@@ -342,20 +342,37 @@ class DataAccessStore:
         self,
         fields_meta: Sequence[Any],
         params_by_dataset: Mapping[str, Mapping[str, Any]],
+        *,
+        filters: Any = None,
+        filters_by_dataset: Mapping[str, Any] | None = None,
     ) -> None:
         """#8 ``required_filters`` 强制执行。
 
         catalog 字段声明了读取时必须附带的条件（如 index_weight 必须指定
-        IndexSymbol、industry 字段必须指定 IndustrySource）时：缺少即
-        production fail-closed（抛 ValidationError），research 只告警。
+        IndexSymbol、industry 字段必须指定 IndustrySource、美股财务必须 filter
+        timeframe）时：缺少即 production fail-closed（抛 ValidationError），
+        research 只告警。
+
+        满足途径（任一即可）：
+            1. params_by_dataset 里带该 key（路径参数）
+            2. 全局 filters 或 filters_by_dataset 的过滤 AST 里覆盖该列
+               （列过滤，如 timeframe='quarterly'）——#42 扩展
         """
+        from data_access.read.predicate_ast import filter_columns, parse_filters
+
         missing: list[tuple[str, str]] = []
+        global_cols = filter_columns(parse_filters(filters))
+        per_ds_cols = {
+            str(ds): filter_columns(parse_filters(f))
+            for ds, f in (filters_by_dataset or {}).items()
+        }
         for f in fields_meta:
             required = getattr(f, "required_filters", ()) or ()
             if not required:
                 continue
             ds = getattr(f, "dataset", None)
             effective = dict((params_by_dataset or {}).get(ds, {}))
+            filter_cols = set(global_cols) | set(per_ds_cols.get(ds, set()))
             for key in required:
                 if key in effective:
                     continue
@@ -363,10 +380,13 @@ class DataAccessStore:
                 lower_key = str(key).lower()
                 if any(str(k).lower() == lower_key for k in effective):
                     continue
+                # filters / filters_by_dataset 里按列覆盖
+                if any(str(c).lower() == lower_key for c in filter_cols):
+                    continue
                 missing.append((getattr(f, "logical_name", "?"), str(key)))
         if not missing:
             return
-        detail = "; ".join(f"'{n}' 需参数 {k}" for n, k in missing)
+        detail = "; ".join(f"'{n}' 需参数或过滤 {k}" for n, k in missing)
         if _production_mode():
             raise ValidationError(
                 f"required_filters 未满足（production fail-closed）：{detail}"
@@ -1286,7 +1306,14 @@ class DataAccessStore:
         pbd.setdefault(anchor, dict(params or {}))
 
         # #8 required_filters 强制执行（production fail-closed，research warning）
-        self._enforce_required_filters(fields_meta, pbd)
+        # #42：同时检查 params 与 filters/filters_by_dataset 列覆盖（美股财务
+        # timeframe、行业 IndustrySource 是列过滤不是路径参数）。
+        self._enforce_required_filters(
+            fields_meta,
+            pbd,
+            filters=filters,
+            filters_by_dataset=filters_by_dataset,
+        )
 
         merged = self._resolve_sql_budget(list(per_ds), query_budget)
         all_cols = [c for cols in per_ds.values() for c in cols]
@@ -1459,7 +1486,9 @@ class DataAccessStore:
         catalog = get_semantic_catalog()
         out: list[Any] = []
         for name in names:
-            f = catalog.resolve_one(name)
+            # #41 跨市场：传 dataset 让 catalog 按市场消歧（A股 return_bp 的 alias
+            # 'ret' 与美股独立字段 'ret' 不再串味）。
+            f = catalog.resolve_one(name, dataset=dataset)
             if f is not None:
                 out.append(f)
                 continue
@@ -1734,7 +1763,7 @@ class DataAccessStore:
                 per_ds[str(ds)] = [str(c) for c in (cols or [])]
             for ds, cols in per_ds.items():
                 for c in cols:
-                    f = catalog.resolve_one(c)
+                    f = catalog.resolve_one(c, dataset=ds)
                     if f is None:
                         f = catalog.resolve_by_physical(ds, c)
                     fields_meta.append(
@@ -1756,7 +1785,7 @@ class DataAccessStore:
                     SemanticField(logical_name=physical, dataset=ds, physical_name=physical)
                 )
                 continue
-            f = catalog.resolve_one(col)
+            f = catalog.resolve_one(col, dataset=anchor)
             if f is not None:
                 per_ds.setdefault(f.dataset, [])
                 if f.physical_name not in per_ds[f.dataset]:

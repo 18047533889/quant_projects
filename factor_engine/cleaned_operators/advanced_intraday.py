@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
-from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg_two
+from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg, _daily_agg_two
 from cleaned_operators.rolling_pack import register_polars_udf
 
 _EPS = 1e-12

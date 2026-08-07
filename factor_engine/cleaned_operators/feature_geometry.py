@@ -108,7 +108,11 @@ def _effective_rank_chunk(c1, c2, c3, min_rows: int) -> float:
     if w is None:
         return np.nan
     p = w / w.sum()
-    ent = float(-np.sum(p * np.log(p)))
+    # Zero eigenvalue -> p=0: define 0*log(0) = 0 (spectral entropy convention).
+    plog = np.zeros_like(p)
+    nz = p > 0.0
+    plog[nz] = p[nz] * np.log(p[nz])
+    ent = float(-np.sum(plog))
     return float(np.clip(np.exp(ent), 1.0, 3.0))
 
 

@@ -350,4 +350,165 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         ArgSpec("x", _F), ArgSpec("recent_window", _W), ArgSpec("prior_window", _W),
     )
 
+    # ---- market-state description language (2026-08-08, §18) ---------------
+    # A. Quantile-hit dynamics.
+    signatures["ts_quantilogram"] = _sig(
+        "ts_quantilogram",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("quantile", _FLT),
+        ArgSpec("lag", _INT), ArgSpec("side", _ANY),
+    )
+    signatures["ts_cross_quantilogram"] = _sig(
+        "ts_cross_quantilogram",
+        ArgSpec("target", _F), ArgSpec("source", _F), ArgSpec("window", _W),
+        ArgSpec("target_q", _FLT), ArgSpec("source_q", _FLT), ArgSpec("lag", _INT),
+        ArgSpec("target_side", _ANY), ArgSpec("source_side", _ANY),
+    )
+    signatures["ts_quantile_crossing_spectral_concentration"] = _sig(
+        "ts_quantile_crossing_spectral_concentration",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("quantile", _FLT), ArgSpec("side", _ANY),
+    )
+    # C. Extreme dependence.
+    signatures["ts_extremogram"] = _sig(
+        "ts_extremogram",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("quantile", _FLT),
+        ArgSpec("lag", _INT), ArgSpec("side", _ANY),
+    )
+    signatures["ts_cross_extremogram"] = _sig(
+        "ts_cross_extremogram",
+        ArgSpec("target", _F), ArgSpec("source", _F), ArgSpec("window", _W),
+        ArgSpec("target_q", _FLT), ArgSpec("source_q", _FLT), ArgSpec("lag", _INT),
+        ArgSpec("target_side", _ANY), ArgSpec("source_side", _ANY),
+    )
+    signatures["ts_extremal_dependence_decay"] = _sig(
+        "ts_extremal_dependence_decay",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("quantile", _FLT),
+        ArgSpec("side", _ANY), ArgSpec("max_lag", _INT),
+    )
+    # B. Expectile.
+    signatures["ts_expectile"] = _sig(
+        "ts_expectile", ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("tau", _FLT)
+    )
+    signatures["ts_expectile_beta"] = _sig(
+        "ts_expectile_beta",
+        ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("tau", _FLT),
+    )
+    # D. Directional-change intrinsic time.
+    for _name in (
+        "ts_dc_overshoot_ratio", "ts_dc_event_rate",
+        "ts_dc_duration_asymmetry", "ts_dc_overshoot_asymmetry",
+    ):
+        signatures[_name] = _sig(
+            _name,
+            ArgSpec("x", _F), ArgSpec("scale", _F), ArgSpec("threshold", _FLT), ArgSpec("window", _W),
+        )
+    # E. Multi-field covariance geometry.
+    for _name in ("ts_feature_mode_share", "ts_feature_effective_rank"):
+        signatures[_name] = _sig(
+            _name, ArgSpec("f1", _F), ArgSpec("f2", _F), ArgSpec("f3", _F), ArgSpec("window", _W)
+        )
+    for _name in ("ts_feature_subspace_rotation",):
+        signatures[_name] = _sig(
+            _name,
+            ArgSpec("f1", _F), ArgSpec("f2", _F), ArgSpec("f3", _F),
+            ArgSpec("window", _W), ArgSpec("recent_window", _W), ArgSpec("prior_window", _W),
+        )
+    signatures["ts_beta_break_score"] = _sig(
+        "ts_beta_break_score",
+        ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("window", _W),
+        ArgSpec("recent_window", _W), ArgSpec("prior_window", _W),
+    )
+    # F. Conditional / band dependence.
+    signatures["ts_conditional_transfer_entropy"] = _sig(
+        "ts_conditional_transfer_entropy",
+        ArgSpec("target", _F), ArgSpec("source", _F), ArgSpec("condition", _F),
+        ArgSpec("window", _W), ArgSpec("bins", _INT), ArgSpec("lag", _INT),
+        ArgSpec("min_transitions", _INT),
+    )
+    signatures["ts_modwt_band_corr"] = _sig(
+        "ts_modwt_band_corr",
+        ArgSpec("x", _F), ArgSpec("y", _F), ArgSpec("window", _W),
+        ArgSpec("level", _INT), ArgSpec("band", _INT),
+    )
+    # G. Sampling-scale / noise diagnostics and profile surprise (intraday).
+    signatures["intraday_subsampled_rv_dispersion"] = _sig(
+        "intraday_subsampled_rv_dispersion",
+        ArgSpec("returns", _F), ArgSpec("sampling", _INT),
+    )
+    signatures["intraday_volatility_signature_slope"] = _sig(
+        "intraday_volatility_signature_slope",
+        ArgSpec("returns", _F), ArgSpec("max_interval", _INT),
+    )
+    signatures["intraday_realized_power_variation"] = _sig(
+        "intraday_realized_power_variation",
+        ArgSpec("returns", _F), ArgSpec("order", _FLT), ArgSpec("sampling", _INT),
+    )
+    signatures["intraday_profile_surprise_energy"] = _sig(
+        "intraday_profile_surprise_energy",
+        ArgSpec("x", _F), ArgSpec("history_days", _INT), ArgSpec("n_slots", _INT), ArgSpec("cap", _FLT),
+    )
+    signatures["intraday_profile_phase_shift"] = _sig(
+        "intraday_profile_phase_shift",
+        ArgSpec("x", _F), ArgSpec("history_days", _INT), ArgSpec("max_shift", _INT), ArgSpec("n_slots", _INT),
+    )
+    # H. No-L2 spread estimators.
+    signatures["ohlc_corwin_schultz_spread"] = _sig(
+        "ohlc_corwin_schultz_spread",
+        ArgSpec("high", _F), ArgSpec("low", _F), ArgSpec("smooth_window", _W),
+    )
+    signatures["ts_roll_effective_spread"] = _sig(
+        "ts_roll_effective_spread", ArgSpec("x", _F), ArgSpec("window", _W)
+    )
+    # J. Local non-linear cross-section.
+    signatures["cs_knn_local_linear_residual"] = _sig(
+        "cs_knn_local_linear_residual",
+        ArgSpec("target", _F), ArgSpec("f1", _F), ArgSpec("f2", _F), ArgSpec("f3", _F),
+        ArgSpec("k", _INT), ArgSpec("ridge", _FLT),
+    )
+    signatures["cs_knn_tangent_residual"] = _sig(
+        "cs_knn_tangent_residual",
+        ArgSpec("target", _F), ArgSpec("f1", _F), ArgSpec("f2", _F), ArgSpec("f3", _F),
+        ArgSpec("k", _INT),
+    )
+    signatures["cs_knn_local_gradient_norm"] = _sig(
+        "cs_knn_local_gradient_norm",
+        ArgSpec("target", _F), ArgSpec("f1", _F), ArgSpec("f2", _F), ArgSpec("f3", _F),
+        ArgSpec("k", _INT), ArgSpec("ridge", _FLT),
+    )
+    for _name in ("cs_rank_copula_mi", "cs_rank_copula_entropy"):
+        signatures[_name] = _sig(
+            _name, ArgSpec("a", _F), ArgSpec("b", _F), ArgSpec("grid", _INT)
+        )
+    # K + L. Systemic tail / relation diffusion.
+    signatures["group_tail_centrality"] = _sig(
+        "group_tail_centrality",
+        ArgSpec("x", _F), ArgSpec("group_id", _G), ArgSpec("window", _W),
+        ArgSpec("quantile", _FLT), ArgSpec("side", _ANY),
+    )
+    signatures["group_tail_lead_score"] = _sig(
+        "group_tail_lead_score",
+        ArgSpec("x", _F), ArgSpec("group_id", _G), ArgSpec("window", _W),
+        ArgSpec("quantile", _FLT), ArgSpec("side", _ANY), ArgSpec("lag", _INT),
+    )
+    signatures["relation_diffusion_score"] = _sig(
+        "relation_diffusion_score",
+        ArgSpec("x", _F), ArgSpec("group", _G), ArgSpec("alpha", _FLT), ArgSpec("steps", _INT),
+    )
+    # M. Marked event.
+    signatures["event_mark_autocorr"] = _sig(
+        "event_mark_autocorr",
+        ArgSpec("event", _B), ArgSpec("mark", _F), ArgSpec("history_window", _W), ArgSpec("event_lag", _INT),
+    )
+    signatures["event_interval_mark_coupling"] = _sig(
+        "event_interval_mark_coupling",
+        ArgSpec("event", _B), ArgSpec("mark", _F), ArgSpec("window", _W),
+    )
+    # N. Update clock.
+    for _name in (
+        "update_path_efficiency", "update_acceleration",
+        "update_surprise", "update_direction_persistence",
+    ):
+        signatures[_name] = _sig(
+            _name, ArgSpec("x", _F), ArgSpec("update_event", _B), ArgSpec("n_updates", _INT)
+        )
+
     return signatures

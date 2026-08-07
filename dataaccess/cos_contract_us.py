@@ -28,9 +28,16 @@ for _name in ("balance", "income", "cashflow"):
 
 US_COS_CONTRACTS.update({
     "us_stock_dividend": _c("us_stock_dividend", "us", "E2", "event", "ticker", pit="effective_time_only", event_column="ex_dividend_date", period_column="ex_dividend_date", event_id_columns=("id",), storage_layout="event_files", note="No announcement timestamp; explicit ex-date use only."),
-    "us_stock_capital_daily": _c("us_stock_capital_daily", "us", "E2", "event", "ticker", pit="effective_time_only", event_column="execution_date", period_column="execution_date", event_id_columns=("id",), storage_layout="event_files", note="Split events, not a daily share-count snapshot."),
+    # StockCapitalDaily 目录混放两种 schema（C13）：{date}.parquet=拆分事件，
+    # shares_{date}.parquet=稀疏 PIT 股本。拆成两个数据集，各自 storage_layout
+    # 归递归布局（全量 sync + complete marker），绝不按决策日枚举文件名。
+    "us_stock_capital_split": _c("us_stock_capital_split", "us", "E2", "event", "ticker", pit="effective_time_only", event_column="execution_date", period_column="execution_date", event_id_columns=("id",), storage_layout="event_files", note="Split/adjustment events ({date}.parquet), not a daily share-count snapshot."),
+    "us_stock_capital_shares": _c("us_stock_capital_shares", "us", "E2", "asof", "Ticker", availability_column="TradeDate", period_column="TradeDate", revision_columns=(), storage_layout="period_files", note="Sparse PIT shares (shares_{date}.parquet); same-day same-ticker can repeat, dedup needed. Prefer us_ticker_shares_snapshot for daily exposure."),
     "us_stock_indicator": _c("us_stock_indicator", "us", "X0", "refuse_panel", "ticker", panel="sparse", pit="unsupported", storage_layout="sparse_files"),
     "us_stock_valuation_daily": _c("us_stock_valuation_daily", "us", "X0", "refuse_panel", "ticker", panel="sparse", pit="unsupported", storage_layout="sparse_files"),
+    "us_ticker_shares_snapshot": _c("us_ticker_shares_snapshot", "us", "D1", "equi", "ticker", storage_layout=D, note="Daily shares snapshot; preferred market-cap exposure = weighted_shares_outstanding x Close."),
+    "us_security_master_daily_snap": _c("us_security_master_daily_snap", "us", "D1", "equi", "ticker", storage_layout=D),
+    "us_fact_news": _c("us_fact_news", "us", "E2", "event", "ticker", pit="strict", availability_column="published_utc", storage_layout="event_files", note="FactNews clean news; PIT=published_utc; TradeDate is partition only."),
     "us_ticker_alias": _c("us_ticker_alias", "us", "EMPTY", "refuse", "ticker", pit="unsupported"),
     "us_stock_status": _c("us_stock_status", "us", "EMPTY", "refuse", "Symbol", pit="unsupported"),
     "us_stock_industry": _c("us_stock_industry", "us", "EMPTY", "refuse", "Symbol", pit="unsupported"),

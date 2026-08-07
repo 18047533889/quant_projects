@@ -1227,6 +1227,80 @@ _ADVANCED_PACK_POLICIES = {
 }
 _EXPLICIT_POLICIES.update(_ADVANCED_PACK_POLICIES)
 
+# 2026-08-08 market-state description language pack (§18): quantile-hit /
+# extreme dependence / expectile / directional-change / feature geometry /
+# conditional dependence / spread estimators / local non-linear cross-section /
+# systemic tail / marked event / update clock.  Explicit scopes keep the
+# registry bridge and the production surface truthful.
+_MARKET_LANGUAGE_PACK_POLICIES = {
+    # Quantile-hit / extreme dependence.
+    "ts_quantilogram": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_cross_quantilogram": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_quantile_crossing_spectral_concentration": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    "ts_extremogram": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_cross_extremogram": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_extremal_dependence_decay": {"scope": "ts", "pit_safe": True, "min_periods": 4},
+    # Expectile (magnitude-sensitive tail).
+    "ts_expectile": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_expectile_beta": {"scope": "ts", "pit_safe": True, "min_periods": 4},
+    # Directional-change intrinsic time.
+    "ts_dc_overshoot_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_dc_event_rate": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_dc_duration_asymmetry": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_dc_overshoot_asymmetry": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Multi-field covariance geometry.
+    "ts_feature_mode_share": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_feature_effective_rank": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_feature_subspace_rotation": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    "ts_beta_break_score": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    # Conditional / band dependence.
+    "ts_conditional_transfer_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_modwt_band_corr": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    # Sampling-scale / noise diagnostics and profile surprise (intraday).
+    "intraday_subsampled_rv_dispersion": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "intraday_volatility_signature_slope": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "intraday_realized_power_variation": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "intraday_profile_surprise_energy": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    "intraday_profile_phase_shift": {
+        "scope": "session_intraday", "pit_safe": True,
+        "session_aware": True, "reset_at_session_boundary": True, "min_periods": 20,
+    },
+    # No-L2 spread estimators.
+    "ohlc_corwin_schultz_spread": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_roll_effective_spread": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Local non-linear cross-section.
+    "cs_knn_local_linear_residual": {"scope": "cs", "pit_safe": True, "min_periods": 2},
+    "cs_knn_tangent_residual": {"scope": "cs", "pit_safe": True, "min_periods": 2},
+    "cs_knn_local_gradient_norm": {"scope": "cs", "pit_safe": True, "min_periods": 2},
+    "cs_rank_copula_mi": {"scope": "cs", "pit_safe": True, "min_periods": 2},
+    "cs_rank_copula_entropy": {"scope": "cs", "pit_safe": True, "min_periods": 2},
+    # Systemic tail / group relation diffusion.
+    "group_tail_centrality": {"scope": "group", "pit_safe": True, "min_periods": 5},
+    "group_tail_lead_score": {"scope": "group", "pit_safe": True, "min_periods": 5},
+    "relation_diffusion_score": {"scope": "group", "pit_safe": True, "min_periods": 2},
+    # Marked event.
+    "event_mark_autocorr": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "event_interval_mark_coupling": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    # Update clock (sparse non-price fields).
+    "update_path_efficiency": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "update_acceleration": {"scope": "ts", "pit_safe": True, "min_periods": 4},
+    "update_surprise": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "update_direction_persistence": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+}
+_EXPLICIT_POLICIES.update(_MARKET_LANGUAGE_PACK_POLICIES)
+
 # Fiscal/event pack：fiscal_event_ops 把 date_diff_days / cash_flow_lifecycle_stage
 # 并入 extended 表面（cash_flow_lifecycle_stage 已进 DAILY_FACTOR_MIGRATED），但它们的
 # 显式 scope policy 不在过滤后的 _EXPLICIT_POLICIES，导致 load_all 的

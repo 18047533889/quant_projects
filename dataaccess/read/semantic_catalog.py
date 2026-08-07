@@ -51,6 +51,7 @@ class SemanticField:
     logical_name: str
     dataset: str                       # 物理数据集（registry 名）
     physical_name: str                 # 数据集内的物理列名
+    market: str = "any"                # ashare / us / any（any=跨市场通用）
     dtype: str | None = None           # float64 / int64 / string / date ...
     frequency: str | None = None       # daily / minute / tick / quarterly ...
     grain: str | None = None           # instrument / cross_section / snapshot ...
@@ -81,6 +82,7 @@ class SemanticField:
             "logical_name": self.logical_name,
             "dataset": self.dataset,
             "physical_name": self.physical_name,
+            "market": self.market,
             "dtype": self.dtype,
             "frequency": self.frequency,
             "grain": self.grain,
@@ -135,16 +137,23 @@ def _bool_or_default(value: Any, default: bool = True) -> bool:
 
 
 def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
-    """把 YAML 单条声明解析成 SemanticField。``dataset`` / ``physical_name`` 必填。"""
+    """把 YAML 单条声明解析成 SemanticField。``dataset`` / ``physical_name`` 必填。
+
+    ``logical_name`` 可显式覆盖（用于同一逻辑字段的跨市场条目：key 用
+    ``us_total_assets`` 保证 YAML key 唯一，logical_name 声明为 ``total_assets``
+    让 catalog 的 _by_name 同时挂 A股/美股两个候选）。
+    """
     context = f"semantic field '{name}'"
     dataset = raw.get("dataset")
     physical = raw.get("physical_name") or raw.get("physical") or name
+    logical = str(raw.get("logical_name") or name)
     if not dataset:
         raise ValidationError(f"{context}: 缺少 dataset（逻辑字段必须落到某个数据集）")
     return SemanticField(
-        logical_name=name,
+        logical_name=logical,
         dataset=str(dataset),
         physical_name=str(physical),
+        market=str(raw.get("market") or "any"),
         dtype=_str_or_none(raw.get("dtype")),
         frequency=_str_or_none(raw.get("frequency")),
         grain=_str_or_none(raw.get("grain")),
@@ -177,11 +186,15 @@ class SemanticFieldCatalog:
         source_path: str | Path | None = None,
     ) -> None:
         self._fields: dict[str, SemanticField] = dict(fields or {})
-        self._by_name: dict[str, SemanticField] = {}
+        # _by_name：logical_name / YAML key / alias → 候选字段列表。同一逻辑名可被
+        # 多个市场占用（如 A股 total_assets 与美股 us_total_assets 的 logical_name
+        # 都是 total_assets），resolve 时按 market 消歧。any 表示跨市场通用。
+        self._by_name: dict[str, list[SemanticField]] = {}
         for name, f in self._fields.items():
-            self._by_name.setdefault(name, f)
+            for key in {name, f.logical_name}:
+                self._by_name.setdefault(key, []).append(f)
             for alias in f.aliases:
-                self._by_name.setdefault(alias, f)
+                self._by_name.setdefault(alias, []).append(f)
         self._source_path = str(source_path) if source_path is not None else None
 
     @property
@@ -191,23 +204,65 @@ class SemanticFieldCatalog:
     def names(self) -> list[str]:
         return sorted(self._fields)
 
-    def resolve_one(self, name: str) -> SemanticField | None:
-        """按逻辑名或别名解析；找不到返回 None（调用方可再回退 registry）。"""
-        return self._by_name.get(name)
+    @staticmethod
+    def _market_of(dataset: str | None) -> str | None:
+        """由数据集名推断市场（us_*/ashare_*）；无法判断返回 None。"""
+        if not dataset:
+            return None
+        if dataset.startswith("us_") or dataset.startswith("us_stock") or dataset == "us":
+            return "us"
+        if dataset.startswith("ashare_") or dataset.startswith("a_share") or dataset == "ashare":
+            return "ashare"
+        return None
+
+    def resolve_one(
+        self, name: str, market: str | None = None, *, dataset: str | None = None
+    ) -> SemanticField | None:
+        """按逻辑名或别名解析；找不到返回 None（调用方可再回退 registry）。
+
+        market 传入时，优先返回该市场专属字段；没有专属字段时回退 any（跨市场
+        通用）。dataset 传入时用数据集名前缀推断 market（更高优先级）。
+        """
+        candidates = self._by_name.get(name)
+        if not candidates:
+            return None
+        effective = market or (self._market_of(dataset) if dataset else None)
+        if effective and effective != "any":
+            for f in candidates:
+                if f.market == effective:
+                    return f
+        # 回退：any 通用字段，或第一个
+        for f in candidates:
+            if f.market == "any":
+                return f
+        return candidates[0]
 
     def resolve_by_physical(self, dataset: str, physical_name: str) -> SemanticField | None:
         """按 (dataset, 物理列名) 反查逻辑字段（调用方传物理列时的单位归一化用）。
 
-        同一物理列可能被多个逻辑字段引用，返回第一个。
+        同一物理列可能被多个逻辑字段引用，返回第一个；优先返回与该数据集同市场
+        的字段（防止 A股/美股同名物理列串味）。
         """
-        for f in self._fields.values():
-            if f.dataset == dataset and f.physical_name == physical_name:
+        candidates = [
+            f
+            for f in self._fields.values()
+            if f.dataset == dataset and f.physical_name == physical_name
+        ]
+        if not candidates:
+            return None
+        effective = self._market_of(dataset)
+        if effective and effective != "any":
+            for f in candidates:
+                if f.market == effective:
+                    return f
+        for f in candidates:
+            if f.market == "any":
                 return f
-        return None
+        return candidates[0]
 
-    def get(self, name: str) -> SemanticField:
+    def get(self, name: str, market: str | None = None, *, dataset: str | None = None) -> SemanticField:
         """严格解析；找不到抛 ValidationError。"""
-        f = self.resolve_one(name)
+        f = self.resolve_one(name, market=market, dataset=dataset)
         if f is None:
             raise ValidationError(
                 f"逻辑字段 '{name}' 不在 SemanticFieldCatalog 中。"
@@ -215,10 +270,12 @@ class SemanticFieldCatalog:
             )
         return f
 
-    def resolve(self, *names: str) -> list[SemanticField]:
+    def resolve(
+        self, *names: str, market: str | None = None, dataset: str | None = None
+    ) -> list[SemanticField]:
         out: list[SemanticField] = []
         for name in names:
-            out.append(self.get(name))
+            out.append(self.get(name, market=market, dataset=dataset))
         return out
 
     def to_dict(self) -> dict[str, Any]:

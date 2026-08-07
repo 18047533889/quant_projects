@@ -5,9 +5,9 @@
 
 ## 摘要
 
-- canonical 总数：1107
-- daily：1015
-- research：61
+- canonical 总数：1293
+- daily：1152
+- research：82
 - unsafe：7
 - legacy：1
 
@@ -175,7 +175,15 @@
 | cs_impute_mean | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
 | cs_impute_median | daily | pandas_numpy, sql |  | True | cs | None | None | 0 |
 | cs_isolation | daily | pandas_numpy |  | True | cs | None | 1 | 0 |
+| cs_isotonic_residual | daily | pandas_numpy, polars |  | True | cs | None | None | 0 |
 | cs_knn_distance | daily | pandas_numpy |  | True | cs | None | None | 0 |
+| cs_knn_graph_dirichlet_energy | daily | pandas_numpy |  | True | cs | None | None | 0 |
+| cs_knn_local_gradient_norm | research | pandas_numpy, polars |  | True | cs | None | 2 | 0 |
+| cs_knn_local_linear_residual | extended | pandas_numpy, polars |  | True | cs | None | 2 | 0 |
+| cs_knn_local_moran | daily | pandas_numpy, polars |  | True | cs | None | None | 0 |
+| cs_knn_neighbor_retention | daily | pandas_numpy |  | True | cs | None | None | 0 |
+| cs_knn_peer_mean_ex_self | daily | pandas_numpy |  | True | cs | None | None | 0 |
+| cs_knn_tangent_residual | research | pandas_numpy, polars |  | False | cs | None | 2 | 0 |
 | cs_local_curvature | daily | pandas_numpy |  | True | cs | None | 1 | 0 |
 | cs_local_density | daily | pandas_numpy |  | True | cs | None | 1 | 0 |
 | cs_local_density_score | daily | pandas_numpy |  | True | cs | None | None | 0 |
@@ -190,6 +198,8 @@
 | cs_quantile | daily | pandas_numpy, sql | c_percentile, quantile | True | cs | None | None | 0 |
 | cs_quantile_resid | daily | pandas_numpy |  | True | cs | None | None | 0 |
 | cs_rank_churn | daily | pandas_numpy |  | True | cs | None | None | 0 |
+| cs_rank_copula_entropy | research | pandas_numpy, polars |  | False | cs | None | 2 | 0 |
+| cs_rank_copula_mi | research | pandas_numpy, polars |  | False | cs | None | 2 | 0 |
 | cs_rank_gaussian | daily | pandas_numpy, polars |  | True | cs | None | None | 0 |
 | cs_regression | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
 | cs_relative_density_ratio | daily | pandas_numpy |  | True | cs | None | None | 0 |
@@ -233,9 +243,21 @@
 | event_cluster_mean_size | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | event_cumulative_return_past | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | event_decay_asof | daily | pandas_numpy, polars | event_decay | True | elementwise | None | None | 0 |
+| event_fano_factor | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
 | event_frequency | daily | pandas_numpy, sql |  | True | ts | None | 1 | 0 |
+| event_hawkes_branching_ratio | research | pandas_numpy |  | False | ts | None | 5 | 1 |
+| event_historical_response_mean | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
+| event_historical_response_sign_balance | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
+| event_interval_mark_coupling | extended | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
+| event_interval_memory | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
+| event_local_variation | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
 | event_log_return_sum | daily | pandas_numpy |  | True | elementwise | None | None | 0 |
+| event_mark_autocorr | extended | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
 | event_refractory | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| event_response_decay_rate | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
+| event_response_dispersion | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
+| event_response_peak_lag | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
+| event_response_reversal_strength | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
 | event_return_since_last | daily | pandas_numpy | event_compounded_return | True | elementwise | None | None | 0 |
 | exp | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | exp_neg | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
@@ -384,6 +406,12 @@
 | fundamental_staleness | daily | pandas_numpy, polars |  | True | fundamental_period | None | 1 | 0 |
 | garman_klass_vol | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ge | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
+| group_corr_effective_rank | daily | pandas_numpy |  | True | group | None | None | 0 |
+| group_corr_mode_localization | daily | pandas_numpy |  | True | group | None | None | 0 |
+| group_corr_mode_share | daily | pandas_numpy |  | True | group | None | None | 0 |
+| group_corr_mst_length | daily | pandas_numpy, polars |  | True | group | None | None | 0 |
+| group_corr_second_mode_localization | daily | pandas_numpy |  | True | group | None | None | 0 |
+| group_corr_spectral_gap | daily | pandas_numpy |  | True | group | None | None | 0 |
 | group_count | daily | pandas_numpy, polars, sql |  | True | group | None | None | 0 |
 | group_decay_linear | daily | pandas_numpy, polars, sql | group_rank_linear_weighted_value | True | group | None | None | 0 |
 | group_ex_self_mad | daily | pandas_numpy |  | True | group | None | 1 | 0 |
@@ -411,6 +439,9 @@
 | group_spd_feature_structure_shift | extended | pandas_numpy |  | True | group | None | 2 | 0 |
 | group_std | daily | pandas_numpy, polars, sql |  | True | group | None | None | 0 |
 | group_sum | daily | pandas_numpy, polars, sql |  | True | group | None | None | 0 |
+| group_tail_centrality | extended | pandas_numpy, polars |  | True | group | None | 5 | 0 |
+| group_tail_coexceedance_density | daily | pandas_numpy, polars |  | True | group | None | None | 0 |
+| group_tail_lead_score | research | pandas_numpy, polars |  | False | group | None | 5 | 0 |
 | group_tail_ratio | daily | pandas_numpy |  | True | group | None | None | 0 |
 | group_ts_decay_linear | daily | pandas_numpy |  | True | group | None | None | 0 |
 | group_valid_count | daily | pandas_numpy |  | True | group | None | None | 0 |
@@ -553,7 +584,7 @@
 | intra_segment_vwap_deviation | daily | pandas_numpy, polars |  | True | elementwise | None | 1 | 0 |
 | intra_session_return_asymmetry | daily | pandas_numpy |  | True | session_intraday | None | 1 | 0 |
 | intra_signed_imbalance_proxy | daily | pandas_numpy, polars |  | True | elementwise | None | 1 | 0 |
-| intra_signed_jump_ratio | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
+| intra_signed_jump_ratio | daily | pandas_numpy, polars | intraday_signed_jump_balance | True | elementwise | None | None | 0 |
 | intra_signed_return_profile_cosine | daily | pandas_numpy |  | True | elementwise | None | 1 | 0 |
 | intra_signed_tail_variation_ratio | daily | pandas_numpy |  | True | elementwise | None | 1 | 0 |
 | intra_slot_amount_surprise | daily | pandas_numpy |  | True | session_intraday | None | 1 | 0 |
@@ -581,12 +612,30 @@
 | intraday_bvc_imbalance | daily | pandas_numpy, polars |  | True | session_intraday | None | 1 | 0 |
 | intraday_impact_asymmetry | daily | pandas_numpy, polars |  | True | session_intraday | None | 1 | 0 |
 | intraday_impact_beta | daily | pandas_numpy, polars |  | True | session_intraday | None | 1 | 0 |
+| intraday_jump_test_stat | daily | pandas_numpy, polars |  | True | elementwise | None | 1 | 0 |
+| intraday_medrv | daily | pandas_numpy, polars |  | True | elementwise | None | 1 | 0 |
+| intraday_minrv | daily | pandas_numpy, polars |  | True | elementwise | None | 1 | 0 |
+| intraday_profile_pca_residual | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
+| intraday_profile_phase_shift | research | pandas_numpy, polars |  | False | session_intraday | None | 20 | 0 |
+| intraday_profile_surprise_energy | extended | pandas_numpy, polars |  | True | session_intraday | None | 20 | 0 |
+| intraday_quantile_curve_pca_residual | research | pandas_numpy |  | False | session_intraday | None | 20 | 0 |
+| intraday_quantile_curve_pca_score | research | pandas_numpy |  | False | session_intraday | None | 20 | 0 |
+| intraday_realized_power_variation | research | pandas_numpy, polars |  | False | session_intraday | None | 20 | 0 |
+| intraday_realized_semivariance_balance | daily | pandas_numpy, polars, sql |  | True | elementwise | None | 1 | 0 |
 | intraday_return_wasserstein_shift | daily | pandas_numpy, polars |  | True | session_intraday | None | 1 | 0 |
+| intraday_rv_signature_curvature | daily | pandas_numpy, polars |  | True | elementwise | None | 1 | 0 |
+| intraday_rv_signature_slope | daily | pandas_numpy |  | True | session_intraday | None | 2 | 0 |
+| intraday_session_shape_novelty | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
+| intraday_subsampled_rv_dispersion | extended | pandas_numpy, polars |  | True | session_intraday | None | 20 | 0 |
 | intraday_volatility | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
+| intraday_volatility_concentration | daily | pandas_numpy, polars, sql |  | True | elementwise | None | 1 | 0 |
+| intraday_volatility_entropy | daily | pandas_numpy, polars, sql |  | True | elementwise | None | 1 | 0 |
+| intraday_volatility_signature_slope | extended | pandas_numpy, polars |  | True | session_intraday | None | 20 | 0 |
+| intraday_volatility_time_centroid | daily | pandas_numpy, polars |  | True | elementwise | None | 1 | 0 |
+| intraday_volume_clock_path_efficiency | daily | pandas_numpy |  | True | session_intraday | None | 2 | 0 |
+| intraday_volume_clock_roughness | daily | pandas_numpy |  | True | session_intraday | None | 2 | 0 |
 | intraday_vwap_deviation | extended | pandas_numpy |  | True | ts | None | 1 | 0 |
 | intraday_wasserstein_pair_distance | extended | pandas_numpy |  | True | session_intraday | None | 20 | 0 |
-| intraday_wasserstein_quantile_pca_residual | research | pandas_numpy |  | False | session_intraday | None | 20 | 0 |
-| intraday_wasserstein_quantile_pca_score | research | pandas_numpy |  | False | session_intraday | None | 20 | 0 |
 | inverse | daily | pandas_numpy, polars, sql | inv, reciprocal | True | elementwise | None | None | 0 |
 | is_finite | daily | pandas_numpy, polars, sql |  | True | elementwise | None | 1 | 0 |
 | is_infinite | daily | pandas_numpy, polars, sql | IS_INFINITE, is_inf | True | elementwise | None | None | 0 |
@@ -615,6 +664,7 @@
 | neg | daily | pandas_numpy, polars, sql | negate, reverse | True | elementwise | None | None | 0 |
 | normalize | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
 | not_ | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
+| ohlc_corwin_schultz_spread | extended | pandas_numpy, polars |  | True | ts | None | 2 | 0 |
 | open_close_return | daily | pandas_numpy, polars, sql | intraday_return | True | elementwise | None | None | 0 |
 | open_to_vwap_return | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | or_ | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
@@ -677,6 +727,7 @@
 | real_turnover_rate | daily | pandas_numpy, polars |  | True | elementwise | None | 1 | 0 |
 | relation_category_share | daily | pandas_numpy |  | True | group | None | None | 0 |
 | relation_concentration_acceleration | daily | pandas_numpy |  | True | cs | None | None | 0 |
+| relation_diffusion_score | research | pandas_numpy, polars |  | False | group | None | 2 | 0 |
 | relation_distinct_count | extended | pandas_numpy |  | False | elementwise | None | None | 0 |
 | relation_distribution_kurtosis | daily | pandas_numpy |  | True | cs | None | None | 0 |
 | relation_distribution_skew | daily | pandas_numpy |  | True | cs | None | None | 0 |
@@ -697,6 +748,10 @@
 | relation_weighted_std_ex_self | daily | pandas_numpy |  | True | group | None | 1 | 0 |
 | relative_volume | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | report_benford_js_divergence | research | pandas_numpy |  | False | ts | None | 1 | 0 |
+| report_change_breadth | daily | pandas_numpy |  | True | fundamental_period | None | 1 | 0 |
+| report_change_coherence | daily | pandas_numpy |  | True | fundamental_period | None | 1 | 0 |
+| report_filing_delay_surprise | daily | pandas_numpy, polars |  | True | fundamental_period | None | 1 | 0 |
+| report_revision_magnitude | research | pandas_numpy |  | False | ts | None | 5 | 0 |
 | report_rolling_mean | daily | pandas_numpy |  | True | fundamental_period | None | 1 | 0 |
 | report_yoy_lag | daily | pandas_numpy |  | True | fundamental_period | None | 1 | 0 |
 | residual_momentum_capm | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
@@ -712,11 +767,12 @@
 | rolling_pvt | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | rolling_vwap | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | round | daily | pandas_numpy, polars, sql | ROUND | True | elementwise | None | None | 0 |
-| row_sum_skipna | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
+| row_sum_skipna | daily | pandas_numpy, polars, sql |  | True | fundamental_period | None | None | 0 |
 | safe_div_null | daily | pandas_numpy, polars, sql | div_or_null, safe_div | True | elementwise | None | None | 0 |
 | saturate | daily | pandas_numpy, polars, sql |  | True | elementwise | None | 1 | 0 |
 | scale | daily | pandas_numpy, polars, sql | SCALE, c_scale | True | cs | None | None | 0 |
 | sec | unsafe | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
+| session_event_recovery_score | daily | pandas_numpy |  | True | session_intraday | None | 2 | 0 |
 | sigmoid | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | sign | daily | pandas_numpy, polars, sql | SIGN | True | elementwise | None | None | 0 |
 | signed_dollar_volume | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
@@ -732,6 +788,11 @@
 | sqrt_abs | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | square | daily | pandas_numpy, polars, sql | sqr | True | elementwise | None | None | 0 |
 | state_deadband | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| state_episode_efficiency | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
+| state_episode_excursion_balance | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
+| state_episode_mae | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
+| state_episode_mfe | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
+| state_episode_retrace_ratio | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
 | state_ewm_if | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | state_hold | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | state_latch | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -751,9 +812,12 @@
 | truncate | daily | pandas_numpy, polars, sql |  | True | elementwise | None | None | 0 |
 | ts_abs_concentration | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_abs_entropy | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
+| ts_active_information_storage | research | pandas_numpy |  | False | ts | None | 5 | 1 |
 | ts_ar_coeff_stability | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_ar_coefficient | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_ar_fitted_value | extended | pandas_numpy |  | False | ts | None | 1 | 0 |
 | ts_ar_forecast | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_ar_in_sample_resid | extended | pandas_numpy |  | False | ts | None | 1 | 0 |
 | ts_ar_innovation | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_ar_innovation_z | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_ar_prior_coeff | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -768,11 +832,15 @@
 | ts_argmin_index_from_oldest | daily | pandas_numpy, sql |  | True | ts | None | 1 | 0 |
 | ts_autocorr | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 1 |
 | ts_autocorr_decay_half_life | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_autocorrelation_time | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_average_volume | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_best_lag_corr | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_beta | daily | pandas_numpy, polars, sql | beta, m_beta, rolling_beta | True | ts | None | 1 | 0 |
+| ts_beta_break_score | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_beta_if | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_betti_1_max_persistence | research | pandas_numpy |  | False | ts | None | 2 | 0 |
+| ts_binned_response_curvature | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_binned_response_monotonicity | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_bottomk_mean | daily | pandas_numpy, polars | ts_bottom_n_avg | True | ts | None | 1 | 0 |
 | ts_bottomk_std | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_bottomk_sum | daily | pandas_numpy, polars | ts_bottom_n_sum | True | ts | None | 1 | 0 |
@@ -785,17 +853,26 @@
 | ts_channel_width_atr | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_channel_width_pct | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_channel_width_slope | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_chatterjee_xi | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_chord_excursion_area | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_conditional_mutual_information | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_conditional_transfer_entropy | research | pandas_numpy, polars |  | False | ts | None | 3 | 0 |
 | ts_confirmed_pivot_high | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_confirmed_pivot_low | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_consolidation_slope | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_consolidation_volume_decay | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_consolidation_width | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_copula_central_asymmetry | research | pandas_numpy |  | False | ts | None | 5 | 0 |
 | ts_corr | daily | pandas_numpy, polars, sql | Corr, TS_CORR, corr, correlation, m_cor, ts_correlation | True | ts | None | 1 | 0 |
 | ts_corr_if | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_count_if | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_cov | daily | pandas_numpy, polars, sql | Cov, Covariance, TS_COV, cov, m_cov, ts_covariance | True | ts | None | 1 | 0 |
 | ts_coverage_ratio | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_cpt_value | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_cross_extremogram | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_cross_quantilogram | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_crossing_acceleration | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
+| ts_crossing_speed | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_current_drawdown_area | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_current_drawdown_duration | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_cusum_break_score | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -804,9 +881,14 @@
 | ts_days_since | daily | pandas_numpy, polars, sql | event_age | True | ts | None | 1 | 0 |
 | ts_days_since_high | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_days_since_low | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
+| ts_dc_duration_asymmetry | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_dc_event_rate | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_dc_overshoot_asymmetry | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_dc_overshoot_ratio | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_decay_exp_window | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_decay_linear | daily | pandas_numpy, polars, sql | DECAY_LINEAR, TS_DECAY_LINEAR, WMA, decay_linear, ts_decay | True | ts | None | 1 | 0 |
 | ts_delay | daily | pandas_numpy, polars, sql | DELAY, Delay, Ref, delay, m_delay, prev, shift | True | ts | None | 1 | 1 |
+| ts_delay_intrinsic_dimension | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_delta | daily | pandas_numpy, polars, sql | Delta, Diff, TS_DELTA, delta, deltas | True | ts | None | 1 | 1 |
 | ts_dfa_hurst | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_distance_corr | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -819,6 +901,10 @@
 | ts_effective_transfer_entropy | research | pandas_numpy |  | False | ts | None | 2 | 0 |
 | ts_ema | daily | pandas_numpy, polars, sql | EMA, ema, ewm, ewm_mean | True | ts | None | 1 | 0 |
 | ts_endpoint_deviation | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_energy_break_score | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
+| ts_envelope_boundary_dwell | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_envelope_compression | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_envelope_pressure | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_event_spacing_cv | daily | pandas_numpy, polars | event_interval_cv | True | ts | None | 1 | 0 |
 | ts_event_spacing_mean | daily | pandas_numpy, polars | event_interval_mean | True | ts | None | 1 | 0 |
 | ts_ewm_corr | daily | pandas_numpy, sql | ewm_corr | True | ts | None | 1 | 0 |
@@ -827,14 +913,30 @@
 | ts_ewm_var | daily | pandas_numpy, polars, sql | ewm_var | True | ts | None | 1 | 0 |
 | ts_expected_shortfall | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_expected_shortfall_asymmetry | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_expectile | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_expectile_beta | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_expectile_beta_spread | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_expectile_regression_coeff | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_expectile_regression_coeff_prior | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_expectile_regression_forecast_error | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_expectile_regression_resid | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_extrema_confirmation_rate | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_extrema_divergence_strength | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_extremal_dependence_decay | research | pandas_numpy, polars |  | False | ts | None | 4 | 0 |
+| ts_extremal_index | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_extreme_cluster_ratio | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_extremogram | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_feature_effective_rank | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_feature_mode_share | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_feature_pca_reconstruction_error | research | pandas_numpy |  | False | ts | None | None | 0 |
+| ts_feature_subspace_rotation | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_ffill_limited | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_first_passage_bias | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_first_passage_conditional_time | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_first_passage_hit_probability | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_fisher_information_shift | research | pandas_numpy |  | False | ts | None | 2 | 0 |
+| ts_forbidden_ordinal_pattern_ratio | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_fractional_difference | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_gap_fill_ratio | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_gap_reversion_ratio | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_gap_survival_duration | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -843,15 +945,22 @@
 | ts_garch_standardized_shock | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_garch_vol_forecast | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_garch_vol_surprise | research | pandas_numpy |  | False | ts | None | None | 0 |
+| ts_generalized_hurst_exponent | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_gjr_garch_vol_forecast | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_gjr_leverage | research | pandas_numpy |  | False | ts | None | None | 0 |
+| ts_gpd_shape_pwm | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_hankel_effective_rank | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_hankel_singular_gap | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_har_from_return_forecast_error_z | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_har_from_return_next_vol | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_har_rv_forecast | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_har_rv_forecast_error_z | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_har_rv_innovation_z | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_har_rv_next_forecast | research | pandas_numpy |  | False | ts | None | None | 0 |
+| ts_hartigan_dip | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_higuchi_fractal_dimension | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_hill_tail_index | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_hsic | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_huber_regression_coeff | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_huber_regression_coeff_prior | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_huber_regression_forecast_error | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -865,6 +974,13 @@
 | ts_impulse_strength | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_impulse_volume | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_industry_liquidity_beta | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_interval_exploration_efficiency | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_interval_nesting_depth | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_interval_occupancy_entropy | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_interval_occupancy_mode_distance | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_interval_overlap_component_ratio | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_interval_union_coverage | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_joint_energy_shift | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
 | ts_jump_bipower_proxy | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_kalman_beta | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_kalman_beta_change | research | pandas_numpy |  | False | ts | None | None | 0 |
@@ -872,19 +988,27 @@
 | ts_kalman_innovation_z | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_kalman_level | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_kalman_trend | research | pandas_numpy |  | False | ts | None | None | 0 |
+| ts_km_diffusion_gradient | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_km_equilibrium_distance | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_km_quasipotential_depth | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_kramers_moyal_diffusion | extended | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_kramers_moyal_drift | extended | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_kramers_moyal_local_stability | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_ks_shift | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_kurt | daily | pandas_numpy, polars | Kurt, TS_KURT, kurt, m_kurt, ts_kurtosis | True | ts | None | 1 | 0 |
+| ts_l_kurtosis | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_l_skewness | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_lag_of_peak_corr | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_lagged_mutual_information | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_last_if | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_last_pivot_high | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_last_pivot_low | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_lempel_ziv_complexity | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_level_shift_score | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_leverage_effect | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_line_convergence | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_line_parallelism | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_local_lyapunov_exponent | research | pandas_numpy |  | False | ts | None | 5 | 0 |
 | ts_location_shift | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_log_return | daily | pandas_numpy, polars, sql | log_returns | True | ts | None | 1 | 1 |
 | ts_lower_partial_moment | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -892,19 +1016,32 @@
 | ts_lz_complexity | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_mad | daily | pandas_numpy, polars, sql | Mad, m_mad, mad | True | ts | None | 1 | 0 |
 | ts_market_liquidity_beta | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_markov_committor | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_markov_entropy_production | research | pandas_numpy |  | False | ts | None | 5 | 0 |
+| ts_markov_mean_first_passage_time | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_markov_persistence | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_markov_spectral_gap | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_markov_state_entropy | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_markov_stationary_surprisal | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_markov_transition_surprisal | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_mass_concentration | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_matrix_profile_discord_score | research | pandas_numpy |  | False | ts | None | None | 0 |
+| ts_matrix_profile_motif_age | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_matrix_profile_motif_distance | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_max | daily | pandas_numpy, polars, sql | Max, TS_MAX, m_max, window_max | True | ts | None | 1 | 0 |
 | ts_max_buildup | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_max_chord_excursion | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_max_drawdown | daily | pandas_numpy, sql |  | True | ts | None | 1 | 0 |
 | ts_max_if | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_mean | daily | pandas_numpy, polars, sql | Mean, SMA, TS_MEAN, m_avg, ma, mean, move, running_mean, window_mean | True | ts | None | 1 | 0 |
+| ts_mean_excess_slope | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_mean_if | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_mean_reversion_half_life | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_median | daily | pandas_numpy, polars, sql | Median, m_median, median | True | ts | None | 1 | 0 |
 | ts_min | daily | pandas_numpy, polars, sql | Min, TS_MIN, m_min, window_min | True | ts | None | 1 | 0 |
 | ts_min_if | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_mmd_rbf_shift | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_modwt_band_corr | research | pandas_numpy, polars |  | False | ts | None | 8 | 0 |
 | ts_moment | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_monotonicity | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_motif_recurrence_count | research | pandas_numpy |  | False | ts | None | None | 0 |
@@ -918,8 +1055,16 @@
 | ts_multi_regression_r2_prior | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_multi_regression_resid | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_multi_regression_resid_z | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_multifractal_curvature | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_multifractal_width | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_multiscale_entropy_slope | research | pandas_numpy |  | False | ts | None | None | 0 |
+| ts_multiscale_permutation_entropy_slope | research | pandas_numpy |  | False | ts | None | 5 | 0 |
+| ts_multiscale_trend_consensus | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_multiscale_trend_curvature | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_multiscale_trend_dispersion | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_multivariate_matrix_profile_novelty | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_mutual_information | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_nearest_structural_level_distance | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_negative_ratio | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_new_high | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_new_low | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
@@ -929,10 +1074,12 @@
 | ts_nth_pivot_low_age | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_nth_value | daily | pandas_numpy, sql |  | True | ts | None | 1 | 0 |
 | ts_opening_mispricing_score | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_ordinal_irreversibility | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_overnight_intraday_cov | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_overnight_intraday_sign_agreement | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_overnight_intraday_spread | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_partial_corr | daily | pandas_numpy, sql |  | True | ts | None | 3 | 0 |
+| ts_partial_distance_correlation | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_path_efficiency | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_path_leadlag_area | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_path_signature_area | research | pandas_numpy |  | False | ts | None | None | 0 |
@@ -942,6 +1089,7 @@
 | ts_permutation_entropy | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_permutation_transition_entropy | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_persistence_diagram_shift | research | pandas_numpy |  | False | ts | None | 2 | 0 |
+| ts_persistence_entropy | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_pivot_high_age | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_pivot_high_count | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_pivot_high_spacing | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
@@ -957,19 +1105,28 @@
 | ts_product | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_quantile | daily | pandas_numpy, polars, sql | Percentile, TS_QUANTILE, m_percentile, percentile | True | ts | None | 1 | 0 |
 | ts_quantile_beta_spread | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_quantile_crossing_spectral_concentration | research | pandas_numpy, polars |  | False | ts | None | 8 | 0 |
 | ts_quantile_if | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_quantile_kurtosis | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_quantile_range | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_quantile_regression_beta | research | pandas_numpy |  | False | ts | None | 5 | 0 |
 | ts_quantile_regression_coeff | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_quantile_regression_resid | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_quantile_regression_slope | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_quantile_skew | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_quantile_transport_curvature | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_quantile_transport_slope | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_quantilogram | extended | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_range_expansion | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_rank | daily | pandas_numpy, polars, sql | TS_RANK, m_rank | True | ts | None | 1 | 0 |
 | ts_rank_if | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_ratio | daily | pandas_numpy, polars | ratios | True | ts | None | 1 | 1 |
 | ts_realized_quarticity | daily | pandas_numpy, sql |  | True | ts | None | 1 | 0 |
 | ts_recovery_fraction | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_recurrence_diagonal_entropy | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_recurrence_divergence | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_recurrence_rate | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_recurrence_trapping_time | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_regime_duration | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_regression_forecast_error | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_regression_forecast_error_z | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -985,6 +1142,7 @@
 | ts_resistance_fit_r2 | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_resistance_level | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_resistance_slope | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_response_slope_asymmetry | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_ridge_regression_coeff | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_ridge_regression_coeff_prior | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_ridge_regression_forecast_error | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -992,6 +1150,7 @@
 | ts_ridge_regression_resid | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_ridge_regression_resid_z | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_robust_zscore | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_roll_effective_spread | research | pandas_numpy, polars |  | False | ts | None | 5 | 0 |
 | ts_roughness | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_run_concentration | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_run_efficiency | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -1005,9 +1164,15 @@
 | ts_sign_persistence | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_skew | daily | pandas_numpy, polars, sql | Skew, TS_SKEW, m_skew, skew, ts_skewness | True | ts | None | 1 | 0 |
 | ts_sma_cn | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_spectral_centroid | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_spectral_flatness | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_spectral_low_frequency_ratio | research | pandas_numpy |  | False | ts | None | None | 0 |
+| ts_spectral_peak_concentration | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_spectral_quality_factor | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_ssa_reconstruction_residual | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_staleness | daily | pandas_numpy, sql |  | True | ts | None | 1 | 0 |
 | ts_state_age_percentile | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_state_density | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_state_entry_strength | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_state_exit_hazard | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_state_integral | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -1015,7 +1180,8 @@
 | ts_std | daily | pandas_numpy, polars, sql | Std, TS_STD, m_std, running_std, std, std_n, ts_std_dev, ts_stddev, window_std | True | ts | None | 1 | 0 |
 | ts_std_if | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | ts_stratified_mean_spread | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
-| ts_student_t_fisher_shift | research | pandas_numpy |  | False | ts | None | 2 | 0 |
+| ts_structural_level_density | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_structural_level_strength | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_sum | daily | pandas_numpy, polars, sql | Sum, TS_SUM, m_sum, running_sum, sum, sum_n, window_sum | True | ts | None | 1 | 0 |
 | ts_sum_decay | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_sum_if | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
@@ -1031,6 +1197,8 @@
 | ts_tail_imbalance | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_tail_mean | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_tail_ratio | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_threshold_cycle_asymmetry | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_threshold_cycle_period | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_time_since_change | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_time_slope | daily | pandas_numpy, polars, sql | Slope, TS_TIME_SLOPE, slope | True | ts | None | 1 | 0 |
 | ts_time_under_water | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
@@ -1038,6 +1206,8 @@
 | ts_topk_std | daily | pandas_numpy, polars | ts_top_n_std | True | ts | None | 1 | 0 |
 | ts_topk_sum | daily | pandas_numpy, polars | TS_TOPK_SUM, m_top_n_sum, tm_top_n_sum | True | ts | None | 1 | 0 |
 | ts_transfer_entropy | extended | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_transfer_entropy_peak_lag | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
+| ts_transfer_entropy_peak_strength | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
 | ts_transition_count | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_transition_intensity | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_trend_break_score | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -1047,8 +1217,12 @@
 | ts_turning_intensity | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_turning_point_ratio | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_turning_rate | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_turnover_age_dispersion | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
 | ts_turnover_cost_dispersion | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
+| ts_turnover_cost_entropy | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
+| ts_turnover_cost_mode_distance | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
 | ts_turnover_cost_quantile_distance | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
+| ts_turnover_cost_skew | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
 | ts_turnover_holding_age | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
 | ts_turnover_near_cost_mass | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
 | ts_turnover_profit_share | daily | pandas_numpy, polars |  | True | ts | None | 1 | 1 |
@@ -1062,9 +1236,17 @@
 | ts_variance_ratio | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_variance_ratio_slope | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_variogram_slope | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
+| ts_vector_path_curvature | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_vector_path_efficiency | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_vector_self_intersection_rate | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_vector_state_local_density | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_vector_state_mahalanobis | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_vector_turning_coherence | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_vol_acceleration | daily | pandas_numpy, sql |  | True | ts | None | 1 | 0 |
 | ts_vol_clustering | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_vol_of_vol | daily | pandas_numpy, sql |  | True | ts | None | 1 | 0 |
+| ts_vol_pvariation_roughness | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
+| ts_vol_scaling_break | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_vol_shift_score | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | ts_vol_term_structure | daily | pandas_numpy, sql |  | True | ts | None | 1 | 0 |
 | ts_wasserstein_shift | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
@@ -1092,6 +1274,10 @@
 | unitize | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
 | up_down_volume_ratio | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
 | up_volume_ratio | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
+| update_acceleration | extended | pandas_numpy, polars |  | True | ts | None | 4 | 0 |
+| update_direction_persistence | extended | pandas_numpy, polars |  | True | ts | None | 3 | 0 |
+| update_path_efficiency | extended | pandas_numpy, polars |  | True | ts | None | 3 | 0 |
+| update_surprise | extended | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
 | valuation_cashflow_disagreement | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
 | valuation_growth_mismatch | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |
 | valuation_pcf_definition_gap | daily | pandas_numpy, polars |  | True | elementwise | None | None | 0 |

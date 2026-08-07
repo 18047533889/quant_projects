@@ -88,38 +88,51 @@ _REGISTRY_PATCHES: dict[str, dict[str, Any]] = {
     "us_stock_balance": {
         "time_column": "filing_date", "instrument_column": "ticker",
         "schema_replace": {
-            "ticker": "string", "period_end": "string",
+            "ticker": "string", "cik": "string", "period_end": "string",
             "filing_date": "timestamp", "fiscal_quarter": "int",
             "fiscal_year": "int", "timeframe": "string",
+            "total_assets": "double", "total_liabilities": "double",
+            "total_equity": "double",
         },
     },
     "us_stock_income": {
         "time_column": "filing_date", "instrument_column": "ticker",
         "schema_replace": {
-            "ticker": "string", "period_end": "string",
+            "ticker": "string", "cik": "string", "period_end": "string",
             "filing_date": "timestamp", "fiscal_quarter": "int",
             "fiscal_year": "int", "timeframe": "string",
+            "revenue": "double", "gross_profit": "double",
+            "operating_income": "double",
+            "net_income_loss_attributable_common_shareholders": "double",
         },
     },
     "us_stock_cashflow": {
         "time_column": "filing_date", "instrument_column": "ticker",
         "schema_replace": {
-            "ticker": "string", "period_end": "string",
+            "ticker": "string", "cik": "string", "period_end": "string",
             "filing_date": "timestamp", "fiscal_quarter": "int",
             "fiscal_year": "int", "timeframe": "string",
+            "net_cash_from_operating_activities": "double",
+            "net_cash_from_investing_activities": "double",
+            "net_cash_from_financing_activities": "double",
         },
     },
     "us_stock_dividend": {
         "instrument_column": "ticker",
         "schema_replace": {
             "id": "string", "ticker": "string", "record_date": "string",
-            "pay_date": "timestamp", "ex_dividend_date": "string",
-            "frequency": "int", "cash_amount": "double", "currency": "string",
-            "distribution_type": "string", "TradeDate": "timestamp",
+            "pay_date": "timestamp", "declaration_date": "string",
+            "ex_dividend_date": "string", "frequency": "int",
+            "cash_amount": "double", "currency": "string",
+            "distribution_type": "string",
+            "historical_adjustment_factor": "double",
+            "split_adjusted_cash_amount": "double", "TradeDate": "timestamp",
         },
     },
-    "us_stock_capital_daily": {
-        "instrument_column": "ticker",
+    # StockCapitalDaily 双 schema 拆分：{date}.parquet=拆分事件，
+    # shares_{date}.parquet=稀疏 PIT 股本。拆分数据集各自 schema，禁止 glob 混读。
+    "us_stock_capital_split": {
+        "time_column": "TradeDate", "instrument_column": "ticker",
         "schema_replace": {
             "id": "string", "execution_date": "timestamp",
             "split_from": "double", "split_to": "double", "ticker": "string",
@@ -127,20 +140,67 @@ _REGISTRY_PATCHES: dict[str, dict[str, Any]] = {
             "TradeDate": "timestamp",
         },
     },
+    "us_stock_capital_shares": {
+        "time_column": "TradeDate", "instrument_column": "Ticker",
+        "schema_replace": {
+            "Ticker": "string", "TradeDate": "timestamp",
+            "pit_basic_shares_outstanding": "double",
+            "pit_diluted_shares_outstanding": "double",
+        },
+    },
     "us_stock_indicator": {
         "time_column": "TradeDate", "instrument_column": "ticker",
         "schema_replace": {
             "ticker": "string", "cik": "string", "TradeDate": "timestamp",
-            "price": "double", "market_cap": "double",
-            "price_to_earnings": "double",
+            "price": "double", "average_volume": "double",
+            "market_cap": "double", "earnings_per_share": "double",
+            "price_to_earnings": "double", "price_to_book": "double",
+            "price_to_sales": "double", "price_to_cash_flow": "double",
+            "price_to_free_cash_flow": "double", "dividend_yield": "double",
+            "return_on_assets": "double", "return_on_equity": "double",
+            "debt_to_equity": "double", "current": "double",
+            "quick": "double", "cash": "double", "ev_to_sales": "double",
+            "ev_to_ebitda": "double", "enterprise_value": "double",
+            "free_cash_flow": "double",
         },
     },
     "us_stock_valuation_daily": {
         "time_column": "TradeDate", "instrument_column": "ticker",
         "schema_replace": {
             "ticker": "string", "cik": "string", "TradeDate": "timestamp",
-            "price": "double", "market_cap": "double",
-            "price_to_earnings": "double",
+            "price": "double", "average_volume": "double",
+            "market_cap": "double", "earnings_per_share": "double",
+            "price_to_earnings": "double", "price_to_book": "double",
+            "price_to_sales": "double", "price_to_cash_flow": "double",
+            "price_to_free_cash_flow": "double", "dividend_yield": "double",
+            "return_on_assets": "double", "return_on_equity": "double",
+            "debt_to_equity": "double", "current": "double",
+            "quick": "double", "cash": "double", "ev_to_sales": "double",
+            "ev_to_ebitda": "double", "enterprise_value": "double",
+            "free_cash_flow": "double",
+        },
+    },
+    "us_ticker_shares_snapshot": {
+        "time_column": "TradeDate", "instrument_column": "ticker",
+        "schema_replace": {
+            "ticker": "string", "cik": "string", "share_class_figi": "string",
+            "share_class_shares_outstanding": "double",
+            "weighted_shares_outstanding": "double", "TradeDate": "string",
+            "source": "string",
+        },
+    },
+    "us_security_master_daily_snap": {
+        "time_column": "TradeDate", "instrument_column": "ticker",
+        "schema_replace": {
+            "ticker": "string", "name": "string", "type": "string",
+            "market": "string", "locale": "string", "TradeDate": "timestamp",
+        },
+    },
+    "us_fact_news": {
+        "time_column": "published_utc", "instrument_column": "ticker",
+        "schema_replace": {
+            "ticker": "string", "published_utc": "timestamp",
+            "TradeDate": "timestamp",
         },
     },
 }

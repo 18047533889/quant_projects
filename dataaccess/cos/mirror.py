@@ -127,7 +127,10 @@ def _build_mirror_registry() -> dict[str, MirrorSpec]:
         _spec("us_etf_list", cos_prefix=up, local_root=ur, table="ETFList", layout="single_full"),
         _spec("us_security_master", cos_prefix=up, local_root=ur, table="SecurityMaster", layout="single_full"),
         _spec("us_stock_balance", cos_prefix=up, local_root=ur, table="StockBalance"),
-        _spec("us_stock_capital_daily", cos_prefix=up, local_root=ur, table="StockCapitalDaily"),
+        # StockCapitalDaily 目录混放 {date}.parquet（拆分事件）与 shares_{date}.parquet
+        # （PIT 股本），两 schema 不同——按数据集拆分镜像，禁止 glob 整个目录。
+        _spec("us_stock_capital_split", cos_prefix=up, local_root=ur, table="StockCapitalDaily"),
+        _spec("us_stock_capital_shares", cos_prefix=up, local_root=ur, table="StockCapitalDaily"),
         _spec("us_stock_cashflow", cos_prefix=up, local_root=ur, table="StockCashFlow"),
         _spec("us_stock_daily", cos_prefix=up, local_root=ur, table="StockDailyBar"),
         _spec("us_stock_dividend", cos_prefix=up, local_root=ur, table="StockDividend"),
@@ -138,6 +141,9 @@ def _build_mirror_registry() -> dict[str, MirrorSpec]:
         _spec("us_stock_list", cos_prefix=up, local_root=ur, table="StockList"),
         _spec("us_stock_status", cos_prefix=up, local_root=ur, table="StockStatus", layout="single_full"),
         _spec("us_stock_valuation_daily", cos_prefix=up, local_root=ur, table="StockValuationDaily"),
+        _spec("us_security_master_daily_snap", cos_prefix=up, local_root=ur, table="SecurityMasterDailySnap"),
+        _spec("us_ticker_shares_snapshot", cos_prefix=up, local_root=ur, table="TickerSharesSnapshot"),
+        _spec("us_fact_news", cos_prefix=up, local_root=ur, table="FactNews"),
         _spec("us_ticker_alias", cos_prefix=up, local_root=ur, table="TickerAlias", layout="single_full"),
         _spec("us_ticker_map", cos_prefix=up, local_root=ur, table="TickerMap", layout="single_full"),
         # ---- 美股 clean_data 衍生层（hive / 单文件）----

@@ -210,6 +210,9 @@ _SCALAR_VALUES: dict[str, Any] = {
     "signal_window": 9,
     "signal_period": 9,
     "side": "lower",
+    "target_side": "lower",
+    "source_side": "lower",
+    "max_shift": 3,
     "order": "largest",
     "add_intercept": True,
     "clip": 3.0,
@@ -561,6 +564,8 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_beta_break_score", "window"): 120,
     ("ts_beta_break_score", "recent_window"): 30,
     ("ts_beta_break_score", "prior_window"): 90,
+    ("ts_modwt_band_corr", "band"): 1,
+    ("intraday_realized_power_variation", "order"): 4,
     # 2026-08 V2/V3 dynamics pack: small state counts / fixed order / side
     # selectors.  A-share state-machine ``side`` remains up/down; these are
     # upper/lower tail selectors.

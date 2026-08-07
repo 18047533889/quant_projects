@@ -47,6 +47,8 @@ ashare_stock_daily:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 StockDailyBar：Return 为 bp（÷10000 才是小数收益）；Factor 为后复权
+  # 乘数（后复权价 = Close × Factor）；HighLimit/LowLimit 为涨跌停价。
   schema:
     TradeDate: date
     Symbol: string
@@ -57,8 +59,13 @@ ashare_stock_daily:
     PreClose: double
     Volume: int
     Amount: double
+    HighLimit: double
+    LowLimit: double
     Return: double
+    Factor: double
     Vwap: double
+    IsSuspend: bool
+    UpdateTime: timestamp
 
 ashare_stock_minute:
   <<: *ashare_lqtp_defaults
@@ -93,14 +100,28 @@ ashare_stock_valuation_daily:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 StockValuationDaily：TurnoverRatio/DividendRatio 为百分数 %（÷100）；
+  # PeRatio/PbRatio/PsRatio/PcfRatio* 为倍数；Capitalization 系列为股本（股）。
   schema:
     TradeDate: date
     Symbol: string
+    Capitalization: double
+    CirculatingCap: double
     MarketCap: double
     CirculatingMarketCap: double
-    PeRatio: double
-    PbRatio: double
     TurnoverRatio: double
+    PeRatio: double
+    PeRatioLyr: double
+    PbRatio: double
+    PsRatio: double
+    PcfRatio: double
+    PcfRatio2: double
+    DividendRatio: double
+    FreeCap: double
+    FreeMarketCap: double
+    ACap: double
+    AMarketCap: double
+    UpdateTime: timestamp
 
 ashare_stock_capital_daily:
   <<: *ashare_lqtp_defaults
@@ -108,11 +129,15 @@ ashare_stock_capital_daily:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 StockCapitalDaily：S1 日终股本快照（≠美股拆股事件表）。覆盖可能短于行情。
   schema:
     TradeDate: date
     Symbol: string
+    ChangeDate: date
+    PubDate: date
     TotalCapital: double
     CirculatingCapital: double
+    UpdateTime: timestamp
 
 ashare_stock_indicator:
   <<: *ashare_lqtp_defaults
@@ -120,14 +145,19 @@ ashare_stock_indicator:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 StockIndicator：E1 事件表（文件名=PubDate，PIT=PubDate）；
+  # Roe/Roa/*Margin/Inc* 均为百分数 %（÷100 得小数）。
   schema:
     TradeDate: date
     Symbol: string
-    Eps: double
-    Roe: double
     PubDate: date
     ReportPeriodEndDate: date
     UpdateTime: timestamp
+    Eps: double
+    Roe: double
+    Roa: double
+    NetProfitMargin: double
+    GrossProfitMargin: double
 
 ashare_stock_balance:
   <<: *ashare_lqtp_defaults
@@ -135,6 +165,8 @@ ashare_stock_balance:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 StockBalance：E1 事件表（文件名=PubDate，PIT=PubDate，period=ReportPeriodEndDate）。
+  # 关键科目；完整 111 字段见字典（高缺失金融科目不在此声明）。
   schema:
     TradeDate: date
     Symbol: string
@@ -143,6 +175,9 @@ ashare_stock_balance:
     UpdateTime: timestamp
     TotalAssets: double
     TotalLiability: double
+    TotalOwnerEquities: double
+    TotalCurrentAssets: double
+    TotalNonCurrentAssets: double
 
 ashare_stock_income:
   <<: *ashare_lqtp_defaults
@@ -150,6 +185,7 @@ ashare_stock_income:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 StockIncome：E1 事件表；NetProfit 含少数股东损益，归母用 NpParentCompanyOwners。
   schema:
     TradeDate: date
     Symbol: string
@@ -158,7 +194,9 @@ ashare_stock_income:
     UpdateTime: timestamp
     TotalOperatingRevenue: double
     OperatingRevenue: double
+    OperatingCost: double
     NetProfit: double
+    NpParentCompanyOwners: double
 
 ashare_turnover_base_daily:
   <<: *ashare_lqtp_defaults
@@ -178,12 +216,16 @@ ashare_stock_cashflow:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 StockCashFlow：E1 事件表；NetOperateCashFlow 为 OCF。
   schema:
     TradeDate: date
     Symbol: string
     PubDate: date
     ReportPeriodEndDate: date
     UpdateTime: timestamp
+    NetOperateCashFlow: double
+    NetInvestCashFlow: double
+    NetFinanceCashFlow: double
 
 ashare_stock_dividend:
   <<: *ashare_lqtp_defaults
@@ -191,10 +233,17 @@ ashare_stock_dividend:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 StockDividend：E1/effective_time_only；文件名=ExDividendDate；
+  # 无公告 PIT（默认拒绝当严格 PIT）；StockDividend/StockTransfer 为每股比例。
   schema:
     TradeDate: date
     Symbol: string
+    RightRegDate: date
+    ExDividendDate: date
     CashDividend: double
+    StockDividend: double
+    StockTransfer: double
+    UpdateTime: timestamp
 
 ashare_index_daily:
   <<: *ashare_lqtp_defaults
@@ -218,11 +267,13 @@ ashare_index_constituent:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 IndexConstituent：grain=(TradeDate, IndexSymbol, Symbol)；Weight 为百分数 %（和≈100）。
   schema:
     TradeDate: date
     IndexSymbol: string
     Symbol: string
     Weight: double
+    UpdateTime: timestamp
 
 ashare_etf_daily:
   <<: *ashare_lqtp_defaults
@@ -277,11 +328,15 @@ ashare_stock_industry:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 StockIndustry：grain=(TradeDate, Symbol, IndustrySource)；join 前必须先
+  # filter 单一 IndustrySource（否则行数×6）。IndustrySource ∈ {sw_l1..sw_l3, zjw, jq_l1, jq_l2}。
   schema:
     TradeDate: date
     Symbol: string
+    IndustrySource: string
     IndustryCode: string
     IndustryName: string
+    UpdateTime: timestamp
 
 ashare_stock_status:
   <<: *ashare_lqtp_defaults
@@ -289,10 +344,21 @@ ashare_stock_status:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # 字典 §5 StockStatus：S1 快照；可交易过滤 PublicStatus=='正常上市'；
+  # IsSuspend 不在本表（在 StockDailyBar）。注意：不存在「ListedState」列，正确的是 PublicStatus。
   schema:
     TradeDate: date
     Symbol: string
-    ListedState: string
+    CompanyId: int
+    PubDate: date
+    ChangeDate: date
+    PublicStatusCode: int
+    PublicStatus: string
+    ChangeReason: string
+    ChangeTypeCode: int
+    ChangeType: string
+    Comments: string
+    UpdateTime: timestamp
 
 # Point-in-time research universe and tradability mask used by production factor evaluation.
 # This is a curated clean-data contract, not a current-security-master snapshot. Each row
@@ -361,6 +427,9 @@ us_stock_daily:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Ticker
+  # 字典 §5 StockDailyBar：Ret/Ret_Intra/Ret_Overnight/High_Low_Ratio/
+  # Vwap_Close_Dist/Upper_Shadow_Ratio 均为小数（禁止再 /10000 或 /100）；
+  # AdjFactor 为后复权乘数（调整价≈原价×AdjFactor）。TradeDate 为 timestamp[ns]。
   schema:
     TradeDate: timestamp
     Ticker: string
@@ -376,21 +445,44 @@ us_stock_daily:
     Ret: double
     Ret_Intra: double
     Ret_Overnight: double
+    High_Low_Ratio: double
+    Upper_Shadow_Ratio: double
+    Vwap_Close_Dist: double
 
 us_stock_valuation_daily:
   <<: *us_massive_defaults
   root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockValuationDaily
   glob: "**/*.parquet"
   time_column: TradeDate
-  instrument_column: Ticker
+  instrument_column: ticker
+  # 字典 §5 StockValuationDaily（美股）：X0 稀疏表（~49 个文件，禁止当全历史面板）。
+  # 列名是 snake_case（与 A股 PascalCase 完全不同，禁止套 A股 schema）。
+  # dividend_yield/return_on_equity/return_on_assets 为小数（禁止再 /100）；
+  # price_to_* / debt_to_equity / current / quick / cash 为倍数或比率。
   schema:
-    TradeDate: date
-    Ticker: string
-    MarketCap: double
-    CirculatingMarketCap: double
-    PeRatio: double
-    PbRatio: double
-    TurnoverRatio: double
+    ticker: string
+    cik: string
+    TradeDate: timestamp
+    price: double
+    average_volume: double
+    market_cap: double
+    earnings_per_share: double
+    price_to_earnings: double
+    price_to_book: double
+    price_to_sales: double
+    price_to_cash_flow: double
+    price_to_free_cash_flow: double
+    dividend_yield: double
+    return_on_assets: double
+    return_on_equity: double
+    debt_to_equity: double
+    current: double
+    quick: double
+    cash: double
+    ev_to_sales: double
+    ev_to_ebitda: double
+    enterprise_value: double
+    free_cash_flow: double
 
 us_stock_indicator:
   <<: *us_massive_defaults
@@ -398,6 +490,32 @@ us_stock_indicator:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: ticker
+  # 字典 §5 StockIndicator（美股）：X0 稀疏表，内容是 Valuation 克隆（不是 A股财务
+  # 比率表）；ROE/ROA/dividend_yield 已为小数；比 Valuation 少 Volatility_20d。
+  schema:
+    ticker: string
+    cik: string
+    TradeDate: timestamp
+    price: double
+    average_volume: double
+    market_cap: double
+    earnings_per_share: double
+    price_to_earnings: double
+    price_to_book: double
+    price_to_sales: double
+    price_to_cash_flow: double
+    price_to_free_cash_flow: double
+    dividend_yield: double
+    return_on_assets: double
+    return_on_equity: double
+    debt_to_equity: double
+    current: double
+    quick: double
+    cash: double
+    ev_to_sales: double
+    ev_to_ebitda: double
+    enterprise_value: double
+    free_cash_flow: double
 
 us_stock_balance:
   <<: *us_massive_defaults
@@ -405,6 +523,20 @@ us_stock_balance:
   glob: "**/*.parquet"
   time_column: filing_date
   instrument_column: ticker
+  # 字典 §5 StockBalance（美股）：E2 事件表，文件名=period_end，PIT=filing_date；
+  # 必须 filter timeframe（quarterly/annual/trailing_twelve_months），否则 TTM 与
+  # 季度/年度混在同一截面。金额 USD 绝对额。
+  schema:
+    ticker: string
+    cik: string
+    period_end: string
+    filing_date: timestamp
+    fiscal_quarter: int
+    fiscal_year: int
+    timeframe: string
+    total_assets: double
+    total_liabilities: double
+    total_equity: double
 
 us_stock_income:
   <<: *us_massive_defaults
@@ -412,6 +544,19 @@ us_stock_income:
   glob: "**/*.parquet"
   time_column: filing_date
   instrument_column: ticker
+  # 字典 §5 StockIncome（美股）：E2 事件表，PIT=filing_date；必须 filter timeframe。
+  schema:
+    ticker: string
+    cik: string
+    period_end: string
+    filing_date: timestamp
+    fiscal_quarter: int
+    fiscal_year: int
+    timeframe: string
+    revenue: double
+    gross_profit: double
+    operating_income: double
+    net_income_loss_attributable_common_shareholders: double
 
 us_stock_cashflow:
   <<: *us_massive_defaults
@@ -419,13 +564,56 @@ us_stock_cashflow:
   glob: "**/*.parquet"
   time_column: filing_date
   instrument_column: ticker
+  # 字典 §5 StockCashFlow（美股）：E2 事件表，PIT=filing_date；必须 filter timeframe。
+  schema:
+    ticker: string
+    cik: string
+    period_end: string
+    filing_date: timestamp
+    fiscal_quarter: int
+    fiscal_year: int
+    timeframe: string
+    net_cash_from_operating_activities: double
+    net_cash_from_investing_activities: double
+    net_cash_from_financing_activities: double
 
-us_stock_capital_daily:
+# ---- 美股 StockCapitalDaily 双 schema 拆分 ----------------------------------
+# 字典 §C13：同一目录混放两种 schema，禁止 glob 整个目录——
+#   {YYYY-MM-DD}.parquet    = 拆分/调整事件（forward_split/reverse_split/stock_dividend）
+#   shares_{YYYY-MM-DD}.parquet = 稀疏 PIT 股本（同日同 Ticker 可多行，需去重）
+# 因此拆成两个数据集，各自 glob 只命中一种前缀，杜绝 schema 拼炸。
+us_stock_capital_split:
   <<: *us_massive_defaults
   root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockCapitalDaily
-  glob: "**/*.parquet"
+  # [0-9]*.parquet 只命中 {YYYY-MM-DD}.parquet，排除同目录 shares_*.parquet
+  #（两 schema 完全不同，合并会拼炸——字典 C13 已警告）。
+  glob: "[0-9]*.parquet"
   time_column: TradeDate
   instrument_column: ticker
+  # 拆分/调整事件文件。注意与 shares_ 文件同目录，glob 只匹配 {date}.parquet。
+  schema:
+    id: string
+    execution_date: timestamp
+    split_from: double
+    split_to: double
+    ticker: string
+    adjustment_type: string
+    historical_adjustment_factor: double
+    TradeDate: timestamp
+
+us_stock_capital_shares:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/StockCapitalDaily
+  glob: "shares_*.parquet"
+  time_column: TradeDate
+  instrument_column: Ticker
+  # 稀疏 PIT 股本（shares_ 前缀文件）；同日同 Ticker 可多行。日频股本首选
+  # us_ticker_shares_snapshot，本表是稀疏 PIT 股本来源。
+  schema:
+    Ticker: string
+    TradeDate: timestamp
+    pit_basic_shares_outstanding: double
+    pit_diluted_shares_outstanding: double
 
 us_stock_dividend:
   <<: *us_massive_defaults
@@ -433,6 +621,22 @@ us_stock_dividend:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: ticker
+  # 字典 §5 StockDividend（美股）：E2 事件表，文件名=ex_dividend_date；
+  # cash_amount 单位随 currency（非 USD 约 12%，禁止当美元）；可含未来除权日文件。
+  schema:
+    id: string
+    ticker: string
+    record_date: string
+    pay_date: timestamp
+    declaration_date: string
+    ex_dividend_date: string
+    frequency: int
+    cash_amount: double
+    currency: string
+    distribution_type: string
+    historical_adjustment_factor: double
+    split_adjusted_cash_amount: double
+    TradeDate: timestamp
 
 us_stock_list:
   <<: *us_massive_defaults
@@ -551,6 +755,52 @@ us_is_ticker_halt_minute:
   glob: "date=*/data.parquet"
   time_column: timestamp
   instrument_column: ticker
+
+
+# ---- 美股 massive_data 补充数据集（字典 §2 / C23）------------------------------
+# TickerSharesSnapshot：日频股本快照，市值中性推荐源
+#   （size 暴露 = Close × weighted_shares_outstanding，替代 X0 稀疏 Valuation）。
+us_ticker_shares_snapshot:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/TickerSharesSnapshot
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: ticker
+  schema:
+    ticker: string
+    cik: string
+    share_class_figi: string
+    share_class_shares_outstanding: double
+    weighted_shares_outstanding: double
+    TradeDate: string
+    source: string
+
+# SecurityMasterDailySnap：每日证券主数据快照（D1）
+us_security_master_daily_snap:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/SecurityMasterDailySnap
+  glob: "**/*.parquet"
+  time_column: TradeDate
+  instrument_column: ticker
+  schema:
+    ticker: string
+    name: string
+    type: string
+    market: string
+    locale: string
+    TradeDate: timestamp
+
+# FactNews：clean 层新闻（RAW_EVENT）；PIT=published_utc；TradeDate 仅分区。
+us_fact_news:
+  <<: *us_massive_defaults
+  root: ${US_MASSIVE_ROOT:-/home/shw/quant_projects/data/us_stock/massive_data}/FactNews
+  glob: "**/*.parquet"
+  time_column: published_utc
+  instrument_column: ticker
+  schema:
+    ticker: string
+    published_utc: timestamp
+    TradeDate: timestamp
 
 
 # ---- 正式行情库（全员只读） ---------------------------------------------------

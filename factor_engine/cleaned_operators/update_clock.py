@@ -152,7 +152,8 @@ def _surprise(vals: np.ndarray) -> float:
     mad = float(np.median(np.abs(past - med)))
     if mad <= _EPS:
         return np.nan
-    return float((d[-1] - med) / mad)
+    # MAD-normalised innovation (1.4826 puts MAD on the sigma scale).
+    return float((d[-1] - med) / (1.4826 * mad))
 
 
 def _direction_persist(vals: np.ndarray) -> float:
