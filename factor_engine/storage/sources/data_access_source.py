@@ -357,6 +357,7 @@ class DataAccessSource(DataSource):
     def clear_cache(self, *, reset_snapshot: bool = True) -> None:
         self._column_cache.clear()
         self._panel_cache.clear()
+        self._cache_bytes = 0
         self._lazy_bundle = None
         if reset_snapshot:
             self._data_snapshot_id = None
@@ -394,6 +395,8 @@ class DataAccessSource(DataSource):
             "cached_columns": len(self._column_cache),
             "cached_panels": len(self._panel_cache),
             "max_cache_columns": self._max_cache_columns,
+            "cache_bytes": self._cache_bytes,
+            "max_cache_bytes": self._max_cache_bytes,
         }
 
     def enable_lazy_scan(self, enabled: bool = True) -> None:
