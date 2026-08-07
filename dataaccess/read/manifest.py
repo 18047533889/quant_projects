@@ -205,6 +205,8 @@ class DatasetManifest:
                     "format": self.format,
                     "created_at": self.created_at,
                     "file_count": self.file_count,
+                    "dataset_version": self.dataset_version,
+                    "partition_version": self.partition_version,
                 },
                 ensure_ascii=False,
                 sort_keys=True,
@@ -356,16 +358,16 @@ def manifest_root_for_paths(paths: Sequence[str]) -> Path | None:
     return None
 
 
-def is_manifest_fresh(manifest: DatasetManifest, glob_paths: Sequence[str]) -> bool:
-    """文件名级新鲜度检查：glob 展开数量与 manifest 文件数一致才信任。
+def _count_data_files(glob_paths: Sequence[str]) -> int | None:
+    """文件名级 glob 计数（只算数据文件，排除 manifest 自身）。
 
-    只做文件名 glob（不读 footer），远快于逐文件 pq.read_metadata。
+    返回 None 表示无法本地计数（远程 glob）→ 调用方应信任 manifest。
     """
     count = 0
     for pattern in glob_paths:
         if str(pattern).startswith("s3://"):
             # 远程无法本地计数 → 信任 manifest（COS 对象按日不变）
-            return True
+            return None
         matches = []
         if "*" in pattern or "?" in pattern or "[" in pattern:
             matches = glob_module.glob(pattern, recursive=True)
@@ -381,7 +383,36 @@ def is_manifest_fresh(manifest: DatasetManifest, glob_paths: Sequence[str]) -> b
             if name == MANIFEST_FILENAME or name == _MANIFEST_META_FILENAME:
                 continue
             count += 1
+    return count
+
+
+def is_manifest_fresh(manifest: DatasetManifest, glob_paths: Sequence[str]) -> bool:
+    """文件名级新鲜度检查：glob 展开数量与 manifest 文件数一致才信任。
+
+    只做文件名 glob（不读 footer），远快于逐文件 pq.read_metadata。
+    """
+    count = _count_data_files(glob_paths)
+    if count is None:
+        return True
     return count == manifest.file_count
+
+
+def manifest_version_token(root: Path) -> dict[str, Any] | None:
+    """廉价版本 token：只读 ``_manifest.json`` sidecar，不读 manifest parquet。
+
+    供 query-scoped snapshot 的 ``store.manifest_version()`` 使用——几十微秒级，
+    避免每次 describe 整个 dataset 再执行一次实际 read。
+    """
+    meta_path = Path(root) / _MANIFEST_META_FILENAME
+    if not meta_path.exists():
+        return None
+    try:
+        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
 
 
 def build_manifest_for_dataset(
