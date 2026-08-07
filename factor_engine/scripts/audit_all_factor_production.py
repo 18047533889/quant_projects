@@ -558,6 +558,8 @@ _MINUTE_PANEL_PARAMS: dict[str, str] = {
     "locked": "minute_zero",
     # 2026-08 advanced intraday: pair-distribution second series.
     "y": "minute_ret",
+    # 2026-08 V2/V3 session-recovery: minute shock-indicator event panel.
+    "event": "minute_shock",
 }
 
 # Minute-source operators also consume a few daily panels that are broadcast

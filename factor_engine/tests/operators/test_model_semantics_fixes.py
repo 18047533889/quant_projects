@@ -200,7 +200,10 @@ def test_garch_shock_uses_h_t() -> None:
         h[t] = 0.05 + 0.1 * ret[t - 1] ** 2 + 0.8 * h[t - 1]
         ret[t] = np.sqrt(h[t]) * rng.standard_normal()
     seg = ret[-120:]
-    params = _fit_garch(seg)
+    # P0-040: the shock of the current return must be standardised by
+    # parameters fitted strictly on <= t-1 (the window *excluding* the current
+    # return), then evaluated against the variance that governed it.
+    params = _fit_garch(seg[:-1])
     assert params is not None
     w, a, b = params
     h_prev = float(np.var(seg))

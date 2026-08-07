@@ -317,14 +317,25 @@ def _score_rank_weighted_mean(t: np.ndarray, sc: np.ndarray, decay: float) -> fl
         return np.nan
     tv = t[valid].astype(float)
     sv = sc[valid].astype(float)
-    order = np.argsort(-sv, kind="stable")  # highest score -> rank 0
-    tv = tv[order]
     n = tv.size
     if n == 0:
         return np.nan
-    w = np.power(decay, np.arange(n, dtype=float))
+    # Average-tie ranks (highest score -> rank 0).  A stable argsort alone gives
+    # tied scores distinct ranks in arrival order, silently weighting the earlier
+    # observation more; equal scores must share the mean rank / equal weight.
+    order = np.argsort(-sv, kind="mergesort")
+    s_sorted = -sv[order]
+    ranks = np.empty(n, dtype=float)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and s_sorted[j + 1] == s_sorted[i]:
+            j += 1
+        ranks[order[i : j + 1]] = 0.5 * (i + j)
+        i = j + 1
+    w = np.power(decay, ranks)
     w /= w.sum()
-    return float(np.sum(w * tv))
+    return float(np.sum(w * tv[order]))
 
 
 @register_operator(
@@ -347,7 +358,9 @@ class TsScoreRankWeightedMean(SeriesOperator):
         "指数秩加权均值（salience 加权）：按 score 降序加权平均 target。",
         ["target", "score", "window", "decay"],
         domain="price_volume",
-        unit="ratio",
+        # The output is a weighted mean *of the target* — it inherits the target's
+        # unit (price / amount / volatility / earnings), never a fixed ratio.
+        unit="same_as:target",
         cost=3,
     )
 
@@ -412,7 +425,10 @@ class ReportBenfordJsDivergence(SeriesOperator):
 
     输入必须是报表金额类量纲字段（严禁比率/百分比/代码/布尔）。本算子只描述
     *数字分布异常*，绝不解释为"造假概率"——firm-year divergence 的稳健性在
-    文献中仍存争议，因此仅作为 Research 特征供下游检验。P2 / Research。
+    文献中仍存争议，因此仅作为 Research 特征供下游检验。**用法警告**：对
+    as-of forward-fill 的日频基本面 panel，同一份财报值会在多个交易日重复，
+    首位数分布将主要反映*披露频率/forward-fill 持久性*而非财报数字本身的
+    异常；应作用于同一份财报的多个金额项或 distinct 披露观测。P2 / Research。
     """
 
     metadata = _metadata(

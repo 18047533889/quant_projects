@@ -31,7 +31,7 @@ P2 = {
     "intraday_wasserstein_quantile_pca_score",
     "intraday_wasserstein_quantile_pca_residual",
     "ts_betti_1_max_persistence", "ts_persistence_diagram_shift",
-    "ts_student_t_fisher_shift",
+    "ts_fisher_information_shift",
 }
 ALL_OPS = P1 | P2
 
@@ -83,7 +83,7 @@ def test_advanced_ops_deterministic_and_shape_preserving():
         "group_spd_feature_structure_shift": (x, y, np.abs(x), g),
         "ts_betti_1_max_persistence": (x,),
         "ts_persistence_diagram_shift": (x,),
-        "ts_student_t_fisher_shift": (x,),
+        "ts_fisher_information_shift": (x,),
     }
     kwargs = {
         "ts_transfer_entropy": {"window": 40, "bins": 3, "lag": 1},
@@ -97,7 +97,7 @@ def test_advanced_ops_deterministic_and_shape_preserving():
         "group_spd_feature_structure_shift": {"reference_window": 30},
         "ts_betti_1_max_persistence": {"window": 40, "tau": 1, "embedding_dim": 3},
         "ts_persistence_diagram_shift": {"window": 20, "tau": 1, "embedding_dim": 3},
-        "ts_student_t_fisher_shift": {"recent_window": 30, "prior_window": 30},
+        "ts_fisher_information_shift": {"recent_window": 30, "prior_window": 30},
     }
     for name, args in calls.items():
         op = OperatorRegistry.get(name, "pandas_numpy")
@@ -347,7 +347,7 @@ def test_betti_and_diagram_shift_panels():
 
 def test_student_t_fisher_shift_same_vs_different():
     rng = np.random.default_rng(13)
-    op = OperatorRegistry.get("ts_student_t_fisher_shift", "pandas_numpy")
+    op = OperatorRegistry.get("ts_fisher_information_shift", "pandas_numpy")
     # Same heavy-tailed distribution in both windows -> small information distance.
     same = _frame(rng.standard_t(df=5.0, size=(200, 3)), "2024-01-01")
     out_same = op.calculate(same, recent_window=60, prior_window=80)
