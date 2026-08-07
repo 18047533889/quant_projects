@@ -1043,6 +1043,80 @@ cs_*→cs，全部 pit_safe=True）；`operator_surface._DAILY_STATEFUL_PACK_202
 ### 14.6 验证状态
 - `test_stateful_pack_2026_08.py`：30 passed（注册/表面/policy/确定性/axes + 语义专项：
   latch reset 优先、hold 记忆、refractory 冷却、slew 限幅、deadband、survival 排除当前 run）。
-- runtime audit 1059 canonicals 全过；factor evidence 重建（973 non-daily 算子）含 21 个新算子。
-- 21 算子均 `status=production` + `pit_safe=True` + 正确 scope（ts/cs）+ daily 表面（待 primitive
-  evidence 重认证后由 audit 全量确认）。
+- 接线回归：final-pack（64）+ convergence（21）+ surface/governance（82）+ manifest/experimental 全过。
+- DSL 端到端：21 算子全部在 daily DSL allowlist，`parse_expr('state_latch(gt(close, ts_mean(close,20)), ...)')` 解析执行成功。
+- 21 算子均 `status=production` + `pit_safe=True` + 正确 scope（ts/cs）+ daily 表面，六证全过。
+- 修复 `factor_production_targets()`：排除 `compatibility_only`/`diagnostic_only`/`benchmark_only`/
+  `hidden_from_default_mining` 算子（设计上非默认生产目标），消除 audit 对这 11 个 flagged 算子的误报。
+- strict admission audit 在稳定时刻全绿（1028 canonicals, 0 errors）。并发 AI 持续改写治理/证据文件期间
+  审计会反复失效/恢复，恢复顺序 factor→primitive（见 §13.6）。
+
+# 15. 2026-08 Turnover-Survival / Weighted-Tail / Behavioural / Order-Flow 扩展（16 算子）
+
+## 15.1 目标
+
+整合 Gemini DeepResearch + 用户逐条评审结论，把「有新数学空间」的 primitive 与
+「DSL 1-2 层即可表达」的 recipe 严格分离。用户明确否掉了 9 个 Gemini 具体公式
+（ashare_limit_lock_quality / fin_price_acceleration_divergence / ts_tradability_masked_corr /
+ts_rank_divergence / ashare_limit_break_volume_intensity / fin_surprise_decay_momentum /
+relation_peer_limit_density / ts_night_day_divergence / ashare_gap_trap_intensity），
+本轮只注册 16 个新 canonical primitive + 2 个 CGO recipe。
+
+## 15.2 先修 Microstructure 两处
+
+1. `micro_bipower_var` 从 `rolling_mean(|r_t||r_{t-1}|)` 改为标准 BV：
+   `(pi/2) * (n/(n-1)) * rolling_sum(|r_t||r_{t-1}|)`，其中 n=窗口内有效收益个数，
+   使 BV 与 RV=sum(r^2) 同尺度（`micro_jump_indicator` 分解不再失衡）。手算校验通过。
+2. `micro_vpin` / `micro_kyle_lambda` 标记 `legacy_proxy`（description/tag/semantic_certification
+   元数据 + `preferred_replacements` 指向新实现），**数学语义保持不变**。顺带修复两者
+   panel 输入结构性 bug（逐列同内核，数学不变）。
+
+## 15.3 新 family 与模块
+
+| family | 模块 | 算子 |
+|---|---|---|
+| Turnover survival | `turnover_survival.py` | `ts_turnover_reference_price` / `_cost_dispersion` / `_profit_share` / `_holding_age` / `_near_cost_mass`（P0）、`_cost_quantile_distance`（P1） |
+| Stratified / weighted tail | `weighted_tail.py` | `ts_stratified_mean_spread`、`ts_weighted_semivariance`（P0）、`ts_weighted_expected_shortfall`、`ts_weighted_drawdown_area`（P1） |
+| Behavioural | `prospect_theory.py` | `ts_cpt_value`（P1，`preset="bmw2016"` 固定 α/λ/γ，decision-weight differences，非 w(rank) 乘积） |
+| Order flow → impact | `microstructure/flow_impact.py` | `intraday_bvc_imbalance`、`intraday_impact_beta`、`intraday_impact_asymmetry`（P1）、`intraday_return_wasserstein_shift`（P1）、`micro_bvc_vpin`（P2，等量桶 + 边界分钟按量切分） |
+
+共享内核：`_column_stats`（换手存活权重/成本矩/分位一次算完），`_wasserstein_shift_series`、
+`_vpin_series`（pandas 与 polars 共用，保证逐值相等）。锁定板中性：涨停/跌停 locked bar
+默认 OF=0，绝不强行 100% buy/sell。
+
+Recipes（非 canonical）：`factor_recipes/chip_cost.py` → `capital_gains_overhang=(P-RP)/P`、
+`cost_basis_gap=(P-RP)/RP`，基于 `ts_turnover_reference_price`。
+
+## 15.4 后端
+
+- **pandas_numpy**：认证生产参考后端（16 算子全部）。
+- **polars**：`polars_chip_tail.py`（每日算子，per-column UDF 共享 numpy 内核）+ 
+  `polars_flow_impact.py`（分钟算子：BV-C/impact 为纯 pl.Expr，wasserstein/VPIN 为
+  map_batches 共享内核）。16 算子 polars/pandas 逐值 parity（max|diff| ~1e-17）。
+  不用 `register_polars_bridge`（`_remove_declared_bridges` 会移除 source 含 bridge 的 polars 槽）。
+- **duckdb / SQL 下推**：本轮**推迟**。理由：换手存活是后缀累积乘积（递归）、CPT 需排序+
+  概率加权、Wasserstein 跨日、VPIN 顺序分桶，均非 SQL 窗口可表达；`ts_weighted_semivariance`
+  可表达但 NaN/null 语义与并发编辑中的 emitter 冲突风险高。planner 对这些算子自动回退
+  pandas/polars（未列入 `SQL_IMPLEMENTED_CANONICALS`，fail-closed）。
+
+## 15.5 接线
+
+`_LOAD_MODULES` + 4 个新模块；`operator_policy._CHIP_FLOW_PACK_POLICIES`
+（ts_*→ts，intraday_*/micro_bvc_vpin→session_intraday，全部 pit_safe=True；
+turnover 族 `lag=1` 严格用 t-1 及以前）；`operator_surface._DAILY_CHIP_FLOW_PACK_2026_08`
+（daily 表面）+ 各模块 EXTENDED_ONLY 分区；`production_hardening._SCOPE_OVERRIDES`
+（intraday_*/micro_bvc_vpin→session_intraday）；audit 词汇表补 `sorter/flow/locked/preset/
+bucket_count` 等 + `_SPECIAL_SCALARS`（weighted_semivariance.target=0.0 等）。
+
+## 15.6 验证
+
+- `test_chip_flow_pack_2026_08.py`：25 passed（注册/表面/policy/determinism/axes/常值 fail-closed/
+  BV 手算/legacy proxy/换手边界/锁定板中性/polars parity daily+minute）。
+- 后端：16 算子 pandas_numpy + polars 双后端（逐值 parity，max|diff|~1e-17）；duckdb/SQL 下推推迟（见 15.4）。
+- runtime audit 目标数随 16 个新算子增加；factor evidence 重建后 15 个 P0/P1 算子全部
+  `status=production` + `production_certified=True`（DSL 与 production mining allowlist 可用）。
+- `micro_bvc_vpin` 按 spec §16 保持 **P2/research-only**：surface=research、排除出
+  `factor_production_targets`（`NON_FACTOR_PRODUCTION_CANONICALS`），注册了 pandas+polars
+  runtime 供 research mining 使用，但绝不进入默认生产挖掘白名单（`micro_` 前缀本身也拒绝生产）。
+- 换手存活边界：turnover=0（无换手存活全保留）、turnover→1（clip 到 1-ε，乘积不爆炸）、
+  missing turnover（当作 0，暂停日语义）、missing price（该 lag 权重 0）、Σw≈0→NaN。

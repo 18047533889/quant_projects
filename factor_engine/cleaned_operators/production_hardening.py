@@ -56,6 +56,10 @@ NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
     # to fail with a precise migration error; they are not factor-panel targets.
     "holder_concentration_change",
     "holder_count_change_rate",
+    # micro_bvc_vpin is P2 / research-only: BV-C carries estimation error, minute
+    # bars are not ticks and the VPIN literature is contested.  It must never be a
+    # default production-admission subject (spec §16).
+    "micro_bvc_vpin",
 })
 
 FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({

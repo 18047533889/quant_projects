@@ -275,10 +275,21 @@ def dataset_read_stats(
         estimated_rows = sidecar.num_rows
         parquet_files = sidecar.num_files
     else:
-        paths = store._prepare_dataset_read(ds, time_range=time_range, params=params)
-        parquet_files_list = expand_parquet_paths(paths)
-        parquet_files = len(parquet_files_list)
-        estimated_rows = estimate_parquet_rows(parquet_files_list)
+        # 优先用 manifest：避免 glob + 逐文件 footer
+        from data_access.read.manifest import load_manifest_for_dataset
+
+        try:
+            manifest = load_manifest_for_dataset(store, dataset, **params)
+        except Exception:
+            manifest = None
+        if manifest is not None and manifest.total_rows > 0:
+            estimated_rows = manifest.total_rows
+            parquet_files = manifest.file_count
+        else:
+            paths = store._prepare_dataset_read(ds, time_range=time_range, params=params)
+            parquet_files_list = expand_parquet_paths(paths)
+            parquet_files = len(parquet_files_list)
+            estimated_rows = estimate_parquet_rows(parquet_files_list)
     mode = suggest_read_mode(
         estimated_rows,
         column_count=len(columns) if columns else None,

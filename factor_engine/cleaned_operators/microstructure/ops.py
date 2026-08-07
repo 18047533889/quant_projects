@@ -373,14 +373,19 @@ class MicroVpinOp(SeriesOperator):
 
         w = max(1, int(window))
         mp = max(1, int(min_periods))
-        if hasattr(close, "apply"):
-            ret = close.apply(lambda s: pct_change_by_session(pd.Series(s)).abs())
-        else:
-            ret = pct_change_by_session(pd.Series(close)).abs()
-        weighted = ret * volume
-        return rolling_by_session(weighted, w, "sum", min_periods=mp) / rolling_by_session(
-            volume, w, "sum", min_periods=mp
-        ).replace(0, np.nan)
+
+        def _one(c: pd.Series, v: pd.Series) -> pd.Series:
+            r = pct_change_by_session(pd.Series(c)).abs()
+            num = rolling_by_session(r * v, w, "sum", min_periods=mp)
+            den = rolling_by_session(v, w, "sum", min_periods=mp).replace(0, np.nan)
+            return num / den
+
+        if hasattr(close, "columns"):
+            out = pd.DataFrame(index=close.index, columns=close.columns, dtype=float)
+            for col in close.columns:
+                out[col] = _one(close[col], volume[col])
+            return out
+        return _one(pd.Series(close), pd.Series(volume))
 
 
 @register_operator(
@@ -418,18 +423,19 @@ class MicroKyleLambdaOp(SeriesOperator):
 
         w = max(2, int(window))
         mp = max(2, int(min_periods))
-        if hasattr(close, "apply"):
-            out = close.copy() * np.nan
+
+        def _one(c: pd.Series, v: pd.Series) -> pd.Series:
+            r = pct_change_by_session(pd.Series(c)).abs()
+            cov = rolling_cov_by_session(r, v, w, min_periods=mp)
+            var = rolling_var_by_session(v, w, min_periods=mp).replace(0, np.nan)
+            return cov / var
+
+        if hasattr(close, "columns"):
+            out = pd.DataFrame(index=close.index, columns=close.columns, dtype=float)
             for col in close.columns:
-                r = pct_change_by_session(close[col]).abs()
-                cov = rolling_cov_by_session(r, volume[col], w, min_periods=mp)
-                var = rolling_var_by_session(volume[col], w, min_periods=mp).replace(0, np.nan)
-                out[col] = cov / var
+                out[col] = _one(close[col], volume[col])
             return out
-        r = pct_change_by_session(pd.Series(close)).abs()
-        cov = rolling_cov_by_session(r, pd.Series(volume), w, min_periods=mp)
-        var = rolling_var_by_session(pd.Series(volume), w, min_periods=mp).replace(0, np.nan)
-        return cov / var
+        return _one(pd.Series(close), pd.Series(volume))
 
 # api stub placeholders — 未注册算子，仅供 catalog 占位；勿与 @register_operator 实现混用
 

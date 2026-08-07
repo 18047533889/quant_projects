@@ -199,7 +199,7 @@ _DAILY_CHIP_FLOW_PACK_2026_08 = frozenset({
     "ts_cpt_value",
     "intraday_bvc_imbalance", "intraday_impact_beta",
     "intraday_impact_asymmetry", "intraday_return_wasserstein_shift",
-    "micro_bvc_vpin",
+    # NOTE: micro_bvc_vpin stays research-only (P2) — see flow_impact.py.
 })
 DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_CHIP_FLOW_PACK_2026_08)
 RESEARCH_ONLY_CANONICALS=frozenset({"holder_concentration_change","holder_count_change_rate"});LEGACY_ONLY_CANONICALS=frozenset({"cube"});INTERNAL_ONLY_CANONICALS=frozenset({"constant","identity","protected_div"})

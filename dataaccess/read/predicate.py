@@ -33,6 +33,7 @@ class Predicate:
     time_range: tuple[Any, Any] | None = None           # (start, end)，闭区间
     instrument_filter: Sequence[str] | None = None      # 标的白名单
     hive_filters: dict[str, Sequence[Any]] | None = None  # hive 分区列 IN 过滤
+    filters: "Filter | None" = None                     # 通用 Filter AST（任意列等值/范围/集合/空值）
     extra: list[dict] | None = None
     time_column_is_timestamp: bool = False              # 时间列为 timestamp 时做 end-of-day 展开
 
@@ -41,6 +42,7 @@ class Predicate:
             self.time_range is None
             and not self.instrument_filter
             and not self.hive_filters
+            and self.filters is None
             and not self.extra
         )
 
@@ -72,14 +74,14 @@ def compile_predicate(
     if predicate.is_empty():
         return CompiledPredicate(where_sql="")
 
-    # 列名用 quote_ident，防止列名里有奇怪字符（实际上不会有，但便宜的防御）
-    t_col = _quote_ident(time_column)
-    i_col = _quote_ident(instrument_column)
-
     clauses: list[str] = []
     params: list[Any] = []
 
+    # 时间列/标的列可选（generic table）；对应的过滤维度没列就明确报错。
     if predicate.time_range is not None:
+        if not time_column:
+            raise ValidationError("该数据集未声明 time_column，无法应用 time_range 过滤")
+        t_col = _quote_ident(time_column)
         start, end = predicate.time_range
         if start is not None:
             clauses.append(f"{t_col} >= ?")
@@ -99,6 +101,11 @@ def compile_predicate(
             params.append(end_value)
 
     if predicate.instrument_filter:
+        if not instrument_column:
+            raise ValidationError(
+                "该数据集未声明 instrument_column，无法应用 instrument_filter 过滤"
+            )
+        i_col = _quote_ident(instrument_column)
         # list 作为单个参数绑定到 IN ?
         clauses.append(f"{i_col} IN ?")
         params.append(list(predicate.instrument_filter))
@@ -111,9 +118,17 @@ def compile_predicate(
             clauses.append(f"{_quote_ident(col_name)} IN ?")
             params.append(values)
 
+    if predicate.filters is not None:
+        from data_access.read.predicate_ast import compile_filter_duckdb
+
+        filter_sql, filter_params = compile_filter_duckdb(predicate.filters)
+        if filter_sql:
+            clauses.append(f"({filter_sql})")
+            params.extend(filter_params)
+
     if predicate.extra:
-        # 预留给后续扩展，PR1 不处理；有人传了就抛错提醒
-        raise ValidationError("predicate.extra 在 PR1 未启用")
+        # 旧占位；如真有人传了，说明是在用尚未定义的扩展
+        raise ValidationError("predicate.extra 未启用；请使用 filters= 通用过滤表达式")
 
     where_sql = "WHERE " + " AND ".join(clauses)
     return CompiledPredicate(where_sql=where_sql, params=params)

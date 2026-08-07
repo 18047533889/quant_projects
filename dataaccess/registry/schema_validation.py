@@ -184,16 +184,22 @@ def _fetch_actual_schema(
         raise ValidationError(
             f"dataset '{ds.name}' 的 resolve_paths 返回空，无法做 schema 校验"
         )
-    read_parquet_opts: list[str] = []
-    if ds.hive_partitioning:
-        read_parquet_opts.append("hive_partitioning=true")
-    if ds.union_by_name:
-        read_parquet_opts.append("union_by_name=true")
-    opts_suffix = (", " + ", ".join(read_parquet_opts)) if read_parquet_opts else ""
+    from data_access.read.formats import format_adapter_for_dataset
 
+    adapter = format_adapter_for_dataset(ds)
+    if not adapter.uses_duckdb:
+        raise ValidationError(
+            f"dataset '{ds.name}' 的格式 '{ds.format}' 不能走 DuckDB DESCRIBE；"
+            "schema 校验请切到 pyarrow 引擎路径。"
+        )
     path_param = paths if len(paths) > 1 else paths[0]
     # DESCRIBE 返回 column_name, column_type, null, key, default, extra 六列
-    sql = f"DESCRIBE SELECT * FROM read_parquet(?{opts_suffix}) LIMIT 0"
+    sql = adapter.describe_sql(
+        path_param,
+        hive_partitioning=ds.hive_partitioning,
+        union_by_name=ds.union_by_name,
+    )
+    sql = f"DESCRIBE {sql}"
     tbl = engine.execute_arrow(sql, [path_param])
     if "column_name" not in tbl.column_names or "column_type" not in tbl.column_names:
         # 不同 DuckDB 版本列名略有差别；兜底取前两列

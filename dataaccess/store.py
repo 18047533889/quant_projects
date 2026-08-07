@@ -113,6 +113,11 @@ def _assert_instrument_filter_supported(
     """schema 已声明但缺少 instrument 列时，禁止 instrument_filter。"""
     if not instrument_filter:
         return
+    if ds.instrument_column is None:
+        raise ValidationError(
+            f"数据集 '{ds.name}' 未声明 instrument_column，不支持 instrument_filter；"
+            "请在 datasets.yaml 声明 instrument_column 或 roles.instrument。"
+        )
     schema = getattr(ds, "schema", None) or {}
     if schema and ds.instrument_column not in schema:
         raise ValidationError(
@@ -322,6 +327,7 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
         limit: int | None = None,
         query_budget: QueryBudget | None = None,
         **params: Any,
@@ -359,6 +365,7 @@ class DataAccessStore:
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            filters=filters,
             limit=limit,
         )
 
@@ -456,6 +463,7 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
         limit: int | None = None,
         query_budget: QueryBudget | None = None,
         **params: Any,
@@ -490,6 +498,7 @@ class DataAccessStore:
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            filters=filters,
             limit=limit,
             query_budget=query_budget,
             **params,
@@ -502,6 +511,7 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
         limit: int | None = None,
         batch_size: int = 100_000,
         query_budget: QueryBudget | None = None,
@@ -555,6 +565,7 @@ class DataAccessStore:
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            filters=filters,
             limit=limit,
         )
         reader = self._engine.execute_reader(sql, sql_params, batch_size=batch_size)
@@ -607,6 +618,7 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
         query_budget: QueryBudget | None = None,
         **params: Any,
     ) -> tuple[Any, list[str]]:
@@ -661,9 +673,13 @@ class DataAccessStore:
         needed_cols: list[str] = []
         if columns:
             needed_cols.extend(columns)
-            if time_range is not None and ds.time_column not in needed_cols:
+            if time_range is not None and ds.time_column and ds.time_column not in needed_cols:
                 needed_cols.append(ds.time_column)
-            if instrument_filter is not None and ds.instrument_column not in needed_cols:
+            if (
+                instrument_filter is not None
+                and ds.instrument_column
+                and ds.instrument_column not in needed_cols
+            ):
                 needed_cols.append(ds.instrument_column)
             lf = lf.select([pl_mod.col(c) for c in needed_cols])
 
@@ -673,6 +689,10 @@ class DataAccessStore:
         # 把字符串 / datetime / date 归一化到 python datetime，再交给 pl.lit——
         # 这样无论下层是 Datetime 还是 Date 列，Polars 自己都能 coerce。
         if time_range is not None:
+            if ds.time_column is None:
+                raise ValidationError(
+                    f"数据集 '{dataset}' 未声明 time_column，无法应用 time_range"
+                )
             start_val, end_val = time_range
             if start_val is not None:
                 lf = lf.filter(
@@ -683,7 +703,17 @@ class DataAccessStore:
                     pl_mod.col(ds.time_column) <= pl_mod.lit(_to_pydatetime(end_val))
                 )
         if instrument_filter is not None:
+            if ds.instrument_column is None:
+                raise ValidationError(
+                    f"数据集 '{dataset}' 未声明 instrument_column，无法应用 instrument_filter"
+                )
             lf = lf.filter(pl_mod.col(ds.instrument_column).is_in(list(instrument_filter)))
+        if filters is not None:
+            from data_access.read.predicate_ast import compile_filter_polars, parse_filters
+
+            expr = compile_filter_polars(parse_filters(filters), pl=pl_mod)
+            if expr is not None:
+                lf = lf.filter(expr)
 
         # 如果 columns 指定了但我们追加过 time/instrument，在 filter 之后再把
         # 原始 columns 剪回来（filter 用过了就可以丢）
@@ -713,6 +743,7 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
         query_budget: QueryBudget | None = None,
         **params: Any,
     ):
@@ -736,6 +767,7 @@ class DataAccessStore:
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            filters=filters,
             query_budget=query_budget,
             **params,
         )
@@ -748,6 +780,7 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
         query_budget: QueryBudget | None = None,
         **params: Any,
     ) -> ScanHandle:
@@ -759,6 +792,7 @@ class DataAccessStore:
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            filters=filters,
             query_budget=query_budget,
             **params,
         )
@@ -787,6 +821,7 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
         **params: Any,
     ):
         """同 read_arrow，但返回 pandas DataFrame。
@@ -799,6 +834,7 @@ class DataAccessStore:
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            filters=filters,
             **params,
         )
         return table.to_pandas(self_destruct=True, split_blocks=True)
@@ -810,6 +846,7 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
         limit: int | None = None,
         query_budget: QueryBudget | None = None,
         mode: str = "auto",
@@ -847,6 +884,7 @@ class DataAccessStore:
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            filters=filters,
             query_budget=query_budget,
             **params,
         )
@@ -887,6 +925,7 @@ class DataAccessStore:
         columns: Sequence[str] | None = None,
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
         limit: int | None = None,
         query_budget: QueryBudget | None = None,
         mode: str = "auto",
@@ -933,6 +972,7 @@ class DataAccessStore:
             columns=columns,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            filters=filters,
             query_budget=query_budget,
             **params,
         )
@@ -964,6 +1004,38 @@ class DataAccessStore:
             **params,
         )
 
+    def build_dataset_manifest(
+        self,
+        dataset: str,
+        *,
+        include_row_groups: bool = False,
+        force: bool = False,
+        **params: Any,
+    ) -> dict[str, Any] | None:
+        """为数据集构建 ``_manifest.parquet``（文件级 min/max 元数据清单）。
+
+        建好后 read 路径会用它按 time_range / instrument_filter 做文件级裁剪，
+        避免 ``**/*.parquet`` 全量 glob + 逐文件 footer。返回构建摘要。
+        """
+        from data_access.read.manifest import build_manifest_for_dataset
+
+        manifest = build_manifest_for_dataset(
+            self,
+            dataset,
+            params=dict(params or {}),
+            include_row_groups=include_row_groups,
+            force=force,
+        )
+        if manifest is None:
+            return None
+        return {
+            "dataset": dataset,
+            "files": manifest.file_count,
+            "rows": manifest.total_rows,
+            "bytes": manifest.total_bytes,
+            "format": manifest.format,
+        }
+
     def load_columns(
         self,
         dataset: str,
@@ -971,6 +1043,7 @@ class DataAccessStore:
         columns: Sequence[str],
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
         output_names: dict[str, str] | None = None,
         normalize_timestamp: bool | None = None,
         timestamp_unit: str | None = None,
@@ -1008,6 +1081,11 @@ class DataAccessStore:
             timestamp_unit = adapter_opts.get("timestamp_unit")
 
         # 一次 SQL 同时选所有需要的列 + 时间列 + 标的列
+        if ds.time_column is None or ds.instrument_column is None:
+            raise ValidationError(
+                f"数据集 '{dataset}' 需要 time_column + instrument_column 才能 load_columns；"
+                "请在 datasets.yaml 声明（或 roles.event_time / roles.instrument）。"
+            )
         all_cols = list(dict.fromkeys(
             [ds.time_column, ds.instrument_column, *columns]
         ))
@@ -1018,6 +1096,7 @@ class DataAccessStore:
             columns=all_cols,
             time_range=time_range,
             instrument_filter=instrument_filter,
+            filters=filters,
             **params,
         )
         table = read_result.table
@@ -1612,7 +1691,7 @@ class DataAccessStore:
             instrument_filter=instrument_filter,
         )
 
-    def _prepare_dataset_read(
+    def _resolve_raw_paths(
         self,
         ds: Dataset,
         *,
@@ -1620,7 +1699,7 @@ class DataAccessStore:
         params: dict[str, Any],
         instrument_filter: Sequence[str] | None = None,
     ) -> list[str]:
-        """COS 镜像 / 远程直读 + 路径解析（read_arrow / stream / scan 共用）。
+        """COS 镜像 / 远程直读 + 路径解析（未做 manifest/partition 裁剪）。
 
         若调用方显式传了 ``read_root``（或环境变量 DATA_ACCESS_READ_ROOT_*），
         则优先用本地覆盖路径，跳过 COS remote（适合「数据已在自选目录」）。
@@ -1672,6 +1751,87 @@ class DataAccessStore:
 
         ensure_local_mirror_for_dataset(ds, time_range=time_range)
         return self._resolve_paths(ds, params, instrument_filter=instrument_filter)
+
+    def _prune_read_paths(
+        self,
+        ds: Dataset,
+        paths: list[str],
+        *,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Sequence[str] | None,
+        params: dict[str, Any] | None = None,
+    ) -> list[str]:
+        """读前路径裁剪：Partition Planner（路径模板级）+ Manifest（文件级）。
+
+        只对本地 parquet 生效；远程/非 parquet 直接放行。裁剪结果会让
+        DuckDB 收到的文件列表大幅缩小（尤其是 ``**/*.parquet`` 大量小文件）。
+        """
+        from data_access.read.partition_planner import parse_partitioning, prune_paths_for_time_range
+
+        partitioning = parse_partitioning(getattr(ds, "partitioning", None))
+        paths = prune_paths_for_time_range(
+            paths,
+            time_range,
+            partitioning=partitioning,
+            time_column=ds.time_column,
+        )
+
+        if (time_range is not None or instrument_filter) and str(getattr(ds, "format", "parquet")) in {
+            "parquet",
+            "pq",
+        } and not any(str(p).startswith("s3://") for p in paths):
+            from data_access.read.manifest import DatasetManifest, is_manifest_fresh, manifest_root_for_paths
+
+            root = manifest_root_for_paths(paths)
+            if root is not None:
+                try:
+                    manifest = DatasetManifest.load(root)
+                except Exception:
+                    manifest = None
+                if manifest is not None and manifest.dataset in {"", ds.name}:
+                    raw_paths = self._resolve_raw_paths(
+                        ds,
+                        time_range=None,
+                        params=dict(params or {}),
+                        instrument_filter=None,
+                    )
+                    if is_manifest_fresh(manifest, raw_paths):
+                        pruned = manifest.prune(
+                            time_range=time_range,
+                            instrument_filter=instrument_filter,
+                        )
+                        if pruned:
+                            logger.info(
+                                "manifest_prune: dataset=%s raw_files=%d pruned_files=%d",
+                                ds.name,
+                                manifest.file_count,
+                                len(pruned),
+                            )
+                            return self._authorize_read_paths(pruned)
+        return paths
+
+    def _prepare_dataset_read(
+        self,
+        ds: Dataset,
+        *,
+        time_range: tuple[Any, Any] | None,
+        params: dict[str, Any],
+        instrument_filter: Sequence[str] | None = None,
+    ) -> list[str]:
+        """读路径统一入口：raw 解析 + manifest/partition 裁剪。"""
+        paths = self._resolve_raw_paths(
+            ds,
+            time_range=time_range,
+            params=params,
+            instrument_filter=instrument_filter,
+        )
+        return self._prune_read_paths(
+            ds,
+            paths,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            params=params,
+        )
 
     def _authorize_read_paths(self, glob_paths: list[str]) -> list[str]:
         """本地/远程读路径白名单校验。"""
@@ -1924,34 +2084,52 @@ class DataAccessStore:
         time_range: tuple[Any, Any] | None,
         instrument_filter: Sequence[str] | None,
         limit: int | None = None,
+        filters: Any = None,
     ) -> tuple[str, list[Any]]:
-        """组装 SELECT 语句。路径用 ? 参数绑定，列名/谓词用 registry 控制。"""
+        """组装 SELECT 语句。路径用 ? 参数绑定，列名/谓词用 registry 控制。
+
+        文件格式由 registry 的 ``format`` 决定（FormatAdapter），默认 parquet——
+        对现有数据集生成的 SQL 与改前逐字节一致。
+        """
+        from data_access.read.formats import format_adapter_for_dataset
+        from data_access.read.predicate_ast import parse_filters
+
         if columns:
             col_clause = ", ".join(_quote_ident(c) for c in columns)
         else:
             col_clause = "*"
 
-        # read_parquet 的 path 参数：单路径直接 ?，多路径用 list
-        # DuckDB 支持 read_parquet([...], hive_partitioning=..., union_by_name=...)
-        # 注意 hive_partitioning / union_by_name 是 read_parquet 的命名参数，
-        # 不能用 ? 占位符传（DuckDB SQL 语法限制），必须直接拼到 SQL 里
-        # —— 这些值来自 registry，可信。
+        # path 参数：单路径直接 ?，多路径用 list；命名参数（hive_partitioning/
+        # union_by_name 等）由 adapter 直接拼 SQL——这些值来自 registry，可信。
         path_param = paths if len(paths) > 1 else paths[0]
+        adapter = format_adapter_for_dataset(ds)
+        if not adapter.uses_duckdb:
+            raise ValidationError(
+                f"数据集 '{ds.name}' 的格式 '{ds.format}' 不能走 DuckDB SQL；"
+                f"请用 store.read(..., engine='pyarrow') / read_uri 的 PyArrow 路径。"
+            )
+        from_clause = adapter.build_from_clause(
+            path_param,
+            hive_partitioning=ds.hive_partitioning,
+            union_by_name=ds.union_by_name,
+        )
 
-        read_parquet_opts = []
-        if ds.hive_partitioning:
-            read_parquet_opts.append("hive_partitioning=true")
-        if ds.union_by_name:
-            read_parquet_opts.append("union_by_name=true")
-        opts_suffix = (", " + ", ".join(read_parquet_opts)) if read_parquet_opts else ""
-
-        from_clause = f"read_parquet(?{opts_suffix})"
-
-        time_col_type = str((ds.schema or {}).get(ds.time_column, "")).lower()
+        if time_range is not None and ds.time_column is None:
+            raise ValidationError(
+                f"数据集 '{ds.name}' 未声明 time_column，无法应用 time_range；"
+                "请在 datasets.yaml 里声明 time_column 或 roles.event_time。"
+            )
+        if instrument_filter and ds.instrument_column is None:
+            raise ValidationError(
+                f"数据集 '{ds.name}' 未声明 instrument_column，无法应用 instrument_filter；"
+                "请在 datasets.yaml 里声明 instrument_column 或 roles.instrument。"
+            )
+        time_col_type = str((ds.schema or {}).get(ds.time_column or "", "")).lower()
         predicate = Predicate(
             time_range=time_range,
             instrument_filter=instrument_filter,
             hive_filters=self._bucket_hive_filters(ds, instrument_filter),
+            filters=parse_filters(filters),
             time_column_is_timestamp=("timestamp" in time_col_type or "datetime" in time_col_type),
         )
         compiled = compile_predicate(
@@ -2017,7 +2195,7 @@ def adapter_options_for_dataset(ds: Dataset) -> dict[str, Any]:
       ``normalize_timestamp=True``。
     """
     schema = getattr(ds, "schema", None) or {}
-    if not schema:
+    if not schema or not ds.time_column:
         return {}
     time_dtype = str(schema.get(ds.time_column, "")).lower()
     opts: dict[str, Any] = {}

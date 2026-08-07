@@ -27,6 +27,7 @@ from data_access.core.exceptions import ValidationError
 from .layout_policy import LayoutPolicy, parse_layout_policy
 from .params_validation import ParamSpec, parse_params_schema, validate_params
 from data_access.read.query_budget import DatasetQueryPolicy, parse_dataset_query_policy
+from data_access.read.formats import FormatSpec, default_glob_for_format, normalize_format_name
 from data_access.core.namespace import resolve_namespace
 from .paths import canonicalize, expand_env
 
@@ -42,17 +43,24 @@ _VALID_LAYOUTS = {"plain", "hive"}
 
 @dataclass(frozen=True)
 class DatasetBase:
-    """所有数据集的共同字段。"""
+    """所有数据集的共同字段。
+
+    PR8 注：schema 字段放在 StaticDataset / ParametricDataset 上而不是这里，
+    因为 dataclass + frozen + 继承对字段默认值有严格顺序要求（非默认字段不能
+    跟在默认字段之后）。放 base 上会污染子类的非默认字段，所以两个子类各自带。
+    """
     name: str
     access_mode: str                  # published / namespaced / staging
     layout: str                       # plain / hive
-    time_column: str                  # 业务约定的时间列名，供结构化谓词用
-    instrument_column: str            # 业务约定的标的列名
+    time_column: str | None           # 业务约定的时间列名（semantic roles 的便捷别名，可空）
+    instrument_column: str | None     # 业务约定的标的列名（同上，可空）
     hive_partitioning: bool           # 传给 DuckDB read_parquet(hive_partitioning=)
     union_by_name: bool               # 传给 DuckDB read_parquet(union_by_name=)
-    # PR8 注：schema 字段放在 StaticDataset / ParametricDataset 上而不是这里，
-    # 因为 dataclass + frozen + 继承对字段默认值有严格顺序要求（非默认字段不能
-    # 跟在默认字段之后）。放 base 上会污染子类的非默认字段，所以两个子类各自带。
+
+    @property
+    def format(self) -> str:
+        """物理文件格式名（格式符快捷入口，等价于 format_spec.type）。"""
+        return self.format_spec.type
 
 
 @dataclass(frozen=True)
@@ -66,6 +74,13 @@ class StaticDataset(DatasetBase):
     partition_columns: tuple[str, ...] = field(default_factory=lambda: ("year",))
     storage_format: str = "long"
     layout_policy: LayoutPolicy | None = None
+    # ---- 通用 Data IO Layer 新增字段（全部带默认值，向后兼容） ----
+    format_spec: FormatSpec = field(default_factory=FormatSpec)   # 物理文件格式（parquet/csv/...）
+    storage: dict[str, Any] | None = None                         # storage backend 声明
+    roles: Mapping[str, str] = field(default_factory=dict)        # 语义角色（event_time/instrument/...）
+    partitioning: dict[str, Any] | None = None                    # 时间/分区裁剪声明
+    semantic: str | None = None                                   # panel/event/factor/...
+    engine: dict[str, Any] | None = None                          # 优先/兜底执行引擎
 
     @property
     def kind(self) -> str:
@@ -101,6 +116,13 @@ class ParametricDataset(DatasetBase):
     partition_columns: tuple[str, ...] = field(default_factory=lambda: ("year",))
     storage_format: str = "long"
     layout_policy: LayoutPolicy | None = None
+    # ---- 通用 Data IO Layer 新增字段（全部带默认值，向后兼容） ----
+    format_spec: FormatSpec = field(default_factory=FormatSpec)   # 物理文件格式（parquet/csv/...）
+    storage: dict[str, Any] | None = None                         # storage backend 声明
+    roles: Mapping[str, str] = field(default_factory=dict)        # 语义角色（event_time/instrument/...）
+    partitioning: dict[str, Any] | None = None                    # 时间/分区裁剪声明
+    semantic: str | None = None                                   # panel/event/factor/...
+    engine: dict[str, Any] | None = None                          # 优先/兜底执行引擎
 
     @property
     def kind(self) -> str:
@@ -161,11 +183,48 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     if layout not in _VALID_LAYOUTS:
         raise ValidationError(f"{context}: layout 必须是 {_VALID_LAYOUTS}，收到 {layout!r}")
 
-    time_column = _require_str(raw, "time_column", context=context)
-    instrument_column = _require_str(raw, "instrument_column", context=context)
+    # time_column / instrument_column 可选（generic table）：优先显式字段，其次语义角色。
+    roles_raw = raw.get("roles")
+    roles: dict[str, str] = {}
+    if roles_raw is not None:
+        if not isinstance(roles_raw, dict):
+            raise ValidationError(
+                f"{context}: roles 必须是 mapping（角色名→列名），收到 {type(roles_raw).__name__}"
+            )
+        roles = {str(k): str(v) for k, v in roles_raw.items() if v is not None}
+
+    time_column = raw.get("time_column", roles.get("event_time"))
+    instrument_column = raw.get("instrument_column", roles.get("instrument"))
+    if time_column is not None and (not isinstance(time_column, str) or not time_column):
+        raise ValidationError(f"{context}: time_column 必须是非空字符串或省略")
+    if instrument_column is not None and (
+        not isinstance(instrument_column, str) or not instrument_column
+    ):
+        raise ValidationError(f"{context}: instrument_column 必须是非空字符串或省略")
+    time_column = str(time_column) if time_column is not None else None
+    instrument_column = str(instrument_column) if instrument_column is not None else None
 
     hive_partitioning = bool(raw.get("hive_partitioning", layout == "hive"))
     union_by_name = bool(raw.get("union_by_name", False))
+
+    # ---- 通用 Data IO Layer 字段解析 ----
+    format_spec = FormatSpec.from_yaml(raw.get("format", "parquet"), context=context)
+    storage = raw.get("storage")
+    if storage is not None and not isinstance(storage, dict):
+        raise ValidationError(
+            f"{context}: storage 必须是 mapping，收到 {type(storage).__name__}"
+        )
+    partitioning = raw.get("partitioning")
+    if partitioning is not None and not isinstance(partitioning, dict):
+        raise ValidationError(
+            f"{context}: partitioning 必须是 mapping，收到 {type(partitioning).__name__}"
+        )
+    semantic = raw.get("semantic")
+    if semantic is not None and not isinstance(semantic, str):
+        raise ValidationError(f"{context}: semantic 必须是字符串")
+    engine = raw.get("engine")
+    if engine is not None and not isinstance(engine, dict):
+        raise ValidationError(f"{context}: engine 必须是 mapping，收到 {type(engine).__name__}")
 
     # PR8：解析可选 schema（列名 -> 类型字符串）。不填 = 不做首访自检。
     schema_raw = raw.get("schema", {}) or {}
@@ -202,7 +261,7 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             ns = resolve_namespace()
             root_expanded = root_expanded.replace("${RUN_NAMESPACE}", ns)
         root = canonicalize(root_expanded)
-        glob = raw.get("glob", "**/*.parquet")
+        glob = raw.get("glob", default_glob_for_format(format_spec.type))
         return StaticDataset(
             name=name,
             access_mode=access_mode,
@@ -211,6 +270,12 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             instrument_column=instrument_column,
             hive_partitioning=hive_partitioning,
             union_by_name=union_by_name,
+            format_spec=format_spec,
+            storage=storage,
+            roles=roles,
+            partitioning=partitioning,
+            semantic=semantic,
+            engine=engine,
             root=root,
             glob=glob,
             schema=schema_decl,
@@ -223,7 +288,7 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     root_template = expand_env(root_template_raw)
     if "${RUN_NAMESPACE}" in root_template:
         root_template = root_template.replace("${RUN_NAMESPACE}", resolve_namespace())
-    glob_template = raw.get("glob_template", "**/*.parquet")
+    glob_template = raw.get("glob_template", default_glob_for_format(format_spec.type))
     params_schema_raw = raw.get("params_schema", {})
     if not isinstance(params_schema_raw, dict) or not params_schema_raw:
         raise ValidationError(f"{context}: parametric 数据集必须声明非空 params_schema")
@@ -244,6 +309,12 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         instrument_column=instrument_column,
         hive_partitioning=hive_partitioning,
         union_by_name=union_by_name,
+        format_spec=format_spec,
+        storage=storage,
+        roles=roles,
+        partitioning=partitioning,
+        semantic=semantic,
+        engine=engine,
         root_template=root_template,
         glob_template=glob_template,
         params_schema=params_schema,

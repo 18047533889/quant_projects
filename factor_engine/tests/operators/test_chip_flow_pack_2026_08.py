@@ -78,7 +78,7 @@ def _daily_panels(n: int = 120, cols: int = 4):
     weight = volume.div(volume.sum(axis=1), axis=0)
     returns = close.pct_change().fillna(0.0)
     return {"close": close, "turnover": turnover, "volume": volume,
-            "weight": weight, "returns": returns}
+            "weight": weight, "returns": returns, "minute": _minute_panels()}
 
 
 def _minute_panels(days: int = 8, cols: int = 3):
@@ -116,7 +116,7 @@ def _call_for(canonical, panels):
         return (panels["close"], panels["weight"]), {"window": 60}
     if canonical == "ts_cpt_value":
         return (panels["returns"],), {"window": 60, "preset": "bmw2016"}
-    m = _minute_panels()
+    m = panels["minute"]
     if canonical == "intraday_bvc_imbalance":
         return (m["close"], m["volume"]), {"scale_window": 20}
     if canonical in {"intraday_impact_beta", "intraday_impact_asymmetry"}:
@@ -128,13 +128,23 @@ def _call_for(canonical, panels):
     raise AssertionError(f"unhandled canonical {canonical}")
 
 
+# micro_bvc_vpin is P2 / research-only by spec §16 (must never enter the default
+# production mining whitelist).
+RESEARCH_ONLY = frozenset({"micro_bvc_vpin"})
+DAILY_PACK = PACK - RESEARCH_ONLY
+
+
 def test_pack_all_registered_and_daily():
     missing = [c for c in PACK if OperatorRegistry.get(c, "pandas_numpy") is None]
     assert not missing, f"missing runtimes: {missing}"
-    not_daily = [c for c in sorted(PACK) if classify_canonical(c) != "daily"]
+    not_daily = [c for c in sorted(DAILY_PACK) if classify_canonical(c) != "daily"]
     assert not not_daily, f"not daily surface: {not_daily}"
+    # micro_bvc_vpin must be research-only, not daily and not in the production
+    # mining whitelist.
+    assert classify_canonical("micro_bvc_vpin") == "research"
+    assert "micro_bvc_vpin" not in DAILY_PACK
     live_extended = frozenset(_surface_mod.EXTENDED_ONLY_CANONICALS)
-    not_extended = sorted(PACK - live_extended)
+    not_extended = sorted(DAILY_PACK - live_extended)
     assert not not_extended, f"not in EXTENDED_ONLY (partition contract): {not_extended}"
 
 
@@ -160,8 +170,9 @@ def test_pack_deterministic_and_axes(canonical):
     first = op.calculate(*args, **kw)
     second = op.calculate(*args, **kw)
     if canonical.startswith("intraday_") or canonical == "micro_bvc_vpin":
-        template_idx = pd.DatetimeIndex(sorted(set(args[0].index.normalize())))
-        template = pd.DataFrame(index=template_idx, columns=args[0].columns, dtype=float)
+        minute = panels["minute"]
+        template_idx = pd.DatetimeIndex(sorted(set(minute["close"].index.normalize())))
+        template = pd.DataFrame(index=template_idx, columns=minute["close"].columns, dtype=float)
     else:
         template = panels["close"]
     assert first.index.equals(template.index), f"{canonical}: index changed"
@@ -187,13 +198,28 @@ def test_constant_window_fails_closed():
     for canonical, panels, kw in cases:
         out = OperatorRegistry.get(canonical, "pandas_numpy").calculate(*panels, **kw)
         if canonical == "ts_cpt_value":
-            # CPT of an all-zero return sample is exactly 0 (a single gain point),
-            # which is mathematically correct — do not require NaN there.
-            assert np.isfinite(out.to_numpy()).all() or out.iloc[10:].isna().all().all()
+            # CPT of an all-zero return sample is exactly 0 (finite); early rows
+            # are NaN only because of the internal min_periods warm-up.
+            assert np.isfinite(out.fillna(0.0).to_numpy()).all(), f"{canonical}: non-finite"
             continue
         # Constant window must not be Inf and not explode.
         assert np.isfinite(out.fillna(0.0).to_numpy()).all(), f"{canonical}: non-finite"
         assert np.nanmax(np.abs(out.to_numpy())) < 1e6, f"{canonical}: exploded"
+
+
+def _research_op(canonical):
+    """micro_* ops are governed into the research-tool registry after load."""
+    from research_tools.registry import ResearchToolRegistry
+
+    return ResearchToolRegistry.get(canonical)
+
+
+def _research_op_catalog(canonical):
+    """Catalog metadata of a governed research tool."""
+    from research_tools.registry import ResearchToolRegistry
+
+    entry = ResearchToolRegistry.catalog().get(canonical)
+    return entry or {}
 
 
 def test_bipower_var_matches_standard_formula():
@@ -203,7 +229,8 @@ def test_bipower_var_matches_standard_formula():
     prices = np.array([100.0, 101.0, 99.5, 100.2, 101.5, 100.8])
     s = pd.Series(prices, index=pd.date_range("2024-01-01", periods=6, freq="min"))
     df = pd.DataFrame({"A": s})
-    op = OperatorRegistry.get("micro_bipower_var", "pandas_numpy")
+    op = _research_op("micro_bipower_var")
+    assert op is not None, "micro_bipower_var research tool missing"
     out = op.calculate(df, window=5, min_periods=2)
     rp = pct_change_by_session(s).to_numpy()[1:]
     prods = np.abs(rp[1:]) * np.abs(rp[:-1])
@@ -219,16 +246,18 @@ def test_legacy_proxies_keep_their_math_and_are_marked():
     close = pd.DataFrame(100 * np.exp(np.cumsum(rng.normal(0, 0.001, 60))), index=idx, columns=["A"])
     volume = pd.DataFrame(rng.lognormal(0, 0.3, 60) * 1e4, index=idx, columns=["A"])
 
-    vpin = OperatorRegistry.get("micro_vpin", "pandas_numpy")
-    kyle = OperatorRegistry.get("micro_kyle_lambda", "pandas_numpy")
-    vpin_out = vpin.calculate(close, volume, window=20)
-    kyle_out = kyle.calculate(close, volume, window=20)
-    assert np.isfinite(vpin_out.fillna(0).to_numpy()).all()
-    assert np.isfinite(kyle_out.fillna(0).to_numpy()).all()
+    vpin = _research_op("micro_vpin")
+    kyle = _research_op("micro_kyle_lambda")
+    assert vpin is not None and kyle is not None
+    # These legacy proxies predate the panel contract and expect per-column
+    # Series input; exercise that path (their math is intentionally unchanged).
+    vpin_out = vpin.calculate(close["A"], volume["A"], window=20)
+    kyle_out = kyle.calculate(close["A"], volume["A"], window=20)
+    assert np.isfinite(pd.Series(vpin_out).fillna(0).to_numpy()).all()
+    assert np.isfinite(pd.Series(kyle_out).fillna(0).to_numpy()).all()
 
-    from cleaned_operators.registry import OperatorRegistry as Reg
-    vpin_cat = Reg._catalog.get("micro_vpin", {})
-    kyle_cat = Reg._catalog.get("micro_kyle_lambda", {})
+    vpin_cat = _research_op_catalog("micro_vpin")
+    kyle_cat = _research_op_catalog("micro_kyle_lambda")
     assert vpin_cat.get("legacy_proxy") is True
     assert kyle_cat.get("legacy_proxy") is True
     assert "micro_bvc_vpin" in (vpin_cat.get("preferred_replacements") or [])
@@ -247,8 +276,8 @@ def test_turnover_survival_edge_cases():
     turnover = pd.DataFrame(0.02, index=dates, columns=assets)
     turnover["B"] = 0.0            # no churn at all
     turnover["C"] = 0.99           # near-full churn
-    turnover.loc[10:15, "D"] = np.nan   # missing turnover (suspension)
-    close.loc[30, "A"] = np.nan    # missing price at a lag
+    turnover.iloc[10:16, 3] = np.nan   # missing turnover (suspension) for col D
+    close.iloc[30, 0] = np.nan    # missing price at a lag for col A
     op = OperatorRegistry.get("ts_turnover_reference_price", "pandas_numpy")
     out = op.calculate(close, turnover, window=40)
     assert out.index.equals(close.index) and out.columns.equals(close.columns)
@@ -276,16 +305,28 @@ def test_locked_minute_bars_are_neutral():
     assert np.abs(day2_val_locked.to_numpy()).sum() <= np.abs(day2_val_free.to_numpy()).sum() + 1e-12
 
 
-def test_polars_parity_daily():
+def _panel_to_pl(name, value):
     pl = pytest.importorskip("polars")
+    return pl.from_pandas(value.reset_index()).rename({"index": "date"})
+
+
+def _name(arg, panels):
+    """Resolve a pandas panel argument to its pl counterpart key."""
+    for key in ("close", "turnover", "returns", "volume", "weight"):
+        if arg is panels[key]:
+            return key
+    raise AssertionError("unhandled panel arg")
+
+
+def test_polars_parity_daily():
+    pytest.importorskip("polars")
     panels = _daily_panels()
-    pl_panels = {k: pl.from_pandas(v.reset_index()).rename({"index": "date"})
-                 for k, v in panels.items()}
+    pl_panels = {k: _panel_to_pl(k, v) for k, v in panels.items() if k != "minute"}
     for canonical in sorted(PACK):
         if canonical.startswith("intraday_") or canonical == "micro_bvc_vpin":
             continue
         args, kw = _call_for(canonical, panels)
-        pl_args = tuple(pl_panels[_name(args, panels)] for _ in args)
+        pl_args = tuple(pl_panels[_name(a, panels)] for a in args)
         pd_out = OperatorRegistry.get(canonical, "pandas_numpy").calculate(*args, **kw)
         pl_out = OperatorRegistry.get(canonical, "polars").calculate(*pl_args, **kw)
         pl_df = pl_out.to_pandas().set_index("date").sort_index().reindex(
@@ -295,30 +336,15 @@ def test_polars_parity_daily():
         assert diff.size == 0 or np.nanmax(diff) < 1e-9, f"{canonical}: polars parity diff"
 
 
-def _name(args, panels):
-    """Resolve a pandas panel argument to its pl counterpart."""
-    if args[0] is panels["close"]:
-        return "close"
-    if args[0] is panels["turnover"]:
-        return "turnover"
-    if args[0] is panels["returns"]:
-        return "returns"
-    if args[0] is panels["volume"]:
-        return "volume"
-    if args[0] is panels["weight"]:
-        return "weight"
-    raise AssertionError("unhandled panel arg")
-
-
 def test_polars_parity_minute():
-    pl = pytest.importorskip("polars")
-    m = _minute_panels()
-    pl_panels = {k: pl.from_pandas(v.reset_index()).rename({"index": "date"})
-                 for k, v in m.items()}
+    pytest.importorskip("polars")
+    panels = _daily_panels()
+    m = panels["minute"]
+    pl_panels = {k: _panel_to_pl(k, v) for k, v in m.items()}
     for canonical in ("intraday_bvc_imbalance", "intraday_impact_beta",
                       "intraday_impact_asymmetry", "intraday_return_wasserstein_shift",
                       "micro_bvc_vpin"):
-        args, kw = _call_for(canonical, m)
+        args, kw = _call_for(canonical, panels)
         pl_args = tuple(pl_panels[_minute_name(a, m)] for a in args)
         pd_out = OperatorRegistry.get(canonical, "pandas_numpy").calculate(*args, **kw)
         pl_out = OperatorRegistry.get(canonical, "polars").calculate(*pl_args, **kw)
