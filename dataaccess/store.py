@@ -45,6 +45,7 @@ from data_access.core import audit
 from data_access.read.adapters import arrow_table_to_multiindex_columns
 from data_access.core.engine import DuckDBEngine, get_shared_engine, reset_shared_engine
 from data_access.core.exceptions import (
+    CommittedButAuditFailed,
     DataError,
     MatrixCoverageMiss,
     MatrixUnavailable,
@@ -117,6 +118,29 @@ _VALID_WRITE_MODES = {"overwrite", "append"}
 
 # 读写路径元参数：不进 params_schema，不进 snapshot params
 _READ_PATH_META_KEYS = ("read_root", "_read_root", "bucket_values", "read_auto", "lazy_scan")
+
+_READ_AUTO_MODES = frozenset({"auto", "arrow", "stream", "polars"})
+
+
+def _normalize_read_mode(mode: Any) -> str:
+    """#P0 收官（0.9.5）：read_auto / read_auto_stream 的 ``mode`` 必须显式合法。
+
+    未知 / 空字符串 / 非字符串 mode ⇒ ``ValidationError`` fail-closed——旧代码
+    ``str(mode or "auto").lower()`` 把 ``"foo"`` / ``"POLARR"`` 静默落到 read_arrow
+    兜底，模式写错不暴露。``None``（缺省）→ ``auto``。
+    """
+    if mode is None:
+        return "auto"
+    if not isinstance(mode, str):
+        raise ValidationError(
+            f"read_auto 的 mode 必须是字符串，收到 {mode!r}；允许 {sorted(_READ_AUTO_MODES)}"
+        )
+    text = mode.strip().lower()
+    if not text or text not in _READ_AUTO_MODES:
+        raise ValidationError(
+            f"read_auto 未知 mode={mode!r}；允许 {sorted(_READ_AUTO_MODES)}"
+        )
+    return text
 _WRITE_PATH_META_KEYS = ("write_root", "_write_root", "write_dir", "_write_dir")
 
 # #44 read()/read_result() 的读取模式：普通面板 / 事件 / PIT / 维表 / 稀疏
@@ -161,9 +185,12 @@ class DataAccessStore:
     ) -> None:
         self._registry = registry
         self._engine = engine
-        # 登记表根 + 环境额外根（其他服务器自选读/写目录时用）
+        # 登记表根 + 环境额外根（其他服务器自选读/写目录时用）。
+        # #7 PathAuthorizer 收 **unresolved root template**（保留 ${RUN_NAMESPACE}
+        # 占位符），authorize 时按当前 session namespace 解析——store 构造时不再
+        # 把 namespace 烘焙进白名单。
         self._authorizer = PathAuthorizer(
-            list(registry.allowed_roots()) + extra_allowed_roots_from_env()
+            list(registry.allowed_root_templates()) + extra_allowed_roots_from_env()
         )
         # PR8 + P0：首访 schema 自检缓存 key = dataset + params + manifest
         self._schema_checked: set[str] = set()
@@ -248,6 +275,15 @@ class DataAccessStore:
             try:
                 yield
                 state = "COMMITTED"
+            except CommittedButAuditFailed:
+                # #P0 收官（0.9.5）：body **已经成功提交**（如 publish 的
+                # candidate→target rename + post-verify 都完成，ok=True），只有
+                # durable audit 落盘失败。必须仍按 COMMITTED 完成 manifest rebuild
+                # ——数据确实发布了，manifest 必须追平新 generation；审计失败继续
+                # 向上传播，caller 单独处理。绝不能把「已发布」误判成 ABORTED（那
+                # 会留下「数据已上线但 manifest 不重建」的不一致）。
+                state = "COMMITTED"
+                raise
             except Exception:
                 state = "ABORTED"
                 raise
@@ -1441,6 +1477,7 @@ class DataAccessStore:
         # 对 datetime 列比较字符串会抛 InvalidOperationError。统一用 pandas.Timestamp
         # 把字符串 / datetime / date 归一化到 python datetime，再交给 pl.lit——
         # 这样无论下层是 Datetime 还是 Date 列，Polars 自己都能 coerce。
+        is_ts_col = "timestamp" in str((ds.schema or {}).get(ds.time_column or "", "")).lower()
         if time_range is not None:
             if ds.time_column is None:
                 raise ValidationError(
@@ -1452,9 +1489,23 @@ class DataAccessStore:
                     pl_mod.col(ds.time_column) >= pl_mod.lit(_to_pydatetime(start_val))
                 )
             if end_val is not None:
-                lf = lf.filter(
-                    pl_mod.col(ds.time_column) <= pl_mod.lit(_to_pydatetime(end_val))
+                # #27B 收官轮：timestamp 列 date-only end → ``< next_day``（完整一天），
+                # 与 DuckDB 路径共用 ``expand_end_bound``——三 backend 结果必须一致。
+                # 旧代码固定 ``<= end 00:00`` 会丢最后一天白天（10:00 等）的行。
+                from data_access.read.predicate import expand_end_bound
+
+                end_value, hi_op = expand_end_bound(
+                    end_val, time_column_is_timestamp=is_ts_col
                 )
+                end_value = _to_pydatetime(end_value)
+                if hi_op == "<":
+                    lf = lf.filter(
+                        pl_mod.col(ds.time_column) < pl_mod.lit(end_value)
+                    )
+                else:
+                    lf = lf.filter(
+                        pl_mod.col(ds.time_column) <= pl_mod.lit(end_value)
+                    )
         if instrument_filter is not None:
             if ds.instrument_column is None:
                 raise ValidationError(
@@ -1635,7 +1686,15 @@ class DataAccessStore:
         ds = self._registry.get(dataset)
         budget = self._resolve_read_budget(ds, query_budget)
 
-        resolved_mode = str(mode or "auto").lower()
+        resolved_mode = _normalize_read_mode(mode)
+        # #32 收官轮：read_auto 的 mode 是明确 enum（auto/arrow/stream/polars）。
+        # 未知值必须 fail-closed，不能静默落到 read_arrow（那样调用方以为
+        # 指定了 polars/stream 却拿到 arrow 语义——成本与内存假设全错）。
+        if resolved_mode not in {"auto", "arrow", "stream", "polars"}:
+            raise ValidationError(
+                f"read_auto: 未知 mode={mode!r}；只接受 "
+                "auto / arrow / stream / polars"
+            )
         if resolved_mode == "auto":
             # 成本路由（rows/bytes/columns/files/remote/selectivity），不只行数
             from data_access.read.scan_cost import (
@@ -1675,8 +1734,12 @@ class DataAccessStore:
             **params,
         )
         if resolved_mode == "polars":
-            lf = self.scan_polars(dataset, **read_kwargs)
-            table = collect_polars_with_budget(lf, query_budget=budget)
+            # #P0 收官（0.9.5）：read_auto 的 polars 分支必须走受控 ``scan()``
+            # （ScanHandle），不能用裸 ``scan_polars()`` 的 LazyFrame——后者既没有
+            # snapshot revalidation，也没有 collect 前的 budget/audit 强制。
+            # ``scan()`` 返回 ScanHandle，``collect_table()`` 是受控物化终点。
+            scan = self.scan(dataset, **read_kwargs)
+            table = scan.collect_table()
             if limit is not None and table.num_rows > limit:
                 table = table.slice(0, limit)
             return table
@@ -1725,7 +1788,7 @@ class DataAccessStore:
         ds = self._registry.get(dataset)
         budget = self._resolve_read_budget(ds, query_budget)
 
-        resolved_mode = str(mode or "auto").lower()
+        resolved_mode = _normalize_read_mode(mode)
         if resolved_mode == "auto":
             from data_access.read.scan_cost import (
                 estimate_scan_cost,
@@ -3242,8 +3305,9 @@ class DataAccessStore:
                 # #P0-9 查询时钟（PIT 分支是 knowledge_time，可能 != ds.time_column）
                 time_column=time_col,
             )
-            if not paths:
-                # #21 manifest 空裁剪：生成带 schema 的空 SELECT，不回退全量扫描
+            if not paths or not _paths_have_files(paths):
+                # #21 manifest 空裁剪 / #P0 收官（0.9.5）glob 无匹配文件：生成带
+                # schema 的空 SELECT，不回退全量扫描、不把空 glob 塞给 DuckDB。
                 return _empty_branch_sql(select_cols, dsobj), [], []
             path_param = paths if len(paths) > 1 else paths[0]
             from_clause = adapter.build_from_clause(
@@ -3567,34 +3631,52 @@ class DataAccessStore:
                 params=uni_params,
                 instrument_filter=instrument_filter,
             )
-            uadapter = format_adapter_for_dataset(uds)
-            upath_param = upaths if len(upaths) > 1 else upaths[0]
-            u_from = uadapter.build_from_clause(
-                upath_param,
-                hive_partitioning=uds.hive_partitioning,
-                union_by_name=uds.union_by_name,
-            )
-            params_list.append(upath_param)
-            utype = str((uds.schema or {}).get(ut or "", "")).lower()
-            upred = Predicate(
-                time_range=time_range,
-                instrument_filter=instrument_filter,
-                time_column_is_timestamp=("timestamp" in utype or "datetime" in utype),
-            )
-            ucompiled = compile_predicate(upred, time_column=ut, instrument_column=ui)
-            params_list.extend(ucompiled.params)
-            u_sub = (
-                f"SELECT DISTINCT {_quote_ident(ut)}, {_quote_ident(ui)} "
-                f"FROM {u_from} {ucompiled.where_sql}".strip()
-            )
-            join_clauses.append(
-                f"INNER JOIN ({u_sub}) AS _u ON "
-                f"a.{_quote_ident(anchor_time)} = _u.{_quote_ident(ut)} "
-                f"AND a.{_quote_ident(anchor_inst)} = _u.{_quote_ident(ui)}"
-            )
-            if universe not in datasets:
-                datasets.append(universe)
-            per_ds_paths[universe] = upaths
+            if not upaths or not _paths_have_files(upaths):
+                # #P0 收官（0.9.5）：时间窗内无 universe partition / 空股票池 /
+                # manifest 裁剪为空 / glob 匹配不到任何文件 → 语义上必须得到
+                # **0 行结果**，而不是 ``upaths[0]`` 的 IndexError，更不能把空
+                # glob 塞给 DuckDB 报 ``No files found``。复用其他 joined branch
+                # 的 typed empty 模式：``_empty_branch_sql`` 生成带 schema 的空
+                # universe 子查询——INNER JOIN 对空集自然产出 0 行，输出列 schema
+                # 保持不变。
+                u_sub = _empty_branch_sql([ut, ui], uds)
+                join_clauses.append(
+                    f"INNER JOIN ({u_sub}) AS _u ON "
+                    f"a.{_quote_ident(anchor_time)} = _u.{_quote_ident(ut)} "
+                    f"AND a.{_quote_ident(anchor_inst)} = _u.{_quote_ident(ui)}"
+                )
+                if universe not in datasets:
+                    datasets.append(universe)
+                per_ds_paths[universe] = []
+            else:
+                uadapter = format_adapter_for_dataset(uds)
+                upath_param = upaths if len(upaths) > 1 else upaths[0]
+                u_from = uadapter.build_from_clause(
+                    upath_param,
+                    hive_partitioning=uds.hive_partitioning,
+                    union_by_name=uds.union_by_name,
+                )
+                params_list.append(upath_param)
+                utype = str((uds.schema or {}).get(ut or "", "")).lower()
+                upred = Predicate(
+                    time_range=time_range,
+                    instrument_filter=instrument_filter,
+                    time_column_is_timestamp=("timestamp" in utype or "datetime" in utype),
+                )
+                ucompiled = compile_predicate(upred, time_column=ut, instrument_column=ui)
+                params_list.extend(ucompiled.params)
+                u_sub = (
+                    f"SELECT DISTINCT {_quote_ident(ut)}, {_quote_ident(ui)} "
+                    f"FROM {u_from} {ucompiled.where_sql}".strip()
+                )
+                join_clauses.append(
+                    f"INNER JOIN ({u_sub}) AS _u ON "
+                    f"a.{_quote_ident(anchor_time)} = _u.{_quote_ident(ut)} "
+                    f"AND a.{_quote_ident(anchor_inst)} = _u.{_quote_ident(ui)}"
+                )
+                if universe not in datasets:
+                    datasets.append(universe)
+                per_ds_paths[universe] = upaths
 
         if anchor_sub is None:
             raise ValidationError("read_joined: anchor 子查询缺失")
@@ -3684,9 +3766,27 @@ class DataAccessStore:
         ds = self._registry.get("factor_lake")
         strict = is_strict_semantics()
 
+        # #29 收官轮：require_same_* 必须**能证明**一致性。factor_lake schema 缺
+        # 对应元数据列时（例如没有 universe 列，无法证明各因子同 universe）——
+        # 直接 fail-closed，绝不「列不存在 → continue → success」。与 strict 无关：
+        # 用户显式要求一致性，就无法证明时拒绝，research 也不能悄悄放行。
+        if require_same_data_snapshot and "data_snapshot_id" not in (ds.schema or {}):
+            raise DataError(
+                "require_same_data_snapshot=True 但 factor_lake 未声明 "
+                "data_snapshot_id 元数据列，无法证明各因子同数据快照 → 拒绝。"
+            )
+        if require_same_universe and "universe" not in (ds.schema or {}):
+            raise DataError(
+                "require_same_universe=True 但 factor_lake 未声明 universe 元数据列，"
+                "无法证明各因子同 universe → 拒绝。"
+            )
+
         seen_snapshots: set[str] = set()
         seen_universes: set[str] = set()
         for fid in fids:
+            # #28 收官轮：三个 gate **正交组合**，不是 mutually exclusive。
+            # 显式 version 检查通过后**不 continue**——data_snapshot/universe gate
+            # 独立生效；「有显式版本」不再豁免跨因子 snapshot/universe 一致性。
             if versions and versions.get(fid) is not None:
                 expected = versions[fid]
                 vals = self._factor_metadata_values(
@@ -3699,27 +3799,24 @@ class DataAccessStore:
                             f"factor {fid}: 无法确认 factor_version（窗口内无数据或"
                             " probe 失败）。require_same 无法证明 → 禁止混入训练矩阵。"
                         )
-                    continue
-                if len(actuals) > 1:
+                elif len(actuals) > 1:
                     raise ValidationError(
                         f"factor {fid}: 窗口内出现多个 factor_version："
                         f"{sorted(actuals)}。禁止在训练矩阵里混入不同版本。"
                     )
-                actual = next(iter(actuals))
-                if actual != str(expected):
-                    raise ValidationError(
-                        f"factor {fid}: 期望版本 {expected}，实际 {actual}。"
-                        "禁止在训练矩阵里混入不同版本。"
-                    )
-                continue
+                else:
+                    actual = next(iter(actuals))
+                    if actual != str(expected):
+                        raise ValidationError(
+                            f"factor {fid}: 期望版本 {expected}，实际 {actual}。"
+                            "禁止在训练矩阵里混入不同版本。"
+                        )
             if require_same_data_snapshot or require_same_universe:
                 cols: list[str] = []
                 if require_same_data_snapshot:
                     cols.append("data_snapshot_id")
-                if require_same_universe and "universe" in (ds.schema or {}):
+                if require_same_universe:
                     cols.append("universe")
-                if not cols:
-                    continue
                 vals = self._factor_metadata_values(
                     fid, cols, time_range=time_range, params=params
                 )
@@ -3730,16 +3827,16 @@ class DataAccessStore:
                             "universe 一致 → 禁止混入训练矩阵。"
                         )
                     continue
-                if require_same_data_snapshot and "data_snapshot_id" in vals:
-                    snaps = set(vals["data_snapshot_id"]) - {"<null>"}
+                if require_same_data_snapshot:
+                    snaps = set(vals.get("data_snapshot_id", ())) - {"<null>"}
                     if not snaps and strict:
                         raise DataError(
                             f"factor {fid}: data_snapshot_id 为空，无法证明一致"
                             " → 禁止混入训练矩阵。"
                         )
                     seen_snapshots.update(snaps)
-                if require_same_universe and "universe" in vals:
-                    seen_universes.update(set(vals["universe"]) - {"<null>"})
+                if require_same_universe:
+                    seen_universes.update(set(vals.get("universe", ())) - {"<null>"})
         if require_same_data_snapshot and len(seen_snapshots) > 1:
             raise ValidationError(
                 f"因子混用不同 data_snapshot：{sorted(seen_snapshots)}。"
@@ -4481,19 +4578,27 @@ class DataAccessStore:
         matrix_cols = self._matrix_available_columns(
             universe=universe, frequency=frequency, **params
         )
-        if matrix_cols is not None:
-            base = [c for c in ("datetime", "asset") if c in matrix_cols]
-            missing = [f for f in fids if f not in matrix_cols]
-            if missing:
-                raise MatrixCoverageMiss(
-                    f"factor_matrix 不覆盖请求因子：{missing}"
-                    f"（矩阵可用列 {sorted(matrix_cols) if len(matrix_cols) <= 40 else str(len(matrix_cols)) + ' 列'}）"
-                )
-            # 请求顺序保留；同时并入用户显式 columns（若给了）
-            explicit = [str(c) for c in (columns or []) if str(c) in matrix_cols]
-            proj = list(dict.fromkeys(base + fids + explicit))
-            if proj:
-                columns = proj
+        # #31 收官轮：无法探测可用列（无 registry schema 且 DESCRIBE/probe 失败）
+        # 时**不能** columns=None 继续读整个 factor_matrix——那会返回大量未请求的
+        # 因子列，覆盖性也未证明。fail-closed 抛 MatrixCoverageMiss，调用方回退
+        # factor-major（逐因子精确投影）。
+        if matrix_cols is None:
+            raise MatrixCoverageMiss(
+                "factor_matrix 无法探测可用列（registry 无 schema 且 DESCRIBE 失败）"
+                "——无法证明覆盖请求因子，拒绝读全矩阵（避免返回未请求因子列）。"
+            )
+        base = [c for c in ("datetime", "asset") if c in matrix_cols]
+        missing = [f for f in fids if f not in matrix_cols]
+        if missing:
+            raise MatrixCoverageMiss(
+                f"factor_matrix 不覆盖请求因子：{missing}"
+                f"（矩阵可用列 {sorted(matrix_cols) if len(matrix_cols) <= 40 else str(len(matrix_cols)) + ' 列'}）"
+            )
+        # 请求顺序保留；同时并入用户显式 columns（若给了）
+        explicit = [str(c) for c in (columns or []) if str(c) in matrix_cols]
+        proj = list(dict.fromkeys(base + fids + explicit))
+        if proj:
+            columns = proj
         matrix_params = dict(params, universe=universe, frequency=frequency)
         handle = self.read(
             "factor_matrix",
@@ -4571,13 +4676,27 @@ class DataAccessStore:
         *,
         factor_ids: Sequence[str] | None = None,
     ) -> dict[str, Any]:
-        """扫描因子湖重建目录，落盘 ``_factor_catalog.json``。"""
+        """扫描因子湖重建目录，落盘 ``_factor_catalog.json``。
+
+        #30 收官轮：``factor_ids`` 指定时为 **partial refresh = merge/update**——
+        只更新请求的因子，绝不把未刷新的其他 catalog 记录覆盖掉（旧代码 discover
+        出子集后直接 save，B/C 会被删）。不带 ``factor_ids`` 才是全量 rebuild。
+        """
         from data_access.read.factors import FactorCatalog, factor_catalog_root
 
         root = factor_catalog_root(self, dataset)
         if root is None:
             raise ValidationError(f"无法解析因子湖根目录（dataset={dataset}）")
-        catalog = FactorCatalog.discover(root, factor_ids=factor_ids)
+        refreshed = FactorCatalog.discover(root, factor_ids=factor_ids)
+        if factor_ids is not None:
+            # partial refresh：与现有 on-disk catalog merge（现有记录保留，只覆盖
+            # 请求的 factor_id）。load 对缺失文件返回空 → 首次 partial refresh 安全。
+            existing = FactorCatalog.load(root)
+            merged = dict(existing.records)
+            merged.update(refreshed.records)
+            catalog = FactorCatalog(root=root, records=merged)
+        else:
+            catalog = refreshed
         catalog.save(root)
         return {
             "root": str(root),
@@ -5624,6 +5743,26 @@ class DataAccessStore:
                             len(pruned),
                         )
                         return self._authorize_read_paths(pruned)
+
+        # #22 收官轮：plain-layout 本地 glob 无任何匹配文件 → 返回空列表。
+        # 分区 layout 已被上面按日期展开成具体路径（空范围已返回 []）；这里只覆盖
+        # 无法按时间裁剪的 raw glob（无 manifest 的静态/参数化 dataset，以及
+        # read_joined 的 universe 空股票池）。否则 DuckDB 报 "No files found" 并
+        # 进入 3 次 IO 重试循环——语义上必须是 0 行 typed result，而不是查询失败。
+        if (
+            (time_range is not None or instrument_filter)
+            and str(getattr(ds, "format", "parquet")) in {"parquet", "pq"}
+            and not any(str(p).startswith(("s3://", "cos://")) for p in paths)
+            and len(paths) <= 8
+            and any(any(c in str(p) for c in "*?[") for p in paths)
+        ):
+            import glob as _glob
+
+            if not any(_glob.glob(str(p), recursive=True) for p in paths):
+                logger.info(
+                    "glob_empty: dataset=%s 无匹配文件，返回空读取", ds.name
+                )
+                return []
         return paths
 
     @staticmethod
@@ -5811,6 +5950,23 @@ class DataAccessStore:
                 if read_root
                 else Path(resolve_namespace_path(str(ds.root)))
             )
+            # #25 收官轮：published 目标目录缺失（publish 双 rename 崩溃窗口）→
+            # 确定性恢复（journal 驱动，无 journal 即 no-op）。只 stat 一次，开销可忽略。
+            if (
+                not root.exists()
+                and str(getattr(ds, "access_mode", "")) == "published"
+                and (root.parent / f".publish.{root.name}.journal").exists()
+            ):
+                from data_access.write.publish import _recover_publish_journal
+
+                try:
+                    _recover_publish_journal(root.parent, root.name)
+                except Exception:
+                    logger.warning(
+                        "publish recovery 失败（dataset=%s）: 读路径继续，可能失败",
+                        ds.name,
+                        exc_info=True,
+                    )
             glob_paths = [str(root / ds.glob)]
         else:
             glob_paths = ds.resolve_paths(**read_params)
@@ -6503,6 +6659,26 @@ def _duckdb_type_for_schema(dtype: str) -> str:
     if "int" in d or "long" in d:
         return "BIGINT"
     return "VARCHAR"
+
+
+def _paths_have_files(paths: Sequence[str]) -> bool:
+    """#P0 收官（0.9.5）：本地 glob 路径列表是否真的匹配到文件。
+
+    ``_prepare_dataset_read`` 对「无 manifest / 未裁剪」返回的是 **glob 模式串**
+    （即使目录里一个文件都没有）——直接把模式塞给 ``read_parquet(?)`` 会让
+    DuckDB 报 ``No files found``。join/read 路径据此在「目录存在但无文件」时走
+    typed empty branch（0 行），而不是执行一个必然失败的全量查询。远程路径无法
+    本地判定 → 保守返回 True（照常执行，别把远程误判成空）。
+    """
+    import glob as glob_mod
+
+    for p in paths:
+        text = str(p)
+        if text.startswith(("s3://", "cos://")):
+            return True
+        if glob_mod.glob(text, recursive=True):
+            return True
+    return False
 
 
 def _empty_branch_sql(select_cols: Sequence[str], dsobj: Any) -> str:

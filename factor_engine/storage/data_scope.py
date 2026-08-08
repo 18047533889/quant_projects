@@ -5,18 +5,42 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping
 
 
+@dataclass(frozen=True)
+class DataExecutionScope:
+    """执行语义作用域：freq/calendar/timezone 等，随 anchor 一起进入 data_scope。
+
+    Round-8 audit #325/#326：``compute_data_scope`` 只绑定 anchor source 属性，
+    不包含二级 SourceRef 依赖与执行语义（frequency、calendar、timezone 等）。
+    同一份底层数据以不同执行语义读取时应得到不同缓存键；这里把执行语义显式
+    纳入指纹，避免缓存跨 freq/日历/时区污染。
+    """
+
+    frequency: str = "1d"
+    bar_freq: str = ""
+    session_calendar: str = ""
+    timezone: str = ""
+    timestamp_convention: str = ""
+    full_history_start: str = ""
+    factor_lake_version: str = ""
+    adjustment_basis: str = ""
+    decision_time_policy: str = ""
+
+
 def _jsonable(value: Any) -> Any:
     """将常见配置值转为跨进程稳定的 JSON 结构。
 
     禁止优先使用任意对象 ``repr``：很多对象的 repr 含内存地址，会让同一配置
-    在不同 worker 上得到不同 cache key。确实无法结构化时退回类型名 + 字符串值。
+    在不同 worker 上得到不同 cache key。覆盖 dataclass/Enum/date/datetime/
+    Path/list/tuple/set/frozenset/Mapping 后，任何仍无法结构化的对象直接
+    ``TypeError`` 失败关闭（Round-8 audit #327）——不再退化为 ``str()``，防止
+    内存地址等不稳定表示混入缓存键。
     """
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
@@ -37,14 +61,23 @@ def _jsonable(value: Any) -> Any:
             str(k): _jsonable(v)
             for k, v in sorted(value.items(), key=lambda item: str(item[0]))
         }
-    return {
-        "__type__": f"{type(value).__module__}.{type(value).__qualname__}",
-        "value": str(value),
-    }
+    raise TypeError(
+        f"unsupported data_scope value type: {type(value).__module__}.{type(value).__qualname__}"
+    )
 
 
-def compute_data_scope(data_source: Any) -> str:
-    """从数据源提取稳定作用域指纹，防止跨参数/快照/读模式缓存污染。"""
+def compute_data_scope(
+    data_source: Any,
+    *,
+    execution: DataExecutionScope | None = None,
+    source_dependencies: tuple[str, ...] | None = None,
+) -> str:
+    """从数据源提取稳定作用域指纹，防止跨参数/快照/读模式缓存污染。
+
+    Round-8 audit #325/#326：在 anchor 指纹之外，可选地把执行语义
+    （``DataExecutionScope``）与二级 SourceRef 依赖清单（``source_dependencies``）
+    纳入指纹。两者都不传时行为与旧版完全一致（向后兼容）。
+    """
     payload: dict[str, Any] = {}
     for attr in (
         "dataset",
@@ -62,6 +95,12 @@ def compute_data_scope(data_source: Any) -> str:
         val = getattr(data_source, attr, None)
         if val is not None and (not isinstance(val, str) or val.strip()):
             payload[attr] = _jsonable(val)
+
+    if execution is not None:
+        payload["execution"] = _jsonable(asdict(execution))
+
+    if source_dependencies:
+        payload["source_dependencies"] = sorted(source_dependencies)
 
     params = getattr(data_source, "params", None)
     if isinstance(params, Mapping) and params:

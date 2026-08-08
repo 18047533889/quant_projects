@@ -135,6 +135,16 @@ def try_stateful_segmented_incremental(
     caller falls back.  With ``bootstrap=True`` the operator is run from the
     dataset origin over the full supplied window and the terminal checkpoint is
     persisted (used to seed the checkpoint store on the first run).
+
+    Audit #378: a persisted checkpoint's ``as_of`` is the LAST FULLY COMMITTED
+    input timestamp.  The output window always re-computes its terminal bar
+    (1-bar inclusive overlap), so the committed checkpoint is the state one bar
+    before the end (multi-bar) and a single-bar segment has no new fully
+    committed bar and never overwrites the checkpoint.  All instruments run
+    first; their pending checkpoints are then committed together atomically via
+    ``StatefulCheckpointStore.commit_batch`` — a failure of any instrument (or
+    of the batch commit itself) abandons the whole segment and returns ``None``,
+    so no checkpoint is ever persisted for a partially-successful segment.
     """
     canonical = ir.op
     if canonical not in SEGMENTED_EXECUTION_CANONICALS:
@@ -172,7 +182,19 @@ def try_stateful_segmented_incremental(
         "params": params,
     }
 
+    # Audit #379: the complete (timestamp, instrument) grid the source anchors.
+    # ``incremental`` must match the full-history shape exactly — rows missing
+    # from a panel cell are preserved as NaN, never dropped.
+    anchor_index = pd.MultiIndex.from_product(
+        [reference.index, instruments],
+        names=["timestamp", "instrument"],
+    )
+
     out = np.full((len(segment_timestamps), len(instruments)), np.nan, dtype=float)
+    # Audit #378: a checkpoint's ``as_of`` is the LAST FULLY COMMITTED input
+    # timestamp.  All instruments run first; only after every one succeeds are
+    # their pending checkpoints committed atomically via ``store.commit_batch``.
+    pending: dict[str, Any] = {}
     for j, instrument in enumerate(instruments):
         checkpoint = None if bootstrap else store.load_latest(
             factor_id, canonical, instrument, before=start
@@ -187,9 +209,11 @@ def try_stateful_segmented_incremental(
         }
         try:
             if len(segment_timestamps) >= 2:
-                # The output window re-computes its terminal bar (1-bar inclusive
-                # overlap), so the persistent checkpoint must be the state just
-                # before it — the next run then resumes from that boundary.
+                # Multi-bar branch: the output window re-computes its terminal
+                # bar (1-bar inclusive overlap), so the checkpoint to persist is
+                # the state just before the terminal bar — ``checkpoint.as_of ==
+                # last fully committed input timestamp == t(n-1)`` and the next
+                # segment resumes from that boundary.
                 first = execute_stateful_segment(
                     canonical,
                     {key: values[:-1] for key, values in inputs.items()},
@@ -210,8 +234,14 @@ def try_stateful_segmented_incremental(
                     checkpoint=first.checkpoint,
                 )
                 out[:, j] = np.concatenate([first.values, last.values])
-                store.save(factor_id, first.checkpoint)
+                pending[instrument] = first.checkpoint
             else:
+                # Single-bar branch: the one bar is only re-computed (1-bar
+                # inclusive overlap) — there is NO new fully-committed bar, so
+                # ``checkpoint.as_of`` (the last fully committed input timestamp)
+                # is unchanged.  We must NOT overwrite the checkpoint: the
+                # incoming one (or, under bootstrap, the absence of one) remains
+                # the resume point for the next segment.
                 single = execute_stateful_segment(
                     canonical,
                     inputs,
@@ -223,13 +253,22 @@ def try_stateful_segmented_incremental(
                     starts_at_dataset_origin=starts_at_origin,
                 )
                 out[:, j] = single.values
-                store.save(factor_id, single.checkpoint)
         except Exception as exc:
             logger.warning("stateful segment failed for %s/%s: %s", factor_id, instrument, exc)
             return None
 
+    # Every instrument succeeded.  Commit the batch atomically: any failure here
+    # abandons the whole segment (no checkpoint is persisted), fail-closed.
+    if pending:
+        try:
+            store.commit_batch(factor_id, list(pending.values()))
+        except Exception as exc:
+            logger.warning("stateful checkpoint batch commit failed for %s: %s", factor_id, exc)
+            return None
+
     panel = pd.DataFrame(out, index=reference.index, columns=instruments)
-    result_series = panel.stack()
+    result_series = panel.stack(future_stack=True)
+    result_series = result_series.reindex(anchor_index)
     result_series.index = result_series.index.set_names(["timestamp", "instrument"])
     mode = {
         "mode": "stateful_segmented",

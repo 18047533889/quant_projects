@@ -5,6 +5,8 @@
 returns a factor panel and remains in the DSL must be production hardened.
 """
 from __future__ import annotations
+import enum
+from dataclasses import dataclass
 from typing import Iterable, Literal
 OperatorSurface=Literal["daily","extended","research","unsafe","legacy","internal","unclassified","all"]
 
@@ -446,11 +448,177 @@ _DAILY_GEMINI_V2_PACK_2026_08 = frozenset({
     "event_allan_factor", "composition_entropy", "composition_js_divergence",
 })
 DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_GEMINI_V2_PACK_2026_08)
+# =====================================================================
+# #311: daily-factor migration reviewed manifest
+# ---------------------------------------------------------------------
+# ``DAILY_FACTOR_MIGRATED`` is a large manual frozenset accumulated across many
+# 2026-08 packs (each ``_DAILY_*_PACK`` unioned itself in at import).  Going
+# forward the reviewed migration surface is owned by ``REVIEWED_MIGRATION_MANIFEST``:
+# a version-bound registry mapping each canonical to its review id, semantic hash
+# and approved authoring tier.  The manual frozenset is retained only as the
+# backward-compatible seed (tests still read it) and a derived view of the
+# manifest.  New migrations MUST be added via :func:`register_daily_migration`
+# (with a review_id) rather than by mutating the frozenset.
+# =====================================================================
+REVIEWED_MIGRATION_MANIFEST: dict[str, dict[str, str]] = {
+    canonical: {
+        "review_id": "seed-2026-08-manual",
+        "semantic_hash": "",
+        "approved_authoring_tier": "daily",
+    }
+    for canonical in sorted(DAILY_FACTOR_MIGRATED)
+}
+
+
+def register_daily_migration(
+    canonical: str,
+    *,
+    review_id: str,
+    semantic_hash: str = "",
+    approved_authoring_tier: str = "daily",
+) -> None:
+    """Record a reviewed daily-surface migration in the manifest.
+
+    This is the forward path for adding an operator to the daily surface: the
+    entry carries a ``review_id`` (plus optional ``semantic_hash`` and
+    ``approved_authoring_tier``) so the migration is version-bound and auditable.
+    The legacy ``DAILY_FACTOR_MIGRATED`` frozenset is kept in sync so existing
+    consumers that import it directly continue to see the operator.
+    """
+    REVIEWED_MIGRATION_MANIFEST[canonical] = {
+        "review_id": review_id,
+        "semantic_hash": semantic_hash,
+        "approved_authoring_tier": approved_authoring_tier,
+    }
+    global DAILY_FACTOR_MIGRATED
+    DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | {canonical})
+
+
+def daily_factor_migrated() -> frozenset[str]:
+    """Live read of the reviewed daily-migration surface (manifest keys)."""
+    return frozenset(REVIEWED_MIGRATION_MANIFEST)
+
+
 RESEARCH_ONLY_CANONICALS=frozenset({"holder_concentration_change","holder_count_change_rate"});LEGACY_ONLY_CANONICALS=frozenset({"cube"});INTERNAL_ONLY_CANONICALS=frozenset({"constant","identity","protected_div"})
 HIDDEN_DAILY_NAMES=frozenset({"cube","cumulative_max","cumulative_mean","cumulative_min","fmax","fmin","inv","reciprocal","sqr"})
+# =====================================================================
+# #310: three ORTHOGONAL dimensions.
+# ---------------------------------------------------------------------
+#   * AuthoringTier          — which authoring surface an operator is authored
+#                              on (surface membership; ``classify_canonical``).
+#   * ProductionCertification— whether the operator is evidence-certified for
+#                              production (six-gate composite; decoupled from
+#                              which surface list the canonical appears in).
+#   * BackendCapability      — what a specific runtime backend is capable of
+#                              for this canonical (backend-granular flags).
+# An operator can be authored EXTENDED while its certification is PENDING and a
+# given backend is merely *available*; the three never conflate.
+# =====================================================================
+class AuthoringTier(enum.Enum):
+    DAILY = "daily"
+    EXTENDED = "extended"
+    RESEARCH = "research"
+    INTERNAL = "internal"
+    # Backward-compatible non-production authoring surfaces.
+    UNSAFE = "unsafe"
+    LEGACY = "legacy"
+    UNCLASSIFIED = "unclassified"
+
+
+class ProductionCertification(enum.Enum):
+    CERTIFIED = "certified"
+    PENDING = "pending"
+    DENIED = "denied"
+
+
+@dataclass(frozen=True)
+class BackendCapability:
+    backend: str
+    available: bool
+    production_certified: bool
+    reference_backend: bool
+    certification_tier: str = ""
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "backend": self.backend,
+            "available": self.available,
+            "production_certified": self.production_certified,
+            "reference_backend": self.reference_backend,
+            "certification_tier": self.certification_tier,
+        }
+
+
+def authoring_tier(canonical: str) -> AuthoringTier:
+    """Return the authoring tier enum for ``canonical`` (surface membership)."""
+    return AuthoringTier(classify_canonical(canonical))
+
+
+def production_certification(canonical: str) -> ProductionCertification:
+    """Return the operator's production certification (evidence/policy driven).
+
+    #310: certification is derived from the operator's ACTUAL certification
+    fields — the six-gate ``production_certified`` composite written by
+    ``reconcile_operator_certification`` (the single certification authority) —
+    never from which surface list the canonical happens to appear in.
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    resolved = OperatorRegistry._aliases.get(canonical, canonical)
+    catalog = OperatorRegistry._catalog.get(resolved, {})
+    # Six-gate composite is the only production-certification authority.
+    if catalog.get("production_certified") is True:
+        return ProductionCertification.CERTIFIED
+    # Explicitly blocked / never intended for production.
+    if catalog.get("status") in (
+        "denied", "rejected", "deprecated", "stub", "doc_only",
+    ):
+        return ProductionCertification.DENIED
+    try:
+        from cleaned_operators.operator_spec import (
+            PERMANENTLY_FORBIDDEN_CANONICALS,
+            is_production_denied,
+        )
+        if resolved in PERMANENTLY_FORBIDDEN_CANONICALS or is_production_denied(resolved):
+            return ProductionCertification.DENIED
+    except Exception:
+        pass
+    if not catalog:
+        # Unknown / unregistered operator fails closed.
+        return ProductionCertification.DENIED
+    # Not a production target -> no certification is ever granted.
+    try:
+        from cleaned_operators.production_hardening import factor_production_targets
+        if resolved not in factor_production_targets():
+            return ProductionCertification.DENIED
+    except Exception:
+        pass
+    # Registered, reviewed target, but evidence not yet bound -> awaiting
+    # certification (PENDING), which is distinct from a hard DENIED.
+    return ProductionCertification.PENDING
+
+
+def backend_capability(canonical: str, backend: str) -> BackendCapability:
+    """Return per-backend capability flags for ``canonical``."""
+    from cleaned_operators.registry import OperatorRegistry
+
+    resolved = OperatorRegistry._aliases.get(canonical, canonical)
+    backends = OperatorRegistry.backends_for(resolved)
+    meta = dict(
+        (OperatorRegistry._catalog.get(resolved, {}).get("backend_meta") or {}).get(backend) or {}
+    )
+    return BackendCapability(
+        backend=backend,
+        available=backend in backends,
+        production_certified=bool(meta.get("production_certified")),
+        reference_backend=bool(meta.get("reference_backend")),
+        certification_tier=str(meta.get("certification_tier") or ""),
+    )
+
+
 def classify_canonical(canonical:str)->str:
     if canonical in INTERNAL_ONLY_CANONICALS:return "internal"
-    if canonical in DAILY_CANONICALS or canonical in DAILY_FACTOR_MIGRATED:return "daily"
+    if canonical in DAILY_CANONICALS or canonical in daily_factor_migrated():return "daily"
     if canonical in EXTENDED_ONLY_CANONICALS:return "extended"
     if canonical in RESEARCH_ONLY_CANONICALS:return "research"
     if canonical in UNSAFE_CANONICALS:return "unsafe"

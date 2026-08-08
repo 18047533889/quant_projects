@@ -109,6 +109,7 @@ class PerfConfig:
 
         cfg: dict = dict(config or {})
         mem_cfg = dict(cfg.get("memory") or {})
+        cache_cfg = dict(cfg.get("cache") or {})
         results_cfg = dict(cfg.get("results") or {})
         spill_cfg = dict(cfg.get("spill") or {})
         if self.memory_limit_bytes is not None:
@@ -123,7 +124,14 @@ class PerfConfig:
             spill_cfg["directory"] = self.spill_dir
         if self.spill_budget_bytes is not None:
             spill_cfg["max_size"] = self.spill_budget_bytes
-        cfg["memory"], cfg["results"], cfg["spill"] = mem_cfg, results_cfg, spill_cfg
+        # 审计 #340：显式透传 cache 配置（含 ``resources.cache.duckdb_fraction``），
+        # 否则 ``ExecutionResourcePlan.from_dict`` 读不到用户配置。
+        cfg["memory"], cfg["cache"], cfg["results"], cfg["spill"] = (
+            mem_cfg,
+            cache_cfg,
+            results_cfg,
+            spill_cfg,
+        )
         if not cfg.get("mode"):
             cfg["mode"] = "auto"
         return ExecutionResourcePlan.from_dict(cfg)

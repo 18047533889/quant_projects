@@ -227,8 +227,15 @@ class DataRequest:
         非法元素类型。``fields="close"`` 会被逐字符拆成 c/l/o/s/e，是典型的
         silent semantic inversion；非法元素（int/对象）也立即报错而不是 str() 化。
         """
+        # #7 fields/order_by 顺序是语义（投影顺序 / 排序优先级）→ ordered=True，
+        # set/dict/generator 拒绝；instruments 是成员语义 → 接受 set 但 canonical
+        # 排序。
         self.fields = strict_sequence(
-            self.fields, name="request.fields", element_type=str, allow_none=False
+            self.fields,
+            name="request.fields",
+            element_type=str,
+            allow_none=False,
+            ordered=True,
         )
         self.instruments = strict_sequence(
             self.instruments,
@@ -237,7 +244,11 @@ class DataRequest:
             allow_none=True,
         )
         self.order_by = strict_sequence(
-            self.order_by, name="request.order_by", element_type=str, allow_none=True
+            self.order_by,
+            name="request.order_by",
+            element_type=str,
+            allow_none=True,
+            ordered=True,
         )
 
     @property

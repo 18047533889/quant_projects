@@ -31,10 +31,39 @@ data_access.read.session_calendar —— 交易所 session / 交易日历（时�
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 from data_access.core.exceptions import ValidationError
+
+# #7 唯一 Market canonicalizer：明确 alias → canonical market。未知值直接报错，
+# 绝不能 ``else → us``。
+_MARKET_ALIASES = {
+    "ashare": "ashare", "a_share": "ashare", "a": "ashare", "cn": "ashare",
+    "us": "us", "usa": "us", "nyse": "us", "nasdaq": "us", "am": "us",
+    "us_stock": "us",
+}
+
+
+def canonicalize_market(market: str | None) -> str | None:
+    """把市场名 canonicalize 到 ``ashare`` / ``us``；未知值 fail-closed。
+
+    #7 旧代码 ``_calendar_dataset_for`` 对任何非 ashare 的 market（``europe`` /
+    ``abc`` / ``uss``）静默返回 ``us_calendar``——把未知市场当美国市场，PIT /
+    session availability / 日历缓存全部被带偏。现在只接受明确 alias。
+    """
+    if market is None:
+        return None
+    key = str(market).strip().lower()
+    canon = _MARKET_ALIASES.get(key)
+    if canon is None:
+        raise ValidationError(
+            f"未知市场名 {market!r}。仅支持：ashare/a_share/cn（A股）与 "
+            "us/usa/nyse/nasdaq（美股）；不能把未知市场静默当美国市场处理。"
+        )
+    return canon
 
 # (start, end) 是闭区间分钟标签；offset_min 是该时段第一根 bar 的 session
 # elapsed 下标。
@@ -108,27 +137,52 @@ class MarketSession:
             return max(total, 1)
         return self.total_bars
 
-    def elapsed_index(self, t: _dt.time) -> int | None:
+    def effective_segments_on(self, d: _dt.date) -> tuple[SessionSegment, ...]:
+        """该日生效的 segment 集合：early-close 日按提前收盘裁剪，否则原样。
+
+        #7 date-specific session 操作（``next_bar`` / ``elapsed`` / ``close`` /
+        ``latency``）必须先构造 effective segments，再消费同一套——不能再拿常规
+        09:30–16:00 映射 half-day（实际 13:00 收市）的 13:01。
+        """
+        if d not in self.early_close_dates or self.early_close_time is None:
+            return self.segments
+        ec = self.early_close_time
+        out: list[SessionSegment] = []
+        for seg in self.segments:
+            if seg.start > ec:
+                continue
+            end = min(seg.end, ec)
+            out.append(SessionSegment(seg.name, seg.start, end, seg.offset_min))
+        return tuple(out)
+
+    def elapsed_index(
+        self, t: _dt.time, *, on: _dt.date | None = None
+    ) -> int | None:
         """把本地时间标签映射到 session elapsed bar index（0 = 当日第一根）。
 
-        不在任何时段内（午休 / 盘前盘后）返回 None。
+        ``on`` 提供日期时按该日 effective segments 映射（early-close 日 13:00
+        之后不再映射到当天）。不在任何时段内（午休 / 盘前盘后）返回 None。
         """
-        for seg in self.segments:
+        segs = self.effective_segments_on(on) if on is not None else self.segments
+        for seg in segs:
             if seg.contains(t):
                 return seg.offset_min + _minutes_between(seg.start, t)
         return None
 
-    def hhmm_elapsed_index(self, hhmm: str) -> int | None:
+    def hhmm_elapsed_index(
+        self, hhmm: str, *, on: _dt.date | None = None
+    ) -> int | None:
         try:
             h, m = (int(p) for p in str(hhmm).split(":", 1))
-            return self.elapsed_index(_dt.time(h, m))
+            return self.elapsed_index(_dt.time(h, m), on=on)
         except (ValueError, TypeError):
             return None
 
-    def contains_hhmm(self, hhmm: str) -> bool:
+    def contains_hhmm(self, hhmm: str, *, on: _dt.date | None = None) -> bool:
         try:
             h, m = (int(p) for p in str(hhmm).split(":", 1))
-            return any(s.contains(_dt.time(h, m)) for s in self.segments)
+            segs = self.effective_segments_on(on) if on is not None else self.segments
+            return any(s.contains(_dt.time(h, m)) for s in segs)
         except (ValueError, TypeError):
             return False
 
@@ -559,6 +613,17 @@ def compile_available_from(
     return _apply_latency(base, latency, bar_interval_minutes)
 
 
+def _segment_after(
+    segs: Sequence[SessionSegment], seg_name: str
+) -> _dt.time | None:
+    """effective segments 中某 segment 之后下一 segment 的起点（无 → None）。"""
+    names = [s.name for s in segs]
+    idx = names.index(seg_name) if seg_name in names else -1
+    if 0 <= idx < len(segs) - 1:
+        return segs[idx + 1].start
+    return None
+
+
 def _compile_next_bar(
     knowledge: Any,
     kdate: _dt.date,
@@ -568,7 +633,12 @@ def _compile_next_bar(
     *,
     strict: bool = False,
 ) -> Any:
-    """next_bar：当前 session 的下一根 bar（含午休跨段 / 收盘跨日）。"""
+    """next_bar：当前 session 的下一根 bar（含午休跨段 / 收盘跨日）。
+
+    #7 消费该日 **effective segments**（``session.effective_segments_on(kdate)``）：
+    early-close 日（美股 half-day，实际 13:00 收市）knowledge=13:00 的 next_bar
+    必须跳到下一交易日第一根，而不是常规 segment 里的 13:01。
+    """
     if session is None or not session.segments:
         td = calendar.next_trading_day(kdate)
         if td is not None:
@@ -576,16 +646,24 @@ def _compile_next_bar(
         if strict:
             _raise_right_boundary("next_bar", kdate)
         return knowledge
+    segs = session.effective_segments_on(kdate)
+    if not segs:
+        td = calendar.next_trading_day(kdate)
+        if td is not None:
+            return _combine(td, _session_first_start(session))
+        if strict:
+            _raise_right_boundary("next_bar", kdate)
+        return knowledge
     if ktime is None:
         # 只有日期：默认当天开盘后第一根（当天是交易日）→ 当日第一根
         if calendar.is_trading_day(kdate):
-            return _combine(kdate, _session_first_start(session))
+            return _combine(kdate, segs[0].start)
         td = calendar.next_trading_day(kdate)
         if td is None:
             if strict:
                 _raise_right_boundary("next_bar", kdate)
             return knowledge
-        return _combine(td, _session_first_start(session))
+        return _combine(td, segs[0].start)
     if not calendar.is_trading_day(kdate):
         # 非交易日（周末/节假日）：绝无「当天开盘」，直接下一交易日第一根
         td = calendar.next_trading_day(kdate)
@@ -593,14 +671,14 @@ def _compile_next_bar(
             if strict:
                 _raise_right_boundary("next_bar", kdate)
             return knowledge
-        return _combine(td, _session_first_start(session))
-    for seg in session.segments:
+        return _combine(td, segs[0].start)
+    for seg in segs:
         if seg.contains(ktime):
             nxt = _add_minutes(ktime, 1)  # 分钟级 session 默认 1 根 = 1 分钟
             if nxt <= seg.end:
                 return _combine(kdate, nxt)
             # 段末最后一根 → 下一段起点（午休跨段）；无下一段 → 下一交易日
-            nxt_seg = _session_next_segment_start(session, seg.name)
+            nxt_seg = _segment_after(segs, seg.name)
             if nxt_seg is not None:
                 return _combine(kdate, nxt_seg)
             td = calendar.next_trading_day(kdate)
@@ -608,11 +686,11 @@ def _compile_next_bar(
                 if strict:
                     _raise_right_boundary("next_bar", kdate)
                 return knowledge
-            return _combine(td, _session_first_start(session))
-    # 不在任何 segment 内：盘前 → 当日第一根；午休/盘后 → 下一段/下一交易日
-    if ktime < session.segments[0].start:
-        return _combine(kdate, _session_first_start(session))
-    for seg in session.segments:
+            return _combine(td, segs[0].start)
+    # 不在任何 effective segment 内：盘前 → 当日第一根；午休/盘后 → 下一段/下一交易日
+    if ktime < segs[0].start:
+        return _combine(kdate, segs[0].start)
+    for seg in segs:
         if seg.start > ktime:
             return _combine(kdate, seg.start)
     td = calendar.next_trading_day(kdate)
@@ -620,7 +698,7 @@ def _compile_next_bar(
         if strict:
             _raise_right_boundary("next_bar", kdate)
         return knowledge
-    return _combine(td, _session_first_start(session))
+    return _combine(td, segs[0].start)
 
 
 def _compile_next_session_open(
@@ -632,11 +710,20 @@ def _compile_next_session_open(
     *,
     strict: bool = False,
 ) -> Any:
-    """next_session_open / session：按 session 边界映射。"""
+    """next_session_open / session：按 session 边界映射（early-close 日消费
+    effective segments，与 ``next_bar`` 同一套）。"""
     if session is None or not session.segments:
         td = calendar.next_trading_day(kdate)
         if td is not None:
             return _combine(td, _dt.time(0, 0))
+        if strict:
+            _raise_right_boundary("next_session_open", kdate)
+        return knowledge
+    segs = session.effective_segments_on(kdate)
+    if not segs:
+        td = calendar.next_trading_day(kdate)
+        if td is not None:
+            return _combine(td, _session_first_start(session))
         if strict:
             _raise_right_boundary("next_session_open", kdate)
         return knowledge
@@ -647,13 +734,13 @@ def _compile_next_session_open(
                 if strict:
                     _raise_right_boundary("next_session_open", kdate)
                 return knowledge
-            return _combine(td, _session_first_start(session))
-        for seg in session.segments:
+            return _combine(td, segs[0].start)
+        for seg in segs:
             if ktime < seg.start:
                 # 该 session 已开盘但 knowledge 在其前 → 当日该段起点
                 return _combine(kdate, seg.start)
             if seg.contains(ktime):
-                nxt = _session_next_segment_start(session, seg.name)
+                nxt = _segment_after(segs, seg.name)
                 if nxt is not None:
                     return _combine(kdate, nxt)
                 td = calendar.next_trading_day(kdate)
@@ -661,13 +748,13 @@ def _compile_next_session_open(
                     if strict:
                         _raise_right_boundary("next_session_open", kdate)
                     return knowledge
-                return _combine(td, _session_first_start(session))
+                return _combine(td, segs[0].start)
     td = calendar.next_trading_day(kdate)
     if td is None:
         if strict:
             _raise_right_boundary("next_session_open", kdate)
         return knowledge
-    return _combine(td, _session_first_start(session))
+    return _combine(td, segs[0].start)
 
 
 def _as_date(value: Any) -> _dt.date | None:
@@ -728,8 +815,16 @@ def _combine(d: _dt.date, t: _dt.time) -> _dt.datetime:
 
 
 def _calendar_dataset_for(market: str) -> str:
-    """market → registry 日历数据集名（缓存 key / manifest token 共用）。"""
-    return "ashare_calendar" if market == "ashare" else "us_calendar"
+    """market → registry 日历数据集名（缓存 key / manifest token 共用）。
+
+    #7 未知 market fail-closed（经 ``canonicalize_market``），不再静默 us_calendar。
+    """
+    canon = canonicalize_market(market)
+    if canon is None:
+        raise ValidationError(
+            f"无法为 market={market!r} 定位交易日历数据集（market 未知）"
+        )
+    return "ashare_calendar" if canon == "ashare" else "us_calendar"
 
 
 def _calendar_source_token(store: Any, market: str) -> str | None:
@@ -743,6 +838,47 @@ def _calendar_source_token(store: Any, market: str) -> str | None:
     except Exception:
         return None
     return token.get("source_epoch") or token.get("manifest_epoch")
+
+
+def _calendar_file_token(store: Any, market: str) -> str | None:
+    """无 manifest 时的日历数据版本 token：日历数据集文件的 path+size+mtime_ns。
+
+    #7 旧退路是 ``store.registry_fingerprint()``——registry 是**配置**版本不是
+    **数据**版本：``us_calendar.parquet`` 更新了、registry.yaml 没变、无 manifest
+    时，长驻 worker 的 cache key 不变，一直拿旧 trading days（holiday/临时休市/
+    PIT 都被带偏）。现在按实际文件 stat 出 token；remote/读不到返回 None 兜底。
+    """
+    try:
+        dataset = _calendar_dataset_for(market)
+        ds = store.registry.get(dataset)
+    except Exception:
+        return None
+    root = getattr(ds, "root", None) or getattr(ds, "root_template", None)
+    if not root:
+        return None
+    try:
+        from data_access.registry.paths import resolve_namespace_path
+
+        root_path = Path(resolve_namespace_path(str(root))).expanduser()
+    except Exception:
+        return None
+    if not root_path.is_dir():
+        return None  # remote/未同步：无法本地 stat，兜底 registry_fingerprint
+    glob = getattr(ds, "glob", None) or "*.parquet"
+    parts: list[str] = []
+    try:
+        for p in sorted(root_path.glob(glob)):
+            try:
+                st = p.stat()
+                parts.append(f"{p.name}:{st.st_size}:{st.st_mtime_ns}")
+            except OSError:
+                continue
+    except OSError:
+        return None
+    if not parts:
+        return None
+    digest = hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+    return f"files:{digest[:24]}:{len(parts)}"
 
 
 def _load_calendar_from_registry(store: Any, market: str) -> tuple[_dt.date, ...] | None:
@@ -842,10 +978,15 @@ def get_market_calendar(
     不同，日历更新后也应失效。key = ``{market}:{source_token}``：
         - 显式 trading_days → 内容指纹（长度+首末日）
         - store registry 且日历数据集有 manifest → source_epoch
-        - store registry 无 manifest → store 注册表指纹（store-local）
-    日历数据更新 → source_epoch 变化 → key 变化 → 自动 reload。
+        - store registry 无 manifest → 日历文件 snapshot（path+size+mtime_ns），
+          #7 不再用 registry_fingerprint（那是配置版本，不是数据版本）
+    日历数据更新 → token 变化 → key 变化 → 自动 reload。
+
+    #7 market 未知 fail-closed：未知名不得静默当美国市场。
     """
-    key = str(market).strip().lower()
+    key = canonicalize_market(market)
+    if key is None:
+        raise ValidationError("market 未提供，无法加载交易日历")
     if trading_days:
         days_sorted = sorted(set(trading_days))
         token = (
@@ -855,6 +996,11 @@ def get_market_calendar(
         )
     elif store is not None:
         token = _calendar_source_token(store, key)
+        if token is None:
+            # #7 无 manifest → 文件 snapshot（path+size+mtime_ns）做数据版本 token，
+            # 不用 registry_fingerprint（配置版本，数据更新了它不变 → 长驻 worker
+            # 一直拿旧 trading days）。remote 读不到本地文件时返回 None 走兜底。
+            token = _calendar_file_token(store, key)
         if token is None:
             try:
                 token = f"store:{store.registry_fingerprint()[:16]}"

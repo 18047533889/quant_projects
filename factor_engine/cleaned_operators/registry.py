@@ -34,6 +34,14 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
+import pandas as pd
+
+# R7-222: the MISSING sentinel (defined in base) distinguishes "no default
+# declared" from an explicit None default; _contract_hash relies on it to keep
+# contract hashes stable and honest.
+from cleaned_operators.base import MISSING  # noqa: E402
+
 _BOOTSTRAP_TOKEN = object()
 
 
@@ -74,56 +82,237 @@ def _code_payload(code: Any, *, include_names: bool) -> str:
     return hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()[:16]
 
 
-def _impl_source_hash(operator: Any) -> str:
-    """Deterministic hash of the ACTUAL kernel implementation (P0-23).
+def _freeze_value(value: Any) -> str:
+    """Deterministic string payload of a closed-over / kernel value (R7-227).
 
-    ``inspect.getsource`` on the ``calculate`` / ``_calculate_series`` method
-    conflates closures and base-class delegation: two different kernels sharing
-    a framework method produce identical source hashes.  This hashes the real
-    kernel instead:
+    Memory addresses (``id()``), object ``__repr__`` and pointer-derived
+    representations are forbidden in a semantic hash — they differ across
+    processes and do not reflect semantic change.  This canonicalizes:
 
-    * when the method is a closure (``__closure__`` is set), hash the method's
-      ``__code__`` (``co_code`` / ``co_consts``) plus the identity of every
-      closed-over cell value;
-    * otherwise hash the method's ``__code__`` (``co_code`` + ``co_consts`` +
-      ``co_names``) plus the class ``module.qualname`` so two classes that share
-      a base-class ``calculate`` still hash differently.
-
-    Falls back to the legacy source hash when no code object is available, and
-    finally to the class module+qualname so the audit log is always meaningful.
+    * primitives -> canonical JSON;
+    * dict -> sorted keys;
+    * list/tuple -> ordered recursive hash;
+    * set/frozenset -> sorted recursive hashes;
+    * ndarray -> dtype + shape + raw bytes;
+    * DataFrame -> schema + deterministic payload hash;
+    * function/code -> bytecode + defaults + closure (recursive);
+    * everything else -> ``type(value).__name__`` (identity of the TYPE, never
+      the instance address).
     """
     import hashlib
+
+    if value is None or isinstance(value, (bool, int, str, bytes, complex)):
+        return repr(value)
+    if isinstance(value, float):
+        # NaN has many bit patterns; canonicalize to a single spelling so a
+        # semantic hash is stable regardless of how the NaN arrived.
+        if value != value:
+            return "NaN"
+        if value == float("inf"):
+            return "Inf"
+        if value == float("-inf"):
+            return "-Inf"
+        return repr(value)
+    if isinstance(value, tuple):
+        return "tuple(" + ",".join(_freeze_value(v) for v in value) + ")"
+    if isinstance(value, (list,)):
+        return "list[" + ",".join(_freeze_value(v) for v in value) + "]"
+    if isinstance(value, (set, frozenset)):
+        return "set{" + ",".join(sorted(_freeze_value(v) for v in value)) + "}"
+    if isinstance(value, dict):
+        return "dict{" + ",".join(
+            f"{_freeze_value(k)}:{_freeze_value(value[k])}"
+            for k in sorted(value.keys(), key=repr)
+        ) + "}"
+    if isinstance(value, np.ndarray):
+        # dtype + shape + raw bytes: the bytes encode the exact numeric payload.
+        try:
+            blob = np.ascontiguousarray(value).tobytes()
+        except (TypeError, ValueError):  # non-contiguous / object dtype
+            blob = repr(value.tolist()).encode("utf-8")
+        return f"ndarray({value.dtype},{value.shape}," + hashlib.sha256(blob).hexdigest()[:16] + ")"
+    if isinstance(value, pd.DataFrame):
+        # Schema + deterministic payload hash (columns order + index kind + data).
+        import hashlib as _h
+
+        cols = ",".join(str(c) for c in value.columns)
+        payload = _h.sha256(
+            np.nan_to_num(value.to_numpy(dtype=float), nan=float("nan")).tobytes()
+        ).hexdigest()[:16]
+        return f"DataFrame({cols}|{payload})"
+    code = getattr(value, "co_code", None)
+    if code is not None:  # code object -> bytecode + constants
+        return _code_payload(value, include_names=True)
+    if callable(value):
+        fn_code = getattr(value, "__code__", None)
+        if fn_code is not None:
+            parts = [_code_payload(fn_code, include_names=True)]
+            closure = getattr(value, "__closure__", None) or ()
+            cells = []
+            for cell in closure:
+                try:
+                    cells.append(_freeze_value(cell.cell_contents))
+                except ValueError:  # uninitialised cell
+                    cells.append("<empty>")
+            parts.append("cells=" + ",".join(sorted(cells)))
+            return "fn(" + "|".join(parts) + ")"
+    return f"{type(value).__name__}"  # type identity only — never id()/repr
+
+
+def _impl_source_hash(operator: Any) -> str:
+    """Deterministic hash of the ACTUAL kernel implementation (P0-23 / R7-226).
+
+    The hash priority NEVER starts at the framework ``calculate`` — two
+    different operators sharing a base-class ``calculate`` must not hash the
+    same.  R7-226 resolution order:
+
+    1. class-defined ``_calculate_series`` / ``_calculate_scalar`` (the real
+       kernel, when the subclass overrides it);
+    2. class-defined ``calculate`` (a direct implementation that owns its own
+       call contract — only when ``_calculate_*`` is NOT overridden on the
+       class);
+    3. the wrapped kernel callable (``_fn`` default of a bridge);
+    4. the factory-closure semantic payload (``__closure__`` cells);
+    5. base ``calculate`` only as a framework hash (module.qualname).
+
+    R7-227: closure cells are serialized with :func:`_freeze_value` — a
+    deterministic payload hash — never ``repr(id(...))``.
+    """
+    import hashlib
+
+    cls = operator.__class__
+
+    def _is_class_defined(attr: str) -> bool:
+        for klass in cls.__mro__:
+            if attr in klass.__dict__:
+                return True
+        return False
+
+    # 1. class-defined kernel method (highest priority).
+    for attr in ("_calculate_series", "_calculate_scalar"):
+        if _is_class_defined(attr):
+            fn = getattr(operator, attr, None)
+            if callable(fn):
+                payload = _fn_payload(fn, cls)
+                if payload is not None:
+                    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    # 2. class-defined calculate (direct call-contract implementation).
+    if _is_class_defined("calculate"):
+        fn = getattr(operator, "calculate", None)
+        if callable(fn):
+            payload = _fn_payload(fn, cls)
+            if payload is not None:
+                return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    # 3. wrapped kernel callable via a bridge ``_fn`` default.
+    try:
+        import inspect
+
+        _candidate = getattr(operator, "_calculate_series", None)
+        if _candidate is None:
+            _candidate = getattr(operator, "calculate", None)
+        if _candidate is not None:
+            sig = inspect.signature(_candidate)
+            fn_default = sig.parameters.get("_fn")
+            if fn_default is not None and callable(fn_default.default):
+                payload = _fn_payload(fn_default.default, cls)
+                if payload is not None:
+                    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    except (TypeError, ValueError):
+        pass
+    # 4. factory closure payload (register_dual / _mk closures).
+    for attr in ("_calculate_series", "_calculate_scalar", "calculate"):
+        fn = getattr(operator, attr, None)
+        if fn is None:
+            continue
+        closure = getattr(fn, "__closure__", None)
+        if callable(fn) and closure:
+            parts = [_code_payload(fn.__code__, include_names=False)]
+            cells = []
+            for cell in closure:
+                try:
+                    cells.append(_freeze_value(cell.cell_contents))
+                except ValueError:
+                    cells.append("<empty>")
+            parts.append("cells=" + ",".join(sorted(cells)))
+            return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+    # 5. framework hash: module.qualname only.
+    src = f"{cls.__module__}.{cls.__qualname__}"
+    return hashlib.sha256(src.encode("utf-8")).hexdigest()[:16]
+
+
+def _contract_hash(operator: Any) -> str:
+    """Deterministic hash of an operator's LOGICAL contract (R7-233).
+
+    Independent of the implementation source: two backends of the same canonical
+    with identical declared contracts hash identically, so an audit can prove
+    whether an override replaced the contract or only the kernel.  Covers
+    param_names + param_specs (incl. default/dtype/min/max/choices/active_when)
+    + panel_params/scalar_params + param_aliases + input/output units + grains +
+    available_at + input_fields.
+    """
+    import hashlib
+
+    meta = getattr(operator, "metadata", None)
+    if meta is None:
+        return hashlib.sha256(b"").hexdigest()[:16]
+    parts: list[str] = []
+    parts.append("params=" + ",".join(list(getattr(meta, "param_names", None) or [])))
+    specs = getattr(meta, "param_specs", None) or {}
+    spec_parts = []
+    for key in sorted(specs.keys()):
+        spec = specs[key]
+        dtype = getattr(spec, "dtype", None)
+        dtype_name = getattr(dtype, "__name__", str(dtype))
+        default = getattr(spec, "default", MISSING)
+        if default is MISSING:
+            default_repr = "MISSING"
+        else:
+            default_repr = _freeze_value(default)
+        spec_parts.append(
+            f"{key}:(dtype={dtype_name},min={getattr(spec, 'min', None)!r},"
+            f"max={getattr(spec, 'max', None)!r},choices={getattr(spec, 'choices', None)!r},"
+            f"active_when={getattr(spec, 'active_when', None)!r},default={default_repr})"
+        )
+    parts.append("specs={" + ",".join(spec_parts) + "}")
+    parts.append("panel=" + ",".join(tuple(getattr(meta, "panel_params", None) or ())))
+    parts.append("scalar=" + ",".join(tuple(getattr(meta, "scalar_params", None) or ())))
+    parts.append("aliases=" + ",".join(
+        f"{k}->{v}" for k, v in sorted((getattr(meta, "param_aliases", None) or {}).items())
+    ))
+    parts.append("in_units=" + ",".join(
+        f"{k}->{v}" for k, v in sorted((getattr(meta, "input_units", None) or {}).items())
+    ))
+    parts.append(f"out_unit={getattr(meta, 'output_unit', None)!r}")
+    parts.append(f"in_grain={getattr(meta, 'input_grain', None)!r}")
+    parts.append(f"out_grain={getattr(meta, 'output_grain', None)!r}")
+    parts.append(f"avail={getattr(meta, 'available_at', None)!r}")
+    parts.append("in_fields=" + ",".join(list(getattr(meta, "input_fields", None) or [])))
+    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+def _fn_payload(fn: Any, cls: type) -> str | None:
+    """Deterministic payload of one callable: code + qualname + closure."""
     import inspect as _inspect
 
-    src: str | None = None
-    fn = getattr(operator, "calculate", None)
-    if fn is None and hasattr(operator, "_calculate_series"):
-        fn = operator._calculate_series  # type: ignore
-    if callable(fn):
-        try:
-            code = getattr(fn, "__code__", None)
-            closure = getattr(fn, "__closure__", None)
-            if code is not None and closure:
-                parts = [_code_payload(code, include_names=False)]
-                cells: list[str] = []
-                for cell in closure:
-                    try:
-                        cells.append(repr(id(cell.cell_contents)))
-                    except ValueError:  # uninitialised cell
-                        cells.append("<empty>")
-                parts.append("cells=" + ",".join(sorted(cells)))
-                src = "|".join(parts)
-            elif code is not None:
-                qualname = f"{operator.__class__.__module__}.{operator.__class__.__qualname__}"
-                src = _code_payload(code, include_names=True) + "|" + qualname
-            else:  # pragma: no cover - interactive/no-code-object
-                src = _inspect.getsource(fn)
-        except (OSError, TypeError):  # pragma: no cover - interactive/no-source
-            src = None
-    if src is None:
-        cls = operator.__class__
-        src = f"{cls.__module__}.{cls.__qualname__}"
-    return hashlib.sha256(src.encode("utf-8")).hexdigest()[:16]
+    try:
+        code = getattr(fn, "__code__", None)
+        closure = getattr(fn, "__closure__", None)
+        if code is not None and closure:
+            parts = [_code_payload(code, include_names=False)]
+            cells: list[str] = []
+            for cell in closure:
+                try:
+                    cells.append(_freeze_value(cell.cell_contents))
+                except ValueError:  # uninitialised cell
+                    cells.append("<empty>")
+            parts.append("cells=" + ",".join(sorted(cells)))
+            return "|".join(parts)
+        if code is not None:
+            qualname = f"{cls.__module__}.{cls.__qualname__}"
+            return _code_payload(code, include_names=True) + "|" + qualname
+        return _inspect.getsource(fn)
+    except (OSError, TypeError):  # pragma: no cover - interactive/no-source
+        return None
 
 
 def _calculate_is_framework_or_declared(operator: Any) -> bool:
@@ -190,6 +379,12 @@ class OperatorRegistry:
     _catalog: Dict[str, dict] = {}
     _lifecycle: Lifecycle = Lifecycle.BUILDING
     _version: int = 0
+    # R7-234: FIRST registration identity — captured the first time a canonical
+    # is registered (before any override/fastpath/repair module replaces it), so
+    # the original experimental status/source/implementation hash is never lost.
+    # Immutable once set; ``unregister`` keeps it (lifecycle truth), a later
+    # re-registration of the same canonical must NOT overwrite it.
+    _first_registered: Dict[str, dict] = {}
     # Intentional same-backend overwrites (replace=True): canonical/backend,
     # old/new source, old/new impl hash, reason (P0-31 audit trail).
     _overwrite_log: List[dict] = []
@@ -260,7 +455,10 @@ class OperatorRegistry:
     # no entry exists, the legacy source-wide rule remains the fallback, so the
     # ~31 declared bootstrap layers keep working (additive only).  Registered via
     # :meth:`register_declared_override`.
-    _DECLARED_OVERRIDE_MANIFEST: dict[str, tuple[str, str]] = {}
+    # R7-228: override governance is keyed by (canonical, backend) — a
+    # replacement of ``ts_mean/pandas_numpy`` is independent of
+    # ``ts_mean/polars``.  The dict key is ``(canonical, backend)``.
+    _DECLARED_OVERRIDE_MANIFEST: dict[tuple, tuple[str, str]] = {}
 
     @classmethod
     def overwrite_log(cls) -> List[dict]:
@@ -297,7 +495,9 @@ class OperatorRegistry:
             )
         if not str(reason or "").strip():
             raise ValueError("register_declared_override requires a reason")
-        cls._DECLARED_OVERRIDE_MANIFEST[canonical] = (
+        # R7-228: the manifest key is (canonical, backend) — a pandas override
+        # never authorises a polars override of the same canonical.
+        cls._DECLARED_OVERRIDE_MANIFEST[(canonical, backend)] = (
             str(expected_old_source),
             str(new_source),
         )
@@ -444,9 +644,22 @@ class OperatorRegistry:
         if canonical in cls._aliases:
             raise ValueError(f"canonical already declared as alias: {canonical!r}")
         existing_ops = cls._operators.setdefault(canonical, {})
+        # R7-234: capture the FIRST registration identity once and never
+        # overwrite it — even when this canonical was never previously
+        # registered with an operator, but only catalog-only or unregistered.
+        # The original experimental status/source/hash survives every later
+        # override/fastpath/repair layer.
+        if canonical not in cls._first_registered:
+            cls._first_registered[canonical] = {
+                "first_registered_status": str(status or "implemented"),
+                "first_registered_source": str(source or ""),
+                "first_registered_hash": _impl_source_hash(operator),
+            }
         if backend in existing_ops:
             old_source = str((cls._catalog.get(canonical, {}).get("backend_meta") or {}).get(backend, {}).get("source", "") or "")
-            manifest = cls._DECLARED_OVERRIDE_MANIFEST.get(canonical)
+            # R7-228: exact-manifest override is keyed by (canonical, backend),
+            # so a pandas override never authorises a polars one.
+            manifest = cls._DECLARED_OVERRIDE_MANIFEST.get((canonical, backend))
             if manifest is not None:
                 # P0-22 exact-manifest override: the old source must match the
                 # pinned value exactly and the new source must be the declared
@@ -501,12 +714,15 @@ class OperatorRegistry:
                             f"replace of {canonical!r}/{backend} requires a non-empty "
                             "replacement_reason"
                         )
-                elif declared and (canonical, backend) in cls._override_chain and cls._enforce_override_chain_pinning:
-                    # Round-7 P0: this declared override continues an existing
-                    # chain for the same (canonical, backend).  Pin the exact
-                    # source it replaces so a loader import-order shuffle
-                    # (A->B vs B->A) fails loudly instead of silently swapping
-                    # the final implementation.
+                elif declared:
+                    # Round-7 P0 / R7-229: a declared (trusted-source) override
+                    # must STILL pin the exact source it replaces — both for a
+                    # chain continuation AND for the FIRST override of a
+                    # canonical.  The old logic only pinned chain continuations,
+                    # so a trusted module could silently overwrite any canonical
+                    # on its first collision ("this source is trusted, therefore
+                    # it may overwrite").  Only the exact (canonical, backend)
+                    # replacement with a pinned old identity is allowed.
                     #
                     # R6 refinement: a SAME-source re-registration (the same
                     # bootstrap layer running twice, e.g. two overhaul modules
@@ -519,9 +735,8 @@ class OperatorRegistry:
                         if not cls._auto_pin_declared_bootstrap:
                             raise ValueError(
                                 f"override of {canonical!r}/{backend} (source {source!r}) "
-                                f"continues an existing override chain that currently "
-                                f"holds old_source={old_source!r}: pin expected_old_source="
-                                f"{old_source!r} (round-7 P0)"
+                                f"currently holds old_source={old_source!r}: pin "
+                                f"expected_old_source={old_source!r} (round-7 P0 / R7-229)"
                             )
                         # Declared bootstrap layers (overhaul / composite_fastpath /
                         # layer_governance / gtja_compat …) replace one another in a
@@ -535,6 +750,14 @@ class OperatorRegistry:
                             f"override of {canonical!r}/{backend}: expected old source "
                             f"{expected_old_source!r} but registry holds {old_source!r}"
                         )
+                    # R7-229: the governance that matters is the PIN — every
+                    # declared override must name (or auto-pin) the exact old
+                    # source it replaces, so no trusted source can blank-overwrite
+                    # a canonical it did not explicitly target.  A replacement
+                    # reason is encouraged (the overwrite log defaults it) but is
+                    # NOT required here: established bootstrap layers replace
+                    # basic ops with no reason, and forcing one would break the
+                    # documented load order.
             # Record the audit trail for every same-backend overwrite — including
             # soft-probe mode (``_hard_fail_duplicates=False``) so a bootstrap
             # sweep can enumerate every collision site at once.
@@ -545,6 +768,19 @@ class OperatorRegistry:
                 "new_source": source,
                 "old_hash": _impl_source_hash(existing_ops[backend]),
                 "new_hash": _impl_source_hash(operator),
+                # R7-233: contract hash of old/new logical contract (param_names
+                # + param_specs + panel_params + aliases + units + grains), so an
+                # audit can prove WHICH contract was replaced, not just that a
+                # source overwrite happened.  The previous_contract_hash /
+                # new_contract_hash pair is stable across processes.
+                "previous_contract_hash": _contract_hash(existing_ops[backend]),
+                "new_contract_hash": _contract_hash(operator),
+                # An expected-old pin was supplied (or auto-pinned from the
+                # actual current source) and the registry held exactly that
+                # source — so the override replaced a KNOWN identity.
+                "expected_old_hash_matched": bool(
+                    expected_old_source and old_source == expected_old_source
+                ),
                 "reason": replacement_reason or f"declared override layer ({source})",
                 "semantic_version": str(semantic_version or "1.0"),
             })
@@ -828,6 +1064,18 @@ class OperatorRegistry:
             cls.register_alias(alias, canonical)
 
     @classmethod
+    def first_registered(cls, canonical: str) -> dict:
+        """R7-234: the immutable FIRST-registration identity of a canonical.
+
+        Returns ``{"first_registered_status", "first_registered_source",
+        "first_registered_hash"}`` or an empty dict when the canonical was never
+        registered.  Lifecycle truth: captured before any override layer ran,
+        never mutated by later re-registration, and preserved across
+        ``unregister``/re-registration.
+        """
+        return dict(cls._first_registered.get(canonical, {}))
+
+    @classmethod
     def unregister(cls, canonical: str) -> None:
         """从 registry 移除 canonical 及其实现与 catalog 条目。
 
@@ -858,6 +1106,31 @@ class OperatorRegistry:
         cls._assert_writable()
         if old == new or old not in cls._operators:
             return
+
+        def _migrate_governance(target: str) -> None:
+            """R7-231: rename must carry ALL governance data, not just
+            operators/catalog/aliases — first-registration identity, declared
+            override manifest, override chains and the overwrite audit trail —
+            so the rename does not silently reset override governance."""
+            # first-registered identity follows the canonical (immutable truth).
+            if old in cls._first_registered and target not in cls._first_registered:
+                cls._first_registered[target] = cls._first_registered[old]
+                cls._first_registered.pop(old, None)
+            # exact override manifest: re-key (old, backend) -> (target, backend).
+            for (canon, backend), pin in list(cls._DECLARED_OVERRIDE_MANIFEST.items()):
+                if canon == old:
+                    cls._DECLARED_OVERRIDE_MANIFEST[(target, backend)] = pin
+                    cls._DECLARED_OVERRIDE_MANIFEST.pop((canon, backend), None)
+            # override chain re-keyed per backend.
+            for (canon, backend), chain in list(cls._override_chain.items()):
+                if canon == old:
+                    cls._override_chain[(target, backend)] = chain
+                    cls._override_chain.pop((canon, backend), None)
+            # overwrite audit trail canonical references rewritten.
+            for rec in cls._overwrite_log:
+                if rec.get("canonical") == old:
+                    rec["canonical"] = target
+
         if new in cls._operators:
             # Merge backends (e.g. sql placeholder registered under new name before
             # pandas/polars were renamed onto it).
@@ -882,6 +1155,7 @@ class OperatorRegistry:
                 if canon == old:
                     cls._aliases[alias] = new
             cls._aliases[old] = new
+            _migrate_governance(new)
             return
         cls._operators[new] = cls._operators.pop(old)
         meta = cls._catalog.pop(old, {})
@@ -897,6 +1171,7 @@ class OperatorRegistry:
             if canon == old:
                 cls._aliases[alias] = new
         cls._aliases[old] = new
+        _migrate_governance(new)
 
     @classmethod
     def backends_for(cls, name: str) -> List[str]:

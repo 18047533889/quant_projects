@@ -99,7 +99,9 @@ def mutation_lock(
     starttime_ticks = _proc_starttime_ticks(os.getpid())
     while fd is None:
         try:
-            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+            # O_RDWR：续租/release 需要经 fd 读回 payload（_read_payload_fd）。
+            # O_WRONLY 下 os.read(fd) 会 EBADF，fencing 的 fd 身份校验全部失效。
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o644)
             now = time.time()
             payload = {
                 "pid": os.getpid(),
@@ -145,7 +147,9 @@ def mutation_lock(
 
         def _renew() -> None:
             while not stop.wait(interval):
-                if not _renew_lease(lock_path, txid, lease_seconds):
+                # #7 续租经持有的 fd（inode 身份），绝不能经路径 O_TRUNC——
+                # 路径上的锁被打破/重建后，经路径截断会毁掉新 writer 的锁。
+                if not _renew_lease(fd, lock_path, txid, lease_seconds):
                     return  # 锁已不属于我们 → 停止续租
 
         t = threading.Thread(
@@ -162,10 +166,14 @@ def mutation_lock(
             state.renew_thread.join(timeout=2.0)
         held.pop(lock_path, None)
         try:
-            os.close(fd)
+            # #7 owner-only release：先经 fd 写 released 标记（见 _release_lease），
+            # 再关 fd——release 需要活 fd 做 inode 身份校验。
+            _release_lease(fd, lock_path, txid)
         finally:
-            # owner-only release：只有锁仍是自己的（transaction_id 匹配）才删。
-            _release_lease(lock_path, txid)
+            try:
+                os.close(fd)
+            except OSError:
+                pass
 
 
 def _proc_starttime_ticks(pid: int) -> float | None:
@@ -188,44 +196,79 @@ def _proc_starttime_ticks(pid: int) -> float | None:
         return None
 
 
-def _renew_lease(path: Path, txid: str, lease_seconds: float) -> bool:
-    """续租：只有锁的 transaction_id 仍属于我们才改写 lease_until。
+def _renew_lease(fd: int, path: Path, txid: str, lease_seconds: float) -> bool:
+    """续租：只改写**自己持有的 inode**（fd 即所有权），绝不动路径上的新锁。
 
-    返回 False 表示锁已不属于我们（被打破/重建），调用方应停止续租。
+    #7 TOCTOU 修复：旧代码「读 path payload → 判断 txid → os.open(path, O_TRUNC)」
+    在判断与 truncate 之间锁可能已被打破/重建，旧 writer 会把**新 writer 的锁**
+    truncate 掉。现在：
+        - 所有权判定 = ``os.stat(path)`` 与 ``os.fstat(fd)`` 的 **inode 身份**一致，
+          且 fd payload 的 transaction_id 仍属于我们；
+        - 写入只经 fd（``lseek + ftruncate + write + fsync``）——fd 永远指向创建时
+          的 inode；即使路径已换成新 inode（我们的 fd 变成孤儿），也碰不到它。
+
+    返回 False 表示锁已不属于我们（路径 inode 与 fd 不一致 / 文件消失 / txid 不符），
+    调用方应停止续租。
     """
-    payload = _read_payload(path)
-    if payload is None:
-        return False
-    if str(payload.get("transaction_id") or "") != txid:
-        return False
     try:
+        st = os.stat(path)
+        if st.st_ino != os.fstat(fd).st_ino:
+            return False  # 路径上的锁已被替换成新 inode → 我们失去所有权
+        payload = _read_payload_fd(fd)
+        if payload is None or str(payload.get("transaction_id") or "") != txid:
+            return False
         now = time.time()
         body = json.dumps(
             {**payload, "acquired_at": now, "lease_until": now + lease_seconds},
             sort_keys=True,
         )
-        fd = os.open(str(path), os.O_WRONLY | os.O_TRUNC)
-        try:
-            os.write(fd, (body + "\n").encode())
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+        os.lseek(fd, 0, os.SEEK_SET)
+        os.ftruncate(fd, 0)
+        os.write(fd, (body + "\n").encode())
+        os.fsync(fd)
         return True
     except OSError:
         return False
 
 
-def _release_lease(path: Path, txid: str) -> None:
-    """owner-only release：读回 payload，transaction_id 匹配才 unlink。"""
-    payload = _read_payload(path)
-    if payload is not None and str(payload.get("transaction_id") or "") != txid:
-        return  # 锁已被打破并重建，是别人的锁——绝不删除
+def _release_lease(fd: int, path: Path, txid: str) -> None:
+    """owner-only release：经 fd 写 ``released`` 标记，**绝不 unlink**。
+
+    #7 TOCTOU 修复：旧代码「读 path → 判断 txid → unlink(path)」check 与 unlink
+    之间锁被替换，旧 writer 会删掉新 writer 的锁。现在旧 owner 永远不对路径做
+    任何 unlink/truncate——release 只在**自己的 inode** 上写 released 标记（fd
+    指向的 inode），路径上的新锁原样保留。released 标记由 ``_can_break_lock``
+    视为立即可打破，下次 acquisition 会 unlink+重建完成清理。
+
+    代价：release 后锁文件保留在目录里（写一次该 root 就会被清理），换来了
+    「旧 owner 不可能删除后来创建的新 inode」这一 provable 保证。
+    """
     try:
-        path.unlink()
-    except FileNotFoundError:
-        pass
+        payload = _read_payload_fd(fd)
+        if payload is None or str(payload.get("transaction_id") or "") != txid:
+            return  # 锁已不属于我们（txid 不符）——绝不碰
+        now = time.time()
+        body = json.dumps(
+            {**payload, "released": True, "lease_until": now},
+            sort_keys=True,
+        )
+        os.lseek(fd, 0, os.SEEK_SET)
+        os.ftruncate(fd, 0)
+        os.write(fd, (body + "\n").encode())
+        os.fsync(fd)
     except OSError:
         pass
+
+
+def _read_payload_fd(fd: int) -> dict | None:
+    """从持有的 fd 读 payload（自己的 inode），与路径无关。"""
+    try:
+        os.lseek(fd, 0, os.SEEK_SET)
+        data = os.read(fd, 65536).decode("utf-8", "replace")
+        payload = json.loads(data)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _can_break_lock(path: Path, *, stale_after: float, hard_break: float) -> bool:
@@ -233,6 +276,11 @@ def _can_break_lock(path: Path, *, stale_after: float, hard_break: float) -> boo
     payload = _read_payload(path)
     if payload is None:
         return False
+    # #7 released 标记：owner 已显式释放（release 不再 unlink，改为写标记）。
+    # 新 writer 看到 released 立即打破——正是 release 不删锁换来的安全：旧 owner
+    # 没有 unlink 路径，绝无「删掉新锁」的可能；清理交给下次 acquisition。
+    if payload.get("released") is True:
+        return True
     # 1) owner 已死（含 PID reuse）→ 直接打破
     if _owner_is_dead(payload):
         return True

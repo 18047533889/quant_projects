@@ -2,6 +2,9 @@
 """高级算子 composite lowering：展开为基础 PlanNode DAG。"""
 from __future__ import annotations
 
+import hashlib
+import inspect
+import itertools
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -17,10 +20,11 @@ class CompositeLoweringDuplicateError(RuntimeError):
 # ``lowered_primitives`` reflects real parameter branches instead of a generic
 # ``window=3`` AST.
 _LOWERING_DECLARATIONS: dict[str, dict] = {}
-# R5-29 / R6 P0-05: explicit replacement manifest — a second registration of the
-# same canonical is an error unless it is declared here with a reason.  Use
-# ``declare_lowering_replacement()`` to add an entry (never mutate directly).
-_LOWERING_REPLACEMENTS: dict[str, str] = {}
+# R5-29 / R6 P0-05 / WS-D #261: explicit replacement manifest — a second
+# registration of the same canonical is an error unless it is declared here with
+# a reason AND (when provided) a hash of the lowering it expects to replace.
+# Use ``declare_lowering_replacement()`` to add an entry (never mutate directly).
+_LOWERING_REPLACEMENTS: dict[str, dict] = {}
 # R6 P0-05: source-module provenance per composite — duplicate-registration
 # errors now name BOTH the original and the clashing module.
 _LOWERING_SOURCES: dict[str, str] = {}
@@ -28,6 +32,13 @@ _LOWERING_SOURCES: dict[str, str] = {}
 # from the declaration/replacement manifests above; registration/query paths
 # reference it, so it must always be defined at module scope.
 _COMPOSITE_LOWERINGS: dict[str, LoweringFn] = {}
+# WS-D #260: the FULL LoweringContract stored per canonical (deps / min_inputs /
+# source_module / param_branches / history_requirement / grain_transform /
+# statefulness).  Lookups read this — never a partial declaration dict.
+_LOWERING_CONTRACTS: dict[str, "LoweringContract"] = {}
+# WS-D #261: hash of the currently-registered lowering fn per canonical — the
+# "old identity" a declared replacement must pin to.
+_LOWERING_OLD_HASH: dict[str, str] = {}
 _LOWERINGS_LOADED = False
 
 ExecutionKind = str  # primitive | composite | stateful | external_kernel
@@ -92,14 +103,59 @@ class LoweringContract:
     statefulness: str = "stateless"
 
 
-def declare_lowering_replacement(canonical: str, reason: str) -> None:
-    """R6 P0-05: declare that a canonical's lowering may be re-registered.
+def _lowering_hash(fn: LoweringFn) -> str:
+    """Deterministic identity hash for one lowering function (WS-D #261).
+
+    Combines the module path, the qualified name and the compiled bytecode so a
+    source-level change to the lowering body invalidates the hash and a declared
+    replacement pinned to the old hash is refused.
+    """
+    code = getattr(fn, "__code__", None)
+    body = (code.co_code if code is not None else None) or repr(fn)
+    payload = (
+        f"{getattr(fn, '__module__', '')}.{getattr(fn, '__qualname__', '')}:"
+        f"{body}"
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def declare_lowering_replacement(
+    canonical: str,
+    reason: str,
+    *,
+    expected_old_hash: str | None = None,
+    new_hash: str | None = None,
+    semantic_version: str | None = None,
+) -> None:
+    """R6 P0-05 / WS-D #261: declare that a canonical's lowering may be
+    re-registered.
 
     ``register_lowering`` refuses a duplicate registration unless the canonical
     is declared here with a replacement reason — the explicit escape hatch that
-    replaces silent overwrite.
+    replaces silent overwrite.  When ``expected_old_hash`` is given, the
+    re-registration is ALSO refused unless the currently-registered lowering
+    hashes to exactly that value (identity-pinned replacement).
     """
-    _LOWERING_REPLACEMENTS[str(canonical)] = reason
+    _LOWERING_REPLACEMENTS[str(canonical)] = {
+        "reason": str(reason),
+        "expected_old_hash": expected_old_hash,
+        "new_hash": new_hash,
+        "semantic_version": semantic_version,
+    }
+
+# WS-D #262: known multi-branch composites whose ``param_branches`` are declared
+# here (the stored LoweringContract is enriched at registration).  ``fast`` /
+# ``slow`` / ``signal`` carry distinct representative values (5/26/9 plus the
+# canonical defaults) so every branch — including MACD's ``fast < slow`` gate —
+# is exercised by ``certified_for_all_branches``.
+_KNOWN_PARAM_BRANCHES: dict[str, dict[str, tuple[float, ...]]] = {
+    "MACD_line": {"fast": (5.0, 12.0), "slow": (26.0,), "signal": (9.0,)},
+    "MACD_signal": {"fast": (5.0, 12.0), "slow": (26.0,), "signal": (9.0,)},
+    "MACD_hist": {"fast": (5.0, 12.0), "slow": (26.0,), "signal": (9.0,)},
+    "BollingerUpper": {"window": (10.0, 20.0), "std_dev": (1.5, 2.0, 2.5)},
+    "BollingerLower": {"window": (10.0, 20.0), "std_dev": (1.5, 2.0, 2.5)},
+    "BollingerBands": {"window": (10.0, 20.0), "std_dev": (1.5, 2.0, 2.5)},
+}
 
 # 需 external kernel / 非 SQL-Polars 可内联的算子（research 或专用 runtime）
 EXTERNAL_KERNEL_CANONICALS: frozenset[str] = frozenset(
@@ -158,11 +214,14 @@ def register_lowering(
     *,
     deps: tuple[str, ...] | None = None,
     min_inputs: int | None = None,
+    contract: LoweringContract | None = None,
 ):
     """注册 canonical 算子的 lowering 函数（R5-29）。
 
     重复注册同一 canonical 会报错——silent overwrite 与 OperatorRegistry 的
-    duplicate guard 同罪。仅显式 ``_LOWERING_REPLACEMENTS`` 声明的覆盖才允许。
+    duplicate guard 同罪。仅显式 ``_LOWERING_REPLACEMENTS`` 声明的覆盖才允许；
+    当该声明携带 ``expected_old_hash`` 时，还会校验当前已注册 lowering 的
+    identity hash 与声明一致（WS-D #261）。
 
     参数:
         canonical: 待展开的 composite canonical 名。
@@ -170,6 +229,9 @@ def register_lowering(
             ``lowered_primitives`` 用这些参数构造探测 stub，而不是硬编码
             ``{"window":3,"d":3,"std_dev":2.0}``（R5-30）。
         min_inputs: 展开所需的最少 panel 输入数。
+        contract: WS-D #260 — 完整的 ``LoweringContract``（param_branches /
+            history_requirement / grain_transform / statefulness）。传入后
+            替代 ``deps``/``min_inputs`` 成为 lookups 的唯一契约来源。
     """
 
     def decorator(fn: LoweringFn) -> LoweringFn:
@@ -177,7 +239,8 @@ def register_lowering(
         source = getattr(fn, "__module__", "") or ""
         if key in _COMPOSITE_LOWERINGS:
             original_source = _LOWERING_SOURCES.get(key, "<unknown>")
-            if key not in _LOWERING_REPLACEMENTS:
+            replacement = _LOWERING_REPLACEMENTS.get(key)
+            if replacement is None:
                 raise CompositeLoweringDuplicateError(
                     f"composite lowering for {key!r} already registered by "
                     f"{original_source}; silent overwrite by {source} is forbidden "
@@ -185,13 +248,41 @@ def register_lowering(
                     "planner.composite_lowering.declare_lowering_replacement("
                     f"{key!r}, reason=...) to authorise the replacement."
                 )
+            expected_old_hash = replacement.get("expected_old_hash")
+            if expected_old_hash:
+                current_hash = _LOWERING_OLD_HASH.get(key) or _lowering_hash(
+                    _COMPOSITE_LOWERINGS[key]
+                )
+                if current_hash != expected_old_hash:
+                    raise CompositeLoweringDuplicateError(
+                        f"declared replacement for {key!r} pins expected old "
+                        f"lowering hash {expected_old_hash}, but the currently "
+                        f"registered lowering hashes to {current_hash}; refusing "
+                        f"replacement (WS-D #261)."
+                    )
+        declared_branches = dict(contract.param_branches or {}) if contract is not None else {}
+        if not declared_branches and key in _KNOWN_PARAM_BRANCHES:
+            declared_branches = dict(_KNOWN_PARAM_BRANCHES[key])
+        stored = LoweringContract(
+            deps=tuple(contract.deps or deps or ()) if contract is not None else tuple(deps or ()),
+            min_inputs=contract.min_inputs if contract is not None else min_inputs,
+            source_module=(
+                (contract.source_module or source) if contract is not None else source
+            ),
+            param_branches=declared_branches,
+            history_requirement=contract.history_requirement if contract is not None else None,
+            grain_transform=contract.grain_transform if contract is not None else None,
+            statefulness=contract.statefulness if contract is not None else None,
+        )
         _COMPOSITE_LOWERINGS[key] = fn
+        _LOWERING_CONTRACTS[key] = stored
         _LOWERING_DECLARATIONS[key] = {
-            "deps": tuple(deps or ()),
-            "min_inputs": min_inputs,
-            "source_module": source,
+            "deps": stored.deps,
+            "min_inputs": stored.min_inputs,
+            "source_module": stored.source_module,
         }
         _LOWERING_SOURCES[key] = source
+        _LOWERING_OLD_HASH[key] = _lowering_hash(fn)
         return fn
 
     return decorator
@@ -405,7 +496,11 @@ def collect_plan_ops(node: PlanNode) -> list[str]:
 
 
 def composite_dual_backend_capable(canon: str) -> bool:
-    """composite lowering 后全部 primitive 须已 dual-backend production 认证。"""
+    """composite lowering 后全部 primitive 须已 dual-backend production 认证。
+
+    Reads the stored LoweringContract (default branch).  For the strict
+    every-branch certification use :func:`certified_for_all_branches`.
+    """
     prims = lowered_primitives(canon)
     if not prims:
         return False
@@ -414,30 +509,82 @@ def composite_dual_backend_capable(canon: str) -> bool:
     return all(p in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE for p in prims)
 
 
-def lowered_primitives(canon: str) -> tuple[str, ...] | None:
-    """若存在 composite lowering，返回展开后的 primitive 集合（静态探测）。
-
-    R5-30: 当 lowering 声明了 ``deps``（真正读取的参数名）时，探测 stub 使用
-    声明参数构造真实分支，而不是硬编码 ``window=3`` 猜——像 MACD 这种依赖
-    ``fast/slow/signal`` 才走展开分支的 composite，硬编码 stub 会得到空展开。
-    """
+def _resolve_composite(canon: str) -> str | None:
+    """Resolve an alias/canonical to a registered composite, else None."""
     from cleaned_operators.registry import OperatorRegistry
 
     _ensure_lowerings_loaded()
     resolved = OperatorRegistry._aliases.get(canon, canon)
-    lowering = _COMPOSITE_LOWERINGS.get(resolved)
-    if lowering is None:
+    if resolved not in _COMPOSITE_LOWERINGS:
         return None
-    declaration = _LOWERING_DECLARATIONS.get(resolved, {})
-    deps = declaration.get("deps") or ()
-    min_inputs = declaration.get("min_inputs")
-    # R6 P0-06: probe with REAL declared defaults from the composite's registered
-    # operator (ParamSpec default / param_types) instead of fabricated 5/2.0
-    # numbers, so parameter-gated branches (MACD fast/slow/signal, Bollinger
-    # std_dev, …) fire the same way they do in a real call.  Only when a dep has
-    # no declared default do we fall back to a small integer.  The old hardcoded
-    # ``{"window":3,"d":3,"std_dev":2.0}`` fallback is gone — an undeclared
-    # composite probes with column inputs only and its own internal defaults.
+    return resolved
+
+
+def _kernel_panel_count(resolved: str) -> int | None:
+    """Honest panel-input arity from the operator's kernel signature.
+
+    Counts positional parameters (after ``self``) with no default — the panel
+    inputs.  Falls back to ``None`` when the signature cannot be introspected.
+    """
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        op = OperatorRegistry.get(resolved)
+    except Exception:
+        return None
+    fn = getattr(op, "_calculate_series", None) or getattr(op, "calculate", None)
+    if fn is None:
+        return None
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return None
+    count = 0
+    for parameter in sig.parameters.values():
+        if parameter.name == "self":
+            continue
+        if parameter.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            break
+        if parameter.default is inspect.Parameter.empty:
+            count += 1
+        else:
+            break
+    return count if count > 0 else None
+
+
+def _probe_panel_count(resolved: str, contract: LoweringContract | None) -> int:
+    """Derive the number of panel probe inputs for a composite (WS-D #264).
+
+    Resolution order: the operator kernel signature (honest panel arity) ->
+    the declared contract (``min_inputs`` minus scalar deps the probe passes as
+    attrs) -> a conservative floor of 2 (single-series lowerings ignore the
+    extra probe input; ratio/family lowerings need at least two series).
+    """
+    kernel_count = _kernel_panel_count(resolved)
+    if kernel_count is not None:
+        return kernel_count
+    if contract is not None and contract.min_inputs is not None:
+        return max(1, contract.min_inputs - len(contract.deps))
+    return 2
+
+
+def _probe_attrs(resolved: str, deps: tuple[str, ...]) -> dict[str, object]:
+    """Default-branch probe attrs from the composite's declared parameter
+    branches (or the legacy ParamSpec / name fallback).
+
+    ``param_branches`` is the single source for the probe when available; the
+    first value of each branch is the default branch.  Fast/slow/signal use
+    DISTINCT representative values (5/26/9) so MACD's ``fast < slow`` branch
+    actually fires.
+    """
+    branches = composite_param_branches(resolved)
+    if branches:
+        return {name: values[0] for name, values in branches.items()}
+    from cleaned_operators.registry import OperatorRegistry
+
     op_meta = getattr(OperatorRegistry.get(resolved), "metadata", None)
     specs = getattr(op_meta, "param_specs", None) or {}
     types = getattr(op_meta, "param_types", None) or {}
@@ -469,15 +616,165 @@ def lowered_primitives(canon: str) -> tuple[str, ...] | None:
             stub_attrs[dep] = 5
         else:
             stub_attrs[dep] = 2.0 if dep in {"std_dev", "tolerance", "alpha", "span", "q"} else 1
-    probe_count = max(min_inputs or 3, 3)
+    return stub_attrs
+
+
+def _probe_primitives(
+    resolved: str,
+    contract: LoweringContract | None,
+    attrs: dict[str, object],
+) -> tuple[str, ...] | None:
+    """Lower one static probe stub and collect the resulting primitive ops."""
+    panel_count = _probe_panel_count(resolved, contract)
     probe_inputs = [
         PlanNode(op="column", attrs={"name": f"__probe_{i}__"}, inputs=[])
-        for i in range(probe_count)
+        for i in range(panel_count)
     ]
     stub = PlanNode(
         op=resolved,
         inputs=probe_inputs,
-        attrs=dict(stub_attrs),
+        attrs=dict(attrs),
     )
     lowered = lower_composite_operators(stub, _stack=())
     return tuple(collect_plan_ops(lowered))
+
+
+def lowered_primitives(canon: str) -> tuple[str, ...] | None:
+    """若存在 composite lowering，返回展开后的 primitive 集合（静态探测）。
+
+    R5-30 / WS-D #263-#264: 探测 stub 使用存储的 ``LoweringContract``（真实
+    param_branches / ParamSpec 默认值）和真实 panel 输入构造，而不是硬编码
+    ``window=3`` 或 ``max(min_inputs, 3)`` 个伪造输入。MACD fast/slow/signal
+    取不同的代表性值（5/26/9），让 ``fast < slow`` 分支真实触发。
+    """
+    resolved = _resolve_composite(canon)
+    if resolved is None:
+        return None
+    contract = _LOWERING_CONTRACTS.get(resolved)
+    attrs = _probe_attrs(resolved, tuple(contract.deps) if contract else ())
+    return _probe_primitives(resolved, contract, attrs)
+
+
+def composite_param_branches(canon: str) -> dict[str, tuple[float, ...]]:
+    """WS-D #262: enumerate the reachable parameter branch values of a composite.
+
+    Prefers the stored ``LoweringContract.param_branches``; when a composite was
+    registered without explicit branches, derives representative values from its
+    declared deps + operator defaults (fast/slow/signal stay distinct and within
+    a firing regime).  Returns ``{}`` when the canonical has no composite
+    lowering or no branchable parameters.
+    """
+    resolved = _resolve_composite(canon)
+    if resolved is None:
+        return {}
+    contract = _LOWERING_CONTRACTS.get(resolved)
+    if contract is not None and contract.param_branches:
+        return {name: tuple(values) for name, values in contract.param_branches.items()}
+    if contract is not None and resolved in _KNOWN_PARAM_BRANCHES:
+        return {name: tuple(values) for name, values in _KNOWN_PARAM_BRANCHES[resolved].items()}
+    if contract is None:
+        return {}
+    deps = tuple(contract.deps)
+    if not deps:
+        return {}
+    from cleaned_operators.registry import OperatorRegistry
+
+    op_meta = getattr(OperatorRegistry.get(resolved), "metadata", None)
+    specs = getattr(op_meta, "param_specs", None) or {}
+    branches: dict[str, list[float]] = {}
+    for dep in deps:
+        values: list[float] = []
+        spec = specs.get(dep)
+        if spec is not None:
+            if spec.choices:
+                values.append(float(spec.choices[0]))
+            default = getattr(spec, "default", None)
+            if default is not None:
+                values.append(float(default))
+            if spec.min is not None:
+                values.append(float(spec.min))
+        if dep in {"fast", "fast_window", "short_window", "er_window", "signal_window"}:
+            values.append(5.0)
+        elif dep in {"slow", "slow_window", "long_window"}:
+            values.append(26.0)
+        elif dep in {"signal", "signal_period", "signal_span"}:
+            values.append(9.0)
+        elif dep in {"window", "d", "left_window", "right_window", "history_window",
+                     "n", "k", "period", "lag", "ema_window", "atr_window",
+                     "er_window", "short_window", "long_window"}:
+            values.append(5.0)
+        elif dep in {"std_dev", "tolerance", "alpha", "span", "q", "std"}:
+            values.append(2.0)
+        deduped = sorted({float(v) for v in values if v is not None})
+        if deduped:
+            branches[dep] = deduped
+    return {name: tuple(values) for name, values in branches.items()}
+
+
+def certified_for_all_branches(canon: str) -> bool:
+    """WS-D #262: certify a composite over EVERY reachable parameter branch.
+
+    Unlike :func:`composite_dual_backend_capable` (default branch only), this
+    lowers the probe for every combination of ``composite_param_branches``
+    values and requires every lowered primitive to be dual-backend production
+    certified on every branch.  Returns ``False`` when any branch fails to lower
+    or yields an uncertified primitive.
+    """
+    from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+
+    resolved = _resolve_composite(canon)
+    if resolved is None:
+        return False
+    contract = _LOWERING_CONTRACTS.get(resolved)
+    branches = composite_param_branches(resolved)
+    if not branches:
+        prims = lowered_primitives(resolved)
+        return bool(prims) and all(
+            p in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE for p in prims
+        )
+    keys = list(branches)
+    for combo in itertools.product(*(branches[key] for key in keys)):
+        attrs = dict(zip(keys, combo))
+        prims = _probe_primitives(resolved, contract, attrs)
+        if not prims:
+            return False
+        if not all(p in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE for p in prims):
+            return False
+    return True
+
+
+def composite_history_requirement(canon: str) -> str | None:
+    """WS-D #260: the stored contract's ``history_requirement`` string."""
+    resolved = _resolve_composite(canon)
+    if resolved is None:
+        return None
+    contract = _LOWERING_CONTRACTS.get(resolved)
+    return contract.history_requirement if contract is not None else None
+
+
+def composite_grain_transform(canon: str) -> str | None:
+    """WS-D #260: the stored contract's ``grain_transform`` string."""
+    resolved = _resolve_composite(canon)
+    if resolved is None:
+        return None
+    contract = _LOWERING_CONTRACTS.get(resolved)
+    return contract.grain_transform if contract is not None else None
+
+
+def composite_statefulness(canon: str) -> str:
+    """WS-D #260: the stored contract's ``statefulness`` (default: inferred)."""
+    resolved = _resolve_composite(canon)
+    if resolved is None:
+        return "stateless"
+    contract = _LOWERING_CONTRACTS.get(resolved)
+    if contract is not None and contract.statefulness:
+        return contract.statefulness
+    return infer_execution_contract(resolved).statefulness
+
+
+def registered_lowering_contract(canon: str) -> LoweringContract | None:
+    """Expose the stored ``LoweringContract`` for a composite (WS-D #260)."""
+    resolved = _resolve_composite(canon)
+    if resolved is None:
+        return None
+    return _LOWERING_CONTRACTS.get(resolved)

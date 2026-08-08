@@ -411,6 +411,7 @@ def _register() -> None:
             tags_extra=spec["tags_extra"],
             output_unit=spec.get("output_unit"),
             param_specs=spec.get("param_specs"),
+            relational_specs=spec.get("relational_specs"),
         )
     union_extended(*_SPECS.keys())
 

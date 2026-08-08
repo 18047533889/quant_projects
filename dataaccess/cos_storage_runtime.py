@@ -246,6 +246,10 @@ def install_cos_storage_runtime() -> None:
             continue
         spec = mirror.DATASET_MIRROR_REGISTRY.get(name)
         if spec is not None:
+            # 保存原始 spec，uninstall 才能精确还原（#P0 收官：install 不能永久
+            # 改全局 registry，否则测试/同进程后续读全部被污染成递归布局）。
+            _originals.setdefault("mirror.registry_entries", {})
+            _originals["mirror.registry_entries"].setdefault(name, spec)
             mirror.DATASET_MIRROR_REGISTRY[name] = replace(spec, layout=layout)
     _originals.update({
         "mirror.sync_dataset": mirror.sync_dataset,
@@ -260,6 +264,37 @@ def install_cos_storage_runtime() -> None:
     remote.local_mirror_complete_for_range = _patched_local_complete
     remote.materialize_remote_via_cli = _patched_materialize_remote_via_cli
     _installed = True
+
+
+def uninstall_cos_storage_runtime() -> None:
+    """#P0 收官：还原 install 造成的全部全局副作用（registry + 各 patch）。
+
+    让 install 可以安全地用于测试/短期模式——测试结束时调用，后续代码不被
+    递归布局 / 月份 glob patch 污染。幂等：未 install 时 no-op。
+    """
+    global _installed
+    if not _installed:
+        return
+    from data_access.cos import mirror, remote
+    entries = _originals.get("mirror.registry_entries", {})
+    for name, spec in entries.items():
+        mirror.DATASET_MIRROR_REGISTRY[name] = spec
+    if "mirror.sync_dataset" in _originals:
+        mirror.sync_dataset = _originals["mirror.sync_dataset"]
+    if "mirror.ensure_local_mirror" in _originals:
+        mirror.ensure_local_mirror = _originals["mirror.ensure_local_mirror"]
+    if "remote.build_remote_paths" in _originals:
+        remote.build_remote_paths = _originals["remote.build_remote_paths"]
+    if "remote.local_mirror_complete_for_range" in _originals:
+        remote.local_mirror_complete_for_range = _originals[
+            "remote.local_mirror_complete_for_range"
+        ]
+    if "remote.materialize_remote_via_cli" in _originals:
+        remote.materialize_remote_via_cli = _originals[
+            "remote.materialize_remote_via_cli"
+        ]
+    _originals.clear()
+    _installed = False
 
 
 __all__ = ["install_cos_storage_runtime"]

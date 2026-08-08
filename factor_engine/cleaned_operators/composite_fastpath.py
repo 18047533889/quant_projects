@@ -143,9 +143,32 @@ def _pd_wilder(x: pd.DataFrame, window: int, min_periods: int | None = None) -> 
 
 
 def _pl_align(*frames: "pl.DataFrame") -> list[str]:
-    cols = pl_cols(frames[0])
-    for frame in frames[1:]:
-        cols = [col for col in cols if col in frame.columns]
+    """Strict multi-panel alignment (WS-B #242): never take the column intersection.
+
+    Every frame must share the same PanelIdentity (same time axis, same ordered
+    instrument columns).  A stock missing from one frame (or permuted) raises
+    ``ValueError`` instead of silently dropping it.  The reserved bridge
+    ``__fe_time__`` metadata column is excluded from the instrument set even if
+    a caller's local skip set does not list it.
+    """
+    from cleaned_operators.common._polars_bridge import (
+        FE_TIME_COL,
+        verify_frames_share_identity,
+    )
+
+    verify_frames_share_identity("composite_fastpath._pl_align", *frames)
+
+    def _instruments(frame: "pl.DataFrame") -> list[str]:
+        return [c for c in pl_cols(frame) if c != FE_TIME_COL]
+
+    cols = _instruments(frames[0])
+    for i, frame in enumerate(frames[1:], start=1):
+        other_cols = _instruments(frame)
+        if other_cols != cols:
+            raise ValueError(
+                f"composite_fastpath._pl_align: panel input {i} instrument columns "
+                f"{other_cols} != base {cols} (a silent intersection would drop stocks)"
+            )
     return cols
 
 

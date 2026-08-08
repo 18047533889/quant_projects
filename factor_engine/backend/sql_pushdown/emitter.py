@@ -70,34 +70,48 @@ def _window_spec(node: PlanNode, default: int = 3):
     spec = window_spec_from_plan_node(node, default=default)
     if spec.closed != "right":
         raise PlanParamError(f"closed={spec.closed!r} 暂未支持，仅 right")
+    # #360：nan_policy 决定 NaN/NULL 在窗口聚合内的参与方式。SQL 层目前仅
+    # 生成 RESPECT NULLS（propagate）语义；ignore 需要 IGNORE NULLS，尚未实现。
+    if spec.nan_policy != "propagate":
+        raise PlanParamError(
+            f"window.nan_policy={spec.nan_policy!r} 需要 "
+            f"IGNORE NULLS 语义，SQL emitter 尚未生成（仅 propagate/RESPECT NULLS）"
+        )
     return spec
 
 
 def _float_attr(node: PlanNode, *keys: str, default: float) -> float:
-    """从 attrs 中按候选键读取有限浮点参数。"""
-    from backend.plan_params import PlanParamError, parse_finite_float, parse_unit_interval
+    """从 attrs 中按候选键读取有限浮点参数。
+
+    #356：参数缺失（不在 attrs）→ 返回 ``default``；参数提供但非法
+    （非有限 / 越界 / 非数值）→ raise ``PlanParamError``，不再静默回落。
+    注意 ``lo``/``hi`` 在 clip 语境是任意实数界（非 [0,1] 概率），故只走
+    ``parse_finite_float``，不按 unit-interval 校验。
+    """
+    from backend.plan_params import parse_finite_float, parse_unit_interval
 
     for key in keys:
         if key in (node.attrs or {}) and node.attrs[key] is not None:
             raw = node.attrs[key]
-            if key in {"p", "q", "lo", "hi", "min_pct", "max_pct", "lower", "upper"}:
-                try:
-                    return parse_unit_interval(raw, label=key)
-                except PlanParamError:
-                    return default
-            try:
-                need_pos = key in {"epsilon", "eps", "to", "ann_factor"}
-                return parse_finite_float(raw, label=key, gt=0.0 if need_pos else None)
-            except PlanParamError:
-                return default
+            if key in {"a", "p", "q", "min_pct", "max_pct", "lower", "upper"}:
+                return parse_unit_interval(raw, label=key)
+            need_pos = key in {"epsilon", "eps", "to", "ann_factor"}
+            return parse_finite_float(raw, label=key, gt=0.0 if need_pos else None)
     return default
 
 
 def _int_attr(node: PlanNode, *keys: str, default: int) -> int:
-    """从 attrs 中按候选键读取整数参数（至少为 1）。"""
+    """从 attrs 中按候选键读取整数参数（严格解析，无静默截断/钳制）。
+
+    #357：整数直接用；非整数（float 5.9 / 字符串）→ raise ``PlanParamError``。
+    需要的钳制（如 ``max(1, ...)``）由调用点显式完成——emitter 参数已
+    canonicalize，非整数出现说明上游 bug，应 fail。
+    """
+    from backend.plan_params import parse_positive_int_literal
+
     for key in keys:
         if key in node.attrs and node.attrs[key] is not None:
-            return max(int(node.attrs[key]), 1)
+            return parse_positive_int_literal(node.attrs[key], label=key)
     return default
 
 
@@ -175,7 +189,12 @@ def _sql_literal(val: Any) -> str:
         return "NULL"
     if isinstance(val, bool):
         return "TRUE" if val else "FALSE"
-    if isinstance(val, (int, float)):
+    if isinstance(val, float):
+        # #358：非有限浮点不能进 SQL 字面量。
+        if not math.isfinite(val):
+            raise ValueError("non-finite literal cannot be emitted to SQL")
+        return str(val)
+    if isinstance(val, int):
         return str(val)
     s = str(val).replace("'", "''")
     return f"'{s}'"
@@ -927,13 +946,25 @@ def _rolling_std_min_periods_sql(
 
 
 def _int_attr(node: PlanNode, *keys: str, input_index: int | None = None, default: int = 0) -> int:
-    """从 attrs 或 positional literal 读取整数参数。"""
+    """从 attrs 或 positional literal 读取整数参数（严格解析，无静默截断）。
+
+    #357：非整数（float 5.9 / 字符串）→ raise ``PlanParamError``；需要的钳制
+    （如 ``max(1, ...)``）由调用点显式完成。
+    """
+    from backend.plan_params import parse_positive_int_literal
+
     for key in keys:
         if key in node.attrs and node.attrs[key] is not None:
-            return int(node.attrs[key])
+            return parse_positive_int_literal(node.attrs[key], label=key)
     if input_index is not None:
         pos = _literal_positional(node, input_index, default=float(default))
         if pos is not None:
+            if isinstance(pos, float) and pos != int(pos):
+                from backend.plan_params import PlanParamError
+
+                raise PlanParamError(
+                    f"positional integer 参数必须为整数 literal，收到 {pos!r}"
+                )
             return int(pos)
     return default
 
@@ -1142,6 +1173,28 @@ def _cum_delta_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
     )
 
 
+# #376：SQL 层 ts_ema / ts_ewm_std / ts_ewm_var / ts_ewm_cov / ts_ewm_corr 都是
+# 有限窗近似（``ROWS BETWEEN w-1 PRECEDING`` 内的指数衰减加权和），并非
+# canonical ``ts_ema`` 的精确递归 EWM。任何拿该 SQL 输出做 exact production
+# parity 认证的代码点必须 fail（见 ``EWM_SQL_APPROX``），不得静默当作 exact。
+_SQL_EWM_IS_APPROX = True
+"""SQL EWM 是否为有限窗近似（#376）。True → 不可用于 exact parity。"""
+
+EWM_SQL_APPROX = _SQL_EWM_IS_APPROX
+"""导出的 EWM SQL 近似标记；外部 parity 认证代码应据此拒绝 exact 断言。"""
+
+
+def _sql_ewm_exact_parity_guard() -> None:
+    """#376：SQL 层 ``ts_ema``/``ts_ewm_*`` 是有限窗近似。
+
+    任何拿该 SQL 近似给 canonical ``ts_ema`` 做 exact production parity 认证
+    的代码点必须调用本守卫（强制 ``AssertionError``），而不是静默给出近似结果。
+    """
+    raise AssertionError(
+        "SQL EWM 为有限窗近似（EWM_SQL_APPROX=True），不能用于 exact parity 认证"
+    )
+
+
 def _ewm_weighted_moment_sql(
     inner_sql: str,
     w: int,
@@ -1149,7 +1202,10 @@ def _ewm_weighted_moment_sql(
     dialect: SqlDialect,
     sqrt: bool,
 ) -> str:
-    """指数衰减窗口矩（对齐 ``ewm(span, adjust=False)`` 的有限窗近似）。"""
+    """指数衰减窗口矩（对齐 ``ewm(span, adjust=False)`` 的有限窗近似）。
+
+    #376：有限窗近似（``_SQL_EWM_IS_APPROX=True``），勿用于 exact parity。
+    """
     alpha = 2.0 / (float(w) + 1.0)
     decay = 1.0 - alpha
     over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
@@ -5536,6 +5592,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
 
     if op in {"ts_ema", "ema", "ewm_mean"}:
+        # #376：这是有限窗近似（EWM_SQL_APPROX=True），不是 canonical ts_ema
+        # 的精确递归 EWM——勿用其做 exact production parity 认证。
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None

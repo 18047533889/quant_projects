@@ -1220,6 +1220,13 @@ def default_typed_mining_search_space_config(
         tags = list(getattr(meta, "tags", None) or [])
         values = _typed_tag_values(tags)
         params = list(entry.get("param_names") or getattr(meta, "param_names", None) or [])
+        # review #295: scalar knobs (window/lag/...) are NEVER data inputs.
+        # The typed search space must list the PANEL inputs as ``inputs`` and
+        # keep the searchable scalar knobs in a separate ``scalar_parameters``
+        # list so a campaign generator never samples a panel as a scalar.
+        from cleaned_operators.search.factor_dedup import split_scalar_panel_params
+
+        scalar_params, panel_inputs = split_scalar_panel_params(params, meta, canonical)
         cost = float(values.get("cost", entry.get("cost", 1.0)))
         if not cost > 0:
             raise ValueError(f"operator {canonical!r} has invalid mining cost {cost!r}")
@@ -1237,6 +1244,8 @@ def default_typed_mining_search_space_config(
         signatures.append({
             "name": canonical,
             "inputs": params,
+            "panel_inputs": panel_inputs,
+            "scalar_parameters": scalar_params,
             "input_units": input_units,
             "output": getattr(meta, "return_type", None) or entry.get("return_type") or "series",
             "signature": values.get("signature") or f"{','.join(params)}->series",

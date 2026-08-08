@@ -25,9 +25,10 @@ from .mirror import (
     DATASET_MIRROR_REGISTRY,
     MirrorSpec,
     _cos_table_uri,
-    _iter_dates,
     _iter_years,
+    _local_file_usable,
     _parse_date,
+    expected_partitions,
     mirror_spec_for_dataset,
 )
 from data_access.core.exceptions import ValidationError
@@ -196,7 +197,11 @@ def _s3_table_base(spec: MirrorSpec) -> str:
     return cos_uri_to_s3_uri(_cos_table_uri(spec)).rstrip("/")
 
 
-def _remote_daily_paths(spec: MirrorSpec, time_range: tuple[Any, Any] | None) -> list[str]:
+def _remote_daily_paths(
+    spec: MirrorSpec,
+    dataset_name: str,
+    time_range: tuple[Any, Any] | None,
+) -> list[str]:
     base = _s3_table_base(spec)
     if time_range is None:
         authorize_s3_path(f"{base}/*.parquet")
@@ -205,7 +210,12 @@ def _remote_daily_paths(spec: MirrorSpec, time_range: tuple[Any, Any] | None) ->
     end = _parse_date(time_range[1])
     if start is None or end is None:
         raise ValidationError(f"remote 模式无法解析 time_range: {time_range}")
-    paths = [f"{base}/{day.isoformat()}.parquet" for day in _iter_dates(start, end)]
+    # #P0 收官（0.9.5）：期望 partition 走共享 expected_partitions（trade_day 用
+    # 交易日历，跨周末/节假日不再生成不存在的对象路径）。
+    paths = [
+        f"{base}/{day.isoformat()}.parquet"
+        for day in expected_partitions(dataset_name, start, end, layout="daily_parquet")
+    ]
     for path in paths:
         authorize_s3_path(path)
     return paths
@@ -223,7 +233,11 @@ def _remote_root_file(spec: MirrorSpec) -> list[str]:
     return [path]
 
 
-def _remote_hive_date_paths(spec: MirrorSpec, time_range: tuple[Any, Any] | None) -> list[str]:
+def _remote_hive_date_paths(
+    spec: MirrorSpec,
+    dataset_name: str,
+    time_range: tuple[Any, Any] | None,
+) -> list[str]:
     base = cos_uri_to_s3_uri(spec.cos_prefix.rstrip("/"))
     if time_range is None:
         path = f"{base}/date=*/{spec.file_name}"
@@ -234,7 +248,8 @@ def _remote_hive_date_paths(spec: MirrorSpec, time_range: tuple[Any, Any] | None
     if start is None or end is None:
         raise ValidationError(f"remote 模式无法解析 time_range: {time_range}")
     paths = [
-        f"{base}/date={day.isoformat()}/{spec.file_name}" for day in _iter_dates(start, end)
+        f"{base}/date={day.isoformat()}/{spec.file_name}"
+        for day in expected_partitions(dataset_name, start, end, layout="hive_date")
     ]
     for path in paths:
         authorize_s3_path(path)
@@ -285,9 +300,9 @@ def build_remote_paths(
     if spec.layout == "root_file":
         return _remote_root_file(spec)
     if spec.layout == "daily_parquet":
-        return _remote_daily_paths(spec, time_range)
+        return _remote_daily_paths(spec, dataset_name, time_range)
     if spec.layout == "hive_date":
-        return _remote_hive_date_paths(spec, time_range)
+        return _remote_hive_date_paths(spec, dataset_name, time_range)
     if spec.layout == "hive_year":
         return _remote_hive_year_paths(spec, time_range)
     raise ValidationError(f"未知 mirror layout: {spec.layout}")
@@ -330,12 +345,22 @@ def _remote_paths_from_storage(
 
     glob = getattr(ds, "glob", None)
     if isinstance(ds, ParametricDataset):
-        validated = dict(params or {})
         if not ds.glob_template:
             raise ValidationError(
                 f"数据集 '{ds.name}' 是 ParametricDataset 但未声明 glob_template；"
                 "无法推导 glob（fail-closed，禁止扫描整个数据集）"
             )
+        # #P0 收官（0.9.5）：remote 必须复用与 local 完全相同的 compiled param IR。
+        # 旧代码 ``glob_template.format(**dict(params or {}))`` 绕过了 ``validate_params``
+        # （type/range/allowed/regex/路径遍历防护）——同一 dataset local 拒参数、
+        # remote 却放行，严重时参数能把 glob 扩成 ``**/*.parquet`` 全库扫描。
+        # ``validate_params`` 是 resolve_paths 前半段的唯一事实源，这里复用同一份。
+        from data_access.registry.params_validation import ParamSpec, validate_params
+
+        specs = ds.param_specs or {
+            k: ParamSpec(name=k, type=t) for k, t in ds.params_schema.items()
+        }
+        validated = validate_params(ds.name, specs, dict(params or {}))
         try:
             glob = ds.glob_template.format(**validated)
         except (KeyError, ValueError, IndexError, AttributeError) as exc:
@@ -359,7 +384,10 @@ def _remote_paths_from_storage(
         hi = _parse_date(end)
         if lo is not None and hi is not None:
             return _resolve_storage_paths(
-                (f"{uri}/{day.isoformat()}.parquet" for day in _iter_dates(lo, hi)),
+                (
+                    f"{uri}/{day.isoformat()}.parquet"
+                    for day in expected_partitions(ds.name, lo, hi, layout="daily_parquet")
+                ),
                 authorized_prefix=auth_prefix,
             )
     if layout in {"hive_date", "hive_year"} and time_range and time_range[0]:
@@ -371,7 +399,7 @@ def _remote_paths_from_storage(
                 return _resolve_storage_paths(
                     (
                         f"{uri}/date={day.isoformat()}/data.parquet"
-                        for day in _iter_dates(lo, hi)
+                        for day in expected_partitions(ds.name, lo, hi, layout="hive_date")
                     ),
                     authorized_prefix=auth_prefix,
                 )
@@ -380,6 +408,21 @@ def _remote_paths_from_storage(
                 authorized_prefix=auth_prefix,
             )
     return _resolve_storage_paths([f"{uri}/{glob}"], authorized_prefix=auth_prefix)
+
+
+def resolve_remote_paths(
+    ds: "Dataset",
+    *,
+    time_range: tuple[Any, Any] | None = None,
+    params: Mapping[str, Any] | None = None,
+) -> list[str]:
+    """public 入口：storage.source=cos 数据集的远程路径（无手工 mirror spec）。
+
+    #P0 收官（0.9.5）：与 ``_remote_paths_from_storage`` 相同——ParametricDataset
+    的 glob 复用 ``validate_params``（type/range/allowed/regex/路径遍历防护），
+    local/remote 参数 parity 一致，不允许 remote 绕过校验。
+    """
+    return _remote_paths_from_storage(ds, time_range=time_range, params=params)
 
 
 def _resolve_storage_paths(
@@ -405,7 +448,9 @@ def _resolve_storage_paths(
     return out
 
 
-def _local_daily_complete(spec: MirrorSpec, time_range: tuple[Any, Any]) -> bool:
+def _local_daily_complete(
+    spec: MirrorSpec, dataset_name: str, time_range: tuple[Any, Any]
+) -> bool:
     start = _parse_date(time_range[0])
     end = _parse_date(time_range[1])
     if start is None or end is None:
@@ -413,28 +458,35 @@ def _local_daily_complete(spec: MirrorSpec, time_range: tuple[Any, Any]) -> bool
     from .mirror import _local_table_dir
 
     local_dir = _local_table_dir(spec)
-    return all((local_dir / f"{day.isoformat()}.parquet").exists() for day in _iter_dates(start, end))
-
-
-def _local_hive_date_complete(spec: MirrorSpec, time_range: tuple[Any, Any]) -> bool:
-    start = _parse_date(time_range[0])
-    end = _parse_date(time_range[1])
-    if start is None or end is None:
-        return False
     return all(
-        (spec.local_root / f"date={day.isoformat()}" / spec.file_name).exists()
-        for day in _iter_dates(start, end)
+        _local_file_usable(local_dir / f"{day.isoformat()}.parquet")
+        for day in expected_partitions(dataset_name, start, end, layout="daily_parquet")
     )
 
 
-def _local_hive_year_complete(spec: MirrorSpec, time_range: tuple[Any, Any]) -> bool:
+def _local_hive_date_complete(
+    spec: MirrorSpec, dataset_name: str, time_range: tuple[Any, Any]
+) -> bool:
     start = _parse_date(time_range[0])
     end = _parse_date(time_range[1])
     if start is None or end is None:
         return False
     return all(
-        (spec.local_root / f"year={year}" / spec.file_name).exists()
-        for year in _iter_years(start, end)
+        _local_file_usable(spec.local_root / f"date={day.isoformat()}" / spec.file_name)
+        for day in expected_partitions(dataset_name, start, end, layout="hive_date")
+    )
+
+
+def _local_hive_year_complete(
+    spec: MirrorSpec, dataset_name: str, time_range: tuple[Any, Any]
+) -> bool:
+    start = _parse_date(time_range[0])
+    end = _parse_date(time_range[1])
+    if start is None or end is None:
+        return False
+    return all(
+        _local_file_usable(spec.local_root / f"year={year}" / spec.file_name)
+        for year in expected_partitions(dataset_name, start, end, layout="hive_year")
     )
 
 
@@ -443,24 +495,29 @@ def local_mirror_complete_for_range(
     *,
     time_range: tuple[Any, Any] | None,
 ) -> bool:
-    """``auto`` 模式：判断本地是否已有所需文件。"""
+    """``auto`` 模式：判断本地是否已有所需文件。
+
+    #P0 收官（0.9.5）：统一走 ``_local_file_usable``（verified/corrupt 三态）
+    而不是裸 ``.exists()``——本地一个截断/checksum 错/无 manifest 的 parquet
+    **只要文件还在**，exists 就会把它当「本地齐全」而选它，而不是 resync/remote。
+    """
     spec = mirror_spec_for_dataset(dataset_name)
     if spec is None:
         return False
     if spec.layout == "single_full":
         from .mirror import _local_table_dir
 
-        return (_local_table_dir(spec) / spec.file_name).exists()
+        return _local_file_usable(_local_table_dir(spec) / spec.file_name)
     if spec.layout == "root_file":
-        return (spec.local_root / spec.file_name).exists()
+        return _local_file_usable(spec.local_root / spec.file_name)
     if time_range is None:
         return False
     if spec.layout == "daily_parquet":
-        return _local_daily_complete(spec, time_range)
+        return _local_daily_complete(spec, dataset_name, time_range)
     if spec.layout == "hive_date":
-        return _local_hive_date_complete(spec, time_range)
+        return _local_hive_date_complete(spec, dataset_name, time_range)
     if spec.layout == "hive_year":
-        return _local_hive_year_complete(spec, time_range)
+        return _local_hive_year_complete(spec, dataset_name, time_range)
     return False
 
 
@@ -564,7 +621,7 @@ def hybrid_cos_read_paths(
         local_dir = _local_table_dir(spec)
         for day in _expected_dates(ds.name, start, end):
             lp = local_dir / f"{day.isoformat()}.parquet"
-            if lp.exists():
+            if _local_file_usable(lp):
                 local.append(str(lp))
             else:
                 rp = f"{remote_base}/{day.isoformat()}.parquet"
@@ -573,7 +630,7 @@ def hybrid_cos_read_paths(
     elif spec.layout == "hive_date":
         for day in _expected_dates(ds.name, start, end):
             lp = spec.local_root / f"date={day.isoformat()}" / spec.file_name
-            if lp.exists():
+            if _local_file_usable(lp):
                 local.append(str(lp))
             else:
                 rp = f"{remote_base}/date={day.isoformat()}/{spec.file_name}"
@@ -582,7 +639,7 @@ def hybrid_cos_read_paths(
     elif spec.layout == "hive_year":
         for year in _iter_years(start, end):
             lp = spec.local_root / f"year={year}" / spec.file_name
-            if lp.exists():
+            if _local_file_usable(lp):
                 local.append(str(lp))
             else:
                 rp = f"{remote_base}/year={year}/{spec.file_name}"
@@ -811,19 +868,19 @@ def materialize_remote_via_cli(
 
     paths: list[str] = []
     if cache_spec.layout == "daily_parquet":
-        for day in _iter_dates(start, end):
+        for day in expected_partitions(dataset_name, start, end, layout=cache_spec.layout):
             _sync_daily_file(cache_spec, day)
             dest = _local_table_dir(cache_spec) / f"{day.isoformat()}.parquet"
             if dest.exists() and dest.stat().st_size > 0:
                 paths.append(str(dest))
     elif cache_spec.layout == "hive_date":
-        for day in _iter_dates(start, end):
+        for day in expected_partitions(dataset_name, start, end, layout=cache_spec.layout):
             _sync_hive_date(cache_spec, day)
             dest = cache_spec.local_root / f"date={day.isoformat()}" / cache_spec.file_name
             if dest.exists() and dest.stat().st_size > 0:
                 paths.append(str(dest))
     elif cache_spec.layout == "hive_year":
-        for year in _iter_years(start, end):
+        for year in expected_partitions(dataset_name, start, end, layout=cache_spec.layout):
             _sync_hive_year(cache_spec, year)
             dest = cache_spec.local_root / f"year={year}" / cache_spec.file_name
             if dest.exists() and dest.stat().st_size > 0:

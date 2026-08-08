@@ -324,16 +324,18 @@ def _load_module_if_available(mod: str) -> None:
     try:
         __import__(mod, fromlist=["*"])
     except ImportError as exc:
-        # A module file that does not exist yet (planned / next-stage surface)
-        # carries no operators, so skipping it cannot lose functionality.  A
-        # module that *exists* but fails to import (missing dependency, code
-        # error) stays fatal so registry breakage is never masked.  For a nested
-        # name the error reports the deepest missing parent (e.g.
-        # ``cleaned_operators.ts_model`` for ``.ts_model.dynamic_regression``).
-        missing_module = isinstance(exc, ModuleNotFoundError) and (
-            exc.name == mod or mod.startswith((exc.name or "") + ".")
+        # WS-B #247: only swallow an ImportError when the module (or its parent
+        # package) does not exist (planned / next-stage surface) OR the only
+        # missing dependency is the optional ``polars`` package.  Any other
+        # ImportError — a code error in an existing module, a missing non-optional
+        # dependency — is fatal and re-raised so registry breakage is never
+        # masked.  ``should_skip_optional_import_error`` centralises the policy
+        # (single source of truth in cleaned_operators/common/_polars_bridge.py).
+        from cleaned_operators.common._polars_bridge import (
+            should_skip_optional_import_error,
         )
-        if not missing_module and ".polars" not in mod and not mod.endswith("research_polars"):
+
+        if not should_skip_optional_import_error(exc, mod):
             raise
         _SKIPPED_OPTIONAL_MODULES.add(mod)
         logger = None

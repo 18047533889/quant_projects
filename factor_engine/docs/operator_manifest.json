@@ -232528,7 +232528,12 @@
       "window_semantics": null
     },
     "ts_rolling_sr_gaussian_mean_shift_score": {
-      "aliases": [],
+      "alias_evidence_origins": {
+        "ts_sr_gaussian_mean_shift_score": "ts_rolling_sr_gaussian_mean_shift_score"
+      },
+      "aliases": [
+        "ts_sr_gaussian_mean_shift_score"
+      ],
       "available_at": null,
       "backend_meta": {
         "pandas_numpy": {
@@ -232542,7 +232547,8 @@
             "x",
             "window",
             "shift_sigma",
-            "baseline_window"
+            "baseline_window",
+            "side"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -232568,7 +232574,8 @@
             "x",
             "window",
             "shift_sigma",
-            "baseline_window"
+            "baseline_window",
+            "side"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "research_spectral_polars",
@@ -232590,13 +232597,15 @@
           "x",
           "window",
           "shift_sigma",
-          "baseline_window"
+          "baseline_window",
+          "side"
         ],
         "polars": [
           "x",
           "window",
           "shift_sigma",
-          "baseline_window"
+          "baseline_window",
+          "side"
         ]
       },
       "backend_status": "implemented",
@@ -232617,13 +232626,15 @@
             "x",
             "window",
             "shift_sigma",
-            "baseline_window"
+            "baseline_window",
+            "side"
           ],
           "polars": [
             "x",
             "window",
             "shift_sigma",
-            "baseline_window"
+            "baseline_window",
+            "side"
           ]
         },
         "backends": [
@@ -232643,7 +232654,8 @@
           "x",
           "window",
           "shift_sigma",
-          "baseline_window"
+          "baseline_window",
+          "side"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -232683,7 +232695,8 @@
         "x",
         "window",
         "shift_sigma",
-        "baseline_window"
+        "baseline_window",
+        "side"
       ],
       "param_specs": {
         "baseline_window": {
@@ -232704,6 +232717,19 @@
           "history_semantics": null,
           "max": null,
           "min": 0.01,
+          "searchable": true
+        },
+        "side": {
+          "active_when": null,
+          "choices": [
+            "up",
+            "down"
+          ],
+          "default": null,
+          "dtype": "str",
+          "history_semantics": null,
+          "max": null,
+          "min": null,
           "searchable": true
         },
         "window": {
@@ -232744,7 +232770,7 @@
         "pit_safe",
         "causal",
         "deterministic",
-        "signature:x,window,shift_sigma,baseline_window->series",
+        "signature:x,window,shift_sigma,baseline_window,side->series",
         "domain:change_point",
         "unit:level",
         "cost:4"

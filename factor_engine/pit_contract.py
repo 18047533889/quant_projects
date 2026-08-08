@@ -27,6 +27,35 @@ class PITColumns:
 AvailablePolicy = Literal["same_day", "next_trading_day"]
 
 
+def four_layer_pit_allowed(
+    *,
+    field_pit_allowed: bool,
+    table_pit_allowed: bool = True,
+    dataset_pit_allowed: bool = True,
+    operator_pit_allowed: bool = True,
+) -> tuple[bool, dict[str, bool]]:
+    """Combined four-layer PIT eligibility (round-7 WS-E #282).
+
+    Production PIT eligibility = ``field ∧ table ∧ dataset ∧ operator``.  Each
+    layer is a bool; the combined result is false if any layer is false.  Returns
+    ``(combined, layer_status)`` so a caller can report which layer rejected the
+    field.
+
+    * ``field_pit_allowed`` — the field's ``strict_pit_allowed`` contract.
+    * ``table_pit_allowed`` — the owning logical table's ``strict_pit_allowed``.
+    * ``dataset_pit_allowed`` — the DataAccess COS contract's ``pit_policy``
+      (``strict``) supports PIT reads.
+    * ``operator_pit_allowed`` — operator-level PIT policy (caller-supplied).
+    """
+    layers = {
+        "field_pit_allowed": bool(field_pit_allowed),
+        "table_pit_allowed": bool(table_pit_allowed),
+        "dataset_pit_allowed": bool(dataset_pit_allowed),
+        "operator_pit_allowed": bool(operator_pit_allowed),
+    }
+    return (all(layers.values()), layers)
+
+
 def _shift_available_to_next_decision(
     available: pd.Series,
     decisions: pd.DataFrame,
@@ -139,8 +168,17 @@ def pit_asof_join(
         # Events announced after the last decision can never be visible; a NaT
         # as-of key is invalid for merge_asof, so drop them explicitly.
         right = right.loc[shifted.notna()].copy()
-    left = left.sort_values([columns.instrument, decision_time])
-    right = right.sort_values([columns.instrument, columns.available_at])
+    # #404 (review-8): ``pd.merge_asof(by=...)`` requires the asof key to be
+    # *globally* monotonic across all ``by`` groups — sorting by
+    # ``[instrument, decision_time]`` interleaves instruments (A: Jan1 Jan2,
+    # B: Jan1 Jan2 → ``Jan1 Jan2 Jan1 Jan2``) and raises
+    # ``ValueError: left keys must be sorted``.  Sort by the asof key first
+    # (ties broken by instrument) and restore the caller's row order via an
+    # explicit ``__pit_row_order__`` sentinel.
+    left = left.copy()
+    left["__pit_row_order__"] = range(len(left))
+    left = left.sort_values([decision_time, columns.instrument]).reset_index(drop=True)
+    right = right.sort_values([columns.available_at, columns.instrument]).reset_index(drop=True)
 
     joined = pd.merge_asof(
         left,
@@ -152,6 +190,7 @@ def pit_asof_join(
         allow_exact_matches=True,
         suffixes=("", "_fundamental"),
     )
+    joined = joined.sort_values("__pit_row_order__").drop(columns="__pit_row_order__").reset_index(drop=True)
     if max_age_days is not None:
         if int(max_age_days) < 0:
             raise ValueError("max_age_days must be non-negative or None")

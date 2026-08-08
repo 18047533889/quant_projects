@@ -39,6 +39,14 @@ class ResourceBudgetExceeded(ResourceGovernanceError):
     """内存 / CPU / 结果字节预算超限。禁止 fallback。"""
 
 
+class ResourceContractApplyError(ResourceGovernanceError):
+    """资源契约应用失败（live PRAGMA / env 线程设置无法生效）。
+
+    production 模式下 live PRAGMA 应用失败不再静默：宁可显式失败，也不要
+    worker 以错误的 DuckDB threads 继续执行。禁止 fallback。
+    """
+
+
 class DeadlineExceeded(ResourceGovernanceError):
     """查询超时（deadline）。禁止 fallback。"""
 

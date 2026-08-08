@@ -58,19 +58,20 @@ def test_mutation_lock_heartbeat_renews_lease(tmp_path):
         payload1 = json.loads(lock.read_text())
         assert payload1["lease_until"] > time.time()
         assert payload1["transaction_id"] == payload0["transaction_id"]
-    assert not lock.exists()  # 正常 release 删除锁
+    # #7 release 不再 unlink（旧 owner 绝不能删新 inode）——写 released 标记，
+    # 由下次 acquisition 打破清理。
+    assert lock.exists()
+    assert json.loads(lock.read_text())["released"] is True
+    assert json.loads(lock.read_text())["transaction_id"] == payload0["transaction_id"]
 
 
 def test_mutation_lock_release_only_owner(tmp_path):
-    from data_access.write.mutation_lock import (
-        _release_lease,
-        mutation_lock,
-    )
+    from data_access.write.mutation_lock import mutation_lock
 
     lock = tmp_path / ".data-access.mutation.lock"
     with mutation_lock(tmp_path, lease_seconds=10, poll=0.01):
         txid_a = json.loads(lock.read_text())["transaction_id"]
-        # 模拟：A 的锁被打破、B 重建（新 transaction_id）
+        # 模拟：A 的锁被打破、B 重建（新 transaction_id、新 inode）
         lock.unlink()
         lock.write_text(
             json.dumps(
@@ -79,10 +80,10 @@ def test_mutation_lock_release_only_owner(tmp_path):
             ),
             encoding="utf-8",
         )
-        # A 的 release 绝不能删除 B 的锁
-        _release_lease(lock, txid_a)
-        assert lock.exists()
-        assert json.loads(lock.read_text())["transaction_id"] == "OTHER"
+        # 在 with 退出时，A 的 finally 会用 A 自己的 fd 执行 owner-only release——
+        # 它只写 A 的孤儿 inode 上的 released 标记，绝不能碰路径上的 B 锁。
+    assert lock.exists()
+    assert json.loads(lock.read_text())["transaction_id"] == "OTHER"
 
 
 def test_mutation_lock_pid_reuse_detection():
@@ -264,8 +265,11 @@ def test_pit_index_generation_directory_commit(tmp_path):
             )
         ]
     )
+    # #P0 收官（0.9.5）：complete 元数据必须带可证明的 generation + source identity
+    # （load 后 metadata 才能保持 authoritative）。
     meta = PITIndexMetadata(complete=True, source_file_count=1,
-                            indexed_file_count=1, generation_id="g1")
+                            indexed_file_count=1, generation_id="g1",
+                            source_snapshot="snap-1")
     _commit_index_generation(root, idx, meta, "g1")
     assert _current_generation(root) == "g1"
     p = _current_index_parquet(root)
@@ -273,17 +277,19 @@ def test_pit_index_generation_directory_commit(tmp_path):
     loaded = load_pit_event_index(p)
     assert len(loaded) == 1 and loaded.records[0].ticker == "AAPL"
     assert loaded.metadata.complete is True
-    # 二次提交后旧 generation 被清理
+    # 二次提交后保留 {new, previous} 两代（#P0 收官：上一代 good generation 始终
+    # 可回退，绝不清到只剩刚提交的）
     idx2 = PITEventIndex(
         [PITEventRecord(ticker="MSFT", filing_date=dt.date(2024, 2, 1),
                         period_end=dt.date(2024, 1, 31), file_path="y.parquet")]
     )
     meta2 = PITIndexMetadata(complete=True, source_file_count=1,
-                             indexed_file_count=1, generation_id="g2")
+                             indexed_file_count=1, generation_id="g2",
+                             source_snapshot="snap-2")
     _commit_index_generation(root, idx2, meta2, "g2")
     assert _current_generation(root) == "g2"
-    dirs = [c.name for c in _pit_index_dir(root).iterdir() if c.is_dir()]
-    assert dirs == ["g2"]
+    dirs = {c.name for c in _pit_index_dir(root).iterdir() if c.is_dir()}
+    assert dirs == {"g1", "g2"}
 
 
 # ---------------------------------------------------------------------------
@@ -411,9 +417,16 @@ def test_coverage_trading_day_lag_uses_calendar(monkeypatch):
     monkeypatch.setattr(
         "data_access.read.session_calendar.get_market_calendar", _get_cal
     )
-    # observed_end 在最后一个交易日之前 → lag = 2（1/3, 1/4）
+    # observed_end 在最后一个交易日之前 → lag = 2（1/3, 1/4），日历可用 → authoritative
     assert _trading_day_lag(dt.date(2024, 1, 2), dt.date(2024, 1, 4),
-                            store=object(), dataset="us_xxx") == 2
+                            store=object(), dataset="us_xxx", strict=True) == (2, True)
+    # strict 下日历不可用 → 绝不自然日近似（fail-closed）
+    assert _trading_day_lag(dt.date(2024, 1, 2), dt.date(2024, 1, 4),
+                            store=None, dataset="europe", strict=True) == (None, False)
+    # research 下日历不可用 → 自然日近似但显式标记 non-authoritative
+    lag, auth = _trading_day_lag(dt.date(2024, 1, 2), dt.date(2024, 1, 4),
+                                 store=None, dataset="europe", strict=False)
+    assert auth is False and lag is not None
 
 
 # ---------------------------------------------------------------------------

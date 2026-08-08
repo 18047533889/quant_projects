@@ -135,6 +135,52 @@ class PITIndexMetadata:
     # ---- #P0-18 列 override 身份（自定义列构建的 index 不能当默认构建复用）----
     columns_used: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        """#P0 收官（0.9.5）：PIT 元数据自身 typed invariant（direct 构造也校验）。
+
+        加载路径把 JSON 里的**原始值**直接传进来（不做 ``bool(...)`` 预转换）——
+        ``"complete": "false"`` 在 Python 里是 ``bool("false") == True``，只有在这里
+        做严格类型检查才能 fail-closed 抓住它。任何违反 ⇒ ``ValidationError`` ⇒
+        ``load_pit_event_index`` 回退成非权威（complete=False）。
+
+        与 TemporalJoinSpec 的 ``__post_init__`` 同一设计：不依赖构造入口，direct
+        构造与从 JSON/registry 反序列化走同一套 invariant。
+        """
+        if not isinstance(self.complete, bool):
+            raise ValidationError(
+                f"PITIndexMetadata.complete 必须是布尔值，收到 {self.complete!r}"
+            )
+        if not isinstance(self.glob_failed, bool):
+            raise ValidationError(
+                f"PITIndexMetadata.glob_failed 必须是布尔值，收到 {self.glob_failed!r}"
+            )
+        for name, val in (
+            ("source_file_count", self.source_file_count),
+            ("indexed_file_count", self.indexed_file_count),
+        ):
+            if not isinstance(val, int) or isinstance(val, bool) or val < 0:
+                raise ValidationError(
+                    f"PITIndexMetadata.{name} 必须是非负整数，收到 {val!r}"
+                )
+        if self.indexed_file_count > self.source_file_count:
+            raise ValidationError(
+                f"PITIndexMetadata.indexed_file_count={self.indexed_file_count} "
+                f"> source_file_count={self.source_file_count}（fail-closed）"
+            )
+        if self.complete:
+            # complete 与 glob_failed/failed_files/indexed==source 互相矛盾 → 拒绝
+            if self.glob_failed or self.failed_files:
+                raise ValidationError(
+                    "PITIndexMetadata complete=True 但 glob_failed=True 或 failed_files "
+                    f"非空（{len(self.failed_files)} 个）——完整索引不能有漏枚举/失败文件"
+                )
+            if self.indexed_file_count != self.source_file_count:
+                raise ValidationError(
+                    f"PITIndexMetadata complete=True 但 indexed_file_count="
+                    f"{self.indexed_file_count} != source_file_count="
+                    f"{self.source_file_count}（fail-closed）"
+                )
+
     @property
     def is_authoritative(self) -> bool:
         return self.complete and self.indexed_file_count == self.source_file_count
@@ -367,15 +413,21 @@ def _current_index_parquet(root: Path) -> Path | None:
     return legacy if legacy.exists() else None
 
 
-def _prune_old_generations(index_dir: Path, keep: str) -> None:
-    """提交后清理旧 generation 目录（保留刚提交的）。crash 前的旧目录仍完整。"""
+def _prune_old_generations(index_dir: Path, keep: str | set[str]) -> None:
+    """提交后清理旧 generation 目录。
+
+    #P0 收官（0.9.5）：``keep`` 可以是单个 generation 或集合——提交新 gen 时
+    **至少保留上一代 good generation**（与 build lock 一起保证：current 永远指向
+    完整存在的目录，绝不指向刚被清理的）。crash 前的旧目录仍完整。
+    """
     import shutil
 
+    keep_set = {keep} if isinstance(keep, str) else set(keep)
     try:
         for child in index_dir.iterdir():
             if child.name == _PIT_INDEX_POINTER or not child.is_dir():
                 continue
-            if child.name != keep:
+            if child.name not in keep_set:
                 shutil.rmtree(child, ignore_errors=True)
     except OSError:
         pass
@@ -394,10 +446,21 @@ def _commit_index_generation(
     2. 原子替换 ``current`` 指针 —— 这是唯一 commit 点；
     3. crash 在任意时刻：指针要么还在旧 gen（旧索引完整可用），要么已指向新
        gen（新目录完整）。绝不出现「旧索引被毁 + 新索引未完成」。
+
+    #P0 收官（0.9.5）：记录切换前的 ``previous`` 代，清理时保留
+    ``{new, previous}``——上一代 good generation 始终可回退。
+
+    #P0 收官（0.9.5）并发安全：指针切换 + 清理在 ``mutation_lock(index_dir)``
+    **独占锁**内完成（两个 builder 直接并发调本函数时串行化），且指针写入走
+    ``atomic_write_text``（唯一 tmp + O_EXCL + fsync）——绝不再用共享的固定
+    ``.current.tmp`` 名（两个进程同时 ``os.replace`` 同一个 tmp 会互相
+    FileNotFoundError / 把对方刚提交的 current 指向被清掉的目录）。
     """
     import json
 
     import pyarrow.parquet as pq
+
+    from data_access.write.mutation_lock import mutation_lock
 
     index_dir = _pit_index_dir(root)
     index_dir.mkdir(parents=True, exist_ok=True)
@@ -410,24 +473,21 @@ def _commit_index_generation(
         )
     )
     # #P1-final closure 19：统一 atomic durable-write（内容 fsync，不只 fsync 目录）
-    from data_access.core.atomic import atomic_write_file, atomic_write_json
+    from data_access.core.atomic import atomic_write_file, atomic_write_json, atomic_write_text
 
     atomic_write_file(
         gen_dir / _INDEX_FILENAME, lambda tmp: pq.write_table(arrow, tmp)
     )
     atomic_write_json(gen_dir / _INDEX_META_FILENAME, metadata.to_dict())
 
-    # 唯一 commit 点：原子替换指针（先 fsync tmp 文件 fd 再 rename）。
-    pointer = index_dir / _PIT_INDEX_POINTER
-    tmp_ptr = index_dir / f".{_PIT_INDEX_POINTER}.tmp"
-    with open(tmp_ptr, "w", encoding="utf-8") as fh:
-        fh.write(generation)
-        fh.flush()
-        os.fsync(fh.fileno())
-    os.replace(str(tmp_ptr), str(pointer))
-    _fsync_parent(pointer)
-
-    _prune_old_generations(index_dir, generation)
+    with mutation_lock(index_dir, timeout=300.0):
+        previous = _current_generation(root)
+        # 唯一 commit 点：原子替换指针（唯一 tmp + fsync + replace + fsync dir）。
+        pointer = index_dir / _PIT_INDEX_POINTER
+        atomic_write_text(pointer, generation)
+        # 保留 {new, previous}（build lock + 本层 commit lock 串行化后 current 不可能
+        # 指向被删目录）
+        _prune_old_generations(index_dir, {generation, previous})
 
 
 def _schema_hash_of(ds: Any) -> str:
@@ -483,11 +543,10 @@ def build_pit_event_index(
 
     **#15**：任何源文件读取失败都会记录到 ``failed_files`` 并把 ``complete``
     置 False——索引存在但不允许 authoritative prune（fail-open）。
+
+    扫描/提交主体在 ``_build_pit_index_locked``（本函数只负责解析列 + 拿
+    build lock）。
     """
-    import json
-
-    import pyarrow.parquet as pq
-
     from data_access.cos_contract import get_cos_contract
 
     ds = store._registry.get(dataset)
@@ -515,6 +574,50 @@ def build_pit_event_index(
     root = _index_root(store, dataset)
     if root is None:
         raise ValidationError(f"无法解析数据集 {dataset!r} 的根目录")
+    # #P0 收官（0.9.5）：PIT index build/commit 走**独占 build lock**（mutation_lock
+    # 于 .pit_index 目录）。两个 builder 并发时串行化「重检复用 → 扫描 → 写新
+    # generation → 切 current → 清理」，杜绝：
+    #     A 写 gA；B 写 gB；A current->gA；A prune 删 gB；B current->gB（指向被删目录）
+    # 锁内**重检复用**：等锁期间另一个 builder 可能已提交完整索引，能复用就不白建。
+    from data_access.write.mutation_lock import mutation_lock
+
+    with mutation_lock(_pit_index_dir(root), timeout=3600.0):
+        return _build_pit_index_locked(
+            store=store,
+            dataset=dataset,
+            ds=ds,
+            root=root,
+            inst_col=inst_col,
+            filing_col=filing_col,
+            period_col=period_col,
+            timeframe_column=timeframe_column,
+            columns_used=columns_used,
+            time_range=time_range,
+            timeframe_filter=timeframe_filter,
+            limit=limit,
+            force=force,
+        )
+
+
+def _build_pit_index_locked(
+    *,
+    store: Any,
+    dataset: str,
+    ds: Any,
+    root: Path,
+    inst_col: str,
+    filing_col: str,
+    period_col: str | None,
+    timeframe_column: str | None,
+    columns_used: tuple[str, ...],
+    time_range: tuple[Any, Any] | None,
+    timeframe_filter: str | None,
+    limit: int | None,
+    force: bool,
+) -> "PITEventIndex":
+    """持有 build lock 的 PIT 索引构建主体（见 ``build_pit_event_index``）。"""
+    import pyarrow.parquet as pq
+
     index_path = _current_index_parquet(root)
     if index_path is not None and index_path.exists() and not force:
         try:
@@ -629,11 +732,17 @@ def build_pit_event_index(
         created_at=_dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
         # #P0-15/#P0-16 + #P1-final closure 6：完整 = 无失败文件 + 无 glob 枚举
         # 失败 + 未截断 + 文件数全对。任何一项不满足 → complete=False。
+        # #P0 收官（0.9.5）：源身份可证明也是完整的前置——source_file_count>0 时
+        # source_snapshot 必须非 None（无法证明「这批文件确实是构建时那批」的索引
+        # 不能标 authoritative）；complete 也要求 generation 存在（唯一性/权威判定
+        # 用，build 一定提供）。
         complete=(
             not failed_files
             and not enum_failed
             and not truncated
             and indexed_files == source_file_count
+            and (source_file_count == 0 or source_snapshot is not None)
+            and generation is not None
         ),
         glob_failed=enum_failed,
         generation_id=generation,
@@ -643,16 +752,28 @@ def build_pit_event_index(
         columns_used=columns_used,
     )
     idx = PITEventIndex(records, metadata=metadata)
-    try:
-        # #P1-final closure 18：staged generation-directory 提交——先写完整新 gen
-        # 目录，最后原子切换指针。crash 任意时刻旧 generation 完整可用。
-        _commit_index_generation(root, idx, metadata, generation)
-    except Exception as exc:
-        # 写失败不阻塞正确性，但必须告警（不再静默 pass）
+    if metadata.is_authoritative:
+        # #P0 收官（0.9.5）：**只有新的 authoritative generation 才切 current**——
+        # incomplete（glob 失败/部分文件失败/截断/无法证明源身份）绝不覆盖上一代
+        # 好索引（不能拿残索引把完整索引换掉）。
+        try:
+            # #P1-final closure 18：staged generation-directory 提交——先写完整新
+            # gen 目录，最后原子切换指针。crash 任意时刻旧 generation 完整可用。
+            _commit_index_generation(root, idx, metadata, generation)
+        except Exception as exc:
+            # 写失败不阻塞正确性，但必须告警（不再静默 pass）
+            import logging
+
+            logging.getLogger("data_access.pit_index").warning(
+                "PIT 索引 sidecar 写失败（dataset=%s）：%s", dataset, exc
+            )
+    else:
         import logging
 
         logging.getLogger("data_access.pit_index").warning(
-            "PIT 索引 sidecar 写失败（dataset=%s）：%s", dataset, exc
+            "PIT 索引构建不完整（dataset=%s）或无法证明源身份：保留上一代索引，"
+            "不切换 current（fail-closed）",
+            dataset,
         )
     return idx
 
@@ -686,16 +807,19 @@ def load_pit_event_index(path: Any) -> PITEventIndex:
     if meta_file.exists():
         try:
             payload = json.loads(meta_file.read_text(encoding="utf-8"))
+            # #P0 收官（0.9.5）：**原始值**直接传入（不做 ``bool()`` / ``int()``
+            # 预转换）——``"complete": "false"`` → ``bool("false") == True`` 的
+            # 串味只有让 ``__post_init__`` 看到原始类型才能 fail-closed 抓住。
             metadata = PITIndexMetadata(
                 source_snapshot=payload.get("source_snapshot"),
                 manifest_epoch=payload.get("manifest_epoch"),
-                source_file_count=int(payload.get("source_file_count") or 0),
-                indexed_file_count=int(payload.get("indexed_file_count") or 0),
+                source_file_count=payload.get("source_file_count", 0),
+                indexed_file_count=payload.get("indexed_file_count", 0),
                 failed_files=tuple(str(f) for f in (payload.get("failed_files") or ())),
                 schema_hash=payload.get("schema_hash"),
                 created_at=payload.get("created_at"),
-                complete=bool(payload.get("complete", False)),
-                glob_failed=bool(payload.get("glob_failed", False)),
+                complete=payload.get("complete", False),
+                glob_failed=payload.get("glob_failed", False),
                 generation_id=payload.get("generation_id"),
                 filing_scope_min=payload.get("filing_scope_min"),
                 filing_scope_max=payload.get("filing_scope_max"),
@@ -710,8 +834,19 @@ def load_pit_event_index(path: Any) -> PITEventIndex:
                     or parquet_gen != metadata.generation_id
                 ):
                     metadata = PITIndexMetadata()  # mixed generation → 非权威
-        except (OSError, json.JSONDecodeError, TypeError, ValueError):
-            metadata = PITIndexMetadata()  # 元数据损坏 → 非权威
+            # #P0 收官（0.9.5）：complete 索引必须能证明 generation + source identity。
+            # 缺 generation（无法证明未 partial-write）或 source_file_count>0 但缺
+            # source_snapshot（无法证明「这些文件确实是构建时那批」）→ 非权威。
+            if metadata.complete and (
+                metadata.generation_id is None
+                or (
+                    metadata.source_file_count > 0
+                    and metadata.source_snapshot is None
+                )
+            ):
+                metadata = PITIndexMetadata()
+        except (OSError, json.JSONDecodeError, TypeError, ValueError, ValidationError):
+            metadata = PITIndexMetadata()  # 元数据损坏/非法 → 非权威
     return PITEventIndex(records, metadata=metadata)
 
 

@@ -9964,9 +9964,9 @@
         "polars"
       ],
       "pit_safe": false,
-      "scope": "elementwise",
+      "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -12574,7 +12574,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -13058,7 +13058,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -13268,7 +13268,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -13909,7 +13909,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14079,7 +14079,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14093,7 +14093,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14107,7 +14107,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14121,7 +14121,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14149,7 +14149,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14163,7 +14163,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14247,7 +14247,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14261,7 +14261,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14275,7 +14275,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14289,7 +14289,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14303,7 +14303,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14317,7 +14317,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14770,7 +14770,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14784,7 +14784,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14798,7 +14798,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14812,7 +14812,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14826,7 +14826,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -14840,7 +14840,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -15228,7 +15228,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -15403,7 +15403,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -15758,7 +15758,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -15954,7 +15954,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -16295,7 +16295,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -16309,7 +16309,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -16323,7 +16323,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -16703,7 +16703,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
       "min_periods": 1,
@@ -17091,7 +17091,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -17713,7 +17713,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -18438,7 +18438,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -18606,7 +18606,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -18723,7 +18723,7 @@
         "pandas_numpy",
         "polars"
       ],
-      "pit_safe": false,
+      "pit_safe": true,
       "scope": "ts",
       "lookback": null,
       "min_periods": 1,
@@ -18955,7 +18955,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -18969,7 +18969,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -18983,7 +18983,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {
@@ -18997,7 +18997,7 @@
       "pit_safe": false,
       "scope": "ts",
       "lookback": null,
-      "min_periods": null,
+      "min_periods": 1,
       "lag": 0
     },
     {

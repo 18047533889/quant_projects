@@ -4,13 +4,33 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from typing import Any
 
 from planner.logical_plan import PlanNode
 
 
+class NonFiniteLiteralError(ValueError):
+    """计划中出现了非有限 literal（NaN / +/-Inf），无法生成稳定缓存键。"""
+
+
 def _jsonable(v: Any) -> Any:
-    """将 attrs 值转为可 JSON 序列化的稳定表示。"""
+    """将 attrs 值转为可 JSON 序列化的稳定表示。
+
+    Round-8 audit #324：float literal 必须先通过 ``math.isfinite`` 门——NaN 与
+    +/-Inf 不是可复现的标量字面量，跨进程/跨 JSON 运行时会得到不同表示，从而
+    污染 CSE 与持久化缓存键。int 也做防御性溢出检查（保持 64 位有符号范围内）。
+    """
+    if isinstance(v, float):
+        if not math.isfinite(v):
+            raise NonFiniteLiteralError(
+                f"plan literal {v!r} is not a finite float; NaN/Inf are forbidden in plan keys"
+            )
+    if isinstance(v, int) and not isinstance(v, bool):
+        if not (-(2**63) <= v < 2**63):
+            raise ValueError(
+                f"plan int literal {v} exceeds signed 64-bit range; cannot produce a stable plan key"
+            )
     if isinstance(v, (str, int, float, bool)) or v is None:
         return v
     if isinstance(v, (list, tuple)):
@@ -21,7 +41,16 @@ def _jsonable(v: Any) -> Any:
 
 
 def _operator_semantic_contract(op: str) -> dict[str, Any]:
-    """Bind structural hashes to the registered operator semantics."""
+    """Bind structural hashes to the registered operator semantics.
+
+    Round-8 audit #323: the returned contract — and therefore every
+    ``plan_cache_key`` / ``structural_key`` that embeds it — binds the SELECTED
+    backend's ``implementation_hash`` (R6-154) alongside ``semantic_version``,
+    ``policy_hash`` and ``signature_hash``.  A code change to an operator kernel
+    (e.g. editing ``_calculate_series``) that forgets to bump
+    ``semantic_version`` still invalidates every plan and persistent-cache key
+    depending on the operator, because the implementation source hash changes.
+    """
     if op in {"column", "literal", "plan_ref"}:
         return {"semantic_version": 1}
     try:
@@ -136,6 +165,18 @@ def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
 
 def plan_cache_key(node: PlanNode) -> str:
     """与 :func:`structural_key` 等价；别名用于执行期缓存命名。
+
+    Round-8 audit #323：该键通过 :func:`_operator_semantic_contract` 绑定算子
+    的 ``OperatorSemanticIdentity``，其含义为::
+
+        OperatorSemanticIdentity = hash(canonical,
+                                        signature_hash,
+                                        policy_hash,
+                                        implementation_hash,
+                                        semantic_version)
+
+    即改动算子 kernel 实现（如 ``_calculate_series``）即使忘记 bump
+    ``semantic_version``，也会使本键变化并失效旧缓存。
 
     参数：
         node: 待缓存的子计划根节点

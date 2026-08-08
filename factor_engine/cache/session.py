@@ -26,6 +26,7 @@ class ExecutionCacheSession:
     stats: CacheHitStats | None = None
     cse_budget_bytes: int | None = None
     panel_budget_bytes: int | None = None
+    execution_id: str = "session"
 
     def __post_init__(self) -> None:
         """初始化默认 dict 与 ``ExpressionCache`` / ``PanelCache`` 包装。"""
@@ -35,14 +36,20 @@ class ExecutionCacheSession:
             self.shared_result_cache = {}
         if self.stats is None:
             self.stats = CacheHitStats()
+        # 审计 #334：session 层名带 execution_id，不同 session 不再互踩记账；
+        # 同一 execution_id 重复注册时后者覆盖（可接受）。
+        self._l0_layer = f"{self.execution_id}:l0_cse"
+        self._l1_layer = f"{self.execution_id}:l1_panel"
         self._expression_cache = ExpressionCache(
             self.shared_result_cache,
             stats=self.stats,
             budget_bytes=self.cse_budget_bytes,
+            layer_name=self._l0_layer,
         )
         self._panel_cache = PanelCache(
             self.panel_cache,
             budget_bytes=self.panel_budget_bytes,
+            layer_name=self._l1_layer,
         )
         # Phase 5 R6：把 CSE / panel 两层注册到全局 MemoryGovernor 的 evict hooks，
         # RSS 高压档时由 governor 主动逐出。
@@ -50,8 +57,19 @@ class ExecutionCacheSession:
             from runtime.resource_governor import global_memory_governor
 
             gov = global_memory_governor()
-            gov.register_layer("l0_cse", self._expression_cache.evict_if_over_budget)
-            gov.register_layer("l1_panel", self._panel_cache.evict_if_over_budget)
+            gov.register_layer(self._l0_layer, self._expression_cache.evict_if_over_budget)
+            gov.register_layer(self._l1_layer, self._panel_cache.evict_if_over_budget)
+        except Exception:
+            pass
+
+    def release(self) -> None:
+        """释放本 session 在 MemoryGovernor 中的层注册与记账（审计 #334）。"""
+        try:
+            from runtime.resource_governor import global_memory_governor
+
+            gov = global_memory_governor()
+            gov.unregister_layer(self._l0_layer)
+            gov.unregister_layer(self._l1_layer)
         except Exception:
             pass
 

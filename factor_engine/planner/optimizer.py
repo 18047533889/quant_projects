@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from .logical_plan import PlanNode
 
 
@@ -88,16 +90,32 @@ class Optimizer:
                     if vb == 0.0:
                         return n
                     out = va / vb
+                # Audit #389 finite gate: 1e308 * 1e308 overflows to +inf during
+                # constant folding.  Folding would manufacture an ``inf`` literal
+                # that the runtime's numeric semantics may treat differently from
+                # an evaluated multiply (e.g. protected_div / NaN handling).  When
+                # the folded result is a non-finite float, DON'T fold — leave the
+                # operator node in place and let the runtime apply its own
+                # arithmetic semantics to the operands.
+                if isinstance(out, float) and not math.isfinite(out):
+                    return n
                 return PlanNode(op="literal", attrs={"value": out}, inputs=[])
         if n.op == "nary_add" and inputs and all(c.op == "literal" for c in inputs):
+            out = sum(float(c.attrs["value"]) for c in inputs)
+            # Audit #389: same finite gate for nary sums (e.g. 1e308 + 1e308).
+            if isinstance(out, float) and not math.isfinite(out):
+                return n
             return PlanNode(
                 op="literal",
-                attrs={"value": sum(float(c.attrs["value"]) for c in inputs)},
+                attrs={"value": out},
                 inputs=[],
             )
         if n.op == "nary_mul" and inputs and all(c.op == "literal" for c in inputs):
             prod = 1.0
             for c in inputs:
                 prod *= float(c.attrs["value"])
+            # Audit #389: same finite gate for nary products.
+            if isinstance(prod, float) and not math.isfinite(prod):
+                return n
             return PlanNode(op="literal", attrs={"value": prod}, inputs=[])
         return n

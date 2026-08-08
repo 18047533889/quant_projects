@@ -182,6 +182,18 @@ def record(
         )
         with _write_lock:
             with path.open("a", encoding="utf-8") as f:
+                # #26 收官轮：跨进程行原子性。``_write_lock`` 只是线程锁，挡不住
+                # 多进程并发 append；CPython 的 ``f.write`` 对 O_APPEND 通常单次
+                # write() 因此 Linux 上原子，但 buffer 分裂 / NFS / 其它实现下
+                # 可能把一行拆成多次 syscall → 行间 interleave / 半行。对 fd 加
+                # ``flock``（进程间互斥，崩溃时随 fd 关闭自动释放）保证**一行就是
+                # 一个原子 append**——不依赖 PIPE_BUF / 单次 syscall 假设。
+                try:
+                    import fcntl
+
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                except OSError:
+                    pass  # 无 flock 平台（非 POSIX）退化为内核 O_APPEND 语义
                 f.write(line + "\n")
                 if durable:
                     f.flush()

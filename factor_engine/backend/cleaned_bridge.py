@@ -221,9 +221,19 @@ def _prepare_call_args(
                 template = _ctx_template(ctx)
         else:
             if broadcast_scalars and template_panel is not None:
-                call_args.append(pd.DataFrame(
+                scalar_panel = pd.DataFrame(
                     val, index=template_panel.index, columns=template_panel.columns
-                ))
+                )
+                if backend == "polars":
+                    # WS-B #245: keep every panel in a polars call a polars frame
+                    # carrying the same ``__fe_time__`` metadata column so the
+                    # central validator / PanelIdentity gate sees one consistent
+                    # axis (a bare pandas frame would be column-misaligned with
+                    # the ``__fe_time__``-carrying polars inputs).
+                    from .panel_polars import panel_to_polars
+                    call_args.append(panel_to_polars(scalar_panel))
+                else:
+                    call_args.append(scalar_panel)
             else:
                 # Scalar literals used by panel operators (e.g. ts_delay(..., n))
                 # remain scalar; cleaned operators validate them directly.

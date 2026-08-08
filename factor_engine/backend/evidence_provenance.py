@@ -539,6 +539,54 @@ def implementation_sources_for(canonical: str) -> dict[str, str]:
     sources["implementation_source_duckdb"] = "backend/sql_pushdown/emitter.py"
     return sources
 
+_EVIDENCE_CACHE_MODULES: tuple[str, ...] = (
+    "backend.evidence_provenance",
+    "backend.factor_operator_evidence",
+    "backend.primitive_evidence",
+    "cleaned_operators.edge_requirements",
+)
+
+
+def collect_cache_clearers() -> list[Any]:
+    """Return every evidence ``@lru_cache`` ``cache_clear`` callable in-process.
+
+    Only decorated functions (``functools.lru_cache``) expose ``cache_clear``;
+    modules are resolved via ``sys.modules`` first so a partially-initialized
+    package is never re-imported, and each cache-clearer is idempotent.
+    """
+    import importlib
+
+    clearers: list[Any] = []
+    for module_name in _EVIDENCE_CACHE_MODULES:
+        try:
+            mod = sys.modules.get(module_name) or importlib.import_module(module_name)
+        except Exception:
+            continue
+        for obj in vars(mod).values():
+            cache_clear = getattr(obj, "cache_clear", None)
+            if callable(cache_clear):
+                clearers.append(cache_clear)
+    return clearers
+
+
+def invalidate_all_evidence_caches() -> int:
+    """Clear every evidence ``@lru_cache`` in-process and return how many.
+
+    Certification, evidence sync, delta-install and registry-reload call this so
+    cached verified-set / validation / source-hash results never outlive the
+    source files or JSON artifacts they were derived from.  It must actually
+    invalidate in-process caches, not merely report what would be cleared.
+    """
+    clearers = collect_cache_clearers()
+    for cache_clear in clearers:
+        try:
+            cache_clear()
+        except TypeError:
+            # Some callables reject extra args; a bare clear is always safe.
+            pass
+    return len(clearers)
+
+
 def enrich_operator_metadata(
     *,
     certified: frozenset[str],

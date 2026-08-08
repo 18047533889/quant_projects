@@ -30,6 +30,90 @@ FE_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = FE_ROOT.parent
 VERIFIED_PATH = FE_ROOT / "evidence" / "factor_operator_verified.json"
 
+# review #253: the factor evidence artifact must bind the FULL execution TCB,
+# not just operator sources.  Editing any component below invalidates previously
+# certified factor evidence (fail-closed) until a fresh runtime audit re-binds.
+# ``ExecutionTCB`` is the spec tuple; ``_EXECUTION_TCB_SOURCES`` resolves each
+# component to its source file(s) / tree(s).
+ExecutionTCB = (
+    "operator_implementation",
+    "logical_contract",
+    "field_catalog",
+    "ir_analyzer",
+    "planner",
+    "backend_bridge",
+    "backend_router",
+    "panel_conversion",
+    "source_alignment",
+    "calendar_session_semantics",
+)
+
+# Value is one of:
+#   Path                                  -> single source file
+#   (Path, (pattern, ...))                -> tracked tree hash under Path
+#   (Path, Path, ...)                     -> multiple single source files
+_EXECUTION_TCB_SOURCES: dict[str, object] = {
+    "operator_implementation": (FE_ROOT / "cleaned_operators", ("*.py",)),
+    "logical_contract": (
+        FE_ROOT / "cleaned_operators" / "edge_requirements.py",
+        FE_ROOT / "cleaned_operators" / "operator_policy.py",
+    ),
+    "field_catalog": (FE_ROOT / "fields", ("*.py",)),
+    "ir_analyzer": (FE_ROOT / "ir", ("*.py",)),
+    "planner": (FE_ROOT / "planner", ("*.py",)),
+    "backend_bridge": FE_ROOT / "backend" / "cleaned_bridge.py",
+    "backend_router": FE_ROOT / "backend" / "backend_router.py",
+    "panel_conversion": FE_ROOT / "backend" / "panel_polars.py",
+    "source_alignment": (FE_ROOT / "storage" / "sources", ("*.py",)),
+    "calendar_session_semantics": (
+        FE_ROOT / "runtime" / "session_calendar.py",
+        FE_ROOT / "storage" / "trading_calendar.py",
+        FE_ROOT / "market" / "session.py",
+    ),
+}
+
+
+def execution_tcb_hash() -> str:
+    """Composite hash over every ExecutionTCB component source.
+
+    Uses the same Git-clean-tree digest machinery as the rest of the evidence
+    system so an unstaged edit to the bridge / router / panel-conversion / any
+    TCB source invalidates previously certified factor evidence.
+    """
+    from backend.evidence_provenance import (
+        _source_hash,
+        _tree_hash,
+        compute_implementation_hash,
+        compute_payload_hash,
+    )
+
+    parts: dict[str, str] = {}
+    for name in ExecutionTCB:
+        spec = _EXECUTION_TCB_SOURCES.get(name)
+        if spec is None:
+            parts[name] = ""
+            continue
+        if isinstance(spec, Path):
+            parts[name] = _source_hash(spec)
+        elif (
+            isinstance(spec, tuple)
+            and len(spec) == 2
+            and isinstance(spec[1], tuple)
+        ):
+            root, patterns = spec
+            parts[name] = _tree_hash(root, patterns)
+        elif isinstance(spec, tuple):
+            parts[name] = compute_payload_hash(
+                {
+                    str(p.relative_to(FE_ROOT)): _source_hash(p)
+                    for p in spec
+                    if isinstance(p, Path)
+                }
+            )
+        else:
+            parts[name] = ""
+    return compute_payload_hash(parts)
+
 
 def _hashes() -> dict[str, str]:
     from backend.evidence_provenance import _tree_hash, compute_implementation_hash
@@ -76,6 +160,11 @@ def _hashes() -> dict[str, str]:
         "audit_source_hash": compute_implementation_hash(
             audit.read_text(encoding="utf-8")
         ),
+        # review #253: full execution TCB composite — editing the backend bridge
+        # (cleaned_bridge), backend router, panel conversion, field catalog,
+        # IR/analyzer, planner, source alignment or calendar/session semantics
+        # invalidates previously certified factor evidence.
+        "execution_tcb_hash": execution_tcb_hash(),
     }
     for name, path in files.items():
         hashes[name] = compute_implementation_hash(path.read_text(encoding="utf-8"))

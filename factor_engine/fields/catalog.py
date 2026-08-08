@@ -1,6 +1,8 @@
 """Built-in A-share daily, fiscal, relation, and reference field catalog."""
 from __future__ import annotations
 
+import enum
+
 from .spec import FieldSpec, TableSpec
 from .units import (
     UNIT_BASIS_POINT,
@@ -40,6 +42,7 @@ def _table(
     current_snapshot_only=False,
     cardinality="many_to_one",
     strict_pit_allowed=True,
+    metadata=None,
 ):
     return TableSpec(
         name=name,
@@ -63,6 +66,7 @@ def _table(
         current_snapshot_only=current_snapshot_only,
         cardinality=cardinality,
         strict_pit_allowed=strict_pit_allowed,
+        metadata=dict(metadata or {}),
     )
 
 
@@ -73,6 +77,11 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
         domain="price_volume", frequency="minute", table_kind="minute_session",
         join_policy="minute_session", timezone="Asia/Shanghai",
         session_calendar="ashare",
+        # Round-7 WS-E #293: the A-share COS minute mirror labels the one-minute
+        # bar with its END timestamp (09:31 = the 09:30-09:31 bar, last 15:00).
+        # Declared here so the runtime session slotting never guesses from a
+        # 09:30/13:00 heuristic.
+        metadata={"bar_timestamp_role": "bar_end", "bar_timestamp_convention": "bar_end"},
     ),
     _table("StockValuationDaily", "ashare_stock_valuation_daily", domain="valuation"),
     _table("StockCapitalDaily", "ashare_stock_capital_daily", domain="capital", join_policy="state_asof"),
@@ -155,6 +164,55 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
 _TABLE_BY_NAME = {item.name: item for item in ASHARE_TABLE_SPECS}
 
 
+class FieldRole(enum.Enum):
+    """Typed field role vocabulary (round-7 WS-E #284).
+
+    ``role`` remains a plain ``str`` on :class:`~fields.spec.FieldSpec` for
+    backward compatibility; the catalog validates every declared role against
+    this enum at load time so a typo like ``"knowledge_tiem"`` fails the catalog
+    instead of silently degrading mining/PIT semantics.
+    """
+
+    FEATURE = "feature"
+    TIME = "time"
+    INSTRUMENT = "instrument"
+    LABEL = "label"
+    IDENTIFIER = "identifier"
+    GROUP_KEY = "group_key"
+    STATUS = "status"
+    KNOWLEDGE_TIME = "knowledge_time"
+    EFFECTIVE_TIME = "effective_time"
+    PERIOD_ID = "period_id"
+    INGESTION_TIME = "ingestion_time"
+
+    @classmethod
+    def values(cls) -> set[str]:
+        return {item.value for item in cls}
+
+
+#: Additional role spellings accepted from the DataAccess catalog (semantic
+#: fields may use a slightly wider vocabulary).
+_EXTRA_ACCEPTED_ROLES = frozenset({"event_time", "revision_id"})
+
+
+def validate_field_role(role: str) -> str:
+    """Validate a field ``role`` spelling; raise on unknown values.
+
+    Raises ``ValueError`` for unknown roles (e.g. a typo such as
+    ``"knowledge_tiem"``) so a broken catalog cannot silently change mining /
+    PIT semantics.  Returns the canonical role string on success.
+    """
+    text = str(role).strip().lower()
+    if not text:
+        raise ValueError("field role must be non-empty")
+    if text in FieldRole.values() or text in _EXTRA_ACCEPTED_ROLES:
+        return text
+    raise ValueError(
+        f"unknown field role {role!r}; expected one of "
+        f"{sorted(FieldRole.values())}"
+    )
+
+
 def _value_kind(dtype: str, unit: str, role: str) -> str:
     if role in {"time", "knowledge_time", "effective_time", "period_id", "ingestion_time"}:
         return "datetime" if dtype == "datetime" else "date"
@@ -192,6 +250,7 @@ def _f(
     metadata=None,
 ):
     table_spec = _TABLE_BY_NAME[table]
+    role = validate_field_role(role)
     return FieldSpec(
         name=name,
         table=table,
@@ -623,4 +682,9 @@ ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
 )
 
 
-__all__ = ["ASHARE_FIELD_SPECS", "ASHARE_TABLE_SPECS"]
+__all__ = [
+    "ASHARE_FIELD_SPECS",
+    "ASHARE_TABLE_SPECS",
+    "FieldRole",
+    "validate_field_role",
+]

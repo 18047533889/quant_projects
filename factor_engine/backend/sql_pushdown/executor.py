@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import os
 import sys
 from dataclasses import dataclass
 from typing import Any
@@ -48,6 +49,52 @@ def _sql_fallback_allowed(exc: BaseException, ctx: ExecutionContext) -> bool:
         return True
     production = str(getattr(ctx, "run_mode", "") or "").lower() == "production"
     return not production
+
+
+class SqlResultSchemaError(RuntimeError):
+    """SQL 执行结果缺少预期的列别名（#369/#370：batch 结果 schema 契约）。"""
+
+
+def fallback_reason_is_fail_closed(reason_class: str) -> bool:
+    """reason class 名称是否为 fail-closed 治理类异常（禁止跨后端 fallback）。
+
+    CapabilityMiss / CompilationUnsupported 属于「这个后端做不到」，允许 fallback；
+    其余 ResourceGovernanceError 子类（OOM / Deadline / Schema / PIT / DQ …）
+    在 production 下必须 fail-closed。
+    """
+    if not reason_class:
+        return False
+    try:
+        import runtime.resource_errors as re_mod
+        from runtime.resource_errors import (
+            CapabilityMiss,
+            CompilationUnsupported,
+            ResourceGovernanceError,
+        )
+
+        cls = getattr(re_mod, str(reason_class), None)
+        if not isinstance(cls, type):
+            return False
+        if issubclass(cls, (CapabilityMiss, CompilationUnsupported)):
+            return False
+        return issubclass(cls, ResourceGovernanceError)
+    except Exception:
+        return False
+
+
+def _note_sql_fallback(ctx: ExecutionContext, reason_class: str, *, sid: str | None = None) -> None:
+    """记录一次 SQL 下推被跳过/回退的 reason class（供 fallback 审计 telemetry）。
+
+    写入 ``ctx.runtime_stats["sql_fallback_reasons"]``（按 sid 索引）与
+    ``ctx.runtime_stats["sql_fallback_reason"]``（最近一次，供 _eval_python 读取）。
+    """
+    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+    reasons = dict(runtime.get("sql_fallback_reasons") or {})
+    key = str(sid) if sid is not None else "last"
+    reasons[key] = str(reason_class)
+    runtime["sql_fallback_reasons"] = reasons
+    runtime["sql_fallback_reason"] = str(reason_class)
+    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
 
 
 @dataclass(frozen=True)
@@ -133,8 +180,14 @@ def _series_from_sql_table(table, *, timestamp_col: str, instrument_col: str) ->
     )
 
 
-def _lazy_from_sql_table(table) -> Any:
-    """Arrow/SQL 结果 → long-table LazyFrame（``ts, inst, _v``），无 pandas 往返。"""
+def materialized_sql_result_lazy_wrapper(table) -> Any:
+    """Arrow/SQL 结果 → long-table LazyFrame（``ts, inst, _v``），无 pandas 往返。
+
+    .. important::
+        该结果**已完整物化**（SQL 已执行完），只是套了一层 ``LazyFrame`` 壳以复用
+        Polars long-lazy 消费接口。它**不代表 streaming**：
+        ``supports_streaming=False``，``materializes_full_panel=True``。
+    """
     import polars as pl
 
     if hasattr(table, "to_pandas"):
@@ -149,6 +202,12 @@ def _lazy_from_sql_table(table) -> Any:
     if "_v" not in df.columns:
         raise ValueError("SQL result missing value column")
     return df.select(["ts", "inst", "_v"]).lazy()
+
+
+# Deprecated alias（审计 #368）：旧名暗示 lazy，实际结果已物化。
+def _lazy_from_sql_table(table) -> Any:
+    """Deprecated alias of :func:`materialized_sql_result_lazy_wrapper`."""
+    return materialized_sql_result_lazy_wrapper(table)
 
 
 def execute_compiled_sql(
@@ -198,14 +257,19 @@ def execute_batch_compiled_sql(
 
     out: dict[str, pd.Series] = {}
     col_names = list(getattr(table, "column_names", []) or getattr(table, "schema", {}).names or [])
+    # #369/#370：expected alias 是 batch 结果 schema 契约；缺失必须显式失败，
+    # 不再 ``if alias in col_names: ... continue`` 静默跳过。
+    expected = {alias for _, alias in compiled.column_aliases}
+    missing = expected - set(col_names)
+    if missing:
+        raise SqlResultSchemaError(f"missing expected SQL aliases: {sorted(missing)}")
     for sid, alias in compiled.column_aliases:
-        if alias in col_names:
-            out[sid] = _series_from_batch_table(
-                table,
-                timestamp_col="ts",
-                instrument_col="inst",
-                value_column=alias,
-            )
+        out[sid] = _series_from_batch_table(
+            table,
+            timestamp_col="ts",
+            instrument_col="inst",
+            value_column=alias,
+        )
     return out
 
 
@@ -232,9 +296,18 @@ def _build_duckdb_store_kwargs(
     _ensure_data_access()
     from data_access.read.query_budget import QueryBudget, resolve_query_budget
 
+    # #371：QueryBudget 可配置。优先显式 query_budget 参数；否则读环境变量
+    # FACTOR_ENGINE_QUERY_BUDGET_MAX_ROWS（int）；否则默认 50M。
     explicit = query_budget
     if explicit is None:
-        explicit = QueryBudget(max_rows=50_000_000)
+        _env_max = os.environ.get("FACTOR_ENGINE_QUERY_BUDGET_MAX_ROWS", "").strip()
+        if _env_max:
+            try:
+                explicit = QueryBudget(max_rows=int(_env_max))
+            except (TypeError, ValueError):
+                explicit = None
+        if explicit is None:
+            explicit = QueryBudget(max_rows=50_000_000)
     return {
         "read_datasets": list(compiled.read_datasets),
         "view_columns": view_columns,
@@ -302,6 +375,7 @@ def try_execute_sql_pushdown_long(
     """
     pctx = extract_pushdown_context(ctx)
     if pctx is None:
+        _note_sql_fallback(ctx, "NoPushdownContext", sid=sid)
         return None
 
     compiled = compile_plan_to_sql(
@@ -314,6 +388,7 @@ def try_execute_sql_pushdown_long(
         dialect=pctx.dialect,
     )
     if compiled is None:
+        _note_sql_fallback(ctx, "CompilationUnsupported", sid=sid)
         return None
 
     try:
@@ -323,10 +398,12 @@ def try_execute_sql_pushdown_long(
             table = _execute_duckdb_table(
                 compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)
             )
-        return _lazy_from_sql_table(table)
+        # #368：结果已完整物化，只是套 LazyFrame 壳；supports_streaming=False。
+        return materialized_sql_result_lazy_wrapper(table)
     except Exception as exc:
         if not _sql_fallback_allowed(exc, ctx):
             raise
+        _note_sql_fallback(ctx, type(exc).__name__, sid=sid)
         from backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
 
         try:
@@ -345,6 +422,7 @@ def try_execute_sql_pushdown_batch_long(
         return {}
     pctx = extract_pushdown_context(ctx)
     if pctx is None:
+        _note_sql_fallback(ctx, "NoPushdownContext", sid=",".join(sorted(plans.keys())[:3]))
         return None
 
     compiled = compile_plans_batch_to_sql(
@@ -357,6 +435,7 @@ def try_execute_sql_pushdown_batch_long(
         dialect=pctx.dialect,
     )
     if compiled is None:
+        _note_sql_fallback(ctx, "CompilationUnsupported", sid=",".join(sorted(plans.keys())[:3]))
         return None
 
     try:
@@ -369,16 +448,30 @@ def try_execute_sql_pushdown_batch_long(
         import polars as pl
 
         df = pl.from_arrow(table) if hasattr(table, "to_pandas") else pl.DataFrame(table)
+        # #369/#370：batch wide result 是单条宽物化；必须按列 chunk（每 chunk
+        # 最多 64 个 alias）分批 select，避免一次拉取整宽。
+        expected = {alias for _, alias in compiled.column_aliases}
+        missing = expected - set(df.columns)
+        if missing:
+            raise SqlResultSchemaError(f"missing expected SQL aliases: {sorted(missing)}")
         out: dict[str, Any] = {}
-        for sid, alias in compiled.column_aliases:
-            if alias not in df.columns:
-                continue
-            part = df.select(["ts", "inst", pl.col(alias).alias("_v")]).lazy()
-            out[sid] = part
+        alias_list = list(compiled.column_aliases)
+        for i in range(0, len(alias_list), 64):
+            chunk = alias_list[i : i + 64]
+            chunk_aliases = [a for _, a in chunk]
+            part = df.select(["ts", "inst", *chunk_aliases]).lazy()
+            for sid, alias in chunk:
+                out[sid] = part.select(["ts", "inst", pl.col(alias).alias("_v")])
         return out
+    except SqlResultSchemaError:
+        # #369/#370：batch 结果 schema 契约违约是 fail-closed，必须上抛，不回退。
+        raise
     except Exception as exc:
         if not _sql_fallback_allowed(exc, ctx):
             raise
+        _note_sql_fallback(
+            ctx, type(exc).__name__, sid=",".join(sorted(plans.keys())[:3])
+        )
         from backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
 
         try:
@@ -403,6 +496,7 @@ def try_execute_sql_pushdown(
     """
     pctx = extract_pushdown_context(ctx)
     if pctx is None:
+        _note_sql_fallback(ctx, "NoPushdownContext")
         return None
 
     try:
@@ -416,14 +510,27 @@ def try_execute_sql_pushdown(
             dialect=pctx.dialect,
         )
     except Exception as exc:
-        # 编译失败本质是 CompilationUnsupported：可 fallback；但 OOM/Deadline/
-        # PIT/Schema 等 fail-closed 错误必须上抛。
-        from runtime.resource_errors import is_fail_closed_error
+        # #365/#366 compile fail-closed：只有「可下推失败」类（CapabilityMiss /
+        # CompilationUnsupported）允许返回 None（换后端 fallback）；其余 fail-closed
+        # 或 production 未知异常必须上抛，research 未知异常才允许 fallback。
+        from runtime.resource_errors import (
+            CapabilityMiss,
+            CompilationUnsupported,
+            is_fail_closed_error,
+        )
 
+        if isinstance(exc, (CapabilityMiss, CompilationUnsupported)):
+            _note_sql_fallback(ctx, type(exc).__name__)
+            return None
         if is_fail_closed_error(exc):
             raise
+        production = str(getattr(ctx, "run_mode", "") or "").lower() == "production"
+        if production:
+            raise
+        _note_sql_fallback(ctx, type(exc).__name__)
         return None
     if compiled is None:
+        _note_sql_fallback(ctx, "CompilationUnsupported")
         return None
 
     try:
@@ -433,6 +540,7 @@ def try_execute_sql_pushdown(
     except Exception as exc:
         if not _sql_fallback_allowed(exc, ctx):
             raise
+        _note_sql_fallback(ctx, type(exc).__name__)
         return None
 
 
@@ -445,6 +553,7 @@ def try_execute_sql_pushdown_batch(
         return {}
     pctx = extract_pushdown_context(ctx)
     if pctx is None:
+        _note_sql_fallback(ctx, "NoPushdownContext", sid=",".join(sorted(plans.keys())[:3]))
         return None
 
     try:
@@ -458,12 +567,27 @@ def try_execute_sql_pushdown_batch(
             dialect=pctx.dialect,
         )
     except Exception as exc:
-        from runtime.resource_errors import is_fail_closed_error
+        # #365/#366 compile fail-closed（同 try_execute_sql_pushdown）。
+        from runtime.resource_errors import (
+            CapabilityMiss,
+            CompilationUnsupported,
+            is_fail_closed_error,
+        )
 
+        if isinstance(exc, (CapabilityMiss, CompilationUnsupported)):
+            _note_sql_fallback(
+                ctx, type(exc).__name__, sid=",".join(sorted(plans.keys())[:3])
+            )
+            return None
         if is_fail_closed_error(exc):
             raise
+        production = str(getattr(ctx, "run_mode", "") or "").lower() == "production"
+        if production:
+            raise
+        _note_sql_fallback(ctx, type(exc).__name__, sid=",".join(sorted(plans.keys())[:3]))
         return None
     if compiled is None:
+        _note_sql_fallback(ctx, "CompilationUnsupported", sid=",".join(sorted(plans.keys())[:3]))
         return None
 
     try:
@@ -473,7 +597,11 @@ def try_execute_sql_pushdown_batch(
             ctx.data_source,
             query_budget=getattr(ctx, "query_budget", None),
         )
+    except SqlResultSchemaError:
+        # #369：missing expected alias 是 schema 契约违约，fail-closed，不回退。
+        raise
     except Exception as exc:
         if not _sql_fallback_allowed(exc, ctx):
             raise
+        _note_sql_fallback(ctx, type(exc).__name__, sid=",".join(sorted(plans.keys())[:3]))
         return None

@@ -54,6 +54,21 @@ class FieldSpec:
     applicability: tuple[str, ...] = ()
     allowed_operator_families: tuple[str, ...] = ()
     mining_allowed: bool = True
+    # Round-7 WS-C (#269-#273): the *declared* typed-IR semantic kind.  When set,
+    # it is authoritative — callers MUST NOT guess from the field name (review
+    # #269).  ``None`` means "not declared"; the mapping helper
+    # :func:`semantic_kind_of_field` may then fall back to name-derived kinds
+    # only for raw/research columns.
+    semantic_kind: str | None = None
+    # Round-7 WS-C (#277): explicit availability descriptor (``session_close`` /
+    # ``PubDate`` / ``filing`` / ...).  When absent, availability is derived from
+    # ``knowledge_time_column`` / ``role`` / exact-name defaults — never from
+    # substring matching on the field name.
+    available_at: str | None = None
+    # Round-7 WS-C (#277): canonical concept id (e.g. ``price.close``,
+    # ``volume``).  Availability / semantics may key off the concept instead of
+    # the physical column name.
+    concept: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict, compare=False, hash=False)
 
     def __post_init__(self) -> None:
@@ -170,4 +185,70 @@ class TableSpec:
         return result
 
 
-__all__ = ["FIELD_CATALOG_SCHEMA_VERSION", "FieldSpec", "TableSpec"]
+# ---------------------------------------------------------------------------
+# Round-7 WS-C (#269-#273): semantic-kind mapping helper.
+#
+# A FieldSpec with an explicit ``semantic_kind`` is authoritative — the helper
+# never overrides it with a name guess.  For raw/research columns (or catalog
+# fields that carry no explicit kind) the name-based fallback below covers the
+# canonical activity / mask / group roles without touching price-basis /
+# flow-semantics derivation, which lives in ``ir.types.semantic_type_of``.
+# ---------------------------------------------------------------------------
+#: name -> declared semantic kind for the well-known non-price activity roles.
+_SEMANTIC_KIND_NAME_MAP = {
+    "volume": "NonNegativeActivity",
+    "volume_ratio": "NonNegativeActivity",
+    "amount": "NonNegativeActivity",
+    "amount_ratio": "NonNegativeActivity",
+    "turnover": "NonNegativeActivity",
+    "turnover_ratio": "NonNegativeActivity",
+    "universe_mask": "MaskBool",
+    "mask": "MaskBool",
+    "group_id": "GroupKey",
+    "group": "GroupKey",
+    "event": "EventBool",
+    "is_event": "EventBool",
+    "event_flag": "EventBool",
+}
+
+
+def semantic_kind_of_field(spec_or_name) -> str | None:
+    """Resolve a field's typed-IR semantic kind.
+
+    Priority (review #269 — never guess where a kind is declared):
+    1. ``FieldSpec.semantic_kind`` (explicit, authoritative);
+    2. ``price_basis`` / ``flow_semantics`` derivation
+       (:func:`ir.types.semantic_type_of`);
+    3. exact-name fallback for raw/research columns (Volume -> NonNegativeActivity,
+       UniverseMask -> MaskBool, GroupId -> GroupKey, ...).
+    """
+    if spec_or_name is None:
+        return None
+    if hasattr(spec_or_name, "semantic_kind"):
+        declared = getattr(spec_or_name, "semantic_kind", None)
+        if declared:
+            return str(declared)
+    price_basis = getattr(spec_or_name, "price_basis", None)
+    flow_semantics = getattr(spec_or_name, "flow_semantics", None)
+    if price_basis or flow_semantics:
+        from ir.types import semantic_type_of
+
+        kind = semantic_type_of(
+            price_basis=price_basis,
+            flow_semantics=flow_semantics,
+            frequency=getattr(spec_or_name, "frequency", None),
+            domain=getattr(spec_or_name, "domain", None),
+        )
+        if kind is not None:
+            return kind.value
+    name = getattr(spec_or_name, "name", spec_or_name)
+    low = str(name or "").lower()
+    return _SEMANTIC_KIND_NAME_MAP.get(low)
+
+
+__all__ = [
+    "FIELD_CATALOG_SCHEMA_VERSION",
+    "FieldSpec",
+    "TableSpec",
+    "semantic_kind_of_field",
+]

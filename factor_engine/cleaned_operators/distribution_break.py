@@ -76,14 +76,21 @@ def _energy_distance(X: np.ndarray, Y: np.ndarray) -> float:
 
 
 def _joint_shift_cell(block: np.ndarray, recent: int, prior: int) -> float:
-    """Energy distance between recent and prior windows (robust-std on prior)."""
+    """Energy distance between recent and prior windows (robust-std on prior).
+
+    R6-122 (strict-past contract): both windows end at ``t-1`` — the current
+    row ``t`` is ONLY the query point, never part of either block.  The caller
+    passes ``[.., t]`` (inclusive); slicing here stops at ``n-1`` so the recent
+    window is ``[t-r, t-1]`` and the prior is ``[t-r-p, t-r-1]``.  The old code
+    sliced ``block[n-r:n]`` which re-included the current row.
+    """
     r = int(recent)
     p = int(prior)
     n = block.shape[0]
-    if n < r + p:
+    if n < r + p + 1:
         return np.nan
-    prior_block = block[n - r - p : n - r]      # [t-r-p, t-r-1]
-    recent_block = block[n - r : n]             # [t-r, t-1]
+    prior_block = block[n - r - p - 1 : n - r - 1]      # [t-r-p, t-r-1]
+    recent_block = block[n - r - 1 : n - 1]             # [t-r, t-1]
     d = prior_block.shape[1]
     med = np.median(prior_block, axis=0)
     mad = 1.4826 * np.median(np.abs(prior_block - med), axis=0)

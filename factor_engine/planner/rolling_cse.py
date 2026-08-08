@@ -12,6 +12,7 @@ from planner.rolling_cache import (
     ROLLING_OPS,
     _first_col_ref,
     _window_from_attrs,
+    _window_from_literals,
 )
 
 ROLLING_OP_CANONICAL: dict[str, str] = {
@@ -24,7 +25,15 @@ ROLLING_OP_CANONICAL: dict[str, str] = {
     "ts_delay": "ts_delay",
 }
 
-_ROLLING_ATTR_IGNORE = frozenset({"min_periods", "min_count", "ddof"})
+# 默认原则：只有 OperatorContract 明确声明的 cse_irrelevant_params 才能忽略，
+# 目前没有任何声明的参数可忽略 —— 因此 ddof/min_periods/min_count 全部视为
+# active 参数，必须进入语义键（#319）。
+_ROLLING_ATTR_IGNORE = frozenset()
+
+# window 已被显式放进 payload 主字段，故从 extra 中排除以避免重复承载；
+# 其余所有 attrs（含 d/period/n/periods/lag/min_periods/min_count/ddof）
+# 一律进 extra，不允许丢失（#319）。
+_WINDOW_EXTRA_EXCLUDE = frozenset({"window"})
 
 
 def canonical_rolling_op(op: str) -> str:
@@ -37,6 +46,18 @@ def canonical_rolling_op(op: str) -> str:
         canonical 算子名；无别名时返回原 op
     """
     return ROLLING_OP_CANONICAL.get(op, op)
+
+
+def _merge_windows(attrs_window: int | None, literal_window: int | None) -> int | None:
+    """合并 attrs 与 literal 两路 window 解析结果。
+
+    literal child input 是最终执行值（#318），优先；仅 attrs 解析到值时回退
+    attrs；两者都非 None 且不一致时以 literal 为准（双源互斥时宁可分离也不
+    错误合并不同 window 的子树）。
+    """
+    if literal_window is not None:
+        return literal_window
+    return attrs_window
 
 
 def _second_col_ref(node: PlanNode) -> str | None:
@@ -61,7 +82,10 @@ def rolling_semantic_key(node: PlanNode) -> str | None:
     col = _first_col_ref(node)
     if not col:
         return None
-    window = _window_from_attrs(node.op, node.attrs)
+    window = _merge_windows(
+        _window_from_attrs(node.op, node.attrs),
+        _window_from_literals(node),
+    )
     payload: dict[str, Any] = {"op": op, "col": col, "window": window}
     col2 = _second_col_ref(node)
     if col2 is not None:
@@ -69,7 +93,7 @@ def rolling_semantic_key(node: PlanNode) -> str | None:
     extra = {
         k: node.attrs[k]
         for k in sorted(node.attrs)
-        if k not in _ROLLING_ATTR_IGNORE and k not in {"window", "d", "period", "n", "periods", "lag"}
+        if k not in _ROLLING_ATTR_IGNORE and k not in _WINDOW_EXTRA_EXCLUDE
     }
     if extra:
         payload["attrs"] = extra

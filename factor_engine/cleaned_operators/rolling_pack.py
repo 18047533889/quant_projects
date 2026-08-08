@@ -80,7 +80,9 @@ def check_window(window: int, name: str = "window") -> int:
 # ---------------------------------------------------------------------------
 # Polars bridge: delegate to the pandas_numpy reference for exact parity.
 # ---------------------------------------------------------------------------
-_SKIP_PANEL = frozenset({"date", "stock_code"})
+_SKIP_PANEL = frozenset(
+    {"date", "stock_code", "timestamp", "trade_date", "datetime", "__fe_time__"}
+)
 
 
 def _pl_to_pd(frame: Any) -> pd.DataFrame:

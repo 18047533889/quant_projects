@@ -102,6 +102,29 @@ analyzer._FIN_DAILY_WINDOW_CANONICALS = frozenset(
     }
 )
 
+# WS-D #257: the analyzer must read the SAME history authority as warmup and
+# composite lowering.  Register every canonical in the stateful seed into
+# ``ir.analyzer``'s canonical history-requirement registry, so the analyzer's
+# lookback derives from ``HistoryRequirement`` instead of a name-guessing tuple.
+# The ``FULL_HISTORY_LOOKBACK_SENTINEL`` integer survives ONLY as the
+# serialized-analysis encoding (``analysis.lookback``) for round-trip
+# compatibility; it is not consulted by warmup/chunking anymore.
+from runtime.execution_contract import _STATEFUL_CANONICALS, history_requirement
+
+for _stateful_canon in _STATEFUL_CANONICALS:
+    if _stateful_canon in analyzer._HISTORY_REQUIREMENT_FUNCS:
+        continue
+
+    def _make_history_fn(canon: str):
+        def _history_fn(params):
+            return history_requirement(canon, params).rows
+
+        return _history_fn
+
+    analyzer.register_history_requirement(
+        _stateful_canon, _make_history_fn(_stateful_canon)
+    )
+
 FULL_HISTORY_LOOKBACK_SENTINEL = 1_000_000_000
 analyzer.FULL_HISTORY_LOOKBACK_SENTINEL = FULL_HISTORY_LOOKBACK_SENTINEL
 if not getattr(analyzer.AnalysisResult, "_full_history_init_installed", False):

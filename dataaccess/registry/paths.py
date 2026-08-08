@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import threading
 from pathlib import Path
 from typing import Iterable
 
@@ -151,22 +152,48 @@ def dataset_env_root(dataset_name: str, kind: str) -> str | None:
 
 
 class PathAuthorizer:
-    """按一组允许的根目录做前缀校验；registry 加载时构造一次，store 内部用。"""
+    """按一组允许的根目录做前缀校验；registry 加载时构造一次，store 内部用。
 
-    def __init__(self, allowed_roots: Iterable[Path]) -> None:
-        # canonicalize 后去重，避免重复比较；保留原顺序仅用于错误信息排序
+    #7 生命周期错配修复：PathAuthorizer 现在保存 **unresolved root template**
+    （``${RUN_NAMESPACE}`` 占位符原样保留），``resolve_and_authorize`` 时按
+    **当前 session 的 namespace** 解析。旧实现 store 构造时就把 namespace 烘焙进
+    ``_roots``，长期 worker 换 ``DataAccessSession`` 后数据集路径解析成新
+    namespace，authorizer 却仍只认识旧的——轻则合法路径被拒，重则（白名单配宽时）
+    削弱 namespace 隔离。解析结果按 namespace 缓存（``resolve_namespace()`` 是
+    ContextVar，不同请求不碰撞）。
+    """
+
+    def __init__(self, allowed_roots: Iterable[str | Path]) -> None:
+        # 保存 raw template（string）。canonicalize 延迟到 authorize 时按当前
+        # namespace 做——含占位符的模板此刻无法安全 canonicalize。
+        self._templates: tuple[str, ...] = tuple(str(r) for r in allowed_roots)
+        self._cache: dict[str, tuple[Path, ...]] = {}
+        self._cache_lock = threading.Lock()
+
+    def _effective_roots(self) -> tuple[Path, ...]:
+        """当前 context namespace 下的有效白名单根（带 per-namespace 缓存）。"""
+        from data_access.core.namespace import resolve_namespace
+
+        ns = resolve_namespace()
+        cached = self._cache.get(ns)
+        if cached is not None:
+            return cached
         seen: set[Path] = set()
         roots: list[Path] = []
-        for raw in allowed_roots:
-            resolved = canonicalize(raw)
+        for tpl in self._templates:
+            resolved = canonicalize(resolve_namespace_path(tpl))
             if resolved not in seen:
                 seen.add(resolved)
                 roots.append(resolved)
-        self._roots: tuple[Path, ...] = tuple(roots)
+        out = tuple(roots)
+        with self._cache_lock:
+            self._cache[ns] = out
+        return out
 
     @property
     def allowed_roots(self) -> tuple[Path, ...]:
-        return self._roots
+        """当前 namespace 下已解析的根（错误信息 / 诊断用）。"""
+        return self._effective_roots()
 
     def resolve_and_authorize(self, path: str | Path) -> Path:
         """清洗路径并检查是否落在任一允许根下；不通过则抛 ValidationError。
@@ -174,18 +201,19 @@ class PathAuthorizer:
         返回 canonical 路径（可直接交给 DuckDB/open()）。
         """
         resolved = canonicalize(path)
-        for root in self._roots:
+        for root in self._effective_roots():
             if path_is_under(resolved, root):
                 return resolved
+        roots = self._effective_roots()
         sensitive = os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
         if sensitive:
-            root_hint = f"{len(self._roots)} registered roots"
+            root_hint = f"{len(roots)} registered roots"
             resolved_hint = hashlib.sha256(str(resolved).encode()).hexdigest()[:12]
             raise ValidationError(
                 f"路径越界（canonical path fingerprint={resolved_hint}）；{root_hint}。"
                 "如需新增，请在 data_access/config/datasets.yaml 注册数据集。"
             )
-        roots_hint = "\n  ".join(str(r) for r in self._roots)
+        roots_hint = "\n  ".join(str(r) for r in roots)
         raise ValidationError(
             f"路径越界（不在任何已注册数据集根下）：{resolved}\n"
             f"当前允许的数据根：\n  {roots_hint}\n"

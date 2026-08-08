@@ -147,18 +147,23 @@ _remote_meta_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
 _REMOTE_META_TTL_SECONDS = 30.0
 
 
-def _remote_object_meta(uri: str) -> dict[str, Any] | None:
+def _remote_object_meta(uri: str, *, fresh: bool = False) -> dict[str, Any] | None:
     """s3:// / cos:// 对象头元数据（best-effort，带 TTL memo）。
 
     需要已配置 S3 凭证（``cos.remote.resolve_s3_credentials``）与 boto3。
     失败（无凭证/网络/未装 boto3）返回 None 并 memoize 为 None，**绝不阻塞**
     读路径。对象同 key 被覆盖 → etag/version_id 变化 → snapshot_id 跟着变。
+
+    ``fresh=True``（#P0 收官 0.9.5）：**绕过 TTL 缓存强制重新 HEAD**。ScanHandle
+    collect 前的 snapshot revalidation 用它——collect(t1) 必须拿到 scan(t0) 之后
+    对象的最新身份，不能复用 30s 内的旧 HEAD 而漏掉同 key 覆盖。
     """
     key = str(uri)
     now = time.monotonic()
-    cached = _remote_meta_cache.get(key)
-    if cached is not None and now - cached[0] < _REMOTE_META_TTL_SECONDS:
-        return cached[1]
+    if not fresh:
+        cached = _remote_meta_cache.get(key)
+        if cached is not None and now - cached[0] < _REMOTE_META_TTL_SECONDS:
+            return cached[1]
     try:
         from data_access.cos.remote import cos_uri_to_s3_uri, resolve_s3_credentials
 

@@ -34,6 +34,8 @@ import pandas as pd
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
+_EPS = 1e-12
+
 try:  # H1 Rips persistence kernel from the topology reference module.
     from cleaned_operators.advanced_topology import _rips_h1_pairs, _takens_points
 
@@ -237,9 +239,8 @@ _NEW_CANONICALS = (
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | set(_NEW_CANONICALS)
-    )
+    # R5-50: live extend mutator, never a frozenset reassignment.
+    _surface.extend_extended_only(set(_NEW_CANONICALS))
     for _canon in _NEW_CANONICALS:
         register_polars_bridge(_canon)
 

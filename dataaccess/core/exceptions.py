@@ -113,3 +113,14 @@ class AuditWriteError(DataAccessError):
     任意参与数据集没有成功构建 snapshot → 抛此错，禁止「查询成功但 lineage /
     cache / replay 不可靠」。
     """
+
+
+class CommittedButAuditFailed(AuditWriteError):
+    """#P0 收官（0.9.5）：**数据已提交、仅审计确认失败**。
+
+    与普通 ``AuditWriteError`` 的区别：body 本身**已经成功提交**（candidate →
+    target rename、post-verify 都完成，``ok=True``），只有最后 durable audit 落盘
+    失败。外层的 ``_dataset_mutation`` 必须把这种情形当 **COMMITTED** 处理——
+    仍然 rebuild manifest（数据确实发布了，manifest 必须追平），再单独向上报告
+    审计失败。真正的 mutation failure（body 中途抛错）仍是 ABORTED，绝不 rebuild。
+    """

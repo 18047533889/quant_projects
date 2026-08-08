@@ -19,7 +19,6 @@ from runtime.session_calendar import SessionBarCalendar
 from storage.cache import PersistentPlanCache
 
 logger = get_logger("runtime.warmup_service")
-FULL_HISTORY_LOOKBACK_SENTINEL = 1_000_000_000
 
 
 @dataclass(frozen=True)
@@ -196,14 +195,33 @@ def prepare_run_warmup(
     from runtime.production_policy import ProductionPolicyViolation, is_production_mode
     from storage.trading_calendar import infer_market
 
+    # WS-D #256/#257/#248: the full-history decision and the minimum warm-up
+    # come from the execution-contract authority, not a 1e9 integer sentinel.
+    # ``analysis.requires_full_history`` (set by the analyzer from the
+    # production-hardening set) and the legacy serialized sentinel are both
+    # retained as compatibility inputs, but the authority's combined IR
+    # requirement is what actually drives the replay decision.
+    from runtime.execution_contract import (
+        factor_history_requirement,
+        is_full_history_lookback,
+    )
+
+    factor_requirement = factor_history_requirement(
+        getattr(analysis, "ir", None)
+    )
     requires_full_history = bool(
         getattr(analysis, "requires_full_history", False)
-        or int(getattr(analysis, "lookback", 0)) >= FULL_HISTORY_LOOKBACK_SENTINEL
+        or is_full_history_lookback(getattr(analysis, "lookback", 0))
+        or factor_requirement.is_full_history
     )
     raw_lookback = int(getattr(analysis, "lookback", 0))
     finite_lookback = 0 if requires_full_history else raw_lookback
+    # #248: warmup never hardcodes min_periods=1; the minimum warm-up rows are
+    # the SAME authority the planner/analyzer consult.  effective_lookback adds
+    # the standard lag/extra buffer on top of the larger of (analyzer lookback,
+    # authority minimum rows).
     history_buffer = effective_lookback(
-        finite_lookback,
+        max(finite_lookback, factor_requirement.rows),
         factor_freq=getattr(factor, "freq", None),
         source_bar_freq=source_bar_freq,
     )

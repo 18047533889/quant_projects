@@ -12,7 +12,12 @@ from expr.field import FieldRef
 from expr.literal import Literal
 from ir.nodes import IRNode
 from ir.schema import DEFAULT_COLUMN_SCHEMA, Schema
-from ir.types import semantic_type_of
+from ir.types import (
+    OPERATOR_INPUT_TYPE_CONTRACTS,
+    SemanticLattice,
+    lattice_join_semantic_attrs,
+    semantic_type_of,
+)
 
 _LAG_PARAM_NAMES = {
     "ts_delay": ("n", "d", "lag", "periods", "window"),
@@ -879,6 +884,56 @@ def validate_semantic_kind_contracts(ir: IRNode) -> list[str]:
     return errors
 
 
+class UnknownRawColumnError(ValueError):
+    """A raw ``ColumnRef`` with no registered ``FieldSpec`` in production mode.
+
+    Round-7 WS-C (#273): production formulas must reference catalog fields via
+    ``field(...)``; an unresolvable raw column would otherwise fall back to a
+    generic float panel and silently carry no semantic contract.  Research
+    formulas keep the explicit opt-in (``col(...)`` / default ``production=False``).
+    """
+
+
+def validate_input_type_contracts(ir: IRNode) -> list[str]:
+    """Reject operator calls whose argument violates the typed-input gate.
+
+    Round-7 WS-C (#269-#273): an operator that declares per-parameter
+    ``input_types`` (see ``ir.types.OPERATOR_INPUT_TYPE_CONTRACTS``) rejects an
+    argument whose ``semantic_kind`` is present but not in the declared set —
+    e.g. swapping Volume into a close slot, or Return into a volume slot.
+    Arguments with no declared semantic kind (untyped research columns) pass:
+    the gate cannot prove a mismatch and stays permissive for raw columns.
+    """
+    errors: list[str] = []
+
+    def walk(node: IRNode) -> None:
+        contract = OPERATOR_INPUT_TYPE_CONTRACTS.get(node.op)
+        if contract is not None:
+            for index, arg_contract in enumerate(contract):
+                if index >= len(node.inputs):
+                    break
+                child = node.inputs[index]
+                if child.op in {"literal", "materialized_series", "plan_ref"}:
+                    continue
+                child_kind = (child.semantic_attrs or {}).get("semantic_kind")
+                if child_kind is not None and not arg_contract.accepts(child_kind):
+                    name = str(
+                        (child.attrs or {}).get("name")
+                        or (child.attrs or {}).get("field")
+                        or f"input[{index}]"
+                    )
+                    errors.append(
+                        f"operator {node.op!r} parameter {arg_contract.parameter!r} "
+                        f"declares input_types={sorted(arg_contract.allowed_semantic_kinds)}, "
+                        f"got {child_kind!r} on {name!r} (typed-IR #269)"
+                    )
+        for child in node.inputs:
+            walk(child)
+
+    walk(ir)
+    return errors
+
+
 def validate_fundamental_zero_imputation(ir: IRNode) -> list[str]:
     """Return errors for zero/mean imputation applied to fundamental data.
 
@@ -1041,7 +1096,13 @@ def validate_max_domains(analysis: AnalysisResult, *, max_domains: int = 2) -> l
 class Analyzer:
     """Lower Expr trees to IR and derive deterministic causal history."""
 
-    def lower(self, expr: Expr) -> AnalysisResult:
+    def __init__(self, *, production: bool = False) -> None:
+        # Round-7 WS-C (#273): production mode rejects raw ColumnRefs with no
+        # registered FieldSpec (no generic float-panel fallback).  Research mode
+        # (default) keeps the explicit opt-in.
+        self._production = bool(production)
+
+    def lower(self, expr: Expr, *, production: bool | None = None) -> AnalysisResult:
         columns: set[str] = set()
         referenced_fields: dict[str, Any] = {}
         column_schemas: dict[str, Schema] = {}
@@ -1057,6 +1118,16 @@ class Analyzer:
                 from fields import FIELD_REGISTRY, resolve_field
 
                 spec = resolve_field(node)
+                # Round-7 WS-C (#273): production mode fails closed on an unknown
+                # raw ColumnRef — no generic float-panel fallback.  Research mode
+                # keeps the explicit opt-in.
+                effective_production = self._production if production is None else bool(production)
+                if spec is None and effective_production:
+                    raise UnknownRawColumnError(
+                        f"unknown raw column {node.name!r} has no registered FieldSpec; "
+                        "production formulas must reference catalog fields via "
+                        "field(...) (typed-IR #273)"
+                    )
                 schema = Schema.from_field(spec) if spec is not None else DEFAULT_COLUMN_SCHEMA
                 column_schemas[node.name] = schema
                 if spec is not None:
@@ -1118,11 +1189,10 @@ class Analyzer:
                         semantic["price_basis"] = price_basis
                 # Round-6 P0-50: propagate the field's PIT/availability
                 # coordinate so a factor's root schema can answer
-                # "available_at = max(inputs)" (audit §51).  ``schema`` carries
-                # the explicit knowledge time and the name-based EOD defaults
-                # (close/high/low/vwap/volume/amount -> session_close, P0-13);
-                # for unresolvable raw DSL columns fall back to the same
-                # name-based default directly.
+                # "available_at = max(inputs)" (audit §51).  Round-7 WS-C
+                # (#277): the descriptor comes from FieldSpec.available_at /
+                # knowledge_time_column / role, then an EXACT-name EOD default
+                # (no "pe"/"pb"/"close" substring guessing).
                 if schema.available_at is None:
                     from ir.schema import _available_at_of
 
@@ -1130,19 +1200,32 @@ class Analyzer:
                     semantic["available_at"] = name_default
                 else:
                     semantic["available_at"] = schema.available_at
+                semantic["availability_expr"] = schema.availability_expr
                 semantic["knowledge_model"] = schema.knowledge_model
                 semantic["fiscal_grain"] = schema.fiscal_grain
                 semantic["source_vintage"] = schema.source_vintage
                 semantic["universe_id"] = schema.universe_id
-                if spec is not None:
-                    kind = semantic_type_of(
+                # Round-7 WS-C (#269-#273): semantic-kind resolution order is
+                # (1) FieldSpec.semantic_kind (declared, authoritative),
+                # (2) the mapping helper (price-basis / flow-semantics / exact
+                # name for raw columns), (3) semantic_type_of as a final pass.
+                from fields.spec import semantic_kind_of_field
+
+                kind = semantic_kind_of_field(spec) if spec is not None else None
+                if kind is None:
+                    kind = semantic_kind_of_field(node.name)
+                if kind is None:
+                    typed = semantic_type_of(
                         price_basis=semantic.get("price_basis"),
                         flow_semantics=semantic.get("flow_semantics"),
                         frequency=schema.frequency,
                         domain=schema.domain,
                     )
-                    if kind is not None:
-                        semantic["semantic_kind"] = kind.value
+                    kind = typed.value if typed is not None else None
+                if kind is not None:
+                    semantic["semantic_kind"] = kind
+                if schema.semantic_lattice is not None:
+                    semantic["lattice"] = schema.semantic_lattice
                 return IRNode(op="column", attrs=attrs, semantic_attrs=semantic), 0
             if isinstance(node, Literal):
                 return IRNode(op="literal", attrs={"value": node.value}), 0
@@ -1247,62 +1330,88 @@ class Analyzer:
                 elif signature.output.value == "Series[Datetime]":
                     attrs["dtype"] = "datetime64[ns]"
 
-            # Propagate field-catalog metadata into semantic_attrs (never attrs, to
-            # preserve IR hash stability across DSL / manual-construction paths).
+            # Round-7 WS-C (#265-#268): propagate field-catalog metadata into
+            # semantic_attrs via the SEMANTIC LATTICE join across ALL inputs
+            # (not first-input inheritance).  A dimension with one distinct
+            # value stays scalar; conflicting values are recorded as mixed_.
             semantic: dict[str, Any] = {}
             if inputs:
-                first_sem = inputs[0].semantic_attrs or {}
-                first_col = inputs[0].attrs or {}
-                for key in (
-                    "domain",
-                    "frequency",
-                    "cardinality",
-                    "temporal_model",
-                    "unit",
-                    "price_basis",
-                    "flow_semantics",
-                ):
-                    val = first_sem.get(key) if first_sem.get(key) is not None else first_col.get(key)
-                    if val is not None:
-                        semantic[key] = val
-                semantic["pit_safe"] = all(
-                    child.semantic_attrs.get("pit_safe", (child.attrs or {}).get("pit_safe", True))
-                    for child in inputs
-                )
-                # Round-6 P0-50: ``available_at`` propagates bottom-up as the
-                # LATEST input's knowledge-time descriptor — the factor cannot be
-                # used before its last-arriving input is knowable (audit §51).
-                # knowledge_model / fiscal_grain / source_vintage / universe_id
-                # inherit from the primary (first) input.
+                child_views: list[dict[str, Any]] = []
+                for child in inputs:
+                    view = dict(child.semantic_attrs or {})
+                    if "pit_safe" not in view:
+                        view["pit_safe"] = (child.attrs or {}).get("pit_safe", True)
+                    child_views.append(view)
+                semantic = lattice_join_semantic_attrs(child_views)
+                # knowledge_model / fiscal_grain / universe_id are PIT
+                # descriptors: unambiguous across children -> propagate; else
+                # first non-None + mixed_ marker (no blind input[0] copy).
+                for key in ("knowledge_model", "fiscal_grain", "universe_id"):
+                    values = [
+                        (child.semantic_attrs or {}).get(key)
+                        for child in inputs
+                        if child.op != "literal"
+                    ]
+                    distinct = list(dict.fromkeys(v for v in values if v is not None))
+                    if len(distinct) == 1:
+                        semantic[key] = distinct[0]
+                    elif len(distinct) > 1:
+                        semantic[key] = distinct[0]
+                        semantic[f"mixed_{key}"] = tuple(distinct)
+                # Round-6 P0-50 / WS-C #274-#275: ``available_at`` propagates
+                # bottom-up as the LATEST input's knowledge-time descriptor — the
+                # factor cannot be used before its last-arriving input is knowable
+                # (audit §51).  Literal children carry no availability and are
+                # excluded.  An UNKNOWN input fails closed (result "unknown").
                 from ir.schema import propagate_available_at
 
                 child_availabilities = tuple(
                     (child.semantic_attrs or {}).get("available_at")
                     for child in inputs
+                    if child.op != "literal"
                 )
                 available_at = propagate_available_at(child_availabilities)
                 if available_at is not None:
                     semantic["available_at"] = available_at
-                for key in (
-                    "knowledge_model",
-                    "fiscal_grain",
-                    "source_vintage",
-                    "universe_id",
-                ):
-                    val = first_sem.get(key)
-                    if val is not None:
-                        semantic[key] = val
+                # source_vintage: first non-None structured spec (the Schema's
+                # semantic lattice carries the full join for multi-input trees).
+                vintage_values = [
+                    (child.semantic_attrs or {}).get("source_vintage")
+                    for child in inputs
+                    if child.op != "literal"
+                ]
+                vintage_distinct = list(dict.fromkeys(v for v in vintage_values if v is not None))
+                if len(vintage_distinct) == 1:
+                    semantic["source_vintage"] = vintage_distinct[0]
+                elif len(vintage_distinct) > 1:
+                    semantic["source_vintage"] = vintage_distinct[0]
+                    semantic["mixed_source_vintage"] = tuple(vintage_distinct)
+                # Join the children's semantic lattices into the root.
+                joined_lattice: SemanticLattice | None = None
+                for child in inputs:
+                    child_lattice = (child.semantic_attrs or {}).get("lattice")
+                    if isinstance(child_lattice, SemanticLattice):
+                        joined_lattice = (
+                            child_lattice
+                            if joined_lattice is None
+                            else joined_lattice.join(child_lattice)
+                        )
+                if joined_lattice is not None:
+                    semantic["lattice"] = joined_lattice
             if signature is not None and signature.output_unit and signature.output_unit != "inherit":
                 semantic["unit"] = signature.output_unit
-            # P0-30: derive the typed-IR semantic kind from the propagated attrs.
-            kind = semantic_type_of(
-                price_basis=semantic.get("price_basis"),
-                flow_semantics=semantic.get("flow_semantics"),
-                frequency=semantic.get("frequency"),
-                domain=semantic.get("domain"),
-            )
-            if kind is not None:
-                semantic["semantic_kind"] = kind.value
+            # P0-30 / WS-C: derive the typed-IR semantic kind from the joined
+            # attrs — only when the lattice left the kind unresolved (a
+            # single-kind join already pinned it; a mixed join stays unresolved).
+            if "semantic_kind" not in semantic and "mixed_semantic_kind" not in semantic:
+                kind = semantic_type_of(
+                    price_basis=semantic.get("price_basis"),
+                    flow_semantics=semantic.get("flow_semantics"),
+                    frequency=semantic.get("frequency"),
+                    domain=semantic.get("domain"),
+                )
+                if kind is not None:
+                    semantic["semantic_kind"] = kind.value
 
             return (
                 IRNode(op=canonical, inputs=inputs, attrs=attrs, semantic_attrs=semantic),
@@ -1331,6 +1440,10 @@ class Analyzer:
         semantic_kind_errors = validate_semantic_kind_contracts(ir)
         if semantic_kind_errors:
             raise TypedInputContractError("; ".join(semantic_kind_errors))
+        # Round-7 WS-C (#269): per-parameter typed-input gate (input_types).
+        input_type_errors = validate_input_type_contracts(ir)
+        if input_type_errors:
+            raise TypedInputContractError("; ".join(input_type_errors))
         return AnalysisResult(
             ir=ir,
             lookback=lookback,

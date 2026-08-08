@@ -91,7 +91,31 @@ class Operator(ABC):
         # longer silently ``int(5.9)`` a window that pandas would reject.
         from cleaned_operators.base import validate_operator_call
 
-        return validate_operator_call(self, args, kwargs)
+        processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
+        # WS-B #243/#244: multi-input operators must verify every panel shares
+        # the same PanelIdentity (time axis + instrument axis + grain) before
+        # the kernel runs — a shifted date axis or permuted stock columns fail
+        # loudly.  Only a declared typed broadcast (a formal BroadcastSpec)
+        # relaxes strict identity parity.  #245: strip the bridge-injected
+        # ``__fe_time__`` metadata column after identity verification so
+        # value-column extraction never treats the time axis as a factor feature.
+        from cleaned_operators.base import _TYPED_BROADCAST_TAGS
+        from cleaned_operators.common._polars_bridge import (
+            strip_panel_metadata,
+            verify_frames_share_identity,
+        )
+
+        tags = set(self.metadata.tags or [])
+        allow_broadcast = bool(
+            (tags & _TYPED_BROADCAST_TAGS) or "allow_panel_broadcast" in tags
+        )
+        verify_frames_share_identity(
+            f"operator {self.metadata.name}",
+            *processed_args,
+            allow_broadcast=allow_broadcast,
+        )
+        processed_args = tuple(strip_panel_metadata(a) for a in processed_args)
+        return processed_args, processed_kwargs
 
     def __repr__(self):
         return f"<Operator: {self.metadata.name}>"
@@ -576,7 +600,11 @@ def apply_numba_rank(df: pl.DataFrame, axis: int = 1) -> pl.DataFrame:
 # define their own local ``_SKIP_PANEL`` / ``_SKIP`` copy — replacing them is
 # tracked separately (P1-17) so this shared constant is the canonical source for
 # new code.  ``_SKIP_PANEL`` remains as a backward-compatible alias.
-PANEL_SKIP_COLUMNS = frozenset({"date", "stock_code"})
+# WS-B #245: ``__fe_time__`` is the reserved bridge-injected time-axis column
+# and is a metadata column, never a factor feature.
+PANEL_SKIP_COLUMNS = frozenset(
+    {"date", "stock_code", "timestamp", "trade_date", "datetime", "__fe_time__"}
+)
 _SKIP_PANEL = PANEL_SKIP_COLUMNS
 
 

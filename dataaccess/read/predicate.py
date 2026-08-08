@@ -47,6 +47,7 @@ def strict_sequence(
     element_type: type = str,
     allow_none: bool = True,
     allow_empty: bool = True,
+    ordered: bool = False,
 ) -> tuple | None:
     """#P0-C12 严格序列解析（DataRequest / SemanticField 共用）。
 
@@ -54,9 +55,16 @@ def strict_sequence(
     semantic inversion）；非序列容器 → ValidationError；元素类型不对 → 立即
     ValidationError（不再静默 str() 化非法对象 / 返回空 tuple 丢语义）。
 
+    #7 拆规则（set/dict/generator 之前会被 ``tuple(value)`` 吞掉）：
+        - ``ordered=True``（fields / order_by / revision_order / primary_key，
+          顺序是语义）：只接受 list/tuple；set/frozenset/dict/generator 拒绝。
+        - ``ordered=False``（instruments 等成员语义）：set/frozenset 接受，但转成
+          deterministic canonical 排序（repr key），不再依赖 set 迭代序；
+          dict/generator 拒绝。
+
     - None → None（``allow_none=True``）或 ()（``allow_none=False``）
     - str/bytes → ValidationError
-    - list/tuple/set/frozenset/生成器 → tuple，逐元素校验 ``element_type``
+    - 其余 → tuple，逐元素校验 ``element_type``
     """
     if value is None:
         return None if allow_none else ()
@@ -65,12 +73,27 @@ def strict_sequence(
             f"{name} 必须是序列（list/tuple/set），收到 str/bytes {value!r}。"
             "裸字符串会被误当成字符序列逐项拆开。"
         )
-    try:
-        items = tuple(value)
-    except TypeError:
+    if ordered:
+        if not isinstance(value, (list, tuple)):
+            raise ValidationError(
+                f"{name} 必须是 list/tuple（顺序是语义），"
+                f"收到 {type(value).__name__} {value!r}；set/dict/generator 会丢顺序"
+            )
+        items = value
+    elif isinstance(value, dict):
         raise ValidationError(
-            f"{name} 必须是序列（list/tuple/set），收到 {type(value).__name__} {value!r}"
+            f"{name} 不接受 mapping/dict（会退化成键列表），收到 {value!r}"
         )
+    elif isinstance(value, (set, frozenset)):
+        # 成员语义：set 可以，但转 deterministic canonical order（repr key）。
+        items = sorted(value, key=repr)
+    else:
+        try:
+            items = tuple(value)
+        except TypeError:
+            raise ValidationError(
+                f"{name} 必须是序列（list/tuple/set），收到 {type(value).__name__} {value!r}"
+            )
     if not allow_empty and not items:
         raise ValidationError(f"{name} 不能为空序列")
     for item in items:
@@ -79,7 +102,7 @@ def strict_sequence(
                 f"{name} 的元素必须是 {element_type.__name__}，"
                 f"收到 {type(item).__name__} {item!r}"
             )
-    return items
+    return tuple(items)
 
 
 def _normalize_time_range(value: Any) -> Any:
@@ -162,6 +185,30 @@ class CompiledPredicate:
     params: list[Any] = field(default_factory=list)
 
 
+def expand_end_bound(
+    end: Any, *, time_column_is_timestamp: bool
+) -> tuple[Any, str]:
+    """#27B 收官轮：timestamp 时间列上 date-only end 必须包含**完整一天**。
+
+    对 timestamp 时间列，日期型 end 应包含整天——**`< next_day`**（严格小于次日
+    零点），而不是旧 ``<= next_day - 1µs``。nanosecond timestamp 会漏掉当天最后
+    999ns 范围的数据；``< next_day`` 对任意时间精度都包含完整一天。只对「午夜/
+    纯日期」值展开，带时间的值原样保留（``<=``）。DuckDB 与 Polars 两条读取路径
+    共用同一语义——三 backend 结果必须一致。
+
+    返回 ``(bound_value, hi_op)``。
+    """
+    if not time_column_is_timestamp:
+        return end, "<="
+    try:
+        ts = pd.Timestamp(end)
+        if ts == ts.normalize():
+            return ts + pd.Timedelta(days=1), "<"
+    except (ValueError, TypeError):
+        pass
+    return end, "<="
+
+
 def compile_predicate(
     predicate: Predicate,
     *,
@@ -196,21 +243,11 @@ def compile_predicate(
             clauses.append(f"{t_col} {lo_op} ?")
             params.append(start)
         if end is not None:
-            end_value = end
-            hi_op = "<" if predicate.time_upper_exclusive else "<="
-            if predicate.time_column_is_timestamp:
-                # 对 timestamp 时间列，日期型 end 应包含整天。
-                # #P1-final closure 16：date-only end → **`< next_day`**（严格小于
-                # 次日零点），而不是旧 `<= next_day - 1µs`。nanosecond timestamp
-                # 会漏掉当天最后 999ns 范围的数据；`< next_day` 对任意时间精度
-                # 都包含完整一天。只对"午夜/纯日期"值展开，带时间的值原样保留。
-                try:
-                    ts = pd.Timestamp(end)
-                    if ts == ts.normalize():
-                        end_value = ts + pd.Timedelta(days=1)
-                        hi_op = "<"
-                except (ValueError, TypeError):
-                    end_value = end
+            end_value, hi_op = expand_end_bound(
+                end, time_column_is_timestamp=predicate.time_column_is_timestamp
+            )
+            if predicate.time_upper_exclusive:
+                hi_op = "<"
             clauses.append(f"{t_col} {hi_op} ?")
             params.append(end_value)
 

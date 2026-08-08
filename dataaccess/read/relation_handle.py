@@ -118,6 +118,10 @@ class RelationHandle:
 
         if is_strict_semantics():
             sql_escape.validate_sql_sandbox(sql)
+        # #34 收官轮：RelationHandle 只能引用 ``_sub``（当前句柄作为数据源）。
+        # 数据源边界与 strict 无关——research 也不能 JOIN 未声明的表（读取的数据
+        # 不在 snapshot/lineage 里，治理与追溯同时失效）。
+        sql_escape.assert_sql_from_scope(sql, allowed=("_sub",))
 
     # ---- 追加表达式 ----
 

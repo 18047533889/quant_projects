@@ -388,14 +388,12 @@ class TsBettiCrockerBifurcationScore(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {
-            "ts_wavelet_lowpass_reconstruct",
-            "ts_signature_mahalanobis_anomaly",
-            "ts_persistence_birth_dispersion",
-        }
-    )
+    # R5-50: live extend mutator, never a frozenset reassignment.
+    _surface.extend_research_only({
+        "ts_wavelet_lowpass_reconstruct",
+        "ts_signature_mahalanobis_anomaly",
+        "ts_persistence_birth_dispersion",
+    })
     from cleaned_operators.registry import OperatorRegistry
 
     # P1-010: renamed to the honest _dispersion name; old name stays as an alias.

@@ -3,20 +3,40 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 
 from backend.plan_params import PlanParamError, parse_positive_int_literal
 from planner.logical_plan import PlanNode
 
 
+class MissingWindowPolicy(Enum):
+    """窗口内缺失值（NaN/SQL NULL）的参与策略（#359）。
+
+    * ``PROPAGATE`` — 缺失值参与传播（SQL ``RESPECT NULLS`` 语义）
+    * ``IGNORE`` — 忽略缺失值（SQL ``IGNORE NULLS`` 语义）
+    * ``ZERO`` — 缺失值按 0 参与聚合
+    """
+
+    PROPAGATE = "propagate"
+    IGNORE = "ignore"
+    ZERO = "zero"
+
+
 @dataclass(frozen=True)
 class WindowSpec:
-    """滚动窗口契约（第一阶段 rolling primitive 统一入口）。"""
+    """滚动窗口契约（第一阶段 rolling primitive 统一入口）。
+
+    ``nan_policy``（#360）决定 NaN/SQL NULL 在窗口内如何参与聚合：
+    ``propagate``（RESPECT NULLS）、``ignore``（IGNORE NULLS）、``zero``。
+    SQL emitter 依据该字段映射 ``IGNORE NULLS`` / ``RESPECT NULLS`` 语义。
+    """
 
     size: int
     min_periods: int = 1
     closed: str = "right"
     ddof: int = 1
-    null_policy: str = "skip"
+    null_policy: MissingWindowPolicy = MissingWindowPolicy.IGNORE
+    nan_policy: str = "propagate"
 
     def __post_init__(self) -> None:
         if self.size <= 0:
@@ -29,10 +49,30 @@ class WindowSpec:
             )
         if self.closed not in {"right", "left", "both", "neither"}:
             raise PlanParamError(f"window.closed 非法: {self.closed!r}")
-        if self.ddof < 0:
-            raise PlanParamError(f"window.ddof 不能为负: {self.ddof}")
-        if self.null_policy not in {"skip", "propagate", "zero"}:
-            raise PlanParamError(f"window.null_policy 非法: {self.null_policy!r}")
+        # #361：SQL 只实现 population/sample 两档（ddof ∈ {0, 1}），
+        # 别假装支持任意 ddof。
+        if self.ddof not in {0, 1}:
+            raise PlanParamError(f"window.ddof 仅支持 0 或 1，收到 {self.ddof}")
+        # #359：null_policy 统一为 MissingWindowPolicy 枚举。字符串只在 parser
+        # 边界映射：``"skip"`` 是旧外部别名 → IGNORE。
+        np = self.null_policy
+        if isinstance(np, str):
+            if np == "skip":
+                np = MissingWindowPolicy.IGNORE
+            elif np == "ignore":
+                np = MissingWindowPolicy.IGNORE
+            elif np == "propagate":
+                np = MissingWindowPolicy.PROPAGATE
+            elif np == "zero":
+                np = MissingWindowPolicy.ZERO
+            else:
+                raise PlanParamError(f"window.null_policy 非法: {np!r}")
+        elif not isinstance(np, MissingWindowPolicy):
+            raise PlanParamError(f"window.null_policy 非法: {np!r}")
+        object.__setattr__(self, "null_policy", np)
+        # #360：nan_policy 合法集 {propagate, ignore, zero}。
+        if self.nan_policy not in {"propagate", "ignore", "zero"}:
+            raise PlanParamError(f"window.nan_policy 非法: {self.nan_policy!r}")
 
     @classmethod
     def from_plan_node(
@@ -84,10 +124,12 @@ class WindowSpec:
 
         closed = str(attrs.get("closed", "right"))
         null_policy = str(attrs.get("null_policy", "skip"))
+        nan_policy = str(attrs.get("nan_policy", "propagate"))
         return cls(
             size=size,
             min_periods=min_periods,
             closed=closed,
             ddof=ddof,
             null_policy=null_policy,
+            nan_policy=nan_policy,
         )

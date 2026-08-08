@@ -87,6 +87,37 @@ def _window_from_attrs(op: str, attrs: dict[str, Any]) -> int | None:
     return None
 
 
+def _window_from_literals(node: PlanNode) -> int | None:
+    """从 positional literal child inputs 解析 window/lag 参数。
+
+    ``ts_mean(close, 20)`` 的 20 是 ``op=="literal"`` 的 child input 而非 attrs
+    （见 ``planner/lowerings/_helpers.py`` 的 ``ts_mean``/``ts_delay`` 等），因此
+    ``_window_from_attrs`` 会漏掉窗口值。本函数遍历 ``node.inputs[1:]``，跳过
+    column / materialized_series / plan_ref 等非 literal 子节点，取第一个
+    ``op=="literal"`` 子节点作为窗口值；对 ``ts_delay``/``delay``/``ts_delta``
+    该 literal 即 lag（同一解析逻辑）。
+
+    参数：
+        node: 候选 rolling 计划节点
+
+    返回：
+        整数窗口/lag；非 rolling 算子或无法解析时返回 ``None``
+    """
+    if node.op not in ROLLING_OPS:
+        return None
+    for child in node.inputs[1:]:
+        if getattr(child, "op", None) != "literal":
+            continue
+        value = (child.attrs or {}).get("value")
+        if value is None:
+            continue
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
 def rolling_entry_from_node(structural_id: str, node: PlanNode) -> RollingCacheEntry | None:
     """从计划节点构造 rolling 缓存摘要条目。
 

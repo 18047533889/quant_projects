@@ -35,6 +35,7 @@ data_access.read.temporal_join —— 语义级时间 join 规格（TemporalJoin
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -208,6 +209,10 @@ def _tuple_of(value: Any) -> tuple[str, ...]:
     原来 int/float/bool/dict 等非法输入会静默变成空 tuple——revision_order=2026
     直接丢掉语义还不报错。现在统一抛 ValidationError，与 Semantic YAML 的
     严格解析方向一致。
+
+    #7 只接受 list/tuple（ordered sequence）：``revision_order`` / ``primary_key``
+    的顺序是业务语义，set/frozenset 的迭代序不确定、dict 退化成键列表、generator
+    一次性消费——全部拒绝。
     """
     if value is None:
         return ()
@@ -226,7 +231,8 @@ def _tuple_of(value: Any) -> tuple[str, ...]:
                 out.append(v)
         return tuple(out)
     raise ValidationError(
-        f"列名序列必须是字符串/列表/元组，收到 {type(value).__name__}: {value!r}"
+        f"列名序列必须是字符串/列表/元组（set/dict/generator 会丢顺序），"
+        f"收到 {type(value).__name__}: {value!r}"
     )
 
 
@@ -267,12 +273,54 @@ def _str_or_none(value: Any) -> str | None:
     return text or None
 
 
+def _strict_latency(value: Any) -> int | None:
+    """#7 latency 严格解析：只接受非 bool int / exact integer 字符串。
+
+    旧代码 ``latency = int(latency)`` 把 ``1.9`` 静默截断成 ``1``——programmatic
+    API（``TemporalJoinSpec.__post_init__`` 要求真 int）与 YAML API 对同一契约
+    语义不一致。现在 ``1.9`` / ``"1.9"`` 全部拒绝；字符串只允许 ``"1"`` 这类
+    exact integer representation（``[+-]?\\d+``，无小数/指数）。
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValidationError(
+            f"availability_latency 必须是整数，收到 {value!r}（bool 不是合法 latency）"
+        )
+    if isinstance(value, int):
+        if value < 0:
+            raise ValidationError(f"availability_latency 不能为负数，收到 {value}")
+        return value
+    if isinstance(value, str):
+        s = value.strip()
+        if re.fullmatch(r"[+-]?\d+", s):
+            n = int(s)
+            if n < 0:
+                raise ValidationError(
+                    f"availability_latency 不能为负数，收到 {s!r}"
+                )
+            return n
+    raise ValidationError(
+        f"availability_latency 必须是整数（或 exact integer 字符串），"
+        f"收到 {value!r}"
+    )
+
+
 def _period_values_of(value: Any) -> tuple[Any, ...]:
-    """exact_period 的目标 period 值（保留原始类型，日期不要 stringify）。"""
+    """exact_period 的目标 period 值（保留原始类型，日期不要 stringify）。
+
+    #7 set → canonical 排序（成员语义，顺序无关但指纹需确定性），dict/generator 拒绝。
+    """
     if value is None:
         return ()
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, set):
+        return tuple(sorted(value, key=repr))
+    if isinstance(value, (list, tuple)):
         return tuple(value)
+    if isinstance(value, dict):
+        raise ValidationError(
+            f"period_values 不接受 mapping/dict，收到 {value!r}"
+        )
     return (value,)
 
 
@@ -379,22 +427,7 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
             f"period_selection 必须是 {sorted(_VALID_PERIOD_SELECTIONS)}，"
             f"收到 {period_selection!r}"
         )
-    latency = raw.get("availability_latency")
-    if latency is not None:
-        if isinstance(latency, bool):
-            raise ValidationError(
-                f"availability_latency 必须是整数，收到 {latency!r}（bool 不是合法 latency）"
-            )
-        try:
-            latency = int(latency)
-        except (ValueError, TypeError):
-            raise ValidationError(
-                f"availability_latency 必须是整数，收到 {latency!r}"
-            )
-        if latency < 0:
-            raise ValidationError(
-                f"availability_latency 不能为负数，收到 {latency}"
-            )
+    latency = _strict_latency(raw.get("availability_latency"))
     return TemporalJoinSpec(
         policy=policy,
         decision_time=_str_or_none(raw.get("decision_time")),

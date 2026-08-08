@@ -20,6 +20,27 @@ import pandas as pd
 
 from backend.operator_errors import OperatorParameterError
 
+class _MissingDefaultType:
+    """Sentinel: ``ParamSpec.default`` was NOT declared (vs explicitly None)."""
+
+    _instance: "_MissingDefaultType | None" = None
+
+    def __new__(cls) -> "_MissingDefaultType":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:  # pragma: no cover - cosmetic
+        return "MISSING"
+
+
+# R7-222: ``ParamSpec.default = MISSING`` distinguishes "no default declared"
+# from an explicitly-declared ``None`` default.  All default checks must test
+# ``spec.default is MISSING``, never ``spec.default is None`` (an explicit None
+# default is a legitimate contract, e.g. ``center=None`` in a z-score).
+MISSING = _MissingDefaultType()
+
+
 _INTEGER_PARAM_NAMES = frozenset(
     {
         # legacy core names
@@ -102,8 +123,9 @@ class ParamSpec:
     # enforcement — an INACTIVE parameter (its controller is not in the allowed
     # values) must be unprovided or exactly equal to this default, otherwise the
     # call is rejected (a dead knob that silently changes nothing must not create
-    # a second AST).
-    default: Any = None
+    # a second AST).  ``MISSING`` (the sentinel) means "no default declared";
+    # ``None`` is a legitimate declared default.
+    default: Any = MISSING
 
 
 # R6-24 (RelationalParamSpec): cross-parameter feasibility constraints that
@@ -232,6 +254,21 @@ class OperatorMetadata:
     # ``input_fields`` from ``scalar_parameters`` instead of listing ``window`` /
     # ``lag`` as data fields.
     panel_params: tuple[str, ...] = ()
+    # R7-224: explicit panel-input arity, distinct from total positional arity.
+    # ``panel_arity`` counts ONLY the panel/Series arguments (``ts_corr(x, y,
+    # window)`` -> 2); ``total_positional_arity`` counts every positional
+    # argument INCLUDING scalar params (``ts_corr(x, y, window)`` -> 3).  When
+    # ``total_positional_arity`` is set it replaces ``input_arity`` in the
+    # extra-positional gate; when only ``panel_arity`` is set, ``scalar_params``
+    # provides the count of trailing scalar slots.  ``None`` = kernel-implied
+    # (legacy inference from param_names/defaults).
+    panel_arity: int | None = None
+    total_positional_arity: int | None = None
+    # R7-224: declared scalar (non-panel) parameter names — the complement of
+    # ``panel_params`` within ``param_names``.  Used to derive
+    # ``total_positional_arity = len(panel_params) + len(scalar_params)`` when
+    # the explicit arity fields are not set.
+    scalar_params: tuple[str, ...] = ()
 
 
 def _normalise_integer(
@@ -246,14 +283,24 @@ def _normalise_integer(
     ``OperatorMetadata.param_types``, then the legacy name whitelist.  A spec
     may also carry ``min``/``max``/``choices`` that are enforced regardless of
     dtype.
+
+    R7-219: a spec is the sole authority for bounds.  ``ParamSpec(dtype=int)``
+    with ``min=None`` means *truly unbounded* (``-1``, ``0`` and ``1`` are all
+    legal), NOT "fall back to the legacy ≥1 lower bound".  The name-whitelist
+    lower bound applies only when there is NO spec at all — i.e. only legacy
+    operators without a declared contract use the name heuristic.
     """
     lower_default = 0 if name in _NONNEGATIVE_INTEGER_PARAMS else 1
-    lower = spec.min if spec is not None and spec.min is not None else lower_default
-    upper = spec.max if spec is not None and spec.max is not None else None
+    if spec is not None:
+        lower = spec.min  # None => unbounded (declaration is authoritative)
+        upper = spec.max  # None => unbounded
+    else:
+        lower = lower_default
+        upper = None
     choices = spec.choices if spec is not None and spec.choices else None
 
     def _check_int(result: int) -> int:
-        if result < lower:
+        if lower is not None and result < lower:
             raise OperatorParameterError(f"{name} must be >= {lower}")
         if upper is not None and result > upper:
             raise OperatorParameterError(f"{name} must be <= {upper}")
@@ -263,9 +310,13 @@ def _normalise_integer(
             )
         return result
 
-    is_int_declared = declared_type is int or (
-        spec is not None and spec.dtype is int
-    )
+    # R7-220: every declared ``ParamSpec`` — int/float/bool/str/choices — routes
+    # through the single strict validator below.  Only operators WITHOUT a spec
+    # keep the legacy name-whitelist / ``param_types`` heuristics.
+    if spec is not None and spec.dtype is not None:
+        return _validate_param_spec(value, name, spec, lower, upper)
+
+    is_int_declared = declared_type is int
     if is_int_declared:
         # Authoritative source: a param declared int is validated regardless of
         # its name, so `int(5.9) -> 5` can never slip through (review P0-06 / R4-01).
@@ -323,6 +374,95 @@ def _normalise_integer(
     if not np.isfinite(float(value)) or float(value) != float(int(value)):
         raise OperatorParameterError(f"{name} must be an integer")
     return _check_int(int(value))
+
+
+def _validate_param_spec(
+    value: Any,
+    name: str,
+    spec: ParamSpec,
+    lower: Any,
+    upper: Any,
+) -> Any:
+    """Single strict entry point for a declared ``ParamSpec`` (R7-220).
+
+    Every declared dtype is enforced here — including ``bool`` (``type(x) is
+    bool``, never a truthy int) and ``str`` — instead of each caller branch
+    re-implementing its own acceptance rules.  ``int`` accepts ``Integral`` but
+    not ``bool``; ``float`` accepts ``Real`` but not ``bool`` and must be
+    finite; ``choices`` requires exact membership.
+    """
+    dtype = spec.dtype
+    choices = spec.choices
+    # R7-222: an explicitly-declared ``None`` default (``default=None``, NOT
+    # ``MISSING``) makes ``None`` a legal value regardless of dtype — e.g.
+    # ``center=None`` (no centering) in a z-score.  Without this, the strict
+    # type gate would reject the very value the contract declares as default.
+    if value is None and spec.default is None:
+        return value
+    if dtype is bool:
+        # Strict: ``type(value) is bool`` — a truthy ``1``/``1.0`` is a contract
+        # violation, not a usable boolean.
+        if type(value) is not bool:
+            raise OperatorParameterError(
+                f"{name} must be a boolean, not {type(value).__name__} ({value!r})"
+            )
+        return value
+    if dtype is str:
+        if not isinstance(value, str):
+            raise OperatorParameterError(
+                f"{name} must be a string, not {type(value).__name__} ({value!r})"
+            )
+        if choices is not None and value not in choices:
+            raise OperatorParameterError(
+                f"{name}={value!r} is not an allowed choice {list(choices)}"
+            )
+        return value
+    if dtype is int:
+        if isinstance(value, (bool, np.bool_)):
+            raise OperatorParameterError(f"{name} must be an integer, not bool")
+        if not isinstance(value, (int, float, np.integer, np.floating)):
+            raise OperatorParameterError(
+                f"{name} must be an integer, not {type(value).__name__} ({value!r})"
+            )
+        if not np.isfinite(float(value)) or float(value) != float(int(value)):
+            raise OperatorParameterError(f"{name} must be an integer")
+        result = int(value)
+        if lower is not None and result < lower:
+            raise OperatorParameterError(f"{name} must be >= {lower}")
+        if upper is not None and result > upper:
+            raise OperatorParameterError(f"{name} must be <= {upper}")
+        if choices is not None and result not in choices:
+            raise OperatorParameterError(
+                f"{name}={result} is not an allowed choice {list(choices)}"
+            )
+        return result
+    if dtype is float:
+        if isinstance(value, (bool, np.bool_)):
+            raise OperatorParameterError(f"{name} must be a real number, not bool")
+        if not isinstance(value, (int, float, np.integer, np.floating)):
+            raise OperatorParameterError(
+                f"{name} must be a real number, not {type(value).__name__} ({value!r})"
+            )
+        numeric = float(value)
+        if not np.isfinite(numeric):
+            raise OperatorParameterError(f"{name} must be finite")
+        if lower is not None and numeric < lower:
+            raise OperatorParameterError(f"{name} must be >= {lower}")
+        if upper is not None and numeric > upper:
+            raise OperatorParameterError(f"{name} must be <= {upper}")
+        if choices is not None and numeric not in choices:
+            raise OperatorParameterError(
+                f"{name}={numeric} is not an allowed choice {list(choices)}"
+            )
+        return value
+    # No recognized dtype: if choices are declared, require exact membership.
+    if choices is not None:
+        if value not in choices:
+            raise OperatorParameterError(
+                f"{name}={value!r} is not an allowed choice {list(choices)}"
+            )
+        return value
+    return value
 
 
 # review #5 R5-06 / round-7 P0: legacy keyword aliases that kernels read for the
@@ -443,10 +583,14 @@ def _enforce_active_when(
         if pname not in bound:
             continue
         provided = bound[pname]
-        canonical_default = (
-            spec.default if spec.default is not None else defaults.get(pname)
-        )
-        if canonical_default is not None and provided == canonical_default:
+        # R7-222: ``MISSING`` = no default declared -> fall back to the kernel
+        # signature default; an explicit ``None`` default is a real default that
+        # an inactive parameter may legitimately be pinned to.
+        if spec.default is not MISSING:
+            canonical_default = spec.default
+        else:
+            canonical_default = defaults.get(pname, MISSING)
+        if provided == canonical_default:
             continue
         raise OperatorParameterError(
             f"{metadata.name}: parameter {pname!r} is inactive when "
@@ -490,7 +634,18 @@ def _normalise_call(
     # so a zero-param op with a ``*args`` kernel cannot silently swallow extra
     # panels.
     if not variadic:
-        declared_arity = getattr(metadata, "input_arity", None)
+        # R7-224: total positional arity is the panel arity + scalar params.  An
+        # explicit ``total_positional_arity`` wins; then ``input_arity`` (the
+        # round-7 panel-input count); then panel_params + scalar_params when both
+        # are declared; then the legacy ``len(param_names)``.
+        declared_arity = getattr(metadata, "total_positional_arity", None)
+        if declared_arity is None:
+            declared_arity = getattr(metadata, "input_arity", None)
+        if declared_arity is None:
+            _pp = getattr(metadata, "panel_params", None) or ()
+            _sp = getattr(metadata, "scalar_params", None) or ()
+            if _pp or _sp:
+                declared_arity = len(_pp) + len(_sp)
         if declared_arity is not None:
             if len(args) != int(declared_arity):
                 raise OperatorParameterError(
@@ -512,25 +667,53 @@ def _normalise_call(
         )
         for index, value in enumerate(args)
     ]
+    # R7-223: alias -> canonical param-name map.  A keyword given under an alias
+    # spelling is validated against the CANONICAL target's ParamSpec/type/bounds
+    # — never the alias's own (usually empty) spec — so ``d=5`` on an operator
+    # whose canonical ``window`` is declared ``ParamSpec(dtype=int, min=2)`` is
+    # validated as ``window=5``.  ``metadata.param_aliases`` (explicit
+    # declarations) wins over the legacy kernel-alias table.
+    explicit_aliases = getattr(metadata, "param_aliases", None) or {}
+    alias_target: dict[str, str] = {}
+    for key in list(kwargs.keys()):
+        if key in explicit_aliases:
+            target = explicit_aliases[key]
+            if target not in names:
+                raise OperatorParameterError(
+                    f"{metadata.name}: alias {key!r} -> {target!r}, but {target!r} "
+                    "is not a declared parameter (R7-223); the alias must point at "
+                    "a canonical param_names entry"
+                )
+            alias_target[key] = target
+        elif key in _LEGACY_KERNEL_ALIASES and not variadic:
+            targets = _LEGACY_KERNEL_ALIASES[key]
+            matched = [t for t in targets if t in names or t in aliases]
+            if matched:
+                # Prefer the first declared canonical target, mirroring the
+                # kernel's own lookup order.
+                alias_target[key] = matched[0]
     processed_kwargs: dict[str, Any] = {}
     for key, value in kwargs.items():
-        if key in names or key in aliases:
+        if key in names:
             processed_kwargs[key] = _normalise_integer(
                 value, key, types.get(key), specs.get(key)
             )
             continue
-        if not variadic and key in _LEGACY_KERNEL_ALIASES:
-            # round-7 P0: a legacy alias is only accepted when the operator
-            # declares the canonical parameter it is a synonym for.  ``window=``
-            # stays legal for a ``window``-declaring kernel; ``alpha=`` on an op
-            # with no alpha/halflife/lambda_param parameter is rejected instead
-            # of silently swallowed by ``**_``.
-            targets = _LEGACY_KERNEL_ALIASES[key]
-            if any(t in names or t in aliases for t in targets):
-                processed_kwargs[key] = _normalise_integer(
-                    value, key, types.get(key), specs.get(key)
-                )
-                continue
+        if key in alias_target:
+            # R7-223: validate against the canonical target's contract.
+            canon = alias_target[key]
+            processed_kwargs[key] = _normalise_integer(
+                value, canon, types.get(canon), specs.get(canon)
+            )
+            continue
+        if key in aliases:
+            # Legacy alias declared without a param_aliases entry but present in
+            # the alias set: keep the alias spelling as the kwarg key but validate
+            # against the (empty) alias slot — accepted for backward compat.
+            processed_kwargs[key] = _normalise_integer(
+                value, key, types.get(key), specs.get(key)
+            )
+            continue
         if variadic:
             processed_kwargs[key] = _normalise_integer(
                 value, key, types.get(key), specs.get(key)

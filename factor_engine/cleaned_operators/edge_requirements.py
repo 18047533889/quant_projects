@@ -2,20 +2,39 @@
 """Operator-specific IEEE edge evidence requirements.
 
 This module does not manufacture certification. It reports which production
-operators still lack required NaN/Inf evidence so routing can remain fail-closed.
+operators still lack required NaN/Inf/zero/domain edge evidence so routing can
+remain fail-closed.
 
 review #5 R5-15: the previous gate was a *vacuous pass* — an operator with no
 declared required edge dimensions returned ``production_edge_evidence_complete
 == True`` ("nothing required, therefore passed") without anyone deciding it is
 edge-insensitive.  The gate now exposes an explicit tri-state
-(:func:`edge_evidence_status`) — ``complete`` / ``incomplete`` / ``undeclared``
-— and a strict mode (:data:`edge_gate_strict`) under which an undeclared
-operator does NOT pass.  ``NAN_REQUIRED`` and ``INF_REQUIRED`` are now genuinely
-independent sets instead of the same frozenset.
+(:func:`edge_evidence_status`) — ``complete`` / ``incomplete`` / ``undeclared``.
+
+review #250: production has NO vacuous pass for undeclared operators.  The
+runtime ``edge_gate_strict`` flag is gone; in its place ``EdgeGateMode``
+distinguishes *production* (undeclared == FAIL) from *research* (undeclared ==
+warning only).  ``production_edge_evidence_complete`` defaults to production
+mode so every production certification path fails closed until an operator is
+declared (legacy required set or EDGE_IMMUNE) AND its edge evidence is complete.
+
+review #251: :class:`EdgeContract` is the declarative edge contract.  The
+legacy ``NAN_REQUIRED`` / ``INF_REQUIRED`` membership is treated as the declared
+behavior (``nan="propagate"`` / ``pos_inf=neg_inf="propagate"``) and
+``EDGE_IMMUNE`` as ``ignore`` for every dimension.  Certification reads the
+contract instead of a growing manual list.
+
+review #252: edge evidence is backend-specific.  Evidence is keyed
+``{"edge_evidence": {"pandas_numpy": {...}, "polars": {...}, "duckdb": {...}}}``
+and every gate accepts a ``backend`` parameter (default ``"duckdb"`` for
+backward compatibility with the legacy flat ``duckdb_nan_edge_verified`` /
+``duckdb_inf_edge_verified`` lists).
 """
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, fields
+from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
@@ -45,18 +64,79 @@ INF_REQUIRED = frozenset({
 # Operators explicitly declared edge-insensitive: they only move/reshape values
 # or compare booleans and cannot turn NaN/Inf into a wrong finite output, so no
 # edge evidence is required.  Anything NOT here (and not in the required sets)
-# is *undeclared* — a fail-closed state under strict mode, never a pass.
+# is *undeclared* — a fail-closed state under production mode, never a pass.
 EDGE_IMMUNE = frozenset({
     "reindex", "shift_forward", "alias", "identity", "first_not_null",
     "last_not_null", "cum_sum", "cum_prod", "cum_max", "cum_min",
 })
 
-# R5-15: strict gate — when True, an operator with undeclared edge requirements
-# does NOT count as edge-verified (no vacuous pass).  Production certification
-# should run with this enabled and resolve every undeclared operator into either
-# a required set (with evidence) or EDGE_IMMUNE.  Default is False to keep the
-# existing catalog surface operational until the evidence is regenerated.
-edge_gate_strict: bool = False
+# The edge dimensions a contract can declare.  Ordering is the canonical order.
+EDGE_DIMENSIONS = ("nan", "pos_inf", "neg_inf", "zero", "domain_invalid")
+
+# Valid declared behaviors per dimension.
+EDGE_BEHAVIORS = ("propagate", "ignore", "break", "invalid")
+
+
+class EdgeGateMode(Enum):
+    """Distinguish production from research edge gating.
+
+    * ``PRODUCTION`` — an undeclared operator FAILS the edge gate (no vacuous
+      pass).  This is the default for :func:`production_edge_evidence_complete`.
+    * ``RESEARCH`` — an undeclared operator is a warning only (still
+      ``undeclared`` in :func:`edge_evidence_status`, but the gate does not
+      fail on it).
+    """
+
+    PRODUCTION = "production"
+    RESEARCH = "research"
+
+
+@dataclass(frozen=True)
+class EdgeContract:
+    """Declared IEEE edge behavior for one operator.
+
+    Each dimension is one of ``EDGE_BEHAVIORS``:
+
+    * ``propagate`` — NaN/Inf/zero/domain-invalid input must propagate to the
+      output; evidence must verify the propagated value is produced.
+    * ``ignore`` — the operator is edge-insensitive for this dimension
+      (EDGE_IMMUNE); no evidence required.
+    * ``break`` — the operator raises / returns invalid on this input; evidence
+      must verify the fail behavior.
+    * ``invalid`` — the dimension is not part of the operator's domain
+      (undeclared for that dimension).
+
+    A contract with every dimension ``invalid`` is *undeclared*
+    (:attr:`declared` is False) and fails closed under
+    :data:`EdgeGateMode.PRODUCTION`.
+    """
+
+    nan: str = "invalid"
+    pos_inf: str = "invalid"
+    neg_inf: str = "invalid"
+    zero: str = "invalid"
+    domain_invalid: str = "invalid"
+
+    def __post_init__(self) -> None:
+        for dim in EDGE_DIMENSIONS:
+            value = getattr(self, dim)
+            if value not in EDGE_BEHAVIORS:
+                raise ValueError(
+                    f"EdgeContract.{dim}={value!r} not in {EDGE_BEHAVIORS}"
+                )
+
+    @property
+    def declared(self) -> bool:
+        return any(getattr(self, dim) != "invalid" for dim in EDGE_DIMENSIONS)
+
+    @property
+    def required_dimensions(self) -> frozenset[str]:
+        """Dimensions whose behavior must be verified (propagate/break)."""
+        return frozenset(
+            dim
+            for dim in EDGE_DIMENSIONS
+            if getattr(self, dim) in ("propagate", "break")
+        )
 
 
 def _factor_engine_root() -> Path:
@@ -81,14 +161,15 @@ def load_primitive_evidence() -> dict:
 
 
 def edge_requirements_declared(canonical: str) -> bool:
-    name = _resolve(canonical)
-    return bool(
-        required_edge_dimensions(name)
-        or name in EDGE_IMMUNE
-    )
+    return edge_contract(canonical) is not None
 
 
 def required_edge_dimensions(canonical: str) -> frozenset[str]:
+    """Backward-compatible legacy dimension set.
+
+    Returns ``{"nan"}`` / ``{"inf"}`` per membership in the legacy required
+    sets.  New callers should read :func:`edge_contract` instead.
+    """
     name = _resolve(canonical)
     required: set[str] = set()
     if name in NAN_REQUIRED:
@@ -98,50 +179,170 @@ def required_edge_dimensions(canonical: str) -> frozenset[str]:
     return frozenset(required)
 
 
-def missing_edge_dimensions(canonical: str, evidence: dict | None = None) -> frozenset[str]:
-    payload = evidence if evidence is not None else load_primitive_evidence()
+def edge_contract(canonical: str) -> EdgeContract | None:
+    """Return the declared :class:`EdgeContract` for an operator.
+
+    Layers on top of the legacy lists without deleting them:
+
+    * ``NAN_REQUIRED`` membership → ``nan="propagate"``;
+    * ``INF_REQUIRED`` membership → ``pos_inf="propagate"``, ``neg_inf="propagate"``;
+    * ``EDGE_IMMUNE`` membership → ``"ignore"`` for every dimension;
+    * otherwise ``None`` (undeclared).
+
+    Returns ``None`` for an undeclared operator so callers fail closed instead
+    of inventing a contract.
+    """
     name = _resolve(canonical)
+    if name in EDGE_IMMUNE:
+        return EdgeContract(
+            nan="ignore",
+            pos_inf="ignore",
+            neg_inf="ignore",
+            zero="ignore",
+            domain_invalid="ignore",
+        )
+    nan = "propagate" if name in NAN_REQUIRED else "invalid"
+    inf = "propagate" if name in INF_REQUIRED else "invalid"
+    if nan == "invalid" and inf == "invalid":
+        return None
+    return EdgeContract(nan=nan, pos_inf=inf, neg_inf=inf)
+
+
+def _backend_edge_verified(payload: dict, backend: str) -> dict[str, frozenset[str]]:
+    """Extract per-backend verified edge sets from an evidence payload.
+
+    Prefers the review #252 nested schema::
+
+        {"edge_evidence": {
+            "pandas_numpy": {"nan_verified": [...], "inf_verified": [...], ...},
+            "polars": {...}, "duckdb": {...}}}
+
+    Falls back to the legacy flat keys (``duckdb_nan_edge_verified`` /
+    ``duckdb_inf_edge_verified`` and the collective ``polars_edge_verified``)
+    so pre-regeneration evidence still routes.
+    """
+    edge_evidence = payload.get("edge_evidence")
+    if isinstance(edge_evidence, dict) and isinstance(edge_evidence.get(backend), dict):
+        be = edge_evidence[backend]
+        out: dict[str, frozenset[str]] = {}
+        for dim, key in _EDGE_EVIDENCE_KEYS.items():
+            out[dim] = frozenset(str(x) for x in (be.get(key) or []))
+        return out
+    # Legacy fallback.
+    if backend == "duckdb":
+        return {
+            "nan": frozenset(str(x) for x in (payload.get("duckdb_nan_edge_verified") or [])),
+            "inf": frozenset(str(x) for x in (payload.get("duckdb_inf_edge_verified") or [])),
+            "zero": frozenset(),
+            "domain_invalid": frozenset(),
+        }
+    if backend == "polars":
+        edge = frozenset(str(x) for x in (payload.get("polars_edge_verified") or []))
+        return {
+            "nan": edge,
+            "inf": edge,
+            "zero": frozenset(),
+            "domain_invalid": frozenset(),
+        }
+    return {"nan": frozenset(), "inf": frozenset(), "zero": frozenset(), "domain_invalid": frozenset()}
+
+
+_EDGE_EVIDENCE_KEYS = {
+    "nan": "nan_verified",
+    "inf": "inf_verified",
+    "zero": "zero_verified",
+    "domain_invalid": "domain_invalid_verified",
+}
+
+
+def backend_edge_evidence(
+    canonical: str, backend: str = "duckdb", evidence: dict | None = None
+) -> dict[str, frozenset[str]]:
+    """Return the verified edge-name sets for one backend.
+
+    ``canonical`` is resolved to its final name, but the verified sets are
+    whole-registry lists so the name is passed through to match members.
+    """
+    name = _resolve(canonical)
+    payload = evidence if evidence is not None else load_primitive_evidence()
+    sets = _backend_edge_verified(payload, backend)
+    # Keep dimension names present even when empty, for stable callers.
+    return {dim: sets.get(dim, frozenset()) for dim in ("nan", "inf", "zero", "domain_invalid")}
+
+
+def missing_edge_dimensions(
+    canonical: str, evidence: dict | None = None, backend: str = "duckdb"
+) -> frozenset[str]:
+    """Dimensions that lack verified edge evidence on ``backend``.
+
+    Returns members of ``{"nan", "inf", "zero", "domain_invalid"}``.  An
+    undeclared operator returns ``frozenset()`` here — undeclared is a *gating*
+    state handled by :func:`edge_evidence_status` /
+    :func:`production_edge_evidence_complete`, never a silent pass.
+    """
+    name = _resolve(canonical)
+    contract = edge_contract(name)
+    if contract is None:
+        return frozenset()
+    verified = backend_edge_evidence(name, backend, evidence)
     missing: set[str] = set()
-    required = required_edge_dimensions(name)
-    if "nan" in required and name not in set(payload.get("duckdb_nan_edge_verified", [])):
+    if contract.nan in ("propagate", "break") and name not in verified["nan"]:
         missing.add("nan")
-    if "inf" in required and name not in set(payload.get("duckdb_inf_edge_verified", [])):
+    if (
+        contract.pos_inf in ("propagate", "break")
+        or contract.neg_inf in ("propagate", "break")
+    ) and name not in verified["inf"]:
         missing.add("inf")
+    if contract.zero in ("propagate", "break") and name not in verified["zero"]:
+        missing.add("zero")
+    if (
+        contract.domain_invalid in ("propagate", "break")
+        and name not in verified["domain_invalid"]
+    ):
+        missing.add("domain_invalid")
     return frozenset(missing)
 
 
 def edge_evidence_status(
-    canonical: str, evidence: dict | None = None
+    canonical: str, evidence: dict | None = None, backend: str = "duckdb"
 ) -> str:
-    """R5-15: honest tri-state edge gate.
+    """Honest tri-state edge gate.
 
-    * ``complete`` — all required NaN/Inf dimensions have verified evidence, or
-      the operator is explicitly ``EDGE_IMMUNE``;
-    * ``incomplete`` — at least one required dimension lacks evidence;
-    * ``undeclared`` — the operator has no declared edge requirement (it is
-      neither in a required set nor ``EDGE_IMMUNE``); under strict mode this is
-      a fail-closed state, never a pass.
+    * ``complete`` — the operator is declared (required set or EDGE_IMMUNE) and
+      every required dimension has verified edge evidence on ``backend``;
+    * ``incomplete`` — declared, but at least one required dimension lacks
+      evidence;
+    * ``undeclared`` — the operator has no declared edge contract; under
+      production mode this is a fail-closed state, never a pass.
     """
     name = _resolve(canonical)
-    if name in EDGE_IMMUNE:
-        return "complete"
-    missing = missing_edge_dimensions(name, evidence)
+    if edge_contract(name) is None:
+        return "undeclared"
+    missing = missing_edge_dimensions(name, evidence, backend)
     if missing:
         return "incomplete"
-    required = required_edge_dimensions(name)
-    if required:
-        return "complete"
-    return "undeclared"
+    return "complete"
 
 
-def production_edge_evidence_complete(canonical: str, evidence: dict | None = None) -> bool:
-    status = edge_evidence_status(canonical, evidence)
+def production_edge_evidence_complete(
+    canonical: str,
+    evidence: dict | None = None,
+    backend: str = "duckdb",
+    mode: EdgeGateMode = EdgeGateMode.PRODUCTION,
+) -> bool:
+    """Whether the operator's edge evidence is production-complete.
+
+    Defaults to :data:`EdgeGateMode.PRODUCTION` — an undeclared operator FAILS
+    (no vacuous pass).  ``EdgeGateMode.RESEARCH`` demotes undeclared to a
+    warning (returns True) for research-only tooling; production certification
+    must never pass ``mode=RESEARCH``.
+    """
+    status = edge_evidence_status(canonical, evidence, backend)
     if status == "complete":
         return True
     if status == "incomplete":
         return False
-    # undeclared: strict mode fails closed; legacy mode preserves the previous
-    # vacuous pass for operators already on the surface (see module docstring).
-    if edge_gate_strict:
+    # undeclared
+    if mode is EdgeGateMode.PRODUCTION:
         return False
     return True

@@ -2,6 +2,36 @@
 
 ## 执行状态（2026-08-09 完成）
 
+### 第七轮二阶回归收口（0.9.6，main=`608f602` 排除前 54 项后再审的 12 项）
+
+用户排除前 54 项后再审，确认 12 个新增问题/二阶回归；前 7 个 P0/P0-P1 + 后 5 个
+P1 全部一次性落地（Core Freeze 前最后一批）：
+- ✅ **1. mutation lock TOCTOU（P0）**：续租改经 fd（inode 身份，`stat(path).st_ino
+  == fstat(fd).st_ino`），旧 writer 绝不可能 truncate 新 inode；release 不再
+  unlink，改经 fd 写 `released` 标记，`_can_break_lock` 视为立即可打破。锁 fd 改
+  `O_RDWR`。
+- ✅ **2. StorageSpec URI scheme→backend（P0）**：`type` 未显式时从 scheme 推导；
+  `oss://` 与 scheme/type 矛盾拒绝，绝不 fallback LOCAL。
+- ✅ **3. PathAuthorizer 延迟 namespace（P0）**：保存 unresolved root template，
+  authorize 时按当前 session namespace 解析（`allowed_root_templates()`）。
+- ✅ **4. join_policy strict enum（P0）**：拼写错 fail-closed，不再静默丢 PIT 语义。
+- ✅ **5. next_bar early-close（P0）**：消费 `effective_segments_on(d)`，half-day
+  收盘后正确跳下一交易日。
+- ✅ **6. Market canonicalizer（P0）**：未知 market fail-closed，不再静默当 US。
+- ✅ **7. latency exact int（P0/P1）**：`1.9`/`"1.9"` 拒绝，不再截断成 1。
+- ✅ **8. strict_sequence 拆规则（P1）**：fields/order_by 只收 list/tuple；instruments
+  接受 set 但 canonical 排序。
+- ✅ **9. TimePartitionSpec `__post_init__`（P1）**：typo 构造即报错，不 fallback daily。
+- ✅ **10. 无 manifest 日历缓存文件 snapshot（P1）**：path+size+mtime_ns 做数据版本
+  token，不再用 registry_fingerprint（配置版本）。
+- ✅ **11. QueryBudget 自身 invariant（P1）**：负数/NaN/Inf/bool 构造即拒绝。
+- ✅ **12. StorageSpec.options 深冻结（P1）**：递归不可变映射，内部 mutation 从根上禁止。
+
+回归：`tests/unit/test_final_closure_round8.py` 14 条；全量 **724 passed / 0 failed**；
+ContractIR audit 71 数据集一致（fingerprint=b7d21b082127eb00）。
+**Core Freeze 生效**：后续差分测试 → 并发/crash 测试 → 真实 A股/美股 golden →
+benchmark → FactorEngine integration，不再由 AI 大范围审计新增功能。
+
 ### 第三批审计收口（0.9.5，main=`3550257f0` 补扫的 9 项）
 
 用户按最新 main（仅改 FactorEngine，DataAccess 无变化，前两轮结论成立）又补扫出
@@ -422,3 +452,71 @@ WriteRequest
 - 只改 `dataaccess/`；`factor_engine/` 不碰。
 - `read/scan_handle.py`（并发会话已改）需要编辑时先重读。
 - 测试：`tests/` 属本仓库，可安全更新。
+
+---
+
+## 第四批审计收口（0.9.5 二期，main=`0cf8e18` 的 12 项二阶/故障注入）
+
+用户按最新 main（新增 atomic write / PIT generation-directory / SQL sandbox /
+COS mirror 校验）又扫出 12 项「实现边界 / 二阶竞态」，全部落地（1–7 并 Core
+Freeze blocker，8–12 P1 收尾）：
+
+- ✅ **1. atomic 并发 writer 安全**：`atomic_write_bytes/file` 临时文件改为
+  `.<name>.tmp.<pid>.<uuid8>` + `O_EXCL`（不再共享固定 `.<name>.tmp` 互 O_TRUNC）；
+  `_write_all` full-write loop；`durable=True` 的 fsync 错误向上传播（`durable=False`
+  best-effort 吞）；异常清理自己的 tmp。
+- ✅ **2. publish commit+audit 事务分离**：新增 `CommittedButAuditFailed`（
+  `AuditWriteError` 子类）——publish body 已成功提交（ok=True）但 durable audit 落盘
+  失败时抛它；`_dataset_mutation` 对这类异常仍按 **COMMITTED** 重建 manifest（数据
+  确实发布了，manifest 必须追平），再单独向上报告；body 真失败 + 审计失败 → 原始
+  错误不被审计失败掩盖。
+- ✅ **3. read_auto polars 受控 collect**：polars 分支改走 `self.scan()`（ScanHandle）
+  + `collect_table()`，不再拿裸 LazyFrame 塞 `collect_polars_with_budget`；同时
+  `mode` 未知/空/非字符串 fail-closed（`_normalize_read_mode`）。
+- ✅ **4. ScanHandle 远程 snapshot revalidation**：s3:// / cos:// 路径不再被跳过——
+  collect 前 `fresh=True` 强制 re-HEAD 并对比 etag/content_length/version_id；strict
+  下变化或无法验证（无凭证/网络/未记录身份）⇒ fail-closed。
+- ✅ **5. auto/hybrid 消费 mirror 三态**：`local_mirror_complete_for_range` /
+  `_local_daily/hive_date/year_complete` / `hybrid_cos_read_paths` 一律走
+  `_local_file_usable`（verified/corrupt/legacy 三态）——本地截断/checksum 错的
+  parquet 不再被裸 `.exists()` 误当「齐全」而绕过 remote/resync。
+- ✅ **6. 共享 expected-partitions 编译器**：`mirror.expected_partitions()` 成为
+  local/mirror/remote/hybrid 唯一「期望 partition」事实源（daily/hive_date 走
+  trade_day 日历、calendar_day 自然日；hive_year 按年）——remote 不再自造一套自然日
+  逻辑，交易日型数据跨周末不再误切 remote / 请求不存在的周末对象。
+- ✅ **7. ParametricDataset remote 复用 validate_params**：`_remote_paths_from_storage`
+  走 `validate_params`（type/range/allowed/regex/路径遍历防护）再 format，local 与
+  remote 参数 parity 一致，参数不再能扩大 glob 范围；新增 public `resolve_remote_paths`。
+- ✅ **8. coverage manifest fast path 修好 + 贯穿 params**：`_observed_from_manifest`
+  用与主流程相同的 validated params（不再硬编码 `{}`）；顺带修掉它读
+  `manifest.min_time_key/max_time_key`（**不存在**的属性）被 `except Exception` 静默
+  吞掉的旧 bug——改从 `manifest.files` 的 min_time/max_time 推导，fast path 首次真正
+  生效。
+- ✅ **9. strict 5t 无日历 fail-closed**：`_trading_day_lag` 返回 `(lag, authoritative)`；
+  strict 下日历不可用 ⇒ `(None, False)` ⇒ status 降级 `partial` + `authority=approximate`
+  （绝不把自然日近似当权威交易陈旧度）；research 才允许近似并显式标记。
+- ✅ **10. read_joined 空 universe ⇒ 0 行**：universe 分支 `not upaths`（含 glob 无
+  匹配文件，`_paths_have_files`）复用 typed empty 分支（`_empty_branch_sql`）——
+  不再 `upaths[0]` IndexError / 不把空 glob 塞 DuckDB。
+- ✅ **11. PITIndexMetadata typed invariant**：`__post_init__` 拒绝 bool 串味
+  （`complete="false"` / `glob_failed="no"`）、负数 counts、`indexed > source`、
+  `complete=True` 但 `glob_failed/failed_files`；load 路径把 JSON 原始值直接传入（不
+  `bool()` 预转换）并额外要求 complete 索引能证明 generation + source identity，
+  缺失 ⇒ 非权威。
+- ✅ **12. PIT index build lock + generation fencing**：`build_pit_event_index` 全程持
+  `mutation_lock(.pit_index)`（含锁内重检复用）；`_commit_index_generation` 的指针
+  切换 + 清理也在 commit lock 内，指针走 `atomic_write_text`（唯一 tmp，不再共享
+  `.current.tmp`）；**只有 authoritative（complete）构建才切 current**（不完整保留
+  上一代）；`_prune_old_generations` 保留 `{new, previous}`——并发 builder 的 current
+  永远指向有效 generation。
+
+**回归**：全量 `tests/` **758 passed / 0 failed**（含并发会话共享 DoD
+`test_final_closure_round9.py` 11 条 + 本会话补充 `test_final_closure_round9b.py`
+13 条；两者互补覆盖全部 12 项）；真实 `datasets.yaml` 71 个数据集照常加载。
+协调并发会话：为其 `cos_storage_runtime` 补了 `uninstall_cos_storage_runtime()` +
+`test_cos_storage_runtime.py` autouse 还原 fixture（否则其全局 patch 污染整个 suite）；
+为其 `round9.py` 修了一处 `ParamSpec(enum=…)` 测试 bug 与 PIT 指针 `.current.tmp`
+共享名竞态（两进程并发 `_commit_index_generation`）。FE 侧
+`test_catalog_us.py` + `test_data_access_catalog_errors.py` 15 passed；
+`tests/market + tests/storage` 其余失败均为并发会话 FE WIP（operator manifest 未
+重新生成 / R7-229 override reason），与本批无关。未碰 GitHub。

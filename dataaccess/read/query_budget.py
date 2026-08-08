@@ -34,6 +34,35 @@ class QueryBudget:
     require_columns: bool = False
     require_time_range: bool = False
 
+    def __post_init__(self) -> None:
+        """#7 公开 ``QueryBudget`` 自身也做 invariant validation（复用
+        ``DatasetQueryPolicy`` 的规则：positive int / positive finite float /
+        bool reject）。
+
+        旧代码 programmatic ``QueryBudget(max_rows=-1, max_elapsed_ms=nan)`` 绕过
+        parser 校验——``elapsed > nan`` 恒 False，等价于把 deadline check 关掉；
+        负数 / bool 预算也一样静默失效。现在构造即 fail-closed。
+        """
+        if self.max_rows is not None:
+            _positive_int(self.max_rows, context="QueryBudget.max_rows")
+        if self.max_result_bytes is not None:
+            _positive_int(self.max_result_bytes, context="QueryBudget.max_result_bytes")
+        if self.max_elapsed_ms is not None:
+            _positive_finite_float(
+                self.max_elapsed_ms, context="QueryBudget.max_elapsed_ms"
+            )
+        if self.max_scan_files is not None:
+            _positive_int(self.max_scan_files, context="QueryBudget.max_scan_files")
+        if not isinstance(self.require_columns, bool):
+            raise ValidationError(
+                f"QueryBudget.require_columns 必须是布尔值，收到 {self.require_columns!r}"
+            )
+        if not isinstance(self.require_time_range, bool):
+            raise ValidationError(
+                f"QueryBudget.require_time_range 必须是布尔值，"
+                f"收到 {self.require_time_range!r}"
+            )
+
 
 @dataclass(frozen=True)
 class DatasetQueryPolicy:

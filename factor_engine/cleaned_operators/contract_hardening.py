@@ -95,69 +95,6 @@ _LOOKBACK_PARAM_PRIORITY = (
 )
 
 
-def _install_polars_validation() -> None:
-    try:
-        import polars as pl
-    except ImportError:  # pragma: no cover
-        return
-
-    from cleaned_operators import base_polars
-    from cleaned_operators.base import _normalise_call, _validate_common_integer_relations
-
-    def prepare(self, args: tuple[Any, ...], kwargs: dict[str, Any]):
-        processed_args, processed_kwargs = _normalise_call(self.metadata, args, kwargs)
-        frames = [
-            value
-            for value in (*processed_args, *processed_kwargs.values())
-            if isinstance(value, pl.DataFrame)
-        ]
-        if frames:
-            base = frames[0]
-            if len(set(base.columns)) != len(base.columns):
-                raise ValueError(f"{self.metadata.name}: primary Polars panel has duplicate columns")
-            if "allow_panel_broadcast" not in set(self.metadata.tags or []):
-                for position, frame in enumerate(frames[1:], start=1):
-                    if frame.height != base.height:
-                        raise ValueError(
-                            f"{self.metadata.name}: Polars panel {position} height is misaligned"
-                        )
-                    if frame.columns != base.columns:
-                        raise ValueError(
-                            f"{self.metadata.name}: Polars panel {position} columns are misaligned"
-                        )
-        _validate_common_integer_relations(
-            self.metadata, processed_args, processed_kwargs
-        )
-        valid = self.validate_params(*processed_args, **processed_kwargs)
-        if valid is False:
-            raise ValueError(f"{self.metadata.name}: parameter validation failed")
-        return processed_args, processed_kwargs
-
-    def series_calculate(self, *args, **kwargs):
-        processed_args, processed_kwargs = self._prepare_call(tuple(args), dict(kwargs))
-        return self._calculate_series(*processed_args, **processed_kwargs)
-
-    def scalar_calculate(self, *args, **kwargs):
-        processed_args, processed_kwargs = self._prepare_call(tuple(args), dict(kwargs))
-        return self._calculate_scalar(*processed_args, **processed_kwargs)
-
-    def transform_calculate(self, x, **kwargs):
-        processed_args, processed_kwargs = self._prepare_call((x,), dict(kwargs))
-        return self._calculate_series(processed_args[0], **processed_kwargs)
-
-    def two_var_calculate(self, x, y, **kwargs):
-        processed_args, processed_kwargs = self._prepare_call((x, y), dict(kwargs))
-        return self._calculate_series(
-            processed_args[0], processed_args[1], **processed_kwargs
-        )
-
-    base_polars.Operator._prepare_call = prepare
-    base_polars.SeriesOperator.calculate = series_calculate
-    base_polars.ScalarOperator.calculate = scalar_calculate
-    base_polars.TransformOperator.calculate = transform_calculate
-    base_polars.TwoVarOperator.calculate = two_var_calculate
-
-
 def _correct_policy_metadata() -> None:
     from cleaned_operators import operator_policy
 
@@ -349,7 +286,11 @@ def apply_final_contract_hardening() -> None:
     # Write-protect the evidence-converged certification fields across every
     # contract-derivation code path (review §2.7).
     snapshot = _snapshot_certification_state()
-    _install_polars_validation()
+    # R7-240: the late ``_install_polars_validation`` override is GONE.  Polars
+    # operators already route ``_prepare_call`` through the single central
+    # ``validate_operator_call`` (base_polars.py); installing a second, weaker
+    # per-file validator at the end of registry load re-weakened ParamSpec /
+    # typed-broadcast / active_when / axis validation for the Polars backend.
     _correct_policy_metadata()
     _derive_contracts()
     _validate_final_contracts()

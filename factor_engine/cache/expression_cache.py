@@ -33,15 +33,19 @@ class ExpressionCache:
         *,
         stats: CacheHitStats | None = None,
         budget_bytes: int | None = None,
+        layer_name: str = "l0_cse",
     ) -> None:
         self._store: OrderedDict[str, Any] = (
             store if isinstance(store, OrderedDict) else OrderedDict(store or {})
         )
         self._stats = stats
         self._budget_bytes = budget_bytes
+        self.layer_name = layer_name
         self._bytes = 0
         for value in self._store.values():
-            self._bytes += _estimate(value)
+            size = _estimate(value)
+            self._bytes += size
+            _governor().reserve_accounting(self.layer_name, size)
 
     @property
     def store(self) -> dict[str, Any]:
@@ -80,21 +84,33 @@ class ExpressionCache:
         if size > self.budget_bytes:
             # 单对象就超预算：宁可让调用方按需重算，也不要它撑爆内存
             return
+        gov = _governor()
         if sid in self._store:
-            self._bytes -= _estimate(self._store[sid])
+            old_size = _estimate(self._store[sid])
+            self._bytes -= old_size
+            gov.release_accounting(self.layer_name, old_size)
         self._bytes += size
+        gov.reserve_accounting(self.layer_name, size)
         self._store[sid] = value
-        self._evict_to(self.budget_bytes)
+        freed = self._evict_to(self.budget_bytes)
+        if freed > 0:
+            gov.release_accounting(self.layer_name, freed)
 
     def release(self, sid: str) -> None:
         """显式释放某 sid（CSE 引用计数归零时立即回收，P0-5）。"""
         if sid in self._store:
-            self._bytes -= _estimate(self._store[sid])
+            size = _estimate(self._store[sid])
+            self._bytes -= size
             del self._store[sid]
+            _governor().release_accounting(self.layer_name, size)
 
-    def evict_if_over_budget(self) -> int:
-        """触发式逐出（MemoryGovernor RSS 高压档调用）；返回释放字节数。"""
-        return self._evict_to(self.budget_bytes)
+    def evict_if_over_budget(self, target: int = 0) -> int:
+        """触发式逐出（MemoryGovernor evict hook）；返回释放字节数。
+
+        审计 #332：``target > 0`` 用 ``target``，否则逐出到自身 ``budget_bytes``。
+        记账由 ``MemoryGovernor._evict_for`` 统一扣减，这里不重复 release。
+        """
+        return self._evict_to(target if target > 0 else self.budget_bytes)
 
     def __len__(self) -> int:
         return len(self._store)

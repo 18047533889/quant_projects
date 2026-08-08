@@ -21,6 +21,7 @@ it may not enter the mining grammar (parameter_sensitivity_verified).
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -42,6 +43,14 @@ class ParamNormalizer:
     symmetric_with: tuple[str, ...] = ()
     # zero boundary reduces to a different AST; enforce strict positivity.
     strict_positive: bool = False
+    # Audit #386: only declare True when the operator output is provably
+    # positive-homogeneous of degree 0 in the group, i.e. f(c*w) == f(w) for any
+    # c > 0.  Weighted mean / weighted rank / scale-invariant aggregation are
+    # PHD0.  Weighted sum / exposure / regularization / any parameter where
+    # scaling the group changes the numeric output MUST stay False — otherwise
+    # canonicalization would collapse genuinely distinct parameter sets into one
+    # key (audit #386).
+    positive_homogeneous_degree_0: bool = False
 
 
 def _norm_group(values: dict[str, float]) -> dict[str, float]:
@@ -67,9 +76,32 @@ class ParameterCanonicalizer:
         self.canonical = canonical
         self.normalizers = {n.name: n for n in normalizers}
 
+    def _validate_sequence_params(self, params: dict[str, Any]) -> None:
+        """Audit #387: reject sequence params containing any non-numeric or
+        non-finite element.  A mixed-type weight vector (e.g. ``[1.0, "x"]``) is
+        an invalid parameter set, never a candidate for partial-element
+        canonicalization."""
+        for name, value in params.items():
+            if not isinstance(value, (list, tuple)):
+                continue
+            for element in value:
+                if not isinstance(element, (int, float, bool)):
+                    raise ValueError(
+                        f"{self.canonical}: parameter {name} contains non-numeric element"
+                    )
+                if isinstance(element, float) and not math.isfinite(element):
+                    raise ValueError(
+                        f"{self.canonical}: parameter {name} contains non-numeric element"
+                    )
+
     def canonical_key(self, params: dict[str, Any]) -> tuple[Any, ...]:
         groups: dict[str, dict[str, float]] = {}
         processed: dict[str, Any] = {}
+        # Audit #387: a sequence (list/tuple) parameter must be all-numeric and
+        # finite — a single non-numeric or non-finite element makes the WHOLE
+        # parameter invalid.  We never drop a partial element (that would quietly
+        # canonicalize a corrupted weight vector into a shorter one).
+        self._validate_sequence_params(params)
         # Pass 1: pure scales and strict-positives.
         for name, value in params.items():
             norm = self.normalizers.get(name)
@@ -87,7 +119,16 @@ class ParameterCanonicalizer:
             if norm is not None and norm.normalize_with:
                 group = [name, *norm.normalize_with]
                 values = {g: float(processed.get(g, np.nan)) for g in group}
-                if all(np.isfinite(v) for v in values.values()):
+                # Audit #386: only scale-free the group when EVERY member is a
+                # declared PHD0 parameter (f(c*w) == f(w)).  Otherwise the group
+                # values enter the key unchanged — normalizing a weighted sum /
+                # exposure / regularization parameter would manufacture a
+                # different semantic than the one actually evaluated.
+                group_norms = [self.normalizers[g] for g in group if g in self.normalizers]
+                phd0 = bool(group_norms) and all(
+                    n.positive_homogeneous_degree_0 for n in group_norms
+                )
+                if all(np.isfinite(v) for v in values.values()) and phd0:
                     canonical = _norm_group(values)
                     for g in group:
                         processed[g] = canonical[g]

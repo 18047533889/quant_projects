@@ -7,7 +7,10 @@ import os
 import sys
 import time
 from collections import OrderedDict
+from dataclasses import dataclass, field as _dc_field
 from typing import Any, Iterable
+
+import pandas as pd
 
 from logging_utils import get_logger
 from workspace_paths import quant_projects_root
@@ -52,6 +55,160 @@ class CatalogResolutionError(DataAccessColumnPreflightError):
 
 class CatalogCorrupt(DataAccessColumnPreflightError):
     """SemanticFieldCatalog data is corrupt or unreadable."""
+
+
+class FieldMiningGateError(DataAccessColumnPreflightError):
+    """A requested field is not mining_allowed and cannot be used as a mined input.
+
+    Round-7 WS-E #279 production hard gate.
+    """
+
+
+class HistoricalSnapshotBackfillError(DataAccessColumnPreflightError):
+    """A ``current_snapshot_only`` field cannot backfill a historical window.
+
+    Round-7 WS-E #280: historical auto-mining over a snapshot-only field leaks
+    the current snapshot into the past unless the operator opts into
+    ``snapshot_now_only``.
+    """
+
+
+class FourLayerPITError(DataAccessColumnPreflightError):
+    """At least one of the four PIT eligibility layers failed.
+
+    Round-7 WS-E #282: field ∧ table ∧ dataset ∧ operator must all allow PIT for
+    a production PIT-eligible read.
+    """
+
+
+class HistoricalCoverageError(DataAccessColumnPreflightError):
+    """A field's historical coverage over the requested window is below threshold.
+
+    Round-7 WS-E #315: a partial-history field over a search window must be
+    coverage-gated (reject or flag) when coverage drops below the threshold.
+    """
+
+
+@dataclass(frozen=True)
+class HistoricalCoverageContract:
+    """Coverage contract for a partial-history field (round-7 WS-E #315).
+
+    Attributes:
+        field: the logical field this contract describes.
+        first_valid_date: ISO date at which the field begins to have data.
+        coverage_ratio: overall non-null coverage in [0, 1] over the declared
+            history.
+        coverage_by_year: per-year coverage ratio, keyed by int year.
+        coverage_by_stock: per-stock coverage ratio, keyed by instrument.
+        threshold: default minimum coverage ratio for ``covers_window``.
+    """
+
+    field: str
+    first_valid_date: str | None = None
+    coverage_ratio: float = 1.0
+    coverage_by_year: dict[int, float] = _dc_field(default_factory=dict)
+    coverage_by_stock: dict[str, float] = _dc_field(default_factory=dict)
+    threshold: float = 0.7
+
+    def covers_window(
+        self,
+        start: str | None = None,
+        end: str | None = None,
+        *,
+        threshold: float | None = None,
+    ) -> bool:
+        """True when the field's coverage meets ``threshold`` over [start, end]."""
+        threshold = float(threshold if threshold is not None else self.threshold)
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("coverage threshold must be in [0, 1]")
+        ratio = float(self.coverage_ratio)
+        if ratio < threshold:
+            return False
+        if start is not None and self.first_valid_date:
+            try:
+                if pd.Timestamp(start).normalize() < pd.Timestamp(self.first_valid_date).normalize():
+                    return False
+            except (ValueError, TypeError):
+                return False
+        if self.coverage_by_year and (start is not None or end is not None):
+            year_start = None
+            year_end = None
+            if start is not None:
+                try:
+                    year_start = int(pd.Timestamp(start).year)
+                except (ValueError, TypeError):
+                    year_start = None
+            if end is not None:
+                try:
+                    year_end = int(pd.Timestamp(end).year)
+                except (ValueError, TypeError):
+                    year_end = None
+            for year, year_ratio in self.coverage_by_year.items():
+                if year_start is not None and int(year) < year_start:
+                    continue
+                if year_end is not None and int(year) > year_end:
+                    continue
+                if float(year_ratio) < threshold:
+                    return False
+        return True
+
+    def violations(
+        self,
+        start: str | None = None,
+        end: str | None = None,
+        *,
+        threshold: float | None = None,
+    ) -> list[str]:
+        """Return a human-readable list of coverage violations (empty = OK)."""
+        threshold = float(threshold if threshold is not None else self.threshold)
+        problems: list[str] = []
+        ratio = float(self.coverage_ratio)
+        if ratio < threshold:
+            problems.append(f"overall coverage {ratio:.3f} < threshold {threshold:.3f}")
+        if start is not None and self.first_valid_date:
+            try:
+                if pd.Timestamp(start).normalize() < pd.Timestamp(self.first_valid_date).normalize():
+                    problems.append(
+                        f"window start {start} precedes first_valid_date {self.first_valid_date}"
+                    )
+            except (ValueError, TypeError):
+                problems.append(f"unparseable window start {start!r}")
+        for year, year_ratio in (self.coverage_by_year or {}).items():
+            if float(year_ratio) < threshold:
+                problems.append(f"year {year} coverage {float(year_ratio):.3f} < {threshold:.3f}")
+        return problems
+
+
+def assert_historical_coverage(
+    contract: HistoricalCoverageContract,
+    *,
+    start: str | None = None,
+    end: str | None = None,
+    threshold: float | None = None,
+) -> None:
+    """Raise :class:`HistoricalCoverageError` when ``contract`` does not cover the window."""
+    if contract is None:
+        return
+    problems = contract.violations(start=start, end=end, threshold=threshold)
+    if problems:
+        raise HistoricalCoverageError(
+            f"field {contract.field!r} historical coverage over "
+            f"window=[{start}, {end}] fails: {'; '.join(problems)}"
+        )
+
+
+#: Coverage contracts keyed by logical field name (round-7 WS-E #315).  The
+#: search/factor preflight registers partial-history contracts here so the
+#: column-resolution gate can enforce them without re-reading data.
+_COVERAGE_CONTRACTS: dict[str, HistoricalCoverageContract] = {}
+
+
+def register_coverage_contract(contract: HistoricalCoverageContract) -> HistoricalCoverageContract:
+    """Register a :class:`HistoricalCoverageContract` for coverage gating (#315)."""
+    if contract is None or not getattr(contract, "field", None):
+        raise ValueError("coverage contract requires a field name")
+    _COVERAGE_CONTRACTS[str(contract.field)] = contract
+    return contract
 
 
 def _ensure_data_access_importable() -> None:
@@ -158,6 +315,9 @@ class DataAccessSource(DataSource):
         semantic_filters: dict[str, Any] | None = None,
         read_mode: str = "panel",
         strict_unknown_fields: bool | None = None,
+        enforce_mining_gate: bool = False,
+        snapshot_now_only: bool = False,
+        mining_coverage_threshold: float | None = None,
     ) -> None:
         self.dataset = dataset
         self.fields = dict(fields or {})
@@ -181,6 +341,23 @@ class DataAccessSource(DataSource):
                 )
                 strict_unknown_fields = True
         self.strict_unknown_fields = bool(strict_unknown_fields)
+        # Round-7 WS-E #279/#280: opt-in production hard gates for mining/backfill
+        # field contracts.  Default OFF so legitimate reads of structural columns
+        # (e.g. a one_to_many weight that a factor aggregates before mining) keep
+        # working; the AlphaMiner / production preflight enables them explicitly.
+        self.enforce_mining_gate = bool(enforce_mining_gate)
+        #: Round-7 WS-E #280 opt-in: only the current snapshot may be used, so a
+        #: ``current_snapshot_only`` field is allowed even on a "now" window.
+        self.snapshot_now_only = bool(snapshot_now_only)
+        #: Round-7 WS-E #315: when set, partial-history fields whose coverage over
+        #: the requested window is below this threshold are rejected.
+        if mining_coverage_threshold is not None:
+            threshold = float(mining_coverage_threshold)
+            if not 0.0 <= threshold <= 1.0:
+                raise ValueError("mining_coverage_threshold must be in [0, 1]")
+            self.mining_coverage_threshold = threshold
+        else:
+            self.mining_coverage_threshold = None
         self.start_date = start_date
         self.end_date = end_date
         self.instrument_filter = list(instrument_filter) if instrument_filter else None
@@ -474,7 +651,219 @@ class DataAccessSource(DataSource):
             built = self._build_field_plans(missing)
             for n, plan in built.items():
                 self._field_plans[(n, version)] = plan
-        return {n: self._field_plans[(n, version)] for n in names}
+        plans = {n: self._field_plans[(n, version)] for n in names}
+        self._enforce_field_contract_gates(plans)
+        return plans
+
+    def _window_is_historical(self) -> bool:
+        """True when this source is configured for a historical (backfill) window.
+
+        No ``start_date`` (full history) or a ``start_date`` strictly before
+        today counts as historical — the danger for a ``current_snapshot_only``
+        field is the current snapshot leaking into the past (round-7 WS-E #280).
+        """
+        if self.start_date is None:
+            return True
+        try:
+            import pandas as pd
+
+            return bool(
+                pd.Timestamp(self.start_date).normalize()
+                < pd.Timestamp.now().normalize()
+            )
+        except (ValueError, TypeError):
+            return True
+
+    def _enforce_field_contract_gates(
+        self,
+        plans: dict[str, NormalizedFieldPlan],
+    ) -> None:
+        """Apply the opt-in production field-contract hard gates (round-7 WS-E).
+
+        #279 ``mining_allowed``: reject a ``mining_allowed=False`` field when the
+            mining gate is enabled (raw read path of the mining preflight).
+        #280 ``current_snapshot_only``: reject historical auto-mining over a
+            snapshot-only field unless the operator opts into ``snapshot_now_only``.
+        #315 coverage: reject a partial-history field whose declared coverage is
+            below ``mining_coverage_threshold`` over the requested window.
+        """
+        if not (self.enforce_mining_gate or self.mining_coverage_threshold is not None):
+            return
+        historical = self._window_is_historical()
+        for name, plan in plans.items():
+            if plan is None:
+                continue
+            if self.enforce_mining_gate and not plan.mining_allowed:
+                raise FieldMiningGateError(
+                    f"field {name!r} (table={plan.physical_dataset!r}) has "
+                    "mining_allowed=False and cannot be used as a mined factor input"
+                )
+            if (
+                self.enforce_mining_gate
+                and plan.current_snapshot_only
+                and historical
+                and not self.snapshot_now_only
+            ):
+                raise HistoricalSnapshotBackfillError(
+                    f"field {name!r} is current_snapshot_only and cannot backfill a "
+                    f"historical window (start_date={self.start_date!r}); opt into "
+                    "snapshot_now_only=True to use only the current snapshot"
+                )
+            if (
+                self.mining_coverage_threshold is not None
+                and plan.coverage in {"partial_history", "sparse_event"}
+            ):
+                self._gate_coverage(plan, name)
+
+    def _gate_coverage(self, plan: NormalizedFieldPlan, name: str) -> None:
+        """Coverage-gate a partial-history field over the source window (#315).
+
+        The declared coverage contract is read from the module-level registry
+        (populated by the search/factor preflight from the catalog).  A
+        partial-history field with an active threshold but NO registered contract
+        fails closed in production (``strict_unknown_fields``) and warns in
+        research.
+        """
+        contract = _COVERAGE_CONTRACTS.get(name)
+        if contract is None:
+            if self.strict_unknown_fields:
+                raise HistoricalCoverageError(
+                    f"field {name!r} is {plan.coverage!r} but has no declared "
+                    "HistoricalCoverageContract; coverage-gate cannot be satisfied"
+                )
+            return
+        assert_historical_coverage(
+            contract,
+            start=self.start_date,
+            end=self.end_date,
+            threshold=self.mining_coverage_threshold,
+        )
+
+    def assert_four_layer_pit(
+        self,
+        plans: dict[str, NormalizedFieldPlan] | None = None,
+        *,
+        operator_pit_allowed: bool = True,
+        names: Iterable[str] | None = None,
+    ) -> dict[str, NormalizedFieldPlan]:
+        """Four-layer PIT eligibility preflight (round-7 WS-E #282).
+
+        Combined eligibility = ``field_pit_allowed ∧ table_pit_allowed ∧
+        dataset_pit_allowed ∧ operator_pit_allowed``.
+
+        * ``field_pit_allowed`` — the field's ``strict_pit_allowed`` contract.
+        * ``table_pit_allowed`` — the owning table's ``strict_pit_allowed``.
+        * ``dataset_pit_allowed`` — the DataAccess COS contract's ``pit_policy``
+          is strict (or the dataset supports PIT reads).
+        * ``operator_pit_allowed`` — caller-supplied operator-level flag.
+
+        Returns the (resolved) plans so callers can chain.  Raises
+        :class:`FourLayerPITError` on the first field whose combined eligibility
+        is false.
+        """
+        if names is not None:
+            names_list = list(names)
+            if names_list:
+                plans = self._ensure_field_plans(names_list)
+        if not plans:
+            return {}
+        from pit_contract import four_layer_pit_allowed
+
+        dataset_pit_allowed = self._dataset_pit_allowed()
+        for name, plan in plans.items():
+            if plan is None:
+                continue
+            field_pit_allowed = bool(getattr(plan, "strict_pit_allowed", True))
+            table_pit_allowed = self._table_pit_allowed(plan)
+            combined, layers = four_layer_pit_allowed(
+                field_pit_allowed=field_pit_allowed,
+                table_pit_allowed=table_pit_allowed,
+                dataset_pit_allowed=dataset_pit_allowed,
+                operator_pit_allowed=bool(operator_pit_allowed),
+            )
+            if not combined:
+                failed = sorted(k for k, v in layers.items() if not v)
+                raise FourLayerPITError(
+                    f"field {name!r} PIT eligibility failed at layer(s): "
+                    f"{', '.join(failed)}"
+                )
+        return plans
+
+    def _dataset_pit_allowed(self) -> bool:
+        """Dataset-layer PIT eligibility from the DataAccess COS contract.
+
+        * ``pit_policy == "strict"`` (event datasets with an availability column)
+          is explicitly PIT-capable.
+        * A dense / state-ready / minute panel with ``pit_policy`` in
+          ``not_applicable`` / ``unsupported`` is inherently PIT-safe because the
+          exact equi-read on (TradeDate, Symbol) is point-in-time.
+        * ``effective_time_only`` / sparse / forbidden panels are NOT PIT-eligible
+          (the value only exists at an effective date, not an announcement time).
+        """
+        try:
+            from data_access.cos_contract import get_cos_contract
+
+            contract = get_cos_contract(self.dataset)
+        except Exception:
+            return True
+        if contract is None:
+            return True
+        pit = str(getattr(contract, "pit_policy", "not_applicable") or "")
+        panel = str(getattr(contract, "panel_policy", "") or "")
+        if pit == "strict":
+            return True
+        if panel in {"dense", "state_ready", "minute"} and pit in {
+            "not_applicable", "unsupported",
+        }:
+            return True
+        return False
+
+    def _table_pit_allowed(self, plan: NormalizedFieldPlan) -> bool:
+        """Table-layer PIT eligibility from the FE FIELD_REGISTRY TableSpec."""
+        if not plan.physical_dataset:
+            return True
+        try:
+            from fields import FIELD_REGISTRY
+
+            table_spec = FIELD_REGISTRY.resolve_table(str(plan.physical_dataset))
+            if table_spec is None:
+                return True
+            return bool(getattr(table_spec, "strict_pit_allowed", True))
+        except Exception:
+            return True
+
+    def source_dependency_hash(self) -> str:
+        """Deterministic hash over this source's field-plan contracts + snapshot.
+
+        Round-7 WS-E #317: folds each resolved input's source identity (dataset,
+        physical column, scale, mining/PIT contract) and the current data
+        snapshot into a reproducibility hash for factor materialization /
+        cache identity.
+        """
+        plans: dict[str, Any] = {}
+        for (name, _version), plan in self._field_plans.items():
+            plans[name] = {
+                "source": plan.source,
+                "physical": list(plan.physical_fields),
+                "scale": float(plan.scale) if plan.scale is not None else None,
+                "mining_allowed": bool(plan.mining_allowed),
+                "coverage": plan.coverage,
+                "strict_pit_allowed": bool(plan.strict_pit_allowed),
+                "current_snapshot_only": bool(plan.current_snapshot_only),
+            }
+        payload = json.dumps(
+            {
+                "dataset": self.dataset,
+                "snapshot_id": self._data_snapshot_id,
+                "manifest_token": self._manifest_token,
+                "plans": plans,
+                "params": dict(self.params),
+            },
+            sort_keys=True,
+            default=str,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     @staticmethod
     def _detect_source_frequency(ds) -> str | None:

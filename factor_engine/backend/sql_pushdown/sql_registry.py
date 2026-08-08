@@ -40,7 +40,15 @@ _SQL_MARKERS_INCOMPLETE = False
 
 @dataclass(frozen=True)
 class SqlCapableOperator:
-    """Registry 中 ``backend='sql'`` 的占位算子（编译走 emitter）。"""
+    """Registry 中 ``backend='sql'`` 的占位算子（编译走 emitter）。
+
+    .. important::（审计 #363）
+        SQL 实现**不拥有** parameter signature：capability 一律读 OperatorRegistry
+        的 logical contract（``_catalog[canon]`` 的 ``param_names`` / ``param_specs`` /
+        生产签名）。这里 metadata 的 ``param_names=[]`` 只是占位，**不做**签名审计
+        ——签名审计走 registry contract（见 ``backend/operator_capability.py`` 的
+        ``check_call_capability`` / ``_sql_bound_param_names``）。
+    """
 
     canonical: str
 

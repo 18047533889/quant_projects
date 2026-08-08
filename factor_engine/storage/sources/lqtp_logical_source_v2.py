@@ -480,10 +480,24 @@ class LQTPLogicalDataSource(_Base):
                 raise MissingDataDependencyError(
                     f"derived field {field!r} did not return a Series"
                 )
-            return self._align_by_instrument(anchor, series.rename(field))
+            # Round-7 WS-E #291: DerivedField defaults to exact alignment — a day
+            # with no derived value is NaN, never the previous day's value.
+            # Callers may opt into state_asof / event_asof via a join_policy
+            # transform param.
+            policy = str(tparams.get("join_policy") or "exact")
+            return self._align_for_join_policy(
+                anchor, series.rename(field), policy, context=f"derived:{field}"
+            )
 
         if table == "Intermediate":
-            return self._align_by_instrument(anchor, self._load_intermediate(spec))
+            policy = str(
+                tparams.get("join_policy")
+                or spec.params_dict().get("join_policy")
+                or "exact"
+            )
+            return self._align_for_join_policy(
+                anchor, self._load_intermediate(spec), policy, context=f"intermediate:{field}"
+            )
 
         if table in {"DailyBar", "StockDailyBar"}:
             return self.inner.load_column(field)
@@ -622,18 +636,81 @@ class LQTPLogicalDataSource(_Base):
         if key.endswith("low"):
             return float(vals.min())
         if key.endswith("volume") or key.endswith("amount"):
-            return float(vals.sum())
+            # Round-7 WS-E #292: pandas Series.sum() turns an all-NaN group into
+            # 0.  sum(min_count=1) keeps an all-missing minute day as NaN so the
+            # daily feature does not fabricate a zero volume/amount.
+            return float(vals.sum(min_count=1))
         return float(vals.iloc[-1])
 
+    @classmethod
+    def _align_for_join_policy(
+        cls,
+        anchor: pd.MultiIndex,
+        series: pd.Series,
+        join_policy: str,
+        *,
+        context: str,
+    ) -> pd.Series:
+        """Align ``series`` to ``anchor`` honouring an explicit join policy.
+
+        Round-7 WS-E #290/#291: minute→daily aggregated features and
+        Intermediate/DerivedField values default to ``exact`` (today-no-value →
+        NaN, never yesterday's carry).  ``state_asof`` / ``event_asof`` /
+        ``asof_backward`` retain the backward as-of semantics for callers that
+        explicitly opt in.
+        """
+        policy = str(join_policy or "exact").lower()
+        if policy in {"exact", "exact_session", "exact_date"}:
+            return cls._align_exact_by_instrument(anchor, series)
+        if policy in {"state_asof", "event_asof", "asof_backward"}:
+            return cls._align_by_instrument(anchor, series)
+        raise MissingDataDependencyError(
+            f"{context}: unsupported join_policy {join_policy!r}"
+        )
+
     @staticmethod
-    def _session_slots(frame: pd.DataFrame) -> pd.DataFrame:
+    def _session_timestamp_convention() -> str:
+        """Declared bar timestamp convention for the minute source (#293).
+
+        Round-7 WS-E #293: the runtime must NOT guess bar_start vs bar_end from
+        whether 09:30/13:00 bars happen to exist in the data.  The convention is
+        read from the FE catalog TableSpec metadata (``bar_timestamp_role``),
+        falling back to the DataAccess DatasetContract, and only then to the
+        documented A-share default ``bar_end``.
+        """
+        try:
+            from fields import FIELD_REGISTRY
+
+            table_spec = FIELD_REGISTRY.resolve_table("StockMinuteBar")
+            if table_spec is not None:
+                metadata = dict(getattr(table_spec, "metadata", None) or {})
+                declared = str(
+                    metadata.get("bar_timestamp_role")
+                    or metadata.get("bar_timestamp_convention")
+                    or ""
+                ).lower()
+                if declared in {"bar_start", "bar_end"}:
+                    return declared
+        except Exception:
+            pass
+        try:
+            from data_access.cos_contract import get_cos_contract
+
+            contract = get_cos_contract("ashare_stock_minute")
+            declared = str(getattr(contract, "bar_timestamp_role", "") or "").lower()
+            if declared in {"bar_start", "bar_end"}:
+                return declared
+        except Exception:
+            pass
+        return "bar_end"
+
+    @classmethod
+    def _session_slots(cls, frame: pd.DataFrame) -> pd.DataFrame:
         from runtime.session_calendar import SessionCalendar
 
         out = frame.copy()
         timestamps = pd.to_datetime(out["timestamp"])
-        minute = timestamps.dt.hour * 60 + timestamps.dt.minute
-        has_start_labels = bool((minute == 570).any() or (minute == 780).any())
-        convention = "bar_start" if has_start_labels else "bar_end"
+        convention = cls._session_timestamp_convention()
         calendar = SessionCalendar.ashare(timestamp_convention=convention)
         segment = calendar.segment_id(timestamps)
         slot = calendar.segment_ordinal(timestamps)
@@ -702,7 +779,9 @@ class LQTPLogicalDataSource(_Base):
                     join_policy="exact_session",
                     pushdown="bundle",
                 )
-                return self._align_by_instrument(self._anchor_index(), vwap)
+                # Round-7 WS-E #290: minute→daily must align EXACT on TradeDate ×
+                # Symbol; a missing minute day stays NaN, never yesterday's carry.
+                return self._align_exact_by_instrument(self._anchor_index(), vwap)
             except Exception as exc:  # noqa: BLE001
                 if not _minute_fallback_allowed(exc):
                     raise
@@ -785,7 +864,8 @@ class LQTPLogicalDataSource(_Base):
                     join_policy="exact_session",
                     pushdown="duckdb",
                 )
-                return self._align_by_instrument(self._anchor_index(), daily)
+                # Round-7 WS-E #290: exact TradeDate×Symbol alignment, no asof carry.
+                return self._align_exact_by_instrument(self._anchor_index(), daily)
             except Exception as exc:  # noqa: BLE001
                 if not _minute_fallback_allowed(exc):
                     raise
@@ -871,4 +951,6 @@ class LQTPLogicalDataSource(_Base):
             names=["timestamp", "instrument"],
         )
         daily = pd.Series(agg["value"].to_numpy(), index=idx, name=field)
-        return self._align_by_instrument(self._anchor_index(), daily)
+        # Round-7 WS-E #290: minute→daily exact alignment — a missing minute day
+        # must not carry the previous day's intraday feature forward.
+        return self._align_exact_by_instrument(self._anchor_index(), daily)

@@ -131,10 +131,17 @@ class ParameterCanonicalizer:
     """R6 P1-19: turn an operator node's parameter dict into a canonical form
     used for AST-hash dedup.  Two plans that differ only by proportional weight
     scale, pure float noise, or inactive parameters hash identically.
+
+    The dedup chain is explicitly: ``canonicalize`` -> canonical parameter dict
+    -> ``hash_key`` produces the equivalence-class key -> the caller (CSE /
+    factor_dedup) keeps one representative per key.  No mutable ``_seen`` cache
+    is stored here: it would only ever grow across calls (memory leak) and the
+    caller already owns the key->node map.  Audit #388: removed the dead
+    ``self._seen`` field that was initialized but never read or written.
     """
 
     def __init__(self) -> None:
-        self._seen: dict[tuple, str] = {}
+        pass
 
     def canonicalize(self, canonical: str, attrs: dict[str, Any]) -> dict[str, Any]:
         return canonicalize_parameter_values(attrs)

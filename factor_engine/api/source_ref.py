@@ -34,7 +34,18 @@ class SourceRefSpec:
                 "dialect":self.dialect,"dialect_version":self.dialect_version}
 
 def _scalar(value: Any) -> Any:
-    if value is None or isinstance(value, (str,int,float,bool)): return value
+    if value is None or isinstance(value, (str, bool)):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        # Round-7 WS-E #289: NaN / +/-Inf must never enter an encoded SourceRef
+        # identity — a non-finite parameter is not a reproducible scalar literal.
+        if value != value or value in (float("inf"), float("-inf")):
+            raise ValueError(
+                "source parameters must be finite floats; NaN/Inf are forbidden"
+            )
+        return value
     raise TypeError(f"source parameters must be scalar literals, got {type(value).__name__}")
 
 def make_source_ref(table: str, field: str, *, params: Mapping[str, Any] | None = None,
@@ -60,6 +71,44 @@ def decode_source_ref(name: str) -> SourceRefSpec | None:
     return make_source_ref(payload["table"],payload["field"],params=payload.get("params") or {},
         transform=payload.get("transform"),transform_params=payload.get("transform_params") or {},
         dialect=payload.get("dialect","lqtp"),dialect_version=payload.get("dialect_version","2026-07-19"))
+
+def looks_like_source_ref(name: str) -> bool:
+    """Audit #392: cheap structural check that a name carries the SourceRef
+    prefix.  Consistent with the ``_PREFIX`` constant so a prefix rename stays in
+    sync.  Does NOT validate the payload — use ``decode_source_ref_strict`` for
+    that."""
+    return isinstance(name, str) and name.startswith(_PREFIX)
+
+def decode_source_ref_strict(name: str) -> SourceRefSpec:
+    """Audit #392: strictly decode a prefixed SourceRef, raising ValueError on
+    ANY malformed payload (bad base64, bad JSON, missing table/field, invalid
+    scalar parameter).  Unlike ``decode_source_ref`` — whose contract is to
+    return None for non-prefixed names and to let decode errors propagate — this
+    helper never swallows a damaged identity: a corrupt SourceRef must fail the
+    caller loudly instead of being silently treated as absent."""
+    if not isinstance(name, str):
+        raise ValueError(f"source ref name must be str, got {type(name).__name__}")
+    if not name.startswith(_PREFIX):
+        raise ValueError("not a source ref")
+    token = name[len(_PREFIX):]
+    try:
+        raw = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
+    except Exception as exc:  # binascii.Error / ValueError on bad alphabet
+        raise ValueError(f"malformed source ref base64 payload: {exc}") from exc
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except Exception as exc:
+        raise ValueError(f"malformed source ref json payload: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("source ref payload must be a JSON object")
+    for key in ("table", "field"):
+        if key not in payload:
+            raise ValueError(f"source ref payload missing required field {key!r}")
+    if not isinstance(payload["table"], str) or not isinstance(payload["field"], str):
+        raise ValueError("source ref table/field must be strings")
+    return make_source_ref(payload["table"], payload["field"], params=payload.get("params") or {},
+        transform=payload.get("transform"), transform_params=payload.get("transform_params") or {},
+        dialect=payload.get("dialect", "lqtp"), dialect_version=payload.get("dialect_version", "2026-07-19"))
 
 def is_source_ref(name: str) -> bool: return decode_source_ref(name) is not None
 

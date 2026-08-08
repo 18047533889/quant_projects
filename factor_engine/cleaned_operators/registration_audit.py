@@ -46,6 +46,67 @@ def _params(operator: Any) -> tuple[str, ...]:
     return tuple(str(x) for x in (getattr(metadata, "param_names", None) or ()))
 
 
+def _logical_names(logical: list[dict[str, Any]]) -> tuple[str, ...]:
+    """Human-readable role/name pair for error messages."""
+    return tuple(f"{entry['role']}:{entry['name']}" for entry in logical)
+
+
+def _logical_signature(operator: Any) -> list[dict[str, Any]] | None:
+    """Logical per-position signature: panel-vs-scalar role + required status.
+
+    R7-232: arity alone is insufficient — ``(x, weight, window)`` and
+    ``(x, window, weight)`` have equal length but bind a positional scalar to a
+    panel slot.  This derives, per positional index, whether the param is a
+    PANEL input (leading, required, positionally bound) or a SCALAR control
+    (defaulted, may trail).  The panel prefix is the shape a positional call
+    actually binds, so it must match across backends exactly.
+
+    Role resolution order:
+    1. ``metadata.panel_params`` / ``metadata.scalar_params`` (R7-224 declared);
+    2. ``metadata.panel_arity`` (leading N are panel);
+    3. fallback: params without a default are panel inputs (legacy kernel
+       inference); params with a default are scalars.
+    Returns ``None`` when the operator has no declared positional contract
+    (zero-param ops with kernel-implied arity are not comparable).
+    """
+    import inspect
+
+    metadata = getattr(operator, "metadata", None)
+    if metadata is None:
+        return None
+    names = list(getattr(metadata, "param_names", None) or ())
+    if not names:
+        return None
+    declared_panel = list(getattr(metadata, "panel_params", None) or ())
+    declared_scalar = list(getattr(metadata, "scalar_params", None) or ())
+    panel_arity = getattr(metadata, "panel_arity", None)
+    out: list[dict[str, Any]] = []
+    for index, name in enumerate(names):
+        role: str | None = None
+        if name in declared_panel:
+            role = "panel"
+        elif name in declared_scalar:
+            role = "scalar"
+        elif panel_arity is not None and index < int(panel_arity):
+            role = "panel"
+        elif panel_arity is not None:
+            role = "scalar"
+        if role is None:
+            # Legacy inference: params without a kernel default are panel inputs.
+            fn = getattr(operator, "_calculate_series", None) or getattr(operator, "calculate", None)
+            has_default = True
+            if callable(fn):
+                try:
+                    sig = inspect.signature(fn)
+                    param = sig.parameters.get(name)
+                    has_default = param is not None and param.default is not inspect.Parameter.empty
+                except (TypeError, ValueError):
+                    has_default = True
+            role = "scalar" if has_default else "panel"
+        out.append({"name": name, "role": role, "position": index})
+    return out
+
+
 def install_registration_audit() -> None:
     """Wrap registry registration before any runtime modules are imported."""
     global _INSTALLED, _ORIGINAL_REGISTER
@@ -165,6 +226,42 @@ def finalize_registration_audit() -> None:
                     f"{len(pandas_params)} ({tuple(params)} vs {tuple(pandas_params)}). "
                     "A positional call valid against the reference would mis-read "
                     "or break this backend (R4-100)."
+                )
+
+    # R7-232: LOGICAL signature equivalence, not just param COUNT.  Two backends
+    # with the same arity but swapped panel/scalar roles (pandas ``(x, weight,
+    # window)`` vs polars ``(x, window, weight)``) are semantically DIFFERENT —
+    # a positional call binds the scalar to a panel slot and vice versa.  This
+    # compares, per positional index, whether both backends agree on
+    # panel-vs-scalar role and required-vs-optional status.  A backend may
+    # reorder or rename scalar params (trailing defaults), but the PANEL prefix
+    # (positionally leading, required inputs) must match exactly — that is the
+    # shape that a positional call actually binds.
+    for canonical in sorted(OperatorRegistry._operators):
+        implementations = OperatorRegistry._operators.get(canonical, {})
+        pandas_op = implementations.get("pandas_numpy")
+        if pandas_op is None:
+            continue
+        pandas_logical = _logical_signature(pandas_op)
+        if pandas_logical is None:
+            continue
+        for backend, operator in implementations.items():
+            if backend == "pandas_numpy":
+                continue
+            other_logical = _logical_signature(operator)
+            if other_logical is None:
+                continue
+            # Panel prefix must match exactly (positional index + role).
+            p_panels = [i for i, k in enumerate(pandas_logical) if k["role"] == "panel"]
+            o_panels = [i for i, k in enumerate(other_logical) if k["role"] == "panel"]
+            if p_panels != o_panels:
+                raise RuntimeError(
+                    f"R7-232 logical signature mismatch for {canonical}/{backend}: "
+                    f"panel positional indices {p_panels} != pandas reference "
+                    f"{o_panels} ({_logical_names(pandas_logical)} vs "
+                    f"{_logical_names(other_logical)}).  Same arity but different "
+                    "panel/scalar layout — a positional call binds a scalar to a "
+                    "panel slot.  Fix the backend signature, not the gate."
                 )
 
     for canonical, expected in _FISCAL_SIGNATURES.items():

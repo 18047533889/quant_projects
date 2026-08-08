@@ -41,7 +41,12 @@ from backend.factory import build_backend
 from ir.analyzer import AnalysisResult, Analyzer
 from logging_utils import get_logger
 from planner.cse import apply_cse
-from planner.dag import DAGPlan, FactorPlan
+from planner.dag import (
+    DAGPlan,
+    FactorExecutionScope,
+    FactorPlan,
+    assert_unique_factor_names,
+)
 from planner.logical_plan import PlanNode
 from planner.lowerer import Lowerer
 from planner.optimizer import Optimizer
@@ -54,6 +59,61 @@ from storage.factory import build_data_source
 from storage.materializer import ParquetMaterializer
 
 logger = get_logger("runtime.engine")
+
+#: run_mode 严格白名单（#6）；任何其他值（含 typo）在引擎构造时直接抛
+#: ``ValueError``，不允许静默回落为 research。
+VALID_RUN_MODES = frozenset({"production", "research", "paper"})
+
+
+def _validate_run_mode(mode: str) -> None:
+    """严格校验 run_mode：非法值启动即失败。"""
+    if mode not in VALID_RUN_MODES:
+        raise ValueError(
+            f"非法 run_mode={mode!r}；合法值 {sorted(VALID_RUN_MODES)}"
+        )
+
+
+def _scope_from_factor(factor: Any) -> FactorExecutionScope:
+    """从 ``Factor`` 对象推断执行作用域；属性取不到时使用默认值（#321）。"""
+    return FactorExecutionScope(
+        frequency=str(getattr(factor, "freq", None) or "1d"),
+        universe_id=str(getattr(factor, "universe", None) or "ALL"),
+        market=str(getattr(factor, "market", None) or "A"),
+        calendar_id=str(
+            getattr(factor, "calendar_id", None)
+            or getattr(factor, "calendar", None)
+            or ""
+        ),
+        source_scope_hash=str(getattr(factor, "source_scope_hash", None) or ""),
+        decision_time_policy=str(getattr(factor, "decision_time_policy", None) or ""),
+    )
+
+
+def _scope_namespace(scope_key: str) -> str:
+    """将作用域键哈希为 sid 前缀，隔离跨作用域 CSE 共享。"""
+    import hashlib
+
+    digest = hashlib.sha256(scope_key.encode("utf-8")).hexdigest()[:16]
+    return f"scope:{digest}:"
+
+
+def _namespace_plan_refs(node: PlanNode, namespace: str) -> PlanNode:
+    """把子树内所有 ``plan_ref`` 的 sid 加上作用域命名空间前缀。"""
+    if node.op == "plan_ref":
+        sid = (node.attrs or {}).get("sid")
+        if sid:
+            return PlanNode(
+                op="plan_ref",
+                attrs={**node.attrs, "sid": f"{namespace}{sid}"},
+                inputs=[],
+            )
+        return node
+    return PlanNode(
+        op=node.op,
+        attrs=dict(node.attrs),
+        inputs=[_namespace_plan_refs(c, namespace) for c in node.inputs],
+        node_id=node.node_id,
+    )
 
 
 class FactorEngine:
@@ -89,6 +149,8 @@ class FactorEngine:
         self.data_source = data_source  # 从 parquet 等拉 MultiIndex 面板的统一入口
         self.cache = cache  # 列级缓存；无则每次 execute 全量算
         self.run_mode = resolve_run_mode(run_mode)
+        # #6：严格 run_mode 校验——非法值（含 typo）启动即失败，不静默回落。
+        _validate_run_mode(self.run_mode)
         self.analyzer = Analyzer()  # Expr → IR + 依赖列分析
         self.lowerer = Lowerer()  # IR → 逻辑计划树
         self.optimizer = Optimizer()  # 计划级优化（常折叠等）
@@ -176,12 +238,19 @@ class FactorEngine:
 
         ``pit_enforce=True`` 时在编译阶段对每个因子做 PIT 安全审计（``assert_pit_safe``
         是纯审计、不改计划），因此批跑也能满足 PIT 而无需退化为逐因子 ``run()``。
+
+        CSE / rolling-CSE 按 :class:`FactorExecutionScope` 分组执行：不同
+        freq/universe/market/calendar 执行作用域的因子不共享子树（#321），
+        且重复 ``factor.name`` 在此 fail-fast（#322）。
         """
         perf = perf or PerfConfig.from_env()
         if enable_cse is None:
             enable_cse = perf.enable_cse
+        # #322：重复 factor name 在编译前 fail-fast（analyses/roots 以 name 为键）。
+        names = [f.name for f in factors]
+        assert_unique_factor_names(names)
         plans: list[PlanNode] = []
-        names: list[str] = []
+        scopes: list[FactorExecutionScope] = []
         analyses: dict[str, AnalysisResult] = {}
         for factor in factors:
             plan, analysis = self.compile(
@@ -190,19 +259,66 @@ class FactorEngine:
                 pit_forbid_forward_fill=pit_forbid_forward_fill,
             )
             plans.append(plan)
-            names.append(factor.name)
             analyses[factor.name] = analysis
+            scopes.append(_scope_from_factor(factor))
         if enable_cse and len(plans) > 0:
-            new_plans, shared = apply_cse(plans)
-            from planner.rolling_cse import apply_rolling_cse
-
-            new_plans, shared = apply_rolling_cse(new_plans, existing_shared=shared)
+            new_plans, shared = self._cse_by_scope(plans, scopes)
         else:
             new_plans, shared = plans, {}
         roots = [
             FactorPlan(factor_name=n, root=r) for n, r in zip(names, new_plans, strict=True)
         ]
         return DAGPlan(roots=roots, shared_nodes=shared), analyses
+
+    @staticmethod
+    def _cse_by_scope(
+        plans: list[PlanNode],
+        scopes: list[FactorExecutionScope],
+    ) -> tuple[list[PlanNode], dict[str, PlanNode]]:
+        """按执行作用域分组执行结构 CSE + rolling CSE（#321）。
+
+        同一作用域内的因子才共享子树；不同作用域的因子不交叉。多作用域时
+        对每组 shared 的 sid 加作用域命名空间前缀，避免同结构子树因 sid 相同
+        而跨作用域互相引用。单一作用域时保持既有行为（不做前缀）。
+
+        参数：
+            plans: 各因子逻辑计划根列表
+            scopes: 与 ``plans`` 对齐的每个因子的执行作用域
+
+        返回：
+            ``(改写后的根列表, shared_nodes 字典)``
+        """
+        from planner.rolling_cse import apply_rolling_cse
+
+        groups: dict[str, list[int]] = {}
+        for i, scope in enumerate(scopes):
+            groups.setdefault(scope.scope_key(), []).append(i)
+
+        if len(groups) <= 1:
+            # 单一执行作用域：等价于旧的全局 CSE，sid 保持纯结构键。
+            new_plans, shared = apply_cse(list(plans))
+            return apply_rolling_cse(new_plans, existing_shared=shared)
+
+        result: dict[int, PlanNode] = {}
+        shared: dict[str, PlanNode] = {}
+        for scope_key, idxs in groups.items():
+            ns = _scope_namespace(scope_key)
+            group_plans = [plans[i] for i in idxs]
+            group_new, group_shared = apply_cse(group_plans)
+            group_new, group_shared = apply_rolling_cse(
+                group_new, existing_shared=group_shared
+            )
+            # 命名空间化：shared 键与所有 plan_ref 的 sid 统一加前缀，隔离跨作用域。
+            group_shared = {
+                f"{ns}{sid}": _namespace_plan_refs(node, ns)
+                for sid, node in group_shared.items()
+            }
+            group_new = [_namespace_plan_refs(p, ns) for p in group_new]
+            shared.update(group_shared)
+            for j, plan in zip(idxs, group_new):
+                result[j] = plan
+        new_plans = [result[i] for i in range(len(plans))]
+        return new_plans, shared
 
     def compile_many(
         self,
@@ -1194,10 +1310,25 @@ class FactorEngine:
         )
         if self.cache is None and shared_result_cache is None:
             return base
+        # #335：session 的 CSE / panel 字节预算从 perf/resource plan 传入；
+        # 无 resource plan（构造失败/未配置）时预算为 None（session 不强制限制）。
+        cse_budget_bytes: int | None = None
+        panel_budget_bytes: int | None = None
+        try:
+            resource_plan = effective_perf.build_resource_plan()
+            if resource_plan is not None:
+                cse_budget_bytes = getattr(resource_plan, "cse_budget_bytes", None)
+                panel_budget_bytes = getattr(resource_plan, "panel_budget_bytes", None)
+        except Exception:  # pragma: no cover - resource probe 失败不阻塞执行
+            logger.debug("ExecutionCacheSession 资源预算构造失败，使用 None 预算", exc_info=True)
+            cse_budget_bytes = None
+            panel_budget_bytes = None
         session = ExecutionCacheSession(
             plan_cache=self.cache,
             shared_result_cache=shared_result_cache,
             panel_cache={},
+            cse_budget_bytes=cse_budget_bytes,
+            panel_budget_bytes=panel_budget_bytes,
         )
         return session.wrap_context(base)
 

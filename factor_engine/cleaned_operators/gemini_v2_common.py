@@ -46,7 +46,7 @@ from cleaned_operators.rolling_pack import frame_like
 # axis would feed the time column into the kernel as a numeric feature (and
 # then rewrite it as an output column).  ``stock_code`` / ``instrument`` /
 # ``symbol`` / ``session`` are identity / session columns and never features.
-_AXIS_COLUMNS = ("date", "timestamp", "trade_date", "datetime")
+_AXIS_COLUMNS = ("__fe_time__", "date", "timestamp", "trade_date", "datetime")
 _IDENTITY_COLUMNS = ("stock_code", "instrument", "symbol", "session")
 _SKIP = frozenset((*_AXIS_COLUMNS, *_IDENTITY_COLUMNS))
 

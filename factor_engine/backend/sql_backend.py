@@ -8,7 +8,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from planner.logical_plan import PlanNode
@@ -23,11 +23,27 @@ from .runtime_events import append_runtime_event, merge_runtime
 from .runtime_labels import resolve_runtime_backend_label
 from .sql_pushdown.executor import (
     extract_pushdown_context,
+    fallback_reason_is_fail_closed,
     try_execute_sql_pushdown,
     try_execute_sql_pushdown_batch,
     try_execute_sql_pushdown_batch_long,
     try_execute_sql_pushdown_long,
 )
+
+
+@dataclass(frozen=True)
+class FallbackEvent:
+    """一次 SQL → Python/Polars fallback 的审计事件（#366）。
+
+    ``reason_class`` 为触发 fallback 的异常/原因类型名；``allowed_by_policy``
+    表示该 fallback 是否被 production 回退策略授权（fail-closed 类不授权）。
+    """
+
+    from_backend: str
+    to_backend: str
+    canonical: str
+    reason_class: str
+    allowed_by_policy: bool
 
 
 def _merge_runtime(ctx: ExecutionContext, **fields: Any) -> None:
@@ -63,11 +79,13 @@ class SqlBackend(Backend):
         prefer_long = bool(getattr(ctx, "materialize_sql_as_long_lazy", False))
         query_count = 0
         sql_fallback_count = 0
+        sql_full_execution_failed = False
 
         _merge_runtime(
             ctx,
             backend=resolve_runtime_backend_label(self),
             sql_plan_fully_compilable=bool(physical.fully_sql),
+            compile_fully_sql=bool(physical.fully_sql),
             fully_sql=bool(physical.fully_sql),
             sql_subtrees=sorted(physical.sql_subtrees.keys()),
             sql_subtree_count=len(physical.sql_subtrees),
@@ -101,6 +119,7 @@ class SqlBackend(Backend):
                     query_count=query_count,
                 )
                 return finalize_panel_result(pushed, ctx)
+            sql_full_execution_failed = True
             _merge_runtime(ctx, sql_full_execution_failed=True)
 
         pending = {
@@ -147,12 +166,28 @@ class SqlBackend(Backend):
                 sql_fallback_count += 1
 
         used_sql = query_count > 0
-        partial = used_sql and not physical.fully_sql
+        # #367：区分「计划可完整编译」与「实际完整 SQL 执行成功」。
+        compile_fully_sql = bool(physical.fully_sql)
+        execution_fully_sql = bool(
+            used_sql and not sql_full_execution_failed and compile_fully_sql
+        )
+        execution_partial_sql = bool(used_sql and not execution_fully_sql)
         if used_sql or python_fallback_cache or mat_lazy or mat_cache:
             _merge_runtime(
                 ctx,
                 used_sql_pushdown=used_sql,
-                sql_partial_pushed=partial and used_sql,
+                compile_fully_sql=compile_fully_sql,
+                execution_fully_sql=execution_fully_sql,
+                execution_partial_sql=execution_partial_sql,
+                sql_partial_pushed=execution_partial_sql,
+                sql_fallback_event_count=len(
+                    list(
+                        (getattr(ctx, "runtime_stats", None) or {}).get(
+                            "sql_fallback_events"
+                        )
+                        or []
+                    )
+                ),
                 sql_long_lazy_subtrees=sorted(sql_long_sids),
                 sql_series_subtrees=sorted(sql_series_sids),
                 python_fallback_subtree_sids=sorted(python_fallback_cache.keys()),
@@ -190,7 +225,38 @@ class SqlBackend(Backend):
         return self._polars.execute(plan, ctx)
 
     def _eval_python(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
-        backend = self._python if self._operator_backend == "pandas_numpy" else self._polars
-        if hasattr(backend, "_eval"):
-            return backend._eval(plan, ctx)
-        return backend.execute(plan, ctx)
+        """Python/Polars 回退执行，并记录一条 :class:`FallbackEvent`（#366）。
+
+        production_fallback_policy：production 下若 reason_class 是 fail-closed 类，
+        不回退（raise）；否则记录 authorized fallback。
+        """
+        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+        reason_class = str(runtime.get("sql_fallback_reason") or "CompilationUnsupported")
+        production = str(getattr(ctx, "run_mode", "") or "").lower() == "production"
+        fail_closed = fallback_reason_is_fail_closed(reason_class)
+        if production and fail_closed:
+            raise RuntimeError(
+                f"production blocks SQL->python fallback for {plan.op!r}: "
+                f"fail-closed reason {reason_class!r}"
+            )
+        to_backend = (
+            "pandas_numpy" if self._operator_backend == "pandas_numpy" else "polars"
+        )
+        backend = self._python if to_backend == "pandas_numpy" else self._polars
+        result = backend._eval(plan, ctx) if hasattr(backend, "_eval") else backend.execute(plan, ctx)
+        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+        events = list(runtime.get("sql_fallback_events") or [])
+        events.append(
+            asdict(
+                FallbackEvent(
+                    from_backend=self.runtime_backend_label,
+                    to_backend=to_backend,
+                    canonical=str(getattr(plan, "op", "") or ""),
+                    reason_class=reason_class,
+                    allowed_by_policy=not (production and fail_closed),
+                )
+            )
+        )
+        runtime["sql_fallback_events"] = events
+        ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+        return result

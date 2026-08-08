@@ -9,7 +9,7 @@ Pandas-first tier membership are never sufficient by themselves.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Sequence
+from typing import Any, Literal, Sequence
 
 BackendName = Literal[
     "pandas_numpy",
@@ -90,6 +90,18 @@ class OperatorCapabilitySummary:
     notes: str = ""
 
 
+@dataclass(frozen=True)
+class CapabilityDecision:
+    """调用级（canonical + bound params × dialect）SQL capability 判定。"""
+
+    canonical: str
+    dialect: str
+    supported: bool
+    production_safe: bool
+    reason: str
+    estimated_cost: float = 1.0
+
+
 def resolve_canonical(name: str) -> str:
     from cleaned_operators.registry import OperatorRegistry
 
@@ -147,13 +159,169 @@ def _sql_capable_canonicals() -> frozenset[str]:
     return SQL_IMPLEMENTED_CANONICALS
 
 
-_EMITTER_OK_CACHE: dict[tuple[str, str, int], bool] = {}
+#: #364：per-canonical×dialect 覆盖——即使 backend_meta 声明为 streaming，这些
+#: canonical 的 SQL 实现实际是 self-join / rolling OLS / 全局结构，并非真 streaming。
+_SQL_STREAMING_LIMITATIONS: frozenset[str] = frozenset(
+    {
+        # EWM 家族：EWMA self join 依赖前序状态，不是真 streaming
+        "ts_ema",
+        "ewm_std",
+        "ewm_var",
+        "ewm_cov",
+        "ewm_corr",
+        "ts_ewm_std",
+        "ts_ewm_var",
+        "ts_ewm_cov",
+        "ts_ewm_corr",
+        "RSI_WILDER",
+        "ATR_WILDER",
+        "ADX",
+        "DX",
+        "DMI_plus",
+        "DMI_minus",
+        "MACD_line",
+        "MACD_signal",
+        "MACD_hist",
+        "DEMA",
+        "TEMA",
+        # rolling regression：窗口内 OLS 需要每窗口状态，不是 streaming
+        "ts_beta",
+        "rolling_beta",
+        "return_volume_beta",
+        "return_turnover_beta",
+        "ts_regression_slope",
+        "ts_regression_tstat",
+        "ts_time_slope",
+        # KNN / graph / matrix_profile：全局结构，整宽物化
+        "knn",
+        "graph",
+        "matrix_profile",
+        "ts_matrix_profile",
+    }
+)
 
 
-def _sql_emitter_ok(canon: str, *, dialect: str = "duckdb_sql") -> bool:
+_EMITTER_SOURCE_HASH: str | None = None
+
+
+def _emitter_source_hash() -> str:
+    """``backend.sql_pushdown.emitter`` 模块源码的 sha256 前缀（#390）。"""
+    global _EMITTER_SOURCE_HASH
+    if _EMITTER_SOURCE_HASH is not None:
+        return _EMITTER_SOURCE_HASH
+    import hashlib
+    import inspect
+
+    try:
+        from backend.sql_pushdown import emitter as _emitter_mod
+
+        src = inspect.getsourcefile(_emitter_mod)
+        if src:
+            with open(src, "rb") as fh:
+                _EMITTER_SOURCE_HASH = hashlib.sha256(fh.read()).hexdigest()[:16]
+                return _EMITTER_SOURCE_HASH
+    except Exception:
+        pass
+    _EMITTER_SOURCE_HASH = "unknown"
+    return _EMITTER_SOURCE_HASH
+
+
+def _safe_payload_hash(payload: Any) -> str:
+    """对任意 payload 计算稳定 hash；JSON 不可序列化时回退 repr。"""
+    try:
+        from backend.evidence_provenance import compute_payload_hash
+
+        return compute_payload_hash(payload)
+    except Exception:
+        import hashlib
+
+        return hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()[:16]
+
+
+def _sql_contract(canon: str) -> dict:
+    """读取 OperatorRegistry 中 canonical 的 logical contract（#363）。
+
+    SQL 实现不拥有 parameter signature，capability 一律读 registry contract；
+    SQL marker 元数据里的 ``param_names=[]`` 不做签名审计。
+    """
     from cleaned_operators.registry import OperatorRegistry
 
-    cache_key = (canon, dialect, OperatorRegistry.version())
+    return dict(OperatorRegistry._catalog.get(canon, {}) or {})
+
+
+def _sql_bound_param_names(canon: str) -> frozenset[str]:
+    """SQL canonical 的合法 bound-param 名集合：contract param_names/param_specs + 生产签名。"""
+    contract = _sql_contract(canon)
+    names: set[str] = set(contract.get("param_names") or ())
+    specs = contract.get("param_specs") or {}
+    if isinstance(specs, dict):
+        names.update(specs.keys())
+    try:
+        from backend.production_signature import PRODUCTION_SIGNATURES
+
+        sig = PRODUCTION_SIGNATURES.get(canon)
+        if sig is not None:
+            names.update(p.name for p in sig.params)
+    except Exception:
+        pass
+    return frozenset(names)
+
+
+def _validate_bound_params(canon: str, bound_params: dict) -> None:
+    """校验 bound params 都存在于 registry logical contract（#363）。
+
+    非法 param 名直接 raise ``UnsupportedOperatorBackendError``（调用级契约违约）。
+    """
+    allowed = _sql_bound_param_names(canon)
+    unknown = sorted(set(bound_params) - allowed)
+    if unknown:
+        raise UnsupportedOperatorBackendError(
+            f"{canon}: SQL bound params {unknown} not in registry contract/signature "
+            f"param_names={sorted(allowed)}"
+        )
+
+
+def _build_bound_plan(canon: str, bound_params: dict | None):
+    """用 ``minimal_plan(canon)`` 打底、把 bound_params 填入 attrs 构造 bound-call plan。"""
+    from planner.logical_plan import PlanNode
+    from backend.sql_pushdown.plan_fixtures import minimal_plan
+
+    plan = minimal_plan(canon)
+    if bound_params:
+        attrs = dict(plan.attrs or {})
+        attrs.update(bound_params)
+        plan = PlanNode(op=plan.op, inputs=plan.inputs, attrs=attrs, node_id=plan.node_id)
+    return plan
+
+
+_EMITTER_OK_CACHE: dict[tuple[Any, ...], bool] = {}
+
+
+def _sql_emitter_ok(
+    canon: str,
+    *,
+    dialect: str = "duckdb_sql",
+    bound_params: dict | None = None,
+) -> bool:
+    """emitter 能否编译该 canonical（可选：带 bound params 的调用组合，#390/#391）。
+
+    缓存 key 由 ``(canon, dialect, registry_version, emitter_hash, contract_hash,
+    params_key)`` 组成，参数摘要独立缓存——同一 canonical 的不同参数组合结果分开。
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    registry_version = OperatorRegistry.version()
+    emitter_hash = _emitter_source_hash()
+    contract_hash = _safe_payload_hash(_sql_contract(canon))
+    params_key = _safe_payload_hash(bound_params) if bound_params else ""
+    cache_key = (
+        canon,
+        dialect,
+        registry_version,
+        emitter_hash,
+        contract_hash,
+        params_key,
+    )
     if cache_key in _EMITTER_OK_CACHE:
         return _EMITTER_OK_CACHE[cache_key]
     if canon in {"column", "literal"}:
@@ -170,9 +338,8 @@ def _sql_emitter_ok(canon: str, *, dialect: str = "duckdb_sql") -> bool:
             compile_plan_to_sql,
             plan_is_sql_capable,
         )
-        from backend.sql_pushdown.plan_fixtures import minimal_plan
 
-        plan = minimal_plan(canon)
+        plan = _build_bound_plan(canon, bound_params)
         if plan_is_sql_capable(plan):
             compiled = compile_plan_to_sql(
                 plan,
@@ -253,6 +420,11 @@ def _sql_status(canon: str, *, dialect: BackendName) -> CapabilityStatus:
 
     if canon not in SQL_IMPLEMENTED_CANONICALS:
         return "unsupported"
+    # #363：SQL canonical 的 parameter signature 一律读 registry logical contract；
+    # SQL marker 的 ``param_names=[]`` 不做签名审计。调用级（bound params）校验
+    # 在 check_call_capability 完成，这里保持无参基态。
+    contract = _sql_contract(canon)
+    _ = contract
     if not _sql_emitter_ok(canon, dialect=dialect):
         return "implemented"
     if dialect == "clickhouse_sql":
@@ -293,6 +465,80 @@ def backend_status(
     if backend in _SQL_BACKENDS:
         return _sql_status(canon, dialect=backend)
     return "unsupported"
+
+
+def check_call_capability(
+    canonical: str,
+    bound_params: dict | None = None,
+    *,
+    dialect: str = "duckdb_sql",
+) -> CapabilityDecision:
+    """调用级 SQL capability 判定（#362）。
+
+    对 ``canonical + bound_params × dialect`` 组合，先取算子级 base status
+    （``_sql_status``），再用「带参数的 bound-call plan」编译验证该参数组合能否
+    由 emitter 下推：
+
+    - 能编译且 base status == production_safe → ``production_safe=True``；
+    - 能编译但 base status 较低 → ``supported=True`` / ``production_safe=False``；
+    - 编译失败（该参数组合不受支持）→ ``supported=False``。
+
+    参数:
+        canonical: 算子名或别名。
+        bound_params: 调用参数（如 ``{'window': 20, 'ddof': 1}``）。参数名必须
+            存在于 registry logical contract / 生产签名，否则 raise
+            ``UnsupportedOperatorBackendError``（#363）。
+        dialect: SQL 方言，``duckdb_sql`` 或 ``clickhouse_sql``。
+    """
+    from backend.operator_cost import default_backend_speedup
+
+    canon = resolve_canonical(canonical)
+    if canon == "if_else":
+        canon = "where"
+    if bound_params is not None:
+        if not isinstance(bound_params, dict):
+            bound_params = dict(bound_params)
+        _validate_bound_params(canon, bound_params)
+
+    if canon not in _sql_capable_canonicals():
+        return CapabilityDecision(
+            canonical=canon,
+            dialect=dialect,
+            supported=False,
+            production_safe=False,
+            reason="not in SQL_IMPLEMENTED_CANONICALS",
+            estimated_cost=1.0,
+        )
+
+    base_status = _sql_status(canon, dialect=dialect)  # type: ignore[arg-type]
+    compile_ok = _sql_emitter_ok(canon, dialect=dialect, bound_params=bound_params or None)
+    cost = default_backend_speedup(canon, dialect, base_status)
+    if not compile_ok:
+        return CapabilityDecision(
+            canonical=canon,
+            dialect=dialect,
+            supported=False,
+            production_safe=False,
+            reason=f"bound params {bound_params or {}} fail SQL compile",
+            estimated_cost=cost,
+        )
+    if base_status == "production_safe":
+        return CapabilityDecision(
+            canonical=canon,
+            dialect=dialect,
+            supported=True,
+            production_safe=True,
+            reason=f"SQL compiles with {bound_params or {}}; production_safe",
+            estimated_cost=cost,
+        )
+    return CapabilityDecision(
+        canonical=canon,
+        dialect=dialect,
+        supported=True,
+        production_safe=False,
+        reason=f"SQL compiles with {bound_params or {}} but status={base_status}",
+        estimated_cost=cost,
+    )
 
 
 def production_eligible_backends(
@@ -366,6 +612,15 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
     notes = ""
     if backend == "clickhouse_sql" and status != "unsupported":
         notes = "dialect=clickhouse; verify per deployment"
+    supports_streaming = bool(backend_meta.get("supports_streaming", False))
+    materializes_full_panel = bool(
+        backend_meta.get("materializes_full_panel", backend == "pandas_numpy")
+    )
+    if backend in _SQL_BACKENDS and canon in _SQL_STREAMING_LIMITATIONS:
+        # #364：per-canonical×dialect 覆盖——EWM self join / rolling regression /
+        # KNN/graph/matrix_profile 并非真 streaming，即使 backend_meta 声明过强也强制降级。
+        supports_streaming = False
+        materializes_full_panel = True
     return BackendCapability(
         canonical=canon,
         backend=backend,
@@ -391,10 +646,8 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         ),
         supports_window=bool(backend_meta.get("supports_window", scope == "ts")),
         supports_lazy=bool(backend_meta.get("supports_lazy", False)),
-        supports_streaming=bool(backend_meta.get("supports_streaming", False)),
-        materializes_full_panel=bool(
-            backend_meta.get("materializes_full_panel", backend == "pandas_numpy")
-        ),
+        supports_streaming=supports_streaming,
+        materializes_full_panel=materializes_full_panel,
         notes=notes,
     )
 

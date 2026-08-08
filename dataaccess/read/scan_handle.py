@@ -16,6 +16,8 @@ from .read_contract import (
     ReadLineage,
     ReadResult,
     ReadStats,
+    _remote_object_meta,
+    _remote_snapshot_meta_enabled,
     rebuild_snapshot_files,
 )
 
@@ -32,6 +34,34 @@ _MATERIALIZING_METHODS = {
     "sink_ndjson",
     "sink_parquet",
 }
+
+
+def _remote_identity_changed(fv: Any, meta: dict[str, Any]) -> bool:
+    """#P0 收官（0.9.5）：对比重新 HEAD 到的远程对象身份与 snapshot 记录值。
+
+    只比真实身份字段（etag/content_length/version_id）——last_modified 在
+    manifest/parquet/内存三种表示之间往返会丢精度，不比。snapshot 侧**没有记录
+    任何可比较身份**（research 模式建的 snapshot）时，strict 下视为无法证明未变
+    → fail-closed；research 下视为未变（宽容放行）。
+    """
+    etag = meta.get("etag")
+    if fv.etag is not None and etag is not None and fv.etag != etag:
+        return True
+    length = meta.get("content_length")
+    if (
+        fv.content_length is not None
+        and length is not None
+        and int(fv.content_length) != int(length)
+    ):
+        return True
+    version = meta.get("version_id")
+    if fv.version_id is not None and version is not None and fv.version_id != version:
+        return True
+    if is_strict_semantics() and (
+        fv.etag is None and fv.content_length is None and fv.version_id is None
+    ):
+        return True  # 无法证明未变 → fail-closed
+    return False
 
 
 @dataclass
@@ -80,8 +110,12 @@ class ScanHandle:
             - 无变化 → 原 snapshot
             - 有变化且 strict → 抛 ValidationError（fail-closed，要求重新 scan）
             - 有变化且 research → 重建 snapshot 文件版本（lineage 不再撒谎）
-        远程对象由 etag/version_id 参与 manifest hash，scan 后覆盖也会在
-        ``_remote_object_meta`` 变化时体现；无 _store（无法 stat）→ 原样返回。
+        远程对象（s3:// / cos://，#P0 收官 0.9.5）不能只靠 manifest hash 里记录
+        的旧 etag：**collect 前必须强制重新 HEAD**（``fresh=True`` 绕过 TTL memo）
+        并对比 etag/content_length/version_id——scan(t0) 后对象同 key 被覆盖，
+        collect(t1) 会读到新数据，若还声称旧 ETag，训练/回测 lineage 直接失真。
+        strict/pin 下变化或无法验证（无凭证/网络/未记录身份）→ fail-closed。
+        无 _store（无法 stat）→ 原样返回。
         """
         if self._store is None:
             return self.snapshot
@@ -90,6 +124,17 @@ class ScanHandle:
         for fv in self.snapshot.files:
             path = str(fv.path)
             if path.startswith("s3://") or path.startswith("cos://"):
+                if _remote_snapshot_meta_enabled():
+                    meta = _remote_object_meta(path, fresh=True)
+                    if meta is None:
+                        if is_strict_semantics():
+                            changed.append(f"{path} (remote identity unverifiable)")
+                            continue
+                        restat.append(fv)
+                        continue
+                    if _remote_identity_changed(fv, meta):
+                        changed.append(f"{path} (remote etag/size changed)")
+                        continue
                 restat.append(fv)
                 continue
             from pathlib import Path

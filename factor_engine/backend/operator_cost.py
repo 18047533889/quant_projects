@@ -2,8 +2,49 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+
+_LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CostContext:
+    """算子代价估值的运行时上下文（行数、窗口、特征维等规模参数）。
+
+    用于把参数规模（window / feature_dim）反映到 O(NW)/O(NK^2) 算子成本上，
+    避免 window=5 与 window=500 估出相同成本。字段全为可选：缺省 None 表示
+    调用方未提供该维度信息，保持无 ctx 时行为不变。
+    """
+
+    rows: int = 500_000
+    instruments: int = 3000
+    window: int | None = None
+    k: int | None = None
+    feature_dim: int | None = None
+    regressors: int | None = None
+    group_count: int | None = None
+    average_group_size: int | None = None
+    session_bars: int | None = None
+    expected_density: float | None = None
+
+
+@dataclass(frozen=True)
+class CostSpec:
+    """算子的显式代价规格：复杂度串 + 参数缩放维度 + 物化放大系数。
+
+    参数:
+        time_complexity: 大 O 复杂度串（``O(N)``、``O(NW)``、``O(NK^2)`` …）。
+        memory_complexity: 内存档位（``low``/``medium``/``high``）。
+        parameter_scaling: 该算子成本随哪个参数缩放：``window`` | ``feature_dim`` | ``none``。
+        materialization_multiplier: 峰值物化放大系数（默认 1.0）。
+    """
+
+    time_complexity: str
+    memory_complexity: str
+    parameter_scaling: str = "none"
+    materialization_multiplier: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -195,6 +236,46 @@ _COSTS: dict[str, OperatorCost] = {
 }
 
 
+# 成本随参数缩放的高危算子族（审计 #350/#351）。
+#   - window 族：O(NW) 系列，window 越大成本越高（ts_corr/ts_beta/rank_corr …）。
+#   - feature_dim 族：group/neutralize/panel regression（cs_regression/neutralize …），
+#     回归器数量 K 越大成本越高。
+_FEATURE_DIM_OPS = frozenset({
+    "neutralize",
+    "group_neutralize",
+    "size_neutralize",
+    "industry_size_neutralize",
+    "cs_regression",
+    "cs_resid",
+    "cs_multi_resid",
+    "cs_wls_resid",
+})
+
+
+def _resolve_canonical_name(canon: str) -> str:
+    """将算子名解析为 canonical；解析失败时原样返回（兼容未 load_all 环境）。"""
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        return OperatorRegistry.resolve_canonical(str(canon))
+    except Exception:
+        return str(canon)
+
+
+def _cost_spec_for_registered(name: str) -> CostSpec | None:
+    """查 ``_COSTS`` 表构建 ``CostSpec``；未登记返回 ``None``（不记 warning）。"""
+    cost = _COSTS.get(name)
+    if cost is None:
+        return None
+    if "NW" in cost.complexity:
+        scaling = "window"
+    elif "K" in cost.complexity or name in _FEATURE_DIM_OPS:
+        scaling = "feature_dim"
+    else:
+        scaling = "none"
+    return CostSpec(cost.complexity, cost.memory, scaling, 1.0)
+
+
 @dataclass(frozen=True)
 class BackendCost:
     """单算子 × backend 的运行成本估计（毫秒量级相对值）。"""
@@ -209,60 +290,117 @@ class BackendCost:
 _DEFAULT_BACKEND_COST = BackendCost("pandas_numpy", 1.0, 80.0, 1.0, False)
 
 _BENCHMARK_JSON = Path(__file__).resolve().parents[1] / "benchmarks" / "backend_cost_baseline.json"
-_BENCHMARK_CACHE: dict[str, dict[str, BackendCost]] | None = None
+# 缓存 (table, status)：status ∈ {"missing", "corrupt", "stale", "ok"}（审计 #354）。
+_BENCHMARK_CACHE: tuple[dict[str, dict[str, BackendCost]] | None, str] | None = None
+
+# 视为「有效 measured baseline」必须携带的 provenance 字段（审计 #353）。
+# 缺失任一字段即 stale——避免把无出处/无实现 hash 的旧 benchmark 当权威成本。
+_BENCHMARK_PROVENANCE_REQUIRED = (
+    "implementation_hash",
+    "backend_versions",
+    "cpu_model",
+    "ram_gb",
+    "rows",
+    "columns",
+    "window_distribution",
+    "null_rate",
+    "group_cardinality",
+)
 
 
-def _load_benchmark_costs() -> dict[str, dict[str, BackendCost]]:
-    """从 benchmark JSON 加载并缓存 backend 成本表。"""
+def _load_benchmark_costs() -> tuple[dict[str, dict[str, BackendCost]] | None, str]:
+    """从 benchmark JSON 加载并缓存 backend 成本表，区分 missing/stale/corrupt。
+
+    返回 ``(table, status)``：
+      - 文件不存在 → ``(None, "missing")``
+      - JSON 解析失败 → ``(None, "corrupt")``（warning）
+      - provenance 不满足（非 measured / 缺字段 / seed 占位）→ ``(None, "stale")``（warning）
+      - 满足 → ``(table, "ok")``
+
+    调用方（``get_backend_cost``）在 ``table is None`` 时全走静态
+    ``_BACKEND_COST_TABLE``/默认值。
+    """
     global _BENCHMARK_CACHE
     if _BENCHMARK_CACHE is not None:
         return _BENCHMARK_CACHE
-    table: dict[str, dict[str, BackendCost]] = {}
-    if _BENCHMARK_JSON.is_file():
-        try:
-            import json
+    if not _BENCHMARK_JSON.is_file():
+        _BENCHMARK_CACHE = (None, "missing")
+        return _BENCHMARK_CACHE
+    try:
+        import json
 
-            data = json.loads(_BENCHMARK_JSON.read_text(encoding="utf-8"))
-            if str(data.get("generated_by") or "") == "seed_defaults":
-                _BENCHMARK_CACHE = {}
-                return {}
-            provenance = data.get("provenance") if isinstance(data.get("provenance"), dict) else {}
-            if provenance and not provenance.get("measured"):
-                _BENCHMARK_CACHE = {}
-                return {}
-            for canon, backends in (data.get("operators") or {}).items():
-                if not isinstance(backends, dict):
-                    continue
-                row: dict[str, BackendCost] = {}
-                for backend, spec in backends.items():
-                    if not isinstance(spec, dict) or "error" in spec:
-                        continue
-                    bname = str(backend)
-                    if bname.startswith("polars_panel"):
-                        bname = "polars"
-                    elif bname.startswith("polars_long"):
-                        bname = "polars_long"
-                    elif bname == "polars_long":
-                        bname = "polars_long"
-                    elif "@" in bname:
-                        bname = bname.split("@", 1)[0]
-                        if bname == "polars_panel":
-                            bname = "polars"
-                        elif bname == "polars_long":
-                            bname = "polars_long"
-                    row[bname] = BackendCost(
-                        backend=bname,
-                        fixed_overhead_ms=float(spec.get("fixed_overhead_ms", 1.0)),
-                        per_million_rows_ms=float(spec.get("per_million_rows_ms", 80.0)),
-                        memory_factor=float(spec.get("memory_factor", 1.0)),
-                        requires_conversion=bname in {"polars", "clickhouse_sql"},
-                    )
-                if row:
-                    table[str(canon)] = row
-        except Exception:
-            table = {}
-    _BENCHMARK_CACHE = table
-    return table
+        data = json.loads(_BENCHMARK_JSON.read_text(encoding="utf-8"))
+    except Exception as exc:
+        _LOGGER.warning(
+            "backend cost benchmark JSON corrupt (%s): %s", _BENCHMARK_JSON, exc
+        )
+        _BENCHMARK_CACHE = (None, "corrupt")
+        return _BENCHMARK_CACHE
+    if str(data.get("generated_by") or "") == "seed_defaults":
+        _LOGGER.warning(
+            "backend cost benchmark is seed_defaults placeholder, treated as stale (%s)",
+            _BENCHMARK_JSON,
+        )
+        _BENCHMARK_CACHE = (None, "stale")
+        return _BENCHMARK_CACHE
+    provenance = data.get("provenance") if isinstance(data.get("provenance"), dict) else {}
+    if not provenance.get("measured"):
+        _LOGGER.warning(
+            "backend cost benchmark provenance.measured is not true, treated as stale (%s)",
+            _BENCHMARK_JSON,
+        )
+        _BENCHMARK_CACHE = (None, "stale")
+        return _BENCHMARK_CACHE
+    missing = [key for key in _BENCHMARK_PROVENANCE_REQUIRED if key not in provenance]
+    if missing:
+        _LOGGER.warning(
+            "backend cost benchmark provenance missing fields %s, treated as stale (%s)",
+            missing,
+            _BENCHMARK_JSON,
+        )
+        _BENCHMARK_CACHE = (None, "stale")
+        return _BENCHMARK_CACHE
+    table: dict[str, dict[str, BackendCost]] = {}
+    for canon, backends in (data.get("operators") or {}).items():
+        if not isinstance(backends, dict):
+            continue
+        row: dict[str, BackendCost] = {}
+        for backend, spec in backends.items():
+            if not isinstance(spec, dict) or "error" in spec:
+                continue
+            bname = str(backend)
+            if bname.startswith("polars_panel"):
+                bname = "polars"
+            elif bname.startswith("polars_long"):
+                bname = "polars_long"
+            elif bname == "polars_long":
+                bname = "polars_long"
+            elif "@" in bname:
+                bname = bname.split("@", 1)[0]
+                if bname == "polars_panel":
+                    bname = "polars"
+                elif bname == "polars_long":
+                    bname = "polars_long"
+            row[bname] = BackendCost(
+                backend=bname,
+                fixed_overhead_ms=float(spec.get("fixed_overhead_ms", 1.0)),
+                per_million_rows_ms=float(spec.get("per_million_rows_ms", 80.0)),
+                memory_factor=float(spec.get("memory_factor", 1.0)),
+                requires_conversion=bname in {"polars", "clickhouse_sql"},
+            )
+        if row:
+            table[str(canon)] = row
+    _BENCHMARK_CACHE = (table, "ok")
+    return _BENCHMARK_CACHE
+
+
+def benchmark_status() -> str:
+    """最近一次 benchmark 成本表加载状态：``missing`` | ``corrupt`` | ``stale`` | ``ok``。
+
+    ``estimate_plan_cost`` 的 routing_basis 依赖该状态：只有 ``ok`` 时才视为
+    measured baseline 可路由（审计 #354）。
+    """
+    return _load_benchmark_costs()[1]
 
 _BACKEND_COST_TABLE: dict[str, dict[str, BackendCost]] = {
     "ts_mean": {
@@ -301,13 +439,67 @@ def get_backend_cost(canon: str, backend: str) -> BackendCost:
 
     返回:
         含固定开销与每百万行耗时的 ``BackendCost``。
+
+    注意:
+        benchmark 表仅在 provenance 有效（``_load_benchmark_costs`` 返回 ``ok``）时
+        参与查询；``stale``/``corrupt``/``missing`` 时全走静态
+        ``_BACKEND_COST_TABLE``/``_DEFAULT_BACKEND_COST``。
     """
     canon = str(canon)
-    bench = _load_benchmark_costs().get(canon, {})
-    if backend in bench:
-        return bench[backend]
+    bench, _status = _load_benchmark_costs()
+    if bench:
+        row = bench.get(canon, {})
+        if backend in row:
+            return row[backend]
     table = _BACKEND_COST_TABLE.get(canon, {})
     return table.get(backend, _DEFAULT_BACKEND_COST)
+
+
+def cost_spec_for(canon: str) -> CostSpec:
+    """返回算子的显式代价规格 ``CostSpec``。
+
+    参数:
+        canon: 算子 canonical 名称。
+
+    返回:
+        已登记则解析 ``_COSTS`` 复杂度/内存字段与参数缩放维度；未登记返回
+        ``CostSpec("O(N)", "medium", "none", 1.0)`` 并打 warning 标记
+        「research-only: no explicit CostSpec」（生产矿上未登记成本的算子必须显式声明，
+        见 ``production_requires_cost_spec``）。
+    """
+    name = _resolve_canonical_name(canon)
+    spec = _cost_spec_for_registered(name)
+    if spec is None:
+        _LOGGER.warning(
+            "research-only: no explicit CostSpec for canonical %r; "
+            "defaulting to O(N)/medium/none/1.0",
+            name,
+        )
+        return CostSpec("O(N)", "medium", "none", 1.0)
+    return spec
+
+
+def production_requires_cost_spec(canon: str) -> bool:
+    """生产模式要求显式 CostSpec 的判定。
+
+    当 canonical 不在 ``_COSTS`` 显式登记、且当前 run_mode 为 ``production`` 时
+    返回 ``True``——生产矿上未登记成本的算子必须显式声明 CostSpec，不允许静默落到
+    ``_DEFAULT``（O(N)/medium）低估风险。
+
+    参数:
+        canon: 算子 canonical 名称。
+
+    返回:
+        是否要求显式 CostSpec。
+    """
+    if _resolve_canonical_name(canon) in _COSTS:
+        return False
+    try:
+        from runtime.production_policy import resolve_run_mode
+
+        return resolve_run_mode() == "production"
+    except Exception:
+        return False
 
 
 def default_backend_speedup(
@@ -340,6 +532,7 @@ def estimate_backend_cost(
     *,
     row_count_estimate: int | None = None,
     requires_conversion: bool | None = None,
+    cost_ctx: CostContext | None = None,
 ) -> float:
     """估算相对成本（越小越快）。
 
@@ -348,6 +541,10 @@ def estimate_backend_cost(
         backend: 目标 backend 名称。
         row_count_estimate: 可选行数估计，默认 50 万行。
         requires_conversion: 是否需格式转换开销；为 ``None`` 时使用成本表默认值。
+        cost_ctx: 运行时规模上下文（审计 #350）。提供 ``window`` 时对 O(NW) 算子
+            乘 ``max(1, window/20)``（clamp 下限 1，上限 100）；提供 ``feature_dim``
+            时对 group/neutralize/panel regression 族乘 ``max(1, feature_dim/10)``。
+            为 ``None`` 时行为与旧版完全一致。
 
     返回:
         相对成本浮点数。
@@ -359,7 +556,19 @@ def estimate_backend_cost(
     cost = bc.fixed_overhead_ms + bc.per_million_rows_ms * millions
     if conv:
         cost += 2.0 + 0.05 * millions
-    return cost * bc.memory_factor
+    cost *= bc.memory_factor
+    if cost_ctx is not None:
+        name = _resolve_canonical_name(canon)
+        op_cost = _COSTS.get(name)
+        if cost_ctx.window is not None and op_cost is not None and "NW" in op_cost.complexity:
+            window_factor = max(1.0, min(100.0, cost_ctx.window / 20.0))
+            cost *= window_factor
+        if cost_ctx.feature_dim is not None and (
+            name in _FEATURE_DIM_OPS or (op_cost is not None and "K" in op_cost.complexity)
+        ):
+            dim_factor = max(1.0, cost_ctx.feature_dim / 10.0)
+            cost *= dim_factor
+    return cost
 
 
 def tier1_has_explicit_cost(canon: str) -> bool:
@@ -388,45 +597,76 @@ def get_operator_cost(op: str) -> OperatorCost:
 
     返回:
         已登记则返回对应 ``OperatorCost``，否则返回默认 ``_DEFAULT``。
+
+    注意:
+        生产模式（run_mode=production）下，未在 ``_COSTS`` 登记成本的算子必须通过
+        ``production_requires_cost_spec`` 显式声明 CostSpec，不允许静默落到 ``_DEFAULT``。
     """
-    try:
-        from cleaned_operators.registry import OperatorRegistry
-
-        name = OperatorRegistry.resolve_canonical(str(op))
-    except Exception:
-        name = str(op)
-    return _COSTS.get(name, _DEFAULT)
+    return _COSTS.get(_resolve_canonical_name(op), _DEFAULT)
 
 
-def estimate_plan_cost(plan: object) -> dict[str, object]:
-    """计算逻辑计划子树代价摘要（节点数 + 最大 tier）。
+_TIER_WORK_WEIGHT = {0: 1.0, 1: 10.0, 2: 3.0, 3: 8.0}
+_MEMORY_FACTOR = {"high": 3.0, "medium": 2.0, "low": 1.0}
+_DEFAULT_PLAN_ROWS = 500_000
+
+
+def estimate_plan_cost(plan: object, *, rows: int | None = None) -> dict[str, object]:
+    """计算逻辑计划子树代价摘要（节点数 + 最大 tier + 估真实 Work/峰值内存）。
 
     参数:
         plan: 逻辑计划根节点或子树。
+        rows: 可选行数估计；缺省 50 万行（用于 total_work 行数系数与峰值内存估算）。
 
     返回:
-        含 ``node_count``、``max_tier``、``expensive_ops`` 的字典。
+        含 ``node_count``、``max_tier``、``expensive_ops``（兼容字段）以及
+        ``total_work``、``peak_live_memory_bytes``、``shared_node_count``、
+        ``routing_basis`` 的字典（审计 #352/#354）。
     """
     max_tier = 0
     expensive: list[str] = []
     node_count = 0
+    shared_ids: set[int] = set()
+    total_work = 0.0
+    max_mem_factor = 1.0
+    max_mat_multiplier = 1.0
+
+    row_count = rows or _DEFAULT_PLAN_ROWS
+    rows_coeff = max(1.0, row_count / float(_DEFAULT_PLAN_ROWS))
 
     def walk(node: object) -> None:
         """递归遍历计划子树并累计代价统计。"""
-        nonlocal max_tier, node_count
+        nonlocal max_tier, node_count, total_work, max_mem_factor, max_mat_multiplier
         node_count += 1
+        shared_ids.add(id(node))
         op = str(getattr(node, "op", "") or "")
         if op:
             cost = get_operator_cost(op)
             max_tier = max(max_tier, cost.tier)
             if cost.tier >= 3 or cost.memory == "high":
                 expensive.append(op)
+            total_work += _TIER_WORK_WEIGHT.get(cost.tier, 3.0) * _complexity_extra(cost.complexity)
+            max_mem_factor = max(max_mem_factor, _MEMORY_FACTOR.get(cost.memory, 1.0))
+            spec = _cost_spec_for_registered(_resolve_canonical_name(op))
+            if spec is not None:
+                max_mat_multiplier = max(max_mat_multiplier, spec.materialization_multiplier)
         for child in getattr(node, "inputs", []) or []:
             walk(child)
 
     walk(plan)
+    peak_bytes = max(1, row_count) * 8 * max_mem_factor * max_mat_multiplier
     return {
         "node_count": node_count,
         "max_tier": max_tier,
         "expensive_ops": sorted(set(expensive)),
+        "total_work": round(total_work * rows_coeff, 3),
+        "peak_live_memory_bytes": int(peak_bytes),
+        "shared_node_count": len(shared_ids),
+        "routing_basis": benchmark_status(),
     }
+
+
+def _complexity_extra(complexity: str) -> float:
+    """O(N log N)/O(NW) 相对 O(N) 的额外 work 系数（审计 #352）。"""
+    if "N log N" in complexity or "NW" in complexity:
+        return 5.0
+    return 1.0

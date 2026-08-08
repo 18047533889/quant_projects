@@ -10,6 +10,7 @@ instead of each source re-deriving scale from a different registry.
 """
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -42,6 +43,21 @@ class NormalizedFieldPlan:
         source: provenance discriminator used by normalization:
             "catalog" (SemanticFieldCatalog), "registry" (FE FIELD_REGISTRY),
             or "raw" (no registered contract — research pass-through).
+        required_filters: mandatory dataset filters that must be applied to read
+            this field safely (mirrored from the catalog / FE FieldSpec, round-7
+            WS-E #281).
+        applicability: market/universe applicability labels (round-7 WS-E #281).
+        allowed_operator_families: operator families permitted over this field
+            (round-7 WS-E #281).
+        null_policy: preserve / drop / zero_fill ... declared by the field
+            (round-7 WS-E #281/#316).
+        semantic_kind: typed semantic kind (e.g. ReturnDecimal / PriceRaw /
+            NonNegativeActivity) when the field declares one (round-7 WS-E #281).
+        strict_pit_allowed: field-level PIT eligibility (round-7 WS-E #282).
+        current_snapshot_only: the field must never backfill historical panels
+            (round-7 WS-E #280).
+        role: catalog field role (feature / time / instrument / ...); drives
+            mining and MissingSemantic inference (round-7 WS-E #284/#316).
     """
 
     logical_concept: str
@@ -62,6 +78,14 @@ class NormalizedFieldPlan:
     price_basis: str | None = None
     flow_semantics: str | None = None
     source: str = "raw"
+    required_filters: tuple[str, ...] = field(default_factory=tuple)
+    applicability: tuple[str, ...] = field(default_factory=tuple)
+    allowed_operator_families: tuple[str, ...] = field(default_factory=tuple)
+    null_policy: str = "preserve"
+    semantic_kind: str | None = None
+    strict_pit_allowed: bool = True
+    current_snapshot_only: bool = False
+    role: str = "feature"
 
     @property
     def is_scale_applicable(self) -> bool:
@@ -114,6 +138,19 @@ def _catalog_coverage(field) -> str | None:
     return _coverage_from_temporal_model(getattr(field, "temporal_model", None))
 
 
+def _table_current_snapshot_only(table: str | None) -> bool:
+    """Look up a table's ``current_snapshot_only`` from the FE FIELD_REGISTRY."""
+    if not table:
+        return False
+    try:
+        from fields import FIELD_REGISTRY
+
+        table_spec = FIELD_REGISTRY.resolve_table(str(table))
+        return bool(getattr(table_spec, "current_snapshot_only", False))
+    except Exception:  # pragma: no cover - defensive
+        return False
+
+
 def plan_from_field_spec(name: str, spec: Any) -> NormalizedFieldPlan:
     """Build a plan from a FactorEngine ``FieldSpec`` (registry)."""
     return NormalizedFieldPlan(
@@ -135,6 +172,16 @@ def plan_from_field_spec(name: str, spec: Any) -> NormalizedFieldPlan:
         price_basis=getattr(spec, "price_basis", None),
         flow_semantics=getattr(spec, "flow_semantics", None),
         source="registry",
+        required_filters=tuple(getattr(spec, "required_filters", ()) or ()),
+        applicability=tuple(getattr(spec, "applicability", ()) or ()),
+        allowed_operator_families=tuple(
+            getattr(spec, "allowed_operator_families", ()) or ()
+        ),
+        null_policy=str(getattr(spec, "null_policy", "preserve") or "preserve"),
+        semantic_kind=getattr(spec, "semantic_kind", None),
+        strict_pit_allowed=bool(getattr(spec, "strict_pit_allowed", True)),
+        current_snapshot_only=_table_current_snapshot_only(getattr(spec, "table", None)),
+        role=str(getattr(spec, "role", "feature") or "feature"),
     )
 
 
@@ -167,11 +214,74 @@ def plan_from_catalog_field(name: str, field: Any) -> NormalizedFieldPlan:
         price_basis=getattr(field, "price_basis", None),
         flow_semantics=getattr(field, "flow_semantics", None),
         source="catalog",
+        required_filters=tuple(getattr(field, "required_filters", ()) or ()),
+        applicability=tuple(getattr(field, "applicability", ()) or ()),
+        allowed_operator_families=tuple(
+            getattr(field, "allowed_operator_families", ()) or ()
+        ),
+        null_policy=str(getattr(field, "null_policy", "preserve") or "preserve"),
+        semantic_kind=getattr(field, "semantic_kind", None),
+        strict_pit_allowed=bool(getattr(field, "strict_pit_allowed", True)),
+        current_snapshot_only=_table_current_snapshot_only(getattr(field, "table", None)),
+        role=str(getattr(field, "role", "feature") or "feature"),
     )
 
 
+class MissingSemantic(enum.Enum):
+    """Semantic meaning of a missing value for a field (round-7 WS-E #316).
+
+    Sparse-event fields (announcement / event) treat a missing value as
+    ``NO_EVENT`` (there was no announcement that day); dense fundamental / price
+    fields treat missing as ``UNKNOWN`` (the value is expected but not observed
+    yet).  ``NOT_APPLICABLE`` marks fields that only exist for a subset of
+    instruments/dates; ``NOT_TRADING`` marks suspension / no-session gaps;
+    ``STRUCTURAL_ZERO`` marks fields whose absence is economically a zero.
+    """
+
+    UNKNOWN = "unknown"
+    NO_EVENT = "no_event"
+    NOT_APPLICABLE = "not_applicable"
+    NOT_TRADING = "not_trading"
+    STRUCTURAL_ZERO = "structural_zero"
+
+
+#: Field temporal models / coverage values whose missing cells are semantically
+#: "no event occurred" rather than "value unknown".
+_NO_EVENT_TEMPORAL_MODELS = frozenset({
+    "sparse_event", "financial_event", "financial_pit", "effective_only",
+    "relation_pit", "sparse_snapshot", "event", "event_series",
+})
+_NO_EVENT_COVERAGE = frozenset({"sparse_event", "partial_history", "current_snapshot"})
+
+
+def missing_semantic_for_plan(plan: Any) -> MissingSemantic:
+    """Map a field (``NormalizedFieldPlan`` / ``FieldSpec``) to its MissingSemantic.
+
+    The mapping is driven by the declared null_policy, temporal model and
+    coverage so sparse-event fields resolve to ``NO_EVENT`` and dense fields to
+    ``UNKNOWN`` (round-7 WS-E #316).
+    """
+    null_policy = str(getattr(plan, "null_policy", "preserve") or "preserve").lower()
+    if null_policy in {"zero", "zero_fill", "as_zero", "structural_zero"}:
+        return MissingSemantic.STRUCTURAL_ZERO
+    temporal_model = str(getattr(plan, "temporal_model", "") or "").strip().lower()
+    if temporal_model in _NO_EVENT_TEMPORAL_MODELS:
+        return MissingSemantic.NO_EVENT
+    coverage = str(getattr(plan, "coverage", "") or "").strip().lower()
+    if coverage in _NO_EVENT_COVERAGE:
+        return MissingSemantic.NO_EVENT
+    role = str(getattr(plan, "role", "") or "").lower()
+    if role in {"knowledge_time", "period_id", "effective_time", "ingestion_time"}:
+        return MissingSemantic.NOT_APPLICABLE
+    if coverage == "current_snapshot":
+        return MissingSemantic.NOT_APPLICABLE
+    return MissingSemantic.UNKNOWN
+
+
 __all__ = [
+    "MissingSemantic",
     "NormalizedFieldPlan",
+    "missing_semantic_for_plan",
     "plan_from_catalog_field",
     "plan_from_field_spec",
 ]

@@ -2,8 +2,18 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from data_access.cos import mirror, remote
-from data_access.cos_storage_runtime import install_cos_storage_runtime
+from data_access.cos_storage_runtime import install_cos_storage_runtime, uninstall_cos_storage_runtime
+
+
+@pytest.fixture(autouse=True)
+def _uninstall_runtime_after_each_test():
+    """#P0 收官：install 会永久 patch 全局（registry + build_remote_paths 等），
+    测试结束必须还原，否则同进程后续测试被递归布局/月份 glob 污染。"""
+    yield
+    uninstall_cos_storage_runtime()
 
 
 def test_period_event_and_sparse_layouts_do_not_enumerate_decision_days():

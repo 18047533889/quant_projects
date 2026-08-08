@@ -15,6 +15,35 @@ class StatefulContractError(ValueError):
     pass
 
 
+class CheckpointSerializationError(StatefulContractError):
+    """Raised when a checkpoint's state cannot be serialized without silently
+    corrupting it (a non-finite float in a field that requires finite values).
+    Callers must fail closed (fall back to full-history replay), never persist a
+    lossy null in place of an ``Inf``/``NaN`` value."""
+
+
+@dataclass(frozen=True)
+class CheckpointFieldSpec:
+    """Per-field type / value-domain contract for a checkpoint's state.
+
+    ``dtype`` is one of ``float|int|str|bool|object``; ``object`` means no type
+    constraint beyond the surrounding checks.  ``finite=True`` fails closed when
+    a numeric value is ``NaN``/``Inf`` (non-finite), ``finite=False`` permits a
+    ``NaN`` "missing" marker that the kernels treat identically to ``null``.
+    ``min``/``max`` bound numeric values (inclusive).  ``nested_schema`` lists
+    the required keys of an object-valued field (e.g. an ``EwmState`` dict); the
+    field's ``finite`` then applies to the nested numeric values.
+    """
+
+    name: str
+    dtype: str = "float"          # float|int|str|bool|object
+    nullable: bool = True
+    finite: bool = True           # 非有限时 fail closed
+    min: float | None = None
+    max: float | None = None
+    nested_schema: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True)
 class StatefulOperatorSpec:
     canonical: str
@@ -26,6 +55,7 @@ class StatefulOperatorSpec:
     dependencies: tuple[str, ...] = ()
     checkpoint_required_for_segmented: bool = True
     segmented_execution_supported: bool = True
+    checkpoint_field_specs: tuple[CheckpointFieldSpec, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -39,17 +69,45 @@ class StateCheckpoint:
     state: Mapping[str, Any]
 
     def to_json(self) -> str:
-        def standard_json(value: Any) -> Any:
+        # Audit #381: never silently null a non-finite float.  A non-finite value
+        # in a field whose spec requires ``finite=True`` (or in any un-spec'd
+        # state field) fails closed with an explicit error — the old behaviour
+        # mapped ``Inf``/``NaN`` to ``None``, which corrupts a real ``Inf`` state.
+        # Fields explicitly declared ``finite=False`` may legitimately hold a
+        # ``NaN`` missing-marker that the kernels treat identically to null; only
+        # those are persisted as null.
+        spec = StatefulCheckpointRegistry.get(self.operator)
+        field_specs = (
+            {fs.name: fs for fs in spec.checkpoint_field_specs}
+            if spec is not None else {}
+        )
+
+        def standard_json(value: Any, *, state_field: str | None = None) -> Any:
             if isinstance(value, float) and not math.isfinite(value):
-                return None
+                fs = field_specs.get(state_field) if state_field is not None else None
+                if fs is not None and not fs.finite:
+                    return None  # lossless NaN "missing" marker
+                raise CheckpointSerializationError(
+                    "checkpoint state contains non-finite value; refusing to silently null it"
+                )
             if isinstance(value, Mapping):
-                return {str(k): standard_json(v) for k, v in value.items()}
+                return {str(k): standard_json(v, state_field=state_field) for k, v in value.items()}
             if isinstance(value, (list, tuple)):
-                return [standard_json(v) for v in value]
+                return [standard_json(v, state_field=state_field) for v in value]
             return value
 
+        payload = asdict(self)
+        state = payload.get("state")
+        if isinstance(state, Mapping):
+            payload = dict(payload)
+            payload["state"] = {
+                str(k): standard_json(v, state_field=str(k)) for k, v in state.items()
+            }
+            serialized = payload
+        else:
+            serialized = standard_json(payload)
         return json.dumps(
-            standard_json(asdict(self)), ensure_ascii=False, sort_keys=True,
+            serialized, ensure_ascii=False, sort_keys=True,
             separators=(",", ":"), allow_nan=False,
         )
 
@@ -148,6 +206,8 @@ class StatefulCheckpointRegistry:
         missing = sorted(set(spec.checkpoint_fields) - set(checkpoint.state))
         if missing:
             raise StatefulContractError(f"checkpoint missing fields: {missing}")
+        if spec.checkpoint_field_specs:
+            cls._validate_field_specs(spec.checkpoint_field_specs, checkpoint.state)
         if expected_instrument is not None and checkpoint.instrument != expected_instrument:
             raise StatefulContractError("checkpoint instrument mismatch")
         if input_identity is not None:
@@ -160,6 +220,71 @@ class StatefulCheckpointRegistry:
             raise StatefulContractError("checkpoint as_of is invalid") from exc
         if parsed.tzinfo is None:
             raise StatefulContractError("checkpoint as_of must be timezone-aware")
+
+    @staticmethod
+    def _validate_field_specs(
+        field_specs: tuple[CheckpointFieldSpec, ...],
+        state: Mapping[str, Any],
+    ) -> None:
+        """Audit #380: enforce the per-field dtype / finite / range contract."""
+        for fs in field_specs:
+            if fs.name not in state:
+                raise StatefulContractError(f"checkpoint state missing field for spec: {fs.name}")
+            value = state[fs.name]
+            if fs.nested_schema:
+                if isinstance(value, Mapping):
+                    missing_nested = sorted(set(fs.nested_schema) - set(value))
+                    if missing_nested:
+                        raise StatefulContractError(
+                            f"checkpoint field {fs.name} missing nested keys: {missing_nested}"
+                        )
+                    if fs.finite:
+                        for sub_key, sub_value in value.items():
+                            if isinstance(sub_value, float) and not math.isfinite(sub_value):
+                                raise StatefulContractError(
+                                    f"checkpoint field {fs.name}.{sub_key} is non-finite"
+                                )
+                    continue
+                # A non-object value in an object-schema field falls through to the
+                # scalar dtype check below (tolerates legacy scalar states while
+                # still validating them as numeric when the dtype demands it).
+
+            if value is None:
+                if not fs.nullable:
+                    raise StatefulContractError(f"checkpoint field {fs.name} must not be null")
+                continue
+            if fs.dtype == "float":
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise StatefulContractError(f"checkpoint field {fs.name} must be numeric")
+                numeric = float(value)
+                if fs.finite and not math.isfinite(numeric):
+                    raise StatefulContractError(f"checkpoint field {fs.name} must be finite")
+                if fs.min is not None and numeric < fs.min:
+                    raise StatefulContractError(
+                        f"checkpoint field {fs.name} below min {fs.min}"
+                    )
+                if fs.max is not None and numeric > fs.max:
+                    raise StatefulContractError(
+                        f"checkpoint field {fs.name} above max {fs.max}"
+                    )
+            elif fs.dtype == "int":
+                if isinstance(value, bool) or not isinstance(value, int):
+                    raise StatefulContractError(f"checkpoint field {fs.name} must be an integer")
+                if fs.min is not None and value < fs.min:
+                    raise StatefulContractError(
+                        f"checkpoint field {fs.name} below min {fs.min}"
+                    )
+                if fs.max is not None and value > fs.max:
+                    raise StatefulContractError(
+                        f"checkpoint field {fs.name} above max {fs.max}"
+                    )
+            elif fs.dtype == "str":
+                if not isinstance(value, str):
+                    raise StatefulContractError(f"checkpoint field {fs.name} must be a string")
+            elif fs.dtype == "bool":
+                if not isinstance(value, bool):
+                    raise StatefulContractError(f"checkpoint field {fs.name} must be a boolean")
+            # dtype == "object": presence is the only contract (no type gate).
 
     @classmethod
     def require_for_segment(
@@ -195,6 +320,38 @@ class StatefulCheckpointRegistry:
         )
 
 
+# Audit #380: per-field type / value-domain specs for every registered operator.
+# EwmState-backed fields are nested object dicts ``{weighted_avg, old_wt,
+# valid_count}``; ``*_last_*``/``mean_*`` fields may hold a ``NaN`` missing
+# marker (declared ``finite=False`` — persisted as null, semantically identical
+# to None on resume), every other numeric field fails closed on non-finite.
+def _nested_ewm(name: str) -> CheckpointFieldSpec:
+    # The production state is an ``EwmState`` dict; a scalar float is tolerated
+    # for legacy/foreign checkpoints and validated as numeric.
+    return CheckpointFieldSpec(
+        name=name,
+        dtype="float",
+        nullable=False,
+        finite=True,
+        nested_schema=("weighted_avg", "old_wt", "valid_count"),
+    )
+
+
+def _ts(name: str) -> CheckpointFieldSpec:
+    return CheckpointFieldSpec(name=name, dtype="str", nullable=False)
+
+
+def _f(name: str, *, finite: bool = True, nullable: bool = True,
+       min: float | None = None, max: float | None = None) -> CheckpointFieldSpec:
+    return CheckpointFieldSpec(
+        name=name, dtype="float", nullable=nullable, finite=finite, min=min, max=max
+    )
+
+
+def _i(name: str, *, min: int | None = None, max: int | None = None) -> CheckpointFieldSpec:
+    return CheckpointFieldSpec(name=name, dtype="int", nullable=True, min=min, max=max)
+
+
 for _spec in (
     StatefulOperatorSpec(
         canonical="trade_when",
@@ -208,6 +365,10 @@ for _spec in (
         # a full-history-replay operator until a real restore implementation is
         # added alongside ``stateful_runtime``.
         segmented_execution_supported=False,
+        checkpoint_field_specs=(
+            CheckpointFieldSpec(name="last_value", dtype="object", nullable=True, finite=False),
+            _ts("last_timestamp"),
+        ),
     ),
     # Recursive technical operators documented as stateful (checkpoint schemas in
     # production_hardening.STATEFUL_CHECKPOINTS) but with no segmented restore
@@ -220,6 +381,10 @@ for _spec in (
         checkpoint_fields=("last_value", "last_timestamp"),
         missing_policy="carry_state_emit_null",
         segmented_execution_supported=False,
+        checkpoint_field_specs=(
+            _f("last_value"),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="Supertrend",
@@ -230,6 +395,13 @@ for _spec in (
         missing_policy="carry_state_emit_null",
         segmented_execution_supported=False,
         dependencies=("ATR_WILDER",),
+        checkpoint_field_specs=(
+            _f("final_upper"),
+            _f("final_lower"),
+            _i("direction", min=-1, max=1),
+            _f("last_close", finite=False),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="SupertrendDirection",
@@ -240,6 +412,13 @@ for _spec in (
         missing_policy="carry_state_emit_null",
         segmented_execution_supported=False,
         dependencies=("Supertrend",),
+        checkpoint_field_specs=(
+            _f("final_upper"),
+            _f("final_lower"),
+            _i("direction", min=-1, max=1),
+            _f("last_close", finite=False),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="PSAR",
@@ -249,30 +428,87 @@ for _spec in (
         checkpoint_fields=("sar", "direction", "extreme_point", "acceleration_factor", "prev_high", "prev_low", "last_timestamp"),
         missing_policy="carry_state_emit_null",
         segmented_execution_supported=False,
+        checkpoint_field_specs=(
+            _f("sar"),
+            _i("direction", min=-1, max=1),
+            _f("extreme_point"),
+            _f("acceleration_factor", min=0.0),
+            _f("prev_high"),
+            _f("prev_low"),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="ts_ewm_std", state_schema_version="ewm_moment_state.v1",
         semantic_version="3.0", minimum_history=2,
         checkpoint_fields=("effective_weight", "weight_sum", "squared_weight_sum", "observation_count", "mean_x", "mean_y", "second_moment_x", "second_moment_y", "cross_moment", "last_timestamp"),
         missing_policy="pandas_adjust_false_ignore_na_false",
+        checkpoint_field_specs=(
+            _f("effective_weight"),
+            _f("weight_sum"),
+            _f("squared_weight_sum"),
+            _i("observation_count", min=0),
+            _f("mean_x", finite=False),
+            _f("mean_y", finite=False),
+            _f("second_moment_x"),
+            _f("second_moment_y"),
+            _f("cross_moment"),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="ts_ewm_var", state_schema_version="ewm_moment_state.v1",
         semantic_version="3.0", minimum_history=2,
         checkpoint_fields=("effective_weight", "weight_sum", "squared_weight_sum", "observation_count", "mean_x", "mean_y", "second_moment_x", "second_moment_y", "cross_moment", "last_timestamp"),
         missing_policy="pandas_adjust_false_ignore_na_false",
+        checkpoint_field_specs=(
+            _f("effective_weight"),
+            _f("weight_sum"),
+            _f("squared_weight_sum"),
+            _i("observation_count", min=0),
+            _f("mean_x", finite=False),
+            _f("mean_y", finite=False),
+            _f("second_moment_x"),
+            _f("second_moment_y"),
+            _f("cross_moment"),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="ts_ewm_cov", state_schema_version="ewm_moment_state.v1",
         semantic_version="3.0", minimum_history=2,
         checkpoint_fields=("effective_weight", "weight_sum", "squared_weight_sum", "observation_count", "mean_x", "mean_y", "second_moment_x", "second_moment_y", "cross_moment", "last_timestamp"),
         missing_policy="pairwise_pandas_adjust_false_ignore_na_false",
+        checkpoint_field_specs=(
+            _f("effective_weight"),
+            _f("weight_sum"),
+            _f("squared_weight_sum"),
+            _i("observation_count", min=0),
+            _f("mean_x", finite=False),
+            _f("mean_y", finite=False),
+            _f("second_moment_x"),
+            _f("second_moment_y"),
+            _f("cross_moment"),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="ts_ewm_corr", state_schema_version="ewm_moment_state.v1",
         semantic_version="3.0", minimum_history=2,
         checkpoint_fields=("effective_weight", "weight_sum", "squared_weight_sum", "observation_count", "mean_x", "mean_y", "second_moment_x", "second_moment_y", "cross_moment", "last_timestamp"),
         missing_policy="pairwise_pandas_adjust_false_ignore_na_false",
+        checkpoint_field_specs=(
+            _f("effective_weight"),
+            _f("weight_sum"),
+            _f("squared_weight_sum"),
+            _i("observation_count", min=0),
+            _f("mean_x", finite=False),
+            _f("mean_y", finite=False),
+            _f("second_moment_x"),
+            _f("second_moment_y"),
+            _f("cross_moment"),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="ts_ema",
@@ -284,6 +520,10 @@ for _spec in (
         # gap did not decay the weight and full/incremental diverged).
         checkpoint_fields=("ema", "last_timestamp"),
         missing_policy="pandas_adjust_false_ignore_na_false",
+        checkpoint_field_specs=(
+            _nested_ewm("ema"),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="RSI_WILDER",
@@ -294,6 +534,12 @@ for _spec in (
         # dicts), not SMA averages of the first window.
         checkpoint_fields=("gain", "loss", "last_close", "last_timestamp"),
         missing_policy="pandas_adjust_false_ignore_na_false",
+        checkpoint_field_specs=(
+            _nested_ewm("gain"),
+            _nested_ewm("loss"),
+            _f("last_close", finite=False),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="ATR_WILDER",
@@ -304,6 +550,11 @@ for _spec in (
         # the smoothing is the pandas EWM (``tr`` EwmState dict), not a seeded mean.
         checkpoint_fields=("tr", "last_close", "last_timestamp"),
         missing_policy="pandas_adjust_false_ignore_na_false",
+        checkpoint_field_specs=(
+            _nested_ewm("tr"),
+            _f("last_close", finite=False),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="ADX",
@@ -315,6 +566,16 @@ for _spec in (
         checkpoint_fields=("tr", "plus_dm", "minus_dm", "dx", "last_high", "last_low", "last_close", "last_timestamp"),
         missing_policy="pandas_adjust_false_ignore_na_false",
         dependencies=("ATR_WILDER",),
+        checkpoint_field_specs=(
+            _nested_ewm("tr"),
+            _nested_ewm("plus_dm"),
+            _nested_ewm("minus_dm"),
+            _nested_ewm("dx"),
+            _f("last_high", finite=False),
+            _f("last_low", finite=False),
+            _f("last_close", finite=False),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="MACD_line",
@@ -324,6 +585,11 @@ for _spec in (
         checkpoint_fields=("fast_ema", "slow_ema", "last_timestamp"),
         missing_policy="pandas_adjust_false_ignore_na_false",
         dependencies=("ts_ema",),
+        checkpoint_field_specs=(
+            _nested_ewm("fast_ema"),
+            _nested_ewm("slow_ema"),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="MACD_signal",
@@ -333,6 +599,12 @@ for _spec in (
         checkpoint_fields=("fast_ema", "slow_ema", "signal_ema", "last_timestamp"),
         missing_policy="pandas_adjust_false_ignore_na_false",
         dependencies=("ts_ema", "MACD_line"),
+        checkpoint_field_specs=(
+            _nested_ewm("fast_ema"),
+            _nested_ewm("slow_ema"),
+            _nested_ewm("signal_ema"),
+            _ts("last_timestamp"),
+        ),
     ),
     StatefulOperatorSpec(
         canonical="MACD_hist",
@@ -342,6 +614,12 @@ for _spec in (
         checkpoint_fields=("fast_ema", "slow_ema", "signal_ema", "last_timestamp"),
         missing_policy="pandas_adjust_false_ignore_na_false",
         dependencies=("ts_ema", "MACD_signal"),
+        checkpoint_field_specs=(
+            _nested_ewm("fast_ema"),
+            _nested_ewm("slow_ema"),
+            _nested_ewm("signal_ema"),
+            _ts("last_timestamp"),
+        ),
     ),
 ):
     StatefulCheckpointRegistry.register(_spec)

@@ -76,6 +76,10 @@ def _measured_baseline() -> tuple[dict[str, Any], bool]:
     provenance = payload.get("provenance") if isinstance(payload.get("provenance"), dict) else {}
     if not provenance.get("measured"):
         return payload, False
+    # 审计 #353：provenance 必须携带实现 hash，否则无法对应到当前算子实现，
+    # 即使运行时版本匹配也不视为 measured baseline。
+    if not provenance.get("implementation_hash"):
+        return payload, False
     recorded = provenance.get("runtime_family") or provenance.get("runtime_versions") or {}
     if not isinstance(recorded, dict) or not recorded:
         return payload, False
@@ -109,9 +113,31 @@ def _canonical_ops(plan: PlanNode) -> tuple[str, ...]:
 
 
 def _contains_source_ref(plan: PlanNode) -> bool:
-    from api.source_ref import decode_source_ref
-
     found = False
+
+    try:
+        # 审计 #392：三态判定——looks_like_source_ref 只判前缀形态；
+        # payload 损坏时 decode_source_ref_strict 抛 ValueError，不吞异常。
+        from api.source_ref import decode_source_ref_strict, looks_like_source_ref
+    except ImportError:
+        # 另一个代理尚未落 api/source_ref.py 的新原语：回退到旧 decode_source_ref，
+        # 损坏时仍 re-raise（与旧行为一致）。
+        from api.source_ref import decode_source_ref
+
+        def walk(node: PlanNode) -> None:
+            nonlocal found
+            if found:
+                return
+            if node.op == "column":
+                name = str((node.attrs or {}).get("name") or "")
+                if name and decode_source_ref(name) is not None:
+                    found = True
+                    return
+            for child in getattr(node, "inputs", ()) or ():
+                walk(child)
+
+        walk(plan)
+        return found
 
     def walk(node: PlanNode) -> None:
         nonlocal found
@@ -119,7 +145,8 @@ def _contains_source_ref(plan: PlanNode) -> bool:
             return
         if node.op == "column":
             name = str((node.attrs or {}).get("name") or "")
-            if name and decode_source_ref(name) is not None:
+            if name and looks_like_source_ref(name):
+                decode_source_ref_strict(name)  # payload 损坏则抛 ValueError，不吞
                 found = True
                 return
         for child in getattr(node, "inputs", ()) or ():
@@ -134,6 +161,33 @@ def _data_source_kind(ctx: Any) -> str:
     seen: set[int] = set()
     while ds is not None and id(ds) not in seen:
         seen.add(id(ds))
+        # 审计 #355：优先用数据源显式声明的 capabilities，避免用 class name 猜
+        # backend 而误判 wrapper / custom source。
+        caps = getattr(ds, "capabilities", None)
+        if caps is not None:
+            engine = getattr(caps, "engine_kind", None)
+            if isinstance(engine, str) and engine:
+                kind = engine.lower()
+                if "clickhouse" in kind:
+                    return "clickhouse"
+                if "duckdb" in kind:
+                    return "duckdb"
+                if "pandas" in kind:
+                    return "memory"
+            dialect = getattr(caps, "dialect", None)
+            if isinstance(dialect, str) and dialect:
+                dl = dialect.lower()
+                if "clickhouse" in dl:
+                    return "clickhouse"
+                if "duckdb" in dl:
+                    return "duckdb"
+            if getattr(caps, "supports_sql_pushdown", False):
+                dl = str(getattr(caps, "dialect", "") or "").lower()
+                if "clickhouse" in dl:
+                    return "clickhouse"
+                if "duckdb" in dl:
+                    return "duckdb"
+        # 回退：class-name 启发（保留现有逻辑）。
         name = type(ds).__name__.lower()
         if "clickhouse" in name:
             return "clickhouse"

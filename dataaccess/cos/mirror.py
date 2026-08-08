@@ -308,16 +308,18 @@ def _strict_mirror_mode() -> bool:
 # #P1-final closure 21：trade_day 期望日期在真实日历不可用时的回退标记。
 # 自然日回退会高估期望 partition（把周末/节假日当缺失），strict 下应显式记录
 # degraded，而不是静默当「完整期望」。
-_expected_dates_degraded: bool = False
 
 
-def expected_dates_degraded() -> bool:
-    """最近一次 ``_expected_dates`` 是否发生了 calendar→自然日 回退。"""
-    return _expected_dates_degraded
+def _market_trading_days(
+    dataset_name: str, start: date, end: date
+) -> tuple[list[date], bool]:
+    """#33 收官轮：返回 ``(交易日, used_calendar)``。
 
-
-def _market_trading_days(dataset_name: str, start: date, end: date) -> list[date]:
-    """#25 用市场交易日历返回 [start, end] 内的交易日；无日历回退自然日。"""
+    ``used_calendar=True`` = 用了真实市场交易日历；``False`` = 日历不可用/市场未知/
+    窗口内无交易日 → 回退自然日（调用方据此标记 degraded）。旧实现返回裸 list，
+    日历不可用时自然日回退也是**非空列表**，调用方 ``if tdays`` 会误判成「用了
+    日历」——degraded 检测从未真正生效。
+    """
     try:
         from data_access.read.session_calendar import get_market_calendar
 
@@ -327,42 +329,97 @@ def _market_trading_days(dataset_name: str, start: date, end: date) -> list[date
         elif dataset_name.startswith("ashare_") or dataset_name.startswith("a_share"):
             market = "ashare"
         if market is None:
-            return _iter_dates(start, end)
+            return _iter_dates(start, end), False
         cal = get_market_calendar(market, store=None)
         if cal is None or not getattr(cal, "has_data", False):
-            return _iter_dates(start, end)
-        days = [d for d in cal.trading_days if start <= d <= end]
-        return sorted(days) if days else _iter_dates(start, end)
+            return _iter_dates(start, end), False
+        days = sorted(d for d in cal.trading_days if start <= d <= end)
+        if not days:
+            # 日历可用但窗口内无交易日（长假/历史窗口）→ 自然日回退并标记 degraded
+            return _iter_dates(start, end), False
+        return days, True
     except Exception:
-        return _iter_dates(start, end)
+        return _iter_dates(start, end), False
+
+
+def _expected_dates_with_degraded(
+    dataset_name: str, start: date, end: date
+) -> tuple[list[date], bool]:
+    """#33 收官轮：期望 partition + degraded 标记一起返回（**线程安全**）。
+
+    不再用 module-global ``_expected_dates_degraded``——两个线程同时查不同 dataset
+    会互相覆盖 degraded 状态。degraded 随结果走，谁调用谁持有。
+
+    ``degraded=True`` 表示 trade_day 真实交易日历不可用 → 自然日回退，期望
+    partition 被高估（周末/节假日算缺失），不是权威交易日集合。
+    """
+    domain = _calendar_domain_of(dataset_name)
+    if domain == "calendar_day":
+        return _iter_dates(start, end), False
+    # trade_day（缺省）：优先交易日历，回退自然日
+    tdays, used_calendar = _market_trading_days(dataset_name, start, end)
+    if used_calendar:
+        return tdays, False
+    logger.warning(
+        "cos_mirror: %s 的 trade_day 期望日期回退为自然日（真实交易日历不可用）——"
+        "期望 partition 会被高估（周末/节假日算缺失）。",
+        dataset_name,
+    )
+    return tdays, True
 
 
 def _expected_dates(dataset_name: str, start: date, end: date) -> list[date]:
     """#25 决定哪些 partition 应该存在：trade_day 用交易日历，calendar_day 用自然日。
 
     避免「交易日型数据按自然日枚举」导致周末/节假日被当成缺失 partition，进而
-    误判 mirror 不完整 / 误切 remote。
-
-    #P1-final closure 21：trade_day 真实日历不可用 → 自然日回退**显式标记
-    degraded**（``expected_dates_degraded()`` 可查），调用方/审计据此知道期望
-    partition 是被高估的近似，而不是权威交易日。
+    误判 mirror 不完整 / 误切 remote。需要 degraded 标记时用
+    ``_expected_dates_with_degraded``。
     """
-    global _expected_dates_degraded
-    _expected_dates_degraded = False
-    domain = _calendar_domain_of(dataset_name)
-    if domain == "calendar_day":
-        return _iter_dates(start, end)
-    # trade_day（缺省）：优先交易日历，回退自然日
-    tdays = _market_trading_days(dataset_name, start, end)
-    if not tdays:
-        _expected_dates_degraded = True
-        logger.warning(
-            "cos_mirror: %s 的 trade_day 期望日期回退为自然日（真实交易日历不可用）——"
-            "期望 partition 会被高估（周末/节假日算缺失）。",
-            dataset_name,
-        )
-        return _iter_dates(start, end)
-    return tdays
+    return _expected_dates_with_degraded(dataset_name, start, end)[0]
+
+
+def _expected_dates(dataset_name: str, start: date, end: date) -> list[date]:
+    """#25 决定哪些 partition 应该存在：trade_day 用交易日历，calendar_day 用自然日。
+
+    避免「交易日型数据按自然日枚举」导致周末/节假日被当成缺失 partition，进而
+    误判 mirror 不完整 / 误切 remote。需要 degraded 标记时用
+    ``_expected_dates_with_degraded``。
+    """
+    return _expected_dates_with_degraded(dataset_name, start, end)[0]
+
+
+def expected_partitions(
+    dataset_name: str, start: date, end: date, *, layout: str
+) -> list[Any]:
+    """#P0 收官（0.9.5）：**共享的期望 partition 编译器**。
+
+    local/mirror/remote/hybrid 共用同一份「该数据集在 [start,end] 内应该存在哪些
+    partition」：
+        - ``daily_parquet`` / ``hive_date`` → 期望日期（trade_day 走交易日历，
+          calendar_day 走自然日；日历不可用回退自然日并标记 degraded）；
+        - ``hive_year`` → 年份（天然与自然日无关）。
+    remote 侧**不得**再实现一套「自然日逐日枚举」——交易日型数据跨周末会被误判
+    缺失 → 误切 remote → 去请求不存在的周末对象。mirror 的
+    ``_sync_daily_file`` / ``sync_dataset`` 与 remote 的路径构建全走这里，保证
+    本地完整性判断与远程路径生成用同一份期望集合。
+    """
+    layout = str(layout or "").lower()
+    if layout == "hive_year":
+        return list(_iter_years(start, end))
+    return _expected_dates(dataset_name, start, end)
+
+
+def expected_partitions_with_degraded(
+    dataset_name: str, start: date, end: date, *, layout: str
+) -> tuple[list[Any], bool]:
+    """共享期望 partition 编译器 + degraded 标记（线程安全，见 ``_expected_dates_with_degraded``）。
+
+    ``hive_year`` 与自然日无关，永不 degraded。
+    """
+    layout = str(layout or "").lower()
+    if layout == "hive_year":
+        return list(_iter_years(start, end)), False
+    return _expected_dates_with_degraded(dataset_name, start, end)
 
 
 def _run_cos_cli(args: Sequence[str]) -> None:
@@ -661,13 +718,13 @@ def sync_dataset(
         raise ValueError(f"无法解析 time_range: {time_range}")
 
     if spec.layout == "daily_parquet":
-        for day in _iter_dates(start, end):
+        for day in expected_partitions(dataset_name, start, end, layout=spec.layout):
             _sync_daily_file(spec, day)
     elif spec.layout == "hive_date":
-        for day in _iter_dates(start, end):
+        for day in expected_partitions(dataset_name, start, end, layout=spec.layout):
             _sync_hive_date(spec, day)
     elif spec.layout == "hive_year":
-        for year in _iter_years(start, end):
+        for year in expected_partitions(dataset_name, start, end, layout=spec.layout):
             _sync_hive_year(spec, year)
     else:
         raise ValueError(f"未知 layout: {spec.layout}")

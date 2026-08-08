@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.9.6 — 第七轮二阶回归收口（12 项，Core Freeze 前最后一批）
+
+用户对最新 main（`608f602`）排除前 54 项后再审，确认 12 个新增问题/二阶回归。
+前 7 个 P0/P0-P1（Freeze 前必修）+ 后 5 个 P1 全部一次性落地：
+
+**并发安全（item 1，P0）**
+- `mutation_lock` 续租/release 的 **check-then-act TOCTOU** 修复：续租改经持有的
+  fd（`lseek+ftruncate+write+fsync`），所有权判定用 `stat(path).st_ino ==
+  fstat(fd).st_ino` **inode 身份**——旧 writer 的 heartbeat 绝不可能 truncate 后来
+  重建的新 inode；release 不再 `unlink`，改为经 fd 写 `released` 标记，旧 owner
+  永远不对路径做任何 unlink（"删新锁"窗口从源头消除），`_can_break_lock` 把
+  released 视为立即可打破，下次 acquisition 完成清理。锁 fd 改 `O_RDWR`
+  （`O_WRONLY` 下无法经 fd 读回 payload，fencing 校验失效）。
+
+**存储（item 2/12，P0/P1）**
+- `StorageSpec.from_yaml` **URI scheme → backend**：`type` 未显式声明时从 `uri` 的
+  scheme 推导（`cos://`→cos、`s3://`→s3、`http(s)://`→http）；未实现 scheme
+  （`oss://`）与「scheme 推导 ≠ 显式 type」矛盾配置直接拒绝，**绝不 fallback
+  LOCAL**（旧 bug：`from_yaml("cos://…")` 被解析成 `type=local`）。
+- `StorageSpec.options` **深冻结**：frozen dataclass 不再留可变 dict——
+  递归转 `MappingProxyType`/tuple/frozenset，`ds.storage.options["x"]=…` 从根上
+  TypeError，immutable IR 契约落实。
+
+**namespace/授权（item 3，P0）**
+- `PathAuthorizer` **保存 unresolved root template**，`resolve_and_authorize` 时按
+  **当前 session namespace** 解析（per-namespace 缓存）。旧实现 store 构造时把
+  namespace 烘焙进 `_roots`，长期 worker 换 `DataAccessSession` 后数据集路径解析成
+  新 namespace、authorizer 却只认识旧的。新增 `DatasetRegistry.allowed_root_templates()`。
+
+**PIT 语义（item 4/7，P0）**
+- `SemanticField.join_policy` **strict enum**（exact/asof/pit_asof/
+  pit_asof_backward/asof_backward/latest_period）：拼写错 fail-closed，不再在执行链
+  `join_spec_from_field` 静默丢成 None → exact（丢 PIT join 语义 = 引入未来数据）。
+- `availability_latency` dict 解析 **exact int 严格化**：只接受非 bool int 或 exact
+  integer 字符串；`1.9`/`"1.9"` 全部拒绝（旧 `int(latency)` 静默截断成 1，与
+  `TemporalJoinSpec.__post_init__` 的 programmatic 契约不一致）。
+
+**日历/session（item 5/6/10，P0/P0/P1）**
+- `next_bar`/`next_session_open` 消费 **effective segments**
+  （`MarketSession.effective_segments_on(d)`）：美股 early-close（half-day 13:00
+  收市）日 13:00 的 next_bar 正确跳下一交易日 09:30，不再映射成常规 09:30–16:00
+  segment 里的 13:01；`elapsed_index`/`contains_hhmm` 新增 `on=` 日期参数。
+- **Market canonicalizer**（`canonicalize_market`）：仅接受明确 alias
+  （ashare/a_share/a/cn；us/usa/nyse/nasdaq/am/us_stock），未知值 fail-closed——
+  `_calendar_dataset_for("europe")` 不再静默返回 `us_calendar`。
+- 无 manifest 的日历缓存 token：改用**文件 snapshot**（path+size+mtime_ns），不再用
+  `registry_fingerprint`（配置版本≠数据版本）；remote 读不到本地文件时兜底。
+
+**typed 对象 self-validating（item 8/9/11，P1）**
+- `strict_sequence` 拆规则：`ordered=True`（fields/order_by）只接受 list/tuple，
+  set/dict/generator 拒绝；`instruments` 等成员语义接受 set 但 canonical 排序。
+  `_tuple_of`（semantic_catalog / temporal_join）同理只收 list/tuple。
+- `TimePartitionSpec`/`PartitionSpec` 加 `__post_init__`：`frequency="daliy"` 等 typo
+  构造即报错，`prune_paths_for_time_range` 不再 `is_valid` 静默 fallback daily。
+- 公开 `QueryBudget` 自身 **invariant validation**：负数/NaN/Inf/bool 预算构造即
+  fail-closed（复用 `_positive_int`/`_positive_finite_float`），`max_elapsed_ms=nan`
+  不再等价于关掉 deadline check。
+
+**回归**：`tests/unit/test_final_closure_round8.py` 14 条；全量 **724 passed / 0
+failed**；ContractIR audit 71 数据集一致（fingerprint=b7d21b082127eb00）。
+
 ## 0.9.4 — 第六轮最终 Closure Ledger 收口（54 项 root issues）
 
 按用户最终 Closure Ledger（31 个 Core Freeze blocker + 23 个 P1 + 2 设计决策）落地。

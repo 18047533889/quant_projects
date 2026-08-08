@@ -28,9 +28,11 @@ data_access.publish —— staging → published 的原子发布
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
+import sys
 import time
 import uuid
 from contextlib import contextmanager
@@ -42,6 +44,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from data_access.core import audit
+from data_access.core.atomic import atomic_write_json
 from data_access.core.exceptions import DataError, ValidationError
 from data_access.core.namespace import is_namespace_explicit, resolve_namespace
 from data_access.registry.paths import PathAuthorizer
@@ -123,6 +126,9 @@ def publish_from_staging(
 
         with mutation_lock(target_dir.parent):
             with _publish_lock(target_parent, target_dir.name):
+                # #25 收官轮：上一次崩溃（双 rename 窗口）留下的半提交 → 先确定性恢复，
+                # 确保 target 处于 old/new generation，绝不把「target 缺失」继续往前带。
+                _recover_publish_journal(target_parent, target_dir.name)
                 # 第 1 步：copy staging → candidate（跨 FS 兼容的慢路径）
                 _copy_tree(staging_dir, candidate_dir)
 
@@ -173,6 +179,19 @@ def publish_from_staging(
                     elapsed_ms=(time.perf_counter() - start) * 1000,
                 )
 
+                # #25 收官轮：第一个 rename 前 durable journal——进程在两个 rename
+                # 之间死亡时，下次 publish / 读路径能确定性恢复 target（old 或 new，
+                # 绝不留 missing）。journal 落盘失败 → abort（任何 rename 都没发生）。
+                _journal = {
+                    "target_name": target_dir.name,
+                    "candidate": candidate_dir.name,
+                    "archive": archive_path.name if archive_path else None,
+                    "state": "switching",
+                }
+                atomic_write_json(
+                    _publish_journal_path(target_parent, target_dir.name), _journal
+                )
+
                 # 第 4 步：同 FS 原子 rename —— old_published → archive，candidate → final
                 # （manifest 已随 candidate 一起原子切换上线）
                 if _target_has_published_content(target_dir):
@@ -189,7 +208,17 @@ def publish_from_staging(
                     if archive_path and archive_path.exists():
                         os.rename(str(archive_path), str(target_dir))
                         archive_path = None
+                    # #25：回滚完成后状态已收敛 → 清 journal
+                    _publish_journal_path(target_parent, target_dir.name).unlink(
+                        missing_ok=True
+                    )
                     raise
+
+                # 提交点已过：target = new generation。清 journal（下一次 recovery
+                # 视 target 存在 → 直接收敛）。
+                _publish_journal_path(target_parent, target_dir.name).unlink(
+                    missing_ok=True
+                )
 
                 try:
                     post_inv = _file_inventory(target_dir)
@@ -227,27 +256,49 @@ def publish_from_staging(
             shutil.rmtree(candidate_dir, ignore_errors=True)
 
         elapsed_ms = (time.perf_counter() - start) * 1000
-        audit.record(
-            op="publish",
-            dataset=target_name,
-            ok=ok,
-            rows=source_rows,
-            # target_dir 在早期校验阶段失败时可能还没解析出来；不记就是不记
-            paths=[str(target_dir)] if target_dir is not None else None,
-            params=params or None,
-            elapsed_ms=elapsed_ms,
-            error=err_msg,
-            # #P1-final closure 22：发布是权威动作——审计必须 durable 落盘（flush
-            # + fsync）。业务成功但审计写失败 ⇒ AuditWriteError 向上抛，不允许
-            # 「发布了、审计悄悄没记」。
-            durable=True,
-            extra={
-                "source": staging_name,
-                "archive_path": str(archive_path) if archive_path else None,
-                "namespace_explicit": is_namespace_explicit(),
-                "namespace": resolve_namespace(),
-            },
-        )
+        active_exc = sys.exc_info()[1]
+        try:
+            audit.record(
+                op="publish",
+                dataset=target_name,
+                ok=ok,
+                rows=source_rows,
+                # target_dir 在早期校验阶段失败时可能还没解析出来；不记就是不记
+                paths=[str(target_dir)] if target_dir is not None else None,
+                params=params or None,
+                elapsed_ms=elapsed_ms,
+                error=err_msg,
+                # #P1-final closure 22：发布是权威动作——审计必须 durable 落盘（flush
+                # + fsync）。业务成功但审计写失败 ⇒ AuditWriteError 向上抛，不允许
+                # 「发布了、审计悄悄没记」。
+                durable=True,
+                extra={
+                    "source": staging_name,
+                    "archive_path": str(archive_path) if archive_path else None,
+                    "namespace_explicit": is_namespace_explicit(),
+                    "namespace": resolve_namespace(),
+                },
+            )
+        except Exception as exc:
+            # #P0 收官（0.9.5）：区分「已提交 + 审计失败」与「真失败 + 审计失败」。
+            # body 走到 finally 时 ``ok=True`` 意味着 candidate→target rename、
+            # post-verify 全部成功——数据**确实发布了**，只有 durable audit 落盘
+            # 失败。必须抛 ``CommittedButAuditFailed`` 让外层 ``_dataset_mutation``
+            # 按 COMMITTED 重建 manifest（数据已发布，manifest 必须追平），再单独
+            # 报告审计失败。若 body 已失败（ok=False），审计失败不能掩盖原始错误
+            # ——只记 warning，让原始异常继续传播（ABORTED，不 rebuild）。
+            if ok and active_exc is None:
+                from data_access.core.exceptions import CommittedButAuditFailed
+
+                raise CommittedButAuditFailed(
+                    f"publish 已提交但审计落盘失败（dataset={target_name!r}）："
+                    f"{type(exc).__name__}: {exc}。数据已发布，但合规证据未 durable "
+                    "落盘。"
+                ) from exc
+            logger.error(
+                "publish audit durable write failed while body already failing "
+                "（不掩盖原始错误）: %s", exc,
+            )
 
     logger.info(
         "publish staging=%s → target=%s rows=%d archive=%s elapsed_ms=%.1f",
@@ -630,6 +681,82 @@ def _target_has_published_content(target_dir: Path) -> bool:
         return any(target_dir.rglob("*.parquet"))
     except OSError:
         return False
+
+
+# ---- #25 崩溃 recovery（双 rename 窗口 target 缺失）-----------------------------
+
+
+def _publish_journal_path(parent: Path, target_name: str) -> Path:
+    """publish journal：``{parent}/.publish.<target_name>.journal``。
+
+    双 rename（old→archive / candidate→target）之间进程死亡会让 target 目录缺失。
+    journal 在第一个 rename 前 durable 落盘，记录恢复所需的 candidate/archive 名。
+    """
+    return parent / f".publish.{target_name}.journal"
+
+
+def _cleanup_candidates(parent: Path) -> None:
+    """清掉残留的 publish candidate 临时目录（崩溃/回滚的孤儿）。"""
+    for p in parent.glob(".publish_candidate.*"):
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+
+
+def _recover_publish_journal(parent: Path, target_name: str) -> None:
+    """#25 收官轮：publish 双 rename 崩溃的**确定性** recovery。
+
+    状态机（journal 在第一个 rename 前 durable 写入，state="switching"）：
+        - target 已存在      → 提交已完成（只漏了清 journal）→ 清 journal + 孤儿 candidate；
+        - target 缺失 + candidate 带 ``.publish_manifest.json``（candidate 在 rename
+          前已完整校验/写入）→ **晋升 candidate**（new generation 权威；旧 gen 在 archive）；
+        - target 缺失 + archive 存在 → **回退 archive**（old generation）；
+        - 两者都不可得 → journal 保留 + error（等人工）。
+    绝不允许「两个 rename 之间崩溃 → target 永久缺失」。调用点：publish 起点
+    （mutation_lock 内）+ published static dataset 读路径 root 缺失时。
+    """
+    journal = _publish_journal_path(parent, target_name)
+    if not journal.exists():
+        return
+    try:
+        payload = json.loads(journal.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        # 半写 journal 不可信 → 保留等待人工，不冒险自动恢复
+        logger.error("publish journal 不可读（半写？）：%s", journal)
+        return
+    if payload.get("state") != "switching":
+        journal.unlink(missing_ok=True)
+        return
+    target = parent / str(payload.get("target_name", target_name))
+    candidate = parent / str(payload["candidate"]) if payload.get("candidate") else None
+    archive = parent / str(payload["archive"]) if payload.get("archive") else None
+
+    if target.exists():
+        logger.info(
+            "publish recovery: target=%s 已存在，清理 journal（提交已完成）", target
+        )
+        journal.unlink(missing_ok=True)
+        _cleanup_candidates(parent)
+        return
+
+    recovered = False
+    if candidate is not None and candidate.exists() and (
+        candidate / ".publish_manifest.json"
+    ).exists():
+        logger.info("publish recovery: 晋升 candidate %s → %s", candidate, target)
+        os.rename(str(candidate), str(target))
+        recovered = True
+    elif archive is not None and archive.exists():
+        logger.info("publish recovery: 回退 archive %s → %s", archive, target)
+        os.rename(str(archive), str(target))
+        recovered = True
+    if recovered:
+        journal.unlink(missing_ok=True)
+        _cleanup_candidates(parent)
+    else:
+        logger.error(
+            "publish recovery: target=%s 缺失且无可用 candidate/archive，journal 保留待人工",
+            target,
+        )
 
 
 # ---- 拷贝 / 回滚 ------------------------------------------------------------

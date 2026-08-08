@@ -216,6 +216,13 @@ def _group_wasserstein_barycenter_distance(
     window: int = 60,
     min_group_size: int = 3,
 ) -> pd.DataFrame:
+    # R6-135 (membership vintage — current_members_retrospective): the group is
+    # defined by TODAY's row-r labels, and each *current* member's trailing
+    # aligned window contributes its history to the group barycenter.  A stock
+    # reclassified into group A yesterday contributes its pre-reclassification
+    # history to A's sample.  This is the explicit, documented canonical (NOT a
+    # silent mix with historical_contemporaneous_membership, which would need a
+    # PIT group panel).
     if int(window) < 4:
         raise ValueError("group_wasserstein_barycenter_distance requires window >= 4")
     w = int(window)

@@ -31,24 +31,66 @@ from typing import Any, Sequence
 from data_access.core.exceptions import ValidationError
 
 
+_VALID_TIME_FREQUENCIES = frozenset({"daily", "monthly", "yearly"})
+_VALID_TIME_SOURCES = frozenset({"filename", "path"})
+
+
 @dataclass(frozen=True)
 class TimePartitionSpec:
-    """时间分区声明。``pattern`` 支持 {date}/{year}/{month} 占位符。"""
+    """时间分区声明。``pattern`` 支持 {date}/{year}/{month} 占位符。
+
+    #9 typed object self-validating：构造即校验非法值，**绝不 fallback**。
+    """
 
     source: str = "filename"       # "filename" | "path"
     field: str = "date"
     frequency: str = "daily"       # daily | monthly | yearly
     pattern: str | None = None     # 如 "{date}.parquet"、"date={date}/data.parquet"
 
+    def __post_init__(self) -> None:
+        """#9 程序化 ``TimePartitionSpec(frequency="daliy")`` 之前绕过 YAML parser，
+        ``prune_paths_for_time_range`` 再按 ``is_valid`` 静默 fallback 成 daily——
+        typo 静默变成默认值（分区裁剪语义漂移）。现在非法值构造即报错。"""
+        if self.frequency not in _VALID_TIME_FREQUENCIES:
+            raise ValidationError(
+                f"TimePartitionSpec.frequency 必须是 "
+                f"{sorted(_VALID_TIME_FREQUENCIES)}，收到 {self.frequency!r}"
+            )
+        if self.source not in _VALID_TIME_SOURCES:
+            raise ValidationError(
+                f"TimePartitionSpec.source 必须是 {sorted(_VALID_TIME_SOURCES)}，"
+                f"收到 {self.source!r}"
+            )
+        if not self.field or not isinstance(self.field, str):
+            raise ValidationError(
+                f"TimePartitionSpec.field 必须是非空字符串，收到 {self.field!r}"
+            )
+
     @property
     def is_valid(self) -> bool:
-        return self.frequency in {"daily", "monthly", "yearly"}
+        # #9 __post_init__ 已保证实例合法；保留属性兼容旧调用方（恒 True）。
+        return True
 
 
 @dataclass(frozen=True)
 class PartitionSpec:
     time: TimePartitionSpec | None = None
     hive: tuple[str, ...] = ()     # hive 分区列（year/month/date...）
+
+    def __post_init__(self) -> None:
+        """#9 typed ``PartitionSpec`` 也 self-validating，与 TemporalJoinSpec 的
+        「对象自身即合法」原则一致：非法 time/hive 构造即报错，不依赖 parser。"""
+        if self.time is not None and not isinstance(self.time, TimePartitionSpec):
+            raise ValidationError(
+                f"PartitionSpec.time 必须是 TimePartitionSpec 或 None，"
+                f"收到 {type(self.time).__name__}"
+            )
+        for v in self.hive:
+            if not isinstance(v, str):
+                raise ValidationError(
+                    f"PartitionSpec.hive 元素必须是字符串，"
+                    f"收到 {type(v).__name__}: {v!r}"
+                )
 
 
 # #P0-final closure 3：唯一 ``partitioning:`` schema。loader 与 planner 读同一份

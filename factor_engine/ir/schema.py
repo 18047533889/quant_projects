@@ -1,8 +1,26 @@
-"""IR result schema with optional field semantics."""
+"""IR result schema with optional field semantics.
 
-from dataclasses import dataclass
+Round-7 WS-C (review #265-#278): the schema carries a **semantic lattice**
+(:class:`ir.types.SemanticLattice`) and an :class:`ir.types.AvailabilityExpr`
+knowledge-time descriptor instead of the string ``_AVAILABILITY_RANK`` total
+order.  ``available_at`` remains a *string label* on the public surface for
+backward compatibility; the typed expression and structured vintage live beside
+it and resolve to concrete timestamps at the data layer.
+"""
 
-from .types import ValueType, normalize_dtype
+from dataclasses import dataclass, field
+
+from .types import (
+    AvailabilityExpr,
+    SemanticLattice,
+    SourceVintageSpec,
+    UNKNOWN,
+    ValueType,
+    availability_expr_of,
+    latest_availability,
+    normalize_dtype,
+    semantic_type_of,
+)
 
 
 @dataclass(frozen=True)
@@ -17,6 +35,11 @@ class Schema:
     compile time the actual clock is data-dependent, so the schema records what
     governs the availability (session_close / next_session_open / filing / ...)
     and the analyzer propagates ``available_at = max(all_inputs)`` up the IR.
+
+    Round-7 WS-C: ``availability_expr`` is the typed :class:`AvailabilityExpr`
+    whose ``label`` is mirrored onto ``available_at``; ``source_vintage`` is a
+    structured :class:`SourceVintageSpec`; ``semantic_lattice`` is the
+    five-dimension semantic lattice of the subtree.
     """
 
     value_type: ValueType  # scalar / series / panel
@@ -34,15 +57,18 @@ class Schema:
     flow_semantics: str | None = None  # stock / single_period_flow / cumulative_ytd_flow / ttm_flow
     pit_safe: bool = True
     nullable: bool = True
-    # Round-6 P0-50 PIT/availability coordinate.  ``available_at`` is a
-    # knowledge-time descriptor propagated as ``max(all_input.available_at)``
-    # (audit §51: factor.available_at = max(all_input.available_at,
-    # operator_processing_latency)).
+    # Round-6 P0-50 PIT/availability coordinate.  ``available_at`` is the
+    # *label* of the knowledge-time descriptor propagated as
+    # ``max(all_input.available_at)`` (audit §51: factor.available_at =
+    # max(all_input.available_at, operator_processing_latency)).
     available_at: str | None = None
+    # Round-7 WS-C: the typed expression (label mirrors ``available_at``).
+    availability_expr: AvailabilityExpr | None = None
     knowledge_model: str | None = None  # exact / asof / financial_pit / next_trading_day ...
     fiscal_grain: str | None = None  # flow / ytd / balance / ttm (derived from flow_semantics)
-    source_vintage: str | None = None
+    source_vintage: SourceVintageSpec | str | None = None
     universe_id: str | None = None
+    semantic_lattice: SemanticLattice | None = None
 
     def __post_init__(self) -> None:
         # Round-6 P0-50: derive the fiscal grain from flow semantics when the
@@ -54,6 +80,13 @@ class Schema:
                 object.__setattr__(self, "fiscal_grain", derived)
         if self.knowledge_model is None and self.temporal_model not in {"exact", "unknown"}:
             object.__setattr__(self, "knowledge_model", self.temporal_model)
+        # Round-7 WS-C: keep the typed expression and the label in sync.
+        if self.availability_expr is None and self.available_at is not None:
+            expr = availability_expr_of(self.available_at)
+            if not isinstance(expr, type(UNKNOWN)):
+                object.__setattr__(self, "availability_expr", expr)
+        if self.availability_expr is not None and self.available_at is None:
+            object.__setattr__(self, "available_at", self.availability_expr.label)
 
     @classmethod
     def from_field(cls, spec, *, value_type: ValueType = ValueType.PANEL) -> "Schema":
@@ -61,8 +94,21 @@ class Schema:
 
         Round-6 P0-50: maps the field's knowledge-time column / temporal model /
         flow semantics / vintage / universe onto the schema's PIT coordinate.
+        Round-7 WS-C: the availability descriptor is a typed
+        :class:`AvailabilityExpr`, the vintage is a :class:`SourceVintageSpec`,
+        and the field's semantic attrs are captured in a :class:`SemanticLattice`.
         """
         flow_semantics = getattr(spec, "flow_semantics", None)
+        available_at = _available_at_of(spec)
+        vintage = SourceVintageSpec.from_field_spec(spec)
+        kind = _semantic_kind_of_field_spec(spec)
+        lattice = SemanticLattice.from_field_attrs(
+            domain=getattr(spec, "domain", None),
+            frequency=getattr(spec, "frequency", None),
+            source_vintage=vintage,
+            universe_id=getattr(spec, "universe_id", None),
+            semantic_kind=kind,
+        )
         return cls(
             value_type=value_type,
             dtype=normalize_dtype(spec.dtype),
@@ -79,74 +125,87 @@ class Schema:
             flow_semantics=flow_semantics,
             pit_safe=spec.strict_pit_allowed,
             nullable=spec.nullable,
-            available_at=_available_at_of(spec),
+            available_at=available_at,
+            availability_expr=availability_expr_of(available_at),
             knowledge_model=_knowledge_model_of(getattr(spec, "temporal_model", None)),
             fiscal_grain=_fiscal_grain_of(flow_semantics),
-            source_vintage=getattr(spec, "revision_columns", None),
+            source_vintage=vintage,
             universe_id=getattr(spec, "universe_id", None),
+            semantic_lattice=lattice,
         )
 
-    def semantic_kind(self):
+    def semantic_kind(self) -> str | None:
         """Map this schema's propagated attrs to a typed-IR semantic kind.
 
         Uses :func:`ir.types.semantic_type_of`; ``None`` means no semantic kind
         is pinned down (generic derived numeric series).
         """
-        from .types import semantic_type_of
-
-        return semantic_type_of(
+        if self.semantic_lattice is not None and self.semantic_lattice.scalar_semantic_kind():
+            return self.semantic_lattice.scalar_semantic_kind()
+        kind = semantic_type_of(
             price_basis=self.price_basis,
             flow_semantics=self.flow_semantics,
             frequency=self.frequency,
             domain=self.domain,
         )
+        return kind.value if kind is not None else None
 
 
-# Round-6 P0-50: availability descriptors, ranked by lateness.  A factor's
-# ``available_at`` is the descriptor of the LATEST input — ``max(all_inputs)``
-# by this ordering — because the factor cannot be used for a decision until its
-# last-arriving input is knowable (audit §51).  Unknown descriptors sort last
-# (conservative: unknown availability is treated as the latest).
-_AVAILABILITY_RANK = [
-    "unknown",
-    "midnight",
-    "session_open",
-    "pre_close",
-    "local_close",
-    "session_close",
-    "after_close",
-    "next_session_open",
-    "next_trading_day",
-    "filing_date",
-    "pub_date",
-    "declaration_date",
-    "knowledge_time",
-]
+def _semantic_kind_of_field_spec(spec) -> str | None:
+    """FieldSpec semantic-kind: declared ``semantic_kind`` first, then helpers."""
+    declared = getattr(spec, "semantic_kind", None)
+    if declared:
+        return str(declared)
+    try:
+        from fields.spec import semantic_kind_of_field
+
+        return semantic_kind_of_field(spec)
+    except ImportError:  # pragma: no cover - spec always importable
+        return None
 
 
-def _rank_availability(descriptor: str | None) -> int:
-    if descriptor is None:
-        return len(_AVAILABILITY_RANK)  # unknown sorts latest (conservative)
-    low = str(descriptor).lower()
-    for index, candidate in enumerate(_AVAILABILITY_RANK):
-        if candidate in low:
-            return index
-    return len(_AVAILABILITY_RANK)
+# ---------------------------------------------------------------------------
+# Round-7 WS-C availability propagation.
+#
+# The legacy string ``_AVAILABILITY_RANK`` total order is DELETED.  Ordering now
+# lives on the :class:`AvailabilityExpr` classes (``lateness``); the compat shim
+# below converts legacy string labels to expressions.  UNKNOWN sorts fail-closed
+# (+infinity): a single unknown input makes the root unknown (review #274/#275).
+# ---------------------------------------------------------------------------
+def _lateness_of(descriptor) -> float:
+    return availability_expr_of(descriptor).lateness
 
 
-def propagate_available_at(descriptors: tuple[str | None, ...]) -> str | None:
+def _rank_availability(descriptor) -> float:
+    """Backward-compat shim: lateness of a descriptor (higher = later).
+
+    Previously a list-index total order with ``"unknown"`` at index 0 (the bug,
+    review #274).  Now UNKNOWN is +infinity — it always sorts latest.
+    """
+    return _lateness_of(descriptor)
+
+
+def propagate_available_at(descriptors) -> str | None:
     """Return the latest availability descriptor across inputs (audit §51).
 
-    Only KNOWN descriptors compete — an input whose availability is unknown
-    (``None``) must not silently win the max (that would discard the latest
-    known input's constraint).  If every input is unknown, returns ``None``.
+    WS-C fail-closed semantics (review #275): if ANY input's availability is
+    unknown (``None`` or the literal ``"unknown"``), the result is ``"unknown"``
+    — the unknown input is NOT dropped in favour of the latest known one.
+    Otherwise returns the label of the latest known descriptor.
+
+    Accepts either legacy string labels or :class:`AvailabilityExpr` objects.
     """
-    known = [descriptor for descriptor in descriptors if descriptor is not None]
-    if not known:
+    exprs = [availability_expr_of(item) for item in descriptors] if descriptors else []
+    if not exprs:
         return None
-    ranked = [(descriptor, _rank_availability(descriptor)) for descriptor in known]
-    latest = max(ranked, key=lambda pair: pair[1])
-    return latest[0]
+    latest = max(exprs, key=lambda item: item.lateness)
+    return latest.label
+
+
+def latest_availability_expr(descriptors) -> AvailabilityExpr:
+    """Typed variant of :func:`propagate_available_at` returning the expression."""
+    exprs = [availability_expr_of(item) for item in descriptors] if descriptors else []
+    return latest_availability(exprs)
 
 
 def _knowledge_model_of(temporal_model: str | None) -> str | None:
@@ -155,26 +214,38 @@ def _knowledge_model_of(temporal_model: str | None) -> str | None:
     return str(temporal_model)
 
 
-# Round-6 P0-13/14/15: EOD fields cannot be known until the session closes; the
-# day's open only after the opening auction.  When a field carries no explicit
-# knowledge-time column these name-based defaults stop a factor that reads
-# Close_t / VWAP_t / Volume_t from being treated as available intra-day.
-_EOD_AVAILABILITY_MARKERS = (
-    "close", "high", "low", "vwap", "volume", "amount", "turnover", "limit_up",
-    "limit_down", "adjfactor", "factor", "market_cap", "pe", "pb", "pct_chg",
-)
+# Round-7 WS-C (#277): the substring ``_EOD_AVAILABILITY_MARKERS`` list
+# (which matched ``"pe"``/``"pb"``/``"close"`` inside ANY field name) is gone.
+# Availability is decided from the FieldSpec's explicit ``available_at`` /
+# ``knowledge_time_column`` / ``role`` first, then an EXACT-name EOD default
+# (no substring matching).  An unrecognised name stays unknown (fail-closed).
+_EOD_AVAILABILITY_EXACT_NAMES = frozenset({
+    "close", "high", "low", "vwap", "volume", "amount", "turnover",
+    "turnover_ratio", "limit_up", "limit_down", "adjfactor", "factor",
+    "market_cap", "pe", "pb", "pct_chg", "pct_change", "ret", "return",
+})
+_OPEN_AVAILABILITY_EXACT_NAMES = frozenset({"open", "pre_open", "local_open"})
 
 
 def _available_at_of(spec) -> str | None:
-    """Explicit knowledge time first; name-based EOD default second."""
+    """Resolve a field's availability descriptor (label string).
+
+    Resolution order (review #277):
+    1. explicit ``FieldSpec.available_at`` or ``knowledge_time_column``;
+    2. ``FieldSpec.role`` — group keys / masks are day-level, not EOD;
+    3. exact-name EOD / open defaults (``"close"`` -> ``session_close``);
+    4. ``None`` — availability unknown (fail-closed).
+    """
     explicit = getattr(spec, "available_at", None) or getattr(spec, "knowledge_time_column", None)
     if explicit:
         return str(explicit)
-    name = str(getattr(spec, "name", "") or "")
-    low = name.lower()
-    if low in {"open", "pre_open"}:
+    role = str(getattr(spec, "role", "") or "").lower()
+    if role in {"group_key", "identifier", "time", "instrument"}:
+        return None
+    name = str(getattr(spec, "name", "") or "").lower()
+    if name in _OPEN_AVAILABILITY_EXACT_NAMES:
         return "session_open"
-    if any(marker in low for marker in _EOD_AVAILABILITY_MARKERS):
+    if name in _EOD_AVAILABILITY_EXACT_NAMES:
         return "session_close"
     return None
 
@@ -195,5 +266,7 @@ DEFAULT_COLUMN_SCHEMA = Schema(ValueType.PANEL, "float64", ("timestamp", "instru
 __all__ = [
     "DEFAULT_COLUMN_SCHEMA",
     "Schema",
+    "_available_at_of",
+    "latest_availability_expr",
     "propagate_available_at",
 ]

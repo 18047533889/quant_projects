@@ -30,6 +30,15 @@ class FieldRegistry:
         key = self._key(spec.name)
         if key in self._tables and not replace:
             raise ValueError(f"table already registered: {spec.name}")
+        # Round-7 WS-E #283: on replace, drop the aliases owned by the OLD table
+        # identity so a renamed source/dataset cannot leave stale aliases pointing
+        # at the new table.
+        if replace and key in self._tables:
+            old = self._tables[key]
+            for alias in (old.name, old.dataset, *old.aliases):
+                alias_key = self._key(alias)
+                if self._table_aliases.get(alias_key) == key:
+                    del self._table_aliases[alias_key]
         aliases = (spec.name, spec.dataset, *spec.aliases)
         for alias in aliases:
             alias_key = self._key(alias)
@@ -41,19 +50,38 @@ class FieldRegistry:
             self._table_aliases[self._key(alias)] = key
         return spec
 
-    def register(self, spec: FieldSpec, *, replace: bool = False) -> FieldSpec:
-        self._validate_field(spec)
-        identity = self._identity(spec.table, spec.name)
-        if identity in self._fields and not replace:
-            raise ValueError(f"field already registered: {spec.table}.{spec.name}")
-        self._fields[identity] = spec
+    @staticmethod
+    def _field_alias_set(spec: FieldSpec) -> set[str]:
+        """Alias spellings owned by one field identity (round-7 WS-E #283)."""
         aliases = {
             spec.name, spec.source_name, spec.qualified_name,
             f"{spec.table}.{spec.name}", *(spec.aliases or ()),
         }
         if spec.dataset:
             aliases.update({f"{spec.dataset}.{spec.name}", f"{spec.dataset}.{spec.source_name}"})
-        for alias in aliases:
+        return {str(item) for item in aliases if item}
+
+    def register(self, spec: FieldSpec, *, replace: bool = False) -> FieldSpec:
+        self._validate_field(spec)
+        identity = self._identity(spec.table, spec.name)
+        if identity in self._fields and not replace:
+            raise ValueError(f"field already registered: {spec.table}.{spec.name}")
+        # Round-7 WS-E #283: on replace, remove every alias owned by the OLD
+        # identity (old source_name / aliases / dataset-qualified spellings)
+        # before registering the new spec's aliases.  Shared aliases keep the
+        # other owners — only the replaced identity is dropped from each set.
+        if replace and identity in self._fields:
+            old = self._fields[identity]
+            for alias in self._field_alias_set(old):
+                alias_key = self._key(alias)
+                owners = self._field_aliases.get(alias_key)
+                if owners is None:
+                    continue
+                owners.discard(identity)
+                if not owners:
+                    del self._field_aliases[alias_key]
+        self._fields[identity] = spec
+        for alias in self._field_alias_set(spec):
             self._field_aliases.setdefault(self._key(alias), set()).add(identity)
         return spec
 

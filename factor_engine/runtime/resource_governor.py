@@ -16,12 +16,17 @@ SLURM > RLIMIT > host RAM），绝不能只信 ``psutil.virtual_memory().total``
 """
 from __future__ import annotations
 
+import logging
+import math
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from runtime.resource_errors import ResourceBudgetExceeded
+from runtime.resource_errors import ResourceBudgetExceeded, ResourceContractApplyError
+
+_logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # 真实资源发现
@@ -100,15 +105,22 @@ def _read_cgroup_cpu_quota() -> tuple[int, int] | None:
 
 
 def _read_rlimit_mem() -> int | None:
-    """RLIMIT_AS / RLIMIT_DATA 软上限（字节）；无限返回 ``None``。"""
+    """RLIMIT_AS / RLIMIT_DATA 软上限（字节）；两者均无限返回 ``None``。
+
+    审计 #338：对 RLIMIT_AS 与 RLIMIT_DATA 都取 finite 的 soft 值，返回其中
+    **最小值**（不是第一个找到的）；两者都是 ``RLIM_INFINITY`` → ``None``。
+    """
     try:
         import resource
 
+        finite: list[int] = []
         for which in (resource.RLIMIT_AS, resource.RLIMIT_DATA):
-            soft, hard = resource.getrlimit(which)
+            soft, _hard = resource.getrlimit(which)
             if soft != resource.RLIM_INFINITY:
-                return int(soft)
-        return None
+                finite.append(int(soft))
+        if not finite:
+            return None
+        return min(finite)
     except Exception:
         return None
 
@@ -137,14 +149,15 @@ def effective_memory_limit_bytes(
 ) -> int:
     """进程真实内存上限（最严格来源取最小值）。
 
-    优先级：显式参数/环境变量 > cgroup v2 > cgroup v1 > SLURM > RLIMIT > host RAM。
-    完全无法探测时回退 8GiB。
+    审计 #336：显式配置 / 环境变量都不能超过探测到的 **hard limit**。
+    流程：
+        1. 探测 hard 候选（cgroup v2 > cgroup v1 > SLURM > RLIMIT > host RAM），
+           取 min 作为 ``hard_limit``；
+        2. ``requested = explicit_bytes(>0) or env or hard_limit``；
+        3. 返回 ``min(requested, hard_limit)``。
+
+    即显式配置 64GB + 容器 8GB → 8GB。完全无法探测时 hard_limit 回退 8GiB。
     """
-    if explicit_bytes is not None and explicit_bytes > 0:
-        return explicit_bytes
-    env = _env_int(explicit_env, None)
-    if env is not None:
-        return env
     candidates: list[int] = []
     cg2 = _read_cgroup_v2_max()
     if cg2 is not None:
@@ -161,9 +174,16 @@ def effective_memory_limit_bytes(
     host = _host_memory_bytes()
     if host is not None:
         candidates.append(host)
-    if not candidates:
-        return 8 * 1024**3
-    return min(candidates)
+    hard_limit = min(candidates) if candidates else 8 * 1024**3
+
+    requested = hard_limit
+    if explicit_bytes is not None and explicit_bytes > 0:
+        requested = explicit_bytes
+    else:
+        env = _env_int(explicit_env, None)
+        if env is not None:
+            requested = env
+    return min(requested, hard_limit)
 
 
 def effective_cpu_slots(
@@ -186,9 +206,9 @@ def effective_cpu_slots(
     qp = _read_cgroup_cpu_quota()
     if qp is not None:
         quota, period = qp
-        slots = quota // period
-        if slots > 0:
-            return max(1, slots)
+        # 审计 #337：小数 quota 用 ceil（0.5 quota → 1 slot），不再回退 affinity。
+        slots = max(1, math.ceil(quota / period))
+        return slots
     try:
         import os as _os
 
@@ -341,7 +361,11 @@ class ExecutionResourcePlan:
         cse_frac = float(cache_cfg.get("cse_fraction", 0.40))
         panel_frac = float(cache_cfg.get("panel_fraction", 0.25))
         column_frac = float(cache_cfg.get("column_fraction", 0.35))
-        duckdb_frac = float(cache_cfg.get("duckdb_fraction", 0.45)) if False else 0.45
+        duckdb_frac = float(cache_cfg.get("duckdb_fraction", 0.45))
+        if not (0.05 <= duckdb_frac <= 0.95):
+            raise ValueError(
+                f"resources.cache.duckdb_fraction 必须在 [0.05, 0.95]，得到 {duckdb_frac}"
+            )
 
         workers_cfg = int(concurrency.get("max_workers") or 0) or base.max_workers
         workers = max(1, min(workers_cfg, effective_cpu_slots()))
@@ -487,6 +511,25 @@ class MemoryGovernor:
         """注册缓存层：``evict(target_bytes) -> freed_bytes``。"""
         self._evict_hooks[name] = evict
 
+    def unregister_layer(self, name: str) -> None:
+        """从 evict hooks 与记账中移除某层（审计 #333/#334）。"""
+        self._evict_hooks.pop(name, None)
+        self._usage.pop(name, None)
+
+    def reserve_accounting(self, name: str, bytes_: int) -> None:
+        """**仅记账**（不触发 evict hook）：cache 内部 ``set`` 时调用（审计 #333）。
+
+        避免递归：cache 已有自己的 LRU 预算逐出，governor 不应在每次 set 时
+        再触发一轮 evict hook。
+        """
+        bytes_ = max(0, int(bytes_))
+        self._usage[name] = self._usage.get(name, 0) + bytes_
+
+    def release_accounting(self, name: str, bytes_: int) -> None:
+        """**仅记账**（不触发 evict hook）：cache 内部 evict/release 时调用（审计 #333）。"""
+        bytes_ = max(0, int(bytes_))
+        self._usage[name] = max(0, self._usage.get(name, 0) - bytes_)
+
     def reserve(self, name: str, bytes_: int) -> bool:
         """某层尝试占用 ``bytes_`` 字节；超出全局 budget 时触发 evict。
 
@@ -497,11 +540,15 @@ class MemoryGovernor:
             freed = self._evict_for(bytes_)
             if self.total_usage + bytes_ > self.process_budget_bytes:
                 return False
-        self._usage[name] = self._usage.get(name, 0) + bytes_
+        self.reserve_accounting(name, bytes_)
         return True
 
     def _evict_for(self, needed: int) -> int:
-        """逐出 LRU 缓存直到腾出 ``needed`` 字节。"""
+        """逐出 LRU 缓存直到腾出 ``needed`` 字节。
+
+        审计 #333：逐出记账统一走 ``release_accounting``（hook 本身只逐出并返回
+        释放字节数，不直接改 ``_usage``，避免与这里重复扣减）。
+        """
         freed = 0
         for name, hook in self._evict_hooks.items():
             if self.total_usage + needed <= self.process_budget_bytes:
@@ -509,15 +556,14 @@ class MemoryGovernor:
             target = max(0, self.total_usage + needed - self.process_budget_bytes)
             n = hook(target)
             if n > 0:
-                self._usage[name] = max(0, self._usage.get(name, 0) - n)
+                self.release_accounting(name, n)
                 freed += n
                 self.evictions.append(f"{name}:{n}")
         return freed
 
     def release(self, name: str, bytes_: int) -> None:
         """释放某层占用的字节。"""
-        bytes_ = max(0, int(bytes_))
-        self._usage[name] = max(0, self._usage.get(name, 0) - bytes_)
+        self.release_accounting(name, bytes_)
 
     def release_all(self, name: str) -> None:
         """清空某层全部记账。"""
@@ -533,9 +579,26 @@ class MemoryGovernor:
                     return int(rss)
             except Exception:
                 pass
+        # 审计 #341：优先用真实当前 RSS；不可用时读 /proc/self/status VmRSS；
+        # 最后才 fallback ru_maxrss。
+        try:
+            import psutil  # type: ignore[import-untyped]
+
+            return int(psutil.Process().memory_info().rss)
+        except Exception:
+            pass
+        try:
+            with open("/proc/self/status", encoding="utf-8") as fh:
+                for line in fh:
+                    if line.startswith("VmRSS:"):
+                        return int(line.split()[1]) * 1024
+        except Exception:
+            pass
         try:
             import resource
 
+            # 注意：ru_maxrss 是历史峰值，不是当前值；仅在以上真实 RSS 探测
+            # 均不可用时才作兜底。
             return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024
         except Exception:
             return 0
@@ -614,6 +677,14 @@ class ExecutionResourceScope:
         }
         threads = self._duckdb_threads or self.plan.duckdb_threads
         os.environ["DUCKDB_MAX_THREADS"] = str(threads)
+        # 审计 #348：polars 线程数是进程级启动期设置，若 polars 已被 import，
+        # 事后改 POLARS_MAX_THREADS 不保证生效。best-effort 仍设置 env，
+        # 但明确告警需要不同 CPU 配额时应走 worker 进程隔离。
+        if "polars" in sys.modules:
+            _logger.warning(
+                "POLARS_MAX_THREADS 在 polars 已导入后不保证生效；需要不同 "
+                "CPU 配额请用 worker 进程隔离"
+            )
         os.environ["POLARS_MAX_THREADS"] = str(max(1, self.plan.polars_threads))
         os.environ["DUCKDB_MEMORY_LIMIT"] = str(self.plan.duckdb_budget_bytes)
         os.environ["DUCKDB_TEMP_DIRECTORY"] = self.plan.spill_dir
@@ -623,6 +694,11 @@ class ExecutionResourceScope:
         return self
 
     def _apply_live_pragma(self, threads: int) -> None:
+        """对当前 DuckDB 连接应用 live ``PRAGMA threads``。
+
+        审计 #348/#349：成功则记录 ``_prev_pragma``；失败不再静默——production
+        下抛 ``ResourceContractApplyError``（fail-closed），非 production 记 warning。
+        """
         try:
             from data_access import get_store
 
@@ -633,8 +709,17 @@ class ExecutionResourceScope:
                         engine._conn.execute("SELECT current_setting('threads')").fetchone()[0]
                     )
                     engine._conn.execute(f"PRAGMA threads={int(threads)}")
-        except Exception:
+        except Exception as exc:  # noqa: BLE001
             self._prev_pragma = None
+            if os.environ.get("FACTOR_ENGINE_RUN_MODE") == "production":
+                raise ResourceContractApplyError(
+                    f"无法应用 DuckDB live PRAGMA threads={int(threads)}: {exc}"
+                ) from exc
+            _logger.warning(
+                "无法应用 DuckDB live PRAGMA threads=%d: %s（非 production，继续）",
+                int(threads),
+                exc,
+            )
 
     def __exit__(self, exc_type, exc, tb) -> None:
         for key, value in self._prev.items():
@@ -650,8 +735,17 @@ class ExecutionResourceScope:
                 if hasattr(engine, "_write_lock"):
                     with engine._write_lock:
                         engine._conn.execute(f"PRAGMA threads={int(self._prev_pragma)}")
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                # 审计 #349：恢复失败只在非 production 下吞掉；production 不吞。
+                if os.environ.get("FACTOR_ENGINE_RUN_MODE") == "production":
+                    raise ResourceContractApplyError(
+                        f"无法恢复 DuckDB PRAGMA threads={int(self._prev_pragma)}: {exc}"
+                    ) from exc
+                _logger.warning(
+                    "无法恢复 DuckDB PRAGMA threads=%d: %s",
+                    int(self._prev_pragma),
+                    exc,
+                )
 
 
 # ---------------------------------------------------------------------------

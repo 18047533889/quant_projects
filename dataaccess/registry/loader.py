@@ -527,10 +527,8 @@ class DatasetRegistry:
 
         #P0-49 ParametricDataset 优先用显式 ``authorized_root``（比静态前缀更窄、
         更安全），缺省回退 static_root。
-        #P1-final closure 12：authorized_root 可能仍含 ``${RUN_NAMESPACE}``
-        占位符（load 不再烘焙）——白名单按**当前 context** namespace 解析后
-        交给 PathAuthorizer（PathAuthorizer 是 store 级对象，绑定在 store 构造时
-        的 namespace context 上，与请求一致）。
+        按**当前 context** namespace 解析后返回（诊断/测试用）；PathAuthorizer
+        构造用 ``allowed_root_templates``（保留占位符、延迟解析）。
         """
         roots: list[Path] = []
         for ds in self._datasets.values():
@@ -539,6 +537,22 @@ class DatasetRegistry:
             elif isinstance(ds, ParametricDataset):
                 raw = ds.authorized_root or ds.static_root
                 roots.append(Path(resolve_namespace_path(str(raw))))
+        return roots
+
+    def allowed_root_templates(self) -> list[str]:
+        """unresolved root template（``${RUN_NAMESPACE}`` 占位符原样保留）。
+
+        #7 PathAuthorizer 需要这个：store 级对象不再把 namespace 烘焙进白名单，
+        ``resolve_and_authorize`` 时按**当前请求**的 namespace 解析——长期 worker
+        换 ``DataAccessSession`` 后白名单随之生效，不再与数据集路径错配。
+        """
+        roots: list[str] = []
+        for ds in self._datasets.values():
+            if isinstance(ds, StaticDataset):
+                roots.append(str(ds.root))
+            elif isinstance(ds, ParametricDataset):
+                raw = ds.authorized_root or ds.static_root
+                roots.append(str(raw))
         return roots
 
 

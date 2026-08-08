@@ -5,10 +5,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import uuid
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+
+def _governor():
+    """惰性导入全局 MemoryGovernor，避免 storage → runtime → storage 循环导入。"""
+    from runtime.resource_governor import global_memory_governor
+
+    return global_memory_governor()
 
 
 class CacheManager:
@@ -22,17 +31,26 @@ class CacheManager:
           （键为计划子树的结构化字符串 + 可选 ``data_scope``）。
     """
 
-    def __init__(self, *, data_scope: str | None = None, budget_bytes: int | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        data_scope: str | None = None,
+        budget_bytes: int | None = None,
+        layer_name: str = "l2_subplan",
+    ) -> None:
         """初始化实例。
 
         参数:
             data_scope: 数据作用域指纹（可选）
             budget_bytes: 子计划结果字节预算（Phase 5 R6；``None`` 按进程预算比例）
+            layer_name: MemoryGovernor 记账层名（审计 #333；``PersistentPlanCache``
+                继承本类也用 ``"l2_subplan"``）
 
         返回:
             无
         """
         self.data_scope = data_scope
+        self.layer_name = layer_name
         # R6-151: insertion-ordered dict so eviction is true LRU — a ``get()``
         # moves the entry to the most-recent end, and eviction drops the oldest
         # (least-recently-used) entry.  The previous plain dict evicted by
@@ -96,15 +114,21 @@ class CacheManager:
         """
         from runtime.resource_governor import estimate_object_bytes
 
+        gov = _governor()
         scoped = self._scoped_key(key)
         size = estimate_object_bytes(value)
         if size > self.budget_bytes:
             return
         if scoped in self._cache:
-            self._bytes -= estimate_object_bytes(self._cache[scoped])
+            old_size = estimate_object_bytes(self._cache[scoped])
+            self._bytes -= old_size
+            gov.release_accounting(self.layer_name, old_size)
         self._bytes += size
+        gov.reserve_accounting(self.layer_name, size)
         self._cache[scoped] = value
-        self._evict_to(self.budget_bytes)
+        freed = self._evict_to(self.budget_bytes)
+        if freed > 0:
+            gov.release_accounting(self.layer_name, freed)
 
     def _evict_to(self, target: int) -> int:
         from runtime.resource_governor import estimate_object_bytes
@@ -119,8 +143,13 @@ class CacheManager:
         return freed
 
     def evict_if_over_budget(self, target: int = 0) -> int:
-        """MemoryGovernor evict hook：逐出到 ``target`` 字节（默认尽可能腾出）。"""
-        return self._evict_to(target if target > 0 else 0)
+        """MemoryGovernor evict hook：逐出到 ``target`` 字节。
+
+        审计 #332：``target > 0`` 用 ``target``，否则逐出到自身 ``budget_bytes``
+        （governor 触发路径的记账由 ``MemoryGovernor._evict_for`` 统一扣减，
+        这里只逐出并返回释放字节数，避免重复记账）。
+        """
+        return self._evict_to(target if target > 0 else self.budget_bytes)
 
     def clear_memory(self) -> None:
         """clear_memory。
@@ -133,6 +162,7 @@ class CacheManager:
         """
         self._cache.clear()
         self._bytes = 0
+        _governor().release_all(self.layer_name)
 
     def with_scope(self, data_scope: str, *, clear_memory: bool = False) -> CacheManager:
         """返回同类型实例并切换作用域（用于增量窗口隔离）。
@@ -144,7 +174,11 @@ class CacheManager:
         返回:
             CacheManager
         """
-        out = type(self)(data_scope=data_scope, budget_bytes=self._budget_bytes)
+        out = type(self)(
+            data_scope=data_scope,
+            budget_bytes=self._budget_bytes,
+            layer_name=self.layer_name,
+        )
         if not clear_memory and type(out) is CacheManager:
             out._cache = dict(self._cache)
             out._bytes = self._bytes
@@ -204,13 +238,38 @@ def _jsonable_index_names(index: Any) -> list[str | None]:
     return names
 
 
+def _payload_checksum(path: Path) -> str:
+    """Parquet 文件字节的 sha256（流式，避免整读大文件）。"""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _schema_hash(value: Any) -> str:
+    """frame dtypes/columns 摘要（审计 #330 meta ``schema_hash``）。"""
+    if isinstance(value, pd.DataFrame):
+        cols = "|".join(f"{c}:{value[c].dtype}" for c in value.columns)
+    else:
+        cols = f"series:{getattr(value, 'dtype', 'unknown')}"
+    return hashlib.sha256(cols.encode("utf-8")).hexdigest()
+
+
 def _save_value(path: Path, value: Any) -> None:
-    """将 Series/DataFrame 写入 Parquet 并附带元数据 JSON。
-    
+    """将 Series/DataFrame 原子写入 Parquet 并附带元数据 JSON。
+
+    审计 #330：
+        - 先写 ``<key>.tmp.<uuid>.parquet`` 与 ``<key>.tmp.<uuid>.meta.json``；
+        - meta 新增 ``payload_checksum``（parquet 字节 sha256）、``schema_hash``
+          （dtypes/columns 摘要）、``generation_id``（uuid）；
+        - 两份都写成功后才用 ``os.replace`` 原子改名到正式路径，避免读到
+          写了一半的缓存文件。
+
     参数:
         path: 文件或目录路径
         value: 缓存值
-    
+
     返回:
         无
     """
@@ -218,21 +277,48 @@ def _save_value(path: Path, value: Any) -> None:
     if isinstance(value, pd.Series):
         frame = _series_to_frame(value)
         meta = {"kind": "series", "index_columns": [c for c in frame.columns if c != "__value__"]}
-        frame.to_parquet(path, index=False)
+        is_frame = False
     elif isinstance(value, pd.DataFrame):
         meta = {"kind": "dataframe", "index_name": _jsonable_index_names(value.index)}
-        value.to_parquet(path, index=True)
+        is_frame = True
     else:
         return
-    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+    tmp_dir = path.parent
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    tmp_base = f"{path.name}.tmp.{uuid.uuid4().hex}"
+    tmp_parquet = tmp_dir / f"{tmp_base}.parquet"
+    tmp_meta = tmp_dir / f"{tmp_base}.meta.json"
+    try:
+        if is_frame:
+            value.to_parquet(tmp_parquet, index=True)
+        else:
+            frame.to_parquet(tmp_parquet, index=False)
+        meta["payload_checksum"] = _payload_checksum(tmp_parquet)
+        meta["schema_hash"] = _schema_hash(value)
+        meta["generation_id"] = uuid.uuid4().hex
+        tmp_meta.write_text(json.dumps(meta), encoding="utf-8")
+        os.replace(tmp_parquet, path)
+        os.replace(tmp_meta, meta_path)
+    except Exception:
+        # 清理残留 tmp 文件后重抛（若 parquet 已替换而 meta 未替换，下次 load
+        # 会因 checksum 不匹配而 fail-closed 返回 None，安全）。
+        for p in (tmp_parquet, tmp_meta):
+            try:
+                p.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
 
 
 def _load_value(path: Path) -> Any | None:
-    """从 Parquet + 元数据 JSON 恢复缓存值。
-    
+    """从 Parquet + 元数据 JSON 恢复缓存值（校验 ``payload_checksum``，fail-closed）。
+
+    审计 #330：checksum 缺失或不匹配都返回 ``None``，不信任未经验证的磁盘缓存。
+
     参数:
         path: 文件或目录路径
-    
+
     返回:
         Any | None
     """
@@ -241,6 +327,12 @@ def _load_value(path: Path) -> Any | None:
         return None
     try:
         meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        checksum = meta.get("payload_checksum")
+        if not checksum:
+            # 旧格式无校验和：fail-closed，不信任
+            return None
+        if _payload_checksum(path) != checksum:
+            return None
         frame = pd.read_parquet(path)
     except Exception:
         return None
@@ -285,6 +377,7 @@ class PersistentPlanCache(CacheManager):
         *,
         data_scope: str | None = None,
         budget_bytes: int | None = None,
+        layer_name: str = "l2_subplan",
     ) -> None:
         """初始化实例。
 
@@ -292,11 +385,15 @@ class PersistentPlanCache(CacheManager):
             root: 根目录路径
             data_scope: 数据作用域指纹（可选）
             budget_bytes: 内存层字节预算（可选）
+            layer_name: MemoryGovernor 记账层名（默认 ``"l2_subplan"``；磁盘部分
+                仍走 disk hit accounting，不单独计层）
 
         返回:
             无
         """
-        super().__init__(data_scope=data_scope, budget_bytes=budget_bytes)
+        super().__init__(
+            data_scope=data_scope, budget_bytes=budget_bytes, layer_name=layer_name
+        )
         self.root = Path(root)
 
     def _namespace_root(self) -> Path:
@@ -351,12 +448,16 @@ class PersistentPlanCache(CacheManager):
         # it if it cannot fit alone, else account + evict to budget.
         from runtime.resource_governor import estimate_object_bytes
 
+        gov = _governor()
         size = estimate_object_bytes(value)
         if size > self.budget_bytes:
             return None
         self._bytes += size
+        gov.reserve_accounting(self.layer_name, size)
         self._cache[scoped] = value
-        self._evict_to(self.budget_bytes)
+        freed = self._evict_to(self.budget_bytes)
+        if freed > 0:
+            gov.release_accounting(self.layer_name, freed)
         return value
 
     def set(self, key: str, value) -> None:
@@ -373,15 +474,21 @@ class PersistentPlanCache(CacheManager):
             return
         from runtime.resource_governor import estimate_object_bytes
 
+        gov = _governor()
         scoped = self._scoped_key(key)
         size = estimate_object_bytes(value)
         if size > self.budget_bytes:
             return
         if scoped in self._cache:
-            self._bytes -= estimate_object_bytes(self._cache[scoped])
+            old_size = estimate_object_bytes(self._cache[scoped])
+            self._bytes -= old_size
+            gov.release_accounting(self.layer_name, old_size)
         self._bytes += size
+        gov.reserve_accounting(self.layer_name, size)
         self._cache[scoped] = value
-        self._evict_to(self.budget_bytes)
+        freed = self._evict_to(self.budget_bytes)
+        if freed > 0:
+            gov.release_accounting(self.layer_name, freed)
         path = self._disk_path(scoped)
         path.parent.mkdir(parents=True, exist_ok=True)
         _save_value(path, value)
@@ -396,7 +503,12 @@ class PersistentPlanCache(CacheManager):
         返回:
             PersistentPlanCache
         """
-        out = PersistentPlanCache(self.root, data_scope=data_scope, budget_bytes=self._budget_bytes)
+        out = PersistentPlanCache(
+            self.root,
+            data_scope=data_scope,
+            budget_bytes=self._budget_bytes,
+            layer_name=self.layer_name,
+        )
         if not clear_memory:
             out._cache = dict(self._cache)
             out._bytes = self._bytes

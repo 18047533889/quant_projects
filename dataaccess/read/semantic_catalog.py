@@ -142,9 +142,13 @@ def _tuple_of(
             f"{name} 必须是序列（list/tuple），收到裸 {type(value).__name__} "
             f"{value!r}；请写成 [项1, 项2]"
         )
-    if not isinstance(value, (list, tuple, set, frozenset)):
+    # #7 只接受 list/tuple（ordered sequence）——``revision_order`` 的顺序本身是
+    # 业务语义，set/frozenset/dict/generator 之前被 ``tuple()`` 吞掉：set 迭代序
+    # 不确定、dict 退化成键列表，都会让版本排序语义漂移。
+    if not isinstance(value, (list, tuple)):
         raise ValidationError(
-            f"{name} 必须是序列，收到 {type(value).__name__} {value!r}"
+            f"{name} 必须是 list/tuple（顺序是语义），收到 {type(value).__name__} "
+            f"{value!r}；set/frozenset/dict/generator 会丢顺序"
         )
     out: list[Any] = []
     for v in value:
@@ -174,6 +178,17 @@ def _float_or_none(value: Any) -> float | None:
 
 # #31 合法枚举集合
 _VALID_AVAILABILITY = {"same_day", "next_trading_day", "session"}
+# #7 join_policy strict enum：canonical 集合与 ``join_spec_from_field`` 支持的
+# 一一对应。拼写错（``pit_asof_backword``）之前在 ``join_spec_from_field`` 里
+# 静默丢成 None → exact——**丢掉 PIT join 语义**（不是崩，而是可能引入未来数据）。
+_VALID_JOIN_POLICIES = frozenset({
+    "exact",
+    "asof",
+    "pit_asof",
+    "pit_asof_backward",  # 历史 alias → pit_asof
+    "asof_backward",      # 历史 alias → pit_asof
+    "latest_period",      # → pit_asof + period_selection=latest_period
+})
 _VALID_DUPLICATE_POLICIES = {"keep_first", "keep_last", "latest_revision", "error"}
 _VALID_PERIOD_SELECTIONS = {
     "latest_period",
@@ -339,6 +354,16 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         context=context,
         default="all",
     )
+    # #7 join_policy 严格枚举：拼写错 fail-closed，绝不在执行链静默退化 exact。
+    join_policy = _str_or_none(raw.get("join_policy"))
+    if join_policy is not None:
+        jp = str(join_policy).strip().lower()
+        if jp not in _VALID_JOIN_POLICIES:
+            raise ValidationError(
+                f"{context}: join_policy={join_policy!r} 不在合法集合 "
+                f"{sorted(_VALID_JOIN_POLICIES)} 内"
+            )
+        join_policy = jp
     return SemanticField(
         logical_name=logical,
         dataset=str(dataset) if dataset else None,
@@ -355,7 +380,7 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         knowledge_time=_str_or_none(raw.get("knowledge_time")),
         effective_time=_str_or_none(raw.get("effective_time")),
         period_time=_str_or_none(raw.get("period_time")),
-        join_policy=_str_or_none(raw.get("join_policy")),
+        join_policy=join_policy,
         required_filters=_tuple_of(
             raw.get("required_filters"), name=f"{logical}.required_filters"
         ),

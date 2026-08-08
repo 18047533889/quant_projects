@@ -24,9 +24,11 @@ data_access.core.storage —— 存储后端抽象（local / s3 / cos / http / c
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping
 
 from data_access.core.exceptions import ValidationError
@@ -42,6 +44,52 @@ class StorageBackend(str, Enum):
 
 
 _REMOTE_BACKENDS = frozenset({StorageBackend.S3, StorageBackend.COS, StorageBackend.HTTP})
+
+# ``scheme://``（URI 形态）匹配器。`..`/`/` 等非 URI 字符串不匹配。
+_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*://")
+
+
+def _backend_from_uri_scheme(uri: Any) -> str | None:
+    """从 URI scheme 推导 storage backend；非 URI（无 scheme）返回 None。
+
+    #7 类型未显式声明时**必须**从 scheme 推导，绝不能 fallback LOCAL——
+    ``StorageSpec.from_yaml("cos://bucket/path")`` 之前被静默解析成
+    ``type=local, uri=cos://...``，直接破坏 authorization / reader 路由 /
+    snapshot / remote capability。未实现 scheme（如 ``oss://``）直接拒绝。
+    """
+    text = str(uri or "").strip()
+    if not text:
+        return None
+    low = text.lower()
+    if low.startswith("cos://"):
+        return "cos"
+    if low.startswith("s3://"):
+        return "s3"
+    if low.startswith(("http://", "https://")):
+        return "http"
+    if _SCHEME_RE.match(text):
+        raise ValidationError(
+            f"storage URI {uri!r} 的 scheme 未实现（支持 cos:// / s3:// / http(s)://）。"
+            "不能把带 scheme 的 URI 静默当 local 处理。"
+        )
+    return None
+
+
+def _deep_freeze(value: Any) -> Any:
+    """递归把 mapping/list/set 转成不可变形式（深冻结）。
+
+    #12：``StorageSpec`` 是 frozen typed IR，但 ``options`` 是可变 dict——
+    ``ds.storage.options["x"]=...`` 可以绕过 frozen dataclass 的不可变契约，
+    且 plan/fingerprint 未必感知内部 mutation。构造时深冻结，任何写路径都会
+    TypeError，从根上把「registry compile 后即 immutable」落实。
+    """
+    if isinstance(value, Mapping):
+        return MappingProxyType({k: _deep_freeze(v) for k, v in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_deep_freeze(v) for v in value)
+    if isinstance(value, set):
+        return frozenset(_deep_freeze(v) for v in value)
+    return value
 
 
 @dataclass(frozen=True)
@@ -79,6 +127,8 @@ class StorageSpec:
                 f"未知 storage.type={self.type!r}。支持: "
                 f"{[b.value for b in StorageBackend]}"
             )
+        # #12 深冻结 options（见 ``_deep_freeze``）：frozen dataclass 不再留可变 dict。
+        object.__setattr__(self, "options", _deep_freeze(self.options))
 
     @property
     def backend(self) -> StorageBackend:
@@ -135,7 +185,21 @@ class StorageSpec:
             if k != "source":
                 merged[k] = v  # 顶层字段优先
 
-        stype = str(merged.get("type") or "local").strip().lower()
+        # #7 URI scheme → backend：``type`` 未显式声明时从 ``uri`` 的 scheme 推导，
+        # 绝不 fallback LOCAL。``_backend_from_uri_scheme`` 对未知 scheme（oss://）
+        # 直接拒绝；显式 type 与 scheme 推导矛盾也拒绝（配置写错的两种形态）。
+        uri_raw = merged.get("uri")
+        inferred = _backend_from_uri_scheme(uri_raw) if uri_raw else None
+        stype_raw = merged.get("type")
+        if stype_raw:
+            stype = str(stype_raw).strip().lower()
+            if inferred is not None and stype != inferred:
+                raise ValidationError(
+                    f"{context}: uri={uri_raw!r} 的 scheme 推导 backend={inferred!r}，"
+                    f"与显式 type={stype!r} 矛盾。请删除其一使两者一致。"
+                )
+        else:
+            stype = inferred if inferred is not None else "local"
         try:
             backend = StorageBackend(stype)
         except ValueError:

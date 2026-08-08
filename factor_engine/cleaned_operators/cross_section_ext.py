@@ -252,7 +252,12 @@ def _tail_coexceedance_series(x2d: np.ndarray, g2d: np.ndarray, window: int, qua
         col = x2d[:, c]
         for r in range(rows):
             lo = max(0, r - w + 1)
-            vals = col[lo : r + 1]
+            # R6-132: the threshold must come from the STRICT prior history
+            # [t-W, t-1] — the current row cannot participate in defining the
+            # anomaly threshold it is then tested against (a big x_t would raise
+            # its own bar).  Same prior-prefix rule as the impact-decay shock
+            # threshold (#194).
+            vals = col[lo:r]
             vals = vals[np.isfinite(vals)]
             if vals.size < _MIN_Q_ROWS:
                 continue

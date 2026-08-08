@@ -842,6 +842,53 @@ def assert_sql_tables_declared(query: str, declared: Sequence[str]) -> None:
         )
 
 
+def assert_sql_from_scope(query: str, *, allowed: Sequence[str]) -> None:
+    """#34 收官轮：RelationHandle 的 FROM/JOIN 表集合必须全部落在允许 scope 内。
+
+    ``allowed`` 如 ``("_sub",)``。任何其它**裸表引用**——未声明 dataset / DuckDB
+    系统表（information_schema / pg_catalog）/ TEMP VIEW / 已存在普通 catalog
+    表——都拒绝。不能借 ``_sub`` 合法存在的同时再读一个没有声明的数据源（仅检查
+    「SQL 里出现了 FROM _sub」挡不住 ``JOIN some_other_table``）。子查询里的裸表
+    引用同样被扫到（不允许藏进嵌套子查询）。
+
+    表函数调用（``FROM read_parquet(?)`` 等，名字后紧跟 ``(``）不是裸表引用——
+    由独立的函数 allowlist（``_check_sql_function_allowlist``）治理。
+
+    与 strict 无关：数据源边界是安全/治理问题，research 也不能放开（读到的数据
+    不在 snapshot/lineage 里，治理与追溯同时失效）。
+    """
+    import re
+
+    allowed_l = {str(a).lower() for a in allowed}
+    for chunk in _iter_code_chunks(query):
+        for m in re.finditer(
+            r"(?i)\b(?:FROM|JOIN)\s+"
+            r"(?:\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}"
+            r"|\"([^\"]+)\""
+            r"|([A-Za-z_][A-Za-z0-9_.]*))",
+            chunk,
+        ):
+            name = m.group(1) or m.group(2) or m.group(3)
+            if not name:
+                continue
+            # 函数调用：FROM read_parquet(...)——名字后紧跟 ( 的不是表引用。
+            rest = chunk[m.end():].lstrip()
+            if rest.startswith("("):
+                continue
+            tl = name.lower()
+            if tl in allowed_l:
+                continue
+            # 下划线开头是内部临时名/子查询别名（_sub 本身已在 allowed 里）。
+            # 只放行明确的内部 scope 前缀，不放行任意 _foo（避免用户借 _ 前缀绕过）。
+            if tl.startswith("__scope"):
+                continue
+            raise ValidationError(
+                f"RelationHandle SQL 引用了 scope 外的表：{name!r}。完整 SELECT 只能 "
+                f"FROM/JOIN {sorted(allowed_l)}；其它表一律拒绝（避免读取未声明的数据源"
+                "绕过 DataAccess 治理）。"
+            )
+
+
 def _inline_path_params(sql: str, params: Sequence[Any]) -> str:
     """把参数化 SQL 的 ? 替换成 DuckDB 字面量。
 
