@@ -469,16 +469,24 @@ def _count_data_files(glob_paths: Sequence[str]) -> int | None:
 
 
 def is_manifest_fresh(manifest: DatasetManifest, glob_paths: Sequence[str]) -> bool:
-    """新鲜度检查（默认 O(1)）：写路径维护 ``manifest_epoch`` → 读路径信任。
+    """新鲜度检查（默认 O(1)）：双 epoch 判定 ``source_epoch == manifest_built_epoch``。
 
-    只有旧格式（无 epoch 的 ``_manifest.json``）才退回文件名 glob 比对，保证
-    老 manifest 在重建前仍然可用。新 manifest 不再在 read path 做 O(N) glob。
+    mutation 后 ``source_epoch`` 递增但 ``manifest_built_epoch`` 不动 → 立刻 dirty，
+    读路径不会再拿旧 ``_manifest.parquet`` 做 prune（避免 min/max 过期的错误裁剪）。
+
+    只有完全无 epoch 的极老 ``_manifest.json`` 才退回文件名 glob 比对。单 epoch
+    老格式（无 split）视为 source==built（建好后未 mutation）。
     """
     root = manifest_root_for_paths(list(glob_paths) if glob_paths else [])
     if root is not None:
         meta = manifest_version_token(root)
-        if meta is not None and meta.get("manifest_epoch") is not None:
-            return True
+        if meta is not None:
+            src = meta.get("source_epoch")
+            built = meta.get("manifest_built_epoch")
+            if src is not None and built is not None:
+                return src == built
+            if meta.get("manifest_epoch") is not None:
+                return True
     count = _count_data_files(glob_paths)
     if count is None:
         return True
@@ -517,14 +525,15 @@ def _read_epoch(root: Path) -> str | None:
     meta = manifest_version_token(root)
     if meta is None:
         return None
-    return meta.get("manifest_epoch")
+    return meta.get("source_epoch") or meta.get("manifest_epoch")
 
 
-def bump_manifest_epoch(root: Path) -> str | None:
-    """写路径 mutation 后调用：递增 ``_manifest.json`` 的 ``manifest_epoch``。
+def bump_source_epoch(root: Path) -> str | None:
+    """写路径 mutation 后调用：只递增 ``_manifest.json`` 的 ``source_epoch``。
 
-    只改 sidecar（O(1)，不重建 manifest、不 glob）。返回新 epoch；无 sidecar
-    返回 None（该数据集没有 manifest 可失效）。
+    ``manifest_built_epoch`` 保持不动 → manifest 自动 dirty，读路径不会再用旧
+    ``_manifest.parquet`` 的 min/max 做 prune。O(1)，不重建 manifest、不 glob。
+    返回新 source_epoch；无 sidecar 返回 None（该数据集没有 manifest 可失效）。
     """
     meta_path = Path(root) / _MANIFEST_META_FILENAME
     if not meta_path.exists():
@@ -535,15 +544,58 @@ def bump_manifest_epoch(root: Path) -> str | None:
         payload = {}
     if not isinstance(payload, dict):
         payload = {}
-    epoch = _next_epoch(payload.get("manifest_epoch"))
-    payload["manifest_epoch"] = epoch
+    src = _next_epoch(
+        payload.get("source_epoch") or payload.get("manifest_epoch")
+    )
+    payload["source_epoch"] = src
+    payload["manifest_epoch"] = src  # 兼容读取方（等价 source_epoch）
+    # manifest_built_epoch 保持原值 → source != built，manifest 变 dirty。
     tmp_meta = meta_path.with_name(f".{_MANIFEST_META_FILENAME}.tmp")
     tmp_meta.write_text(
         json.dumps(payload, ensure_ascii=False, sort_keys=True),
         encoding="utf-8",
     )
     os.replace(str(tmp_meta), str(meta_path))
-    return epoch
+    return src
+
+
+def bump_manifest_epoch(root: Path) -> str | None:
+    """兼容别名：递增 source_epoch（老调用方）。"""
+    return bump_source_epoch(root)
+
+
+def rebuild_manifest_for_dataset(
+    store: Any, dataset: str, **params: Any
+) -> DatasetManifest | None:
+    """mutation commit 后重建 manifest，使 ``manifest_built_epoch == source_epoch``。
+
+    - 数据集没有 manifest sidecar → 不建（数据集主人才决定是否启用 manifest）。
+    - 重建失败 → 返回 None（manifest 保持 dirty，读路径安全回退 glob + 全文件
+      列表，不回退错误 prune）。
+    - 成功后 ``manifest_built_epoch`` 追上 ``source_epoch``，prune 恢复。
+    """
+    from data_access.read.manifest import (
+        build_manifest_for_dataset as _build,
+    )
+    from data_access.read.manifest import manifest_root_for_paths, manifest_version_token
+
+    ds = store._registry.get(dataset)
+    try:
+        raw_paths = store._resolve_raw_paths(ds, time_range=None, params=dict(params))
+    except Exception:
+        return None
+    root = manifest_root_for_paths(raw_paths)
+    if root is None:
+        return None
+    token = manifest_version_token(root)
+    if token is None or not (
+        token.get("source_epoch") is not None or token.get("manifest_epoch") is not None
+    ):
+        return None  # 没有启用 manifest
+    try:
+        return _build(store, dataset, params=params or None, include_row_groups=False)
+    except Exception:
+        return None
 
 
 def _save_row_groups(root: Path, row_groups: Sequence[ManifestRowGroup]) -> Path:

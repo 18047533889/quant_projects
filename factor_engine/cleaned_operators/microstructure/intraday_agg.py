@@ -295,9 +295,20 @@ class IntraSegmentVwapDeviation(SeriesOperator):
         return pd.DataFrame(out).sort_index()
 
 
+def _coverage_ok(r: np.ndarray, floor: float = 0.9) -> bool:
+    """Coverage gate: realised-variation estimates must not treat data gaps as
+    zero-return minutes (P1-56).  A day whose observed grid is < ``floor``
+    finite returns fails closed rather than reporting a partial RV."""
+    if r.size == 0:
+        return False
+    return float(np.sum(np.isfinite(r))) / r.size >= floor
+
+
 def _seg_realized_vol(close_v, times, segment):
     mask = _seg_mask(times, segment)
     r = _log_returns(close_v[mask])
+    if not _coverage_ok(r):
+        return np.nan
     with np.errstate(invalid="ignore"):
         return float(math.sqrt(float(np.nansum(r * r))))
 
@@ -324,6 +335,8 @@ class IntraSegmentRealizedVol(SeriesOperator):
 
 def _rv(close_v):
     r = _log_returns(close_v)
+    if not _coverage_ok(r):
+        return np.nan
     with np.errstate(invalid="ignore"):
         return float(np.nansum(r * r))
 
@@ -346,10 +359,16 @@ class IntraRealizedVariance(SeriesOperator):
 
 def _semivariance(close_v, side):
     r = _log_returns(close_v)
+    if not _coverage_ok(r):
+        return np.nan
     if side == "down":
         r = np.where(r < 0, r, 0.0)
     elif side == "up":
         r = np.where(r > 0, r, 0.0)
+    else:
+        # An invalid ``side`` must fail loudly, never silently fall back to the
+        # full RV (P1-55).
+        raise ValueError("intra_realized_semivariance requires side in {'up', 'down'}")
     with np.errstate(invalid="ignore"):
         return float(np.nansum(r * r))
 
@@ -372,11 +391,15 @@ class IntraRealizedSemivariance(SeriesOperator):
 
 def _bipower(close_v):
     r = _log_returns(close_v)
-    finite = r[np.isfinite(r)]
-    if len(finite) < 2:
+    if not _coverage_ok(r):
         return np.nan
+    # Bipower variation must use *real adjacent* minute returns.  Compressing
+    # the finite returns and differencing the compressed series pairs 09:40 with
+    # 09:42 across a gap — a 3rd-round P1-53 numerical bug.  Multiplying the raw
+    # positional array means any product touching a NaN return is dropped and
+    # only truly adjacent finite minutes are summed.
     with np.errstate(invalid="ignore"):
-        return float((math.pi / 2.0) * np.nansum(np.abs(finite[1:]) * np.abs(finite[:-1])))
+        return float((math.pi / 2.0) * np.nansum(np.abs(r[1:]) * np.abs(r[:-1])))
 
 
 @register_operator(

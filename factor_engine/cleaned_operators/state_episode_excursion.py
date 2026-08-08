@@ -144,7 +144,7 @@ def _mfe_series(x2d: np.ndarray, s2d: np.ndarray, scale2d: np.ndarray) -> np.nda
         for t in range(rows):
             if sign[t] == 0:
                 continue
-            se = _episode_scale_entry(sc, entry[t], t)
+            se = _episode_scale_entry(sc, entry[t])
             if not np.isfinite(se):
                 continue
             out[t, c] = MFE[t] / (se + _EPS)
@@ -160,7 +160,7 @@ def _mae_series(x2d: np.ndarray, s2d: np.ndarray, scale2d: np.ndarray) -> np.nda
         for t in range(rows):
             if sign[t] == 0:
                 continue
-            se = _episode_scale_entry(sc, entry[t], t)
+            se = _episode_scale_entry(sc, entry[t])
             if not np.isfinite(se):
                 continue
             out[t, c] = MAE[t] / (se + _EPS)
@@ -198,7 +198,7 @@ def _retrace_series(x2d: np.ndarray, s2d: np.ndarray) -> np.ndarray:
     return out
 
 
-def _balance_series(x2d: np.ndarray, s2d: np.ndarray, _scale2d: np.ndarray) -> np.ndarray:
+def _balance_series(x2d: np.ndarray, s2d: np.ndarray) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
@@ -340,24 +340,25 @@ class StateEpisodeRetraceRatio(SeriesOperator):
 )
 class StateEpisodeExcursionBalance(SeriesOperator):
     """片段偏移平衡: (MFE-MAE)/(MFE+MAE+eps)。 [-1,1]。 P1。
+
+    ``scale`` was a dead public parameter — nothing used it — so it has been
+    removed (P0-14); every declared searchable parameter must change the output.
     """
 
     metadata = _metadata(
         "state_episode_excursion_balance",
         "状态片段内 MFE 与 MAE 的归一化平衡。",
-        ["x", "state", "scale"],
+        ["x", "state"],
         unit="ratio",
         cost=3,
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, state: pd.DataFrame, scale: pd.DataFrame, **_: Any
+        self, x: pd.DataFrame, state: pd.DataFrame, **_: Any
     ) -> pd.DataFrame:
         return frame_like(
             x,
-            _balance_series(
-                x.to_numpy(dtype=float), state.to_numpy(dtype=float), scale.to_numpy(dtype=float)
-            ),
+            _balance_series(x.to_numpy(dtype=float), state.to_numpy(dtype=float)),
         )
 
 
