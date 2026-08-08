@@ -868,6 +868,9 @@ class DataAccessStore:
         filters: Any = None,
         limit: int | None = None,
         query_budget: QueryBudget | None = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
         **params: Any,
     ) -> pa.Table:
         """读取已注册数据集，返回 Arrow Table（零拷贝，推荐路径）。
@@ -903,6 +906,9 @@ class DataAccessStore:
             filters=filters,
             limit=limit,
             query_budget=query_budget,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
             **params,
         ).table
 
@@ -1258,6 +1264,9 @@ class DataAccessStore:
         time_range: tuple[Any, Any] | None = None,
         instrument_filter: Sequence[str] | None = None,
         filters: Any = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
         **params: Any,
     ):
         """同 read_arrow，但返回 pandas DataFrame。
@@ -1271,6 +1280,9 @@ class DataAccessStore:
             time_range=time_range,
             instrument_filter=instrument_filter,
             filters=filters,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
             **params,
         )
         return table.to_pandas(self_destruct=True, split_blocks=True)

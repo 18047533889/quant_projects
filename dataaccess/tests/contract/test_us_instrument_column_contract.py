@@ -164,10 +164,13 @@ def test_us_instrument_filter_respects_declared_column(
     config = _write_config(tmp_path, us_root=us_root, us_clean=us_clean)
     store = DataAccessStore(load_registry(config), DuckDBEngine())
 
+    # #44 X0 稀疏表（us_stock_valuation_daily）需要显式 allow_sparse=True
+    # 才能按稀疏面板读；对其它数据集无害。
     table = store.read_arrow(
         dataset,
         columns=[instrument_col],
         instrument_filter=filter_tickers,
+        allow_sparse=True,
     )
     assert table.num_rows == expected_rows
 
