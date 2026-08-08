@@ -86,7 +86,11 @@ def _pagerank_series(
     business_category="relation",
     canonical="group_signal_attraction_share",
     source="relation.ops_ext",
-    status="implemented",
+    # P0-008: research-only (fake complete-graph PageRank demotion).  ``experimental``
+    # status is what keeps production_hardening._mark_experimental from certifying a
+    # research-surface op — the six-gate governance invariant requires certified ops
+    # to be daily/extended, and this op is intentionally not.
+    status="experimental",
 )
 class GroupSignalAttractionShare(SeriesOperator):
     """组内信号吸引份额（无 PIT 关系图时的诚实命名，P1-28）。

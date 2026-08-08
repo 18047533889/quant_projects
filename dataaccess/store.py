@@ -107,6 +107,9 @@ _VALID_WRITE_MODES = {"overwrite", "append"}
 _READ_PATH_META_KEYS = ("read_root", "_read_root", "bucket_values", "read_auto", "lazy_scan")
 _WRITE_PATH_META_KEYS = ("write_root", "_write_root", "write_dir", "_write_dir")
 
+# #44 read()/read_result() 的读取模式：普通面板 / 事件 / PIT / 维表 / 稀疏
+_VALID_READ_MODES = {"auto", "panel", "event", "pit", "dimension", "sparse"}
+
 
 def _assert_instrument_filter_supported(
     ds: Dataset,
@@ -419,6 +422,228 @@ class DataAccessStore:
                 )
         return out
 
+    def _enforce_read_contract(
+        self,
+        dataset: str,
+        *,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
+    ) -> None:
+        """#44 Store 级 temporal model 强制（D1/S1/E1/E2/X0/EMPTY/MINUTE/STATIC/RAW_EVENT 一等公民）。
+
+        只对 ``COS_DATASET_CONTRACTS`` 里登记的数据集生效；factor_lake 等无契约
+        数据集跳过（它们没有 panel/PIT 语义约束）。语义：
+            - EMPTY               → 一律拒绝（占位表）。
+            - X0（mode=panel）    → 必须 allow_sparse=True 才放行。
+            - E1/E2/RAW_EVENT（mode=panel/auto）
+                → production/strict 拒绝（必须走 mode='event'/'pit' 或 read_joined）；
+                  research 告警放行。
+            - STATIC（mode=panel/auto）
+                → production/strict 拒绝（mode='dimension' 放行）；research 告警。
+            - mode='event'/'pit'  → 必须是事件表（pit 会校验 PIT 时钟）。
+            - mode='dimension'    → 必须是 STATIC。
+            - mode='sparse'       → 必须是 X0。
+        """
+        from data_access.cos_contract import get_cos_contract, resolve_event_clock
+
+        contract = get_cos_contract(dataset)
+        if contract is None:
+            return
+        effective = str(mode or "auto").strip().lower()
+        if effective not in _VALID_READ_MODES:
+            raise ValidationError(
+                f"mode={mode!r} 非法；合法: {sorted(_VALID_READ_MODES)}"
+            )
+        if contract.is_empty:
+            raise ValidationError(f"数据集 {dataset!r} 是 EMPTY 占位表，禁止作为数据源")
+        if effective == "event":
+            if not (contract.is_event or contract.is_raw_event):
+                raise ValidationError(
+                    f"数据集 {dataset!r} 不是事件表，mode='event' 不适用"
+                )
+            if contract.pit_policy == "effective_time_only":
+                resolve_event_clock(
+                    dataset, allow_effective_time=allow_effective_time
+                )
+            return
+        if effective == "pit":
+            resolve_event_clock(dataset, allow_effective_time=allow_effective_time)
+            return
+        if effective == "dimension":
+            if not contract.is_static:
+                raise ValidationError(
+                    f"数据集 {dataset!r} 不是 STATIC 维表，mode='dimension' 不适用"
+                )
+            return
+        if effective == "sparse":
+            if not contract.is_sparse:
+                raise ValidationError(
+                    f"数据集 {dataset!r} 不是 X0 稀疏表，mode='sparse' 不适用"
+                )
+            return
+        # mode == auto | panel：普通面板读取
+        if contract.is_sparse:
+            if allow_sparse:
+                return
+            raise ValidationError(
+                f"数据集 {dataset!r} 是 X0 稀疏表，不是完整日频面板；"
+                "如需稀疏读取请显式传 allow_sparse=True"
+            )
+        if contract.is_event or contract.is_raw_event:
+            msg = (
+                f"数据集 {dataset!r} 是 {contract.temporal_model} 事件表；普通面板读取"
+                "禁止。请用 mode='event'/'pit'（事件/PIT API）或 read_joined 语义 join。"
+            )
+            if _production_mode() or _strict_read_mode():
+                raise ValidationError(msg)
+            logger.warning("%s（research 放行）", msg)
+            return
+        if contract.is_static:
+            msg = (
+                f"数据集 {dataset!r} 是 STATIC 维表，不是时间×标的面板；"
+                "如需维表读取请 mode='dimension'。"
+            )
+            if _production_mode() or _strict_read_mode():
+                raise ValidationError(msg)
+            logger.warning("%s（research 放行）", msg)
+
+    def _validate_allowed_filter_values(
+        self,
+        fields_meta: Sequence[Any],
+        params_by_dataset: Mapping[str, Mapping[str, Any]],
+        *,
+        filters: Any = None,
+        filters_by_dataset: Mapping[str, Any] | None = None,
+    ) -> None:
+        """#52 allowed_filter_values 值校验：过滤值必须在契约允许集合内。
+
+        只对 catalog 字段挂到的 COS 契约数据集生效；校验 params 里的路径参数值
+        与 filters/filters_by_dataset 里过滤列的字面值。production fail-closed。
+        """
+        from data_access.cos_contract import get_cos_contract
+        from data_access.read.predicate_ast import filter_column_values, parse_filters
+
+        problems: list[tuple[str, str, list[Any]]] = []
+        seen: set[str] = set()
+        for f in fields_meta:
+            ds = getattr(f, "dataset", None)
+            if not ds:
+                continue
+            contract = get_cos_contract(ds)
+            if contract is None or not contract.allowed_filters:
+                continue
+            key = f"{ds}:{tuple(sorted(contract.allowed_filters))}"
+            if key in seen:
+                continue
+            seen.add(key)
+            effective = dict((params_by_dataset or {}).get(ds, {}))
+            col_vals: dict[str, set[Any]] = {}
+            for c, vv in filter_column_values(parse_filters(filters)).items():
+                col_vals.setdefault(c, set()).update(vv)
+            for dsf, ff in (filters_by_dataset or {}).items():
+                if dsf != ds:
+                    continue
+                for c, vv in filter_column_values(parse_filters(ff)).items():
+                    col_vals.setdefault(c, set()).update(vv)
+            for c, choices in contract.allowed_filters.items():
+                if c in effective:
+                    pv = effective[c]
+                    vals = pv if isinstance(pv, (list, tuple, set, frozenset)) else (pv,)
+                    bad = [v for v in vals if v not in choices]
+                    if bad:
+                        problems.append((ds, c, bad))
+                if c in col_vals:
+                    bad = [v for v in col_vals[c] if v not in choices]
+                    if bad:
+                        problems.append((ds, c, bad))
+        if not problems:
+            return
+        detail = "; ".join(f"{ds}.{c}={bad!r}" for ds, c, bad in problems)
+        if _production_mode():
+            raise ValidationError(
+                f"过滤值不在契约允许集合内（production fail-closed）：{detail}"
+            )
+        logger.warning("过滤值不在契约允许集合内（research 放行）：%s", detail)
+
+    def _validate_joined_contract_filters(
+        self,
+        per_ds: Mapping[str, Sequence[str]],
+        params_by_dataset: Mapping[str, Mapping[str, Any]],
+        *,
+        filters: Any = None,
+        filters_by_dataset: Mapping[str, Any] | None = None,
+    ) -> None:
+        """read_joined 的每数据集契约校验（P0-1/P0-9）。
+
+        对每个参与 join 的 COS 契约数据集：
+            - EMPTY → 拒绝；
+            - required_panel_filters / required_dimension_filters 必须被
+              params 或 filters 列覆盖（否则 ×N 行或语义错误）。
+        fan-out 守卫（P0-10）在 ``_read_joined_sql`` 里按实际 join key 判定。
+        """
+        from data_access.cos_contract import get_cos_contract
+        from data_access.read.predicate_ast import filter_columns, parse_filters
+
+        global_cols = filter_columns(parse_filters(filters))
+        per_ds_cols = {
+            str(ds): filter_columns(parse_filters(f))
+            for ds, f in (filters_by_dataset or {}).items()
+        }
+        for ds in per_ds:
+            contract = get_cos_contract(ds)
+            if contract is None:
+                continue
+            if contract.is_empty:
+                raise ValidationError(
+                    f"数据集 {ds!r} 是 EMPTY 占位表，禁止参与 join"
+                )
+            effective = dict((params_by_dataset or {}).get(ds, {}))
+            filter_cols = set(global_cols) | set(per_ds_cols.get(ds, set()))
+            required = (
+                tuple(contract.required_panel_filters or ())
+                + tuple(contract.required_dimension_filters or ())
+            )
+            if required:
+                missing = []
+                for k in required:
+                    if k in effective or any(
+                        str(c).lower() == str(k).lower() for c in effective
+                    ):
+                        continue
+                    if any(str(c).lower() == str(k).lower() for c in filter_cols):
+                        continue
+                    missing.append(k)
+                if missing:
+                    detail = ", ".join(missing)
+                    if _production_mode() or _strict_read_mode():
+                        raise ValidationError(
+                            f"数据集 {ds!r} join 缺少必需过滤 {detail}"
+                            "（production fail-closed）"
+                        )
+                    logger.warning(
+                        "数据集 %r join 缺少必需过滤 %s（research 放行）",
+                        ds, detail,
+                    )
+
+    def _event_cutoff_for_contract(
+        self,
+        dataset: str,
+        *,
+        time_range: tuple[Any, Any] | None,
+    ) -> None:
+        """#16 effective_time_only 事件表未来数据 cutoff（读路径）。"""
+        from data_access.cos_contract import enforce_event_cutoff, get_cos_contract
+
+        contract = get_cos_contract(dataset)
+        if contract is None:
+            return
+        enforce_event_cutoff(
+            contract,
+            time_range=time_range,
+            production=_production_mode() or _strict_read_mode(),
+        )
+
     def _schema_fingerprint(
         self,
         ds: Dataset,
@@ -443,9 +668,16 @@ class DataAccessStore:
         filters: Any = None,
         limit: int | None = None,
         query_budget: QueryBudget | None = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
         **params: Any,
     ) -> ReadResult:
-        """读取数据集并返回带 ``DataSnapshot`` 的 ``ReadResult``（审计/lineage 用）。"""
+        """读取数据集并返回带 ``DataSnapshot`` 的 ``ReadResult``（审计/lineage 用）。
+
+        ``mode``（#44）：auto|panel|event|pit|dimension|sparse——读取的语义模式，
+        决定 COS 契约如何强制（事件表不能当普通面板读等）。
+        """
         ds = self._registry.get(dataset)
         return self._read_dataset_object(
             ds,
@@ -456,6 +688,9 @@ class DataAccessStore:
             filters=filters,
             limit=limit,
             query_budget=query_budget,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
             params=params,
         )
 
@@ -471,8 +706,19 @@ class DataAccessStore:
         limit: int | None,
         query_budget: QueryBudget | None,
         params: dict[str, Any],
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
     ) -> ReadResult:
         """按已解析的 ``Dataset`` 对象执行一次读（read_result / read_uri 共用）。"""
+        # #44 Store 级 temporal model 强制 + #16 effective-only 事件未来 cutoff
+        self._enforce_read_contract(
+            dataset,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+        )
+        self._event_cutoff_for_contract(dataset, time_range=time_range)
         _assert_instrument_filter_supported(ds, instrument_filter)
         budget = self._resolve_read_budget(ds, query_budget)
         validate_query_request(
@@ -502,6 +748,12 @@ class DataAccessStore:
         # 美股财务 timeframe 是列过滤，传 filters 覆盖即可）。避免 read_joined
         # 强制而 read() 放行的不一致。
         self._enforce_required_filters(
+            self._fields_meta_for_columns(dataset, columns),
+            {dataset: dict(params)},
+            filters=filters,
+        )
+        # #52 allowed_filter_values 值校验（production fail-closed）
+        self._validate_allowed_filter_values(
             self._fields_meta_for_columns(dataset, columns),
             {dataset: dict(params)},
             filters=filters,
@@ -665,6 +917,9 @@ class DataAccessStore:
         limit: int | None = None,
         batch_size: int = 100_000,
         query_budget: QueryBudget | None = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
         **params: Any,
     ) -> Iterator[pa.RecordBatch]:
         """流式读取（PR7）：返回一个 Arrow RecordBatch 生成器。
@@ -695,6 +950,14 @@ class DataAccessStore:
             ...     total += batch.num_rows
         """
         ds = self._registry.get(dataset)
+        # #44 流式读同样强制 temporal model（EMPTY/X0/事件表面板读语义）
+        self._enforce_read_contract(
+            dataset,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+        )
+        self._event_cutoff_for_contract(dataset, time_range=time_range)
         _assert_instrument_filter_supported(ds, instrument_filter)
         budget = self._resolve_read_budget(ds, query_budget)
         validate_query_request(
@@ -770,6 +1033,9 @@ class DataAccessStore:
         instrument_filter: Sequence[str] | None = None,
         filters: Any = None,
         query_budget: QueryBudget | None = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
         **params: Any,
     ) -> tuple[Any, list[str]]:
         """内部：构建 Polars LazyFrame，同时返回已解析 paths（避免 scan 二次准备）。"""
@@ -782,6 +1048,14 @@ class DataAccessStore:
 
         scan_start = time.perf_counter()
         ds = self._registry.get(dataset)
+        # #44 Polars 扫描同样强制 temporal model + #16 effective-only cutoff
+        self._enforce_read_contract(
+            dataset,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+        )
+        self._event_cutoff_for_contract(dataset, time_range=time_range)
         _assert_instrument_filter_supported(ds, instrument_filter)
         budget = self._resolve_read_budget(ds, query_budget)
         validate_query_request(
@@ -895,6 +1169,9 @@ class DataAccessStore:
         instrument_filter: Sequence[str] | None = None,
         filters: Any = None,
         query_budget: QueryBudget | None = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
         **params: Any,
     ):
         """返回 Polars LazyFrame，惰性扫描已注册数据集（PR7）。
@@ -919,6 +1196,9 @@ class DataAccessStore:
             instrument_filter=instrument_filter,
             filters=filters,
             query_budget=query_budget,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
             **params,
         )
         return lf
@@ -932,6 +1212,9 @@ class DataAccessStore:
         instrument_filter: Sequence[str] | None = None,
         filters: Any = None,
         query_budget: QueryBudget | None = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
         **params: Any,
     ) -> ScanHandle:
         """受控 Polars 扫描：``collect()`` 强制 budget + snapshot（production 推荐）。"""
@@ -944,6 +1227,9 @@ class DataAccessStore:
             instrument_filter=instrument_filter,
             filters=filters,
             query_budget=query_budget,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
             **params,
         )
         snapshot = self._build_snapshot(
@@ -1172,9 +1458,15 @@ class DataAccessStore:
         batch_size: int = 100_000,
         query_budget: QueryBudget | None = None,
         normalize_units: bool = False,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
         **params: Any,
     ) -> ReadHandle:
         """统一读入口：引擎/结果形态自动路由，返回 ``ReadHandle``。
+
+        ``mode``（#44）：auto|panel|event|pit|dimension|sparse——语义读取模式，
+        COS 契约按此强制（事件表不能当普通面板读；X0 需要 allow_sparse）。
 
         - ``engine``: auto | duckdb | polars | pyarrow
         - ``result``: auto | arrow | pandas | polars | lazy | stream
@@ -1203,6 +1495,9 @@ class DataAccessStore:
             query_budget=query_budget,
             params=params,
             normalize_units=normalize_units,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
         )
 
     def read_uri(
@@ -1348,6 +1643,13 @@ class DataAccessStore:
             pbd,
             filters=filters,
             filters_by_dataset=filters_by_dataset,
+        )
+        # #52 allowed_filter_values 值校验 + #44 每数据集契约（EMPTY/必需过滤）
+        self._validate_allowed_filter_values(
+            fields_meta, pbd, filters=filters, filters_by_dataset=filters_by_dataset
+        )
+        self._validate_joined_contract_filters(
+            per_ds, pbd, filters=filters, filters_by_dataset=filters_by_dataset
         )
 
         merged = self._resolve_sql_budget(list(per_ds), query_budget)
@@ -1868,7 +2170,7 @@ class DataAccessStore:
         """
         from data_access.read.formats import format_adapter_for_dataset
         from data_access.read.predicate import Predicate, compile_predicate
-        from data_access.read.predicate_ast import parse_filters
+        from data_access.read.predicate_ast import filter_columns, parse_filters
         from data_access.read.temporal_join import TemporalJoinSpec, parse_join_spec
 
         datasets = [anchor] + [d for d in per_ds if d != anchor]
@@ -2344,6 +2646,9 @@ class DataAccessStore:
         query_budget: QueryBudget | None,
         params: dict[str, Any],
         normalize_units: bool = False,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
     ) -> ReadHandle:
         """统一 read 编排：engine 路由 + 结果形态。"""
         from data_access.read.formats import format_adapter_for_dataset
@@ -2394,6 +2699,9 @@ class DataAccessStore:
                 params=params,
                 batch_size=batch_size,
                 normalize_units=normalize_units,
+                mode=mode,
+                allow_sparse=allow_sparse,
+                allow_effective_time=allow_effective_time,
             )
         if engine == "polars":
             budget = self._resolve_read_budget(ds, query_budget)
@@ -2404,6 +2712,9 @@ class DataAccessStore:
                 instrument_filter=instrument_filter,
                 filters=filters,
                 query_budget=query_budget,
+                mode=mode,
+                allow_sparse=allow_sparse,
+                allow_effective_time=allow_effective_time,
                 **params,
             )
             snapshot = self._build_snapshot(
@@ -2441,6 +2752,9 @@ class DataAccessStore:
             limit=limit,
             query_budget=query_budget,
             params=params,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
         )
         if normalize_units and columns and rr.table is not None:
             rr = self._normalize_read_result(
@@ -2481,8 +2795,19 @@ class DataAccessStore:
         params: dict[str, Any],
         batch_size: int,
         normalize_units: bool = False,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
     ) -> ReadHandle:
         """PyArrow 引擎（arrow/feather 格式）：直读文件 + pc 表达式过滤。"""
+        # #44 PyArrow 引擎同样强制 temporal model
+        self._enforce_read_contract(
+            dataset,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+        )
+        self._event_cutoff_for_contract(dataset, time_range=time_range)
         import pyarrow.compute as pc
 
         from data_access.read.formats import pyarrow_engine_read

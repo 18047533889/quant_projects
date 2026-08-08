@@ -231,6 +231,38 @@ def filter_columns(f: Filter | None) -> set[str]:
     return set()
 
 
+def filter_column_values(f: Filter | None) -> dict[str, set[Any]]:
+    """收集 AST 里每个列的「候选取值」集合（#9 allowed_filter_values 值校验用）。
+
+    只对等值/包含（Eq/In）和 Between 端点提取字面值；范围/空值过滤不产生
+    强候选（返回空集合，调用方跳过该校验）。
+    """
+    if f is None:
+        return {}
+    out: dict[str, set[Any]] = {}
+
+    def _add(col: str, values: Sequence[Any]) -> None:
+        vals = out.setdefault(col, set())
+        for v in values:
+            if v is not None:
+                vals.add(v)
+
+    if isinstance(f, Eq):
+        _add(f.column, [f.value])
+    elif isinstance(f, In):
+        _add(f.column, list(f.values))
+    elif isinstance(f, Between):
+        _add(f.column, [f.lower, f.upper])
+    elif isinstance(f, (And, Or)):
+        for c in f.children:
+            for col, vals in filter_column_values(c).items():
+                _add(col, vals)
+    elif isinstance(f, Not):
+        for col, vals in filter_column_values(f.child).items():
+            _add(col, vals)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # DuckDB 编译器
 # ---------------------------------------------------------------------------

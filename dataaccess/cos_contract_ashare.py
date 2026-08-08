@@ -12,19 +12,21 @@ ASHARE_COS_CONTRACTS = {
     # AdjFactor 同为乘法后复权但基期/事件覆盖不同，禁止当同一列混用。
     "ashare_stock_daily": _c("ashare_stock_daily", "ashare", "D1", "equi", "Symbol", return_column="Return", return_scale=1 / 10000, adjustment_column="Factor", adjustment_convention="backward_vendor_factor", storage_layout=D),
     "ashare_stock_minute": _c("ashare_stock_minute", "ashare", "MINUTE", "equi", "Symbol", storage_layout=D),
-    "ashare_stock_list": _c("ashare_stock_list", "ashare", "D1", "equi", "Symbol", storage_layout=D),
-    "ashare_stock_status": _c("ashare_stock_status", "ashare", "S1", "equi", "Symbol", storage_layout=D),
-    "ashare_stock_industry": _c("ashare_stock_industry", "ashare", "D1", "equi", "Symbol", required_panel_filters=("IndustrySource",), allowed_filter_values=(("IndustrySource", _INDUSTRY),), storage_layout=D),
+    # 字典：StockList/Status/Industry/TopTen/ETFList/IndexList/IndexConstituent
+    # 含周末自然日文件；行情/估值才主要是交易日。→ calendar_domain="calendar_day"。
+    "ashare_stock_list": _c("ashare_stock_list", "ashare", "D1", "equi", "Symbol", calendar_domain="calendar_day", storage_layout=D),
+    "ashare_stock_status": _c("ashare_stock_status", "ashare", "S1", "equi", "Symbol", calendar_domain="calendar_day", storage_layout=D),
+    "ashare_stock_industry": _c("ashare_stock_industry", "ashare", "D1", "equi", "Symbol", required_panel_filters=("IndustrySource",), required_dimension_filters=("IndustrySource",), allowed_filter_values=(("IndustrySource", _INDUSTRY),), cardinality="one_to_many", unique_key=("TradeDate", "Symbol", "IndustrySource"), calendar_domain="calendar_day", storage_layout=D),
     "ashare_stock_valuation_daily": _c("ashare_stock_valuation_daily", "ashare", "D1", "equi", "Symbol", storage_layout=D),
     "ashare_stock_capital_daily": _c("ashare_stock_capital_daily", "ashare", "S1", "equi", "Symbol", storage_layout=D),
     "ashare_etf_daily": _c("ashare_etf_daily", "ashare", "D1", "equi", "Symbol", storage_layout=D),
-    "ashare_etf_list": _c("ashare_etf_list", "ashare", "D1", "equi", "Symbol", storage_layout=D),
+    "ashare_etf_list": _c("ashare_etf_list", "ashare", "D1", "equi", "Symbol", calendar_domain="calendar_day", storage_layout=D),
     "ashare_index_daily": _c("ashare_index_daily", "ashare", "D1", "equi", "Symbol", return_column="Return", return_scale=1 / 10000, storage_layout=D),
-    "ashare_index_list": _c("ashare_index_list", "ashare", "D1", "equi", "Symbol", storage_layout=D),
-    "ashare_index_constituent": _c("ashare_index_constituent", "ashare", "D1", "equi", "Symbol", required_panel_filters=("IndexSymbol",), storage_layout=D),
+    "ashare_index_list": _c("ashare_index_list", "ashare", "D1", "equi", "Symbol", calendar_domain="calendar_day", storage_layout=D),
+    "ashare_index_constituent": _c("ashare_index_constituent", "ashare", "D1", "equi", "Symbol", required_panel_filters=("IndexSymbol",), required_dimension_filters=("IndexSymbol",), cardinality="one_to_many", unique_key=("IndexSymbol", "TradeDate", "Symbol"), calendar_domain="calendar_day", storage_layout=D),
     "ashare_universe_daily": _c("ashare_universe_daily", "ashare", "D1", "equi", "Symbol"),
-    "ashare_stock_topten_shareholder": _c("ashare_stock_topten_shareholder", "ashare", "S1", "equi", "Symbol", storage_layout=D),
-    "ashare_stock_topten_float_shareholder": _c("ashare_stock_topten_float_shareholder", "ashare", "S1", "equi", "Symbol", storage_layout=D),
+    "ashare_stock_topten_shareholder": _c("ashare_stock_topten_shareholder", "ashare", "S1", "equi", "Symbol", calendar_domain="calendar_day", cardinality="one_to_many", unique_key=("TradeDate", "Symbol", "Rank"), storage_layout=D),
+    "ashare_stock_topten_float_shareholder": _c("ashare_stock_topten_float_shareholder", "ashare", "S1", "equi", "Symbol", calendar_domain="calendar_day", cardinality="one_to_many", unique_key=("TradeDate", "Symbol", "Rank"), storage_layout=D),
 }
 
 for _name in ("balance", "income", "cashflow", "indicator"):
