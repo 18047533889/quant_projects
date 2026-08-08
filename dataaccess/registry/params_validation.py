@@ -112,11 +112,18 @@ class ParamSpec:
                 f"params_schema['{name}'] 只有 int 类型可以声明 min/max"
             )
 
+        # #P0-50 path_segment 用严格 bool 解析：``"false"`` 字符串 → False，
+        # 不是 ``bool("false") == True``。
+        path_segment = _parse_strict_bool(
+            payload.get("path_segment"),
+            context=f"params_schema['{name}'].path_segment",
+            default=False,
+        )
         return cls(
             name=name,
             type=ptype,
             pattern=pattern,
-            path_segment=bool(payload.get("path_segment", False)),
+            path_segment=path_segment,
             enum_values=enum_values,
             min_int=parsed_min,
             max_int=parsed_max,
@@ -159,6 +166,21 @@ def validate_params(
     for name, spec in specs.items():
         normalized[name] = _validate_one(dataset_name, spec, params[name])
     return normalized
+
+
+def _parse_strict_bool(raw: Any, *, context: str, default: bool) -> bool:
+    """#P0-50 严格 bool：``"false"`` 字符串 → False；非法值报错。"""
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        text = raw.strip().lower()
+        if text in {"true", "1", "yes", "on"}:
+            return True
+        if text in {"false", "0", "no", "off", ""}:
+            return False
+    raise ValidationError(f"{context}: 非法布尔值 {raw!r}（应为 true/false）")
 
 
 def _parse_strict_int(ctx: str, raw: Any) -> int:

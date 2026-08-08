@@ -44,6 +44,27 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
     )
 
 
+def _avg_tie_ranks(vals: np.ndarray) -> np.ndarray:
+    """Average tie ranks of ``vals`` (0-based).
+
+    A double stable argsort gives tied values *distinct* ranks in
+    column-arrival order, silently making the rank transform depend on the
+    stock-column ordering (review R4-13).  Average ranks canonicalise ties.
+    """
+    order = np.argsort(vals, kind="mergesort")
+    s = vals[order]
+    ranks = np.empty(len(vals), dtype=float)
+    n = len(vals)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and s[j + 1] == s[i]:
+            j += 1
+        ranks[order[i : j + 1]] = 0.5 * (i + j)
+        i = j + 1
+    return ranks
+
+
 def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
     """Date t feature matrix (n,d) -> rank-standardised U + per-stock validity."""
     n, d = feats[t].shape
@@ -54,7 +75,7 @@ def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
         m = int(fin.sum())
         if m < 2:
             continue
-        ranks = np.argsort(np.argsort(col[fin], kind="stable"), kind="stable").astype(float)
+        ranks = _avg_tie_ranks(col[fin])
         U[fin, j] = (ranks + 0.5) / m
     valid = np.all(np.isfinite(U), axis=1)
     return U, valid
@@ -75,10 +96,11 @@ def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int) -> np.ndarray:
     ds = dist[finite]
     order = np.argsort(ds, kind="stable")
     kth = ds[order[k - 1]]
-    # Tie-inclusive selection (audit F01: average tied rank): every neighbor
-    # with distance <= the k-th distance enters, so a tie at the boundary is
-    # never broken by column position — permuting stock columns leaves the
-    # neighbor identity unchanged.
+    # Tie-inclusive selection (audit F01 / review R4-83): the neighbour set is
+    # the *kth-distance radius* — every name with distance <= the k-th distance
+    # enters, so a tie at the boundary is never broken by column position
+    # (permuting stock columns leaves the neighbour identity unchanged).  The
+    # returned set therefore contains >= k names when boundary ties exist.
     return finite[ds <= kth]
 
 
@@ -90,13 +112,15 @@ def _peer_mean_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.ndarr
         for i in range(n):
             if not valid[i]:
                 continue
+            if not np.isfinite(target[t, i]):
+                continue  # R4-82: target itself missing -> cannot judge peers
             nbrs = _neighbors(U, valid, k, i)
-            if nbrs.size == 0:
+            if nbrs.size < k:
                 continue
             vals = target[t, nbrs]
             vals = vals[np.isfinite(vals)]
-            if vals.size == 0:
-                continue
+            if vals.size < k:
+                continue  # R4-82: never call a <k-peer mean a k-NN mean
             out[t, i] = float(np.mean(vals))
     return out
 
@@ -207,15 +231,15 @@ def _dirichlet_energy_series(target: np.ndarray, feats: np.ndarray, k: int) -> n
             if not valid[i]:
                 continue
             nbrs = _neighbors(U, valid, k, i)
-            if nbrs.size == 0:
+            if nbrs.size < k:
                 continue
             x_i = target[t, i]
             if not np.isfinite(x_i):
                 continue
             vals = target[t, nbrs]
             vals = vals[np.isfinite(vals)]
-            if vals.size == 0:
-                continue
+            if vals.size < k:
+                continue  # R4-82: never call a <k-peer energy a k-NN energy
             out[t, i] = float(np.mean((vals - x_i) ** 2))
     return out
 

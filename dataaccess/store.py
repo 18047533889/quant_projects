@@ -1849,6 +1849,7 @@ class DataAccessStore:
         query_budget: QueryBudget | None = None,
         params: Mapping[str, Any] | None = None,
         params_by_dataset: Mapping[str, Mapping[str, Any]] | None = None,
+        order_by: Sequence[str] | None = None,
     ) -> ReadHandle:
         """多数据集批量 join：每张物理表只扫一次，DuckDB 内 exact / PIT-asof join。
 
@@ -1936,6 +1937,7 @@ class DataAccessStore:
             limit=limit,
             seed_window=seed_window,
             universe=(universe if time_varying_universe else None),
+            order_by=order_by,
         )
 
         snapshots = []
