@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from data_access.core.engine import DuckDBEngine, get_shared_engine, reset_shared_engine
 from data_access.core.exceptions import (
+    AmbiguousSemanticFieldError,
     DataAccessError,
     DataError,
     DeadlineExceeded,
@@ -10,6 +11,24 @@ from data_access.core.exceptions import (
     ValidationError,
 )
 from data_access.read.key_policy import KeyPolicy
+from data_access.read.aggregation import (
+    AggregationItem,
+    AggregationSpec,
+    aggregate_minute_bundle,
+    aggregate_minute_to_daily,
+)
+from data_access.read.session_calendar import (
+    MarketCalendar,
+    MarketSession,
+    get_market_calendar,
+    get_market_session,
+)
+from data_access.read.pit_event_index import (
+    PITEventIndex,
+    PITEventRecord,
+)
+from data_access.read.physical_plan import PlanNode, build_physical_plan
+from data_access.read.contract_ir import ContractIR, build_contract_ir
 from data_access.read.query_budget import QueryBudget
 from data_access.read.read_contract import DataSnapshot, ReadResult, SqlReadResult
 from data_access.read.scan_handle import ScanHandle
@@ -55,9 +74,24 @@ __all__ = [
     "DuckDBEngine",
     "DataAccessError",
     "ValidationError",
+    "AmbiguousSemanticFieldError",
     "DataError",
     "EngineError",
     "DeadlineExceeded",
+    "AggregationSpec",
+    "AggregationItem",
+    "aggregate_minute_to_daily",
+    "aggregate_minute_bundle",
+    "MarketCalendar",
+    "MarketSession",
+    "get_market_calendar",
+    "get_market_session",
+    "PITEventIndex",
+    "PITEventRecord",
+    "PlanNode",
+    "build_physical_plan",
+    "ContractIR",
+    "build_contract_ir",
     "QueryBudget",
     "KeyPolicy",
     "DataSnapshot",
@@ -86,4 +120,4 @@ from importlib.metadata import PackageNotFoundError, version as _package_version
 try:
     __version__ = _package_version("data-access")
 except PackageNotFoundError:
-    __version__ = "0.7.0+local"
+    __version__ = "0.8.0+local"

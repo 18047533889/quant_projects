@@ -31,6 +31,16 @@ from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_op
 from cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
 _EPS = 1e-12
+# Real update fields (fundamentals / index weights / shareholding) update at
+# quarterly-to-semiannual frequency — a 5-update window is NOT a 10-day window.
+# ``2*n_updates`` days was a data-understanding error: on quarterly A-share
+# reports (~1.5% of trading days) it could never accumulate n_updates=5, so the
+# whole family returned all-NaN on real data.  Scan the trailing 3 trading years
+# (~756 days, ~12 quarterly updates) so the last ``n_updates`` *real* update nodes
+# are actually reachable; NaN only when even that horizon holds too few updates.
+# The kernel is O(rows): per-column update indices are precomputed once and each
+# row does a binary search (no per-row window scan).
+_UPDATE_LOOKBACK_DAYS = 756
 
 
 def _metadata(
@@ -57,17 +67,6 @@ def _metadata(
     )
 
 
-def _last_updates(xc: np.ndarray, evc: np.ndarray, n: int) -> np.ndarray | None:
-    """Last ``n`` values at true update nodes within a trailing window."""
-    idx = np.flatnonzero((evc >= 0.5) & np.isfinite(evc))
-    if idx.size < n:
-        return None
-    vals = xc[idx][-n:]
-    if not np.all(np.isfinite(vals)):
-        return None
-    return vals
-
-
 def _update_kernel(canonical: str, min_updates: int, fn) -> SeriesOperator:
     def _calculate_series(
         self,
@@ -85,12 +84,20 @@ def _update_kernel(canonical: str, min_updates: int, fn) -> SeriesOperator:
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for c in range(cols):
+            # Precompute absolute update-node indices once (O(rows) per column);
+            # each row binary-searches for the last ``n`` real updates within the
+            # trailing ``_UPDATE_LOOKBACK_DAYS`` horizon (PIT: only updates <= r).
+            upd_idx = np.flatnonzero((ev[:, c] >= 0.5) & np.isfinite(ev[:, c]))
+            if upd_idx.size < n:
+                continue
             for r in range(rows):
-                lo = max(0, r - 2 * n)
-                chunk_x = xv[lo : r + 1, c]
-                chunk_e = ev[lo : r + 1, c]
-                vals = _last_updates(chunk_x, chunk_e, n)
-                if vals is None:
+                lo = r - _UPDATE_LOOKBACK_DAYS + 1
+                j0 = int(np.searchsorted(upd_idx, lo, side="left"))
+                j1 = int(np.searchsorted(upd_idx, r + 1, side="left"))
+                if j1 - j0 < n:
+                    continue
+                vals = xv[upd_idx[j1 - n : j1], c]
+                if not np.all(np.isfinite(vals)):
                     continue
                 out[r, c] = fn(vals)
         return frame_like(x, out)

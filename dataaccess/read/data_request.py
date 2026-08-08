@@ -96,6 +96,8 @@ class ReadPlan:
     time_range: tuple[Any, Any] | None = None
     instruments: Sequence[str] | None = None
     universe: str | None = None
+    # #4 物理计划 DAG（由 store.plan 注入；explain() 渲染，execute() 消费）
+    physical: Any = field(default=None, repr=False)
     # 绑定到 store 以便 execute（由 store.plan 注入）
     _store: Any = field(default=None, repr=False)
 
@@ -154,6 +156,19 @@ class ReadPlan:
                     f"dataset_version={info.get('dataset_version')} "
                     f"partition_version={info.get('partition_version')}"
                 )
+        # #4 物理计划 DAG
+        if self.physical is not None:
+            lines.append("PHYSICAL PLAN")
+            lines.append("  |-- ProjectNode (输出字段)")
+            lines.append("  |-- NormalizeNode (单位归一化)")
+            lines.append("  |-- AggregationNode (分钟→日聚合)")
+            lines.append("  |-- TemporalJoinNode / FilterNode")
+            lines.append("  `-- ScanNode (物理扫描)")
+            lines.append("")
+            lines.append("NODES")
+            from data_access.read.physical_plan import render_plan
+
+            lines.append(render_plan(self.physical))
         return "\n".join(lines)
 
     def execute(self) -> Any:
@@ -164,6 +179,56 @@ class ReadPlan:
         tr = self.time_range
         insts = self.instruments
         req = self.request
+
+        # #4 AggregationNode：分钟→日聚合一次 scan 多输出（不经过 read_joined）
+        if req.aggregations:
+            from data_access.read.aggregation import (
+                AggregationItem,
+                aggregate_minute_bundle,
+            )
+
+            items: list[AggregationItem] = []
+            for raw in req.aggregations:
+                if isinstance(raw, AggregationItem):
+                    items.append(raw)
+                    continue
+                if isinstance(raw, Mapping):
+                    fld = str(raw.get("field") or raw.get("column") or "")
+                    if not fld:
+                        raise ValidationError(
+                            f"aggregations 项缺少 field: {raw!r}"
+                        )
+                    items.append(
+                        AggregationItem(
+                            field=fld,
+                            spec=raw.get("spec"),
+                            output_name=(
+                                str(raw["output_name"])
+                                if raw.get("output_name")
+                                else None
+                            ),
+                        )
+                    )
+                else:
+                    raise ValidationError(
+                        "aggregations 项必须是 AggregationItem 或 dict"
+                    )
+            if not items:
+                raise ValidationError("aggregations 为空")
+            ds = self.datasets[0]
+            ds_params = req.dataset_params(ds)
+            market = str(ds_params.get("market") or "") or None
+            timezone = str(ds_params.get("timezone") or "") or None
+            return aggregate_minute_bundle(
+                store,
+                ds,
+                items,
+                time_range=tr,
+                instrument_filter=insts,
+                params=ds_params,
+                market=market,
+                timezone=timezone,
+            )
         # 时变 universe：把成员过滤下沉到 join（(date, instrument) 精确成员），
         # 否则退化为窗口内静态集合求交（旧行为）。
         time_varying = bool(getattr(req, "time_varying_universe", True))

@@ -41,8 +41,11 @@ from typing import Any, Mapping
 from data_access.core.exceptions import ValidationError
 
 _VALID_POLICIES = frozenset({"exact", "asof", "pit_asof"})
-_VALID_AVAILABILITY = frozenset({"same_day", "next_trading_day"})
+_VALID_AVAILABILITY = frozenset({"same_day", "next_trading_day", "session"})
 _VALID_DUPLICATE_POLICIES = frozenset({"keep_first", "keep_last", "latest_revision", "error"})
+_VALID_PERIOD_SELECTIONS = frozenset(
+    {"latest_period", "exact_period", "annual", "quarterly", "ttm", "all"}
+)
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,11 @@ class TemporalJoinSpec:
     deduplicate: bool = True
     primary_key: tuple[str, ...] = ()
     duplicate_policy: str = "latest_revision"
+    # ---- #45 财务 PIT 报告期选择 ----
+    period_selection: str = "all"          # latest_period/exact_period/annual/quarterly/ttm/all
+    period_values: tuple[Any, ...] = ()    # exact_period 的目标 period 值列表
+    # ---- #16 事件未来数据 cutoff ----
+    future_cutoff: bool = True             # effective_time_only 事件右表不读未来生效事件
 
     @property
     def is_asof(self) -> bool:
@@ -82,6 +90,11 @@ class TemporalJoinSpec:
         if not self.is_asof:
             raise ValueError("exact join 不使用比较操作符")
         return ">" if self.availability == "next_trading_day" else ">="
+
+    @property
+    def needs_period_selection(self) -> bool:
+        """是否需要报告期选择（latest_period 等）。"""
+        return bool(self.period_time) and self.period_selection not in {"", "all"}
 
     def effective_decision_time(self, anchor_time_column: str | None) -> str:
         return self.decision_time or anchor_time_column or ""
@@ -100,6 +113,9 @@ class TemporalJoinSpec:
             "deduplicate": self.deduplicate,
             "primary_key": list(self.primary_key),
             "duplicate_policy": self.duplicate_policy,
+            "period_selection": self.period_selection,
+            "period_values": list(self.period_values),
+            "future_cutoff": self.future_cutoff,
         }
 
 
@@ -118,6 +134,15 @@ def _str_or_none(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _period_values_of(value: Any) -> tuple[Any, ...]:
+    """exact_period 的目标 period 值（保留原始类型，日期不要 stringify）。"""
+    if value is None:
+        return ()
+    if isinstance(value, (list, tuple, set)):
+        return tuple(value)
+    return (value,)
 
 
 def normalize_join_policy(policy: Any) -> str:
@@ -145,13 +170,18 @@ def join_spec_from_field(field: Any) -> TemporalJoinSpec | None:
     revision = tuple(getattr(field, "revision_order", ()) or ())
     knowledge = getattr(field, "knowledge_time", None)
     period = getattr(field, "period_time", None)
-    if policy in {"pit_asof_backward", "pit_asof", "asof_backward", "asof"}:
+    if policy in {"pit_asof_backward", "pit_asof", "asof_backward", "asof", "latest_period"}:
+        period_selection = str(getattr(field, "period_selection", "all") or "all")
+        if policy == "latest_period" and period_selection == "all":
+            period_selection = "latest_period"
         return TemporalJoinSpec(
             policy="pit_asof",
             knowledge_time=knowledge or None,
             period_time=period or None,
             revision_order=revision,
             availability=availability,
+            period_selection=period_selection,
+            period_values=tuple(getattr(field, "period_values", ()) or ()),
         )
     if policy == "exact" and (revision or getattr(field, "primary_key", ())):
         return TemporalJoinSpec(
@@ -200,6 +230,12 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
         raise ValidationError(
             f"duplicate_policy 必须是 {sorted(_VALID_DUPLICATE_POLICIES)}，收到 {dup!r}"
         )
+    period_selection = _str_or_none(raw.get("period_selection")) or "all"
+    if period_selection not in _VALID_PERIOD_SELECTIONS:
+        raise ValidationError(
+            f"period_selection 必须是 {sorted(_VALID_PERIOD_SELECTIONS)}，"
+            f"收到 {period_selection!r}"
+        )
     return TemporalJoinSpec(
         policy=policy,
         decision_time=_str_or_none(raw.get("decision_time")),
@@ -210,4 +246,7 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
         deduplicate=bool(raw.get("deduplicate", True)),
         primary_key=_tuple_of(raw.get("primary_key")),
         duplicate_policy=dup,
+        period_selection=period_selection,
+        period_values=_period_values_of(raw.get("period_values")),
+        future_cutoff=bool(raw.get("future_cutoff", True)),
     )

@@ -149,6 +149,27 @@ class DataAccessStore:
         self._schema_checked: set[str] = set()
         self._schema_check_lock = threading.Lock()
         self._registry_hash = _compute_registry_hash(registry)
+        # #46 注入的市场交易日历（{market: MarketCalendar}），session availability 用
+        self._calendars: dict[str, Any] = {}
+
+    def set_calendar(self, market: str, calendar: Any) -> None:
+        """注入一个市场的交易日历（MarketCalendar），供 session availability 使用。
+
+        部署在不同服务器时，可在这里注入该环境的真实交易所日历（替代默认
+        周末休市兜底）。市场名：ashare / us。
+        """
+        self._calendars[str(market).strip().lower()] = calendar
+
+    def get_calendar(self, market: str | None) -> Any | None:
+        """取某市场的交易日历：显式注入优先，否则从 registry 日历数据集惰性加载。"""
+        if not market:
+            return None
+        key = str(market).strip().lower()
+        if key in self._calendars:
+            return self._calendars[key]
+        from data_access.read.session_calendar import get_market_calendar
+
+        return get_market_calendar(key, store=self)
 
     @property
     def registry(self) -> DatasetRegistry:
@@ -1979,6 +2000,17 @@ class DataAccessStore:
                 if result == "auto":
                     result = "arrow"
 
+        # #4 编译物理计划 DAG（Scan→Filter→TemporalJoin→Aggregation→Normalize→Project）
+        from data_access.read.physical_plan import build_physical_plan
+
+        physical = build_physical_plan(
+            request=request,
+            fields=fields,
+            datasets=datasets,
+            join_policies=joins,
+            scan_costs=scan_costs,
+        )
+
         return ReadPlan(
             request=request,
             datasets=datasets,
@@ -1993,8 +2025,194 @@ class DataAccessStore:
             time_range=request.time_range,
             instruments=request.instruments,
             universe=request.universe,
+            physical=physical,
             _store=self,
         )
+
+    def pit_event_index(
+        self,
+        dataset: str,
+        *,
+        ticker_column: str | None = None,
+        filing_column: str | None = None,
+        period_column: str | None = None,
+        timeframe_column: str | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        timeframe_filter: str | None = None,
+        force: bool = False,
+        limit: int | None = None,
+    ) -> Any:
+        """#8 美股财务 PIT 事件索引（构建或加载 sidecar）。
+
+        记录 ``(ticker, filing_date, period_end, timeframe)``，使文件按
+        ``period_end`` 命名时仍能按 ``filing_date`` 裁剪。返回 ``PITEventIndex``。
+
+        列名缺省按 COS 契约推断（us_stock_balance 等 E2 契约自带
+        filing_date/period_end）；无契约时可显式传入列名。
+        """
+        from data_access.read.pit_event_index import build_pit_event_index
+
+        return build_pit_event_index(
+            self,
+            dataset,
+            ticker_column=ticker_column,
+            filing_column=filing_column,
+            period_column=period_column,
+            timeframe_column=timeframe_column,
+            time_range=time_range,
+            timeframe_filter=timeframe_filter,
+            force=force,
+            limit=limit,
+        )
+
+    def prune_pit_paths(
+        self,
+        dataset: str,
+        *,
+        filing_range: tuple[Any, Any] | None = None,
+        timeframe: str | None = None,
+        tickers: Sequence[str] | None = None,
+    ) -> list[str]:
+        """#8 用 PIT 索引按 filing_date 精准裁剪文件路径。
+
+        返回匹配文件的路径集合；无索引返回空列表（调用方可回退全量路径）。
+        """
+        from data_access.read.pit_event_index import prune_paths_by_filing_range
+
+        return prune_paths_by_filing_range(
+            self,
+            dataset,
+            filing_range=filing_range,
+            timeframe=timeframe,
+            tickers=tickers,
+        )
+
+    def materialize_daily_aggregate(
+        self,
+        *,
+        source_dataset: str,
+        serving_dataset: str,
+        time_column: str,
+        instrument_column: str,
+        groupby: Sequence[str],
+        value_columns: Mapping[str, Sequence[str]],
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        mode: str = "overwrite",
+        partition_by: Sequence[str] | None = None,
+        **params: Any,
+    ) -> dict[str, Any]:
+        """#30 高扇出源表 → 日频预聚合 serving 数据集。"""
+        from data_access.cos.serving import materialize_daily_aggregate as _m
+
+        return _m(
+            self,
+            source_dataset=source_dataset,
+            serving_dataset=serving_dataset,
+            time_column=time_column,
+            instrument_column=instrument_column,
+            groupby=groupby,
+            value_columns=value_columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            mode=mode,
+            partition_by=partition_by,
+            **params,
+        )
+
+    @staticmethod
+    def route_minute_storage(**kwargs: Any) -> str:
+        """#17 分钟级 date-major vs bucket-major 存储路由。"""
+        from data_access.cos.serving import route_minute_storage as _r
+
+        return _r(**kwargs)
+
+    def enable_result_cache(self, enabled: bool = True) -> None:
+        """进程级开启/关闭查询结果缓存（read_cached 使用）。"""
+        from data_access.read.query_cache import set_result_cache_enabled
+
+        set_result_cache_enabled(enabled)
+
+    def read_cached(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
+        limit: int | None = None,
+        **params: Any,
+    ) -> Any:
+        """带查询结果缓存的 read_arrow（默认关闭，enable_result_cache(True) 开启）。
+
+        key 含 manifest 版本 token：写路径 bump epoch 后自动失效。
+        命中返回 Arrow Table；未命中走 read_arrow 并写入缓存。
+        """
+        from data_access.read.query_cache import (
+            get_query_cache,
+            query_cache_key,
+            result_cache_enabled,
+        )
+
+        if not result_cache_enabled():
+            return self.read_arrow(
+                dataset,
+                columns=columns,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                filters=filters,
+                limit=limit,
+                **params,
+            )
+        cache = get_query_cache()
+        try:
+            token = self.manifest_version(dataset, **params)
+        except Exception:
+            token = None
+        key = query_cache_key(
+            dataset=dataset,
+            params=dict(params),
+            time_range=time_range,
+            instruments=instrument_filter,
+            columns=columns,
+            manifest_token=token,
+        )
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+        table = self.read_arrow(
+            dataset,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            limit=limit,
+            **params,
+        )
+        if table.num_rows is not None:
+            cache.set(key, table)
+        return table
+
+    def coverage(self, dataset: str, **params: Any) -> Any:
+        """#14 数据集覆盖/完整性报告：complete/partial/unavailable + 问题列表。"""
+        from data_access.read.coverage import compute_coverage
+
+        return compute_coverage(self, dataset, params=params)
+
+    def contract_ir(self) -> Any:
+        """#12 统一 Contract IR：registry + COS 契约 + 语义字段 的合并视图。"""
+        from data_access.read.contract_ir import build_contract_ir
+        from data_access.read.semantic_catalog import get_semantic_catalog
+
+        return build_contract_ir(
+            self._registry,
+            catalog=get_semantic_catalog(),
+        )
+
+    def contract_ir_fingerprint(self) -> str:
+        """#12 Contract IR 稳定指纹（跨服务器对比语义版本）。"""
+        return self.contract_ir().fingerprint()
 
     def manifest_version(self, dataset: str, **params: Any) -> dict[str, Any]:
         """廉价的 query-scoped snapshot token：只读 ``_manifest.json`` sidecar，
@@ -2262,6 +2480,7 @@ class DataAccessStore:
             dsobj = self._registry.get(ds)
             spec = specs[ds]
             policy = spec.policy
+            use_session_avail = False
             cols = list(per_ds.get(ds, []))
             t_col = dsobj.time_column
             inst_col = dsobj.instrument_column
@@ -2281,6 +2500,9 @@ class DataAccessStore:
             for k in (t_col, inst_col, right_time, *spec.revision_order):
                 if k and k not in select_cols:
                     select_cols.append(k)
+            # #45 period_selection 需要 period_time 列参与 running-max
+            if spec.needs_period_selection and spec.period_time not in select_cols:
+                select_cols.append(spec.period_time)
             select_list = ", ".join(_quote_ident(c) for c in select_cols)
 
             ds_params = dict(params_by_dataset.get(ds, {}))
@@ -2333,6 +2555,17 @@ class DataAccessStore:
                 sub, branch_params, paths = branch
                 params_list.extend(branch_params)
                 per_ds_paths[ds] = paths
+                # #45 period_selection：先选报告期，再去重
+                if spec.needs_period_selection:
+                    sub, _pp = _period_selection_sql(
+                        sub,
+                        inst_col=inst_col,
+                        period_col=spec.period_time,
+                        knowledge_col=t_col,
+                        selection=spec.period_selection,
+                        period_values=spec.period_values,
+                    )
+                    params_list.extend(_pp)
                 if (
                     spec.deduplicate
                     and spec.revision_order
@@ -2346,6 +2579,14 @@ class DataAccessStore:
                 branches: list[str] = []
                 if seed_window and time_range is not None and time_range[0] is not None:
                     start, end = time_range
+                    # #16 future_cutoff：effective_time_only 事件右表不读未来生效
+                    # 事件（美股 Dividend 甚至有未来日期文件）。
+                    if spec.future_cutoff:
+                        from data_access.cos_contract import get_cos_contract as _gcc
+
+                        _ct = _gcc(ds)
+                        if _ct is not None and _ct.pit_policy == "effective_time_only":
+                            end = _min_date_bound(end)
                     # 窗口分支 [start, end]（按数据集 time_column 裁剪文件）
                     win = _build_branch_sub(
                         dsobj,
@@ -2406,9 +2647,43 @@ class DataAccessStore:
                     params_list.extend(full[1])
                     per_ds_paths[ds] = full[2]
                 sub = " UNION ALL ".join(branches)
+                # #45 period_selection 必须在 revision 去重之前：running_max 需要
+                # 看到全部 revision 才能正确标记「该 period 是否已成为峰值」。
+                if spec.needs_period_selection:
+                    sub, _pp = _period_selection_sql(
+                        sub,
+                        inst_col=inst_col,
+                        period_col=spec.period_time,
+                        knowledge_col=right_time,
+                        selection=spec.period_selection,
+                        period_values=spec.period_values,
+                    )
+                    params_list.extend(_pp)
                 # 跨窗口/seed 统一按 (instrument, knowledge_time) 去重最新 revision
                 if spec.deduplicate and spec.revision_order and inst_col and right_time:
                     sub = _dedup_key_sql(sub, inst_col, right_time, spec.revision_order)
+                # #46 session availability：用交易日历把 knowledge 编译成
+                # available_from（decision >= next_trading_day(knowledge)）。
+                if spec.availability == "session" and not use_session_avail:
+                    market = _market_of_dataset(ds)
+                    cal = self.get_calendar(market) if market else None
+                    if cal is not None:
+                        wrapped, _cp, ok = _session_avail_sql(
+                            sub,
+                            right_time_col=right_time,
+                            calendar=cal,
+                            start=time_range[0] if time_range else None,
+                            end=time_range[1] if time_range else None,
+                        )
+                        if ok:
+                            sub = wrapped
+                            params_list.extend(_cp)
+                            use_session_avail = True
+                    if not use_session_avail:
+                        logger.warning(
+                            "session availability: 数据集 %r 无可用交易日历，回退 >= (same_day)",
+                            ds,
+                        )
 
             for c in cols:
                 if c in seen_out:
@@ -2424,12 +2699,21 @@ class DataAccessStore:
                 continue
             prev = "a"
             if policy in {"asof", "pit_asof"}:
-                cond = (
-                    f"{prev}.{_quote_ident(anchor_inst)} = "
-                    f"{alias}.{_quote_ident(inst_col)} "
-                    f"AND {prev}.{_quote_ident(decision_time)} "
-                    f"{spec.comparison_operator} {alias}.{_quote_ident(right_time)}"
-                )
+                if use_session_avail:
+                    # #46 decision >= available_from（日历编译的下一交易日）
+                    cond = (
+                        f"{prev}.{_quote_ident(anchor_inst)} = "
+                        f"{alias}.{_quote_ident(inst_col)} "
+                        f"AND {prev}.{_quote_ident(decision_time)} >= "
+                        f"{alias}._avail_from"
+                    )
+                else:
+                    cond = (
+                        f"{prev}.{_quote_ident(anchor_inst)} = "
+                        f"{alias}.{_quote_ident(inst_col)} "
+                        f"AND {prev}.{_quote_ident(decision_time)} "
+                        f"{spec.comparison_operator} {alias}.{_quote_ident(right_time)}"
+                    )
                 join_clauses.append(f"ASOF LEFT JOIN ({sub}) AS {alias} ON {cond}")
             else:
                 cond = (
@@ -4530,6 +4814,42 @@ def _and_filters(*filters: Any) -> Any:
     return And(tuple(parts))
 
 
+def _min_date_bound(end: Any) -> Any:
+    """#16 事件 cutoff：把时间窗上界钳到今天（effective_time_only 防未来事件）。"""
+    import datetime as _dt
+
+    if end is None:
+        return _dt.date.today()
+    e = end.date() if isinstance(end, _dt.datetime) else end
+    if isinstance(e, _dt.date) and e > _dt.date.today():
+        return _dt.date.today()
+    return end
+
+
+def _market_of_dataset(dataset: str) -> str | None:
+    """推断数据集所属市场（session availability 的日历查找用）。
+
+    优先级：COS 契约声明的 market → 数据集名前缀。无契约且前缀无法识别
+    （测试用临时数据集）返回 None。
+    """
+    if not dataset:
+        return None
+    key = str(dataset)
+    try:
+        from data_access.cos_contract import get_cos_contract
+
+        contract = get_cos_contract(key)
+        if contract is not None:
+            return contract.market
+    except Exception:
+        pass
+    if key.startswith("us_"):
+        return "us"
+    if key.startswith("ashare_") or key.startswith("a_share"):
+        return "ashare"
+    return None
+
+
 def _dedup_key_sql(sub_sql: str, inst_col: str, time_col: str, revision_order: Sequence[str]) -> str:
     """在（可含 UNION 的）事件子查询上按 (instrument, time) 去重，保留
     revision_order 降序最新一版——替代依赖 parquet 扫描顺序的 keep_last。
@@ -4542,6 +4862,158 @@ def _dedup_key_sql(sub_sql: str, inst_col: str, time_col: str, revision_order: S
         f"QUALIFY ROW_NUMBER() OVER (PARTITION BY {_quote_ident(inst_col)}, "
         f"{_quote_ident(time_col)} ORDER BY {order}) = 1"
     )
+
+
+def _session_avail_sql(
+    sub_sql: str,
+    *,
+    right_time_col: str,
+    calendar: Any,
+    start: Any = None,
+    end: Any = None,
+    max_rows: int = 4000,
+) -> tuple[str, list[Any], bool]:
+    """#46 session availability：把 knowledge_time 编译成真正的 available_from。
+
+    用交易日历生成 ``(knowledge_date -> next_trading_day)`` 的 VALUES CTE，
+    LEFT JOIN 到右表算出 ``_avail_from``；ASOF 改为 ``decision >= _avail_from``。
+    相比旧的严格大于，节假日/周末公告能映射到真正的下一交易日。
+
+    返回 (wrapped_sql, params, ok)。窗口为空或超过 max_rows 时返回
+    (sub_sql, [], False) 让调用方回退。
+    """
+    if not calendar or not getattr(calendar, "has_data", False):
+        return sub_sql, [], False
+    import datetime as _dt
+
+    def _as_date(v: Any) -> _dt.date | None:
+        if v is None:
+            return None
+        if isinstance(v, _dt.datetime):
+            return v.date()
+        if isinstance(v, _dt.date):
+            return v
+        if isinstance(v, str):
+            try:
+                return _dt.date.fromisoformat(v[:10])
+            except ValueError:
+                return None
+        return None
+
+    lo = _as_date(start)
+    if lo is not None:
+        lo = lo - _dt.timedelta(days=30)
+    hi = _as_date(end)
+    if lo is None:
+        lo = calendar.trading_days[0] if calendar.trading_days else None
+    if hi is None:
+        hi = calendar.trading_days[-1] if calendar.trading_days else None
+    if lo is None or hi is None or lo > hi:
+        return sub_sql, [], False
+    # 把窗口内每个自然日（含周末/节假日）映射到「严格大于它的下一交易日」。
+    # 仅交易日有 next；非交易日也要映射（节假日公告 → 下一交易日可见）。
+    tds = set(calendar.trading_days)
+    next_map: dict[_dt.date, _dt.date] = {}
+    nxt_td: _dt.date | None = None
+    day = hi
+    while day >= lo and len(next_map) < max_rows:
+        next_map[day] = nxt_td  # type: ignore[assignment]
+        if day in tds:
+            nxt_td = day
+        day -= _dt.timedelta(days=1)
+    pairs: list[tuple[str, str]] = [
+        (kd.isoformat(), nxt.isoformat())
+        for kd, nxt in next_map.items()
+        if nxt is not None
+    ]
+    if not pairs:
+        return sub_sql, [], False
+    placeholders = ", ".join("(?, ?)" for _ in pairs)
+    vals: list[Any] = []
+    for kd, ntd in pairs:
+        vals.extend([kd, ntd])
+    cte = (
+        f"SELECT * FROM (VALUES {placeholders}) AS _cal(_kd, _next_td)"
+    )
+    # COALESCE 在子查询内完成：日历窗口外的 knowledge（如很早的 seed 记录）
+    # 回退到其本身，ASOF 条件保持纯列比较（DuckDB ASOF 不接受表达式）。
+    wrapped = (
+        f"SELECT _r.*, "
+        f"COALESCE(CAST(_cal._next_td AS DATE), "
+        f"CAST(_r.{_quote_ident(right_time_col)} AS DATE)) AS _avail_from "
+        f"FROM ({sub_sql}) _r LEFT JOIN ({cte}) _cal "
+        f"ON CAST(_r.{_quote_ident(right_time_col)} AS DATE) = _cal._kd"
+    )
+    return wrapped, vals, True
+
+
+def _period_selection_sql(
+    sub_sql: str,
+    *,
+    inst_col: str,
+    period_col: str,
+    knowledge_col: str,
+    selection: str,
+    period_values: Sequence[Any] | None = None,
+) -> tuple[str, list[Any]]:
+    """#45 财务报告期选择（PIT 状态更新语义）。
+
+    - latest_period：``period == running_max(period) over (inst, knowledge)``
+      ——「在截至 knowledge 已可知的记录中取报告期最新的那版」。旧报告期的晚
+      修订（knowledge 更新但 period 更旧）不会让当前财务状态回滚。
+    - exact_period：只保留 ``period IN period_values``。
+    - annual / quarterly：按 period 月份过滤（12-31 / 3,6,9,12 月末）。
+    - ttm：美股有 ``timeframe`` 列时按 'trailing_twelve_months' 过滤；无该列
+      则等价 all（并告警）。
+
+    返回 (sql, extra_params)。调用方把它套在窗口+seed 的 UNION 之后、revision
+    去重之前——running_max 需要看到全部 revision 才能正确标记「period 峰值」。
+    """
+    sel = str(selection or "all").strip().lower()
+    if sel in {"", "all"}:
+        return sub_sql, []
+    if sel == "latest_period":
+        wrapped = (
+            f"SELECT * FROM ("
+            f"SELECT *, MAX({_quote_ident(period_col)}) OVER ("
+            f"PARTITION BY {_quote_ident(inst_col)} "
+            f"ORDER BY {_quote_ident(knowledge_col)} "
+            f"ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS _pm "
+            f"FROM ({sub_sql}) AS _pl) AS _ps "
+            f"WHERE _ps.{_quote_ident(period_col)} = _ps._pm"
+        )
+        return wrapped, []
+    if sel == "exact_period":
+        vals = list(period_values or ())
+        if not vals:
+            raise ValidationError(
+                "period_selection='exact_period' 需要提供 period_values"
+            )
+        placeholders = ", ".join("?" for _ in vals)
+        return (
+            f"SELECT * FROM ({sub_sql}) AS _pe "
+            f"WHERE {_quote_ident(period_col)} IN ({placeholders})",
+            vals,
+        )
+    if sel == "annual":
+        return (
+            f"SELECT * FROM ({sub_sql}) AS _pa "
+            f"WHERE EXTRACT(MONTH FROM {_quote_ident(period_col)}) = 12",
+            [],
+        )
+    if sel == "quarterly":
+        return (
+            f"SELECT * FROM ({sub_sql}) AS _pq "
+            f"WHERE EXTRACT(MONTH FROM {_quote_ident(period_col)}) IN (3, 6, 9, 12)",
+            [],
+        )
+    if sel == "ttm":
+        return (
+            f"SELECT * FROM ({sub_sql}) AS _pt "
+            f"WHERE COALESCE(LOWER({_quote_ident('timeframe')}), '') = 'trailing_twelve_months'",
+            [],
+        )
+    raise ValidationError(f"period_selection={selection!r} 不支持")
 
 
 def _seed_qualify_sql(sub_sql: str, inst_col: str, time_col: str, revision_order: Sequence[str]) -> str:

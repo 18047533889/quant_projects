@@ -53,3 +53,12 @@ class DeadlineExceeded(DataAccessError):
     由 watchdog 在截止时间后调用 ``conn.interrupt()`` 触发；表示查询被主动
     终止（而不是查完才发现超时）。
     """
+
+
+class AmbiguousSemanticFieldError(ValidationError):
+    """跨市场逻辑字段无法在无上下文下消歧（#54 fail-closed）。
+
+    典型场景：``resolve_one("market_cap")`` 没传 market/dataset，而
+    ``market_cap`` 在 A股/美股都登记了——生产模式直接抛错，禁止 YAML 顺序
+    决定市场。
+    """

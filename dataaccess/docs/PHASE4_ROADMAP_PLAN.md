@@ -192,3 +192,37 @@
 11. serving 分层 + 预聚合 + bucket 路由（P2）
 12. benchmark_workloads + correctness gates 测试（P2）
 13. 全量回归 + sync_install + 版本/CHANGELOG/文档
+
+---
+
+## 完成状态（2026-08-08，v0.8.0）
+
+第一批（P0 语义正确性）**全部完成**：
+- #44 Store 级 temporal model 强制（read 全入口 + mode= 参数）
+- #45 `period_selection`（latest_period 旧报告期晚修订不回滚，实测对照）
+- #46 MarketCalendar/SessionCalendar + `availability="session"`（节假日映射正确）
+- #47 物理计划 DAG（explain 显示 NODES，execute 消费 aggregations）
+- #48 分钟聚合 UTC→Asia/Shanghai + session elapsed bar index（240 根）
+- #49 `aggregate_minute_bundle`（一次 scan 多聚合）
+- #50 聚合走 QueryBudget/deadline/audit（返回带 snapshot 的 ReadHandle）
+- #51 `pit_event_index` + `prune_pit_paths`（美股财务 filing_date 裁剪）
+- #52 allowed_filter_values 值校验（production fail-closed）
+- #53 grain/cardinality 强契约 + exact join fan-out 守卫
+- #54 跨市场歧义 `AmbiguousSemanticFieldError`（fail-closed）
+
+第二批（P1 结构一致性）**全部完成**：
+- #12 Contract IR（`contract_ir.py` + audit 脚本）
+- #13 calendar_domain（StockList/Status/Industry/TopTen → calendar_day）
+- #14 coverage/完整性（`coverage.py` + `store.coverage()`）
+- #15 RAW_EVENT（us_fact_news 不再复用 E2）
+- #16 事件未来数据 cutoff（enforce_event_cutoff + TemporalJoinSpec.future_cutoff）
+
+第三批（P2）**核心落地**：
+- #25 查询结果缓存（read_cached，LRU+TTL，默认关）
+- #30/#31 serving 分层 + 高扇出预聚合（`cos/serving.py`）
+- #17 分钟 date-major/bucket-major 路由（route_minute_storage）
+- #32 真实 workload Benchmark（--metrics 记录 scans/bytes/rows）
+- #33 正确性 gates（`tests/unit/test_correctness_gates.py`，16 个）
+
+验证：dataaccess **507 通过 / 0 失败**；allowlist rc=0；语义审计 0 问题；
+Contract IR 审计一致（71 数据集）。版本 0.7.0 → **0.8.0**。

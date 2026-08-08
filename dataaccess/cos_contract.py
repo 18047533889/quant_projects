@@ -212,9 +212,22 @@ def enforce_event_cutoff(
         return
     import datetime as _dt
 
-    end_dt = end if isinstance(end, _dt.date) else _dt.datetime.now()
+    def _to_date(v: Any) -> _dt.date | None:
+        if isinstance(v, _dt.datetime):
+            return v.date()
+        if isinstance(v, _dt.date):
+            return v
+        if isinstance(v, str):
+            try:
+                return _dt.date.fromisoformat(str(v)[:10])
+            except ValueError:
+                return None
+        return None
+
+    end_date = _to_date(end)
     today = _dt.date.today()
-    end_date = end_dt.date() if isinstance(end_dt, _dt.datetime) else end_dt
+    if end_date is None:
+        return
     if end_date > today:
         msg = (
             f"数据集 {contract.name!r} 是 effective_time_only 事件表，"

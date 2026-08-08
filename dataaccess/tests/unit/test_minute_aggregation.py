@@ -62,7 +62,8 @@ minute_ds:
 def test_minute_range_sum_pushdown(minute_store):
     """#14 minute_range 09:30~10:00 volume sum（含 10:00 整点）在 DuckDB 内完成。"""
     spec = AggregationSpec(aggregation="minute_range", start="09:30", end="10:00")
-    t = aggregate_minute_to_daily(minute_store, "minute_ds", "volume", spec)
+    # #7 返回带 snapshot 的 ReadHandle
+    t = aggregate_minute_to_daily(minute_store, "minute_ds", "volume", spec).to_arrow()
     rows = t.to_pydict()
     assert rows["inst"] == ["A"]
     assert int(rows["value"][0]) == 100 + 200 + 300 + 400 + 500 + 600  # 含 10:00
@@ -73,13 +74,13 @@ def test_minute_at_first_and_last(minute_store):
     t = aggregate_minute_to_daily(
         minute_store, "minute_ds", "close",
         AggregationSpec(aggregation="minute_at", hhmm="09:30"),
-    )
+    ).to_arrow()
     assert float(t.to_pydict()["value"][0]) == pytest.approx(10.0)  # 09:30 只有一笔
     # 10:00 只有 10:00 一笔 → last = 10.5
     t2 = aggregate_minute_to_daily(
         minute_store, "minute_ds", "close",
         AggregationSpec(aggregation="minute_at", hhmm="10:00"),
-    )
+    ).to_arrow()
     assert float(t2.to_pydict()["value"][0]) == pytest.approx(10.5)
 
 
@@ -89,7 +90,7 @@ def test_minute_range_instrument_filter(minute_store):
     t = aggregate_minute_to_daily(
         minute_store, "minute_ds", "volume", spec,
         instrument_filter=["NOPE"],
-    )
+    ).to_arrow()
     assert t.num_rows == 0
 
 

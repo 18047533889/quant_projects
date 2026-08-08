@@ -162,6 +162,22 @@
   reason: "dataaccess 自身实现：统一读句柄（无禁用 API，登记以防误报）"
 - path: dataaccess/read/scan_cost.py
   reason: "dataaccess 自身实现：读路径成本估算（无禁用 API）"
+- path: dataaccess/read/session_calendar.py
+  reason: "dataaccess 自身实现：交易所 session/交易日历（#46），仅导入标准库与 pandas"
+- path: dataaccess/read/physical_plan.py
+  reason: "dataaccess 自身实现：物理计划 DAG（#4），纯编译不读文件"
+- path: dataaccess/read/pit_event_index.py
+  reason: "dataaccess 自身实现：美股财务 PIT 物理索引（#8），构建时 pq.read_table 读取列"
+- path: dataaccess/read/contract_ir.py
+  reason: "dataaccess 自身实现：Contract IR 编译器（#12），只编译不读文件"
+- path: dataaccess/read/coverage.py
+  reason: "dataaccess 自身实现：覆盖/完整性报告（#14），glob() 枚举文件"
+- path: dataaccess/cos/serving.py
+  reason: "dataaccess 自身实现：serving 层预聚合（#30），read_parquet + groupby 聚合"
+- path: dataaccess/read/query_cache.py
+  reason: "dataaccess 自身实现：查询结果缓存（#25），无禁用 API"
+- path: dataaccess/scripts/audit_contract_ir.py
+  reason: "dataaccess 自身实现：Contract IR 审计脚本（#12），只编译不读文件"
 - path: factor_engine/runtime/intermediate_registry.py
   reason: "factor_engine 独立下线计划（PR7 factor_engine→data_access）；迁移完成前暂豁免"
 - path: factor_engine/scripts/calibrate_backend_costs.py

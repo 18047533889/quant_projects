@@ -30,6 +30,7 @@ data_access.read.semantic_catalog —— 字段语义单一事实源（SemanticF
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from dataclasses import dataclass, field
@@ -37,6 +38,8 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from data_access.core.exceptions import ValidationError
+
+logger = logging.getLogger("data_access.semantic_catalog")
 
 try:
     import yaml  # type: ignore[import-untyped]
@@ -71,6 +74,8 @@ class SemanticField:
     duplicate_policy: str = "latest_revision"  # keep_first / keep_last / latest_revision / error
     aliases: tuple[str, ...] = ()            # 其它叫法（含 FactorEngine 里的别名）
     mining_allowed: bool = True
+    period_selection: str = "all"            # latest_period/exact_period/annual/quarterly/ttm/all
+    period_values: tuple[Any, ...] = ()      # exact_period 的目标 period 值
 
     @property
     def is_scale_applicable(self) -> bool:
@@ -102,6 +107,8 @@ class SemanticField:
             "duplicate_policy": self.duplicate_policy,
             "aliases": list(self.aliases),
             "mining_allowed": self.mining_allowed,
+            "period_selection": self.period_selection,
+            "period_values": list(self.period_values),
         }
 
 
@@ -173,6 +180,8 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         duplicate_policy=_str_or_none(raw.get("duplicate_policy")) or "latest_revision",
         aliases=_tuple_of(raw.get("aliases")),
         mining_allowed=_bool_or_default(raw.get("mining_allowed"), True),
+        period_selection=_str_or_none(raw.get("period_selection")) or "all",
+        period_values=_tuple_of(raw.get("period_values")) if raw.get("period_values") else (),
     )
 
 
@@ -222,6 +231,10 @@ class SemanticFieldCatalog:
 
         market 传入时，优先返回该市场专属字段；没有专属字段时回退 any（跨市场
         通用）。dataset 传入时用数据集名前缀推断 market（更高优先级）。
+
+        **#54 fail-closed**：无 market/dataset 上下文且存在多个非 any 候选时，
+        production 抛 ``AmbiguousSemanticFieldError``（禁止 YAML 顺序决定市场）；
+        research 告警后取第一个。
         """
         candidates = self._by_name.get(name)
         if not candidates:
@@ -231,10 +244,24 @@ class SemanticFieldCatalog:
             for f in candidates:
                 if f.market == effective:
                     return f
-        # 回退：any 通用字段，或第一个
+        # 回退：any 通用字段
         for f in candidates:
             if f.market == "any":
                 return f
+        # 无上下文且多市场候选 → fail-closed
+        ambiguous = [f for f in candidates if f.market != "any"]
+        if len(ambiguous) > 1:
+            markets = sorted({f.market for f in ambiguous})
+            from data_access.core.exceptions import AmbiguousSemanticFieldError
+            from data_access.read.query_budget import _production_mode
+
+            msg = (
+                f"逻辑字段 '{name}' 跨市场歧义（候选市场: {markets}）。"
+                "请显式传 market='ashare'/'us' 或 dataset= 让 catalog 消歧。"
+            )
+            if _production_mode():
+                raise AmbiguousSemanticFieldError(msg)
+            logger.warning("%s（research 放行，取 YAML 顺序第一个）", msg)
         return candidates[0]
 
     def resolve_by_physical(self, dataset: str, physical_name: str) -> SemanticField | None:

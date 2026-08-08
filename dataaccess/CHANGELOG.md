@@ -1,5 +1,79 @@
 # Changelog
 
+## 0.8.0 — 市场语义 + 物理布局 + 查询优化器统一（Phase 4）
+
+按 `docs/PHASE4_ROADMAP_PLAN.md` 落地：Store 级 temporal model 强制、
+财务 PIT `period_selection`、session 交易日历、物理计划 DAG、分钟时区/时段
+修复、一次 scan 多聚合、美股财务 PIT 索引、Contract IR、serving 分层、
+正确性 gates。
+
+**P0 语义正确性**
+- **Store 级 temporal model 强制**（#44）：`read/read_result/read_arrow_stream/
+  scan_polars/read_joined` 所有读入口统一执行 COS 契约——EMPTY 拒绝、X0 须
+  `allow_sparse=True`、E1/E2/RAW_EVENT 面板读 production 拒绝（mode=event/pit
+  显式放行）、STATIC 面板读拒绝（mode=dimension）。`read()` 新增
+  `mode=auto|panel|event|pit|dimension|sparse`。
+- **财务 `period_selection`**（#45）：`TemporalJoinSpec` 新增
+  latest_period/exact_period/annual/quarterly/ttm/all；`latest_period` 用
+  running-max(period) 实现「先选报告期、再选该期最新 revision」——旧报告期
+  晚修订不再回滚当前财务状态（实测对照：plain asof 会回滚到 999，latest_period
+  保持 200）。
+- **session 交易日历**（#46）：新增 `read/session_calendar.py`（A股 09:31–11:30
+  +13:01–15:00 共 240 根；US 9:30–16:00）；`availability="session"` 用日历
+  VALUES CTE 把 knowledge 编译成 available_from（decision >= 下一交易日），
+  节假日/周末公告映射正确；`store.set_calendar/get_calendar` 可注入真实日历。
+- **物理计划 DAG**（#4）：新增 `read/physical_plan.py`
+  Scan→Filter→TemporalJoin→Aggregation→Normalize→Project；`DataRequest` 的
+  `aggregations/transforms/field_params/pit/frequency` 真正编译进计划，
+  `ReadPlan.explain()` 渲染 NODES，`execute()` 走一次 scan 多聚合。
+- **分钟聚合时区/时段修复**（#5）：`AggregationSpec` 绑定 market/timezone；
+  `QuoteTime`(UTC) 先 `timezone(tz, ...)`（naive 用 `AT TIME ZONE 'UTC'`）再取
+  HH:MM，minute_at("09:31") 匹配北京 09:31；minute_of_day 用 session elapsed
+  bar index（09:31=0 … 15:00=239），午休不多算 90 分钟。
+- **一次 scan 多聚合**（#6）：`aggregate_minute_bundle` 单条 SQL（CTE + FILTER），
+  同一分钟数据只扫一次产出几十列。
+- **聚合治理**（#7）：聚合入口走 QueryBudget/deadline/audit，返回带 snapshot 的
+  ReadHandle。
+- **美股财务 PIT 索引**（#8）：`read/pit_event_index.py` + `store.pit_event_index/
+  prune_pit_paths`——文件按 period_end 命名时仍能按 filing_date 精准裁剪；
+  `docs/PIT_SERVING_LAYOUT.md` 说明 serving 分层。
+- **allowed_filter_values 值校验**（#52）：Store 读路径统一校验过滤值
+  （timeframe/IndustrySource 等），production fail-closed。
+- **grain/unique_key/cardinality + fan-out 守卫**（#53）：契约新增
+  grain/unique_key/cardinality/required_dimension_filters；read_joined exact
+  join 拒绝静默行放大（TopTen/Industry 等 one_to_many）。
+- **跨市场歧义 fail-closed**（#54）：`resolve_one` 无 market/dataset 且多市场
+  候选时 production 抛 `AmbiguousSemanticFieldError`。
+
+**P1 结构一致性**
+- **Contract IR**（#12）：`read/contract_ir.py` + `store.contract_ir()/
+  contract_ir_fingerprint()` 把 registry + COS 契约 + 语义字段编译成统一 IR；
+  `scripts/audit_contract_ir.py` CI 对齐。
+- **calendar_domain / coverage**（#13/#14）：契约新增 calendar_domain
+  （StockList/Status/Industry/TopTen 等标 calendar_day）；`read/coverage.py` +
+  `store.coverage()` 回答 complete/partial/unavailable。
+- **RAW_EVENT + 事件未来 cutoff**（#15/#16）：`_MODELS` 加 RAW_EVENT（us_fact_news
+  改用）；`enforce_event_cutoff`（effective_time_only 未来事件拒绝）+
+  `TemporalJoinSpec.future_cutoff`（join 右表不读未来生效事件）。
+
+**P2 serving 层 / 基准 / 正确性**
+- **serving 分层 + 预聚合**（#30/#31）：`cos/serving.py`（Source/Serving/Semantic
+  View 三层；`materialize_daily_aggregate` 高扇出→日频预聚合；
+  `route_minute_storage` date-major/bucket-major 路由）。
+- **查询结果缓存**（#25）：`read/query_cache.py` + `store.read_cached/
+  enable_result_cache`（LRU+TTL，默认关闭，manifest epoch 失效）。
+- **真实 workload Benchmark**（#32）：`scripts/benchmark_workloads.py` 补
+  A股日频 1日/1年/5年、分钟全市场1日、美股5年、latest_period PIT、
+  filing_date+timeframe PIT、Industry sw_l1、TopTen、US shares×close、
+  FactNews、COS cold/warm + `--metrics`（scans/bytes/rows）。
+- **正确性 gates**（#33）：新增 `tests/unit/test_correctness_gates.py`（16 个）：
+  Return/10000 vs Ret 不除、X0/EMPTY 拒绝、timeframe 强制、latest_period
+  不回滚、exact_period/annual、分钟 UTC→上海 + 午休 bar index、bundle、
+  未来 dividend 不前视、跨市场歧义 fail-closed。
+
+**回归**：dataaccess **507 通过 / 0 失败**；allowlist rc=0；语义审计 0 问题；
+Contract IR 审计一致。
+
 ## 0.7.0 — A股/美股两本 COS 数据字典对照落地
 
 对照 `COS_ashare_lqtp_data_dictionary.md` 与 `COS_us_massive_data_dictionary.md`，
