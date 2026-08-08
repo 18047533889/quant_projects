@@ -252,13 +252,23 @@ def test_s10_quarter_from_cumulative_requires_same_fiscal_year():
 def test_s11_cashflow_disagreement_homogenises_scale():
     from cleaned_operators.valuation.ops_v2 import _valuation_cashflow_disagreement
 
+    # P0-18: each row's cross-sectional z-score needs >= 5 finite stocks, so a
+    # single-column panel fail-closes to NaN — use a real cross-section to
+    # exercise the scale-homogenisation path.
     index = pd.date_range("2024-01-01", periods=6)
-    pe = pd.DataFrame({"A": [10.0, 20.0, 15.0, 30.0, 8.0, 12.0]}, index=index)
-    ocf = pd.DataFrame({"A": [0.05, 0.02, 0.08, 0.01, 0.03, 0.04]}, index=index)
-    ey = pd.DataFrame({"A": [0.10, 0.05, 0.12, 0.04, 0.06, 0.08]}, index=index)
+    cols = [f"S{i}" for i in range(10)]
+    pe = pd.DataFrame(np.linspace(8.0, 30.0, 60).reshape(6, 10), index=index, columns=cols)
+    ocf = pd.DataFrame(np.linspace(0.01, 0.08, 60).reshape(6, 10), index=index, columns=cols)
+    ey = pd.DataFrame(np.linspace(0.04, 0.12, 60).reshape(6, 10), index=index, columns=cols)
     out = _valuation_cashflow_disagreement(pe, pe * 2, pe * 3, ocf, ey)
     assert out.shape == pe.shape
     assert np.isfinite(out.to_numpy()).all()
+    # P0-18: an under-populated cross-section (< 5 stocks per row) fail-closes to
+    # NaN instead of emitting a spurious "no disagreement" value.
+    single = pd.DataFrame({"A": [10.0, 20.0, 15.0, 30.0, 8.0, 12.0]}, index=index)
+    out_s = _valuation_cashflow_disagreement(single, single * 2, single * 3, single * 0.01, single * 0.02)
+    assert out_s.shape == single.shape
+    assert out_s.isna().all().all()
 
 
 def test_s11_quality_mismatch_uses_wls():

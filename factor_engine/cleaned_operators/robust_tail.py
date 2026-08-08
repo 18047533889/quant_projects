@@ -5,9 +5,13 @@ Adds partial moments, expected shortfall, quantile-based skew/kurtosis, a tail
 ratio with denominator protection and an extreme-event clustering ratio.  All
 are causal daily-panel transforms with fail-closed missing/constant handling.
 
-Missing-value policy: NaN never means 0; constant windows and degenerate
-quantiles return NaN rather than an unbounded number; tail samples below the
-configured minimum return NaN (never Inf).
+Missing-value policy: NaN never means 0; degenerate quantiles return NaN
+rather than an unbounded number; tail samples below the configured minimum
+return NaN (never Inf).  Constant (dispersion=0) windows have a well-defined
+partial-moment / expected-shortfall value, so those operators return the
+deterministic value (R5 P1-38(a)) instead of NaN; pure *ratio* operators
+(quantile skew/kurtosis, tail ratio) still fail-closed to NaN when the
+denominator degenerates.
 """
 from __future__ import annotations
 
@@ -75,7 +79,10 @@ class TsLowerPartialMoment(SeriesOperator):
 
         def _fn(chunk: np.ndarray) -> float:
             valid = valid_values(chunk)
-            if not _has_spread(valid, min_count=mp):
+            # R5 P1-38(a): a constant window (dispersion=0) still has a
+            # well-defined partial moment (max(threshold - c, 0)^order) — only
+            # the sample-size floor applies, not a spread requirement.
+            if valid.size < mp:
                 return np.nan
             below = np.maximum(thr - valid, 0.0)
             return float(np.mean(np.power(below, ord_)))
@@ -110,7 +117,9 @@ class TsUpperPartialMoment(SeriesOperator):
 
         def _fn(chunk: np.ndarray) -> float:
             valid = valid_values(chunk)
-            if not _has_spread(valid, min_count=mp):
+            # R5 P1-38(a): constant windows have a well-defined upper partial
+            # moment; only the sample-size floor applies.
+            if valid.size < mp:
                 return np.nan
             above = np.maximum(valid - thr, 0.0)
             return float(np.mean(np.power(above, ord_)))
@@ -147,7 +156,9 @@ class TsExpectedShortfall(SeriesOperator):
 
         def _fn(chunk: np.ndarray) -> float:
             valid = valid_values(chunk)
-            if not _has_spread(valid, min_count=min_tail):
+            # R5 P1-38(a): a constant window has a well-defined ES (the tail mean
+            # is the sample value itself) — only the sample-size floor applies.
+            if valid.size < min_tail:
                 return np.nan
             if side_kind == "lower":
                 thr = float(np.quantile(valid, quantile))
@@ -329,16 +340,26 @@ class TsExtremeClusterRatio(SeriesOperator):
             return chunk <= thr
 
         def _fn(chunk: np.ndarray) -> float:
-            if not _has_spread(chunk[np.isfinite(chunk)], min_count=mp):
+            finite = np.isfinite(chunk)
+            if not _has_spread(chunk[finite], min_count=mp):
                 return np.nan
             extreme = _extreme(chunk)
             count = int(extreme.sum())
             if count < mp:
                 return np.nan
+            # R5 P1-38(c): NaN must not be treated as a non-extreme point that
+            # cuts a cluster.  Censor it: skip the position and keep the "previous
+            # was extreme" flag, so extremes separated only by missing values
+            # still count as adjacent.
             clustered = 0
-            for i in range(1, len(chunk)):
-                if extreme[i] and extreme[i - 1]:
+            prev = False
+            for i in range(len(chunk)):
+                if not finite[i]:
+                    continue
+                cur = bool(extreme[i])
+                if cur and prev:
                     clustered += 1
+                prev = cur
             return float(clustered / count)
 
         return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))

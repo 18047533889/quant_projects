@@ -1,9 +1,9 @@
 {
   "schema_version": 2,
-  "canonical_count": 1355,
+  "canonical_count": 1360,
   "surface_counts": {
     "daily": 1185,
-    "extended": 65,
+    "extended": 70,
     "research": 94,
     "unsafe": 7,
     "legacy": 1,
@@ -3406,6 +3406,34 @@
       "lag": 0
     },
     {
+      "canonical": "event_allan_log_mean",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": false,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "event_allan_scaling_slope",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": false,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
       "canonical": "event_arithmetic_return_sum",
       "surface": "daily",
       "aliases": [],
@@ -4723,6 +4751,19 @@
       "lag": 0
     },
     {
+      "canonical": "fin_median_abs_deviation",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "fin_minority_profit_share",
       "surface": "daily",
       "aliases": [],
@@ -4869,6 +4910,19 @@
       "backends": [
         "pandas_numpy",
         "polars"
+      ],
+      "pit_safe": false,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_percentile_vs_prior_history",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -5407,6 +5461,19 @@
       "backends": [
         "pandas_numpy",
         "polars"
+      ],
+      "pit_safe": false,
+      "scope": "fundamental_period",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "fin_zscore_vs_prior_history",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -11946,7 +12013,9 @@
     {
       "canonical": "ts_autocorrelation_time",
       "surface": "daily",
-      "aliases": [],
+      "aliases": [
+        "ts_integrated_autocorrelation_time"
+      ],
       "backends": [
         "pandas_numpy",
         "polars"
@@ -18347,7 +18416,9 @@
     {
       "canonical": "ts_vol_pvariation_roughness",
       "surface": "daily",
-      "aliases": [],
+      "aliases": [
+        "ts_pvariation_scaling_exponent"
+      ],
       "backends": [
         "pandas_numpy",
         "polars"

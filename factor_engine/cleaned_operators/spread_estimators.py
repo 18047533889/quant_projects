@@ -12,7 +12,10 @@ No L2 queue data is assumed — only daily OHLC.  Two classic estimators:
   (P2; note the covariance is frequently non-negative, which yields 0).
 
 Both are prefix-causal (a spread at ``t`` uses rows ``<= t``), deterministic
-and fail-closed to NaN when the required pairs are invalid.
+and fail-closed to NaN when the required pairs are invalid.  Both smooth/cov
+windows are coverage-gated (R5 P1-44): a spread labelled "20d" must actually be
+estimated from a meaningful share of the window, not from a handful of valid
+points — missing/suspended bars reduce coverage and push the output to NaN.
 """
 from __future__ import annotations
 
@@ -150,7 +153,7 @@ class OhlcCorwinSchultzSpread(SeriesOperator):
         )
 
 
-def _roll_spread_series(xv: np.ndarray, window: int) -> np.ndarray:
+def _roll_spread_series(xv: np.ndarray, window: int, min_periods: int) -> np.ndarray:
     rows, cols = xv.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
@@ -165,7 +168,12 @@ def _roll_spread_series(xv: np.ndarray, window: int) -> np.ndarray:
             a = seg[1:]
             b = seg[:-1]
             ok = np.isfinite(a) & np.isfinite(b)
-            if int(ok.sum()) < 4:
+            # R5 P1-44: coverage gate — a handful of valid adjacent pairs must
+            # not stand in for a full ``window`` of observations (a "20d spread"
+            # from 4 trades is misleading).  Require ``min_periods`` valid
+            # pairs; otherwise fail closed to NaN (esp. for suspended/missing
+            # bars).
+            if int(ok.sum()) < min_periods:
                 continue
             cov = float(np.cov(a[ok], b[ok], ddof=1)[0, 1])
             if not np.isfinite(cov):
@@ -193,22 +201,37 @@ class TsRollEffectiveSpread(SeriesOperator):
 
     metadata = _metadata(
         "ts_roll_effective_spread",
-        "Roll 有效 spread 2 sqrt(max(-Cov(dx_t, dx_{t-1}), 0))。",
-        ["price", "window"],
+        "Roll 有效 spread 2 sqrt(max(-Cov(dx_t, dx_{t-1}), 0))（覆盖门 min_periods）。",
+        ["price", "window", "min_periods"],
         domain="price_volume",
         unit="fraction",
         cost=4,
     )
 
-    def _calculate_series(self, price: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
+    def _calculate_series(
+        self,
+        price: pd.DataFrame,
+        window: int = 20,
+        min_periods: Any = None,
+        **_: Any,
+    ) -> pd.DataFrame:
         w = int(window)
         if w < 5:
             raise ValueError("ts_roll_effective_spread requires window >= 5")
+        # R5 P1-44: coverage gate.  Default = half the window (at least 4 pairs):
+        # a "20d spread" must actually be estimated from a meaningful share of
+        # the window, not from a handful of valid trades.
+        if min_periods is None:
+            mp = max(4, w // 2)
+        else:
+            mp = int(min_periods)
+            if mp < 4:
+                raise ValueError("ts_roll_effective_spread requires min_periods >= 4")
         # The kernel is ``2*sqrt(max(-Cov(d log P), 0))`` and requires a POSITIVE
         # price series: feeding a signed return series silently produces NaN for
         # every negative log(·) (a data-understanding footgun).  The param is
         # named ``price`` so the contract is explicit.
-        return frame_like(price, _roll_spread_series(price.to_numpy(dtype=float), w))
+        return frame_like(price, _roll_spread_series(price.to_numpy(dtype=float), w, mp))
 
 
 def _register_surface() -> None:

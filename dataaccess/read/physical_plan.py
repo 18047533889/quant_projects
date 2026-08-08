@@ -210,7 +210,8 @@ def execute_physical_plan(store: Any, plan: Any) -> Any:
     非组合场景（无聚合 / 单数据集）返回 None，由 ``ReadPlan.execute()`` 走
     现有 read/read_joined/aggregate_minute_bundle 路径（节点语义等价）。
     """
-    req = plan.request
+    # #4 只消费 plan 编译时冻结的 compiled（execute 已不读活的 request）。
+    req = plan.compiled if plan.compiled is not None else plan.request
     if not getattr(req, "aggregations", None) or len(plan.datasets) <= 1:
         return None
     return _execute_composed(store, plan, req)
@@ -266,15 +267,24 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     if not items:
         raise ValidationError("aggregations 为空")
 
+    # #4 compiled（execute_physical_plan 已传 req；防御兜底）
+    if req is None:
+        req = plan.compiled if plan.compiled is not None else plan.request
     ds_params = req.dataset_params(anchor)
     market = str(ds_params.get("market") or "") or None
     timezone = str(ds_params.get("timezone") or "") or None
+    # #2 静态 universe：先展开成 instruments（与 read_joined 非组合路径一致），
+    # 时变 universe 才下沉成 join 内的 INNER JOIN（_read_joined_sql 处理）。
+    insts = plan.instruments
+    time_varying = bool(getattr(req, "time_varying_universe", True))
+    if req.universe and not time_varying:
+        insts = store._resolve_universe_instruments(req.universe, plan.time_range, insts)
     agg_handle = aggregate_minute_bundle(
         store,
         anchor,
         items,
         time_range=plan.time_range,
-        instrument_filter=plan.instruments,
+        instrument_filter=insts,
         params=ds_params,
         market=market,
         timezone=timezone,
@@ -317,7 +327,7 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
             anchor_dsobj,
             time_range=plan.time_range,
             params=ds_params,
-            instrument_filter=plan.instruments,
+            instrument_filter=insts,
         )
     except Exception:
         source_paths = []
@@ -327,12 +337,13 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
         per_ds,
         effective_specs,
         time_range=plan.time_range,
-        instrument_filter=plan.instruments,
+        instrument_filter=insts,
         filters=req.filters,
         filters_by_dataset=getattr(req, "filters_by_dataset", None),
         params_by_dataset=pbd,
         limit=getattr(req, "limit", None),
-        universe=plan.universe,
+        # #2 时变 universe 才下沉 INNER JOIN；静态 universe 已展开进 insts
+        universe=(req.universe if time_varying else None),
         anchor_override={
             "path": anchor_path,
             "time_column": "ts",
@@ -342,25 +353,8 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
         order_by=getattr(req, "order_by", None),
     )
 
-    start_clock = _perf_counter()
-    try:
-        budget = store._resolve_read_budget(anchor_dsobj, None)
-        table = store._engine.execute_arrow(
-            sql, sql_params, deadline_ms=budget.max_elapsed_ms
-        )
-    finally:
-        try:
-            os.unlink(anchor_path)
-        except OSError:
-            pass
-    elapsed_ms = (_perf_counter() - start_clock) * 1000
-
-    if getattr(req, "normalize_units", False) and plan.fields:
-        from data_access.read.semantic_catalog import normalize_table_units
-
-        table = normalize_table_units(table, plan.fields)
-
-    # 多数据集 snapshot（组合读的 lineage 基础；#14 fail-closed）
+    # 多数据集 snapshot（组合读的 lineage 基础；#14 fail-closed）——先构建，
+    # 与执行顺序无关，流式/物化共用同一份。
     snapshots = []
     for ds in datasets:
         try:
@@ -369,7 +363,7 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
                 dsobj,
                 time_range=plan.time_range,
                 params=req.dataset_params(ds),
-                instrument_filter=plan.instruments,
+                instrument_filter=insts,
             )
             snapshots.append(
                 store._build_snapshot(
@@ -389,6 +383,55 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
         else None
     )
     lineage = SqlReadLineage(datasets=tuple(datasets), query_preview="composed:" + sql[:120])
+
+    budget = store._resolve_read_budget(anchor_dsobj, None)
+    need_normalize = bool(getattr(req, "normalize_units", False) and plan.fields)
+    result_mode = str(getattr(req, "result", "auto") or "auto")
+
+    if result_mode == "stream" and not need_normalize:
+        # #2 组合路径也 honor result="stream"：直接跑 engine reader，不物化整表。
+        reader = store._engine.execute_reader(
+            sql, sql_params, batch_size=100_000, deadline_ms=budget.max_elapsed_ms
+        )
+
+        def _gen() -> Any:
+            try:
+                for batch in reader:
+                    yield batch
+            finally:
+                try:
+                    close = getattr(reader, "close", None)
+                    if close is not None:
+                        close()
+                except Exception:
+                    pass
+                try:
+                    os.unlink(anchor_path)
+                except OSError:
+                    pass
+
+        stats = ReadStats(rows=0, bytes=0, elapsed_ms=0.0)
+        return ReadHandle(
+            stream=_gen(), snapshot=snapshot, stats=stats, lineage=lineage
+        )
+
+    start_clock = _perf_counter()
+    try:
+        table = store._engine.execute_arrow(
+            sql, sql_params, deadline_ms=budget.max_elapsed_ms
+        )
+    finally:
+        try:
+            os.unlink(anchor_path)
+        except OSError:
+            pass
+    elapsed_ms = (_perf_counter() - start_clock) * 1000
+
+    if need_normalize:
+        from data_access.read.semantic_catalog import normalize_table_units
+
+        table = normalize_table_units(table, plan.fields)
+
     stats = ReadStats(rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms)
     return ReadHandle(table=table, snapshot=snapshot, stats=stats, lineage=lineage)
 

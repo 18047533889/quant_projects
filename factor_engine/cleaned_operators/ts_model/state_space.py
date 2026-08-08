@@ -45,6 +45,11 @@ def _register(name: str, description: str, params: list[str], unit: str, fn):
 
 
 def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str) -> np.ndarray:
+    # P0-15: the noise parameters must be well-typed — a negative process-noise
+    # would shrink uncertainty, a non-positive observation-noise breaks the
+    # Kalman update.  Fail fast instead of silently producing nonsense.
+    if not (q >= 0.0 and r > 0.0):
+        raise ValueError("q must be >= 0 and r must be > 0")
     n = len(vals)
     mu = np.full(n, np.nan, dtype=float)
     p = np.full(n, np.nan, dtype=float)
@@ -55,8 +60,14 @@ def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str) -> np.nda
         x = vals[t]
         if not np.isfinite(x):
             if np.isfinite(mu_prev):
+                # P0-15: a missing observation is predict-only — the filtered
+                # state is unchanged but the covariance really advances by Q.
+                # Previously p_prev was left behind and the same stale P was
+                # re-emitted for every missing row, so K consecutive gaps did
+                # not accumulate P + K*Q as the theory requires.
                 mu[t] = mu_prev
-                p[t] = p_prev + q
+                p_prev = p_prev + q
+                p[t] = p_prev
             continue
         if not np.isfinite(mu_prev):
             mu_prev = x
@@ -87,12 +98,14 @@ _register("ts_kalman_level", "局部水平模型的过滤水平估计。", ["x",
            lambda x, q=1e-4, r=1.0: _apply_col(x, lambda v: _kalman_level(v, float(q), float(r), "level")))
 _register("ts_kalman_innovation_z", "观测值相对 Kalman 预测的标准化创新。", ["x", "q", "r"], "level",
            lambda x, q=1e-4, r=1.0: _apply_col(x, lambda v: _kalman_level(v, float(q), float(r), "innovation_z")))
-_register("ts_kalman_beta_uncertainty", "Beta 状态协方差/标准误。", ["y", "x", "q", "r"], "level",
+_register("ts_kalman_beta_uncertainty", "Beta 状态滤波协方差 P(标准误为 sqrt(P), 此处输出 P)。", ["y", "x", "q", "r"], "level",
            lambda y, x, q=1e-3, r=1.0: _apply_two(y, x, lambda a, b: _kalman_beta(a, b, float(q), float(r), "uncertainty")))
 
 
 def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: float) -> np.ndarray:
     """Local linear trend: level and slope states."""
+    if not (q_level >= 0.0 and q_trend >= 0.0 and r > 0.0):
+        raise ValueError("q_level/q_trend must be >= 0 and r must be > 0")
     n = len(vals)
     slope = np.full(n, np.nan, dtype=float)
     level = np.nan
@@ -144,6 +157,8 @@ _BETA_WARMUP = 5
 
 
 def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str) -> np.ndarray:
+    if not (q >= 0.0 and r > 0.0):
+        raise ValueError("q must be >= 0 and r must be > 0")
     n = len(y)
     beta = np.full(n, np.nan, dtype=float)
     change = np.full(n, np.nan, dtype=float)

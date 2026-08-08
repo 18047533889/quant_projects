@@ -50,9 +50,15 @@ def _stack_feats(features: list[pd.DataFrame]) -> np.ndarray:
 
 
 def _euclidean_pairs(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """(m,d) vs (n,d) -> (m,n) pairwise Euclidean distances."""
+    """(m,d) vs (n,d) -> (m,n) pairwise Euclidean distances.
+
+    No ``+ EPS`` inside the radical (P0-04 review): an additive floor makes the
+    self-distance ``d(x_i, x_i) = sqrt(EPS) > 0`` and systematically biases the
+    energy distance ``2 E|X-Y| - E|X-X'| - E|Y-Y'|``.  A distance is a distance;
+    degenerate zero-distance cases are handled at the caller (``max(ed, 0)``).
+    """
     diff = a[:, None, :] - b[None, :, :]
-    return np.sqrt(np.sum(diff * diff, axis=2) + _EPS)
+    return np.sqrt(np.sum(diff * diff, axis=2))
 
 
 def _energy_distance(X: np.ndarray, Y: np.ndarray) -> float:

@@ -27,7 +27,14 @@ def metadata(
     unit: str,
     cost: int = 5,
     domain: str = "price_volume",
+    input_units: dict[str, str] | None = None,
+    output_unit: str | None = None,
 ) -> OperatorMetadata:
+    # P1-89: the typed-v2 surface carries explicit input_units / output_unit
+    # field semantics.  Regression kernels that previously wrote a generic
+    # ``unit`` tag now also declare the concrete unit relationships (e.g. beta
+    # -> unit(y)/unit(x), residual -> unit(y)); ``unit`` remains in the tags for
+    # backward compatibility with legacy consumers.
     return OperatorMetadata(
         name=name,
         category="time_series_regression",
@@ -39,6 +46,8 @@ def metadata(
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        input_units=dict(input_units) if input_units else {},
+        output_unit=output_unit,
     )
 
 

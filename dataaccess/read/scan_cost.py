@@ -56,6 +56,9 @@ class ScanCost:
     instrument_count: int = 0
     engine_startup_ms: float = 5.0
     score: float = 0.0
+    # #30 数据集文件格式：arrow/feather 没有 DuckDB 原生 reader，auto 路由
+    # 必须选 pyarrow，不能拿 scan_parquet 硬扫。
+    file_format: str | None = None
     # ---- #25 真实 CBO 扩展：已选文件/字节/row-group、投影字节、IO 估算 ----
     selected_files: int = 0
     selected_bytes: int | None = None
@@ -88,6 +91,7 @@ class ScanCost:
             "estimate_ms": self.estimate_ms,
             "calibrated_factor": self.calibrated_factor,
             "calibrated_score": self.calibrated_score,
+            "file_format": self.file_format,
         }
 
 
@@ -192,6 +196,15 @@ def estimate_scan_cost(
         projection_bytes = int(estimated_rows * width)
 
     remote = is_remote_storage(ds)
+    # #30 数据集格式（arrow/feather 无 DuckDB reader → pyarrow；csv/tsv/jsonl 可
+    # 走 duckdb/polars；parquet 全引擎）。用 normalize_format_name 防别名漂移。
+    file_format = None
+    try:
+        from data_access.read.formats import normalize_format_name
+
+        file_format = normalize_format_name(str(getattr(ds, "format", "parquet") or "parquet"))
+    except Exception:
+        file_format = str(getattr(ds, "format", "parquet") or "parquet").lower()
     startup = _ENGINE_STARTUP_MS.get("polars" if prefer_polars else "duckdb", 5.0)
 
     # 选择率：有 manifest 时用「裁剪后字节 / 全量字节」；否则经验值
@@ -240,6 +253,7 @@ def estimate_scan_cost(
         projection_bytes=projection_bytes,
         estimate_ms=estimate_ms,
         calibrated_factor=calibrated,
+        file_format=file_format,
     )
 
 
@@ -305,7 +319,12 @@ def suggest_read_strategy(
         )
 
     if engine == "auto":
-        if cost.file_count == 0 and cost.estimated_rows == 0:
+        fmt = str(cost.file_format or "parquet").lower()
+        if fmt in {"arrow", "feather", "ipc", "feather-v2"}:
+            # #30 文档说 Arrow/Feather 自动选 PyArrow，但 router 从没实现——
+            # arrow/feather 没有 DuckDB/scan_parquet 原生 reader，硬走会报错。
+            engine = "pyarrow"
+        elif cost.file_count == 0 and cost.estimated_rows == 0:
             engine = "duckdb"
         elif prefer_polars and cost.estimated_rows >= _STREAM_MIN_ROWS:
             engine = "polars"

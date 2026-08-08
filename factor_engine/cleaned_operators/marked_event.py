@@ -51,9 +51,25 @@ def _metadata(
     )
 
 
+def _validate_event_bool(ev: np.ndarray, operator: str) -> None:
+    """Event inputs must be strict boolean indicators {0, 1} or NaN (review P1-47a).
+
+    A probability / z-score / any other non-0/1 finite value is a caller bug:
+    silently thresholding at 0.5 would reinterpret a non-boolean input as an
+    event.  Raise loudly instead.
+    """
+    finite = ev[np.isfinite(ev)]
+    bad = finite[(finite != 0.0) & (finite != 1.0)]
+    if bad.size:
+        raise ValueError(
+            f"{operator} requires a strict boolean event indicator "
+            f"(values 0/1 or NaN); found non-boolean finite value {float(bad[0])!r}"
+        )
+
+
 def _event_marks(evc: np.ndarray, mkc: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Indices and marks of events (event = truthy finite value) in a window."""
-    idx = np.flatnonzero((evc >= 0.5) & np.isfinite(evc))
+    """Indices and marks of events (event = strictly 1.0; 0 and NaN are non-events)."""
+    idx = np.flatnonzero(evc == 1.0)
     marks = np.asarray([mkc[i] for i in idx], dtype=float)
     return idx, marks
 
@@ -119,6 +135,7 @@ class EventMarkAutocorr(SeriesOperator):
             raise ValueError("event_mark_autocorr requires history_window >= event_lag + 5")
 
         evv = event.to_numpy(dtype=float)
+        _validate_event_bool(evv, "event_mark_autocorr")
         mkv = mark.to_numpy(dtype=float)
         rows, cols = evv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -129,12 +146,24 @@ class EventMarkAutocorr(SeriesOperator):
         return frame_like(event, out)
 
 
-def _interval_mark_chunk(evc: np.ndarray, mkc: np.ndarray) -> float:
-    idx, marks = _event_marks(evc, mkc)
-    if idx.shape[0] < 5:
+def _interval_mark_chunk(in_idx: np.ndarray, prev_idx: int | None, mkv: np.ndarray) -> float:
+    """Corr(interval -> following event mark) over a window's events.
+
+    ``in_idx`` are the absolute event rows inside the window; ``prev_idx`` is the
+    last event row strictly before the window (or None).  The pre-window ->
+    first-in-window interval is *included* (paired with the first in-window
+    event's mark); dropping it biases the estimate against long intervals that
+    merely straddle the window boundary (review P1-47b).
+    """
+    if in_idx.size < 4:
         return np.nan
-    intervals = np.diff(idx).astype(float)
-    marks_after = marks[1:]
+    marks = mkv[in_idx]
+    if prev_idx is not None:
+        intervals = np.diff(np.concatenate([[prev_idx], in_idx])).astype(float)
+        marks_after = marks            # first interval pairs with marks[0]
+    else:
+        intervals = np.diff(in_idx).astype(float)
+        marks_after = marks[1:]
     ok = np.isfinite(intervals) & np.isfinite(marks_after)
     if int(ok.sum()) < 4:
         return np.nan
@@ -178,13 +207,19 @@ class EventIntervalMarkCoupling(SeriesOperator):
             raise ValueError("event_interval_mark_coupling requires window >= 6")
 
         evv = event.to_numpy(dtype=float)
+        _validate_event_bool(evv, "event_interval_mark_coupling")
         mkv = mark.to_numpy(dtype=float)
         rows, cols = evv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for c in range(cols):
+            all_idx = np.flatnonzero(evv[:, c] == 1.0)
             for r in range(rows):
                 lo = max(0, r - w + 1)
-                out[r, c] = _interval_mark_chunk(evv[lo : r + 1, c], mkv[lo : r + 1, c])
+                start_pos = int(np.searchsorted(all_idx, lo, side="left"))
+                end_pos = int(np.searchsorted(all_idx, r + 1, side="left"))
+                in_idx = all_idx[start_pos:end_pos]
+                prev_idx = int(all_idx[start_pos - 1]) if start_pos > 0 else None
+                out[r, c] = _interval_mark_chunk(in_idx, prev_idx, mkv[:, c])
         return frame_like(event, out)
 
 

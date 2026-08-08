@@ -65,6 +65,8 @@ _EXTENDED_OPS = [
     "group_wasserstein_barycenter_distance",
     "intraday_impact_decay_rate",
     "ts_multifractal_asymmetry",
+    "event_allan_scaling_slope",
+    "event_allan_log_mean",
 ]
 _RESEARCH_OPS = [
     "ts_dmd_dominant_growth_rate",
@@ -98,6 +100,10 @@ def _make_panels(n: int = 140, m: int = 8, seed: int = 3) -> dict[str, pd.DataFr
     ret = pd.DataFrame(logr, index=idx, columns=cols)
     vol = pd.DataFrame(1.0e4 + rng.integers(0, 3.0e4, (n, m)), index=idx, columns=cols).astype(float)
     amt = (vol.to_numpy() * close.to_numpy())
+    # 0/1 event indicator panel (for the Allan-factor family input contract).
+    event = pd.DataFrame(
+        (rng.uniform(size=(n, m)) < 0.02).astype(float), index=idx, columns=cols
+    )
     return {
         "close": close,
         "ret": ret,
@@ -105,6 +111,7 @@ def _make_panels(n: int = 140, m: int = 8, seed: int = 3) -> dict[str, pd.DataFr
         "amt": pd.DataFrame(amt, index=idx, columns=cols),
         "high": close * 1.02,
         "low": close * 0.98,
+        "event": event,
         "grp": pd.DataFrame(
             np.tile(np.array(["g0", "g0", "g0", "g1", "g1", "g1", "g2", "g2"]), (n, 1)),
             index=idx, columns=cols,
@@ -156,7 +163,9 @@ _TS_SPECS: dict[str, tuple[list[str], dict]] = {
     "ts_hodges_lehmann_location": (["ret"], {"window": 32}),
     "ts_pickands_tail_index": (["ret"], {"window": 60, "k": 4}),
     "ts_evt_threshold_stability": (["ret"], {"window": 60, "k_min": 4, "k_max": 12}),
-    "event_allan_factor": (["vol"], {"window": 64, "max_scale": 8}),
+    "event_allan_factor": (["event"], {"window": 64, "scale": 8}),
+    "event_allan_scaling_slope": (["event"], {"window": 64, "max_scale": 8}),
+    "event_allan_log_mean": (["event"], {"window": 64, "max_scale": 8}),
     "cs_hartigan_dip": (["ret"], {"min_cross": 3}),
     "group_wasserstein_barycenter_distance": (["ret", "grp"], {"window": 32}),
     "ts_cross_spectral_coherence": (["ret", "vol"], {"window": 40}),

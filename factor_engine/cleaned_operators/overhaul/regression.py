@@ -208,6 +208,23 @@ def pd_trend_tstat(x, window, min_periods=None, **_):
     return frame_pd(x, out)
 
 
+def _trailing_contiguous(chunk: np.ndarray) -> np.ndarray:
+    """Longest trailing contiguous finite run ending at the current row.
+
+    A missing value breaks the time axis — a gap must never re-pair values that
+    were not temporally adjacent (no drop-finite/reconnect), and a NaN at the
+    current row yields an empty block so the caller emits NaN instead of
+    reusing the last valid history (review P1-125).
+    """
+    n = chunk.shape[0]
+    if n == 0 or not np.isfinite(chunk[-1]):
+        return chunk[:0]
+    end = n
+    while end > 0 and np.isfinite(chunk[end - 1]):
+        end -= 1
+    return chunk[end:]
+
+
 def pd_max_drawdown(x, window, min_periods=2, **_):
     w, mp = window_params(window, min_periods, default_mp=2)
     mp = max(mp, 2)
@@ -215,7 +232,7 @@ def pd_max_drawdown(x, window, min_periods=2, **_):
     for col in range(arr.shape[1]):
         for row in range(arr.shape[0]):
             values = arr[max(0, row - w + 1) : row + 1, col]
-            valid = values[np.isfinite(values)]
+            valid = _trailing_contiguous(values)
             if valid.size < mp or np.any(valid <= 0):
                 continue
             peaks = np.maximum.accumulate(valid)

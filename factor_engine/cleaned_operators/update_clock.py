@@ -57,6 +57,17 @@ def _metadata(
     )
 
 
+def _validate_update_event(ev: np.ndarray, canonical: str) -> None:
+    """``update_event`` must be a strict boolean indicator {0, 1} or NaN (review P1-48a)."""
+    finite = ev[np.isfinite(ev)]
+    bad = finite[(finite != 0.0) & (finite != 1.0)]
+    if bad.size:
+        raise ValueError(
+            f"{canonical} requires update_event to be a strict boolean indicator "
+            f"(0/1 or NaN); found non-boolean finite value {float(bad[0])!r}"
+        )
+
+
 def _update_kernel(canonical: str, min_updates: int, fn) -> SeriesOperator:
     def _calculate_series(
         self,
@@ -71,6 +82,7 @@ def _update_kernel(canonical: str, min_updates: int, fn) -> SeriesOperator:
 
         xv = x.to_numpy(dtype=float)
         ev = update_event.to_numpy(dtype=float)
+        _validate_update_event(ev, canonical)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for c in range(cols):
@@ -81,7 +93,7 @@ def _update_kernel(canonical: str, min_updates: int, fn) -> SeriesOperator:
             # capital events) must still reach the last ``n`` updates however far
             # back they are (P0-11).  NaN only when the whole history holds
             # fewer than ``n`` updates.
-            upd_idx = np.flatnonzero((ev[:, c] >= 0.5) & np.isfinite(ev[:, c]))
+            upd_idx = np.flatnonzero(ev[:, c] == 1.0)
             if upd_idx.size < n:
                 continue
             for r in range(rows):
@@ -113,7 +125,7 @@ _DESCRIPTIONS = {
     "update_path_efficiency": "真实 update 节点上的路径效率 |Δ_K|/Σ|Δ_j|（方向一致性）。",
     "update_acceleration": "最近两次 update 差的归一化 (d_K - d_{K-1})/MAD(d)（改善加速）。",
     "update_surprise": "本次 update 相对其自身历史的中位数 z 分（innovation）。",
-    "update_direction_persistence": "幅度加权的方向保持率 |Σ w_j·sign(Δ_j)|/Σ w_j。",
+    "update_direction_persistence": "幅度加权方向保持率 Σ|Δ_j|·1[sign(Δ_j)=sign(net)]/Σ|Δ_j|。",
 }
 _UNITS = {
     "update_path_efficiency": "ratio",
@@ -162,11 +174,22 @@ def _direction_persist(vals: np.ndarray) -> float:
     net = vals[-1] - vals[0]
     if abs(net) <= _EPS:
         return np.nan
-    # Sign agreement: the fraction of update deltas pointing in the same
-    # direction as the net move, P = #{sign(d_i) == sign(net)} / N.  The old
-    # magnitude-weighted form was algebraically identical to path efficiency
-    # (|Σd|/Σ|d|) and duplicated that canonical — P0-10.
-    return float(np.mean(np.sign(d) == np.sign(net)))
+    # Magnitude-weighted direction persistence (docstring said "magnitude
+    # weighted" but the old body was unweighted sign consistency, review P1-48b):
+    #   P = Σ|Δ_i|·1[sign(Δ_i) == sign(net)] / Σ|Δ_i|
+    # Each update delta votes, weighted by its own size, on whether it agrees
+    # with the direction of the overall move.  Zero deltas carry |Δ|=0 so they
+    # no longer distort the denominator.  This stays distinct from path
+    # efficiency: the old magnitude form |ΣΔ|/Σ|Δ| was algebraically identical
+    # to ``_path_eff`` and duplicated that canonical (P0-10), whereas this is a
+    # fraction in [0, 1] of the total update mass pointing the net way.
+    s = np.sign(net)
+    w = np.abs(d)
+    total = float(w.sum())
+    if total <= _EPS:
+        return np.nan
+    same = w[np.sign(d) == s]
+    return float(same.sum() / total)
 
 
 TsUpdatePathEfficiency = _update_kernel("update_path_efficiency", 3, _path_eff)

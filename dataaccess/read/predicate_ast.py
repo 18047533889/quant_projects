@@ -319,6 +319,61 @@ def filter_columns(f: Filter | None) -> set[str]:
     return set()
 
 
+def filter_restricts_column(f: Filter | None, column: str) -> bool:
+    """保守证明 filter 是否把 ``column`` 限制到某个具体取值/区间子集。
+
+    required_filters / allowed_filter_values 用（#14/#15）：只靠「列名出现在
+    条件里」证明不了维度被真正限定——``timeframe != 'quarterly'``、
+    ``timeframe IS NOT NULL``、``timeframe='quarterly' OR price > 0`` 都能让
+    结果越出所需维度。
+
+    规则（充分条件，宁严勿松）：
+        - Eq(col, v) / In(col, [v...]) / Between(col, lo, hi) → True（正向限制）
+        - And：任一子句限制即成立（AND 链中任意一支都能保证子集）
+        - Or：所有子句都限制才成立（未限制分支会让整条 OR 通过越界行）
+        - Ne / NotIn / IsNull / IsNotNull / Not / 单边范围 → False（不能证明）
+        - 其它列的子句 → 不影响本列
+    """
+    return filter_constraint_status(f, column) == "positive"
+
+
+def filter_constraint_status(f: Filter | None, column: str) -> str:
+    """报告 ``column`` 在 filter 里的约束强度：absent / positive / weak。
+
+    - ``absent``   ：列未出现在 AST 中（没有施加任何约束）
+    - ``positive`` ：存在等值/包含/区间字面约束，``filter_column_values`` 可取到
+      被允许的值集合（结果 ⊆ 该集合可验证）
+    - ``weak``     ：列被提及但无法证明子集（Ne/NotIn/IsNull/IsNotNull/Not/
+      OR 部分分支）——strict 下禁止作为契约维度 gate 的依据
+    """
+    if f is None:
+        return "absent"
+    if isinstance(f, ColumnFilter):
+        if f.column != column:
+            return "absent"
+        if isinstance(f, (Eq, In, Between)):
+            return "positive"
+        return "weak"
+    if isinstance(f, (And, Or)):
+        statuses = [filter_constraint_status(c, column) for c in f.children]
+        if isinstance(f, And):
+            # AND：任一分支 positive 即成立
+            if "positive" in statuses:
+                return "positive"
+            if any(s != "absent" for s in statuses):
+                return "weak"
+            return "absent"
+        # OR：必须所有分支都 positive，否则未限制分支可绕过
+        if all(s == "positive" for s in statuses):
+            return "positive"
+        if any(s != "absent" for s in statuses):
+            return "weak"
+        return "absent"
+    if isinstance(f, Not):
+        return "weak" if filter_constraint_status(f.child, column) != "absent" else "absent"
+    return "absent"
+
+
 def filter_column_values(f: Filter | None) -> dict[str, set[Any]]:
     """收集 AST 里每个列的「候选取值」集合（#9 allowed_filter_values 值校验用）。
 

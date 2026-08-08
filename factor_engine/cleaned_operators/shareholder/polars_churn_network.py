@@ -60,7 +60,7 @@ _register("holder_pledge_change", "质押率变化（Polars）。", ["pledge_rat
           lambda pr, lag=1: pr.with_columns([(pr[c] - pr[c].shift(int(lag))).alias(c) for c in _cols(pr)]))
 _register("holder_common_holding_peer_return", "共同持股 peer 收益（Polars）。", ["peer_return", "own_return", "overlap"],
           lambda pr, o, ov: _three(pr, o, ov, lambda p, r, l: p - l * r))
-_register("holder_peer_return_breadth", "股东跨股票 breadth（Polars）。", ["breadth", "scale"],
+_register("holder_peer_return_breadth", "股东跨股票 breadth（Polars；scale 纯乘法参数，不改变 rank 排序，移除搜索面）。", ["breadth"],
           lambda b, scale=1.0: b.with_columns([(b[c] * float(scale)).alias(c) for c in _cols(b)]))
 _register("holder_shareholder_network_centrality", "网络中心度（Polars）。", ["degree", "total"],
           lambda d, t: _binary(d, t, _safe_div))
@@ -98,9 +98,15 @@ def _hhi(*frames):
     base, cols, arrays = _ranked(*frames)
     out = []
     for c in cols:
-        total = sum(f[c].fill_null(0.0) for f in arrays)
+        filled = [f[c].fill_null(0.0) for f in arrays]
+        total = sum(filled)
+        # P1-135: NaN (unknown pledge/freeze) must not be zero-filled back to 0;
+        # an unknown share makes the top-10 HHI undefined -> fail closed to null.
+        any_unknown = pl.any_horizontal([f[c].is_null() for f in arrays])
+        shares = [f / total for f in filled]
+        hhi = sum((s * s) for s in shares)
         out.append(
-            ((sum(f[c].fill_null(0.0) / total for f in arrays).pow(2))).alias(c)
+            pl.when((~any_unknown) & (total > 0)).then(hhi).otherwise(None).alias(c)
         )
     return base.with_columns(out)
 
@@ -115,8 +121,10 @@ def _pledged_count(*frames):
     base, cols, arrays = _ranked(*frames)
     out = []
     for c in cols:
+        # P1-135: NaN (unknown pledge) must not be counted as a non-pledger.
+        any_unknown = pl.any_horizontal([f[c].is_null() for f in arrays])
         cnt = sum((f[c].fill_null(0.0) > 0).cast(pl.Float64) for f in arrays)
-        out.append(cnt.alias(c))
+        out.append(pl.when(~any_unknown).then(cnt).otherwise(None).alias(c))
     return base.with_columns(out)
 
 
@@ -148,13 +156,20 @@ def _np_slope(vals):
     import numpy as np
 
     v = np.asarray(vals, dtype=float)
-    v = v[np.isfinite(v)]
+    finite_mask = np.isfinite(v)
+    t = np.arange(v.shape[0], dtype=float)[finite_mask]
+    v = v[finite_mask]
     if len(v) < 3:
         return float("nan")
-    t = np.arange(len(v), dtype=float)
-    if np.var(t) <= _EPS:
+    # P1-136: centred dot product (population cov/var, SAME ddof) — the old
+    # np.cov(ddof=1)/np.var(ddof=0) inflated the slope by n/(n-1).
+    tb = float(np.mean(t))
+    vb = float(np.mean(v))
+    var = float(np.mean((t - tb) ** 2))
+    if var <= _EPS:
         return float("nan")
-    return float(np.cov(t, v)[0, 1] / np.var(t))
+    cov = float(np.mean((t - tb) * (v - vb)))
+    return float(cov / var)
 
 
 def _slope_no_snapshot(concentration, window=8, snapshot_date=None):

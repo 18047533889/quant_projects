@@ -393,6 +393,8 @@ class KAMA(SeriesOperator):
     )
 
     def _calculate_series(self, close: pd.DataFrame, window: int = 10, **kwargs) -> pd.DataFrame:
+        missing_policy = kwargs.get("missing_policy", "interrupt")
+        max_gap = kwargs.get("max_gap", 0)
         fast_sc = 2 / (2 + 1)
         slow_sc = 2 / (30 + 1)
         direction = (close - close.shift(window)).abs()
@@ -400,15 +402,29 @@ class KAMA(SeriesOperator):
         er = direction / volatility.replace(0, np.nan)
         sc = (er * (fast_sc - slow_sc) + slow_sc) ** 2
         result = close.copy()
+        gap_max = max(int(max_gap), 0)
         for col in close.columns:
             kama_vals = close[col].values.copy()
             sc_vals = sc[col].values if isinstance(sc, pd.DataFrame) else sc.values
+            gap = 0
             for i in range(1, len(kama_vals)):
-                if np.isnan(kama_vals[i]):
-                    kama_vals[i] = kama_vals[i - 1]
-                else:
-                    prev = kama_vals[i - 1] if not np.isnan(kama_vals[i - 1]) else kama_vals[i]
-                    kama_vals[i] = prev + sc_vals[i] * (kama_vals[i] - prev)
+                if not np.isfinite(kama_vals[i]):
+                    # Audit 13.6 unified missing-state policy: a missing price
+                    # must not silently bridge a suspension / data gap.
+                    # ``interrupt`` (default) -> NaN and break the recursion
+                    # (next finite bar re-seeds); ``carry`` bridges at most
+                    # ``max_gap`` bars with the last finite value, then
+                    # interrupts.
+                    gap += 1
+                    prev = kama_vals[i - 1]
+                    if missing_policy == "carry" and gap <= gap_max and np.isfinite(prev):
+                        kama_vals[i] = prev
+                    else:
+                        kama_vals[i] = np.nan
+                    continue
+                gap = 0
+                prev = kama_vals[i - 1] if np.isfinite(kama_vals[i - 1]) else kama_vals[i]
+                kama_vals[i] = prev + sc_vals[i] * (kama_vals[i] - prev)
             result[col] = kama_vals
         return result
 

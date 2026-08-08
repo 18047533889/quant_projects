@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 import threading
 import time
 import uuid
@@ -167,45 +168,63 @@ class DataAccessStore:
 
     @contextmanager
     def _dataset_mutation(self, dataset: str, **params: Any):
-        """#P0-27 DatasetTransaction：metadata 只在 COMMIT 后前进。
+        """#P0-27/#10 DatasetTransaction：显式 PREPARED/COMMITTED/ABORTED。
 
-        - **COMMITTED**（body 正常返回）：bump source_epoch + 重建 manifest，
-          ``manifest_built_epoch`` 追上 → 数据源成为可信任的新 generation。
-        - **ABORTED**（body 抛异常）：也 bump source_epoch（部分写入也必须失效
-          旧 manifest，防止读路径拿旧 min/max 裁剪），但**不重建**——manifest
-          保持 dirty，读路径安全回退 glob；失败态绝不当作新版本。
+        顺序（#9）：
+            1. **PREPARED**（进入 body 前）：先 bump source_epoch——**mark
+               generation dirty 在 mutate 之前**。读者立刻判旧，不给「数据已改、
+               旧 epoch 仍短暂有效、缓存继续命中旧结果」的窗口。
+            2. body 正常返回 → **COMMITTED**：rebuild manifest，
+               ``manifest_built_epoch`` 追上 → 数据源成为可信任的新 generation。
+            3. body 抛异常 → **ABORTED**：**绝不 build fresh manifest**（#10）——
+               失败后的部分状态不能当成新版本；manifest 保持 dirty，读路径安全
+               回退 glob。
 
         业务代码不再自己 ``touch_manifest_epoch``。
         """
-        committed = False
-        try:
-            yield
-            committed = True
-        except Exception:
-            raise
-        finally:
-            from data_access.read.manifest import (
-                bump_source_epoch,
-                manifest_root_for_paths,
-                rebuild_manifest_for_dataset,
-            )
+        from data_access.read.manifest import (
+            bump_source_epoch,
+            manifest_root_for_paths,
+            rebuild_manifest_for_dataset,
+        )
 
-            try:
-                ds = self._registry.get(dataset)
-            except Exception:
-                return
+        state = "PREPARED"
+        # 关键：finally 里**绝不能 `return`**——body 抛出的异常正在传播时，
+        # finally 里的 return 会把它静默吞掉。这里只做 guard，让异常自然传播。
+        active_exc = sys.exc_info()[1]
+
+        # #9 mutate 前置失效：先 mark dirty，正文还没写、旧 generation 已不可信
+        try:
+            ds = self._registry.get(dataset)
+        except Exception:
+            if active_exc is None:
+                raise
+            ds = None
+        if ds is not None:
             try:
                 raw_paths = self._resolve_raw_paths(
                     ds, time_range=None, params=dict(params)
                 )
+                root = manifest_root_for_paths(raw_paths)
+                if root is not None:
+                    bump_source_epoch(root)
             except Exception:
-                raw_paths = []
-            root = manifest_root_for_paths(raw_paths)
-            if root is None:
-                return
-            new_epoch = bump_source_epoch(root)
-            if new_epoch is not None and committed:
-                rebuild_manifest_for_dataset(self, dataset, **params)
+                if active_exc is None:
+                    raise
+        try:
+            yield
+            state = "COMMITTED"
+        except Exception:
+            state = "ABORTED"
+            raise
+        finally:
+            # 只有 COMMITTED 才允许 metadata 追平 source generation（#10）
+            if state == "COMMITTED" and ds is not None:
+                try:
+                    rebuild_manifest_for_dataset(self, dataset, **params)
+                except Exception:
+                    if sys.exc_info()[1] is None:
+                        raise
 
     def set_calendar(self, market: str, calendar: Any) -> None:
         """注入一个市场的交易日历（MarketCalendar），供 session availability 使用。
@@ -434,15 +453,17 @@ class DataAccessStore:
 
         满足途径（任一即可）：
             1. params_by_dataset 里带该 key（路径参数）
-            2. 全局 filters 或 filters_by_dataset 的过滤 AST 里覆盖该列
-               （列过滤，如 timeframe='quarterly'）——#42 扩展
+            2. 全局 filters 或 filters_by_dataset 的过滤 AST **真正限制**该列
+               （#14：不是「列名出现在条件里」——``timeframe != 'quarterly'``、
+               ``timeframe IS NOT NULL``、``timeframe='quarterly' OR price>0``
+               都不能证明结果落在所需维度，必须走 PredicateConstraint）。
         """
-        from data_access.read.predicate_ast import filter_columns, parse_filters
+        from data_access.read.predicate_ast import filter_restricts_column, parse_filters
 
         missing: list[tuple[str, str]] = []
-        global_cols = filter_columns(parse_filters(filters))
-        per_ds_cols = {
-            str(ds): filter_columns(parse_filters(f))
+        global_ast = parse_filters(filters)
+        per_ds_ast = {
+            str(ds): parse_filters(f)
             for ds, f in (filters_by_dataset or {}).items()
         }
         for f in fields_meta:
@@ -451,7 +472,7 @@ class DataAccessStore:
                 continue
             ds = getattr(f, "dataset", None)
             effective = dict((params_by_dataset or {}).get(ds, {}))
-            filter_cols = set(global_cols) | set(per_ds_cols.get(ds, set()))
+            ds_ast = per_ds_ast.get(ds)
             for key in required:
                 if key in effective:
                     continue
@@ -459,8 +480,10 @@ class DataAccessStore:
                 lower_key = str(key).lower()
                 if any(str(k).lower() == lower_key for k in effective):
                     continue
-                # filters / filters_by_dataset 里按列覆盖
-                if any(str(c).lower() == lower_key for c in filter_cols):
+                # filters / filters_by_dataset 里必须**真正约束**该列
+                if filter_restricts_column(global_ast, str(key)):
+                    continue
+                if filter_restricts_column(ds_ast, str(key)):
                     continue
                 missing.append((getattr(f, "logical_name", "?"), str(key)))
         if not missing:
@@ -617,12 +640,24 @@ class DataAccessStore:
 
         只对 catalog 字段挂到的 COS 契约数据集生效；校验 params 里的路径参数值
         与 filters/filters_by_dataset 里过滤列的字面值。production fail-closed。
+
+        #15：``filter_column_values`` 只抽 Eq/In/Between 字面量——对 Ne/NotIn/
+        IsNotNull/复杂 Not/Or 返回空集合，旧代码「跳过校验」，等于放行越界值。
+        现在用 ``filter_constraint_status`` 区分三种：
+            absent   → 未约束该列，跳过（合法）
+            positive → 检查提取值 ⊆ allowed
+            weak     → 无法证明 result ⊆ allowed → production/strict 拒绝
         """
         from data_access.cos_contract import get_cos_contract
-        from data_access.read.predicate_ast import filter_column_values, parse_filters
+        from data_access.read.predicate_ast import (
+            filter_column_values,
+            filter_constraint_status,
+            parse_filters,
+        )
 
         problems: list[tuple[str, str, list[Any]]] = []
         seen: set[str] = set()
+        global_ast = parse_filters(filters)
         for f in fields_meta:
             ds = getattr(f, "dataset", None)
             if not ds:
@@ -635,14 +670,7 @@ class DataAccessStore:
                 continue
             seen.add(key)
             effective = dict((params_by_dataset or {}).get(ds, {}))
-            col_vals: dict[str, set[Any]] = {}
-            for c, vv in filter_column_values(parse_filters(filters)).items():
-                col_vals.setdefault(c, set()).update(vv)
-            for dsf, ff in (filters_by_dataset or {}).items():
-                if dsf != ds:
-                    continue
-                for c, vv in filter_column_values(parse_filters(ff)).items():
-                    col_vals.setdefault(c, set()).update(vv)
+            per_ds_ast = parse_filters((filters_by_dataset or {}).get(ds))
             for c, choices in contract.allowed_filters.items():
                 if c in effective:
                     pv = effective[c]
@@ -650,10 +678,21 @@ class DataAccessStore:
                     bad = [v for v in vals if v not in choices]
                     if bad:
                         problems.append((ds, c, bad))
-                if c in col_vals:
-                    bad = [v for v in col_vals[c] if v not in choices]
+                # 全局过滤（锚点）与 per-dataset 过滤都看；任一 weak 即不可证明
+                g_status = filter_constraint_status(global_ast, str(c))
+                p_status = filter_constraint_status(per_ds_ast, str(c))
+                if g_status == "positive" or p_status == "positive":
+                    vals: set[Any] = set()
+                    for src in (global_ast, per_ds_ast):
+                        for _c, _v in filter_column_values(src).items():
+                            if _c == str(c):
+                                vals |= set(_v)
+                    bad = [v for v in vals if v not in choices]
                     if bad:
                         problems.append((ds, c, bad))
+                elif g_status == "weak" or p_status == "weak":
+                    # #15 无法证明子集：Ne/NotIn/IsNotNull/Or 部分分支等
+                    problems.append((ds, c, ["<unprovable>"]))
         if not problems:
             return
         detail = "; ".join(f"{ds}.{c}={bad!r}" for ds, c, bad in problems)
@@ -877,6 +916,7 @@ class DataAccessStore:
         mode: str = "auto",
         allow_sparse: bool = False,
         allow_effective_time: bool = False,
+        physical_scope: str | Sequence[str] | None = None,
     ) -> ReadResult:
         """按已解析的 ``Dataset`` 对象执行一次读（read_result / read_uri 共用）。"""
         # #5 统一读前语义门禁：temporal contract + event cutoff + required_filters
@@ -896,12 +936,23 @@ class DataAccessStore:
         validate_query_request(
             budget, columns=list(columns) if columns else None, time_range=time_range
         )
-        paths = self._prepare_dataset_read(
-            ds,
-            time_range=time_range,
-            params=params,
-            instrument_filter=instrument_filter,
-        )
+        if physical_scope is not None:
+            scope = (
+                list(physical_scope)
+                if isinstance(physical_scope, (list, tuple))
+                else [str(physical_scope)]
+            )
+            # #6/#17：精确 URI scope 冻结一次，execution 与 snapshot 消费同一份
+            paths = self._expand_glob_paths(scope)
+        else:
+            paths = self._prepare_dataset_read(
+                ds,
+                time_range=time_range,
+                params=params,
+                instrument_filter=instrument_filter,
+            )
+            # #6 冻结 glob → 精确文件列表：DuckDB 不再二次 expand（TOCTOU）
+            paths = self._expand_glob_paths(paths)
         files = build_file_manifest(paths)
         self._enforce_scan_files(budget, paths, files=files)
         self._ensure_schema(ds, paths, params, files=files)
@@ -1083,6 +1134,7 @@ class DataAccessStore:
         mode: str = "auto",
         allow_sparse: bool = False,
         allow_effective_time: bool = False,
+        physical_scope: str | Sequence[str] | None = None,
         **params: Any,
     ) -> Iterator[pa.RecordBatch]:
         """流式读取（PR7）：返回一个 Arrow RecordBatch 生成器。
@@ -1129,12 +1181,21 @@ class DataAccessStore:
         validate_query_request(
             budget, columns=list(columns) if columns else None, time_range=time_range
         )
-        paths = self._prepare_dataset_read(
-            ds,
-            time_range=time_range,
-            params=params,
-            instrument_filter=instrument_filter,
-        )
+        if physical_scope is not None:
+            scope = (
+                list(physical_scope)
+                if isinstance(physical_scope, (list, tuple))
+                else [str(physical_scope)]
+            )
+            paths = self._expand_glob_paths(scope)
+        else:
+            paths = self._prepare_dataset_read(
+                ds,
+                time_range=time_range,
+                params=params,
+                instrument_filter=instrument_filter,
+            )
+            paths = self._expand_glob_paths(paths)
         files = build_file_manifest(paths)
         self._enforce_scan_files(budget, paths, files=files)
         self._ensure_schema(ds, paths, params, files=files)
@@ -1225,6 +1286,7 @@ class DataAccessStore:
         mode: str = "auto",
         allow_sparse: bool = False,
         allow_effective_time: bool = False,
+        physical_scope: str | Sequence[str] | None = None,
         **params: Any,
     ) -> tuple[Any, list[str]]:
         """内部：构建 Polars LazyFrame，同时返回已解析 paths（避免 scan 二次准备）。"""
@@ -1253,35 +1315,66 @@ class DataAccessStore:
         validate_query_request(
             budget, columns=list(columns) if columns else None, time_range=time_range
         )
-        paths = self._prepare_dataset_read(
-            ds,
-            time_range=time_range,
-            params=params,
-            instrument_filter=instrument_filter,
-        )
+        if physical_scope is not None:
+            scope = (
+                list(physical_scope)
+                if isinstance(physical_scope, (list, tuple))
+                else [str(physical_scope)]
+            )
+            paths = self._expand_glob_paths(scope)
+        else:
+            paths = self._prepare_dataset_read(
+                ds,
+                time_range=time_range,
+                params=params,
+                instrument_filter=instrument_filter,
+            )
+            # #6/#7 冻结一次：LazyFrame 绑定精确文件清单，collect 前不会因新文件
+            # 而读到 snapshot 没记录的数据（ScanHandle.collect 再 revalidate mtime）。
+            paths = self._expand_glob_paths(paths)
         # scan_polars 也走 schema 自检：发现声明漂移尽早报。
         files = build_file_manifest(paths)
         self._enforce_scan_files(budget, paths, files=files)
         self._ensure_schema(ds, paths, params, files=files)
 
-        # pl.scan_parquet 可以接 list[str]，也支持 glob。我们传 list 给它。
-        # 跨年份列不一致时靠 union_by_name：
+        # #29 按 FormatSpec 选 Polars scan 函数：旧代码一律 scan_parquet，
+        # CSV/TSV/JSONL 数据集如果路由到 Polars 会被 scan_parquet 处理报错。
+        _fmt = str(getattr(ds, "format", "parquet") or "parquet").strip().lower()
+        scan_kwargs: dict[str, Any] = {}
+        if _fmt in {"parquet", "pq"}:
+            # hive_partitioning 只有 parquet 扫描支持（scan_csv/scan_ndjson 没有
+            # 这个参数，传了会 TypeError）
+            scan_kwargs["hive_partitioning"] = ds.hive_partitioning
+            _scan = pl_mod.scan_parquet
+        elif _fmt in {"csv"}:
+            _scan = pl_mod.scan_csv
+        elif _fmt in {"tsv", "tab"}:
+            _scan = lambda p, **kw: pl_mod.scan_csv(p, separator="\t", **kw)  # noqa: E731
+        elif _fmt in {"jsonl", "ndjson", "json"}:
+            _scan = pl_mod.scan_ndjson
+        else:
+            _scan = pl_mod.scan_parquet
+        # pl.scan_* 可以接 list[str]，也支持 glob。我们传 list 给它。
+        # 跨年份列不一致时靠 union_by_name（只对 parquet 有意义；scan_csv/
+        # scan_ndjson 没有 missing_columns/allow_missing_columns 参数）：
         #   - Polars 1.30+：参数是 missing_columns='insert'/'raise'，老的 allow_missing_columns 被弃用
         #   - Polars 1.28 ~ 1.29：参数名是 allow_missing_columns
         # 用 try/except 兜两边，避免硬编码版本号判断。
-        scan_kwargs: dict[str, Any] = {"hive_partitioning": ds.hive_partitioning}
-        try:
-            lf = pl_mod.scan_parquet(
-                paths,
-                missing_columns="insert" if ds.union_by_name else "raise",
-                **scan_kwargs,
-            )
-        except TypeError:
-            lf = pl_mod.scan_parquet(
-                paths,
-                allow_missing_columns=ds.union_by_name,
-                **scan_kwargs,
-            )
+        if _fmt in {"parquet", "pq"}:
+            try:
+                lf = _scan(
+                    paths,
+                    missing_columns="insert" if ds.union_by_name else "raise",
+                    **scan_kwargs,
+                )
+            except TypeError:
+                lf = _scan(
+                    paths,
+                    allow_missing_columns=ds.union_by_name,
+                    **scan_kwargs,
+                )
+        else:
+            lf = _scan(paths, **scan_kwargs)
 
         # 仅选列：给 Polars optimizer 做 column pushdown
         # time/instrument 列如果 columns 里没包含但有过滤条件，先留着让 filter
@@ -1761,6 +1854,9 @@ class DataAccessStore:
                 query_budget=query_budget,
                 params=kwargs,
                 normalize_units=normalize_units,
+                # #17 精确 URI 作为 physical scope：Contract 只提供语义门禁，
+                # 物理读取范围仍限定调用方指定的文件——绝不读整个 dataset glob。
+                physical_scope=uri,
             )
         ds = self._uri_dataset(
             uri,
@@ -1789,42 +1885,47 @@ class DataAccessStore:
     def _resolve_registered_dataset_for_uri(self, uri: str, fmt: str) -> str | None:
         """#6 production read_uri：URI → 唯一已登记数据集（复用其 Contract）。
 
-        匹配规则：URI 的绝对路径必须落在数据集的 root / static_root 下，且格式
-        一致。多个候选 → 返回 None（调用方拒绝，禁止 YAML 顺序决定语义）。
+        匹配规则：URI 必须落在数据集的 root / static_root 下，且格式一致。
+        多个候选 → 返回 None（调用方拒绝，禁止 YAML 顺序决定语义）。
+
+        #18：``s3://``/``cos://`` 对象 URI 不能用 ``pathlib.Path``（那是本地
+        文件系统语义，``Path("s3://bucket/key")`` 会被当本地路径解析）——按
+        字符串前缀匹配。本地路径才走 Path + resolve。
+        #19：格式匹配用 ``fmt == auto or fmt == dformat``。旧代码
+        ``fmt not in {"auto", dformat, "parquet"}`` 里 ``"parquet"`` 恒在集合
+        中——``read_uri(..., format="parquet")`` 会让 CSV 数据集也成候选。
         """
         from pathlib import Path
 
         from data_access.registry import ParametricDataset, StaticDataset
 
-        p = Path(uri).expanduser()
-        try:
-            resolved = p.resolve()
-        except OSError:
-            resolved = p
+        is_object = uri.startswith("s3://") or uri.startswith("cos://")
         candidates: list[str] = []
         for name in self._registry.names():
             dsobj = self._registry.get(name)
             dformat = str(getattr(dsobj, "format", "parquet")).lower()
-            if fmt not in {"auto", dformat, "parquet"}:
+            if dformat in {"pq"}:
+                dformat = "parquet"
+            if fmt != "auto" and fmt != dformat:
                 continue
             if isinstance(dsobj, StaticDataset):
                 root = getattr(dsobj, "root", None)
-                if root is None:
-                    continue
-                try:
-                    resolved.relative_to(Path(root).resolve())
-                except (ValueError, OSError):
-                    continue
-                candidates.append(name)
             elif isinstance(dsobj, ParametricDataset):
-                static = getattr(dsobj, "static_root", None)
-                if static is None:
+                root = getattr(dsobj, "static_root", None)
+            else:
+                continue
+            if root is None:
+                continue
+            if is_object:
+                # 对象 URI：字符串前缀（cos://bucket/prefix 或 s3://bucket/prefix）
+                if not uri.startswith(str(root)):
                     continue
+            else:
                 try:
-                    resolved.relative_to(Path(static).resolve())
+                    Path(uri).expanduser().resolve().relative_to(Path(root).resolve())
                 except (ValueError, OSError):
                     continue
-                candidates.append(name)
+            candidates.append(name)
         return candidates[0] if len(candidates) == 1 else None
 
     # ---- 集成层：DataRequest/ReadPlan / read_joined / RelationHandle ----
@@ -2310,7 +2411,8 @@ class DataAccessStore:
                 anchor = next(iter(dsets))
             else:
                 raise ValidationError("多数据集 DataRequest 必须显式指定 anchor")
-        request.anchor = anchor
+        # #4 不写回 request.anchor：plan() 不应把调用方的请求改掉（编译后
+        # 调用方还能用原 request 做别的事；ReadPlan.anchor 由 datasets[0] 兜底）。
 
         per_ds: dict[str, list[str]] = {}
         for f in fields:
@@ -2341,8 +2443,12 @@ class DataAccessStore:
         scan_costs: dict[str, Any] = {}
         storage: dict[str, str] = {}
         snapshot_info: dict[str, dict[str, Any]] = {}
+        plan_snapshot_tokens: dict[str, dict[str, Any]] = {}
         for ds in datasets:
             dsobj = self._registry.get(ds)
+            # #27 plan() 按每 dataset 传 source_params：factor lake / model output
+            # 这类 ParametricDataset 不传参数会得到错误成本 / 无 manifest。
+            ds_params = request.dataset_params(ds)
             try:
                 cost = estimate_scan_cost(
                     self,
@@ -2350,15 +2456,19 @@ class DataAccessStore:
                     columns=per_ds.get(ds) or None,
                     time_range=request.time_range,
                     instrument_filter=request.instruments,
+                    **ds_params,
                 )
             except Exception:
                 cost = None
             scan_costs[ds] = cost
             storage[ds] = storage_description(dsobj)
             try:
-                snapshot_info[ds] = self.manifest_version(ds)
+                token = self.manifest_version(ds, **ds_params)
+                snapshot_info[ds] = token
+                plan_snapshot_tokens[ds] = dict(token)
             except Exception:
                 snapshot_info[ds] = {"has_manifest": False}
+                plan_snapshot_tokens[ds] = {"has_manifest": False}
 
         engine, result = request.engine, request.result
         if len(datasets) > 1:
@@ -2387,6 +2497,20 @@ class DataAccessStore:
             scan_costs=scan_costs,
         )
 
+        # #4 编译期冻结请求语义（不可变）：execute 只消费 compiled，不读活的 req。
+        from data_access.read.data_request import compile_data_request
+
+        compiled = compile_data_request(request)
+        snapshot_policy = compiled.snapshot_policy
+        if snapshot_policy not in {
+            "latest",
+            "fail_if_changed",
+            "pin",
+        }:
+            raise ValidationError(
+                f"snapshot_policy 必须是 latest|fail_if_changed|pin，收到 {snapshot_policy!r}"
+            )
+
         return ReadPlan(
             request=request,
             datasets=datasets,
@@ -2403,6 +2527,9 @@ class DataAccessStore:
             universe=request.universe,
             physical=physical,
             join_specs_effective=effective_specs,
+            compiled=compiled,
+            snapshot_policy=snapshot_policy,
+            plan_snapshot_tokens=plan_snapshot_tokens,
             _store=self,
         )
 
@@ -2557,6 +2684,23 @@ class DataAccessStore:
             token = self.manifest_version(dataset, **params)
         except Exception:
             token = None
+        # #25 无权威 source version → 不缓存：manifest 拿不到就给弱 token 仍缓存
+        # 的话，底层数据被外部系统修改（不经 DataAccess epoch）缓存只能等 TTL。
+        # 这里没有 authoritative manifest（不存在 / 不 fresh）就完全跳过缓存。
+        if token is None or not token.get("has_manifest") or not token.get("fresh"):
+            return self.read_arrow(
+                dataset,
+                columns=columns,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                filters=filters,
+                limit=limit,
+                mode=mode,
+                allow_sparse=allow_sparse,
+                allow_effective_time=allow_effective_time,
+                normalize_units=normalize_units,
+                **params,
+            )
         try:
             from data_access.read.semantic_catalog import get_semantic_catalog
 
@@ -3587,8 +3731,12 @@ class DataAccessStore:
         mode: str = "auto",
         allow_sparse: bool = False,
         allow_effective_time: bool = False,
+        physical_scope: str | Sequence[str] | None = None,
     ) -> ReadHandle:
-        """统一 read 编排：engine 路由 + 结果形态。"""
+        """统一 read 编排：engine 路由 + 结果形态。
+
+        ``physical_scope``（#17）：read_uri 精确 URI scope，透传给各引擎。
+        """
         from data_access.read.formats import format_adapter_for_dataset
         from data_access.read.read_handle import ReadHandle
 
@@ -3640,6 +3788,7 @@ class DataAccessStore:
                 mode=mode,
                 allow_sparse=allow_sparse,
                 allow_effective_time=allow_effective_time,
+                physical_scope=physical_scope,
             )
         if engine == "polars":
             budget = self._resolve_read_budget(ds, query_budget)
@@ -3653,6 +3802,7 @@ class DataAccessStore:
                 mode=mode,
                 allow_sparse=allow_sparse,
                 allow_effective_time=allow_effective_time,
+                physical_scope=physical_scope,
                 **params,
             )
             snapshot = self._build_snapshot(
@@ -3701,15 +3851,26 @@ class DataAccessStore:
                 mode=mode,
                 allow_sparse=allow_sparse,
                 allow_effective_time=allow_effective_time,
+                physical_scope=physical_scope,
                 **params,
             )
             try:
-                stream_paths = self._prepare_dataset_read(
-                    ds,
-                    time_range=time_range,
-                    params=params,
-                    instrument_filter=instrument_filter,
-                )
+                if physical_scope is not None:
+                    scope = (
+                        list(physical_scope)
+                        if isinstance(physical_scope, (list, tuple))
+                        else [str(physical_scope)]
+                    )
+                    stream_paths = self._expand_glob_paths(scope)
+                else:
+                    stream_paths = self._expand_glob_paths(
+                        self._prepare_dataset_read(
+                            ds,
+                            time_range=time_range,
+                            params=params,
+                            instrument_filter=instrument_filter,
+                        )
+                    )
                 stream_snapshot = self._build_snapshot(
                     dataset=dataset, ds=ds, paths=stream_paths, params=params
                 )
@@ -3743,6 +3904,7 @@ class DataAccessStore:
             mode=mode,
             allow_sparse=allow_sparse,
             allow_effective_time=allow_effective_time,
+            physical_scope=physical_scope,
         )
         if normalize_units and columns and rr.table is not None:
             rr = self._normalize_read_result(
@@ -3767,6 +3929,7 @@ class DataAccessStore:
         mode: str = "auto",
         allow_sparse: bool = False,
         allow_effective_time: bool = False,
+        physical_scope: str | Sequence[str] | None = None,
     ) -> ReadHandle:
         """PyArrow 引擎（arrow/feather 格式）：直读文件 + pc 表达式过滤。"""
         # #5 PyArrow 引擎同样强制 temporal contract + required_filters + allowed values
@@ -3791,12 +3954,22 @@ class DataAccessStore:
         validate_query_request(
             budget, columns=list(columns) if columns else None, time_range=time_range
         )
-        paths = self._prepare_dataset_read(
-            ds,
-            time_range=time_range,
-            params=params,
-            instrument_filter=instrument_filter,
-        )
+        if physical_scope is not None:
+            scope = (
+                list(physical_scope)
+                if isinstance(physical_scope, (list, tuple))
+                else [str(physical_scope)]
+            )
+            paths = self._expand_glob_paths(scope)
+        else:
+            paths = self._prepare_dataset_read(
+                ds,
+                time_range=time_range,
+                params=params,
+                instrument_filter=instrument_filter,
+            )
+            # #6 冻结 glob → 精确文件列表，Scanner 与 snapshot 读到完全一致
+            paths = self._expand_glob_paths(paths)
         files = build_file_manifest(paths)
         self._enforce_scan_files(budget, paths, files=files)
 
@@ -5261,6 +5434,46 @@ class DataAccessStore:
                         )
                         return self._authorize_read_paths(pruned)
         return paths
+
+    @staticmethod
+    def _expand_glob_paths(paths: Sequence[str]) -> list[str]:
+        """把 glob 路径展开成**精确文件列表**（#6 snapshot 与执行读到完全一致）。
+
+        snapshot 构建后、DuckDB 真正展开 glob 前若新增 parquet，旧流程返回数据
+        含新文件但 snapshot 没记录——lineage 不真实。这里在 snapshot 构建的同时
+        展开一次，之后读路径只消费这份 frozen list，不再二次 mutable glob。
+
+        - 本地 glob（含 ``*``/``?``/``[``）→ glob.glob(recursive=True) 排序展开
+        - 展开为空 → 保留原 pattern（调用方按空分支处理，行为与旧版一致）
+        - s3:// / cos:// 无法本地展开 → 原样保留（远程由 etag/version_id 表达版本）
+        """
+        import glob as glob_mod
+
+        frozen: list[str] = []
+        seen: set[str] = set()
+        for pattern in paths:
+            p = str(pattern)
+            if p.startswith("s3://") or p.startswith("cos://"):
+                if p not in seen:
+                    seen.add(p)
+                    frozen.append(p)
+                continue
+            if not any(ch in p for ch in "*?["):
+                if p not in seen:
+                    seen.add(p)
+                    frozen.append(p)
+                continue
+            expanded = sorted(glob_mod.glob(p, recursive=True))
+            if not expanded:
+                if p not in seen:
+                    seen.add(p)
+                    frozen.append(p)
+                continue
+            for fp in expanded:
+                if fp not in seen:
+                    seen.add(fp)
+                    frozen.append(fp)
+        return frozen
 
     def _prepare_dataset_read(
         self,

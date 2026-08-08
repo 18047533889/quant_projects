@@ -94,6 +94,13 @@ def _profile_slow_query_enabled() -> bool:
     }
 
 
+def _production_mode() -> bool:
+    fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
+    if fe == "production":
+        return True
+    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
+
+
 def maybe_log_slow_query_plan(
     engine: Any,
     *,
@@ -131,7 +138,7 @@ def maybe_log_slow_query_plan(
                 elapsed_ms=elapsed_ms,
                 extra={"sql_op": op, "plan": plan[:4000]},
             )
-        if _profile_slow_query_enabled():
+        if _profile_slow_query_enabled() and not _production_mode():
             profile_fn = getattr(engine, "profile_analyze", None)
             if callable(profile_fn):
                 profile = profile_fn(sql, params)

@@ -65,6 +65,11 @@ class TsCusumPressure(SeriesOperator):
     ) -> pd.DataFrame:
         w = max(2, int(reference_window))
         k = float(drift)
+        # P1-71: a negative drift would *accelerate* the accumulation of both
+        # S+ and S- (it appears in both update laws) instead of being the
+        # dead-zone allowance the docstring promises — reject it explicitly.
+        if not np.isfinite(k) or k < 0.0:
+            raise ValueError("drift must be a finite number >= 0")
         mp = int(min_periods) if min_periods is not None else max(5, w // 2)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -89,7 +94,16 @@ class TsCusumPressure(SeriesOperator):
                     continue
                 med = float(np.median(valid))
                 mad = float(np.median(np.abs(valid - med)))
-                scale = 1.4826 * mad + _EPS
+                # P1-71: a zero-spread baseline (robust scale == 0) makes the
+                # standardised shock z = (x - med)/scale undefined.  Dividing
+                # by the epsilon floor produced enormous bogus pressure.  A
+                # degenerate window must emit NaN and re-baseline.
+                if mad <= _EPS:
+                    out[row, col] = np.nan
+                    sp = 0.0
+                    sm = 0.0
+                    continue
+                scale = 1.4826 * mad
                 z = (float(xt) - med) / scale
                 sp = max(0.0, sp + z - k)
                 sm = min(0.0, sm + z + k)
@@ -186,7 +200,11 @@ class StateEwmIf(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         hl = float(half_life)
-        alpha = 1.0 - np.exp(-np.log(2.0) / hl) if hl > 0.0 else 1.0
+        # P1-72: half_life <= 0 silently collapsed to alpha == 1 (memory wiped
+        # every update) — that is a degenerate EWM, not a meaningful parameter.
+        if not np.isfinite(hl) or hl <= 0.0:
+            raise ValueError("half_life must be a finite number > 0")
+        alpha = 1.0 - np.exp(-np.log(2.0) / hl)
         x, condition = _aligned(x, condition)
         xv = x.to_numpy(dtype=float)
         cv = condition.to_numpy(dtype=float)

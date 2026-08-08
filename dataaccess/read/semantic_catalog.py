@@ -389,13 +389,15 @@ class SemanticFieldCatalog:
         if len(ambiguous) > 1:
             markets = sorted({f.market for f in ambiguous})
             from data_access.core.exceptions import AmbiguousSemanticFieldError
-            from data_access.read.query_budget import _production_mode
+            from data_access.read.query_budget import is_strict_semantics
 
             msg = (
                 f"逻辑字段 '{name}' 跨市场歧义（候选市场: {markets}）。"
                 "请显式传 market='ashare'/'us' 或 dataset= 让 catalog 消歧。"
             )
-            if _production_mode():
+            # #16 strict_read 完全共享 production 的 fail-closed：不能只查
+            # _production_mode()（DATA_ACCESS_STRICT_READ=1 也要拦）。
+            if is_strict_semantics():
                 raise AmbiguousSemanticFieldError(msg)
             logger.warning("%s（research 放行，取 YAML 顺序第一个）", msg)
         return candidates[0]

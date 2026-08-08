@@ -76,6 +76,17 @@ def _resolve_canonical(op: str) -> str:
 def _call_cleaned_operator(canonical: str, operator: Any, call_args: list[Any], kw: dict[str, Any]) -> Any:
     from backend.parameter_aliases import reject_runtime_parameter_aliases
     reject_runtime_parameter_aliases(canonical, kw)
+    # R5 P0-01 (defense-in-depth): the dispatch layer runs the central logical
+    # call validator for every cleaned operator, so an operator that overrides
+    # ``calculate`` directly (bypassing ``SeriesOperator._prepare_call``) still
+    # cannot escape the integer ParamSpec / panel-axis / validate_params gate.
+    # SeriesOperator-derived operators re-validate inside ``calculate``; that
+    # second pass is pure and cheap.  Polars panels are left untouched by the
+    # pandas-axis validator (only ``pd.DataFrame`` frames are checked).
+    from cleaned_operators.base import validate_operator_call
+    metadata = getattr(operator, "metadata", None)
+    if metadata is not None:
+        validate_operator_call(operator, tuple(call_args), dict(kw))
     return operator.calculate(*call_args, **kw)
 
 

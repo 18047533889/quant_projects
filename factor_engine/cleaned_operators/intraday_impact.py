@@ -15,8 +15,14 @@ boundary — the day's minute grid is split into contiguous session blocks and
 each block is processed independently (the session minute axis is never
 compressed).  Minute-source input → daily scalar per symbol.  No L2/order-flow
 data is assumed (minute OHLCV only), so this is an impact-decay *proxy*, not a
-full market-impact propagator.  Strict-PIT within the day, deterministic,
-NaN fail-closed.
+full market-impact propagator.
+
+Availability (R5 P0-08): this is an EOD-REALISED feature — ``available_at =
+session_close``.  The shock label at minute ``e`` uses only the causal prefix
+``|ret|[:e+1]`` (never the whole session), but the impact path ``h = 1..H``
+after a shock is inherently future-looking within the day.  It must be
+consumed from T+1 onward (or only after the last minute bar of the session),
+never for same-session intraday decisions.  Deterministic, NaN fail-closed.
 """
 from __future__ import annotations
 
@@ -61,11 +67,14 @@ def _impact_decay_day(
     if np.any(amounts < 0.0):
         return np.nan
 
-    # contiguous session blocks (never bridge a lunch/close gap)
+    # contiguous session blocks on the OFFICIAL 1-minute grid: any deviation from
+    # exactly one minute (a missing bar, the lunch break, a close) is a boundary —
+    # a 2-minute gap means one minute is missing and must NOT pair the two sides
+    # (P0-02 review: ``> 2min`` treated a missing bar as continuous).
     blocks: list[list[int]] = []
     cur = [0]
     for i in range(1, n):
-        gap = (minutes[i] - minutes[i - 1]) > pd.Timedelta(minutes=2)
+        gap = (minutes[i] - minutes[i - 1]) != pd.Timedelta(minutes=1)
         if gap:
             blocks.append(cur)
             cur = [i]
@@ -81,9 +90,19 @@ def _impact_decay_day(
         r = rets[idx]
         a = amounts[idx]
         absr = np.abs(r)
-        thr = float(np.quantile(absr, float(shock_quantile)))
         logp = np.log(np.maximum(np.cumprod(1.0 + r), 1e-12))
         for e in range(idx.size - horizon):
+            # R5 P0-08 (causal shock gate): a minute's shock label at time ``e``
+            # must not use the whole session's |ret| quantile (which sees future
+            # minutes).  The threshold is the quantile of the causal prefix
+            # ``absr[:e+1]`` only.  The impact path after ``e`` is inherently a
+            # post-shock feature — this operator is an EOD-realised daily scalar
+            # available at ``session_close`` and must be consumed T+1, never
+            # intra-day (documented in the module docstring).
+            prefix = absr[: e + 1]
+            if prefix.size < 4:
+                continue
+            thr = float(np.quantile(prefix, float(shock_quantile)))
             if not (absr[e] > thr and absr[e] > _EPS and a[e] > 0.0):
                 continue
             sign_e = 1.0 if r[e] > 0.0 else -1.0
@@ -115,15 +134,15 @@ class IntradayImpactDecayRate(SeriesOperator):
 
     metadata = _metadata(
         "intraday_impact_decay_rate",
-        "冲击后价格冲击幅度的衰减率 κ（>0 衰减 / <0 放大）。",
-        ["ret", "amount", "volume", "horizon", "shock_quantile"],
+        "冲击后价格冲击幅度的衰减率 κ（>0 衰减 / <0 放大）。"
+        " available_at=session_close（EOD 实现特征，仅 T+1 使用，禁止当日盘中决策）。",
+        ["ret", "amount", "horizon", "shock_quantile"],
     )
 
     def _calculate_series(
         self,
         ret: pd.DataFrame,
         amount: pd.DataFrame,
-        volume: pd.DataFrame,
         horizon: int = 10,
         shock_quantile: float = 0.9,
         **_: Any,

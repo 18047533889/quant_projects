@@ -7,7 +7,6 @@ from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_op
 from cleaned_operators.fundamental.transforms_v2 import (
     _pos_int,
     _streak_span,
-    _values,
     _walk_periods,
     fin_ratio,
 )

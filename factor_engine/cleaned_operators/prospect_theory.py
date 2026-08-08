@@ -118,11 +118,13 @@ def _metadata_proxy() -> Any:
         name="ts_cpt_value",
         category="time_series_behavioral",
         description="累积前景理论价值(固定 bmw2016 参数集)。",
-        param_names=["returns", "window", "preset"],
+        # P1-86: ``preset`` has exactly one legal value (bmw2016) and is NOT a
+        # search parameter — it stays as an internal kernel default only.
+        param_names=["returns", "window"],
         return_type="series",
         tags=[
             "time_series_behavioral", "daily", "pit_safe", "causal", "typed_v2",
-            "signature:returns,window,preset->series", "unit:level", "cost:1",
+            "signature:returns,window->series", "unit:level", "cost:1",
         ],
     )
 

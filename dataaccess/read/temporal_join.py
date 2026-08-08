@@ -149,13 +149,51 @@ class TemporalJoinSpec:
 
 
 def _tuple_of(value: Any) -> tuple[str, ...]:
+    """把列名序列归一化成 str tuple；非法类型 fail-closed（#34）。
+
+    原来 int/float/bool/dict 等非法输入会静默变成空 tuple——revision_order=2026
+    直接丢掉语义还不报错。现在统一抛 ValidationError，与 Semantic YAML 的
+    严格解析方向一致。
+    """
     if value is None:
         return ()
     if isinstance(value, str):
         return (value,) if value.strip() else ()
     if isinstance(value, (list, tuple)):
-        return tuple(str(v) for v in value if v is not None)
-    return ()
+        out: list[str] = []
+        for v in value:
+            if v is None:
+                continue
+            if not isinstance(v, str):
+                raise ValidationError(
+                    f"列名序列元素必须是字符串，收到 {type(v).__name__}: {v!r}"
+                )
+            if v.strip():
+                out.append(v)
+        return tuple(out)
+    raise ValidationError(
+        f"列名序列必须是字符串/列表/元组，收到 {type(value).__name__}: {value!r}"
+    )
+
+
+def _as_bool(value: Any, default: bool) -> bool:
+    """YAML/JSON bool 解析：字符串 "false"/"0"/"no"/"off" 正确 → False（#33）。
+
+    旧代码 ``bool(raw.get("deduplicate", True))`` 会把配置字符串 ``"false"``
+    当成 True——TemporalJoinSpec 的语义和配置脱节。
+    """
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in {"false", "0", "no", "off", "n", "f"}:
+        return False
+    if text in {"true", "1", "yes", "on", "y", "t"}:
+        return True
+    raise ValidationError(f"bool 值无法识别: {value!r}（合法 true/false/1/0/yes/no）")
 
 
 def _str_or_none(value: Any) -> str | None:
@@ -266,6 +304,13 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
             f"收到 {period_selection!r}"
         )
     latency = raw.get("availability_latency")
+    if latency is not None:
+        try:
+            latency = int(latency)
+        except (ValueError, TypeError):
+            raise ValidationError(
+                f"availability_latency 必须是整数，收到 {latency!r}"
+            )
     return TemporalJoinSpec(
         policy=policy,
         decision_time=_str_or_none(raw.get("decision_time")),
@@ -273,11 +318,12 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
         period_time=_str_or_none(raw.get("period_time")),
         revision_order=_tuple_of(raw.get("revision_order")),
         availability=availability,
-        deduplicate=bool(raw.get("deduplicate", True)),
+        # #33 字符串 "false"/"0" 必须解析成 False，不能 bool("false") == True
+        deduplicate=_as_bool(raw.get("deduplicate"), True),
         primary_key=_tuple_of(raw.get("primary_key")),
         duplicate_policy=dup,
         period_selection=period_selection,
         period_values=_period_values_of(raw.get("period_values")),
-        future_cutoff=bool(raw.get("future_cutoff", True)),
-        availability_latency=int(latency) if latency is not None else None,
+        future_cutoff=_as_bool(raw.get("future_cutoff"), True),
+        availability_latency=latency,
     )

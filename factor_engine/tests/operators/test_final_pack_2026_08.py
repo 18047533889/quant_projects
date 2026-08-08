@@ -280,23 +280,32 @@ def _ashare_panels(close, high, low, volume):
 
 
 def test_constant_window_returns_nan():
-    """Representative fail-closed behaviour: constant input -> NaN, never 0."""
+    """Representative fail-closed behaviour: degenerate ratio/correlation inputs -> NaN, never 0."""
     n = 60
     dates = pd.bdate_range("2024-01-02", periods=n)
     const = pd.DataFrame(np.ones((n, 2)), index=dates, columns=["A", "B"])
     const_high = const * 1.01
     const_low = const * 0.99
     cases = [
-        ("ts_lower_partial_moment", (const,), {"window": 20}),
-        ("ts_expected_shortfall", (const,), {"window": 20}),
         ("ts_tail_ratio", (const,), {"window": 20}),
         ("ts_distance_corr", (const, const_high), {"window": 20}),
         ("ts_hurst_dfa", (const,), {"window": 20}),
         # Note: ts_permutation_entropy of a constant series is 0 (a single
         # permutation state), which is mathematically correct orderedness and is
         # intentionally NOT NaN.
+        # Note: ts_lower_partial_moment / ts_expected_shortfall are NOT here —
+        # R5 P1-38(a): a constant window has a well-defined deterministic value
+        # (LPM = max(thr-c,0)^order = 0; ES = the sample value), so only the
+        # sample-size floor applies and they must NOT be NaN.
     ]
     for canonical, panels, kw in cases:
         out = OperatorRegistry.get(canonical, "pandas_numpy").calculate(*panels, **kw)
         # Constant window must fail closed: fully NaN in the mature window rows.
         assert out.iloc[30:].isna().all().all(), f"{canonical}: constant window not NaN"
+
+    # R5 P1-38(a): partial moment / ES of a constant window are the deterministic
+    # values, not NaN.
+    lpm = OperatorRegistry.get("ts_lower_partial_moment", "pandas_numpy").calculate(const, window=20)
+    assert (lpm.iloc[30:] == 0.0).all().all(), "LPM of a constant window is 0"
+    es = OperatorRegistry.get("ts_expected_shortfall", "pandas_numpy").calculate(const, window=20)
+    assert np.allclose(es.iloc[30:].to_numpy(), 1.0), "ES of a constant window is the sample value"

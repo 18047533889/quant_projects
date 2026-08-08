@@ -259,6 +259,17 @@ class TsMeanReversionOuApproxHalfLife(SeriesOperator):
 
 
 def _variance_ratio_slope(vals: np.ndarray, window: int, max_q: int, min_periods: int) -> float:
+    maxq = max(2, int(max_q))
+    # P1-90: when ``max_q`` exceeds what the window can ever support, every q in
+    # the range 2..max_q cannot be evaluated and the operator would silently
+    # fall back to a shorter q-range — manufacturing identical outputs for
+    # different ``max_q`` parameters.  Fail loudly (independent of data
+    # availability) instead of silently skipping.
+    if maxq + 2 > int(window):
+        raise ValueError(
+            f"ts_variance_ratio_slope: max_q={max_q} needs at least "
+            f"max_q+2={maxq + 2} rows in the window, but window={window}"
+        )
     n = len(vals)
     start = max(0, n - window)
     seg = vals[start:]
@@ -275,7 +286,7 @@ def _variance_ratio_slope(vals: np.ndarray, window: int, max_q: int, min_periods
         return np.nan
     logq = []
     vr = []
-    for q in range(2, max(2, int(max_q)) + 1):
+    for q in range(2, maxq + 1):
         if finite.size < q + 2:
             continue
         qrets = finite[q:] - finite[:-q]
@@ -284,8 +295,15 @@ def _variance_ratio_slope(vals: np.ndarray, window: int, max_q: int, min_periods
         logq.append(np.log(float(q)))
     if len(logq) < 2:
         return np.nan
-    slope = float(np.cov(logq, vr)[0, 1] / np.var(logq))
-    return slope
+    # P1-90: use a centered dot product (ddof=0 in both numerator and
+    # denominator) instead of ``np.cov(logq, vr)[0, 1] / np.var(logq)``, whose
+    # ddof=1 covariance / ddof=0 variance ratio biased the slope by n/(n-1).
+    lx = np.asarray(logq, dtype=float) - float(np.mean(logq))
+    ly = np.asarray(vr, dtype=float) - float(np.mean(vr))
+    denom = float(np.dot(lx, lx))
+    if denom <= 0.0:
+        return np.nan
+    return float(np.dot(lx, ly) / denom)
 
 
 @register_operator(

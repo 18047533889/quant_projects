@@ -137,26 +137,42 @@ def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: f
             if not np.isfinite(y_i):
                 continue
             nbrs = _neighbors(U, valid, k, i, peer_mask)
-            if nbrs.size < 4:
+            # P1-45(a): fail-close when fewer than the requested k peers exist —
+            # a k=10 request must not silently degrade into a 4-peer fit.
+            if nbrs.size < max(4, k):
                 continue
             Z = U[nbrs]
             y = y_t[nbrs]
             # all neighbours are target-finite by construction; keep the guard.
             fin = np.isfinite(y)
-            if int(fin.sum()) < 4:
+            if int(fin.sum()) < max(4, k):
                 continue
             Z = Z[fin]
             y = y[fin]
-            A = Z.T @ Z + float(ridge) * np.eye(d)
+            # P1-45(b): fit with an intercept.  Rank-standardised features live in
+            # [0,1], so a no-intercept fit forces the regression through the
+            # origin and biases the residual for off-centre targets.  The ridge
+            # penalty applies to the feature slopes only, never the intercept.
+            Xd = np.column_stack([np.ones(len(y)), Z])
+            pen = np.zeros((d + 1, d + 1))
+            pen[1:, 1:] = float(ridge) * np.eye(d)
             try:
-                beta = np.linalg.solve(A, Z.T @ y)
+                beta = np.linalg.solve(Xd.T @ Xd + pen, Xd.T @ y)
             except np.linalg.LinAlgError:
                 continue
-            resid = y - Z @ beta
+            resid = y - Xd @ beta
             med = float(np.median(resid))
             mad = float(np.median(np.abs(resid - med)))
-            scale = 1.4826 * mad + _EPS
-            yhat = float(U[i] @ beta)
+            # P1-45(c): robust scale fallback — MAD, then std, then NaN.
+            if mad > _EPS:
+                scale = 1.4826 * mad
+            else:
+                sd_resid = float(np.std(resid))
+                if sd_resid > _EPS:
+                    scale = sd_resid
+                else:
+                    continue
+            yhat = float(beta[0] + np.dot(U[i], beta[1:]))
             out[t, i] = float((y_i - yhat) / scale)
     return out
 
@@ -174,21 +190,26 @@ def _local_gradient_series(target: np.ndarray, feats: np.ndarray, k: int, ridge:
             if not valid[i]:
                 continue
             nbrs = _neighbors(U, valid, k, i, peer_mask)
-            if nbrs.size < 4:
+            # P1-45(a): fail-close when fewer than the requested k peers exist.
+            if nbrs.size < max(4, k):
                 continue
             Z = U[nbrs]
             y = y_t[nbrs]
             fin = np.isfinite(y)
-            if int(fin.sum()) < 4:
+            if int(fin.sum()) < max(4, k):
                 continue
             Z = Z[fin]
             y = y[fin]
-            A = Z.T @ Z + float(ridge) * np.eye(d)
+            # P1-45(b): fit with an intercept (ridge on feature slopes only); the
+            # reported gradient is the feature-slope norm, intercept excluded.
+            Xd = np.column_stack([np.ones(len(y)), Z])
+            pen = np.zeros((d + 1, d + 1))
+            pen[1:, 1:] = float(ridge) * np.eye(d)
             try:
-                beta = np.linalg.solve(A, Z.T @ y)
+                beta = np.linalg.solve(Xd.T @ Xd + pen, Xd.T @ y)
             except np.linalg.LinAlgError:
                 continue
-            out[t, i] = float(np.linalg.norm(beta))
+            out[t, i] = float(np.linalg.norm(beta[1:]))
     return out
 
 
@@ -201,7 +222,8 @@ def _tangent_series(feats: np.ndarray, k: int) -> np.ndarray:
             if not valid[i]:
                 continue
             nbrs = _neighbors(U, valid, k, i)
-            if nbrs.size < 4:
+            # P1-45(a): fail-close when fewer than the requested k peers exist.
+            if nbrs.size < max(4, k):
                 continue
             cloud = U[nbrs]
             mu = cloud.mean(axis=0)

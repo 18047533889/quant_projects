@@ -19,6 +19,16 @@ factors.  None of these fabricates a tick-level signed flow it does not have:
 * ``micro_bvc_vpin``                — VPIN built from BV-C flow over
   equal-volume buckets, splitting boundary bars proportionally by volume.
 
+The three BV-C/flow estimators (``intraday_bvc_imbalance``,
+``intraday_impact_*`` consume a supplied flow) share one classification policy
+(P1-87): only *successfully classified* volume enters the denominator.  A minute
+bar is classifiable when it has a finite log-return, a formed rolling scale, a
+finite non-negative volume and (if a locked marker is supplied) a non-NaN
+marker.  Warmup / unclassified bars contribute zero flow AND zero volume, so
+they can no longer mechanically pull the imbalance toward zero; a NaN locked
+marker (state unknown) is excluded entirely rather than force-classified.  The
+classified share is the implicit ``coverage`` of the day's estimate.
+
 All operators are minute-frequency-input, one-scalar-per-(date, symbol) output,
 prefix-causal, and never look past the current row / day.
 """
@@ -67,27 +77,37 @@ def _bvc_flow(
     locked: np.ndarray | None,
     scale_window: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """BV-C signed flow and volume arrays for one (instrument, day).
+    """BV-C signed flow and *classified-volume* arrays for one (instrument, day).
 
-    Returns ``(of, vol)`` aligned arrays.  Denominator policy: non-finite
-    *volume* bars are excluded from both numerator and denominator (``vol``=0);
-    bars with a non-finite return or a missing rolling scale (warmup) emit zero
-    flow (neutral) but their real volume stays in the denominator; bars marked
-    ``locked`` are classified neutral (zero flow) with their volume counted —
-    a price resting at the limit is never assumed all-buy / all-sell.
+    Returns ``(of, vol)`` aligned arrays where ``vol`` is the volume that was
+    *successfully classified* — the denominator of any imbalance/VPIN ratio must
+    only sum classified volume (P1-87).  A bar is classifiable when it has a
+    finite log-return, a formed rolling scale (warmup bars are not), a finite
+    non-negative volume, and (when a locked marker is supplied) a non-NaN
+    marker.  Classified bars marked ``locked`` are classified neutral (zero
+    flow) with their volume counted — a price resting at the limit is never
+    assumed all-buy / all-sell.  NaN ``locked`` means *unknown* and is excluded
+    entirely (neither numerator nor denominator); unclassified volume never
+    leaks into the denominator, so a warmup gap no longer pulls imbalance to 0.
     """
     n = close_vals.shape[0]
     r = _log_returns(close_vals)
     scale = _rolling_scale(r, max(2, int(scale_window)), max(2, int(scale_window) // 2))
-    z = np.where(np.isfinite(r) & np.isfinite(scale), r / (scale + _EPS), 0.0)
-    p = _normal_cdf(z)
-    of = volume_vals * (2.0 * p - 1.0)
+    finite_vol = np.isfinite(volume_vals) & (volume_vals >= 0.0)
+    classifiable = np.isfinite(r) & np.isfinite(scale) & finite_vol
     if locked is not None:
         lk = np.asarray(locked, dtype=float)
-        neutral = (np.isfinite(lk) & (lk != 0.0)) | ~np.isfinite(of)
+        # NaN locked marker = unknown -> excluded from classification.
+        classifiable = classifiable & np.isfinite(lk)
+    z = np.where(classifiable, r / (scale + _EPS), 0.0)
+    p = _normal_cdf(z)
+    of = np.where(classifiable, volume_vals * (2.0 * p - 1.0), 0.0)
+    if locked is not None:
+        lk = np.asarray(locked, dtype=float)
+        neutral = np.isfinite(lk) & (lk != 0.0)
         of = np.where(neutral, 0.0, of)
     of = np.where(np.isfinite(of), of, 0.0)
-    vol = np.where(np.isfinite(volume_vals), volume_vals, 0.0)
+    vol = np.where(classifiable, volume_vals, 0.0)
     return of, vol
 
 
@@ -120,7 +140,10 @@ def _wasserstein_shift_series(
 
 
 def _equal_volume_vpin(vol: np.ndarray, of: np.ndarray, buckets: int) -> float:
-    """``sum_b |OF_b| / total_volume`` over equal-volume buckets.
+    """``sum_b |OF_b| / total_classified_volume`` over equal-volume buckets.
+
+    ``vol`` is the *classified* volume from ``_bvc_flow`` (P1-87), so the VPIN
+    denominator only reflects successfully classified bars.
 
     A bar straddling a bucket boundary is split *proportionally by volume* via a
     while-loop, so a single huge bar can cross arbitrarily many buckets (the old
@@ -211,10 +234,14 @@ class IntradayBvcImbalance(SeriesOperator):
 
     ``z_m = r_m / (sigma_m + eps)`` (``sigma_m`` a trailing minute scale),
     ``p_m = Phi(z_m)``, ``OF_m = V_m*(2*p_m - 1)`` and
-    ``BVCI = sum(OF) / sum(V)`` over the day (range roughly ``[-1, 1]``).
-    ``locked`` is an optional 0/1 panel: bars marked locked are classified
-    neutral (zero flow) — a price resting at the limit is never assumed to be
-    all-buy or all-sell without tick-level trade direction.
+    ``BVCI = sum(OF) / sum(V_classified)`` over the day (range roughly ``[-1, 1]``)
+    where ``V_classified`` is only the successfully classified volume (P1-87):
+    warmup bars without a formed scale, non-finite returns, and (when supplied)
+    NaN ``locked`` markers are excluded from the denominator, so they can no
+    longer pull the ratio toward 0.  ``locked`` is an optional 0/1 panel: bars
+    marked locked are classified neutral (zero flow, volume still counted) — a
+    price resting at the limit is never assumed to be all-buy or all-sell
+    without tick-level trade direction.
     """
 
     metadata = _metadata(
@@ -233,6 +260,8 @@ class IntradayBvcImbalance(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         close, volume = _as_panel(close), _as_panel(volume)
+        if np.any(volume.to_numpy(dtype=float) < 0.0):
+            raise ValueError("intraday_bvc_imbalance: volume must be non-negative")
         locked_panel = _as_panel(locked) if isinstance(locked, pd.DataFrame) else None
         sw = max(2, int(scale_window))
         out: dict[str, pd.Series] = {}
@@ -440,7 +469,8 @@ class MicroBvcVpin(SeriesOperator):
     The day's minute bars are aggregated into ``bucket_count`` equal-volume
     buckets; a bar that straddles a bucket boundary is split proportionally by
     volume, so the boundary minute never sits entirely on one side.  The output
-    is ``sum_b |OF_b| / total_volume`` — the conventional VPIN range ``[0, 1]``.
+    is ``sum_b |OF_b| / V_classified`` (``V_classified`` = successfully
+    classified volume only, P1-87) — the conventional VPIN range ``[0, 1]``.
     P2 / research-only: BV-C carries estimation error, minute bars are not ticks
     and the VPIN literature itself is contested.
     """
@@ -461,6 +491,8 @@ class MicroBvcVpin(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         close, volume = _as_panel(close), _as_panel(volume)
+        if np.any(volume.to_numpy(dtype=float) < 0.0):
+            raise ValueError("micro_bvc_vpin: volume must be non-negative")
         out: dict[str, pd.Series] = {}
 
         for inst in close.columns:

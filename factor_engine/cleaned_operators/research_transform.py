@@ -176,9 +176,21 @@ def _sig_mahalanobis_series(fs: list[np.ndarray], path_window: int, history_wind
         if len(hist) < 5:
             continue
         H = np.stack(hist, axis=0)
-        mu = H.mean(axis=0)
-        centered = H - mu
-        n, dim = H.shape
+        # P0-26: the three path channels carry different units (a CNY price vs a
+        # return vs a ratio), so the 12 signature components sit on wildly
+        # different scales.  Robust-standardise each component on the HISTORY
+        # sample first (median/MAD -> std fallback -> 1.0), then Mahalanobis on
+        # the standardised space; ``cur`` is standardised with the same history
+        # statistics (strict-PIT, never the current row's own scale).
+        med = np.median(H, axis=0)
+        mad = 1.4826 * np.median(np.abs(H - med), axis=0)
+        scale = np.where(mad > _EPS, mad, np.std(H, axis=0))
+        scale = np.where(np.isfinite(scale) & (scale > _EPS), scale, 1.0)
+        Hs = (H - med) / scale
+        cur_s = (cur - med) / scale
+        mu = Hs.mean(axis=0)
+        centered = Hs - mu
+        n, dim = Hs.shape
         # Covariance needs a robust sample: >= max(20, 2*dim) history vectors
         # (dim=12 -> at least 24) before the 12-dim Mahalanobis distance is stable.
         if n < max(20, 2 * dim):
@@ -189,7 +201,7 @@ def _sig_mahalanobis_series(fs: list[np.ndarray], path_window: int, history_wind
             inv = np.linalg.pinv(shrink)
         except np.linalg.LinAlgError:
             continue
-        diff = cur - mu
+        diff = cur_s - mu
         d = float(np.sqrt(diff @ inv @ diff))
         out[r] = d
     return out
@@ -208,8 +220,8 @@ class TsSignatureMahalanobisAnomaly(SeriesOperator):
 
     metadata = _metadata(
         "ts_signature_mahalanobis_anomaly",
-        "三字段路径签名 Mahalanobis 异常（depth=2，收缩协方差）。",
-        ["f1", "f2", "f3", "path_window", "history_window", "depth"],
+        "三字段路径签名 Mahalanobis 异常（depth=2，收缩协方差，通道先稳健标准化）。",
+        ["f1", "f2", "f3", "path_window", "history_window"],
     )
 
     def _calculate_series(
@@ -219,7 +231,7 @@ class TsSignatureMahalanobisAnomaly(SeriesOperator):
         f3: pd.DataFrame,
         path_window: int = 20,
         history_window: int = 60,
-        depth: int = 2,
+        depth: int = 2,  # P0-26: fixed at 2 — not a search parameter (removed from the signature)
         **_: Any,
     ) -> pd.DataFrame:
         if int(depth) != 2:
@@ -248,7 +260,11 @@ def _bifurcation_score(chunk: np.ndarray, tau: int, dim: int) -> float:
         from cleaned_operators.topology_ext import _persistence_pairs
     except Exception:  # pragma: no cover - optional topology backend
         return np.nan
-    pairs = _persistence_pairs(chunk, int(tau), int(dim))
+    # P0-05 review: ``_persistence_pairs`` requires the explicit ``h0`` flag
+    # (H0 loops / H1 filtration are computed differently); the old call omitted
+    # it and would TypeError on every evaluation.  H1-only for the bifurcation
+    # proxy (consistent with the certified Rips H1 kernel this operator reuses).
+    pairs = _persistence_pairs(chunk, int(tau), int(dim), h0=False)
     if not pairs:
         return np.nan
     births = np.asarray([p[0] for p in pairs], dtype=float)

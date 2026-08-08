@@ -66,6 +66,25 @@ def _tri_rolling(a: np.ndarray, b: np.ndarray, c: np.ndarray, w: int, fn) -> np.
     return out
 
 
+def _robust_scale(col: np.ndarray) -> float | None:
+    """Median/MAD robust scale with a std fallback (R5 P1-42(a)).
+
+    When MAD == 0 (at least half the observations equal the median) but the
+    column is not truly constant, dividing by ``_EPS`` would turn a near-constant
+    feature into a single extreme outlier and corrupt the correlation matrix;
+    fall back to ``std`` in that case.  Only a truly constant column (MAD == 0
+    and std == 0) has no scale at all — the caller must fail closed.
+    """
+    med = float(np.median(col))
+    mad = float(np.median(np.abs(col - med)))
+    if mad > 0.0:
+        return 1.4826 * mad
+    std = float(np.std(col))
+    if std <= _EPS:
+        return None
+    return std
+
+
 def _feature_matrix(c1: np.ndarray, c2: np.ndarray, c3: np.ndarray, min_rows: int) -> np.ndarray | None:
     F = np.stack([c1, c2, c3], axis=1)
     complete = np.isfinite(F).all(axis=1)
@@ -75,8 +94,12 @@ def _feature_matrix(c1: np.ndarray, c2: np.ndarray, c3: np.ndarray, min_rows: in
     z = np.empty_like(Z)
     for j in range(3):
         med = float(np.median(Z[:, j]))
-        mad = float(np.median(np.abs(Z[:, j] - med)))
-        z[:, j] = (Z[:, j] - med) / (1.4826 * mad + _EPS)
+        scale = _robust_scale(Z[:, j])
+        if scale is None:
+            # R5 P1-42(a): a constant feature carries no information — fail
+            # closed to NaN rather than emitting a degenerate all-zero column.
+            return None
+        z[:, j] = (Z[:, j] - med) / scale
     return z
 
 
@@ -160,19 +183,32 @@ def _beta_break_chunk(yc, xc, recent: int, prior: int, min_pairs: int) -> float:
     yp = yc[n - recent - prior : n - recent]
     xp = xc[n - recent - prior : n - recent]
 
-    def _beta(yy, xx) -> float | None:
+    def _std_beta(yy, xx) -> float | None:
         ok = np.isfinite(yy) & np.isfinite(xx)
         if int(ok.sum()) < min_pairs:
             return None
         yy = yy[ok]
         xx = xx[ok]
-        vx = float(np.var(xx))
+        # R5 P1-42(b): raw beta carries the units of y/x, so a
+        # ``|Δβ|/(1+|β|)`` break is not comparable across arbitrary y/x pairs.
+        # Standardise both series first (robust z-score): the resulting beta IS
+        # the (robust) correlation — unitless — so recent-vs-prior breaks become
+        # scale-free.
+        my = float(np.median(yy))
+        mx = float(np.median(xx))
+        sy = _robust_scale(yy)
+        sx = _robust_scale(xx)
+        if sy is None or sx is None:
+            return None
+        zy = (yy - my) / sy
+        zx = (xx - mx) / sx
+        vx = float(np.var(zx))
         if vx <= _EPS:
             return None
-        return float(np.cov(yy, xx, ddof=0)[0, 1] / vx)
+        return float(np.cov(zy, zx, ddof=0)[0, 1] / vx)
 
-    br = _beta(yr, xr)
-    bp = _beta(yp, xp)
+    br = _std_beta(yr, xr)
+    bp = _std_beta(yp, xp)
     if br is None or bp is None:
         return np.nan
     return float((br - bp) / (1.0 + abs(bp)))
@@ -326,12 +362,14 @@ class TsBetaBreakScore(SeriesOperator):
 
     ``(beta_recent - beta_prior) / (1 + |beta_prior|)``：y 对 x 的敏感度在
     recent 与 prior 窗口之间变化多大。y=valuation、x=profitability/growth 等
-    组合可捕捉"估值-基本面关系断裂"。P1。
+    组合可捕捉"估值-基本面关系断裂"。R5 P1-42(b)：beta 有量纲（y/x 单位），
+    直接比较 ``|Δβ|/(1+|β|)`` 在不同 y/x 组合间不可比——这里先把 x、y 各自
+    robust 标准化，beta 即（稳健）相关系数、无量纲，再比较。P1。
     """
 
     metadata = _metadata(
         "ts_beta_break_score",
-        "recent vs prior 滚动 beta 变化 (Δbeta)/(1+|beta_prior|)。",
+        "recent vs prior 标准化 beta(=相关)变化 (Δcorr)/(1+|corr_prior|)。",
         ["y", "x", "recent_window", "prior_window"],
         domain="price_volume",
         unit="ratio",

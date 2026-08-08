@@ -326,6 +326,14 @@ class OperatorRegistry:
             prev.get("param_names"),
             getattr(operator.metadata, "param_names", []),
         )
+        # R4-95/98: surface the field-semantic metadata on the catalog dict so
+        # catalog consumers see unit / window-semantics labels.  First
+        # non-None wins: the pandas backend (registered first) typically carries
+        # the annotations, while the polars/SQL markers must not wipe them.
+        def _first_non_null(cur: Any, new: Any) -> Any:
+            return cur if cur is not None else new
+
+        _metadata = getattr(operator, "metadata", None)
         updated.update({
             "canonical": canonical,
             "backends": sorted(cls._operators[canonical].keys()),
@@ -334,6 +342,18 @@ class OperatorRegistry:
             "param_names": canonical_params,
             "aliases": sorted(set((aliases or []) + prev.get("aliases", []))),
             "backend_meta": backend_meta,
+            "window_semantics": _first_non_null(
+                prev.get("window_semantics"),
+                getattr(_metadata, "window_semantics", None),
+            ),
+            "input_units": _first_non_null(
+                prev.get("input_units"),
+                dict(getattr(_metadata, "input_units", None) or {}),
+            ),
+            "output_unit": _first_non_null(
+                prev.get("output_unit"),
+                getattr(_metadata, "output_unit", None),
+            ),
         })
         # Keep legacy catalog readers from seeing a registration-order-dependent
         # source.  New consumers must use backend_meta[backend].source.

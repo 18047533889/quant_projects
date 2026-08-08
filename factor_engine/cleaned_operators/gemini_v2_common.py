@@ -13,11 +13,20 @@ Every new operator in this round follows the same engineering contract:
 * trailing-window NaN policy — ``trailing_contiguous_finite`` never compresses
   a missing value out of the time axis (a gap must not shorten a window and
   re-pair data that were never adjacent), which is the prefix-invariance and
-  future-randomisation contract all new tests assert.
+  future-randomisation contract all new tests assert.  R5 P0-03: the *current*
+  row is part of that contract — a NaN at the current row fails the window
+  closed (empty block) instead of silently reusing the previous contiguous
+  run, so a today-missing field never emits a stale yesterday factor.
 
-``register_dual`` binds the kernel as a *default argument* of ``calculate``
-(``_fn=fn``) — a bare closure over the loop variable is late-bound and every
-operator would call the last kernel.
+``register_dual`` binds the kernel as a *default argument* of the backend
+entry points (``_fn=fn``) — a bare closure over the loop variable is
+late-bound and every operator would call the last kernel.  R5 P0-01: both
+backends are ``SeriesOperator`` subclasses that implement
+``_calculate_series`` (never a bare ``calculate`` override), so every call is
+routed through the central logical-call validator
+(``base.validate_operator_call``) — integer ``ParamSpec`` checks, panel-axis
+alignment, ``validate_params`` and common parameter relations are enforced
+uniformly and cannot be bypassed by a future module.
 """
 from __future__ import annotations
 
@@ -32,25 +41,30 @@ from cleaned_operators.registry import OperatorRegistry
 from cleaned_operators.rolling_pack import frame_like
 
 _SKIP = frozenset({"date", "stock_code"})
+# Date-ish column names a polars wide frame may use to carry its time axis.
+_AXIS_COLUMNS = ("date", "timestamp", "trade_date", "datetime")
 
 _EPS = 1e-12
 
 
 def trailing_contiguous_finite(chunk: np.ndarray) -> np.ndarray:
-    """Longest trailing contiguous finite run (never re-connects across a gap).
+    """Longest trailing contiguous finite run ending at the current row.
 
     A missing value invalidates everything before it for the current row: the
     time structure is preserved and a gap never re-pairs data that were not
     actually adjacent.  Used by all trailing-window kernels in this round.
+
+    R5 P0-03 (fail-closed current row): a NaN at the current row returns the
+    empty block so the caller emits NaN — a missing *today* value must never
+    silently fall back to the previous contiguous historical run.
     """
     n = chunk.shape[0]
+    if n == 0 or not np.isfinite(chunk[-1]):
+        return chunk[:0]
     end = n
-    while end > 0 and not np.isfinite(chunk[end - 1]):
+    while end > 0 and np.isfinite(chunk[end - 1]):
         end -= 1
-    start = end
-    while start > 0 and np.isfinite(chunk[start - 1]):
-        start -= 1
-    return chunk[start:end]
+    return chunk[end:]
 
 
 def trailing_contiguous_multi(*chunks: np.ndarray) -> tuple[np.ndarray, ...] | None:
@@ -59,41 +73,44 @@ def trailing_contiguous_multi(*chunks: np.ndarray) -> tuple[np.ndarray, ...] | N
     Returns ``None`` when the current row is not finite in any input.  Used by
     multi-input operators (EDGE / Abdi-Ranaldo / cross-spectral) where one
     missing panel invalidates the aligned pair.
+
+    R5 P0-03: if the *current* row is NaN in any input, ``None`` is returned
+    immediately (fail-closed) — a stale-history run is never produced.
     """
     n = int(chunks[0].shape[0])
+    if n == 0 or any(not np.isfinite(ch[n - 1]) for ch in chunks):
+        return None
     end = n
     for _ in range(end):
-        ok = True
-        for ch in chunks:
-            if not np.isfinite(ch[end - 1]):
-                ok = False
-                break
-        if ok:
+        if all(np.isfinite(ch[end - 1]) for ch in chunks):
             break
         end -= 1
-    if end <= 0:
-        return None
     start = end
     for _ in range(start):
-        ok = True
-        for ch in chunks:
-            if not np.isfinite(ch[start - 1]):
-                ok = False
-                break
-        if not ok:
+        if not all(np.isfinite(ch[start - 1]) for ch in chunks):
             break
         start -= 1
     return tuple(ch[start:end] for ch in chunks)
 
 
 def _align(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
+    """Align composition parts, failing closed on any axis mismatch (R5 P1-14).
+
+    Composition inputs are financial panels (asset / liability / flow data
+    aligned on PubDate).  A silent ``reindex`` could re-pair a row to a
+    different date (or an instrument column to a different name) after an
+    upstream misalignment.  FactorEngine must fail closed instead.
+    """
     if not frames:
         return ()
     base = frames[0]
     out = [base]
-    for frame in frames[1:]:
+    for position, frame in enumerate(frames[1:], start=1):
         if not frame.index.equals(base.index) or not frame.columns.equals(base.columns):
-            frame = frame.reindex(index=base.index, columns=base.columns)
+            raise ValueError(
+                "composition inputs are misaligned: panel %d has a different "
+                "index/columns than panel 0 (fail-closed; no silent reindex)" % position
+            )
         out.append(frame)
     return tuple(out)
 
@@ -115,15 +132,25 @@ def register_dual(
     # forwarded to the pandas OperatorMetadata.  Backward-compatible: None keeps
     # the previous behaviour for the other register_dual callers.
     window_semantics: str | None = None,
+    # R5 P1-01: authoritative per-parameter contracts.  A param without a spec
+    # still resolves via the legacy name whitelist; a declared spec overrides it
+    # in both directions (int stays validated, float stays float, bounds/choices
+    # and ``searchable=False`` are enforced).
+    param_specs: Mapping[str, Any] | None = None,
 ) -> None:
     """Register ``fn`` under ``canonical`` for both pandas_numpy and polars.
 
     The polars backend runs the *same* kernel (converted frame), guaranteeing
     numerical parity; it is registered ``backend_explicit`` so production
-    hardening keeps it.
+    hardening keeps it.  R5 P0-02: the polars backend is a ``python_bridge``
+    (materialises the full panel and is not a native polars execution), and it
+    asserts that every input carries the same date axis and instrument columns
+    before computing — a positionally-misaligned pair (``x_t`` against
+    ``y_{t+1}`` or stock A against stock B) is rejected instead of silently
+    paired.
     """
-    from cleaned_operators.base import Operator as PandasOperator
     from cleaned_operators.base import OperatorMetadata as PandasMetadata
+    from cleaned_operators.base import SeriesOperator as PandasSeriesOperator
 
     tag_list = [
         "daily", "panel", "pit_safe", "causal", "deterministic",
@@ -132,8 +159,9 @@ def register_dual(
         *tags_extra,
     ]
     units = dict(input_units) if input_units else None
+    specs = dict(param_specs) if param_specs else None
 
-    class _PandasOp(PandasOperator):
+    class _PandasOp(PandasSeriesOperator):
         metadata = PandasMetadata(
             name=canonical,
             category=category,
@@ -145,9 +173,10 @@ def register_dual(
             input_units=units,
             output_unit=output_unit,
             window_semantics=window_semantics,
+            param_specs=specs,
         )
 
-        def calculate(self, *args, _fn=fn, **kwargs):
+        def _calculate_series(self, *args, _fn=fn, **kwargs):
             return _fn(*args, **kwargs)
 
     OperatorRegistry.register(
@@ -156,14 +185,52 @@ def register_dual(
     )
 
     class _PolarsOp(PolarsSeriesOperator):
-        metadata = PolarsMetadata(name=canonical, category=category, param_names=[])
+        metadata = PolarsMetadata(
+            name=canonical, category=category, param_names=[],
+            tags=["python_bridge", "materializes_full_panel"],
+        )
 
         def _calculate_series(self, *frames, _fn=fn, **params):
             import polars as pl  # noqa: F401
-            pdfs = [
-                f.select([c for c in f.columns if c not in _SKIP]).to_pandas()
-                for f in frames
-            ]
+            pdfs: list[pd.DataFrame] = []
+            axes: list[tuple[np.ndarray | None, tuple[str, ...], int]] = []
+            for f in frames:
+                cols = [c for c in f.columns if c not in _SKIP]
+                pdf = f.select(cols).to_pandas()
+                date_vals: np.ndarray | None = None
+                for name in _AXIS_COLUMNS:
+                    if name in f.columns:
+                        date_vals = np.asarray(f[name].to_numpy())
+                        break
+                axes.append((date_vals, tuple(cols), pdf.shape[0]))
+                pdfs.append(pdf)
+            base_date, base_cols, base_rows = axes[0]
+            for j, (date_vals, cols, rows) in enumerate(axes[1:], start=1):
+                if rows != base_rows:
+                    raise ValueError(
+                        f"{canonical}: polars input {j} has {rows} rows != base {base_rows}"
+                    )
+                if cols != base_cols:
+                    raise ValueError(
+                        f"{canonical}: polars input {j} instrument columns {cols} "
+                        f"!= base {base_cols} (order matters)"
+                    )
+                if base_date is None and date_vals is not None:
+                    raise ValueError(
+                        f"{canonical}: polars input {j} carries a date axis while "
+                        "the base input does not"
+                    )
+                if base_date is not None and date_vals is None:
+                    raise ValueError(
+                        f"{canonical}: polars input {j} has no date axis while the "
+                        "base input carries one"
+                    )
+                if base_date is not None and not np.array_equal(base_date, date_vals):
+                    raise ValueError(
+                        f"{canonical}: polars input {j} date axis is misaligned with "
+                        "the base input (a gap, an extra row, or a different order "
+                        "would pair x_t with y_{t+1})"
+                    )
             out = _fn(*pdfs, **params)
             base = frames[0]
             cols = [c for c in base.columns if c not in _SKIP]

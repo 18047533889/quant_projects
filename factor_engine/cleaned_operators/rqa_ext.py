@@ -31,6 +31,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -40,6 +41,17 @@ from cleaned_operators.gemini_v2_common import (
 
 _EPS = 1e-12
 
+# R5 P1-01: embedding ints are validated (dim=1.9 -> reject), ``theiler >= 0``.
+_RQA_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=2),
+    "dim": ParamSpec(dtype=int, min=1),
+    "delay": ParamSpec(dtype=int, min=1),
+    "eps_fraction": ParamSpec(dtype=float, min=0.0, max=1.0),
+    "min_line": ParamSpec(dtype=int, min=2),
+    "min_periods": ParamSpec(dtype=int, min=4),
+    "theiler": ParamSpec(dtype=int, min=0),
+}
+
 
 def _rqa_stats_window(
     v: np.ndarray,
@@ -47,6 +59,7 @@ def _rqa_stats_window(
     delay: int,
     eps_fraction: float,
     min_line: int,
+    theiler: int = 0,
 ) -> dict[str, float]:
     """Full RQA statistics for one finite window (see module docstring)."""
     M = v.shape[0] - (dim - 1) * delay
@@ -65,7 +78,12 @@ def _rqa_stats_window(
         return {}
     eps = float(eps_fraction) * scale
     D = np.sqrt(np.sum((P[:, None, :] - P[None, :, :]) ** 2, axis=2))
-    R = (D <= eps) & ~np.eye(M, dtype=bool)
+    # R5 P1-05 (Theiler window): pairs too close in TIME (|i − j| ≤ theiler) are
+    # excluded from the recurrence matrix — a smooth price series makes adjacent
+    # embedded points naturally close, which would otherwise inflate DET/LAM.
+    # ``theiler=0`` keeps the historical behaviour.
+    time_mask = np.abs(np.arange(M)[:, None] - np.arange(M)[None, :]) > int(theiler)
+    R = (D <= eps) & time_mask
 
     total_pairs = M * (M - 1)
     if total_pairs <= 0:
@@ -104,10 +122,19 @@ def _rqa_stats_window(
         if length >= min_line:
             vert_lengths.append(length)
 
-    determinism = (2.0 * sum(diag_lengths)) / n_rec if diag_lengths else 0.0
-    laminarity = (1.0 * sum(vert_lengths)) / n_rec if vert_lengths else 0.0
-    mean_diag = float(np.mean(diag_lengths)) if diag_lengths else np.nan
-    longest_vert = float(np.max(vert_lengths)) if vert_lengths else np.nan
+    # P1-28: when ``min_line >= M`` no line of the requested length can exist —
+    # the line statistics are unestimable (returning 0 would read as "confirmed
+    # no deterministic line").  ``M`` is the phase-space size computed above.
+    if int(min_line) >= M:
+        determinism = np.nan
+        laminarity = np.nan
+        mean_diag = np.nan
+        longest_vert = np.nan
+    else:
+        determinism = (2.0 * sum(diag_lengths)) / n_rec if diag_lengths else 0.0
+        laminarity = (1.0 * sum(vert_lengths)) / n_rec if vert_lengths else 0.0
+        mean_diag = float(np.mean(diag_lengths)) if diag_lengths else np.nan
+        longest_vert = float(np.max(vert_lengths)) if vert_lengths else np.nan
 
     return {
         "rate": rate,
@@ -119,8 +146,8 @@ def _rqa_stats_window(
 
 
 def _check_params(
-    window: int, dim: int, delay: int, eps_fraction: float, min_line: int
-) -> tuple[int, int, int, float, int]:
+    window: int, dim: int, delay: int, eps_fraction: float, min_line: int, theiler: int = 0
+) -> tuple[int, int, int, float, int, int]:
     w = max(2, int(window))
     d = max(1, int(dim))
     dl = max(1, int(delay))
@@ -130,12 +157,13 @@ def _check_params(
     if d * dl > 4:
         raise ValueError("dimension*delay must be <= 4 (embedding support)")
     ml = max(2, int(min_line))
-    return w, d, dl, ef, ml
+    th = max(0, int(theiler))
+    return w, d, dl, ef, ml, th
 
 
-def _rqa_series(x2d: np.ndarray, window: int, dim: int, delay: int, eps_fraction: float, min_line: int, min_periods: int, key: str) -> np.ndarray:
+def _rqa_series(x2d: np.ndarray, window: int, dim: int, delay: int, eps_fraction: float, min_line: int, min_periods: int, key: str, theiler: int = 0) -> np.ndarray:
     rows, cols = x2d.shape
-    w, d, dl, ef, ml = _check_params(window, dim, delay, eps_fraction, min_line)
+    w, d, dl, ef, ml, th = _check_params(window, dim, delay, eps_fraction, min_line, theiler)
     mp = max(4, int(min_periods))
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
@@ -145,7 +173,7 @@ def _rqa_series(x2d: np.ndarray, window: int, dim: int, delay: int, eps_fraction
             v = trailing_contiguous_finite(col[lo : r + 1])
             if v.size < mp:
                 continue
-            stats = _rqa_stats_window(v, d, dl, ef, ml)
+            stats = _rqa_stats_window(v, d, dl, ef, ml, th)
             val = stats.get(key, np.nan)
             if np.isfinite(val):
                 out[r, c] = float(val)
@@ -160,8 +188,9 @@ def _ts_recurrence_determinism(
     eps_fraction: float = 0.1,
     min_line: int = 4,
     min_periods: int = 10,
+    theiler: int = 0,
 ) -> pd.DataFrame:
-    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "determinism")
+    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "determinism", theiler)
     return frame_like(x, out)
 
 
@@ -173,8 +202,9 @@ def _ts_recurrence_laminarity(
     eps_fraction: float = 0.1,
     min_line: int = 4,
     min_periods: int = 10,
+    theiler: int = 0,
 ) -> pd.DataFrame:
-    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "laminarity")
+    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "laminarity", theiler)
     return frame_like(x, out)
 
 
@@ -186,8 +216,9 @@ def _ts_recurrence_mean_diagonal_length(
     eps_fraction: float = 0.1,
     min_line: int = 4,
     min_periods: int = 10,
+    theiler: int = 0,
 ) -> pd.DataFrame:
-    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "mean_diagonal_length")
+    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "mean_diagonal_length", theiler)
     return frame_like(x, out)
 
 
@@ -199,47 +230,52 @@ def _ts_recurrence_longest_vertical_length(
     eps_fraction: float = 0.1,
     min_line: int = 4,
     min_periods: int = 10,
+    theiler: int = 0,
 ) -> pd.DataFrame:
-    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "longest_vertical_length")
+    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "longest_vertical_length", theiler)
     return frame_like(x, out)
 
 
 _SPECS: dict[str, dict[str, Any]] = {
     "ts_recurrence_determinism": {
         "fn": _ts_recurrence_determinism,
-        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods"],
+        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods", "theiler"],
         "category": "time_series_recurrence",
         "domain": "path_geometry",
         "unit": "ratio",
         "cost": 6,
         "tags_extra": ["state"],
+        "param_specs": _RQA_PARAM_SPECS,
     },
     "ts_recurrence_laminarity": {
         "fn": _ts_recurrence_laminarity,
-        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods"],
+        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods", "theiler"],
         "category": "time_series_recurrence",
         "domain": "path_geometry",
         "unit": "ratio",
         "cost": 6,
         "tags_extra": ["state"],
+        "param_specs": _RQA_PARAM_SPECS,
     },
     "ts_recurrence_mean_diagonal_length": {
         "fn": _ts_recurrence_mean_diagonal_length,
-        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods"],
+        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods", "theiler"],
         "category": "time_series_recurrence",
         "domain": "path_geometry",
         "unit": "bars",
         "cost": 6,
         "tags_extra": [],
+        "param_specs": _RQA_PARAM_SPECS,
     },
     "ts_recurrence_longest_vertical_length": {
         "fn": _ts_recurrence_longest_vertical_length,
-        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods"],
+        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods", "theiler"],
         "category": "time_series_recurrence",
         "domain": "path_geometry",
         "unit": "bars",
         "cost": 6,
         "tags_extra": [],
+        "param_specs": _RQA_PARAM_SPECS,
     },
 }
 
@@ -257,6 +293,7 @@ def _register() -> None:
             source="rqa_ext",
             tags_extra=spec["tags_extra"],
             output_unit=spec["unit"],
+            param_specs=spec.get("param_specs"),
         )
     union_extended(*_SPECS.keys())
 

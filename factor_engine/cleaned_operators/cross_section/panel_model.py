@@ -77,7 +77,7 @@ def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "leve
 
 
 def _pca_svd(X: np.ndarray, n_components: int):
-    """Standardised SVD PCA; returns (loadings, explained_ratio, proj_fn).
+    """Standardised SVD PCA; returns the model in the *active sub-space* only.
 
     Missing values are handled per column: the mean / std are estimated from
     each column's finite rows and any still-missing entry is imputed with that
@@ -87,15 +87,21 @@ def _pca_svd(X: np.ndarray, n_components: int):
 
     Audit M01: a column whose finite coverage is below 2 rows is INACTIVE and is
     dropped from the fit (``np.nanmean`` on an all-NaN column would otherwise
-    leak NaN into the SVD); its mu/sd/loading come back NaN (fail-closed).
-    Audit M07: ``n_components`` is capped below the fit rank
-    (``min(n_features, n_observations) - 1``) so the reconstruction error is
-    never trivially zero from a full-rank fit.
+    leak NaN into the SVD).  Audit M07: ``n_components`` is capped below the fit
+    rank (``min(n_features, n_observations) - 1``) so the reconstruction error
+    is never trivially zero from a full-rank fit.
+    Audit P0-14: the returned model is *active-space only* — ``mu``/``sd`` have
+    length ``n_active``, ``loadings`` has shape ``(k, n_active)`` with
+    ``k = actual_k``, and the boolean ``active`` mask plus ``k`` let callers map
+    back to the full universe.  Inactive columns never carry NaN into the shared
+    matrix products, so one suspended stock can no longer poison the component
+    scores / reconstruction of every other stock.
     """
     n, d = X.shape
     finite_count = np.sum(np.isfinite(X), axis=0)
     active = finite_count >= 2
-    if int(active.sum()) < 2:
+    n_active = int(active.sum())
+    if n_active < 2:
         return None
     sub = X[:, active]
     mu_sub = np.nanmean(sub, axis=0)
@@ -103,24 +109,26 @@ def _pca_svd(X: np.ndarray, n_components: int):
     sd_sub = np.where(sd_sub > _EPS, sd_sub, 1.0)
     Xc = np.where(np.isfinite(sub), sub, mu_sub)
     Xs = (Xc - mu_sub) / sd_sub
-    k = int(min(n_components, Xs.shape[1] - 1, Xs.shape[0] - 1))
+    k = int(min(n_components, n_active - 1, Xs.shape[0] - 1))
     if k < 1:
         return None
     U, s, Vt = np.linalg.svd(Xs, full_matrices=False)
     total_var = float(np.sum(s * s))
-    mu = np.full(d, np.nan)
-    sd = np.full(d, np.nan)
-    loadings = np.full((n_components, d), np.nan)
-    explained = np.full(n_components, np.nan)
-    mu[active] = mu_sub
-    sd[active] = sd_sub
-    loadings[:k, active] = Vt[:k]
-    explained[:k] = s[:k] ** 2 / max(total_var, _EPS)
-    return {"mu": mu, "sd": sd, "loadings": loadings, "explained": explained}
+    explained = s[:k] ** 2 / max(total_var, _EPS)
+    return {
+        "active": active,
+        "k": k,
+        "mu": mu_sub,
+        "sd": sd_sub,
+        "loadings": Vt[:k],
+        "explained": explained,
+    }
 
 
 def _pca_transform(pca, row: np.ndarray) -> np.ndarray:
-    z = (row - pca["mu"]) / pca["sd"]
+    """Project ``row`` (full universe) onto the active sub-space's components."""
+    row_active = row[pca["active"]]
+    z = (row_active - pca["mu"]) / pca["sd"]
     return pca["loadings"] @ z
 
 
@@ -150,9 +158,12 @@ def _pca_loading(
     X: np.ndarray, cur: np.ndarray, component: int, prev: np.ndarray | None
 ) -> np.ndarray:
     pca = _pca_svd(X, component + 1)
-    if pca is None:
+    if pca is None or component >= pca["k"]:
         return np.full(len(cur), np.nan)
-    loading = pca["loadings"][component].copy()
+    # P0-14: loadings are active-space (k, n_active); map back to the full
+    # universe, leaving inactive columns NaN (fail-closed).
+    loading = np.full(len(cur), np.nan)
+    loading[pca["active"]] = pca["loadings"][component]
     # Audit M02: the eigenvector sign is arbitrary per SVD; align each window's
     # loading to the previous window's loading so the loading factor has no
     # pure-numerical sign flip between consecutive windows.
@@ -162,8 +173,11 @@ def _pca_loading(
             loading = -loading
     else:
         # No usable previous window: fall back to per-window sign-normalisation
-        # on the largest |loading|.
-        k = int(np.argmax(np.abs(loading)))
+        # on the largest |loading| (finite entries only).
+        fin = np.flatnonzero(np.isfinite(loading))
+        if fin.size == 0:
+            return loading
+        k = fin[int(np.argmax(np.abs(loading[fin])))]
         if loading[k] < 0:
             loading = -loading
     return loading
@@ -195,9 +209,14 @@ def _pca_resid(X: np.ndarray, cur: np.ndarray, n_components: int) -> np.ndarray:
     if pca is None:
         return np.full(len(cur), np.nan)
     score = _pca_transform(pca, cur)
-    z = (cur - pca["mu"]) / pca["sd"]
+    cur_active = cur[pca["active"]]
+    z = (cur_active - pca["mu"]) / pca["sd"]
     recon = pca["mu"] + pca["sd"] * (pca["loadings"].T @ score)
-    return cur - recon
+    out = np.full(len(cur), np.nan)
+    # P0-14: write residuals only for the active sub-space; inactive stocks stay
+    # NaN (fail-closed) and can no longer poison their peers.
+    out[pca["active"]] = cur_active - recon
+    return out
 
 
 _mk(
@@ -218,14 +237,20 @@ def _pca_commonality(X: np.ndarray, cur: np.ndarray, n_components: int) -> np.nd
     pca = _pca_svd(X, min(int(n_components), X.shape[1]))
     if pca is None:
         return np.full(len(cur), np.nan)
-    z = (X - pca["mu"]) / pca["sd"]           # (n_rows, n_features)
-    score = pca["loadings"] @ z.T             # (n_components, n_rows)
-    recon = (pca["mu"][:, None] + pca["sd"][:, None] * (pca["loadings"].T @ score)).T  # (n_rows, n_features)
-    resid = X - recon
+    # P0-14: work only in the active sub-space so an inactive column's NaN never
+    # leaks into the shared variance decomposition.
+    Xa = X[:, pca["active"]]
+    z = (Xa - pca["mu"]) / pca["sd"]           # (n_rows, n_active)
+    score = pca["loadings"] @ z.T              # (k, n_rows)
+    recon = (pca["mu"][:, None] + pca["sd"][:, None] * (pca["loadings"].T @ score)).T  # (n_rows, n_active)
+    resid = Xa - recon
     var_resid = np.nanvar(resid, axis=0)
-    var_ret = np.nanvar(X, axis=0)
+    var_ret = np.nanvar(Xa, axis=0)
     with np.errstate(divide="ignore", invalid="ignore"):
-        return np.where(var_ret > _EPS, 1.0 - var_resid / var_ret, np.nan)
+        ratio_active = np.where(var_ret > _EPS, 1.0 - var_resid / var_ret, np.nan)
+    out = np.full(X.shape[1], np.nan)
+    out[pca["active"]] = ratio_active
+    return out
 
 
 _mk(
@@ -346,10 +371,12 @@ def _model_predict(X: np.ndarray, y: np.ndarray, x_cur: np.ndarray, method: str,
         pca = _pca_svd(Xs, min(int(n_components), Xs.shape[1]))
         if pca is None:
             return np.nan
-        score = pca["loadings"] @ Xs.T
+        # P0-14: components live in the active sub-space only.
+        Xa = Xs[:, pca["active"]]
+        score = pca["loadings"] @ Xa.T
         beta, *_ = np.linalg.lstsq(np.column_stack([np.ones(score.shape[1]), score.T]), yv, rcond=None)
-        z = (x_cur - mu) / sd
-        s = pca["loadings"] @ z
+        za = (x_cur - mu)[pca["active"]] / sd[pca["active"]]
+        s = pca["loadings"] @ za
         return float(beta[0] + beta[1:] @ s)
     if method == "pls":
         return _pls1_predict(Xs, yv, int(n_components), (x_cur - mu) / sd)

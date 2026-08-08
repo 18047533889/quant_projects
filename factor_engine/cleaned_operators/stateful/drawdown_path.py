@@ -84,7 +84,13 @@ class TsRecoveryFraction(SeriesOperator):
                     continue
                 vals = seg
                 p = float(np.max(vals))
-                p_pos = int(np.argmax(vals))
+                # P1-79: the current recovery episode restarts at the *most
+                # recent* time the peak was hit, not the first.  np.argmax
+                # returns the earliest occurrence of a repeated running max,
+                # which would anchor the trough to an old dip and overstate
+                # recovery.  Reverse-argmax picks the last peak.
+                p_pos = int(vals[::-1].argmax())
+                p_pos = len(vals) - 1 - p_pos
                 t = float(np.min(vals[p_pos:]))
                 if p - t <= _EPS:
                     out[row, col] = 1.0

@@ -3,8 +3,14 @@
 from __future__ import annotations
 import numpy as np
 import pandas as pd
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
-from cleaned_operators.price_volume.candle_pattern_engine_v2 import _engine as _base_engine,_pi
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.price_volume.candle_pattern_engine_v2 import (
+    _engine as _base_engine,
+    _pi,
+    _CANDLE_BODY_ACTIVE,
+    _CANDLE_SHADOW_ACTIVE,
+    _CANDLE_PENETRATION_ACTIVE,
+)
 
 
 def _engine(o,h,l,c,pattern,body_window,shadow_window,penetration):
@@ -27,6 +33,6 @@ def _engine(o,h,l,c,pattern,body_window,shadow_window,penetration):
     return pd.DataFrame(np.where(mask,-1.0,np.nan),index=o.index,columns=o.columns).where(valid)
 
 class CandlestickPatternEngineV2(SeriesOperator):
-    metadata=OperatorMetadata(name="candlestick_pattern",category="candle_pattern",description="Adaptive bounded Japanese-candlestick pattern engine.",param_names=["open","high","low","close","pattern","body_window","shadow_window","penetration"],return_type="series",tags=["pit_safe","causal","bounded_history","production_repair"])
+    metadata=OperatorMetadata(name="candlestick_pattern",category="candle_pattern",description="Adaptive bounded Japanese-candlestick pattern engine.",param_names=["open","high","low","close","pattern","body_window","shadow_window","penetration"],return_type="series",tags=["pit_safe","causal","bounded_history","production_repair","semantic_family:adaptive_custom"],param_specs={"pattern":ParamSpec(dtype=str,searchable=True),"body_window":ParamSpec(dtype=int,min=2,active_when=("pattern",_CANDLE_BODY_ACTIVE)),"shadow_window":ParamSpec(dtype=int,min=2,active_when=("pattern",_CANDLE_SHADOW_ACTIVE)),"penetration":ParamSpec(dtype=float,min=0.0,max=1.0,active_when=("pattern",_CANDLE_PENETRATION_ACTIVE))})
     def _calculate_series(self,open,high,low,close,pattern,body_window=10,shadow_window=10,penetration=0.3,**kwargs):return _engine(open,high,low,close,pattern,body_window,shadow_window,penetration)
 register_operator(name="candlestick_pattern",category="candle_pattern",business_category="technical_extension",canonical="candlestick_pattern",source="candle_pattern_engine_repairs_v2",backend="pandas_numpy",status="production")(CandlestickPatternEngineV2)

@@ -1,5 +1,155 @@
 # Changelog
 
+## 0.9.1 — 第三轮增量收口（compiled 计划 / 谓词门 / 精确快照）
+
+在 `6d66e9c` 之上按第三层审计清单（P0 1-23 / P1 24-40）收口，全部为「新模块
+组合以后的语义一致 / snapshot 真实 / 计划执行一致 / 明确代码 bug」：
+
+**计划与执行一致（P0-1..5）**
+- `CompiledDataRequest`：`plan()` 编译期冻结请求语义（不可变），`ReadPlan.execute()`
+  只消费 compiled——调用方在 plan 后改 `req.filters/joins/aggregations` 不再改变
+  执行；`plan()` 不再写回 `request.anchor`。
+- `snapshot_policy = latest / fail_if_changed / pin`：execute 前按每数据集
+  `manifest_version` 对比 plan 时刻 token，版本变化即拒绝（回测/训练可复现）。
+- 组合执行器 `_execute_composed` honor `result="stream"`（不再忽略）、静态 universe
+  先展开、`time_varying_universe` 正确下沉；`ReadPlan.execute()` 把 plan 阶段
+  编译好的 `join_specs_effective` 原样交给 read_joined（explain == execute）。
+
+**Snapshot 真实化（P0-6..8）**
+- `_expand_glob_paths`：读路径把 glob 冻结成精确文件清单，DuckDB 不再二次
+  mutable glob（TOCTOU）；Polars scan 绑定精确文件 + `ScanHandle.collect()`
+  collect 前 revalidate（mtime/size），strict 变化即拒、research 重建 snapshot。
+- `FileVersion` 增加 `etag/version_id/content_length/last_modified`；s3:// 对象
+  头元数据（boto3 best-effort，strict 或 `DATA_ACCESS_REMOTE_SNAPSHOT_META=1`
+  时 head），对象被覆盖 → snapshot_id 跟着变。
+
+**日历（P0-11..13 / P1-31/32）**
+- `MarketCalendar.available_from()` 先做 UTC → 交易所本地时区转换；非交易日不
+  生成「当天开盘」（跳到下一交易日开盘）。
+- 全局 calendar 缓存 key = market + source token（manifest source_epoch /
+  explicit 内容指纹 / store 注册表指纹），数据更新自动失效、store-local。
+- `sql_next_trading_day_join` 改 `zip(days, days[1:])` O(N)。
+
+**契约门升级（P0-14..16）**
+- `required_filters` 从「列名出现在条件里」升级为 `filter_restricts_column`
+  PredicateConstraint：`Ne`/`IsNotNull`/`Not`/OR-部分分支不能再冒充已约束。
+- `allowed_filter_values` 用 `filter_constraint_status` 区分 absent/positive/weak：
+  weak（无法证明 result ⊆ allowed）→ strict 拒绝。
+- `DATA_ACCESS_STRICT_READ=1` 完全共享 production 的 fail-closed（semantic
+  catalog 歧义 / ScanHandle lazy / __getattr__ 物化路径统一 `is_strict_semantics`）。
+
+**read_uri（P0-17..19）**
+- strict `read_uri` 用**精确 URI 作为 physical scope**（借用注册数据集 Contract
+  做语义门禁，物理读取仍限指定文件，不再全 glob）。
+- 对象 URI 反查不再用 `pathlib.Path`（本地语义）；格式匹配修正（`format="parquet"`
+  不再让 CSV 注册数据集成为候选）。
+
+**Serving / stream（P0-21..23 / P1-29/30）**
+- `materialize_daily_aggregate` 重写为一次扫描：PreparedReadRequest → 带
+  time_range/instrument_filter 行级谓词的聚合 SQL → GROUP BY（旧实现扫两遍且
+  第二遍无行级谓词，会把未请求的股票聚合进去）。
+- Polars scan 按 FormatSpec 选 `scan_parquet/scan_csv/scan_ndjson`（不再硬编码）；
+  CBO `suggest_read_strategy` 对 arrow/feather 自动选 pyarrow。
+- stream deadline 已前置到 engine reader（第一批前）。
+
+**写事务（P0-9..10）**
+- `_dataset_mutation` 显式 PREPARED/COMMITTED/ABORTED：进入 body 前先 bump
+  source_epoch（mark dirty 在 mutate 之前），只有 COMMITTED 才 rebuild manifest，
+  ABORTED 绝不 build fresh。
+
+**Spec/IR/Storage 硬化（P1-33..40）**
+- `TemporalJoinSpec`：字符串 `"false"/"0"` 正确解析为 False；`revision_order`/
+  `primary_key` 非法类型 fail-closed；`availability_latency` 类型校验。
+- `ContractIR`：`external=True` 贯通（audit 不再误报外部契约）；`required_filters`
+  完整合并 panel+dimension+event+字段级；availability/duplicate_policy 冲突检测。
+- `StorageSpec(type=非法)` 构造即抛；`resolve_storage_for_dataset` COS 查询失败
+  fail-closed（不再静默降级 local）；新增 `storage_backend_capabilities()` 能力
+  矩阵（HTTP/ClickHouse 未实现 reader 显式声明）。
+
+**Query cache / CBO（P1-25..27）**
+- 无权威 manifest（不存在 / 不 fresh）→ 不再缓存（外部系统改数据只能等 TTL
+  的坑）。
+- `plan()` 按每 dataset 传 `source_params` 给 `estimate_scan_cost` /
+  `manifest_version`（ParametricDataset 成本/版本正确）。
+
+**回归**：`tests/unit/test_final_closure_round3.py` 18 条新增，全量 420 passed，
+ContractIR audit 71 数据集一致。
+
+## 0.9.0 — DataAccess 收官整改（统一语义 / 事务 / 治理）
+
+按 `docs/DATAACCESS_FINAL_CLOSURE_PLAN.md` 落地：消灭第二套 join 语义、PIT
+财务 seed 正确性、交易日历 fail-closed、多时钟时间轴、dataset 级契约门、因子
+矩阵一致性、执行治理（stream 直路由 / governed lazy / Scanner 下推）、写事务
+原子性、namespace/ContractIR/Metadata Plane。含 17 条 DoD 回归 + 永久 CI。
+
+**统一 JoinCompiler（P0-1/P0-2）**
+- 删除 `PhysicalPlanExecutor._join_aggregated_anchor` 的第二套 join 语义；聚合
+  锚点物化为临时 parquet 作为 `anchor_override`，交给与 `read_joined` **同一个**
+  `_read_joined_sql` 编译——period_selection / revision 去重 / session 日历 /
+  seed+window / future_cutoff / fanout / universe 全部一致。
+- 新增 `_effective_join_specs`：SemanticField 默认 → COS Contract 默认 → 显式
+  joins 覆盖；`plan()`/PIT validator/组合执行消费同一份。
+
+**PIT / 日历 / 时钟**
+- Financial seed 改为「截至 start 的 PIT 状态」（period DESC, revision DESC），
+  修掉 Q3 已被晚到 Q2 修订回滚（P0-3）。
+- Calendar loader 过滤 `IsTradeDay`/`is_trading_day`；production 真实日历不可用
+  fail-closed；fallback 日历缓存到独立 key 不污染权威日历（P0-4/5）。
+- `_session_avail_sql` 前瞻 21 天；availability 拆细粒度
+  （same_instant/next_bar/next_session_open/after_close_next_open/…，P0-6/7）。
+- 美股 early close（13:00 收市）按日期注入 session（P0-8）。
+- ContractIR 增加 `TemporalAxes`；manifest 只在查询时钟 == partition 时钟时
+  prune，PIT 分支用 knowledge 时钟裁剪或放行（P0-9）。
+- dataset 级 required filters（timeframe/IndustrySource/IndexSymbol）无论选哪些
+  列都强制（P0-10）；`is_strict_semantics()` 唯一 fail-closed 开关（P0-11）；
+  effective_time_only 无界查询 production 拒绝（P0-13）；fanout IN 多值仍判
+  fan-out（P0-14）。
+
+**因子 / PIT 索引 / 缓存**
+- `read_factors` 一致性 gate 先于 matrix 路由；matrix 精确投影请求 fids，
+  MatrixCoverageMiss 兜底；版本检查改窗口内 DISTINCT 集合（跨分区混版本能抓住，
+  P0-17/23/24/25）。
+- PITEventIndex：文件级 min/max 剪枝、`indexed_file_count`=文件数、
+  limit 截断 → complete=False、真 schema hash（P0-15/16）。
+- cache key：columns 保留顺序（[A,B]≠[B,A]）、columns=None 展开 schema 列
+  （P0-35/36）。
+
+**执行治理（P0-18..22）**
+- `result="stream"` 直接路由到真正 reader，不再先物化再重扫；deadline 传给
+  engine watchdog（第一批之前生效）；generator finally 关闭 reader 归还连接。
+- governed lazy：production 不暴露 raw LazyFrame，collect 走 budget 治理。
+- PyArrow 引擎改 dataset.Scanner（filter/projection pushdown，不再先全读再
+  pc.filter）。
+- sql_relation production 增加 FROM 表集合绑定（snapshot_datasets 是真实数据
+  边界，不止 lineage）。
+
+**写事务（P0-26..31）**
+- `_dataset_mutation` 改 DatasetTransaction：metadata 只在 COMMIT 前进；
+  ABORTED 只 invalidate 不重建（manifest 保持 dirty 安全回退）。
+- 多分区 upsert 改 prepare-then-promote：全部 merge 成功才统一晋级，失败
+  可检测（staged_partitions 进 TransactionManifest）。
+- publish 增加 unique_key 唯一性发布 gate + 发布代次 content_hash。
+- mutation lock 跨 host 不得用本地 PID 回收（P0-31）。
+
+**Namespace / ContractIR / Metadata Plane（P0-32..34）**
+- namespace 改 `contextvars.ContextVar`，嵌套 enter/exit 恢复外层，asyncio 不串。
+- ContractIR 补 `issues` 字段（修复 audit() AttributeError），`store.contract_ir()
+  .audit()` 在完整 registry 上可运行。
+- Metadata Plane 感知 source_epoch 变化，mutation 后不再返回旧派生对象。
+
+**P1 收口（部分）**
+- P1-17 row-group 统计按 (path,row_group) 去重；P1-14 CBO 不再重复计 selectivity；
+  P1-21 storage_backend/layout/file_format 严格分离；P1-28 `order_by` 确定性排序
+  （DataRequest/read_joined/组合执行）；P1-23 PIT schema hash。
+
+**DoD 回归 + CI**
+- `tests/unit/test_final_closure_dod.py`：17 条收官 DoD（路径等价 / 组合 parity /
+  late-revision / 真实日历 / 末端 boundary / early close / required filter 不可绕
+  过 / fanout 单值 / 未来事件拒绝 / PIT index 计数 / ContractIR audit / plane
+  epoch / cache 列序 / stream 直路由+早停 / 锁 host 感知 / 嵌套 namespace）。
+- `.github/workflows/dataaccess-final-closure.yml`：ContractIR audit + DoD 套件
+  永久 CI。
+
 ## 0.8.1 — DataAccess 正确性收口（DataAccess-only）
 
 按 `docs/DATAACCESS_CORRECTNESS_FIX_PLAN.md` 落地：Manifest 双 epoch、mutation

@@ -39,6 +39,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -48,15 +49,53 @@ from cleaned_operators.gemini_v2_common import (
 
 _EPS = 1e-12
 
+# R5 P1-01: authoritative per-parameter contracts (no silent 5.9 -> 5).
+_HVG_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=4, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=4, searchable=True),
+}
+
 
 # ---------------------------------------------------------------------------
 # shared HVG kernel
 # ---------------------------------------------------------------------------
+def _hvg_reference_O_W2(v: np.ndarray) -> list[tuple[int, int]]:
+    """Reference HVG edge enumeration, strictly by the mathematical definition.
+
+    Edge ``(i, j)`` (``i < j``) exists iff ``x_k < min(x_i, x_j)`` for EVERY
+    intermediate ``i < k < j`` — a strict inequality, so an equal-height
+    intermediate (e.g. ``x_k == x_i``) blocks the pair.  ``O(W²)`` per window;
+    used as the ground truth for the monotonic-stack implementation.
+    """
+    n = v.shape[0]
+    edges: list[tuple[int, int]] = []
+    for i in range(n):
+        vi = float(v[i])
+        for j in range(i + 1, n):
+            vj = float(v[j])
+            m = vi if vi < vj else vj
+            ok = True
+            for k in range(i + 1, j):
+                if float(v[k]) >= m:
+                    ok = False
+                    break
+            if ok:
+                edges.append((i, j))
+    return edges
+
+
 def _hvg_directed_degrees(v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Direct HVG in/out degrees via a monotonic stack (strict ``<``).
 
     Returns ``(k_in, k_out)`` (length ``len(v)``).  Every edge ``(j, i)``
     (``j < i``) contributes ``+1`` to ``k_out[j]`` and ``+1`` to ``k_in[i]``.
+
+    R5 P0-06 (ties): the stack keeps indices with *strictly decreasing* values.
+    When the current value equals the stack top, the two are adjacent-visible
+    (edge ``(top, i)``) and the current node REPLACES the old equal top — the
+    old equal-height node can no longer be exposed to a future taller node
+    (it would be blocked by the equal intermediate anyway).  Without this rule
+    ``[1, 1, 2]`` would wrongly connect nodes 0 and 2.
     """
     n = v.shape[0]
     k_in = np.zeros(n, dtype=float)
@@ -72,12 +111,22 @@ def _hvg_directed_degrees(v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
             j = stack[-1]
             k_out[j] += 1.0
             k_in[i] += 1.0
-        stack.append(i)
+            if float(v[j]) == vi:
+                stack[-1] = i          # equal top is replaced, not duplicated
+            else:
+                stack.append(i)
+        else:
+            stack.append(i)
     return k_in, k_out
 
 
 def _hvg_edges(v: np.ndarray) -> list[tuple[int, int]]:
-    """Edge list of the undirected HVG (as ``(min_i, max_i)`` pairs)."""
+    """Edge list of the undirected HVG (as ``(min_i, max_i)`` pairs).
+
+    Same strictly-decreasing stack with the equal-top replace rule (R5 P0-06)
+    as :func:`_hvg_directed_degrees`; the two must agree with
+    :func:`_hvg_reference_O_W2` on every input (property-tested).
+    """
     n = v.shape[0]
     edges: list[tuple[int, int]] = []
     stack: list[int] = []
@@ -87,8 +136,14 @@ def _hvg_edges(v: np.ndarray) -> list[tuple[int, int]]:
             j = stack.pop()
             edges.append((j, i))
         if stack:
-            edges.append((stack[-1], i))
-        stack.append(i)
+            j = stack[-1]
+            edges.append((j, i))
+            if float(v[j]) == vi:
+                stack[-1] = i          # equal top is replaced, not duplicated
+            else:
+                stack.append(i)
+        else:
+            stack.append(i)
     return edges
 
 
@@ -173,7 +228,11 @@ def _hvg_stats(v: np.ndarray) -> dict[str, float]:
     else:
         assortativity = np.nan
 
-    # ---- motif entropy (size-3 patterns) ----
+    # ---- motif entropy (size-3 induced patterns) ----
+    # R5 P1-04: the semantics are the entropy of the *induced* 3-node subgraph
+    # type distribution over all C(n,3) triples (not consecutive-window
+    # visibility motifs).  O(n³) per window by construction — this operator is
+    # extended-only (cost 5) and intentionally not on the daily grammar.
     motifs: dict[tuple[bool, bool, bool], int] = {}
     total = 0
     for i in range(n):
@@ -201,16 +260,17 @@ def _hvg_stats(v: np.ndarray) -> dict[str, float]:
     }
 
 
-def _hvg_series(x2d: np.ndarray, window: int, key: str) -> np.ndarray:
+def _hvg_series(x2d: np.ndarray, window: int, min_periods: int, key: str) -> np.ndarray:
     rows, cols = x2d.shape
     w = max(4, int(window))
+    mp = max(4, int(min_periods))
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
             lo = max(0, r - w + 1)
             v = trailing_contiguous_finite(col[lo : r + 1])
-            if v.size < 8:
+            if v.size < mp:
                 continue
             stats = _hvg_stats(v)
             val = stats.get(key, np.nan)
@@ -222,38 +282,45 @@ def _hvg_series(x2d: np.ndarray, window: int, key: str) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # kernels
 # ---------------------------------------------------------------------------
+def _hvg_check_params(window: int, min_periods: int, canonical: str) -> tuple[int, int]:
+    w = int(window)
+    mp = int(min_periods)
+    if w < 4:
+        raise ValueError(f"{canonical} requires window >= 4")
+    if mp < 4:
+        raise ValueError(f"{canonical} requires min_periods >= 4")
+    if mp > w:
+        raise ValueError(f"{canonical} requires min_periods <= window (got {mp} > {w})")
+    return w, mp
+
+
 def _ts_hvg_degree_entropy(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
-    if int(window) < 4:
-        raise ValueError("ts_hvg_degree_entropy requires window >= 4")
-    out = _hvg_series(x.to_numpy(dtype=float), int(window), "degree_entropy")
+    w, mp = _hvg_check_params(window, min_periods, "ts_hvg_degree_entropy")
+    out = _hvg_series(x.to_numpy(dtype=float), w, mp, "degree_entropy")
     return frame_like(x, out)
 
 
 def _ts_hvg_forward_backward_asymmetry(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
-    if int(window) < 4:
-        raise ValueError("ts_hvg_forward_backward_asymmetry requires window >= 4")
-    out = _hvg_series(x.to_numpy(dtype=float), int(window), "asymmetry")
+    w, mp = _hvg_check_params(window, min_periods, "ts_hvg_forward_backward_asymmetry")
+    out = _hvg_series(x.to_numpy(dtype=float), w, mp, "asymmetry")
     return frame_like(x, out)
 
 
 def _ts_hvg_clustering_coefficient(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
-    if int(window) < 4:
-        raise ValueError("ts_hvg_clustering_coefficient requires window >= 4")
-    out = _hvg_series(x.to_numpy(dtype=float), int(window), "clustering")
+    w, mp = _hvg_check_params(window, min_periods, "ts_hvg_clustering_coefficient")
+    out = _hvg_series(x.to_numpy(dtype=float), w, mp, "clustering")
     return frame_like(x, out)
 
 
 def _ts_hvg_assortativity(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
-    if int(window) < 4:
-        raise ValueError("ts_hvg_assortativity requires window >= 4")
-    out = _hvg_series(x.to_numpy(dtype=float), int(window), "assortativity")
+    w, mp = _hvg_check_params(window, min_periods, "ts_hvg_assortativity")
+    out = _hvg_series(x.to_numpy(dtype=float), w, mp, "assortativity")
     return frame_like(x, out)
 
 
 def _ts_hvg_motif_entropy(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
-    if int(window) < 4:
-        raise ValueError("ts_hvg_motif_entropy requires window >= 4")
-    out = _hvg_series(x.to_numpy(dtype=float), int(window), "motif_entropy")
+    w, mp = _hvg_check_params(window, min_periods, "ts_hvg_motif_entropy")
+    out = _hvg_series(x.to_numpy(dtype=float), w, mp, "motif_entropy")
     return frame_like(x, out)
 
 
@@ -269,6 +336,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "unit": "entropy",
         "cost": 4,
         "tags_extra": ["hvg"],
+        "param_specs": _HVG_PARAM_SPECS,
     },
     "ts_hvg_forward_backward_asymmetry": {
         "fn": _ts_hvg_forward_backward_asymmetry,
@@ -322,6 +390,7 @@ def _register() -> None:
             source="hvg_ext",
             tags_extra=spec["tags_extra"],
             output_unit=spec["unit"],
+            param_specs=spec.get("param_specs"),
         )
     union_extended(*_SPECS.keys())
 

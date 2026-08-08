@@ -15,7 +15,7 @@ import pandas as pd
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 
 
-def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str) -> OperatorMetadata:
+def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str, output_unit: str | None = None) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="time_series_risk",
@@ -27,6 +27,7 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", "cost:1",
         ],
+        output_unit=output_unit,
     )
 
 
@@ -54,14 +55,19 @@ def _rolling_apply_2d(values: np.ndarray, window: int, fn: Any, min_periods: int
     status="experimental",
 )
 class TsDownsideDeviation(SeriesOperator):
-    """下行偏离：sqrt(mean(min(x - target, 0)^2))。"""
+    """下行偏离：sqrt(mean(min(x - target, 0)^2))。
+
+    单位继承 x (R5 P1-36(c))：对价格/收益序列输入，输出与 x 同单位，不是无量纲
+    比值。
+    """
 
     metadata = _metadata(
         "ts_downside_deviation",
-        "下行偏离 sqrt(mean(min(x-target,0)^2))。",
+        "下行偏离 sqrt(mean(min(x-target,0)^2))，单位继承 x。",
         ["x", "window", "target", "min_periods"],
         domain="price_volume",
-        unit="ratio",
+        unit="same_as:target",
+        output_unit="same_as:target",
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, target: float = 0.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:
@@ -88,14 +94,19 @@ class TsDownsideDeviation(SeriesOperator):
     status="experimental",
 )
 class TsUpsideDeviation(SeriesOperator):
-    """上行偏离：sqrt(mean(max(x - target, 0)^2))。"""
+    """上行偏离：sqrt(mean(max(x - target, 0)^2))。
+
+    单位继承 x (R5 P1-36(c))：对价格/收益序列输入，输出与 x 同单位，不是无量纲
+    比值。
+    """
 
     metadata = _metadata(
         "ts_upside_deviation",
-        "上行偏离 sqrt(mean(max(x-target,0)^2))。",
+        "上行偏离 sqrt(mean(max(x-target,0)^2))，单位继承 x。",
         ["x", "window", "target", "min_periods"],
         domain="price_volume",
-        unit="ratio",
+        unit="same_as:target",
+        output_unit="same_as:target",
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, target: float = 0.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:
@@ -142,7 +153,10 @@ class TsCurrentDrawdownDuration(SeriesOperator):
                 start = max(0, row - w + 1)
                 chunk = xv[start : row + 1, col]
                 valid_mask = np.isfinite(chunk)
-                if not valid_mask.any():
+                # R5 P1-36(a): the *current* observation is missing — the "current"
+                # drawdown duration is unknowable.  Fail-close to NaN instead of
+                # silently reporting the stale duration from the older peers.
+                if not valid_mask.any() or not valid_mask[-1]:
                     continue
                 running_peak = np.maximum.accumulate(np.where(valid_mask, chunk, -np.inf))
                 streak = 0
@@ -187,7 +201,9 @@ class TsTimeUnderWater(SeriesOperator):
                 start = max(0, row - w + 1)
                 chunk = xv[start : row + 1, col]
                 valid = chunk[np.isfinite(chunk)]
-                if valid.size == 0:
+                # R5 P1-36(b): a missing *current* observation must fail-close to
+                # NaN rather than emitting the historical under-water ratio.
+                if valid.size == 0 or not np.isfinite(chunk[-1]):
                     continue
                 running_peak = np.maximum.accumulate(np.where(np.isnan(chunk), -np.inf, chunk))
                 under = np.sum((chunk < running_peak) & np.isfinite(chunk))
@@ -225,11 +241,16 @@ def _best_lag_corr(x: np.ndarray, y: np.ndarray, row: int, window: int, max_lag:
     status="experimental",
 )
 class TsBestLagCorr(SeriesOperator):
-    """y 对 x 各滞后阶绝对相关中的最大值。"""
+    """source x 领先 target y 的绝对相关强度。
+
+    方向约定 (R5 P1-36(d))：计算 ``corr(y[t], x[t-lag])`` 在 lag=0..max_lag 上的
+    最大绝对值，即 ``x``（source/领先序列）过去的值对 ``y``（target/跟随序列）
+    当前的预测能力。x 领先 y，方向是 source -> target。
+    """
 
     metadata = _metadata(
         "ts_best_lag_corr",
-        "y 对 x 滞后 0..max_lag 绝对相关的最大值。",
+        "source x 领先 target y：max_lag 内 |corr(y[t], x[t-lag])| 的最大值。",
         ["y", "x", "window", "max_lag"],
         domain="price_volume",
         unit="ratio",

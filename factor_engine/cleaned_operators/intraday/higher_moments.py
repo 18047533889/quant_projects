@@ -32,11 +32,31 @@ def _realized_var(r: np.ndarray) -> float:
 
 
 def _bipower_var(r: np.ndarray) -> float:
-    finite = r[np.isfinite(r)]
-    if len(finite) < 2:
+    # P1-100: the product must run over *adjacent slots of the original minute
+    # axis* — |r_t| * |r_{t-1}| — never over the compressed array of finite
+    # returns.  Compressing made the two sides of a missing minute neighbours,
+    # fabricating a within-day cross-product where no real adjacent pair exists.
+    if int(np.isfinite(r).sum()) < 2:
         return np.nan
     with np_errstate():
-        return float((np.pi / 2.0) * np.nansum(np.abs(finite[1:]) * np.abs(finite[:-1])))
+        prod = np.abs(r[1:]) * np.abs(r[:-1])
+        valid = np.isfinite(r[1:]) & np.isfinite(r[:-1])
+        if not np.any(valid):
+            return np.nan
+        return float((np.pi / 2.0) * np.nansum(prod))
+
+
+def _check_scale(threshold_scale: float) -> float:
+    """Validate ``threshold_scale`` (P1-102): must be a finite number > 0.
+
+    A negative scale flips the mask into "every bar is a jump" (the threshold
+    becomes negative, so ``|r| > negative`` is almost always true) — reject it
+    loudly rather than silently producing a degenerate decomposition.
+    """
+    ts = float(threshold_scale)
+    if not np.isfinite(ts) or ts <= 0.0:
+        raise ValueError("threshold_scale must be a finite number > 0")
+    return ts
 
 
 def _jump_mask(r: np.ndarray, threshold_scale: float) -> np.ndarray:
@@ -46,6 +66,7 @@ def _jump_mask(r: np.ndarray, threshold_scale: float) -> np.ndarray:
     own realized volatility; the default 3.0 yields roughly one jump bar per
     trading day for an i.i.d. Gaussian minute process (0.27% two-sided tail).
     """
+    ts = _check_scale(threshold_scale)
     finite = r[np.isfinite(r)]
     n = len(finite)
     mask = np.zeros(len(r), dtype=bool)
@@ -57,7 +78,7 @@ def _jump_mask(r: np.ndarray, threshold_scale: float) -> np.ndarray:
     per_bar_vol = float(np.sqrt(rv / n))
     if per_bar_vol <= _EPS:
         return mask
-    thresh = float(threshold_scale) * per_bar_vol
+    thresh = ts * per_bar_vol
     with np_errstate():
         mask = np.abs(r) > thresh
     return mask
@@ -152,14 +173,22 @@ class IntraRealizedQuarticity(SeriesOperator):
 
 def _tripower_quarticity(close_v: np.ndarray) -> float:
     r = log_returns(close_v)
-    finite = r[np.isfinite(r)]
-    if len(finite) < 4:
+    # P1-100: same slot-axis rule as bipower — a triple product is only
+    # admissible across three *adjacent* minute slots, all present.  Compressing
+    # finite returns first would bridge missing minutes into adjacency.
+    n_finite = int(np.isfinite(r).sum())
+    if n_finite < 4:
         return np.nan
     with np_errstate():
-        prod = np.abs(finite[2:]) ** (4.0 / 3.0) * np.abs(finite[1:-1]) ** (4.0 / 3.0) * np.abs(finite[:-2]) ** (4.0 / 3.0)
+        a = np.abs(r[2:]) ** (4.0 / 3.0)
+        b = np.abs(r[1:-1]) ** (4.0 / 3.0)
+        c = np.abs(r[:-2]) ** (4.0 / 3.0)
+        prod = a * b * c
+        valid = np.isfinite(r[2:]) & np.isfinite(r[1:-1]) & np.isfinite(r[:-2])
+        if not np.any(valid):
+            return np.nan
         total = float(np.nansum(prod))
-    n = len(finite)
-    return tripower_scale() * n * total
+    return tripower_scale() * n_finite * total
 
 
 @register_operator(
@@ -255,9 +284,13 @@ def _signed_jump_stats(close_v: np.ndarray, threshold_scale: float) -> tuple[flo
         w = rj * rj / total
         concentration = float(np.sum(w * w))
     idx = np.flatnonzero(mask)
-    n_bars = int(np.sum(np.isfinite(r)))
-    first_t = float(idx[0]) / (n_bars - 1) if n_bars > 1 else np.nan
-    last_t = float(idx[-1]) / (n_bars - 1) if n_bars > 1 else np.nan
+    # P1-101: normalise by the *official* minute slot grid (len(r) - 1, i.e.
+    # 239 for a full 240-minute A-share session), never by the count of finite
+    # returns.  Using the finite count made first/last time exceed 1 whenever a
+    # missing minute shrank the denominator below the raw index.
+    n_slots = len(r)
+    first_t = float(idx[0]) / (n_slots - 1) if n_slots > 1 else np.nan
+    last_t = float(idx[-1]) / (n_slots - 1) if n_slots > 1 else np.nan
     cluster_cv = np.nan
     if len(idx) > 2:
         gaps = np.diff(idx).astype(float)
@@ -284,7 +317,7 @@ class IntraPositiveJumpVariation(SeriesOperator):
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
-        ts = float(threshold_scale)
+        ts = _check_scale(threshold_scale)
 
         def _fn(v, t):
             return _signed_jump_stats(v, ts)[0]
@@ -309,7 +342,7 @@ class IntraNegativeJumpVariation(SeriesOperator):
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
-        ts = float(threshold_scale)
+        ts = _check_scale(threshold_scale)
 
         def _fn(v, t):
             return _signed_jump_stats(v, ts)[1]
@@ -327,14 +360,22 @@ class IntraNegativeJumpVariation(SeriesOperator):
     status="experimental",
 )
 class IntraSignedJumpRatio(SeriesOperator):
-    """有符号跳跃比 (posJV-negJV)/(jump_variation+eps)。"""
+    """有符号跳跃比 (posTail-negTail)/(posTail+negTail+eps)。
+
+    基于阈值尾部平方和 (|r|>threshold*sqrt(RV/N) 的正负尾部), 不是 BNS
+    跳跃分解 max(RV-BV,0) 的符号分解 —— 与 ``*_tail_variation`` 族同源
+    (P1-103 文档对齐)。
+    """
 
     metadata = metadata(
-        "intra_signed_jump_ratio", "有符号跳跃比。", ["close", "threshold_scale"], unit="ratio"
+        "intra_signed_jump_ratio",
+        "有符号跳跃比(阈值尾部, 非 BNS 分解)。",
+        ["close", "threshold_scale"],
+        unit="ratio",
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
-        ts = float(threshold_scale)
+        ts = _check_scale(threshold_scale)
 
         def _fn(v, t):
             pos, neg, *_ = _signed_jump_stats(v, ts)
@@ -361,7 +402,7 @@ class IntraJumpCount(SeriesOperator):
     metadata = metadata("intra_jump_count", "日内跳跃分钟数。", ["close", "threshold_scale"], unit="count")
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
-        ts = float(threshold_scale)
+        ts = _check_scale(threshold_scale)
 
         def _fn(v, t):
             return _signed_jump_stats(v, ts)[2]
@@ -391,7 +432,7 @@ def _tail_op(name: str, description: str, unit: str, index: int):
         metadata = metadata(name, description, ["close", "threshold_scale"], unit=unit)
 
         def _calculate_series(self, close, threshold_scale=3.0, **_):
-            ts = float(threshold_scale)
+            ts = _check_scale(threshold_scale)
 
             def _fn(v, t):
                 return _signed_jump_stats(v, ts)[index]
@@ -436,7 +477,7 @@ class IntraSignedTailVariationRatio(SeriesOperator):
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
-        ts = float(threshold_scale)
+        ts = _check_scale(threshold_scale)
 
         def _fn(v, t):
             pos, neg, *_ = _signed_jump_stats(v, ts)
@@ -464,7 +505,7 @@ class IntraJumpConcentration(SeriesOperator):
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
-        ts = float(threshold_scale)
+        ts = _check_scale(threshold_scale)
 
         def _fn(v, t):
             return _signed_jump_stats(v, ts)[3]
@@ -489,7 +530,7 @@ class IntraJumpFirstTime(SeriesOperator):
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
-        ts = float(threshold_scale)
+        ts = _check_scale(threshold_scale)
 
         def _fn(v, t):
             return _signed_jump_stats(v, ts)[4]
@@ -514,7 +555,7 @@ class IntraJumpLastTime(SeriesOperator):
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
-        ts = float(threshold_scale)
+        ts = _check_scale(threshold_scale)
 
         def _fn(v, t):
             return _signed_jump_stats(v, ts)[5]
@@ -539,7 +580,7 @@ class IntraJumpClustering(SeriesOperator):
     )
 
     def _calculate_series(self, close, threshold_scale=3.0, **_):
-        ts = float(threshold_scale)
+        ts = _check_scale(threshold_scale)
 
         def _fn(v, t):
             return _signed_jump_stats(v, ts)[6]

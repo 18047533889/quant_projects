@@ -78,16 +78,19 @@ def _scan_confirmed_pivots(x: np.ndarray, confirmation: int, prominence: float) 
     """Return ``(bar_idx, price, is_peak)`` for all confirmed pivots of a column.
 
     ``x`` is the 1D per-column price series.  NaN bars are skipped (they neither
-    form pivots nor break the chain).  Confirmed peaks/troughs alternate via the
-    prominence filter against the most recent opposite confirmed pivot; the first
-    pivot seeds the chain.
+    form pivots nor break the chain).  A strict peak/trough alternation state
+    machine (review R4-18): after a peak the next accepted pivot is a trough
+    (prominence-filtered against the peak), and vice-versa; a same-side more
+    extreme candidate *replaces* the previous pivot instead of appending, so the
+    chain can never contain two consecutive peaks or two consecutive troughs.
+    The first non-flat pivot seeds the chain.
     """
     n = len(x)
     conf = int(confirmation)
     prom = float(prominence)
     pivots: list[tuple[int, float, bool]] = []
-    last_peak: tuple[int, float] | None = None
-    last_trough: tuple[int, float] | None = None
+    last_type: bool | None = None  # True=peak, False=trough
+    last_val: float | None = None
     for k in range(n):
         xk = x[k]
         if not np.isfinite(xk) or xk <= 0.0:
@@ -108,25 +111,32 @@ def _scan_confirmed_pivots(x: np.ndarray, confirmation: int, prominence: float) 
                 is_trough_cand = False
             if not is_peak_cand and not is_trough_cand:
                 break
+        if is_peak_cand and is_trough_cand:
+            continue  # flat neighbourhood (all equal): not a pivot
         pxk = float(xk)
-        if is_peak_cand:
-            if last_trough is None:
-                if last_peak is None:  # seed the chain
-                    pivots.append((k, pxk, True))
-                    last_peak = (k, pxk)
-            else:
-                if pxk - last_trough[1] > prom * abs(pxk):
-                    pivots.append((k, pxk, True))
-                    last_peak = (k, pxk)
-        if is_trough_cand:
-            if last_peak is None:
-                if last_trough is None:  # seed the chain
-                    pivots.append((k, pxk, False))
-                    last_trough = (k, pxk)
-            else:
-                if last_peak[1] - pxk > prom * abs(pxk):
-                    pivots.append((k, pxk, False))
-                    last_trough = (k, pxk)
+        if last_type is None:  # seed the chain
+            is_peak = is_peak_cand
+            pivots.append((k, pxk, is_peak))
+            last_type = is_peak
+            last_val = pxk
+        elif last_type:  # last was a peak -> next legal pivot is a trough
+            if is_trough_cand and last_val - pxk > prom * abs(pxk):
+                pivots.append((k, pxk, False))
+                last_type = False
+                last_val = pxk
+            elif is_peak_cand and pxk > last_val:
+                # same-side more extreme peak: replace, do not append (R4-18)
+                pivots[-1] = (k, pxk, True)
+                last_val = pxk
+        else:  # last was a trough -> next legal pivot is a peak
+            if is_peak_cand and pxk - last_val > prom * abs(pxk):
+                pivots.append((k, pxk, True))
+                last_type = True
+                last_val = pxk
+            elif is_trough_cand and pxk < last_val:
+                # same-side more extreme trough: replace, do not append (R4-18)
+                pivots[-1] = (k, pxk, False)
+                last_val = pxk
     return pivots
 
 
@@ -157,7 +167,10 @@ def _density_series(price2d: np.ndarray, window: int, prominence: float, confirm
             if not ds:
                 continue
             d = np.asarray(ds, dtype=float)
-            out[t, c] = float(np.mean(np.exp(-0.5 * (d / bw) ** 2)))
+            # R4-90: absolute level density (kernel mass per time bar), not a
+            # nearby fraction — a NEW distant pivot must add mass, never pull the
+            # mean down.  (1/window)·Σ K(d_i) is time-normalised.
+            out[t, c] = float(np.sum(np.exp(-0.5 * (d / bw) ** 2)) / w)
     return out
 
 
@@ -229,13 +242,19 @@ def _strength_series(
             if not usable:
                 continue
             total = 0.0
+            cutoff = 0.05
             for (k, p, _is_peak) in usable:
                 if p <= 0.0:
                     continue
                 di = math.log(pt / p)
-                if abs(di) <= 0.05:
-                    age = float(t - k - conf)
-                    total += math.exp(-dec * age) * abs(di)
+                adi = abs(di)
+                if adi > cutoff:
+                    continue
+                age = float(t - k - conf)
+                # R4-19: proximity weight must PEAK on the level (distance 0)
+                # and decay with distance, not the reverse.  Old code used
+                # |log(P/L)| so being exactly on a level contributed 0.
+                total += math.exp(-dec * age) * (1.0 - adi / cutoff)
             out[t, c] = total
     return out
 
@@ -251,15 +270,15 @@ def _strength_series(
     source="structural_levels",
 )
 class TsStructuralLevelDensity(SeriesOperator):
-    """当前价格位于历史结构密集区的程度（对数距离高斯核均值）。
+    """当前价格位于历史结构密集区的程度（对数距离高斯核时间归一和 /window）。
 
     高 → 现价被大量历史确认转折价位包围（密集转折带）；低 → 价格处于历史
-    稀疏区。P1。
+    稀疏区。时间归一后新出现的远处 pivot 只会增加质量，不会拉低均值（R4-90）。P1。
     """
 
     metadata = _metadata(
         "ts_structural_level_density",
-        "当前价格相对近期确认结构价位的密度（exp(-0.5*(log-dist/bandwidth)^2) 均值）。",
+        "结构价位密度（exp(-0.5*(log-dist/bandwidth)^2) 时间归一和 /window，绝对密度）。",
         ["price", "window", "prominence", "confirmation", "bandwidth"],
         unit="ratio",
         cost=5,
@@ -334,14 +353,15 @@ class TsNearestStructuralLevelDistance(SeriesOperator):
     source="structural_levels",
 )
 class TsStructuralLevelStrength(SeriesOperator):
-    """近旁结构价位的按年龄衰减反应强度（|log-dist|<=0.05 的加权和）。
+    """近旁结构价位的按年龄衰减反应强度（距离核 (1-|log-dist|/0.05)+ 的加权和）。
 
-    高 → 现价贴近多个较新确认价位（潜在反应区）。P1。
+    权重在价位上（距离 0）最大，随距离线性衰减到 cutoff（R4-19）。高 → 现价贴近
+    多个较新确认价位（潜在反应区）。P1。
     """
 
     metadata = _metadata(
         "ts_structural_level_strength",
-        "近旁结构价位加权反应：Σ exp(-decay*age)*|log-dist|，仅 |log-dist|<=0.05。",
+        "近旁结构价位加权反应：Σ exp(-decay*age)*(1-|log-dist|/0.05)，距离越近权重越大。",
         ["price", "window", "prominence", "confirmation", "decay"],
         unit="strength",
         cost=5,

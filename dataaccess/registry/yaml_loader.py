@@ -12,9 +12,15 @@ import yaml
 
 
 class StrictYAMLLoader(yaml.SafeLoader):
-    """SafeLoader + duplicate mapping key → ConstructorError（fail-closed）。"""
+    """SafeLoader + duplicate mapping key → ConstructorError（fail-closed）。
+
+    先 ``flatten_mapping`` 处理 ``<<: *anchor`` 合并键（显式 key 覆盖 merged key
+    不会产生 duplicate）；真正重复的**显式** key 才报错。
+    """
 
     def construct_mapping(self, node: Any, deep: bool = False) -> dict[str, Any]:
+        if isinstance(node, yaml.MappingNode):
+            self.flatten_mapping(node)
         mapping: dict[str, Any] = {}
         for key_node, value_node in node.value:
             key = self.construct_object(key_node, deep=deep)

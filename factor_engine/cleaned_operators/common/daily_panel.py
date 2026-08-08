@@ -70,6 +70,23 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
 
 
+def _trailing_contiguous(chunk: np.ndarray) -> np.ndarray:
+    """Longest trailing contiguous finite run ending at the current row.
+
+    A missing value breaks the time axis — rows on either side of a NaN are
+    never re-paired as adjacent (no drop-finite/reconnect).  A NaN at the
+    current row yields an empty block so the caller emits NaN instead of
+    silently reusing the last valid history (review P1-125).
+    """
+    n = chunk.shape[0]
+    if n == 0 or not np.isfinite(chunk[-1]):
+        return chunk[:0]
+    end = n
+    while end > 0 and np.isfinite(chunk[end - 1]):
+        end -= 1
+    return chunk[end:]
+
+
 def ts_count_if(
     condition: pd.DataFrame,
     window: int,
@@ -472,7 +489,11 @@ def ts_max_drawdown(
     mp = max(_positive_int(min_periods, "min_periods"), 2)
 
     def drawdown(values: np.ndarray) -> float:
-        valid = values[np.isfinite(values)]
+        # Trailing contiguous valid price run — a NaN must not re-pair values
+        # that were not temporally adjacent, and a NaN current row yields an
+        # empty block (fail-closed) rather than the last valid history
+        # (review P1-125).
+        valid = _trailing_contiguous(values)
         if valid.size < mp or np.any(valid <= 0):
             return np.nan
         peaks = np.maximum.accumulate(valid)
@@ -548,7 +569,13 @@ _OPERATORS: dict[str, tuple[str, list[str], Callable[..., pd.DataFrame], str]] =
     "cs_bucket": ("cross_sectional", ["x", "buckets", "ascending"], cs_bucket, "按交易日横截面平均排名分桶"),
     "cs_multi_resid": ("cross_sectional_regression", ["y", "x1", "x2", "...", "add_intercept", "min_obs"], cs_multi_resid, "多变量横截面 OLS 残差"),
     "cs_wls_resid": ("cross_sectional_regression", ["y", "x", "weight", "add_intercept", "min_obs"], cs_wls_resid, "加权横截面回归残差"),
-    "period_lag": ("fundamental_period", ["x", "period_id", "periods"], period_lag, "按已披露报告期进行滞后"),
+    # R4-22: ``period_lag`` is NOT registered here.  The canonical ``period_lag``
+    # must resolve to the fiscal_strict implementation (exact fiscal-ordinal lag
+    # with revision policy) registered by ``cleaned_operators.fiscal_strict``.
+    # This module's legacy occurrence-order ``period_lag`` function (below) is
+    # retained for reference only and must not act as a second canonical
+    # semantic; the legacy helper ``_period_ordinal`` / ``_fiscal_ordered_insert``
+    # back it and the fiscal-strict canonical.
     "ts_regression_tstat": ("time_series_regression", ["y", "x", "window", "min_periods", "add_intercept"], ts_regression_tstat, "滚动回归斜率 t 统计量"),
     "ts_trend_tstat": ("time_series_regression", ["x", "window", "min_periods"], ts_trend_tstat, "滚动时间趋势斜率 t 统计量"),
     "ts_max_drawdown": ("time_series_risk", ["x", "window", "min_periods"], ts_max_drawdown, "滚动窗口最大回撤"),

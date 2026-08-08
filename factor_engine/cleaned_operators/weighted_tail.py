@@ -5,8 +5,9 @@ These generalise the fixed formulas Gemini proposed into weight- and
 sorter-parameterised primitives that AlphaMiner / AlphaProbe / GP can recombine:
 
 * ``ts_stratified_mean_spread``      — mean of ``target`` on the high-sorter tail
-  minus the mean on the low-sorter tail inside a trailing window (``target`` /
-  ``sorter`` are parameters, so ``return x volume`` is just one recipe).
+  minus the mean on the low-sorter tail inside a trailing window (``quantile``
+  must be ``<= 0.5`` so the two strata never overlap; ``target`` / ``sorter``
+  are parameters, so ``return x volume`` is just one recipe).
 * ``ts_weighted_semivariance``       — sqrt of the weight-normalised mean of
   squared downside deviations below a target (weights default to turnover).
 * ``ts_weighted_expected_shortfall`` — weight-normalised mean of the tail beyond
@@ -34,7 +35,11 @@ _EPS = 1e-12
 def _weighted_quantile(
     values: np.ndarray, weights: np.ndarray, quantile: float
 ) -> float:
-    """Linear-interpolated weighted quantile over (value, weight) pairs."""
+    """Linear-interpolated weighted quantile over (value, weight) pairs.
+
+    ``q <= cdf[0]`` clamps to ``cs[0]`` and ``q >= cdf[-1]`` clamps to ``cs[-1]``
+    (P0-17: the old index-clamp-to-1 extrapolated below the first value).
+    """
     qq = float(quantile)
     order = np.argsort(values)
     cs = values[order]
@@ -44,9 +49,9 @@ def _weighted_quantile(
     if total <= _EPS:
         return np.nan
     cdf = cdf / total
-    if qq <= 0.0:
+    if qq <= float(cdf[0]):
         return float(cs[0])
-    if qq >= 1.0:
+    if qq >= float(cdf[-1]):
         return float(cs[-1])
     idx = int(np.searchsorted(cdf, qq, side="left"))
     idx = min(max(idx, 1), cs.shape[0] - 1)
@@ -55,6 +60,13 @@ def _weighted_quantile(
         return float(cs[idx])
     frac = (qq - float(cdf[idx - 1])) / span
     return float(cs[idx - 1] + frac * (cs[idx] - cs[idx - 1]))
+
+
+def _validate_nonneg_weight(weight: pd.DataFrame, name: str) -> None:
+    """Reject negative weights before they can enter any risk statistic (P1-80)."""
+    arr = weight.to_numpy(dtype=float)
+    if np.any(arr < 0.0):
+        raise ValueError(f"{name}: weights must be non-negative (got a negative weight)")
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str) -> Any:
@@ -86,9 +98,11 @@ class TsStratifiedMeanSpread(SeriesOperator):
     Inside each trailing window the aligned (``target``, ``sorter``) pairs are
     sorted by ``sorter``; the result is the mean of ``target`` over the top
     ``quantile`` fraction minus the mean over the bottom ``quantile`` fraction.
-    ``target = return, sorter = volume`` reproduces the volume-stratified return
-    spread, but the primitive is generic: ``return x amount``, ``return x
-    turnover``, ``fundamental_change x turnover`` etc. are all the same call.
+    ``quantile`` must be ``<= 0.5`` so the top and bottom strata stay disjoint
+    (P1-83).  ``target = return, sorter = volume`` reproduces the
+    volume-stratified return spread, but the primitive is generic: ``return x
+    amount``, ``return x turnover``, ``fundamental_change x turnover`` etc. are
+    all the same call.
     """
 
     metadata = _metadata(
@@ -109,8 +123,10 @@ class TsStratifiedMeanSpread(SeriesOperator):
     ) -> pd.DataFrame:
         w = max(2, int(window))
         q = float(quantile)
-        if not 0.0 < q < 1.0:
-            raise ValueError("quantile must be in (0, 1)")
+        if not 0.0 < q <= 0.5:
+            # P1-83: with q > 0.5 the top and bottom strata overlap and the
+            # spread becomes degenerate, so reject it loudly.
+            raise ValueError("quantile must be in (0, 0.5] so the top and bottom strata are disjoint")
         mp = int(min_periods) if min_periods is not None else max(5, w // 4)
         mp = max(2, mp)
 
@@ -166,6 +182,7 @@ class TsWeightedSemivariance(SeriesOperator):
         tgt = float(target)
         mp = int(min_periods) if min_periods is not None else 2
         mp = max(2, mp)
+        _validate_nonneg_weight(weight, "ts_weighted_semivariance")
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
             xv, wv = aligned_pairs(a, b)
@@ -224,6 +241,7 @@ class TsWeightedExpectedShortfall(SeriesOperator):
         kind = str(side).lower()
         if kind not in {"lower", "upper"}:
             raise ValueError("side must be 'lower' or 'upper'")
+        _validate_nonneg_weight(weight, "ts_weighted_expected_shortfall")
         if min_tail_count is not None:
             min_tail = max(2, int(min_tail_count))
         else:
@@ -266,9 +284,11 @@ class TsWeightedDrawdownArea(SeriesOperator):
     """Weight-normalised drawdown-depth area from the running peak.
 
     With ``DD_s = max(0, 1 - x_s / Peak_s)`` (``Peak_s`` the running max inside
-    the window), the output is ``sum(w * DD) / sum(w)``.  ``weight = volume``
-    recovers Gemini's ``ts_volume_underwater`` idea, but the weight is a free
-    parameter (amount / turnover / 1 are all searchable).
+    the window), the output is ``sum(w * DD) / sum(w)``.  The time axis is
+    preserved: a missing price resets the running peak so the drawdown never
+    reconnects across a data gap (P1-85).  ``weight = volume`` recovers
+    Gemini's ``ts_volume_underwater`` idea, but the weight is a free parameter
+    (amount / turnover / 1 are all searchable).
     """
 
     metadata = _metadata(
@@ -286,20 +306,37 @@ class TsWeightedDrawdownArea(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         w = max(2, int(window))
+        _validate_nonneg_weight(weight, "ts_weighted_drawdown_area")
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
-            xv, wv = aligned_pairs(a, b)
-            pos = (xv > 0.0) & np.isfinite(xv)
-            if int(pos.sum()) < 2:
+            # P1-85: do NOT compress the time axis with aligned_pairs before
+            # computing the running peak.  ``a`` / ``b`` keep their positions, so
+            # a missing price (NaN) breaks the path: the running peak resets at
+            # each contiguous valid run and never reconnects across a gap.  A
+            # missing *weight* does not break the price path — its drawdown is
+            # simply excluded from the weighted mean.
+            price_ok = np.isfinite(a) & (a > 0.0)
+            if int(price_ok.sum()) < 2:
                 return np.nan
-            p = xv[pos]
-            wt = wv[pos]
-            total = float(wt.sum())
+            dd = np.full(a.shape[0], np.nan)
+            run_start = None
+            peak = 0.0
+            for i in range(a.shape[0]):
+                if not price_ok[i]:
+                    run_start = None
+                    continue
+                if run_start is None:
+                    run_start = i
+                    peak = a[i]
+                else:
+                    peak = max(peak, a[i])
+                dd[i] = max(0.0, 1.0 - a[i] / peak)
+            wv = np.where(np.isfinite(b), b, 0.0)
+            valid = price_ok & np.isfinite(b)
+            total = float(wv[valid].sum())
             if total <= _EPS:
                 return np.nan
-            running_max = np.maximum.accumulate(p)
-            dd = np.maximum(0.0, 1.0 - p / running_max)
-            return float(np.sum(wt * dd) / total)
+            return float(np.sum(wv[valid] * dd[valid]) / total)
 
         return frame_like(
             x,

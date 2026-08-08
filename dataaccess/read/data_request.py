@@ -39,6 +39,125 @@ if TYPE_CHECKING:
     from data_access.read.semantic_catalog import SemanticField
 
 _VALID_JOIN_POLICIES = {"exact", "asof", "pit_asof"}
+_VALID_SNAPSHOT_POLICIES = {"latest", "fail_if_changed", "pin"}
+
+
+@dataclass(frozen=True)
+class CompiledDataRequest:
+    """#4 plan() 时深拷贝的**不可变**请求语义。
+
+    DataRequest 是可变的；``store.plan()`` 曾执行 ``request.anchor = anchor``，
+    ReadPlan 又保存原始 request 引用。于是：
+
+        plan = store.plan(req); req.filters = ...; plan.execute()
+
+    实际执行内容会变，但 scan_costs / physical plan / snapshot_info / explain
+    还是旧计划——「计划即声明」破裂。plan() 把请求的语义字段冻结成这份对象，
+    ReadPlan.execute() / PhysicalPlan 组合执行器只消费它，不再读活的 req。
+    """
+
+    fields: tuple[str, ...] = ()
+    start: Any = None
+    end: Any = None
+    instruments: tuple[str, ...] | None = None
+    universe: str | None = None
+    pit: bool = False
+    anchor: str | None = None
+    frequency: str | None = None
+    normalize_units: bool = False
+    engine: str = "auto"
+    result: str = "auto"
+    limit: int | None = None
+    filters: Any = None
+    filters_by_dataset: Mapping[str, Any] | None = None
+    joins: Mapping[str, Any] | None = None
+    join_specs: Mapping[str, Any] | None = None
+    source_params: Mapping[str, Mapping[str, Any]] | None = None
+    field_params: Mapping[str, Mapping[str, Any]] | None = None
+    transforms: Mapping[str, str] | None = None
+    aggregations: tuple[Any, ...] | None = None
+    time_varying_universe: bool = True
+    order_by: tuple[str, ...] | None = None
+    snapshot_policy: str = "latest"
+
+    @property
+    def time_range(self) -> tuple[Any, Any] | None:
+        if self.start is None and self.end is None:
+            return None
+        return (self.start, self.end)
+
+    def dataset_params(self, dataset: str, *, fallback: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        sp = dict(self.source_params or {})
+        return dict(sp.get(dataset, fallback or {}) or {})
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "fields": list(self.fields),
+            "time_range": list(self.time_range) if self.time_range else None,
+            "anchor": self.anchor,
+            "universe": self.universe,
+            "pit": self.pit,
+            "frequency": self.frequency,
+            "normalize_units": self.normalize_units,
+            "engine": self.engine,
+            "result": self.result,
+            "limit": self.limit,
+            "snapshot_policy": self.snapshot_policy,
+            "order_by": list(self.order_by) if self.order_by else None,
+        }
+
+
+def compile_data_request(request: Any) -> CompiledDataRequest:
+    """把 DataRequest（或等价 dict）深拷贝成不可变 CompiledDataRequest。
+
+    sequences/映射深拷贝成 tuple/dict，调用方之后改原始 req 不会影响本对象。
+    """
+    if isinstance(request, dict):
+        request = DataRequest(**request)
+    fields = tuple(
+        list(request.fields) if request.fields is not None else ()
+    )
+    return CompiledDataRequest(
+        fields=fields,
+        start=request.start,
+        end=request.end,
+        instruments=(
+            tuple(request.instruments) if request.instruments is not None else None
+        ),
+        universe=request.universe,
+        pit=bool(request.pit),
+        anchor=request.anchor,
+        frequency=request.frequency,
+        normalize_units=bool(request.normalize_units),
+        engine=request.engine,
+        result=request.result,
+        limit=request.limit,
+        filters=request.filters,
+        filters_by_dataset=(
+            dict(request.filters_by_dataset)
+            if request.filters_by_dataset
+            else None
+        ),
+        joins=dict(request.joins) if request.joins else None,
+        join_specs=dict(request.join_specs) if request.join_specs else None,
+        source_params=(
+            {k: dict(v) for k, v in request.source_params.items()}
+            if request.source_params
+            else None
+        ),
+        field_params=(
+            {k: dict(v) for k, v in request.field_params.items()}
+            if request.field_params
+            else None
+        ),
+        transforms=dict(request.transforms) if request.transforms else None,
+        aggregations=(
+            tuple(request.aggregations) if request.aggregations is not None else None
+        ),
+        time_varying_universe=bool(getattr(request, "time_varying_universe", True)),
+        order_by=tuple(request.order_by) if request.order_by else None,
+        snapshot_policy=str(getattr(request, "snapshot_policy", "latest") or "latest"),
+    )
 
 
 @dataclass
@@ -71,6 +190,12 @@ class DataRequest:
     # 时显式声明 order_by=[time, instrument]，SQL 端加 ORDER BY；ordering 进
     # cache key / lineage / plan，保证同一请求稳定复现。
     order_by: Sequence[str] | None = None
+    # #5 snapshot_policy：latest（默认）/ fail_if_changed / pin
+    #   - latest          ：execute 时读取当时最新文件（现状）
+    #   - fail_if_changed ：plan 生成后底层数据版本变化 → execute 拒绝
+    #   - pin             ：同 fail_if_changed，且要求有权威 manifest 才可 pin
+    # 回测/训练/production 建议 fail_if_changed 或 pin，保证「计划即执行」。
+    snapshot_policy: str = "latest"
 
     @property
     def time_range(self) -> tuple[Any, Any] | None:
@@ -106,6 +231,12 @@ class ReadPlan:
     join_specs_effective: dict[str, Any] = field(default_factory=dict)
     # #4 物理计划 DAG（由 store.plan 注入；explain() 渲染，execute() 消费）
     physical: Any = field(default=None, repr=False)
+    # #4 不可变编译请求：execute() 只消费它，不读活的 request（防 plan 后篡改）
+    compiled: Any = field(default=None, repr=False)
+    # #5 snapshot pin：latest / fail_if_changed / pin
+    snapshot_policy: str = "latest"
+    # #5 plan 时刻每数据集的 manifest token（execute 前对比，变化即拒绝）
+    plan_snapshot_tokens: dict[str, dict[str, Any]] = field(default_factory=dict)
     # 绑定到 store 以便 execute（由 store.plan 注入）
     _store: Any = field(default=None, repr=False)
 
@@ -179,11 +310,60 @@ class ReadPlan:
             lines.append(render_plan(self.physical))
         return "\n".join(lines)
 
+    def _verify_snapshot_pin(self, store: Any) -> None:
+        """#5 snapshot_policy=fail_if_changed/pin：execute 前校验数据版本未变。
+
+        plan 生成后数据可能被改写（上午计划、下午执行）。对比每数据集
+        source_epoch/manifest_epoch 与 plan 时刻 token：变化 → 拒绝执行，
+        保证「计划即执行」、lineage/缓存可复现。
+        """
+        if self.snapshot_policy == "latest":
+            return
+        req = self.compiled if self.compiled is not None else self.request
+        changed: list[str] = []
+        unpinnable: list[str] = []
+        for ds in self.datasets:
+            try:
+                token = store.manifest_version(ds, **req.dataset_params(ds))
+            except Exception:
+                token = {"has_manifest": False}
+            plan_tok = self.plan_snapshot_tokens.get(ds, {}) or {}
+            if not token.get("has_manifest"):
+                if self.snapshot_policy == "pin":
+                    unpinnable.append(ds)
+                # fail_if_changed：无 manifest 无法判断 → 视为未变（不误伤）
+                continue
+            cur = token.get("source_epoch") or token.get("manifest_epoch")
+            prev = plan_tok.get("source_epoch") or plan_tok.get("manifest_epoch")
+            if cur != prev:
+                changed.append(ds)
+        if unpinnable:
+            from data_access.core.exceptions import SnapshotBuildError
+
+            raise SnapshotBuildError(
+                f"snapshot_policy=pin 需要权威 manifest：{', '.join(unpinnable)} "
+                "没有 manifest，无法 pin 数据版本。请用 fail_if_changed 或去掉 "
+                "snapshot_policy=pin。"
+            )
+        if changed:
+            from data_access.core.exceptions import SnapshotBuildError
+
+            raise SnapshotBuildError(
+                f"snapshot_policy={self.snapshot_policy}：plan 生成后以下数据集 "
+                f"版本已变化（source_epoch/manifest_epoch 不一致），拒绝执行："
+                f"{', '.join(changed)}。请重新 plan() 绑定最新版本。"
+            )
+
     def execute(self) -> Any:
         """执行计划，返回 ReadHandle（读路径照常走 budget/audit/snapshot）。"""
         if self._store is None:
             raise RuntimeError("ReadPlan 未绑定 DataAccessStore，无法 execute")
         store = self._store
+        # #4 execute 只消费 plan 编译时冻结的语义（compiled），不读活的 request——
+        # 调用方在 plan() 之后改 req.filters/joins/aggregations 不再影响执行。
+        req = self.compiled if self.compiled is not None else self.request
+        # #5 snapshot pin：fail_if_changed / pin 在 execute 前校验数据版本未变
+        self._verify_snapshot_pin(store)
         # #11 节点式执行：聚合+join 组合先交给 PhysicalPlanExecutor；
         # 非组合场景返回 None，走下方现有 read/read_joined/aggregate 路径。
         if self.physical is not None:
@@ -194,7 +374,6 @@ class ReadPlan:
                 return composed
         tr = self.time_range
         insts = self.instruments
-        req = self.request
 
         # #4 AggregationNode：分钟→日聚合一次 scan 多输出（不经过 read_joined）
         if req.aggregations:
@@ -282,13 +461,13 @@ class ReadPlan:
         anchor = self.anchor
         if anchor is None:
             raise ValidationError("多数据集计划缺少 anchor")
-        joins: dict[str, Any] = {}
-        joins.update(dict(req.joins or {}))
-        joins.update(dict(req.join_specs or {}))
+        # #3 单一事实源：把 plan 阶段编译好的 effective_join_specs 原样交给
+        # read_joined（read_joined 内 _effective_join_specs 对已解析 spec 幂等），
+        # 不再在 execute 里重新推导——explain 显示的语义 == 真正执行语义。
         return store.read_joined(
             anchor,
             fields=self.per_dataset_columns,
-            joins=joins or None,
+            joins=self.join_specs_effective or None,
             time_range=tr,
             instrument_filter=insts,
             filters=req.filters,

@@ -5,7 +5,7 @@
 
 ## 摘要
 
-- canonical 总数：1355
+- canonical 总数：1360
 - daily：1185
 - research：94
 - unsafe：7
@@ -247,6 +247,8 @@
 | event_abnormal_return_past | daily | pandas_numpy |  | False | ts | None | 1 | 0 |
 | event_active_count | daily | pandas_numpy |  | False | elementwise | None | None | 0 |
 | event_allan_factor | daily | pandas_numpy, polars |  | False | ts | None | 8 | 0 |
+| event_allan_log_mean | extended | pandas_numpy, polars |  | False | elementwise | None | None | 0 |
+| event_allan_scaling_slope | extended | pandas_numpy, polars |  | False | elementwise | None | None | 0 |
 | event_arithmetic_return_sum | daily | pandas_numpy |  | False | elementwise | None | None | 0 |
 | event_cluster_count | daily | pandas_numpy |  | False | ts | None | 1 | 0 |
 | event_cluster_mean_size | daily | pandas_numpy |  | False | ts | None | 1 | 0 |
@@ -342,6 +344,7 @@
 | fin_mad | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
 | fin_margin_persistence | daily | pandas_numpy |  | False | fundamental_period | None | 1 | 0 |
 | fin_mean_abs_deviation | extended | pandas_numpy |  | False | fundamental_period | None | 1 | 0 |
+| fin_median_abs_deviation | extended | pandas_numpy |  | False | fundamental_period | None | 1 | 0 |
 | fin_minority_profit_share | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
 | fin_miss_streak | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
 | fin_monotonicity | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
@@ -353,6 +356,7 @@
 | fin_other_earnings_dependence | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
 | fin_pct_change | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
 | fin_percentile_history | daily | pandas_numpy, polars | report_rank | False | fundamental_period | None | 1 | 0 |
+| fin_percentile_vs_prior_history | extended | pandas_numpy |  | False | fundamental_period | None | 1 | 0 |
 | fin_positive_streak | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
 | fin_qoq | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
 | fin_quarter_from_cumulative | daily | pandas_numpy, polars | report_single_quarter | False | fundamental_period | None | 1 | 0 |
@@ -391,6 +395,7 @@
 | fin_working_capital_change | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
 | fin_yoy | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
 | fin_zscore_history | daily | pandas_numpy, polars |  | False | fundamental_period | None | 1 | 0 |
+| fin_zscore_vs_prior_history | extended | pandas_numpy |  | False | fundamental_period | None | 1 | 0 |
 | fiscal_accrual_quality | daily | pandas_numpy |  | False | fundamental_period | None | 1 | 0 |
 | fiscal_ar_resid_std | daily | pandas_numpy |  | False | fundamental_period | None | 1 | 0 |
 | fiscal_asymmetric_elasticity | daily | pandas_numpy |  | False | fundamental_period | None | 1 | 0 |
@@ -852,7 +857,7 @@
 | ts_argmin_index_from_oldest | daily | pandas_numpy, sql |  | False | ts | None | 1 | 0 |
 | ts_autocorr | daily | pandas_numpy, polars, sql |  | False | ts | None | 1 | 1 |
 | ts_autocorr_decay_half_life | daily | pandas_numpy |  | False | ts | None | 1 | 0 |
-| ts_autocorrelation_time | daily | pandas_numpy, polars |  | False | ts | None | 1 | 0 |
+| ts_autocorrelation_time | daily | pandas_numpy, polars | ts_integrated_autocorrelation_time | False | ts | None | 1 | 0 |
 | ts_average_volume | daily | pandas_numpy, polars, sql |  | False | ts | None | 1 | 0 |
 | ts_bds_statistic | research | pandas_numpy, polars |  | False | ts | None | 1 | 0 |
 | ts_best_lag_corr | daily | pandas_numpy, polars |  | False | ts | None | 1 | 0 |
@@ -1305,7 +1310,7 @@
 | ts_vol_acceleration | daily | pandas_numpy, sql |  | False | ts | None | 1 | 0 |
 | ts_vol_clustering | daily | pandas_numpy |  | False | ts | None | 1 | 0 |
 | ts_vol_of_vol | daily | pandas_numpy, sql |  | False | ts | None | 1 | 0 |
-| ts_vol_pvariation_roughness | daily | pandas_numpy, polars |  | False | ts | None | 1 | 0 |
+| ts_vol_pvariation_roughness | daily | pandas_numpy, polars | ts_pvariation_scaling_exponent | False | ts | None | 1 | 0 |
 | ts_vol_scaling_break | daily | pandas_numpy, polars |  | False | ts | None | 1 | 0 |
 | ts_vol_shift_score | daily | pandas_numpy |  | False | ts | None | 1 | 0 |
 | ts_vol_term_structure | daily | pandas_numpy, sql |  | False | ts | None | 1 | 0 |

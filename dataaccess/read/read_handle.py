@@ -50,6 +50,10 @@ class ReadHandle:
         self._govern_lazy = bool(govern_lazy)
         self._polars_df: Any = None
         self._pandas_df: Any = None
+        # #P1-9 stream 消费状态：one-shot 流被部分消费后，to_arrow() 不能静默
+        # 返回「剩余 batch」的截断结果。
+        self._stream_started = False
+        self._stream_completed = False
         if table is not None:
             self._source: Any = table
             self._kind = "table"
@@ -97,6 +101,13 @@ class ReadHandle:
         if self._kind == "table":
             return self._source
         if self._kind == "stream":
+            # #P1-9 部分消费的 stream 不能静默物化「剩余 batch」——那是截断结果。
+            if self._stream_started and not self._stream_completed:
+                raise RuntimeError(
+                    "ReadHandle 的 stream 已被部分消费（前一个循环 break 过）；"
+                    "继续 to_arrow() 只会物化剩余 batch，得到截断结果。"
+                    "请重新 read() 再消费，或先 to_arrow() 再切 batch。"
+                )
             batches = list(self._source)
             self._source = pa.Table.from_batches(batches) if batches else pa.table({})
             self._kind = "table"
@@ -148,9 +159,16 @@ class ReadHandle:
         return self.to_polars().lazy()
 
     def stream(self, batch_size: int | None = None) -> Iterator[pa.RecordBatch]:
-        """RecordBatch 流。有底层流时直接透传；否则把已物化表切 batch。"""
+        """RecordBatch 流。有底层流时直接透传；否则把已物化表切 batch。
+
+        #P1-9 标记消费状态：生成器被 break（GeneratorExit）→ ``_stream_completed``
+        保持 False，之后 ``to_arrow()`` 会拒绝截断物化。
+        """
         if self._kind == "stream":
-            yield from self._source
+            self._stream_started = True
+            for batch in self._source:
+                yield batch
+            self._stream_completed = True
             return
         if self._kind == "lazy":
             if self._govern_lazy:

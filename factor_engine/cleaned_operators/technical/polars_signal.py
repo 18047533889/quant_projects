@@ -558,14 +558,27 @@ def _dmi_adx_exprs(high: pl.Expr, low: pl.Expr, close: pl.Expr, window: int) -> 
     return _wilder_ewm(dx, w)
 
 
-def _kama_1d(values: np.ndarray, sc: np.ndarray) -> np.ndarray:
+def _kama_1d(values: np.ndarray, sc: np.ndarray, missing_policy: str = "interrupt", max_gap: int = 0) -> np.ndarray:
     out = values.astype(np.float64, copy=True)
+    gap_max = max(int(max_gap), 0)
+    gap = 0
     for i in range(1, len(out)):
-        if np.isnan(out[i]):
-            out[i] = out[i - 1]
-        else:
-            prev = out[i - 1] if np.isfinite(out[i - 1]) else out[i]
-            out[i] = prev + sc[i] * (out[i] - prev)
+        if not np.isfinite(out[i]):
+            # Audit 13.6 unified missing-state policy: a missing price must not
+            # silently bridge a suspension / data gap.  ``interrupt`` (default)
+            # -> NaN and break the recursion (next finite bar re-seeds);
+            # ``carry`` bridges at most ``max_gap`` bars with the last finite
+            # value, then interrupts.
+            gap += 1
+            prev = out[i - 1]
+            if missing_policy == "carry" and gap <= gap_max and np.isfinite(prev):
+                out[i] = prev
+            else:
+                out[i] = np.nan
+            continue
+        gap = 0
+        prev = out[i - 1] if np.isfinite(out[i - 1]) else out[i]
+        out[i] = prev + sc[i] * (out[i] - prev)
     return out
 
 
@@ -699,6 +712,8 @@ class KAMAPolars(SeriesOperator):
         er = max(int(kwargs.get("d", er_window)), 1)
         fast = max(int(kwargs.get("p", fast_window)), 1)
         slow = max(int(kwargs.get("q", slow_window)), 1)
+        missing_policy = kwargs.get("missing_policy", "interrupt")
+        max_gap = kwargs.get("max_gap", 0)
         if fast >= slow:
             raise ValueError("fast_window must be < slow_window")
         fast_sc = 2.0 / (fast + 1.0)
@@ -713,7 +728,7 @@ class KAMAPolars(SeriesOperator):
             sc = (efficiency * (fast_sc - slow_sc) + slow_sc).pow(2)
             sc_arr = close.select(sc.alias("_sc")).to_series().to_numpy()
             vals = close[c].to_numpy()
-            out_data[c] = _kama_1d(vals, sc_arr)
+            out_data[c] = _kama_1d(vals, sc_arr, missing_policy, max_gap)
         result = pl.DataFrame(out_data)
         if "date" in close.columns:
             result = result.with_columns(close["date"])

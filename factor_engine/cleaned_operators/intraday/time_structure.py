@@ -70,9 +70,12 @@ class IntraIntervalReturn(SeriesOperator):
 
 
 def _interval_share(vals: np.ndarray, times: np.ndarray, start: int, end: int) -> float:
+    # P1-105: ``nansum`` treats a NaN (unknown) minute as a zero-value minute,
+    # silently deflating the share.  Sum over FINITE values only; unknown bars
+    # contribute to neither the interval nor the denominator.
     mask = _interval_mask(times, start, end)
-    seg = float(np.nansum(vals[mask]))
-    total = float(np.nansum(vals))
+    seg = float(np.nansum(vals[mask] * np.isfinite(vals[mask])))
+    total = float(np.nansum(vals * np.isfinite(vals)))
     return seg / total if total > _EPS else np.nan
 
 
@@ -123,8 +126,13 @@ class IntraIntervalAmountShare(SeriesOperator):
 def _interval_rv(close_v: np.ndarray, times: np.ndarray, start: int, end: int) -> float:
     mask = _interval_mask(times, start, end)
     r = log_returns(close_v[mask])
+    r_finite = r[np.isfinite(r)]
+    if r_finite.size < 2:
+        return np.nan
+    # P1-105: sum over FINITE squared returns only — a NaN bar is an unknown
+    # return, not a zero-return, and must not be counted as ``0``.
     with np_errstate():
-        return float(np.nansum(r * r))
+        return float(np.sum(r_finite * r_finite))
 
 
 @register_operator(
@@ -152,8 +160,10 @@ class IntraIntervalRealizedVariance(SeriesOperator):
 def _interval_vwap_dev(close_v, amt_v, vol_v, times, start, end):
     mask = _interval_mask(times, start, end)
     c = close_v[mask]
-    a = float(np.nansum(amt_v[mask]))
-    v = float(np.nansum(vol_v[mask]))
+    # P1-105: sum FINITE amount/volume only — an unknown (NaN) bar is not a
+    # zero-amount bar and must not drag the VWAP toward 0.
+    a = float(np.sum(amt_v[mask][np.isfinite(amt_v[mask])]))
+    v = float(np.sum(vol_v[mask][np.isfinite(vol_v[mask])]))
     finite_c = c[np.isfinite(c)]
     if len(finite_c) == 0 or v <= _EPS:
         return np.nan
@@ -203,12 +213,16 @@ class IntraIntervalVwapDeviation(SeriesOperator):
 def _interval_illiq(close_v: np.ndarray, amt_v: np.ndarray, times: np.ndarray, start: int, end: int) -> float:
     mask = _interval_mask(times, start, end)
     r = log_returns(close_v[mask])
-    amt = np.where(np.isfinite(amt_v[mask]), amt_v[mask], 0.0)
-    denom = np.maximum(amt, _EPS)
-    ratio = np.abs(r) / denom
-    ratio = ratio[np.isfinite(ratio)]
-    if len(ratio) == 0:
+    a = amt_v[mask]
+    # P1-105: an unknown (NaN) amount is NOT a zero-amount bar — pair only the
+    # minutes where BOTH the return and the amount are finite.
+    ok = np.isfinite(r) & np.isfinite(a)
+    r_ok = r[ok]
+    a_ok = a[ok]
+    if len(r_ok) == 0:
         return np.nan
+    denom = np.maximum(a_ok, _EPS)
+    ratio = np.abs(r_ok) / denom
     return float(np.mean(ratio))
 
 

@@ -73,6 +73,9 @@ class ContractIRDataset:
     name: str
     in_registry: bool = False
     in_contracts: bool = False
+    # #35 契约在、registry 没有，但显式声明为 external（COS remote 才可见）的
+    # 数据集——audit() 不再误报「契约数据集不在 registry」。
+    external: bool = False
     market: str | None = None
     temporal_model: str | None = None
     panel_policy: str | None = None
@@ -134,9 +137,9 @@ class ContractIR:
             problems.extend(d.issues)
             if not d.in_registry and not d.in_contracts:
                 continue
-            if d.in_contracts and not d.in_registry:
+            if d.in_contracts and not d.in_registry and not d.external:
                 problems.append(
-                    f"契约数据集 {name!r} 不在 registry（或未显式标记 external）"
+                    f"契约数据集 {name!r} 不在 registry 且未标记 external"
                 )
             if (
                 d.in_registry
@@ -218,10 +221,13 @@ def build_contract_ir(
             entry.period_time = contract.period_column
             entry.revision_order = list(contract.revision_columns or ())
             entry.unique_key = list(contract.unique_key or ())
+            # #36 required_filters 完整合并：panel + dimension + event + 字段级
+            # required_filters（旧代码只并前两个，事件过滤维度会漏）。
             entry.required_filters = list(
                 dict.fromkeys(
                     list(contract.required_panel_filters or ())
                     + list(contract.required_dimension_filters or ())
+                    + list(contract.required_event_filters or ())
                 )
             )
             entry.allowed_filter_values = dict(contract.allowed_filter_values or ())
@@ -288,11 +294,40 @@ def build_contract_ir(
                     )
                 ):
                     entry.temporal_axes = axes
+        # #35 external：契约在、registry 没有但显式声明 → audit() 放行
+        entry.external = name in external and not entry.in_registry
         # 一致性 issue：契约在但 registry 没有 → 未标记 external
         if entry.in_contracts and not entry.in_registry and name not in external:
             entry.issues.append(
                 f"契约数据集 {name!r} 不在 registry 且未标记 external"
             )
+        # #36 冲突检测：契约默认与字段级语义（availability / duplicate_policy /
+        # period_selection）在 catalog 全字段一致时仍冲突 → 记 issue。
+        if contract is not None and catalog is not None:
+            field_avails = {
+                getattr(f, "availability", None)
+                for f in catalog._fields.values()
+                if f.dataset == name and getattr(f, "availability", None)
+            }
+            if len(field_avails) == 1:
+                fav = next(iter(field_avails))
+                if fav not in (None, entry.availability):
+                    entry.issues.append(
+                        f"字段级 availability={fav!r} 与契约默认 "
+                        f"{entry.availability!r} 不一致（数据集 {name!r}）"
+                    )
+            field_dups = {
+                getattr(f, "duplicate_policy", None)
+                for f in catalog._fields.values()
+                if f.dataset == name and getattr(f, "duplicate_policy", None)
+            }
+            if len(field_dups) == 1:
+                fdup = next(iter(field_dups))
+                if fdup not in (None, entry.duplicate_policy):
+                    entry.issues.append(
+                        f"字段级 duplicate_policy={fdup!r} 与契约默认 "
+                        f"{entry.duplicate_policy!r} 不一致（数据集 {name!r}）"
+                    )
         out[name] = entry
 
     return ContractIR(out)

@@ -55,6 +55,28 @@ def _finite(chunk: np.ndarray) -> np.ndarray:
     return chunk[np.isfinite(chunk)]
 
 
+def _trailing_contiguous(chunk: np.ndarray) -> np.ndarray:
+    """Trailing contiguous run of finite values (no time-axis compression).
+
+    Drops only *leading* NaNs; an interior or trailing NaN (gap) truncates the
+    run, so the retained points keep their original relative spacing.  Empty
+    when the current (trailing) value is NaN.  Unlike ``_finite`` this never
+    reconnects points across a missing-value gap, which would distort path
+    geometry (turning rate / efficiency / roughness / trend break / centroid).
+    """
+    chunk = np.asarray(chunk, dtype=float)
+    n = chunk.size
+    if n == 0:
+        return chunk
+    finite = np.isfinite(chunk)
+    if not finite[-1]:
+        return np.empty(0, dtype=float)
+    last_bad = np.flatnonzero(~finite)
+    if last_bad.size == 0:
+        return chunk
+    return chunk[last_bad[-1] + 1 :]
+
+
 def _ols_slope(y: np.ndarray) -> float:
     n = y.size
     if n < 2:
@@ -165,7 +187,7 @@ class TsTurningRate(SeriesOperator):
             return 0
 
         def _fn(chunk: np.ndarray) -> float:
-            v = chunk[np.isfinite(chunk)]
+            v = _trailing_contiguous(chunk)
             if v.size < mp + 1:
                 return np.nan
             d = np.diff(v)
@@ -210,7 +232,7 @@ class TsTurningIntensity(SeriesOperator):
         xv = x.to_numpy(dtype=float)
 
         def _fn(chunk: np.ndarray) -> float:
-            v = chunk[np.isfinite(chunk)]
+            v = _trailing_contiguous(chunk)
             if v.size < mp:
                 return np.nan
             d = np.diff(v)
@@ -256,7 +278,7 @@ class TsPathEfficiency(SeriesOperator):
         xv = x.to_numpy(dtype=float)
 
         def _fn(chunk: np.ndarray) -> float:
-            v = chunk[np.isfinite(chunk)]
+            v = _trailing_contiguous(chunk)
             if v.size < mp:
                 return np.nan
             net = abs(float(v[-1]) - float(v[0]))
@@ -289,7 +311,7 @@ class TsRoughness(SeriesOperator):
         xv = x.to_numpy(dtype=float)
 
         def _fn(chunk: np.ndarray) -> float:
-            v = chunk[np.isfinite(chunk)]
+            v = _trailing_contiguous(chunk)
             if v.size < mp:
                 return np.nan
             d = np.diff(v)
@@ -335,7 +357,7 @@ class TsTrendBreakScore(SeriesOperator):
         xv = x.to_numpy(dtype=float)
 
         def _fn(chunk: np.ndarray) -> float:
-            v = chunk[np.isfinite(chunk)]
+            v = _trailing_contiguous(chunk)
             n = v.size
             if n < mp:
                 return np.nan
@@ -379,8 +401,7 @@ class TsWeightedTimeCentroid(SeriesOperator):
         wv = weight.to_numpy(dtype=float)
 
         def _fn(chunk: np.ndarray) -> float:
-            finite = np.isfinite(chunk)
-            v = chunk[finite]
+            v = _trailing_contiguous(chunk)
             n = v.size
             if n < mp:
                 return np.nan

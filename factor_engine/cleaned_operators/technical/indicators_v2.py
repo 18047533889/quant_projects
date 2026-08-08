@@ -119,27 +119,66 @@ def ichimoku_cloud_position(high,low,close,tenkan_window,kijun_window,senkou_b_w
     a=ichimoku_senkou_a(high,low,tenkan_window,kijun_window); b=ichimoku_senkou_b(high,low,senkou_b_window); lo=pd.DataFrame(np.minimum(a,b),index=a.index,columns=a.columns); hi=pd.DataFrame(np.maximum(a,b),index=a.index,columns=a.columns)
     return (close-lo)/(hi-lo).replace(0,np.nan)
 
-def KAMA(close,er_window,fast_window,slow_window):
+def KAMA(close,er_window,fast_window,slow_window,missing_policy="interrupt",max_gap=0):
     er=_pi(er_window,"er_window",2); fast=_pi(fast_window,"fast_window"); slow=_pi(slow_window,"slow_window")
     if fast>=slow: raise ValueError("fast_window must be < slow_window")
+    if missing_policy not in ("interrupt","carry"):
+        raise ValueError("missing_policy must be 'interrupt' or 'carry'")
+    gap_max=max(int(max_gap),0)
     change=(close-close.shift(er)).abs(); vol=close.diff().abs().rolling(er,min_periods=er).sum(); efficiency=change/vol.replace(0,np.nan)
     fast_sc=2.0/(fast+1.0); slow_sc=2.0/(slow+1.0); sc=(efficiency*(fast_sc-slow_sc)+slow_sc)**2
     arr=close.to_numpy(float); alpha=sc.to_numpy(float); out=np.full_like(arr,np.nan,float)
     for c in range(arr.shape[1]):
         last=np.nan
+        gap=0
         for t in range(arr.shape[0]):
-            if not np.isfinite(arr[t,c]): continue
+            if not np.isfinite(arr[t,c]):
+                # Unified missing-state policy (audit 13.6): a missing price must
+                # not silently bridge a suspension / data gap.  Default
+                # ``interrupt`` -> NaN and break the recursion so the next finite
+                # bar re-seeds.  ``carry`` may bridge at most ``max_gap`` missing
+                # bars with the last finite value, then interrupts too.
+                gap += 1
+                if missing_policy == "carry" and gap <= gap_max and np.isfinite(last):
+                    out[t,c] = last
+                else:
+                    last = np.nan
+                continue
+            gap = 0
             if not np.isfinite(last): last=arr[t,c]
             elif np.isfinite(alpha[t,c]): last=last+alpha[t,c]*(arr[t,c]-last)
             out[t,c]=last
     return pd.DataFrame(out,index=close.index,columns=close.columns)
 
-def Supertrend(high,low,close,atr_window,multiplier):
+def Supertrend(high,low,close,atr_window,multiplier,missing_policy="interrupt",max_gap=0):
     w=_pi(atr_window,"atr_window",2); mult=_pf(multiplier,"multiplier",0); atr=_wilder(_tr(high,low,close),w); mid=(high+low)/2.0; basic_u=mid+mult*atr; basic_l=mid-mult*atr
+    if missing_policy not in ("interrupt","carry"):
+        raise ValueError("missing_policy must be 'interrupt' or 'carry'")
+    gap_max=max(int(max_gap),0)
     rows,cols=close.shape; out=np.full((rows,cols),np.nan); cu=basic_u.to_numpy(float); cl=basic_l.to_numpy(float); cv=close.to_numpy(float); final_u=cu.copy(); final_l=cl.copy(); trend=np.ones((rows,cols),dtype=int)
     for c in range(cols):
+        gap=0
         for t in range(1,rows):
-            if not np.isfinite(cv[t,c]): continue
+            if not np.isfinite(cv[t,c]):
+                # Unified missing-state policy (audit 13.6): a missing close must
+                # not silently bridge a suspension / data gap.  ``interrupt``
+                # (default) -> NaN and break the recursion (next finite bar
+                # re-seeds); ``carry`` bridges at most ``max_gap`` bars with the
+                # previous finite level, then interrupts.
+                gap += 1
+                if missing_policy == "carry" and gap <= gap_max and np.isfinite(final_u[t-1,c]) and np.isfinite(final_l[t-1,c]):
+                    out[t,c] = out[t-1,c]
+                else:
+                    trend[t,c] = 0  # sentinel: state broken, next finite bar re-seeds
+                continue
+            gap = 0
+            if trend[t-1,c] == 0:
+                # Re-seed after a gap: restart bands from the current bar.
+                trend[t,c] = 1
+                final_u[t,c] = cu[t,c]
+                final_l[t,c] = cl[t,c]
+                out[t,c] = final_l[t,c]
+                continue
             if np.isfinite(final_u[t-1,c]) and (cu[t,c]>=final_u[t-1,c] and cv[t-1,c]<=final_u[t-1,c]): final_u[t,c]=final_u[t-1,c]
             if np.isfinite(final_l[t-1,c]) and (cl[t,c]<=final_l[t-1,c] and cv[t-1,c]>=final_l[t-1,c]): final_l[t,c]=final_l[t-1,c]
             if trend[t-1,c]>0 and cv[t,c]<final_l[t,c]: trend[t,c]=-1
@@ -147,18 +186,38 @@ def Supertrend(high,low,close,atr_window,multiplier):
             else: trend[t,c]=trend[t-1,c]
             out[t,c]=final_l[t,c] if trend[t,c]>0 else final_u[t,c]
     return pd.DataFrame(out,index=close.index,columns=close.columns)
-def SupertrendDirection(high,low,close,atr_window,multiplier):
-    st=Supertrend(high,low,close,atr_window,multiplier); return pd.DataFrame(np.where(close>=st,1.0,-1.0),index=close.index,columns=close.columns).where(st.notna())
+def SupertrendDirection(high,low,close,atr_window,multiplier,missing_policy="interrupt",max_gap=0):
+    st=Supertrend(high,low,close,atr_window,multiplier,missing_policy,max_gap); return pd.DataFrame(np.where(close>=st,1.0,-1.0),index=close.index,columns=close.columns).where(st.notna())
 
-def PSAR(high,low,acceleration,maximum):
+def PSAR(high,low,acceleration,maximum,missing_policy="interrupt",max_gap=0):
     af0=_pf(acceleration,"acceleration",0); afmax=_pf(maximum,"maximum",0)
     if af0<=0 or afmax<af0: raise ValueError("require 0 < acceleration <= maximum")
+    if missing_policy not in ("interrupt","carry"):
+        raise ValueError("missing_policy must be 'interrupt' or 'carry'")
+    gap_max=max(int(max_gap),0)
     h,l=high.to_numpy(float),low.to_numpy(float); rows,cols=h.shape; out=np.full((rows,cols),np.nan)
     for c in range(cols):
         if rows<2: continue
-        bull=True; sar=l[0,c]; ep=h[0,c]; af=af0
+        bull=True; sar=l[0,c]; ep=h[0,c]; af=af0; live=True; gap=0
         for t in range(1,rows):
-            if not (np.isfinite(h[t,c]) and np.isfinite(l[t,c])): continue
+            if not (np.isfinite(h[t,c]) and np.isfinite(l[t,c])):
+                # Unified missing-state policy (audit 13.6): a missing bar must
+                # not silently bridge a suspension / data gap.  ``interrupt``
+                # (default) -> NaN and break the recursion (next finite bar
+                # re-seeds); ``carry`` bridges at most ``max_gap`` bars with the
+                # previous finite SAR, then interrupts.
+                gap += 1
+                if missing_policy == "carry" and gap <= gap_max and live:
+                    out[t,c] = sar
+                else:
+                    live = False
+                continue
+            gap = 0
+            if not live:
+                # Re-seed after a gap from the current bar's own range.
+                bull=True; sar=l[t,c]; ep=h[t,c]; af=af0; live=True
+                out[t,c]=sar
+                continue
             sar=sar+af*(ep-sar)
             if bull:
                 if t>=2: sar=min(sar,l[t-1,c],l[t-2,c])

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 import duckdb
 
@@ -53,24 +54,108 @@ def _parse_int_env(name: str, default: int) -> int:
     return value
 
 
+def _cgroup_memory_limit_bytes() -> int | None:
+    """#P1-26 cgroup 内存上限：v2 ``memory.max`` / v1 ``memory.limit_in_bytes``。
+
+    Docker/K8s/Slurm 里 host RAM 可能 512GB 而容器只有 32GB——按 host 估会
+    OOM。effective = min(host, cgroup, RLIMIT_AS)。
+    """
+    candidates = []
+    try:
+        p = Path("/sys/fs/cgroup/memory.max")
+        if p.exists():
+            raw = p.read_text(encoding="ascii").strip()
+            if raw.isdigit():
+                candidates.append(int(raw))
+    except (OSError, ValueError):
+        pass
+    try:
+        p = Path("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+        if p.exists():
+            raw = p.read_text(encoding="ascii").strip()
+            if raw.isdigit():
+                candidates.append(int(raw))
+    except (OSError, ValueError):
+        pass
+    try:
+        import resource
+
+        soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+        if hard != resource.RLIM_INFINITY and hard > 0:
+            candidates.append(hard)
+    except (ValueError, OSError, ImportError):
+        pass
+    finite = [c for c in candidates if c > 0 and c != (1 << 63) - 1]
+    return min(finite) if finite else None
+
+
+def _cgroup_cpu_slots() -> int | None:
+    """#P1-26 cgroup/cpuset 有效 CPU 数：``cpu.max`` quota 与
+    ``cpuset.cpus.effective`` 取交集下限。
+    """
+    slots: list[int] = []
+    try:
+        p = Path("/sys/fs/cgroup/cpu.max")
+        if p.exists():
+            raw = p.read_text(encoding="ascii").split()
+            if len(raw) >= 2 and raw[0].isdigit() and raw[1].isdigit():
+                quota, period = int(raw[0]), int(raw[1])
+                if period > 0 and quota > 0:
+                    slots.append(max(1, quota // period))
+    except (OSError, ValueError):
+        pass
+    try:
+        p = Path("/sys/fs/cgroup/cpuset.cpus.effective")
+        if p.exists():
+            raw = p.read_text(encoding="ascii").strip()
+            count = 0
+            for part in raw.split(","):
+                if "-" in part:
+                    lo, hi = part.split("-", 1)
+                    if lo.isdigit() and hi.isdigit():
+                        count += int(hi) - int(lo) + 1
+                elif part.isdigit():
+                    count += 1
+            if count > 0:
+                slots.append(count)
+    except (OSError, ValueError):
+        pass
+    if not slots:
+        return None
+    effective = min(slots)
+    host = os.cpu_count() or 1
+    return max(1, min(effective, host))
+
+
 def _available_memory_bytes() -> int | None:
-    """Return host memory available to this process when it can be determined."""
+    """Return host memory available to this process when it can be determined.
+
+    #P1-26 effective = min(host MemAvailable, cgroup limit, RLIMIT_AS)——容器/
+    Slurm 下按 host 估会 OOM。
+    """
+    host: int | None = None
     try:
         with open("/proc/meminfo", encoding="ascii") as handle:
             for line in handle:
                 if line.startswith("MemAvailable:"):
                     value = int(line.split()[1])
-                    return value * 1024
+                    host = value * 1024
     except (OSError, ValueError, IndexError):
         pass
-    try:
-        pages = os.sysconf("SC_AVPHYS_PAGES")
-        page_size = os.sysconf("SC_PAGE_SIZE")
-        if pages > 0 and page_size > 0:
-            return pages * page_size
-    except (OSError, ValueError, AttributeError):
-        pass
-    return None
+    if host is None:
+        try:
+            pages = os.sysconf("SC_AVPHYS_PAGES")
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            if pages > 0 and page_size > 0:
+                host = pages * page_size
+        except (OSError, ValueError, AttributeError):
+            pass
+    cgroup = _cgroup_memory_limit_bytes()
+    if host is None:
+        return cgroup
+    if cgroup is None:
+        return host
+    return min(host, cgroup)
 
 
 def _auto_memory_limit() -> str | None:
@@ -101,8 +186,9 @@ def resolve_duckdb_config(
         except ValueError as exc:
             raise ValidationError("DUCKDB_THREADS 必须是整数") from exc
     else:
+        # #P1-26 cpuset/cpu.max 感知：容器 quota 限制下不能按 host CPU 数开线程。
         effective_threads = min(
-            os.cpu_count() or 4,
+            _cgroup_cpu_slots() or os.cpu_count() or 4,
             _parse_int_env("DUCKDB_MAX_THREADS", 8),
         )
     if effective_threads <= 0:

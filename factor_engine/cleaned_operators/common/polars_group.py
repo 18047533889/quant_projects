@@ -118,6 +118,13 @@ def hierarchical_group_neutralize(x, group, subgroup):
 
 
 def cs_robust_resid(y, x, trim_ratio=0.1, add_intercept=True):
+    """Trimmed cross-sectional OLS residual.
+
+    Note (R5 P1-37c): this trims the most extreme ``x`` observations and then
+    fits an ordinary least-squares line.  It is *trimmed OLS*, not a true robust
+    regression (no Huber / LAD weighting).  The name and signature are kept for
+    compatibility with the pandas twin (``group_ext.CsRobustResid``).
+    """
     trim = _pf(trim_ratio, "trim_ratio")
     if not (0.0 <= trim < 0.5):
         raise ValueError("cs_robust_resid requires 0 <= trim_ratio < 0.5")
@@ -155,7 +162,7 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("group_ex_self_mean", ("x", "group"), group_ex_self_mean, "Group mean excluding self."),
     ("group_ex_self_weighted_mean", ("x", "weight", "group"), group_ex_self_weighted_mean, "Group weighted mean excluding self."),
     ("hierarchical_group_neutralize", ("x", "group", "subgroup"), hierarchical_group_neutralize, "Subgroup then group demean."),
-    ("cs_robust_resid", ("y", "x", "trim_ratio", "add_intercept"), cs_robust_resid, "Trimmed cross-sectional regression residual."),
+    ("cs_robust_resid", ("y", "x", "trim_ratio", "add_intercept"), cs_robust_resid, "Trimmed-OLS cross-sectional residual (not a true robust regression)."),
 )
 
 

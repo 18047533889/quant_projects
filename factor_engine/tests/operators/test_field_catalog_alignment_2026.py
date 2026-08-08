@@ -379,7 +379,14 @@ def test_concentration_trend_advances_by_snapshot_not_ffill_rows():
     # Snapshot-aligned trend is positive and holds constant after the 3rd report.
     assert float(snap["A"].iloc[-1]) > 0.0
     slope_tail = float(snap["A"].iloc[-1])
-    assert abs(slope_tail - 1.5) < 1e-6  # slope over [1,2,3] == 1.5
+    # P1-136: the slope is a centered dot product over the snapshot DATES
+    # (epoch days, not the ordinal 0,1,2) and the ddof inflation is gone — the
+    # legacy 1.5 was the buggy value.  Compute the exact per-day slope of
+    # [1,2,3] over the three snapshot dates.
+    _sdates = pd.to_datetime(["2023-12-31", "2024-01-31", "2024-02-29"]).to_numpy().astype("int64").astype(float) / 8.64e13
+    _svals = np.array([1.0, 2.0, 3.0])
+    _exp = float(np.sum((_sdates - _sdates.mean()) * (_svals - _svals.mean())) / np.sum((_sdates - _sdates.mean()) ** 2))
+    assert abs(slope_tail - _exp) < 1e-6, f"snapshot slope {slope_tail} != expected {_exp}"
     # No slope before the 3rd snapshot (causal), then forward-filled daily.
     assert int(snap["A"].notna().sum()) < n
     assert snap["A"].notna().iloc[-1]

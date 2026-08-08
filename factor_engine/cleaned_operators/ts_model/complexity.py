@@ -13,7 +13,11 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import SeriesOperator, register_operator
-from cleaned_operators.ts_model._rolling_core import frame_like, metadata
+from cleaned_operators.ts_model._rolling_core import (
+    frame_like,
+    metadata,
+    trailing_contiguous_finite,
+)
 
 _CANONICALS: list[str] = []
 
@@ -53,16 +57,40 @@ def _apply(x: pd.DataFrame, fn) -> pd.DataFrame:
     return frame_like(x, out)
 
 
+def _average_tie_rank(block: np.ndarray) -> tuple[float, ...]:
+    """Ordinal-pattern rank with average-tie handling.
+
+    P1-91: ``np.argsort(np.argsort(block))`` arbitrarily breaks ties by index
+    order, turning an exact-tie block into a spurious distinct pattern.  Equal
+    values instead share the average of the ranks they would jointly occupy
+    (mean-rank convention), so ties are not manufactured into patterns.
+    """
+    order = np.argsort(block, kind="stable")
+    n = block.shape[0]
+    ranks = np.empty(n, dtype=float)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and block[order[j + 1]] == block[order[i]]:
+            j += 1
+        avg = (i + j) / 2.0 + 1.0  # 1-based mean rank over the tied run
+        ranks[order[i : j + 1]] = avg
+        i = j + 1
+    return tuple(float(r) for r in ranks)
+
+
 def _permutation_entropy(vals: np.ndarray, order: int, window: int) -> float:
     seg = vals[-int(window):]
-    finite = seg[np.isfinite(seg)]
+    # P1-91: keep the physical time axis — a gap splits the sequence, so the
+    # ordinal patterns never bridge missing observations (no dropna reconnect).
+    finite = trailing_contiguous_finite(seg)
     if len(finite) < order + 1:
         return np.nan
     n = len(finite)
-    counts: dict[tuple[int, ...], int] = {}
+    counts: dict[tuple[float, ...], int] = {}
     for i in range(n - order + 1):
         block = finite[i : i + order]
-        rank = tuple(np.argsort(np.argsort(block)))
+        rank = _average_tie_rank(block)
         counts[rank] = counts.get(rank, 0) + 1
     total = sum(counts.values())
     if total <= 1:
@@ -77,7 +105,9 @@ _register("ts_permutation_entropy", "序模式排列熵（归一化）。", ["x"
 
 def _sample_entropy(vals: np.ndarray, m: int, r_scale: float, window: int) -> float:
     seg = vals[-int(window):]
-    finite = seg[np.isfinite(seg)]
+    # P1-91: physical time axis only — trailing contiguous finite block; the
+    # embedding never bridges a gap.
+    finite = trailing_contiguous_finite(seg)
     if len(finite) < m + 2:
         return np.nan
     r = float(r_scale) * float(np.std(finite))
@@ -107,7 +137,8 @@ _register("ts_sample_entropy", "样本熵（相似子序列继续保持相似的
 
 def _lz_complexity(vals: np.ndarray, window: int, bins: int) -> float:
     seg = vals[-int(window):]
-    finite = seg[np.isfinite(seg)]
+    # P1-91: physical time axis only (no dropna reconnect over gaps).
+    finite = trailing_contiguous_finite(seg)
     if len(finite) < 16:
         return np.nan
     # discretize to bins
@@ -131,7 +162,15 @@ def _lz_complexity(vals: np.ndarray, window: int, bins: int) -> float:
             i += k_max
             k = 1
             k_max = 1
-    return float(c * np.log2(l) / l) if l > 1 else np.nan
+    if l <= 1:
+        return np.nan
+    # P1-91: the old normalisation used log2(l), which is only correct for a
+    # binary alphabet.  The alphabet here has ``bins`` symbols, so the standard
+    # Lempel-Ziv bound is c * log_bins(l) / l = c * ln(l) / (l * ln(bins)).
+    b = int(bins)
+    if b < 2:
+        return np.nan
+    return float(c * np.log(l) / (l * np.log(b)))
 
 
 _register("ts_lz_complexity", "Lempel-Ziv 复杂度（符号化）。", ["x", "window", "bins"], "level",
@@ -140,7 +179,8 @@ _register("ts_lz_complexity", "Lempel-Ziv 复杂度（符号化）。", ["x", "w
 
 def _multiscale_entropy_slope(vals: np.ndarray, max_scale: int, window: int) -> float:
     seg = vals[-int(window):]
-    finite = seg[np.isfinite(seg)]
+    # P1-91: physical time axis only (no dropna reconnect over gaps).
+    finite = trailing_contiguous_finite(seg)
     if len(finite) < 16:
         return np.nan
     scales: list[int] = []
@@ -153,9 +193,16 @@ def _multiscale_entropy_slope(vals: np.ndarray, max_scale: int, window: int) -> 
         if np.isfinite(e):
             scales.append(float(s))
             ents.append(e)
-    if len(scales) < 2 or np.var(scales) <= 0:
+    if len(scales) < 2:
         return np.nan
-    return float(np.cov(scales, ents)[0, 1] / np.var(scales))
+    # P1-91: centered dot product (ddof-consistent) instead of the
+    # cov(ddof=1)/var(ddof=0) mix that biased the slope by n/(n-1).
+    sx = np.asarray(scales, dtype=float) - float(np.mean(scales))
+    sy = np.asarray(ents, dtype=float) - float(np.mean(ents))
+    denom = float(np.dot(sx, sx))
+    if denom <= 0.0:
+        return np.nan
+    return float(np.dot(sx, sy) / denom)
 
 
 _register("ts_multiscale_entropy_slope", "多尺度熵相对尺度的斜率。", ["x", "max_scale", "window"], "level",
@@ -164,7 +211,8 @@ _register("ts_multiscale_entropy_slope", "多尺度熵相对尺度的斜率。",
 
 def _turning_point_ratio(vals: np.ndarray, window: int) -> float:
     seg = vals[-int(window):]
-    finite = seg[np.isfinite(seg)]
+    # P1-91: physical time axis only — direction flips never span a gap.
+    finite = trailing_contiguous_finite(seg)
     if len(finite) < 4:
         return np.nan
     d = np.diff(finite)
@@ -181,7 +229,9 @@ _register("ts_turning_point_ratio", "局部方向反转次数比例。", ["x", "
 
 def _dfa_hurst(vals: np.ndarray, window: int, min_scale: int, max_scale: int) -> float:
     seg = vals[-int(window):]
-    finite = seg[np.isfinite(seg)]
+    # P1-91: physical time axis only — the integration profile never bridges a
+    # gap; a missing row splits the series.
+    finite = trailing_contiguous_finite(seg)
     if len(finite) < max(32, max_scale * 4):
         return np.nan
     y = np.cumsum(finite - np.mean(finite))
@@ -202,9 +252,16 @@ def _dfa_hurst(vals: np.ndarray, window: int, min_scale: int, max_scale: int) ->
         fluct = np.sqrt(fluct / n_seg)
         f.append(fluct)
         scales.append(np.log(s))
-    if len(scales) < 3 or np.var(scales) <= 0:
+    if len(scales) < 3:
         return np.nan
-    return float(np.cov(scales, np.log(f))[0, 1] / np.var(scales))
+    # P1-91: centered dot product (ddof-consistent numerator/denominator) — the
+    # old cov(ddof=1)/var(ddof=0) mix biased the DFA exponent by n/(n-1).
+    sx = np.asarray(scales, dtype=float) - float(np.mean(scales))
+    sy = np.log(np.asarray(f, dtype=float)) - float(np.mean(np.log(f)))
+    denom = float(np.dot(sx, sx))
+    if denom <= 0.0:
+        return np.nan
+    return float(np.dot(sx, sy) / denom)
 
 
 _register("ts_dfa_hurst", "DFA 估计 Hurst 指数。", ["x", "window", "min_scale", "max_scale"], "level",
@@ -213,11 +270,11 @@ _register("ts_dfa_hurst", "DFA 估计 Hurst 指数。", ["x", "window", "min_sca
 
 def _cusum_vol_break(vals: np.ndarray, window: int, min_periods: int) -> float:
     seg = vals[-int(window):]
-    sq = seg ** 2
-    valid = np.isfinite(sq)
-    if valid.sum() < max(min_periods, 10):
+    # P1-91: physical time axis only — the CUSUM path never spans a gap.
+    finite = trailing_contiguous_finite(seg)
+    if finite.size < max(min_periods, 10):
         return np.nan
-    v = sq[valid]
+    v = finite ** 2
     mean = float(np.mean(v))
     sd = float(np.std(v))
     if sd <= 1e-12:
@@ -235,10 +292,14 @@ _register("ts_cusum_vol_break_score", "平方收益 CUSUM 波动突变得分。"
 
 def _regime_filter(vals: np.ndarray, window: int, stat: str) -> float:
     seg = vals[-int(window):]
-    finite = seg[np.isfinite(seg)]
+    # P1-91: physical time axis only — the filter recursion never bridges a gap.
+    finite = trailing_contiguous_finite(seg)
     if len(finite) < 10:
         return np.nan
-    # Two-state Gaussian filter on volatility (high/low), deterministic grid.
+    # P1-91: heuristic two-state Gaussian FILTER on volatility (high/low) with a
+    # deterministic grid — NOT a full two-state HMM: there is no transition
+    # matrix, no Baum-Welch parameter learning and no Viterbi decoding.  The
+    # "prob" stat is a filtered posterior for a fixed (not fitted) state grid.
     r = np.array(finite, dtype=float)
     var_all = float(np.var(r))
     sigma_hi = np.sqrt(max(var_all * 2.0, 1e-12))
@@ -262,7 +323,10 @@ def _regime_filter(vals: np.ndarray, window: int, stat: str) -> float:
             else:
                 break
         return float(d)
-    # change point probability: recent jump in filtered prob
+    # P1-91: "changepoint" is a heuristic recent-shift score — the magnitude of
+    # the filtered-probability jump between a trailing window and the older
+    # window — NOT a posterior change-point probability.  Renamed semantics in
+    # the operator metadata; the kernel is unchanged.
     if len(p_hi_hist) < 5:
         return np.nan
     recent = p_hi_hist[-3:]
@@ -270,9 +334,9 @@ def _regime_filter(vals: np.ndarray, window: int, stat: str) -> float:
     return float(abs(np.mean(recent) - np.mean(older)))
 
 
-_register("ts_two_state_regime_probability", "两状态高波动过滤概率（仅滤波）。", ["x", "window"], "level",
+_register("ts_two_state_regime_probability", "两状态高波动过滤概率（heuristic 滤波：无转移矩阵、非完整 HMM）。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _regime_filter(v, int(window), "prob")), cost=5)
 _register("ts_regime_duration", "当前状态持续期（过滤概率>0.5 的连续长度）。", ["x", "window"], "count",
            lambda x, window=120: _apply(x, lambda v: _regime_filter(v, int(window), "duration")), cost=5)
-_register("ts_change_point_probability", "在线状态切换概率（滤波概率近突变度）。", ["x", "window"], "level",
+_register("ts_change_point_probability", "在线后验状态近突变启发式得分（heuristic shift，非真正变点概率）。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _regime_filter(v, int(window), "changepoint")), cost=5)

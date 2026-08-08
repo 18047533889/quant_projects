@@ -3510,6 +3510,36 @@
       "polars_reference_parity": false,
       "surface": "daily"
     },
+    "event_allan_log_mean": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": false,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
+    },
+    "event_allan_scaling_slope": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": false,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "expression_native",
+      "polars_implemented": true,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
+    },
     "event_arithmetic_return_sum": {
       "duckdb_edge_parity": false,
       "duckdb_implemented": false,
@@ -4935,6 +4965,21 @@
       "polars_reference_parity": false,
       "surface": "extended"
     },
+    "fin_median_abs_deviation": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": false,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
+    },
     "fin_minority_profit_share": {
       "duckdb_edge_parity": false,
       "duckdb_implemented": false,
@@ -5099,6 +5144,21 @@
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "daily"
+    },
+    "fin_percentile_vs_prior_history": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": false,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
     },
     "fin_positive_streak": {
       "duckdb_edge_parity": false,
@@ -5669,6 +5729,21 @@
       "polars_production_safe": false,
       "polars_reference_parity": false,
       "surface": "daily"
+    },
+    "fin_zscore_vs_prior_history": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": false,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
     },
     "fiscal_accrual_quality": {
       "duckdb_edge_parity": false,
@@ -20329,7 +20404,7 @@
   "schema_version": 1,
   "surface_counts": {
     "daily": 1185,
-    "extended": 65,
+    "extended": 70,
     "internal": 3,
     "legacy": 1,
     "research": 94,

@@ -84,7 +84,11 @@ def _conditional_te_window(
     c_t = cw[:-lag]  # c_s
     t_next = tw[lag:]  # t_{s+lag}
     mask = np.isfinite(t_t) & np.isfinite(s_t) & np.isfinite(c_t) & np.isfinite(t_next)
-    if int(mask.sum()) < max(lag + 2, min_transitions):
+    # R5 P1-43(a): a 4-D joint distribution over ``bins^4`` cells needs far more
+    # transitions than a plain count floor — under-powered windows fail closed
+    # to NaN instead of emitting a noisy CTE from a near-empty contingency table.
+    required = 3 * (bins ** 4)
+    if int(mask.sum()) < max(lag + 2, min_transitions, required):
         return np.nan
     xs = t_t[mask]
     ys = s_t[mask]
@@ -149,7 +153,9 @@ class TsConditionalTransferEntropy(SeriesOperator):
     在给定条件序列 C（regime/market/valuation...）状态的前提下，S 对 T 的方向
     信息传递。用于检验预测关系是否在控制状态变量后依然存在（如 turnover→return
     的关系在估值高/低状态下是否显著不同）。分位数分箱 + Jeffreys 平滑，
-    常量/退化状态 fail-closed。P2 / Research。
+    常量/退化状态 fail-closed。R5 P1-43(a)：四维联合 (t',t,s,c) 有 ``bins^4``
+    个格子，bins 限 {2,3} 且需 N >> bins^4 样本，否则 fail-closed NaN。
+    P2 / Research。
     """
 
     metadata = _metadata(
@@ -175,16 +181,23 @@ class TsConditionalTransferEntropy(SeriesOperator):
         w = int(window)
         nb = int(bins)
         lg = int(lag)
-        if not (2 <= nb <= 5):
-            raise ValueError("ts_conditional_transfer_entropy requires 2 <= bins <= 5")
+        # R5 P1-43(a): production restricts the search to bins in {2, 3}.  The
+        # 4-D joint (t', t, s, c) has ``bins^4`` cells; 4/5 bins need more daily
+        # transitions than a panel can supply and only manufacture noise.
+        if nb not in (2, 3):
+            raise ValueError(
+                "ts_conditional_transfer_entropy requires bins in {2, 3} "
+                "(higher bins need bins^4 samples a daily panel cannot provide)"
+            )
         if lg < 1:
             raise ValueError("ts_conditional_transfer_entropy requires lag >= 1")
         if w < lg + 2:
             raise ValueError("ts_conditional_transfer_entropy requires window >= lag + 2")
-        # Default floor scaled to the 4-D joint cell count, but *feasible* for
-        # the default window=60: the old ``max(80, 6*bins^3)`` made the default
-        # call (window=60, bins=3) require 162 transitions it could never have,
-        # silently producing an all-NaN column.  Fail closed loudly instead.
+        # ``min_transitions`` floor stays feasible for the default window=60 /
+        # bins=3 (the old ``max(80, 6*bins^3)`` silently produced an all-NaN
+        # column).  The stricter ``N >> bins^4`` requirement is enforced at
+        # runtime by the kernel (fail-closed NaN, R5 P1-43(a)) so this operator
+        # never emits a noisy CTE from a near-empty contingency table.
         if min_transitions is None:
             mt = max(30, 2 * nb * nb * nb)
         else:
@@ -236,6 +249,13 @@ def _modwt_band_corr_chunk(xc: np.ndarray, yc: np.ndarray, level: int, band: int
         return np.nan
     dx = _haar_detail(xc, level, band)
     dy = _haar_detail(yc, level, band)
+    # R5 P1-43(b): the causal zero-padding contaminates the cone of influence —
+    # the first ``2^band - 1`` samples (all boundary effects accumulated across
+    # levels <= band).  Censor them so the correlation is computed on interior
+    # coefficients only.
+    n_coi = (1 << band) - 1
+    dx = dx[n_coi:]
+    dy = dy[n_coi:]
     ok = np.isfinite(dx) & np.isfinite(dy)
     if int(ok.sum()) < level + 3:
         return np.nan
@@ -261,7 +281,9 @@ class TsModwtBandCorr(SeriesOperator):
 
     用因果边界 Haar MODWT 把 x、y 分解到多分辨率频带，取第 ``band`` 层的细节
     系数做窗口相关。回答"两序列是否只在某个频带（如周线/月线）协同"。PIT 安全
-    （因果边界不引入未来）。P2 / Research。
+    （因果边界不引入未来）。R5 P1-43(b)：因果零填充污染 cone-of-influence
+    （前 ``2^band - 1`` 个系数），相关计算前先 censor 掉；``level > band`` 不改变
+    输出（死参数区间），故 level 上限按 band 约束。P2 / Research。
     """
 
     metadata = _metadata(
@@ -289,8 +311,17 @@ class TsModwtBandCorr(SeriesOperator):
             raise ValueError("ts_modwt_band_corr requires level >= 1")
         if not (1 <= bd <= lv):
             raise ValueError("ts_modwt_band_corr requires 1 <= band <= level")
-        if w < lv + 8:
-            raise ValueError("ts_modwt_band_corr requires window >= level + 8")
+        # R5 P1-43(b): the Haar loop stops at ``band``, so ``level > band`` is a
+        # dead parameter range that never changes the output — cap ``level`` at
+        # ``band`` to keep the search surface meaningful.
+        lv = min(lv, bd)
+        # Cone-of-influence coefficients are censored, so the window must be long
+        # enough to leave interior samples after dropping ``2^band - 1`` of them.
+        if w < (1 << bd) + lv + 6:
+            raise ValueError(
+                "ts_modwt_band_corr requires window >= band + level + 6 "
+                "(boundary/cone-of-influence coefficients are censored)"
+            )
         return frame_like(
             x,
             map_pair_rolling(

@@ -68,6 +68,7 @@ def _survival_kernel(
             # state to downstream models).
             cur = 0
             prev_active = False
+            age[row] = np.nan
             pct[row] = np.nan
             hazard[row] = np.nan
             residual[row] = np.nan
@@ -75,6 +76,7 @@ def _survival_kernel(
         active = s != 0.0
         if active:
             cur += 1
+            age[row] = cur
             comp = np.asarray(completed, dtype=float)
             # percentile
             if comp.size >= min_pct:
@@ -85,7 +87,14 @@ def _survival_kernel(
             if comp.size >= min_haz:
                 d_l = float(np.sum(comp == cur))
                 n_l = float(np.sum(comp >= cur))
-                hazard[row] = (d_l + alpha) / (n_l + 2.0 * alpha)
+                # P1-77: gate on the *age-specific* risk set N_l, not just the
+                # total completed-run count.  A single survivor reaching age l
+                # must not produce a hazard estimate (hazard would read as a
+                # robust probability when it is really 1 sample).
+                if n_l >= min_haz:
+                    hazard[row] = (d_l + alpha) / (n_l + 2.0 * alpha)
+                else:
+                    hazard[row] = np.nan
             else:
                 hazard[row] = np.nan
             # residual life
@@ -100,6 +109,7 @@ def _survival_kernel(
                 if len(completed) > history_window:
                     completed.pop(0)
                 cur = 0
+            age[row] = 0.0
             pct[row] = 0.0
             hazard[row] = 0.0
             residual[row] = 0.0

@@ -24,6 +24,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -32,6 +33,11 @@ from cleaned_operators.gemini_v2_common import (
 )
 
 _EPS = 1e-12
+
+_ROBUST_SCALE_SPECS = {
+    "window": ParamSpec(dtype=int, min=2),
+    "min_periods": ParamSpec(dtype=int, min=2),
+}
 
 # Corrected consistency constant (robustbase / Akinshin 2022).
 _QN_D_INF = 2.21914446598508
@@ -151,6 +157,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 5,
         "tags_extra": [],
         "output_unit": "same_as_target",
+        "param_specs": _ROBUST_SCALE_SPECS,
     },
     "ts_hodges_lehmann_location": {
         "fn": _ts_hodges_lehmann_location,
@@ -161,6 +168,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 5,
         "tags_extra": [],
         "output_unit": "same_as_target",
+        "param_specs": _ROBUST_SCALE_SPECS,
     },
 }
 
@@ -178,6 +186,7 @@ def _register() -> None:
             source="robust_scale",
             tags_extra=spec["tags_extra"],
             output_unit=spec.get("output_unit"),
+            param_specs=spec.get("param_specs"),
         )
     union_extended(*_SPECS.keys())
 

@@ -3,9 +3,14 @@
 
 Three deterministic, trailing-window change-point scores.  Each scans a window
 for the best breakpoint ``τ`` (``min_segment ≤ τ ≤ n - min_segment``) using a
-Gaussian profile-likelihood or rank statistic, and returns a *signed* bounded
-score (never a p-value — financial series are serially correlated and the
+Gaussian profile-likelihood or rank statistic, and returns a *signed* score
+(never a p-value — financial series are serially correlated and the
 independence assumptions behind change-point p-values do not hold).
+The GLR scores are ``sign · sqrt(max_LLR)`` — NOT bounded (P1-29: a change of
+arbitrary size yields an arbitrarily large score); only the rank-based Pettitt
+score is normalised into [-1, 1].  ``window >= 2·min_segment + 2`` is required
+for any breakpoint to exist — smaller windows are rejected up front instead of
+silently returning all-NaN.
 
 * ``ts_glr_mean_shift_score``      — generalised likelihood ratio for a mean
   shift: ``LLR_τ = (n/2)·ln(σ̂² / σ̂_w²)``, output ``sign(μ_post - μ_pre) ·
@@ -27,6 +32,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -35,6 +41,12 @@ from cleaned_operators.gemini_v2_common import (
 )
 
 _EPS = 1e-12
+
+# R5 P1-01: ``min_segment`` is an int (5.9 -> 5 is rejected).
+_GLR_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=4),
+    "min_segment": ParamSpec(dtype=int, min=2),
+}
 
 
 def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
@@ -125,7 +137,10 @@ def _pettitt_score(v: np.ndarray, min_segment: int) -> float:
         if abs(u) > best_k:
             best_k = abs(u)
             best_t = t
-            best_sign = 1.0 if u > 0.0 else (-1.0 if u < 0.0 else 0.0)
+            # R5 P1-06: unify the change-point family sign — "positive = the post
+            # regime is higher".  A post-higher regime gives the pre-half LOW
+            # ranks, hence a negative Pettitt U*, so the sign is flipped.
+            best_sign = -1.0 if u > 0.0 else (1.0 if u < 0.0 else 0.0)
     if best_k <= _EPS:
         return 0.0
     normalized = best_k / (n * n / 4.0)
@@ -155,24 +170,32 @@ def _glr_series(x2d: np.ndarray, window: int, min_segment: int, which: str) -> n
     return out
 
 
+def _glr_feasibility(window: int, min_segment: int, canonical: str) -> tuple[int, int]:
+    w = int(window)
+    ms = max(2, int(min_segment))
+    # P1-29: no breakpoint exists unless the window can hold two segments — a
+    # window below ``2*min_segment + 2`` would silently return all-NaN for the
+    # whole parameter combination.
+    if w < 2 * ms + 2:
+        raise ValueError(f"{canonical} requires window >= 2*min_segment + 2 (got window={w}, min_segment={ms})")
+    return w, ms
+
+
 def _ts_glr_mean_shift_score(x: pd.DataFrame, window: int = 60, min_segment: int = 10) -> pd.DataFrame:
-    if int(window) < 4:
-        raise ValueError("ts_glr_mean_shift_score requires window >= 4")
-    out = _glr_series(x.to_numpy(dtype=float), int(window), int(min_segment), "mean")
+    w, ms = _glr_feasibility(window, min_segment, "ts_glr_mean_shift_score")
+    out = _glr_series(x.to_numpy(dtype=float), w, ms, "mean")
     return frame_like(x, out)
 
 
 def _ts_glr_variance_shift_score(x: pd.DataFrame, window: int = 60, min_segment: int = 10) -> pd.DataFrame:
-    if int(window) < 4:
-        raise ValueError("ts_glr_variance_shift_score requires window >= 4")
-    out = _glr_series(x.to_numpy(dtype=float), int(window), int(min_segment), "variance")
+    w, ms = _glr_feasibility(window, min_segment, "ts_glr_variance_shift_score")
+    out = _glr_series(x.to_numpy(dtype=float), w, ms, "variance")
     return frame_like(x, out)
 
 
 def _ts_pettitt_change_score(x: pd.DataFrame, window: int = 120, min_segment: int = 10) -> pd.DataFrame:
-    if int(window) < 4:
-        raise ValueError("ts_pettitt_change_score requires window >= 4")
-    out = _glr_series(x.to_numpy(dtype=float), int(window), int(min_segment), "pettitt")
+    w, ms = _glr_feasibility(window, min_segment, "ts_pettitt_change_score")
+    out = _glr_series(x.to_numpy(dtype=float), w, ms, "pettitt")
     return frame_like(x, out)
 
 
@@ -185,6 +208,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "unit": "level",
         "cost": 3,
         "tags_extra": ["condition"],
+        "param_specs": _GLR_PARAM_SPECS,
     },
     "ts_glr_variance_shift_score": {
         "fn": _ts_glr_variance_shift_score,
@@ -194,6 +218,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "unit": "level",
         "cost": 3,
         "tags_extra": ["condition"],
+        "param_specs": _GLR_PARAM_SPECS,
     },
     "ts_pettitt_change_score": {
         "fn": _ts_pettitt_change_score,
@@ -203,6 +228,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "unit": "ratio",
         "cost": 4,
         "tags_extra": ["state"],
+        "param_specs": _GLR_PARAM_SPECS,
     },
 }
 
@@ -220,6 +246,7 @@ def _register() -> None:
             source="glr_change",
             tags_extra=spec["tags_extra"],
             output_unit=spec["unit"],
+            param_specs=spec.get("param_specs"),
         )
     union_extended(*_SPECS.keys())
 

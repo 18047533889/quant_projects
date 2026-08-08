@@ -152,8 +152,12 @@
   reason: "dataaccess 实现本体，内部原子写入 parquet"
 - path: dataaccess/write/upsert.py
   reason: "upsert 读取已有分区并原子写回"
+- path: dataaccess/write/publish.py
+  reason: "publish 校验 unique_key / 行数需直读 parquet + DuckDB（_validate_unique_key），不能递归调 read_arrow"
 - path: dataaccess/core/duckdb_capabilities.py
   reason: "dataaccess 自身实现：DuckDB 版本能力探测（import duckdb 读版本）"
+- path: dataaccess/core/retry.py
+  reason: "dataaccess 自身实现：ExceptionClassifier 需要 duckdb.Error 判断瞬时/致命错误是否可重试"
 - path: dataaccess/read/formats.py
   reason: "dataaccess 自身实现：格式适配层，arrow/feather 直读（pyarrow feather/ipc）"
 - path: dataaccess/read/manifest.py

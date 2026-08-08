@@ -129,6 +129,11 @@ FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
     "state_episode_retrace_ratio",
     "state_episode_excursion_balance",
     "ts_interval_nesting_depth",
+    # review #4 R4-04: candle_gap_atr normalizes the open-gap by a *Wilder* ATR
+    # (``ewm(alpha=1/w, adjust=False)`` in candle_geometry_v2) — infinite-history
+    # recursion with no checkpoint-restore, so it must stay full-replay (it was
+    # previously mislabeled ``bounded_history``).
+    "candle_gap_atr",
 })
 
 # These schemas document the minimum state needed by a future segmented runtime.
@@ -601,5 +606,27 @@ def check_factor_production_hardening() -> list[str]:
         ):
             errors.append(
                 f"{canonical}: streaming advertised without segmented execution support"
+            )
+    # R5 P0-04 release gate: ANY daily-surface canonical that is not PIT-safe
+    # fails the release — not merely the current production targets.  A daily
+    # factor with a stale/expired certification must stop the build instead of
+    # printing a warning.  Genuinely research/experimental ops (``fail_closed``)
+    # are exempt by design.
+    from cleaned_operators.operator_surface import classify_canonical
+
+    for canonical in sorted(OperatorRegistry.list_canonical()):
+        if classify_canonical(canonical) != "daily":
+            continue
+        if should_fail_closed(canonical):
+            continue
+        operator = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(
+            canonical
+        )
+        if operator is None:
+            continue
+        policy = infer_operator_policy(operator, canonical=canonical)
+        if not policy.pit_safe:
+            errors.append(
+                f"{canonical}: daily-surface pit_safe=False (release gate R5-P0-04)"
             )
     return errors

@@ -85,22 +85,24 @@ _register("index_reconstitution_churn", "窗口内纳入+剔除次数（Polars�
 
 
 def _multi_index_entry(entry_a, entry_b, entry_c, window):
-    # Unknown-state contract (S9): NaN must not be treated as "not entered".
-    # Sum only the known index flags per row; rows with all three unknown are NaN.
+    # P1-141: partial-unknown flags (A=1,B=NaN,C=NaN) must NOT collapse to
+    # 1+0+0 = "1 entered".  Require ALL three flags known per day; unknown is
+    # never "not entered".  A window containing any unknown day yields null
+    # (fail closed) via min_samples=window on the null-propagated value.
     w = int(window)
     cols = _cols(entry_a, entry_b, entry_c)
     out = []
     for c in cols:
-        a = entry_a[c].fill_null(0.0).cast(pl.Float64)
-        b = entry_b[c].fill_null(0.0).cast(pl.Float64)
-        cc = entry_c[c].fill_null(0.0).cast(pl.Float64)
-        known = entry_a[c].is_not_null() | entry_b[c].is_not_null() | entry_c[c].is_not_null()
-        total = pl.DataFrame(
-            {"_v": a + b + cc, "_k": known}
-        ).with_columns(
-            pl.when(pl.col("_k")).then(pl.col("_v")).otherwise(None).alias("_o")
-        )["_o"]
-        out.append(total.rolling_sum(w).alias(c))
+        all_known = (
+            entry_a[c].is_not_null()
+            & entry_b[c].is_not_null()
+            & entry_c[c].is_not_null()
+        )
+        # entry_a+entry_b+entry_c propagates null -> value null on unknown days.
+        val = pl.when(all_known).then(
+            entry_a[c] + entry_b[c] + entry_c[c]
+        ).otherwise(None)
+        out.append(val.rolling_sum(w).alias(c))
     return entry_a.with_columns(out)
 
 
@@ -109,31 +111,51 @@ _register("multi_index_entry_intensity", "多指数同时纳入强度（Polars�
 
 
 def _event_decay(entry_event, window, decay, missing_policy="break"):
+    import numpy as np
+
     w = int(window)
     d = float(decay)
+    if not (np.isfinite(d) and 0.0 <= d <= 1.0):
+        raise ValueError("index_event_decay decay must satisfy 0 <= decay <= 1")
     policy = str(missing_policy or "break").lower()
-    import numpy as np
+    if policy not in ("break", "carry"):
+        raise ValueError("index_event_decay missing_policy must be 'break' or 'carry'")
 
     weights = np.array([d ** k for k in range(w)], dtype=float)
 
     def _apply(vals):
         arr = np.asarray(vals, dtype=float)
-        if len(arr) < w:
-            return float("nan")
-        # R4 (unknown != no-event): a NaN event is UNKNOWN, never a 0 event.
-        # Feeding a gap through as zeros manufactures a fake "no event" window.
-        # Both policies leave the output undefined while a gap is inside the
-        # window; "break" also resets the observed state, "carry" keeps the
-        # weight state (rolling_map recomputes per window, so the observable
-        # difference is limited to the reset behavior documented on pandas).
-        if not np.all(np.isfinite(arr)):
-            return float("nan")
-        return float(np.dot(arr[::-1], weights))
+        n = len(arr)
+        out = np.full(n, np.nan, dtype=float)
+        seen = False
+        last_valid = np.nan
+        for i in range(n):
+            if np.isfinite(arr[i]):
+                seen = True
+            if not seen:
+                continue  # before the first known event -> NaN
+            start = max(0, i - w + 1)
+            seg = arr[start:i + 1]
+            if len(seg) < w:
+                continue  # full-window warmup contract
+            if not np.all(np.isfinite(seg)):
+                # Data gap inside the window: never treat as zero events.
+                # P1-143: "carry" carries the last valid decay value forward;
+                # "break" leaves NaN until a full clean window re-accumulates.
+                if policy == "carry" and np.isfinite(last_valid):
+                    out[i] = last_valid
+                continue
+            out[i] = float(np.dot(seg[::-1], weights))
+            last_valid = out[i]
+        return out
 
     cols = _cols(entry_event)
-    return entry_event.with_columns(
-        [entry_event[c].rolling_map(_apply, window_size=w).alias(c) for c in cols]
-    )
+    result = entry_event.clone()
+    for c in cols:
+        result = result.with_columns(
+            pl.Series(c, _apply(entry_event[c].cast(pl.Float64).to_numpy()))
+        )
+    return result
 
 
 _register("index_event_decay", "指数事件衰减近因信号（Polars）。",

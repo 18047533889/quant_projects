@@ -4,10 +4,14 @@
 Two complements:
 
 * ``ts_autocorrelation_time`` — integrated autocorrelation time ``tau_int`` of
-  the window.  Sample autocorrelations ``rho(k)`` are computed over aligned
-  finite pairs for ``k = 1..max_lag``; the sum ``1 + 2*sum rho(k)`` accumulates
-  only while ``rho(k) > 0`` (stops at the first non-positive value) and is then
-  normalised by ``max_lag`` so the output stays on a comparable scale.
+  the window, in bars (review R4-56).  Sample autocorrelations ``rho(k)`` are
+  computed for ``k = 1..max_lag`` over the *trailing contiguous finite window*
+  (review R4-57: the same cohort is used for the mean, the total variance and
+  every lag-k numerator — never a re-connected axis); the sum
+  ``1 + 2*sum rho(k)`` accumulates only while ``rho(k) > 0`` (stops at the
+  first non-positive value) and is NOT divided by ``max_lag``, so white noise
+  gives ``~1`` bar regardless of ``max_lag``.  The precise spelling
+  ``ts_integrated_autocorrelation_time`` is an alias of this canonical.
 * ``ts_fractional_difference`` — the fractional differencing transform
   ``y_t = sum_{k=0}^{min(cutoff, t)} w_k * x_{t-k}`` with the binomial-weight
   recursion ``w_0 = 1, w_k = -w_{k-1} * (d - k + 1) / k`` for ``d in (-1, 1)``.
@@ -58,33 +62,45 @@ def _check_window(window: int) -> int:
     return w
 
 
+def _trailing_contiguous_finite(chunk: np.ndarray) -> np.ndarray:
+    """Trailing contiguous run of finite values (suffix after the last gap)."""
+    finite = np.isfinite(chunk)
+    if not np.any(finite):
+        return np.array([], dtype=float)
+    bad = np.flatnonzero(~finite)
+    if bad.size == 0:
+        return chunk
+    return chunk[int(bad[-1]) + 1 :]
+
+
 def _autocorrelation_time(chunk: np.ndarray, max_lag: int) -> float:
-    valid = chunk[np.isfinite(chunk)]
-    n = int(valid.size)
+    # Review R4-57: the mean / total variance and every lag-k numerator use the
+    # SAME cohort — the trailing contiguous finite window.  Values are never
+    # re-connected across a gap.
+    contig = _trailing_contiguous_finite(chunk)
+    n = int(contig.size)
     if n < 3:
         return np.nan
-    mu = float(np.mean(valid))
-    denom = float(np.sum((valid - mu) ** 2))
+    mu = float(np.mean(contig))
+    denom = float(np.sum((contig - mu) ** 2))
     if not np.isfinite(denom) or denom <= 1e-12:
         return np.nan
     tau = 1.0
     m = int(max_lag)
-    total_len = int(chunk.shape[0])
     for k in range(1, m + 1):
-        if total_len <= k:
+        if n <= k:
             break
-        x = chunk[: total_len - k]
-        y = chunk[k:]
-        finite = np.isfinite(x) & np.isfinite(y)
-        cnt = int(finite.sum())
-        if cnt < 2:
-            break
-        num = float(np.sum((x[finite] - mu) * (y[finite] - mu)))
+        x = contig[: n - k]
+        y = contig[k:]
+        num = float(np.sum((x - mu) * (y - mu)))
         rho = num / denom
         if not np.isfinite(rho) or rho <= 0.0:
             break
         tau += 2.0 * rho
-    return tau / m
+    # Review R4-56: true integrated autocorrelation time in bars — do NOT divide
+    # by max_lag (white noise would collapse to 1/max_lag and max_lag 20 vs 40
+    # would mechanically halve the output).
+    return tau
 
 
 def _autocorrelation_time_series(x2d: np.ndarray, window: int, max_lag: int) -> np.ndarray:
@@ -135,17 +151,20 @@ def _fractional_difference_series(x2d: np.ndarray, fd: float, cutoff: int) -> np
     source="memory_ext",
 )
 class TsAutocorrelationTime(SeriesOperator):
-    """积分自相关时间 tau_int = 1 + 2*sum rho(k)（rho>0 时累加），按 max_lag 归一。
+    """积分自相关时间 ``tau_int = 1 + 2*sum rho(k)``（rho>0 时累加），单位 bars。
 
+    传统 integrated autocorrelation time，输出**不除以 max_lag**（R4-56）：
+    白噪声 → τ≈1 bar，与 max_lag 无关；max_lag 只截断求和的滞后上限。
     大 -> 强序列依赖（动量/慢变量）；小 -> 近白噪声。随机游走等非平稳序列
-    会给出持续为正的自相关，tau_int 偏大，正好表达其长记忆。P1。
+    会给出持续为正的自相关，tau_int 偏大，正好表达其长记忆。统计量在尾部
+    连续有限窗口上计算（R4-57），跨 gap 不重连。P1。
     """
 
     metadata = _metadata(
         "ts_autocorrelation_time",
-        "积分自相关时间（正自相关累加，按 max_lag 归一化）。",
+        "积分自相关时间（bars，正自相关累加，不除以 max_lag）。",
         ["x", "window", "max_lag"],
-        unit="ratio",
+        unit="bars",
         cost=3,
     )
 
@@ -205,4 +224,21 @@ def _register_surface() -> None:
         register_polars_bridge(_canon)
 
 
+def _register_precise_alias() -> None:
+    """R4-56: expose the precise name ``ts_integrated_autocorrelation_time``.
+
+    The canonical stays ``ts_autocorrelation_time`` (polars_geometry_math
+    hard-codes that name in its polars-backend list, so a canonical rename is
+    not loadable without editing that module).  The precise spelling is
+    registered as an alias so new DSL expressions can use it.
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    OperatorRegistry.register_alias(
+        "ts_integrated_autocorrelation_time",
+        "ts_autocorrelation_time",
+    )
+
+
 _register_surface()
+_register_precise_alias()

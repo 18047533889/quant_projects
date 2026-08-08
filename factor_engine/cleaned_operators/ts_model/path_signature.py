@@ -96,10 +96,20 @@ def _sig_level2(x: np.ndarray, y: np.ndarray, window: int):
     ay = sy - sy[0]
     dx = np.diff(sx)
     dy = np.diff(sy)
-    s_xdx = float(np.sum(ax[:-1] * dx))  # ∫ Xbar_x dX_x
-    s_xdy = float(np.sum(ax[:-1] * dy))  # ∫ Xbar_x dX_y  (cross term)
-    s_ydx = float(np.sum(ay[:-1] * dx))  # ∫ Xbar_y dX_x  (cross term)
-    s_ydy = float(np.sum(ay[:-1] * dy))  # ∫ Xbar_y dX_y
+    s_xdx = float(np.sum(ax[:-1] * dx))  # Σ Xbar_x ΔX  (strictly-lower part)
+    s_xdy = float(np.sum(ax[:-1] * dy))  # Σ Xbar_x ΔY   (cross term)
+    s_ydx = float(np.sum(ay[:-1] * dx))  # Σ Xbar_y ΔX   (cross term)
+    s_ydy = float(np.sum(ay[:-1] * dy))  # Σ Xbar_y ΔY
+    # P1-92: for a piecewise-linear path the exact level-2 iterated integral is
+    #   S^(2)_{jk} = Σ_i [ Xbar_j(i) ΔS_k(i) + 0.5 ΔS_j(i) ΔS_k(i) ]
+    # — the discrete sums above are only the strictly-lower part; the diagonal
+    # (1/2)ΔX⊗ΔX term was missing, so the depth-2 norm was not the standard
+    # signature norm.  The Levy area is unaffected (the diagonal contribution
+    # to ∫∫dX dY equals that of ∫∫dY dX, so it cancels exactly in area).
+    s_xdx += 0.5 * float(np.sum(dx * dx))
+    s_xdy += 0.5 * float(np.sum(dx * dy))
+    s_ydx += 0.5 * float(np.sum(dy * dx))
+    s_ydy += 0.5 * float(np.sum(dy * dy))
     area = 0.5 * (s_xdy - s_ydx)  # Levy area (translation-invariant)
     return s_xdx, s_xdy, s_ydx, s_ydy, area
 

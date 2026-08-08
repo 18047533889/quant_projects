@@ -34,16 +34,17 @@ def _trailing_contiguous_finite(chunk: np.ndarray) -> np.ndarray:
 
     Complexity operators must never re-connect values across a gap: after a
     recent missing value only the trailing contiguous finite block is a valid
-    sample for the *current* complexity (review R4-62 / R4-64).
+    sample for the *current* complexity (review R4-62 / R4-64).  R5 P0-03: a
+    NaN at the current row returns the empty block (fail-closed) so a missing
+    value today never emits a stale-history complexity factor.
     """
     n = len(chunk)
-    j = n
-    while j > 0 and not np.isfinite(chunk[j - 1]):
-        j -= 1
-    i = j
+    if n == 0 or not np.isfinite(chunk[-1]):
+        return np.empty(0, dtype=float)
+    i = n
     while i > 0 and np.isfinite(chunk[i - 1]):
         i -= 1
-    return chunk[i:j].astype(float)
+    return chunk[i:].astype(float)
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:

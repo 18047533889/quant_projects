@@ -137,13 +137,15 @@ def _growth_mismatch(ey, g, scale=1.0):
     scale = float(scale)
     if not np.isfinite(scale) or scale <= 0:
         raise ValueError("valuation_growth_mismatch scale must be a positive finite number")
-    # Both inputs must be decimal ratios by contract; scale is backward-compat only.
+    # P1-140: ``scale`` removed from the searchable surface (only 1.0 is
+    # production-meaningful); kept as a backward-compat positional that
+    # validates the unit-honest default.
     return _binary(ey, g, lambda a, b: (a - b / scale))
 
 
 _register(
-    "valuation_growth_mismatch", "盈利收益率 - 利润增长（输入须为小数比率，字段层 /100；scale 仅向后兼容）。",
-    ["earnings_yield", "profit_growth", "scale"],
+    "valuation_growth_mismatch", "盈利收益率 - 利润增长（输入须为小数比率，字段层 /100；scale 已从搜索面移除，仅向后兼容 1.0）。",
+    ["earnings_yield", "profit_growth"],
     lambda ey, g, scale=1.0: _growth_mismatch(ey, g, scale),
     unit="level",
 )

@@ -35,9 +35,22 @@ from cleaned_operators.gemini_v2_common import (
 from cleaned_operators.multifractal import _hurst_generalized
 
 _QS = np.array([1.0, 2.0, 4.0])
+_EPS = 1e-12
 
 
 def _spectrum_asymmetry(v: np.ndarray) -> float:
+    # P1-34: the negative moments h(-q) are dominated by the SMALLEST increment
+    # (``|dx|^q``, q < 0), which is exactly where A-share data is degenerate
+    # (0-return / suspended / limit-duplicate increments).  The sibling kernel
+    # already fail-closes on these without any EPS added into the moment:
+    #   * an exact-zero increment makes ``0^-q = inf`` and the structure
+    #     function returns NaN;
+    #   * near-zero increments make the negative-moment scaling law noisy, and
+    #     the log-log fit's R² >= 0.9 gate rejects the window.
+    # So the honest treatment is the kernel's own fail-closed behaviour — no
+    # extra ad-hoc floor is imposed (an aggressive min/median guard would also
+    # reject healthy series, since the smallest of ~hundreds of increments is
+    # almost always << its median).
     hp = np.asarray([_hurst_generalized(v, q_) for q_ in _QS], dtype=float)
     hn = np.asarray([_hurst_generalized(v, -q_) for q_ in _QS], dtype=float)
     if not (np.all(np.isfinite(hp)) and np.all(np.isfinite(hn))):

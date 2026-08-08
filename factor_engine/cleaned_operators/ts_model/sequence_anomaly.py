@@ -85,15 +85,24 @@ def _mp_stats(vals: np.ndarray, m: int, stat: str) -> float:
     )
     last = n - 1
     if stat in {"discord", "motif"}:
+        # P1-93: ``motif`` is an ALIAS of ``discord`` — both return the trailing
+        # subsequence's matrix-profile novelty (its minimum distance to any
+        # historical subsequence).  The two names are intentionally the same
+        # quantity; ``ts_matrix_profile_discord_score`` is the canonical and
+        # ``ts_matrix_profile_motif_distance`` is kept as a compatibility alias
+        # (its metadata documents the relationship).
         return float(novelty[last, 0])
     if stat == "recurrence":
         return float(frequency[last, 0]) if np.isfinite(frequency[last, 0]) else np.nan
     return float(dispersion[last, 0]) if np.isfinite(dispersion[last, 0]) else np.nan
 
 
-_register("ts_matrix_profile_discord_score", "末尾子序列到最近历史子序列距离（离群度）。", ["x", "m"], "level",
+_register("ts_matrix_profile_discord_score", "末尾子序列到最近历史子序列距离（离群度，novelty canonical）。", ["x", "m"], "level",
            lambda x, m=20: _apply(x, lambda v: _mp_stats(v, int(m), "discord")))
-_register("ts_matrix_profile_motif_distance", "末尾子序列到最相似历史模式的距离。", ["x", "m"], "level",
+# P1-93: ``motif_distance`` is the same novelty value as ``discord_score``.
+# The canonical is ``ts_matrix_profile_discord_score``; this name is kept
+# registered for backward compatibility and its metadata documents the alias.
+_register("ts_matrix_profile_motif_distance", "末尾子序列 matrix-profile novelty 距离（与 ts_matrix_profile_discord_score 同一数值的兼容别名）。", ["x", "m"], "level",
            lambda x, m=20: _apply(x, lambda v: _mp_stats(v, int(m), "motif")))
 _register("ts_motif_recurrence_count", "相似历史模式出现次数（近邻计数）。", ["x", "m"], "count",
            lambda x, m=20: _apply(x, lambda v: _mp_stats(v, int(m), "recurrence")))

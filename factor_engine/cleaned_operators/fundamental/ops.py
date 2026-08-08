@@ -25,16 +25,21 @@ from cleaned_operators.base import (
 )
 
 
-@register_operator(name="ttm", category="fundamental", business_category="fundamental", canonical="ttm", source="factor_dsl_np", status="experimental")
+@register_operator(name="ttm", category="fundamental", business_category="fundamental", canonical="ttm", source="factor_dsl_np", status="deprecated")
 class LqtpTtmOp(SeriesOperator):
-    """滚动十二个月（TTM）累加；可选 fiscal_quarter(1-4) 对齐报告期"""
+    """Deprecated 滚动十二个月（TTM）累加；可选 fiscal_quarter(1-4) 对齐报告期。
+
+    旧实现按 trading-day row 滚动（daily as-of ffill 下 ttm=最近4个交易日相加），
+    与严格 fiscal-ordinal 语义不一致。请改用 strict operators:
+    ``ttm_from_quarterly`` / ``ttm_from_cumulative``（compatibility-only）。
+    """
     metadata = OperatorMetadata(
         name="ttm",
         category="fundamental",
-        description="滚动十二个月（TTM）累加；可选 fiscal_quarter(1-4) 对齐报告期",
+        description="Deprecated: 按交易日行滚动 TTM，ffill 下语义错误；改用 ttm_from_quarterly / ttm_from_cumulative。",
         param_names=["x", "fiscal_quarter"],
         return_type="series",
-        tags=["fundamental", "pit_safe"],
+        tags=["fundamental", "pit_safe", "deprecated", "compatibility_only"],
     )
 
     def _calculate_series(self, x: pd.DataFrame, fiscal_quarter: pd.DataFrame | None = None, **kwargs):
@@ -43,16 +48,20 @@ class LqtpTtmOp(SeriesOperator):
         return compute_ttm(x, fiscal_quarter)
 
 
-@register_operator(name="quarter", category="fundamental", business_category="fundamental", canonical="quarter", source="factor_dsl_np", status="experimental")
+@register_operator(name="quarter", category="fundamental", business_category="fundamental", canonical="quarter", source="factor_dsl_np", status="deprecated")
 class LqtpQuarterOp(SeriesOperator):
-    """累计值转单季度；Q1/跨年用当期值，其余期用差分；可选 fiscal_quarter"""
+    """Deprecated 累计值转单季度；可选 fiscal_quarter。
+
+    旧实现按日频行走 Q1/跨年边界，daily as-of ffill 下季度化语义错误。
+    请改用 ``quarter_from_cumulative``（compatibility-only）。
+    """
     metadata = OperatorMetadata(
         name="quarter",
         category="fundamental",
-        description="累计值转单季度；Q1/跨年用当期值，其余期用差分；可选 fiscal_quarter",
+        description="Deprecated: 日频行季度化在 ffill 下语义错误；改用 quarter_from_cumulative。",
         param_names=["x", "fiscal_quarter"],
         return_type="series",
-        tags=["fundamental", "pit_safe"],
+        tags=["fundamental", "pit_safe", "deprecated", "compatibility_only"],
     )
 
     def _calculate_series(self, x: pd.DataFrame, fiscal_quarter: pd.DataFrame | None = None, **kwargs):
@@ -61,16 +70,20 @@ class LqtpQuarterOp(SeriesOperator):
         return compute_quarter(x, fiscal_quarter)
 
 
-@register_operator(name="yoy", category="fundamental", business_category="fundamental", canonical="yoy", source="factor_dsl_np", status="experimental")
+@register_operator(name="yoy", category="fundamental", business_category="fundamental", canonical="yoy", source="factor_dsl_np", status="deprecated")
 class LqtpYoyOp(SeriesOperator):
-    """同比增速；默认 lag=4，可选 fiscal_quarter 找同季度去年同期"""
+    """Deprecated 同比增速；默认 lag=4 行。
+
+    旧实现按 trading-day row 找去年同日（ffill 下 yoy fallback=i-4 交易日错误）。
+    请改用 ``yoy_by_period``（compatibility-only）。
+    """
     metadata = OperatorMetadata(
         name="yoy",
         category="fundamental",
-        description="同比增速；默认 lag=4，可选 fiscal_quarter 找同季度去年同期",
+        description="Deprecated: 交易日行同比在 ffill 下语义错误；改用 yoy_by_period。",
         param_names=["x", "fiscal_quarter"],
         return_type="series",
-        tags=["fundamental", "pit_safe"],
+        tags=["fundamental", "pit_safe", "deprecated", "compatibility_only"],
     )
 
     def _calculate_series(self, x: pd.DataFrame, fiscal_quarter: pd.DataFrame | None = None, **kwargs):
@@ -251,3 +264,29 @@ class DebtToEquityOp(TwoVarOperator):
         den = total_equity.replace(0, np.nan) if hasattr(total_equity, "replace") else total_equity
         out = total_debt / den
         return out.replace([np.inf, -np.inf], np.nan)
+
+
+# ---------------------------------------------------------------------------
+# P1-129: legacy row-wise ttm/quarter/yoy marked deprecated / compatibility-only.
+# The strict fiscal-ordinal replacements are registered by fiscal_strict.py
+# (quarter_from_cumulative / ttm_from_quarterly / ttm_from_cumulative /
+# yoy_by_period); the old row-walking names stay for back-compat but are
+# advertised as superseded.
+# ---------------------------------------------------------------------------
+from cleaned_operators.registry import OperatorRegistry as _registry  # noqa: E402
+
+for _old, _new in (
+    ("ttm", "ttm_from_quarterly"),
+    ("quarter", "quarter_from_cumulative"),
+    ("yoy", "yoy_by_period"),
+):
+    _entry = _registry._catalog.get(_old)
+    if _entry is not None:
+        _entry["compatibility_only"] = True
+        _entry["preferred_replacements"] = [_new]
+        _entry.setdefault(
+            "semantic_note",
+            "旧 ttm/quarter/yoy 按交易日行滚动，在 daily as-of forward-fill 下语义错误"
+            "（ttm=最近4个交易日相加、yoy fallback=i-4 交易日、quarter=日频行季度化）；"
+            "改用 strict fiscal-ordinal 算子。",
+        )

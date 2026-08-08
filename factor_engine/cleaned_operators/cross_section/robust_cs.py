@@ -94,7 +94,11 @@ def _cs_ridge_resid(y, *features, alpha=0.1, add_intercept=True):
         X = _design([f[valid] for f in frows], add_intercept)
         yy = yrow[valid]
         pen = a * np.eye(X.shape[1])
-        pen[0, 0] = 0.0
+        # P0-13: only the intercept is unregularised.  When add_intercept=False
+        # the first design column is a real exposure and must be penalised like
+        # every other feature.
+        if add_intercept:
+            pen[0, 0] = 0.0
         beta, *_ = np.linalg.lstsq(X.T @ X + pen, X.T @ yy, rcond=None)
         out = np.full(len(yrow), np.nan)
         out[valid] = yrow[valid] - X @ beta
@@ -112,6 +116,26 @@ _mk(
 )
 
 
+def _quantile_regression_beta(X: np.ndarray, yy: np.ndarray, q: float) -> np.ndarray | None:
+    """Exact pinball-loss quantile regression coefficients via LP (HiGHS).
+
+    Minimises ``sum_i rho_q(yy_i - X_i @ beta)`` with the pinball loss
+    ``rho_q(u) = u (q - 1[u<0])`` using the standard LP form: free coefficients
+    are split ``beta = beta+ - beta-`` (both non-negative) and non-negative
+    slack ``u``/``v`` absorb positive / negative residuals.  Returns ``None``
+    (fail-closed) when the solver does not converge.
+    """
+    import scipy.optimize as opt
+
+    n, p = X.shape
+    c = np.concatenate([np.zeros(2 * p), np.full(n, q), np.full(n, 1.0 - q)])
+    A_eq = np.concatenate([X, -X, np.eye(n), -np.eye(n)], axis=1)
+    res = opt.linprog(c, A_eq=A_eq, b_eq=yy, bounds=[(0.0, None)] * (2 * p + 2 * n), method="highs")
+    if not res.success:
+        return None
+    return res.x[:p] - res.x[p : 2 * p]
+
+
 def _cs_quantile_resid(y, x, q=0.5):
     quantile = float(q)
     if not (0.0 < quantile < 1.0):
@@ -124,12 +148,10 @@ def _cs_quantile_resid(y, x, q=0.5):
             return np.full(len(yrow), np.nan)
         X = np.column_stack([np.ones(valid.sum()), xr[valid]])
         yy = yrow[valid]
-        beta, *_ = np.linalg.lstsq(X, yy, rcond=None)
-        for _ in range(8):
-            resid = yy - X @ beta
-            weight = np.clip(np.where(resid > 0, quantile, 1.0 - quantile), 1e-6, None)
-            beta, *_ = np.linalg.lstsq(X * weight[:, None], yy * weight, rcond=None)
+        beta = _quantile_regression_beta(X, yy, quantile)
         out = np.full(len(yrow), np.nan)
+        if beta is None:
+            return out
         out[valid] = yrow[valid] - X @ beta
         return out
 
@@ -152,17 +174,20 @@ def _cs_spline_resid(y, x, knots=4):
         qs = np.unique(qs)
         if len(qs) < 2:
             return np.full(len(yrow), np.nan)
-        # piecewise-linear basis (truncated linear splines) -> OLS
-        bases = [np.ones(len(xs))]
-        bases.extend([np.maximum(xs - knot, 0.0) for knot in qs[1:]])
-        X = np.column_stack(bases)
+        # R5 P1-94: standard truncated-power piecewise-linear basis is
+        # 1, x, (x-k_1)_+, (x-k_2)_+, ...  The old basis only had the hinges
+        # (plus intercept), so the response below the first knot was forced
+        # constant.  Add the raw ``x`` term so every segment has a linear slope.
+        hinge = lambda t, knot: np.maximum(t - knot, 0.0)
+        X = np.column_stack(
+            [np.ones(len(xs)), xs] + [hinge(xs, knot) for knot in qs[1:]]
+        )
         beta, *_ = np.linalg.lstsq(X, ys, rcond=None)
         out = np.full(len(yrow), np.nan)
-        pred = np.ones(len(yrow))
+        pred = beta[0] + beta[1] * xr
         for c, knot in enumerate(qs[1:]):
-            pred = pred + beta[c + 1] * np.maximum(xr - knot, 0.0)
-        pred = beta[0] + pred - 1.0
-        out[valid] = yrow[valid] - (beta[0] + sum(beta[c + 1] * np.maximum(xr[valid] - knot, 0.0) for c, knot in enumerate(qs[1:])))
+            pred = pred + beta[c + 2] * hinge(xr, knot)
+        out[valid] = yrow[valid] - pred[valid]
         return out
 
     return _frame_like(y, _row_wise(y, [x], _fn))
@@ -214,7 +239,13 @@ def _knn_blockwise(Xn: np.ndarray, k: int, block: int = 500) -> np.ndarray:
     for lo in range(0, n, block):
         hi = min(lo + block, n)
         d2 = np.sum((Xn[lo:hi, None, :] - Xn[None, :, :]) ** 2, axis=2)
-        np.fill_diagonal(d2, np.inf)
+        # P0-11: the block's local rows map to global columns ``lo..hi``, so the
+        # block-matrix diagonal is only the true self column in the first block
+        # (lo=0).  Mask each row's *actual* global self column so a stock is
+        # never its own k-NN in any block; otherwise off-block self entries show
+        # up as distance 0 and pull the k-NN mean toward 0.
+        for local_i, global_i in enumerate(range(lo, hi)):
+            d2[local_i, global_i] = np.inf
         kk = min(k, n - 1)
         if kk < 1:
             continue
@@ -312,9 +343,17 @@ def _cs_robust_mahalanobis_mad(*features):
             continue
         Xv = X[valid]
         center = np.median(Xv, axis=0)
+        # P1-95: three-tier robust scale fallback.  Prefer MAD; if a dimension
+        # is MAD-degenerate (>= half the cross-section equal to the median) but
+        # still has spread, fall back to its std; if both are ~0 the dimension
+        # carries no information and is dropped from the distance.
         mad = 1.4826 * np.median(np.abs(Xv - center), axis=0)
-        mad = np.where(mad > _EPS, mad, 1.0)
-        z = (Xv - center) / mad
+        sd = np.std(Xv, axis=0)
+        scale = np.where(mad > _EPS, mad, sd)
+        good = scale > _EPS
+        if not np.any(good):
+            continue
+        z = (Xv[:, good] - center[good]) / scale[good]
         d = np.sqrt(np.sum(z * z, axis=1))
         out[row, valid] = d
     return _frame_like(features[0], out)

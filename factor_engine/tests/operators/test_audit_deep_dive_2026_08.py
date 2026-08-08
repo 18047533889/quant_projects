@@ -218,3 +218,95 @@ def test_matrix_profile_exclusion_zone_and_new_outputs():
     # Frequency and dispersion are populated where 3+ candidates exist.
     assert np.isfinite(f2[last, 0])
     assert np.isfinite(d2[last, 0])
+
+
+# ---------------------------------------------------------------------------
+# P1-I / audit 13.5–13.6: directional-change online clock + recursive indicator
+# unified missing-state policy.
+# ---------------------------------------------------------------------------
+def _series(*vals: float) -> pd.DataFrame:
+    return pd.DataFrame({"c": np.array(vals, dtype=float)})
+
+
+def test_dc_online_clock_uses_per_bar_historical_scale():
+    # A monotone series never completes a DC leg -> overshoot ratio is NaN.
+    x = _series(0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    s = _series(1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+    out = _get("ts_dc_overshoot_ratio").calculate(x, s, threshold=1.0, window=10)
+    assert np.isnan(out.iloc[-1, 0])
+
+    # Sawtooth: events confirm against the scale available *at that bar*, not
+    # today's end-of-window scale.  With per-bar scale 0.5 in the middle the
+    # clock confirms tighter, then re-freezes.
+    x2 = _series(0.0, 2.0, 4.0, 1.0, 3.0, 5.0, 2.0, 4.0, 6.0)
+    s2 = _series(1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0)
+    rate = _get("ts_dc_event_rate").calculate(x2, s2, threshold=1.0, window=10)
+    # Hand-traced online events at bars 3,4,6,7 -> 4/9.
+    assert rate.iloc[-1, 0] == pytest.approx(4.0 / 9.0)
+
+
+def test_kama_missing_state_default_interrupts():
+    from cleaned_operators.technical.indicators_v2 import KAMA
+
+    x = _series(1.0, 2.0, np.nan, 3.0, 4.0)
+    out = KAMA(x, 3, 2, 5)
+    # Default interrupt: the missing bar emits NaN and the recursion re-seeds at
+    # the next finite bar (3.0) instead of bridging the suspension.
+    assert np.isnan(out.iloc[2, 0])
+    assert out.iloc[3, 0] == pytest.approx(3.0)
+
+
+def test_kama_missing_state_carry_bridges_bounded_gap():
+    from cleaned_operators.technical.indicators_v2 import KAMA
+
+    x = _series(1.0, 2.0, np.nan, 3.0, 4.0)
+    carry = KAMA(x, 3, 2, 5, missing_policy="carry", max_gap=1)
+    # carry bridges the single missing bar with the last finite value.
+    assert carry.iloc[2, 0] == pytest.approx(carry.iloc[1, 0])
+
+    # Two consecutive missing bars exceed max_gap=1 -> the second bar interrupts.
+    x2 = _series(1.0, 2.0, np.nan, np.nan, 4.0)
+    out2 = KAMA(x2, 3, 2, 5, missing_policy="carry", max_gap=1)
+    assert np.isnan(out2.iloc[3, 0])
+    # First missing bar still bridged.
+    assert out2.iloc[2, 0] == pytest.approx(out2.iloc[1, 0])
+
+
+def test_supertrend_and_psar_missing_state_interrupt():
+    from cleaned_operators.technical.indicators_v2 import Supertrend, PSAR
+
+    high = _series(1.0, 2.0, 3.0, np.nan, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0)
+    low = _series(0.0, 1.0, 2.0, np.nan, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0)
+    close = _series(1.5, 2.5, 3.5, np.nan, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5)
+
+    st = Supertrend(high, low, close, 3, 2.0)
+    # Missing bar -> NaN output; the recursion interrupts and re-seeds once the
+    # Wilder ATR band is again finite (a band over a gap is uncomputable).
+    assert np.isnan(st.iloc[3, 0])
+    assert np.isnan(st.iloc[4, 0])  # ATR still warming through the gap
+    assert np.isfinite(st.iloc[5, 0])
+
+    ps = PSAR(high, low, 0.02, 0.2)
+    assert np.isnan(ps.iloc[3, 0])
+    assert np.isfinite(ps.iloc[4, 0])  # PSAR re-seeds from the bar's own range
+
+
+def test_supertrend_pandas_polars_parity_with_gap():
+    import polars as pl
+
+    from cleaned_operators.technical.polars_tech_misc import Supertrend as PlST
+
+    high = _series(1.0, 2.0, 3.0, np.nan, 4.0, 5.0, 6.0, 7.0, 8.0)
+    low = _series(0.0, 1.0, 2.0, np.nan, 3.0, 4.0, 5.0, 6.0, 7.0)
+    close = _series(1.5, 2.5, 3.5, np.nan, 4.5, 5.5, 6.5, 7.5, 8.5)
+
+    from cleaned_operators.technical.indicators_v2 import Supertrend as PdST
+
+    a = PdST(high, low, close, 3, 2.0)["c"].to_numpy()
+    ph = pl.DataFrame({"c": high["c"].to_numpy()})
+    pl_ = pl.DataFrame({"c": low["c"].to_numpy()})
+    pc = pl.DataFrame({"c": close["c"].to_numpy()})
+    b = np.array(
+        [float(v) if v is not None else np.nan for v in PlST(ph, pl_, pc, 3, 2.0)["c"].to_list()]
+    )
+    assert np.allclose(a, b, equal_nan=True, atol=1e-9)

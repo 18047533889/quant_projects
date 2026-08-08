@@ -6,8 +6,11 @@ embedded into an ``L x K`` Hankel matrix (``L = dim`` rows, column stride
 ``delay``), and ``X = H[:, :-1]``, ``Y = H[:, 1:]`` approximate the linear
 Koopman-style propagator ``Ã = U_r^T Y V_r Σ_r^{-1}`` from a rank-``r`` SVD of
 ``X``.  The eigenvalues of ``Ã`` give per-mode growth ``g = ln|λ|/Δt`` and
-frequency ``f = arg(λ)/(2π·Δt)``; mode energy ``E_j = |b_j|²·Σ_t |λ_j|^{2t}``
-(with ``b = U_r^T H[:, 0]``) selects the dominant mode.
+frequency ``f = arg(λ)/(2π·Δt)``; the *exact* DMD modes are
+``Φ = Y V Σ^{-1} W`` (``W`` = eigenvectors of ``Ã``) and the amplitudes are the
+pseudoinverse solution ``b = Φ† x_1``.  Mode energy is the finite-horizon sum
+``E_j = Σ_{t=0}^{K-1} |b_j λ_j^t|²`` — never a closed-form geometric-series
+with a denominator clamp (that formula went unstable when ``|λ| > 1``).
 
 All three operators are Research-surface: SVD/eigen decomposition is
 numerically delicate, so they are excluded from the default mining grammar
@@ -28,6 +31,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -36,6 +40,16 @@ from cleaned_operators.gemini_v2_common import (
 )
 
 _EPS = 1e-12
+
+# R5 P1-01/P1-02: ``rank``/``dim``/``delay`` are validated ints (a fractional
+# value is rejected, never silently truncated).
+_DMD_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=10),
+    "rank": ParamSpec(dtype=int, min=1),
+    "dim": ParamSpec(dtype=int, min=2),
+    "delay": ParamSpec(dtype=int, min=1),
+    "top_k": ParamSpec(dtype=int, min=1),
+}
 
 
 def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any] | None:
@@ -49,8 +63,11 @@ def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any
     X = H[:, :-1]
     Y = H[:, 1:]
     U, S, Vt = np.linalg.svd(X, full_matrices=False)
-    r = min(int(rank), S.shape[0] - 1)
-    if r < 1:
+    # R5 P1-02: an infeasible rank is REJECTED (fail-closed), never silently
+    # clipped down — ``rank=4`` and ``rank=3`` must not compile to the same
+    # factor, which the old ``min(rank, S.shape[0]-1)`` did.
+    r = int(rank)
+    if r < 1 or r > S.shape[0]:
         return None
     if S[0] <= _EPS or S[r - 1] <= _EPS * S[0]:
         return None
@@ -58,21 +75,37 @@ def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any
     if cond > 1e12:
         return None
     Ur = U[:, :r]
-    Sr_inv = np.diag(1.0 / S[:r])
     Vr = Vt[:r, :].T
+    Sr_inv = np.diag(1.0 / S[:r])
     A_tilde = Ur.T @ Y @ Vr @ Sr_inv
-    eig_vals = np.linalg.eigvals(A_tilde)
-    eig_vals = eig_vals[np.isfinite(eig_vals)]
+    # P0-06 rewrite: keep the (eigval, eigvector) PAIRS together so the filtered
+    # subset stays aligned (eigenvalues alone cannot be re-paired to modes).
+    eig_vals, W = np.linalg.eig(A_tilde)
+    finite = np.isfinite(eig_vals)
+    if not finite.all():
+        eig_vals = eig_vals[finite]
+        W = W[:, finite]
     if eig_vals.size == 0:
         return None
-    b = Ur.T @ H[:, 0]
-    # per-mode reconstruction energy E_j = |b_j|^2 * sum_{t=0}^{K-1} |lam_j|^{2t}
-    Kf = float(K)
-    energies = np.abs(b) ** 2 * np.where(
-        np.abs(np.abs(eig_vals) - 1.0) < _EPS,
-        Kf,
-        (1.0 - np.abs(eig_vals) ** (2 * Kf)) / np.maximum(1.0 - np.abs(eig_vals) ** 2, _EPS),
-    )
+    # exact DMD modes Phi = Y V Sigma^{-1} W  and  amplitudes b = Phi^dagger x_1.
+    # (The old code used the SVD-coordinate projection ``Ur.T @ H[:, 0]`` as if
+    # it were the mode amplitude — that is not the standard DMD amplitude and
+    # mis-orders the dominant mode / energies.)
+    Phi = Y @ (Vr / S[:r]) @ W          # (L, r) exact modes
+    x1 = X[:, 0]
+    b = np.linalg.pinv(Phi) @ x1        # (r,) mode amplitudes
+    # finite-horizon energy E_j = sum_{t=0}^{K-1} |b_j lam_j^t|^2 — a direct
+    # K-term sum (stable), never the closed-form-with-clamp.
+    rho = np.abs(eig_vals) ** 2
+    tgrid = np.arange(K, dtype=float)
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        powers = rho[:, None] ** tgrid          # (r, K)
+        e_sum = np.sum(powers, axis=1)
+    for j in range(eig_vals.size):
+        if not np.isfinite(e_sum[j]) and rho[j] > 1.0:
+            # last-term-dominated stable form (avoids overflow of rho^K)
+            e_sum[j] = np.exp(min((K - 1) * np.log(rho[j]), 700.0)) * (rho[j] / (rho[j] - 1.0))
+    energies = (np.abs(b) ** 2) * e_sum
     order = np.argsort(-energies)
     return {
         "eig": eig_vals[order],
@@ -143,6 +176,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 8,
         "tags_extra": [],
         "output_unit": "level",
+        "param_specs": _DMD_PARAM_SPECS,
     },
     "ts_dmd_dominant_frequency": {
         "fn": _ts_dmd_dominant_frequency,
@@ -153,6 +187,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 8,
         "tags_extra": [],
         "output_unit": "cycles",
+        "param_specs": _DMD_PARAM_SPECS,
     },
     "ts_dmd_mode_concentration": {
         "fn": _ts_dmd_mode_concentration,
@@ -163,6 +198,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 8,
         "tags_extra": [],
         "output_unit": "ratio",
+        "param_specs": _DMD_PARAM_SPECS,
     },
 }
 
@@ -180,6 +216,7 @@ def _register() -> None:
             source="dmd",
             tags_extra=spec["tags_extra"],
             output_unit=spec.get("output_unit"),
+            param_specs=spec.get("param_specs"),
         )
     union_research(*_SPECS.keys())
 

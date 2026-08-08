@@ -17,8 +17,12 @@ Four families share hit-sequence kernels:
 
 All kernels are prefix-causal: the quantile threshold is estimated from the
 trailing window ending at the current row, and every lagged term combines only
-past observations.  Fail-closed to NaN on degenerate / constant / too-short
-windows; deterministic (no randomness).
+past observations.  By default the threshold is re-estimated every day, so a
+*past* hit label is repainted as the window rolls; ``fixed_threshold=True``
+switches to the strict-past / fixed-event-threshold mode (threshold estimated
+once from the leading strictly-past rows and frozen for the whole window) —
+R5 P1-40(b).  Fail-closed to NaN on degenerate / constant / too-short windows;
+deterministic (no randomness).
 """
 from __future__ import annotations
 
@@ -80,9 +84,23 @@ def _side_threshold(chunk: np.ndarray, q: float, side: str) -> float:
     return float(np.nanquantile(chunk, q if side == "lower" else 1.0 - q))
 
 
-def _hit_series(chunk: np.ndarray, q: float, side: str, demean: bool) -> np.ndarray:
-    """1/0 hit indicator (optionally demeaned by ``q``); NaN preserved."""
-    thr = _side_threshold(chunk, q, side)
+def _hit_series(
+    chunk: np.ndarray, q: float, side: str, demean: bool, fixed_threshold: bool = False
+) -> np.ndarray:
+    """1/0 hit indicator (optionally demeaned by ``q``); NaN preserved.
+
+    R5 P1-40(b): by default the quantile is re-estimated from the full trailing
+    window every day, so a *past* hit label is repainted as the window rolls (a
+    documented property).  ``fixed_threshold=True`` switches to the strict-past /
+    fixed-event-threshold mode: the threshold is estimated ONCE from the
+    strictly-past leading rows (excluding the current row) and frozen for the
+    whole window, so no past label is repainted by today's data.
+    """
+    if fixed_threshold:
+        lead = chunk[:-1] if chunk.shape[0] > 1 else chunk
+        thr = _side_threshold(lead, q, side)
+    else:
+        thr = _side_threshold(chunk, q, side)
     if not np.isfinite(thr):
         return np.full(chunk.shape, np.nan)
     if side == "lower":
@@ -117,8 +135,10 @@ def _pearson_lag(a: np.ndarray, lag: int) -> float:
 # --------------------------------------------------------------------------
 # quantilogram
 # --------------------------------------------------------------------------
-def _quantilogram_chunk(chunk: np.ndarray, q: float, lag: int, side: str) -> float:
-    H = _hit_series(chunk, q, side, demean=True)
+def _quantilogram_chunk(
+    chunk: np.ndarray, q: float, lag: int, side: str, fixed_threshold: bool = False
+) -> float:
+    H = _hit_series(chunk, q, side, demean=True, fixed_threshold=fixed_threshold)
     return _pearson_lag(H, lag)
 
 
@@ -142,7 +162,7 @@ class TsQuantilogram(SeriesOperator):
     metadata = _metadata(
         "ts_quantilogram",
         "分位命中序列自相关 Corr(H_t, H_{t-lag})（extreme-state 记忆）。",
-        ["x", "window", "quantile", "lag", "side"],
+        ["x", "window", "quantile", "lag", "side", "fixed_threshold"],
         domain="price_volume",
         unit="corr",
         cost=4,
@@ -155,6 +175,7 @@ class TsQuantilogram(SeriesOperator):
         quantile: float = 0.1,
         lag: int = 1,
         side: str = "lower",
+        fixed_threshold: bool = False,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
@@ -170,16 +191,23 @@ class TsQuantilogram(SeriesOperator):
             map_rolling(
                 x.to_numpy(dtype=float),
                 w,
-                lambda c: _quantilogram_chunk(c, q, lg, side),
+                lambda c: _quantilogram_chunk(c, q, lg, side, fixed_threshold),
             ),
         )
 
 
 def _cross_quantilogram_chunk(
-    tc: np.ndarray, sc: np.ndarray, tq: float, sq: float, lag: int, ts: str, ss: str
+    tc: np.ndarray,
+    sc: np.ndarray,
+    tq: float,
+    sq: float,
+    lag: int,
+    ts: str,
+    ss: str,
+    fixed_threshold: bool = False,
 ) -> float:
-    Ht = _hit_series(tc, tq, ts, demean=True)
-    Hs = _hit_series(sc, sq, ss, demean=True)
+    Ht = _hit_series(tc, tq, ts, demean=True, fixed_threshold=fixed_threshold)
+    Hs = _hit_series(sc, sq, ss, demean=True, fixed_threshold=fixed_threshold)
     m = Ht.shape[0]
     if m <= lag + 2:
         return np.nan
@@ -216,7 +244,7 @@ class TsCrossQuantilogram(SeriesOperator):
     metadata = _metadata(
         "ts_cross_quantilogram",
         "跨序列分位命中相关 Corr(H_target_t, H_source_{t-lag})。",
-        ["target", "source", "window", "target_q", "source_q", "lag", "target_side", "source_side"],
+        ["target", "source", "window", "target_q", "source_q", "lag", "target_side", "source_side", "fixed_threshold"],
         domain="price_volume",
         unit="corr",
         cost=5,
@@ -232,6 +260,7 @@ class TsCrossQuantilogram(SeriesOperator):
         lag: int = 1,
         target_side: str = "lower",
         source_side: str = "lower",
+        fixed_threshold: bool = False,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
@@ -250,18 +279,27 @@ class TsCrossQuantilogram(SeriesOperator):
                 target.to_numpy(dtype=float),
                 source.to_numpy(dtype=float),
                 w,
-                lambda a, b: _cross_quantilogram_chunk(a, b, tq, sq, lg, target_side, source_side),
+                lambda a, b: _cross_quantilogram_chunk(
+                    a, b, tq, sq, lg, target_side, source_side, fixed_threshold
+                ),
             ),
         )
 
 
-def _hit_spectral_concentration_chunk(chunk: np.ndarray, q: float, side: str) -> float:
-    H = _hit_series(chunk, q, side, demean=False)
+def _hit_spectral_concentration_chunk(
+    chunk: np.ndarray, q: float, side: str, fixed_threshold: bool = False
+) -> float:
+    H = _hit_series(chunk, q, side, demean=False, fixed_threshold=fixed_threshold)
     fin = np.isfinite(H)
-    if int(fin.sum()) < 8:
+    n = chunk.shape[0]
+    # R5 P1-40(a): censoring, not manufacture — missing hits are excluded from
+    # the periodogram entirely (they must NOT contribute a zero "no-event"
+    # sample), and mostly-missing windows fail closed via the coverage gate.
+    if int(fin.sum()) < max(8, int(np.ceil(0.5 * n))):
         return np.nan
-    mu = float(H[fin].mean())
-    h = np.where(fin, H - mu, 0.0)  # preserve spacing for periodicity detection
+    h = H[fin]  # observed hit process only (missing gaps compressed)
+    mu = float(h.mean())
+    h = h - mu
     powers = np.abs(np.fft.rfft(h)) ** 2.0
     powers = powers[1:]  # drop DC
     total = float(powers.sum())
@@ -284,13 +322,15 @@ class TsQuantileCrossingSpectralConcentration(SeriesOperator):
     对命中序列做 periodogram（rfft 功率谱，去掉 DC），输出最大非零频点功率占比
     ``max P_f / sum P_f``。白噪声命中 → 谱平坦、集中度低；有重复周期（如隔周
     放量、定期爆雷）→ 集中度高。普通频谱分析作用于原始 x，这里作用于
-    "某 quantile regime" 本身。P2 / Research。
+    "某 quantile regime" 本身。R5 P1-40(a)：missing 命中被 censor（从谱估计中
+    排除，而不是填 0 制造"无事件"）；缺失过多的窗口经 coverage gate fail-closed
+    → NaN。P2 / Research。
     """
 
     metadata = _metadata(
         "ts_quantile_crossing_spectral_concentration",
         "分位命中序列谱集中度 max P_f / sum P_f（极端状态周期性）。",
-        ["x", "window", "quantile", "side"],
+        ["x", "window", "quantile", "side", "fixed_threshold"],
         domain="price_volume",
         unit="ratio",
         cost=5,
@@ -302,6 +342,7 @@ class TsQuantileCrossingSpectralConcentration(SeriesOperator):
         window: int = 120,
         quantile: float = 0.1,
         side: str = "lower",
+        fixed_threshold: bool = False,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
@@ -314,7 +355,7 @@ class TsQuantileCrossingSpectralConcentration(SeriesOperator):
             map_rolling(
                 x.to_numpy(dtype=float),
                 w,
-                lambda c: _hit_spectral_concentration_chunk(c, q, side),
+                lambda c: _hit_spectral_concentration_chunk(c, q, side, fixed_threshold),
             ),
         )
 
@@ -322,8 +363,10 @@ class TsQuantileCrossingSpectralConcentration(SeriesOperator):
 # --------------------------------------------------------------------------
 # extremogram
 # --------------------------------------------------------------------------
-def _extremogram_excess_chunk(chunk: np.ndarray, q: float, lag: int, side: str) -> float:
-    E = _hit_series(chunk, q, side, demean=False)
+def _extremogram_excess_chunk(
+    chunk: np.ndarray, q: float, lag: int, side: str, fixed_threshold: bool = False
+) -> float:
+    E = _hit_series(chunk, q, side, demean=False, fixed_threshold=fixed_threshold)
     m = E.shape[0]
     if m <= lag + 1:
         return np.nan
@@ -361,7 +404,7 @@ class TsExtremogram(SeriesOperator):
     metadata = _metadata(
         "ts_extremogram",
         "极值 excess dependence P(E_{t+lag}|E_t) - P(E)。",
-        ["x", "window", "quantile", "lag", "side"],
+        ["x", "window", "quantile", "lag", "side", "fixed_threshold"],
         domain="price_volume",
         unit="probability",
         cost=4,
@@ -374,6 +417,7 @@ class TsExtremogram(SeriesOperator):
         quantile: float = 0.1,
         lag: int = 1,
         side: str = "lower",
+        fixed_threshold: bool = False,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
@@ -389,16 +433,23 @@ class TsExtremogram(SeriesOperator):
             map_rolling(
                 x.to_numpy(dtype=float),
                 w,
-                lambda c: _extremogram_excess_chunk(c, q, lg, side),
+                lambda c: _extremogram_excess_chunk(c, q, lg, side, fixed_threshold),
             ),
         )
 
 
 def _cross_extremogram_chunk(
-    tc: np.ndarray, sc: np.ndarray, tq: float, sq: float, lag: int, ts: str, ss: str
+    tc: np.ndarray,
+    sc: np.ndarray,
+    tq: float,
+    sq: float,
+    lag: int,
+    ts: str,
+    ss: str,
+    fixed_threshold: bool = False,
 ) -> float:
-    Et = _hit_series(tc, tq, ts, demean=False)
-    Es = _hit_series(sc, sq, ss, demean=False)
+    Et = _hit_series(tc, tq, ts, demean=False, fixed_threshold=fixed_threshold)
+    Es = _hit_series(sc, sq, ss, demean=False, fixed_threshold=fixed_threshold)
     m = Et.shape[0]
     if m <= lag + 1:
         return np.nan
@@ -435,7 +486,7 @@ class TsCrossExtremogram(SeriesOperator):
     metadata = _metadata(
         "ts_cross_extremogram",
         "跨序列极值溢出 P(E_target_t|E_source_{t-lag}) - P(E_target)。",
-        ["target", "source", "window", "target_q", "source_q", "lag", "target_side", "source_side"],
+        ["target", "source", "window", "target_q", "source_q", "lag", "target_side", "source_side", "fixed_threshold"],
         domain="price_volume",
         unit="probability",
         cost=5,
@@ -451,6 +502,7 @@ class TsCrossExtremogram(SeriesOperator):
         lag: int = 1,
         target_side: str = "lower",
         source_side: str = "lower",
+        fixed_threshold: bool = False,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
@@ -469,13 +521,17 @@ class TsCrossExtremogram(SeriesOperator):
                 target.to_numpy(dtype=float),
                 source.to_numpy(dtype=float),
                 w,
-                lambda a, b: _cross_extremogram_chunk(a, b, tq, sq, lg, target_side, source_side),
+                lambda a, b: _cross_extremogram_chunk(
+                    a, b, tq, sq, lg, target_side, source_side, fixed_threshold
+                ),
             ),
         )
 
 
-def _extremal_decay_chunk(chunk: np.ndarray, q: float, side: str, max_lag: int) -> float:
-    E = _hit_series(chunk, q, side, demean=False)
+def _extremal_decay_chunk(
+    chunk: np.ndarray, q: float, side: str, max_lag: int, fixed_threshold: bool = False
+) -> float:
+    E = _hit_series(chunk, q, side, demean=False, fixed_threshold=fixed_threshold)
     m = E.shape[0]
     H = int(max_lag)
     if m <= H + 3:
@@ -495,6 +551,10 @@ def _extremal_decay_chunk(chunk: np.ndarray, q: float, side: str, max_lag: int) 
         if denom <= 0:
             continue
         ex = float(np.sum(yy * xx)) / denom - base
+        # R5 P1-40(c): SELECTION BIAS — only *positive* excess lags enter the
+        # log-linear fit, so tau is estimated on a censored subset of lags and
+        # the fitted decay is biased (overstates decay).  Kept as a Research-only
+        # heuristic (the surface classification excludes it from production).
         if ex > 0.0:
             hs.append(float(h))
             es.append(float(np.log(ex + _EPS)))
@@ -526,13 +586,15 @@ class TsExtremalDependenceDecay(SeriesOperator):
 
     对 ``h=1..max_lag`` 的 extremogram excess 序列拟合 ``Excess(h) ~ a·e^{-h/tau}``
     （对正 excess 做 log-linear 回归），返回 tau。大 tau = 极端状态持续很久；
-    小 tau = 快速回归。与普通波动率持久性不同。P2 / Research。
+    小 tau = 快速回归。与普通波动率持久性不同。R5 P1-40(c)：只有正 excess 的
+    lag 进入 log 拟合，存在 selection bias（高估衰减/有偏 tau），故仅供
+    Research（surface 分类已排除生产）。P2 / Research。
     """
 
     metadata = _metadata(
         "ts_extremal_dependence_decay",
-        "极值依赖指数衰减时间常数 tau（extremogram decay）。",
-        ["x", "window", "quantile", "side", "max_lag"],
+        "极值依赖指数衰减时间常数 tau（extremogram decay；仅正 excess 拟合，有 selection bias）。",
+        ["x", "window", "quantile", "side", "max_lag", "fixed_threshold"],
         domain="price_volume",
         unit="time",
         cost=5,
@@ -545,6 +607,7 @@ class TsExtremalDependenceDecay(SeriesOperator):
         quantile: float = 0.1,
         side: str = "lower",
         max_lag: int = 5,
+        fixed_threshold: bool = False,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
@@ -560,7 +623,7 @@ class TsExtremalDependenceDecay(SeriesOperator):
             map_rolling(
                 x.to_numpy(dtype=float),
                 w,
-                lambda c: _extremal_decay_chunk(c, q, side, H),
+                lambda c: _extremal_decay_chunk(c, q, side, H, fixed_threshold),
             ),
         )
 

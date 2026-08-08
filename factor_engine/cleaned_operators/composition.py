@@ -177,7 +177,10 @@ def _composition_ilr_balance(
     gmean_b = np.exp(logs[na:].mean(axis=0))
     r = float(na)
     s = float(len(b))
-    balance = np.sqrt(r * s / (r + s)) * np.log(gmean_a / gmean_b + _EPS)
+    # P1-32: the parts are strictly positive (zero_policy="reject" fails closed on
+    # non-positive parts), so ``gmean_a/gmean_b > 0`` and the log is well-defined
+    # WITHOUT an arbitrary ``+ EPS`` floor.
+    balance = np.sqrt(r * s / (r + s)) * np.log(gmean_a / gmean_b)
     out = np.full(logs.shape[1:], np.nan, dtype=float)
     out[valid] = balance[valid]
     return frame_like(x1, out)
@@ -219,7 +222,9 @@ def _composition_js_divergence(
 _SPECS: dict[str, dict[str, Any]] = {
     "composition_clr_component": {
         "fn": _composition_clr_component,
-        "params": ["target", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "zero_policy"],
+        # P1-32: ``zero_policy`` is fixed to "reject" (the only legal value) and
+        # is NOT a search parameter — the kernel keeps the internal default.
+        "params": ["target", "x1", "x2", "x3", "x4", "x5", "x6", "x7"],
         "category": "compositional_data",
         "domain": "composition",
         "unit": "ratio",
@@ -229,7 +234,8 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
     "composition_entropy": {
         "fn": _composition_entropy,
-        "params": ["x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "zero_policy"],
+        # P1-32: ``zero_policy`` fixed to "reject" — not a search parameter.
+        "params": ["x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8"],
         "category": "compositional_data",
         "domain": "composition",
         "unit": "entropy",
@@ -239,7 +245,8 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
     "composition_aitchison_distance": {
         "fn": _composition_aitchison_distance,
-        "params": ["x1", "x2", "x3", "y1", "y2", "y3", "x4", "x5", "x6", "y4", "y5", "y6", "zero_policy"],
+        # P1-32: ``zero_policy`` fixed to "reject" — not a search parameter.
+        "params": ["x1", "x2", "x3", "y1", "y2", "y3", "x4", "x5", "x6", "y4", "y5", "y6"],
         "category": "compositional_data",
         "domain": "composition",
         "unit": "ratio",
@@ -249,7 +256,7 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
     "composition_ilr_balance": {
         "fn": _composition_ilr_balance,
-        "params": ["x1", "x2", "x3", "y1", "y2", "y3", "x4", "x5", "x6", "y4", "y5", "y6", "zero_policy"],
+        "params": ["x1", "x2", "x3", "y1", "y2", "y3", "x4", "x5", "x6", "y4", "y5", "y6"],
         "category": "compositional_data",
         "domain": "composition",
         "unit": "level",
@@ -259,7 +266,7 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
     "composition_js_divergence": {
         "fn": _composition_js_divergence,
-        "params": ["x1", "x2", "x3", "y1", "y2", "y3", "x4", "x5", "x6", "y4", "y5", "y6", "zero_policy"],
+        "params": ["x1", "x2", "x3", "y1", "y2", "y3", "x4", "x5", "x6", "y4", "y5", "y6"],
         "category": "compositional_data",
         "domain": "composition",
         "unit": "entropy",
@@ -283,6 +290,7 @@ def _register() -> None:
             source="composition",
             tags_extra=spec["tags_extra"],
             output_unit=spec.get("output_unit"),
+            param_specs=spec.get("param_specs"),
         )
     union_extended(*_SPECS.keys())
 

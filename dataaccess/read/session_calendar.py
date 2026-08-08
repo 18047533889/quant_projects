@@ -348,39 +348,48 @@ class MarketCalendar:
           盘前 → 当日 session 起点；盘中/盘后 → 下一 session 起点
         - next_trading_day                              ：下一交易日 00:00
           （knowledge 是日期时）或 下一交易日 session 起点（datetime 时）
+
+        #11/#12：knowledge 带时刻时**先把 UTC timestamp 转成交易所本地
+        时区**再判断 session 边界（美股 filing timestamp 是实质 PIT bug）；
+        非交易日绝不生成「当天的开盘」——先查 ``is_trading_day``，否则跳到
+        下一交易日开盘。
         """
         av = str(availability or "same_day").lower()
         if av in {"same_day", "same_instant", "effective_date_only"}:
             return knowledge
-        kdate = _as_date(knowledge)
+        kdate, ktime = _to_local_date_time(knowledge, self.timezone)
         if kdate is None:
             # 无法识别的 knowledge 时间：回退严格 >=（保守可见）
             return knowledge
         if av in {"session", "next_session_open"}:
             # knowledge 携带时刻时按 session 边界判断
-            if isinstance(knowledge, _dt.datetime):
-                t = knowledge.time()
-                if self.session is not None:
-                    for seg in self.session.segments:
-                        if t < seg.start:
-                            # 该 session 已开盘但 knowledge 在其前 → 当日该段起点
-                            return _combine(kdate, seg.start)
-                        if seg.contains(t):
-                            # 盘中 → 下一段/下一日开盘
-                            nxt = self._next_segment_start(seg.name)
-                            if nxt is not None:
-                                return _combine(kdate, nxt)
-                            td = self.next_trading_day(kdate)
-                            if td is not None:
-                                return _combine(td, self._first_start())
-                            return knowledge
+            if ktime is not None and self.session is not None:
+                if not self.is_trading_day(kdate):
+                    # #12 非交易日（周六/节假日）：绝无「当天开盘」，直接下一交易日
+                    td = self.next_trading_day(kdate)
+                    if td is not None:
+                        return _combine(td, self._first_start())
+                    return knowledge
+                for seg in self.session.segments:
+                    if ktime < seg.start:
+                        # 该 session 已开盘但 knowledge 在其前 → 当日该段起点
+                        return _combine(kdate, seg.start)
+                    if seg.contains(ktime):
+                        # 盘中 → 下一段/下一日开盘
+                        nxt = self._next_segment_start(seg.name)
+                        if nxt is not None:
+                            return _combine(kdate, nxt)
+                        td = self.next_trading_day(kdate)
+                        if td is not None:
+                            return _combine(td, self._first_start())
+                        return knowledge
             td = self.next_trading_day(kdate)
             return _combine(td, self._first_start()) if td is not None else knowledge
         # next_trading_day（默认）
         td = self.next_trading_day(kdate)
         if td is None:
             return knowledge
-        if isinstance(knowledge, _dt.datetime):
+        if ktime is not None:
             return _combine(td, self._first_start())
         return td
 
@@ -406,11 +415,10 @@ class MarketCalendar:
         """
         if not self.trading_days:
             raise ValidationError("交易日历为空，无法编译 next_trading_day")
+        # #32 每个交易日线性找 next 是 O(N²)；直接 zip(相邻交易日) 即 O(N)。
         pairs: list[str] = []
-        for d in self.trading_days:
-            nxt = self.next_trading_day(d)
-            if nxt is None:
-                continue
+        days = self.trading_days
+        for d, nxt in zip(days, days[1:]):
             pairs.append(f"(DATE '{d.isoformat()}', DATE '{nxt.isoformat()}')")
         if not pairs:
             raise ValidationError("交易日历无可用的 next_trading_day 映射")
@@ -446,8 +454,63 @@ def _as_date(value: Any) -> _dt.date | None:
         return None
 
 
+def _to_local_date_time(value: Any, timezone: str | None) -> tuple[_dt.date | None, _dt.time | None]:
+    """把 knowledge 归一化成交易所本地 (date, time)。
+
+    #11：带时区的 datetime 先用 ``ZoneInfo(market timezone)`` 转成本地时间；
+    naive datetime 按字典约定视为 **UTC 存储**，同样先转本地（A 股 QuoteTime /
+    美股 filing timestamp 都存 UTC）。date 无时刻 → (d, None)。
+    """
+    if not isinstance(value, _dt.datetime):
+        d = _as_date(value)
+        return (d, None)
+    tz = None
+    tz_name = (timezone or "").strip()
+    if tz_name and tz_name.upper() not in {"", "UTC", "ETC/UTC"}:
+        try:
+            from zoneinfo import ZoneInfo
+
+            tz = ZoneInfo(tz_name)
+        except Exception:
+            tz = None
+    if value.tzinfo is not None:
+        if tz is not None:
+            value = value.astimezone(tz)
+        local = value.replace(tzinfo=None)
+    elif tz is not None:
+        try:
+            from zoneinfo import ZoneInfo
+
+            local = value.replace(tzinfo=ZoneInfo("UTC")).astimezone(tz).replace(
+                tzinfo=None
+            )
+        except Exception:
+            local = value
+    else:
+        local = value
+    return local.date(), local.time()
+
+
 def _combine(d: _dt.date, t: _dt.time) -> _dt.datetime:
     return _dt.datetime(d.year, d.month, d.day, t.hour, t.minute, t.second)
+
+
+def _calendar_dataset_for(market: str) -> str:
+    """market → registry 日历数据集名（缓存 key / manifest token 共用）。"""
+    return "ashare_calendar" if market == "ashare" else "us_calendar"
+
+
+def _calendar_source_token(store: Any, market: str) -> str | None:
+    """日历数据集当前的 source_epoch（用于缓存 key 失效判断，#31）。
+
+    日历数据更新 → source_epoch 变化 → 缓存 key 变化 → 自动 reload。无
+    manifest 返回 None（调用方用 store 注册表指纹兜底）。
+    """
+    try:
+        token = store.manifest_version(_calendar_dataset_for(market))
+    except Exception:
+        return None
+    return token.get("source_epoch") or token.get("manifest_epoch")
 
 
 def _load_calendar_from_registry(store: Any, market: str) -> tuple[_dt.date, ...] | None:
@@ -458,7 +521,7 @@ def _load_calendar_from_registry(store: Any, market: str) -> tuple[_dt.date, ...
     读 STATIC 维表，避免 production/strict 下被面板契约拒绝。
     失败（未注册 / 读不到 / 无数据）返回 None，调用方决定回退或 fail-closed。
     """
-    dataset = "ashare_calendar" if market == "ashare" else "us_calendar"
+    dataset = _calendar_dataset_for(market)
     try:
         ds = store.registry.get(dataset)
     except Exception:
@@ -520,15 +583,39 @@ def get_market_calendar(
     缓存里出现 fallback 后，后续带真实 store 的调用可能误命中。fallback 缓存到
     独立的 ``{market}::fallback`` 键。production/strict 下真实日历不可用
     直接 fail-closed，不静默退回 business-day。
+
+    #31：缓存 key 不只按 market——同一 market 的 Store A / Store B 日历数据可能
+    不同，日历更新后也应失效。key = ``{market}:{source_token}``：
+        - 显式 trading_days → 内容指纹（长度+首末日）
+        - store registry 且日历数据集有 manifest → source_epoch
+        - store registry 无 manifest → store 注册表指纹（store-local）
+    日历数据更新 → source_epoch 变化 → key 变化 → 自动 reload。
     """
     key = str(market).strip().lower()
+    if trading_days:
+        days_sorted = sorted(set(trading_days))
+        token = (
+            f"explicit:{len(days_sorted)}:"
+            f"{days_sorted[0].isoformat() if days_sorted else '-'}:"
+            f"{days_sorted[-1].isoformat() if days_sorted else '-'}"
+        )
+    elif store is not None:
+        token = _calendar_source_token(store, key)
+        if token is None:
+            try:
+                token = f"store:{store.registry_fingerprint()[:16]}"
+            except Exception:
+                token = None
+    else:
+        token = None
+    cache_key = f"{key}:{token}" if token else key
     if not force_reload and not trading_days:
-        cached = _calendars.get(key)
+        cached = _calendars.get(cache_key)
         if cached is not None:
             return cached
     if trading_days:
         cal = MarketCalendar(key, trading_days=trading_days, source="explicit")
-        _calendars[key] = cal
+        _calendars[cache_key] = cal
         return cal
     if store is not None:
         loaded = _load_calendar_from_registry(store, key)
@@ -539,7 +626,7 @@ def get_market_calendar(
                 source="registry",
                 session=get_market_session_with_early_close(key, store),
             )
-            _calendars[key] = cal
+            _calendars[cache_key] = cal
             return cal
     if _strict_calendar_mode():
         raise ValidationError(

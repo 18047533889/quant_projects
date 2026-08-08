@@ -103,68 +103,82 @@
 - `docs/operator_market_capabilities.json` / `docs/market_field_manifest.json` 重新生成，CI audit 通过。
 - 计划文档本表逐项打勾。
 
+### 整合阶段跟进（2026-08-08）
+- ✅ **polars_fundamental.py R4-26/27 parity**：revision/days_since 族 polars 后端按 pandas 参考重写（`_revision_masks_1d`/`_revision_event_1d`/`_revision_complete_1d`；complete/same/changed/delta 掩码；observed clock）。`test_polars_fundamental.py` 66 passed（原 14 failed）。
+- ✅ **ts_extrema_divergence_strength finite fraction**：瞬态（Batch C 观察 0.18 系并发编辑期间），现稳定通过（F 自测 0.39）。
+- ✅ **candle_pattern_engine_repairs_v2 shim metadata**：registry 可见的 candlestick_pattern 补齐 param_specs（body_window/shadow_window/penetration active_when）+ semantic_family:adaptive_custom（R4-91/92 现在 registry 层生效）。`test_fourth_batch_fixes.py` 14 passed。
+- ⏳ 全量回归 + manifest 重生成。
+
 ## 4. 执行进度追踪
 
 ### Batch A 底层 contract —— ✅ 完成（详见 §1 Batch A 状态表）
 
-### Batch B P0 数学 —— 已派 subagent（B）
+### Batch B P0 数学 —— ✅ 完成（subagent 报告已收）
 | 文件 | 项 | 状态 |
 |---|---|---|
-| sequence_complexity.py | R4-08/64/65 | 进行中 |
-| ts_model/wavelet_spectral.py | R4-09 | 进行中 |
-| dependence_ext.py | R4-14/15/49/50 | 进行中 |
-| complexity_ext.py | R4-17/62/63/64 | 进行中 |
-| candle_pattern_engine_v2.py | R4-10/11/12/91/92 | 进行中 |
-| dynamic_knn.py | R4-13/82/83 | 进行中 |
-| structural_levels.py | R4-18/19/89/90 | 进行中 |
-| report_timing.py | R4-16/84 | 进行中 |
+| sequence_complexity.py | R4-08/64/65 | ✅ R4-08 并发会话已修（仅验证）；trailing finite suffix；permutation 平均 tie rank |
+| ts_model/wavelet_spectral.py | R4-09 | ✅ 并发会话已修核心（验证）；_haar_energy/_spectral_low_ratio 用 trailing contiguous suffix |
+| dependence_ext.py | R4-14/15/49/50 | ✅ HSIC 分母 trace(KHKH)·trace(LHLH)；partial dCor 公式修正（未降级，测试要求 daily）；Chatterjee tie-aware；CMI 样本门槛+ bins∈{2,3} |
+| complexity_ext.py | R4-17/62/63/64 | ✅ LZ 按 alphabet 归一；trailing contiguous；forbidden ordinal 随机零假设超额 |
+| candle_pattern_engine_v2.py | R4-10/11/12/91/92 | ✅ R4-10/11 并发已修（验证）；_sign_direction 允许 0；doji 系列事件语义；param_specs active_when；semantic_family |
+| dynamic_knn.py | R4-13/82/83 | ✅ 平均 tie rank；target 缺失 fail-closed + peers≥k；tie-inclusive kth-radius |
+| structural_levels.py | R4-18/19/89/90 | ✅ 严格峰谷交替状态机；strength 距离衰减核；(1/|log-dist|/0.05)+；density 绝对归一 |
+| report_timing.py | R4-16/84 | ✅ 事件时钟（window=披露事件数）；revision magnitude current/prev period 一致门 |
 
-### Batch C stateful —— 已派 subagent（C）
-| 文件 | 项 | 状态 |
-|---|---|---|
-| technical/indicators_v2.py | R4-04 验证 | 进行中 |
-| price_volume/liquidity_v2.py | R4-29/96 + R4-04 验证 | 进行中 |
-| threshold_cycle.py | R4-05 | 进行中 |
-| state_episode_excursion.py | R4-06 | 进行中 |
-| interval_geometry.py | R4-07 | 进行中 |
+**⚠ 既有（非本批引入）**：`test_final_pack_policies_pit_safe`（add/log/ashare_days_since_limit_up pit_safe 认证噪音）、`test_pcr_forecast_shape`（SVD 未收敛，与 8 文件无关）。
 
-### Batch D missing/time-axis —— 已派 subagent（D）
+### Batch C stateful —— ✅ 完成（subagent 报告已收）
 | 文件 | 项 | 状态 |
 |---|---|---|
-| jump_robust.py | R4-20 | 进行中 |
-| intraday_vol_ext.py | R4-21 | 进行中 |
-| intraday_activity_duration.py | R4-29/74 | 进行中 |
-| vector_path.py | R4-51/52/53 | 进行中 |
-| rough_vol.py | R4-59/60/61 | 进行中 |
-| memory_ext.py | R4-56/57 | 进行中 |
-| event_interval.py | R4-54/55/96 | 进行中 |
-| common/daily_panel.py | R4-02 验证 + R4-22 | 进行中 |
+| technical/indicators_v2.py | R4-04 验证 | ✅ 18 个 ewm(adjust=False) 递归算子均已在 FULL_HISTORY_REPLAY；另补 `candle_gap_atr`（candle_geometry_v2.py，Wilder ATR 递归）入 governance |
+| price_volume/liquidity_v2.py | R4-29/96 + R4-04 | ✅ up/down volume ratio missing→NaN（valid 掩码 + 严格窗口）；polars `_up_ratio` 同步对齐 |
+| threshold_cycle.py | R4-05 | ✅ missing→UNKNOWN(-1) 不保持 state；跨缺口 leg/cycle censor |
+| state_episode_excursion.py | R4-06 | ✅ NaN 打断 episode；MFE/MAE/path 不跨缺口累积；efficiency≤1 保持 |
+| interval_geometry.py | R4-07 | ✅ 首根/缺口后 depth→NaN，缺口重置链条 |
 
-### Batch E fundamental —— 已派 subagent（E）
+### Batch D missing/time-axis —— ✅ 完成（subagent 报告已收）
 | 文件 | 项 | 状态 |
 |---|---|---|
-| fundamental/transforms_v2.py | R4-23/24/25/28 | 进行中 |
-| fundamental/transforms_repairs_v2.py | R4-26/27 | 进行中 |
-| fundamental/expectation_v2.py | R4-26/27/28 | 进行中 |
-| fiscal_strict.py | R4-22/23/24/84 验证 | 进行中 |
+| jump_robust.py | R4-20 | ✅ 中段缺分钟→窗口 invalid→NaN；仅前导 NaN 前缀 drop 到连续段（并发会话已提交同款修复） |
+| intraday_vol_ext.py | R4-21 | ✅ 传原始窗口给 kernel；tau=真实 slot 序号；curvature 对缺口 fail-closed（并发已提交） |
+| intraday_activity_duration.py | R4-29/74 | ✅ 已合规，未改动 |
+| vector_path.py | R4-51/52/53 | ✅ pair 窗口全 finite；曲率标准化坐标；自交率分母排除相邻段（并发已提交） |
+| rough_vol.py | R4-59/60/61 | ✅ 原时间轴增量；scale 严格整数校验；**改名改为 alias 方案**（见下） |
+| memory_ext.py | R4-56/57 | ✅ τ 不除 max_lag（白噪声→1 bar）；统一 trailing contiguous cohort；unit=bars；改名改 alias |
+| event_interval.py | R4-54/55/96 | ✅ EventBool 语义；跨 unknown 间隔 censored；fano 仅完整块 |
+| common/daily_panel.py | R4-02 + R4-22 | ✅ 已接入 validate；legacy occurrence-order period_lag 从 _OPERATORS 移除 |
 
-### Batch F typed/CS —— 已派 subagent（F）
-| 文件 | 项 | 状态 |
-|---|---|---|
-| extrema_divergence.py | R4-45/46 | 进行中 |
-| binned_response.py | R4-47/93 | 进行中 |
-| response-slope 模块 | R4-48 | 进行中 |
-| first_passage.py | R4-85/86 | 进行中 |
-| extreme_tail.py | R4-87/88 | 进行中 |
-| hankel.py | R4-66/67/68/95 | 进行中 |
-| cross_section_local.py | R4-13/65/82/83 | 进行中 |
+**⚠ 偏差说明**：R4-61/R4-56 的 canonical 改名未能按计划执行——`polars_geometry_math.py`（不在批内）硬编码旧名 `ts_vol_pvariation_roughness`/`ts_autocorrelation_time`，降级为 alias 会导致 load_all 抛 "canonical already declared as alias"。故精确名 `ts_integrated_autocorrelation_time`/`ts_pvariation_scaling_exponent` 注册为**别名**，数学 bug 已修，旧表达式不受影响。
 
-### Batch G metadata/governance —— 已派 subagent（G）
+### Batch E fundamental —— ✅ 完成（subagent 报告已收）
 | 文件 | 项 | 状态 |
 |---|---|---|
-| activity_clock.py | R4-02 验证/69/70/71 | 进行中 |
-| spectral_ext.py | R4-02 验证 + R4-95 | 进行中 |
-| weighted_moment_ext.py | R4-02 验证 | 进行中 |
-| multifractal 模块 | R4-94/95 | 进行中 |
-| _aliases.py | R4-22/101 | 进行中 |
-| metadata/catalog | R4-95/97/98/102 | 进行中 |
+| fundamental/transforms_v2.py | R4-23/24/25/28 | ✅ consecutive 类全 require_consecutive=True（缺期→NaN）；last-N-visible 类注明跳期；_trend_stat x_axis=period_ordinal；新增 prior-history 版 zscore/percentile；fin_mad→fin_mean_abs_deviation + 真 MAD |
+| fundamental/transforms_repairs_v2.py | R4-26/27 | ✅ revision 族完整才出 0，缺口→NaN；days_since_update 改 observed clock（gap→NaN，恢复→0） |
+| fundamental/expectation_v2.py | R4-26/27/28 | ✅ 同 R4-26/27 语义；beat/miss streak 跳期即断 |
+| fiscal_strict.py | R4-22/23/24/84 验证 | ✅ 验证通过，未改动（period_lag canonical 解析到 strict 实现） |
+
+**⚠ 整合跟进**：`polars_fundamental.py`（第 5 个文件）的 revision/days_since 族 polars 后端仍为旧语义（缺口→0/盲目 aging），导致 `test_polars_fundamental.py` 14 项 parity 失败 —— 需把同一 R4-26/27 修法应用到该文件。
+
+### Batch F typed/CS —— ✅ 完成（subagent 报告已收）
+| 文件 | 项 | 状态 |
+|---|---|---|
+| extrema_divergence.py | R4-45/46 | ✅ 峰谷交替状态机 + 单调一对一匹配；match_lag 3→4 |
+| binned_response.py | R4-47/93 | ✅ min_per_bin≥3、N≥bins·min、bins∈{3,5} 强制 |
+| response-slope 模块（binned_response.py） | R4-48 | ✅ 标准 β·σx/σy 对比，不除 residual RMSE |
+| first_passage.py | R4-85/86 | ✅ input_units 契约 + barrier≤0→ValueError |
+| extreme_tail.py | R4-87/88 | ✅ 下尾=threshold−x、missing→censor |
+| hankel.py | R4-66/67/68/95 | ✅ min_contiguous_fraction≥0.8、int 校验、window_semantics |
+| cross_section_local.py | R4-13/65/82/83 | ✅ peer_mask 排除缺 target、tie-inclusive 邻居 |
+
+### Batch G metadata/governance —— ✅ 完成（subagent 报告已收）
+| 文件 | 项 | 状态 |
+|---|---|---|
+| activity_clock.py | R4-02/69/70/71 | ✅ scale_window ParamSpec(min=5)；per-op input_units；equal-peak 取最近 peak |
+| spectral_ext.py | R4-02 + R4-95/98 | ✅ window_semantics=trailing_contiguous；input_units |
+| weighted_moment_ext.py | R4-02 + R4-97/95 | ✅ order∈{3,4} EnumSpec；window_semantics=finite_observations |
+| multifractal 模块 | R4-94/95 | ✅ 满 window 才输出；window_semantics=max_rows；register_dual 透出 window_semantics |
+| _aliases.py | R4-22/101 | ✅ 验证通过（period_lag 单实现；fin_mad 为 compat 名）；仅注释 append |
+| metadata/catalog | R4-95/97/98/102 | ✅ registry.freeze() 增加 catalog↔runtime backends 一致性硬门；register() 透出 units/window_semantics |
+
+**⚠ 既有（非本批引入）**：`test_operator_manifest_freshness`（composition_*/ts_multifractal_asymmetry/fin_mean_abs_deviation 未入 checked-in manifest）、`test_layer_governance::test_registry_rejects_implicit_duplicate_after_bootstrap`（测试引用 8/2 旧消息文本）。

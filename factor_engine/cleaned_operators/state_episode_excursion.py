@@ -111,10 +111,9 @@ def _episode_map(x: np.ndarray, state: np.ndarray):
         entry[t] = e
         if not np.isfinite(x[t]):
             # Non-finite price at the entry or mid-episode: the row is NaN and
-            # the episode is broken — the next finite price restarts it.
+            # the episode is broken — the next finite price restarts it
+            # (the ``or broken`` above then starts a fresh episode).
             broken = True
-            continue
-        if broken:
             continue
         # Value-contiguous arc length: since a non-finite price breaks the
         # episode, every interior step here is a consecutive finite price, so

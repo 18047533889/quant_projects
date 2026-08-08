@@ -9,16 +9,21 @@ shape-preserving and NaN fail-closed:
                                    arbitrary ``score`` (generic elite/leader
                                    routing; group_leader_divergence is a recipe).
 * ``ts_value_at_argextreme``     — gather ``value`` at the argmax/argmin of an
-                                   arbitrary ``score`` over a trailing window
+                                   arbitrary ``score`` over a trailing window;
+                                   ties resolve to the *latest* occurrence
                                    (volume-cluster breakdown, extreme-turnover
                                    valuation states etc.).
 * ``cs_weighted_percentile_rank``— weighted empirical CDF rank (weighted
                                    mid-rank ties), ``w_j >= 0``.
 * ``group_distribution_js_divergence`` — Jensen-Shannon divergence between a
-                                   group's value distribution and the market
-                                   quantile-bin distribution (bounded/symmetric;
+                                   group's value distribution and a quantile-bin
+                                   reference distribution (bounded/symmetric;
                                    deliberately NOT KL, which diverges on empty
-                                   market bins).
+                                   bins).  With ``exclude_group_from_reference``
+                                   the reference *and its bin edges* are built
+                                   from the ex-group cross-section only, so the
+                                   group cannot contaminate the bins it is
+                                   measured against.
 * ``event_level_survival_share`` — event cohort: each past event remembers the
                                    ``level`` at event time; the share of those
                                    events whose level is still on the favorable
@@ -163,11 +168,18 @@ def _ts_value_at_argextreme(
             finite = np.isfinite(sseg)
             if not finite.any():
                 continue
+            sub = sseg[finite]
+            # Tie policy = LATEST occurrence: argmax/argmin on the reversed
+            # slice gives the last row attaining the extreme.  A forward argmax
+            # would pick the first (earliest) tied row, so the gathered ``value``
+            # would silently depend on the underlying arg-extreme convention
+            # instead of an explicit, stable "most recent extreme" (review
+            # P1-62a).
             if mode_s == "max":
-                pos = int(np.argmax(sseg[finite]))
+                pos = int(sub.size - 1 - np.argmax(sub[::-1]))
             else:
-                pos = int(np.argmin(sseg[finite]))
-            # translate back to absolute row (first occurrence among ties)
+                pos = int(sub.size - 1 - np.argmin(sub[::-1]))
+            # translate back to absolute row (last occurrence among ties)
             f_idx = np.flatnonzero(finite)[pos]
             val = vv[start + f_idx, c]
             if np.isfinite(val):
@@ -263,21 +275,19 @@ def _group_distribution_js_divergence(
             if pd.isna(lab):
                 continue
             positions.setdefault(lab, []).append(i)
-        # Market quantile-bin edges on the FULL finite cross-section so every
-        # group's reference shares the same bins (stable, comparable JS).
         market_mask = np.isfinite(xr)
         if int(market_mask.sum()) < 2:
             continue
         market = xr[market_mask]
-        edges = np.quantile(market, np.linspace(0.0, 1.0, nb + 1))
-        edges = np.unique(edges)
-        if int(edges.size - 1) < 1:
-            continue
         if exclude_group_from_reference:
-            # Reference = the market distribution EXCLUDING the current group.
-            # Otherwise a large group (banks / electronics) is mechanically "close
-            # to the market" simply because it IS most of the market (self-inclusion
-            # bias).  A degenerate reference (< 2 finite rows) fail-closes.
+            # Reference = the market distribution EXCLUDING the current group,
+            # and the quantile-bin edges are built from that SAME ex-group
+            # reference.  Otherwise a large group (banks / electronics) is
+            # mechanically "close to the market" simply because it IS most of
+            # the market (self-inclusion bias), and full-market edges would let
+            # the group define the very bins it is compared against (reference
+            # self-contamination, review P1-62b).  A degenerate reference
+            # (< 2 finite rows) fail-closes.
             for lab, members in positions.items():
                 gvals = xr[members]
                 gvals = gvals[np.isfinite(gvals)]
@@ -288,16 +298,26 @@ def _group_distribution_js_divergence(
                 ref = xr[other & market_mask]
                 if ref.size < 2:
                     continue
-                g_bin = np.histogram(gvals, bins=edges)[0].astype(float)
+                ref_edges = np.unique(np.quantile(ref, np.linspace(0.0, 1.0, nb + 1)))
+                if ref_edges.size < 2:
+                    continue
+                g_bin = np.histogram(gvals, bins=ref_edges)[0].astype(float)
+                if g_bin.sum() <= 0:
+                    # All group values fall outside the ex-group bin range; the
+                    # distribution on these bins is undefined -> fail closed.
+                    continue
                 gp = g_bin / g_bin.sum()
-                r_bin = np.histogram(ref, bins=edges)[0].astype(float)
+                r_bin = np.histogram(ref, bins=ref_edges)[0].astype(float)
                 rp = r_bin / r_bin.sum()
                 val = _js(gp, rp)
                 for i in members:
                     out[r, i] = val
         else:
             # Legacy / explicit mode: compare against the whole cross-section
-            # (includes the group itself).
+            # (includes the group itself) on full-market edges.
+            edges = np.unique(np.quantile(market, np.linspace(0.0, 1.0, nb + 1)))
+            if int(edges.size - 1) < 1:
+                continue
             market_bin = np.histogram(market, bins=edges)[0].astype(float)
             market_p = market_bin / market_bin.sum()
             for lab, members in positions.items():
@@ -306,6 +326,8 @@ def _group_distribution_js_divergence(
                 if gvals.size < mg:
                     continue
                 g_bin = np.histogram(gvals, bins=edges)[0].astype(float)
+                if g_bin.sum() <= 0:
+                    continue
                 gp = g_bin / g_bin.sum()
                 val = _js(gp, market_p)
                 for i in members:

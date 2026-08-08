@@ -46,12 +46,21 @@ def _jsonable(value: Any) -> Any:
 
 @dataclass(frozen=True)
 class FileVersion:
-    """单个 parquet 文件或 glob 模式版本描述。"""
+    """单个 parquet 文件或 glob 模式版本描述。
+
+    #8 远程对象版本：s3:// / cos:// 对象同 key 被覆盖后，只记 path 的
+    snapshot 永远不变——必须带上 etag/version_id/content_length/last_modified
+    才构成「真实快照身份」。本地文件只填 size/mtime_ns。
+    """
 
     path: str
     size: int | None = None
     mtime_ns: int | None = None
     checksum: str | None = None
+    etag: str | None = None
+    version_id: str | None = None
+    content_length: int | None = None
+    last_modified: Any = None
 
 
 @dataclass(frozen=True)
@@ -80,6 +89,14 @@ class DataSnapshot:
                     "size": f.size,
                     "mtime_ns": f.mtime_ns,
                     "checksum": f.checksum,
+                    "etag": f.etag,
+                    "version_id": f.version_id,
+                    "content_length": f.content_length,
+                    "last_modified": (
+                        f.last_modified.isoformat()
+                        if getattr(f.last_modified, "isoformat", None)
+                        else f.last_modified
+                    ),
                 }
                 for f in self.files
             ],
@@ -120,17 +137,95 @@ def schema_hash_from_decl(schema: Mapping[str, str] | None) -> str:
     return _sha256_text(payload)[:16]
 
 
+# 进程内 memo：s3:// URI → 对象头元数据（避免每次 manifest 都 head 一次）
+_remote_meta_cache: dict[str, dict[str, Any] | None] = {}
+
+
+def _remote_object_meta(uri: str) -> dict[str, Any] | None:
+    """s3:// / cos:// 对象头元数据（best-effort，带进程内 memo）。
+
+    需要已配置 S3 凭证（``cos.remote.resolve_s3_credentials``）与 boto3。
+    失败（无凭证/网络/未装 boto3）返回 None 并 memoize 为 None，**绝不阻塞**
+    读路径。对象同 key 被覆盖 → etag/version_id 变化 → snapshot_id 跟着变。
+    """
+    key = str(uri)
+    if key in _remote_meta_cache:
+        return _remote_meta_cache[key]
+    try:
+        from data_access.cos.remote import resolve_s3_credentials
+
+        creds = resolve_s3_credentials()
+        import boto3
+        from botocore.config import Config
+
+        path = key[len("s3://") :]
+        bucket, sep, obj = path.partition("/")
+        if not sep or not obj:
+            _remote_meta_cache[key] = None
+            return None
+        s3 = boto3.client(
+            "s3",
+            endpoint_url=(
+                ("https://" if creds.use_ssl else "http://") + creds.endpoint
+                if creds.endpoint
+                else None
+            ),
+            region_name=creds.region,
+            aws_access_key_id=creds.access_key_id,
+            aws_secret_access_key=creds.secret_access_key,
+            config=Config(
+                connect_timeout=2, read_timeout=5, retries={"max_attempts": 0}
+            ),
+        )
+        resp = s3.head_object(Bucket=bucket, Key=obj)
+        meta = {
+            "etag": str(resp.get("ETag", "")).strip('"') or None,
+            "version_id": resp.get("VersionId"),
+            "content_length": resp.get("ContentLength"),
+            "last_modified": resp.get("LastModified"),
+        }
+        _remote_meta_cache[key] = meta
+        return meta
+    except Exception:
+        _remote_meta_cache[key] = None
+        return None
+
+
+def _remote_snapshot_meta_enabled() -> bool:
+    """是否对 s3:// 对象 head 元数据（默认：strict/production 才开，避免 dev
+    每次读都打网络；可用 DATA_ACCESS_REMOTE_SNAPSHOT_META=1 强制开启）。"""
+    import os
+
+    raw = os.environ.get("DATA_ACCESS_REMOTE_SNAPSHOT_META", "").strip().lower()
+    if raw in {"1", "true", "yes"}:
+        return True
+    if raw in {"0", "false", "no"}:
+        return False
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        return is_strict_semantics()
+    except Exception:
+        return False
+
+
 def build_file_manifest(paths: Sequence[str]) -> tuple[FileVersion, ...]:
-    """从 DuckDB glob 路径列表构建文件 manifest（本地存在则补 stat）。"""
+    """从 DuckDB glob 路径列表构建文件 manifest（本地 stat / 远程对象头）。"""
     import glob as glob_mod
 
+    enable_remote = _remote_snapshot_meta_enabled()
     versions: list[FileVersion] = []
     seen: set[str] = set()
     for pattern in paths:
-        if str(pattern).startswith("s3://"):
+        if str(pattern).startswith("s3://") or str(pattern).startswith("cos://"):
             if pattern not in seen:
                 seen.add(str(pattern))
-                versions.append(FileVersion(path=str(pattern)))
+                extra: dict[str, Any] = {}
+                if enable_remote:
+                    meta = _remote_object_meta(pattern)
+                    if meta:
+                        extra = meta
+                versions.append(FileVersion(path=str(pattern), **extra))
             continue
         expanded = sorted(glob_mod.glob(pattern, recursive=True))
         if not expanded:
@@ -163,13 +258,19 @@ def file_versions_from_manifest(manifest: Any, paths: Sequence[str]) -> tuple[Fi
     import glob as glob_mod
 
     by_path = {str(f.path): f for f in getattr(manifest, "files", ())}
+    enable_remote = _remote_snapshot_meta_enabled()
     versions: list[FileVersion] = []
     seen: set[str] = set()
     for pattern in paths:
-        if str(pattern).startswith("s3://"):
+        if str(pattern).startswith("s3://") or str(pattern).startswith("cos://"):
             if pattern not in seen:
                 seen.add(str(pattern))
-                versions.append(FileVersion(path=str(pattern)))
+                extra: dict[str, Any] = {}
+                if enable_remote:
+                    meta = _remote_object_meta(pattern)
+                    if meta:
+                        extra = meta
+                versions.append(FileVersion(path=str(pattern), **extra))
             continue
         expanded = sorted(glob_mod.glob(pattern, recursive=True))
         if not expanded:
@@ -184,7 +285,15 @@ def file_versions_from_manifest(manifest: Any, paths: Sequence[str]) -> tuple[Fi
             mf = by_path.get(fp)
             if mf is not None:
                 versions.append(
-                    FileVersion(path=fp, size=mf.bytes, mtime_ns=mf.mtime_ns)
+                    FileVersion(
+                        path=fp,
+                        size=mf.bytes,
+                        mtime_ns=mf.mtime_ns,
+                        etag=getattr(mf, "etag", None),
+                        version_id=getattr(mf, "version_id", None),
+                        content_length=getattr(mf, "content_length", None),
+                        last_modified=getattr(mf, "last_modified", None),
+                    )
                 )
                 continue
             p = Path(fp)
@@ -200,7 +309,16 @@ def file_versions_from_manifest(manifest: Any, paths: Sequence[str]) -> tuple[Fi
 
 def file_manifest_hash(files: Sequence[FileVersion]) -> str:
     payload = [
-        {"path": f.path, "size": f.size, "mtime_ns": f.mtime_ns, "checksum": f.checksum}
+        {
+            "path": f.path,
+            "size": f.size,
+            "mtime_ns": f.mtime_ns,
+            "checksum": f.checksum,
+            "etag": f.etag,
+            "version_id": f.version_id,
+            "content_length": f.content_length,
+            "last_modified": f.last_modified,
+        }
         for f in files
     ]
     text = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
@@ -241,6 +359,41 @@ def build_data_snapshot(
         file_manifest_hash=manifest_hash,
         files=file_versions,
         params=tuple(sorted(canon.items())),
+    )
+
+
+def rebuild_snapshot_files(
+    snapshot: DataSnapshot, files: Sequence[FileVersion]
+) -> DataSnapshot:
+    """重建 snapshot（文件版本已变化，如 scan collect 前底层文件被覆盖）。
+
+    保持 dataset / registry_hash / schema_hash / params / created_at 不变，
+    按新 files 重算 file_manifest_hash 与 snapshot_id——lineage/缓存身份与
+    「实际读到什么」重新对齐，不再把旧 snapshot 当成刚读的数据（#7）。
+    """
+    file_versions = tuple(files)
+    manifest_hash = file_manifest_hash(file_versions)
+    identity = json.dumps(
+        {
+            "dataset": snapshot.dataset,
+            "registry_hash": snapshot.registry_hash,
+            "schema_hash": snapshot.schema_hash,
+            "manifest_hash": manifest_hash,
+            "params": dict(snapshot.params),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return DataSnapshot(
+        snapshot_id=_sha256_text(identity)[:24],
+        dataset=snapshot.dataset,
+        registry_hash=snapshot.registry_hash,
+        schema_hash=snapshot.schema_hash,
+        file_manifest_hash=manifest_hash,
+        files=file_versions,
+        params=snapshot.params,
+        created_at=snapshot.created_at,
     )
 
 

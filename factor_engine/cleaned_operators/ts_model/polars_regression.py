@@ -82,11 +82,26 @@ def _variance_ratio_slope(vals, max_q):
         logq.append(np.log(float(q)))
     if len(logq) < 2 or np.var(logq) <= 1e-12:
         return float("nan")
-    return float(np.cov(logq, vr)[0, 1] / np.var(logq))
+    # P1-90: centered dot product (ddof=0 numerator and denominator) — matches
+    # the pandas reference and removes the n/(n-1) bias of cov(ddof=1)/var(ddof=0).
+    lx = np.asarray(logq, dtype=float) - float(np.mean(logq))
+    ly = np.asarray(vr, dtype=float) - float(np.mean(vr))
+    denom = float(np.dot(lx, lx))
+    if denom <= 1e-12:
+        return float("nan")
+    return float(np.dot(lx, ly) / denom)
 
 
 def _vr_slope(x, window, max_q, min_periods):
     w = max(20, int(window))
+    # P1-90: a ``max_q`` that the rolling window can never support would make the
+    # kernel return NaN (or a silently truncated q-range) for every cell — fail
+    # loudly instead of manufacturing identical outputs for different max_q.
+    if int(max_q) + 3 > w:
+        raise ValueError(
+            f"ts_variance_ratio_slope: max_q={max_q} needs at least "
+            f"max_q+3={int(max_q) + 3} rows in the window, but window={window}"
+        )
     out = []
     for c in _cols(x):
         out.append(x[c].rolling_map(lambda s: _variance_ratio_slope(s, int(max_q)), window_size=w, min_samples=max(int(min_periods), 8)).alias(c))

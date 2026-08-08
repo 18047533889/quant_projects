@@ -3,10 +3,11 @@
 
 The family models the *survival* of past traded chips.  Chips bought on day
 ``t-n`` are still held today with approximate probability equal to the product
-of the daily no-turnover probabilities since then:
+of the daily survival probabilities ``e^{-u}`` since then (Poisson replacement
+hazard, so >100% turnover needs no clipping):
 
-    w_{t-n} = u_{t-n} * prod_{j=1}^{n-1} (1 - u_{t-j})          (raw survival weight)
-    w_n     = w_{t-n} / sum_k w_{t-k}                            (normalised)
+    w_{t-n} = (1 - e^{-u_{t-n}}) * prod_{j=1}^{n-1} e^{-u_{t-j}}   (raw survival weight)
+    w_n     = w_{t-n} / sum_k w_{t-k}                              (normalised)
 
 where ``u`` is the decimal free-float turnover rate.  The reference (average
 acquisition) price is the weight-normalised mean of past prices:
@@ -220,15 +221,18 @@ def _weighted_quantile(
 
     ``cdf`` is the cumulative weight (already normalised to end at ~1).  A
     quantile ``q`` maps to the value where the ECDF crosses ``q``; endpoints
-    clamp to ``values[0]`` / ``values[-1]``.
+    clamp to ``values[0]`` / ``values[-1]`` — in particular ``q <= cdf[0]`` maps
+    to ``values[0]`` and ``q >= cdf[-1]`` maps to ``values[-1]`` (P0-16: the old
+    code clamped the index to 1 and linearly extrapolated below the first
+    value, fabricating chip costs below the observed minimum).
     """
     out = np.empty(len(quantiles))
     for i, qq in enumerate(quantiles):
         qq = float(qq)
-        if qq <= 0.0:
-            out[i] = values[0]
-        elif qq >= 1.0:
-            out[i] = values[-1]
+        if qq <= float(cdf[0]):
+            out[i] = float(values[0])
+        elif qq >= float(cdf[-1]):
+            out[i] = float(values[-1])
         else:
             idx = int(np.searchsorted(cdf, qq, side="left"))
             idx = min(max(idx, 1), values.shape[0] - 1)
@@ -487,7 +491,8 @@ class TsTurnoverCostQuantileDistance(SeriesOperator):
 class TsTurnoverCostEntropy(SeriesOperator):
     """存活筹码成本分布的熵（固定 log-price 分箱，相对当前价）。
 
-    ``H = -Σ_b p_b log p_b / log B``（B=8 个固定箱，越界并到开区间箱）。低 =
+    ``H = -Σ_b p_b log p_b / log B``（B=9 个固定箱：8 条内边界产生 9 个区间，
+    越界并到开区间箱）。低 =
     筹码高度集中在少数成本区（单一密集成本带）；高 = 筹码成本高度分散。与
     ``ts_turnover_cost_dispersion``（只看二阶尺度）互补——entropy 看整个质量
     分布形状。只用 t-1 及以前，PIT 安全。

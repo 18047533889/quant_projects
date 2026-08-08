@@ -86,7 +86,8 @@ class DatasetStatsSnapshot:
             dataset=str(payload.get("dataset", "")),
             num_rows=int(payload.get("num_rows", 0)),
             num_files=int(payload.get("num_files", 0)),
-            partition_columns=tuple(payload.get("partition_columns") or ("year",)),
+            # #P2-4 与 registry 默认一致：不再残留 ("year",)，缺省即无分区列。
+            partition_columns=tuple(payload.get("partition_columns") or ()),
             min_time=payload.get("min_time"),
             max_time=payload.get("max_time"),
             instruments=payload.get("instruments"),
@@ -198,7 +199,11 @@ def estimate_column_null_ratios(
     *,
     sample_files: int = 3,
 ) -> dict[str, float]:
-    """采样若干 parquet 文件估算各列非空率（0~1）。"""
+    """采样若干 parquet 文件估算各列 **null 率**（null_count/total，0~1）。
+
+    #P1-16 字段名叫 ``column_null_ratio``，之前却存的是非空率——名称与数值含义
+    相反会误导 read_auto / CBO。这里真正保存 ``null_count / total``。
+    """
     if not paths:
         return {}
     sample = paths[: max(1, int(sample_files))]
@@ -217,8 +222,7 @@ def estimate_column_null_ratios(
         if total <= 0:
             ratios[name] = 0.0
             continue
-        non_null = total - null_counts.get(name, 0)
-        ratios[name] = non_null / total
+        ratios[name] = null_counts.get(name, 0) / total
     return ratios
 
 

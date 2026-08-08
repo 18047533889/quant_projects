@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
 """Event-interval statistics operators (2026-08 geometry/math expansion).
 
-An *event panel* is a ``TradeDate x Symbol`` frame where a **nonzero** entry
-marks an event and ``0`` / ``NaN`` marks none.  For each instrument column the
-distance between consecutive event rows defines the inter-event intervals
-``τ_i`` inside the trailing window; when a pre-window event is known the gap
-from it into the window is included as the first interval (so the statistics
-are never starved at the window boundary).  The family characterises how
+An *event panel* is a ``TradeDate x Symbol`` frame with explicit **EventBool**
+semantics (reviews R4-54 / R4-96): ``1`` (or any finite nonzero) marks an
+event, ``0`` marks a *confirmed* no-event row, and ``NaN`` marks an *unknown*
+row.  For each instrument column the distance between consecutive event rows
+defines the inter-event intervals ``τ_i`` inside the trailing window; when a
+pre-window event is known the gap from it into the window is included as the
+first interval (so the statistics are never starved at the window boundary).
+An interval that crosses an unknown (NaN) row is **censored** — its distance is
+not defined and it invalidates the window's statistic (``NaN``) rather than
+silently spanning the unknown region.  The family characterises how
 regular / memory-laden / bursty the event process is:
 
 * ``event_interval_memory``   — Pearson correlation of consecutive intervals
@@ -50,24 +54,41 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 
 def _event_mask(col: np.ndarray) -> np.ndarray:
-    """Event rows: finite and nonzero (0/NaN = none)."""
+    """EventBool rows: finite nonzero = event; ``0`` = confirmed no event; ``NaN`` = unknown."""
     return np.isfinite(col) & (col != 0)
 
 
-def _window_taus(ev_pos: np.ndarray, lo_idx: int, hi_idx: int, i0: int) -> np.ndarray | None:
+def _window_taus(
+    ev_pos: np.ndarray,
+    lo_idx: int,
+    hi_idx: int,
+    i0: int,
+    unknown_mask: np.ndarray,
+) -> np.ndarray | None:
     """Inter-event intervals ``τ`` for events in ``[i0, r]``.
 
     The gap from the last known pre-window event (``ev_pos[lo_idx-1] < i0``,
     when it exists) into the first in-window event is prepended.  Returns
     ``None`` when the window contains no event rows.
+
+    Review R4-54: an interval whose open range crosses an *unknown* (NaN) row
+    is censored — the inter-event distance is undefined across an unknown
+    region, so the whole window's statistic is NaN rather than spanning it.
     """
     if hi_idx <= lo_idx:
         return None
-    taus = np.diff(ev_pos[lo_idx:hi_idx]).astype(float)
+    pos = ev_pos[lo_idx:hi_idx]
     if lo_idx > 0:
         prev = ev_pos[lo_idx - 1]
         if prev < i0:
-            taus = np.concatenate([[float(ev_pos[lo_idx] - prev)], taus])
+            pos = np.concatenate([[prev], pos])
+    if pos.size < 2:
+        return None
+    taus = np.diff(pos).astype(float)
+    for idx in range(taus.size):
+        a, b = int(pos[idx]), int(pos[idx + 1])
+        if np.any(unknown_mask[a + 1 : b]):
+            return None  # interval crosses unknown -> censored
     return taus
 
 
@@ -76,12 +97,14 @@ def _interval_memory_series(event2d: np.ndarray, window: int) -> np.ndarray:
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
     for c in range(cols):
-        ev_pos = np.flatnonzero(_event_mask(event2d[:, c]))
+        col = event2d[:, c]
+        unknown = ~np.isfinite(col)
+        ev_pos = np.flatnonzero(_event_mask(col))
         for r in range(rows):
             i0 = max(0, r - w + 1)
             lo = np.searchsorted(ev_pos, i0, side="left")
             hi = np.searchsorted(ev_pos, r, side="right")
-            taus = _window_taus(ev_pos, lo, hi, i0)
+            taus = _window_taus(ev_pos, lo, hi, i0, unknown)
             if taus is None or taus.size < 4:
                 continue
             corr = np.corrcoef(taus[:-1], taus[1:])
@@ -96,12 +119,14 @@ def _local_variation_series(event2d: np.ndarray, window: int) -> np.ndarray:
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
     for c in range(cols):
-        ev_pos = np.flatnonzero(_event_mask(event2d[:, c]))
+        col = event2d[:, c]
+        unknown = ~np.isfinite(col)
+        ev_pos = np.flatnonzero(_event_mask(col))
         for r in range(rows):
             i0 = max(0, r - w + 1)
             lo = np.searchsorted(ev_pos, i0, side="left")
             hi = np.searchsorted(ev_pos, r, side="right")
-            taus = _window_taus(ev_pos, lo, hi, i0)
+            taus = _window_taus(ev_pos, lo, hi, i0, unknown)
             if taus is None or taus.size < 3:
                 continue
             n = taus.size
@@ -122,17 +147,27 @@ def _fano_factor_series(event2d: np.ndarray, window: int, block: int) -> np.ndar
             i0 = max(0, r - w + 1)
             chunk = ev[i0 : r + 1]
             length = chunk.shape[0]
-            n_blocks = (length + b - 1) // b
-            if n_blocks < 2:
+            # Review R4-55: only FULL blocks enter the count distribution — a
+            # trailing partial block (e.g. window 45 / block 20 -> 20/20/5) must
+            # not be weighted equally to a full block.
+            n_full = length // b
+            if n_full < 2:
                 continue
-            counts = np.empty(n_blocks, dtype=float)
-            for k in range(n_blocks):
+            counts = np.empty(n_full, dtype=float)
+            valid = np.zeros(n_full, dtype=bool)
+            for k in range(n_full):
                 seg = chunk[k * b : (k + 1) * b]
+                if np.any(~np.isfinite(seg)):
+                    continue  # unknown minute -> block count is not defined
                 counts[k] = float(np.count_nonzero(_event_mask(seg)))
-            if float(counts.sum()) <= 0.0:  # degenerate: no events in the window
+                valid[k] = True
+            if int(valid.sum()) < 2:
                 continue
-            mean = float(counts.mean())
-            var = float(counts.var())
+            v = counts[valid]
+            if float(v.sum()) <= 0.0:  # degenerate: no events in the window
+                continue
+            mean = float(v.mean())
+            var = float(v.var())
             out[r, c] = var / (mean + _EPS)
     return out
 
@@ -160,7 +195,9 @@ class EventIntervalMemory(SeriesOperator):
     """事件间隔记忆：连续事件间隔对 ``(τ_i, τ_{i+1})`` 的 Pearson 相关。
 
     正 → 间隔长短持续（聚集/惯性）；负 → 长短交替；≈0 → 间隔近似独立。
-    需要窗口内至少 4 个间隔，否则 NaN。事件 = 非零值，0/NaN = 无事件。
+    需要窗口内至少 4 个间隔，否则 NaN。EventBool 语义：1/非零 = 事件，
+    0 = 确认无事件，NaN = unknown；跨越 unknown 的间隔被 censored → 窗口 NaN
+    （R4-54/96）。
     """
 
     metadata = _metadata(
@@ -187,6 +224,7 @@ class EventLocalVariation(SeriesOperator):
     """事件间隔局部变异：``LV = (3/(n-1))·Σ ((τ_{i+1}-τ_i)/(τ_{i+1}+τ_i))²``。
 
     规则事件序列 → LV≈0；间隔不规则 / 间歇性 → 大值。需要至少 3 个间隔。
+    EventBool：NaN = unknown，跨越 unknown 的间隔被 censored → 窗口 NaN。
     """
 
     metadata = _metadata(
@@ -210,10 +248,13 @@ class EventLocalVariation(SeriesOperator):
     source="event_interval",
 )
 class EventFanoFactor(SeriesOperator):
-    """事件 Fano 因子：把窗口切成 ``block`` 行的块，``N_k`` = 每块事件数，
+    """事件 Fano 因子：把窗口切成 ``block`` 行的完整块，``N_k`` = 每块事件数，
     ``F = Var(N_k)/Mean(N_k)``（分母加 eps 防除零）。
 
-    F≈1 → 泊松型随机过程；F>1 → 聚集/爆发；F<1 → 更规则。少于 2 块 → NaN。
+    F≈1 → 泊松型随机过程；F>1 → 聚集/爆发；F<1 → 更规则。仅统计完整块
+    （R4-55，尾部 partial block 不入分布）；含 unknown(NaN) 的块不计数。
+    少于 2 个有效完整块 → NaN。EventBool：1/非零 = 事件，0 = 无事件，
+    NaN = unknown。
     """
 
     metadata = _metadata(

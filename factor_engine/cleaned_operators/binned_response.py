@@ -217,7 +217,8 @@ class TsBinnedResponseMonotonicity(SeriesOperator):
     """条件响应单调性：x 分位组索引 1..B 与组内 y 中位数的 Spearman 相关。
 
     接近 +1 → y 随 x 单调上升；接近 -1 → 单调下降；0 → 无单调结构。
-    要求 ≥B 个有效配对且 ≥3 个非空分位组,否则 NaN。P2。
+    R4-47：要求 N ≥ B·min_per_bin 个有效配对，且 ≥3 个分位组各含 ≥min_per_bin
+    个观测（默认 3），否则 NaN。P2。
     """
 
     metadata = _metadata(
@@ -231,7 +232,7 @@ class TsBinnedResponseMonotonicity(SeriesOperator):
         # Only a small verified grid {3, 5} is allowed.
         param_specs={
             "bins": ParamSpec(dtype=int, min=3, choices=(3, 5)),
-            "min_per_bin": ParamSpec(dtype=int, min=2),
+            "min_per_bin": ParamSpec(dtype=int, min=3),
         },
     )
 
@@ -243,8 +244,8 @@ class TsBinnedResponseMonotonicity(SeriesOperator):
         if b < 2:
             raise ValueError("bins must be >= 2")
         mpb = int(min_per_bin)
-        if mpb < 2:
-            raise ValueError("min_per_bin must be >= 2")
+        if mpb < 3:
+            raise ValueError("min_per_bin must be >= 3")
         return frame_like(
             y, _monotonicity_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float), w, b, mpb)
         )
@@ -272,7 +273,7 @@ class TsBinnedResponseCurvature(SeriesOperator):
         # R4-93: bins is a small verified estimator-resolution grid, not searchable.
         param_specs={
             "bins": ParamSpec(dtype=int, min=3, choices=(3, 5)),
-            "min_per_bin": ParamSpec(dtype=int, min=2),
+            "min_per_bin": ParamSpec(dtype=int, min=3),
         },
     )
 
@@ -284,8 +285,8 @@ class TsBinnedResponseCurvature(SeriesOperator):
         if b < 3:
             raise ValueError("bins must be >= 3 for a quadratic fit")
         mpb = int(min_per_bin)
-        if mpb < 2:
-            raise ValueError("min_per_bin must be >= 2")
+        if mpb < 3:
+            raise ValueError("min_per_bin must be >= 3")
         return frame_like(
             y, _curvature_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float), w, b, mpb)
         )

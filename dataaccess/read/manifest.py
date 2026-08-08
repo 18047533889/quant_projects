@@ -40,6 +40,8 @@ from typing import Any, Mapping, Sequence
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from data_access.core.exceptions import DataError
+
 
 def uuid4_hex() -> str:
     """#P0-30 manifest generation id（uuid4 短 hex）。"""

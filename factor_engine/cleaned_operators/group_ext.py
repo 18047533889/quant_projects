@@ -110,22 +110,28 @@ class GroupExSelfWeightedMean(SeriesOperator):
         out = np.full((rows, cols), np.nan, dtype=float)
         for row in range(rows):
             g_row = gv[row]
+            w_row = wv[row]
+            x_row = xv[row]
             labels = pd.unique(g_row)
             for label in labels:
                 idx = g_row == label
-                valid_w = np.isfinite(wv[row]) & idx
-                total_w = float(np.sum(wv[row][valid_w]))
+                # R5 P1-37(a): numerator and denominator MUST use the *same*
+                # mask `finite(x) & finite(w) & w >= 0`.  The previous code
+                # included peers whose x was missing in the denominator, making
+                # `sum(w_j x_j) / sum(w_j)` inconsistent (denominator counted
+                # missing-x peers, numerator silently dropped them to NaN).
+                mask = idx & np.isfinite(w_row) & np.isfinite(x_row) & (w_row >= 0)
+                total_w = float(np.sum(w_row[mask]))
                 if not np.isfinite(total_w) or total_w <= 0.0:
                     continue
-                weighted = float(np.sum(wv[row][valid_w] * xv[row][valid_w]))
+                weighted = float(np.sum(w_row[mask] * x_row[mask]))
                 for j in np.flatnonzero(idx):
-                    own_w = wv[row][j]
-                    if not np.isfinite(own_w) or not np.isfinite(xv[row][j]):
+                    if not mask[j]:
                         continue
-                    denom = total_w - own_w
+                    denom = total_w - w_row[j]
                     if denom <= 0.0:
                         continue
-                    out[row][j] = (weighted - own_w * xv[row][j]) / denom
+                    out[row][j] = (weighted - w_row[j] * x_row[j]) / denom
         return _frame_like(x, out)
 
 
@@ -138,11 +144,20 @@ class GroupExSelfWeightedMean(SeriesOperator):
     status="experimental",
 )
 class HierarchicalGroupNeutralize(SeriesOperator):
-    """分级中性化：先在 subgroup 内减均值，再在 group 内减均值。"""
+    """分级中性化：先在 subgroup 内减均值，再在 group 内减均值。
+
+    LIMITATION (R5 P1-37(b))：连续对子组/父组逐次 demean 只是近似，不是一次
+    真正的 nested-exposure 中性化 —— 先减 subgroup 均值、再减 group 均值，无法
+    严格消除「subgroup 效应」与「group 效应」的全部联合暴露（第二步会把第一步
+    已部分抵消的 group 均值重新带回）。若需要严格 nested exposure 中性化，应改用
+    (1) 以 ``group + subgroup`` 组合键（composite group key）做单次 demean，
+    或 (2) 对 group/subgroup 哑变量做横截面回归后取残差（dummy regression）。
+    本算子保留逐次 demean 语义，仅在此明确标注局限。
+    """
 
     metadata = _metadata(
         "hierarchical_group_neutralize",
-        "先去除 subgroup 均值，再去除 group 均值。",
+        "先去除 subgroup 均值，再去除 group 均值（近似 nested 中性化，见局限说明）。",
         ["x", "group", "subgroup"],
         domain="price_volume",
         unit="ratio",
@@ -169,6 +184,9 @@ class HierarchicalGroupNeutralize(SeriesOperator):
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for row in range(rows):
+            # Sequential demeaning is an *approximation* of nested neutralization
+            # (R5 P1-37(b)) — see the class LIMITATION note.  Strict nested
+            # exposure requires a composite group key or a dummy regression.
             stage1 = self._demean_row(xv[row].copy(), sv[row])
             out[row] = self._demean_row(stage1, gv[row])
         return _frame_like(x, out)
@@ -183,12 +201,18 @@ class HierarchicalGroupNeutralize(SeriesOperator):
     status="experimental",
 )
 class CsRobustResid(SeriesOperator):
-    """稳健横截面回归残差：先用 trim_ratio 截尾样本拟合 y=a+bx，再输出当前残差。"""
+    """横截面残差：先按 trim_ratio 截尾样本拟合 y=a+bx（trimmed-OLS），再输出当前残差。
+
+    注意 (R5 P1-37(c))：本算子是「截尾后 OLS」（trimmed OLS），不是 Huber/LAD
+    等真正的稳健回归。它对两端离群点做硬截断，但截尾后仍用最小二乘，对剩余
+    样本内的强影响点不稳健；保留此名仅因历史兼容。如需真稳健回归请使用 Huber
+    或 LAD 估计量。
+    """
 
     metadata = OperatorMetadata(
         name="cs_robust_resid",
         category="cross_sectional",
-        description="稳健横截面回归残差（截尾 OLS）。",
+        description="横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。",
         param_names=["y", "x", "trim_ratio", "add_intercept"],
         return_type="series",
         tags=[
@@ -196,6 +220,7 @@ class CsRobustResid(SeriesOperator):
             "signature:y,x,trim_ratio,add_intercept->series", "domain:price_volume",
             "unit:ratio", "cost:2",
         ],
+        output_unit="same_as:target",
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, trim_ratio: float = 0.1, add_intercept: bool = True, **_: Any) -> pd.DataFrame:

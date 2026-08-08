@@ -195,14 +195,16 @@ _mk(
 # § Earnings vs cash
 # ---------------------------------------------------------------------------
 
-def _fin_roe_cash_gap(net_profit, ocf, avg_equity, period_id):
+def _fin_roe_cash_gap(net_profit, ocf, avg_equity, period_id=None):
+    # P1-132: static algebraic ratio — period_id is a structural PIT-alignment
+    # input only and does not participate in the computation.
     return (net_profit - ocf) / avg_equity.replace(0, np.nan)
 
 
 _mk(
     "fin_roe_cash_gap",
-    "会计ROE与现金ROE之差：(NetProfit-OCF)/AvgEquity。",
-    ["net_profit", "ocf", "avg_equity", "period_id"],
+    "会计ROE与现金ROE之差：(NetProfit-OCF)/AvgEquity。period_id 仅对齐契约，不参与计算。",
+    ["net_profit", "ocf", "avg_equity"],
     _fin_roe_cash_gap,
 )
 
@@ -232,9 +234,20 @@ def _fin_earnings_smoothness(net_profit, ocf, period_id, periods=8):
 
     def _calc(o, v1, v2, c):
         keys = o[-n:]
-        e = [float(v1[k]) for k in keys if k in v1 and np.isfinite(v1[k])]
-        f = [float(v2[k]) for k in keys if k in v2 and np.isfinite(v2[k])]
-        if len(e) < 3 or len(f) < 3 or np.std(f) <= _EPS:
+        # P1-131: the profit and OCF stds MUST share one report-period key set.
+        # Independently taking each series' own recent valid fiscal values can
+        # pair profit Q1-Q4 against OCF Q1,Q3,Q4,nextQ1 — a different window
+        # that silently biases the smoothness ratio.  Intersect on keys that
+        # are finite in BOTH series.
+        pairs = [
+            (float(v1[k]), float(v2[k])) for k in keys
+            if k in v1 and k in v2 and np.isfinite(v1[k]) and np.isfinite(v2[k])
+        ]
+        if len(pairs) < 3:
+            return np.nan
+        e = np.asarray([p[0] for p in pairs], dtype=float)
+        f = np.asarray([p[1] for p in pairs], dtype=float)
+        if np.std(f) <= _EPS:
             return np.nan
         return float(np.std(e) / np.std(f))
 
@@ -283,38 +296,44 @@ _mk(
 # § Core vs non-core income
 # ---------------------------------------------------------------------------
 
-def _fin_core_earnings_ratio(op, inv_income, fv_income, asset_deal, other_earnings, revenue, period_id):
-    # P1-40: the old ``scale`` param was dead — the denominator was always
-    # revenue, so scale=A and scale=B produced byte-identical factors (search
-    # space pollution).  Removed; denominator is revenue by contract.
+def _fin_core_earnings_ratio(op, inv_income, fv_income, asset_deal, other_earnings, revenue, period_id=None):
+    # P1-40 / P1-130: the old ``scale`` param was dead — the denominator was
+    # always revenue, so scale=A and scale=B produced byte-identical factors
+    # (search space pollution).  Removed; denominator is revenue by contract.
+    # P1-132: period_id is structural PIT-alignment only, not used here.
     core = op - inv_income - fv_income - asset_deal - other_earnings
     return core / revenue.replace(0, np.nan)
 
 
 _mk(
     "fin_core_earnings_ratio",
-    "核心利润占比：(OperatingProfit-投资收益-公允价值变动-资产处置-其他收益)/营业收入。",
-    ["operating_profit", "investment_income", "fair_value_income", "asset_deal_income", "other_earnings", "revenue", "period_id"],
+    "核心利润占比：(OperatingProfit-投资收益-公允价值变动-资产处置-其他收益)/营业收入。period_id 仅对齐契约，不参与计算。",
+    ["operating_profit", "investment_income", "fair_value_income", "asset_deal_income", "other_earnings", "revenue"],
     _fin_core_earnings_ratio,
 )
 
 
-def _fin_noncore_income_ratio(inv_income, fv_income, asset_deal, other_earnings, nonop_rev, nonop_exp, total_profit, period_id):
+def _fin_noncore_income_ratio(inv_income, fv_income, asset_deal, other_earnings, nonop_rev, nonop_exp, total_profit, period_id=None):
+    # P1-132: period_id is structural PIT-alignment only, not used here.
     noncore = inv_income + fv_income + asset_deal + other_earnings + nonop_rev - nonop_exp
     return noncore / total_profit.abs().replace(0, np.nan)
 
 
 _mk(
     "fin_noncore_income_ratio",
-    "非核心收益占比：(投资收益+公允价值变动+资产处置+其他收益+营业外收入-营业外支出)/|利润总额|。",
-    ["investment_income", "fair_value_income", "asset_deal_income", "other_earnings", "non_operating_revenue", "non_operating_expense", "total_profit", "period_id"],
+    "非核心收益占比：(投资收益+公允价值变动+资产处置+其他收益+营业外收入-营业外支出)/|利润总额|。period_id 仅对齐契约，不参与计算。",
+    ["investment_income", "fair_value_income", "asset_deal_income", "other_earnings", "non_operating_revenue", "non_operating_expense", "total_profit"],
     _fin_noncore_income_ratio,
 )
 
 
 def _mk_dependence(name: str, description: str, num_idx: int, params: list[str]):
+    # P1-132: static algebraic ratios no longer advertise period_id.  The
+    # helper resolves ``total_profit`` positionally as the slot right after
+    # ``num`` so an optional trailing period_id (backward-compat) never shifts
+    # the operand lookup (the old ``args[-2]`` broke once period_id was absent).
     def _calc(*args):
-        num, total_profit = args[num_idx], args[-2]
+        num, total_profit = args[num_idx], args[num_idx + 1]
         return num / total_profit.abs().replace(0, np.nan)
 
     _mk(name, description, params, _calc)
@@ -322,65 +341,69 @@ def _mk_dependence(name: str, description: str, num_idx: int, params: list[str])
 
 _mk_dependence(
     "fin_fair_value_income_dependence",
-    "公允价值变动收益依赖度：FairValueVariableIncome/|利润总额|。",
-    0, ["fair_value_income", "total_profit", "period_id"],
+    "公允价值变动收益依赖度：FairValueVariableIncome/|利润总额|。period_id 仅对齐契约，不参与计算。",
+    0, ["fair_value_income", "total_profit"],
 )
 _mk_dependence(
     "fin_investment_income_dependence",
-    "投资收益依赖度：InvestmentIncome/|利润总额|。",
-    0, ["investment_income", "total_profit", "period_id"],
+    "投资收益依赖度：InvestmentIncome/|利润总额|。period_id 仅对齐契约，不参与计算。",
+    0, ["investment_income", "total_profit"],
 )
 _mk_dependence(
     "fin_other_earnings_dependence",
-    "其他收益依赖度：OtherEarnings/|利润总额|。",
-    0, ["other_earnings", "total_profit", "period_id"],
+    "其他收益依赖度：OtherEarnings/|利润总额|。period_id 仅对齐契约，不参与计算。",
+    0, ["other_earnings", "total_profit"],
 )
 
 
-def _fin_comprehensive_income_gap(total_composite_income, net_profit, avg_equity, period_id):
+def _fin_comprehensive_income_gap(total_composite_income, net_profit, avg_equity, period_id=None):
+    # P1-132: period_id is structural PIT-alignment only, not used here.
     return (total_composite_income - net_profit) / avg_equity.replace(0, np.nan)
 
 
 _mk(
     "fin_comprehensive_income_gap",
-    "综合收益与净利润之差 / 平均权益。",
-    ["total_composite_income", "net_profit", "avg_equity", "period_id"],
+    "综合收益与净利润之差 / 平均权益。period_id 仅对齐契约，不参与计算。",
+    ["total_composite_income", "net_profit", "avg_equity"],
     _fin_comprehensive_income_gap,
 )
 
 
-def _fin_oci_to_equity(oci, avg_equity, period_id):
+def _fin_oci_to_equity(oci, avg_equity, period_id=None):
+    # P1-132: period_id is structural PIT-alignment only, not used here.
     return oci / avg_equity.replace(0, np.nan)
 
 
 _mk(
     "fin_oci_to_equity",
-    "其他综合收益 / 平均权益。",
-    ["other_comprehensive_income", "avg_equity", "period_id"],
+    "其他综合收益 / 平均权益。period_id 仅对齐契约，不参与计算。",
+    ["other_comprehensive_income", "avg_equity"],
     _fin_oci_to_equity,
 )
 
 
-def _fin_discontinued_operation_ratio(discon_profit, net_profit, period_id):
+def _fin_discontinued_operation_ratio(discon_profit, net_profit, period_id=None):
+    # P1-132: period_id is structural PIT-alignment only, not used here.
     return discon_profit / net_profit.abs().replace(0, np.nan)
 
 
 _mk(
     "fin_discontinued_operation_ratio",
-    "终止经营损益 / |净利润|。",
-    ["discontinued_operation_profit", "net_profit", "period_id"],
+    "终止经营损益 / |净利润|。period_id 仅对齐契约，不参与计算。",
+    ["discontinued_operation_profit", "net_profit"],
     _fin_discontinued_operation_ratio,
 )
 
 
-def _fin_minority_profit_share(minority_profit, net_profit, period_id):
+def _fin_minority_profit_share(minority_profit, net_profit, period_id=None):
+    # P1-132: period_id is structural PIT-alignment only, not used here.
     return minority_profit / net_profit.abs().replace(0, np.nan)
 
 
 _mk(
     "fin_minority_profit_share",
-    "少数股东损益 / |净利润|。",
-    ["minority_profit", "net_profit", "period_id"],
+    "少数股东损益 / |净利润|。period_id 仅对齐契约，不参与计算。",
+    ["minority_profit", "net_profit"],
     _fin_minority_profit_share,
 )
 

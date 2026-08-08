@@ -9,8 +9,15 @@ import pyarrow as pa
 
 from data_access.core import audit
 from data_access.core.exceptions import ValidationError
-from .query_budget import QueryBudget, collect_polars_with_budget, _production_mode
-from .read_contract import DataSnapshot, ReadLineage, ReadResult, ReadStats
+from .query_budget import QueryBudget, collect_polars_with_budget, is_strict_semantics
+from .read_contract import (
+    DataSnapshot,
+    FileVersion,
+    ReadLineage,
+    ReadResult,
+    ReadStats,
+    rebuild_snapshot_files,
+)
 
 # 这些 LazyFrame 方法会执行计划、产生物化结果或写出数据，若通过 __getattr__
 # 直接透传就能绕过 QueryBudget / lineage / audit。
@@ -38,10 +45,11 @@ class ScanHandle:
     _store: Any = None
 
     def lazyframe(self) -> Any:
-        """返回底层 LazyFrame（development 用；production 只能使用受控方法）。"""
-        if _production_mode():
+        """返回底层 LazyFrame（research 用；production/strict 只能使用受控方法）。"""
+        if is_strict_semantics():
             raise ValidationError(
-                "production 模式禁止直接获取裸 LazyFrame；请使用 ScanHandle.collect()。"
+                "production/strict 模式禁止直接获取裸 LazyFrame；请使用 "
+                "ScanHandle.collect() / collect_table()。"
             )
         return self._lf
 
@@ -52,8 +60,58 @@ class ScanHandle:
         但**物化**仍只能走 ``ScanHandle.collect()``——那里强制 QueryBudget /
         snapshot / audit，因此这里不构成绕过预算的逃生口。跨包消费方禁止直接
         访问 ``_lf`` 字段。
+
+        #28：production/strict 下即使 composition 也不能放裸 LazyFrame——
+        拿到它就能 ``lf.collect()`` / ``lf.sink_parquet()`` 绕过治理。research
+        放行（composition 需要），但禁止 sink_* 与直接物化（__getattr__ 拦截）。
         """
+        if is_strict_semantics():
+            raise ValidationError(
+                "production/strict 模式禁止 native_lazyframe()（可绕过 budget/audit "
+                "直接物化）；请用 ScanHandle.collect() 受控终点。"
+            )
         return self._lf
+
+    def _revalidate_snapshot(self) -> DataSnapshot:
+        """#7 collect 前 revalidate：scan() 生成 LazyFrame 后可能很久才 collect，
+        底层文件已被覆盖/删除——不能把 scan 时刻的旧 snapshot 当成刚读的数据。
+
+        本地文件逐文件 stat 对比 (size, mtime_ns)：
+            - 无变化 → 原 snapshot
+            - 有变化且 strict → 抛 ValidationError（fail-closed，要求重新 scan）
+            - 有变化且 research → 重建 snapshot 文件版本（lineage 不再撒谎）
+        远程对象由 etag/version_id 参与 manifest hash，scan 后覆盖也会在
+        ``_remote_object_meta`` 变化时体现；无 _store（无法 stat）→ 原样返回。
+        """
+        if self._store is None:
+            return self.snapshot
+        changed: list[str] = []
+        restat: list[FileVersion] = []
+        for fv in self.snapshot.files:
+            path = str(fv.path)
+            if path.startswith("s3://") or path.startswith("cos://"):
+                restat.append(fv)
+                continue
+            from pathlib import Path
+
+            try:
+                st = Path(path).stat()
+            except OSError:
+                changed.append(f"{path} (gone)")
+                continue
+            if (st.st_size, st.st_mtime_ns) != (fv.size, fv.mtime_ns):
+                changed.append(f"{path} (mtime/size changed)")
+                continue
+            restat.append(fv)
+        if not changed:
+            return self.snapshot
+        if is_strict_semantics():
+            raise ValidationError(
+                "ScanHandle 绑定 snapshot 已失效：collect 前底层文件发生变化 "
+                f"（{len(changed)} 个）。请重新 scan() 绑定最新文件清单，避免 "
+                "lineage 与实际读到数据不一致。"
+            )
+        return rebuild_snapshot_files(self.snapshot, restat)
 
     def collect(self) -> ReadResult:
         """执行 Polars 计划并返回绑定 snapshot/lineage 的 ``ReadResult``。"""
@@ -64,18 +122,19 @@ class ScanHandle:
         ok = False
         err_msg: str | None = None
         try:
+            snapshot = self._revalidate_snapshot()
             table = collect_polars_with_budget(self._lf, query_budget=self.budget)
             elapsed_ms = (time.perf_counter() - start) * 1000
             stats = ReadStats(
                 rows=table.num_rows,
                 bytes=table.nbytes,
                 elapsed_ms=elapsed_ms,
-                paths=tuple(f.path for f in self.snapshot.files[:20]),
+                paths=tuple(f.path for f in snapshot.files[:20]),
             )
             ok = True
             return ReadResult(
                 table=table,
-                snapshot=self.snapshot,
+                snapshot=snapshot,
                 stats=stats,
                 lineage=self.lineage,
             )
@@ -106,11 +165,11 @@ class ScanHandle:
     def __getattr__(self, name: str) -> Any:
         if name.startswith("_"):
             raise AttributeError(name)
-        if _production_mode() and (
+        if is_strict_semantics() and (
             name in _MATERIALIZING_METHODS or name.startswith("sink_")
         ):
             raise ValidationError(
-                f"production 模式禁止通过 ScanHandle.{name}() 绕过受控 collect；"
+                f"production/strict 模式禁止通过 ScanHandle.{name}() 绕过受控 collect；"
                 "请使用 ScanHandle.collect()，写出数据请走 data_access.write_arrow/publish。"
             )
 

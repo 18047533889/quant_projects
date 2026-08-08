@@ -55,111 +55,111 @@ def _binary(a, b, expr_fn):
 
 
 _register(
-    "fin_roe_cash_gap", "会计ROE与现金ROE之差（Polars）。", ["net_profit", "ocf", "avg_equity", "period_id"],
+    "fin_roe_cash_gap", "会计ROE与现金ROE之差（Polars）。", ["net_profit", "ocf", "avg_equity"],
     lambda np_, ocf, ae, period_id=None: _roe_cash_gap(np_, ocf, ae),
 )
 _register(
-    "fin_fair_value_income_dependence", "公允价值变动依赖度（Polars）。", ["fair_value_income", "total_profit", "period_id"],
+    "fin_fair_value_income_dependence", "公允价值变动依赖度（Polars）。", ["fair_value_income", "total_profit"],
     lambda fv, tp, period_id=None: _binary(fv, tp, lambda a, b: _safe_div_expr(a, b.abs())),
 )
 _register(
-    "fin_investment_income_dependence", "投资收益依赖度（Polars）。", ["investment_income", "total_profit", "period_id"],
+    "fin_investment_income_dependence", "投资收益依赖度（Polars）。", ["investment_income", "total_profit"],
     lambda inv, tp, period_id=None: _binary(inv, tp, lambda a, b: _safe_div_expr(a, b.abs())),
 )
 _register(
-    "fin_other_earnings_dependence", "其他收益依赖度（Polars）。", ["other_earnings", "total_profit", "period_id"],
+    "fin_other_earnings_dependence", "其他收益依赖度（Polars）。", ["other_earnings", "total_profit"],
     lambda oe, tp, period_id=None: _binary(oe, tp, lambda a, b: _safe_div_expr(a, b.abs())),
 )
 _register(
-    "fin_comprehensive_income_gap", "综合收益与净利润之差/权益（Polars）。", ["total_composite_income", "net_profit", "avg_equity", "period_id"],
+    "fin_comprehensive_income_gap", "综合收益与净利润之差/权益（Polars）。", ["total_composite_income", "net_profit", "avg_equity"],
     lambda tci, np_, ae, period_id=None: _comp_gap(tci, np_, ae),
 )
 _register(
-    "fin_oci_to_equity", "其他综合收益/权益（Polars）。", ["other_comprehensive_income", "avg_equity", "period_id"],
+    "fin_oci_to_equity", "其他综合收益/权益（Polars）。", ["other_comprehensive_income", "avg_equity"],
     lambda oci, ae, period_id=None: _binary(oci, ae, lambda a, e: _safe_div_expr(a, e)),
 )
 _register(
-    "fin_discontinued_operation_ratio", "终止经营损益/|净利润|（Polars）。", ["discontinued_operation_profit", "net_profit", "period_id"],
+    "fin_discontinued_operation_ratio", "终止经营损益/|净利润|（Polars）。", ["discontinued_operation_profit", "net_profit"],
     lambda d, np_, period_id=None: _binary(d, np_, lambda a, b: _safe_div_expr(a, b.abs())),
 )
 _register(
-    "fin_minority_profit_share", "少数股东损益/|净利润|（Polars）。", ["minority_profit", "net_profit", "period_id"],
+    "fin_minority_profit_share", "少数股东损益/|净利润|（Polars）。", ["minority_profit", "net_profit"],
     lambda m, np_, period_id=None: _binary(m, np_, lambda a, b: _safe_div_expr(a, b.abs())),
 )
 _register(
-    "fin_contract_asset_intensity", "合同资产/总资产（Polars）。", ["contract_assets", "total_assets", "period_id"],
+    "fin_contract_asset_intensity", "合同资产/总资产（Polars）。", ["contract_assets", "total_assets"],
     lambda a, ta, period_id=None: _binary(a, ta, lambda x, y: _safe_div_expr(x, y)),
 )
 _register(
-    "fin_contract_liability_intensity", "合同负债/总资产（Polars）。", ["contract_liability", "total_assets", "period_id"],
+    "fin_contract_liability_intensity", "合同负债/总资产（Polars）。", ["contract_liability", "total_assets"],
     lambda l, ta, period_id=None: _binary(l, ta, lambda x, y: _safe_div_expr(x, y)),
 )
 _register(
-    "fin_contract_asset_liability_gap", "(合同资产-合同负债)/总资产（Polars）。", ["contract_assets", "contract_liability", "total_assets", "period_id"],
+    "fin_contract_asset_liability_gap", "(合同资产-合同负债)/总资产（Polars）。", ["contract_assets", "contract_liability", "total_assets"],
     lambda a, l, ta, period_id=None: _three(a, l, ta, lambda x, y, z: _safe_div_expr(x - y, z)),
 )
 _register(
-    "fin_lease_intensity", "(使用权+租赁负债)/总资产（Polars）。", ["usufruct_assets", "lease_liability", "total_assets", "period_id"],
+    "fin_lease_intensity", "(使用权+租赁负债)/总资产（Polars）。", ["usufruct_assets", "lease_liability", "total_assets"],
     lambda u, l, ta, period_id=None: _three(u, l, ta, lambda x, y, z: _safe_div_expr(x + y, z)),
 )
 _register(
-    "fin_lease_asset_liability_gap", "(使用权-租赁负债)/总资产（Polars）。", ["usufruct_assets", "lease_liability", "total_assets", "period_id"],
+    "fin_lease_asset_liability_gap", "(使用权-租赁负债)/总资产（Polars）。", ["usufruct_assets", "lease_liability", "total_assets"],
     lambda u, l, ta, period_id=None: _three(u, l, ta, lambda x, y, z: _safe_div_expr(x - y, z)),
 )
 _register(
-    "fin_goodwill_intensity", "商誉/总资产（Polars）。", ["goodwill", "total_assets", "period_id"],
+    "fin_goodwill_intensity", "商誉/总资产（Polars）。", ["goodwill", "total_assets"],
     lambda g, ta, period_id=None: _binary(g, ta, lambda x, y: _safe_div_expr(x, y)),
 )
 _register(
-    "fin_deferred_tax_gap", "(递延资产-递延负债)/总资产（Polars）。", ["deferred_tax_assets", "deferred_tax_liability", "total_assets", "period_id"],
+    "fin_deferred_tax_gap", "(递延资产-递延负债)/总资产（Polars）。", ["deferred_tax_assets", "deferred_tax_liability", "total_assets"],
     lambda a, l, ta, period_id=None: _three(a, l, ta, lambda x, y, z: _safe_div_expr(x - y, z)),
 )
 _register(
-    "fin_impairment_intensity", "(资产+信用减值)/营收（Polars）。", ["asset_impairment_loss", "credit_impairment_loss", "operating_revenue", "period_id"],
+    "fin_impairment_intensity", "(资产+信用减值)/营收（Polars）。", ["asset_impairment_loss", "credit_impairment_loss", "operating_revenue"],
     lambda ai, ci, rev, period_id=None: _three(ai, ci, rev, lambda x, y, z: _safe_div_expr(x + y, z)),
 )
 _register(
-    "fin_borrowing_intensity", "取得借款现金/平均资产（Polars）。", ["cash_from_borrowing", "avg_assets", "period_id"],
+    "fin_borrowing_intensity", "取得借款现金/平均资产（Polars）。", ["cash_from_borrowing", "avg_assets"],
     lambda c, aa, period_id=None: _binary(c, aa, lambda x, y: _safe_div_expr(x, y)),
 )
 _register(
-    "fin_debt_repayment_intensity", "偿债支付/平均资产（Polars）。", ["borrowing_repayment", "avg_assets", "period_id"],
+    "fin_debt_repayment_intensity", "偿债支付/平均资产（Polars）。", ["borrowing_repayment", "avg_assets"],
     lambda c, aa, period_id=None: _binary(c, aa, lambda x, y: _safe_div_expr(x, y)),
 )
 _register(
-    "fin_net_borrowing_cashflow", "(借款+发债-偿债)/平均资产（Polars）。", ["cash_from_borrowing", "cash_from_bonds_issue", "borrowing_repayment", "avg_assets", "period_id"],
+    "fin_net_borrowing_cashflow", "(借款+发债-偿债)/平均资产（Polars）。", ["cash_from_borrowing", "cash_from_bonds_issue", "borrowing_repayment", "avg_assets"],
     lambda cb, bo, rp, aa, period_id=None: _four(cb, bo, rp, aa, lambda a, b, c, d: _safe_div_expr(a + b - c, d)),
 )
 _register(
-    "fin_interest_coverage_proxy", "营业利润/|利息|（Polars）。", ["operating_profit", "interest_cost", "period_id"],
+    "fin_interest_coverage_proxy", "营业利润/|利息|（Polars）。", ["operating_profit", "interest_cost"],
     lambda op, ic, period_id=None: _binary(op, ic, lambda x, y: _safe_div_expr(x, y.abs())),
 )
 _register(
-    "fin_debt_service_coverage_proxy", "OCF/(偿债+|利息|)（Polars）。", ["ocf", "borrowing_repayment", "interest_cost", "period_id"],
+    "fin_debt_service_coverage_proxy", "OCF/(偿债+|利息|)（Polars）。", ["ocf", "borrowing_repayment", "interest_cost"],
     lambda o, rp, ic, period_id=None: _three(o, rp, ic, lambda x, y, z: _safe_div_expr(x, y + z.abs())),
 )
 _register(
-    "fin_capex_intensity", "购建长期资产支付/平均资产（Polars）。", ["capex_cash", "avg_assets", "period_id"],
+    "fin_capex_intensity", "购建长期资产支付/平均资产（Polars）。", ["capex_cash", "avg_assets"],
     lambda c, aa, period_id=None: _binary(c, aa, lambda x, y: _safe_div_expr(x, y)),
 )
 _register(
-    "fin_acquisition_cash_intensity", "取得子公司现金/平均资产（Polars）。", ["net_cash_from_subcompany", "avg_assets", "period_id"],
+    "fin_acquisition_cash_intensity", "取得子公司现金/平均资产（Polars）。", ["net_cash_from_subcompany", "avg_assets"],
     lambda c, aa, period_id=None: _binary(c, aa, lambda x, y: _safe_div_expr(x, y)),
 )
 _register(
-    "fin_rd_total_intensity", "(研发+资本化)/营收（Polars）。", ["rd_expense", "capitalized_dev_increase", "operating_revenue", "period_id"],
+    "fin_rd_total_intensity", "(研发+资本化)/营收（Polars）。", ["rd_expense", "capitalized_dev_increase", "operating_revenue"],
     lambda r, cd, rev, period_id=None: _three(r, cd, rev, lambda x, y, z: _safe_div_expr(x + y, z)),
 )
 _register(
-    "fin_rd_capitalization_ratio", "开发支出资本化率（Polars）。", ["capitalized_dev_increase", "rd_expense", "period_id"],
+    "fin_rd_capitalization_ratio", "开发支出资本化率（Polars）。", ["capitalized_dev_increase", "rd_expense"],
     lambda cd, r, period_id=None: _binary(cd, r, lambda x, y: _safe_div_expr(x, x + y)),
 )
 _register(
-    "fin_cash_burn_runway", "现金/|年化负OCF|（Polars）。", ["cash_equivalents", "ocf", "period_id"],
+    "fin_cash_burn_runway", "现金/|负OCF|（输入 OCF 须为 TTM/年化口径；P1-133 无隐藏年化）。", ["cash_equivalents", "annualized_ocf"],
     lambda c, o, period_id=None: _binary(c, o, lambda x, y: _safe_div_expr(x, pl.min_horizontal(y, pl.lit(0.0)).abs())),
 )
 _register(
-    "fin_financing_gap", "(资本开支+偿债+分派-OCF)/平均资产（Polars）。", ["capex", "debt_repayment", "dividend_interest_payment", "ocf", "avg_assets", "period_id"],
+    "fin_financing_gap", "(资本开支+偿债+分派-OCF)/平均资产（Polars）。", ["capex", "debt_repayment", "dividend_interest_payment", "ocf", "avg_assets"],
     lambda cx, dr, di, o, aa, period_id=None: _financing_gap(cx, dr, di, o, aa),
 )
 

@@ -174,6 +174,17 @@ def _strict_bool(value: Any, *, key: str, context: str) -> bool:
     raise ValidationError(f"{context}: 字段 '{key}' 必须是布尔值，收到 {value!r}")
 
 
+def _validate_known_keys(
+    mapping: dict, *, allowed: set[str], context: str
+) -> None:
+    """#P0-38 strict typed config：未知 key 拒绝（storage/partitioning/engine）。"""
+    unknown = sorted(set(mapping) - allowed)
+    if unknown:
+        raise ValidationError(
+            f"{context} 含未知配置 key {unknown}；应为 {sorted(allowed)} 之一"
+        )
+
+
 def _parse_partition_columns(raw: Any, *, context: str) -> tuple[str, ...]:
     """#P0-53 默认/空 → ``()``，不再用 ``("year",)``。
 
@@ -231,17 +242,18 @@ _UNRESOLVED_ENV_RE = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}")
 _UNRESOLVED_DOLLAR_RE = re.compile(r"(?<!\\)\$[A-Za-z_][A-Za-z0-9_]*")
 
 
-def _assert_no_unresolved_env(payload: Any, *, context: str) -> None:
-    """#P0-47 registry compile 后任何残留 ``${...}`` / ``$VAR`` → 启动失败。
+def _assert_no_unresolved_env(fields: Mapping[str, str], *, context: str) -> None:
+    """#P0-47 env 展开后的字段里仍残留 ``${...}`` / ``$VAR`` → 启动失败。
 
     ``expand_env`` 未设 env 且无 default 时保留原样——不能把配置问题变成奇怪的
-    路径问题，生产必须启动即失败。
+    路径问题，生产必须启动即失败。（在 ``expand_env`` **之后**检查，不能检查原始
+    YAML——那里 ${ENV} 是合法待展开 token。）
     """
 
     def walk(node: Any, path: str) -> None:
         if isinstance(node, str):
             m = _UNRESOLVED_ENV_RE.search(node) or _UNRESOLVED_DOLLAR_RE.search(node)
-            if m:
+            if m and "${RUN_NAMESPACE}" not in m.group(0):
                 raise ValidationError(
                     f"{context}: 字段 {path} 含未解析环境变量 {m.group(0)!r}。"
                     "请设置该 env，或在 YAML 里提供 ${VAR:-default} 默认值。"
@@ -253,7 +265,7 @@ def _assert_no_unresolved_env(payload: Any, *, context: str) -> None:
             for i, v in enumerate(node):
                 walk(v, f"{path}[{i}]")
 
-    walk(payload, "$")
+    walk(dict(fields), "$")
 
 
 def _parse_dataset(name: str, raw: dict) -> Dataset:
@@ -307,21 +319,47 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     # ---- 通用 Data IO Layer 字段解析 ----
     format_spec = FormatSpec.from_yaml(raw.get("format", "parquet"), context=context)
     storage = raw.get("storage")
-    if storage is not None and not isinstance(storage, dict):
-        raise ValidationError(
-            f"{context}: storage 必须是 mapping，收到 {type(storage).__name__}"
+    if storage is not None:
+        if not isinstance(storage, dict):
+            raise ValidationError(
+                f"{context}: storage 必须是 mapping，收到 {type(storage).__name__}"
+            )
+        _validate_known_keys(
+            storage,
+            allowed={"source", "type", "uri", "layout", "credential_profile"},
+            context=f"{context}: storage",
         )
+        src = storage.get("source")
+        if isinstance(src, dict):
+            _validate_known_keys(
+                src,
+                allowed={"type", "uri", "layout", "endpoint", "region",
+                         "credential_profile", "bucket"},
+                context=f"{context}: storage.source",
+            )
     partitioning = raw.get("partitioning")
-    if partitioning is not None and not isinstance(partitioning, dict):
-        raise ValidationError(
-            f"{context}: partitioning 必须是 mapping，收到 {type(partitioning).__name__}"
+    if partitioning is not None:
+        if not isinstance(partitioning, dict):
+            raise ValidationError(
+                f"{context}: partitioning 必须是 mapping，收到 {type(partitioning).__name__}"
+            )
+        _validate_known_keys(
+            partitioning,
+            allowed={"columns", "partition_by", "bucket", "granularity", "time_column"},
+            context=f"{context}: partitioning",
         )
     semantic = raw.get("semantic")
     if semantic is not None and not isinstance(semantic, str):
         raise ValidationError(f"{context}: semantic 必须是字符串")
     engine = raw.get("engine")
-    if engine is not None and not isinstance(engine, dict):
-        raise ValidationError(f"{context}: engine 必须是 mapping，收到 {type(engine).__name__}")
+    if engine is not None:
+        if not isinstance(engine, dict):
+            raise ValidationError(f"{context}: engine 必须是 mapping，收到 {type(engine).__name__}")
+        _validate_known_keys(
+            engine,
+            allowed={"preferred", "fallback", "backend", "options"},
+            context=f"{context}: engine",
+        )
 
     # PR8：解析可选 schema（列名 -> 类型字符串）。不填 = 不做首访自检。
     schema_raw = raw.get("schema", {}) or {}
@@ -359,6 +397,10 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             root_expanded = root_expanded.replace("${RUN_NAMESPACE}", ns)
         root = canonicalize(root_expanded)
         glob = raw.get("glob", default_glob_for_format(format_spec.type))
+        # #P0-47 env 展开后仍有残留 → 启动失败
+        _assert_no_unresolved_env(
+            {"root": root_expanded, "glob": glob}, context=context
+        )
         schema_version = _parse_schema_version(raw, context=context)
         authorized_root = _parse_authorized_root(raw, static_prefix=None, context=context)
         return StaticDataset(
@@ -390,6 +432,11 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     if "${RUN_NAMESPACE}" in root_template:
         root_template = root_template.replace("${RUN_NAMESPACE}", resolve_namespace())
     glob_template = raw.get("glob_template", default_glob_for_format(format_spec.type))
+    # #P0-47 env 展开后仍有残留 → 启动失败（含 authorized_root 模板）
+    _assert_no_unresolved_env(
+        {"root_template": root_template, "glob_template": glob_template},
+        context=context,
+    )
     params_schema_raw = raw.get("params_schema", {})
     if not isinstance(params_schema_raw, dict) or not params_schema_raw:
         raise ValidationError(f"{context}: parametric 数据集必须声明非空 params_schema")
@@ -497,7 +544,6 @@ def load_registry(config_path: str | Path | None = None) -> DatasetRegistry:
 
     if not isinstance(raw, dict):
         raise ValidationError(f"{config_path}: 顶层必须是 mapping（数据集名 → 配置）")
-    _assert_no_unresolved_env(raw, context=str(config_path))
 
     datasets = {
         name: _parse_dataset(name, body)

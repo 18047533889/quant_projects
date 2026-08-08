@@ -35,6 +35,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -43,6 +44,15 @@ from cleaned_operators.gemini_v2_common import (
 )
 
 _EPS = 1e-12
+
+_EDGE_SPECS = {"window": ParamSpec(dtype=int, min=3)}
+_ABDI_SPECS = {
+    "window": ParamSpec(dtype=int, min=3),
+}
+_PS_SPECS = {
+    "window": ParamSpec(dtype=int, min=4),
+    "min_periods": ParamSpec(dtype=int, min=3),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +68,11 @@ def _edge_window(open_: np.ndarray, high: np.ndarray, low: np.ndarray, close: np
     nobs = int(open_.shape[0])
     if nobs < 3:
         return np.nan
+    # Positivity is checked on the *original* prices, never on the log prices:
+    # a stock trading below 1.0 has a negative log-price and would be wrongly
+    # masked out by ``log(o) > 0`` (P0-03 review).
+    raw_valid = (np.asarray(open_, dtype=float) > 0.0) & (np.asarray(high, dtype=float) > 0.0) \
+        & (np.asarray(low, dtype=float) > 0.0) & (np.asarray(close, dtype=float) > 0.0)
     o = np.log(np.asarray(open_, dtype=float))
     h = np.log(np.asarray(high, dtype=float))
     l = np.log(np.asarray(low, dtype=float))
@@ -65,10 +80,9 @@ def _edge_window(open_: np.ndarray, high: np.ndarray, low: np.ndarray, close: np
     m = (h + l) / 2.0
 
     # row-validity mask (impossible OHLC -> NaN, per the operator contract)
-    valid = np.ones(nobs, dtype=bool)
+    valid = raw_valid.copy()
     for i in range(nobs):
-        if not (o[i] > 0.0 and h[i] > 0.0 and l[i] > 0.0 and c[i] > 0.0):
-            valid[i] = False
+        if not raw_valid[i]:
             continue
         if h[i] < max(o[i], c[i]) or l[i] > min(o[i], c[i]):
             valid[i] = False
@@ -208,7 +222,7 @@ def _ts_abdi_ranaldo_spread(
     high: pd.DataFrame,
     low: pd.DataFrame,
     window: int = 20,
-    correction: str = "monthly",
+    correction: str = "monthly",  # P1-30: fixed — the only legal value; not searchable
 ) -> pd.DataFrame:
     if int(window) < 3:
         raise ValueError("ts_abdi_ranaldo_spread requires window >= 3")
@@ -296,10 +310,14 @@ _SPECS: dict[str, dict[str, Any]] = {
         "input_units": {"open": "continuous_price", "high": "continuous_price",
                         "low": "continuous_price", "close": "continuous_price"},
         "output_unit": "ratio",
+        "param_specs": _EDGE_SPECS,
     },
     "ts_abdi_ranaldo_spread": {
         "fn": _ts_abdi_ranaldo_spread,
-        "params": ["close", "high", "low", "window", "correction"],
+        # P1-30: ``correction`` is fixed to ``"monthly"`` (the only legal value)
+        # and is not exposed as a search parameter — the kernel keeps an internal
+        # ``correction`` default but the signature only advertises the real inputs.
+        "params": ["close", "high", "low", "window"],
         "category": "market_microstructure",
         "domain": "liquidity",
         "unit": "ratio",
@@ -308,6 +326,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "input_units": {"close": "continuous_price", "high": "continuous_price",
                         "low": "continuous_price"},
         "output_unit": "ratio",
+        "param_specs": _ABDI_SPECS,
     },
     "ts_pastor_stambaugh_liquidity_gamma": {
         "fn": _ts_pastor_stambaugh_liquidity_gamma,
@@ -320,6 +339,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "input_units": {"ret": "return_decimal", "benchmark_ret": "return_decimal",
                         "amount": "money_local"},
         "output_unit": "ratio",
+        "param_specs": _PS_SPECS,
     },
 }
 
@@ -338,6 +358,7 @@ def _register() -> None:
             tags_extra=spec["tags_extra"],
             input_units=spec.get("input_units"),
             output_unit=spec.get("output_unit"),
+            param_specs=spec.get("param_specs"),
         )
     union_extended(*_SPECS.keys())
 

@@ -164,8 +164,14 @@ def _quantile_hist_mi(a: np.ndarray, b: np.ndarray, bins: int, normalized: bool)
         for j in range(bins):
             if p[i, j] > 0 and p_row[i, 0] > 0 and p_col[0, j] > 0:
                 mi += p[i, j] * np.log(p[i, j] / (p_row[i, 0] * p_col[0, j]))
-    # Miller–Madow finite-sample bias correction.
-    mi = max(0.0, mi - float((bins - 1) ** 2) / (2.0 * n))
+    # R5 P1-39(a): Miller–Madow finite-sample bias correction must use the number
+    # of *occupied* marginal cells, not the full bin grid.  With ties / empty bins
+    # the effective support is smaller than `bins`, so the previous
+    # `(bins-1)^2/(2n)` term over-corrected (and could even dominate for sparse
+    # cells).
+    r_occ = int((p_row[:, 0] > 0).sum())
+    c_occ = int((p_col[0, :] > 0).sum())
+    mi = max(0.0, mi - float((r_occ - 1) * (c_occ - 1)) / (2.0 * n))
     hx = -float(np.sum(p_row * np.log(np.where(p_row > 0, p_row, 1.0))))
     hy = -float(np.sum(p_col * np.log(np.where(p_col > 0, p_col, 1.0))))
     # A (near-)constant marginal carries no information: fail closed to NaN.
@@ -261,6 +267,13 @@ class TsLaggedMutualInformation(SeriesOperator):
 
 
 def _tail_dependence(a: np.ndarray, b: np.ndarray, q: float, upper: bool, min_tail_count: int) -> float:
+    """P(b in tail | a in tail) — directional, conditioned on ``a`` (source).
+
+    ``a`` is the conditioning / source series (operator param ``x``), ``b`` the
+    target series (operator param ``y``).  This is NOT a symmetric copula
+    dependence: it answers "given the SOURCE is in its tail, how likely is the
+    TARGET to be in its own tail".
+    """
     n = a.size
     if n < 4:
         return np.nan
@@ -290,11 +303,16 @@ def _tail_dependence(a: np.ndarray, b: np.ndarray, q: float, upper: bool, min_ta
     source="nonlinear_dependence",
 )
 class TsUpperTailDependence(SeriesOperator):
-    """上尾相关：P(x>Qx(q) ∧ y>Qy(q)) / P(x>Qx(q))。"""
+    """上尾条件概率 P(y 在右尾 | x 在右尾)，有方向：以 source x 为条件。
+
+    方向约定 (R5 P1-39(b))：输出是 P(y > Qy(q) | x > Qx(q))，即以 x（source/
+    条件变量）的右尾为条件，衡量 target y 是否跟随。不是对称的 copula
+    依赖；交换 x/y 会得到不同的数值。
+    """
 
     metadata = _metadata(
         "ts_upper_tail_dependence",
-        "上尾相关，条件样本不足返回 NaN。",
+        "方向性上尾依赖 P(target y 右尾 | source x 右尾)，条件样本不足返回 NaN。",
         ["x", "y", "window", "q", "min_tail_count"],
         unit="ratio",
     )
@@ -302,8 +320,9 @@ class TsUpperTailDependence(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 60, q: float = 0.9, min_tail_count: int = 5, **_: Any) -> pd.DataFrame:
         w = check_window(window)
         quantile = float(q)
-        if not 0.0 < quantile < 1.0:
-            raise ValueError("q must be in (0, 1)")
+        # R5 P1-39(c): upper tail is only meaningful past the median.
+        if not 0.5 < quantile < 1.0:
+            raise ValueError("q must be in (0.5, 1) for the upper tail")
         min_tail = max(2, int(min_tail_count))
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
@@ -323,11 +342,16 @@ class TsUpperTailDependence(SeriesOperator):
     source="nonlinear_dependence",
 )
 class TsLowerTailDependence(SeriesOperator):
-    """下尾相关：P(x≤Qx(q) ∧ y≤Qy(q)) / P(x≤Qx(q))。"""
+    """下尾条件概率 P(y 在左尾 | x 在左尾)，有方向：以 source x 为条件。
+
+    方向约定 (R5 P1-39(b))：输出是 P(y ≤ Qy(q) | x ≤ Qx(q))，即以 x（source/
+    条件变量）的左尾为条件，衡量 target y 是否跟随。不是对称的 copula
+    依赖；交换 x/y 会得到不同的数值。
+    """
 
     metadata = _metadata(
         "ts_lower_tail_dependence",
-        "下尾相关，条件样本不足返回 NaN。",
+        "方向性下尾依赖 P(target y 左尾 | source x 左尾)，条件样本不足返回 NaN。",
         ["x", "y", "window", "q", "min_tail_count"],
         unit="ratio",
     )
@@ -335,8 +359,9 @@ class TsLowerTailDependence(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 60, q: float = 0.1, min_tail_count: int = 5, **_: Any) -> pd.DataFrame:
         w = check_window(window)
         quantile = float(q)
-        if not 0.0 < quantile < 1.0:
-            raise ValueError("q must be in (0, 1)")
+        # R5 P1-39(c): lower tail is only meaningful below the median.
+        if not 0.0 < quantile < 0.5:
+            raise ValueError("q must be in (0, 0.5) for the lower tail")
         min_tail = max(2, int(min_tail_count))
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)

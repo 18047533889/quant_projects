@@ -9,7 +9,7 @@
   first event confirms.
 * ``directional_change_extent`` — normalized progress of the current DC event
   (signed by direction; magnitude = number of ``threshold`` moves since the
-  event's turning point).
+  event's origin, i.e. overshoot accumulates from the event start).
 * ``state_since_trend_tstat``  — OLS slope t-statistic of ``x`` over the
   current episode since the last reset.
 
@@ -48,7 +48,7 @@ class StateSinceReduce(SeriesOperator):
 
     metadata = metadata(
         "state_since_reduce",
-        "自上次 reset 以来的 episode 内 x 的累计/均值/计数/末值。",
+        "自上次 reset 以来的 episode 内 x 的累计/均值/计数/末值。mode 单位: sum/mean/last=level, count=count。",
         ["x", "reset_condition", "mode", "min_episode"],
         domain="price_volume",
         unit="level",
@@ -88,10 +88,16 @@ class StateSinceReduce(SeriesOperator):
                     last = np.nan
                     continue
                 xt = xv[row, col]
-                if np.isfinite(xt):
-                    acc = acc + float(xt)
-                    cnt = cnt + 1
-                    last = float(xt)
+                if not np.isfinite(xt):
+                    # P1-73: a missing x emits NaN that day (the docstring
+                    # contract) instead of continuing to print the old episode
+                    # statistics.  The episode accumulation itself is not
+                    # broken — acc/cnt/last are carried forward unchanged.
+                    out[row, col] = np.nan
+                    continue
+                acc = acc + float(xt)
+                cnt = cnt + 1
+                last = float(xt)
                 if cnt < min_e:
                     out[row, col] = np.nan
                     continue
@@ -111,7 +117,14 @@ def _dc_states_and_extents(price: np.ndarray, threshold: float) -> tuple[np.ndar
     state = np.full(rows, np.nan, dtype=float)
     extent = np.full(rows, np.nan, dtype=float)
     direction = 0
-    turning = np.nan  # extreme of the current direction (trough for up, peak for down)
+    # P0-25: two distinct state variables.  ``origin`` is the price level where
+    # the current event *started* (the extent reference, so overshoot
+    # accumulates from the event origin); ``extreme`` is the running extreme of
+    # the current direction (peak for up, trough for down) and only drives the
+    # reversal test.  Reusing one variable for both made a new high reset the
+    # extent to ~0 (extent = (p/turning - 1)/threshold with turning = p).
+    origin = np.nan
+    extreme = np.nan
     first = np.nan
     for row in range(rows):
         p = price[row]
@@ -119,7 +132,8 @@ def _dc_states_and_extents(price: np.ndarray, threshold: float) -> tuple[np.ndar
             state[row] = np.nan
             extent[row] = np.nan
             direction = 0
-            turning = np.nan
+            origin = np.nan
+            extreme = np.nan
             first = np.nan
             continue
         if direction == 0:
@@ -130,31 +144,39 @@ def _dc_states_and_extents(price: np.ndarray, threshold: float) -> tuple[np.ndar
                 continue
             if p >= first * (1.0 + threshold):
                 direction = 1
-                turning = first
+                origin = first
+                extreme = p
             elif p <= first * (1.0 - threshold):
                 direction = -1
-                turning = first
+                origin = first
+                extreme = p
             state[row] = float(direction)
             if direction == 0:
                 extent[row] = 0.0
             else:
-                extent[row] = (p / turning - 1.0) / threshold
+                extent[row] = (p / origin - 1.0) / threshold
             continue
         if direction == 1:
-            turning = max(turning, p)
-            if p <= turning * (1.0 - threshold):
+            if p > extreme:
+                extreme = p
+            if p <= extreme * (1.0 - threshold):
+                # reversal: a down event starts from the running peak
                 direction = -1
-                turning = p
+                origin = extreme
+                extreme = p
             state[row] = float(direction)
-            extent[row] = (p / turning - 1.0) / threshold
+            extent[row] = (p / origin - 1.0) / threshold
             continue
         # direction == -1
-        turning = min(turning, p)
-        if p >= turning * (1.0 + threshold):
+        if p < extreme:
+            extreme = p
+        if p >= extreme * (1.0 + threshold):
+            # reversal: an up event starts from the running trough
             direction = 1
-            turning = p
+            origin = extreme
+            extreme = p
         state[row] = float(direction)
-        extent[row] = (p / turning - 1.0) / threshold
+        extent[row] = (p / origin - 1.0) / threshold
     return state, extent
 
 
@@ -204,9 +226,11 @@ class DirectionalChangeState(SeriesOperator):
 class DirectionalChangeExtent(SeriesOperator):
     """Normalized progress of the current Directional-Change event.
 
-    Signed by direction: for an up event ``(price/turning - 1)/threshold``, for
-    a down event the same ratio (negative).  Magnitude = number of ``threshold``
-    moves since the event's turning point (1.0 at confirmation, then overshoot).
+    Signed by direction: for an up event ``(price/origin - 1)/threshold``, for
+    a down event the same ratio (negative), where ``origin`` is the price level
+    at which the event started.  Magnitude = number of ``threshold`` moves since
+    the event's origin (1.0 at confirmation, then overshoot accumulates; a new
+    running high inside an up event does *not* reset the extent — P0-25).
     """
 
     metadata = metadata(
@@ -239,11 +263,15 @@ class DirectionalChangeExtent(SeriesOperator):
 )
 class StateSinceTrendTstat(SeriesOperator):
     """OLS slope t-statistic of ``x`` over the current episode since the last
-    reset, computed incrementally over the episode (episode-relative time).
+    reset, computed incrementally over the episode.
 
-    Requires at least ``min_obs`` valid rows in the episode; NaN x rows are
-    skipped without breaking the episode.  Reset rows emit NaN and start a new
-    episode.
+    The regression time axis is the *physical* bar offset within the episode
+    (P1-74): a NaN ``x`` row advances the clock but does not contribute a point,
+    so a gap between valid observations is never compressed into an adjacent
+    pair.  Requires at least ``min_obs`` valid rows in the episode.  Reset rows
+    emit NaN and start a new episode; once the episode exceeds ``max_age`` rows
+    it is censored and emits NaN until a real state reset (P1-75) rather than
+    silently starting a synthetic fresh episode.
     """
 
     metadata = metadata(
@@ -277,6 +305,7 @@ class StateSinceTrendTstat(SeriesOperator):
             Syy = 0.0
             cnt = 0
             age = 0
+            censored = False
             for row in range(rows):
                 age += 1
                 if not np.isfinite(rv[row, col]):
@@ -284,22 +313,31 @@ class StateSinceTrendTstat(SeriesOperator):
                     Ss = Sy = Ssy = Ss2 = Syy = 0.0
                     cnt = 0
                     age = 0
+                    censored = False
                     continue
                 if bool(rv[row, col] != 0.0):
                     out[row, col] = np.nan
                     Ss = Sy = Ssy = Ss2 = Syy = 0.0
                     cnt = 0
                     age = 0
+                    censored = False
+                    continue
+                if censored:
+                    # P1-75: once max_age is exceeded the episode is censored —
+                    # stay NaN until a genuine reset, never start a synthetic
+                    # fresh episode on the very next bar.
+                    out[row, col] = np.nan
                     continue
                 if cap is not None and age > cap:
                     out[row, col] = np.nan
-                    Ss = Sy = Ssy = Ss2 = Syy = 0.0
-                    cnt = 0
-                    age = 0
+                    censored = True
                     continue
                 xt = xv[row, col]
                 if np.isfinite(xt):
-                    s = float(cnt)  # episode-relative time
+                    # P1-74: physical bar offset within the episode (age), not
+                    # the count of valid x rows — missing x rows must advance
+                    # the clock so the regression never compresses time.
+                    s = float(age)
                     xf = float(xt)
                     Ss += s
                     Sy += xf

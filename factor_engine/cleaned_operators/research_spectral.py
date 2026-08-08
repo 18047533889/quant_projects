@@ -18,9 +18,11 @@ stay out of the default production grammar:
 * ``ts_bds_statistic`` — the Brock–Dechert–Scheinkman statistic
   ``√n·(c_m − c_1^m)/σ_m`` for serial dependence (correlation integrals on a
   sup-norm embedding, triple correlation ``K`` via a two-pointer count).
-* ``ts_sr_gaussian_mean_shift_score`` — a *named* Gaussian Shiryaev-Roberts
-  mean-shift statistic (``W_t = max(0, W_{t-1} + μ·z_t − μ²/2)`` on
-  baseline-standardised residuals), not a generic non-parametric SR.
+* ``ts_sr_gaussian_mean_shift_score`` — the Gaussian Shiryaev-Roberts
+  mean-shift statistic: the likelihood-ratio recursion
+  ``R_t = (1 + R_{t-1})·Λ_t`` with ``Λ_t = exp(shift·z_t − shift²/2)`` on
+  baseline-standardised residuals, started after the baseline window;
+  output ``log(1 + R_n)``.
 
 All deterministic (no randomised kernels / bootstrap), strict-PIT, NaN
 fail-closed.
@@ -32,6 +34,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -41,6 +44,28 @@ from cleaned_operators.gemini_v2_common import (
 )
 
 _EPS = 1e-12
+
+# R5 P1-01: research-surface ints/floats are validated (n_segments=2.9, lag=1.9,
+# embedding_dim=2.9, baseline_window=3.9 are all rejected, never truncated).
+_BICOH_SPEC = {
+    "window": ParamSpec(dtype=int, min=16),
+    "n_segments": ParamSpec(dtype=int, min=2),
+}
+_GRANGER_SPEC = {
+    "window": ParamSpec(dtype=int, min=30),
+    "lag": ParamSpec(dtype=int, min=1),
+}
+_HSIC_SPEC = {"window": ParamSpec(dtype=int, min=24)}
+_BDS_SPEC = {
+    "window": ParamSpec(dtype=int, min=30),
+    "embedding_dim": ParamSpec(dtype=int, min=1),
+    "distance_multiplier": ParamSpec(dtype=float, min=0.0),
+}
+_SR_SPEC = {
+    "window": ParamSpec(dtype=int, min=20),
+    "shift_sigma": ParamSpec(dtype=float, min=0.0),
+    "baseline_window": ParamSpec(dtype=int, min=4),
+}
 
 
 def _rbf(a: np.ndarray, b: np.ndarray, sigma: float) -> np.ndarray:
@@ -59,6 +84,12 @@ def _bicoherence_max(v: np.ndarray, n_segments: int) -> float:
         return np.nan
     max_freq = min(32, seg // 2)
     B_sum = np.zeros((max_freq, max_freq), dtype=complex)
+    # P_sum[f1,f2] = Σ_s |X_s(f1)·X_s(f2)|²  — the standard bicoherence
+    # denominator uses the *segment product of powers* and the power of the sum
+    # frequency, NOT the product of three separate spectrum sums (P0-07 review:
+    # the old denominator only matched ``E|X(f1)X(f2)|²·E|X(f1+f2)|²`` up to a
+    # model-implied independence that does not hold, and lost the [0,1] bound).
+    P_sum = np.zeros((max_freq, max_freq), dtype=float)
     S_sum = np.zeros(max_freq, dtype=float)
     for s in range(ns):
         chunk = v[s * seg : (s + 1) * seg]
@@ -69,15 +100,18 @@ def _bicoherence_max(v: np.ndarray, n_segments: int) -> float:
         hann = 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (seg - 1.0))) if seg > 1 else np.ones(seg)
         X = np.fft.rfft(chunk * hann)
         Xf = X[1 : max_freq + 1]
+        pwr = np.abs(Xf) ** 2
         for f1 in range(1, max_freq + 1):
             x1 = Xf[f1 - 1]
+            p1 = pwr[f1 - 1]
             for f2 in range(1, max_freq - f1 + 1):
                 B_sum[f1 - 1, f2 - 1] += x1 * Xf[f2 - 1] * np.conj(Xf[f1 + f2 - 1])
-        S_sum += np.abs(Xf) ** 2
+                P_sum[f1 - 1, f2 - 1] += p1 * pwr[f2 - 1]
+        S_sum += pwr
     best = 0.0
     for f1 in range(1, max_freq + 1):
         for f2 in range(1, max_freq - f1 + 1):
-            denom = S_sum[f1 - 1] * S_sum[f2 - 1] * S_sum[f1 + f2 - 1]
+            denom = P_sum[f1 - 1, f2 - 1] * S_sum[f1 + f2 - 1]
             if denom <= _EPS:
                 continue
             b2 = abs(B_sum[f1 - 1, f2 - 1]) ** 2 / denom
@@ -124,10 +158,19 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
         return np.nan
     Ytr = Y[:train_n]
     Yte = Y[train_n:]
-    Yl_tr = Ylags[:train_n]
-    Yl_te = Ylags[train_n:]
-    Xl_tr = Xlags[:train_n]
-    Xl_te = Xlags[train_n:]
+
+    # R5 P1-13: the RBF kernel is scale-sensitive — raw ``Y`` lags (~0.01) and
+    # raw ``X`` lags (e.g. volume ~1e7) would let the full model's distance be
+    # dominated by ``X``.  Both lag blocks are standardised with STATS FITTED ON
+    # THE TRAINING BLOCK ONLY (never the test block), so no OOS contamination.
+    def _standardize(tr: np.ndarray, te: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        mu = tr.mean(axis=0)
+        sd = tr.std(axis=0)
+        sd = np.where(np.isfinite(sd) & (sd > _EPS), sd, 1.0)
+        return (tr - mu) / sd, (te - mu) / sd
+
+    Yl_tr, Yl_te = _standardize(Ylags[:train_n], Ylags[train_n:])
+    Xl_tr, Xl_te = _standardize(Xlags[:train_n], Xlags[train_n:])
 
     def _kridge(K_tr, target, K_te):
         ntr = K_tr.shape[0]
@@ -246,6 +289,12 @@ def _bds_statistic(v: np.ndarray, m: int, distance_multiplier: float) -> float:
         return np.nan
 
     def _c_integral(dim: int) -> float:
+        # P0-08: the embedded sample has N_m = n - m + 1 vectors; the correlation
+        # integral denominator must be N_m(N_m - 1), not the raw n(n - 1) used
+        # for dim == 1 (otherwise C_m is systematically scaled down for m > 1).
+        N_m = n - dim + 1
+        if N_m < 2:
+            return np.nan
         count = 0
         if dim == 1:
             for i in range(n):
@@ -254,12 +303,12 @@ def _bds_statistic(v: np.ndarray, m: int, distance_multiplier: float) -> float:
                     if abs(vi - v[j]) < eps:
                         count += 1
         else:
-            for i in range(n - dim + 1):
+            for i in range(N_m):
                 seg_i = v[i : i + dim]
-                for j in range(i + 1, n - dim + 1):
+                for j in range(i + 1, N_m):
                     if np.max(np.abs(seg_i - v[j : j + dim])) < eps:
                         count += 1
-        return 2.0 * count / (n * (n - 1))
+        return 2.0 * count / (N_m * (N_m - 1))
 
     c1 = _c_integral(1)
     cm = _c_integral(m)
@@ -325,11 +374,24 @@ def _sr_gaussian(v: np.ndarray, shift_sigma: float, baseline_window: int) -> flo
     if not np.isfinite(mu) or not np.isfinite(sd) or sd <= _EPS:
         return np.nan
     shift = float(shift_sigma)
-    w_stat = 0.0
-    for t in range(n):
+    if not np.isfinite(shift) or shift <= 0.0:
+        return np.nan
+    # P0-09: true Shiryaev-Roberts likelihood-ratio recursion
+    #   R_t = (1 + R_{t-1}) · Λ_t,   Λ_t = exp(shift·z_t − shift²/2)
+    # started only AFTER the baseline window — the baseline observations define
+    # the null and must not be re-scored as candidate shifts (the old code ran a
+    # CUSUM-style max(0, W + μz − μ²/2) over rows 0..n using the baseline itself).
+    # R5 P0-10 numerical form: track log R_t in log-space
+    #   logR_t = logaddexp(0, logR_{t-1}) + logΛ_t
+    # (logaddexp(0, ·) is log(1 + R_{t-1})) — the equivalent linear recursion
+    # ``(1+R)·Λ`` overflows to inf on a real mean shift and wrongly read back
+    # as 0.0.  Output log(1 + R_n), monotone in the accumulated evidence.
+    logR = float("-inf")  # R_0 = 0
+    for t in range(bw, n):
         z = (v[t] - mu) / sd
-        w_stat = max(0.0, w_stat + shift * z - shift * shift / 2.0)
-    return float(w_stat)
+        log_lambda = shift * z - shift * shift / 2.0
+        logR = np.logaddexp(0.0, logR) + log_lambda
+    return float(np.logaddexp(0.0, logR))
 
 
 def _ts_sr_gaussian_mean_shift_score(x: pd.DataFrame, window: int = 120, shift_sigma: float = 1.0, baseline_window: int = 40) -> pd.DataFrame:
@@ -362,6 +424,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 7,
         "tags_extra": [],
         "output_unit": "ratio",
+        "param_specs": _BICOH_SPEC,
     },
     "ts_kernel_granger_score": {
         "fn": _ts_kernel_granger_score,
@@ -372,6 +435,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 9,
         "tags_extra": [],
         "output_unit": "level",
+        "param_specs": _GRANGER_SPEC,
     },
     "ts_residualized_hsic": {
         "fn": _ts_residualized_hsic,
@@ -382,6 +446,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 9,
         "tags_extra": [],
         "output_unit": "level",
+        "param_specs": _HSIC_SPEC,
     },
     "ts_bds_statistic": {
         "fn": _ts_bds_statistic,
@@ -392,6 +457,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 6,
         "tags_extra": [],
         "output_unit": "level",
+        "param_specs": _BDS_SPEC,
     },
     "ts_sr_gaussian_mean_shift_score": {
         "fn": _ts_sr_gaussian_mean_shift_score,
@@ -402,6 +468,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 4,
         "tags_extra": [],
         "output_unit": "level",
+        "param_specs": _SR_SPEC,
     },
 }
 
@@ -419,6 +486,7 @@ def _register() -> None:
             source="research_spectral",
             tags_extra=spec["tags_extra"],
             output_unit=spec.get("output_unit"),
+            param_specs=spec.get("param_specs"),
         )
     union_research(*_SPECS.keys())
 

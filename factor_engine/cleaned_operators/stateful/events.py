@@ -80,7 +80,10 @@ class CrossEvent(SeriesOperator):
 
     ``direction="up"``: 1 where ``x_t > y_t`` and ``x_{t-1} <= y_{t-1}``.
     ``direction="down"``: 1 where ``x_t < y_t`` and ``x_{t-1} >= y_{t-1}``.
-    NaN in either series breaks the comparison (0 output, no cross).
+    ``direction`` must be ``"up"`` or ``"down"`` (anything else raises
+    ValueError, P1-70).  NaN in either series (current or previous row) emits
+    NaN — a missing observation is never read as "no cross"; row 0 has no
+    predecessor so it is also NaN.
     """
 
     metadata = metadata(
@@ -95,9 +98,14 @@ class CrossEvent(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, direction: str = "up", **_: Any) -> pd.DataFrame:
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
-        up = str(direction).lower() != "down"
+        d = str(direction).lower()
+        if d not in {"up", "down"}:
+            raise ValueError(f"direction must be 'up' or 'down', got {direction!r}")
+        up = d == "up"
         rows, cols = xv.shape
-        out = np.zeros((rows, cols), dtype=float)
+        # P1-70: a missing current/previous value emits NaN, never 0 (which
+        # would be indistinguishable from a genuine "no cross").
+        out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(1, rows):
                 cur_ok = np.isfinite(xv[row, col]) and np.isfinite(yv[row, col])

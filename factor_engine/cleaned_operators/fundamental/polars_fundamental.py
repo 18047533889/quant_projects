@@ -738,15 +738,43 @@ def fin_surprise_event_percentile(actual, expected, scale_base, period_id, perio
     return _make(surprise, cols, out)
 
 
-def _same_target_1d(pv: list) -> np.ndarray:
-    n = len(pv)
-    out = np.zeros(n, dtype=bool)
-    prev_key = None
-    for i, raw in enumerate(pv):
-        key = _period_key(raw)
-        out[i] = (key is not None) and (key == prev_key)
-        prev_key = key
-    return out
+def _revision_masks_1d(xv, pv):
+    """Polars mirror of the pandas complete-data revision masks (R4-26).
+
+    A revision can only be asserted when current value, prior value, current
+    period id and prior period id are ALL present.  A missing input (or a prior
+    observation missing because of a data gap) makes the row undetermined -> the
+    caller must emit NaN, never a guessed 0.  The first row of the panel is a
+    valid baseline (no prior disclosure to revise -> complete, "no revision").
+    """
+    n = len(xv)
+    prev_x = _shift(xv, 1)
+    pid_keys = [_period_key(raw) for raw in pv]
+    prev_pid = [None] + pid_keys[:-1]
+    first_row = np.zeros(n, dtype=bool)
+    first_row[0] = True
+    prev_ok = np.isfinite(prev_x) & np.array(
+        [key is not None for key in prev_pid], dtype=bool
+    )
+    complete = np.isfinite(xv) & np.array(
+        [key is not None for key in pid_keys], dtype=bool
+    ) & (prev_ok | first_row)
+    same = np.array(
+        [pid_keys[t] == prev_pid[t] for t in range(n)], dtype=bool
+    ) & prev_ok
+    delta = xv - prev_x
+    changed = (np.abs(delta) > 0) & prev_ok
+    return complete, same, changed, delta
+
+
+def _revision_event_1d(xv, pv) -> np.ndarray:
+    complete, same, changed, _ = _revision_masks_1d(xv, pv)
+    return complete & same & changed
+
+
+def _revision_complete_1d(xv, pv) -> np.ndarray:
+    complete, _, _, _ = _revision_masks_1d(xv, pv)
+    return complete
 
 
 def fin_expectation_revision(expected, target_period_id):
@@ -755,9 +783,13 @@ def fin_expectation_revision(expected, target_period_id):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         arr = expected[c].to_numpy()
-        diff = arr - _shift(arr, 1)
-        same = _same_target_1d(_pv_of(target_period_id, c))
-        out[:, i] = np.where(same, diff, 0.0)
+        pv = _pv_of(target_period_id, c)
+        complete, same, changed, delta = _revision_masks_1d(arr, pv)
+        revision = complete & same & changed
+        # 0 only when the data is complete and a same-target revision is
+        # confirmed absent; missing inputs -> NaN (review R4-26).
+        out[:, i] = np.where(revision, delta, 0.0)
+        out[:, i] = np.where(complete, out[:, i], np.nan)
     return _make(expected, cols, out)
 
 
@@ -767,9 +799,15 @@ def fin_expectation_revision_pct(expected, target_period_id):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         arr = expected[c].to_numpy()
-        revision = _sdiv_num_den(arr, _shift(arr, 1)) - 1.0
-        same = _same_target_1d(_pv_of(target_period_id, c))
-        out[:, i] = np.where(same, revision, 0.0)
+        pv = _pv_of(target_period_id, c)
+        complete, same, changed, _ = _revision_masks_1d(arr, pv)
+        revision = complete & same & changed
+        prev_x = _shift(arr, 1)
+        denom = np.where(prev_x != 0, prev_x, np.nan)
+        pct = _sdiv_num_den(arr, denom) - 1.0
+        pct[~np.isfinite(pct)] = np.nan
+        out[:, i] = np.where(revision, pct, 0.0)
+        out[:, i] = np.where(complete, out[:, i], np.nan)
     return _make(expected, cols, out)
 
 
@@ -784,15 +822,12 @@ def fin_expectation_revision_speed(expected, target_period_id, window_days=60):
     rows = expected.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        out[:, i] = _rolling_sum_nanmin_1d(revision[c].to_numpy(), window)
+        complete = _revision_complete_1d(
+            expected[c].to_numpy(), _pv_of(target_period_id, c)
+        )
+        speed = _rolling_sum_nanmin_1d(revision[c].to_numpy(), window)
+        out[:, i] = np.where(complete, speed, np.nan)
     return _make(revision, cols, out)
-
-
-def _revision_event_1d(xv, pv) -> np.ndarray:
-    same = _same_target_1d(pv)
-    diff = xv - _shift(xv, 1)
-    changed = (np.abs(diff) > 0) & np.isfinite(xv) & np.isfinite(_shift(xv, 1))
-    return same & changed
 
 
 def fin_expectation_revision_count(expected, target_period_id, window_days=60):
@@ -801,8 +836,12 @@ def fin_expectation_revision_count(expected, target_period_id, window_days=60):
     rows = expected.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        event = _revision_event_1d(expected[c].to_numpy(), _pv_of(target_period_id, c))
-        out[:, i] = _rolling_sum_1d(event.astype(float), window, 1)
+        xv = expected[c].to_numpy()
+        pv = _pv_of(target_period_id, c)
+        complete = _revision_complete_1d(xv, pv)
+        event = _revision_event_1d(xv, pv)
+        count = _rolling_sum_1d(event.astype(float), window, 1)
+        out[:, i] = np.where(complete, count, np.nan)
     return _make(expected, cols, out)
 
 
@@ -813,7 +852,11 @@ def fin_expectation_revision_magnitude(expected, target_period_id, window_days=6
     rows = expected.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        out[:, i] = _rolling_sum_nanmin_1d(np.abs(revision[c].to_numpy()), window)
+        complete = _revision_complete_1d(
+            expected[c].to_numpy(), _pv_of(target_period_id, c)
+        )
+        magnitude = _rolling_sum_nanmin_1d(np.abs(revision[c].to_numpy()), window)
+        out[:, i] = np.where(complete, magnitude, np.nan)
     return _make(revision, cols, out)
 
 
@@ -823,12 +866,31 @@ def fin_days_since_expectation_revision(expected, target_period_id, max_days=252
     rows = expected.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        event = _revision_event_1d(expected[c].to_numpy(), _pv_of(target_period_id, c))
+        xv = expected[c].to_numpy()
+        pv = _pv_of(target_period_id, c)
+        event = _revision_event_1d(xv, pv)
+        # Observed clock (R4-27): never age blindly across an unobservable gap.
+        # A gap row -> NaN and the age reference is reset; the first complete
+        # observation after a gap is treated as a fresh revision boundary (0).
+        # ``age`` starts at ``cap`` (matching the pandas reference) so the first
+        # complete non-event row reads as ``cap``, not 0.
         age = cap
-        arr = np.zeros(rows, dtype=float)
+        arr = np.full(rows, np.nan, dtype=float)
         for t in range(rows):
-            age = 0 if bool(event[t]) else min(cap, age + 1)
-            arr[t] = float(age)
+            complete = bool(np.isfinite(xv[t]) and _period_key(pv[t]) is not None)
+            if not complete:
+                age = None
+                continue
+            if bool(event[t]):
+                arr[t] = 0.0
+                age = 0
+            elif age is not None:
+                age = min(cap, age + 1)
+                arr[t] = float(age)
+            else:
+                # Observed-clock resume after a gap: fresh reference (age 0).
+                arr[t] = 0.0
+                age = 0
         out[:, i] = arr
     return _make(expected, cols, out)
 
@@ -1130,8 +1192,13 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
         out = np.full((rows, len(cols)), np.nan, dtype=float)
         for i, c in enumerate(cols):
             xv = _xv_of(x, c)
-            event = _revision_event_1d(xv, _pv_of(period_id, c))
-            out[:, i] = np.where(event, xv - _shift(xv, 1), 0.0)
+            pv = _pv_of(period_id, c)
+            complete, same, changed, delta = _revision_masks_1d(xv, pv)
+            revision = complete & same & changed
+            # 0 only when data is complete and a same-period revision is
+            # confirmed absent; missing inputs -> NaN (review R4-26).
+            values = np.where(revision, delta, 0.0)
+            out[:, i] = np.where(complete, values, np.nan)
         return _make(x, cols, out)
     if which == "pct":
         cols = _cols(x, period_id)
@@ -1139,9 +1206,15 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
         out = np.full((rows, len(cols)), np.nan, dtype=float)
         for i, c in enumerate(cols):
             xv = _xv_of(x, c)
-            event = _revision_event_1d(xv, _pv_of(period_id, c))
-            revision = _sdiv_num_den(xv, _shift(xv, 1)) - 1.0
-            out[:, i] = np.where(event, revision, 0.0)
+            pv = _pv_of(period_id, c)
+            complete, same, changed, _ = _revision_masks_1d(xv, pv)
+            revision = complete & same & changed
+            prev_x = _shift(xv, 1)
+            denom = np.where(prev_x != 0, prev_x, np.nan)
+            pct = _sdiv_num_den(xv, denom) - 1.0
+            pct[~np.isfinite(pct)] = np.nan
+            values = np.where(revision, pct, 0.0)
+            out[:, i] = np.where(complete, values, np.nan)
         return _make(x, cols, out)
     if which == "direction":
         delta = _revision_compose(x, period_id, "delta")
@@ -1157,8 +1230,12 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
         rows = x.height
         out = np.full((rows, len(cols)), np.nan, dtype=float)
         for i, c in enumerate(cols):
-            event = _revision_event_1d(_xv_of(x, c), _pv_of(period_id, c))
-            out[:, i] = _rolling_sum_1d(event.astype(float), window, 1)
+            xv = _xv_of(x, c)
+            pv = _pv_of(period_id, c)
+            complete = _revision_complete_1d(xv, pv)
+            event = _revision_event_1d(xv, pv)
+            count = _rolling_sum_1d(event.astype(float), window, 1)
+            out[:, i] = np.where(complete, count, np.nan)
         return _make(x, cols, out)
     if which == "magnitude":
         pct = _revision_compose(x, period_id, "pct")
@@ -1166,7 +1243,11 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
         rows = x.height
         out = np.full((rows, len(cols)), np.nan, dtype=float)
         for i, c in enumerate(cols):
-            out[:, i] = _rolling_sum_nanmin_1d(np.abs(pct[c].to_numpy()), window)
+            xv = _xv_of(x, c)
+            pv = _pv_of(period_id, c)
+            complete = _revision_complete_1d(xv, pv)
+            magnitude = _rolling_sum_nanmin_1d(np.abs(pct[c].to_numpy()), window)
+            out[:, i] = np.where(complete, magnitude, np.nan)
         return _make(pct, cols, out)
     if which == "restated":
         count = _revision_compose(x, period_id, "count", window_days=window_days)
@@ -1174,9 +1255,14 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
         rows = x.height
         out = np.full((rows, len(cols)), np.nan, dtype=float)
         for i, c in enumerate(cols):
-            out[:, i] = (count[c].to_numpy() > 0).astype(float)
+            arr = count[c].to_numpy()
+            flag = np.where(arr > 0, 1.0, 0.0)
+            out[:, i] = np.where(np.isfinite(arr), flag, np.nan)
         return _make(count, cols, out)
-    # days_since_update
+    # days_since_update / staleness — observed clock (R4-27): never age blindly
+    # across an unobservable gap.  A missing current row emits NaN and resets the
+    # age reference; a resumed observation after a gap is treated as a fresh
+    # update boundary (age 0) because the age cannot be confirmed across it.
     cap = _pi(max_days, "max_days")
     cols = _cols(x, period_id)
     rows = x.height
@@ -1184,20 +1270,34 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
     for i, c in enumerate(cols):
         xv = _xv_of(x, c)
         pv = _pv_of(period_id, c)
-        prev_key = [None] + pv[:-1]
-        update = np.zeros(rows, dtype=bool)
+        age = None
+        last_x = None
+        last_pid = None
+        arr = np.full(rows, np.nan, dtype=float)
         for t in range(rows):
-            same_period = _period_key(pv[t]) == _period_key(prev_key[t])
-            value_changed = np.isfinite(xv[t]) and (t == 0 or not np.isclose(xv[t], xv[t - 1], equal_nan=True))
-            update[t] = (not same_period) or value_changed
-        age = cap
-        arr = np.zeros(rows, dtype=float)
-        for t in range(rows):
-            if t == 0 or bool(update[t]):
+            complete = bool(np.isfinite(xv[t]) and _period_key(pv[t]) is not None)
+            if not complete:
+                # Cannot observe an update event today -> age is unknown.
+                age = None
+                continue
+            if last_x is None:
+                # First complete observation: the value just became visible.
+                arr[t] = 0.0
                 age = 0
-            else:
+                last_x, last_pid = xv[t], pv[t]
+                continue
+            update_event = bool(last_pid != pv[t] or last_x != xv[t])
+            if update_event:
+                arr[t] = 0.0
+                age = 0
+            elif age is not None:
                 age = min(cap, age + 1)
-            arr[t] = float(age)
+                arr[t] = float(age)
+            else:
+                # Observed-clock resume after a gap: fresh reference (age 0).
+                arr[t] = 0.0
+                age = 0
+            last_x, last_pid = xv[t], pv[t]
         out[:, i] = arr
     return _make(x, cols, out)
 

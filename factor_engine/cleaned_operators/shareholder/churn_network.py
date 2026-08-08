@@ -328,13 +328,17 @@ _mk(
 
 def _share_hhi(*args):
     stacked = _stack(list(args))
+    # P1-135: absent ranks arrive as 0 (zero-fill contract), but NaN means
+    # UNKNOWN, never a confirmed 0%.  nan_to_num'ing unknown back to 0 silently
+    # understates the top-10 concentration.  One unknown share poisons the HHI
+    # -> fail closed to NaN.
+    unknown = np.isnan(stacked).any(axis=0)
     values = np.nan_to_num(stacked)
     total = values.sum(axis=0)
     with np.errstate(divide="ignore", invalid="ignore"):
-        shares = values / total
+        shares = values / np.where(total > 0, total, 1)
         hhi = np.sum(shares * shares, axis=0)
-    hhi = np.where(total > 0, hhi, np.nan)
-    return _frame_like(args[0], hhi)
+    return _frame_like(args[0], np.where((total > 0) & ~unknown, hhi, np.nan))
 
 
 _mk(
@@ -352,9 +356,11 @@ _mk(
 
 
 def _pledged_holder_count(*args):
-    stacked = np.nan_to_num(_stack(list(args)))
-    count = np.sum(stacked > 0, axis=0).astype(float)
-    return _frame_like(args[0], count)
+    stacked = _stack(list(args))
+    # P1-135: NaN (unknown pledge) must not be counted as a non-pledged holder.
+    unknown = np.isnan(stacked).any(axis=0)
+    count = np.sum(np.nan_to_num(stacked) > 0, axis=0).astype(float)
+    return _frame_like(args[0], np.where(unknown, np.nan, count))
 
 
 _mk(
@@ -379,8 +385,11 @@ _mk(
 
 def _pledge_churn(*args):
     cur, prev = _cur_prev_ranked(args)
+    # P1-135: unknown (NaN) pledge on either side makes the period change
+    # undefined; it must not be silently zero-filled as "no change".
+    unknown = np.isnan(cur) | np.isnan(prev)
     churn = np.nansum(np.abs(np.nan_to_num(cur) - np.nan_to_num(prev)), axis=0)
-    return _frame_like(args[0], churn)
+    return _frame_like(args[0], np.where(unknown.any(axis=0), np.nan, churn))
 
 
 _mk(
@@ -417,15 +426,31 @@ _mk(
 )
 
 
-def _slope_of(vals: np.ndarray) -> float:
-    """Least-squares slope over equally spaced finite observations."""
-    finite = vals[np.isfinite(vals)]
-    if len(finite) < 3:
+def _slope_of(vals: np.ndarray, x: np.ndarray | None = None) -> float:
+    """Least-squares slope over finite observations.
+
+    ``x`` is the regression abscissa (snapshot date / fiscal ordinal); when
+    omitted it defaults to equal row spacing (0,1,2,...) for the daily rolling
+    path.  Uses a centred dot product (population cov/var, SAME ddof) instead
+    of ``np.cov(ddof=1)/np.var(ddof=0)`` — the mixed ddof inflated the slope by
+    n/(n-1) (P1-136).
+    """
+    vals = np.asarray(vals, dtype=float)
+    finite_mask = np.isfinite(vals)
+    if x is None:
+        t = np.arange(vals.shape[0], dtype=float)[finite_mask]
+    else:
+        t = np.asarray(x, dtype=float)[finite_mask]
+    v = vals[finite_mask]
+    if len(v) < 3:
         return np.nan
-    t = np.arange(len(finite), dtype=float)
-    if np.var(t) <= _EPS:
+    tb = float(np.mean(t))
+    vb = float(np.mean(v))
+    var = float(np.mean((t - tb) ** 2))
+    if var <= _EPS:
         return np.nan
-    return float(np.cov(t, finite)[0, 1] / np.var(t))
+    cov = float(np.mean((t - tb) * (v - vb)))
+    return cov / var
 
 
 def _concentration_slope(concentration, window=8, snapshot_date=None):
@@ -445,6 +470,10 @@ def _snapshot_aligned_slope(concentration, snapshot_date, window):
     value belongs to), the window advances once per distinct snapshot per
     instrument, then the trend is carried forward to each daily row until the
     next report arrives (audit §6.8).
+
+    The regression abscissa is the snapshot DATE (numeric epoch), not the
+    equal row index 0,1,2,... — missing / irregularly spaced report periods are
+    weighted by their real calendar distance (P1-136).
     """
     out = pd.DataFrame(np.nan, index=concentration.index, columns=concentration.columns)
     for col in concentration.columns:
@@ -459,9 +488,37 @@ def _snapshot_aligned_slope(concentration, snapshot_date, window):
         )
         if len(snapshots) < 3:
             continue
-        rolled = snapshots.rolling(window, min_periods=3).apply(_slope_of, raw=True)
-        # Carry the last computed trend forward onto the daily grid causally.
-        out[col] = rolled.reindex(concentration.index).ffill()
+        # Snapshot dates as epoch DAYS (not ns) — ns ~1.7e18 loses float64
+        # precision in the centred dot product and collapses the slope to ~0.
+        sdates = snapshots.index.to_numpy(dtype="datetime64[ns]").astype("int64").astype(float) / 8.64e13
+        svalues = snapshots.to_numpy(dtype=float)
+        n = len(svalues)
+        slopes = np.full(n, np.nan, dtype=float)
+        for i in range(n):
+            lo = max(0, i - window + 1)
+            seg_v = svalues[lo : i + 1]
+            seg_x = sdates[lo : i + 1]
+            if np.isfinite(seg_v).sum() < 3:
+                continue
+            slopes[i] = _slope_of(seg_v, x=seg_x)
+        # Map each daily row's snapshot date to its computed slope, then carry
+        # forward onto the ffilled tail.  The old ``reindex(concentration.index)
+        # .ffill()`` only aligned when a report-end snapshot date happened to be
+        # a trading day (quarter ends often are not) — report dates must not be
+        # dropped for not appearing verbatim in the trading calendar.
+        slope_by_sd = {}
+        for k in range(n):
+            key = pd.Timestamp(snapshots.index[k]).normalize()
+            slope_by_sd[key] = slopes[k]
+        daily = pd.Series(np.nan, index=concentration.index, dtype=float)
+        sd_col = snapshot_date[col]
+        for i in range(len(sd_col)):
+            sdv = sd_col.iloc[i]
+            if pd.notna(sdv):
+                key = pd.Timestamp(sdv).normalize()
+                if key in slope_by_sd:
+                    daily.iloc[i] = slope_by_sd[key]
+        out[col] = daily.ffill()
     return out
 
 
@@ -474,8 +531,63 @@ _mk(
 
 
 def _concentration_acceleration(concentration, window=8, snapshot_date=None):
-    slope = _concentration_slope(concentration, int(window), snapshot_date=snapshot_date)
-    return slope - slope.shift(1)
+    if snapshot_date is None:
+        # Daily grid: second difference of the carried-forward slope (legacy).
+        slope = _concentration_slope(concentration, int(window), snapshot_date=None)
+        return slope - slope.shift(1)
+    return _snapshot_aligned_acceleration(concentration, snapshot_date, int(window))
+
+
+def _snapshot_aligned_acceleration(concentration, snapshot_date, window):
+    """Second difference of the trend on the SNAPSHOT clock, then carry daily.
+
+    The daily-grid difference ``slope - slope.shift(1)`` is ~0 on every ffill
+    flat day and jumps only on snapshot days (P1-137).  Compute
+    slope_k - slope_{k-1} between consecutive distinct snapshots instead, then
+    as-of carry that value onto the daily grid.
+    """
+    out = pd.DataFrame(np.nan, index=concentration.index, columns=concentration.columns)
+    for col in concentration.columns:
+        frame = pd.concat(
+            [concentration[col], snapshot_date[col]], axis=1, keys=["value", "sd"]
+        )
+        snapshots = (
+            frame.dropna(subset=["sd"])
+            .sort_index()
+            .groupby("sd")["value"]
+            .last()
+        )
+        if len(snapshots) < 3:
+            continue
+        sdates = snapshots.index.to_numpy(dtype="datetime64[ns]").astype("int64").astype(float) / 8.64e13
+        svalues = snapshots.to_numpy(dtype=float)
+        n = len(svalues)
+        slopes = np.full(n, np.nan, dtype=float)
+        for i in range(n):
+            lo = max(0, i - window + 1)
+            seg_v = svalues[lo : i + 1]
+            seg_x = sdates[lo : i + 1]
+            if np.isfinite(seg_v).sum() < 3:
+                continue
+            slopes[i] = _slope_of(seg_v, x=seg_x)
+        accel = np.full(n, np.nan, dtype=float)
+        accel[1:] = slopes[1:] - slopes[:-1]
+        # Same daily-grid mapping as the slope: carry each snapshot's second
+        # difference onto its ffilled daily rows (P1-137).
+        accel_by_sd = {}
+        for k in range(n):
+            key = pd.Timestamp(snapshots.index[k]).normalize()
+            accel_by_sd[key] = accel[k]
+        daily = pd.Series(np.nan, index=concentration.index, dtype=float)
+        sd_col = snapshot_date[col]
+        for i in range(len(sd_col)):
+            sdv = sd_col.iloc[i]
+            if pd.notna(sdv):
+                key = pd.Timestamp(sdv).normalize()
+                if key in accel_by_sd:
+                    daily.iloc[i] = accel_by_sd[key]
+        out[col] = daily.ffill()
+    return out
 
 
 _mk(
@@ -514,26 +626,42 @@ _mk(
 
 
 def _common_holding_peer_return(peer_return, own_return, overlap):
-    """共同持股 peer 收益：重叠加权的同行收益（剔除自身）。"""
-    return peer_return - overlap * own_return
+    """共同持股 peer 收益：重叠加权的同行收益（剔除自身）。
+
+    Assumption (P1-139): ``peer_return`` is an overlap-weighted peer average
+    that INCLUDES the instrument's own return weighted by ``overlap``; only
+    then does ``peer_return - overlap * own_return`` equal the overlap-weighted
+    ex-self peer return.  The SourceContract does not guarantee this shape, so
+    the assumption is documented here.  The operator fails closed when
+    ``overlap`` is unknown (NaN) — an unknown overlap is never treated as 0.
+    """
+    out = peer_return - overlap * own_return
+    if hasattr(overlap, "notna"):
+        out = out.where(overlap.notna())
+    return out.replace([np.inf, -np.inf], np.nan)
 
 
 _mk(
     "holder_common_holding_peer_return",
-    "共同持股同行收益（重叠加权，剔除自身）。",
+    "共同持股同行收益（重叠加权，剔除自身；假设 peer_return 已含 overlap*own_return 分量，overlap 未知→NaN）。",
     ["peer_return", "own_return", "overlap"],
     _common_holding_peer_return,
 )
 
 
 def _peer_return_breadth(breadth, scale=1.0):
+    # P1-138: ``scale`` is a pure multiplicative parameter — under any positive
+    # cross-sectional rank the ordering is identical for every positive value,
+    # so exposing it in the searchable surface only polluted the search space.
+    # Removed from the metadata surface; kept as a backward-compat positional
+    # that Recipe arithmetic may fold away.
     return breadth * float(scale)
 
 
 _mk(
     "holder_peer_return_breadth",
-    "股东跨股票 breadth（共同持股覆盖度）。",
-    ["breadth", "scale"],
+    "股东跨股票 breadth（共同持股覆盖度）。scale 纯乘法参数，横截面 rank 下不改变排序，交由 Recipe 算术层。",
+    ["breadth"],
     _peer_return_breadth,
     unit="level",
 )

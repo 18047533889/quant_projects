@@ -36,15 +36,18 @@ _EPS = 1e-12
 
 
 def _trailing_contiguous_finite(chunk: np.ndarray) -> np.ndarray:
-    """Longest trailing contiguous finite run (never re-connects across a gap)."""
+    """Longest trailing contiguous finite run (never re-connects across a gap).
+
+    R5 P0-03: a NaN at the current row returns the empty block so the caller
+    emits NaN instead of re-using the previous contiguous historical run.
+    """
     n = chunk.shape[0]
+    if n == 0 or not np.isfinite(chunk[-1]):
+        return chunk[:0]
     end = n
-    while end > 0 and not np.isfinite(chunk[end - 1]):
+    while end > 0 and np.isfinite(chunk[end - 1]):
         end -= 1
-    start = end
-    while start > 0 and np.isfinite(chunk[start - 1]):
-        start -= 1
-    return chunk[start:end]
+    return chunk[end:]
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:

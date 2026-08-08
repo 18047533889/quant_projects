@@ -34,6 +34,28 @@ _EPS = 1e-12
 _MAD_CONST = 1.4826
 
 
+def _trailing_contiguous(chunk: np.ndarray) -> np.ndarray:
+    """Trailing contiguous run of finite values (no time-axis compression).
+
+    Drops only *leading* NaNs; an interior or trailing NaN (gap) truncates the
+    run so retained points keep their original relative spacing.  Empty when
+    the current (trailing) value is NaN.  Used where adjacent-products /
+    deltas must be genuinely contiguous (bipower proxies), unlike
+    ``valid_values`` which would reconnect points across a missing-value gap.
+    """
+    chunk = np.asarray(chunk, dtype=float)
+    n = chunk.size
+    if n == 0:
+        return chunk
+    finite = np.isfinite(chunk)
+    if not finite[-1]:
+        return np.empty(0, dtype=float)
+    last_bad = np.flatnonzero(~finite)
+    if last_bad.size == 0:
+        return chunk
+    return chunk[last_bad[-1] + 1 :]
+
+
 def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -109,11 +131,14 @@ class TsVolOfVol(SeriesOperator):
     source="alpha_language_volatility",
 )
 class TsVolAcceleration(SeriesOperator):
-    """波动加速度: log((v_t + eps) / (v_{t-lag} + eps))。正 = 波动升温, 负 = 降温。"""
+    """波动加速度: log(v_t / v_{t-lag})。正 = 波动升温, 负 = 降温。
+
+    任一侧波动为零/退化(< eps)时 fail-close -> NaN, 避免 log(EPS) 制造巨大信号。
+    """
 
     metadata = _metadata(
         "ts_vol_acceleration",
-        "当前波动 vs lag 前波动的对数比。",
+        "当前波动 vs lag 前波动的对数比(零波动 -> NaN)。",
         ["ret", "inner_window", "lag", "min_periods"],
         unit="log",
     )
@@ -134,7 +159,9 @@ class TsVolAcceleration(SeriesOperator):
             for row in range(la, rows):
                 if not np.isfinite(v[row, col]) or not np.isfinite(v[row - la, col]):
                     continue
-                out[row, col] = float(np.log((v[row, col] + _EPS) / (v[row - la, col] + _EPS)))
+                if v[row, col] <= _EPS or v[row - la, col] <= _EPS:
+                    continue
+                out[row, col] = float(np.log(v[row, col] / v[row - la, col]))
         return frame_like(ret, out)
 
 
@@ -146,11 +173,14 @@ class TsVolAcceleration(SeriesOperator):
     source="alpha_language_volatility",
 )
 class TsVolTermStructure(SeriesOperator):
-    """波动率期限结构: log((vol_short + eps) / (vol_long + eps))。要求 short < long。"""
+    """波动率期限结构: log(vol_short / vol_long)。要求 short < long。
+
+    任一侧波动为零/退化(< eps)时 fail-close -> NaN, 避免 log(EPS) 制造巨大信号。
+    """
 
     metadata = _metadata(
         "ts_vol_term_structure",
-        "短窗波动 vs 长窗波动对数比。",
+        "短窗波动 vs 长窗波动对数比(零波动 -> NaN)。",
         ["ret", "short_window", "long_window", "min_periods"],
         unit="log",
     )
@@ -172,7 +202,9 @@ class TsVolTermStructure(SeriesOperator):
             for row in range(rows):
                 if not np.isfinite(short[row, col]) or not np.isfinite(longv[row, col]):
                     continue
-                out[row, col] = float(np.log((short[row, col] + _EPS) / (longv[row, col] + _EPS)))
+                if short[row, col] <= _EPS or longv[row, col] <= _EPS:
+                    continue
+                out[row, col] = float(np.log(short[row, col] / longv[row, col]))
         return frame_like(ret, out)
 
 
@@ -223,14 +255,17 @@ class TsSemivarianceBalance(SeriesOperator):
     source="alpha_language_volatility",
 )
 class TsRealizedQuarticity(SeriesOperator):
-    """已实现四次幂比: W*sum r^4 / (3*RV^2 + eps)。
+    """归一化四次幂比(非原始 realized quarticity): W·Σr⁴ / (3·RV² + eps)。
 
-    高 = 波动由极端日集中贡献(W 取窗口内有效观测数)。
+    注意: 该算子的名字保留为 ``ts_realized_quarticity``, 但实际输出是
+    quarticity 相对 RV² 的**归一化浓度统计量**, 而非原始 realized quarticity
+    (Σr⁴)。W = 窗口有效观测数。高斯噪声下该比值 ≈ 1; 高 = 方差由少数极端日
+    集中贡献(峰度方向), 低 = 方差在日内较均匀。
     """
 
     metadata = _metadata(
         "ts_realized_quarticity",
-        "窗口内 r^4 相对 RV^2 之比。",
+        "归一化 quarticity/RV² 浓度比 W·Σr⁴/(3·RV²)(非原始 Σr⁴)。",
         ["ret", "window", "min_periods"],
         unit="ratio",
     )
@@ -292,14 +327,15 @@ class TsVolClustering(SeriesOperator):
     source="alpha_language_volatility",
 )
 class TsLeverageEffect(SeriesOperator):
-    """杠杆效应: corr(r_tau, v_{tau-1}) over window, v = trailing 波动。
+    """杠杆效应(因果版): corr(r_{tau-1}, v_tau) over window, v = trailing 波动。
 
-    负 = 收益下跌伴随波动上行(经典杠杆效应)。
+    即经典杠杆效应 "负收益 -> 未来波动上行" 的因果(<=t)对应: 过去收益与当前/随后
+    波动相关。负 = 收益下跌伴随随后的波动上行(经典杠杆效应)。
     """
 
     metadata = _metadata(
         "ts_leverage_effect",
-        "收益与滞后波动自相关。",
+        "收益与随后波动相关(因果: 窗口内 corr(r_tau, v_{tau+1}) 即 corr(r_{tau-1}, v_tau))。",
         ["ret", "window", "min_periods"],
         unit="ratio",
     )
@@ -314,8 +350,10 @@ class TsLeverageEffect(SeriesOperator):
         for col in range(cols):
             for row in range(rows):
                 start = max(1, row - w + 1)
-                a = rv[start : row + 1, col]
-                b = vol[start - 1 : row, col]  # v_{tau-1} aligned to r_tau
+                # classic leverage: r_tau vs v_{tau+1}; causal form pairs
+                # past return r_{tau-1} with current vol v_tau (both <= row).
+                a = rv[start - 1 : row, col]
+                b = vol[start : row + 1, col]
                 out[row, col] = _corr(a, b, mp)
         return frame_like(ret, out)
 
@@ -346,7 +384,7 @@ class TsJumpBipowerProxy(SeriesOperator):
         rv = ret.to_numpy(dtype=float)
 
         def _fn(chunk: np.ndarray) -> float:
-            v = valid_values(chunk)
+            v = _trailing_contiguous(chunk)
             n = v.size
             if n < mp:
                 return np.nan

@@ -113,29 +113,112 @@ class AggregationSpec:
         }
 
 
+def _parse_hhmm(value: Any, *, context: str) -> str | None:
+    r"""#P0-56 HH:MM 严格格式：``^([01]\d|2[0-3]):[0-5]\d$``。"""
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValidationError(f"{context} 必须是 HH:MM 字符串，收到 {value!r}")
+    text = value.strip()
+    import re as _re
+
+    if not _re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", text):
+        raise ValidationError(f"{context} 必须是 HH:MM（00:00~23:59），收到 {text!r}")
+    return text
+
+
+def _strict_int(value: Any, *, context: str, minimum: int) -> int:
+    """#P0-56 严格整数：禁止 ``int("5.5")`` 静默截断 / bool 混入 / 负数静默修正。"""
+    if isinstance(value, bool):
+        raise ValidationError(f"{context} 必须是整数，不能是 bool")
+    try:
+        out = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(f"{context} 必须是整数，收到 {value!r}") from exc
+    if isinstance(value, float) and not value.is_integer():
+        raise ValidationError(f"{context} 必须是整数，收到 {value!r}")
+    if out < minimum:
+        raise ValidationError(f"{context} 必须 >= {minimum}，收到 {out}")
+    return out
+
+
+def _validate_timezone(tz: str | None, *, context: str) -> str | None:
+    """#P0-55 timezone 只接受合法 IANA 时区（ZoneInfo 可解析）。"""
+    if tz is None:
+        return None
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    try:
+        ZoneInfo(tz)
+    except ZoneInfoNotFoundError as exc:
+        raise ValidationError(f"{context} 不是合法 IANA 时区: {tz!r}") from exc
+    return tz
+
+
+def _sql_string_literal(value: str) -> str:
+    """#P0-55 SQL 字符串字面量转义（timezone 不再直接 f-string 插入）。"""
+    return "'" + value.replace("'", "''") + "'"
+
+
 def parse_aggregation_spec(raw: Any, *, field: str) -> AggregationSpec:
-    """把 str / dict / AggregationSpec 归一化。"""
+    """把 str / dict / AggregationSpec 归一化。
+
+    #P0-56 严格校验：period>0 / index>=0 / HH:MM 格式 / market 枚举 / timezone
+    IANA 合法 / unknown-key reject——禁止 silent clamp（``max(1, period)`` 之类的
+    静默修正把 ``period=-100`` 悄悄变 1）。
+    """
     if isinstance(raw, AggregationSpec):
         return raw
     if isinstance(raw, str):
         return AggregationSpec(aggregation=raw, metric=_semantic_metric(field))
     if not isinstance(raw, Mapping):
         raise ValidationError("聚合规格必须是 str / dict / AggregationSpec")
+    _KNOWN_KEYS = {
+        "aggregation",
+        "start",
+        "end",
+        "hhmm",
+        "metric",
+        "period",
+        "index",
+        "market",
+        "timezone",
+    }
+    unknown = sorted(set(raw) - _KNOWN_KEYS)
+    if unknown:
+        raise ValidationError(
+            f"聚合规格（field={field}）未知 key {unknown}；应为 {sorted(_KNOWN_KEYS)}"
+        )
     agg = str(raw.get("aggregation", "minute_range"))
     if agg not in _VALID_AGGREGATIONS:
         raise ValidationError(
             f"聚合 '{agg}' 不支持；合法: {sorted(_VALID_AGGREGATIONS)}"
         )
+    market = raw.get("market")
+    if market is not None:
+        market = str(market).strip().lower()
+        if market not in {"ashare", "us"}:
+            raise ValidationError(f"聚合 market={market!r} 非法（应为 ashare/us）")
+    timezone = _validate_timezone(
+        str(raw["timezone"]).strip() if raw.get("timezone") is not None else None,
+        context=f"聚合（field={field}）.timezone",
+    )
+    period = _strict_int(
+        raw.get("period", 5), context=f"聚合（field={field}）.period", minimum=1
+    )
+    index = _strict_int(
+        raw.get("index", 0), context=f"聚合（field={field}）.index", minimum=0
+    )
     return AggregationSpec(
         aggregation=agg,
-        start=str(raw["start"]) if raw.get("start") is not None else None,
-        end=str(raw["end"]) if raw.get("end") is not None else None,
-        hhmm=str(raw["hhmm"]) if raw.get("hhmm") is not None else None,
+        start=_parse_hhmm(raw.get("start"), context=f"聚合（field={field}）.start"),
+        end=_parse_hhmm(raw.get("end"), context=f"聚合（field={field}）.end"),
+        hhmm=_parse_hhmm(raw.get("hhmm"), context=f"聚合（field={field}）.hhmm"),
         metric=str(raw["metric"]) if raw.get("metric") is not None else None,
-        period=int(raw.get("period", 5)),
-        index=int(raw.get("index", 0)),
-        market=str(raw["market"]) if raw.get("market") is not None else None,
-        timezone=str(raw["timezone"]) if raw.get("timezone") is not None else None,
+        period=period,
+        index=index,
+        market=market,
+        timezone=timezone,
     )
 
 
@@ -196,10 +279,13 @@ def _local_time_expr(
     """
     tz = _session_timezone(market, timezone)
     if tz and tz.upper() not in {"UTC", "ETC/UTC"}:
+        # #P0-55 tz 已经过 ZoneInfo 校验；SQL 里仍走统一字符串字面量转义，
+        # 不直接 f-string 插值（防止含单引号的异常时区名拼接进 SQL）。
+        tz_literal = _sql_string_literal(tz)
         if time_is_tz:
-            return f"timezone('{tz}', {_quote_ident(t_col)})"
+            return f"timezone({tz_literal}, {_quote_ident(t_col)})"
         return (
-            f"timezone('{tz}', {_quote_ident(t_col)} AT TIME ZONE 'UTC')"
+            f"timezone({tz_literal}, {_quote_ident(t_col)} AT TIME ZONE 'UTC')"
         )
     return _quote_ident(t_col)
 

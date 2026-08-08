@@ -175,18 +175,51 @@ def _multi_regression(
                 ss_res = float(np.sum(e * e))
                 ss_tot = float(np.sum((vy - np.mean(vy)) ** 2))
                 if ss_tot > 0.0:
-                    r2 = float(max(0.0, 1.0 - ss_res / ss_tot))
+                    # P1-88: R² is only guaranteed non-negative when an intercept
+                    # is fitted.  A through-the-origin (no-intercept) fit can be
+                    # arbitrarily worse than predicting the mean, so R² must not
+                    # be clipped to 0 — that would manufacture a false fit floor.
+                    r2 = float(1.0 - ss_res / ss_tot)
                     if stat == "r2_adj":
                         n = len(vy)
-                        p = design.shape[1]
-                        out[row, col] = float(1.0 - (1.0 - r2) * (n - 1.0) / max(n - p - 1.0, 1.0))
+                        # P1-88: the predictor count is the number of slope
+                        # features.  The intercept is a fitted parameter, not a
+                        # predictor, so it must not be double-counted in the
+                        # adjusted-R² penalty (the old code used
+                        # ``design.shape[1]`` which included the intercept and
+                        # penalised one extra degree of freedom).
+                        p = len(feats)
+                        # With an intercept the degrees of freedom are
+                        # n - p - 1; without one (regression through the origin)
+                        # they are n - p.
+                        denom = n - p - (1 if add_intercept else 0)
+                        out[row, col] = float(1.0 - (1.0 - r2) * (n - 1.0) / max(denom, 1.0))
                     else:
                         out[row, col] = r2
     return frame_like(y, out)
 
 
+# P1-89: honest input_units / output_unit for the multi-variable regression
+# family.  beta (a slope) has unit(y)/unit(x); an intercept coefficient has
+# unit(y); a raw residual / forecast error has unit(y); a standardised residual
+# is a dimensionless z-score; R² / adjusted R² are dimensionless.
+_DEFAULT_INPUT_UNITS = {
+    "y": "target",
+    "x1": "predictor", "x2": "predictor", "x3": "predictor", "x4": "predictor",
+}
+_DEFAULT_OUTPUT_UNIT = {
+    "coeff": "unit(y)/unit(x) (intercept: unit(y))",
+    "resid": "unit(y)",
+    "resid_z": "z_score",
+    "r2": "r2",
+    "r2_adj": "r2",
+}
+
+
 def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], extra: Any, stat: str, unit: str,
-                    *, fit_lag: int = 0, stability_k: int = 0, cost: int = 5):
+                    *, fit_lag: int = 0, stability_k: int = 0, cost: int = 5,
+                    input_units: dict[str, str] | None = None,
+                    output_unit: str | None = None):
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -201,6 +234,8 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
             name, description,
             ["y", "x1", "x2", "x3", "x4", "window", "coefficient_index", "min_periods", "add_intercept"],
             unit=unit, cost=cost,
+            input_units=input_units if input_units is not None else _DEFAULT_INPUT_UNITS,
+            output_unit=output_unit if output_unit is not None else _DEFAULT_OUTPUT_UNIT.get(stat),
         )
 
         def _calculate_series(self, y, x1=None, x2=None, x3=None, x4=None,
@@ -344,6 +379,8 @@ def _expectile_op(name: str, description: str, stat: str, *, fit_lag: int = 0):
     class _ExpectileOp(SeriesOperator):
         metadata = metadata(
             name, description, ["y", "x", "window", "q", "min_periods"], unit="level",
+            input_units={"y": "target", "x": "predictor"},
+            output_unit="unit(y)/unit(x) (intercept: unit(y))" if stat == "coeff" else "unit(y)",
         )
 
         def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
@@ -378,6 +415,8 @@ class TsExpectileBetaSpread(SeriesOperator):
     metadata = metadata(
         "ts_expectile_beta_spread", "expectile(q_high) - expectile(q_low)。",
         ["y", "x", "window", "q_high", "q_low", "min_periods"], unit="level",
+        input_units={"y": "target", "x": "predictor"},
+        output_unit="unit(y)/unit(x)",
     )
 
     def _calculate_series(self, y, x, window=60, q_high=0.9, q_low=0.1, min_periods=10, **_):
@@ -406,6 +445,8 @@ class TsQuantileRegressionCoeff(SeriesOperator):
     metadata = metadata(
         "ts_quantile_regression_coeff", "分位数回归斜率（pinball LP）。",
         ["y", "x", "window", "q", "min_periods"], unit="level",
+        input_units={"y": "target", "x": "predictor"},
+        output_unit="unit(y)/unit(x) (intercept: unit(y))",
     )
 
     def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
@@ -431,6 +472,8 @@ class TsQuantileRegressionResid(SeriesOperator):
     metadata = metadata(
         "ts_quantile_regression_resid", "分位数回归残差（pinball LP）。",
         ["y", "x", "window", "q", "min_periods"], unit="level",
+        input_units={"y": "target", "x": "predictor"},
+        output_unit="unit(y)",
     )
 
     def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
@@ -456,6 +499,8 @@ class TsQuantileBetaSpread(SeriesOperator):
     metadata = metadata(
         "ts_quantile_beta_spread", "beta(q_high) - beta(q_low)（pinball LP）。",
         ["y", "x", "window", "q_high", "q_low", "min_periods"], unit="level",
+        input_units={"y": "target", "x": "predictor"},
+        output_unit="unit(y)/unit(x)",
     )
 
     def _calculate_series(self, y, x, window=60, q_high=0.9, q_low=0.1, min_periods=10, **_):

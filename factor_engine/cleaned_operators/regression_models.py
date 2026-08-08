@@ -36,6 +36,23 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
 
 
+def _trailing_contiguous(chunk: np.ndarray) -> np.ndarray:
+    """Longest trailing contiguous finite run ending at the current row.
+
+    A missing value breaks the time axis: rows on either side of a NaN are never
+    re-paired as adjacent (no drop-finite/reconnect).  A NaN at the current row
+    yields an empty block so the caller emits NaN (fail-closed) instead of
+    silently reusing the last valid history (review P1-123).
+    """
+    n = chunk.shape[0]
+    if n == 0 or not np.isfinite(chunk[-1]):
+        return chunk[:0]
+    end = n
+    while end > 0 and np.isfinite(chunk[end - 1]):
+        end -= 1
+    return chunk[end:]
+
+
 def _rolling_apply_2d(values: np.ndarray, window: int, fn: Any, min_periods: int = 1) -> np.ndarray:
     rows, cols = values.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -110,10 +127,10 @@ class TsHuberRegressionResid(SeriesOperator):
 
     metadata = _metadata(
         "ts_huber_regression_resid",
-        "Huber 稳健回归当前样本残差。",
+        "Huber 稳健回归当前样本残差（输出单位继承 y）。",
         ["y", "x", "window", "min_periods"],
         domain="price_volume",
-        unit="ratio",
+        unit="level",
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, min_periods: int = 5, **_: Any) -> pd.DataFrame:
@@ -144,10 +161,10 @@ class TsRidgeRegressionResid(SeriesOperator):
 
     metadata = _metadata(
         "ts_ridge_regression_resid",
-        "Ridge 回归当前样本残差。",
+        "Ridge 回归当前样本残差（输出单位继承 y）。",
         ["y", "x", "window", "alpha", "min_periods"],
         domain="price_volume",
-        unit="ratio",
+        unit="level",
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, alpha: float = 0.1, min_periods: int = 5, **_: Any) -> pd.DataFrame:
@@ -285,7 +302,16 @@ class TsVarianceRatio(SeriesOperator):
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, q: int = 5, min_periods: int = 10, **_: Any) -> pd.DataFrame:
         w = int(window)
-        periods = max(2, int(q))
+        if w < 1:
+            raise ValueError("window must be >= 1")
+        periods = int(q)
+        # Feasibility validation (review P1-123): the q-period return needs at
+        # least 2 overlapping q-period windows inside the trailing window, and a
+        # degenerate q<2 used to be silently clamped.
+        if periods < 2:
+            raise ValueError("q must be >= 2")
+        if periods >= w:
+            raise ValueError("q must be < window")
         mp = max(6, int(min_periods))
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -294,8 +320,9 @@ class TsVarianceRatio(SeriesOperator):
             for row in range(rows):
                 start = max(0, row - w + 1)
                 segment = xv[start : row + 1, col]
-                valid = np.isfinite(segment)
-                vals = segment[valid]
+                # Trailing contiguous run: a gap must not re-pair values that
+                # were not temporally adjacent (review P1-123).
+                vals = _trailing_contiguous(segment)
                 if vals.size < mp:
                     continue
                 rets = np.diff(vals)
@@ -335,6 +362,8 @@ class TsCusumBreakScore(SeriesOperator):
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 5, **_: Any) -> pd.DataFrame:
         w = int(window)
+        if w < 1:
+            raise ValueError("window must be >= 1")
         mp = max(3, int(min_periods))
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -343,8 +372,8 @@ class TsCusumBreakScore(SeriesOperator):
             for row in range(rows):
                 start = max(0, row - w + 1)
                 segment = xv[start : row + 1, col]
-                valid = np.isfinite(segment)
-                vals = segment[valid]
+                # Trailing contiguous run: no drop-finite/reconnect (P1-123).
+                vals = _trailing_contiguous(segment)
                 if vals.size < mp:
                     continue
                 mean = float(np.mean(vals))

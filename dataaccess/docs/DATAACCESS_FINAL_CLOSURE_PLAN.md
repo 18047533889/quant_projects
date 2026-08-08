@@ -1,5 +1,64 @@
 # DataAccess 最终收官整改计划
 
+## 执行状态（2026-08-08 完成）
+
+### 第三轮增量收口（0.9.1，HEAD=`6d66e9c` 之上）
+
+第三层审计清单（P0 1-23 / P1 24-40）全部落地：
+- ✅ **计划=执行**：`CompiledDataRequest` 冻结请求语义（plan 后改 req 不影响
+  execute；plan 不再写回 request.anchor）；`snapshot_policy` latest/
+  fail_if_changed/pin；组合执行器 honor `result="stream"` + 静态 universe；
+  execute 把 plan 编译的 `join_specs_effective` 原样交 read_joined。
+- ✅ **Snapshot 真实**：`_expand_glob_paths` 冻结精确文件清单（TOCTOU）；
+  ScanHandle.collect 前 revalidate + strict fail-closed；`FileVersion` 加
+  etag/version_id/content_length/last_modified（s3 对象头 best-effort）。
+- ✅ **日历**：available_from 先转交易所本地时区；非交易日不生成当天开盘；
+  缓存 key 含 source token（更新自动失效 / store-local）；next_day O(N) zip。
+- ✅ **契约门**：required_filters/allowed_filter_values 升级为 PredicateConstraint
+  （Ne/IsNotNull/OR-部分分支不再算已约束）；strict_read 完全共享 production
+  fail-closed。
+- ✅ **read_uri**：精确 URI physical scope + 对象 URI 不再用 pathlib + 格式匹配修正。
+- ✅ **Serving**：`materialize_daily_aggregate` 一次扫描 + 行级谓词；
+  Polars 按 FormatSpec 选 scan；CBO arrow/feather → pyarrow。
+- ✅ **写事务**：`_dataset_mutation` 显式 PREPARED/COMMITTED/ABORTED（mutate
+  前置 mark dirty；ABORTED 绝不 build fresh）。
+- ✅ **Spec/IR/Storage 硬化**：TemporalJoinSpec bool/类型 fail-closed；ContractIR
+  external + required_filters 完整合并 + 冲突检测；StorageSpec 非法 type 构造即抛；
+  COS 解析失败 fail-closed；能力矩阵。
+- ✅ **Query cache**：无权威 manifest 不缓存；plan 按 dataset 传 source_params。
+- ✅ 回归：`tests/unit/test_final_closure_round3.py` 18 条 + 全量 420 passed +
+  ContractIR audit 71 数据集一致。
+
+### 第二轮收官（0.9.0，HEAD=`5073edf`）
+
+**P0 全部落地**：
+- ✅ P0-1/P0-2 统一 JoinCompiler（删除 `_join_aggregated_anchor`，聚合锚点走同一
+  `_read_joined_sql`；`_effective_join_specs` 全链路共享）
+- ✅ P0-3 financial seed PIT 状态（Q3 不被晚到 Q2 修订回滚）
+- ✅ P0-4/5/6/7/8 Calendar：IsTradeDay 过滤 / fallback 不污染权威缓存 /
+  session 前瞻 / 细粒度 availability / US early close
+- ✅ P0-9/10 多时钟 TemporalAxes + pruning clock 安全 / dataset 级契约门
+- ✅ P0-11..16 `is_strict_semantics()` / read_uri / event cutoff / fanout 单值 /
+  PIT index（文件级剪枝、文件计数、截断 incomplete、真 schema hash）
+- ✅ P0-17/23/24/25 factor matrix（gate 前置、精确投影、DISTINCT 版本检查）
+- ✅ P0-18..22/35/36 执行治理（stream 直路由 + deadline 前置、governed lazy、
+  Scanner pushdown、sql_relation FROM 绑定、cache 列序/默认列）
+- ✅ P0-26..31 写事务（DatasetTransaction、upsert prepare-then-promote、
+  publish unique_key gate + content_hash、mutation lock host 感知）
+- ✅ P0-32/33/34 namespace contextvars / ContractIR issues 字段 / Metadata Plane
+  epoch 感知
+
+**P1 部分落地**：P1-14 CBO 不重复计 selectivity；P1-17 row-group 去重；
+P1-21 storage backend/layout/format 分离；P1-23 PIT schema hash；P1-28 order_by。
+其余 P1（CoverageMatrix 内部孔洞、CBO 校准粒度、mirror registry 并入 datasets.yaml、
+QueryProvenance、InstrumentKey、incremental manifest 等）列为后续批次。
+
+**P2 / DoD / CI**：17 条 DoD 回归（`tests/unit/test_final_closure_dod.py`）+ 永久
+CI（`.github/workflows/dataaccess-final-closure.yml`）。API 收敛到
+`read(DataRequest)/scan/sql/write` 的统一 compiler 列为下一批次。
+
+**回归**：`tests/` 380 passed。
+
 > 基线：`main` @ `5073edf`（dataaccess 本轮整改在 HEAD=`6d66e9c` 之上）。
 > 目标：消灭所有"第二套语义实现"。同一个 DataRequest 无论走 minute aggregation、
 > read_joined、Polars、PyArrow、stream、factor matrix 还是 remote/mirror，都必须由

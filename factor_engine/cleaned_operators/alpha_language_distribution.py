@@ -230,7 +230,10 @@ class TsWassersteinShift(SeriesOperator):
             qa = _empirical_quantiles(ra, grid)
             qb = _empirical_quantiles(oa, grid)
             w1 = float(np.mean(np.abs(qa - qb)))
-            return w1 / (_mad(oa) + _EPS)
+            mad_o = _mad(oa)
+            if not np.isfinite(mad_o) or mad_o < _EPS:
+                return np.nan
+            return w1 / mad_o
 
         return frame_like(x, map_two_window(xv, ws, wl, _fn))
 
@@ -306,7 +309,10 @@ class TsLocationShift(SeriesOperator):
             oa = valid_values(old)
             if ra.size < mp or oa.size < mp:
                 return np.nan
-            return (float(np.median(ra)) - float(np.median(oa))) / (_mad(oa) + _EPS)
+            mad_o = _mad(oa)
+            if not np.isfinite(mad_o) or mad_o < _EPS:
+                return np.nan
+            return (float(np.median(ra)) - float(np.median(oa))) / mad_o
 
         return frame_like(x, map_two_window(xv, ws, wl, _fn))
 
@@ -341,7 +347,11 @@ class TsScaleShift(SeriesOperator):
             oa = valid_values(old)
             if ra.size < mp or oa.size < mp:
                 return np.nan
-            return float(np.log((_mad(ra) + _EPS) / (_mad(oa) + _EPS)))
+            mad_r = _mad(ra)
+            mad_o = _mad(oa)
+            if (not np.isfinite(mad_r) or mad_r < _EPS) or (not np.isfinite(mad_o) or mad_o < _EPS):
+                return np.nan
+            return float(np.log(mad_r / mad_o))
 
         return frame_like(x, map_two_window(xv, ws, wl, _fn))
 

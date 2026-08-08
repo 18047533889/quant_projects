@@ -269,6 +269,82 @@ white-list、ClickHouse streaming、minute 完整语义对齐）会以「guard +
   duplicate YAML、unresolved env、path_segment bool。
 - 全量回归：dataaccess tests 套件全绿；factor_engine 受影响子系统不回归。
 
-## 状态
+## 状态（2026-08-08 实施完成）
 
-2026-08-08 开始实施。
+**P0 全部落地**：
+- P0-1 COS monkey-patch 签名同步（ds/params 透传）`cos_storage_runtime.py`
+- P0-2 generic storage.source 路径统一 normalize + authorize（`_resolve_storage_paths` /
+  `authorize_s3_path(extra_prefixes=)`）`cos/remote.py`
+- P0-3 params/glob format 错误 fail-closed（禁止 `except → **/*.parquet` 降级）`cos/remote.py`
+- P0-4 hybrid remote fragment 统一 `s3://` canonical execution URI `cos/remote.py`
+- P0-5 S3 credential state 改 per-connection（`WeakKeyDictionary[conn, fingerprint]`，
+  `configure_fresh` 绝不影响其他连接）`cos/s3_duckdb.py`
+- P0-6 pooled 连接不交给 ManagedBatchReader 直接 close（cursor=None + on_close 归还）
+  `core/engine.py`
+- P0-7 interrupt/timeout 连接 discard 不重进池（`release(healthy=)`）`core/engine.py`
+- P0-8 deadline pool 真正限并发（Condition 准入，达上限等待超时 `ResourceBudgetExceeded`）
+  `core/engine.py`
+- P0-9 deadline race 最终判定（absolute monotonic deadline + 返回后复查）`core/engine.py`
+- P0-10 `DuckDBEngine.close()` 关 deadline pool + `EngineClosedError` `core/engine.py`
+- P0-11 `_requires_remote_storage` 扫 sql + 绑定 URI params（不再只 sniff SQL）`core/engine.py`
+- P0-12 `store.sql()` 走 semantic gate（`_prepare_read_request` 包装注入 sql_escape）
+  `read/sql_escape.py` + `store.py`
+- P0-13 table-function deny-by-default + 字符串/注释 aware 扫禁词 `read/sql_escape.py`
+- P0-14 QueryBudget production floor（`merge_production_floor`，取更严）`read/query_budget.py`
+- P0-15 eps 编译成 financial PIT（latest_period）`config/semantic_fields.yaml`
+- P0-23 美股 X0 稀疏原始字段 `mining_allowed=false` `config/semantic_fields.yaml`
+- P0-24 新增 `us_market_cap_daily` derived 字段（Close × weighted_shares_outstanding）；
+  X0 market_cap 降为 raw reference `config/semantic_fields.yaml` + `read/semantic_catalog.py`
+- P0-25 RAW_EVENT / one-to-many 禁止 generic latest-asof `cos_event_runtime.py`
+- P0-26 read_cos_events / read_cos_panel 传 view_columns + 内部 `_semantic_gate=False`
+  `cos_event_runtime.py` / `cos_panel_runtime.py`
+- P0-27 文本 period 列统一 `_period_time = CAST(... AS DATE)`（严格 CAST fail-closed），
+  period/seed 逻辑只消费 `_period_time`，输出 EXCLUDE `store.py`
+- P0-28 manifest 构建坏 parquet → `DataError`（不再静默跳过存 fresh）`read/manifest.py`
+- P0-29 manifest `bytes` = 真实文件大小，`footer_bytes` 单独记 `read/manifest.py`
+- P0-30 manifest generation id（parquet schema metadata + JSON sidecar 双写一致性）
+  `read/manifest.py`
+- P0-31 `manifest_root_for_paths` exact file → parent `read/manifest.py`
+- P0-32 publish manifest 在原子切换**前**写进 candidate（commit metadata 先于 commit）
+  `write/publish.py`
+- P0-33 publish 单一 inventory snapshot（source_rows 由 inventory sum）`write/publish.py`
+- P0-34 upsert new_table 重复 upsert key → reject（`_assert_unique_keys`）`write/upsert.py`
+- P0-35 upsert_on ∩ partition_by → local_merge_key = upsert_on - partition_by
+  `write/upsert.py`
+- P0-36 delete_rows 坏 parquet → abort（`best_effort` 才 skip + failed_files）
+  `write/upsert.py`
+- P0-37 delete_rows 两阶段 preflight（max_rows 超限 → 0 行删除）`write/upsert.py`
+- P0-38 storage/partitioning/engine 未知 key reject `registry/loader.py`
+- P0-45 `schema_version` 非法 → 启动失败 `registry/loader.py`
+- P0-46 StrictYAMLLoader（duplicate key + merge anchor）`registry/yaml_loader.py`
+- P0-47 残留 `${ENV}`/`$VAR` → 启动失败（expand_env 之后检查）`registry/loader.py`
+- P0-48 `DATA_ACCESS_EXTRA_ALLOWED_ROOTS=/` production 拒绝 `registry/paths.py`
+- P0-49 ParametricDataset `authorized_root` 显式授权根 `registry/loader.py`
+- P0-50 ParamSpec `path_segment` strict bool + unknown-key reject
+  `registry/params_validation.py`
+- P0-51/52 QUANT_SCHEMA_CHECK production floor + break-glass `registry/schema_validation.py`
+- P0-53 `partition_columns` 默认 `()`（不再错误豁免 year）`registry/loader.py` + `read/stats.py`
+- P0-54 `format.extra` option whitelist `read/formats.py`
+- P0-55/56 aggregation timezone（ZoneInfo 校验 + SQL literal 转义）、HH:MM/period/index/
+  market/unknown-key 严格校验（禁 silent clamp）`read/aggregation.py`
+
+**P1 落地**：P1-1 recursive COS marker → RemoteSnapshot（inventory_hash / object_count /
+revalidate）；P1-3 production 只 LOAD httpfs（`_load_httpfs`）；P1-4/5 ExceptionClassifier
++ 指数退避+jitter + gc 默认 False（`core/retry.py`）；P1-6 production 禁自动 EXPLAIN
+ANALYZE（`read/telemetry.py`）；P1-7/8 ManagedBatchReader 真实 stream lifetime 指标 +
+`read_next_batch()` EOF/异常自动 close；P1-9 ReadHandle stream 部分消费保护；P1-16
+`column_null_ratio` 真 null 率；P1-21/23 publish 锁合并（_publish_lock 仅 fail-fast 语义）
++ 关键写路径 fsync parent；P1-24 COW upsert 分区拆仍走 pandas（低批次可接受，标注）；
+P1-26 cgroup/cpuset-aware 内存/CPU 探测（`core/duckdb_config.py`）。
+
+**P2 落地**：P2-2 字符串/注释 aware 禁词扫描；P2-3 `RelationHandle.explain()` 直接走安全
+engine API；P2-4 `DatasetStatsSnapshot.from_dict` 分区列缺省 `()`。
+
+**测试**：新增 `tests/unit/test_phase6_hardening.py`（22 个新 invariant 测试）。
+全量回归：dataaccess **548 passed / 0 failed**；factor_engine 语义消费侧
+（test_catalog_us / test_field_catalog_alignment）全绿。其余 FE 失败均为并发会话
+operator-certification 过渡期问题（stash 验证与本次改动无关）。
+
+**诚实说明（留待单独 wave）**：完整 SQL AST engine white-list（P0-13 完整版）；
+ClickHouse RecordBatch streaming；minute AggregationBundle 完整语义对齐；
+P1-2 多 credential profile → runtime secret；P1-20 Authoritative Commit Manifest 分层。

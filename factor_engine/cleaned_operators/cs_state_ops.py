@@ -11,10 +11,10 @@
   ``N >= min_cross`` is required; no Monte-Carlo p-value is produced.
 * ``group_wasserstein_barycenter_distance`` — the 1-D Wasserstein (earth
   mover) distance between an instrument's trailing window distribution and
-  its group's pooled distribution (the empirical group "barycenter"): how far
-  a name's recent return distribution sits from its peers' average
-  distribution.  Computed on a fixed quantile grid (deterministic, exact for
-  equal grid).  P1 / extended.
+  its group's Wasserstein barycenter: ``Q_bar(p) = mean_i Q_i(p)`` of the
+  *peer* quantile functions on a common quantile grid (ex-self), NOT the
+  pooled mixture distribution (P0-10).  Computed on a fixed quantile grid
+  (deterministic, exact for equal grid).  P1 / extended.
 """
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -31,6 +32,13 @@ from cleaned_operators.gemini_v2_common import (
 )
 
 _EPS = 1e-12
+
+# R5 P1-01: ``min_cross`` / ``min_group_size`` are validated ints.
+_HARTIGAN_SPEC = {"min_cross": ParamSpec(dtype=int, min=2)}
+_WASSERSTEIN_SPEC = {
+    "window": ParamSpec(dtype=int, min=4),
+    "min_group_size": ParamSpec(dtype=int, min=2),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -226,27 +234,30 @@ def _group_wasserstein_barycenter_distance(
             if lab is None or (isinstance(lab, float) and np.isnan(lab)):
                 continue
             groups.setdefault(lab, []).append(c)
-        # per-group pooled quantiles (computed once, reused for every member)
         for lab, members in groups.items():
             if len(members) < mgs:
                 continue
-            pool_parts: list[np.ndarray] = []
+            # per-member trailing-window quantile curves on the shared p-grid
+            mem_q: dict[int, np.ndarray] = {}
             for c in members:
                 v = trailing_contiguous_finite(arr[lo : r + 1, c])
                 if v.size >= 4:
-                    pool_parts.append(v)
-            if len(pool_parts) < mgs:
+                    mem_q[c] = _quantiles(v)
+            if len(mem_q) < mgs:
                 continue
-            pool = np.concatenate(pool_parts)
-            if pool.size < 12:
-                continue
-            pool_q = _quantiles(pool)
             for c in members:
-                v = trailing_contiguous_finite(arr[lo : r + 1, c])
-                if v.size < 4:
+                if c not in mem_q:
                     continue
-                me_q = _quantiles(v)
-                out[r, c] = _wasserstein_pool(me_q, pool_q)
+                # P0-10: the 1-D Wasserstein barycenter is the MEAN of the member
+                # quantile functions ``Q_bar(p) = mean_i Q_i(p)``, NOT the pooled
+                # mixture distribution (pooling mixes the samples and changes the
+                # quantiles).  Ex-self: each name is compared against the
+                # barycenter of its *peers*.
+                peers = [mem_q[j] for j in mem_q if j != c]
+                if len(peers) < 1:
+                    continue
+                bar_q = np.mean(np.stack(peers, axis=0), axis=0)
+                out[r, c] = _wasserstein_pool(mem_q[c], bar_q)
     return frame_like(x, out)
 
 
@@ -260,6 +271,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 4,
         "tags_extra": ["global_state"],
         "output_unit": "level",
+        "param_specs": _HARTIGAN_SPEC,
     },
     "group_wasserstein_barycenter_distance": {
         "fn": _group_wasserstein_barycenter_distance,
@@ -270,6 +282,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 5,
         "tags_extra": [],
         "output_unit": "same_as_target",
+        "param_specs": _WASSERSTEIN_SPEC,
     },
 }
 
@@ -287,6 +300,7 @@ def _register() -> None:
             source="cs_state_ops",
             tags_extra=spec["tags_extra"],
             output_unit=spec.get("output_unit"),
+            param_specs=spec.get("param_specs"),
         )
     union_extended(*_SPECS.keys())
 

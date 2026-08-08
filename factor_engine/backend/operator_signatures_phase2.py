@@ -587,7 +587,7 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
     signatures["ts_signature_mahalanobis_anomaly"] = _sig(
         "ts_signature_mahalanobis_anomaly",
         ArgSpec("f1", _F), ArgSpec("f2", _F), ArgSpec("f3", _F),
-        ArgSpec("path_window", _W), ArgSpec("history_window", _W), ArgSpec("depth", _INT),
+        ArgSpec("path_window", _W), ArgSpec("history_window", _W),
     )
     signatures["ts_betti_crocker_bifurcation_score"] = _sig(
         "ts_betti_crocker_bifurcation_score",
@@ -636,7 +636,7 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
     signatures["ts_abdi_ranaldo_spread"] = _sig(
         "ts_abdi_ranaldo_spread",
         ArgSpec("close", _F), ArgSpec("high", _F), ArgSpec("low", _F),
-        ArgSpec("window", _W), ArgSpec("correction", _ANY),
+        ArgSpec("window", _W),
     )
     signatures["ts_pastor_stambaugh_liquidity_gamma"] = _sig(
         "ts_pastor_stambaugh_liquidity_gamma",
@@ -671,14 +671,13 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         ArgSpec("x2", _F, required=False), ArgSpec("x3", _F, required=False),
         ArgSpec("x4", _F, required=False), ArgSpec("x5", _F, required=False),
         ArgSpec("x6", _F, required=False), ArgSpec("x7", _F, required=False),
-        ArgSpec("zero_policy", _ANY),
     )
     signatures["composition_entropy"] = _sig(
         "composition_entropy",
         ArgSpec("x1", _F), ArgSpec("x2", _F), ArgSpec("x3", _F),
         ArgSpec("x4", _F, required=False), ArgSpec("x5", _F, required=False),
         ArgSpec("x6", _F, required=False), ArgSpec("x7", _F, required=False),
-        ArgSpec("x8", _F, required=False), ArgSpec("zero_policy", _ANY),
+        ArgSpec("x8", _F, required=False),
     )
     for _cod in ("composition_aitchison_distance", "composition_ilr_balance", "composition_js_divergence"):
         signatures[_cod] = _sig(
@@ -688,7 +687,6 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
             ArgSpec("x4", _F, required=False), ArgSpec("x5", _F, required=False),
             ArgSpec("x6", _F, required=False), ArgSpec("y4", _F, required=False),
             ArgSpec("y5", _F, required=False), ArgSpec("y6", _F, required=False),
-            ArgSpec("zero_policy", _ANY),
         )
     # global-state / transport.
     signatures["cs_hartigan_dip"] = _sig(
@@ -707,7 +705,7 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
     # intraday impact decay (minute-source).
     signatures["intraday_impact_decay_rate"] = _sig(
         "intraday_impact_decay_rate",
-        ArgSpec("ret", _F), ArgSpec("amount", _F), ArgSpec("volume", _F),
+        ArgSpec("ret", _F), ArgSpec("amount", _F),
         ArgSpec("horizon", _INT), ArgSpec("shock_quantile", _FLT),
     )
     # multifractal asymmetry.

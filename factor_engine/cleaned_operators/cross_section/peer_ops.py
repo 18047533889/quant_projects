@@ -169,7 +169,13 @@ def _rolling_regression(y: pd.DataFrame, x: pd.DataFrame, window: int, min_perio
             valid = np.isfinite(a) & np.isfinite(b)
             if valid.sum() < mp or np.var(b[valid]) <= _EPS:
                 continue
-            out[row, col] = float(np.cov(a[valid], b[valid])[0, 1] / np.var(b[valid]))
+            a, b = a[valid], b[valid]
+            # R5 P1-96: np.cov defaults to ddof=1 while np.var defaults to ddof=0,
+            # so the old beta was scaled by n/(n-1).  Use the centered dot product
+            # so numerator and denominator share a single ddof.
+            xbar = float(np.mean(b))
+            denom = float(np.sum((b - xbar) ** 2))
+            out[row, col] = float(np.sum((a - np.mean(a)) * (b - xbar)) / denom)
     return _frame_like(y, out)
 
 
@@ -210,7 +216,23 @@ _mk(
 
 
 def _group_leader_laggard_exposure(own_ret, leader_ret, group, window, lag):
-    leader = leader_ret.shift(int(lag))
+    # R5 P1-97: the ``group`` input must actually drive the exposure.  Derive a
+    # per-group leader return by filtering ``leader_ret`` inside each group (max
+    # finite leader return per group), then broadcast it to every member.  This
+    # works both for a sparse leader panel (only the leader cell filled) and for
+    # a broadcast panel (every member already carries the group's leader return).
+    own_ret, leader_ret, group = _aligned(own_ret, leader_ret, group)
+    lv = leader_ret.to_numpy(dtype=float)
+    gv = group.to_numpy()
+    rows, cols = lv.shape
+    leader = np.full((rows, cols), np.nan, dtype=float)
+    for row in range(rows):
+        for label in pd.unique(gv[row]):
+            idx = np.flatnonzero((gv[row] == label) & np.isfinite(lv[row]))
+            if len(idx) == 0:
+                continue
+            leader[row, idx] = float(np.max(lv[row][idx]))
+    leader = _frame_like(leader_ret, leader).shift(int(lag))
     return _rolling_regression(own_ret, leader, int(window), max(3, int(window) // 5))
 
 
@@ -250,8 +272,19 @@ def _within_group_rank(x_row: np.ndarray, g_row: np.ndarray, gvalue: Any, target
     if pos < 0:
         return np.nan
     vals = x_row[idx]
-    order = np.argsort(np.argsort(vals))
-    return float(order[pos] / (len(vals) - 1))
+    # R5 P1-98: exclude non-finite group members from ranking and give tied
+    # values the average rank.  The old double argsort ranked NaN (as the
+    # largest) and arbitrarily broke ties.
+    if not np.isfinite(vals[pos]):
+        return np.nan
+    finite = vals[np.isfinite(vals)]
+    if finite.size < 3:
+        return np.nan
+    target = vals[pos]
+    below = int(np.sum(finite < target))
+    equal = int(np.sum(finite == target))  # includes the target itself
+    avg_rank_zero_based = below + (equal - 1) / 2.0
+    return float(avg_rank_zero_based / (finite.size - 1))
 
 
 def _group_multi_level_rank_consistency(x, group1, group2, group3):
@@ -270,7 +303,11 @@ def _group_multi_level_rank_consistency(x, group1, group2, group3):
             if np.any(~np.isfinite(ranks)):
                 continue
             sd = float(np.std(ranks))
-            out[row, col] = float(1.0 - sd * np.sqrt(3.0))
+            # R5 P1-99: for three [0,1] ranks the maximum population std is
+            # sqrt(2/9) ~= 0.4714; the old sqrt(3)*sd scaling could only reach
+            # ~0.1835 at the bottom.  Scale by 3/sqrt(2) for the full 0-1 range
+            # and clip defensively against float round-off.
+            out[row, col] = float(np.clip(1.0 - sd * (3.0 / np.sqrt(2.0)), 0.0, 1.0))
     return _frame_like(x, out)
 
 

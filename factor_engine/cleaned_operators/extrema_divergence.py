@@ -121,6 +121,46 @@ def _confirmed_extrema(x: np.ndarray, prominence: float, confirmation: int) -> n
     return ext
 
 
+def _local_confirmed_extrema(x: np.ndarray, prominence: float, confirmation: int) -> np.ndarray:
+    """Per-column *candidate* extremum detector for the matching series ``y``.
+
+    Like ``_confirmed_extrema`` each bar is a strict local max/min over
+    ``±confirmation`` and must clear a prominence step from the most recent
+    opposite extremum — but there is **no** strict alternation state machine, so
+    several same-side candidates can coexist.
+
+    R4-45: the strict alternating kernel is applied to the primary series ``x``,
+    whose confirmed extrema define the turning-point chain.  For ``y`` we want
+    every genuine turning point inside a small ``±match_lag`` neighbourhood of an
+    x extremum, so a globally alternating chain would wrongly drop legitimate y
+    matches and make the divergence sparse whenever x and y are only locally
+    aligned (e.g. the operator run against an unrelated volume panel).
+    """
+    n = len(x)
+    ext = np.zeros(n, dtype=np.int8)
+    last_peak = -1
+    last_trough = -1
+    conf = int(confirmation)
+    prom = float(prominence)
+    for t in range(2 * conf, n):
+        j = t - conf
+        seg = x[j - conf : j + conf + 1]
+        if not np.all(np.isfinite(seg)):
+            continue
+        xj = x[j]
+        left = seg[:conf]
+        right = seg[conf + 1 :]
+        if np.all(xj > left) and np.all(xj > right):
+            if last_trough < 0 or xj - x[last_trough] > prom * xj:
+                ext[j] = 1
+                last_peak = j
+        elif np.all(xj < left) and np.all(xj < right):
+            if last_peak < 0 or x[last_peak] - xj > prom * xj:
+                ext[j] = -1
+                last_trough = j
+    return ext
+
+
 def _side_indices(
     ext: np.ndarray, side: int, r: int, window: int, confirmation: int
 ) -> list[int]:
@@ -210,7 +250,9 @@ def _divergence_series(
     for c in range(cols):
         x, y = x2d[:, c], y2d[:, c]
         ext_x = _confirmed_extrema(x, prominence, conf)
-        ext_y = _confirmed_extrema(y, prominence, conf)
+        # R4-45: y uses the candidate detector (local confirmed extrema), so the
+        # matching set is not thinned by the x chain's strict alternation.
+        ext_y = _local_confirmed_extrema(y, prominence, conf)
         for r in range(rows):
             idx = _side_indices(ext_x, sgn, r, w, conf)
             if len(idx) < 2:
@@ -249,7 +291,8 @@ def _confirmation_rate_series(
     for c in range(cols):
         x, y = x2d[:, c], y2d[:, c]
         ext_x = _confirmed_extrema(x, prominence, conf)
-        ext_y = _confirmed_extrema(y, prominence, conf)
+        # R4-45: y uses the candidate detector for matching (see above).
+        ext_y = _local_confirmed_extrema(y, prominence, conf)
         for r in range(rows):
             idx = _side_indices(ext_x, sgn, r, w, conf)
             if not idx:
@@ -293,7 +336,7 @@ class TsExtremaDivergenceStrength(SeriesOperator):
         window: int = 60,
         prominence: float = 0.02,
         confirmation: int = 3,
-        match_lag: int = 3,
+        match_lag: int = 4,
         side: str = "peak",
         **_: Any,
     ) -> pd.DataFrame:

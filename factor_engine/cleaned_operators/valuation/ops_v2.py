@@ -183,6 +183,11 @@ def _valuation_cashflow_disagreement(pe_ratio, pcf_ratio, pcf_ratio2, ocf_yield,
         for row in range(arr.shape[0]):
             finite = arr[row][np.isfinite(arr[row])]
             if finite.size < 5:
+                # R5 P0-18: fewer than 5 valid stocks means no cross-section to
+                # standardize.  Fail closed (whole row -> NaN) instead of leaving
+                # the raw unscaled values, which would fabricate a fake
+                # "no disagreement" cell.
+                arr[row, :] = np.nan
                 continue
             lo, hi = np.quantile(finite, [0.01, 0.99])
             clipped = np.clip(arr[row], lo, hi)
@@ -190,12 +195,21 @@ def _valuation_cashflow_disagreement(pe_ratio, pcf_ratio, pcf_ratio2, ocf_yield,
             if sd > 0:
                 arr[row] = (clipped - np.nanmean(clipped)) / sd
         standardized.append(arr)
-    with np.errstate(invalid="ignore"):
-        return pd.DataFrame(
-            np.nanstd(np.stack(standardized, axis=0), axis=0),
-            index=pe_ratio.index,
-            columns=pe_ratio.columns,
-            dtype=float,
+    stacked = np.stack(standardized, axis=0)  # (components, rows, cols)
+    out = np.full((stacked.shape[1], stacked.shape[2]), np.nan, dtype=float)
+    for r in range(stacked.shape[1]):
+        # R5 P0-18: a day whose component rows are all-NaN (fewer than 5 valid
+        # stocks) must stay NaN; require at least two standardised components.
+        for c in range(stacked.shape[2]):
+            finite = stacked[:, r, c]
+            finite = finite[np.isfinite(finite)]
+            if finite.size >= 2:
+                out[r, c] = float(np.std(finite))
+    return pd.DataFrame(
+        out,
+        index=pe_ratio.index,
+        columns=pe_ratio.columns,
+        dtype=float,
         )
 
 
@@ -210,17 +224,19 @@ def _growth_mismatch(ey, g, scale=1.0):
     scale = float(scale)
     if not np.isfinite(scale) or scale <= 0:
         raise ValueError("valuation_growth_mismatch scale must be a positive finite number")
-    # Both inputs must be decimal ratios by contract (field layer divides
-    # percent-based StockIndicator growth by 100).  A free ``scale`` would let a
-    # caller silently mask a percent/ratio unit mismatch (audit §5.2), so the
-    # default 1.0 is the only production-meaningful value.
+    # P1-140: ``scale`` is a dead searchable parameter — the only production-
+    # meaningful value is 1.0.  Both inputs are decimal ratios by contract (the
+    # field layer divides percent-based StockIndicator growth by 100); a free
+    # ``scale`` would silently mask a percent/ratio unit mismatch (audit §5.2).
+    # Removed from the searchable metadata surface; kept only as a
+    # backward-compat positional that validates the unit-honest default.
     return ey - g / scale
 
 
 _mk(
     "valuation_growth_mismatch",
-    "盈利收益率 - 利润增长（输入须为小数比率，字段层 /100；scale 仅向后兼容，应保持 1.0）。",
-    ["earnings_yield", "profit_growth", "scale"],
+    "盈利收益率 - 利润增长（输入须为小数比率，字段层 /100；scale 已从搜索面移除，仅向后兼容 1.0）。",
+    ["earnings_yield", "profit_growth"],
     _growth_mismatch,
     unit="level",
 )

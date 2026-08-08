@@ -32,7 +32,14 @@ _CANONICALS: list[str] = []
 
 
 def _aligned_market(close: pd.DataFrame, weights: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    """Return (per-stock minute returns, value-weighted market minute return)."""
+    """Return (per-stock minute returns, value-weighted market minute return).
+
+    P1-104: the cap weights must be FINITE and POSITIVE — a negative / zero /
+    NaN capitalisation would poison the value-weighted market return.  The
+    weights panel is a *daily* capitalisation that the data layer must provide
+    already lagged as-of (previous-day cap), so the day's weights are known at
+    the day's open.
+    """
     close = as_panel(close)
     weights = as_panel(weights)
     raw = close.to_numpy(dtype=float)
@@ -41,6 +48,7 @@ def _aligned_market(close: pd.DataFrame, weights: pd.DataFrame) -> tuple[pd.Data
         logr[1:, :] = np.log(raw[1:, :] / raw[:-1, :])
     rets = pd.DataFrame(logr, index=close.index, columns=close.columns)
     w_bc = broadcast_daily_panel(close, weights)
+    w_bc = w_bc.where(np.isfinite(w_bc) & (w_bc > 0.0))  # P1-104: invalid cap -> excluded
     w_ret = w_bc.where(rets.notna())
     with np_errstate():
         num = (rets * w_bc).sum(axis=1)

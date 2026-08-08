@@ -108,14 +108,16 @@ def _symmetric_gap(gp: np.ndarray, gm: np.ndarray) -> np.ndarray:
     source="alpha_language_cross",
 )
 class CsNeighborGap(SeriesOperator):
-    """邻域缺口: (x_{r+k} - x_{r-k}) / (横截面 MAD + eps), 按日 rank。
+    """邻域缺口(恒非负宽度): (x_{r+k} - x_{r-k}) / (横截面 MAD + eps), 按日 rank。
 
-    边缘(仅一侧有邻居)用单侧缺口; 双侧都无 -> NaN。正 = 周围整体偏高, 负 = 偏低。
+    边缘(仅一侧有邻居)用单侧缺口; 双侧都无 -> NaN。输出恒 >= 0: 它度量 k 阶上
+    下邻居之间的局部数值间距宽度, **不是**带符号的方向性缺口。上下方向失衡由
+    ``cs_local_curvature`` (G+ - G-)/(G+ + G-) 捕捉。
     """
 
     metadata = _metadata(
         "cs_neighbor_gap",
-        "k 阶上下邻居对称缺口(按截面 MAD 归一)。",
+        "k 阶上下邻居间的局部数值间距宽度(恒非负, 按截面 MAD 归一)。",
         ["x", "k", "group"],
         domain="cross_section",
         unit="ratio",
@@ -434,15 +436,18 @@ class GroupExSelfQuantile(SeriesOperator):
     source="alpha_language_cross",
 )
 class RelationWeightedStdExSelf(SeriesOperator):
-    """加权 peer dispersion(排除自身): 组内权重行归一化后的加权 std。
+    """组内排除自身、按节点权重加权的 peer std(非严格 relation-weighted)。
 
-    mu_i = sum_j w_ij x_j, sigma_i = sqrt(sum_j w_ij (x_j - mu_i)^2);
-    自身权重强制为 0, 组内权重行归一化。weight 要求非负。
+    mu_i = Σ_{j≠i} w_j x_j / Σ_{j≠i} w_j,
+    sigma_i = sqrt(Σ_{j≠i} w_j (x_j - mu_i)² / Σ_{j≠i} w_j)。
+    输入只有单 weight 列(各 peer 自身权重), **不是** focal×peer 的 w_ij relation
+    weight; 严格说是 group 内按节点权重加权的分散度(leave-one-out)。
+    组内权重行归一化, 自身排除, weight 要求非负。
     """
 
     metadata = _metadata(
         "relation_weighted_std_ex_self",
-        "组内排除自身的权重加权 std。",
+        "组内按各 peer 自身权重加权的排除自身 std(单 weight 输入, 非 w_ij relation weight)。",
         ["x", "weight", "group", "min_peers"],
         domain="price_volume",
         unit="level",

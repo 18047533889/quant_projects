@@ -88,16 +88,16 @@ def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
         n_bins = 2
     edges = np.unique(np.quantile(finite, np.linspace(0.0, 1.0, n_bins + 1)))
     if edges.size == 1:
+        # Fully degenerate input: every value identical.  Callers already
+        # fail-closed on <2 distinct states, so this is only a well-defined
+        # two-cell fallback so digitization below never sees a scalar.
         edges = np.array([edges[0] - 1.0, edges[0] + 1.0])
-    elif edges.size < n_bins + 1:
-        # Duplicate quantiles collapse bins; re-expand with a tiny deterministic
-        # jitter on a fixed grid so the number of cells stays ``n_bins``.
-        lo, hi = float(edges[0]), float(edges[-1])
-        if hi - lo <= _EPS:
-            lo, hi = lo - 1.0, hi + 1.0
-        edges = np.linspace(lo, hi, n_bins + 1)
-        edges[0] = -np.inf
-        edges[-1] = np.inf
+    # Duplicate quantiles (heavy ties) collapse cells.  Do NOT re-expand them to
+    # equal-width bins: that switches quantile -> equal-width discretization
+    # mid-algorithm and makes the factor jump as ties appear (review P1-49).
+    # Keep the unique quantile edges; the *effective* cell count is
+    # ``edges.size - 1`` and ``_te_from_transitions`` sizes its joint array to
+    # it (see below).
     return edges
 
 
@@ -108,24 +108,31 @@ def _te_from_transitions(xs: np.ndarray, ys: np.ndarray, x_next: np.ndarray, bin
         return np.nan
     x_edges = _quantile_edges(xs, bins)
     y_edges = _quantile_edges(ys, bins)
-    xb = np.clip(np.digitize(xs, x_edges) - 1, 0, bins - 1).astype(np.int64)
-    xnb = np.clip(np.digitize(x_next, x_edges) - 1, 0, bins - 1).astype(np.int64)
-    yb = np.clip(np.digitize(ys, y_edges) - 1, 0, bins - 1).astype(np.int64)
-    joint = np.zeros((bins, bins, bins), dtype=np.float64)
+    nxb = int(x_edges.size - 1)   # effective x cells = unique quantile edges - 1
+    nyb = int(y_edges.size - 1)   # effective y cells
+    if nxb < 2 or nyb < 2:
+        # Every cell collapsed to one: conditional information on a single-bin
+        # marginal is undefined.  Fail closed instead of returning a spurious 0
+        # from a degenerate histogram (review P1-49).
+        return np.nan
+    xb = np.clip(np.digitize(xs, x_edges) - 1, 0, nxb - 1).astype(np.int64)
+    xnb = np.clip(np.digitize(x_next, x_edges) - 1, 0, nxb - 1).astype(np.int64)
+    yb = np.clip(np.digitize(ys, y_edges) - 1, 0, nyb - 1).astype(np.int64)
+    joint = np.zeros((nxb, nxb, nyb), dtype=np.float64)
     for k in range(n):
         joint[xnb[k], xb[k], yb[k]] += 1.0
     joint += _ALPHA  # Jeffreys smoothing: all cells > 0.
     joint /= joint.sum()
-    # Marginals: p(x), p(x',x), p(x,y).
+    # Marginals: p(x), p(x',x), p(x,y).  joint is indexed [x', x, y]; summing
+    # axis 0 (x') leaves axes [x, y], so pxy is directly p(x,y) indexed [x, y].
     px = joint.sum(axis=(0, 2))          # over x' and y -> p(x)
     pxx = joint.sum(axis=2)              # p(x', x)
-    pxy = joint.sum(axis=0)              # p(x, y)  [axis0 is x']
-    pxy = np.moveaxis(pxy, 0, -1)        # -> p(x,y) indexed [x, y]
+    pxy = joint.sum(axis=0)              # over x' -> p(x, y), indexed [x, y]
     # TE = sum p(x',x,y) * log( p(x',x,y) * p(x) / (p(x',x) * p(x,y)) ).
     te = 0.0
-    for i in range(bins):
-        for j in range(bins):
-            for k in range(bins):
+    for i in range(nxb):
+        for j in range(nxb):
+            for k in range(nyb):
                 p = joint[j, i, k]
                 if p <= _EPS:
                     continue
@@ -505,8 +512,10 @@ def _te_peak_window(tw: np.ndarray, sw: np.ndarray, bins: int, min_transitions: 
         xn = x_next[mask]
         if np.unique(xs).size < 2 or np.unique(ys).size < 2:
             continue
+        # Only the *masked* transitions (xs, ys, xn) are aligned triples; passing
+        # the unmasked ``x_next`` here would re-pair values across the NaN gaps
+        # (P0-01 review) — a length mismatch / time misalignment.
         v = _te_from_transitions(xs, ys, xn, bins)
-        v = _te_from_transitions(xs, ys, x_next, bins)
         if not np.isfinite(v):
             continue
         if not np.isfinite(best) or v > best:

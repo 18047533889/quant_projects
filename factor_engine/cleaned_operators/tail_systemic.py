@@ -14,6 +14,14 @@
 Extreme states use each stock's own trailing-window quantile (PIT-safe).  All
 operators are deterministic and fail closed to NaN for stocks with no peers or
 no observed extreme state.
+
+Group membership is read **per day** from the ``group_id`` panel: a historical
+day ``d`` is always evaluated with the membership that was in force *on day d*,
+so an industry change / index migration never relabels past days (review
+P1-46a).  Callers must supply a genuinely historical per-day ``group_id`` panel
+(PIT membership), not a single current-day snapshot — a today-only snapshot
+fed for every row would reintroduce the look-back relabel the per-day panel
+avoids.
 """
 from __future__ import annotations
 
@@ -304,13 +312,20 @@ def _diffusion_series(xv: np.ndarray, gv: np.ndarray, alpha: float, steps: int) 
             if idx.size < 2:
                 continue
             vals = np.asarray([xv[r, i] for i in idx], dtype=float)
-            if not np.all(np.isfinite(vals)):
+            # Local fail-close (review P1-46b): a member whose ``x`` is missing
+            # drops out of that day's adjacency instead of NaN-ing the whole
+            # group's cascade.  The finite subgraph is re-normalised — each
+            # remaining stock still spreads uniformly to its finite peers — and
+            # missing members keep their NaN output.
+            finite_mask = np.isfinite(vals)
+            idx = idx[finite_mask]
+            if idx.size < 2:
                 continue
             m = idx.size
             P = np.full((m, m), 1.0 / (m - 1), dtype=float)
             np.fill_diagonal(P, 0.0)
             cascade = np.zeros(m, dtype=float)
-            v = vals.copy()
+            v = vals[finite_mask].copy()
             for k in range(1, int(steps) + 1):
                 v = P @ v
                 cascade += (1.0 - alpha) * (alpha ** (k - 1)) * v
@@ -338,7 +353,8 @@ class RelationDiffusionScore(SeriesOperator):
 
     group 成员定义邻接（PIT graph 可用前的最务实形态）：每只股票向其同组 peer
     均匀扩散信号，输出 K 步衰减级联。``x - D`` 即 diffusion residual recipe。
-    无 peer 或 x NaN → fail-closed。P2 / Research。
+    fail-close 为**局部**：组内某只股票 x 缺失只剔除该节点、在剩余有限成员
+    上重归一化传播，不再让整组级联变 NaN（review P1-46b）。P2 / Research。
     """
 
     metadata = _metadata(

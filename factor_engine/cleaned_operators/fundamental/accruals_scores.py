@@ -81,9 +81,9 @@ _mk(
 
 _mk(
     "fin_contract_asset_intensity",
-    "合同资产 / 总资产。",
-    ["contract_assets", "total_assets", "period_id"],
-    lambda a, ta, period_id: _safe_ratio(a, ta),
+    "合同资产 / 总资产。period_id 仅对齐契约，不参与计算。",
+    ["contract_assets", "total_assets"],
+    lambda a, ta, period_id=None: _safe_ratio(a, ta),
 )
 _mk(
     "fin_contract_asset_growth",
@@ -93,9 +93,9 @@ _mk(
 )
 _mk(
     "fin_contract_liability_intensity",
-    "合同负债 / 总资产。",
-    ["contract_liability", "total_assets", "period_id"],
-    lambda l, ta, period_id: _safe_ratio(l, ta),
+    "合同负债 / 总资产。period_id 仅对齐契约，不参与计算。",
+    ["contract_liability", "total_assets"],
+    lambda l, ta, period_id=None: _safe_ratio(l, ta),
 )
 _mk(
     "fin_contract_liability_growth",
@@ -105,9 +105,9 @@ _mk(
 )
 _mk(
     "fin_contract_asset_liability_gap",
-    "(合同资产 - 合同负债) / 总资产。",
-    ["contract_assets", "contract_liability", "total_assets", "period_id"],
-    lambda a, l, ta, period_id: _safe_ratio(a - l, ta),
+    "(合同资产 - 合同负债) / 总资产。period_id 仅对齐契约，不参与计算。",
+    ["contract_assets", "contract_liability", "total_assets"],
+    lambda a, l, ta, period_id=None: _safe_ratio(a - l, ta),
 )
 
 
@@ -117,47 +117,51 @@ _mk(
 
 _mk(
     "fin_lease_intensity",
-    "(使用权资产 + 租赁负债) / 总资产。",
-    ["usufruct_assets", "lease_liability", "total_assets", "period_id"],
-    lambda u, l, ta, period_id: _safe_ratio(u + l, ta),
+    "(使用权资产 + 租赁负债) / 总资产。period_id 仅对齐契约，不参与计算。",
+    ["usufruct_assets", "lease_liability", "total_assets"],
+    lambda u, l, ta, period_id=None: _safe_ratio(u + l, ta),
 )
 _mk(
     "fin_lease_asset_liability_gap",
-    "(使用权资产 - 租赁负债) / 总资产。",
-    ["usufruct_assets", "lease_liability", "total_assets", "period_id"],
-    lambda u, l, ta, period_id: _safe_ratio(u - l, ta),
+    "(使用权资产 - 租赁负债) / 总资产。period_id 仅对齐契约，不参与计算。",
+    ["usufruct_assets", "lease_liability", "total_assets"],
+    lambda u, l, ta, period_id=None: _safe_ratio(u - l, ta),
 )
 _mk(
     "fin_goodwill_intensity",
-    "商誉 / 总资产。",
-    ["goodwill", "total_assets", "period_id"],
-    lambda g, ta, period_id: _safe_ratio(g, ta),
+    "商誉 / 总资产。period_id 仅对齐契约，不参与计算。",
+    ["goodwill", "total_assets"],
+    lambda g, ta, period_id=None: _safe_ratio(g, ta),
 )
 _mk(
     "fin_deferred_tax_gap",
-    "(递延所得税资产 - 递延所得税负债) / 总资产。",
-    ["deferred_tax_assets", "deferred_tax_liability", "total_assets", "period_id"],
-    lambda a, l, ta, period_id: _safe_ratio(a - l, ta),
+    "(递延所得税资产 - 递延所得税负债) / 总资产。period_id 仅对齐契约，不参与计算。",
+    ["deferred_tax_assets", "deferred_tax_liability", "total_assets"],
+    lambda a, l, ta, period_id=None: _safe_ratio(a - l, ta),
 )
 _mk(
     "fin_impairment_intensity",
-    "(资产减值损失 + 信用减值损失) / 营业收入。",
-    ["asset_impairment_loss", "credit_impairment_loss", "operating_revenue", "period_id"],
-    lambda ai, ci, rev, period_id: _safe_ratio(ai + ci, rev),
+    "(资产减值损失 + 信用减值损失) / 营业收入。period_id 仅对齐契约，不参与计算。",
+    ["asset_impairment_loss", "credit_impairment_loss", "operating_revenue"],
+    lambda ai, ci, rev, period_id=None: _safe_ratio(ai + ci, rev),
 )
 
 
-def _fin_goodwill_risk_score(goodwill, goodwill_prev, asset_impairment, credit_impairment, total_assets, period_id):
+def _fin_goodwill_risk_score(goodwill, asset_impairment, credit_impairment, total_assets, period_id):
+    # P1-134: the caller-supplied ``goodwill_prev`` was a second "prior period"
+    # source that could disagree with the fiscal-ordinal prior computed from
+    # ``period_id``.  Only the fiscal-ordinal prior is retained — growth is
+    # ``_growth`` (current - prior)/|prior| walked over visible report periods.
     intensity = _safe_ratio(goodwill, total_assets)
-    gw_growth = _safe_ratio(_delta(goodwill, period_id), goodwill_prev.replace(0, np.nan))
+    gw_growth = _growth(goodwill, period_id)
     imp = _safe_ratio(asset_impairment + credit_impairment, total_assets)
     return intensity + gw_growth + imp
 
 
 _mk(
     "fin_goodwill_risk_score",
-    "商誉风险：GoodWill/Assets + GoodWill增长 + 减值/Assets。",
-    ["goodwill", "goodwill_prev", "asset_impairment_loss", "credit_impairment_loss", "total_assets", "period_id"],
+    "商誉风险：GoodWill/Assets + GoodWill增长(fiscal-ordinal) + 减值/Assets。",
+    ["goodwill", "asset_impairment_loss", "credit_impairment_loss", "total_assets", "period_id"],
     _fin_goodwill_risk_score,
 )
 
@@ -174,21 +178,21 @@ _mk(
 )
 _mk(
     "fin_borrowing_intensity",
-    "取得借款收到的现金 / 平均资产。",
-    ["cash_from_borrowing", "avg_assets", "period_id"],
-    lambda c, aa, period_id: _safe_ratio(c, aa),
+    "取得借款收到的现金 / 平均资产。period_id 仅对齐契约，不参与计算。",
+    ["cash_from_borrowing", "avg_assets"],
+    lambda c, aa, period_id=None: _safe_ratio(c, aa),
 )
 _mk(
     "fin_debt_repayment_intensity",
-    "偿还债务支付的现金 / 平均资产。",
-    ["borrowing_repayment", "avg_assets", "period_id"],
-    lambda c, aa, period_id: _safe_ratio(c, aa),
+    "偿还债务支付的现金 / 平均资产。period_id 仅对齐契约，不参与计算。",
+    ["borrowing_repayment", "avg_assets"],
+    lambda c, aa, period_id=None: _safe_ratio(c, aa),
 )
 _mk(
     "fin_net_borrowing_cashflow",
-    "(借款 + 发债 - 偿债) / 平均资产。",
-    ["cash_from_borrowing", "cash_from_bonds_issue", "borrowing_repayment", "avg_assets", "period_id"],
-    lambda cb, bo, rp, aa, period_id: _safe_ratio(cb + bo - rp, aa),
+    "(借款 + 发债 - 偿债) / 平均资产。period_id 仅对齐契约，不参与计算。",
+    ["cash_from_borrowing", "cash_from_bonds_issue", "borrowing_repayment", "avg_assets"],
+    lambda cb, bo, rp, aa, period_id=None: _safe_ratio(cb + bo - rp, aa),
 )
 _mk(
     "fin_equity_capital_growth",
@@ -198,40 +202,44 @@ _mk(
 )
 _mk(
     "fin_financing_gap",
-    "(资本开支 + 偿债 + 分派股利利息 - OCF) / 平均资产。",
-    ["capex", "debt_repayment", "dividend_interest_payment", "ocf", "avg_assets", "period_id"],
-    lambda c, d, di, o, aa, period_id: _safe_ratio(c + d + di - o, aa),
+    "(资本开支 + 偿债 + 分派股利利息 - OCF) / 平均资产。period_id 仅对齐契约，不参与计算。",
+    ["capex", "debt_repayment", "dividend_interest_payment", "ocf", "avg_assets"],
+    lambda c, d, di, o, aa, period_id=None: _safe_ratio(c + d + di - o, aa),
 )
 _mk(
     "fin_interest_coverage_proxy",
-    "营业利润 / |利息费用|。",
-    ["operating_profit", "interest_cost", "period_id"],
-    lambda op, ic, period_id: _safe_ratio(op, ic.abs()),
+    "营业利润 / |利息费用|。period_id 仅对齐契约，不参与计算。",
+    ["operating_profit", "interest_cost"],
+    lambda op, ic, period_id=None: _safe_ratio(op, ic.abs()),
 )
 _mk(
     "fin_debt_service_coverage_proxy",
-    "OCF / (偿债 + |利息费用|)。",
-    ["ocf", "borrowing_repayment", "interest_cost", "period_id"],
-    lambda o, rp, ic, period_id: _safe_ratio(o, rp + ic.abs()),
+    "OCF / (偿债 + |利息费用|)。period_id 仅对齐契约，不参与计算。",
+    ["ocf", "borrowing_repayment", "interest_cost"],
+    lambda o, rp, ic, period_id=None: _safe_ratio(o, rp + ic.abs()),
 )
 _mk(
     "fin_cash_burn_runway",
-    "现金及等价物 / |年化负OCF|（OCF为负时）。",
-    ["cash_equivalents", "ocf", "period_id"],
-    lambda c, o, period_id: _burn_runway(c, o),
+    "现金及等价物 / |负OCF|（输入 OCF 须为 TTM/年化口径；单季 OCF 会低估 runway 年化月数）。",
+    ["cash_equivalents", "annualized_ocf"],
+    lambda c, o, period_id=None: _burn_runway(c, o),
 )
 
 
 def _burn_runway(cash_equivalents: pd.DataFrame, ocf: pd.DataFrame) -> pd.DataFrame:
+    # P1-133: the doc used to claim "现金/|年化负OCF|" but the code did not
+    # annualize — cash/|OCF| on a quarterly/semi-annual/TTM input each mean
+    # different things.  The operator now documents the input as TTM/annualized
+    # OCF; no hidden annualization is performed.
     neg_ocf = ocf.where(ocf < 0, np.nan).abs()
     return cash_equivalents / neg_ocf.replace(0, np.nan)
 
 
 _mk(
     "fin_capex_intensity",
-    "购建固定资产无形资产其他长期资产支付 / 平均资产。",
-    ["capex_cash", "avg_assets", "period_id"],
-    lambda c, aa, period_id: _safe_ratio(c, aa),
+    "购建固定资产无形资产其他长期资产支付 / 平均资产。period_id 仅对齐契约，不参与计算。",
+    ["capex_cash", "avg_assets"],
+    lambda c, aa, period_id=None: _safe_ratio(c, aa),
 )
 _mk(
     "fin_capex_growth",
@@ -241,21 +249,21 @@ _mk(
 )
 _mk(
     "fin_acquisition_cash_intensity",
-    "取得子公司支付现金 / 平均资产。",
-    ["net_cash_from_subcompany", "avg_assets", "period_id"],
-    lambda c, aa, period_id: _safe_ratio(c, aa),
+    "取得子公司支付现金 / 平均资产。period_id 仅对齐契约，不参与计算。",
+    ["net_cash_from_subcompany", "avg_assets"],
+    lambda c, aa, period_id=None: _safe_ratio(c, aa),
 )
 _mk(
     "fin_rd_total_intensity",
-    "(研发费用 + 开发支出资本化增加) / 营业收入（资本化部分为代理值）。",
-    ["rd_expense", "capitalized_dev_increase", "operating_revenue", "period_id"],
-    lambda r, cd, rev, period_id: _safe_ratio(r + cd, rev),
+    "(研发费用 + 开发支出资本化增加) / 营业收入（资本化部分为代理值）。period_id 仅对齐契约，不参与计算。",
+    ["rd_expense", "capitalized_dev_increase", "operating_revenue"],
+    lambda r, cd, rev, period_id=None: _safe_ratio(r + cd, rev),
 )
 _mk(
     "fin_rd_capitalization_ratio",
-    "开发支出资本化增加 / (研发费用 + 资本化增加)（代理值）。",
-    ["capitalized_dev_increase", "rd_expense", "period_id"],
-    lambda cd, r, period_id: _safe_ratio(cd, cd + r),
+    "开发支出资本化增加 / (研发费用 + 资本化增加)（代理值）。period_id 仅对齐契约，不参与计算。",
+    ["capitalized_dev_increase", "rd_expense"],
+    lambda cd, r, period_id=None: _safe_ratio(cd, cd + r),
 )
 
 

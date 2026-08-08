@@ -99,5 +99,33 @@ def test_parse_aggregation_spec_defaults():
     spec = parse_aggregation_spec("minute_at", field="volume")
     assert spec.aggregation == "minute_at"
     assert spec.metric == "sum"  # volume → sum
-    spec2 = parse_aggregation_spec({"aggregation": "minute_range", "start": "a", "end": "b"}, field="close")
+    spec2 = parse_aggregation_spec(
+        {"aggregation": "minute_range", "start": "09:31", "end": "10:00"}, field="close"
+    )
     assert spec2.metric is None  # 显式 dict 不推断 metric
+
+
+def test_parse_aggregation_spec_strict_hhmm_rejects_bad_time():
+    """#P0-56 非法 HH:MM（含非时间字符串）必须 ValidationError，不再静默接受。"""
+    from data_access.core.exceptions import ValidationError
+
+    for bad in ("a", "b", "9:31", "09:61", "24:00", 931):
+        with pytest.raises(ValidationError):
+            parse_aggregation_spec(
+                {"aggregation": "minute_range", "start": bad, "end": "10:00"},
+                field="close",
+            )
+
+
+def test_parse_aggregation_spec_strict_period_index():
+    """#P0-56 period<=0 / index<0 / unknown key 必须 fail-closed，禁止 silent clamp。"""
+    from data_access.core.exceptions import ValidationError
+
+    with pytest.raises(ValidationError):
+        parse_aggregation_spec({"period": -100}, field="close")
+    with pytest.raises(ValidationError):
+        parse_aggregation_spec({"period": 5, "index": -1}, field="close")
+    with pytest.raises(ValidationError):
+        parse_aggregation_spec({"aggregation": "minute_at", "bogus": 1}, field="close")
+    with pytest.raises(ValidationError):
+        parse_aggregation_spec({"timezone": "Not/AZone"}, field="close")

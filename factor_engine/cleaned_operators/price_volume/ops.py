@@ -42,8 +42,24 @@ class CumulativeReturns(SeriesOperator):
     )
 
     def _calculate_series(self, price: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        returns = price.pct_change(fill_method=None).fillna(0)
-        return (1 + returns).cumprod() - 1
+        # Cumulative return along the *contiguous valid price path* only.  A
+        # missing price censors that bar to NaN — never a fabricated 0-return
+        # day — and the path re-anchors at the next valid price (review P1-124).
+        pv = price.to_numpy(dtype=float)
+        rows, cols = pv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for c in range(cols):
+            anchor: float | None = None
+            for t in range(rows):
+                if not np.isfinite(pv[t, c]):
+                    anchor = None
+                    continue
+                if anchor is None:
+                    anchor = pv[t, c]
+                    out[t, c] = 0.0
+                else:
+                    out[t, c] = pv[t, c] / anchor - 1.0
+        return pd.DataFrame(out, index=price.index, columns=price.columns)
 
 
 
@@ -62,10 +78,33 @@ class MaxDrawdown(SeriesOperator):
     )
 
     def _calculate_series(self, returns: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        cum = (1 + returns.fillna(0)).cumprod()
-        running_max = cum.expanding(min_periods=1).max()
-        drawdown = (cum - running_max) / running_max
-        return drawdown.expanding(min_periods=1).min()
+        # Per-bar drawdown along the contiguous valid return path.  A missing
+        # return censors that bar to NaN (never a 0-return day) and the
+        # cumulative path re-anchors at the next valid bar — no fill0, no
+        # dropna/reconnect.  The returned series is the historical worst
+        # drawdown up to each bar (expanding min; missing bars do not reset it).
+        rv = returns.to_numpy(dtype=float)
+        rows, cols = rv.shape
+        dd = np.full((rows, cols), np.nan, dtype=float)
+        for c in range(cols):
+            cum = np.nan
+            peak = np.nan
+            for t in range(rows):
+                if not np.isfinite(rv[t, c]):
+                    cum = np.nan
+                    peak = np.nan
+                    continue
+                if not np.isfinite(cum):
+                    cum = 1.0
+                    peak = 1.0
+                cum *= 1.0 + rv[t, c]
+                if cum > peak:
+                    peak = cum
+                dd[t, c] = (cum - peak) / peak
+        worst = pd.DataFrame(dd, index=returns.index, columns=returns.columns).expanding(min_periods=1).min()
+        # Censor bars whose own return is missing (the drawdown state at that bar
+        # is unknown) instead of silently reporting the historical record there.
+        return worst.where(returns.notna())
 
 
 
@@ -183,7 +222,7 @@ class Volatility(SeriesOperator):
         category="financial",
         description="波动率（年化）",
         examples=["volatility(returns, 20)"],
-        param_names=["x", "window"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["financial", "volatility", "std"]
     )
@@ -205,18 +244,27 @@ class VWAP(SeriesOperator):
         category="financial",
         description="成交量加权平均价",
         examples=["vwap(close, volume, 20)"],
-        param_names=["price", "volume", "window"],
+        param_names=["price", "volume", "window", "min_periods"],
         return_type="series",
         tags=["financial", "vwap"]
     )
 
-    def _calculate_series(self, price: pd.DataFrame, volume: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        mp = int(kwargs.get("min_periods", 1))
+    def _calculate_series(self, price: pd.DataFrame, volume: pd.DataFrame, window: int = 20, min_periods: int | None = None, **kwargs) -> pd.DataFrame:
+        w = int(window)
+        if w < 1:
+            raise ValueError("window must be >= 1")
+        # Volume is a count/amount and must be non-negative (review P1-126).
+        vol_arr = volume.to_numpy(dtype=float)
+        if np.any(vol_arr < 0):
+            raise ValueError("vwap: volume must be non-negative")
+        mp = int(min_periods) if min_periods is not None else 1
+        if mp < 1:
+            raise ValueError("min_periods must be >= 1")
         valid = price.notna() & volume.notna()
         pv = (price * volume).where(valid)
         vol = volume.where(valid)
-        den = vol.rolling(window=window, min_periods=mp).sum().replace(0, np.nan)
-        return pv.rolling(window=window, min_periods=mp).sum() / den
+        den = vol.rolling(window=w, min_periods=mp).sum().replace(0, np.nan)
+        return pv.rolling(window=w, min_periods=mp).sum() / den
 
 
 @register_operator(

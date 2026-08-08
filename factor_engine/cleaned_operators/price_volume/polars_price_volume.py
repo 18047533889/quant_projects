@@ -46,8 +46,15 @@ class CumulativeReturnsPolars(SeriesOperator):
         cols = _numeric_cols(price)
         exprs = []
         for c in cols:
-            ret = pl.col(c) / pl.col(c).shift(1) - 1.0
-            exprs.append(((1.0 + ret.fill_null(0.0)).cum_prod() - 1.0).alias(c))
+            p = pl.col(c)
+            # Re-anchor at each contiguous valid segment: a missing price
+            # censors that bar to null rather than a fabricated 0-return day
+            # (review P1-124).  ``forward_fill`` of the segment-start anchor is
+            # safe because each segment starts at a valid price and the null
+            # boundary rows output null regardless.
+            is_start = p.is_not_null() & (p.shift(1).is_null().fill_null(True))
+            anchor = pl.when(is_start).then(p).otherwise(pl.lit(None)).forward_fill()
+            exprs.append((p / anchor - 1.0).alias(c))
         return price.with_columns(exprs)
 
 
@@ -56,7 +63,7 @@ class VolatilityPolars(SeriesOperator):
     """Polars 滚动波动率（年化）"""
     metadata = OperatorMetadata(
         name="volatility", category="financial", description="滚动波动率（年化）",
-        param_names=["x", "window"], return_type="series", tags=["financial", "polars"],
+        param_names=["x", "window", "min_periods"], return_type="series", tags=["financial", "polars"],
     )
 
     def _calculate_series(
@@ -86,20 +93,32 @@ class VWAPPolars(SeriesOperator):
     """Polars 成交量加权平均价"""
     metadata = OperatorMetadata(
         name="vwap", category="financial", description="成交量加权平均价",
-        param_names=["price", "volume", "window"], return_type="series", tags=["financial", "polars"],
+        param_names=["price", "volume", "window", "min_periods"], return_type="series", tags=["financial", "polars"],
     )
 
     def _calculate_series(
-        self, price: pl.DataFrame, volume: pl.DataFrame, window: int = 20, **kwargs
+        self,
+        price: pl.DataFrame,
+        volume: pl.DataFrame,
+        window: int = 20,
+        min_periods: int | None = None,
+        **kwargs,
     ) -> pl.DataFrame:
         w = int(kwargs.get("d", window))
         cols = _align_cols(price, volume)
+        # Volume is a count/amount and must be non-negative (review P1-126).
+        for c in cols:
+            if int(volume[c].lt(0).sum()) > 0:
+                raise ValueError("vwap: volume must be non-negative")
+        mp = int(min_periods) if min_periods is not None else 1
         exprs = []
         for c in cols:
             pv = price[c] * volume[c]
-            num = pv.rolling_sum(window_size=w, min_samples=1)
-            den = volume[c].rolling_sum(window_size=w, min_samples=1)
-            exprs.append((num / den).alias(c))
+            num = pv.rolling_sum(window_size=w, min_samples=mp)
+            den = volume[c].rolling_sum(window_size=w, min_samples=mp)
+            # Zero total volume -> NaN (cohort-consistent), matching the pandas
+            # reference ``den.replace(0, np.nan)``.
+            exprs.append((pl.when(den == 0).then(pl.lit(None)).otherwise(num / den)).alias(c))
         return price.with_columns(exprs)
 
 
@@ -167,14 +186,43 @@ class MaxDrawdownPolars(SeriesOperator):
     )
 
     def _calculate_series(self, returns: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        # Per-bar drawdown along the contiguous valid return path (review
+        # P1-125): a missing return censors that bar and re-anchors the
+        # cumulative path at the next valid bar — no fill-0, no drop-reconnect.
+        # The returned series is the historical worst drawdown up to each bar.
         cols = _numeric_cols(returns)
-        exprs = []
+        out: dict[str, np.ndarray] = {}
         for c in cols:
-            cum = (1.0 + pl.col(c).fill_null(0.0)).cum_prod()
-            peak = cum.cum_max()
-            dd = (cum - peak) / peak
-            exprs.append(dd.alias(c))
-        return returns.with_columns(exprs)
+            col = np.asarray(returns[c].to_numpy(), dtype=float)
+            rows = col.shape[0]
+            dd = np.full(rows, np.nan, dtype=float)
+            cum = np.nan
+            peak = np.nan
+            for t in range(rows):
+                if not np.isfinite(col[t]):
+                    cum = np.nan
+                    peak = np.nan
+                    continue
+                if not np.isfinite(cum):
+                    cum = 1.0
+                    peak = 1.0
+                cum *= 1.0 + col[t]
+                if cum > peak:
+                    peak = cum
+                dd[t] = (cum - peak) / peak
+            worst = np.empty(rows, dtype=float)
+            running = 0.0
+            for t in range(rows):
+                if np.isfinite(dd[t]):
+                    running = min(running, dd[t])
+                # Censor bars whose own return is missing (drawdown state unknown)
+                # instead of reporting the historical record there.
+                worst[t] = running if np.isfinite(col[t]) else np.nan
+            out[c] = worst
+        result = pl.DataFrame(out)
+        if "date" in returns.columns:
+            result = result.with_columns(returns["date"])
+        return result
 
 
 def _conditional_beta(ret: np.ndarray, mkt: np.ndarray, window: int, *, mode: str, q: float = 0.05) -> np.ndarray:

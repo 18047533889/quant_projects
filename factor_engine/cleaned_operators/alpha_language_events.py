@@ -42,6 +42,7 @@ from cleaned_operators.rolling_pack import (
 )
 
 _EPS = 1e-12
+_MAD_CONST = 1.4826
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
@@ -244,9 +245,11 @@ _register_report_operator(
 
 
 def _make_change_z(periods: int):
-    """Report-observation change z-score: current period-over-period relative
-    change standardized by the MAD of that field's own change history over the
-    *visible* report ordinals (strictly-past, PIT-safe)."""
+    """Report-observation change z-score: (current period-over-period relative
+    change - median of that field's own change history) / (1.4826 * MAD of the
+    history), over the *visible* report ordinals (strictly-past, PIT-safe).
+    Centering removes the systematic positive bias that would otherwise make
+    steadily-growing fundamental fields look persistently "changed"."""
 
     def calc(order, visible, current):
         val = visible.get(current, np.nan)
@@ -271,7 +274,7 @@ def _make_change_z(periods: int):
         mad = float(np.median(np.abs(arr - med)))
         if not np.isfinite(mad) or mad <= _EPS:
             return np.nan
-        return chg / mad
+        return (chg - med) / (_MAD_CONST * mad)
 
     return calc
 
@@ -321,7 +324,7 @@ _register_report_operator(
     "report_change_breadth",
     ("f1", "f2", "f3", "period_id", "periods", "eps"),
     _report_change_breadth,
-    "基本面变化广泛度: (上升字段数 - 下降字段数) / K, 每个字段按其自身报告历史 MAD 标准化。",
+    "基本面变化广泛度: (上升字段数 - 下降字段数) / K, 每个字段按其自身报告历史 (change - median)/(1.4826·MAD) 居中标准化。",
 )
 _register_report_operator(
     "report_change_coherence",

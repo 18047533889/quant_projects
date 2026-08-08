@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from data_access.core.exceptions import ValidationError
+from data_access.read.formats import format_adapter_for_dataset
 
 
 def route_minute_storage(
@@ -107,18 +108,43 @@ def materialize_daily_aggregate(
     for out, vc in value_columns.items():
         srcs, _ = _normalize_value(vc)
         cols.extend(srcs)
-    table = store.read_arrow(
+
+    # #21/#22 一次扫描：PreparedReadRequest → 带行级谓词的聚合 SQL → GROUP BY。
+    # 旧实现先 read_arrow 全表只查 num_rows==0（第一遍白扫），再重扫聚合，
+    # 且第二次聚合 SQL 完全没有 instrument_filter/time_range WHERE——文件内含
+    # 多 ticker/date 时会把没请求的股票也聚合进去。现在单条 SQL 完成：
+    #   路径范围（_prepare_dataset_read）+ 行级谓词（Predicate）+ GROUP BY。
+    from data_access.read.predicate import Predicate, compile_predicate
+
+    store._prepare_read_request(
         source_dataset,
         columns=cols,
         time_range=time_range,
-        instrument_filter=instrument_filter,
         allow_sparse=True,
-        **params,
+        params=dict(params),
     )
-    if table.num_rows == 0:
+    paths = store._prepare_dataset_read(
+        ds, time_range=time_range, params=dict(params), instrument_filter=instrument_filter
+    )
+    if not paths:
         return {"rows": 0, "path": None, "mode": mode}
 
-    # DuckDB 内 groupby + 聚合（source 扇出 → 每日一行）
+    path_param = paths if len(paths) > 1 else paths[0]
+    adapter = format_adapter_for_dataset(ds)
+    from_clause = adapter.build_from_clause(
+        path_param,
+        hive_partitioning=ds.hive_partitioning,
+        union_by_name=ds.union_by_name,
+    )
+    time_col_type = str((ds.schema or {}).get(time_column or "", "")).lower()
+    pred = Predicate(
+        time_range=time_range,
+        instrument_filter=instrument_filter,
+        hive_filters=store._bucket_hive_filters(ds, instrument_filter),
+        time_column_is_timestamp=("timestamp" in time_col_type or "datetime" in time_col_type),
+    )
+    compiled = compile_predicate(pred, time_column=time_column, instrument_column=instrument_column)
+
     group_list = ", ".join(_qi(c) for c in dict.fromkeys([time_column, instrument_column, *groupby]))
     agg_parts: list[str] = []
     for out, vc in value_columns.items():
@@ -127,15 +153,14 @@ def materialize_daily_aggregate(
         agg_parts.append(f"{_AGG[agg]}({expr}) AS {_qi(out)}")
     sql = (
         f"SELECT {group_list}, {', '.join(agg_parts)} "
-        f"FROM read_parquet(?) GROUP BY {group_list}"
-    )
-    paths = store._prepare_dataset_read(
-        ds, time_range=time_range, params=dict(params), instrument_filter=instrument_filter
-    )
-    if not paths:
+        f"FROM {from_clause} {compiled.where_sql} "
+        f"GROUP BY {group_list}"
+    ).strip()
+    params_list: list[Any] = [path_param, *compiled.params]
+    budget = store._resolve_read_budget(ds, None)
+    agg_table = store._engine.execute_arrow(sql, params_list, deadline_ms=budget.max_elapsed_ms)
+    if agg_table.num_rows == 0:
         return {"rows": 0, "path": None, "mode": mode}
-    path_param = paths if len(paths) > 1 else paths[0]
-    agg_table = store._engine.execute_arrow(sql, [path_param], deadline_ms=None)
 
     result = store.write_arrow(
         serving_dataset, agg_table, mode=mode, partition_by=partition_by

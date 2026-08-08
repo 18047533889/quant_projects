@@ -114,16 +114,13 @@ _mk(
 
 
 def _multi_index_entry_intensity(entry_a, entry_b, entry_c, window=20):
-    # Unknown state (NaN) must not be silently treated as "not entered": a missing
-    # index-membership datum could mask a real entry.  Sum entries only over the
-    # index flags that are known, and emit NaN on days where none of the three
-    # index statuses are known (S9 unknown-state contract).
-    known = entry_a.notna() | entry_b.notna() | entry_c.notna()
-    total = (
-        entry_a.where(entry_a.notna(), 0.0)
-        + entry_b.where(entry_b.notna(), 0.0)
-        + entry_c.where(entry_c.notna(), 0.0)
-    ).where(known)
+    # P1-141: partial-unknown flags (A=1,B=NaN,C=NaN) must NOT collapse to
+    # "1 entered" via 1+0+0 — B/C could also be entered but are undisclosed.
+    # Require ALL THREE index flags known per day; unknown is never treated as
+    # "not entered".  The rolling sum then fails closed (min_periods=window)
+    # whenever any day inside the window carries an unknown flag.
+    all_known = entry_a.notna() & entry_b.notna() & entry_c.notna()
+    total = (entry_a + entry_b + entry_c).where(all_known)
     return total.rolling(int(window)).sum()
 
 
@@ -137,16 +134,19 @@ _mk(
 
 
 def _listing_age(listing_date, index_dates):
-    pos = {ts: i for i, ts in enumerate(index_dates)}
+    # P1-142: a ListingDate that falls on a non-trading day (weekend/holiday)
+    # must map to the first trading day ON OR AFTER it (searchsorted "left"),
+    # instead of being dropped for not appearing verbatim in the index.
+    index_array = np.asarray(index_dates, dtype="datetime64[ns]")
     out = pd.DataFrame(np.nan, index=listing_date.index, columns=listing_date.columns, dtype=float)
     for col in listing_date.columns:
         ld = listing_date[col].dropna()
         if len(ld) == 0:
             continue
-        first_date = pd.Timestamp(ld.iloc[0]).normalize()
-        base = pos.get(first_date)
-        if base is None:
-            continue
+        first_date = pd.Timestamp(ld.iloc[0]).normalize().to_datetime64()
+        base = int(np.searchsorted(index_array, first_date, side="left"))
+        if base >= len(index_array):
+            continue  # listing date after the whole panel → unknown age
         ages = np.arange(len(out), dtype=float) - base
         # Pre-listing rows are UNKNOWN (the stock does not trade yet), not an
         # age of zero.  Returning 0 conflates "just listed" with "not listed".
@@ -207,17 +207,26 @@ def _index_event_decay(entry_event, window=20, decay=0.9, missing_policy="break"
 
     缺失事件（NaN）绝不当作「无事件=0」：
       - 首个已知事件之前 → NaN；
-      - 窗口内出现数据缺口 → ``missing_policy="break"``（默认）输出 NaN 并重置；
-        ``"carry"`` 保留衰减权重状态但当前输出仍为 NaN。
+      - 窗口内出现数据缺口：
+        ``missing_policy="break"``（默认）输出 NaN 并重置状态——须重新积累一个
+        完整已知窗口后才恢复输出（缺口不归零、不制造虚假「无事件」）；
+        ``"carry"`` 保留衰减权重状态，把最近一个有效输出向后携带（信号在缺口期
+        不中断，也不谎报为 0 事件）。
     事件序列为 0/±1（纳入=+1、剔除=-1），权重按时间衰减。
     """
     w = int(window)
+    d = float(decay)
+    if not np.isfinite(d) or d < 0.0 or d > 1.0:
+        raise ValueError("index_event_decay decay must satisfy 0 <= decay <= 1")
     policy = str(missing_policy or "break").lower()
-    weight = np.array([float(decay) ** k for k in range(w)], dtype=float)
+    if policy not in ("break", "carry"):
+        raise ValueError("index_event_decay missing_policy must be 'break' or 'carry'")
+    weight = np.array([d ** k for k in range(w)], dtype=float)
     xv = entry_event.to_numpy(dtype=float)
     out = np.full(xv.shape, np.nan, dtype=float)
     for col in range(xv.shape[1]):
         seen = False
+        last_valid = np.nan
         for row in range(xv.shape[0]):
             value = xv[row, col]
             if np.isfinite(value):
@@ -229,8 +238,11 @@ def _index_event_decay(entry_event, window=20, decay=0.9, missing_policy="break"
                 continue  # full-window warmup contract, same as rolling(window)
             if np.isnan(seg).any():
                 # Data gap inside the window: never treat as zero events.
+                if policy == "carry" and np.isfinite(last_valid):
+                    out[row, col] = last_valid
                 continue
             out[row, col] = float(np.dot(seg[::-1], weight))
+            last_valid = out[row, col]
     result = entry_event.copy()
     result.iloc[:, :] = out
     return result

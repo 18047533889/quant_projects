@@ -24,7 +24,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import (
     aligned_pairs,
     check_window,
@@ -303,6 +303,11 @@ class TsConditionalMutualInformation(SeriesOperator):
         unit="entropy",
         cost=6,
     )
+    metadata.param_specs = {
+        # R4-50: bins^3 plug-in cells need large N; production grid is {2, 3}.
+        "bins": ParamSpec(dtype=int, min=2, max=3, choices=(2, 3)),
+        "window": ParamSpec(dtype=int, min=2),
+    }
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, z: pd.DataFrame, window: int = 120, bins: int = 3, **_: Any) -> pd.DataFrame:
         w = check_window(window)

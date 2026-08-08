@@ -89,7 +89,21 @@ class RelationTopkConcentration(SeriesOperator):
         base = panels[0]
         stacked = _stack_panels(*panels)
         n, rows, cols = stacked.shape
-        top_k = min(top_k, n)
+        # Feasibility: k must fit the actual number of relation slots.  A k that
+        # exceeds the available panels used to be silently capped, making
+        # ``relation_topk_concentration(..., k=5)`` and ``k=10`` indistinguishable
+        # in the surface.  Fail closed instead (review P1-121).
+        if top_k > n:
+            raise ValueError(
+                f"relation_topk_concentration: k={top_k} exceeds the number of "
+                f"available relation panels ({n})"
+            )
+        # Relation share/weight semantics require non-negative values; a negative
+        # share would corrupt the top-k concentration ratio (review P1-121).
+        if np.any(stacked[np.isfinite(stacked)] < 0.0):
+            raise ValueError(
+                "relation_topk_concentration: relation share/weight must be non-negative"
+            )
         out = np.full((rows, cols), np.nan, dtype=float)
         for r in range(rows):
             for c in range(cols):
@@ -135,8 +149,8 @@ class RelationDistributionSkew(SeriesOperator):
 
     metadata = _metadata(
         "relation_distribution_skew",
-        "名次面板截面偏度。",
-        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
+        "名次面板截面偏度（variadic：接收 3 个及以上关系面板列数组）。",
+        ["relations"],
         category="relation",
         unit="level",
     )
@@ -166,8 +180,8 @@ class RelationDistributionKurtosis(SeriesOperator):
 
     metadata = _metadata(
         "relation_distribution_kurtosis",
-        "名次面板截面峰度。",
-        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
+        "名次面板截面峰度（variadic：接收 4 个及以上关系面板列数组）。",
+        ["relations"],
         category="relation",
         unit="level",
     )
