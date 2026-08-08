@@ -33,6 +33,13 @@ def _meta(name: str, description: str, params: list[str]) -> OperatorMetadata:
 
 
 def _register(name: str, description: str, params: list[str], fn):
+    # R6 P0-03: every kernel accepts ``period_id`` (signature compatibility with
+    # the pandas reference) — declare it so the R5-06 extra-positional gate does
+    # not reject a valid ``(a, b, period_id)`` call on a wrapper that only listed
+    # the financial columns.
+    declared = list(params)
+    if "period_id" not in declared:
+        declared = declared + ["period_id"]
     @register_operator(
         name=name,
         category="fundamental_period",
@@ -41,7 +48,7 @@ def _register(name: str, description: str, params: list[str], fn):
         source="fundamental.polars_quality_v2",
     )
     class _FundamentalPolars(SeriesOperator):
-        metadata = _meta(name, description, params)
+        metadata = _meta(name, description, declared)
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)

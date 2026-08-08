@@ -122,6 +122,7 @@ OperatorRegistry.register(
     backend_explicit=True,
     replace=True,
     replacement_reason="final layer fixes ts_days_since semantics (inclusive max_lookback)",
+    expected_old_source="operator_overhaul_audited",
 )
 
 if pl is not None:
@@ -140,6 +141,7 @@ if pl is not None:
         backend_explicit=True,
         replace=True,
         replacement_reason="final layer fixes ADX polars parity (strict missing-seed)",
+        expected_old_source="operator_overhaul_native_polars",
     )
     OperatorRegistry.register(
         PolarsFunctionOperator(
@@ -156,4 +158,5 @@ if pl is not None:
         backend_explicit=True,
         replace=True,
         replacement_reason="final layer fixes ts_days_since polars semantics (inclusive max_lookback)",
+        expected_old_source="operator_overhaul_native_polars",
     )

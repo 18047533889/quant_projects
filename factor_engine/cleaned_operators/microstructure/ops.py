@@ -250,7 +250,8 @@ class MicroBipowerVarOp(SeriesOperator):
         name="micro_bipower_var",
         category="intraday_microstructure",
         description="Realized bipower variation (pi/2)*(n/(n-1))*sum(|r_t||r_{t-1}|)",
-        param_names=["close"],
+        param_names=["close", "window", "min_periods"],
+        param_types={"window": int, "min_periods": int},
         return_type="series",
         tags=["microstructure"],
     )

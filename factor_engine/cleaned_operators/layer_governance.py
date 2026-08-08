@@ -269,6 +269,7 @@ def _seal_registry() -> None:
         backend_explicit: bool = True,
         replace: bool = False,
         replacement_reason: str = "",
+        expected_old_source: str = "",
         semantic_version: str = "1.0",
     ) -> None:
         canonical_name = canonical or operator.metadata.name
@@ -299,6 +300,7 @@ def _seal_registry() -> None:
             source=source,
             status=status,
             backend_explicit=backend_explicit,
+            expected_old_source=expected_old_source,
         )
         cls._catalog[canonical_name]["semantic_version"] = semantic_version
 

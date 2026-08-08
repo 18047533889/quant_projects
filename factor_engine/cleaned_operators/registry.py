@@ -193,6 +193,20 @@ class OperatorRegistry:
     # Intentional same-backend overwrites (replace=True): canonical/backend,
     # old/new source, old/new impl hash, reason (P0-31 audit trail).
     _overwrite_log: List[dict] = []
+    # Per-(canonical, backend) ordered override chain for the current load.
+    # Round-7 P0: a declared override that continues an existing chain must pin
+    # the exact source it replaces, so the final implementation no longer
+    # depends on the loader's import order (A->B vs B->A).
+    _override_chain: Dict[tuple, List[str]] = {}
+    # Enforcement switch; a bootstrap sweep may set it False to enumerate every
+    # unpinned chain link at once (mirrors ``_hard_fail_duplicates``).
+    _enforce_override_chain_pinning: bool = True
+    # R6: declared bootstrap layers (operator_overhaul_audited,
+    # composite_fastpath_*, layer_governance_*, gtja_compat, …) replace one
+    # another in a known bootstrap order; auto-pin their chain link to the
+    # actual current source instead of making bootstrap order-fatal.  Set to
+    # False to require every declared layer to pin explicitly.
+    _auto_pin_declared_bootstrap: bool = True
     # Hard-fail on undeclared same-backend duplicates (P0-31).  A bootstrap
     # probe may set this False to enumerate every collision site at once.
     _hard_fail_duplicates: bool = True
@@ -469,6 +483,40 @@ class OperatorRegistry:
                             f"replace of {canonical!r}/{backend} requires a non-empty "
                             "replacement_reason"
                         )
+                elif declared and (canonical, backend) in cls._override_chain and cls._enforce_override_chain_pinning:
+                    # Round-7 P0: this declared override continues an existing
+                    # chain for the same (canonical, backend).  Pin the exact
+                    # source it replaces so a loader import-order shuffle
+                    # (A->B vs B->A) fails loudly instead of silently swapping
+                    # the final implementation.
+                    #
+                    # R6 refinement: a SAME-source re-registration (the same
+                    # bootstrap layer running twice, e.g. two overhaul modules
+                    # registering overlapping specs) is idempotent — the chain
+                    # does not change — so it never needs a pin.  Only a
+                    # genuinely different replacement source must be pinned.
+                    if source == old_source:
+                        pass
+                    elif not expected_old_source:
+                        if not cls._auto_pin_declared_bootstrap:
+                            raise ValueError(
+                                f"override of {canonical!r}/{backend} (source {source!r}) "
+                                f"continues an existing override chain that currently "
+                                f"holds old_source={old_source!r}: pin expected_old_source="
+                                f"{old_source!r} (round-7 P0)"
+                            )
+                        # Declared bootstrap layers (overhaul / composite_fastpath /
+                        # layer_governance / gtja_compat …) replace one another in a
+                        # KNOWN bootstrap order; auto-pin the actual current source so
+                        # the chain audit stays meaningful without making the bootstrap
+                        # itself order-fatal.  Non-declared overrides still must pin
+                        # explicitly (the branch above raises for them).
+                        expected_old_source = old_source
+                    elif old_source != expected_old_source:
+                        raise ValueError(
+                            f"override of {canonical!r}/{backend}: expected old source "
+                            f"{expected_old_source!r} but registry holds {old_source!r}"
+                        )
             # Record the audit trail for every same-backend overwrite — including
             # soft-probe mode (``_hard_fail_duplicates=False``) so a bootstrap
             # sweep can enumerate every collision site at once.
@@ -482,6 +530,7 @@ class OperatorRegistry:
                 "reason": replacement_reason or f"declared override layer ({source})",
                 "semantic_version": str(semantic_version or "1.0"),
             })
+            cls._override_chain.setdefault((canonical, backend), []).append(source)
         existing_ops[backend] = operator
         existing = cls._catalog.get(canonical, {})
         if existing and status == "implemented":

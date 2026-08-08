@@ -33,13 +33,16 @@ def _tr(high,low,close):
     arr=np.maximum.reduce([(high-low).to_numpy(float),(high-prev).abs().to_numpy(float),(low-prev).abs().to_numpy(float)])
     return pd.DataFrame(arr,index=high.index,columns=high.columns)
 
-def _register(name,params,fn,desc,*,tags=(),param_specs=None):
+def _register(name,params,fn,desc,*,tags=(),param_specs=None,expected_old_source=""):
     meta=OperatorMetadata(name=name,category="technical_signal",description=desc,param_names=list(params),return_type="series",
         tags=["pit_safe","causal","production_extension",*tags], param_specs=dict(param_specs or {}))
     def _calculate_series(self,*args,**kwargs): return fn(*args,**kwargs)
     cls=type(f"TechnicalV2_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})
     register_operator(name=name,category="technical_signal",business_category="technical",canonical=name,
-        source="technical_indicators_v2",backend="pandas_numpy",status="production")(cls)
+        source="technical_indicators_v2",backend="pandas_numpy",status="production",
+        replace=bool(expected_old_source),
+        replacement_reason=("overrides composite fastpath layer (round-7 P0 chain pinning)" if expected_old_source else ""),
+        expected_old_source=expected_old_source)(cls)
 
 
 def _dmi(high,low,close,window):
@@ -329,4 +332,8 @@ _PARAM_SPECS = {
 }
 for _name,_params,_fn,_desc in _SPECS:
     _tags=("stateful","full_replay") if _name in _RECURSIVE_EWM or _name in {"KAMA","Supertrend","SupertrendDirection","PSAR"} else ()
-    _register(_name,_params,_fn,_desc,tags=_tags,param_specs=_PARAM_SPECS.get(_name))
+    # KAMA overrides the composite_fastpath_primitives implementation; pin the
+    # exact source it replaces so the chain is independent of import order
+    # (round-7 P0).  Other spec entries register fresh — no pin needed.
+    _pin = "composite_fastpath_primitives" if _name == "KAMA" else ""
+    _register(_name,_params,_fn,_desc,tags=_tags,param_specs=_PARAM_SPECS.get(_name),expected_old_source=_pin)

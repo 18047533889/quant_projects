@@ -72,4 +72,11 @@ def register() -> None:
             source="operator_overhaul_native_polars",
             status="production",
             backend_explicit=True,
+            # Round-7 P0 override-chain pinning: pin the exact prior polars source.
+            replace=True,
+            replacement_reason="overhaul polars-fix layer replaces prior bootstrap source",
+            expected_old_source=str(
+                (OperatorRegistry._catalog.get(name, {}).get("backend_meta") or {})
+                .get("polars", {}).get("source", "") or ""
+            ),
         )

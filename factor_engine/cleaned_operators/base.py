@@ -256,7 +256,16 @@ def _normalise_call(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: d
     # R5-06: reject extra positional arguments past the declared contract unless
     # the operator is explicitly variadic.  A fifth panel silently accepted by a
     # four-parameter kernel is a contract violation, not a feature.
-    if not variadic and len(args) > len(names):
+    #
+    # R6 P0-03/P0-25 refinement: an operator that declares NO named parameters
+    # (``param_names=[]`` — legacy unary/binary elementwise like ``log``,
+    # ``add``, ``subtract``) has no declared positional contract to violate; its
+    # panel arguments are implied by the kernel.  Enforcing ``len(args) >
+    # len(names)`` there would reject every valid ``log(x)`` call.  The strict
+    # extra-positional gate applies only to operators that DO declare a
+    # parameter contract; zero-parameter ops keep their implicit panel arity
+    # (an over-long call still fails inside the kernel).
+    if not variadic and names and len(args) > len(names):
         raise OperatorParameterError(
             f"{metadata.name}: received {len(args)} positional arguments but "
             f"declares {len(names)} parameters {names}; extra positional "
@@ -482,13 +491,15 @@ def register_operator(
     status: str = "implemented",
     replace: bool = False,
     replacement_reason: str = "",
+    expected_old_source: str = "",
 ):
     """Instantiate and register an operator class.
 
     ``replace``/``replacement_reason`` are the explicit escape hatch for the
     registry's silent-overwrite ban (P0-31): a compatibility/override layer
     re-registering an existing canonical+backend must declare it, or load_all
-    raises.
+    raises.  ``expected_old_source`` pins the exact source an override replaces
+    (round-7 P0) so an override *chain* is independent of import order.
     """
 
     def decorator(cls):
@@ -522,6 +533,7 @@ def register_operator(
             backend_explicit=backend_explicit,
             replace=replace,
             replacement_reason=replacement_reason,
+            expected_old_source=expected_old_source,
         )
         return cls
 

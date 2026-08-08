@@ -25,12 +25,18 @@ _MAX_ITER = 100
 _CONV = 1e-10
 
 
-def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadata:
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    param_types: dict | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="relation",
         description=description,
         param_names=params,
+        param_types=dict(param_types or {}),
         return_type="series",
         tags=[
             "relation", "daily", "pit_safe", "causal", "deterministic",
@@ -107,7 +113,8 @@ class GroupSignalAttractionShare(SeriesOperator):
     metadata = _metadata(
         "group_signal_attraction_share",
         "组内信号吸引份额（damping 固定 0.85）。",
-        ["x", "group"],
+        ["x", "group", "damping"],
+        param_types={"damping": float},
     )
 
     def _calculate_series(

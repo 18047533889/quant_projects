@@ -403,8 +403,8 @@ def test_cs_rank_copula_mi_self_stronger_than_independent():
     a = _frame(rng.normal(0.0, 1.0, (rows, n)))
     b = _frame(rng.normal(0.0, 1.0, (rows, n)))
     op = OperatorRegistry.get("cs_rank_copula_mi", "pandas_numpy")
-    mi_self = op.calculate(a, a, grid=6)
-    mi_ind = op.calculate(a, b, grid=6)
+    mi_self = op.calculate(a, a, grid=4)
+    mi_ind = op.calculate(a, b, grid=4)
     assert mi_self.iloc[-1, 0] > mi_ind.iloc[-1, 0]
 
 
@@ -414,8 +414,8 @@ def test_cs_rank_copula_entropy_self_lower_than_independent():
     a = _frame(rng.normal(0.0, 1.0, (rows, n)))
     b = _frame(rng.normal(0.0, 1.0, (rows, n)))
     op = OperatorRegistry.get("cs_rank_copula_entropy", "pandas_numpy")
-    ent_self = op.calculate(a, a, grid=6)
-    ent_ind = op.calculate(a, b, grid=6)
+    ent_self = op.calculate(a, a, grid=4)
+    ent_ind = op.calculate(a, b, grid=4)
     assert ent_self.iloc[-1, 0] < ent_ind.iloc[-1, 0]
 
 

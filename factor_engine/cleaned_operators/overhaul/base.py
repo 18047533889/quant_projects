@@ -188,6 +188,11 @@ class Spec:
 
 def register_specs(specs: dict[str, Spec]) -> None:
     for name, spec in specs.items():
+        prior_source = str(
+            (OperatorRegistry._catalog.get(name, {}).get("backend_meta") or {})
+            .get("pandas_numpy", {}).get("source", "")
+            or ""
+        )
         OperatorRegistry.register(
             PandasFunctionOperator(name, spec.category, spec.params, spec.description, spec.pandas_fn),
             canonical=name,
@@ -195,6 +200,12 @@ def register_specs(specs: dict[str, Spec]) -> None:
             source="operator_overhaul_audited",
             status="production",
             backend_explicit=True,
+            # Round-7 P0 override-chain pinning: this bootstrap layer replaces an
+            # earlier registration (e.g. ``gtja_compat``/``daily_panel``) — pin
+            # the exact prior source so the chain is independent of import order.
+            replace=True,
+            replacement_reason="overhaul audit layer replaces prior bootstrap source",
+            expected_old_source=prior_source,
         )
         if pl is not None and spec.polars_fn is not None:
             OperatorRegistry.register(
@@ -204,4 +215,10 @@ def register_specs(specs: dict[str, Spec]) -> None:
                 source="operator_overhaul_native_polars",
                 status="production",
                 backend_explicit=True,
+                replace=True,
+                replacement_reason="overhaul audit layer replaces prior bootstrap source",
+                expected_old_source=str(
+                    (OperatorRegistry._catalog.get(name, {}).get("backend_meta") or {})
+                    .get("polars", {}).get("source", "") or ""
+                ),
             )

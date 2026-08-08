@@ -65,6 +65,7 @@ def install_registration_audit() -> None:
         backend_explicit: bool = True,
         replace: bool = False,
         replacement_reason: str = "",
+        expected_old_source: str = "",
         semantic_version: str = "1.0",
     ) -> None:
         canonical_name = canonical or operator.metadata.name
@@ -98,6 +99,8 @@ def install_registration_audit() -> None:
             backend_explicit=backend_explicit,
             replace=replace,
             replacement_reason=replacement_reason,
+            expected_old_source=expected_old_source,
+            semantic_version=semantic_version,
         )
 
     OperatorRegistry.register = classmethod(audited_register)

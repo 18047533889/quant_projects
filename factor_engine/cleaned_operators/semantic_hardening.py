@@ -111,6 +111,9 @@ def _rolling_numpy_panel(
     source="semantic_hardening",
     backend="pandas_numpy",
     status="implemented",
+    replace=True,
+    replacement_reason="overflow-fail-closed product overrides the gtja compatibility layer (round-7 P0 chain pinning)",
+    expected_old_source="gtja_compat",
 )
 class TimeSeriesProductAudited(SeriesOperator):
     metadata = OperatorMetadata(

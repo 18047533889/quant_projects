@@ -74,7 +74,12 @@ class TSSumDecayNativePolars(SeriesOperator):
         ])
 
 
-@register_operator(name="ts_moment", category="time_series", business_category="time_series", canonical="ts_moment", source="factor_dsl_polars")
+@register_operator(
+    name="ts_moment", category="time_series", business_category="time_series",
+    canonical="ts_moment", source="factor_dsl_polars",
+    replace=True, replacement_reason="3-arg central moment overrides the 2-arg colwise bridge (round-7 P0 chain pinning)",
+    expected_old_source="factor_dsl_polars_bridge",
+)
 class TSMomentNativePolars(SeriesOperator):
     metadata = OperatorMetadata(name="ts_moment", category="time_series", description="Trailing central moment", param_names=["x", "d", "k"], tags=["polars", "pit_safe"])
 

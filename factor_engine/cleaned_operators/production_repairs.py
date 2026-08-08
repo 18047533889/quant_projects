@@ -153,6 +153,9 @@ class ProductionDigitalCount(SeriesOperator):
     source="production_repairs",
     backend="pandas_numpy",
     status="production",
+    replace=True,
+    replacement_reason="canonical rolling-OLS contract overrides the overhaul compat layer (round-7 P0 chain pinning)",
+    expected_old_source="operator_overhaul_compat",
 )
 class ProductionTSRegressionSlope(SeriesOperator):
     """Rolling OLS with the canonical and historical GTJA call contracts."""

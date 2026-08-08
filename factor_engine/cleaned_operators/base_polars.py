@@ -195,6 +195,9 @@ def register_operator(
     source: str = "",
     backend: str = "polars",
     status: str = "implemented",
+    replace: bool = False,
+    replacement_reason: str = "",
+    expected_old_source: str = "",
 ):
     """Polars 算子类装饰器：实例化并注册到 ``OperatorRegistry``。
 
@@ -206,6 +209,9 @@ def register_operator(
         source: 溯源标记。
         backend: 固定为 ``polars``。
         status: 生命周期状态。
+        replace: 是否允许覆盖同一 canonical+backend 的既有实现。
+        replacement_reason: 覆盖原因（replace=True 时必填）。
+        expected_old_source: 期望被覆盖的旧 source（round-7 P0 chain pinning）。
 
     返回:
         装饰器函数。
@@ -228,6 +234,9 @@ def register_operator(
             source=source or "factor_dsl_np",
             aliases=name_aliases,
             status=status,
+            replace=replace,
+            replacement_reason=replacement_reason,
+            expected_old_source=expected_old_source,
         )
         return cls
     return decorator

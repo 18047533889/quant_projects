@@ -20,6 +20,7 @@ import numpy as np
 import polars as pl
 
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import ParamSpec
 
 _SKIP = frozenset({"date", "stock_code"})
 
@@ -735,6 +736,13 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         return_type="series",
         tags=["pit_safe", "causal", "bounded_history", "polars", "native"],
     )
+    if name == "EaseOfMovement":
+        # Parity with the pandas reference (P1-86 / R5-34): ``volume_scale`` is
+        # a pure unit-conversion constant — it multiplies the whole output
+        # uniformly and leaves cross-sectional ordering invariant, so it must
+        # not be an alpha-search dimension.
+        metadata.param_specs = {"volume_scale": ParamSpec(dtype=float, searchable=False)}
+        metadata.tags = [*(metadata.tags or ()), "unit_conversion_only"]
 
     def _calculate_series(self, *args, **kwargs):
         return function(*args, **kwargs)
