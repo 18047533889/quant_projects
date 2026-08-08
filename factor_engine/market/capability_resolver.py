@@ -57,10 +57,20 @@ def operator_support(
     from cleaned_operators.registry import OperatorRegistry
 
     ctx = context or _market_ctx(market)
-    name = str(canonical).strip()
+    raw_name = str(canonical).strip()
+    # DSL aliases (e.g. ``industry_neutralize`` -> ``group_neutralize``) resolve
+    # to their canonical before contract/production lookups.
+    name = raw_name
+    if OperatorRegistry.get(raw_name, "pandas_numpy") is None:
+        try:
+            resolved = OperatorRegistry.resolve_canonical(raw_name)
+            if resolved:
+                name = resolved
+        except Exception:  # pragma: no cover - defensive
+            pass
     if OperatorRegistry.get(name, "pandas_numpy") is None:
         return MarketSupport(
-            canonical=name, market=market, status=MarketStatus.UNKNOWN,
+            canonical=raw_name, market=market, status=MarketStatus.UNKNOWN,
             notes="operator not registered",
         )
 
@@ -71,7 +81,7 @@ def operator_support(
         prod = _production_allowlist()
         if prod and name not in prod:
             return MarketSupport(
-                canonical=name, market=market,
+                canonical=raw_name, market=market,
                 status=MarketStatus.RESEARCH_ONLY,
                 reason_codes=("NOT_PRODUCTION_CERTIFIED",),
                 notes="not on the production allowlist; research may opt in explicitly",
@@ -82,7 +92,7 @@ def operator_support(
         intrinsic = contract.intrinsic_markets
         if intrinsic != ("ashare", "us") and market not in intrinsic:
             return MarketSupport(
-                canonical=name, market=market,
+                canonical=raw_name, market=market,
                 status=MarketStatus.UNSUPPORTED_MARKET_MECHANISM,
                 required_capabilities=contract.required_capabilities,
                 reason_codes=("MARKET_MECHANISM",),
@@ -98,7 +108,7 @@ def operator_support(
         ]
         if missing:
             return MarketSupport(
-                canonical=name, market=market,
+                canonical=raw_name, market=market,
                 status=MarketStatus.PROVIDER_REQUIRED,
                 required_capabilities=contract.required_capabilities,
                 missing_capabilities=tuple(missing),
@@ -109,14 +119,14 @@ def operator_support(
     # Generic mathematical operator: both markets, input-dependent.
     if contract is None or not contract.required_capabilities:
         return MarketSupport(
-            canonical=name, market=market,
+            canonical=raw_name, market=market,
             status=MarketStatus.CERTIFIED_NATIVE,
             depends_on_inputs=True,
             notes="generic operator; actual support determined by input field providers",
         )
 
     return MarketSupport(
-        canonical=name, market=market,
+        canonical=raw_name, market=market,
         status=MarketStatus.CERTIFIED_NATIVE,
         required_capabilities=contract.required_capabilities,
         notes=contract.notes,
@@ -198,46 +208,112 @@ def _walk(expr: Any, market: str, production: bool, failed: list[dict[str, Any]]
         _walk(child, market, production, failed, warnings)
 
 
+def _decode_field_name(name: str) -> str:
+    """Decode an encoded ``SourceRef`` back to its physical field spelling."""
+    try:
+        from api.source_ref import decode_source_ref
+
+        source = decode_source_ref(name)
+        if source is not None:
+            return f"{source.table}.{source.field}"
+    except (ImportError, ValueError, TypeError):
+        pass
+    return name
+
+
+def _concept_for_physical(table: str, physical: str) -> str | None:
+    """Map a decoded (table, physical) reference to a canonical concept.
+
+    A-share and US may store the same concept under different physical names
+    (A ``StockValuationDaily.MarketCap`` vs US ``StockValuationDaily.market_cap``).
+    This scans provider bindings across both markets so an A-share-sourced DSL
+    reference resolves to the concept, then the concept resolves in the target
+    market.
+    """
+    from fields.providers import PROVIDER_REGISTRY
+
+    qualified = f"{table}.{physical}"
+    for binding in PROVIDER_REGISTRY.for_market("ashare"):
+        if qualified in binding.physical_fields:
+            return binding.concept_id
+    for binding in PROVIDER_REGISTRY.for_market("us"):
+        if qualified in binding.physical_fields:
+            return binding.concept_id
+    return None
+
+
 def _check_column(name: Any, market: str, production: bool, failed: list[dict[str, Any]], warnings: list[str]) -> None:
     if not isinstance(name, str):
         return
     from fields.concepts import concept_alias_map
+    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
     from fields.providers import binding
 
+    plain = _decode_field_name(name)
     aliases = concept_alias_map()
-    concept = aliases.get(name)
-    if concept is None:
-        # Not a canonical concept — legacy column.  Leave to the field registry.
-        from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+    concept = aliases.get(name) or aliases.get(plain)
+    if concept is None and "." in plain:
+        _table, _phys = plain.split(".", 1)
+        concept = _concept_for_physical(_table, _phys)
+    if concept is not None:
+        b = binding(concept, market)
+        if b is None or b.quality == ProviderQuality.UNAVAILABLE:
+            failed.append(
+                {
+                    "node": name,
+                    "kind": "field",
+                    "reason": "UNSUPPORTED_MARKET_MECHANISM"
+                    if b is not None
+                    else "NO_PROVIDER",
+                    "missing_capabilities": [],
+                    "detail": f"concept {concept!r} has no usable provider for {market}",
+                }
+            )
+            return
+        if production and not b.quality.production_usable:
+            failed.append(
+                {
+                    "node": name,
+                    "kind": "field",
+                    "reason": "PROVIDER_REQUIRED",
+                    "missing_capabilities": [],
+                    "detail": f"concept {concept!r} quality {b.quality.value} below production floor",
+                }
+            )
+        return
 
-        spec = MULTI_MARKET_FIELD_REGISTRY.resolve_field(market, name)
-        if spec is None:
-            warnings.append(f"field {name!r} not resolved for market {market}")
+    # Not a canonical concept — check the per-market physical field registry.
+    # Encoded SourceRefs are matched by their physical field within its table.
+    table = None
+    lookup = plain
+    if "." in plain:
+        table, _, lookup = plain.partition(".")
+    spec = MULTI_MARKET_FIELD_REGISTRY.resolve_field(market, lookup, table=table)
+    if spec is None:
+        if production:
+            failed.append(
+                {
+                    "node": name,
+                    "kind": "field",
+                    "reason": "UNKNOWN_FIELD",
+                    "missing_capabilities": [],
+                    "detail": f"field {plain!r} not resolvable for market {market}",
+                }
+            )
+        else:
+            warnings.append(f"field {plain!r} not resolved for market {market} (research: raw column allowed)")
         return
-    b = binding(concept, market)
-    if b is None or b.quality == ProviderQuality.UNAVAILABLE:
-        failed.append(
-            {
-                "node": name,
-                "kind": "field",
-                "reason": "UNSUPPORTED_MARKET_MECHANISM"
-                if b is not None
-                else "NO_PROVIDER",
-                "missing_capabilities": [],
-                "detail": f"concept {concept!r} has no usable provider for {market}",
-            }
-        )
-        return
-    if production and not b.quality.production_usable:
-        failed.append(
-            {
-                "node": name,
-                "kind": "field",
-                "reason": "PROVIDER_REQUIRED",
-                "missing_capabilities": [],
-                "detail": f"concept {concept!r} quality {b.quality.value} below production floor",
-            }
-        )
+    if table is not None and spec.table != table:
+        if production:
+            failed.append(
+                {
+                    "node": name,
+                    "kind": "field",
+                    "reason": "TABLE_COLLISION",
+                    "missing_capabilities": [],
+                    "detail": f"{plain!r} resolves to {spec.qualified_name}, not {table!r}",
+                }
+            )
 
 
 def explain_expression_support(

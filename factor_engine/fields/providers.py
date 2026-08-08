@@ -294,9 +294,9 @@ for _raw, _phys in (("raw_volume_shares", "Volume"),):
         dataset="ashare_stock_daily", physical=(f"StockDailyBar.{_phys}",),
         quality=_NATIVE, coverage=_FULL,
         source_unit=SHARES, canonical_unit=SHARES,
-        transform=_identity, transform_description="identity (uint64 shares; NEVER /Factor)",
+        transform=_identity, transform_description="identity (raw shares; no adjustment applied)",
         temporal_model="exact_daily", available_at="local_close",
-        source_certified=True, notes="generic volume is raw shares; split-adjusted volume is a separate concept",
+        source_certified=True, notes="generic volume is raw shares; NEVER divided by any adjustment factor (split-adjusted volume is a separate concept)",
     )
     _b(
         _raw, "us", "us_raw_volume",

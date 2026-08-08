@@ -253,3 +253,37 @@ CI 通过：全量（新 market 测试 + 既有回归）
 5. P2 两个 build 脚本 + CI 断言 + `operator_market_matrix.md`
 6. golden/fail 跨市场测试全绿
 7. `fields/__init__.py`/`units.py` 最小 additive 接线（追加导出）
+
+## 10. 执行状态（2026-08-08 已完成）
+
+- [x] P0-A：`market/context.py`（MarketContext + ASHARE/US 单例）、`market/capabilities.py`
+  （MarketCapability 26 项 / ProviderQuality 8 级 / CoverageClass 6 级 / MarketStatus 7 级 /
+  每市场能力集合）、`market/instrument.py`（InstrumentKey 市场命名空间）、
+  `market/session.py`（A 240-bar 连续 / US DST·early-close-aware）。
+- [x] P0-B：`fields/units_v2.py`（币种感知 UnitSpec：money CNY/USD、price CNY·USD/share，
+  跨币种算术禁止；percent/bp 仅作 source unit，canonical 层统一 ratio）。
+- [x] P0-C：`fields/concepts.py`（41 个 canonical 概念 + legacy 别名映射）、
+  `fields/catalog_us.py`（16 张 US 表 / 70+ 字段，单位与 PIT 语义按 COS US 字典核验）、
+  `fields/providers.py`（MarketFieldBinding + ProviderRegistry + FinancialPeriodAdapter +
+  explain_field_support）、`fields/market_registry.py`（MultiMarketFieldRegistry，A/US 独立
+  FieldRegistry，同名表隔离）。
+- [x] P1：`cleaned_operators/operator_market.py`（price-limit/industry/holder/index-weight/news
+  契约注册）、`market/capability_resolver.py`（operator_support / explain_operator_support /
+  explain_expression_support / build_search_grammar / build_market_operator_manifest；
+  生产 fail-closed + 编译期拒绝）。
+- [x] P2：`scripts/build_market_field_manifest.py` → `docs/market_field_manifest.json`（41 概念）、
+  `scripts/build_operator_market_capabilities.py` → `docs/operator_market_capabilities.json`
+  （1311 canonical，UNKNOWN=0 / NOT_REVIEWED=0）+ `docs/operator_market_matrix.md`、
+  `scripts/audit_cross_market_semantics.py`（CI：registry==manifest）。
+- [x] 接线：`fields/__init__.py` 追加导出 multi-market 层（legacy `FIELD_REGISTRY` 不动）。
+- [x] 测试：`tests/market/` 72 项全绿（含 golden unit/adjustment/cross-market identity/
+  fail/PIT/table-collision/session 测试）。
+
+**已知非本次回归**（并发会话在改）：
+- `tests/fields/test_field_catalog_v2.py::test_data_access_normalizes_registered_units_without_filling_nan`
+  —— 外部 `data_access` 包（2026-08-08 被并发会话更新）将 `turnover_ratio` 标为
+  `is_scale_applicable=True`，该测试直接调 `_normalize_contract_columns` 绕过 `store.read()`
+  导致 stale。
+- `tests/planner/test_sql_io.py` 3-4 项 —— 并发会话正修改 `backend/sql_pushdown/emitter.py`
+  与 `backend/sql_tiers.py`，`ts_sharpe`/prefetch 相关断言随其进行中编辑波动（两次运行失败数
+  从 4→3，证明是进行中状态）。

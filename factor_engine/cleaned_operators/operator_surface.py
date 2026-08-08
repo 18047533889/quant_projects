@@ -351,6 +351,34 @@ _DAILY_GEOMETRY_MATH_2026_08 = frozenset({
     "intraday_session_shape_novelty", "intraday_profile_pca_residual",
 })
 DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_GEOMETRY_MATH_2026_08)
+# 2026-08-08 Gemini-recommended primitives: group Top-K routing, arg-extreme
+# gathering, weighted percentile rank, group-vs-market JS divergence, event
+# level-survival cohort, weighted standardized moment, conditional covariance,
+# robust multi-regressor residual, activity-clock lag/age + max-drawdown
+# activity cost, spectral entropy / dominant cycle period, relation PageRank
+# centrality, intraday activity-duration curvature.  Each module keeps its names
+# in EXTENDED_ONLY_CANONICALS at import (partition contract) and this frozenset
+# migrates them to the daily surface.  Research-surface transforms
+# (ts_wavelet_lowpass_reconstruct / ts_signature_mahalanobis_anomaly /
+# ts_betti_crocker_bifurcation_score) stay RESEARCH_ONLY_CANONICALS.
+_DAILY_GEMINI_PACK_2026_08 = frozenset({
+    # gathering / distribution
+    "group_topk_mean", "ts_value_at_argextreme",
+    "cs_weighted_percentile_rank", "group_distribution_js_divergence",
+    "event_level_survival_share",
+    # weighted moment / conditional / robust resid
+    "ts_weighted_standardized_moment", "ts_cov_if", "cs_multi_robust_resid",
+    # activity clock
+    "ts_activity_clock_lagged_value", "ts_activity_clock_age",
+    "ts_max_drawdown_activity_cost",
+    # spectral shape
+    "ts_spectral_entropy", "ts_dominant_cycle_period",
+    # relation graph
+    "relation_pagerank_centrality",
+    # intraday activity-duration curvature
+    "intraday_activity_duration_curvature",
+})
+DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_GEMINI_PACK_2026_08)
 RESEARCH_ONLY_CANONICALS=frozenset({"holder_concentration_change","holder_count_change_rate"});LEGACY_ONLY_CANONICALS=frozenset({"cube"});INTERNAL_ONLY_CANONICALS=frozenset({"constant","identity","protected_div"})
 HIDDEN_DAILY_NAMES=frozenset({"cube","cumulative_max","cumulative_mean","cumulative_min","fmax","fmin","inv","reciprocal","sqr"})
 def classify_canonical(canonical:str)->str:

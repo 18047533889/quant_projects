@@ -129,6 +129,9 @@ _PANEL_FORCE: frozenset[tuple[str, str]] = frozenset({
     ("ts_first_passage_bias", "scale"),
     ("ts_first_passage_hit_probability", "scale"),
     ("ts_first_passage_conditional_time", "scale"),
+    # 2026-08-08 event level-survival cohort: ``level`` is a per-row panel
+    # (the level recorded at event time), not the scalar ``level`` default.
+    ("event_level_survival_share", "level"),
     # 2026-08 concurrent episode / envelope families: ``scale`` and envelope
     # band panels collide with scalar names.
     ("state_episode_excursion_balance", "scale"),
@@ -226,6 +229,21 @@ _SCALAR_VALUES: dict[str, Any] = {
     "c": 1.0,
     "fraction": 0.5,
     "buckets": 5,
+    # 2026-08-08 Gemini pack scalar defaults.
+    "exclude_self": True,
+    "include_current": False,
+    "budget": 1.0,
+    "scale_window": 20,
+    "min_peak_share": 0.10,
+    "bins": 10,
+    "min_group_size": 5,
+    "history_window": 60,
+    "direction": "up",
+    "damping": 0.85,
+    "depth": 2,
+    "tau": 5,
+    "dim": 1,
+    "path_window": 20,
     "top": 3,
     "asc": True,
     "annualization": 252.0,
@@ -433,6 +451,13 @@ _SCALAR_VALUES: dict[str, Any] = {
 }
 
 _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
+    # 2026-08-08 Gemini pack: per-op overrides where generic scalar defaults
+    # collide with an operator's required value.
+    ("ts_value_at_argextreme", "mode"): "max",
+    ("ts_weighted_standardized_moment", "order"): 3,
+    ("event_level_survival_share", "direction"): "up",
+    ("ts_wavelet_lowpass_reconstruct", "level"): 2,
+    ("ts_betti_crocker_bifurcation_score", "dim"): 1,
     ("cs_tail_retention", "side"): "top",
     ("state_since_reduce", "mode"): "sum",
     ("cs_rank_gaussian", "method"): "blom",
@@ -656,7 +681,9 @@ _MINUTE_PREFIX_DAYS = 20
 # Operators named ``intraday_*`` are daily-frequency (rolling on daily OHLC /
 # session-aware but frequency-preserving) rather than minute→daily aggregators,
 # so they are NOT minute-source and resolve against the daily panels.
-_MINUTE_SOURCE_EXTRA: frozenset[str] = frozenset()
+# intraday_activity_duration_curvature IS minute-source (consumes minute
+# activity, returns one scalar per day) despite the ``intraday_`` prefix.
+_MINUTE_SOURCE_EXTRA: frozenset[str] = frozenset({"intraday_activity_duration_curvature"})
 
 # Operator parameter name -> minute panel key.  These names also exist as daily
 # panels, so the minute-source dispatch in ``_value`` must win for minute ops.

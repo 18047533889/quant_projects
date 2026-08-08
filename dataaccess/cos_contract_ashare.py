@@ -7,7 +7,10 @@ D = "daily_parquet"
 
 ASHARE_COS_CONTRACTS = {
     "ashare_calendar": _c("ashare_calendar", "ashare", "STATIC", "read_full", "TradeDate"),
-    "ashare_stock_daily": _c("ashare_stock_daily", "ashare", "D1", "equi", "Symbol", return_column="Return", return_scale=1 / 10000, adjustment_column="Factor", adjustment_convention="forward_vendor_factor", storage_layout=D),
+    # 字典 §1.1/C19（2026-08-08 实证）：A股 Factor 是「后复权累积因子」，
+    # 后复权价 = Close × Factor（旧「前复权=Close/Factor」已废止）；与美股
+    # AdjFactor 同为乘法后复权但基期/事件覆盖不同，禁止当同一列混用。
+    "ashare_stock_daily": _c("ashare_stock_daily", "ashare", "D1", "equi", "Symbol", return_column="Return", return_scale=1 / 10000, adjustment_column="Factor", adjustment_convention="backward_vendor_factor", storage_layout=D),
     "ashare_stock_minute": _c("ashare_stock_minute", "ashare", "MINUTE", "equi", "Symbol", storage_layout=D),
     "ashare_stock_list": _c("ashare_stock_list", "ashare", "D1", "equi", "Symbol", storage_layout=D),
     "ashare_stock_status": _c("ashare_stock_status", "ashare", "S1", "equi", "Symbol", storage_layout=D),

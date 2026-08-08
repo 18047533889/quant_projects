@@ -90,6 +90,13 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
         domain="index", table_kind="relation", join_policy="exact",
         required_parameters=("IndexName",), cardinality="one_to_many",
     ),
+    # US StockCapitalDaily has a DUAL schema: ``{date}.parquet`` split/adjustment
+    # events and ``shares_{date}.parquet`` PIT shares.  Both are registered under
+    # one logical table; fields from the two schemas are kept distinct.
+    _table(
+        "StockCapitalDaily", "us_stock_capital_daily", instrument="ticker",
+        domain="capital", join_policy="exact",
+    ),
     # US financial statements: PIT on filing_date; period = period_end;
     # timeframe (quarterly/annual/trailing_twelve_months) MUST be filtered first.
     _table(
@@ -269,6 +276,18 @@ US_FIELD_SPECS: tuple[FieldSpec, ...] = (
        role="identifier", aliases=("index",), mining_allowed=False),
     _f("index_member", "StockIndicesComponents", "Symbol", dtype="string", unit=_UNIT_IDENTIFIER,
        role="identifier", mining_allowed=False),
+
+    # --- StockCapitalDaily (dual schema: splits + PIT shares) --------------
+    _f("split_from", "StockCapitalDaily", "split_from", unit=_UNIT_RATIO, mining_allowed=False),
+    _f("split_to", "StockCapitalDaily", "split_to", unit=_UNIT_RATIO, mining_allowed=False),
+    _f("adjustment_type", "StockCapitalDaily", "adjustment_type", dtype="string",
+       unit=_UNIT_TEXT, role="label", aliases=("split_type",), mining_allowed=False),
+    _f("execution_date", "StockCapitalDaily", "execution_date", dtype="date", unit=_UNIT_DATE,
+       role="effective_time", mining_allowed=False),
+    _f("pit_basic_shares_outstanding", "StockCapitalDaily", "pit_basic_shares_outstanding",
+       unit=_UNIT_SHARE, aliases=("basic_shares_pit",), mining_allowed=False),
+    _f("pit_diluted_shares_outstanding", "StockCapitalDaily", "pit_diluted_shares_outstanding",
+       unit=_UNIT_SHARE, aliases=("diluted_shares_pit",), mining_allowed=False),
 
     # --- Financial statements (PIT on filing_date, timeframe filtered) -----
     _f("filing_date", "StockIncome", "filing_date", dtype="date", unit=_UNIT_DATE,

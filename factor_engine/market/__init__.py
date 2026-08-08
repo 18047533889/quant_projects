@@ -25,8 +25,55 @@ from .capabilities import (
     ProviderQuality,
     capabilities_for,
 )
-from .context import ASHARE_CONTEXT, US_CONTEXT, Market, MarketContext
+from .context import (
+    ASHARE_CONTEXT,
+    US_CONTEXT,
+    Market,
+    MarketContext,
+    known_markets,
+    market_context,
+)
 from .instrument import InstrumentKey, qualified_instrument
+from .session import (
+    ASHARE_SESSION,
+    US_SESSION,
+    SessionSegment,
+    SessionSpec,
+    session_for,
+)
+
+# Lazy import of the capability resolver (it imports cleaned_operators helpers,
+# which are heavy).  Avoid importing it at module scope so the lightweight market
+# package stays importable by the field layer without triggering operator load.
+def operator_support(*args, **kwargs):
+    from .capability_resolver import operator_support as _fn
+
+    return _fn(*args, **kwargs)
+
+
+def explain_expression_support(*args, **kwargs):
+    from .capability_resolver import explain_expression_support as _fn
+
+    return _fn(*args, **kwargs)
+
+
+def explain_operator_support(*args, **kwargs):
+    from .capability_resolver import explain_operator_support as _fn
+
+    return _fn(*args, **kwargs)
+
+
+def build_search_grammar(*args, **kwargs):
+    from .capability_resolver import build_search_grammar as _fn
+
+    return _fn(*args, **kwargs)
+
+
+def build_market_operator_manifest(*args, **kwargs):
+    from .capability_resolver import build_market_operator_manifest as _fn
+
+    return _fn(*args, **kwargs)
+
 
 __all__ = [
     "ASHARE_CAPABILITIES",
@@ -41,6 +88,18 @@ __all__ = [
     "MarketStatus",
     "MarketSupport",
     "ProviderQuality",
+    "ASHARE_SESSION",
+    "US_SESSION",
+    "SessionSegment",
+    "SessionSpec",
+    "session_for",
+    "build_market_operator_manifest",
+    "build_search_grammar",
     "capabilities_for",
+    "explain_expression_support",
+    "explain_operator_support",
+    "known_markets",
+    "market_context",
+    "operator_support",
     "qualified_instrument",
 ]

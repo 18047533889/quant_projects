@@ -1403,3 +1403,33 @@ bucket_count` 等 + `_SPECIAL_SCALARS`（weighted_semivariance.target=0.0 等）
   overshoot 对称性；feature mode_share 恒等输入 → 1；update 无事件 NaN。
 - PIT：prefix-causal 检查 + audit 全绿。
 - 后端 parity：polars bridge 与 numpy 逐点相等；duckdb fallback 执行同一输出。
+
+## 18.7 执行结果（2026-08-08 已完成）
+
+- **39 个算子全部落地**，numpy 参考实现 + `register_polars_udf` polars 后端
+  （source=`polars_udf`，避开 overhaul cleanup 对 "bridge" 来源的剥离，与
+  `polars_dynamics._mk` 同模式）。
+- **治理接线**：10 个模块登记 `_LOAD_MODULES`；`_MARKET_LANGUAGE_PACK_POLICIES`
+  显式 scope/pit_safe；`operator_signatures_phase2.py` 追加 39 个签名
+  （OPERATOR_SIGNATURES 235 项）；审计 `_SCALAR_VALUES`/`_SPECIAL_SCALARS`/
+  `_PANEL_FORCE`/`_PANEL_PARAMETERS` 补齐（`side/tau/sampling/n_slots/ridge/
+  steps/max_shift/event_lag/n_updates/max_interval/target_q/source_q/level/band`
+  等；`mark/update_event` 面板；`dc_* scale` 面板强制）。
+- **发现并修复 2 个实现期真 bug**：`feature_effective_rank` 的 `0·log0→NaN`
+  （谱熵约定）；`update_surprise` 缺 1.4826 MAD 归一化（与提案不符）。
+- **测试**：`tests/operators/test_market_language_2026_08.py` 42 passed——
+  手工 golden（quantilogram 2/3、extremogram -0.5、DC overshoot 2.0/event
+  rate 2/9/不对称 -0.2/0、Corwin-Schultz 0.0487、Roll 0、expectile 均值、
+  relation diffusion [1.5,0.5]、update path 1.0/accel 1.0/surprise 2/1.4826/
+  direction 1.0、event-mark corr 1.0）、性质（mode_share/effective_rank/
+  subspace_rotation 恒等→1/0、modwt 自相关 1、copula MI 自>独立、tail
+  centrality 恒等组→1、相位 shift 0、RV 常数→0）、PIT prefix-causal、
+  polars bridge parity。
+- **运行时审计**：`audit_all_factor_production.py --runtime-only` **1246
+  canonicals 全绿**（exit 0）——39 个新算子确定性/轴保持/前缀因果/PIT 全部合规。
+- **证据认证（六门 `production_certified`）**：因子证据需重生成
+  `evidence/factor_operator_verified.json`（含 39 个新算子），随后 primitive 重生成
+  （factor→primitive 顺序）。当前因子证据 `missing=[39 新算子]`，为
+  认证簿记步骤，与并发会话的证据循环衔接后恢复。
+- **manifest**：39 个新算子需 `export_operator_manifest.py` 重生成
+  `benchmarks/operator_manifest.json`（CI 新鲜度检查），同样待并发收敛后执行。

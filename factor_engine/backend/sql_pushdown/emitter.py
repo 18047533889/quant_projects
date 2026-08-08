@@ -6382,6 +6382,150 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    # 2026-08-08 Gemini-recommended primitives — DuckDB SQL pushdown subset.
+    # group_topk_mean: exact top-k of peers by score (exclude_self supported)
+    # via correlated top-(k+1) selection, matching the pandas kernel.
+    if op == "group_topk_mean":
+        if len(node.inputs) < 3:
+            return None
+        tl = _compile_layer(node.inputs[0], dialect=dialect)
+        sl = _compile_layer(node.inputs[1], dialect=dialect)
+        gl = _compile_layer(node.inputs[2], dialect=dialect)
+        if tl is None or sl is None or gl is None:
+            return None
+        try:
+            k = int(node.attrs.get("k", 3) or 3)
+        except (TypeError, ValueError):
+            return None
+        exclude_self = bool(node.attrs.get("exclude_self", True))
+        if k < 1:
+            return None
+        keep = k + (1 if exclude_self else 0)
+        excl = "AND t2.inst != x.inst" if exclude_self else ""
+        topk = (
+            f"SELECT zz._v AS tv FROM ({tl.sql}) zz "
+            f"JOIN ({sl.sql}) ss USING (ts, inst) "
+            f"JOIN ({gl.sql}) gg USING (ts, inst) "
+            f"WHERE gg._v = g._v AND zz.ts = x.ts {excl} "
+            f"ORDER BY ss._v DESC LIMIT {keep}"
+        )
+        return _Layer(
+            f"SELECT x.ts AS ts, x.inst AS inst, "
+            f"CASE WHEN (SELECT COUNT(*) FROM ({topk}) c) < {k} THEN NULL "
+            f"ELSE (SELECT AVG(tv) FROM ({topk}) q) END AS _v "
+            f"FROM ({tl.sql}) x "
+            f"JOIN ({sl.sql}) s USING (ts, inst) "
+            f"JOIN ({gl.sql}) g USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    # cs_weighted_percentile_rank: weighted empirical CDF with mid-rank ties.
+    if op == "cs_weighted_percentile_rank":
+        if len(node.inputs) < 2:
+            return None
+        xl = _compile_layer(node.inputs[0], dialect=dialect)
+        wl = _compile_layer(node.inputs[1], dialect=dialect)
+        if xl is None or wl is None:
+            return None
+        xv = f"SELECT x.ts, x.inst, x._v AS xv FROM ({xl.sql}) x"
+        xw = f"SELECT x.ts, x.inst, x._v AS xv, w._v AS wv FROM ({xl.sql}) x JOIN ({wl.sql}) w USING (ts, inst)"
+        return _Layer(
+            f"SELECT a.ts AS ts, a.inst AS inst, "
+            f"CASE WHEN wt.total_w <= 0 THEN NULL "
+            f"ELSE (pl.less_w + 0.5 * pl.eq_w) / wt.total_w END AS _v "
+            f"FROM ({xv}) a "
+            f"JOIN (SELECT ts, SUM(wv) AS total_w FROM ({xw}) w2 GROUP BY ts) wt USING (ts) "
+            f"JOIN (SELECT a2.ts, a2.inst, "
+            f"SUM(CASE WHEN b2.xv < a2.xv THEN b2.wv ELSE 0 END) AS less_w, "
+            f"SUM(CASE WHEN b2.xv = a2.xv THEN b2.wv ELSE 0 END) AS eq_w "
+            f"FROM ({xv}) a2 JOIN ({xw}) b2 ON b2.ts = a2.ts "
+            f"GROUP BY a2.ts, a2.inst) pl USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    # ts_cov_if: conditional sample covariance (ddof=1) over selected pairs.
+    if op == "ts_cov_if":
+        if len(node.inputs) < 3:
+            return None
+        xl = _compile_layer(node.inputs[0], dialect=dialect)
+        yl = _compile_layer(node.inputs[1], dialect=dialect)
+        cl = _compile_layer(node.inputs[2], dialect=dialect)
+        if xl is None or yl is None or cl is None:
+            return None
+        spec = _window_spec(node, default=20)
+        win = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        try:
+            mp = int(node.attrs.get("min_periods", 2) or 2)
+        except (TypeError, ValueError):
+            mp = 2
+        mp = max(mp, 2)
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN cnt < {mp} THEN NULL "
+            f"ELSE (SUM(xy) OVER ({win}) - SUM(x) OVER ({win}) * SUM(y) OVER ({win}) / cnt) "
+            f"/ (cnt - 1.0) END AS _v "
+            f"FROM (SELECT ts, inst, x, y, x * y AS xy, COUNT(*) OVER ({win}) AS cnt "
+            f"FROM (SELECT x.ts, x.inst, x._v AS x, y._v AS y, c._v AS cond "
+            f"FROM ({xl.sql}) x JOIN ({yl.sql}) y USING (ts, inst) "
+            f"JOIN ({cl.sql}) c USING (ts, inst)) j "
+            f"WHERE cond <> 0 AND x IS NOT NULL AND y IS NOT NULL) s",
+            has_inst_window=True,
+        )
+
+    # ts_value_at_argextreme: argmax/argmin gather over a row frame.
+    if op == "ts_value_at_argextreme":
+        if len(node.inputs) < 2:
+            return None
+        vl = _compile_layer(node.inputs[0], dialect=dialect)
+        sl = _compile_layer(node.inputs[1], dialect=dialect)
+        if vl is None or sl is None:
+            return None
+        spec = _window_spec(node, default=20)
+        include_current = bool(node.attrs.get("include_current", False))
+        end = "CURRENT ROW" if include_current else "1 PRECEDING"
+        mode = str(node.attrs.get("mode", "max") or "max")
+        fn = "arg_max" if mode == "max" else "arg_min"
+        win = f"PARTITION BY v.inst ORDER BY v.ts ROWS BETWEEN {spec.size - 1} PRECEDING AND {end}"
+        return _Layer(
+            f"SELECT v.ts AS ts, v.inst AS inst, {fn}(v._v, s._v) OVER ({win}) AS _v "
+            f"FROM ({vl.sql}) v LEFT JOIN ({sl.sql}) s USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    # ts_weighted_standardized_moment: weighted standardized central moment
+    # (order 3/4) via nested window reductions (mu -> var -> moment).
+    if op == "ts_weighted_standardized_moment":
+        if len(node.inputs) < 2:
+            return None
+        xl = _compile_layer(node.inputs[0], dialect=dialect)
+        wl = _compile_layer(node.inputs[1], dialect=dialect)
+        if xl is None or wl is None:
+            return None
+        spec = _window_spec(node, default=20)
+        win = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        try:
+            p = int(node.attrs.get("order", 3) or 3)
+        except (TypeError, ValueError):
+            return None
+        if p not in (3, 4):
+            return None
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN n < 3 OR sw <= 0 OR var <= 0 THEN NULL "
+            f"ELSE (SUM(w * POWER(x - mu, {p})) OVER ({win}) / sw) "
+            f"/ (POWER(var, {p} / 2.0) + 1e-12) END AS _v "
+            f"FROM (SELECT ts, inst, x, w, n, sw, mu, "
+            f"SUM(w * (x - mu) * (x - mu)) OVER ({win}) / sw AS var "
+            f"FROM (SELECT ts, inst, x, w, "
+            f"COUNT(*) OVER ({win}) AS n, "
+            f"SUM(w) OVER ({win}) AS sw, "
+            f"SUM(w * x) OVER ({win}) / NULLIF(SUM(w) OVER ({win}), 0) AS mu "
+            f"FROM (SELECT x.ts, x.inst, x._v AS x, w._v AS w "
+            f"FROM ({xl.sql}) x JOIN ({wl.sql}) w USING (ts, inst)) j "
+            f"WHERE x IS NOT NULL AND w IS NOT NULL AND w >= 0) t0) t1",
+            has_inst_window=True,
+        )
+
     return None
 
 

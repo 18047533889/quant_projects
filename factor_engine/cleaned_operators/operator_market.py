@@ -179,10 +179,9 @@ def _register_default_contracts() -> None:
     )
     OPERATOR_MARKET_CONTRACTS.register_many(
         _HOLDER_FAMILY,
-        intrinsic_markets=("ashare",),
         required_capabilities=(_Cap.TOP_HOLDERS.value, _Cap.HOLDER_PLEDGE.value),
         cross_market_comparable=False,
-        notes="A-share top-holder feeds; US has no same-structure holder feed",
+        notes="A-share top-holder feeds; US has no same-structure holder feed (a 13F/institutional provider would unblock US)",
     )
     OPERATOR_MARKET_CONTRACTS.register_many(
         _INDEX_WEIGHT_FAMILY,
@@ -192,10 +191,9 @@ def _register_default_contracts() -> None:
     )
     OPERATOR_MARKET_CONTRACTS.register_many(
         _NEWS_FAMILY,
-        intrinsic_markets=("us",),
         required_capabilities=(_Cap.NEWS.value,),
         cross_market_comparable=False,
-        notes="US FactNews available; A-share clean has no Chinese news feed",
+        notes="US FactNews available; A-share clean has no Chinese news feed (a CN news provider would unblock A)",
     )
 
 

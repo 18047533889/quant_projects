@@ -511,4 +511,87 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
             _name, ArgSpec("x", _F), ArgSpec("update_event", _B), ArgSpec("n_updates", _INT)
         )
 
+    # O. 2026-08-08 Gemini-recommended primitives.
+    signatures["group_topk_mean"] = _sig(
+        "group_topk_mean",
+        ArgSpec("target", _F), ArgSpec("score", _F), ArgSpec("group", _G),
+        ArgSpec("k", _INT), ArgSpec("exclude_self", _ANY),
+    )
+    signatures["ts_value_at_argextreme"] = _sig(
+        "ts_value_at_argextreme",
+        ArgSpec("value", _F), ArgSpec("score", _F), ArgSpec("window", _W),
+        ArgSpec("mode", _ANY), ArgSpec("include_current", _ANY),
+    )
+    signatures["ts_weighted_standardized_moment"] = _sig(
+        "ts_weighted_standardized_moment",
+        ArgSpec("x", _F), ArgSpec("weight", _F), ArgSpec("window", _W), ArgSpec("order", _INT),
+    )
+    signatures["ts_cov_if"] = _sig(
+        "ts_cov_if",
+        ArgSpec("x", _F), ArgSpec("y", _F), ArgSpec("condition", _B),
+        ArgSpec("window", _W), ArgSpec("min_periods", _INT),
+    )
+    signatures["ts_spectral_entropy"] = _sig(
+        "ts_spectral_entropy", ArgSpec("x", _F), ArgSpec("window", _W)
+    )
+    signatures["ts_dominant_cycle_period"] = _sig(
+        "ts_dominant_cycle_period",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_peak_share", _FLT),
+    )
+    signatures["ts_activity_clock_lagged_value"] = _sig(
+        "ts_activity_clock_lagged_value",
+        ArgSpec("x", _F), ArgSpec("activity", _F), ArgSpec("budget", _FLT),
+        ArgSpec("scale_window", _W), ArgSpec("max_lookback", _INT),
+    )
+    signatures["ts_activity_clock_age"] = _sig(
+        "ts_activity_clock_age",
+        ArgSpec("activity", _F), ArgSpec("budget", _FLT),
+        ArgSpec("scale_window", _W), ArgSpec("max_lookback", _INT),
+    )
+    signatures["cs_weighted_percentile_rank"] = _sig(
+        "cs_weighted_percentile_rank", ArgSpec("x", _F), ArgSpec("weight", _F)
+    )
+    signatures["group_distribution_js_divergence"] = _sig(
+        "group_distribution_js_divergence",
+        ArgSpec("x", _F), ArgSpec("group", _G),
+        ArgSpec("bins", _INT), ArgSpec("min_group_size", _INT),
+    )
+    signatures["event_level_survival_share"] = _sig(
+        "event_level_survival_share",
+        ArgSpec("event", _B), ArgSpec("level", _F), ArgSpec("x", _F),
+        ArgSpec("history_window", _W), ArgSpec("direction", _ANY),
+    )
+    signatures["ts_max_drawdown_activity_cost"] = _sig(
+        "ts_max_drawdown_activity_cost",
+        ArgSpec("x", _F), ArgSpec("activity", _F), ArgSpec("window", _W),
+    )
+    signatures["cs_multi_robust_resid"] = _sig(
+        "cs_multi_robust_resid",
+        ArgSpec("y", _F), ArgSpec("x1", _F),
+        ArgSpec("x2", _F, required=False), ArgSpec("x3", _F, required=False),
+        ArgSpec("add_intercept", _ANY),
+    )
+    signatures["relation_pagerank_centrality"] = _sig(
+        "relation_pagerank_centrality",
+        ArgSpec("x", _F), ArgSpec("group", _G), ArgSpec("damping", _FLT),
+    )
+    signatures["intraday_activity_duration_curvature"] = _sig(
+        "intraday_activity_duration_curvature",
+        ArgSpec("activity", _F), ArgSpec("buckets", _INT),
+    )
+    # Research-surface transforms.
+    signatures["ts_wavelet_lowpass_reconstruct"] = _sig(
+        "ts_wavelet_lowpass_reconstruct",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("level", _INT),
+    )
+    signatures["ts_signature_mahalanobis_anomaly"] = _sig(
+        "ts_signature_mahalanobis_anomaly",
+        ArgSpec("f1", _F), ArgSpec("f2", _F), ArgSpec("f3", _F),
+        ArgSpec("path_window", _W), ArgSpec("history_window", _W), ArgSpec("depth", _INT),
+    )
+    signatures["ts_betti_crocker_bifurcation_score"] = _sig(
+        "ts_betti_crocker_bifurcation_score",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("tau", _INT), ArgSpec("dim", _INT),
+    )
+
     return signatures

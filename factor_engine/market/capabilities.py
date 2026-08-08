@@ -210,6 +210,14 @@ class MarketSupport:
     depends_on_inputs: bool = False
     notes: str = ""
 
+    @property
+    def is_supported(self) -> bool:
+        return self.status.is_supported
+
+    @property
+    def is_production_supported(self) -> bool:
+        return self.status.is_production_supported
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "canonical": self.canonical,

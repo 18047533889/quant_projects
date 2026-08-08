@@ -206,9 +206,42 @@ manifest_version/sql_relation/单位归一化）。全量 **456 通过 / 0 失�
    （FE `_financial` 仍用 pandas 做 next_trading_day PIT；DataAccess 已具备
    TemporalJoinSpec 语义，接 anchor 数据集后即可替换）
 
-**回归**：dataaccess 477 通过 / 0 失败；allowlist rc=0；语义审计 0 问题。
-factor_engine 受影响单测各自通过（并发会话 operator-surface WIP 导致组合运行
-不稳定，非本阶段改动）。
+**2026-08-08 第三阶段（A股/美股两本 COS 数据字典对照落地，已全量回归）**：
+基于 `COS_ashare_lqtp_data_dictionary.md` 与 `COS_us_massive_data_dictionary.md`，
+把 dataaccess 的 schema / catalog / 契约对齐到两市场真实口径：
+
+- **A股 datasets.yaml 对齐字典**：`ashare_stock_daily` 补 Factor/HighLimit/
+  LowLimit/IsSuspend/PreClose；`ashare_stock_status` 列名修正 `ListedState`→
+  `PublicStatus`（字典无 ListedState 列）；`ashare_stock_industry` 补
+  IndustrySource（不筛源行数×6）；Valuation/Indicator/Balance/Income/CashFlow/
+  Dividend/Capital 各表 schema 补齐字典真实列。
+- **美股 datasets.yaml 修正**：`us_stock_valuation_daily`/`us_stock_indicator`
+  schema 从错误的 A股 PascalCase 列名修正为美股 snake_case 真实列
+  （market_cap/price_to_earnings/return_on_equity/...，X0 稀疏表）；
+  **`us_stock_capital_daily` 双 schema 拆分**为 `us_stock_capital_split`
+  （glob `[0-9]*.parquet`）与 `us_stock_capital_shares`（glob `shares_*.parquet`），
+  杜绝同目录两 schema glob 混读拼炸（字典 C13）；财务三表补 timeframe 列与
+  filing_date/period_end 语义；dividend 补 currency/ex_dividend_date 等。
+- **新增美股数据集**：`us_ticker_shares_snapshot`（市值中性推荐源 =
+  weighted_shares_outstanding×Close）、`us_security_master_daily_snap`、
+  `us_fact_news`（PIT=published_utc）；datasets.yaml / mirror / cos_contract_us /
+  cos_registry_runtime 四处同步注册。
+- **SemanticFieldCatalog 跨市场**：`SemanticField` 新增 `market` 维度
+  （ashare/us/any）；`_by_name` 改为 name→候选列表，`resolve_one(name, dataset=)`
+  按数据集名前缀消歧。解决 `return_bp` alias `ret` 与美股 `ret`（小数不除）、
+  `roe`（A股 %→/100）与 `return_on_equity`（美股小数）、`total_assets`/
+  `revenue`/`market_cap` 等跨市场同名字段的单位串味。美股财务字段
+  `required_filters=[timeframe]`（E2 事件必须 filter timeframe，否则 TTM 混截面）。
+- **`_enforce_required_filters` 扩展（#42）**：单表 `read()` 与 `read_joined`
+  都强制执行；满足途径从「仅 params」扩展为「params 或 filters /
+  filters_by_dataset 列覆盖」（timeframe/IndustrySource 是列过滤不是路径参数）。
+- **A股 Factor 契约修正**：`cos_contract_ashare` 的 `adjustment_convention`
+  `forward_vendor_factor`→`backward_vendor_factor`（字典 2026-08-08 实证：
+  后复权价 = Close×Factor，旧「前复权=Close/Factor」已废止）。
+
+**回归**：dataaccess 491 通过 / 0 失败（新增 14 个市场一致性测试）；allowlist
+rc=0；语义审计 0 问题。factor_engine 受影响单测各自通过（并发会话
+operator-surface WIP 导致组合运行不稳定，非本阶段改动）。
 
 ## 兼容性保障
 - 新字段全部默认值；`_build_select_sql` 默认走 ParquetAdapter → 生成的 SQL 与改前逐字节一致。

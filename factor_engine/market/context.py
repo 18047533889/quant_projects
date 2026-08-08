@@ -87,12 +87,18 @@ class MarketContext:
         return replace(self, provider_profile=profile)
 
     def as_research(self) -> "MarketContext":
-        """Production -> research convenience (opens proxy/sparse gates)."""
+        """Production -> research convenience (opens proxy/sparse/effective gates).
+
+        Research is allowed to opt in to proxy providers, sparse as-of backfill,
+        and effective-time-only (e.g. ex-dividend) semantics — always with
+        explicit warnings, never silently in production.
+        """
         return replace(
             self,
             provider_profile="research",
             allow_proxy=True,
             allow_sparse=True,
+            allow_effective_time_only=True,
         )
 
     @property

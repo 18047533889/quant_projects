@@ -20,7 +20,10 @@ def test_mirror_registry_covers_markets():
     ashare = [n for n in DATASET_MIRROR_REGISTRY if n.startswith("ashare_")]
     us = [n for n in DATASET_MIRROR_REGISTRY if n.startswith("us_")]
     assert len(ashare) == 21  # +ashare_turnover_base_daily
-    assert len(us) == 23
+    # 23 基础 +5 新增/拆分：us_stock_capital_split / us_stock_capital_shares /
+    # us_security_master_daily_snap / us_ticker_shares_snapshot / us_fact_news
+    # （原 us_stock_capital_daily 拆成 split+shares 两个镜像）
+    assert len(us) == 27
 
 
 def test_ashare_table_map():

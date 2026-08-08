@@ -109,6 +109,7 @@ return_bp:
 # ---- 估值（日频，随行情 exact join） ----
 
 market_cap:
+  market: ashare
   dataset: ashare_stock_valuation_daily
   physical_name: MarketCap
   dtype: double
@@ -414,8 +415,9 @@ price_to_book:
   join_policy: exact
   mining_allowed: true
 
-market_cap:
+us_market_cap:
   market: us
+  logical_name: market_cap
   dataset: us_stock_valuation_daily
   physical_name: market_cap
   dtype: double

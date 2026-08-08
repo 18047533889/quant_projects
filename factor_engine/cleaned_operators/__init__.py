@@ -236,6 +236,18 @@ _LOAD_MODULES = (
     # Surviving polars backends for the geometry/math expansion (polars I/O
     # around the same numpy kernels; source != bridge so production keeps them).
     "cleaned_operators.polars_geometry_math",
+    # 2026-08-08 Gemini-recommended primitives: gathering/distribution, weighted
+    # moment / conditional covariance / robust multi-resid, activity clock,
+    # spectral-shape, relation PageRank, intraday activity-duration curvature,
+    # research-surface transforms (wavelet low-pass / signature Mahalanobis /
+    # CROCKER bifurcation).
+    "cleaned_operators.gather_ext",
+    "cleaned_operators.weighted_moment_ext",
+    "cleaned_operators.activity_clock",
+    "cleaned_operators.spectral_ext",
+    "cleaned_operators.relation.ops_ext",
+    "cleaned_operators.intraday_activity_duration",
+    "cleaned_operators.research_transform",
 )
 
 _REVIEWED_EXTENSIONS = (

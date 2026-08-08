@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.7.0 — A股/美股两本 COS 数据字典对照落地
+
+对照 `COS_ashare_lqtp_data_dictionary.md` 与 `COS_us_massive_data_dictionary.md`，
+把 dataaccess 的 schema / catalog / 契约对齐到两市场真实口径（清洗前后差异）。
+
+**A股 schema 对齐字典**
+- `ashare_stock_daily` 补 Factor/HighLimit/LowLimit/IsSuspend/PreClose
+  （Factor 为后复权乘数：后复权价=Close×Factor）。
+- `ashare_stock_status` 列名修正：`ListedState`→`PublicStatus`（字典无
+  ListedState 列）；补 CompanyId/ChangeType 等。
+- `ashare_stock_industry` 补 IndustrySource（不筛源行数×6）。
+- Valuation/Indicator/Balance/Income/CashFlow/Dividend/Capital 各表 schema
+  补齐字典真实列（% vs 倍数、PubDate 语义、ExDividendDate 等）。
+
+**美股 schema 修正**
+- `us_stock_valuation_daily` / `us_stock_indicator`：从错误的 A股 PascalCase
+  列名修正为美股 snake_case 真实列（market_cap/price_to_earnings/
+  return_on_equity/dividend_yield/...，X0 稀疏表禁止当全历史面板）。
+- **`us_stock_capital_daily` 双 schema 拆分**：`us_stock_capital_split`
+  （glob `[0-9]*.parquet`，拆分事件）+ `us_stock_capital_shares`
+  （glob `shares_*.parquet`，稀疏 PIT 股本）——同目录两 schema 不再 glob 混读拼炸。
+- 财务三表补 `timeframe` 列与 filing_date/period_end 语义（必须 filter
+  timeframe）；dividend 补 currency/ex_dividend_date 等。
+- 新增数据集：`us_ticker_shares_snapshot`（市值中性推荐源）、
+  `us_security_master_daily_snap`、`us_fact_news`；datasets.yaml / mirror /
+  cos_contract_us / cos_registry_runtime 四处同步。
+
+**SemanticFieldCatalog 跨市场**
+- `SemanticField` 新增 `market` 维度（ashare/us/any）；`_by_name` 改为
+  name→候选列表，`resolve_one(name, dataset=)` 按数据集名前缀消歧。
+- 解决跨市场单位串味：`ret`（A股 bp/10000 vs 美股小数不除）、`roe`（A股
+  %→/100）与 `return_on_equity`（美股小数）、`total_assets`/`revenue`/
+  `market_cap` 等按 dataset 命中对应市场字段。
+- 美股财务字段 `required_filters=[timeframe]`（E2 必须 filter timeframe）。
+
+**required_filters 扩展（#42）**
+- 单表 `read()` 与 `read_joined` 都强制执行；满足途径从「仅 params」扩展为
+  「params 或 filters / filters_by_dataset 列覆盖」（timeframe/IndustrySource
+  是列过滤不是路径参数）。
+
+**A股 Factor 契约修正**
+- `cos_contract_ashare` 的 `adjustment_convention` 修正为 backward
+  （字典实证：后复权价 = Close×Factor，旧「前复权=Close/Factor」已废止）。
+
+**回归**：dataaccess 491 通过 / 0 失败（+14 个市场一致性测试）；allowlist
+rc=0；语义审计 0 问题。
+
 ## 0.6.0 — 热路径性能 / PIT 语义级下沉 / FE 消费
 
 **read_joined 重写（P0）**

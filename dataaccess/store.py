@@ -393,6 +393,32 @@ class DataAccessStore:
             )
         logger.warning("required_filters 未满足（research 放行）：%s", detail)
 
+    def _fields_meta_for_columns(
+        self, dataset: str, columns: Sequence[str] | None
+    ) -> list[Any]:
+        """把单表读的列名解析成 catalog 字段元数据（含市场消歧）。
+
+        required_filters 只对 catalog 已登记语义的列生效；物理直读列（catalog
+        未覆盖）返回带空 required_filters 的占位，不触发强制。
+        """
+        from data_access.read.semantic_catalog import SemanticField, get_semantic_catalog
+
+        if not columns:
+            return []
+        catalog = get_semantic_catalog()
+        out: list[Any] = []
+        for col in columns:
+            f = catalog.resolve_one(str(col), dataset=dataset)
+            if f is not None:
+                out.append(f)
+            else:
+                out.append(
+                    SemanticField(
+                        logical_name=str(col), dataset=dataset, physical_name=str(col)
+                    )
+                )
+        return out
+
     def _schema_fingerprint(
         self,
         ds: Dataset,
@@ -470,6 +496,15 @@ class DataAccessStore:
             time_range=time_range,
             instrument_filter=tuple(instrument_filter) if instrument_filter else (),
             params=snapshot.params,
+        )
+
+        # #8/#42 required_filters：单表读同样强制（行业 IndustrySource、
+        # 美股财务 timeframe 是列过滤，传 filters 覆盖即可）。避免 read_joined
+        # 强制而 read() 放行的不一致。
+        self._enforce_required_filters(
+            self._fields_meta_for_columns(dataset, columns),
+            {dataset: dict(params)},
+            filters=filters,
         )
 
         sql, sql_params = self._build_select_sql(

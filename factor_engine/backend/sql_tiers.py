@@ -455,6 +455,17 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "ts_crossing_acceleration",
 })
 
+# 2026-08-08 Gemini-recommended primitives: SQL pushdown subset with emitter
+# branches in backend/sql_pushdown/emitter.py (exact-parity DuckDB window
+# aggregates / correlated top-k selection).
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "group_topk_mean",
+    "cs_weighted_percentile_rank",
+    "ts_cov_if",
+    "ts_value_at_argextreme",
+    "ts_weighted_standardized_moment",
+})
+
 # DuckDB 分层
 DUCKDB_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()
 DUCKDB_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()

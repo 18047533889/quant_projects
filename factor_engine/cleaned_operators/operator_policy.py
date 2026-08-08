@@ -1445,6 +1445,42 @@ _DEEPENING_PACK_POLICIES = {
 }
 _EXPLICIT_POLICIES.update(_DEEPENING_PACK_POLICIES)
 
+# 2026-08-08 Gemini-recommended primitives: gathering/distribution, weighted
+# moment / conditional covariance / robust multi-resid, activity clock, spectral
+# shape, relation PageRank, intraday activity-duration curvature and
+# research-surface transforms.  See gather_ext / weighted_moment_ext /
+# activity_clock / spectral_ext / relation.ops_ext / intraday_activity_duration /
+# research_transform.
+_GEMINI_PACK_POLICIES: dict[str, dict[str, Any]] = {
+    # group / cross-sectional routing (scope: group / cs).
+    "group_topk_mean": {"scope": "group", "pit_safe": True, "min_periods": 1},
+    "cs_weighted_percentile_rank": {"scope": "cs", "pit_safe": True, "min_periods": 1},
+    "group_distribution_js_divergence": {"scope": "group", "pit_safe": True, "min_periods": 1},
+    "cs_multi_robust_resid": {"scope": "cs", "pit_safe": True, "min_periods": 3},
+    # trailing window gather / weighted moment / conditional covariance.
+    "ts_value_at_argextreme": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "ts_weighted_standardized_moment": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_cov_if": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    # activity clock (strict past scale, lag-aware).
+    "ts_activity_clock_lagged_value": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 2},
+    "ts_activity_clock_age": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 2},
+    "ts_max_drawdown_activity_cost": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 2},
+    # spectral shape (trailing FFT).
+    "ts_spectral_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 16},
+    "ts_dominant_cycle_period": {"scope": "ts", "pit_safe": True, "min_periods": 16},
+    # relation graph (group adjacency).
+    "relation_pagerank_centrality": {"scope": "group", "pit_safe": True, "min_periods": 2},
+    # intraday activity-duration curvature (minute source → daily scalar).
+    "intraday_activity_duration_curvature": {
+        "scope": "ts", "pit_safe": True, "min_periods": 3, "session_aware": True,
+    },
+    # research-surface transforms.
+    "ts_wavelet_lowpass_reconstruct": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    "ts_signature_mahalanobis_anomaly": {"scope": "ts", "pit_safe": True, "min_periods": 5},
+    "ts_betti_crocker_bifurcation_score": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+}
+_EXPLICIT_POLICIES.update(_GEMINI_PACK_POLICIES)
+
 # Compatibility export now reflects the reviewed research surface exactly.
 RESEARCH_CORE_CANONICALS = RESEARCH_ONLY_CANONICALS
 
