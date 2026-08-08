@@ -11,6 +11,7 @@ Runtime contracts are enforced centrally:
 """
 from __future__ import annotations
 
+import ast
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
@@ -135,28 +136,196 @@ class ParamSpec:
 # spending expression budget, instead of each kernel hand-rolling a
 # ``return NaN`` guard.  ``expression`` is evaluated in the namespace of the
 # bound parameters via :func:`eval_relational_expression`.
+
+# Review-8 #462: relational expressions are parsed with :mod:`ast` and executed
+# by a restricted interpreter — never free-form ``eval``.  The allowed grammar
+# is: numeric literals, parameter names, arithmetic (``+ - * / **``), comparison
+# (``< <= > >= == !=``), boolean (``and/or/not``) and unary sign.  Function
+# calls, attributes, subscripting, comprehensions and container literals are
+# rejected at parse time.  ``search`` grammar and runtime share this object.
+_ALLOWED_REL_BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow)
+_ALLOWED_REL_CMPOPS = (ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Eq, ast.NotEq)
+_ALLOWED_REL_BOOLOPS = (ast.And, ast.Or)
+_ALLOWED_REL_UNARYOPS = (ast.USub, ast.UAdd, ast.Not)
+
+
+def parse_relational_expression(expression: str) -> tuple[ast.AST, frozenset[str]]:
+    """Parse + validate a restricted predicate, returning ``(tree, params)``.
+
+    Raises :class:`ValueError` for any operator, literal or name usage outside
+    the allowlist — a malformed relation must fail loudly at registration time
+    instead of being ``eval``-ed at runtime.
+    """
+    try:
+        tree = ast.parse(str(expression), mode="eval")
+    except SyntaxError as exc:
+        raise ValueError(
+            f"invalid relational expression {expression!r}: {exc.msg}"
+        ) from exc
+
+    referenced: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Expression, ast.Load)):
+            continue
+        if isinstance(node, ast.Name):
+            if isinstance(node.ctx, ast.Load):
+                referenced.add(node.id)
+            continue
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, (int, float)) and not isinstance(node.value, bool):
+                continue
+            raise ValueError(
+                f"relational expression {expression!r} contains unsupported "
+                f"literal {node.value!r} (only numeric literals are allowed)"
+            )
+        if isinstance(node, ast.BinOp):
+            if type(node.op) not in _ALLOWED_REL_BINOPS:
+                raise ValueError(
+                    f"relational expression {expression!r} uses unsupported "
+                    f"binary operator {type(node.op).__name__}"
+                )
+            continue
+        if isinstance(node, ast.BoolOp):
+            if type(node.op) not in _ALLOWED_REL_BOOLOPS:
+                raise ValueError(
+                    f"relational expression {expression!r} uses unsupported "
+                    f"boolean operator {type(node.op).__name__}"
+                )
+            continue
+        if isinstance(node, ast.UnaryOp):
+            if type(node.op) not in _ALLOWED_REL_UNARYOPS:
+                raise ValueError(
+                    f"relational expression {expression!r} uses unsupported "
+                    f"unary operator {type(node.op).__name__}"
+                )
+            continue
+        if isinstance(node, ast.Compare):
+            if any(type(op) not in _ALLOWED_REL_CMPOPS for op in node.ops):
+                raise ValueError(
+                    f"relational expression {expression!r} uses an unsupported "
+                    f"comparison operator"
+                )
+            continue
+        raise ValueError(
+            f"relational expression {expression!r} uses unsupported node "
+            f"{type(node).__name__} (function calls / attributes / subscripting "
+            f"are not allowed)"
+        )
+    return tree, frozenset(referenced)
+
+
+def _eval_rel_ast(node: ast.AST, ns: dict[str, Any]) -> Any:
+    """Restricted interpreter over a validated relational predicate."""
+    if isinstance(node, ast.Expression):
+        return _eval_rel_ast(node.body, ns)
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.Name):
+        return ns[node.id]
+    if isinstance(node, ast.BinOp):
+        left = _eval_rel_ast(node.left, ns)
+        right = _eval_rel_ast(node.right, ns)
+        op = type(node.op)
+        if op is ast.Add:
+            return left + right
+        if op is ast.Sub:
+            return left - right
+        if op is ast.Mult:
+            return left * right
+        if op is ast.Div:
+            return left / right
+        if op is ast.Pow:
+            return left ** right
+        raise ValueError(f"unsupported binop {op.__name__}")
+    if isinstance(node, ast.UnaryOp):
+        value = _eval_rel_ast(node.operand, ns)
+        op = type(node.op)
+        if op is ast.USub:
+            return -value
+        if op is ast.UAdd:
+            return +value
+        if op is ast.Not:
+            return not value
+        raise ValueError(f"unsupported unaryop {op.__name__}")
+    if isinstance(node, ast.BoolOp):
+        if isinstance(node.op, ast.And):
+            for value in node.values:
+                if not _eval_rel_ast(value, ns):
+                    return False
+            return True
+        if isinstance(node.op, ast.Or):
+            for value in node.values:
+                if _eval_rel_ast(value, ns):
+                    return True
+            return False
+        raise ValueError("unsupported boolop")
+    if isinstance(node, ast.Compare):
+        left = _eval_rel_ast(node.left, ns)
+        for op, comparator in zip(node.ops, node.comparators):
+            right = _eval_rel_ast(comparator, ns)
+            optype = type(op)
+            if optype is ast.Lt:
+                if not (left < right):
+                    return False
+            elif optype is ast.LtE:
+                if not (left <= right):
+                    return False
+            elif optype is ast.Gt:
+                if not (left > right):
+                    return False
+            elif optype is ast.GtE:
+                if not (left >= right):
+                    return False
+            elif optype is ast.Eq:
+                if not (left == right):
+                    return False
+            elif optype is ast.NotEq:
+                if not (left != right):
+                    return False
+            else:  # pragma: no cover - rejected at parse time
+                raise ValueError(f"unsupported comparison {optype.__name__}")
+            left = right
+        return True
+    raise ValueError(f"unsupported node {type(node).__name__}")
+
+
 @dataclass
 class RelationalParamSpec:
     """A declared cross-parameter feasibility constraint.
 
-    ``expression`` is a plain-Python expression over parameter names, e.g.
+    ``expression`` is a restricted expression over parameter names, e.g.
     ``"window >= 4*k + 1"`` or ``"min_periods <= window - 1"``.  Parameters are
     bound positionally+by-name exactly like ``_normalise_call`` does, so every
     relation is checked on the SAME values the kernel will receive.
 
     ``message`` (optional) replaces the default "parameter relation violated"
     text; it may interpolate the bound values with ``{window}`` etc.
+
+    Review-8 #462: the expression is parsed once (register/construct time) into
+    a restricted predicate AST — never free-form ``eval``.  A relation that
+    cannot be parsed by :func:`parse_relational_expression` raises at
+    construction.
     """
 
     expression: str
     message: str | None = None
 
+    def __post_init__(self) -> None:
+        tree, params = parse_relational_expression(self.expression)
+        object.__setattr__(self, "_rel_tree", tree)
+        object.__setattr__(self, "_rel_param_names", params)
+
+    @property
+    def param_names(self) -> frozenset[str]:
+        """The parameter names referenced by this relation (validated at parse)."""
+        return self._rel_param_names
+
     def check(self, bound: dict[str, Any]) -> bool:
         """Evaluate the relation against a bound-parameter dict."""
-        ns = {k: v for k, v in bound.items()}
+        ns = {name: bound[name] for name in self._rel_param_names if name in bound}
         try:
-            return bool(eval(self.expression, {"__builtins__": {}}, ns))
-        except (TypeError, ValueError, ZeroDivisionError):
+            return bool(_eval_rel_ast(self._rel_tree, ns))
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
             # NaN/None/absent parameters: relation undecidable -> treat as
             # unmet so search/replanning is forced to a feasible combination.
             return False

@@ -36,7 +36,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 # R6-133: one canonical k-NN implementation.  This module previously duplicated
 # the competition-rank (nested argsort) kNN with a stable ``order[:k_eff]`` cut
@@ -509,6 +509,13 @@ class GroupTailCoexceedanceDensity(SeriesOperator):
         unit="ratio",
         cost=7,
     )
+    metadata.param_specs = {
+        # window must hold >= _MIN_Q_ROWS prior rows for a per-stock tail
+        # threshold PLUS the current query row, so window >= _MIN_Q_ROWS + 1.
+        "window": ParamSpec(dtype=int, min=_MIN_Q_ROWS + 1),
+        "quantile": ParamSpec(dtype=float, min=0.5, max=0.99),
+        "side": ParamSpec(dtype=str, choices=("upper", "lower")),
+    }
     # R6-135 (membership vintage — current_members_retrospective): the group is
     # defined by TODAY's group labels, and each *current* member's trailing
     # aligned window is used as its "group sample".  This is the
@@ -522,8 +529,8 @@ class GroupTailCoexceedanceDensity(SeriesOperator):
         self, x: pd.DataFrame, group_id: pd.DataFrame, window: int = 120, quantile: float = 0.9, side: str = "upper", **_: Any
     ) -> pd.DataFrame:
         w = int(window)
-        if w < 2:
-            raise ValueError("window must be >= 2")
+        if w < _MIN_Q_ROWS + 1:
+            raise ValueError(f"window must be >= {_MIN_Q_ROWS + 1} (threshold needs {_MIN_Q_ROWS} prior rows + query)")
         if not (0.0 < float(quantile) < 1.0):
             raise ValueError("quantile must be in (0, 1)")
         if side not in ("upper", "lower"):
@@ -555,6 +562,14 @@ class GroupCorrMstLength(SeriesOperator):
         unit="ratio",
         cost=8,
     )
+    # R9-OP-021 (feasibility): ``_pearson`` requires >= _MIN_PAIR_ROWS aligned
+    # rows per edge; window < _MIN_PAIR_ROWS made the whole canonical a
+    # guaranteed-NaN parameter region (window=2..19 legal but every edge NaN).
+    # The declared contract now uses the SAME constant as the kernel guard, so
+    # compile-valid == runtime-feasible.
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=_MIN_PAIR_ROWS),
+    }
     # R6-135: same ``current_members_retrospective`` contract as
     # group_tail_coexceedance_density — today's group membership + each current
     # member's trailing aligned window.  Documented, not silent.
