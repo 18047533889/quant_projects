@@ -2329,11 +2329,14 @@ class DataAccessStore:
     ) -> bool:
         """对比 token 判断缓存/快照是否过期（无 manifest → 视为过期）。
 
-        支持 ``manifest_epoch`` 对比（写路径 bump 后立刻失效）；无 epoch 时
-        退回 dataset_version/partition_version 对比（老 manifest 兼容）。
+        优先比较 source_epoch（写路径 bump 后立刻失效）；当前 manifest 不新鲜
+        （source != built）也视为过期。无 epoch 时退回 dataset_version /
+        partition_version 对比（老 manifest 兼容）。
         """
         cur = self.manifest_version(dataset, **params)
         if not cur.get("has_manifest"):
+            return True
+        if not cur.get("fresh"):
             return True
         if manifest_epoch is not None:
             return cur.get("manifest_epoch") != manifest_epoch
@@ -3800,43 +3803,43 @@ class DataAccessStore:
         ok = False
         err_msg: str | None = None
         files_written: list[Path] = []
-        with audit.AuditTimer() as timer:
-            try:
-                with mutation_lock(target_dir):
-                    if mode == "overwrite":
-                        self._clear_dir(target_dir)
-                    target_dir.mkdir(parents=True, exist_ok=True)
-                    files_written = self._write_table_to_dir(
-                        table, target_dir, partition_by=partition_by,
+        # 统一写事务：mutation → bump source_epoch → 重建 manifest（成功/失败都失效）
+        with self._dataset_mutation(dataset, **params):
+            with audit.AuditTimer() as timer:
+                try:
+                    with mutation_lock(target_dir):
+                        if mode == "overwrite":
+                            self._clear_dir(target_dir)
+                        target_dir.mkdir(parents=True, exist_ok=True)
+                        files_written = self._write_table_to_dir(
+                            table, target_dir, partition_by=partition_by,
+                        )
+                    ok = True
+                    err_msg = None
+                except Exception as exc:
+                    ok = False
+                    err_msg = f"{type(exc).__name__}: {exc}"
+                    files_written = []
+                    # 出错仍然先记审计再抛，方便事后追查
+                    raise
+                finally:
+                    audit.record(
+                        op="write",
+                        dataset=dataset,
+                        ok=ok,
+                        mode=mode,
+                        rows=table.num_rows,
+                        paths=[str(p) for p in files_written] if files_written else [str(target_dir)],
+                        params=params or None,
+                        elapsed_ms=timer.elapsed_ms,
+                        error=err_msg if not ok else None,
+                        extra={"partition_by": list(partition_by)} if partition_by else None,
                     )
-                ok = True
-                err_msg = None
-            except Exception as exc:
-                ok = False
-                err_msg = f"{type(exc).__name__}: {exc}"
-                files_written = []
-                # 出错仍然先记审计再抛，方便事后追查
-                raise
-            finally:
-                audit.record(
-                    op="write",
-                    dataset=dataset,
-                    ok=ok,
-                    mode=mode,
-                    rows=table.num_rows,
-                    paths=[str(p) for p in files_written] if files_written else [str(target_dir)],
-                    params=params or None,
-                    elapsed_ms=timer.elapsed_ms,
-                    error=err_msg if not ok else None,
-                    extra={"partition_by": list(partition_by)} if partition_by else None,
-                )
 
-        logger.info(
-            "write_arrow dataset=%s rows=%d mode=%s files=%d elapsed_ms=%.1f",
-            dataset, table.num_rows, mode, len(files_written), timer.elapsed_ms,
-        )
-        # 写路径 mutation 后 bump manifest epoch，让 query-scoped snapshot 立即失效
-        self.touch_manifest_epoch(dataset, **params)
+            logger.info(
+                "write_arrow dataset=%s rows=%d mode=%s files=%d elapsed_ms=%.1f",
+                dataset, table.num_rows, mode, len(files_written), timer.elapsed_ms,
+            )
         return {
             "rows": table.num_rows,
             "path": str(target_dir),

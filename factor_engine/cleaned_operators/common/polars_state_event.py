@@ -143,25 +143,43 @@ def _truth(cv: np.ndarray) -> np.ndarray:
     return np.isfinite(cv) & (cv != 0)
 
 
-def ts_transition_count(condition, window=20):
+def ts_transition_count(condition, window=20, missing_policy="break"):
     w = _pi(window, "window")
+    policy = str(missing_policy).lower()
+    if policy not in ("break", "carry"):
+        raise ValueError("missing_policy must be 'break' or 'carry'")
     cols = _cols(condition)
     rows = condition.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         cv = condition[c].to_numpy()
         truth = _truth(cv)
+        valid = np.isfinite(cv)
         for row in range(rows):
             start = max(0, row - w + 1)
-            segment = truth[start : row + 1]
-            if np.all(np.isnan(cv[start : row + 1])):
+            if not valid[row]:
                 continue
-            out[row, i] = float(int(np.sum(segment[1:] != segment[:-1])))
+            transitions = 0
+            prev = None
+            for t in range(start, row + 1):
+                if not valid[t]:
+                    if policy == "carry":
+                        continue  # missing row transparent: carry last state
+                    prev = None  # break: missing resets continuity
+                    continue
+                current = bool(truth[t])
+                if prev is not None and current != prev:
+                    transitions += 1
+                prev = current
+            out[row, i] = float(transitions)
     return _make(condition, cols, out)
 
 
-def ts_time_since_change(condition, max_lookback=None):
+def ts_time_since_change(condition, max_lookback=None, missing_policy="break"):
     limit = None if max_lookback is None else int(max_lookback)
+    policy = str(missing_policy).lower()
+    if policy not in ("break", "carry"):
+        raise ValueError("missing_policy must be 'break' or 'carry'")
     cols = _cols(condition)
     rows = condition.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -171,11 +189,22 @@ def ts_time_since_change(condition, max_lookback=None):
         last_change = -1
         prev = None
         for row in range(rows):
-            if np.isfinite(cv[row]):
-                current = bool(truth[row])
-                if prev is not None and current != prev:
-                    last_change = row
-                prev = current
+            if not np.isfinite(cv[row]):
+                if policy == "carry":
+                    # missing row is a continuation: distance keeps growing
+                    if last_change >= 0:
+                        distance = row - last_change
+                        if limit is None or distance < limit:
+                            out[row, i] = float(distance)
+                    continue
+                # break: missing emits NaN and resets continuity
+                last_change = -1
+                prev = None
+                continue
+            current = bool(truth[row])
+            if prev is not None and current != prev:
+                last_change = row
+            prev = current
             if last_change >= 0:
                 distance = row - last_change
                 if limit is None or distance < limit:

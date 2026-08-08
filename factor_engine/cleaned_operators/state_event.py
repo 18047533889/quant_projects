@@ -121,12 +121,24 @@ class TsTimeSinceChange(SeriesOperator):
         valid = np.isfinite(cv)
         truth = valid & (cv != 0)
         rows, cols = truth.shape
+        policy = str(missing_policy).lower()
+        if policy not in ("break", "carry"):
+            raise ValueError("missing_policy must be 'break' or 'carry'")
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             last_change = -1
             prev: bool | None = None
             for row in range(rows):
                 if not valid[row, col]:
+                    if policy == "carry":
+                        # A missing row is a continuation of the same state: the
+                        # distance from the last change keeps growing.
+                        if last_change >= 0:
+                            distance = row - last_change
+                            if limit is None or distance < limit:
+                                out[row, col] = float(distance)
+                        continue
+                    # break (default): missing emits NaN and resets continuity.
                     out[row, col] = np.nan
                     last_change = -1
                     prev = None
