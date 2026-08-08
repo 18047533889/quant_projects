@@ -386,6 +386,9 @@ class IntraRealizedSemivariance(SeriesOperator):
     metadata = _metadata("intra_realized_semivariance", "日内上/下半方差 sum(r_t^2 * 1(sign))。", ["close", "side"], unit="variance")
 
     def _calculate_series(self, close, side="down", **_):
+        if side not in ("up", "down"):
+            # Invalid side must fail loudly (P1-55), not fall back to full RV.
+            raise ValueError("intra_realized_semivariance requires side in {'up', 'down'}")
         return _daily_agg(close, lambda v, t: _semivariance(v, side))
 
 
@@ -447,14 +450,20 @@ class IntraJumpRatio(SeriesOperator):
 # ---------------------------------------------------------------------------
 
 def _path_efficiency(close_v):
-    finite = close_v[np.isfinite(close_v)]
-    if len(finite) < 2:
+    mask = np.isfinite(close_v)
+    if mask.sum() < 2:
         return np.nan
-    changes = np.diff(finite)
-    length = float(np.sum(np.abs(changes)))
+    idx = np.where(mask)[0]
+    pts = close_v[idx]
+    # Value-contiguous arc length through consecutive finite closes (bridging
+    # interior gaps with the straight segment between their endpoints).  By the
+    # triangle inequality this is always >= |net displacement|, so efficiency
+    # stays in [0,1] — P1-54 (compressing the finite closes skipped the gap and
+    # inflated efficiency).
+    length = float(np.sum(np.abs(np.diff(pts))))
     if length <= _EPS:
         return 0.0
-    return float(abs(finite[-1] - finite[0]) / length)
+    return float(abs(pts[-1] - pts[0]) / length)
 
 
 @register_operator(
@@ -480,8 +489,14 @@ def _position_of(high_v, times, *, low: bool):
     idx = np.where(finite_mask)[0]
     vals = high_v[finite_mask]
     target = np.argmin(vals) if low else np.argmax(vals)
-    n = len(idx)
-    return float(idx[target]) / float(n) if n > 0 else np.nan
+    # Normalise by the *observed session grid* (all rows, finite or not).  The
+    # previous denominator counted only finite bars, so a high at raw slot 200
+    # on a 150-finite-bar day produced 200/150 > 1 — a direct numerical error
+    # (P0-23).  ``raw_slot / total_grid`` is always in [0, 1).
+    total = len(high_v)
+    if total <= 0:
+        return np.nan
+    return float(idx[target]) / float(total)
 
 
 @register_operator(
@@ -577,18 +592,23 @@ class IntraVwapCrossCount(SeriesOperator):
 
 
 def _vwap_cross_count(close_v, amount_v, volume_v):
+    # Cumulative VWAP runs on the full aligned grid (all traded bars), while the
+    # cross test only fires on rows where BOTH close and the cumulative VWAP
+    # exist.  The previous code compressed ``close`` to its finite rows but kept
+    # ``amount``/``volume`` on the full axis — the two arrays could desync when a
+    # close was missing (P0-24).
     vol = np.where(np.isfinite(volume_v), volume_v, 0.0)
     amt = np.where(np.isfinite(amount_v), amount_v, 0.0)
-    c = close_v[np.isfinite(close_v)]
-    n = len(c)
-    if n < 2:
-        return np.nan
     cum_v = np.cumsum(vol)
     cum_a = np.cumsum(amt)
     with np.errstate(divide="ignore", invalid="ignore"):
         cum_vwap = np.where(cum_v > _EPS, cum_a / cum_v, np.nan)
+    valid = np.isfinite(close_v) & np.isfinite(cum_vwap)
+    if valid.sum() < 2:
+        return np.nan
+    c = np.where(valid, close_v, np.nan)
     sign = np.sign(c - cum_vwap)
-    sign = sign[np.isfinite(sign)]
+    sign = sign[valid]
     if len(sign) < 2:
         return 0.0
     return float(np.sum(sign[1:] != sign[:-1]))

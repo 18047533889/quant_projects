@@ -66,8 +66,10 @@ class TsTransitionCount(SeriesOperator):
         valid = np.isfinite(cv)
         truth = valid & (cv != 0)
         rows, cols = truth.shape
-        out = np.full((rows, cols), np.nan, dtype=float)
         policy = str(missing_policy).lower()
+        if policy not in ("break", "carry"):
+            raise ValueError("missing_policy must be 'break' or 'carry'")
+        out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
                 start = max(0, row - w + 1)
@@ -78,7 +80,9 @@ class TsTransitionCount(SeriesOperator):
                 prev: bool | None = None
                 for i in range(start, row + 1):
                     if not valid[i, col]:
-                        prev = None
+                        if policy == "carry":
+                            continue  # missing row is transparent; carry the last state
+                        prev = None  # break: missing resets continuity
                         continue
                     current = bool(truth[i, col])
                     if prev is not None and current != prev:

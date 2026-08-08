@@ -31,6 +31,7 @@ import shutil
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Sequence
 
@@ -151,6 +152,44 @@ class DataAccessStore:
         self._registry_hash = _compute_registry_hash(registry)
         # #46 注入的市场交易日历（{market: MarketCalendar}），session availability 用
         self._calendars: dict[str, Any] = {}
+
+    @contextmanager
+    def _dataset_mutation(self, dataset: str, **params: Any):
+        """写路径统一事务（#2）：任何 mutation 都经此失效/重建 manifest。
+
+        进入后无论 body 成功还是抛异常退出：
+            1. ``bump_source_epoch`` 递增 source_epoch → manifest 立刻 dirty；
+            2. best-effort 重建 manifest，让 ``manifest_built_epoch`` 追上
+               source_epoch（重建失败则 manifest 保持 dirty，读路径安全回退
+               glob + 全文件列表，绝不拿旧 min/max 做 prune）。
+
+        业务代码不再自己 ``touch_manifest_epoch``。
+        """
+        try:
+            yield
+        finally:
+            from data_access.read.manifest import (
+                bump_source_epoch,
+                manifest_root_for_paths,
+                rebuild_manifest_for_dataset,
+            )
+
+            try:
+                ds = self._registry.get(dataset)
+            except Exception:
+                return
+            try:
+                raw_paths = self._resolve_raw_paths(
+                    ds, time_range=None, params=dict(params)
+                )
+            except Exception:
+                raw_paths = []
+            root = manifest_root_for_paths(raw_paths)
+            new_epoch = None
+            if root is not None:
+                new_epoch = bump_source_epoch(root)
+            if new_epoch is not None:
+                rebuild_manifest_for_dataset(self, dataset, **params)
 
     def set_calendar(self, market: str, calendar: Any) -> None:
         """注入一个市场的交易日历（MarketCalendar），供 session availability 使用。
@@ -2218,10 +2257,11 @@ class DataAccessStore:
         """廉价的 query-scoped snapshot token：只读 ``_manifest.json`` sidecar，
         不做全量 footer 扫描，也不做 O(N) 文件 glob（#17）。
 
-        freshness 由写路径维护的 ``manifest_epoch`` 决定：sidecar 存在即信任
-        （数据有变更时写路径会 bump epoch）。返回 ``{has_manifest, fresh,
-        dataset_version, partition_version, file_count, manifest_epoch,
-        created_at}``。
+        freshness 由写路径维护的双 epoch 决定：仅当 ``source_epoch ==
+        manifest_built_epoch`` 时 manifest 可信（数据变更时写路径 bump
+        source_epoch）。返回 ``{has_manifest, fresh, dataset_version,
+        partition_version, file_count, source_epoch, manifest_built_epoch,
+        manifest_epoch, created_at}``。
         """
         from data_access.read.manifest import (
             manifest_root_for_paths,
@@ -2239,25 +2279,32 @@ class DataAccessStore:
         token = manifest_version_token(root)
         if token is None:
             return {"dataset": dataset, "has_manifest": False}
+        src = token.get("source_epoch")
+        built = token.get("manifest_built_epoch")
+        legacy = token.get("manifest_epoch")
+        if src is None and built is None and legacy is not None:
+            src = built = legacy
         return {
             "dataset": dataset,
             "has_manifest": True,
-            "fresh": True,
+            "fresh": (src is not None and src == built),
             "dataset_version": token.get("dataset_version"),
             "partition_version": token.get("partition_version"),
             "file_count": token.get("file_count"),
-            "manifest_epoch": token.get("manifest_epoch"),
+            "source_epoch": src,
+            "manifest_built_epoch": built,
+            "manifest_epoch": src if src is not None else legacy,
             "created_at": token.get("created_at"),
         }
 
     def touch_manifest_epoch(self, dataset: str, **params: Any) -> str | None:
-        """写路径 mutation 后调用：递增 manifest epoch（O(1)，不重建 manifest）。
+        """兼容别名（新代码请用 ``_dataset_mutation``）：递增 source_epoch。
 
-        这样 query-scoped snapshot 在数据变更后立刻判定过期，无需在 read path
-        做 glob 计数。返回新 epoch；无 manifest 返回 None。
+        只使 manifest 失效（dirty），不重建。返回新 source_epoch；无 manifest
+        返回 None。query-scoped snapshot 在数据变更后立刻判定过期。
         """
         from data_access.read.manifest import (
-            bump_manifest_epoch,
+            bump_source_epoch,
             manifest_root_for_paths,
         )
 
@@ -2269,7 +2316,7 @@ class DataAccessStore:
         root = manifest_root_for_paths(paths)
         if root is None:
             return None
-        return bump_manifest_epoch(root)
+        return bump_source_epoch(root)
 
     def is_snapshot_stale(
         self,
