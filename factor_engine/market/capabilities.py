@@ -92,6 +92,8 @@ class MarketStatus(str, Enum):
 
     CERTIFIED_NATIVE = "CERTIFIED_NATIVE"
     CERTIFIED_DERIVED = "CERTIFIED_DERIVED"
+    CERTIFIED_PARTIAL = "CERTIFIED_PARTIAL"  # exact/derived quality but < FULL coverage
+    INPUT_DEPENDENT = "INPUT_DEPENDENT"  # generic op; support decided by input providers
     PROVIDER_REQUIRED = "PROVIDER_REQUIRED"
     UNSUPPORTED_MARKET_MECHANISM = "UNSUPPORTED_MARKET_MECHANISM"
     PIT_BLOCKED = "PIT_BLOCKED"
@@ -103,10 +105,16 @@ class MarketStatus(str, Enum):
         return self in (
             MarketStatus.CERTIFIED_NATIVE,
             MarketStatus.CERTIFIED_DERIVED,
+            MarketStatus.CERTIFIED_PARTIAL,
+            MarketStatus.INPUT_DEPENDENT,
         )
 
     @property
     def is_production_supported(self) -> bool:
+        # Production requires FULL coverage: a 42%-coverage provider must not be
+        # treated as a whole-market CERTIFIED_DERIVED.  Partial providers are
+        # "supported" for research/availability but need an explicit opt-in
+        # (availability_mask / coverage threshold) before production.
         return self in (
             MarketStatus.CERTIFIED_NATIVE,
             MarketStatus.CERTIFIED_DERIVED,

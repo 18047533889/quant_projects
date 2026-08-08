@@ -81,25 +81,29 @@ def _pagerank_series(
 
 
 @register_operator(
-    name="relation_pagerank_centrality",
+    name="group_signal_attraction_share",
     category="relation",
     business_category="relation",
-    canonical="relation_pagerank_centrality",
+    canonical="group_signal_attraction_share",
     source="relation.ops_ext",
     status="implemented",
 )
-class RelationPagerankCentrality(SeriesOperator):
-    """组内信号加权 PageRank 中心度（group 邻接的生产务实形态）。
+class GroupSignalAttractionShare(SeriesOperator):
+    """组内信号吸引份额（无 PIT 关系图时的诚实命名，P1-28）。
 
-    每日每个 group 内以信号 ``x`` 加权构造完全图，运行阻尼 PageRank，返回
-    组内每只股票的中心度排名。无 peer 或信号非有限 → fail-closed NaN。
-    ``damping`` 固定 0.85，不进入参数搜索。
+    真正的 ``relation_pagerank_centrality`` 需要一张 PIT 关系图
+    （source/target/weight/direction/validity）。在没有这张图之前，每日 group
+    内以信号 ``x`` 构造的完全图令每个节点的出链分布完全相同，PageRank 退化为
+    "组内 positive signal 归一化 + teleport 收缩"，并不利用任何"谁连谁"的图
+    结构。因此本实现如实命名为 ``group_signal_attraction_share``；
+    ``relation_pagerank_centrality`` 保留为 deprecated research-only 别名。
+    ``damping`` 固定 0.85，不进入参数搜索面（P1-29）。
     """
 
     metadata = _metadata(
-        "relation_pagerank_centrality",
-        "组内信号加权 PageRank 中心度（damping 固定 0.85）。",
-        ["x", "group", "damping"],
+        "group_signal_attraction_share",
+        "组内信号吸引份额（damping 固定 0.85）。",
+        ["x", "group"],
     )
 
     def _calculate_series(
@@ -114,7 +118,7 @@ class RelationPagerankCentrality(SeriesOperator):
             group = group.reindex(index=x.index, columns=x.columns)
         d = float(damping)
         if not (0.0 < d < 1.0):
-            raise ValueError("relation_pagerank_centrality requires 0 < damping < 1")
+            raise ValueError("group_signal_attraction_share requires 0 < damping < 1")
         return frame_like(
             x,
             _pagerank_series(
@@ -127,13 +131,33 @@ class RelationPagerankCentrality(SeriesOperator):
 
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
+    from cleaned_operators.registry import OperatorRegistry
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {"relation_pagerank_centrality"}
+    # P0-008: both names RESEARCH_ONLY.  The group-panel adjacency is a fake
+    # complete graph (edge flow proportional to node signal), so the output is
+    # closer to a signal-weighted share than to a true network PageRank.  It
+    # must not sit on the extended/daily mining surface until a real relation
+    # graph layer (node/edge/weight/direction/validity) exists.
+    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
+        set(_surface.RESEARCH_ONLY_CANONICALS)
+        | {"group_signal_attraction_share"}
     )
     from cleaned_operators.rolling_pack import register_polars_udf
 
-    register_polars_udf("relation_pagerank_centrality")
+    # Only the NEW canonical gets a real polars backend.  ``relation_pagerank_
+    # centrality`` is a pure ALIAS below — registering a polars backend for it
+    # would resurrect it as an active canonical with no explicit policy and break
+    # finalize_layer_governance for every session.
+    register_polars_udf("group_signal_attraction_share")
+    try:
+        OperatorRegistry.register_alias(
+            "relation_pagerank_centrality",
+            "group_signal_attraction_share",
+            replacement_reason="renamed: no PIT relation graph yet, so the group "
+            "complete-graph form is group_signal_attraction_share, not PageRank",
+        )
+    except Exception:  # pragma: no cover - idempotent across reloads
+        pass
 
 
 _register_surface()

@@ -79,12 +79,12 @@ def _group_topk_mean(
         positions: dict[Any, list[int]] = {}
         for i in range(cols):
             lab = g_row[i]
-            if lab is None or (isinstance(lab, float) and np.isnan(lab)):
+            if pd.isna(lab):
                 continue
             positions.setdefault(lab, []).append(i)
         for i in range(cols):
             lab = g_row[i]
-            if lab is None or (isinstance(lab, float) and np.isnan(lab)):
+            if pd.isna(lab):
                 continue
             peers = positions.get(lab)
             if not peers:
@@ -95,12 +95,39 @@ def _group_topk_mean(
                 continue
             scores = sv[r, peers]
             targets = tv[r, peers]
-            finite = np.isfinite(scores) & np.isfinite(targets)
-            if int(finite.sum()) < kk:
+            # Routing universe = peers with a *finite score* ONLY.  A peer whose
+            # target is NaN must still compete for a leader slot by its score —
+            # filtering on score AND target together silently reroutes the group
+            # (a high-score leader with a missing target would be dropped and
+            # the top-k mean would describe a different peer set).
+            score_finite = np.isfinite(scores)
+            if int(score_finite.sum()) < kk:
                 continue
-            order = np.argsort(-scores[finite], kind="stable")
-            top = targets[finite][order[:kk]]
-            out[r, i] = float(np.mean(top))
+            s = scores[score_finite]
+            t = targets[score_finite]
+            # Top-K with an explicit tie policy at the cutoff: all peers strictly
+            # above the k-th score are included in full; the tied group at the
+            # cutoff enters with *fractional* weight so the total weight is k.
+            # A stable argsort alone would break ties by stock-column order and
+            # make the factor change under column permutation.
+            order = np.argsort(-s, kind="mergesort")
+            kth = float(s[order][kk - 1])
+            above = np.flatnonzero(s > kth)
+            n_above = int(above.size)
+            eq_idx = np.flatnonzero(s == kth)
+            n_eq = int(eq_idx.size)
+            n_take_eq = min(max(kk - n_above, 0), n_eq)
+            # Strict missing policy: any *chosen* leader (fully-above peers plus
+            # the portion of the cutoff tie that enters) with a missing target
+            # fail-closes the row — never substitute a lower-score peer.
+            chosen = above if n_take_eq == 0 else np.concatenate([above, eq_idx[:n_take_eq]])
+            if not np.all(np.isfinite(t[chosen])):
+                continue
+            frac = (n_take_eq / n_eq) if n_eq > 0 else 0.0
+            mean_val = (
+                float(np.sum(t[above])) + frac * float(np.sum(t[eq_idx]))
+            ) / kk
+            out[r, i] = float(mean_val)
     return frame_like(target, out)
 
 
@@ -183,11 +210,11 @@ def _cs_weighted_percentile_rank(x: pd.DataFrame, weight: pd.DataFrame) -> pd.Da
                 rank_out[t] = (lower_cum + 0.5 * tie_w) / total
             lower_cum += tie_w
             i = j
-        pos = np.zeros(n, dtype=int)
-        pos[order] = np.arange(n)
-        for t in range(n):
-            orig = int(valid_idx[pos[t]])
-            out[r, orig] = float(rank_out[t])
+        # Correct unsort: rank_out[i] belongs to the i-th *sorted* position, so
+        # it must be written back to original index order[i] (not order[rank]).
+        unsorted = np.empty(n, dtype=float)
+        unsorted[order] = rank_out
+        out[r, valid_idx] = unsorted
     return frame_like(x, out)
 
 
@@ -199,6 +226,7 @@ def _group_distribution_js_divergence(
     group: pd.DataFrame,
     bins: int = 10,
     min_group_size: int = 5,
+    exclude_group_from_reference: bool = True,
 ) -> pd.DataFrame:
     x, group = _align(x, group)
     nb = int(bins)
@@ -226,37 +254,62 @@ def _group_distribution_js_divergence(
     for r in range(rows):
         xr = xv[r]
         g_row = gv[r]
+        # Group membership covers ALL labelled members — the group-level JS state
+        # is broadcast even to a member whose own ``x`` is missing (the *statistical
+        # sample* still requires finite ``x`` below).
+        positions: dict[Any, list[int]] = {}
+        for i in range(cols):
+            lab = g_row[i]
+            if pd.isna(lab):
+                continue
+            positions.setdefault(lab, []).append(i)
+        # Market quantile-bin edges on the FULL finite cross-section so every
+        # group's reference shares the same bins (stable, comparable JS).
         market_mask = np.isfinite(xr)
         if int(market_mask.sum()) < 2:
             continue
         market = xr[market_mask]
-        # market quantile-bin edges (dedupe ties so each bin has positive width)
         edges = np.quantile(market, np.linspace(0.0, 1.0, nb + 1))
         edges = np.unique(edges)
-        n_bins = int(edges.size - 1)
-        if n_bins < 1:
+        if int(edges.size - 1) < 1:
             continue
-        market_bin = np.histogram(market, bins=edges)[0].astype(float)
-        market_p = market_bin / market_bin.sum()
-        positions: dict[Any, list[int]] = {}
-        for i in range(cols):
-            lab = g_row[i]
-            if lab is None or (isinstance(lab, float) and np.isnan(lab)):
-                continue
-            if not np.isfinite(xr[i]):
-                continue
-            positions.setdefault(lab, []).append(i)
-        for i in range(cols):
-            lab = g_row[i]
-            if lab is None or (isinstance(lab, float) and np.isnan(lab)):
-                continue
-            members = positions.get(lab)
-            if not members or len(members) < mg:
-                continue
-            gvals = xr[members]
-            g_bin = np.histogram(gvals, bins=edges)[0].astype(float)
-            gp = g_bin / g_bin.sum()
-            out[r, i] = _js(gp, market_p)
+        if exclude_group_from_reference:
+            # Reference = the market distribution EXCLUDING the current group.
+            # Otherwise a large group (banks / electronics) is mechanically "close
+            # to the market" simply because it IS most of the market (self-inclusion
+            # bias).  A degenerate reference (< 2 finite rows) fail-closes.
+            for lab, members in positions.items():
+                gvals = xr[members]
+                gvals = gvals[np.isfinite(gvals)]
+                if gvals.size < mg:
+                    continue
+                other = np.ones(cols, dtype=bool)
+                other[members] = False
+                ref = xr[other & market_mask]
+                if ref.size < 2:
+                    continue
+                g_bin = np.histogram(gvals, bins=edges)[0].astype(float)
+                gp = g_bin / g_bin.sum()
+                r_bin = np.histogram(ref, bins=edges)[0].astype(float)
+                rp = r_bin / r_bin.sum()
+                val = _js(gp, rp)
+                for i in members:
+                    out[r, i] = val
+        else:
+            # Legacy / explicit mode: compare against the whole cross-section
+            # (includes the group itself).
+            market_bin = np.histogram(market, bins=edges)[0].astype(float)
+            market_p = market_bin / market_bin.sum()
+            for lab, members in positions.items():
+                gvals = xr[members]
+                gvals = gvals[np.isfinite(gvals)]
+                if gvals.size < mg:
+                    continue
+                g_bin = np.histogram(gvals, bins=edges)[0].astype(float)
+                gp = g_bin / g_bin.sum()
+                val = _js(gp, market_p)
+                for i in members:
+                    out[r, i] = val
     return frame_like(x, out)
 
 
@@ -269,6 +322,7 @@ def _event_level_survival_share(
     x: pd.DataFrame,
     history_window: int = 60,
     direction: str = "up",
+    tolerance: float = 0.0,
 ) -> pd.DataFrame:
     event, level, x = _align(event, level, x)
     w = int(history_window)
@@ -277,19 +331,29 @@ def _event_level_survival_share(
     direction_s = str(direction).lower()
     if direction_s not in {"up", "down"}:
         raise ValueError("direction must be 'up' or 'down'")
+    tol = float(tolerance)
+    if tol < 0.0:
+        raise ValueError("tolerance must be >= 0")
     ev = _as_float(event)
     lv = _as_float(level)
     xv = _as_float(x)
     rows, cols = xv.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
-        cohort: list[tuple[int, float]] = []  # (event_row, level) past events
+        # (event_row, level, running_extreme) — the running extremum tracks
+        # min (up) / max (down) of x from the event row (exclusive) to today,
+        # so "survived" means the *whole path since the event* stayed on the
+        # favorable side, not merely that today's x happens to be there (a dip
+        # below the level and recovery would otherwise count as "survived").
+        cohort: list[tuple[int, float, float]] = []
         for r in range(rows):
-            # incorporate the event at r-1 into the cohort
             if r >= 1:
                 prev = r - 1
                 if np.isfinite(ev[prev, c]) and ev[prev, c] != 0.0 and np.isfinite(lv[prev, c]):
-                    cohort.append((prev, float(lv[prev, c])))
+                    if direction_s == "up":
+                        cohort.append((prev, float(lv[prev, c]), np.inf))
+                    else:
+                        cohort.append((prev, float(lv[prev, c]), -np.inf))
             # drop events older than the window
             while cohort and (r - cohort[0][0]) > w:
                 cohort.pop(0)
@@ -299,12 +363,21 @@ def _event_level_survival_share(
             if not np.isfinite(cur):
                 continue
             survived = 0.0
-            for _ev_row, lev in cohort:
+            for k in range(len(cohort)):
+                e_row, lev, ext = cohort[k]
                 if direction_s == "up":
-                    if cur > lev:
+                    ext = min(ext, cur)
+                else:
+                    ext = max(ext, cur)
+                cohort[k] = (e_row, lev, ext)
+                # Inclusive survival: x_t == level (e.g. a stock that touches the
+                # limit price) is still "alive" in A-share limit semantics; a
+                # small tick tolerance avoids floating-point boundary flips.
+                if direction_s == "up":
+                    if ext >= lev - tol:
                         survived += 1.0
                 else:
-                    if cur < lev:
+                    if ext <= lev + tol:
                         survived += 1.0
             out[r, c] = float(survived / len(cohort))
     return frame_like(x, out)
@@ -333,8 +406,8 @@ _PARAMS: dict[str, list[str]] = {
     "group_topk_mean": ["target", "score", "group", "k", "exclude_self"],
     "ts_value_at_argextreme": ["value", "score", "window", "mode", "include_current"],
     "cs_weighted_percentile_rank": ["x", "weight"],
-    "group_distribution_js_divergence": ["x", "group", "bins", "min_group_size"],
-    "event_level_survival_share": ["event", "level", "x", "history_window", "direction"],
+    "group_distribution_js_divergence": ["x", "group", "bins", "min_group_size", "exclude_group_from_reference"],
+    "event_level_survival_share": ["event", "level", "x", "history_window", "direction", "tolerance"],
 }
 
 _CATEGORIES: dict[str, str] = {
@@ -343,6 +416,17 @@ _CATEGORIES: dict[str, str] = {
     "cs_weighted_percentile_rank": "cross_sectional",
     "group_distribution_js_divergence": "cross_sectional",
     "event_level_survival_share": "time_series_event",
+}
+
+# Output unit per operator: only group_topk_mean / ts_value_at_argextreme inherit
+# the target's unit; rank, divergence (nats) and probability must not be tagged
+# ``same_as:target`` or typed search / unit algebra will be polluted.
+_UNITS: dict[str, str] = {
+    "group_topk_mean": "same_as:target",
+    "ts_value_at_argextreme": "same_as:target",
+    "cs_weighted_percentile_rank": "dimensionless",
+    "group_distribution_js_divergence": "dimensionless",
+    "event_level_survival_share": "probability",
 }
 
 
@@ -364,7 +448,7 @@ def _register() -> None:
                 return_type="series",
                 tags=["daily", "panel", "pit_safe", "causal", "deterministic",
                       f"signature:{','.join(params)}->series",
-                      "domain:cross_section", "unit:same_as:target", "cost:3"],
+                      "domain:cross_section", f"unit:{_UNITS[canonical]}", "cost:3"],
             )
 
             def calculate(self, *args, _fn=fn, **kwargs):

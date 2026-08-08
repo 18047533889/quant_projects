@@ -28,8 +28,11 @@ def test_us_regular_session() -> None:
     assert spec.session_id == "US_REGULAR"
     assert spec.timezone == "America/New_York"
     assert spec.early_close_policy == "down_weight"
+    assert spec.bar_convention == "bar_start"
+    # bar-start convention: 09:30..15:59 = 390 bars; 16:00 is the exclusive end.
     assert spec.slot_for_local(datetime(2024, 1, 2, 9, 30)) == 1
-    assert spec.slot_for_local(datetime(2024, 1, 2, 16, 0)) == 391
+    assert spec.slot_for_local(datetime(2024, 1, 2, 15, 59)) == 390
+    assert spec.slot_for_local(datetime(2024, 1, 2, 16, 0)) is None
 
 
 def test_session_serialization() -> None:
@@ -44,3 +47,27 @@ def test_session_contracts_align_with_context() -> None:
 
     assert ASHARE_CONTEXT.session_id == ASHARE_SESSION.session_id
     assert US_CONTEXT.session_id == US_SESSION.session_id
+
+
+def test_slot_for_timestamp_tz_aware_required() -> None:
+    from datetime import timezone
+
+    import pytest
+
+    spec = session_for("us")
+    # naive timestamp -> rejected outright (P1-16)
+    with pytest.raises(ValueError):
+        spec.slot_for_timestamp(datetime(2024, 1, 2, 10, 0))
+    # UTC 15:30 == Eastern 10:30 (winter, EST = UTC-5) -> slot 61
+    ts = datetime(2024, 1, 2, 15, 30, tzinfo=timezone.utc)
+    assert spec.slot_for_timestamp(ts) == 61
+
+
+def test_session_for_date_early_close_aware() -> None:
+    from market import session_for_date
+
+    spec = session_for_date("us", "2024-01-02")
+    assert spec.session_id == "US_REGULAR"
+    # A Calendar provider can attach early-close dates; until then the base
+    # session is returned unchanged.
+    assert "early-close" not in spec.notes

@@ -46,9 +46,13 @@ _KNOWN_CURRENCIES = frozenset({CURRENCY_CNY, CURRENCY_USD})
 class UnitSpec:
     """Structural unit: ``(dimension, currency?, denominator?)``.
 
-    ``currency`` is required for ``money`` and ``price``; ``denominator`` is
-    required for ``price``.  ``scale`` is the legacy multiplier for source-only
-    spellings (percent=0.01, basis_point=0.0001) — canonical units use scale=1.
+    ``currency`` is required for ``money`` and ``price`` EXCEPT for the
+    market-local wildcard (``currency=None``, e.g. ``LOCAL_MONEY``), whose
+    concrete currency is resolved from the ``MarketContext`` by
+    :func:`resolve_unit` — a canonical concept must never hardcode CNY while US
+    bindings declare USD.  ``denominator`` is required for ``price``.  ``scale``
+    is the legacy multiplier for source-only spellings (percent=0.01,
+    basis_point=0.0001) — canonical units use scale=1.
     """
 
     dimension: str
@@ -57,12 +61,7 @@ class UnitSpec:
     scale: float = 1.0
 
     def __post_init__(self) -> None:
-        if self.dimension == DIM_MONEY:
-            if self.currency is None:
-                raise ValueError("money unit requires a currency")
         if self.dimension == DIM_PRICE:
-            if self.currency is None:
-                raise ValueError("price unit requires a currency")
             if self.denominator is None:
                 raise ValueError("price unit requires a denominator")
         if self.currency is not None:
@@ -78,11 +77,13 @@ class UnitSpec:
         return cls(dimension=DIM_RATIO, scale=scale)
 
     @classmethod
-    def money(cls, currency: str, scale: float = 1.0) -> "UnitSpec":
+    def money(cls, currency: str | None, scale: float = 1.0) -> "UnitSpec":
+        """Money in ``currency``, or market-local when ``currency`` is None."""
         return cls(dimension=DIM_MONEY, currency=currency, scale=scale)
 
     @classmethod
-    def price(cls, currency: str, scale: float = 1.0) -> "UnitSpec":
+    def price(cls, currency: str | None, scale: float = 1.0) -> "UnitSpec":
+        """Price per share in ``currency``, or market-local when None."""
         return cls(
             dimension=DIM_PRICE, currency=currency, denominator=DENOM_SHARE,
             scale=scale,
@@ -109,19 +110,26 @@ class UnitSpec:
     def is_count(self) -> bool:
         return self.dimension == DIM_COUNT
 
+    @property
+    def is_local(self) -> bool:
+        """True for the market-local wildcard (currency resolved from context)."""
+        return self.dimension in (DIM_MONEY, DIM_PRICE) and self.currency is None
+
     def is_compatible_with(self, other: "UnitSpec") -> bool:
         """Same dimension AND same currency/denominator for money/price.
 
         A CNY ``money`` is NOT compatible with a USD ``money``; a CNY/share
-        price is NOT compatible with a USD/share price.  Ratios/counts compare
-        on dimension alone (canonical ratios have scale=1).
+        price is NOT compatible with a USD/share price.  A market-local unit
+        (``currency=None``) is compatible with any concrete currency — the
+        canonical layer never hardcodes CNY.  Ratios/counts compare on dimension
+        alone (canonical ratios have scale=1).
         """
         if not isinstance(other, UnitSpec):
             return False
         if self.dimension != other.dimension:
             return False
         if self.dimension in (DIM_MONEY, DIM_PRICE):
-            if self.currency != other.currency:
+            if self.currency != other.currency and self.currency is not None and other.currency is not None:
                 return False
             if self.dimension == DIM_PRICE and self.denominator != other.denominator:
                 return False
@@ -138,7 +146,11 @@ class UnitSpec:
                 f"incompatible unit dimensions: {self} vs {other}"
             )
         if self.dimension in (DIM_MONEY, DIM_PRICE):
-            if self.currency != other.currency:
+            if (
+                self.currency != other.currency
+                and self.currency is not None
+                and other.currency is not None
+            ):
                 raise ValueError(
                     f"cross-currency unit arithmetic not allowed: {self} vs {other}"
                 )
@@ -152,9 +164,9 @@ class UnitSpec:
 
     def __str__(self) -> str:
         if self.dimension == DIM_MONEY:
-            return f"{self.currency}"
+            return self.currency or "local_money"
         if self.dimension == DIM_PRICE:
-            return f"{self.currency}/{self.denominator}"
+            return f"{(self.currency or 'local')}/{self.denominator}"
         return self.dimension
 
     def to_dict(self) -> dict[str, Any]:
@@ -229,11 +241,13 @@ def legacy_unit_string(spec: UnitSpec) -> str:
             return "basis_point"
         return "ratio"
     if spec.dimension == DIM_MONEY:
+        if spec.currency is None:
+            return "local_money"
         if spec.currency == CURRENCY_CNY:
             return "CNY" if abs(spec.scale - 1.0) < 1e-12 else "CNY_10K"
         return "USD" if abs(spec.scale - 1.0) < 1e-12 else "USD_10K"
     if spec.dimension == DIM_PRICE:
-        return f"{spec.currency}/{spec.denominator}"
+        return f"{(spec.currency or 'local')}/{spec.denominator}"
     if spec.dimension == DIM_COUNT:
         return "share" if abs(spec.scale - 1.0) < 1e-12 else "share_10K"
     if spec.dimension == DIM_BOOLEAN:
@@ -264,6 +278,31 @@ DATETIME = UnitSpec(dimension=DIM_DATETIME)
 IDENTIFIER = UnitSpec(dimension=DIM_IDENTIFIER)
 TEXT = UnitSpec(dimension=DIM_TEXT)
 DIMENSIONLESS = UnitSpec(dimension=DIM_DIMENSIONLESS)
+# Market-local wildcards: the canonical concept layer must not hardcode CNY
+# while US bindings declare USD — the concrete currency is resolved from the
+# MarketContext (see ``resolve_unit``).
+LOCAL_MONEY = UnitSpec.money(None)
+LOCAL_PRICE_PER_SHARE = UnitSpec.price(None)
+LOCAL_MONEY_10K = UnitSpec.money(None, scale=10_000.0)
+
+
+def resolve_unit(spec: UnitSpec, market: str | None = None, *, currency: str | None = None) -> UnitSpec:
+    """Fill a market-local unit's currency from the market context.
+
+    ``currency=None`` resolves from ``market`` (ashare -> CNY, us -> USD); an
+    explicit ``currency`` wins.  Concrete units are returned unchanged.
+    """
+    if spec is None:
+        return spec
+    if spec.dimension not in (DIM_MONEY, DIM_PRICE) or spec.currency is not None:
+        return spec
+    cur = currency or (CURRENCY_CNY if (market or "").strip().lower() == "ashare" else CURRENCY_USD)
+    return UnitSpec(
+        dimension=spec.dimension,
+        currency=cur,
+        denominator=spec.denominator,
+        scale=spec.scale,
+    )
 
 
 __all__ = [
@@ -287,6 +326,9 @@ __all__ = [
     "DIMENSIONLESS",
     "DENOM_SHARE",
     "IDENTIFIER",
+    "LOCAL_MONEY",
+    "LOCAL_MONEY_10K",
+    "LOCAL_PRICE_PER_SHARE",
     "RATIO",
     "SHARES",
     "TEXT",
@@ -294,5 +336,6 @@ __all__ = [
     "USD_PER_SHARE",
     "UnitSpec",
     "legacy_unit_string",
+    "resolve_unit",
     "unit_spec_from_legacy",
 ]

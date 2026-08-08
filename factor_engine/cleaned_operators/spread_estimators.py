@@ -53,7 +53,16 @@ def _metadata(
 
 
 def _cs_pair_spread(h1: float, h2: float, l1: float, l2: float) -> float:
-    """Corwin-Schultz spread (fraction of price) for the pair (t-1, t)."""
+    """Corwin-Schultz spread (fraction of price) for the pair (t-1, t).
+
+    Per the CS (2000) definition:
+        beta  = E[ (ln H_t/L_t)^2 + (ln H_{t-1}/L_{t-1})^2 ]   # SUM of single-day ranges
+        gamma = E[ (ln H_{t,t-1}/L_{t,t-1})^2 ]                # aggregate two-day range
+        alpha = (sqrt(2 beta) - sqrt(beta)) / c - sqrt(gamma / c),  c = 3 - 2 sqrt(2)
+    The earlier implementation had beta/gamma reversed (two-day range as beta,
+    single-day sum as gamma), which is not the standard estimator — under a
+    pure-spread construction it returns 0 instead of the spread.
+    """
     if h1 <= l1 or h2 <= l2:
         return np.nan
     H = max(h1, h2)
@@ -61,8 +70,8 @@ def _cs_pair_spread(h1: float, h2: float, l1: float, l2: float) -> float:
     if H <= L:
         return np.nan
     c = 3.0 - 2.0 * np.sqrt(2.0)  # ~0.171573
-    beta = np.log(H / L) ** 2.0
-    gamma = np.log(h1 / l1) ** 2.0 + np.log(h2 / l2) ** 2.0
+    beta = np.log(h1 / l1) ** 2.0 + np.log(h2 / l2) ** 2.0
+    gamma = np.log(H / L) ** 2.0
     alpha = (np.sqrt(2.0 * beta) - np.sqrt(beta)) / c - np.sqrt(gamma / c)
     if alpha <= 0.0:
         return 0.0  # negative alpha -> zero spread (as in the paper)

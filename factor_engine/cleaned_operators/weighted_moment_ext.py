@@ -60,6 +60,7 @@ def _ts_weighted_standardized_moment(
     p = int(order)
     if p not in (3, 4):
         raise ValueError("order must be 3 (weighted skew) or 4 (weighted kurtosis)")
+    min_samples = 4 if p == 4 else 3
     xv = x.to_numpy(dtype=float)
     wv = weight.to_numpy(dtype=float)
     rows, cols = xv.shape
@@ -69,14 +70,24 @@ def _ts_weighted_standardized_moment(
             start = max(0, r - w + 1)
             xs = xv[start : r + 1, c]
             ws = wv[start : r + 1, c]
-            valid = np.isfinite(xs) & np.isfinite(ws) & (ws >= 0.0)
+            # Negative weights are an invalid state (P1-007): a window that
+            # contains one is fail-closed, never silently dropped from the mean.
+            if np.any(ws < 0.0):
+                continue
+            valid = np.isfinite(xs) & np.isfinite(ws)
             n = int(valid.sum())
-            if n < 3:
+            if n < min_samples:
                 continue
             xa = xs[valid].astype(float)
             wa = ws[valid].astype(float)
             sw = float(wa.sum())
             if sw <= _EPS:
+                continue
+            # Effective sample size N_eff = (Σw)²/Σw²: a window where ~all weight
+            # sits on one observation (N_eff ≈ 1) must not masquerade as an
+            # n-sample moment estimate.
+            n_eff = (sw * sw) / (float(np.sum(wa * wa)) + _EPS)
+            if n_eff < float(min_samples) - 1e-9:
                 continue
             mu = float((wa * xa).sum() / sw)
             dev = xa - mu
@@ -162,34 +173,37 @@ def _cs_multi_robust_resid(
         for fv in fvs:
             mask &= np.isfinite(fv[r])
         n = int(mask.sum())
-        k = len(fvs) + (1 if add_intercept else 0)
+        if n < 2:
+            continue
+        # Standardize each exposure (mean 0 / std 1).  A constant exposure is
+        # DROPPED entirely (it carries no information and only invites rank loss),
+        # instead of being kept as a zero column.
+        std_cols: list[np.ndarray] = []
+        for fv in fvs:
+            col = fv[r][mask].astype(float)
+            sd = float(np.std(col))
+            if sd <= _EPS:
+                continue
+            std_cols.append((col - float(np.mean(col))) / sd)
+        k = len(std_cols) + (1 if add_intercept else 0)
         if n <= k:
             continue
-        design = np.column_stack([fv[r][mask] for fv in fvs])
-        # standardize each exposure (mean 0 / std 1) for a scale-free design
-        for j in range(design.shape[1]):
-            sd = float(np.std(design[:, j]))
-            if sd <= _EPS:
-                design[:, j] = 0.0
-            else:
-                design[:, j] = (design[:, j] - float(np.mean(design[:, j]))) / sd
+        design = np.column_stack(std_cols) if std_cols else np.empty((n, 0))
         if add_intercept:
             design = np.column_stack((np.ones(n), design))
-        if np.linalg.matrix_rank(design) < design.shape[1]:
-            continue
-        # ridge-normalized SVD least squares (fixed mild ridge, deterministic).
-        # The intercept is NOT penalized (standard ridge practice) so the level
-        # of y is absorbed and only the exposure slopes are shrunk.
-        reg = np.zeros((design.shape[1], design.shape[1]))
+        # Ridge-normalized SVD/pinv least squares (fixed mild ridge, deterministic).
+        # The intercept is NOT penalized (standard ridge practice) so the level of
+        # y is absorbed and only the exposure slopes are shrunk.  Collinearity
+        # never drops the whole section: pinv of the ridge-augmented normal matrix
+        # is always defined (condition number stays a diagnostic, not a gate).
+        reg = np.zeros((k, k))
         start = 1 if add_intercept else 0
-        for _j in range(start, design.shape[1]):
+        for _j in range(start, k):
             reg[_j, _j] = ridge
         target = yv[r][mask]
         xtx = design.T @ design + reg
-        if np.linalg.cond(xtx) > 1e12:
-            continue
         try:
-            beta = np.linalg.solve(xtx, design.T @ target)
+            beta = np.linalg.pinv(xtx) @ (design.T @ target)
         except np.linalg.LinAlgError:
             continue
         out[r, mask] = target - design @ beta
@@ -223,6 +237,15 @@ _CATEGORIES: dict[str, str] = {
     "cs_multi_robust_resid": "cross_sectional_regression",
 }
 
+# Output unit per operator (P1-27): only ``same_as:target`` for a plain mean.
+# A standardized moment is dimensionless, a covariance carries unit(x)*unit(y),
+# and a regression residual keeps unit(y) — never ``same_as:target``.
+_UNITS: dict[str, str] = {
+    "ts_weighted_standardized_moment": "dimensionless",
+    "ts_cov_if": "unit(x)*unit(y)",
+    "cs_multi_robust_resid": "unit(y)",
+}
+
 _SKIP = frozenset({"date", "stock_code"})
 
 
@@ -244,7 +267,7 @@ def _register() -> None:
                 return_type="series",
                 tags=["daily", "panel", "pit_safe", "causal", "deterministic",
                       f"signature:{','.join(params)}->series",
-                      "domain:statistics", "unit:same_as:target", "cost:4"],
+                      "domain:statistics", f"unit:{_UNITS[canonical]}", "cost:4"],
             )
 
             def calculate(self, *args, _fn=fn, **kwargs):

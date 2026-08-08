@@ -33,10 +33,17 @@ def test_legacy_round_trip() -> None:
 
 
 def test_money_requires_currency() -> None:
-    with pytest.raises(ValueError):
-        UnitSpec(dimension="money")
+    # A money/price WITHOUT a currency is the market-local wildcard (currency
+    # resolved from MarketContext), NOT an error — the canonical concept layer
+    # must not hardcode CNY while US bindings declare USD.  Price still needs
+    # its denominator even in the local form.
+    local = UnitSpec(dimension="money")
+    assert local.is_local
+    assert UnitSpec.price(None).is_local
     with pytest.raises(ValueError):
         UnitSpec(dimension="price", currency="USD")  # missing denominator
+    with pytest.raises(ValueError):
+        UnitSpec(dimension="price")  # local price still needs a denominator
 
 
 def test_cross_currency_arithmetic_blocked() -> None:

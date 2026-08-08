@@ -179,7 +179,10 @@ class TsExpectileBeta(SeriesOperator):
         "expectile 回归斜率 b_tau（不对称最小二乘）。",
         ["y", "x", "window", "tau"],
         domain="price_volume",
-        unit="ratio",
+        # A regression slope carries unit(y)/unit(x) — NOT a fixed ratio.  With
+        # y = price and x = amount the slope is per-amount price, which is not
+        # dimensionless (P2-7).  The Typed Unit Algebra derives this at runtime.
+        unit="unit(y)/unit(x)",
         cost=5,
     )
 

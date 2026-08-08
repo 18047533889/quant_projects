@@ -44,9 +44,97 @@ def _times(multiplier: float) -> Transform:
     return _apply
 
 
-def _mul_factor(x: Any) -> Any:
-    """continuous_close = raw_close * adjustment factor (two-column input)."""
-    return x
+def _not_bool(x: Any) -> Any:
+    """Boolean negation: ``tradable = NOT IsSuspend``.
+
+    The A-share ``IsSuspend`` field is True when the stock is suspended, so the
+    ``tradability_state`` concept (tradable?) is its negation.  Previously the
+    binding used ``_identity`` and only *documented* the negation in
+    ``transform_description`` — the executable transform returned IsSuspend
+    as-is, inverting the semantic.
+    """
+    try:
+        import pandas as _pd
+
+        if isinstance(x, _pd.Series):
+            return (~x.astype(bool)).astype(bool)
+    except Exception:  # pragma: no cover - defensive
+        pass
+    import numpy as _np
+
+    arr = _np.asarray(x, dtype=bool)
+    return _np.logical_not(arr)
+
+
+def _mul_two(field_a: str, field_b: str):
+    """Real multi-field derived transform: ``field_a * field_b``.
+
+    The binding's ``transform`` for a derived provider receives a dict keyed by
+    the *physical* field names and returns the derived array.  This is the
+    executable contract behind ``derived_expression`` (e.g. continuous_close =
+    Close * Factor); the previous implementation registered an identity and
+    only *documented* the multiplication in ``transform_description``.
+    """
+
+    def _apply(fields: dict[str, Any]) -> Any:
+        if field_a not in fields or field_b not in fields:
+            raise KeyError(
+                f"derived provider needs physical fields {field_a!r} and {field_b!r}; got {sorted(fields)}"
+            )
+        return fields[field_a] * fields[field_b]
+
+    return _apply
+
+
+# ---------------------------------------------------------------------------
+# Structured filter requirement (P1-14): ``required_filters`` was a tuple of
+# strings ("IndustrySource", "currency=USD", "timeframe") that could not be
+# executed or hashed.  It is now a machine-executable contract.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class FilterRequirement:
+    """One required read-side filter on a physical provider.
+
+    ``operator`` is one of:
+      - ``"eq"``          value must equal ``value`` (e.g. currency=USD);
+      - ``"enum_select"`` caller must select an allowed value from ``allowed``
+                          (exactly one when ``exactly_one``), e.g. timeframe;
+      - ``"present"``     the column/selection must be supplied (IndustrySource).
+    """
+
+    field: str
+    operator: str = "eq"
+    value: Any = None
+    allowed: tuple[str, ...] = ()
+    exactly_one: bool = False
+    required: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "field": self.field,
+            "operator": self.operator,
+            "value": self.value,
+            "allowed": list(self.allowed),
+            "exactly_one": self.exactly_one,
+            "required": self.required,
+        }
+
+
+def parse_filter_requirement(raw: Any) -> FilterRequirement:
+    """Coerce legacy string / FilterRequirement into a structured contract.
+
+    ``"currency=USD"``   -> eq(currency, USD); ``"timeframe"`` -> enum_select;
+    ``"IndustrySource"`` -> present; ``FilterRequirement`` passes through.
+    """
+    if isinstance(raw, FilterRequirement):
+        return raw
+    token = str(raw).strip()
+    if not token:
+        raise ValueError("empty required_filter entry")
+    if "=" in token:
+        field, _, val = token.partition("=")
+        return FilterRequirement(field=field.strip(), operator="eq", value=val.strip())
+    return FilterRequirement(field=token, operator="enum_select", required=True)
 
 
 # ---------------------------------------------------------------------------
@@ -70,10 +158,13 @@ class MarketFieldBinding:
     knowledge_time: str | None = None
     effective_time: str | None = None
     available_at: str | None = None
-    required_filters: tuple[str, ...] = ()
+    required_filters: tuple[FilterRequirement, ...] = ()
     source_certified: bool = False
     notes: str = ""
     transform_description: str = "identity"
+    derived_expression: str | None = None  # executable expression for derived providers
+    coverage_gate: float | None = None  # P1-002: fraction of target universe the
+    # provider actually covers; when < 0.8 the resolver flags production use.
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -91,8 +182,10 @@ class MarketFieldBinding:
             "knowledge_time": self.knowledge_time,
             "effective_time": self.effective_time,
             "available_at": self.available_at,
-            "required_filters": list(self.required_filters),
+            "required_filters": [f.to_dict() for f in self.required_filters],
             "source_certified": self.source_certified,
+            "derived_expression": self.derived_expression,
+            "coverage_gate": self.coverage_gate,
             "notes": self.notes,
         }
 
@@ -101,19 +194,37 @@ class MarketFieldBinding:
 # Registry.
 # ---------------------------------------------------------------------------
 class ProviderRegistry:
-    """Deterministic (concept_id, market) -> binding registry."""
+    """Deterministic (concept_id, market) -> ordered provider chain registry.
+
+    Each (concept, market) key holds an *ordered* chain of bindings (first =
+    highest priority) so a concept like US ``market_cap_local`` can express
+    ``Close * weighted_shares`` (primary) with a ``share_class_shares * Close``
+    and a sparse-valuation research fallback behind it — a single binding slot
+    cannot represent a real provider chain (P1-5).  ``binding()`` returns the
+    primary; ``bindings()`` returns the whole chain.
+    """
 
     def __init__(self) -> None:
-        self._bindings: dict[tuple[str, str], MarketFieldBinding] = {}
+        self._bindings: dict[tuple[str, str], list[MarketFieldBinding]] = {}
 
     def register(self, binding: MarketFieldBinding, *, replace: bool = False) -> None:
         key = (binding.concept_id.strip(), binding.market.strip().lower())
-        if key in self._bindings and not replace:
-            raise ValueError(f"binding already registered: {binding.concept_id}@{binding.market}")
-        self._bindings[key] = binding
+        chain = self._bindings.setdefault(key, [])
+        if replace:
+            chain.clear()
+        elif any(b.provider_id == binding.provider_id for b in chain):
+            raise ValueError(
+                f"binding already registered: {binding.concept_id}@{binding.market} "
+                f"provider={binding.provider_id}"
+            )
+        chain.append(binding)
 
     def binding(self, concept_id: str, market: str) -> MarketFieldBinding | None:
-        return self._bindings.get((concept_id.strip(), market.strip().lower()))
+        chain = self._bindings.get((concept_id.strip(), market.strip().lower()))
+        return chain[0] if chain else None
+
+    def bindings(self, concept_id: str, market: str) -> tuple[MarketFieldBinding, ...]:
+        return tuple(self._bindings.get((concept_id.strip(), market.strip().lower()), ()))
 
     def require_binding(self, concept_id: str, market: str) -> MarketFieldBinding:
         result = self.binding(concept_id, market)
@@ -125,7 +236,7 @@ class ProviderRegistry:
         m = market.strip().lower()
         return tuple(
             sorted(
-                (b for b in self._bindings.values() if b.market == m),
+                (b for chain in self._bindings.values() for b in chain if b.market == m),
                 key=lambda b: b.concept_id,
             )
         )
@@ -134,7 +245,7 @@ class ProviderRegistry:
         c = concept_id.strip()
         return tuple(
             sorted(
-                (b for b in self._bindings.values() if b.concept_id == c),
+                (b for chain in self._bindings.values() for b in chain if b.concept_id == c),
                 key=lambda b: b.market,
             )
         )
@@ -146,7 +257,7 @@ class ProviderRegistry:
         return tuple(sorted({k[1] for k in self._bindings}))
 
     def to_dict(self) -> dict[str, Any]:
-        return {"bindings": [b.to_dict() for b in self._bindings.values()]}
+        return {"bindings": [b.to_dict() for chain in self._bindings.values() for b in chain]}
 
 
 PROVIDER_REGISTRY = ProviderRegistry()
@@ -181,6 +292,8 @@ def _b(
     required_filters=(),
     source_certified=False,
     notes="",
+    derived_expression=None,
+    coverage_gate=None,
     registry: ProviderRegistry = PROVIDER_REGISTRY,
 ) -> MarketFieldBinding:
     binding = MarketFieldBinding(
@@ -198,10 +311,12 @@ def _b(
         knowledge_time=knowledge_time,
         effective_time=effective_time,
         available_at=available_at,
-        required_filters=tuple(required_filters),
+        required_filters=tuple(parse_filter_requirement(f) for f in required_filters),
         source_certified=source_certified,
         notes=notes,
         transform_description=transform_description,
+        derived_expression=derived_expression,
+        coverage_gate=coverage_gate,
     )
     registry.register(binding)
     return binding
@@ -275,19 +390,69 @@ _b(
     dataset="ashare_stock_daily", physical=("StockDailyBar.Close", "StockDailyBar.Factor"),
     quality=_DERIVED, coverage=_FULL,
     source_unit=CNY_PER_SHARE, canonical_unit=CNY_PER_SHARE,
-    transform=_mul_factor, transform_description="Close * Factor (backward multiplier, verified)",
+    transform=_mul_two("StockDailyBar.Close", "StockDailyBar.Factor"),
+    transform_description="Close * Factor (backward multiplier, verified)",
     temporal_model="exact_daily", available_at="local_close",
-    source_certified=True, notes="Factor is a backward cumulative multiplier; adjusted = raw * Factor",
+    source_certified=True,
+    derived_expression="StockDailyBar.Close * StockDailyBar.Factor",
+    notes="Factor is a backward cumulative multiplier; adjusted = raw * Factor",
 )
 _b(
     "continuous_close", "us", "us_continuous_close",
     dataset="us_stock_daily", physical=("StockDailyBar.Close", "StockDailyBar.AdjFactor"),
     quality=_DERIVED, coverage=_FULL,
     source_unit=USD_PER_SHARE, canonical_unit=USD_PER_SHARE,
-    transform=_mul_factor, transform_description="Close * AdjFactor (backward multiplier)",
+    transform=_mul_two("StockDailyBar.Close", "StockDailyBar.AdjFactor"),
+    transform_description="Close * AdjFactor (backward multiplier)",
     temporal_model="exact_daily", available_at="local_close",
-    source_certified=True, notes="clamp flag (adj_factor > 1e6) -> use returns for long windows",
+    source_certified=True,
+    derived_expression="StockDailyBar.Close * StockDailyBar.AdjFactor",
+    notes="clamp flag (adj_factor > 1e6) -> use returns for long windows",
 )
+
+# P0-010: continuous_open/high/low/vwap — the raw OHLC siblings of
+# continuous_close multiplied by the SAME backward adjustment factor.  Before
+# these bindings, cross-day open/high/low/vwap trend operators could only pull
+# raw (unadjusted) OHLC, so long-window price path factors were split/distortion
+# contaminated.
+for _canon, _bar in (
+    ("continuous_open", "Open"),
+    ("continuous_high", "High"),
+    ("continuous_low", "Low"),
+    ("continuous_vwap", "Vwap"),
+):
+    _b(
+        _canon, "ashare", f"ashare_{_canon}",
+        dataset="ashare_stock_daily",
+        physical=(f"StockDailyBar.{_bar}", "StockDailyBar.Factor"),
+        quality=_DERIVED, coverage=_FULL,
+        source_unit=CNY_PER_SHARE, canonical_unit=CNY_PER_SHARE,
+        transform=_mul_two(f"StockDailyBar.{_bar}", "StockDailyBar.Factor"),
+        transform_description=f"{_bar} * Factor (backward multiplier)",
+        temporal_model="exact_daily", available_at="local_close",
+        source_certified=True,
+        derived_expression=f"StockDailyBar.{_bar} * StockDailyBar.Factor",
+        notes="same backward Factor as continuous_close",
+    )
+for _canon, _bar in (
+    ("continuous_open", "Open"),
+    ("continuous_high", "High"),
+    ("continuous_low", "Low"),
+    ("continuous_vwap", "VWAP"),
+):
+    _b(
+        _canon, "us", f"us_{_canon}",
+        dataset="us_stock_daily",
+        physical=(f"StockDailyBar.{_bar}", "StockDailyBar.AdjFactor"),
+        quality=_DERIVED, coverage=_FULL,
+        source_unit=USD_PER_SHARE, canonical_unit=USD_PER_SHARE,
+        transform=_mul_two(f"StockDailyBar.{_bar}", "StockDailyBar.AdjFactor"),
+        transform_description=f"{_bar} * AdjFactor (backward multiplier)",
+        temporal_model="exact_daily", available_at="local_close",
+        source_certified=True,
+        derived_expression=f"StockDailyBar.{_bar} * StockDailyBar.AdjFactor",
+        notes="same backward AdjFactor as continuous_close",
+    )
 for _raw, _phys in (("raw_volume_shares", "Volume"),):
     _b(
         _raw, "ashare", "ashare_raw_volume",
@@ -336,9 +501,13 @@ _b(
     dataset="us_stock_shares_snapshot",
     physical=("TickerSharesSnapshot.weighted_shares_outstanding", "StockDailyBar.Close"),
     quality=_DERIVED, coverage=CoverageClass.PARTIAL, source_unit=USD, canonical_unit=USD,
-    transform=_mul_factor, transform_description="Close * weighted_shares_outstanding",
+    transform=_mul_two("TickerSharesSnapshot.weighted_shares_outstanding", "StockDailyBar.Close"),
+    transform_description="Close * weighted_shares_outstanding",
     temporal_model="exact_daily", available_at="local_close",
-    source_certified=True, notes="~42% coverage of StockDailyBar tickers; NOT the X0 sparse market_cap",
+    source_certified=True,
+    derived_expression="TickerSharesSnapshot.weighted_shares_outstanding * StockDailyBar.Close",
+    coverage_gate=0.42,
+    notes="~42% coverage of StockDailyBar tickers; NOT the X0 sparse market_cap; coverage_gate<0.8 -> production flags",
 )
 
 # --- turnover --------------------------------------------------------------
@@ -443,9 +612,9 @@ _b(
     dataset="ashare_stock_daily", physical=("StockDailyBar.IsSuspend",),
     quality=_NATIVE, coverage=_FULL, source_unit=UnitSpec(dimension="boolean"),
     canonical_unit=UnitSpec(dimension="boolean"),
-    transform=_identity, transform_description="not IsSuspend (tradable = listed AND not suspended)",
+    transform=_not_bool, transform_description="NOT IsSuspend (tradable = listed AND not suspended)",
     temporal_model="exact_daily", available_at="local_open",
-    source_certified=True, notes="IsSuspend lives in StockDailyBar",
+    source_certified=True, notes="IsSuspend lives in StockDailyBar; transform actually negates it",
 )
 _b(
     "tradability_state", "us", "us_tradability_universe",
@@ -515,35 +684,39 @@ _b(
 )
 
 # --- financial statements (amounts, local currency) ---------------------------
+# Each concept binds to the *physical* statement dataset it actually lives in
+# (StockIncome / StockBalance / StockCashFlow mirror tables), never to the daily
+# bar dataset — the physical field is StockIncome.* / StockBalance.* /
+# StockCashFlow.*, which a daily-bar reader can never satisfy.
 _FIN_A = {
-    "operating_revenue": ("StockIncome.OperatingRevenue",),
-    "net_profit": ("StockIncome.NetProfit",),
-    "operating_cash_flow": ("StockCashFlow.NetOperateCashFlow",),
-    "total_assets": ("StockBalance.TotalAssets",),
-    "total_liabilities": ("StockBalance.TotalLiability",),
-    "equity": ("StockBalance.EquitiesParentCompanyOwners",),
+    "operating_revenue": ("StockIncome.OperatingRevenue", "ashare_stock_income"),
+    "net_profit": ("StockIncome.NetProfit", "ashare_stock_income"),
+    "operating_cash_flow": ("StockCashFlow.NetOperateCashFlow", "ashare_stock_cashflow"),
+    "total_assets": ("StockBalance.TotalAssets", "ashare_stock_balance"),
+    "total_liabilities": ("StockBalance.TotalLiability", "ashare_stock_balance"),
+    "equity": ("StockBalance.EquitiesParentCompanyOwners", "ashare_stock_balance"),
 }
 _FIN_US = {
-    "operating_revenue": ("StockIncome.revenue",),
-    "net_profit": ("StockIncome.net_income_loss_attributable_common_shareholders",),
-    "operating_cash_flow": ("StockCashFlow.net_cash_from_operating_activities",),
-    "total_assets": ("StockBalance.total_assets",),
-    "total_liabilities": ("StockBalance.total_liabilities",),
-    "equity": ("StockBalance.total_equity",),
+    "operating_revenue": ("StockIncome.revenue", "us_stock_income"),
+    "net_profit": ("StockIncome.net_income_loss_attributable_common_shareholders", "us_stock_income"),
+    "operating_cash_flow": ("StockCashFlow.net_cash_from_operating_activities", "us_stock_cashflow"),
+    "total_assets": ("StockBalance.total_assets", "us_stock_balance"),
+    "total_liabilities": ("StockBalance.total_liabilities", "us_stock_balance"),
+    "equity": ("StockBalance.total_equity", "us_stock_balance"),
 }
-for _concept, _phys_a in _FIN_A.items():
+for _concept, (_phys_a, _ds_a) in _FIN_A.items():
     _b(
         _concept, "ashare", f"ashare_{_concept}",
-        dataset="ashare_stock_daily", physical=_phys_a,
+        dataset=_ds_a, physical=(_phys_a,),
         quality=_NATIVE, coverage=_FULL, source_unit=CNY, canonical_unit=CNY,
         transform=_identity, temporal_model="financial_pit",
         knowledge_time="PubDate", available_at="filing",
         source_certified=True, notes="asof(PubDate); flow fields are cumulative YTD",
     )
-for _concept, _phys_us in _FIN_US.items():
+for _concept, (_phys_us, _ds_us) in _FIN_US.items():
     _b(
         _concept, "us", f"us_{_concept}",
-        dataset="us_stock_daily", physical=_phys_us,
+        dataset=_ds_us, physical=(_phys_us,),
         quality=_NATIVE, coverage=_PARTIAL, source_unit=USD, canonical_unit=USD,
         transform=_identity, temporal_model="financial_pit",
         knowledge_time="filing_date", available_at="filing",
@@ -564,7 +737,11 @@ def require_binding(concept_id: str, market: str) -> MarketFieldBinding:
 
 
 def _market_ctx(market: str) -> MarketContext:
-    return ASHARE_CONTEXT if market == "ashare" else US_CONTEXT
+    # Strict market_context (raises on unknown markets) — never a ternary that
+    # silently defaults unknown markets to "us" (P1-1).
+    from market.context import market_context
+
+    return market_context(market)
 
 
 def explain_field_support(
@@ -625,6 +802,30 @@ def explain_field_support(
             coverage=b.coverage, reason_codes=("QUALITY_FLOOR",),
             notes=b.notes,
         )
+    # Provider certification gate: a binding with an *uncertified source* must
+    # never be silently production-certified just because its quality tag is
+    # EXACT_NATIVE/EXACT_DERIVED.  ``source_certified`` is part of the contract
+    # (multi-market plan §45-§46); production fails closed to PROVIDER_REQUIRED.
+    if not b.source_certified:
+        return MarketSupport(
+            canonical=concept_id, market=market,
+            status=(
+                MarketStatus.PROVIDER_REQUIRED
+                if production
+                else MarketStatus.RESEARCH_ONLY
+            ),
+            providers=(b.provider_id,), provider_quality=b.quality,
+            coverage=b.coverage, reason_codes=("SOURCE_UNCERTIFIED",),
+            notes=b.notes,
+        )
+    if b.coverage != CoverageClass.FULL:
+        return MarketSupport(
+            canonical=concept_id, market=market,
+            status=MarketStatus.CERTIFIED_PARTIAL,
+            providers=(b.provider_id,), provider_quality=b.quality,
+            coverage=b.coverage, reason_codes=("PARTIAL_COVERAGE",),
+            notes=b.notes,
+        )
     status = (
         MarketStatus.CERTIFIED_NATIVE
         if b.quality == _NATIVE
@@ -664,12 +865,21 @@ class FinancialPeriodAdapter:
         market: str,
         on: str | None = None,
         direction: str = "backward",
+        by: str | None = None,
     ) -> Any:
         """As-of merge of event rows onto signal dates.
 
         The ``on`` column defaults to the market knowledge-time column
         (ashare=PubDate, us=filing_date).  Look-ahead is impossible because the
         merge only uses rows with knowledge_time <= signal_date.
+
+        ``by`` MUST be the instrument column (Symbol/Ticker) whenever the
+        ``events`` frame mixes several instruments: without ``by`` a stock's
+        signal row can legally match *another* company's most recent filing when
+        the dates line up (entity-identity is not guaranteed), which silently
+        cross-contaminates financial data between companies.  When ``events``
+        has an instrument column and ``by`` is omitted we raise rather than
+        silently risk cross-stock contamination.
         """
         import pandas as pd
 
@@ -677,11 +887,76 @@ class FinancialPeriodAdapter:
         ev = events.copy()
         if pd.api.types.is_datetime64_any_dtype(ev[key].dtype) is False:
             ev[key] = pd.to_datetime(ev[key])
-        dates = pd.Series(pd.to_datetime(signal_dates), name="__signal_date__")
-        ev = ev.sort_values(key)
+
+        # ``signal_dates`` is either a plain Series of dates (single-instrument
+        # caller) or a DataFrame carrying the instrument column alongside the
+        # signal date column.
+        if isinstance(signal_dates, pd.Series):
+            dates = pd.DataFrame({"__signal_date__": pd.to_datetime(signal_dates)})
+        else:
+            dates = signal_dates.copy()
+            if "__signal_date__" in dates.columns:
+                pass
+            elif key in dates.columns:
+                dates = dates.rename(columns={key: "__signal_date__"})
+            else:
+                raise ValueError(
+                    "signal frame must carry the signal-date column (__signal_date__ or "
+                    f"{key!r})"
+                )
+            dates["__signal_date__"] = pd.to_datetime(dates["__signal_date__"])
+
+        # Instrument column is mandatory when events carry per-instrument rows:
+        # without ``by`` merge_asof can legally match one stock's signal row to
+        # another company's filing (dates line up, entity identity is lost).
+        if by is None:
+            inst_cols = [
+                c for c in ev.columns
+                if str(c).strip().lower() in {"symbol", "ticker", "instrument", "stock_code", "secucode"}
+            ]
+            if inst_cols:
+                raise ValueError(
+                    "FinancialPeriodAdapter.asof requires by=<instrument column> when "
+                    f"events carry multiple instruments; found {inst_cols[0]!r}"
+                )
+        elif by not in ev.columns:
+            raise ValueError(f"asof by={by!r} not present in events columns")
+        elif by not in dates.columns:
+            raise ValueError(
+                f"asof by={by!r} not present in signal frames; signals must carry the "
+                "instrument column"
+            )
+
+        if by is not None:
+            # merge_asof with ``by`` requires the time column to be GLOBALLY
+            # monotonic (pandas 2.3), so process each instrument group separately
+            # and concatenate — this also makes the cross-stock guarantee
+            # structural: a signal row can only ever see its own instrument's
+            # event rows.
+            parts: list[pd.DataFrame] = []
+            for _, sub_dates in dates.groupby(by, sort=False):
+                sub_events = ev[ev[by] == sub_dates.iloc[0, dates.columns.get_loc(by)]]
+                if sub_events.empty:
+                    parts.append(sub_dates.copy())
+                    continue
+                joined = pd.merge_asof(
+                    sub_dates.sort_values("__signal_date__"),
+                    sub_events.sort_values(key),
+                    left_on="__signal_date__",
+                    right_on=key,
+                    direction=direction,
+                    allow_exact_matches=True,
+                )
+                parts.append(joined)
+            merged = pd.concat(parts, ignore_index=True)
+            # Keep a single instrument column (the signal side's), dropping the
+            # events-side ``by`` duplicate that merge_asof suffixes.
+            if f"{by}_x" in merged.columns and f"{by}_y" in merged.columns:
+                merged = merged.rename(columns={f"{by}_x": by}).drop(columns=[f"{by}_y"])
+            return merged.sort_values("__signal_date__")
         merged = pd.merge_asof(
-            dates.to_frame(),
-            ev,
+            dates.sort_values("__signal_date__"),
+            ev.sort_values(key),
             left_on="__signal_date__",
             right_on=key,
             direction=direction,
@@ -689,12 +964,25 @@ class FinancialPeriodAdapter:
         return merged
 
 
-def apply_binding_transform(binding: MarketFieldBinding, value: Any) -> Any:
-    """Apply the binding's unit transform to a raw physical value."""
+def apply_binding_transform(binding: MarketFieldBinding, value: Any, *, fields: dict[str, Any] | None = None) -> Any:
+    """Apply the binding's unit transform to a raw physical value.
+
+    Derived providers (``derived_expression`` set, e.g. continuous_close =
+    Close * Factor) receive a dict of their physical fields and evaluate the
+    real multiplication; single-field bindings keep the legacy ``value`` call.
+    """
+    if binding.derived_expression is not None:
+        if fields is None:
+            raise ValueError(
+                f"{binding.concept_id}@{binding.market} is a derived provider "
+                f"({binding.derived_expression!r}); pass fields={{physical: value}}"
+            )
+        return binding.transform(fields)
     return binding.transform(value)
 
 
 __all__ = [
+    "FilterRequirement",
     "FinancialPeriodAdapter",
     "MarketFieldBinding",
     "PROVIDER_REGISTRY",
@@ -702,5 +990,6 @@ __all__ = [
     "apply_binding_transform",
     "binding",
     "explain_field_support",
+    "parse_filter_requirement",
     "require_binding",
 ]

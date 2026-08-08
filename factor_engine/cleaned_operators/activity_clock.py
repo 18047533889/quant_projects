@@ -52,6 +52,7 @@ def _activity_clock_kernel(
     scale_window: int,
     max_lookback: int,
     budget: float,
+    include_current: bool = True,
 ) -> np.ndarray:
     """Return per-row k* (rows back to consume ``budget`` units of scaled act).
 
@@ -61,33 +62,45 @@ def _activity_clock_kernel(
     under the median normalization).  k* is the smallest back-distance whose
     cumulative scaled activity reaches ``budget``; NaN when the budget is not
     consumed within ``max_lookback`` rows.
+
+    Missing-value policy (P0-006): an UNKNOWN activity value inside the budget
+    path does not consume market time — it fail-closes the row (``NaN``), it is
+    never skipped.  Real ``activity == 0`` consumes nothing but is not blocking.
+    Negative activity is an *invalid* state (not a zero) and invalidates any
+    window that contains it.  The scale estimate requires at least
+    ``min_scale_periods = max(5, scale_window//2)`` finite prior observations.
     """
     rows = activity.shape[0]
+    min_scale = max(5, int(scale_window) // 2)
     scaled = np.full(rows, np.nan, dtype=float)
     for s in range(rows):
         if s < 1:
             continue
         lo = max(0, s - scale_window)
         past = activity[lo:s]
-        past = past[np.isfinite(past)]
-        if past.size == 0:
+        finite_past = past[np.isfinite(past)]
+        # negative activity invalidates the scale window (not silently dropped)
+        if np.any(finite_past < 0.0) or finite_past.size < min_scale:
             continue
-        scale = float(np.median(past))
+        scale = float(np.median(finite_past))
         if not np.isfinite(scale) or scale <= _EPS:
             continue
         a = activity[s]
-        if np.isfinite(a) and a >= 0.0:
-            scaled[s] = a / scale
+        if not np.isfinite(a) or a < 0.0:
+            continue
+        scaled[s] = a / scale
     k = np.full(rows, np.nan, dtype=float)
+    start = 0 if include_current else 1
     for r in range(rows):
         cum = 0.0
-        for back in range(max_lookback + 1):
+        for back in range(start, max_lookback + 1):
             s = r - back
             if s < 0:
                 break
             a = scaled[s]
+            # Fail-closed: any unknown activity inside [r-back, r] invalidates.
             if np.isnan(a):
-                continue
+                break
             cum += a
             if cum >= budget:
                 k[r] = float(back)
@@ -101,6 +114,7 @@ def _ts_activity_clock_lagged_value(
     budget: float = 1.0,
     scale_window: int = 20,
     max_lookback: int = 60,
+    include_current: bool = True,
 ) -> pd.DataFrame:
     x, activity = _align(x, activity)
     sw = max(2, int(scale_window))
@@ -113,7 +127,7 @@ def _ts_activity_clock_lagged_value(
     rows, cols = xv.shape
     k = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
-        k[:, c] = _activity_clock_kernel(av[:, c], sw, ml, budget_f)
+        k[:, c] = _activity_clock_kernel(av[:, c], sw, ml, budget_f, bool(include_current))
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         for r in range(rows):
@@ -132,6 +146,7 @@ def _ts_activity_clock_age(
     budget: float = 1.0,
     scale_window: int = 20,
     max_lookback: int = 60,
+    include_current: bool = True,
 ) -> pd.DataFrame:
     activity = activity.copy()
     sw = max(2, int(scale_window))
@@ -143,7 +158,7 @@ def _ts_activity_clock_age(
     rows, cols = av.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
-        out[:, c] = _activity_clock_kernel(av[:, c], sw, ml, budget_f)
+        out[:, c] = _activity_clock_kernel(av[:, c], sw, ml, budget_f, bool(include_current))
     return _frame_like(activity, out)
 
 
@@ -167,6 +182,16 @@ def _ts_max_drawdown_activity_cost(
             act = av[start : r + 1, c]
             if not np.all(np.isfinite(seg)) or not np.all(np.isfinite(act)):
                 continue
+            # Typed contract (P0-007): ``x`` is a positive level (price /
+            # wealth index / positive fundamental level).  ``seg/running_max-1``
+            # is only a drawdown on a positive scale; a non-positive or
+            # negative window is out of contract -> fail closed.
+            if np.any(seg <= 0.0):
+                continue
+            # activity is non-negative by contract; a negative value is an
+            # invalid state (never "cheap" activity), fail closed.
+            if np.any(act < 0.0):
+                continue
             total_act = float(act.sum())
             if total_act <= _EPS:
                 continue
@@ -174,7 +199,10 @@ def _ts_max_drawdown_activity_cost(
             dd = seg / running_max - 1.0
             trough = int(np.argmin(dd))
             if dd[trough] >= -1e-12:
-                continue  # no drawdown within the window
+                # No drawdown within the window is a VALID state: cost is 0,
+                # not NaN (the row is fully observed and flat / monotone up).
+                out[r, c] = 0.0
+                continue
             peak = int(np.argmax(seg[: trough + 1]))
             seg_act = float(act[peak : trough + 1].sum())
             out[r, c] = float(seg_act / total_act)
@@ -197,8 +225,8 @@ _KERNELS: dict[str, Callable[..., pd.DataFrame]] = {
 }
 
 _PARAMS: dict[str, list[str]] = {
-    "ts_activity_clock_lagged_value": ["x", "activity", "budget", "scale_window", "max_lookback"],
-    "ts_activity_clock_age": ["activity", "budget", "scale_window", "max_lookback"],
+    "ts_activity_clock_lagged_value": ["x", "activity", "budget", "scale_window", "max_lookback", "include_current"],
+    "ts_activity_clock_age": ["activity", "budget", "scale_window", "max_lookback", "include_current"],
     "ts_max_drawdown_activity_cost": ["x", "activity", "window"],
 }
 

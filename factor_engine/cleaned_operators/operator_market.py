@@ -160,6 +160,75 @@ _NEWS_FAMILY = frozenset(
     }
 )
 
+# P0-016: the holder family is SPLIT.  Base holder analysis (concentration /
+# entropy / rank / churn / entry-exit / class / overlap / network) only needs the
+# top-holder feed.  Only pledge / freeze / locked ops additionally need the
+# pledge capability.  A-share TopTen has SharePledge/ShareFreeze (in shares) and
+# ShareRatio (%), but FloatTopTen usually does not — forcing every holder op to
+# require pledge made ordinary holder concentration US-blocked twice over.
+_HOLDER_FAMILY = frozenset(
+    {
+        "holder_class_entropy", "holder_class_js_shift",
+        "holder_common_holding_peer_return", "holder_concentration",
+        "holder_concentration_acceleration", "holder_concentration_change",
+        "holder_concentration_slope", "holder_count_change_rate",
+        "holder_entry_share", "holder_exit_share",
+        "holder_float_concentration_gap", "holder_id_matched_churn",
+        "holder_id_matched_entry_share", "holder_id_matched_exit_share",
+        "holder_id_overlap_ratio", "holder_nature_entropy",
+        "holder_net_entry_share", "holder_peer_return_breadth",
+        "holder_rank_stability", "holder_share_weighted_rank_migration",
+        "holder_shareholder_network_centrality",
+        "holder_shareholder_overlap_ratio", "holder_weighted_churn",
+    }
+)
+_HOLDER_PLEDGE_FAMILY = frozenset(
+    {
+        "holder_freeze_concentration", "holder_freeze_ratio",
+        "holder_locked_share_ratio", "holder_pledge_change",
+        "holder_pledge_churn", "holder_pledge_concentration",
+        "holder_pledge_ratio", "holder_pledged_holder_count",
+    }
+)
+
+# P0-015: market-mechanism families with no explicit per-op contracts defaulted
+# to "both" before.  These need declared capabilities so US is not silently
+# granted capabilities it does not have (FULL_MINUTE_OHLCV / DAILY_TURNOVER /
+# FREE_FLOAT_SHARES are A-share-only in the current capability snapshot).
+_MINUTE_PREFIXES = ("intraday_", "intra_", "session_", "micro_")
+
+# intra_lunch_gap_return depends on the A-share lunch-break mechanism itself.
+_LUNCH_GAP_ONLY = frozenset({"intra_lunch_gap_return"})
+# intraday_barrier_approach_acceleration needs minute bars AND daily price limits.
+_MINUTE_WITH_LIMITS = frozenset({"intraday_barrier_approach_acceleration"})
+
+_TURNOVER_FAMILY = frozenset(
+    {
+        "average_turnover", "abnormal_turnover", "turnover_volatility",
+        "turnover_autocorr", "return_per_turnover", "turnover_shock",
+        "turnover_acceleration", "price_turnover_divergence",
+        "return_turnover_beta", "turnover_adjusted_volatility",
+        "turnover_momentum", "turnover_zscore",
+    }
+)
+# TurnoverSurvivalKernel chip family (u_t = free-float turnover).
+_CHIP_FAMILY = frozenset(
+    {
+        "ts_turnover_reference_price", "ts_turnover_cost_dispersion",
+        "ts_turnover_profit_share", "ts_turnover_holding_age",
+        "ts_turnover_near_cost_mass", "ts_turnover_cost_quantile_distance",
+        "ts_turnover_cost_entropy", "ts_turnover_cost_mode_distance",
+        "ts_turnover_cost_skew", "ts_turnover_age_dispersion",
+    }
+)
+_FREE_FLOAT_FAMILY = frozenset(
+    {
+        "free_float_turnover", "free_float_ratio", "free_float_share_ratio",
+        "free_to_circulating_ratio", "market_cap_free_cap_gap",
+        "float_share_ratio", "true_turnover_rate", "real_turnover_rate",
+    }
+)
+
 
 def _register_default_contracts() -> None:
     OPERATOR_MARKET_CONTRACTS.register_many(
@@ -179,9 +248,15 @@ def _register_default_contracts() -> None:
     )
     OPERATOR_MARKET_CONTRACTS.register_many(
         _HOLDER_FAMILY,
-        required_capabilities=(_Cap.TOP_HOLDERS.value, _Cap.HOLDER_PLEDGE.value),
+        required_capabilities=(_Cap.TOP_HOLDERS.value,),
         cross_market_comparable=False,
         notes="A-share top-holder feeds; US has no same-structure holder feed (a 13F/institutional provider would unblock US)",
+    )
+    OPERATOR_MARKET_CONTRACTS.register_many(
+        _HOLDER_PLEDGE_FAMILY,
+        required_capabilities=(_Cap.TOP_HOLDERS.value, _Cap.HOLDER_PLEDGE.value),
+        cross_market_comparable=False,
+        notes="pledge/freeze/locked holder ops additionally need the pledge capability; A-share TopTen only",
     )
     OPERATOR_MARKET_CONTRACTS.register_many(
         _INDEX_WEIGHT_FAMILY,
@@ -197,15 +272,76 @@ def _register_default_contracts() -> None:
     )
 
 
+def _fallback_contract(canonical: str) -> OperatorMarketContract | None:
+    """Synthesized contract for prefix/name families (P0-015).
+
+    Keeps the 1311-canonical manifest machine-generated: the minute / turnover /
+    chip / free-float families get an explicit capability contract without a
+    hand-maintained per-op list of every intraday name.  Explicitly-registered
+    contracts always win (they are checked first by ``contract_for``).
+    """
+    name = str(canonical).strip()
+    if name in _LUNCH_GAP_ONLY:
+        return OperatorMarketContract(
+            canonical=name,
+            intrinsic_markets=("ashare",),
+            cross_market_comparable=False,
+            notes="intra_lunch_gap_return measures the A-share lunch-break mechanism itself; US has no lunch break",
+        )
+    if name in _MINUTE_WITH_LIMITS:
+        return OperatorMarketContract(
+            canonical=name,
+            intrinsic_markets=("ashare",),
+            required_capabilities=(
+                _Cap.FULL_MINUTE_OHLCV.value,
+                _Cap.DAILY_PRICE_LIMITS.value,
+            ),
+            cross_market_comparable=False,
+            notes="minute bars + daily price limits; US has neither as a daily mechanism",
+        )
+    if name in _TURNOVER_FAMILY or name in _CHIP_FAMILY:
+        return OperatorMarketContract(
+            canonical=name,
+            required_capabilities=(_Cap.DAILY_TURNOVER.value,),
+            cross_market_comparable=False,
+            notes="A-share daily turnover feed; US has no isomorphic D1 turnover (do not fake it with volume)",
+        )
+    if name in _FREE_FLOAT_FAMILY:
+        return OperatorMarketContract(
+            canonical=name,
+            required_capabilities=(_Cap.FREE_FLOAT_SHARES.value,),
+            cross_market_comparable=False,
+            notes="A-share free-float shares/turnover; US lacks an isomorphic free-float feed",
+        )
+    if name.startswith(_MINUTE_PREFIXES):
+        return OperatorMarketContract(
+            canonical=name,
+            required_capabilities=(_Cap.FULL_MINUTE_OHLCV.value,),
+            cross_market_comparable=False,
+            notes="minute-microstructure family requires FULL_MINUTE_OHLCV (A supported; US provider_required)",
+        )
+    return None
+
+
 _register_default_contracts()
 
 
 def contract_for(canonical: str) -> OperatorMarketContract | None:
-    return OPERATOR_MARKET_CONTRACTS.get(canonical)
+    explicit = OPERATOR_MARKET_CONTRACTS.get(canonical)
+    if explicit is not None:
+        return explicit
+    return _fallback_contract(canonical)
 
 
 def contract_set() -> frozenset[str]:
-    return frozenset(OPERATOR_MARKET_CONTRACTS.canonicals())
+    return frozenset(
+        set(OPERATOR_MARKET_CONTRACTS.canonicals())
+        | set(_LUNCH_GAP_ONLY)
+        | set(_MINUTE_WITH_LIMITS)
+        | set(_TURNOVER_FAMILY)
+        | set(_CHIP_FAMILY)
+        | set(_FREE_FLOAT_FAMILY)
+    )
 
 
 __all__ = [

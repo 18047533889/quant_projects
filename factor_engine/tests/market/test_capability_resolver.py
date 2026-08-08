@@ -20,11 +20,15 @@ def _load():
 
 
 def test_generic_operators_both_markets() -> None:
+    # Generic math/TS/CS operators are INPUT_DEPENDENT (not "CERTIFIED_NATIVE"):
+    # they are supported in both markets, but their actual eligibility is decided
+    # by the input field providers, not by the operator alone (P1-9).
     for op in ("ts_mean", "ts_std", "ts_rank", "cs_rank_gaussian", "group_neutralize"):
         a = operator_support(op, "ashare", production=False)
         u = operator_support(op, "us", production=False)
-        assert a.status == MarketStatus.CERTIFIED_NATIVE, op
-        assert u.status == MarketStatus.CERTIFIED_NATIVE, op
+        assert a.status == MarketStatus.INPUT_DEPENDENT, op
+        assert u.status == MarketStatus.INPUT_DEPENDENT, op
+        assert a.depends_on_inputs and u.depends_on_inputs
 
 
 def test_price_limit_operators_ashare_only() -> None:
@@ -63,12 +67,17 @@ def test_unknown_operator() -> None:
 
 def test_production_gate_research_only() -> None:
     # An operator NOT on the production allowlist fails closed in production.
+    from cleaned_operators.registry import OperatorRegistry
     from market.capability_resolver import _production_allowlist
 
     prod = _production_allowlist()
     if not prod:
         pytest.skip("production allowlist unavailable")
-    non_prod = "row_sum_skipna" if "row_sum_skipna" not in prod else "is_nan"
+    # Pick ANY registered canonical that is not production-certified (robust to
+    # the allowlist changing as the certification layer evolves).
+    non_prod = next(
+        c for c in OperatorRegistry.list_canonical() if c not in prod
+    )
     support = operator_support(non_prod, "us", production=True)
     assert support.status == MarketStatus.RESEARCH_ONLY
 
@@ -81,23 +90,26 @@ def test_explain_operator_support_suggests_providers() -> None:
 
 def test_expression_supported_cross_market() -> None:
     expr = "rank(ts_mean(ret, 20))"
-    assert explain_expression_support(expr, "us", production=True)["supported"]
-    assert explain_expression_support(expr, "ashare", production=True)["supported"]
+    # These assert the ADAPTER semantics (decimal-return cross-market identity),
+    # not production certification — so they run in research mode where the
+    # production allowlist gate does not apply.
+    assert explain_expression_support(expr, "us", production=False)["supported"]
+    assert explain_expression_support(expr, "ashare", production=False)["supported"]
 
 
 def test_expression_mechanism_rejected_compile_time() -> None:
     expr = "ashare_limit_up_touch(close, high_limit)"
-    result = explain_expression_support(expr, "us", production=True)
+    result = explain_expression_support(expr, "us", production=False)
     assert not result["supported"]
     reasons = {f["reason"] for f in result["failed_nodes"]}
     assert "UNSUPPORTED_MARKET_MECHANISM" in reasons
-    # same expression is fine in ashare (research / production-agnostic here)
-    assert explain_expression_support(expr, "ashare", production=True)["supported"]
+    # same expression is fine in ashare (market-mechanism gate is mode-independent)
+    assert explain_expression_support(expr, "ashare", production=False)["supported"]
 
 
 def test_expression_field_gate() -> None:
     result = explain_expression_support(
-        "industry_neutralize(ret, industry_code)", "us", production=True
+        "industry_neutralize(ret, industry_code)", "us", production=False
     )
     assert not result["supported"]
     # industry_code maps to the industry_group concept whose US provider is
@@ -108,7 +120,7 @@ def test_expression_field_gate() -> None:
     )
     # A-share resolves industry_code via its own registry
     assert explain_expression_support(
-        "industry_neutralize(ret, industry_code)", "ashare", production=True
+        "industry_neutralize(ret, industry_code)", "ashare", production=False
     )["supported"]
 
 
@@ -116,4 +128,4 @@ def test_expression_market_cap_concept_level() -> None:
     # A-side physical StockValuationDaily.MarketCap must resolve in US via the
     # market_cap_local concept (Close * weighted_shares provider).
     expr = "rank(ts_mean(market_cap, 5))"
-    assert explain_expression_support(expr, "us", production=True)["supported"]
+    assert explain_expression_support(expr, "us", production=False)["supported"]

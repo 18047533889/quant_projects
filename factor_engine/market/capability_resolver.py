@@ -28,7 +28,21 @@ from market.context import ASHARE_CONTEXT, MarketContext, US_CONTEXT
 
 
 def _market_ctx(market: str) -> MarketContext:
-    return ASHARE_CONTEXT if market == "ashare" else US_CONTEXT
+    # Strict market_context (raises on unknown markets) — never a ternary that
+    # silently defaults unknown markets to "us" (P1-1).
+    from market.context import market_context
+
+    return market_context(market)
+
+
+class ProductionCertificationUnavailable(RuntimeError):
+    """Production certification evidence could not be loaded — fail closed.
+
+    Raised instead of returning an *empty* allowlist: an empty allowlist makes
+    the production gate a no-op (``if prod and name not in prod`` never fires),
+    silently letting every operator pass.  A build failure must never degrade
+    to "nothing is restricted".
+    """
 
 
 def _production_allowlist() -> frozenset[str]:
@@ -36,8 +50,11 @@ def _production_allowlist() -> frozenset[str]:
         from backend.fastpath_allowlists import production_allowlist
 
         return frozenset(production_allowlist())
-    except Exception:  # pragma: no cover - defensive
-        return frozenset()
+    except Exception as exc:  # pragma: no cover - defensive
+        raise ProductionCertificationUnavailable(
+            "production allowlist/evidence failed to build; refusing to run an "
+            "empty certification gate (fail-closed)"
+        ) from exc
 
 
 def operator_support(
@@ -87,6 +104,20 @@ def operator_support(
                 notes="not on the production allowlist; research may opt in explicitly",
             )
 
+    # P0-015: ``ashare_*`` prefix is a HARD A-share lock unless an explicit
+    # contract opts the operator into US.  This is a safety net for new ashare_*
+    # ops (e.g. ashare_suspension_episode_length) that are not enumerated in the
+    # price-limit family set — we should never rely on remembering to add each one.
+    if name.startswith("ashare_") and market != "ashare":
+        if contract is None or "us" not in contract.intrinsic_markets:
+            return MarketSupport(
+                canonical=raw_name, market=market,
+                status=MarketStatus.UNSUPPORTED_MARKET_MECHANISM,
+                required_capabilities=contract.required_capabilities if contract else (),
+                reason_codes=("MARKET_MECHANISM",),
+                notes="ashare_* prefix binds to the A-share market mechanism",
+            )
+
     # Market-mechanism gate: contract declares intrinsic markets.
     if contract is not None:
         intrinsic = contract.intrinsic_markets
@@ -116,11 +147,15 @@ def operator_support(
                 notes=contract.notes,
             )
 
-    # Generic mathematical operator: both markets, input-dependent.
+    # Generic mathematical operator: both markets, input-dependent.  NOT
+    # "CERTIFIED_NATIVE": many generic operators have hidden requirements
+    # (minute session, group semantics, event clock, price basis...), so the
+    # verdict is explicitly INPUT_DEPENDENT and the real gate is the expression
+    # walk over the input field providers (P1-9).
     if contract is None or not contract.required_capabilities:
         return MarketSupport(
             canonical=raw_name, market=market,
-            status=MarketStatus.CERTIFIED_NATIVE,
+            status=MarketStatus.INPUT_DEPENDENT,
             depends_on_inputs=True,
             notes="generic operator; actual support determined by input field providers",
         )
@@ -280,6 +315,20 @@ def _check_column(name: Any, market: str, production: bool, failed: list[dict[st
                     "detail": f"concept {concept!r} quality {b.quality.value} below production floor",
                 }
             )
+            return
+        # P1-002 coverage gate: EXACT_DERIVED quality must not certify a provider
+        # that only covers part of the target universe (e.g. US market cap at
+        # ~42% via TickerSharesSnapshot).  Below the 80% floor the production use
+        # is surfaced as a WARNING: size-neutralization over a partially-covered
+        # universe systematically selects names with shares data, so any
+        # restricted-universe use must carry the coverage mask in its lineage.
+        if production and b.coverage_gate is not None and b.coverage_gate < 0.8:
+            warnings.append(
+                f"COVERAGE_GATE: concept {concept!r} provider {b.provider_id!r} covers "
+                f"~{b.coverage_gate:.0%} of the target universe; production full-universe "
+                "use is not certified — restricted-universe use must carry the coverage "
+                "mask in lineage"
+            )
         return
 
     # Not a canonical concept — check the per-market physical field registry.
@@ -367,7 +416,7 @@ def build_search_grammar(market: str) -> dict[str, Any]:
     excluded up front, shrinking the mining search space.
     """
     from fields.concepts import list_concepts
-    from fields.providers import PROVIDER_REGISTRY, ProviderQuality
+    from fields.providers import explain_field_support
 
     try:
         from api.mining_integration import list_dsl_allowlist
@@ -382,10 +431,14 @@ def build_search_grammar(market: str) -> dict[str, Any]:
         if support.status.is_supported:
             allowed_ops.add(op)
 
+    # Field concepts are filtered by the *production* eligibility gate, not by
+    # "a binding exists and quality != UNAVAILABLE": PROXY_RESEARCH / SPARSE /
+    # PIT_BLOCKED / SOURCE_UNCERTIFIED providers must not leak into the
+    # production grammar.
     concepts: set[str] = set()
     for concept in list_concepts():
-        b = PROVIDER_REGISTRY.binding(concept.concept_id, market)
-        if b is not None and b.quality != ProviderQuality.UNAVAILABLE:
+        support = explain_field_support(concept.concept_id, market, production=True)
+        if support.status.is_supported:
             concepts.add(concept.concept_id)
 
     return {
@@ -418,7 +471,12 @@ def build_market_operator_manifest(
         else sorted(OperatorRegistry.list_canonical())
     )
     rows: dict[str, Any] = {}
-    counts = {"total": 0, "unknown": 0, "not_reviewed": 0}
+    counts = {
+        "total": 0, "unknown": 0, "not_reviewed": 0,
+        "explicit_contract": 0, "fallback_default": 0,
+    }
+    from cleaned_operators.operator_market import OPERATOR_MARKET_CONTRACTS
+
     for name in names:
         counts["total"] += 1
         contract = contract_for(name)
@@ -426,8 +484,22 @@ def build_market_operator_manifest(
         u = operator_support(name, "us", production=False).to_dict()
         if a["status"] == MarketStatus.UNKNOWN.value:
             counts["unknown"] += 1
+        # Honest review accounting (P1-8): ``contract_origin`` records whether
+        # this operator's market status came from an explicit hand-written
+        # contract, a typed/prefix-derived fallback, or nothing at all.  The
+        # old ``not_reviewed = unknown`` counted every registered operator as
+        # "reviewed" even when its A/US status was only the generic default.
+        if OPERATOR_MARKET_CONTRACTS.get(name) is not None:
+            origin = "explicit"
+            counts["explicit_contract"] += 1
+        elif contract is not None:
+            origin = "typed_derived"
+        else:
+            origin = "fallback_default"
+            counts["fallback_default"] += 1
         row: dict[str, Any] = {
             "canonical": name,
+            "contract_origin": origin,
             "intrinsic_markets": (
                 list(contract.intrinsic_markets) if contract else ["ashare", "us"]
             ),
@@ -439,9 +511,16 @@ def build_market_operator_manifest(
             "us": u,
         }
         rows[name] = row
+    # ``not_reviewed`` is the CI gate and counts ONLY truly unclassified ops.
+    # ``fallback_default`` is informational: a generic math/TS/CS operator with no
+    # explicit contract is *reviewed by default* — both-markets input-dependent is
+    # its correct, intentional status (its per-op ``contract_origin`` row records
+    # that), so it must not fail the "every canonical has an explicit A/US status"
+    # gate.  ``contract_origin`` keeps the honest accounting (P1-8) while the gate
+    # stays meaningful.
     counts["not_reviewed"] = counts["unknown"]
     return {
-        "schema_version": "factor_engine.operator_market_capabilities.v1",
+        "schema_version": "factor_engine.operator_market_capabilities.v2",
         "generated_by": "market/capability_resolver.build_market_operator_manifest",
         "counts": counts,
         "operators": rows,

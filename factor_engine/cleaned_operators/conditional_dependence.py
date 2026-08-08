@@ -74,14 +74,22 @@ def _conditional_te_window(
     tw: np.ndarray, sw: np.ndarray, cw: np.ndarray, bins: int, lag: int, min_transitions: int
 ) -> float:
     """Conditional transfer entropy I(T_{s+lag}; S_s | T_s, C_s) for one window."""
-    valid = np.isfinite(tw) & np.isfinite(sw) & np.isfinite(cw)
-    idx = np.flatnonzero(valid)
-    if idx.size < max(lag + 2, min_transitions):
+    # Lag is applied on the original time axis, then NaN rows are masked: a NaN
+    # gap must not silently redefine the lag (see the plain-TE kernel).
+    n = tw.shape[0]
+    if n < lag + 2:
         return np.nan
-    xs = tw[idx[:-lag]]  # t_s
-    ys = sw[idx[:-lag]]  # s_s
-    cs = cw[idx[:-lag]]  # c_s
-    xn = tw[idx[lag:]]  # t_{s+lag}
+    t_t = tw[:-lag]  # t_s
+    s_t = sw[:-lag]  # s_s
+    c_t = cw[:-lag]  # c_s
+    t_next = tw[lag:]  # t_{s+lag}
+    mask = np.isfinite(t_t) & np.isfinite(s_t) & np.isfinite(c_t) & np.isfinite(t_next)
+    if int(mask.sum()) < max(lag + 2, min_transitions):
+        return np.nan
+    xs = t_t[mask]
+    ys = s_t[mask]
+    cs = c_t[mask]
+    xn = t_next[mask]
     if np.unique(xs).size < 2 or np.unique(ys).size < 2 or np.unique(cs).size < 2:
         return np.nan
     n = xs.shape[0]
@@ -173,10 +181,20 @@ class TsConditionalTransferEntropy(SeriesOperator):
             raise ValueError("ts_conditional_transfer_entropy requires lag >= 1")
         if w < lg + 2:
             raise ValueError("ts_conditional_transfer_entropy requires window >= lag + 2")
+        # Default floor scaled to the 4-D joint cell count, but *feasible* for
+        # the default window=60: the old ``max(80, 6*bins^3)`` made the default
+        # call (window=60, bins=3) require 162 transitions it could never have,
+        # silently producing an all-NaN column.  Fail closed loudly instead.
         if min_transitions is None:
-            mt = max(80, 6 * nb * nb * nb)
+            mt = max(30, 2 * nb * nb * nb)
         else:
             mt = max(lg + 2, int(min_transitions))
+        if w - lg < mt:
+            raise ValueError(
+                "ts_conditional_transfer_entropy window-lag "
+                f"({w - lg}) < min_transitions ({mt}) with bins={nb}; raise window "
+                "or lower bins (default window=60 supports bins<=3)"
+            )
         return frame_like(
             target,
             _tri_rolling(
@@ -190,10 +208,21 @@ class TsConditionalTransferEntropy(SeriesOperator):
 
 
 def _haar_detail(v: np.ndarray, level: int, band: int) -> np.ndarray:
-    """Causal Haar MODWT detail coefficients at the requested band."""
+    """Causal Haar MODWT detail coefficients at the requested band.
+
+    Level ``j`` uses lag ``2^(j-1)`` (the Haar filter dilated by the level):
+    ``W_j,t = (V_{j-1,t} - V_{j-1,t-2^(j-1)}) / sqrt(2)`` with a causal boundary
+    (the first ``2^(j-1)`` rows see the zero-padded past).  The earlier code
+    applied the lag-1 filter at *every* level, which is not a multi-resolution
+    decomposition at all — band k was just the same lag-1 difference iterated k
+    times.
+    """
     a = np.asarray(v, dtype=float)
     for j in range(1, level + 1):
-        prev = np.concatenate([[0.0], a[:-1]])  # causal boundary (no lookahead)
+        dil = 2 ** (j - 1)
+        if a.size < dil + 1:
+            return np.full(a.shape, np.nan, dtype=float)
+        prev = np.concatenate([np.zeros(dil), a[:-dil]])  # causal boundary (no lookahead)
         detail = (prev - a) / np.sqrt(2.0)
         smooth = (prev + a) / np.sqrt(2.0)
         a = smooth

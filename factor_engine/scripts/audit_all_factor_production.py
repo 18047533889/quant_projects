@@ -612,6 +612,23 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_first_passage_conditional_time", "side"): "upper",
     ("ts_transfer_entropy_peak_lag", "bins"): 3,
     ("ts_transfer_entropy_peak_strength", "bins"): 3,
+    # P1-011: Markov/KM param grid is bounded to bins ∈ {3,5,8}, lag ∈ {1,2,3}.
+    ("ts_markov_committor", "bins"): 3,
+    ("ts_markov_mean_first_passage_time", "bins"): 3,
+    ("ts_markov_spectral_gap", "bins"): 3,
+    ("ts_markov_stationary_surprisal", "bins"): 3,
+    # 2026-08 market-correctness round: new keyword params + bigger TE window so
+    # the audit fixture satisfies the min-transitions guard at bins=3.
+    ("event_historical_response_mean", "require_full_horizon"): True,
+    ("event_historical_response_sign_balance", "require_full_horizon"): True,
+    ("group_distribution_js_divergence", "exclude_group_from_reference"): True,
+    ("ts_markov_mean_first_passage_time", "target"): "upper",
+    ("ts_transfer_entropy", "window"): 60,
+    ("ts_transfer_entropy_peak_lag", "window"): 60,
+    ("ts_transfer_entropy_peak_strength", "window"): 60,
+    ("ts_km_equilibrium_distance", "bins"): 5,
+    ("ts_km_diffusion_gradient", "bins"): 5,
+    ("ts_km_quasipotential_depth", "bins"): 5,
     # 2026-08 concurrent SSA / structural-level / rough-vol packs.
     ("ts_ssa_reconstruction_residual", "n_components"): 1,
     ("ts_structural_level_density", "prominence"): 0.1,

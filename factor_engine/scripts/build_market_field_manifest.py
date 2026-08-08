@@ -52,7 +52,7 @@ def build_manifest() -> dict[str, Any]:
                 "knowledge_time": b.knowledge_time,
                 "effective_time": b.effective_time,
                 "available_at": b.available_at,
-                "required_filters": list(b.required_filters),
+                "required_filters": [f.to_dict() for f in b.required_filters],
                 "source_certified": b.source_certified,
                 "providers": [b.provider_id],
                 "notes": b.notes,

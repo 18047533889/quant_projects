@@ -1351,7 +1351,7 @@ _DYNAMICS_PACK_POLICIES = {
     # Historical event-response learning.
     "event_historical_response_mean": {"scope": "ts", "pit_safe": True, "min_periods": 5},
     "event_historical_response_sign_balance": {"scope": "ts", "pit_safe": True, "min_periods": 5},
-    "event_hawkes_branching_ratio": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
+    "event_hawkes_branching_ratio_proxy": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 5},
     # Multivariate distribution break (shift windows end at t-1).
     "ts_joint_energy_shift": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 10},
     "ts_energy_break_score": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 10},
@@ -1470,6 +1470,8 @@ _GEMINI_PACK_POLICIES: dict[str, dict[str, Any]] = {
     "ts_dominant_cycle_period": {"scope": "ts", "pit_safe": True, "min_periods": 16},
     # relation graph (group adjacency).
     "relation_pagerank_centrality": {"scope": "group", "pit_safe": True, "min_periods": 2},
+    # P0-008: honest rename — group complete-graph signal share (research-only).
+    "group_signal_attraction_share": {"scope": "group", "pit_safe": True, "min_periods": 2},
     # intraday activity-duration curvature (minute source → daily scalar).
     "intraday_activity_duration_curvature": {
         "scope": "ts", "pit_safe": True, "min_periods": 3, "session_aware": True,
@@ -1477,7 +1479,7 @@ _GEMINI_PACK_POLICIES: dict[str, dict[str, Any]] = {
     # research-surface transforms.
     "ts_wavelet_lowpass_reconstruct": {"scope": "ts", "pit_safe": True, "min_periods": 8},
     "ts_signature_mahalanobis_anomaly": {"scope": "ts", "pit_safe": True, "min_periods": 5},
-    "ts_betti_crocker_bifurcation_score": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    "ts_persistence_birth_dispersion": {"scope": "ts", "pit_safe": True, "min_periods": 8},
 }
 _EXPLICIT_POLICIES.update(_GEMINI_PACK_POLICIES)
 

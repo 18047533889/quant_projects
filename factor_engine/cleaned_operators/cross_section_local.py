@@ -57,6 +57,24 @@ def _metadata(
     )
 
 
+def _avg_tie_ranks(vals: np.ndarray) -> np.ndarray:
+    """Average tie ranks of ``vals`` (0-based).  A double stable argsort gives
+    tied values *distinct* ranks in column-arrival order, silently making the
+    rank transform depend on the stock-column ordering (P1-42/45)."""
+    order = np.argsort(vals, kind="mergesort")
+    s = vals[order]
+    ranks = np.empty(len(vals), dtype=float)
+    n = len(vals)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and s[j + 1] == s[i]:
+            j += 1
+        ranks[order[i : j + 1]] = 0.5 * (i + j)
+        i = j + 1
+    return ranks
+
+
 def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
     """Date-t feature matrix (n,d) -> rank-standardised U + validity mask."""
     n, d = feats[t].shape
@@ -67,7 +85,7 @@ def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
         m = int(fin.sum())
         if m < 2:
             continue
-        ranks = np.argsort(np.argsort(col[fin], kind="stable"), kind="stable").astype(float)
+        ranks = _avg_tie_ranks(col[fin])
         U[fin, j] = (ranks + 0.5) / m
     valid = np.all(np.isfinite(U), axis=1)
     return U, valid
@@ -146,7 +164,7 @@ def _local_gradient_series(target: np.ndarray, feats: np.ndarray, k: int, ridge:
     return out
 
 
-def _tangent_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.ndarray:
+def _tangent_series(feats: np.ndarray, k: int) -> np.ndarray:
     rows, n, d = feats.shape
     out = np.full((rows, n), np.nan, dtype=float)
     for t in range(rows):
@@ -252,18 +270,18 @@ class CsKnnTangentResidual(SeriesOperator):
     metadata = _metadata(
         "cs_knn_tangent_residual",
         "KNN 局部切平面距离（off-manifold 程度）。",
-        ["target", "f1", "f2", "f3", "k"],
+        ["f1", "f2", "f3", "k"],
         unit="distance",
         cost=8,
     )
 
     def _calculate_series(
-        self, target: pd.DataFrame, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 10, **_: Any
+        self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 10, **_: Any
     ) -> pd.DataFrame:
         kk = int(k)
         if kk < 4:
             raise ValueError("cs_knn_tangent_residual requires k >= 4")
-        return frame_like(target, _tangent_series(target.to_numpy(dtype=float), _stack_feats(f1, f2, f3), kk))
+        return frame_like(f1, _tangent_series(_stack_feats(f1, f2, f3), kk))
 
 
 # --------------------------------------------------------------------------
@@ -277,7 +295,7 @@ def _rank_transform(values: np.ndarray) -> np.ndarray:
         m = int(fin.sum())
         if m < 2:
             continue
-        ranks = np.argsort(np.argsort(col[fin], kind="stable"), kind="stable").astype(float)
+        ranks = _avg_tie_ranks(col[fin])
         out[fin, c] = (ranks + 0.5) / m
     return out
 
@@ -326,7 +344,14 @@ def _register_copula_op(canonical: str, description: str, entropy: bool) -> Seri
             _copula_cross_series(a.to_numpy(dtype=float), b.to_numpy(dtype=float), g, entropy),
         )
 
-    metadata = _metadata(canonical, description, ["a", "b", "grid"], unit="nats", cost=6)
+    metadata = _metadata(
+        canonical, description, ["a", "b", "grid"], unit="nats", cost=6,
+        # P1-44: the copula MI/entropy is a per-day *market-wide scalar* broadcast
+        # to every stock — it is a GLOBAL_STATE / regime feature for ``where`` /
+        # ``trade_when`` / state conditioning, NOT a per-stock Numeric Alpha.  The
+        # tag routes it out of the per-stock alpha pool.
+        extra_tags=("global_state",),
+    )
     return register_operator(
         name=canonical,
         category="cross_sectional",

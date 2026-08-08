@@ -279,7 +279,7 @@ class TsFeatureSubspaceRotation(SeriesOperator):
     metadata = _metadata(
         "ts_feature_subspace_rotation",
         "recent vs prior 特征主导方向夹角（regime rotation）。",
-        ["f1", "f2", "f3", "window", "recent_window", "prior_window"],
+        ["f1", "f2", "f3", "recent_window", "prior_window"],
         domain="price_volume",
         unit="angle",
         cost=6,
@@ -290,18 +290,18 @@ class TsFeatureSubspaceRotation(SeriesOperator):
         f1: pd.DataFrame,
         f2: pd.DataFrame,
         f3: pd.DataFrame,
-        window: int = 120,
         recent_window: int = 30,
         prior_window: int = 90,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
+        # P1-32: ``window`` was redundant — the kernel only ever uses the last
+        # ``recent + prior`` rows, so any window >= recent+prior produced the
+        # exact same output and only inflated the search surface.
         r = int(recent_window)
         p = int(prior_window)
         if r < 5 or p < 5:
             raise ValueError("ts_feature_subspace_rotation requires recent/prior >= 5")
-        if w < r + p:
-            raise ValueError("ts_feature_subspace_rotation requires window >= recent + prior")
+        w = r + p
         return frame_like(
             f1,
             _tri_rolling(
@@ -332,7 +332,7 @@ class TsBetaBreakScore(SeriesOperator):
     metadata = _metadata(
         "ts_beta_break_score",
         "recent vs prior 滚动 beta 变化 (Δbeta)/(1+|beta_prior|)。",
-        ["y", "x", "window", "recent_window", "prior_window"],
+        ["y", "x", "recent_window", "prior_window"],
         domain="price_volume",
         unit="ratio",
         cost=5,
@@ -342,19 +342,17 @@ class TsBetaBreakScore(SeriesOperator):
         self,
         y: pd.DataFrame,
         x: pd.DataFrame,
-        window: int = 120,
         recent_window: int = 30,
         prior_window: int = 90,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
+        # P1-33: ``window`` was redundant — the kernel only uses the last
+        # ``recent + prior`` rows, so it is dropped from the search surface.
         r = int(recent_window)
         p = int(prior_window)
         if r < 5 or p < 5:
             raise ValueError("ts_beta_break_score requires recent/prior >= 5")
-        if w < r + p:
-            raise ValueError("ts_beta_break_score requires window >= recent + prior")
-
+        w = r + p
         yv = y.to_numpy(dtype=float)
         xv = x.to_numpy(dtype=float)
         rows, cols = yv.shape

@@ -16,16 +16,14 @@ from typing import Any
 
 from .units_v2 import (
     BOOLEAN,
-    CNY,
-    CNY_PER_SHARE,
     DATE,
     DIMENSIONLESS,
     IDENTIFIER,
+    LOCAL_MONEY,
+    LOCAL_PRICE_PER_SHARE,
     RATIO,
     SHARES,
     TEXT,
-    USD,
-    USD_PER_SHARE,
     UnitSpec,
 )
 
@@ -126,45 +124,45 @@ _c("return_decimal", "price_volume", "return", RATIO,
   cross_market_comparable=True, aliases=("ret", "return", "returns"),
   description="Daily return as a decimal (0.02 == 2%). A: Return/10000; US: Ret identity.")
 
-_c("raw_open", "price_volume", "price", CNY_PER_SHARE, price_basis=PRICE_BASIS_RAW,
+_c("raw_open", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
   aliases=("open",), cross_market_comparable=False)
-_c("raw_high", "price_volume", "price", CNY_PER_SHARE, price_basis=PRICE_BASIS_RAW,
+_c("raw_high", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
   aliases=("high",), cross_market_comparable=False)
-_c("raw_low", "price_volume", "price", CNY_PER_SHARE, price_basis=PRICE_BASIS_RAW,
+_c("raw_low", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
   aliases=("low",), cross_market_comparable=False)
-_c("raw_close", "price_volume", "price", CNY_PER_SHARE, price_basis=PRICE_BASIS_RAW,
+_c("raw_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
   aliases=("close",), cross_market_comparable=False)
-_c("raw_pre_close", "price_volume", "price", CNY_PER_SHARE, price_basis=PRICE_BASIS_RAW,
+_c("raw_pre_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
   aliases=("pre_close", "prev_close"), cross_market_comparable=False)
-_c("raw_vwap", "price_volume", "price", CNY_PER_SHARE, price_basis=PRICE_BASIS_RAW,
+_c("raw_vwap", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
   aliases=("vwap",), cross_market_comparable=False)
 
-_c("continuous_open", "price_volume", "price", CNY_PER_SHARE,
+_c("continuous_open", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   price_basis=PRICE_BASIS_CONTINUOUS, cross_market_comparable=False,
   description="Backward-adjusted open (Close*Factor family). A: Open*Factor; US: Open*AdjFactor.")
-_c("continuous_high", "price_volume", "price", CNY_PER_SHARE,
+_c("continuous_high", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   price_basis=PRICE_BASIS_CONTINUOUS, cross_market_comparable=False)
-_c("continuous_low", "price_volume", "price", CNY_PER_SHARE,
+_c("continuous_low", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   price_basis=PRICE_BASIS_CONTINUOUS, cross_market_comparable=False)
-_c("continuous_close", "price_volume", "price", CNY_PER_SHARE,
+_c("continuous_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   price_basis=PRICE_BASIS_CONTINUOUS, cross_market_comparable=False,
   description="Backward-adjusted close. A: Close*Factor; US: Close*AdjFactor.")
-_c("continuous_vwap", "price_volume", "price", CNY_PER_SHARE,
+_c("continuous_vwap", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   price_basis=PRICE_BASIS_CONTINUOUS, cross_market_comparable=False)
 
 _c("raw_volume_shares", "price_volume", "volume", SHARES,
   aliases=("volume",), cross_market_comparable=False,
   description="Trade volume in shares. NEVER divided by any adjustment factor.")
 
-_c("amount_local", "price_volume", "amount", CNY, aliases=("amount", "turnover_value"),
+_c("amount_local", "price_volume", "amount", LOCAL_MONEY, aliases=("amount", "turnover_value"),
   market_local_only=True, cross_market_comparable=False,
   description="Turnover amount in local currency (CNY/USD). NOT cross-market comparable as a raw number.")
 
 # --- capital / valuation --------------------------------------------------
-_c("market_cap_local", "valuation", "amount", CNY, market_local_only=True,
+_c("market_cap_local", "valuation", "amount", LOCAL_MONEY, market_local_only=True,
   aliases=("market_cap", "mkt_cap"),
   description="Market cap in local currency. A: MarketCap (exact). US: Close*weighted_shares (derived, ~42% coverage).")
-_c("free_float_market_cap_local", "valuation", "amount", CNY, market_local_only=True,
+_c("free_float_market_cap_local", "valuation", "amount", LOCAL_MONEY, market_local_only=True,
   aliases=("free_market_cap", "float_market_cap"))
 _c("total_shares", "capital", "count", SHARES, aliases=("total_capital", "total_shares"))
 _c("free_float_shares", "capital", "count", SHARES, aliases=("free_cap", "free_float_shares"))
@@ -172,10 +170,10 @@ _c("turnover_ratio_decimal", "valuation", "ratio", RATIO, aliases=("turnover_rat
   cross_market_comparable=True, description="Turnover as decimal. A: TurnoverRatio/100.")
 
 # --- price limits (A-share mechanism) -------------------------------------
-_c("upper_price_limit", "price_volume", "price", CNY_PER_SHARE,
+_c("upper_price_limit", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   price_basis=PRICE_BASIS_RAW_OFFICIAL_LIMIT, market_local_only=True,
   aliases=("high_limit",), description="Official daily upper limit price (raw). A-share only.")
-_c("lower_price_limit", "price_volume", "price", CNY_PER_SHARE,
+_c("lower_price_limit", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   price_basis=PRICE_BASIS_RAW_OFFICIAL_LIMIT, market_local_only=True,
   aliases=("low_limit",), description="Official daily lower limit price (raw). A-share only.")
 
@@ -193,16 +191,16 @@ _c("dividend_yield_decimal", "fundamental", "ratio", RATIO,
   cross_market_comparable=True, description="Dividend yield as decimal. A: DividendRatio/100; US: dividend_yield identity.")
 
 # --- financial statements (flow / stock amounts, local currency) ----------
-_c("operating_revenue", "fundamental", "amount", CNY, market_local_only=True,
+_c("operating_revenue", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
   aliases=("revenue",), description="Revenue for the period in local currency.")
-_c("net_profit", "fundamental", "amount", CNY, market_local_only=True,
+_c("net_profit", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
   aliases=("net_income",))
-_c("operating_cash_flow", "fundamental", "amount", CNY, market_local_only=True, aliases=("ocf",))
-_c("total_assets", "fundamental", "amount", CNY, market_local_only=True)
-_c("total_liabilities", "fundamental", "amount", CNY, market_local_only=True)
-_c("equity", "fundamental", "amount", CNY, market_local_only=True,
+_c("operating_cash_flow", "fundamental", "amount", LOCAL_MONEY, market_local_only=True, aliases=("ocf",))
+_c("total_assets", "fundamental", "amount", LOCAL_MONEY, market_local_only=True)
+_c("total_liabilities", "fundamental", "amount", LOCAL_MONEY, market_local_only=True)
+_c("equity", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
   aliases=("shareholders_equity", "total_equity"))
-_c("earnings_per_share", "fundamental", "price", CNY_PER_SHARE, aliases=("eps",))
+_c("earnings_per_share", "fundamental", "price", LOCAL_PRICE_PER_SHARE, aliases=("eps",))
 
 # --- classification / status ----------------------------------------------
 _c("industry_group", "classification", "group", IDENTIFIER, role=ROLE_GROUP_KEY,
@@ -214,7 +212,7 @@ _c("index_weight", "index", "ratio", RATIO, role=ROLE_GROUP_KEY,
   market_local_only=True, description="Index constituent weight as decimal. A: Weight/100; US: no weight.")
 
 # --- dividends / corporate actions ----------------------------------------
-_c("cash_dividend_per_share", "corporate_action", "price", CNY_PER_SHARE,
+_c("cash_dividend_per_share", "corporate_action", "price", LOCAL_PRICE_PER_SHARE,
   market_local_only=True, description="Per-share cash dividend in local currency.")
 _c("dividend_ex_date", "corporate_action", "date", DATE, role=ROLE_TIME)
 

@@ -173,6 +173,10 @@ def _state_dynamics_series(
     }
 
 
+_KM_BINS_GRID = (3, 5, 8)
+_KM_LAG_GRID = (1, 2, 3)
+
+
 def _run_kernel(
     x: pd.DataFrame, window: int, bins: int, lag: int, min_count: int
 ) -> dict[str, np.ndarray]:
@@ -182,6 +186,12 @@ def _run_kernel(
     mc = max(1, int(min_count))
     if w <= lg:
         raise ValueError("window must exceed lag")
+    # P1-011: the Markov/KM parameter grid is bounded (anti parameter-explosion in
+    # the search grammar): bins ∈ {3,5,8}, lag ∈ {1,2,3}.
+    if int(bins) not in _KM_BINS_GRID:
+        raise ValueError(f"bins must be in {_KM_BINS_GRID}, got {bins!r}")
+    if int(lag) not in _KM_LAG_GRID:
+        raise ValueError(f"lag must be in {_KM_LAG_GRID}, got {lag!r}")
     cols = x.shape[1]
     keys = ["state", "P", "counts", "pi", "D1", "D2", "centers", "total_trans", "edges"]
     gathered: dict[str, list[np.ndarray]] = {k: [] for k in keys}

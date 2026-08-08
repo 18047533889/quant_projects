@@ -31,6 +31,14 @@ _VALUATION_FIELD_ALIASES: dict[str, str] = {
     "market_cap": "valuation.market_cap",
     "circulating_market_cap": "valuation.circulating_market_cap",
 }
+# US valuation uses the lowercase X0 physical names; there is NO turnover /
+# circulating concept in us_stock_valuation_daily (those are A-share fields).
+_US_VALUATION_FIELD_ALIASES: dict[str, str] = {
+    "pe": "valuation.price_to_earnings",
+    "pb": "valuation.price_to_book",
+    "ps": "valuation.price_to_sales",
+    "dividend_yield": "valuation.dividend_yield",
+}
 
 
 def validate_production_dsl(formula: str) -> tuple[bool, str]:
@@ -403,7 +411,18 @@ def default_us_pv_valuation_data_source_config(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> dict[str, Any]:
-    """美股日线 + 估值复合数据源（锚点日线，估值 asof 对齐）。"""
+    """美股日线 + 估值复合数据源（估值仅为 current/research snapshot）。
+
+    P0-013: the previous config used A-share physical field names (PeRatio /
+    PbRatio / TurnoverRatio / MarketCap / CirculatingMarketCap) against
+    ``us_stock_valuation_daily``, which stores the *lowercase* X0 snapshot names
+    (``price_to_earnings`` / ``price_to_book`` / ``price_to_sales`` /
+    ``market_cap`` / ``dividend_yield``) and has no turnover / circulating field.
+    US Valuation/Indicator is an X0 sparse snapshot (~49 files, current-only) —
+    it is marked ``snapshot_only`` and MUST NOT be asof-ffilled into a historical
+    daily panel for default alpha mining.  The historical US market cap comes from
+    ``Close * weighted_shares_outstanding`` (TickerSharesSnapshot), not this X0.
+    """
     pv = default_us_pv_data_source_config(
         start_date=start_date,
         end_date=end_date,
@@ -412,12 +431,14 @@ def default_us_pv_valuation_data_source_config(
         "type": "data_access",
         "dataset": "us_stock_valuation_daily",
         "fields": {
-            "pe": "PeRatio",
-            "pb": "PbRatio",
-            "turnover_ratio": "TurnoverRatio",
-            "market_cap": "MarketCap",
-            "circulating_market_cap": "CirculatingMarketCap",
+            "pe": "price_to_earnings",
+            "pb": "price_to_book",
+            "ps": "price_to_sales",
+            "dividend_yield": "dividend_yield",
         },
+        "snapshot_only": True,
+        "usage": "research_snapshot",
+        "notes": "X0 sparse current-snapshot valuation; do NOT asof-ffill into history",
     }
     if start_date is not None:
         valuation["start_date"] = start_date
@@ -433,9 +454,11 @@ def default_us_pv_valuation_data_source_config(
             "valuation": valuation,
         },
         "joins": {
-            "valuation": "asof_backward",
+            # current-only join: valuation is a snapshot, never backfilled over
+            # the historical panel (asof_backward would invent history).
+            "valuation": "current_only",
         },
-        "aliases": dict(_VALUATION_FIELD_ALIASES),
+        "aliases": dict(_US_VALUATION_FIELD_ALIASES),
     }
 
 

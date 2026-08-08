@@ -254,9 +254,12 @@ def test_modwt_band_corr_identical_is_one():
 
 
 def test_conditional_transfer_entropy_constant_fail_closed():
-    x = _col([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+    # window=60 keeps the bins=3 parameter combination feasible (window-lag 59 >=
+    # the floor of 54); a constant input must still fail closed to NaN (with < 2
+    # distinct states the quantile bins would invent information).
+    x = _col([1.0] * 60)
     out = OperatorRegistry.get("ts_conditional_transfer_entropy", "pandas_numpy").calculate(
-        x, x, x, window=8, bins=3, lag=1
+        x, x, x, window=60, bins=3, lag=1
     )
     assert np.isnan(out.iloc[-1, 0])
 
@@ -265,13 +268,20 @@ def test_conditional_transfer_entropy_constant_fail_closed():
 # Spread estimators
 # ---------------------------------------------------------------------------
 def test_corwin_schultz_two_day_golden():
-    high = _col([10.0, 11.0])
-    low = _col([9.0, 9.5])
+    # Pure-spread construction (the distinguishing golden for the beta/gamma
+    # fix): a constant true price P with a proportional spread S means every
+    # observed high = P(1+S/2) and low = P(1-S/2) on both days.  The CORRECT
+    # Corwin-Schultz estimator (beta = sum of single-day ranges^2, gamma =
+    # aggregate two-day range^2) recovers S ~ 0.05; the reversed-formula
+    # implementation returns 0 here (alpha goes negative), which is how the
+    # beta/gamma swap was caught.
+    P, s = 100.0, 0.025  # half-spread s = S/2, S = 0.05
+    high = _col([P * (1.0 + s), P * (1.0 + s)])
+    low = _col([P * (1.0 - s), P * (1.0 - s)])
     out = OperatorRegistry.get("ohlc_corwin_schultz_spread", "pandas_numpy").calculate(
         high, low, smooth_window=1
     )
-    # beta=ln(11/9)^2, gamma=ln(10/9)^2+ln(11/9.5)^2 -> S ~ 0.0487.
-    assert out.iloc[-1, 0] == pytest.approx(0.0487, rel=1e-2)
+    assert out.iloc[-1, 0] == pytest.approx(0.05, rel=1e-2)
 
 
 def test_roll_spread_geometric_zero():

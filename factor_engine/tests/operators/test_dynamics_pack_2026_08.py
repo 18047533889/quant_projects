@@ -33,7 +33,7 @@ DAILY_OPS = {
 RESEARCH_OPS = {
     "ts_active_information_storage", "ts_multiscale_permutation_entropy_slope",
     "ts_quantile_regression_beta", "ts_copula_central_asymmetry",
-    "event_hawkes_branching_ratio", "ts_markov_entropy_production",
+    "event_hawkes_branching_ratio_proxy", "ts_markov_entropy_production",
     "ts_local_lyapunov_exponent", "report_revision_magnitude",
 }
 POLARS_OPS = DAILY_OPS - {

@@ -228,14 +228,30 @@ def _diagram_w1(pairs_a: list[tuple[float, float]], pairs_b: list[tuple[float, f
         return float(np.mean([_diag_dist(p) for p in pairs_a]))
     from scipy.optimize import linear_sum_assignment
 
+    # Standard extended-diagram construction.  A point may match a point of the
+    # other diagram (L-infinity cost) or the diagonal (cost (death-birth)/2).
+    # Rows  = m1 real D1 points + m2 D1-diagonal copies.
+    # Cols  = m2 real D2 points + m1 D2-diagonal copies.
+    #   real A_i -> real B_j        : d_inf(A_i, B_j)
+    #   real A_i -> any B-diagonal  : diag(A_i)
+    #   any A-diagonal -> real B_j  : diag(B_j)
+    #   A-diagonal -> B-diagonal    : 0   (leftover)
+    # All other cells are illegal and carry a huge cost.  The earlier code left
+    # the unassigned cells at 0 (B1 -> B2's diagonal slot plus B2 -> A1's slot
+    # resolved the matching at cost 0), and the "each point owns one slot"
+    # variant that replaced it double-counted diagonal costs even on identical
+    # diagrams.
     n = m1 + m2
-    cost = np.zeros((n, n), dtype=float)
+    BIG = 1e12
+    cost = np.full((n, n), BIG, dtype=float)
     for i, p in enumerate(pairs_a):
         for j, q in enumerate(pairs_b):
             cost[i, j] = max(abs(p[0] - q[0]), abs(p[1] - q[1]))
-        cost[i, m2 + i] = _diag_dist(p)  # D1 point -> diagonal.
-    for j, q in enumerate(pairs_b):
-        cost[m1 + j, j] = _diag_dist(q)  # D2 point -> diagonal.
+    for i in range(m1):
+        cost[i, m2:] = _diag_dist(pairs_a[i])
+    for j in range(m2):
+        cost[m1:, j] = _diag_dist(pairs_b[j])
+    cost[m1:, m2:] = 0.0
     rows, cols = linear_sum_assignment(cost)
     return float(cost[rows, cols].sum()) / max(m1, m2)
 

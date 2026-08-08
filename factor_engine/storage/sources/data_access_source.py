@@ -517,25 +517,39 @@ class DataAccessSource(DataSource):
         silently caching the raw vendor value (which would contaminate every
         downstream operator with a 10000× or 100× error).
         """
-        catalog_covered: set[str] = set()
+        # catalog-covered field -> SemanticField (for its scale), so the LAZY scan
+        # path can apply the same normalization DataAccess applies on the EAGER path.
+        catalog_covered: dict[str, Any] = {}
         try:
             resolved = _get_store().resolve_fields(list(names), dataset=self.dataset)
             for f in resolved:
                 if getattr(f, "is_scale_applicable", False):
-                    catalog_covered.add(f.logical_name)
+                    catalog_covered[f.logical_name] = f
                     for alias in getattr(f, "aliases", ()) or ():
-                        catalog_covered.add(alias)
+                        catalog_covered[alias] = f
         except Exception:
             # 解析失败 → 不跳过任何字段（回退全 FE registry 归一化，旧行为）
-            catalog_covered = set()
+            catalog_covered = {}
 
         normalized: set[str] = set()
         try:
             from fields import FIELD_REGISTRY
 
             for name in names:
-                if name in catalog_covered:
-                    continue  # 已由 DataAccess 归一化
+                f = catalog_covered.get(name)
+                if f is not None:
+                    # Eager path: ``store.read(normalize_units=True)`` already applied
+                    # the catalog scale, so nothing to do.  Lazy scan path
+                    # (``store.scan`` / ``scan_polars``) does NOT apply the output-layer
+                    # unit normalization, so apply the catalog scale here — otherwise a
+                    # catalog-covered field (e.g. A-share Return/10000) stays in raw
+                    # units on the lazy path while the eager path is decimal (parity bug).
+                    if self._lazy_scan:
+                        scale = getattr(f, "scale", None)
+                        if scale is not None and float(scale) != 1.0:
+                            fetched[name] = fetched[name] * float(scale)
+                            normalized.add(name)
+                    continue
                 spec = FIELD_REGISTRY.get(name)
                 if spec is None or spec.dataset != self.dataset or name not in fetched:
                     continue

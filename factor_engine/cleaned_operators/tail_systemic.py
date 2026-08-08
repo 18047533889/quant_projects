@@ -89,10 +89,20 @@ def _tail_centrality_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, si
     rows, cols = xv.shape
     E = _extreme_indicator_panel(xv, w, q, side)
     by_day = _group_index_by_day(gv)
-    acc = np.zeros(cols, dtype=float)
-    cnt = np.zeros(cols, dtype=float)
     out = np.full((rows, cols), np.nan, dtype=float)
+    # Rolling-window centrality: per-day contributions live in a ring buffer and
+    # leave the running sums once they age out of ``[r-w+1, r]``.  The earlier
+    # implementation accumulated from the sample start (an *expanding* mean)
+    # even though ``window`` was advertised as a rolling window.
+    day_acc = np.zeros((rows, cols), dtype=float)
+    day_cnt = np.zeros((rows, cols), dtype=float)
+    run_acc = np.zeros(cols, dtype=float)
+    run_cnt = np.zeros(cols, dtype=float)
     for r in range(rows):
+        if r - w >= 0:
+            drop = r - w
+            run_acc -= day_acc[drop]
+            run_cnt -= day_cnt[drop]
         members = by_day[r]
         for key, idx in members.items():
             if idx.size < 2:
@@ -111,11 +121,13 @@ def _tail_centrality_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, si
                     continue
                 frac = float(others.mean())
                 if np.isfinite(frac):
-                    acc[i] += frac
-                    cnt[i] += 1.0
+                    day_acc[r, i] += frac
+                    day_cnt[r, i] += 1.0
+        run_acc += day_acc[r]
+        run_cnt += day_cnt[r]
         for i in range(cols):
-            if cnt[i] > 0:
-                out[r, i] = acc[i] / cnt[i]
+            if run_cnt[i] > 0:
+                out[r, i] = run_acc[i] / run_cnt[i]
     return out
 
 
@@ -177,8 +189,12 @@ def _tail_lead_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: st
         base_cnt = np.zeros(cols, dtype=float)
         for d in range(max(0, r - w + 1), r + 1):
             f = d + int(lag)
-            if f >= rows:
-                continue  # PIT: only completed forward observations
+            # PIT: only *completed* forward observations.  ``f >= rows`` guards
+            # the data edge; ``f > r`` guards the current row — without it the
+            # output at row ``r`` reads ``E[f]`` for f in (r, rows), a genuine
+            # future function.
+            if f >= rows or f > r:
+                continue
             members = by_day[d]
             if not members:
                 continue
@@ -191,19 +207,19 @@ def _tail_lead_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: st
                     Ei = E_cur[pos]
                     if not np.isfinite(Ei):
                         continue
-                    base[i] += Ei
-                    base_cnt[i] += 1.0
-                    if Ei <= 0.0:
-                        continue
-                    others = np.concatenate([E_cur[:pos], E_cur[pos + 1:]])
+                    others = np.array([Ef[j] for j in idx if j != i], dtype=float)
                     others = others[np.isfinite(others)]
                     if others.size == 0:
                         continue
-                    peers_fut = np.array([Ef[j] for j in idx if j != i], dtype=float)
-                    peers_fut = peers_fut[np.isfinite(peers_fut)]
-                    if peers_fut.size == 0:
+                    # baseline = unconditional peer-extreme probability P(E_peer, d+lag)
+                    # (the natural baseline for "peer tail lead excess probability");
+                    # the earlier code subtracted P(self extreme), which conflated
+                    # self extreme-ness with peer lead.
+                    base[i] += float(others.mean())
+                    base_cnt[i] += 1.0
+                    if Ei <= 0.0:
                         continue
-                    acc[i] += float(peers_fut.mean())
+                    acc[i] += float(others.mean())
                     cnt[i] += 1.0
         for i in range(cols):
             if cnt[i] > 0 and base_cnt[i] > 0:

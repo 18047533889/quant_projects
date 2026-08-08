@@ -287,3 +287,57 @@ CI 通过：全量（新 market 测试 + 既有回归）
 - `tests/planner/test_sql_io.py` 3-4 项 —— 并发会话正修改 `backend/sql_pushdown/emitter.py`
   与 `backend/sql_tiers.py`，`ts_sharpe`/prefetch 相关断言随其进行中编辑波动（两次运行失败数
   从 4→3，证明是进行中状态）。
+
+## 11. 第三轮复审修复单执行状态（2026-08-08 已执行）
+
+第三方复审（1293 canonical / 12 P0 + P1/P2）全部按单修复：
+
+**P0（12 项全清）**：
+- P0-1 `FinancialPeriodAdapter.asof` 加 `by=` instrument 列，逐股分组 merge_asof，
+  **跨股票财报串线结构性杜绝**（pandas 2.3 by-asof 需时间列全局单调，改逐组拼接）。
+- P0-2 financial concept 的 binding dataset 改为真实报表库（A:
+  `ashare_stock_income/balance/cashflow`；US: `us_stock_income/balance/cashflow`）。
+- P0-3 derived provider 真正可执行：`continuous_close = Close*Factor`、US market_cap
+  = `weighted_shares*Close` 用 `_mul_two` 表达式（原为 identity 假乘法）。
+- P0-4 `_production_allowlist` 加载失败 → `ProductionCertificationUnavailable`（fail-closed，
+  不再静默返回空集绕过 gate）。
+- P0-5 `group_tail_lead_score` 补 `f <= r`（去掉未来函数）+ 前缀不变性测试。
+- P0-6 `cs_weighted_percentile_rank` unsort 修正（`unsorted[order]=rank_out`，手算 golden）。
+- P0-7 `ts_score_rank_weighted_mean` 权重对齐（`w*tv` 原序，手算 golden 24.2857）。
+- P0-8 Corwin-Schultz β/γ 换正（纯 spread 构造 golden 区分新旧公式）。
+- P0-9/10 TE/CTE：参数可行性验证（window-lag < min_transitions → raise），NaN-gap 不再
+  先压缩再 lag（原时间轴先 lag 后 mask）。
+- P0-11 lazy/eager 单位 parity：lazy scan 路径（store.scan 不做归一化）对 catalog 覆盖
+  字段补乘 scale。
+- P0-12 `_diagram_w1` Hungarian 改用 extended-diagram 标准构造（非零非法边），
+  `a=[(1,3)],b=[(1,3),(10,20)] → 2.5` golden。
+
+**P1 已修（本会话）**：P1-1 严格 `market_context`（去 ternary fallback）、P1-3
+`source_certified` 进 production gate、P1-4 `CERTIFIED_PARTIAL`（<FULL 覆盖率不再冒充
+CERTIFIED_DERIVED）、P1-5 provider chain（`bindings()` 有序链）、P1-6
+`LOCAL_MONEY/LOCAL_PRICE_PER_SHARE` + `resolve_unit`（概念层不再硬编码 CNY）、P1-7
+`build_search_grammar` 用 `explain_field_support`、P1-8 manifest `contract_origin`
+（explicit/typed/fallback 诚实记账）、P1-9 `INPUT_DEPENDENT`（generic 不再伪装
+CERTIFIED_NATIVE）、P1-14 结构化 `FilterRequirement`、P1-16 tz-aware
+`slot_for_timestamp`、P1-17 US 390-bar bar-start 边界（16:00→None）、P1-18
+`session_for_date`、P1-25/27 输出单位修正、P1-28/29 pagerank 改名
+`group_signal_attraction_share` + damping 移出搜索面、P1-32/33 feature_geometry 冗余
+window 移除、P1-42/45 平均 tie rank、P1-43 `cs_knn_tangent_residual` 移除无效 target、
+P1-44 copula global_state 标签、P2-1 wavelet 取最近 m 点、P2-3 标准 level-2 signature、
+P2-5 Haar MODWT dilation、P2-7 expectile_beta 单位 `unit(y)/unit(x)`。
+（P1-26/31、P0-005、P1-010 等由并发会话同步修复。）
+
+**已核验不在当前树 / 无需改**：`ts_feature_eigen_gap`/`ts_local_linear_intercept`/
+`cs_linear_locally_coherent_beta_trimmed`/`ts_directional_change_extent`/`update_clock_density`/
+`ts_event_interval_count|ordinal` 在当前 main 不存在对应算子（DC 族是 `ts_dc_*`、
+event_interval 族是 `event_interval_*`、update_clock 族是 `update_*`，其对应语义已正确）。
+
+**测试**：`tests/market/` 78 项通过（新增 financial asof 4 项 + golden 6 项 + session
+修复），operator 数学/治理/SQL-geometry 全绿。`docs/operator_market_capabilities.json`
+(1311 canonical, unknown=0, not_reviewed=0) + `docs/market_field_manifest.json` (41 concepts)
+已重生成，`scripts/audit_cross_market_semantics.py` CI OK。
+
+**第三轮非回归**（并发会话 in-flight）：`tests/operators/test_recipe_*` 19 项 ——
+`backend/recipe_evidence` 的 evidence hash 与当前 `emitter.py`/`operator_policy.py`
+(并发会话正在编辑) 不匹配 → `evidence_artifact_valid()=False`（即 P1-46 evidence 过期，
+由持有 emitter/evidence 层的会话收尾）；`test_data_access_normalizes...` 同前。

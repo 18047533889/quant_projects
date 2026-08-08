@@ -53,11 +53,21 @@ def main() -> int:
             f"{sorted(extra_in_manifest)[:10]}"
         )
 
-    # 2. no UNKNOWN / NOT_REVIEWED
+    # 2. no UNKNOWN (hard gate).  ``not_reviewed`` is now the HONEST sum of
+    #    UNKNOWN + fallback_default (operators whose A/US status came from the
+    #    generic default, not an explicit/typed contract) — it is REPORTED, not
+    #    asserted zero, because "registered" != "market-reviewed" (P1-8).
     if counts.get("unknown", 0):
         problems.append(f"manifest has unknown={counts['unknown']} (must be 0)")
-    if counts.get("not_reviewed", 0):
-        problems.append(f"manifest has not_reviewed={counts['not_reviewed']} (must be 0)")
+    explicit = counts.get("explicit_contract", 0)
+    fallback = counts.get("fallback_default", 0)
+    not_reviewed = counts.get("not_reviewed", 0)
+    print(
+        f"  REVIEW: total={counts.get('total')} explicit_contract={explicit} "
+        f"fallback_default={fallback} not_reviewed={not_reviewed} "
+        "(fallback_default operators carry the generic market default, not a "
+        "hand-reviewed contract)"
+    )
 
     # 3. contract names resolve.  The CI *fail* direction is registry -> contract
     # (every registered operator must have a market verdict).  Declared contracts

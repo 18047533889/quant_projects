@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Iterable
 
 from expr.base import Expr
 from expr.cleaned_call import CleanedCall
@@ -542,8 +542,122 @@ def validate_field_grain_contracts(ir: IRNode) -> list[str]:
     return errors
 
 
+class FundamentalZeroImputationError(ValueError):
+    """Forbidden zero/mean-imputation of undisclosed financial data (P1-003).
+
+    A financial NaN means "not disclosed / not applicable" — it is NOT zero
+    revenue / zero debt / zero cash-flow.  Auto-generated formulas must never
+    reach ``nan_to_num`` / ``fillna_const(0)`` / ``cs_fill_mean`` /
+    ``cs_fill_median`` on a fundamental-domain input unless an explicit research
+    override opts in.
+    """
+
+
+# Zero/mean imputation operators that are forbidden on fundamental-domain inputs.
+_FUNDAMENTAL_ZERO_IMPUTERS = frozenset(
+    {
+        "nan_to_num",
+        "cs_fill_mean",
+        "cs_fill_median",
+        "cs_impute_mean",
+        "cs_impute_median",
+        "group_impute_median",
+    }
+)
+
+
 class FieldCatalogMismatchError(ValueError):
     """A persisted FieldRef was built against a different field catalog."""
+
+
+def validate_fundamental_zero_imputation(ir: IRNode) -> list[str]:
+    """Return errors for zero/mean imputation applied to fundamental data.
+
+    ``ir.semantic_attrs["domain"]`` is propagated up from the leaf column, so an
+    operator whose first input is a fundamental statement column carries
+    ``domain == "fundamental"`` all the way to the root.
+    """
+    errors: list[str] = []
+
+    def walk(node: IRNode) -> None:
+        domain = (node.semantic_attrs or {}).get("domain")
+        if node.op in _FUNDAMENTAL_ZERO_IMPUTERS:
+            if domain == "fundamental":
+                errors.append(
+                    f"{node.op} on fundamental-domain input: an undisclosed financial "
+                    "figure is NOT zero/mean (P1-003); financial NaN = undisclosed, "
+                    "never impute in an auto-generated formula"
+                )
+        elif node.op == "fillna_const":
+            # the fill value is a positional literal input, not a kwarg attr
+            value = None
+            if len(node.inputs) > 1:
+                val_node = node.inputs[1]
+                if val_node.op == "literal":
+                    value = val_node.attrs.get("value")
+            if domain == "fundamental" and value == 0:
+                errors.append(
+                    "fillna_const(0) on fundamental-domain input: undisclosed financial "
+                    "data must not be read as zero (P1-003)"
+                )
+        for child in node.inputs:
+            walk(child)
+
+    walk(ir)
+    return errors
+
+
+# A-share Income/CashFlow statements are fiscal-YTD cumulative.  Single-period
+# comparisons (QoQ / YoY / growth / pct_change) applied directly to a cumulative
+# total are accounting errors: they must first be converted with
+# fin_quarter_from_cumulative (or fin_ttm_cumulative).
+_YTD_NEEDS_QUARTER_OPS = frozenset({"fin_quarter_from_cumulative", "fin_ttm_cumulative"})
+_FLOW_COMPARISON_OPS = frozenset(
+    {"fin_qoq", "fin_yoy", "fin_growth", "fin_pct_change", "fin_log_change"}
+)
+
+
+def _flow_grains(node: IRNode, converted: bool) -> Iterable[tuple[str, bool]]:
+    """Yield ("flow_ytd", already_converted) for fundamental leaf columns."""
+    if node.op in _YTD_NEEDS_QUARTER_OPS:
+        converted = True
+    if node.op == "column":
+        grain = (node.semantic_attrs or {}).get("grain") or ()
+        if "_".join(str(g) for g in grain) == "flow_ytd":
+            yield ("flow_ytd", converted)
+        return
+    for child in node.inputs:
+        yield from _flow_grains(child, converted)
+
+
+def validate_flow_semantics(ir: IRNode) -> list[str]:
+    """P1-004: a single-period flow comparison must not see a YTD cumulative total.
+
+    A-share ``operating_revenue``/``net_profit``/``operating_cash_flow`` are
+    fiscal-YTD cumulative; ``fin_qoq`` (or fin_yoy / growth / pct_change) on them
+    computes quarter-over-quarter on a running total.  The guard requires the
+    conversion op (``fin_quarter_from_cumulative`` / ``fin_ttm_cumulative``) on the
+    path before the comparison.  US statements are already period-scoped by the
+    ``timeframe`` filter on their provider bindings.
+    """
+    errors: list[str] = []
+
+    def walk(node: IRNode) -> None:
+        if node.op in _FLOW_COMPARISON_OPS:
+            for child in node.inputs:
+                for _grain, converted in _flow_grains(child, converted=False):
+                    if not converted:
+                        errors.append(
+                            f"{node.op} applied to A-share fiscal-YTD cumulative flow: "
+                            "convert with fin_quarter_from_cumulative (or fin_ttm_cumulative) "
+                            "first (P1-004); quarter-over-quarter on a cumulative total is an "
+                            "accounting error"
+                        )
+        for child in node.inputs:
+            walk(child)
+
+    walk(ir)
+    return errors
 
 
 class PeriodSelectionContractError(ValueError):
@@ -811,6 +925,12 @@ class Analyzer:
         period_errors = validate_fundamental_period_contracts(referenced_fields)
         if period_errors:
             raise PeriodSelectionContractError("; ".join(period_errors))
+        zero_impute_errors = validate_fundamental_zero_imputation(ir)
+        if zero_impute_errors:
+            raise FundamentalZeroImputationError("; ".join(zero_impute_errors))
+        flow_errors = validate_flow_semantics(ir)
+        if flow_errors:
+            raise FundamentalZeroImputationError("; ".join(flow_errors))
         grain_errors = validate_field_grain_contracts(ir)
         if grain_errors:
             raise FieldGrainContractError("; ".join(grain_errors))

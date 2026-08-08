@@ -1,20 +1,22 @@
 # -*- coding: utf-8 -*-
 """Spectral-shape operators (2026-08 geometry/math expansion).
 
-Every operator shares one kernel: the trailing window is *linearly detrended*
-(fit on the window's finite values), multiplied by a *Hann window*, NaNs are
-zero-padded, an FFT produces the periodogram ``P(f)`` over the positive
-frequencies ``f_i = i/N`` for ``i = 1..floor(N/2)`` (DC is excluded, Nyquist is
-``floor(N/2)/N``):
+Every operator shares one kernel: the trailing window is *linearly detrended*,
+multiplied by a *Hann window*, an FFT produces the periodogram ``P(f)`` over the
+positive frequencies ``f_i = i/N`` for ``i = 1..floor(N/2)`` (DC is excluded,
+Nyquist is ``floor(N/2)/N``):
 
 * ``ts_spectral_centroid``          — Σ f·P / Σ P, normalized by Nyquist.
 * ``ts_spectral_flatness``          — geometric mean / arithmetic mean of P ∈ [0,1].
 * ``ts_spectral_peak_concentration``— max(P) / Σ P.
 * ``ts_spectral_quality_factor``    — peak frequency / half-power bandwidth.
 
-All operators are trailing-window, prefix-causal and deterministic.  A window
-with fewer than 16 finite rows emits NaN; a degenerate (all-zero) spectrum
-emits NaN.  Invalid parameters raise ``ValueError``.
+All operators are trailing-window, prefix-causal and deterministic.  Missing
+policy (P1-009): the trailing window must be fully contiguous-finite — a NaN is
+never zero-padded (a missing value must not inject spectral energy).  A window
+with fewer than 16 rows, or any NaN row, emits NaN; a degenerate (all-zero)
+spectrum emits NaN.  Cross-day price inputs must be continuous price or return
+(not raw close).  Invalid parameters raise ``ValueError``.
 """
 from __future__ import annotations
 
@@ -47,30 +49,29 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 
 def _periodogram(chunk: np.ndarray) -> tuple[np.ndarray, int] | None:
-    """Linear-detrend + Hann + zero-pad-FFT periodogram, positive freqs.
+    """Linear-detrend + Hann + FFT periodogram, positive freqs (P1-009).
 
     Returns ``(P, i_max)`` where ``P[i]`` corresponds to ``f = (i+1)/N`` for
-    ``i = 0..i_max-1`` and ``i_max = floor(N/2)``.  ``None`` when the window
-    has fewer than ``_MIN_FINITE`` finite rows.
+    ``i = 0..i_max-1`` and ``i_max = floor(N/2)``.  ``None`` when the window is
+    not FULLY finite (trailing contiguous window): a missing value is never
+    zero-padded — zero-padding injects spurious low-frequency energy from the
+    missing pattern into the spectrum.  Cross-day price inputs must be continuous
+    price or return (not raw close) so the detrend + spectrum describes the
+    return-generating process, not the un-adjusted level path.
     """
     n = chunk.size
     if n < _MIN_FINITE:
         return None
-    finite = np.isfinite(chunk)
-    if int(np.count_nonzero(finite)) < _MIN_FINITE:
+    v = chunk.astype(float)
+    if not np.all(np.isfinite(v)):
         return None
     t = np.arange(n, dtype=float)
-    v = chunk.astype(float)
-    # linear detrend on the finite values (polyfit returns [slope, intercept])
-    tf = t[finite]
-    xf = v[finite]
-    slope, intercept = np.polyfit(tf, xf, 1)
+    # linear detrend on the full window (all finite by the check above)
+    slope, intercept = np.polyfit(t, v, 1)
     resid = v - (slope * t + intercept)
-    resid[~finite] = np.nan
     # Hann window
     hann = 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (n - 1.0))) if n > 1 else np.ones(n)
     resid = resid * hann
-    resid[~np.isfinite(resid)] = 0.0  # zero-pad NaNs
     spectrum = np.fft.rfft(resid)
     power = (np.abs(spectrum) ** 2) / float(n)
     i_max = n // 2

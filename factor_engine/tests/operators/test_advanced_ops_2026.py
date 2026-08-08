@@ -119,7 +119,9 @@ def test_advanced_ops_prefix_causal():
         "ts_bures_corr_shift": (x, y),
     }
     kwargs = {
-        "ts_transfer_entropy": {"window": 30, "bins": 3, "lag": 1},
+        # window=40 keeps the bins=3 floor (30) feasible; the prefix-invariance
+        # property under test is independent of the exact window.
+        "ts_transfer_entropy": {"window": 40, "bins": 3, "lag": 1},
         "ts_score_rank_weighted_mean": {"window": 30},
         "ts_kramers_moyal_drift": {"window": 30, "bins": 5},
         "ts_bures_corr_shift": {"recent_window": 8, "prior_window": 20},
@@ -575,10 +577,12 @@ def test_transfer_entropy_min_transitions():
     x = _frame(rng.normal(size=(50, 2)))
     y = _frame(rng.normal(size=(50, 2)))
     op = OperatorRegistry.get("ts_transfer_entropy", "pandas_numpy")
-    # window=20 -> ~19 transitions < default floor max(30, 3*bins^2)=30 -> NaN.
-    out_high = op.calculate(x, y, window=20, bins=3, lag=1)
-    assert np.isnan(out_high.to_numpy(dtype=float)).all()
-    out_low = op.calculate(x, y, window=20, bins=3, lag=1, min_transitions=5)
+    # window=20, bins=3 -> window-lag (19) < default floor max(30, 3*bins^2)=30:
+    # the operator can never produce a value, so it now FAILS CLOSED with an
+    # explicit error instead of silently emitting an all-NaN column.
+    with pytest.raises(ValueError):
+        op.calculate(x, y, window=20, bins=3, lag=1)
+    out_low = op.calculate(x, y, window=40, bins=3, lag=1, min_transitions=5)
     assert np.isfinite(out_low.to_numpy(dtype=float)).any()
 
 
@@ -617,7 +621,9 @@ def test_advanced_ops_all_nan_input_is_nan():
     idx = pd.date_range("2024-01-01", periods=40, freq="B")
     nan_panel = pd.DataFrame(np.full((40, 3), np.nan), index=idx, columns=["S0", "S1", "S2"])
     op = OperatorRegistry.get("ts_transfer_entropy", "pandas_numpy")
-    out = op.calculate(nan_panel, nan_panel, window=30, bins=3, lag=1)
+    # window=40 keeps the parameter combination feasible (window-lag 39 >= the
+    # bins=3 floor of 30); all-NaN *data* must still fail closed to all-NaN.
+    out = op.calculate(nan_panel, nan_panel, window=40, bins=3, lag=1)
     assert out.to_numpy(dtype=float).size > 0
     assert np.isnan(out.to_numpy(dtype=float)).all()
 

@@ -6509,20 +6509,27 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         if p not in (3, 4):
             return None
+        # P1-007: match the pandas kernel exactly — a window containing a NEGATIVE
+        # weight fail-closes (never silently dropped), the effective sample size
+        # (sw^2/sw2) must meet the order's minimum (3 for skew, 4 for kurtosis).
+        min_samp = 3 if p == 3 else 4
         return _Layer(
             f"SELECT ts, inst, "
-            f"CASE WHEN n < 3 OR sw <= 0 OR var <= 0 THEN NULL "
+            f"CASE WHEN neg_w > 0 OR n < {min_samp} OR sw <= 0 OR var <= 0 "
+            f"OR (sw * sw) / NULLIF(sw2, 0) < {min_samp} THEN NULL "
             f"ELSE (SUM(w * POWER(x - mu, {p})) OVER ({win}) / sw) "
             f"/ (POWER(var, {p} / 2.0) + 1e-12) END AS _v "
-            f"FROM (SELECT ts, inst, x, w, n, sw, mu, "
+            f"FROM (SELECT ts, inst, x, w, n, neg_w, sw, sw2, mu, "
             f"SUM(w * (x - mu) * (x - mu)) OVER ({win}) / sw AS var "
             f"FROM (SELECT ts, inst, x, w, "
             f"COUNT(*) OVER ({win}) AS n, "
+            f"COUNT(CASE WHEN w < 0 THEN 1 END) OVER ({win}) AS neg_w, "
             f"SUM(w) OVER ({win}) AS sw, "
+            f"SUM(w * w) OVER ({win}) AS sw2, "
             f"SUM(w * x) OVER ({win}) / NULLIF(SUM(w) OVER ({win}), 0) AS mu "
             f"FROM (SELECT x.ts, x.inst, x._v AS x, w._v AS w "
             f"FROM ({xl.sql}) x JOIN ({wl.sql}) w USING (ts, inst)) j "
-            f"WHERE x IS NOT NULL AND w IS NOT NULL AND w >= 0) t0) t1",
+            f"WHERE x IS NOT NULL AND w IS NOT NULL) t0) t1",
             has_inst_window=True,
         )
 

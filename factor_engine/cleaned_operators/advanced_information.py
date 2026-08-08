@@ -142,19 +142,26 @@ def _transfer_entropy_window(
     outer row loop called a rolling sub-routine and kept only ``[-1]``), so one
     output row cost O(w^2).  This kernel computes the current window once.
     """
-    valid = np.isfinite(tw) & np.isfinite(sw)
-    idx = np.flatnonzero(valid)
-    if idx.size < max(lag + 2, min_transitions):
+    # Lag is applied on the ORIGINAL time axis first, then NaN rows are masked:
+    # compacting NaN before lagging would let ``lag=1`` pair a day-1 value with
+    # a day-3 value across a missing day-2 (a gap silently redefines the lag).
+    n = tw.shape[0]
+    if n < lag + 2:
         return np.nan
-    # Transitions s -> s+lag, both within the causal window.
-    xs = tw[idx[:-lag]]
-    ys = sw[idx[:-lag]]
-    x_next = tw[idx[lag:]]
+    x_t = tw[:-lag]
+    y_t = sw[:-lag]
+    x_next = tw[lag:]
+    mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
+    if int(mask.sum()) < max(lag + 2, min_transitions):
+        return np.nan
+    xs = x_t[mask]
+    ys = y_t[mask]
+    xn = x_next[mask]
     # Degenerate constant state: with < 2 distinct states the quantile bins are
     # arbitrary and Jeffreys smoothing would *invent* information; fail closed.
     if np.unique(xs).size < 2 or np.unique(ys).size < 2:
         return np.nan
-    return _te_from_transitions(xs, ys, x_next, bins)
+    return _te_from_transitions(xs, ys, xn, bins)
 
 
 @register_operator(
@@ -202,11 +209,19 @@ class TsTransferEntropy(SeriesOperator):
             raise ValueError("ts_transfer_entropy requires window >= lag + 2")
         # With ``bins`` bins per variable the joint transition space has bins^3
         # cells; a handful of transitions would be dominated by Jeffreys smoothing
-        # mass.  Default floor scales with the cell count.
+        # mass.  Default floor scales with the cell count.  Fail closed loudly when
+        # the requested window cannot physically produce enough transitions (the
+        # old default silently returned an all-NaN column for bins>=8).
         if min_transitions is None:
             mt = max(30, 3 * nb * nb)
         else:
             mt = max(lg + 2, int(min_transitions))
+        if w - lg < mt:
+            raise ValueError(
+                f"ts_transfer_entropy window-lag ({w - lg}) < min_transitions ({mt}) "
+                f"with bins={nb}; raise window or lower bins (default window=60 "
+                "supports bins<=4)"
+            )
         return _frame_like(
             target,
             _rolling_apply_2d_pair(
@@ -222,16 +237,21 @@ def _effective_transfer_entropy_window(
     tw: np.ndarray, sw: np.ndarray, bins: int, lag: int, min_transitions: int
 ) -> float:
     """Effective TE for a *single* window (one computation, like the plain kernel)."""
-    valid = np.isfinite(tw) & np.isfinite(sw)
-    idx = np.flatnonzero(valid)
-    if idx.size < max(lag + 2, min_transitions):
+    n = tw.shape[0]
+    if n < lag + 2:
         return np.nan
-    xs = tw[idx[:-lag]]
-    ys = sw[idx[:-lag]]
-    x_next = tw[idx[lag:]]
+    x_t = tw[:-lag]
+    y_t = sw[:-lag]
+    x_next = tw[lag:]
+    mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
+    if int(mask.sum()) < max(lag + 2, min_transitions):
+        return np.nan
+    xs = x_t[mask]
+    ys = y_t[mask]
+    xn = x_next[mask]
     if np.unique(xs).size < 2 or np.unique(ys).size < 2:
         return np.nan
-    real = _te_from_transitions(xs, ys, x_next, bins)
+    real = _te_from_transitions(xs, ys, xn, bins)
     if not np.isfinite(real):
         return np.nan
     # Deterministic circular shift of the *source transition* series; the
@@ -300,6 +320,11 @@ class TsEffectiveTransferEntropy(SeriesOperator):
             mt = max(30, 3 * nb * nb)
         else:
             mt = max(lg + 2, int(min_transitions))
+        if w - lg < mt:
+            raise ValueError(
+                f"ts_effective_transfer_entropy window-lag ({w - lg}) < min_transitions "
+                f"({mt}) with bins={nb}; raise window or lower bins"
+            )
         return _frame_like(
             target,
             _rolling_apply_2d_pair(
@@ -335,7 +360,10 @@ def _score_rank_weighted_mean(t: np.ndarray, sc: np.ndarray, decay: float) -> fl
         i = j + 1
     w = np.power(decay, ranks)
     w /= w.sum()
-    return float(np.sum(w * tv[order]))
+    # ``w`` is indexed by the ORIGINAL observation order (ranks[order[i]] = ...),
+    # so it must multiply ``tv`` in that same order.  ``tv[order]`` would re-sort
+    # the target and multiply each weight against a *different* observation.
+    return float(np.sum(w * tv))
 
 
 @register_operator(
@@ -459,18 +487,25 @@ def _te_peak_window(tw: np.ndarray, sw: np.ndarray, bins: int, min_transitions: 
     normalized by the largest lag.  Binning is shared per window; this is the
     "fused primitive" that avoids re-discretizing five times in the AST.
     """
-    valid = np.isfinite(tw) & np.isfinite(sw)
-    idx = np.flatnonzero(valid)
+    n = tw.shape[0]
     best = np.nan
     best_lag = np.nan
     for lag in _TE_LAGS:
-        if idx.size < max(lag + 2, min_transitions):
+        if n < lag + 2:
             continue
-        xs = tw[idx[:-lag]]
-        ys = sw[idx[:-lag]]
-        x_next = tw[idx[lag:]]
+        # Lag on the original axis, then mask NaN (a gap must not redefine lag).
+        x_t = tw[:-lag]
+        y_t = sw[:-lag]
+        x_next = tw[lag:]
+        mask = np.isfinite(x_t) & np.isfinite(y_t) & np.isfinite(x_next)
+        if int(mask.sum()) < max(lag + 2, min_transitions):
+            continue
+        xs = x_t[mask]
+        ys = y_t[mask]
+        xn = x_next[mask]
         if np.unique(xs).size < 2 or np.unique(ys).size < 2:
             continue
+        v = _te_from_transitions(xs, ys, xn, bins)
         v = _te_from_transitions(xs, ys, x_next, bins)
         if not np.isfinite(v):
             continue
@@ -525,6 +560,11 @@ class TsTransferEntropyPeakStrength(SeriesOperator):
             mt = max(30, 3 * nb * nb)
         else:
             mt = max(max(_TE_LAGS) + 2, int(min_transitions))
+        if w - max(_TE_LAGS) < mt:
+            raise ValueError(
+                f"ts_transfer_entropy_peak_strength window-lag ({w - max(_TE_LAGS)}) "
+                f"< min_transitions ({mt}) with bins={nb}; raise window or lower bins"
+            )
         return _frame_like(
             target,
             _rolling_apply_2d_pair(
@@ -578,6 +618,11 @@ class TsTransferEntropyPeakLag(SeriesOperator):
             mt = max(30, 3 * nb * nb)
         else:
             mt = max(max(_TE_LAGS) + 2, int(min_transitions))
+        if w - max(_TE_LAGS) < mt:
+            raise ValueError(
+                f"ts_transfer_entropy_peak_lag window-lag ({w - max(_TE_LAGS)}) "
+                f"< min_transitions ({mt}) with bins={nb}; raise window or lower bins"
+            )
         return _frame_like(
             target,
             _rolling_apply_2d_pair(

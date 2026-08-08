@@ -5,7 +5,7 @@
   "concepts": {
     "amount_local": {
       "concept": "amount_local",
-      "canonical_unit": "CNY",
+      "canonical_unit": "local_money",
       "domain": "price_volume",
       "value_kind": "amount",
       "cross_market_comparable": false,
@@ -55,7 +55,7 @@
     },
     "cash_dividend_per_share": {
       "concept": "cash_dividend_per_share",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "corporate_action",
       "value_kind": "price",
       "cross_market_comparable": false,
@@ -96,7 +96,14 @@
         "effective_time": null,
         "available_at": "declaration",
         "required_filters": [
-          "currency=USD"
+          {
+            "field": "currency",
+            "operator": "eq",
+            "value": "USD",
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
         ],
         "source_certified": true,
         "providers": [
@@ -107,7 +114,7 @@
     },
     "continuous_close": {
       "concept": "continuous_close",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
@@ -159,66 +166,210 @@
     },
     "continuous_high": {
       "concept": "continuous_high",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
       "price_basis": "CONTINUOUS",
       "ashare": {
-        "status": "UNKNOWN",
-        "providers": []
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.High",
+          "StockDailyBar.Factor"
+        ],
+        "transform": "High * Factor (backward multiplier)",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_continuous_high"
+        ],
+        "notes": "same backward Factor as continuous_close"
       },
       "us": {
-        "status": "UNKNOWN",
-        "providers": []
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.High",
+          "StockDailyBar.AdjFactor"
+        ],
+        "transform": "High * AdjFactor (backward multiplier)",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_continuous_high"
+        ],
+        "notes": "same backward AdjFactor as continuous_close"
       }
     },
     "continuous_low": {
       "concept": "continuous_low",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
       "price_basis": "CONTINUOUS",
       "ashare": {
-        "status": "UNKNOWN",
-        "providers": []
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Low",
+          "StockDailyBar.Factor"
+        ],
+        "transform": "Low * Factor (backward multiplier)",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_continuous_low"
+        ],
+        "notes": "same backward Factor as continuous_close"
       },
       "us": {
-        "status": "UNKNOWN",
-        "providers": []
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Low",
+          "StockDailyBar.AdjFactor"
+        ],
+        "transform": "Low * AdjFactor (backward multiplier)",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_continuous_low"
+        ],
+        "notes": "same backward AdjFactor as continuous_close"
       }
     },
     "continuous_open": {
       "concept": "continuous_open",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
       "price_basis": "CONTINUOUS",
       "ashare": {
-        "status": "UNKNOWN",
-        "providers": []
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Open",
+          "StockDailyBar.Factor"
+        ],
+        "transform": "Open * Factor (backward multiplier)",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_continuous_open"
+        ],
+        "notes": "same backward Factor as continuous_close"
       },
       "us": {
-        "status": "UNKNOWN",
-        "providers": []
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.Open",
+          "StockDailyBar.AdjFactor"
+        ],
+        "transform": "Open * AdjFactor (backward multiplier)",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_continuous_open"
+        ],
+        "notes": "same backward AdjFactor as continuous_close"
       }
     },
     "continuous_vwap": {
       "concept": "continuous_vwap",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
       "price_basis": "CONTINUOUS",
       "ashare": {
-        "status": "UNKNOWN",
-        "providers": []
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "ashare_stock_daily",
+        "physical": [
+          "StockDailyBar.Vwap",
+          "StockDailyBar.Factor"
+        ],
+        "transform": "Vwap * Factor (backward multiplier)",
+        "source_unit": "CNY/share",
+        "canonical_unit": "CNY/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "ashare_continuous_vwap"
+        ],
+        "notes": "same backward Factor as continuous_close"
       },
       "us": {
-        "status": "UNKNOWN",
-        "providers": []
+        "status": "CERTIFIED_NATIVE",
+        "dataset": "us_stock_daily",
+        "physical": [
+          "StockDailyBar.VWAP",
+          "StockDailyBar.AdjFactor"
+        ],
+        "transform": "VWAP * AdjFactor (backward multiplier)",
+        "source_unit": "USD/share",
+        "canonical_unit": "USD/share",
+        "coverage": "FULL",
+        "pit": "exact_daily",
+        "knowledge_time": null,
+        "effective_time": null,
+        "available_at": "local_close",
+        "required_filters": [],
+        "source_certified": true,
+        "providers": [
+          "us_continuous_vwap"
+        ],
+        "notes": "same backward AdjFactor as continuous_close"
       }
     },
     "dividend_ex_date": {
@@ -289,7 +440,7 @@
     },
     "earnings_per_share": {
       "concept": "earnings_per_share",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "fundamental",
       "value_kind": "price",
       "cross_market_comparable": false,
@@ -305,14 +456,14 @@
     },
     "equity": {
       "concept": "equity",
-      "canonical_unit": "CNY",
+      "canonical_unit": "local_money",
       "domain": "fundamental",
       "value_kind": "amount",
       "cross_market_comparable": false,
       "price_basis": null,
       "ashare": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "ashare_stock_daily",
+        "dataset": "ashare_stock_balance",
         "physical": [
           "StockBalance.EquitiesParentCompanyOwners"
         ],
@@ -333,7 +484,7 @@
       },
       "us": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "us_stock_daily",
+        "dataset": "us_stock_balance",
         "physical": [
           "StockBalance.total_equity"
         ],
@@ -346,7 +497,14 @@
         "effective_time": null,
         "available_at": "filing",
         "required_filters": [
-          "timeframe"
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
         ],
         "source_certified": true,
         "providers": [
@@ -357,7 +515,7 @@
     },
     "free_float_market_cap_local": {
       "concept": "free_float_market_cap_local",
-      "canonical_unit": "CNY",
+      "canonical_unit": "local_money",
       "domain": "valuation",
       "value_kind": "amount",
       "cross_market_comparable": false,
@@ -441,7 +599,14 @@
         "effective_time": null,
         "available_at": "local_close",
         "required_filters": [
-          "IndexSymbol"
+          {
+            "field": "IndexSymbol",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
         ],
         "source_certified": true,
         "providers": [
@@ -464,7 +629,14 @@
         "effective_time": null,
         "available_at": "local_close",
         "required_filters": [
-          "IndexName"
+          {
+            "field": "IndexName",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
         ],
         "source_certified": true,
         "providers": [
@@ -543,7 +715,14 @@
         "effective_time": null,
         "available_at": "local_close",
         "required_filters": [
-          "IndustrySource"
+          {
+            "field": "IndustrySource",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
         ],
         "source_certified": true,
         "providers": [
@@ -573,7 +752,7 @@
     },
     "lower_price_limit": {
       "concept": "lower_price_limit",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
@@ -621,7 +800,7 @@
     },
     "market_cap_local": {
       "concept": "market_cap_local",
-      "canonical_unit": "CNY",
+      "canonical_unit": "local_money",
       "domain": "valuation",
       "value_kind": "amount",
       "cross_market_comparable": false,
@@ -667,19 +846,19 @@
         "providers": [
           "us_market_cap_shares_snapshot"
         ],
-        "notes": "~42% coverage of StockDailyBar tickers; NOT the X0 sparse market_cap"
+        "notes": "~42% coverage of StockDailyBar tickers; NOT the X0 sparse market_cap; coverage_gate<0.8 -> production flags"
       }
     },
     "net_profit": {
       "concept": "net_profit",
-      "canonical_unit": "CNY",
+      "canonical_unit": "local_money",
       "domain": "fundamental",
       "value_kind": "amount",
       "cross_market_comparable": false,
       "price_basis": null,
       "ashare": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "ashare_stock_daily",
+        "dataset": "ashare_stock_income",
         "physical": [
           "StockIncome.NetProfit"
         ],
@@ -700,7 +879,7 @@
       },
       "us": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "us_stock_daily",
+        "dataset": "us_stock_income",
         "physical": [
           "StockIncome.net_income_loss_attributable_common_shareholders"
         ],
@@ -713,7 +892,14 @@
         "effective_time": null,
         "available_at": "filing",
         "required_filters": [
-          "timeframe"
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
         ],
         "source_certified": true,
         "providers": [
@@ -756,14 +942,14 @@
     },
     "operating_cash_flow": {
       "concept": "operating_cash_flow",
-      "canonical_unit": "CNY",
+      "canonical_unit": "local_money",
       "domain": "fundamental",
       "value_kind": "amount",
       "cross_market_comparable": false,
       "price_basis": null,
       "ashare": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "ashare_stock_daily",
+        "dataset": "ashare_stock_cashflow",
         "physical": [
           "StockCashFlow.NetOperateCashFlow"
         ],
@@ -784,7 +970,7 @@
       },
       "us": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "us_stock_daily",
+        "dataset": "us_stock_cashflow",
         "physical": [
           "StockCashFlow.net_cash_from_operating_activities"
         ],
@@ -797,7 +983,14 @@
         "effective_time": null,
         "available_at": "filing",
         "required_filters": [
-          "timeframe"
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
         ],
         "source_certified": true,
         "providers": [
@@ -808,14 +1001,14 @@
     },
     "operating_revenue": {
       "concept": "operating_revenue",
-      "canonical_unit": "CNY",
+      "canonical_unit": "local_money",
       "domain": "fundamental",
       "value_kind": "amount",
       "cross_market_comparable": false,
       "price_basis": null,
       "ashare": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "ashare_stock_daily",
+        "dataset": "ashare_stock_income",
         "physical": [
           "StockIncome.OperatingRevenue"
         ],
@@ -836,7 +1029,7 @@
       },
       "us": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "us_stock_daily",
+        "dataset": "us_stock_income",
         "physical": [
           "StockIncome.revenue"
         ],
@@ -849,7 +1042,14 @@
         "effective_time": null,
         "available_at": "filing",
         "required_filters": [
-          "timeframe"
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
         ],
         "source_certified": true,
         "providers": [
@@ -860,7 +1060,7 @@
     },
     "raw_close": {
       "concept": "raw_close",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
@@ -910,7 +1110,7 @@
     },
     "raw_high": {
       "concept": "raw_high",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
@@ -960,7 +1160,7 @@
     },
     "raw_low": {
       "concept": "raw_low",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
@@ -1010,7 +1210,7 @@
     },
     "raw_open": {
       "concept": "raw_open",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
@@ -1060,7 +1260,7 @@
     },
     "raw_pre_close": {
       "concept": "raw_pre_close",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
@@ -1121,7 +1321,7 @@
         "physical": [
           "StockDailyBar.Volume"
         ],
-        "transform": "identity (uint64 shares; NEVER /Factor)",
+        "transform": "identity (raw shares; no adjustment applied)",
         "source_unit": "share",
         "canonical_unit": "share",
         "coverage": "FULL",
@@ -1134,7 +1334,7 @@
         "providers": [
           "ashare_raw_volume"
         ],
-        "notes": "generic volume is raw shares; split-adjusted volume is a separate concept"
+        "notes": "generic volume is raw shares; NEVER divided by any adjustment factor (split-adjusted volume is a separate concept)"
       },
       "us": {
         "status": "CERTIFIED_NATIVE",
@@ -1160,7 +1360,7 @@
     },
     "raw_vwap": {
       "concept": "raw_vwap",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,
@@ -1326,14 +1526,14 @@
     },
     "total_assets": {
       "concept": "total_assets",
-      "canonical_unit": "CNY",
+      "canonical_unit": "local_money",
       "domain": "fundamental",
       "value_kind": "amount",
       "cross_market_comparable": false,
       "price_basis": null,
       "ashare": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "ashare_stock_daily",
+        "dataset": "ashare_stock_balance",
         "physical": [
           "StockBalance.TotalAssets"
         ],
@@ -1354,7 +1554,7 @@
       },
       "us": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "us_stock_daily",
+        "dataset": "us_stock_balance",
         "physical": [
           "StockBalance.total_assets"
         ],
@@ -1367,7 +1567,14 @@
         "effective_time": null,
         "available_at": "filing",
         "required_filters": [
-          "timeframe"
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
         ],
         "source_certified": true,
         "providers": [
@@ -1378,14 +1585,14 @@
     },
     "total_liabilities": {
       "concept": "total_liabilities",
-      "canonical_unit": "CNY",
+      "canonical_unit": "local_money",
       "domain": "fundamental",
       "value_kind": "amount",
       "cross_market_comparable": false,
       "price_basis": null,
       "ashare": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "ashare_stock_daily",
+        "dataset": "ashare_stock_balance",
         "physical": [
           "StockBalance.TotalLiability"
         ],
@@ -1406,7 +1613,7 @@
       },
       "us": {
         "status": "CERTIFIED_NATIVE",
-        "dataset": "us_stock_daily",
+        "dataset": "us_stock_balance",
         "physical": [
           "StockBalance.total_liabilities"
         ],
@@ -1419,7 +1626,14 @@
         "effective_time": null,
         "available_at": "filing",
         "required_filters": [
-          "timeframe"
+          {
+            "field": "timeframe",
+            "operator": "enum_select",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
         ],
         "source_certified": true,
         "providers": [
@@ -1457,7 +1671,7 @@
         "physical": [
           "StockDailyBar.IsSuspend"
         ],
-        "transform": "not IsSuspend (tradable = listed AND not suspended)",
+        "transform": "NOT IsSuspend (tradable = listed AND not suspended)",
         "source_unit": "boolean",
         "canonical_unit": "boolean",
         "coverage": "FULL",
@@ -1470,7 +1684,7 @@
         "providers": [
           "ashare_tradability"
         ],
-        "notes": "IsSuspend lives in StockDailyBar"
+        "notes": "IsSuspend lives in StockDailyBar; transform actually negates it"
       },
       "us": {
         "status": "SEMANTIC_EQUIVALENT",
@@ -1544,7 +1758,7 @@
     },
     "upper_price_limit": {
       "concept": "upper_price_limit",
-      "canonical_unit": "CNY/share",
+      "canonical_unit": "local/share",
       "domain": "price_volume",
       "value_kind": "price",
       "cross_market_comparable": false,

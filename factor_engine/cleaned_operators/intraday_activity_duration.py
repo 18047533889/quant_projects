@@ -3,18 +3,21 @@
 
 ``intraday_activity_duration_curvature`` — one scalar per (date, symbol): split
 the day's non-negative minute ``activity`` (volume / amount) into ``buckets``
-equal-activity buckets, record the wall-clock bar index at which each bucket
-completes ``D_1..D_B``, and return the standardized second difference of the
-duration curve ``mean(Δ²D) / (MAD(D)+eps)``.
+equal-activity buckets, record the *trading-session* bar index at which each
+bucket completes ``D_1..D_B``, and return the standardized second difference of
+the duration curve ``mean(Δ²D) / (MAD(D)+eps)``.
 
 * Positive curvature → activity *decelerating* into the close (later buckets
-  take longer wall-clock).
+  take longer session-clock).
 * Negative curvature → activity *accelerating* into the close.
 
-This studies how the activity clock itself speeds up / slows down relative to
-wall-clock, orthogonal to the existing volume-clock path-geometry operators
-(which study the price path *on* the activity clock).  Minute-source input,
-strict-PIT within the day, deterministic, NaN fail-closed.
+Clock semantics (P0-005): the session minute axis is never compressed — any NaN
+minute activity fail-closes the day, real zero-activity bars are preserved, and
+positions are original session-bar indices.  This is *trading-session-clock* (A
+continuous-auction minutes, ~240 bars/day), NOT wall-clock elapsed time; US has
+no full-minute OHLCV provider yet, so the operator is A-share supported and US
+provider_required.  Minute-source input, strict-PIT within the day,
+deterministic, NaN fail-closed.
 """
 from __future__ import annotations
 
@@ -45,17 +48,29 @@ def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadat
 
 
 def _day_curvature(values: np.ndarray, buckets: int) -> float:
-    """Duration-curve second-difference curvature for one day of minute activity."""
-    finite = values[np.isfinite(values)]
-    finite = finite[finite >= 0.0]
-    total = float(finite.sum())
-    if total <= _EPS or finite.size < buckets:
+    """Duration-curve second-difference curvature for one day of minute activity.
+
+    Trading-session-clock semantics (P0-005): completion positions are ORIGINAL
+    session-bar indices — the minute axis is NEVER compressed by dropping NaN
+    bars.  A NaN minute activity fail-closes the whole day (an unknown minute is
+    not a zero-volume minute; deleting it would silently shorten the session and
+    move the duration curve).  Negative activity is an invalid state.  Real
+    ``activity == 0`` bars are preserved: they are "no trade" but still occupy a
+    session bar and correctly stretch the duration curve.
+    """
+    v = values.astype(float)
+    if not np.all(np.isfinite(v)):
+        return np.nan
+    if np.any(v < 0.0):
         return np.nan
     b = int(buckets)
     if b < 3:
         raise ValueError("intraday_activity_duration_curvature requires buckets >= 3")
-    cum = np.cumsum(finite)
-    # completion bar index for each fraction b/B (b = 1..B)
+    total = float(v.sum())
+    if total <= _EPS or v.size < b:
+        return np.nan
+    cum = np.cumsum(v)
+    # completion bar index (original session position) for each fraction k/B
     D = np.full(b, np.nan)
     for k in range(1, b + 1):
         target = float(k) / b * total

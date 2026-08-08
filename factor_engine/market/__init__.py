@@ -40,6 +40,7 @@ from .session import (
     SessionSegment,
     SessionSpec,
     session_for,
+    session_for_date,
 )
 
 # Lazy import of the capability resolver (it imports cleaned_operators helpers,
@@ -93,6 +94,7 @@ __all__ = [
     "SessionSegment",
     "SessionSpec",
     "session_for",
+    "session_for_date",
     "build_market_operator_manifest",
     "build_search_grammar",
     "capabilities_for",

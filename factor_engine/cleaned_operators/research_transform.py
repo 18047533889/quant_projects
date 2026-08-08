@@ -11,9 +11,11 @@ via ``default_search_weight = 0``:
 * ``ts_signature_mahalanobis_anomaly`` — 3-field level-2 truncated path
   signature vector; Mahalanobis anomaly vs. the trailing ``history_window`` of
   signature vectors under shrinkage covariance.  ``depth`` fixed at 2.
-* ``ts_betti_crocker_bifurcation_score`` — persistence-diagram birth-time
+* ``ts_persistence_birth_dispersion`` — persistence-diagram birth-time
   dispersion (how strongly structure bifurcates across filtration scales),
-  reuse of the certified Rips H1 kernel.  ``cost = 10``.
+  reuse of the certified Rips H1 kernel.  ``cost = 10``.  (Renamed from
+  ``ts_betti_crocker_bifurcation_score`` — it is a birth-time dispersion proxy,
+  not a true CROCKER; the old name resolves as an alias.)
 """
 from __future__ import annotations
 
@@ -50,15 +52,25 @@ def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadat
 def _haar_lowpass_current(vals: np.ndarray, window: int, level: int) -> float:
     """Return the trailing-causal Haar low-pass reconstruction at the last row."""
     seg = vals[-int(window):]
-    finite = seg[np.isfinite(seg)]
-    n = len(finite)
     keep = int(level)
     if keep < 0:
         raise ValueError("level must be >= 0")
+    # Nearest TRAILING contiguous finite segment (P1-010): the largest power-of-two
+    # must come from the most recent unbroken run, not from the oldest ``finite[:m]``
+    # prefix.  Compressing out missing rows would shift the wavelet's time origin
+    # and mix samples from different calendar times.
+    bad = np.flatnonzero(~np.isfinite(seg))
+    start = int(bad[-1] + 1) if bad.size else 0
+    contig = seg[start:]
+    n = contig.size
     if n < 2 ** (keep + 2):
         return np.nan
     m = 2 ** int(np.floor(np.log2(n)))
-    x = finite[:m].copy()
+    # P2-1: take the MOST RECENT power-of-two block of the contiguous run.  When
+    # the run length is not a power of two, ``contig[:m]`` would discard the
+    # newest observations while claiming to report the *current* low-frequency
+    # reconstruction.
+    x = contig[-m:].copy()
     details: list[np.ndarray] = []
     approx = x
     while len(approx) >= 2:
@@ -110,20 +122,37 @@ class TsWaveletLowpassReconstruct(SeriesOperator):
 # ts_signature_mahalanobis_anomaly(f1, f2, f3, path_window, history_window, depth)
 # ---------------------------------------------------------------------------
 def _sig_vector(seg: np.ndarray) -> np.ndarray | None:
-    """Level-2 truncated signature of a 3-channel path (3 + 9 = 12 comps)."""
+    """Level-2 truncated signature of a 3-channel path (3 + 9 = 12 comps).
+
+    P1-010: the path must be FULLY finite — missing rows are never dropped and
+    the remaining rows stitched together (that would change the path's time
+    origin and sequence of increments).
+    """
     n = seg.shape[0]
     if n < 4:
         return None
-    finite = np.all(np.isfinite(seg), axis=1)
-    if int(finite.sum()) < 4:
+    if not np.all(np.isfinite(seg)):
         return None
-    s = seg[finite]
+    s = seg
     d = np.diff(s, axis=0)
+    # Standard level-2 truncated signature (P2-3): for a piecewise-linear path
+    # the level-2 coefficient is the iterated integral
+    #   S^(2)_{jk} = sum_i [ run_j(i) * dS_k(i) + 0.5 * dS_j(i) * dS_k(i) ]
+    # where ``run`` is the running level-1 value before segment i.  The earlier
+    # code dropped the 0.5 * dS_j * dS_k correction term, so it was not the
+    # genuine path signature.
     comps: list[float] = [float(d[:, j].sum()) for j in range(3)]
-    prev = s[:-1]
+    n2 = np.zeros((3, 3), dtype=float)
+    run = np.zeros(3, dtype=float)
+    for i in range(d.shape[0]):
+        di = d[i]
+        for j in range(3):
+            for k in range(3):
+                n2[j, k] += run[j] * di[k] + 0.5 * di[j] * di[k]
+        run += di
     for j in range(3):
         for k in range(3):
-            comps.append(float(np.sum(prev[:, j] * d[:, k])))
+            comps.append(float(n2[j, k]))
     return np.asarray(comps, dtype=float)
 
 
@@ -150,10 +179,14 @@ def _sig_mahalanobis_series(fs: list[np.ndarray], path_window: int, history_wind
         mu = H.mean(axis=0)
         centered = H - mu
         n, dim = H.shape
+        # Covariance needs a robust sample: >= max(20, 2*dim) history vectors
+        # (dim=12 -> at least 24) before the 12-dim Mahalanobis distance is stable.
+        if n < max(20, 2 * dim):
+            continue
         cov = (centered.T @ centered) / (n - 1.0)
         shrink = 0.1 * np.trace(cov) / dim * np.eye(dim) + cov
         try:
-            inv = np.linalg.inv(shrink)
+            inv = np.linalg.pinv(shrink)
         except np.linalg.LinAlgError:
             continue
         diff = cur - mu
@@ -192,9 +225,13 @@ class TsSignatureMahalanobisAnomaly(SeriesOperator):
         if int(depth) != 2:
             raise ValueError("ts_signature_mahalanobis_anomaly fixes depth = 2")
         base = f1
-        for f in (f2, f3):
-            if not f.index.equals(base.index) or not f.columns.equals(base.columns):
-                f = f.reindex(index=base.index, columns=base.columns)
+        # P1-010: reindex f2/f3 into the base index/columns and REBIND them (the
+        # previous loop reindexed into a loop-local variable that was discarded,
+        # so f2/f3 stayed misaligned for the column extraction below).
+        if not f2.index.equals(base.index) or not f2.columns.equals(base.columns):
+            f2 = f2.reindex(index=base.index, columns=base.columns)
+        if not f3.index.equals(base.index) or not f3.columns.equals(base.columns):
+            f3 = f3.reindex(index=base.index, columns=base.columns)
         cols = base.columns
         out = np.full(base.shape, np.nan, dtype=float)
         for ci, c in enumerate(cols):
@@ -227,19 +264,23 @@ def _bifurcation_score(chunk: np.ndarray, tau: int, dim: int) -> float:
 
 
 @register_operator(
-    name="ts_betti_crocker_bifurcation_score",
+    name="ts_persistence_birth_dispersion",
     category="research_transform",
     business_category="research_transform",
-    canonical="ts_betti_crocker_bifurcation_score",
+    canonical="ts_persistence_birth_dispersion",
     source="research_transform",
     status="experimental",
 )
 class TsBettiCrockerBifurcationScore(SeriesOperator):
-    """持久同调特征出生时间的散布度（CROCKER bifurcation 代理，仅 Research）。"""
+    """持久图特征出生时间的散布度（bifurcation proxy，仅 Research）。
+
+    注意命名（P1-010）：这是持久图 birth-time 散布代理 ``std(births)/span``，
+    不是真正的 CROCKER 图（CROCKER 需沿 filtration 参数追踪 Hk 的变化）。
+    """
 
     metadata = _metadata(
-        "ts_betti_crocker_bifurcation_score",
-        "持久图特征出生时间散布（bifurcation 代理，cost=10，仅 Research）。",
+        "ts_persistence_birth_dispersion",
+        "持久图特征出生时间散布（bifurcation proxy，cost=10，仅 Research）。",
         ["x", "window", "tau", "dim"],
     )
 
@@ -263,13 +304,19 @@ def _register_surface() -> None:
         | {
             "ts_wavelet_lowpass_reconstruct",
             "ts_signature_mahalanobis_anomaly",
-            "ts_betti_crocker_bifurcation_score",
+            "ts_persistence_birth_dispersion",
         }
+    )
+    from cleaned_operators.registry import OperatorRegistry
+
+    # P1-010: renamed to the honest _dispersion name; old name stays as an alias.
+    OperatorRegistry.register_alias(
+        "ts_betti_crocker_bifurcation_score", "ts_persistence_birth_dispersion"
     )
     for _canon in (
         "ts_wavelet_lowpass_reconstruct",
         "ts_signature_mahalanobis_anomaly",
-        "ts_betti_crocker_bifurcation_score",
+        "ts_persistence_birth_dispersion",
     ):
         from cleaned_operators.rolling_pack import register_polars_udf
 

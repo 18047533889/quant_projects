@@ -33,13 +33,15 @@ _DAILY_OPS = [
     "event_level_survival_share",
     "ts_max_drawdown_activity_cost",
     "cs_multi_robust_resid",
-    "relation_pagerank_centrality",
     "intraday_activity_duration_curvature",
 ]
 _RESEARCH_OPS = [
     "ts_wavelet_lowpass_reconstruct",
     "ts_signature_mahalanobis_anomaly",
-    "ts_betti_crocker_bifurcation_score",
+    "ts_persistence_birth_dispersion",
+    # P0-008: the group complete-graph signal share is the honest research-only
+    # canonical; relation_pagerank_centrality is now a pure alias to it.
+    "group_signal_attraction_share",
 ]
 
 
@@ -237,30 +239,66 @@ def test_weighted_percentile_rank_reference(_loaded):
 def test_js_divergence_reference(_loaded):
     idx = list(range(8))
     x = pd.DataFrame(
-        {"A": [1.0, 2, 3, 4, 5, 6, 7, 8], "B": [8.0, 7, 6, 5, 4, 3, 2, 1], "C": [1.0, 1, 1, 1, 1, 1, 1, 1]},
+        {
+            "A": [1.0, 2, 3, 4, 5, 6, 7, 8],
+            "B": [8.0, 7, 6, 5, 4, 3, 2, 1],
+            "C": [1.0, 1, 1, 1, 1, 1, 1, 1],
+            "D": [9.0, 9, 9, 9, 9, 9, 9, 9],
+        },
         index=idx,
     )
-    grp = pd.DataFrame({"A": ["m"] * 8, "B": ["m"] * 8, "C": ["s"] * 8}, index=idx)
+    grp = pd.DataFrame(
+        {"A": ["m"] * 8, "B": ["m"] * 8, "C": ["s"] * 8, "D": ["t"] * 8}, index=idx
+    )
     op = OperatorRegistry.get("group_distribution_js_divergence", "pandas_numpy")
     out = op.calculate(x, grp, bins=4, min_group_size=2)
     assert out["A"].iloc[0] == out["B"].iloc[0]  # same group -> same value
     assert out["A"].iloc[0] >= 0.0  # JS divergence is non-negative
-    assert np.isnan(out["C"].iloc[0])  # group too small
+    assert np.isnan(out["C"].iloc[0])  # group too small (1 member)
+    # ex-self default: group m is compared against market minus {A,B} (i.e. C,D).
+    out_ex = op.calculate(x, grp, bins=4, min_group_size=2, exclude_group_from_reference=True)
+    assert np.isfinite(out_ex["A"].iloc[0])
+
+
+def test_js_divergence_exclude_group_reference(_loaded):
+    # A group that IS the whole market must diverge maximally from its ex-self
+    # reference: excluding it leaves an empty reference -> fail closed.
+    idx = list(range(6))
+    x = pd.DataFrame(
+        {"A": [1.0, 2, 3, 4, 5, 6], "B": [6.0, 5, 4, 3, 2, 1]}, index=idx
+    )
+    grp = pd.DataFrame({"A": ["g"] * 6, "B": ["g"] * 6}, index=idx)
+    op = OperatorRegistry.get("group_distribution_js_divergence", "pandas_numpy")
+    out = op.calculate(x, grp, bins=4, min_group_size=2, exclude_group_from_reference=True)
+    assert np.isnan(out["A"].iloc[0])  # ex-self reference empty -> NaN
+    # with exclusion disabled, both members compare against the full market
+    out_full = op.calculate(x, grp, bins=4, min_group_size=2, exclude_group_from_reference=False)
+    assert out_full["A"].iloc[0] == out_full["B"].iloc[0]
+    assert np.isfinite(out_full["A"].iloc[0])
 
 
 # ---------------------------------------------------------------------------
 # event_level_survival_share
 # ---------------------------------------------------------------------------
 def test_event_level_survival_share_reference(_loaded):
+    # Path-survival semantic: an event only survives if the WHOLE path since the
+    # event stayed on the favorable side (a dip below the level then recovery
+    # does NOT count as survived).
     idx = list(range(8))
     ev = pd.DataFrame({"A": [0.0, 0, 1, 0, 0, 0, 0, 0]}, index=idx)
     lv = pd.DataFrame({"A": [10.0] * 8}, index=idx)
     x = pd.DataFrame({"A": [5.0, 6, 7, 8, 9, 11, 12, 13]}, index=idx)
     op = OperatorRegistry.get("event_level_survival_share", "pandas_numpy")
     out = op.calculate(ev, lv, x, history_window=5, direction="up")
-    assert out["A"].iloc[5] == 1.0  # event@2 level=10, x=11>10
+    assert out["A"].iloc[5] == 0.0  # path dipped to x=8 < level before 11
     assert out["A"].iloc[3] == 0.0  # x=8<10 -> not survived
     assert np.isnan(out["A"].iloc[0])  # no past events
+    # Inclusive boundary (P0-004): a path that touches the level (== 10) without
+    # going below it survives.
+    x2 = pd.DataFrame({"A": [5.0, 6, 7, 10, 10, 11, 12, 13]}, index=idx)
+    out2 = op.calculate(ev, lv, x2, history_window=5, direction="up")
+    assert out2["A"].iloc[5] == 1.0  # running min = 10 >= level
+    assert out2["A"].iloc[7] == 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +323,11 @@ def test_pagerank_centrality_reference(_loaded):
     idx = list(range(3))
     x = pd.DataFrame({"A": [1.0, 2, 3], "B": [2.0, 1, 3], "C": [3.0, 3, 1]}, index=idx)
     grp = pd.DataFrame({"A": ["g"] * 3, "B": ["g"] * 3, "C": ["g"] * 3}, index=idx)
-    op = OperatorRegistry.get("relation_pagerank_centrality", "pandas_numpy")
+    # P0-008: the honest canonical is group_signal_attraction_share; the old
+    # relation_pagerank_centrality name is an alias to it.
+    op = OperatorRegistry.get("group_signal_attraction_share", "pandas_numpy")
+    assert op is not None
+    assert OperatorRegistry.resolve_canonical("relation_pagerank_centrality") == "group_signal_attraction_share"
     out = op.calculate(x, grp, damping=0.85)
     row = out.iloc[0].to_numpy(float)
     assert np.isfinite(row).all()

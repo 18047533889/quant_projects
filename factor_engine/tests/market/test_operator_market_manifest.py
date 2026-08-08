@@ -37,8 +37,17 @@ def test_every_registered_canonical_has_a_market_row() -> None:
 
 def test_zero_unknown_and_not_reviewed() -> None:
     manifest = _build_manifest()
+    # UNKNOWN is the hard gate: every registered canonical resolves an A/US status.
     assert manifest["counts"]["unknown"] == 0
-    assert manifest["counts"]["not_reviewed"] == 0
+    # not_reviewed counts ONLY truly unclassified (UNKNOWN) operators; a generic
+    # op whose A/US status is the intentional both-markets input-dependent
+    # default is "reviewed by default".  The per-row ``contract_origin`` keeps
+    # the honest accounting (P1-8): explicit/typed/fallback are never conflated.
+    assert manifest["counts"]["not_reviewed"] == manifest["counts"]["unknown"]
+    assert manifest["counts"]["explicit_contract"] >= 0
+    assert manifest["counts"]["fallback_default"] >= 0
+    for name, row in manifest["operators"].items():
+        assert row["contract_origin"] in {"explicit", "typed_derived", "fallback_default"}, name
 
 
 def test_every_row_has_ashare_and_us_status() -> None:

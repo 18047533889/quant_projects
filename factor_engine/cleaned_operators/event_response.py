@@ -9,7 +9,7 @@ from history instead of hard-coding what an event means.
   events (P1).
 * ``event_historical_response_sign_balance``— mean sign of those responses;
   high magnitude with low sign balance flags a few extreme winners (P1).
-* ``event_hawkes_branching_ratio``          — mean number of exponential-decay
+* ``event_hawkes_branching_ratio_proxy``    — mean number of exponential-decay
   offspring per event: a self-excitation / clustering proxy (P2 research).
 
 ``response`` and ``event`` are supplied panels (return / volume change /
@@ -59,6 +59,7 @@ def _horizon_response(
     mode: str,
     min_events: int,
     sign_balance: bool,
+    require_full_horizon: bool = True,
 ) -> np.ndarray:
     n = response.shape[0]
     hw = max(2, int(history_window))
@@ -74,18 +75,25 @@ def _horizon_response(
         for s in range(lo, last_event + 1):
             if not np.isfinite(event[s]) or event[s] == 0.0:
                 continue
-            if not np.isfinite(response[s + 1]):
-                continue
-            if not np.isfinite(response[s + H]):
-                continue
             window_vals = response[s + 1 : s + H + 1]
-            finite = window_vals[np.isfinite(window_vals)]
-            if finite.size == 0:
-                continue
-            if mode == "sum":
-                rs.append(float(finite.sum()))
+            # P1-005: unify cohort selection with the shape ops
+            # (peak_lag/decay/dispersion/reversal): an event only enters the
+            # cohort when its ENTIRE response path s+1..s+H is fully observed.
+            # Partial-path averaging (a gap quietly shortened the horizon) would
+            # make mean/peak-lag compare different effective horizons.
+            if require_full_horizon:
+                if not np.all(np.isfinite(window_vals)):
+                    continue
+                seg = window_vals.astype(float)
             else:
-                rs.append(float(finite.mean()))
+                finite = window_vals[np.isfinite(window_vals)]
+                if finite.size == 0:
+                    continue
+                seg = finite
+            if mode == "sum":
+                rs.append(float(seg.sum()))
+            else:
+                rs.append(float(seg.mean()))
         if len(rs) < me:
             continue
         if sign_balance:
@@ -113,8 +121,8 @@ class EventHistoricalResponseMean(SeriesOperator):
 
     metadata = _metadata(
         "event_historical_response_mean",
-        "历史事件后的平均 horizon 响应（sum/mean 模式）。",
-        ["response", "event", "history_window", "horizon", "mode", "min_events"],
+        "历史事件后的平均 horizon 响应（sum/mean 模式，full-horizon cohort）。",
+        ["response", "event", "history_window", "horizon", "mode", "min_events", "require_full_horizon"],
         unit="ratio",
         cost=4,
     )
@@ -127,6 +135,7 @@ class EventHistoricalResponseMean(SeriesOperator):
         horizon: int = 5,
         mode: str = "mean",
         min_events: int = 5,
+        require_full_horizon: bool = True,
         **_: Any,
     ) -> pd.DataFrame:
         m = str(mode).lower()
@@ -138,7 +147,8 @@ class EventHistoricalResponseMean(SeriesOperator):
         out = np.full((rows, cols), np.nan, dtype=float)
         for c in range(cols):
             out[:, c] = _horizon_response(
-                rv[:, c], ev[:, c], history_window, horizon, m, min_events, sign_balance=False
+                rv[:, c], ev[:, c], history_window, horizon, m, min_events,
+                sign_balance=False, require_full_horizon=bool(require_full_horizon),
             )
         return frame_like(response, out)
 
@@ -160,8 +170,8 @@ class EventHistoricalResponseSignBalance(SeriesOperator):
 
     metadata = _metadata(
         "event_historical_response_sign_balance",
-        "历史事件响应符号平衡 mean(sign(R_s))（[-1,1]）。",
-        ["response", "event", "history_window", "horizon", "min_events"],
+        "历史事件响应符号平衡 mean(sign(R_s))（[-1,1]，full-horizon cohort）。",
+        ["response", "event", "history_window", "horizon", "min_events", "require_full_horizon"],
         unit="ratio",
         cost=4,
     )
@@ -173,6 +183,7 @@ class EventHistoricalResponseSignBalance(SeriesOperator):
         history_window: int = 120,
         horizon: int = 5,
         min_events: int = 5,
+        require_full_horizon: bool = True,
         **_: Any,
     ) -> pd.DataFrame:
         rv = response.to_numpy(dtype=float)
@@ -181,13 +192,14 @@ class EventHistoricalResponseSignBalance(SeriesOperator):
         out = np.full((rows, cols), np.nan, dtype=float)
         for c in range(cols):
             out[:, c] = _horizon_response(
-                rv[:, c], ev[:, c], history_window, horizon, "mean", min_events, sign_balance=True
+                rv[:, c], ev[:, c], history_window, horizon, "mean", min_events,
+                sign_balance=True, require_full_horizon=bool(require_full_horizon),
             )
         return frame_like(response, out)
 
 
 # ---------------------------------------------------------------------------
-# event_hawkes_branching_ratio (P2 research)
+# event_hawkes_branching_ratio_proxy (P2 research)
 # ---------------------------------------------------------------------------
 
 def _hawkes_branching_ratio_series(event: np.ndarray, window: int, max_lag: int, min_events: int) -> np.ndarray:
@@ -217,23 +229,25 @@ def _hawkes_branching_ratio_series(event: np.ndarray, window: int, max_lag: int,
 
 
 @register_operator(
-    name="event_hawkes_branching_ratio",
+    name="event_hawkes_branching_ratio_proxy",
     category="event_response",
     business_category="event_response",
-    canonical="event_hawkes_branching_ratio",
+    canonical="event_hawkes_branching_ratio_proxy",
     source="event_response",
     status="experimental",
 )
 class EventHawkesBranchingRatio(SeriesOperator):
-    """Hawkes 分支比代理：每事件在 ``max_lag`` 内的指数衰减后代均值。
+    """Hawkes 分支比**代理**：每事件在 ``max_lag`` 内的指数衰减后代均值。
 
     ``n* = mean_i Σ_{j: t_i<t_j≤t_i+L} exp(-β(t_j-t_i))``，``β=3/max_lag``。
-    度量事件自激/聚集强度；regime shift 与模型误设会产生虚假高值，因此仅
-    P2 / Research，不作为默认高权重搜索基元。
+    注意这是固定指数核的后代聚集 proxy，**没有**拟合真正的 Hawkes
+    ``λ(t)=μ+Σαe^{-β(t-t_i)}`` 也没有 MLE 求 ``α/β``；命名用
+    ``_proxy`` 以免后续被误读为拟合的分支比。度量事件自激/聚集强度；regime
+    shift 与模型误设会产生虚假高值，因此仅 P2 / Research。
     """
 
     metadata = _metadata(
-        "event_hawkes_branching_ratio",
+        "event_hawkes_branching_ratio_proxy",
         "Hawkes 分支比代理 mean(指数衰减后代数/事件)。",
         ["event", "window", "max_lag", "min_events"],
         unit="ratio",
@@ -507,7 +521,14 @@ def _register_surface() -> None:
         }
     )
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | {"event_hawkes_branching_ratio"}
+        set(_surface.RESEARCH_ONLY_CANONICALS) | {"event_hawkes_branching_ratio_proxy"}
+    )
+    # P1-006: the pre-rename name stays as an alias to the honest _proxy canonical
+    # (registered here, AFTER the class decorator registered the target).
+    from cleaned_operators.registry import OperatorRegistry
+
+    OperatorRegistry.register_alias(
+        "event_hawkes_branching_ratio", "event_hawkes_branching_ratio_proxy"
     )
 
 

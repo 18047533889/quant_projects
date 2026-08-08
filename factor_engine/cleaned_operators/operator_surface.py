@@ -373,8 +373,10 @@ _DAILY_GEMINI_PACK_2026_08 = frozenset({
     "ts_max_drawdown_activity_cost",
     # spectral shape
     "ts_spectral_entropy", "ts_dominant_cycle_period",
-    # relation graph
-    "relation_pagerank_centrality",
+    # NOTE: relation_pagerank_centrality was demoted to research-only (P0-008):
+    # its group-panel adjacency is a fake complete graph (edge flow proportional
+    # to node signal), so it is not a true network PageRank.  It stays out of the
+    # daily/extended mining surface until a real relation graph layer exists.
     # intraday activity-duration curvature
     "intraday_activity_duration_curvature",
 })

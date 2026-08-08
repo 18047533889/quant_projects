@@ -11,7 +11,7 @@ from fields.providers import (
     explain_field_support,
     require_binding,
 )
-from market import MarketStatus, ProviderQuality
+from market import CoverageClass, MarketStatus, ProviderQuality
 
 
 def test_concept_alias_map() -> None:
@@ -81,16 +81,24 @@ def test_dividend_pit_blocked_ashare_allowed_research() -> None:
     )
     assert a_research.status == MarketStatus.RESEARCH_ONLY
 
+    # US dividend: EXACT_NATIVE quality but PARTIAL coverage (0.51% null,
+    # ~12.2% non-USD excluded) -> CERTIFIED_PARTIAL, not full-market native.
     us = explain_field_support("cash_dividend_per_share", "us")
-    assert us.status == MarketStatus.CERTIFIED_NATIVE
+    assert us.status == MarketStatus.CERTIFIED_PARTIAL
 
 
 def test_market_cap_us_derived_partial() -> None:
+    # US market cap is derived from a ~42%-coverage shares snapshot: quality is
+    # EXACT_DERIVED but coverage is PARTIAL, so it is CERTIFIED_PARTIAL (never
+    # silently treated as a whole-market CERTIFIED_DERIVED in production).
     us = explain_field_support("market_cap_local", "us")
-    assert us.status == MarketStatus.CERTIFIED_DERIVED
+    assert us.status == MarketStatus.CERTIFIED_PARTIAL
     assert us.provider_quality == ProviderQuality.EXACT_DERIVED
+    assert us.coverage == CoverageClass.PARTIAL
+    assert not us.is_production_supported
     a = explain_field_support("market_cap_local", "ashare")
     assert a.status == MarketStatus.CERTIFIED_NATIVE
+    assert a.is_production_supported
 
 
 def test_multi_market_registry_isolates_table_collisions() -> None:
