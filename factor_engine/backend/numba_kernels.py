@@ -34,6 +34,9 @@ def _get_move_mean() -> Callable[..., np.ndarray] | None:
             s = 0.0
             for j in range(start, i + 1):
                 v = arr[j]
+                # NaN AND ±Inf are missing in the pandas reference
+                # ``rolling().mean()`` (pandas rolling aggregations skip
+                # non-finite); the fast path must match it.
                 if np.isfinite(v):
                     s += v
                     cnt += 1
@@ -112,6 +115,9 @@ def _get_move_corr() -> Callable[..., np.ndarray] | None:
             for j in range(start, i + 1):
                 xv = x[j]
                 yv = y[j]
+                # NaN AND ±Inf are missing in the pandas reference
+                # ``rolling().corr()`` (pandas rolling aggregations skip
+                # non-finite); the fast path must match it.
                 if not (np.isfinite(xv) and np.isfinite(yv)):
                     continue
                 cnt += 1
@@ -214,6 +220,9 @@ def _get_move_std() -> Callable[..., np.ndarray] | None:
             cnt = 0
             for j in range(start, i + 1):
                 v = arr[j]
+                # NaN AND ±Inf are missing in the pandas reference
+                # ``rolling().std()`` (pandas rolling aggregations skip
+                # non-finite); the fast path must match it.
                 if np.isfinite(v):
                     s += v
                     s2 += v * v

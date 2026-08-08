@@ -105,9 +105,13 @@ def _mean_reversion_half_life(vals, min_periods):
     if denom <= 1e-12:
         return float("nan")
     beta = float(np.cov(y[valid], x[valid])[0, 1] / denom)
-    if not np.isfinite(beta) or beta >= 0.0:
+    # Exact discrete AR(1) half-life (audit P1-E): phi = 1 + beta, valid only
+    # for 0 < phi < 1; half_life = ln(0.5)/ln(phi).  Matches the pandas
+    # reference in ts_model.ar_meanrev.
+    phi = 1.0 + beta
+    if not np.isfinite(phi) or not (0.0 < phi < 1.0):
         return float("nan")
-    return float(-np.log(2.0) / beta)
+    return float(np.log(0.5) / np.log(phi))
 
 
 def _half_life(x, window, min_periods):

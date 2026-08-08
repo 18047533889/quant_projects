@@ -36,7 +36,7 @@ DAILY_OPS = frozenset({
     "ts_chord_excursion_area", "ts_max_chord_excursion",
     "ts_turnover_cost_entropy", "ts_turnover_cost_mode_distance",
     "ts_turnover_cost_skew", "ts_turnover_age_dispersion",
-    "group_corr_spectral_gap", "group_corr_second_mode_localization",
+    "group_feature_spectral_gap", "group_feature_second_mode_localization",
     "cs_knn_graph_dirichlet_energy",
     "intraday_rv_signature_slope",
     "report_change_breadth", "report_change_coherence",
@@ -46,7 +46,7 @@ DAILY_OPS = frozenset({
 
 POLARS_OPS = DAILY_OPS - {
     # cross-sectional / group / minute→daily aggregations stay pandas_numpy-only.
-    "group_corr_spectral_gap", "group_corr_second_mode_localization",
+    "group_feature_spectral_gap", "group_feature_second_mode_localization",
     "cs_knn_graph_dirichlet_energy",
     "intraday_rv_signature_slope",
     "report_change_breadth", "report_change_coherence",
@@ -118,7 +118,7 @@ def _build_inputs(name: str, rng: np.random.Generator):
         return (fy, fx), {"window": 90}
     if name.startswith("ts_turnover"):
         return (price, turn), {}
-    if name.startswith("group_corr"):
+    if name.startswith("group_feature") or name.startswith("group_corr"):
         return (fx, fy, fz, g), {}
     if name == "cs_knn_graph_dirichlet_energy":
         return (fy, fx, fz, fz + 1.0), {"k": 3}

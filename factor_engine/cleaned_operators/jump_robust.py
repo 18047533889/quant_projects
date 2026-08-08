@@ -11,7 +11,8 @@ z-statistic.
 
 * ``intraday_medrv``       — MedRV, median-based jump-robust integrated variance.
 * ``intraday_minrv``       — MinRV, minimum-based jump-robust integrated variance.
-* ``intraday_jump_test_stat`` — ``(RV-BV)/sqrt((pi/2)^2 * TQ + eps)`` signed z.
+* ``intraday_jump_test_stat`` — standard Barndorff-Nielsen–Shephard (2006)
+  linear jump-test z-statistic ``(RV-BV)/sqrt((θ-2)/3·Σr⁴)``, θ-2=(π/2)²+π-5.
 
 All operators are trailing-window, prefix-causal and deterministic.  NaN
 returns are dropped from the window; a window with fewer than 5 finite returns
@@ -29,9 +30,19 @@ from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_op
 from cleaned_operators.rolling_pack import check_window, frame_like, register_polars_bridge
 
 _EPS = 1e-12
-_MEDRV_CONST = np.pi / (6.0 - 4.0 * np.sqrt(2.0) + np.pi)  # ~0.9015
+# Standard MedRV constant (Andersen–Dobrev–Schaumburg 2012): pi/(6-4√3+pi).
+# The sqrt(2) variant was a transcription error and changed the estimator's
+# level by ~35% (1.4195 vs 0.9016) — 3rd-round audit P0-01.
+_MEDRV_CONST = np.pi / (6.0 - 4.0 * np.sqrt(3.0) + np.pi)  # ~1.4195
 _MINRV_CONST = np.pi / (np.pi - 2.0)                        # ~2.7516
-_PI_OVER_2_SQ = (np.pi / 2.0) ** 2
+# Barndorff-Nielsen–Shephard (2006) linear jump-test variance factor:
+# Var(sqrt(N)(RV-BV)) -> (θ-2)·IQ with θ = mu1^-4 + 2 mu1^-2 - 5,
+# mu1 = E|Z| = sqrt(2/pi)  =>  θ-2 = (π/2)² + π - 5 ≈ 0.6090.  With the
+# realized-quarticity estimator RQ = (N/3)·Σr⁴ → IQ, the z-statistic is
+#   Z = sqrt(N)(RV-BV)/sqrt((θ-2)·RQ) = (RV-BV)/sqrt((θ-2)/3·Σr⁴).
+# 3rd-round audit P0-02: the previous (π/2)²·TQ denominator was ~2√N too large
+# (a ~30x deflation at N=240) and was not a standard BNS statistic.
+_THETA_MINUS_2 = (np.pi / 2.0) ** 2 + np.pi - 5.0  # ~0.6090
 _MIN_FINITE = 5
 
 
@@ -93,8 +104,9 @@ def _jump_z(v: np.ndarray) -> float:
         return np.nan
     rv = float(np.sum(v * v))
     bv = float((np.pi / 2.0) * np.sum(np.abs(v[1:]) * np.abs(v[:-1])))
-    tq = float((n / 3.0) * np.sum(v ** 4))
-    return float((rv - bv) / np.sqrt(_PI_OVER_2_SQ * tq + _EPS))
+    rq4 = float(np.sum(v ** 4))  # raw quarticity sum Σr⁴
+    denom2 = max(_THETA_MINUS_2 / 3.0 * rq4, _EPS)
+    return float((rv - bv) / np.sqrt(denom2))
 
 
 @register_operator(
@@ -107,7 +119,7 @@ def _jump_z(v: np.ndarray) -> float:
 class IntradayMedRV(SeriesOperator):
     """日内 MedRV 已实现方差（中位数跳跃稳健估计）。
 
-    ``C * N/(N-2) * sum_i med(|r_i|,|r_{i-1}|,|r_{i-2}|)^2``，``C=pi/(6-4sqrt2+pi)``。
+    ``C * N/(N-2) * sum_i med(|r_i|,|r_{i-1}|,|r_{i-2}|)^2``，``C=pi/(6-4sqrt3+pi)``。
     相比 RV 对单根分钟跳跃不敏感；缺失分钟先剔除，随后前 2 个观测无三元组 → 仅
     贡献窗口计数。单位 variance，窗口内 <5 个有限值 → NaN。P1。
     """
@@ -164,16 +176,19 @@ class IntradayMinRV(SeriesOperator):
     source="jump_robust",
 )
 class IntradayJumpTestStat(SeriesOperator):
-    """日内跳跃检验 z 统计量（有符号）。
+    """日内跳跃检验 BNS 线性 z 统计量（Barndorff-Nielsen–Shephard 2006）。
 
-    ``RV=sum r^2``、``BV=(pi/2)*sum |r_i||r_{i-1}|``、``TQ=N/3*sum r^4``；
-    ``Z=(RV-BV)/sqrt(((pi/2)^2)*TQ+eps)``。正 = 存在向上跳跃驱动方差；负 = 连续
-    路径主导（或极端负跳跃）。单位 zscore。P2。
+    ``RV=sum r^2``、``BV=(pi/2)*sum |r_i||r_{i-1}|``、
+    ``Z=(RV-BV)/sqrt((theta-2)/3*sum r^4)``，``theta-2=(pi/2)^2+pi-5≈0.6090``。
+
+    这是**幅度统计量**：正 = 跳跃主导波动（向上或向下跳跃都会使 RV-BV>0）；
+    负 = 连续样本路径主导。它不携带方向信息——跳跃方向请使用有符号跳跃算子，
+    不要把本统计量的正负解释为向上/向下跳跃。单位 zscore。P2。
     """
 
     metadata = _metadata(
         "intraday_jump_test_stat",
-        "日内跳跃检验有符号 z 统计量。",
+        "日内跳跃检验 BNS 线性 z 统计量（幅度，无方向）。",
         ["returns", "window"],
         unit="zscore",
         cost=4,

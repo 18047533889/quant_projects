@@ -45,6 +45,16 @@ class ScanHandle:
             )
         return self._lf
 
+    def native_lazyframe(self) -> Any:
+        """composition-only 返回底层 LazyFrame（Phase 5 正式接口）。
+
+        允许在扫描之上链式组合 Polars 原生表达式（select/filter/join/rename…），
+        但**物化**仍只能走 ``ScanHandle.collect()``——那里强制 QueryBudget /
+        snapshot / audit，因此这里不构成绕过预算的逃生口。跨包消费方禁止直接
+        访问 ``_lf`` 字段。
+        """
+        return self._lf
+
     def collect(self) -> ReadResult:
         """执行 Polars 计划并返回绑定 snapshot/lineage 的 ``ReadResult``。"""
         import time

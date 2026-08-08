@@ -49,12 +49,23 @@ def series_to_panel(s: pd.Series, ctx: ExecutionContext) -> pd.DataFrame:
     return panel
 
 
-def panel_to_series(panel: pd.DataFrame, ctx: ExecutionContext, *, template: pd.Series) -> pd.Series:
+def panel_to_series(
+    panel: pd.DataFrame,
+    ctx: ExecutionContext,
+    *,
+    template: "pd.Series | pd.Index | None" = None,
+) -> pd.Series:
     stacked = panel.stack(future_stack=True)
     stacked.index.names = [ctx.timestamp_col, ctx.instrument_col]
-    if len(stacked) == len(template.index) and stacked.index.equals(template.index):
+    if template is None:
         return stacked
-    return stacked.reindex(template.index)
+    if isinstance(template, pd.Index):
+        target = template
+    else:
+        target = template.index
+    if len(stacked) == len(target) and stacked.index.equals(target):
+        return stacked
+    return stacked.reindex(target)
 
 
 def _resolve_canonical(op: str) -> str:
@@ -195,8 +206,8 @@ def _prepare_call_args(
                     call_args.append(panel)
             if template is None and isinstance(val, pd.Series):
                 template = val
-            elif template is None and getattr(ctx, "template_series", None) is not None:
-                template = ctx.template_series
+            elif template is None and _ctx_template(ctx) is not None:
+                template = _ctx_template(ctx)
         else:
             if broadcast_scalars and template_panel is not None:
                 call_args.append(pd.DataFrame(
@@ -209,11 +220,26 @@ def _prepare_call_args(
     return call_args, template, template_panel
 
 
+def _target_index(template: Any) -> Any:
+    """从 Series 或 MultiIndex 模板提取对齐用的 target index（R16）。"""
+    if isinstance(template, pd.Index):
+        return template
+    return template.index
+
+
+def _ctx_template(ctx: ExecutionContext) -> Any:
+    """Phase 5 R16：优先取 axis-only ``template_index``，兼容旧 ``template_series``。"""
+    idx = getattr(ctx, "template_index", None)
+    if idx is not None:
+        return idx
+    return getattr(ctx, "template_series", None)
+
+
 def _normalize_operator_result(
     result: Any,
     *,
     backend: str,
-    template: pd.Series,
+    template: "pd.Series | pd.Index",
     template_panel: pd.DataFrame | None,
     ctx: ExecutionContext,
 ) -> Any:
@@ -235,18 +261,19 @@ def _normalize_operator_result(
         if panel_native_enabled(ctx):
             return result
         return panel_to_series(result, ctx, template=template)
+    target = _target_index(template)
     if isinstance(result, pd.Series):
         if isinstance(result.index, pd.MultiIndex):
-            if not result.index.equals(template.index):
+            if not result.index.equals(target):
                 raise OperatorShapeError("operator result index does not match the input template")
             return result
-        if len(result) != len(template):
-            raise OperatorShapeError(f"operator result length {len(result)} does not match template {len(template)}")
-        if not result.index.equals(template.index):
+        if len(result) != len(target):
+            raise OperatorShapeError(f"operator result length {len(result)} does not match template {len(target)}")
+        if not result.index.equals(target):
             raise OperatorShapeError("operator returned an indexless/misaligned Series")
         return result
     if pd.api.types.is_scalar(result):
-        return pd.Series(result, index=template.index)
+        return pd.Series(result, index=target)
     array = np.asarray(result)
     if array.ndim == 1:
         if len(array) != len(template):
@@ -298,7 +325,7 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
         ):
             return result
         if template is None:
-            template = getattr(ctx, "template_series", None)
+            template = _ctx_template(ctx)
         if template is None:
             raise ValueError(f"cleaned op {op!r} requires at least one Series input")
         return _normalize_operator_result(

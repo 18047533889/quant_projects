@@ -5233,9 +5233,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         b = _compile_layer(node.inputs[2], dialect=dialect)
         if cond is None or a is None or b is None:
             return None
+        # Audit #19: NULL/NaN condition stays missing — `where` is a value
+        # selector and must not silently take the else branch (pandas reference
+        # ``ScalarBroadcastWhere`` propagates unknown conditions).
+        isnan_fn = _dialect_fn(dialect, "isnan")
         return _Layer(
             f"SELECT c.ts, c.inst, "
-            f"CASE WHEN {_truthy_sql('c._v')} THEN a._v ELSE b._v END AS _v "
+            f"CASE WHEN c._v IS NULL OR {isnan_fn}(c._v) THEN NULL "
+            f"WHEN {_truthy_sql('c._v')} THEN a._v ELSE b._v END AS _v "
             f"FROM ({cond.sql}) c "
             f"INNER JOIN ({a.sql}) a USING (ts, inst) "
             f"INNER JOIN ({b.sql}) b USING (ts, inst)",
@@ -5280,13 +5285,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 has_ts_partition=True,
             )
         if op == "group_mean":
-            expr = f"AVG(x._v) OVER ({part})"
+            # NaN/NULL members stay NaN/NULL (audit #19): the window aggregate
+            # is only assigned to finite members, mirroring the pandas
+            # reference and the group_sum/group_std guards below.
+            expr = f"CASE WHEN x._v IS NULL THEN NULL ELSE AVG(x._v) OVER ({part}) END"
         elif op == "group_sum":
             expr = f"CASE WHEN x._v IS NULL THEN NULL ELSE SUM(x._v) OVER ({part}) END"
         elif op == "group_min":
-            expr = f"MIN(x._v) OVER ({part})"
+            expr = f"CASE WHEN x._v IS NULL THEN NULL ELSE MIN(x._v) OVER ({part}) END"
         elif op == "group_max":
-            expr = f"MAX(x._v) OVER ({part})"
+            expr = f"CASE WHEN x._v IS NULL THEN NULL ELSE MAX(x._v) OVER ({part}) END"
         elif op == "group_count":
             expr = (
                 f"CASE WHEN x._v IS NULL THEN NULL "

@@ -45,6 +45,22 @@ def _runtime_family() -> dict[str, str]:
             out[module] = "missing"
     out["os"] = platform.system()
     out["architecture"] = platform.machine()
+    # Phase 5 P1-2：服务器硬件 fingerprint——不同机器（16核32GB vs 64核512GB、
+    # 本地NVMe vs COS远程）的最优 backend 不同，不能共享同一 measured baseline。
+    try:
+        from runtime.resource_governor import (
+            effective_cpu_slots,
+            effective_memory_limit_bytes,
+            spill_disk_speed_class,
+        )
+
+        out["cpu_model"] = platform.processor() or "unknown"
+        out["effective_cores"] = str(effective_cpu_slots())
+        ram = effective_memory_limit_bytes()
+        out["ram_gb"] = str(round(ram / 1024**3, 1))
+        out["storage_class"] = spill_disk_speed_class()
+    except Exception:
+        pass
     return out
 
 
@@ -191,6 +207,52 @@ def _candidate_is_measured(ops: tuple[str, ...], backend: str) -> bool:
     return True
 
 
+def _execution_memory_budget(ctx: Any) -> int | None:
+    """执行期进程内存预算（Phase 5 P1-1）；无显式资源配置返回 ``None``。
+
+    仅当用户显式配置了内存/结果/spill 任一资源（env 或 PerfConfig 字段）时参与
+    路由，避免改变默认行为。
+    """
+    perf = getattr(ctx, "perf", None)
+    if perf is None:
+        return None
+    explicit = (
+        getattr(perf, "memory_limit_bytes", None)
+        or getattr(perf, "result_budget_bytes", None)
+        or getattr(perf, "spill_budget_bytes", None)
+    )
+    if not explicit:
+        return None
+    try:
+        plan = perf.build_resource_plan()
+    except Exception:
+        return None
+    if plan is None:
+        return None
+    return int(plan.process_budget_bytes)
+
+
+def estimate_plan_peak_memory(ops: tuple[str, ...], rows: int) -> int:
+    """估算整计划峰值内存（字节）。
+
+    以 float64 panel（8B/格）为基准，乘以算子内存档位放大系数：high×3、
+    medium×2、low×1，加一次表示转换缓冲。用于把「峰值内存 > budget」的候选
+    backend 移出路由（Phase 5 P1-1）。
+    """
+    from backend.operator_cost import get_operator_cost
+
+    cells = max(1, rows) * 8
+    factor = 1.0
+    for op in ops:
+        cost = get_operator_cost(op)
+        if cost.memory == "high":
+            factor += 0.5
+        elif cost.memory == "medium":
+            factor += 0.25
+    # 表示转换 / 中间物化缓冲 ≈ 基准 × 1.5
+    return int(cells * factor * 1.5)
+
+
 def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
     from backend.operator_capability import supports_pandas, supports_polars, supports_sql
     from backend.polars_long_production import is_polars_long_native_production_safe
@@ -202,9 +264,21 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
     source_ref = _contains_source_ref(plan)
     data_kind = _data_source_kind(ctx)
     candidates: dict[str, float] = {}
+    mem_budget = _execution_memory_budget(ctx)
+    peak = estimate_plan_peak_memory(ops, rows)
+    if mem_budget is not None and peak > mem_budget:
+        # 显式资源预算下整计划峰值已超预算：无任何候选可安全执行。
+        from backend.operator_capability import UnsupportedOperatorBackendError
+        raise UnsupportedOperatorBackendError(
+            "no eligible physical plan: estimated peak memory "
+            f"{peak / 1024**2:.0f} MiB exceeds execution budget {mem_budget / 1024**2:.0f} MiB"
+        )
+
+    def _within_budget(est_peak: int) -> bool:
+        return mem_budget is None or est_peak <= mem_budget
 
     pandas_ok = all(supports_pandas(op, mode=mode) for op in ops)
-    if pandas_ok:
+    if pandas_ok and _within_budget(peak):
         candidates["pandas_numpy"] = sum(_cost(op, "pandas_numpy", rows) for op in ops)
 
     # Wide Polars is valid even when an operator is not Polars-long-native. The

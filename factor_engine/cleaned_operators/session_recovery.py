@@ -53,6 +53,12 @@ def _recovery_day(x: np.ndarray, event: np.ndarray, horizon: int, residual_fract
     for s in range(1, n):
         if not np.isfinite(event[s]) or event[s] == 0.0:
             continue
+        # Right censoring: an event whose full recovery horizon extends past the
+        # last observed minute is *unobserved*, not a failure.  Excluding it
+        # entirely is the honest survival-analysis treatment — a late-day event
+        # must not drag the daily median toward "no recovery" (P0-04).
+        if s + H >= n:
+            continue
         b = x[s - 1]
         cur = x[s]
         if not np.isfinite(b) or not np.isfinite(cur):
@@ -62,10 +68,10 @@ def _recovery_day(x: np.ndarray, event: np.ndarray, horizon: int, residual_fract
             continue
         tau = H + 1
         for k in range(1, H + 1):
-            if s + k >= n:
-                break
             v = x[s + k]
             if not np.isfinite(v):
+                # a missing interior minute is not evidence of non-recovery;
+                # keep scanning the horizon rather than judging "failed".
                 continue
             if abs(v - b) <= c * a:
                 tau = k

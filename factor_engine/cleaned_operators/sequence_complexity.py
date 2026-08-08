@@ -73,16 +73,22 @@ def _permutation_pattern(values: np.ndarray) -> int:
     return code
 
 
-def _permutation_codes(chunk: np.ndarray, order: int, delay: int) -> list[int]:
-    """Valid permutation codes over the raw window (NaN embeddings dropped)."""
-    codes: list[int] = []
+def _permutation_codes(chunk: np.ndarray, order: int, delay: int) -> list[tuple[int, int]]:
+    """Valid permutation (code, start_index) over the raw window.
+
+    NaN embeddings are dropped, but the original start index is kept so a
+    transition can only be formed between *genuinely adjacent* embeddings
+    (audit R02): after an invalid embedding is removed, ``zip(codes[1:])`` must
+    not bridge the gap into a transition.
+    """
+    codes: list[tuple[int, int]] = []
     embed_len = (order - 1) * delay + 1
     n = len(chunk)
     for i in range(n - embed_len + 1):
         idx = [i + d * delay for d in range(order)]
         vals = chunk[idx]
         if np.isfinite(vals).all():
-            codes.append(_permutation_pattern(vals))
+            codes.append((_permutation_pattern(vals), i))
     return codes
 
 
@@ -130,7 +136,7 @@ class TsPermutationEntropy(SeriesOperator):
         min_p = 2 if min_patterns is None else max(2, int(min_patterns))
 
         def _fn(chunk: np.ndarray) -> float:
-            codes = _permutation_codes(chunk, ord_, dl)
+            codes = [c for c, _ in _permutation_codes(chunk, ord_, dl)]
             if len(codes) < min_p:
                 return np.nan
             counts: dict[int, int] = {}
@@ -241,22 +247,31 @@ class TsPermutationTransitionEntropy(SeriesOperator):
         norm = bool(normalize)
 
         def _fn(chunk: np.ndarray) -> float:
-            codes = _permutation_codes(chunk, ord_, dl)
-            if len(codes) < 3:
+            coded = _permutation_codes(chunk, ord_, dl)
+            if len(coded) < 3:
                 return np.nan
-            states = sorted(set(codes))
+            states = sorted({c for c, _ in coded})
             if len(states) < 2:
                 return np.nan
             state_index = {state: i for i, state in enumerate(states)}
             transitions = [[0.0] * len(states) for _ in range(len(states))]
-            for prev, cur in zip(codes, codes[1:]):
+            n_trans = 0
+            for (prev, start), (cur, start_next) in zip(coded, coded[1:]):
+                # Only genuinely adjacent embeddings form a transition (audit
+                # R02): a dropped NaN embedding must not turn two non-adjacent
+                # patterns into a fake next-pattern link.
+                if start_next != start + dl:
+                    continue
                 transitions[state_index[prev]][state_index[cur]] += 1.0
+                n_trans += 1
+            if n_trans < 2:
+                return np.nan
             cond = 0.0
             for row in transitions:
                 row_sum = float(sum(row))
                 if row_sum <= 0:
                     continue
-                p_cur = row_sum / (len(codes) - 1)
+                p_cur = row_sum / n_trans
                 for count in row:
                     if count <= 0:
                         continue

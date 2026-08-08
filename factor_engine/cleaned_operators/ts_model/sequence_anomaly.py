@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.candle_state_space import _matrix_profile_series
 from cleaned_operators.ts_model._rolling_core import frame_like, metadata
 
 _CANONICALS: list[str] = []
@@ -61,28 +62,33 @@ def _zscore(vec: np.ndarray) -> np.ndarray:
 
 
 def _mp_stats(vals: np.ndarray, m: int, stat: str) -> float:
-    seg = vals[-200:]
-    finite = seg[np.isfinite(seg)]
+    """Unified matrix-profile statistic over the shared kernel.
+
+    The legacy implementation compressed NaN (``seg[np.isfinite(seg)]``), which
+    bridged gaps, and used a hard-coded 200-row invisible tail (audit P0).  The
+    shared ``_matrix_profile_series`` kernel keeps the time axis intact
+    (contiguous-finite patterns only), enforces an exclusion zone and takes an
+    explicit history window — there is no invisible tail.  ``discord`` and
+    ``motif`` are the same min-distance quantity and are both superseded by the
+    novelty canonical (``ts_multivariate_matrix_profile_novelty``).
+    """
+    v = np.asarray(vals, dtype=float)
+    if v.ndim == 1:
+        v = v[:, None]
     m = max(3, int(m))
-    n = len(finite)
+    # Full-history band (explicit — no hard-coded 200): window == history == n.
+    n = v.shape[0]
     if n < m + 3:
         return np.nan
-    last = _zscore(finite[n - m :])
-    distances: list[float] = []
-    for i in range(0, n - m):
-        cand = _zscore(finite[i : i + m])
-        d = float(np.sqrt(np.sum((last - cand) ** 2) / m))
-        distances.append(d)
-    if len(distances) == 0:
-        return np.nan
-    if stat == "discord":
-        return float(min(distances))
-    if stat == "motif":
-        return float(min(distances))
+    novelty, _age, frequency, dispersion = _matrix_profile_series(
+        v, window=n, subsequence_length=m, history=n
+    )
+    last = n - 1
+    if stat in {"discord", "motif"}:
+        return float(novelty[last, 0])
     if stat == "recurrence":
-        thr = float(np.median(distances)) * 0.5
-        return float(sum(d < thr for d in distances))
-    return float(np.mean(distances))
+        return float(frequency[last, 0]) if np.isfinite(frequency[last, 0]) else np.nan
+    return float(dispersion[last, 0]) if np.isfinite(dispersion[last, 0]) else np.nan
 
 
 _register("ts_matrix_profile_discord_score", "末尾子序列到最近历史子序列距离（离群度）。", ["x", "m"], "level",

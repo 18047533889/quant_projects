@@ -43,6 +43,12 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
 
 
 def _apply_two(x: pd.DataFrame, y: pd.DataFrame, fn) -> pd.DataFrame:
+    # Multi-input axes alignment (audit P0): identical index AND columns, so a
+    # reordered secondary panel can never pair A's data with B's path.
+    if not x.index.equals(y.index) or not x.columns.equals(y.columns):
+        raise ValueError(
+            "path_signature inputs must share identical index and columns"
+        )
     xv = x.to_numpy(dtype=float)
     yv = y.to_numpy(dtype=float)
     rows, cols = xv.shape
@@ -53,23 +59,48 @@ def _apply_two(x: pd.DataFrame, y: pd.DataFrame, fn) -> pd.DataFrame:
     return frame_like(x, out)
 
 
+def _trailing_contiguous_xy(
+    x: np.ndarray, y: np.ndarray
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Longest trailing run where BOTH x and y are finite.
+
+    Gap no-compress (audit P0): a missing point splits the path — data on the
+    other side of a gap is never re-joined into the same signature.
+    """
+    valid = np.isfinite(x) & np.isfinite(y)
+    n = valid.shape[0]
+    end = n
+    while end > 0 and not valid[end - 1]:
+        end -= 1
+    start = end
+    while start > 0 and valid[start - 1]:
+        start -= 1
+    if end - start < 1:
+        return None
+    return x[start:end], y[start:end]
+
+
 def _sig_level2(x: np.ndarray, y: np.ndarray, window: int):
     seg_x = x[-int(window):]
     seg_y = y[-int(window):]
-    finite = np.isfinite(seg_x) & np.isfinite(seg_y)
-    sx, sy = seg_x[finite], seg_y[finite]
+    pair = _trailing_contiguous_xy(seg_x, seg_y)
+    if pair is None:
+        return None
+    sx, sy = pair
     if len(sx) < 3:
         return None
+    # Anchor the path to its first point (translation invariance): Xbar(t) = X(t)
+    # - X(0).  Level-2 iterated integrals are then the Chen integrals over the
+    # anchored path — the absolute level no longer enters the statistic.
+    ax = sx - sx[0]
+    ay = sy - sy[0]
     dx = np.diff(sx)
     dy = np.diff(sy)
-    ax = sx[:-1]
-    ay = sy[:-1]
-    # iterated integrals: ∫ X dY etc. (discrete rectangle rule)
-    s_xdx = float(np.sum(ax * dx))
-    s_xdy = float(np.sum(ax * dy))
-    s_ydx = float(np.sum(ay * dx))
-    s_ydy = float(np.sum(ay * dy))
-    area = 0.5 * (s_xdy - s_ydx)
+    s_xdx = float(np.sum(ax[:-1] * dx))  # ∫ Xbar_x dX_x
+    s_xdy = float(np.sum(ax[:-1] * dy))  # ∫ Xbar_x dX_y  (cross term)
+    s_ydx = float(np.sum(ay[:-1] * dx))  # ∫ Xbar_y dX_x  (cross term)
+    s_ydy = float(np.sum(ay[:-1] * dy))  # ∫ Xbar_y dX_y
+    area = 0.5 * (s_xdy - s_ydx)  # Levy area (translation-invariant)
     return s_xdx, s_xdy, s_ydx, s_ydy, area
 
 

@@ -141,8 +141,8 @@ def _z_normalize(sub: np.ndarray) -> np.ndarray:
 
 def _matrix_profile_series(
     x2d: np.ndarray, window: int, subsequence_length: int, history: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Shared matrix-profile kernel -> (novelty, motif_age/history) per row.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Shared matrix-profile kernel -> (novelty, motif_age, frequency, dispersion).
 
     For every row ``t`` the current trailing subsequence is ``x[t-L+1..t]`` and
     the historical search band for prior-subsequence start indices is
@@ -150,10 +150,20 @@ def _matrix_profile_series(
     upper bound (``window >= history``) and also clamps the band, which is
     redundant once ``window >= history`` holds — it keeps the parameter an
     explicit part of the kernel contract.
+
+    Audit P0 (matrix-profile rework):
+    * an exclusion zone of ``L//4`` (>= m/4) keeps trivial self-matches out of
+      the band;
+    * the current pattern AND every candidate must be contiguous-finite — a gap
+      never bridges two patterns (no NaN compression);
+    * ``window``/``history`` are explicit parameters — there is no invisible
+      hard-coded tail.
     """
     rows, cols = x2d.shape
     novelty = np.full((rows, cols), np.nan, dtype=float)
     age = np.full((rows, cols), np.nan, dtype=float)
+    frequency = np.full((rows, cols), np.nan, dtype=float)
+    dispersion = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
     L = int(subsequence_length)
     h = int(history)
@@ -163,6 +173,7 @@ def _matrix_profile_series(
         raise ValueError("history must be >= subsequence_length")
     if w < h:
         raise ValueError("window must be >= history")
+    ez = max(0, int(L // 4))  # matrix-profile exclusion zone (>= m/4)
     for c in range(cols):
         x = x2d[:, c]
         for r in range(rows):
@@ -172,25 +183,34 @@ def _matrix_profile_series(
             if not np.all(np.isfinite(z)):
                 continue
             s0 = max(0, r - h, r - w)
-            s1 = r - L  # latest start index for a strictly prior subsequence
+            s1 = r - L - ez  # strictly prior + exclusion zone
             if s0 > s1:
                 continue
             zz = _z_normalize(z)
             best_d = np.inf
             best_s = -1
+            dists: list[float] = []
             for s in range(s0, s1 + 1):
                 cand = x[s : s + L]
                 if not np.all(np.isfinite(cand)):
                     continue
                 cz = _z_normalize(cand)
                 d = float(np.linalg.norm(zz - cz))
+                dists.append(d)
                 if d < best_d:
                     best_d = d
                     best_s = s
-            if np.isfinite(best_d):
-                novelty[r, c] = best_d
-                age[r, c] = (r - best_s) / float(h)
-    return novelty, age
+            if not dists:
+                continue
+            novelty[r, c] = best_d
+            age[r, c] = (r - best_s) / float(h)
+            if len(dists) >= 3:
+                thr = float(np.median(dists)) * 0.5
+                frequency[r, c] = (
+                    float(sum(d <= thr for d in dists)) / float(len(dists))
+                )
+                dispersion[r, c] = float(np.std(dists))
+    return novelty, age, frequency, dispersion
 
 
 # ---------------------------------------------------------------------------
@@ -290,7 +310,7 @@ class TsMultivariateMatrixProfileNovelty(SeriesOperator):
         self, x: pd.DataFrame, window: int = 120,
         subsequence_length: int = 10, history: int = 80, **_: Any,
     ) -> pd.DataFrame:
-        novelty, _age = _matrix_profile_series(
+        novelty, _age, _freq, _disp = _matrix_profile_series(
             x.to_numpy(dtype=float), window, subsequence_length, history,
         )
         return frame_like(x, novelty)
@@ -322,10 +342,75 @@ class TsMatrixProfileMotifAge(SeriesOperator):
         self, x: pd.DataFrame, window: int = 120,
         subsequence_length: int = 10, history: int = 80, **_: Any,
     ) -> pd.DataFrame:
-        _novelty, age = _matrix_profile_series(
+        _novelty, age, _freq, _disp = _matrix_profile_series(
             x.to_numpy(dtype=float), window, subsequence_length, history,
         )
         return frame_like(x, age)
+
+
+@register_operator(
+    name="ts_matrix_profile_motif_frequency",
+    category="candle_state_space",
+    business_category="candle_state_space",
+    canonical="ts_matrix_profile_motif_frequency",
+    source="candle_state_space",
+)
+class TsMatrixProfileMotifFrequency(SeriesOperator):
+    """矩阵轮廓模式频率：历史带内近邻匹配（距离 <= 中位距离/2）占比。
+
+    与新颖度 / 模式年龄共享同一矩阵轮廓核，输出真正区分的统计量（audit
+    P0：discord/motif 若都只是 min-distance，必须合并为新颖度；频率是
+    “这个模式最近被重复看到多少次”的独立度量）。P1。
+    """
+
+    metadata = _metadata(
+        "ts_matrix_profile_motif_frequency",
+        "历史带内近邻匹配（dist <= median/2）占比。",
+        ["x", "window", "subsequence_length", "history"],
+        unit="ratio",
+        cost=8,
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 120,
+        subsequence_length: int = 10, history: int = 80, **_: Any,
+    ) -> pd.DataFrame:
+        _novelty, _age, freq, _disp = _matrix_profile_series(
+            x.to_numpy(dtype=float), window, subsequence_length, history,
+        )
+        return frame_like(x, freq)
+
+
+@register_operator(
+    name="ts_matrix_profile_neighbor_dispersion",
+    category="candle_state_space",
+    business_category="candle_state_space",
+    canonical="ts_matrix_profile_neighbor_dispersion",
+    source="candle_state_space",
+)
+class TsMatrixProfileNeighborDispersion(SeriesOperator):
+    """矩阵轮廓近邻离散度：历史带内所有候选距离的标准差。
+
+    与新颖度 / 模式年龄 / 频率共享同一矩阵轮廓核；高离散度 = 历史带内既有
+    很近也有很远的模式（audit P0 的 neighbor_dispersion 输出）。P1。
+    """
+
+    metadata = _metadata(
+        "ts_matrix_profile_neighbor_dispersion",
+        "历史带内候选子序列距离的标准差（近邻离散度）。",
+        ["x", "window", "subsequence_length", "history"],
+        unit="ratio",
+        cost=8,
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 120,
+        subsequence_length: int = 10, history: int = 80, **_: Any,
+    ) -> pd.DataFrame:
+        _novelty, _age, _freq, disp = _matrix_profile_series(
+            x.to_numpy(dtype=float), window, subsequence_length, history,
+        )
+        return frame_like(x, disp)
 
 
 _NEW_CANONICALS = (
@@ -333,6 +418,8 @@ _NEW_CANONICALS = (
     "ts_vector_state_local_density",
     "ts_multivariate_matrix_profile_novelty",
     "ts_matrix_profile_motif_age",
+    "ts_matrix_profile_motif_frequency",
+    "ts_matrix_profile_neighbor_dispersion",
 )
 
 

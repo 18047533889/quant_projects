@@ -109,30 +109,45 @@ def apply_universe_mask(
     ``backend.universe_spec``), never dropped rows.  ``None`` / all-NaN mask
     fail-closes the whole row/column via the NaN result.
 
+    NaN/±Inf in the mask are treated as OUT-of-universe (fail-closed): an
+    unknown universe state must never become an in-pool member
+    (``bool(np.nan) is True`` — audit P0).  A DataFrame mask is aligned to the
+    panel by label (index AND columns): same shape but a different column order
+    can no longer pair A's data with B's mask.
+
     Accepts 2-D numpy arrays or pandas DataFrames (same axes).
     """
     keep_shape = UNIVERSE_SPEC.shape_preserving_cross_section if shape_preserving is None else shape_preserving
-    _apply_pandas = True
-    try:
-        import pandas as pd  # noqa: F401
+    del keep_shape  # shape is preserved by construction (never dropped rows)
 
-        if isinstance(panel, pd.DataFrame):
-            _apply_pandas = True
-    except Exception:  # pragma: no cover - optional pandas
-        _apply_pandas = False
-    if _apply_pandas:
-        import pandas as pd
+    import pandas as pd
 
-        if isinstance(panel, pd.DataFrame):
-            m = mask.to_numpy(dtype=bool) if isinstance(mask, pd.DataFrame) else np.asarray(mask, dtype=bool)
-            out = panel.to_numpy(dtype=float).copy()
-            out[~m] = np.nan
-            return pd.DataFrame(out, index=panel.index, columns=panel.columns, dtype=float)
+    if isinstance(panel, pd.DataFrame):
+        if isinstance(mask, pd.DataFrame):
+            # Label-based alignment: a mask with the same shape but a different
+            # column order must NOT be applied positionally.  Reindex by label;
+            # cells the mask does not cover become NaN -> out-of-universe.
+            m = mask.reindex(index=panel.index, columns=panel.columns).to_numpy(
+                dtype=float
+            )
+        else:
+            m = np.asarray(mask, dtype=float)
+        if m.shape != panel.shape:
+            raise ValueError(
+                f"panel/mask shape mismatch: {panel.shape} vs {m.shape}"
+            )
+        # Fail-closed truth: finite & nonzero = in-universe; NaN/Inf/0 = out.
+        m_bool = np.isfinite(m) & (m != 0)
+        out = panel.to_numpy(dtype=float).copy()
+        out[~m_bool] = np.nan
+        return pd.DataFrame(out, index=panel.index, columns=panel.columns, dtype=float)
+
     p = np.asarray(panel, dtype=float).copy()
-    m = np.asarray(mask, dtype=bool)
+    m = np.asarray(mask, dtype=float)
     if p.shape != m.shape:
         raise ValueError(f"panel/mask shape mismatch: {p.shape} vs {m.shape}")
-    p[~m] = np.nan
+    m_bool = np.isfinite(m) & (m != 0)
+    p[~m_bool] = np.nan
     return p
 
 

@@ -1356,10 +1356,20 @@ _DYNAMICS_PACK_POLICIES = {
     "ts_joint_energy_shift": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 10},
     "ts_energy_break_score": {"scope": "ts", "pit_safe": True, "lag": 1, "min_periods": 10},
     "ts_copula_central_asymmetry": {"scope": "ts", "pit_safe": True, "min_periods": 5},
-    # Cross-sectional spectral crowding (per-date group spectrum).
+    # Cross-sectional spectral crowding (per-date group spectrum).  P1-G
+    # rename: the SVD is over the members' feature matrix (not a correlation
+    # matrix), so the canonical names are group_feature_*.
+    "group_feature_mode_share": {"scope": "group", "pit_safe": True},
+    "group_feature_effective_rank": {"scope": "group", "pit_safe": True},
+    "group_feature_mode_localization": {"scope": "group", "pit_safe": True},
+    "group_feature_spectral_gap": {"scope": "group", "pit_safe": True},
+    "group_feature_second_mode_localization": {"scope": "group", "pit_safe": True},
+    # group_corr_* are aliases of the above (kept for compatibility).
     "group_corr_mode_share": {"scope": "group", "pit_safe": True},
     "group_corr_effective_rank": {"scope": "group", "pit_safe": True},
     "group_corr_mode_localization": {"scope": "group", "pit_safe": True},
+    "group_corr_spectral_gap": {"scope": "group", "pit_safe": True},
+    "group_corr_second_mode_localization": {"scope": "group", "pit_safe": True},
     # Session recovery + volume-clock path geometry (minute → daily, EOD).
     "session_event_recovery_score": {
         "scope": "session_intraday", "pit_safe": True, "session_aware": True,

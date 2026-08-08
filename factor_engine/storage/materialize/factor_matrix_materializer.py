@@ -124,19 +124,42 @@ class FactorMatrixMaterializer:
             }
 
         factor_ids = sorted(results.keys())
+        # Phase 5 P1-12：按因子列分块 merge，限制中间 merge 工作集
+        # （5000×2500×2000 列的训练矩阵不可能一次成形）。
+        try:
+            block = max(16, int(os.environ.get("FACTOR_ENGINE_MATRIX_COLUMNS_PER_BLOCK", "256")))
+        except ValueError:
+            block = 256
         merged: pd.DataFrame | None = None
+        block_ids: list[str] = []
+        block_frame: pd.DataFrame | None = None
+
+        def _flush_block() -> None:
+            nonlocal block_frame, merged
+            if block_frame is None:
+                return
+            if merged is None:
+                merged = block_frame
+            else:
+                merged = merged.merge(block_frame, on=["datetime", "asset"], how="outer")
+            block_frame = None
+
         for fid in factor_ids:
             series = results[fid]
             long_df = series_to_long_table(series)
             long_df = long_df.rename(columns={"value": fid})
-            if merged is None:
-                merged = long_df
+            block_ids.append(fid)
+            if block_frame is None:
+                block_frame = long_df
             else:
-                merged = merged.merge(
-                    long_df,
-                    on=["datetime", "asset"],
-                    how="outer",
+                block_frame = block_frame.merge(
+                    long_df, on=["datetime", "asset"], how="outer"
                 )
+            long_df = None  # 释放该因子长表引用
+            if len(block_ids) >= block:
+                _flush_block()
+                block_ids = []
+        _flush_block()
 
         if merged is None or merged.empty:
             return {

@@ -1121,7 +1121,17 @@ def _try_where_from_base_columns(node: PlanNode, base: pl.LazyFrame) -> pl.LazyF
     if cond_name not in schema or a_name not in schema or b_name not in schema:
         return None
     cond = pl.col(cond_name)
-    expr = pl.when(_truthy_expr(cond)).then(pl.col(a_name)).otherwise(pl.col(b_name))
+    # Audit #19: a missing (NULL/NaN) condition stays missing — `where` is a
+    # value selector and must not silently take the else branch (the pandas
+    # reference ``ScalarBroadcastWhere`` propagates unknown conditions).
+    cond_missing = cond.is_null() | cond.is_nan()
+    expr = (
+        pl.when(cond_missing)
+        .then(None)
+        .when(_truthy_expr(cond))
+        .then(pl.col(a_name))
+        .otherwise(pl.col(b_name))
+    )
     return base.select(pl.col(_TS), pl.col(_INST), expr.alias(_VAL))
 
 
@@ -1863,8 +1873,16 @@ def _compile_polars_impl(
         if cond is None or a is None or b is None:
             return None
         joined = _join_triple(cond, a, b)
+        # Audit #19: NULL/NaN condition stays missing (pandas reference
+        # ``ScalarBroadcastWhere`` propagates unknown conditions; the truthy
+        # NULL-as-false rule only applies to boolean-producing ops).
         return joined.with_columns(
-            pl.when(_truthy(_VAL)).then(pl.col("_ym")).otherwise(pl.col("_y")).alias(_VAL)
+            pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+            .then(None)
+            .when(_truthy(_VAL))
+            .then(pl.col("_ym"))
+            .otherwise(pl.col("_y"))
+            .alias(_VAL)
         ).select(_TS, _INST, _VAL)
 
     if op in {"gt", "lt", "eq", "ge", "le", "ne"}:
@@ -2141,7 +2159,14 @@ def _compile_polars_impl(
                 .otherwise(pl.col(_VAL) * rank / denom)
             )
         elif op == "group_mean":
-            expr = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
+            # NaN/NULL members must stay NaN/NULL (audit #19: a missing value
+            # must not become a fabricated group statistic).  The pandas
+            # reference only assigns the group mean to finite members.
+            expr = (
+                pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                .then(None)
+                .otherwise(pl.col(_VAL).mean().over(*over_keys, order_by=_INST))
+            )
         elif op == "group_sum":
             expr = (
                 pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
@@ -2149,9 +2174,17 @@ def _compile_polars_impl(
                 .otherwise(pl.col(_VAL).sum().over(*over_keys, order_by=_INST))
             )
         elif op == "group_min":
-            expr = pl.col(_VAL).min().over(*over_keys, order_by=_INST)
+            expr = (
+                pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                .then(None)
+                .otherwise(pl.col(_VAL).min().over(*over_keys, order_by=_INST))
+            )
         elif op == "group_max":
-            expr = pl.col(_VAL).max().over(*over_keys, order_by=_INST)
+            expr = (
+                pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                .then(None)
+                .otherwise(pl.col(_VAL).max().over(*over_keys, order_by=_INST))
+            )
         elif op == "group_count":
             expr = (
                 pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())

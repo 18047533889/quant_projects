@@ -81,7 +81,8 @@ NEW_CANONICALS: frozenset[str] = frozenset({
     "ts_autocorrelation_time", "ts_fractional_difference",
     # L-moments / Hartigan dip / intrinsic dimension / persistence entropy
     "ts_l_skewness", "ts_l_kurtosis", "ts_hartigan_dip",
-    "ts_delay_intrinsic_dimension", "ts_persistence_entropy",
+    "ts_delay_intrinsic_dimension",
+    "ts_persistence_entropy_h0", "ts_persistence_entropy_h1",
     # cs / group locality
     "cs_knn_local_moran", "cs_isotonic_residual",
     "group_tail_coexceedance_density", "group_corr_mst_length",
@@ -223,7 +224,8 @@ CALLS: dict[str, tuple[tuple[str, ...], dict]] = {
     "cs_isotonic_residual": (("volume", "close"), {}),
     "group_tail_coexceedance_density": (("ret", "group_id"), {"window": 60, "quantile": 0.9, "side": "upper"}),
     "group_corr_mst_length": (("ret", "group_id"), {"window": 60}),
-    "ts_persistence_entropy": (("close",), {"window": 40, "tau": 1, "dim": 3}),
+    "ts_persistence_entropy_h0": (("close",), {"window": 40, "tau": 1, "dim": 3}),
+    "ts_persistence_entropy_h1": (("close",), {"window": 40, "tau": 1, "dim": 3}),
     "ts_delay_intrinsic_dimension": (("close",), {"window": 40, "embedding_dim": 3, "k": 5, "delay": 1}),
     "intraday_session_shape_novelty": (("close_min", "session_id"), {"history_days": 5}),
     "intraday_profile_pca_residual": (("close_min", "session_id"), {"history_days": 5, "n_components": 2}),

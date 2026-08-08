@@ -64,12 +64,22 @@ def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int) -> np.ndarray:
     dist = np.sqrt(np.sum((U - U[i]) ** 2, axis=1))
     dist = np.where(valid, dist, np.inf)
     dist[i] = np.inf
-    order = np.argsort(dist, kind="stable")
     count = int(valid.sum())
-    k_eff = min(max(1, int(k)), count - 1 if count > 0 else 0)
-    if k_eff < 1:
+    k = max(1, int(k))
+    if count - 1 < k:
+        # Fail-closed (audit F03): never silently average fewer than k genuine
+        # neighbors and call it kNN-k.
         return np.array([], dtype=int)
-    return order[:k_eff]
+    finite = np.flatnonzero(valid)
+    finite = finite[finite != i]
+    ds = dist[finite]
+    order = np.argsort(ds, kind="stable")
+    kth = ds[order[k - 1]]
+    # Tie-inclusive selection (audit F01: average tied rank): every neighbor
+    # with distance <= the k-th distance enters, so a tie at the boundary is
+    # never broken by column position — permuting stock columns leaves the
+    # neighbor identity unchanged.
+    return finite[ds <= kth]
 
 
 def _peer_mean_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.ndarray:

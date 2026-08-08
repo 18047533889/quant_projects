@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Runtime resolver for opaque LQTP logical DataTable references."""
+"""Runtime resolver for opaque LQTP logical DataTable references.
+
+Phase 5 P1-8：本模块是 **legacy/base**——生产 canonical resolver 是
+``lqtp_logical_source_v2.LQTPLogicalDataSource``（``ExecutionContext`` 安装时优先
+v2，覆盖 financial/minute/batch）。本类保留 alignment / anchor / 单字段 PIT 等
+共享基实现，供 v2 继承；不再新增业务路径。
+"""
 from __future__ import annotations
 
 import os
@@ -35,7 +41,11 @@ class LQTPLogicalDataSource(DataSource):
                 if isinstance(series.index, pd.MultiIndex):
                     self._cache["__anchor_index__"] = series.index
                     return series.index
-            except Exception:
+            except MissingDataDependencyError:
+                # 该列缺失：尝试下一个候选（capability 类，允许继续）
+                continue
+            except (KeyError, ValueError, FileNotFoundError):
+                # 列不存在 / 数据不可用：继续尝试下一个候选
                 continue
         if hasattr(self.inner, "scan_index_long"):
             frame = self.inner.scan_index_long()

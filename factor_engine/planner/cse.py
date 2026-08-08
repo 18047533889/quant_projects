@@ -37,6 +37,47 @@ def _postorder(root: PlanNode) -> list[PlanNode]:
     return out
 
 
+def cse_consumer_counts(roots: list[PlanNode]) -> dict[str, int]:
+    """统计每个共享子树 sid 在森林中的消费次数（Phase 5 R5）。
+
+    运行时按引用计数回收：某 root 执行完即对其消费的 sid 减一，归零立即 evict，
+    避免共享大 panel 常驻到整个 batch 结束。
+    """
+    counts: dict[str, int] = {}
+
+    def walk(n: PlanNode) -> None:
+        if getattr(n, "op", None) == "plan_ref":
+            sid = str((n.attrs or {}).get("sid") or "")
+            if sid:
+                counts[sid] = counts.get(sid, 0) + 1
+            return
+        for child in getattr(n, "inputs", ()) or ():
+            walk(child)
+
+    for root in roots:
+        walk(root)
+    return counts
+
+
+def collect_consumed_sids(root: PlanNode) -> list[str]:
+    """返回单棵根计划消费的全部共享 sid（去重）。"""
+    seen: set[str] = set()
+    out: list[str] = []
+
+    def walk(n: PlanNode) -> None:
+        if getattr(n, "op", None) == "plan_ref":
+            sid = str((n.attrs or {}).get("sid") or "")
+            if sid and sid not in seen:
+                seen.add(sid)
+                out.append(sid)
+            return
+        for child in getattr(n, "inputs", ()) or ():
+            walk(child)
+
+    walk(root)
+    return out
+
+
 def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode]]:
     """对多棵根计划做结构 CSE。
 

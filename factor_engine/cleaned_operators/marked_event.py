@@ -107,7 +107,7 @@ class EventMarkAutocorr(SeriesOperator):
         self,
         event: pd.DataFrame,
         mark: pd.DataFrame,
-        history_window: int = 120,
+        history_window: int = 252,
         event_lag: int = 1,
         **_: Any,
     ) -> pd.DataFrame:
@@ -171,7 +171,7 @@ class EventIntervalMarkCoupling(SeriesOperator):
     )
 
     def _calculate_series(
-        self, event: pd.DataFrame, mark: pd.DataFrame, window: int = 120, **_: Any
+        self, event: pd.DataFrame, mark: pd.DataFrame, window: int = 252, **_: Any
     ) -> pd.DataFrame:
         w = int(window)
         if w < 6:

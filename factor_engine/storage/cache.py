@@ -22,24 +22,38 @@ class CacheManager:
           （键为计划子树的结构化字符串 + 可选 ``data_scope``）。
     """
 
-    def __init__(self, *, data_scope: str | None = None) -> None:
+    def __init__(self, *, data_scope: str | None = None, budget_bytes: int | None = None) -> None:
         """初始化实例。
-        
+
         参数:
             data_scope: 数据作用域指纹（可选）
-        
+            budget_bytes: 子计划结果字节预算（Phase 5 R6；``None`` 按进程预算比例）
+
         返回:
             无
         """
         self.data_scope = data_scope
         self._cache: dict[str, object] = {}
+        self._budget_bytes = budget_bytes
+        self._bytes = 0
+
+    @property
+    def budget_bytes(self) -> int:
+        if self._budget_bytes is not None and self._budget_bytes > 0:
+            return self._budget_bytes
+        try:
+            from runtime.resource_governor import global_memory_governor
+
+            return int(global_memory_governor().process_budget_bytes * 0.05)
+        except Exception:
+            return 512 * 1024 * 1024
 
     def _scoped_key(self, key: str) -> str:
         """_scoped_key。
-        
+
         参数:
             key: 缓存键
-        
+
         返回:
             str
         """
@@ -49,51 +63,79 @@ class CacheManager:
 
     def get(self, key: str):
         """get。
-        
+
         参数:
             key: 缓存键
-        
+
         返回:
             无
         """
         return self._cache.get(self._scoped_key(key))
 
     def set(self, key: str, value) -> None:
-        """set。
-        
+        """set；受字节预算约束（LRU 逐出）。
+
         参数:
             key: 缓存键
             value: 缓存值
-        
+
         返回:
             无
         """
-        self._cache[self._scoped_key(key)] = value
+        from runtime.resource_governor import estimate_object_bytes
+
+        scoped = self._scoped_key(key)
+        size = estimate_object_bytes(value)
+        if size > self.budget_bytes:
+            return
+        if scoped in self._cache:
+            self._bytes -= estimate_object_bytes(self._cache[scoped])
+        self._bytes += size
+        self._cache[scoped] = value
+        self._evict_to(self.budget_bytes)
+
+    def _evict_to(self, target: int) -> int:
+        from runtime.resource_governor import estimate_object_bytes
+
+        freed = 0
+        while self._cache and self._bytes > target:
+            scoped, value = next(iter(self._cache.items()))
+            size = estimate_object_bytes(value)
+            self._bytes = max(0, self._bytes - size)
+            del self._cache[scoped]
+            freed += size
+        return freed
+
+    def evict_if_over_budget(self, target: int = 0) -> int:
+        """MemoryGovernor evict hook：逐出到 ``target`` 字节（默认尽可能腾出）。"""
+        return self._evict_to(target if target > 0 else 0)
 
     def clear_memory(self) -> None:
         """clear_memory。
-        
+
         参数:
             无
-        
+
         返回:
             无
         """
         self._cache.clear()
+        self._bytes = 0
 
     def with_scope(self, data_scope: str, *, clear_memory: bool = False) -> CacheManager:
         """返回同类型实例并切换作用域（用于增量窗口隔离）。
-        
+
         参数:
             data_scope: 数据作用域指纹
             clear_memory: 见函数签名（可选）
-        
+
         返回:
             CacheManager
         """
-        out = type(self)(data_scope=data_scope)
+        out = type(self)(data_scope=data_scope, budget_bytes=self._budget_bytes)
         if not clear_memory and type(out) is CacheManager:
             out._cache = dict(self._cache)
+            out._bytes = self._bytes
         return out
 
 
@@ -230,17 +272,19 @@ class PersistentPlanCache(CacheManager):
         root: str | Path,
         *,
         data_scope: str | None = None,
+        budget_bytes: int | None = None,
     ) -> None:
         """初始化实例。
-        
+
         参数:
             root: 根目录路径
             data_scope: 数据作用域指纹（可选）
-        
+            budget_bytes: 内存层字节预算（可选）
+
         返回:
             无
         """
-        super().__init__(data_scope=data_scope)
+        super().__init__(data_scope=data_scope, budget_bytes=budget_bytes)
         self.root = Path(root)
 
     def _namespace_root(self) -> Path:
@@ -290,34 +334,44 @@ class PersistentPlanCache(CacheManager):
         return value
 
     def set(self, key: str, value) -> None:
-        """set。
-        
+        """set；受字节预算约束。
+
         参数:
             key: 缓存键
             value: 缓存值
-        
+
         返回:
             无
         """
         if not isinstance(value, (pd.Series, pd.DataFrame)):
             return
+        from runtime.resource_governor import estimate_object_bytes
+
         scoped = self._scoped_key(key)
+        size = estimate_object_bytes(value)
+        if size > self.budget_bytes:
+            return
+        if scoped in self._cache:
+            self._bytes -= estimate_object_bytes(self._cache[scoped])
+        self._bytes += size
         self._cache[scoped] = value
+        self._evict_to(self.budget_bytes)
         path = self._disk_path(scoped)
         path.parent.mkdir(parents=True, exist_ok=True)
         _save_value(path, value)
 
     def with_scope(self, data_scope: str, *, clear_memory: bool = False) -> PersistentPlanCache:
         """with_scope。
-        
+
         参数:
             data_scope: 数据作用域指纹
             clear_memory: 见函数签名（可选）
-        
+
         返回:
             PersistentPlanCache
         """
-        out = PersistentPlanCache(self.root, data_scope=data_scope)
+        out = PersistentPlanCache(self.root, data_scope=data_scope, budget_bytes=self._budget_bytes)
         if not clear_memory:
             out._cache = dict(self._cache)
+            out._bytes = self._bytes
         return out

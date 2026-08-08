@@ -84,19 +84,38 @@ def _pca_svd(X: np.ndarray, n_components: int):
     column mean before the SVD (suspended / halted instruments keep a neutral
     contribution instead of poisoning the factor space).  Columns with zero
     variance are kept with unit scale so the SVD is never singular.
+
+    Audit M01: a column whose finite coverage is below 2 rows is INACTIVE and is
+    dropped from the fit (``np.nanmean`` on an all-NaN column would otherwise
+    leak NaN into the SVD); its mu/sd/loading come back NaN (fail-closed).
+    Audit M07: ``n_components`` is capped below the fit rank
+    (``min(n_features, n_observations) - 1``) so the reconstruction error is
+    never trivially zero from a full-rank fit.
     """
-    mu = np.nanmean(X, axis=0)
-    sd = np.nanstd(X, axis=0)
-    sd = np.where(sd > _EPS, sd, 1.0)
-    Xc = np.where(np.isfinite(X), X, mu)
-    Xs = (Xc - mu) / sd
-    n = Xs.shape[0]
-    if n < 2:
+    n, d = X.shape
+    finite_count = np.sum(np.isfinite(X), axis=0)
+    active = finite_count >= 2
+    if int(active.sum()) < 2:
+        return None
+    sub = X[:, active]
+    mu_sub = np.nanmean(sub, axis=0)
+    sd_sub = np.nanstd(sub, axis=0)
+    sd_sub = np.where(sd_sub > _EPS, sd_sub, 1.0)
+    Xc = np.where(np.isfinite(sub), sub, mu_sub)
+    Xs = (Xc - mu_sub) / sd_sub
+    k = int(min(n_components, Xs.shape[1] - 1, Xs.shape[0] - 1))
+    if k < 1:
         return None
     U, s, Vt = np.linalg.svd(Xs, full_matrices=False)
     total_var = float(np.sum(s * s))
-    loadings = Vt[:n_components]
-    explained = s[:n_components] ** 2 / max(total_var, _EPS)
+    mu = np.full(d, np.nan)
+    sd = np.full(d, np.nan)
+    loadings = np.full((n_components, d), np.nan)
+    explained = np.full(n_components, np.nan)
+    mu[active] = mu_sub
+    sd[active] = sd_sub
+    loadings[:k, active] = Vt[:k]
+    explained[:k] = s[:k] ** 2 / max(total_var, _EPS)
     return {"mu": mu, "sd": sd, "loadings": loadings, "explained": explained}
 
 
@@ -127,23 +146,46 @@ def _rolling_pca(ret: pd.DataFrame, window: int, fn, *, fit_lag: int = 1) -> pd.
     return _frame_like(ret, out)
 
 
-def _pca_loading(X: np.ndarray, cur: np.ndarray, component: int) -> np.ndarray:
+def _pca_loading(
+    X: np.ndarray, cur: np.ndarray, component: int, prev: np.ndarray | None
+) -> np.ndarray:
     pca = _pca_svd(X, component + 1)
     if pca is None:
         return np.full(len(cur), np.nan)
     loading = pca["loadings"][component].copy()
-    # sign-normalise on the largest |loading|
-    k = int(np.argmax(np.abs(loading)))
-    if loading[k] < 0:
-        loading = -loading
+    # Audit M02: the eigenvector sign is arbitrary per SVD; align each window's
+    # loading to the previous window's loading so the loading factor has no
+    # pure-numerical sign flip between consecutive windows.
+    if prev is not None and np.isfinite(prev).any() and np.isfinite(loading).any():
+        m = np.isfinite(loading) & np.isfinite(prev)
+        if np.dot(loading[m], prev[m]) < 0.0:
+            loading = -loading
+    else:
+        # No usable previous window: fall back to per-window sign-normalisation
+        # on the largest |loading|.
+        k = int(np.argmax(np.abs(loading)))
+        if loading[k] < 0:
+            loading = -loading
     return loading
+
+
+def _pca_loading_series(ret: pd.DataFrame, window: int, component: int) -> pd.DataFrame:
+    prev: np.ndarray | None = None
+
+    def _fn(X: np.ndarray, cur: np.ndarray) -> np.ndarray:
+        nonlocal prev
+        loading = _pca_loading(X, cur, int(component), prev)
+        prev = loading.copy()
+        return loading
+
+    return _rolling_pca(ret, int(window), _fn)
 
 
 _mk(
     "panel_rolling_pca_loading",
-    "过去窗口收益矩阵 PCA 的指定主成分载荷（符号规范化）。",
+    "过去窗口收益矩阵 PCA 的指定主成分载荷（跨窗 sign 对齐）。",
     ["ret", "window", "component"],
-    lambda ret, window=120, component=0: _rolling_pca(ret, int(window), lambda X, c: _pca_loading(X, c, int(component))),
+    lambda ret, window=120, component=0: _pca_loading_series(ret, int(window), int(component)),
     unit="loading",
 )
 
@@ -317,31 +359,64 @@ def _model_predict(X: np.ndarray, y: np.ndarray, x_cur: np.ndarray, method: str,
 
 
 def _pls1_predict(X: np.ndarray, y: np.ndarray, n_components: int, x_new: np.ndarray) -> float:
+    """PLS1 with genuine multi-latent-component NIPALS deflation.
+
+    Audit M05: ``n_components`` must extract that many latent components
+    (deflate X and y per component), not silently ignore the extra ones.
+    """
     n = min(n_components, X.shape[1], X.shape[0] - 1)
     if n < 1:
         return np.nan
-    w = X.T @ (y - y.mean()) / max(np.linalg.norm(X.T @ (y - y.mean())), _EPS)
-    t = X @ w
-    p = (X.T @ t) / max(np.dot(t, t), _EPS)
-    q = float(np.dot(t, y) / np.dot(t, t))
-    c = float(np.dot(x_new, w))
-    return float(y.mean() + c * q)
+    Xc = X.copy()
+    yc = y - y.mean()
+    pred = y.mean()
+    for _ in range(n):
+        w = Xc.T @ yc
+        nw = np.linalg.norm(w)
+        if nw <= _EPS:
+            break
+        w = w / nw
+        t = Xc @ w
+        tt = float(np.dot(t, t))
+        if tt <= _EPS:
+            break
+        p = (Xc.T @ t) / tt
+        q = float(np.dot(t, yc)) / tt
+        pred += float(np.dot(x_new, w)) * q
+        Xc = Xc - np.outer(t, p)
+        yc = yc - q * t
+    return float(pred)
 
 
 def _enet_predict(X: np.ndarray, y: np.ndarray, alpha: float, l1_ratio: float, x_new: np.ndarray) -> float:
-    """Coordinate-descent ElasticNet with intercept (standardised features)."""
+    """Coordinate-descent ElasticNet with intercept (standardised features).
+
+    Audit M06: a convergence tolerance + max_iter cap, and a non-converged fit
+    fails closed (NaN) instead of returning the solver's last iterate.
+    """
     n, p = X.shape
     if alpha <= 0 or l1_ratio < 0 or l1_ratio > 1:
         return np.nan
     beta = np.zeros(p)
     intercept = float(np.mean(y))
     yc = y - intercept
-    for _ in range(100):
+    max_iter = 500
+    tol = 1e-8
+    converged = False
+    for _ in range(max_iter):
+        beta_old = beta.copy()
         for j in range(p):
             rj = yc - X @ beta + beta[j] * X[:, j]
             rho = float(X[:, j] @ rj) / n
-            z = np.sign(rho) * max(abs(rho) - float(alpha) * float(l1_ratio), 0.0) / (1.0 + float(alpha) * (1.0 - float(l1_ratio)))
+            z = np.sign(rho) * max(abs(rho) - float(alpha) * float(l1_ratio), 0.0) / (
+                1.0 + float(alpha) * (1.0 - float(l1_ratio))
+            )
             beta[j] = z
+        if float(np.max(np.abs(beta - beta_old))) <= tol:
+            converged = True
+            break
+    if not converged:
+        return np.nan
     return float(intercept + float(x_new @ beta)) if p else np.nan
 
 
@@ -482,7 +557,16 @@ def _moe_forecast(y, feats, market_state, window, n_experts):
             if not np.all(np.isinf(dist)):
                 gates = np.exp(-dist / max(float(np.std(win_ms[win_valid])), 1e-6))
                 gates = gates / max(gates.sum(), _EPS)
-                out[row, col] = float(np.nansum(gates * np.array(preds)))
+                pred_arr = np.array(preds)
+                # Audit M04: a NaN expert prediction must not silently lose its
+                # gate mass.  Renormalize the gates over the FINITE experts only
+                # and weight by that conditional distribution.
+                finite_experts = np.isfinite(pred_arr)
+                if not np.any(finite_experts):
+                    continue
+                gates_valid = gates * finite_experts
+                gates_valid = gates_valid / max(gates_valid.sum(), _EPS)
+                out[row, col] = float(np.sum(gates_valid * pred_arr[finite_experts]))
     return _frame_like(y, out)
 
 

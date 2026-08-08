@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -28,11 +29,15 @@ def _store_scan(store: Any, dataset: str, read_kwargs: dict[str, Any]) -> Any:
 
 
 def _ensure_polars_lazyframe(lf: Any) -> Any:
-    """Polars 原生 long 路径需要裸 ``LazyFrame``，不能链式 ``.collect()`` 得到 ``ReadResult``。"""
+    """Polars 原生 long 路径需要裸 ``LazyFrame``，不能链式 ``.collect()`` 得到 ``ReadResult``。
+
+    Phase 5 R13：通过 dataaccess 正式 ``ScanHandle.native_lazyframe()`` 获取
+    composition-only 句柄，不再访问私有 ``._lf``。
+    """
     from data_access.read.scan_handle import ScanHandle
 
     if isinstance(lf, ScanHandle):
-        return lf._lf
+        return lf.native_lazyframe()
     return lf
 
 
@@ -64,6 +69,34 @@ class LazyColumnBundle:
     timestamp_unit: str | None
     snapshot_id: str | None = None
     _materialized: dict[str, Any] = field(default_factory=dict)
+    _materialized_budget: int = 0
+
+    @property
+    def materialized_budget(self) -> int:
+        """bundle 内已物化 Series 的字节预算（默认进程预算 × 8%）。"""
+        if self._materialized_budget > 0:
+            return self._materialized_budget
+        try:
+            from runtime.resource_governor import ExecutionResourcePlan
+
+            return int(ExecutionResourcePlan.auto().process_budget_bytes * 0.08)
+        except Exception:
+            return 512 * 1024 * 1024
+
+    def _cache_bytes(self) -> int:
+        from runtime.resource_governor import estimate_object_bytes
+
+        return sum(estimate_object_bytes(v) for v in self._materialized.values())
+
+    def _evict_to(self, target: int) -> None:
+        """有界 LRU：超出预算时逐出最早物化的列。"""
+        from runtime.resource_governor import estimate_object_bytes
+
+        if not isinstance(self._materialized, OrderedDict):
+            self._materialized = OrderedDict(self._materialized)
+        while self._materialized and self._cache_bytes() > target:
+            _, value = self._materialized.popitem(last=False)
+            _ = estimate_object_bytes(value)  # 逐出即释放
 
     def missing_physical(self, physical: list[str]) -> list[str]:
         """返回 bundle 中缺失的物理列名列表。"""
@@ -76,10 +109,18 @@ class LazyColumnBundle:
         *,
         output_names: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        """从 bundle 物化列（已 collect 的列走缓存）。"""
+        """从 bundle 物化列（已 collect 的列走有界缓存）。
+
+        Phase 5 R8：``_materialized`` 从无界 dict 改为受 ``materialized_budget``
+        约束的有界 LRU——DataAccessSource 把列逐出后，这里不会留下第二份常驻
+        Series 让内存实际不释放。
+        """
+        from runtime.resource_governor import estimate_object_bytes
+
         from data_access.read.adapters import arrow_table_to_multiindex_columns
 
         names = list(dict.fromkeys(physical_columns))
+        fetched: dict[str, Any] = {}
         pending = [c for c in names if c not in self._materialized]
         if pending:
             select_cols = list(
@@ -98,22 +139,28 @@ class LazyColumnBundle:
                 normalize_timestamp=self.normalize_timestamp,
                 timestamp_unit=self.timestamp_unit,
             )
+            if not isinstance(self._materialized, OrderedDict):
+                self._materialized = OrderedDict(self._materialized)
             effective_out = output_names or self.output_names
-            if effective_out:
-                for src in pending:
-                    logical = effective_out.get(src, src)
-                    self._materialized[logical] = fetched[logical]
-            else:
-                self._materialized.update(fetched)
+            budget = self.materialized_budget
+            # 已 fetch 的列先入缓存（best-effort），超预算时只逐出最旧的；
+            # 返回结果直接基于 fetched 构造，逐出不破坏本次返回。
+            for src in pending:
+                logical = effective_out.get(src, src) if effective_out else src
+                self._materialized[logical] = fetched[logical]
+            if self._cache_bytes() > budget:
+                self._evict_to(budget)
 
         effective_out = output_names or self.output_names
-        if effective_out:
-            return {
-                effective_out.get(src, src): self._materialized[effective_out.get(src, src)]
-                for src in names
-                if effective_out.get(src, src) in self._materialized
-            }
-        return {src: self._materialized[src] for src in names if src in self._materialized}
+        out: dict[str, Any] = {}
+        for src in names:
+            logical = effective_out.get(src, src) if effective_out else src
+            value = self._materialized.get(logical)
+            if value is None and logical in fetched:
+                value = fetched[logical]
+            if value is not None:
+                out[logical] = value
+        return out
 
 
 def build_lazy_column_bundle(

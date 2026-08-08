@@ -44,7 +44,13 @@ def apply_lqtp_policy_patch() -> None:
         # declared.
         scope = existing_scope if existing_scope in reviewed_scopes else fallback
         current["scope"] = scope
-        current["pit_safe"] = True
+        # Review P0-A03: an extended/research surface NEVER grants PIT safety by
+        # blanket.  ``pit_safe`` is a lifecycle result written only by
+        # ``reconcile_operator_certification`` (evidence-driven) after the
+        # evidence overlay binds the per-operator artifact.  Sealing it True here
+        # would give extended-only operators pit_safe without any certificate.
+        if "pit_safe" not in current:
+            current["pit_safe"] = False
         if scope == "ts":
             current.setdefault("min_periods", 1)
         operator_policy._EXPLICIT_POLICIES[canonical] = current

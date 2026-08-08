@@ -15,6 +15,27 @@ from .lqtp_logical_source import _TABLE_DATASETS
 from .logical_tables import logical_table_contract
 
 
+def _minute_fallback_allowed(exc: BaseException) -> bool:
+    """Phase 5 R11：分钟 pushdown 失败是否允许回退 pandas 路径。
+
+    - ``CapabilityMiss``/``CompilationUnsupported`` → 允许（换路径重试）
+    - OOM / ResourceBudgetExceeded / Deadline / PIT / Schema / DQ → 禁止 fallback
+    - 未知异常：production fail-closed，research 允许
+    """
+    from runtime.resource_errors import ResourceGovernanceError, is_fail_closed_error
+
+    if is_fail_closed_error(exc):
+        return False
+    if isinstance(exc, ResourceGovernanceError):
+        return True
+    try:
+        from runtime.production_policy import is_production_mode
+
+        return not is_production_mode()
+    except Exception:
+        return True
+
+
 class LQTPLogicalDataSource(_Base):
     prefer_series_panel_loading = True
 
@@ -51,6 +72,50 @@ class LQTPLogicalDataSource(_Base):
     def _is_source_ref_name(name: str) -> bool:
         from api.source_ref import decode_source_ref
         return decode_source_ref(str(name)) is not None
+
+    #: 显式降维提示（relation one_to_many 标量化必须有其一）
+    _REDUCTION_HINTS = frozenset({
+        "rank", "aggregate", "agg", "top_n", "topn", "top", "topk",
+        "reduce", "reduction", "holder_count", "hhi", "concentration",
+        "sum", "max", "min", "first", "last", "count", "mean",
+        "select", "selector", "argmax", "argmin",
+    })
+
+    @classmethod
+    def _assert_relation_scalar(cls, table: str, spec: Any, contract: Any, field: str) -> None:
+        """Phase 5 R14：one_to_many relation 无显式降维规则时禁止静默标量化。
+
+        现状：``_align_by_instrument``（merge_asof backward）会把一股多股东静默折叠成
+        「排序后最后一行」，结果不确定。必须要求 rank selector 或 aggregate。
+        """
+        if getattr(contract, "cardinality", "many_to_one") != "one_to_many":
+            return
+        keys: set[str] = set()
+        try:
+            keys |= set(spec.params_dict())
+        except Exception:
+            pass
+        if getattr(spec, "transform", None):
+            keys.add(str(spec.transform))
+        try:
+            keys |= set(spec.transform_params_dict())
+        except Exception:
+            pass
+        lowered = {str(k).lower() for k in keys}
+        if any(any(h in k for h in cls._REDUCTION_HINTS) for k in lowered):
+            return
+        msg = (
+            f"logical table {table!r} field {field!r} is one_to_many (multiple rows "
+            "per (date, instrument)); scalarizing it without a rank selector or "
+            "aggregate (e.g. SourceRef params rank=1 / aggregate=top1 / holder_count) "
+            "is nondeterministic. Specify a reduction."
+        )
+        from runtime.production_policy import is_production_mode
+        from runtime.resource_errors import SemanticContractError
+
+        if is_production_mode():
+            raise SemanticContractError(msg)
+        raise MissingDataDependencyError(msg)
 
     def load_column(self, name: str):
         if not self._is_source_ref_name(name):
@@ -179,6 +244,8 @@ class LQTPLogicalDataSource(_Base):
                 elif policy in {"exact", "effective_only"}:
                     out[name] = self._align_exact_by_instrument(self._anchor_index(), series)
                 else:
+                    if policy == "relation_pit":
+                        self._assert_relation_scalar(table, spec, contract, field)
                     out[name] = self._align_by_instrument(self._anchor_index(), series)
 
         # 特殊路径逐个处理
@@ -511,6 +578,7 @@ class LQTPLogicalDataSource(_Base):
             )
             return self._align_exact_by_instrument(anchor, series)
         if contract.join_policy == "relation_pit":
+            self._assert_relation_scalar(table, spec, contract, field)
             self._record_dependency(
                 dataset,
                 kind="shareholder_relation_pit",
@@ -580,7 +648,68 @@ class LQTPLogicalDataSource(_Base):
         transform: str,
         params: dict[str, Any],
     ) -> pd.Series:
-        """Aggregate multi-minute VWAP from additive Amount and Volume legs."""
+        """Aggregate multi-minute VWAP from additive Amount and Volume legs.
+
+        Phase 5 R17：Amount / Volume **同一 scan** 聚合（``aggregate_minute_bundle``），
+        不再各扫一次。只有 bundle 不可用/失败时回退两条独立腿。
+        """
+        if transform in {"minute_at", "minute_range"}:
+            try:
+                from data_access.read.aggregation import (
+                    AggregationItem,
+                    AggregationSpec,
+                    aggregate_minute_bundle,
+                )
+
+                from .data_access_source import _get_store
+
+                spec = AggregationSpec(
+                    aggregation=transform,
+                    start=str(params["start"]) if "start" in params else None,
+                    end=str(params["end"]) if "end" in params else None,
+                    hhmm=str(params["hhmm"]) if "hhmm" in params else None,
+                )
+                handle = aggregate_minute_bundle(
+                    _get_store(),
+                    "ashare_stock_minute",
+                    [
+                        AggregationItem("Amount", spec, "_vwap_amount"),
+                        AggregationItem("Volume", spec, "_vwap_volume"),
+                    ],
+                    time_range=(
+                        getattr(self.inner, "start_date", None),
+                        getattr(self.inner, "end_date", None),
+                    ),
+                    instrument_filter=getattr(self.inner, "instrument_filter", None),
+                )
+                d = handle.to_arrow().to_pydict()
+                ts = d.get("ts") or d.get("date")
+                inst = d.get("inst") or d.get("instrument")
+                amount = np.asarray(d["_vwap_amount"], dtype=float)
+                volume = np.asarray(d["_vwap_volume"], dtype=float)
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    out = np.where(volume == 0, np.nan, amount / volume)
+                idx = pd.MultiIndex.from_arrays(
+                    [pd.to_datetime(ts), inst],
+                    names=["timestamp", "instrument"],
+                )
+                vwap = pd.Series(out, index=idx, name="Vwap")
+                self._record_dependency(
+                    "ashare_stock_minute",
+                    kind="minute_session",
+                    field="Vwap",
+                    transform=transform,
+                    join_policy="exact_session",
+                    pushdown="bundle",
+                )
+                return self._align_by_instrument(self._anchor_index(), vwap)
+            except Exception as exc:  # noqa: BLE001
+                if not _minute_fallback_allowed(exc):
+                    raise
+                logger.warning(
+                    "vwap %s bundle pushdown 失败回退双腿路径: %s", transform, exc
+                )
+
         amount = self._minute_daily("Amount", transform, params)
         volume = self._minute_daily("Volume", transform, params)
         output = amount / volume.replace(0, np.nan)
@@ -658,6 +787,8 @@ class LQTPLogicalDataSource(_Base):
                 )
                 return self._align_by_instrument(self._anchor_index(), daily)
             except Exception as exc:  # noqa: BLE001
+                if not _minute_fallback_allowed(exc):
+                    raise
                 logger.warning(
                     "minute %s pushdown 失败回退 pandas 路径: %s", transform, exc
                 )

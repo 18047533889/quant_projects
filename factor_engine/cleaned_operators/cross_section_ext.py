@@ -283,7 +283,14 @@ def _tail_coexceedance_series(x2d: np.ndarray, g2d: np.ndarray, window: int, qua
                     valid_pairs += 1
             if valid_pairs == 0:
                 continue
-            tc = (2.0 / (N * (N - 1))) * pair_sum - q * q
+            # Independence baseline: two independent stocks are both in the
+            # *tail* event with probability p_tail².  With the threshold built
+            # at quantile q (upper) / 1-q (lower), P(tail) = 1-q for both sides,
+            # so the correct baseline is (1-q)².  The previous q² (0.81 at the
+            # 0.9 default) was two orders of magnitude too large and depressed
+            # every coexceedance factor — 3rd-round audit P0-06.
+            baseline = (1.0 - q) * (1.0 - q)
+            tc = (2.0 / (N * (N - 1))) * pair_sum - baseline
             out[t, idx] = tc
     return out
 
@@ -303,7 +310,13 @@ def _pearson(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def _prim_mean(D: np.ndarray) -> float:
-    """Mean edge length of the MST of a (symmetric) distance matrix D."""
+    """Mean edge length of the MST of a (symmetric) distance matrix D.
+
+    A zero-length edge (perfectly correlated pair, d_ij = sqrt(2(1-ρ)) = 0) is a
+    legal MST edge and must be counted.  Edge existence is determined by the
+    selected-root / parent markers, never by ``edge_length > 0`` — 3rd-round
+    audit P0-07.
+    """
     n = D.shape[0]
     in_tree = np.zeros(n, dtype=bool)
     min_edge = np.full(n, np.inf, dtype=float)
@@ -316,7 +329,7 @@ def _prim_mean(D: np.ndarray) -> float:
         if not np.isfinite(cand[u]):
             return np.nan  # disconnected graph → no spanning tree
         in_tree[u] = True
-        if min_edge[u] > 0.0:
+        if u != 0:  # every non-root node enters the tree through exactly one edge
             total += min_edge[u]
             edges += 1
         for v in range(n):

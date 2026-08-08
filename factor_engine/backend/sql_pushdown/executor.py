@@ -33,6 +33,23 @@ def _ensure_data_access() -> None:
         sys.path.insert(0, root)
 
 
+def _sql_fallback_allowed(exc: BaseException, ctx: ExecutionContext) -> bool:
+    """Phase 5 R11：SQL pushdown 失败是否允许回退 Python/Polars。
+
+    - ``CapabilityMiss`` / ``CompilationUnsupported`` → 允许 fallback（换后端）
+    - ``ResourceBudgetExceeded`` / OOM / Deadline / PIT / Schema / DQ → 禁止 fallback
+    - 未知异常：production fail-closed（宁可显式失败），research 允许 fallback
+    """
+    from runtime.resource_errors import ResourceGovernanceError, is_fail_closed_error
+
+    if is_fail_closed_error(exc):
+        return False
+    if isinstance(exc, ResourceGovernanceError):
+        return True
+    production = str(getattr(ctx, "run_mode", "") or "").lower() == "production"
+    return not production
+
+
 @dataclass(frozen=True)
 class PushdownContext:
     """SQL 下推执行上下文：方言、数据源定位、轴列名与可选过滤条件。"""
@@ -308,6 +325,8 @@ def try_execute_sql_pushdown_long(
             )
         return _lazy_from_sql_table(table)
     except Exception as exc:
+        if not _sql_fallback_allowed(exc, ctx):
+            raise
         from backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
 
         try:
@@ -358,6 +377,8 @@ def try_execute_sql_pushdown_batch_long(
             out[sid] = part
         return out
     except Exception as exc:
+        if not _sql_fallback_allowed(exc, ctx):
+            raise
         from backend.sql_pushdown.strict import handle_sql_long_pushdown_failure
 
         try:
@@ -394,7 +415,13 @@ def try_execute_sql_pushdown(
             filt=pctx.filt,
             dialect=pctx.dialect,
         )
-    except Exception:
+    except Exception as exc:
+        # 编译失败本质是 CompilationUnsupported：可 fallback；但 OOM/Deadline/
+        # PIT/Schema 等 fail-closed 错误必须上抛。
+        from runtime.resource_errors import is_fail_closed_error
+
+        if is_fail_closed_error(exc):
+            raise
         return None
     if compiled is None:
         return None
@@ -403,7 +430,9 @@ def try_execute_sql_pushdown(
         return execute_compiled_sql(
             compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)
         )
-    except Exception:
+    except Exception as exc:
+        if not _sql_fallback_allowed(exc, ctx):
+            raise
         return None
 
 
@@ -428,7 +457,11 @@ def try_execute_sql_pushdown_batch(
             filt=pctx.filt,
             dialect=pctx.dialect,
         )
-    except Exception:
+    except Exception as exc:
+        from runtime.resource_errors import is_fail_closed_error
+
+        if is_fail_closed_error(exc):
+            raise
         return None
     if compiled is None:
         return None
@@ -440,5 +473,7 @@ def try_execute_sql_pushdown_batch(
             ctx.data_source,
             query_budget=getattr(ctx, "query_budget", None),
         )
-    except Exception:
+    except Exception as exc:
+        if not _sql_fallback_allowed(exc, ctx):
+            raise
         return None

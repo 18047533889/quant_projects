@@ -23,8 +23,8 @@ DAILY_OPS = {
     "ts_first_passage_bias",
     "event_historical_response_mean", "event_historical_response_sign_balance",
     "ts_joint_energy_shift", "ts_energy_break_score",
-    "group_corr_mode_share", "group_corr_effective_rank",
-    "group_corr_mode_localization",
+    "group_feature_mode_share", "group_feature_effective_rank",
+    "group_feature_mode_localization",
     "session_event_recovery_score",
     "intraday_volume_clock_path_efficiency", "intraday_volume_clock_roughness",
     "cs_knn_peer_mean_ex_self", "cs_knn_neighbor_retention",
@@ -37,8 +37,8 @@ RESEARCH_OPS = {
     "ts_local_lyapunov_exponent", "report_revision_magnitude",
 }
 POLARS_OPS = DAILY_OPS - {
-    "group_corr_mode_share", "group_corr_effective_rank",
-    "group_corr_mode_localization", "session_event_recovery_score",
+    "group_feature_mode_share", "group_feature_effective_rank",
+    "group_feature_mode_localization", "session_event_recovery_score",
     "intraday_volume_clock_path_efficiency", "intraday_volume_clock_roughness",
     "cs_knn_peer_mean_ex_self", "cs_knn_neighbor_retention",
 }
@@ -102,7 +102,7 @@ def test_dynamics_pack_deterministic_shape_prefix():
         "event_historical_response_sign_balance": (y, ev),
         "ts_joint_energy_shift": (x, y, z),
         "ts_energy_break_score": (x, y, z),
-        "group_corr_mode_share": (x, y, z, g),
+        "group_feature_mode_share": (x, y, z, g),
         "group_corr_effective_rank": (x, y, z, g),
         "group_corr_mode_localization": (x, y, z, g),
         "cs_knn_peer_mean_ex_self": (y, x, z, z + 1.0),

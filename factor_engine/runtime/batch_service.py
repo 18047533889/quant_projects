@@ -45,7 +45,49 @@ def _materialize_shared_subplan(
         if callable(compile_lazy) and compile_lazy(sub, ctx, sid=str(sid)):
             return
     if ctx.shared_result_cache is not None:
-        ctx.shared_result_cache[sid] = backend.execute(sub, ctx)
+        value = backend.execute(sub, ctx)
+        ctx.shared_result_cache[sid] = value
+
+
+def _release_consumed_sids(ctx: Any, root: Any) -> None:
+    """Phase 5 R5：root 执行完，对其消费的共享 sid 引用计数减一，归零立即释放。
+
+    共享子树默认只在 batch 结束时随 ctx 一起释放；这里让大 panel CSE 在最后一个
+    消费者完成时立刻逐出，而不是常驻整个 batch。
+    """
+    if ctx.shared_result_cache is None:
+        return
+    from cache.session import ExecutionCacheSession
+    from planner.cse import collect_consumed_sids
+
+    consumed = collect_consumed_sids(root)
+    if not consumed:
+        return
+    refcounts = getattr(ctx, "_cse_refcounts", None)
+    if refcounts is None:
+        return
+    cache = getattr(ctx, "expression_cache", None)
+    for sid in consumed:
+        remaining = refcounts.get(sid, 1) - 1
+        refcounts[sid] = remaining
+        if remaining <= 0:
+            if cache is not None:
+                cache.release(sid)
+            else:
+                ctx.shared_result_cache.pop(sid, None)
+
+
+def _setup_cse_refcounts(ctx: Any, roots: list[Any]) -> None:
+    """初始化 CSE 引用计数表（挂在 ctx 上）。"""
+    from planner.cse import cse_consumer_counts
+
+    roots_plans = [getattr(fp, "root", fp) for fp in roots]
+    counts = cse_consumer_counts(roots_plans)
+    if counts:
+        try:
+            ctx._cse_refcounts = counts  # type: ignore[attr-defined]
+        except Exception:
+            pass
 
 
 def _clear_polars_long_shared_sid(ctx: Any) -> None:
@@ -116,6 +158,29 @@ def _execute_root_with_path(
     audit_ctx = f"run_many:{factor_name}" if factor_name else "run_many"
     assert_production_fastpath_runtime(local_ctx, mode=run_mode, context=audit_ctx)
     return result, path
+
+
+def _handle_result(
+    policy: str,
+    sink: Any,
+    out: dict[str, Any],
+    name: str,
+    result: Any,
+    path: dict[str, Any],
+    backend_paths: dict[str, dict[str, Any]],
+) -> None:
+    """按 result_policy 处理单个因子结果（R4）。
+
+    - ``return``：全部结果驻留 ``out``（旧行为）
+    - ``sink``：立即交给 ``sink(name, result)``（通常落盘/DQ），**不**驻留
+    - ``yield``/``materialize``：与 ``return`` 相同累积（生成器形态由 run_many_iter 提供）
+    """
+    if policy == "sink" and sink is not None:
+        sink(name, result)
+        backend_paths[name] = path
+        return
+    out[name] = result
+    backend_paths[name] = path
 
 
 def _attach_batch_backend_paths(batch_out: dict[str, Any], paths: dict[str, dict[str, Any]]) -> None:
@@ -296,6 +361,8 @@ def execute_run_many(
     input_dq_thresholds=None,
     pit_enforce: bool = False,
     pit_forbid_forward_fill: bool = False,
+    result_policy: str = "return",
+    sink: Any = None,
 ) -> dict[str, Any]:
     """``FactorEngine.run_many`` 实现体：多因子 DAG 串行求值。
 
@@ -365,6 +432,9 @@ def execute_run_many(
         input_dq_thresholds=input_dq_thresholds,
     )
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
+    from runtime.resource_telemetry import record_resource_telemetry
+
+    ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
     from backend.routing_env import routing_execution_scope
     from planner.dependency_graph import build_factor_batch_graph
 
@@ -387,6 +457,7 @@ def execute_run_many(
             for sid, sub in dag.shared_nodes.items():
                 _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
             _clear_polars_long_shared_sid(ctx)
+            _setup_cse_refcounts(ctx, dag.roots)
         out: dict[str, Any] = {}
         backend_paths: dict[str, dict[str, Any]] = {}
         for layer in batch_graph.parallel_layers:
@@ -394,13 +465,17 @@ def execute_run_many(
                 fp = root_by_name.get(name)
                 if fp is not None:
                     result, path = _run_root(fp)
-                    out[name] = result
-                    backend_paths[name] = path
+                    _handle_result(result_policy, sink, out, name, result, path, backend_paths)
+            # Phase 5 R5：本层全部消费完成，引用计数归零的共享子树立即释放
+            for name in layer:
+                fp = root_by_name.get(name)
+                if fp is not None:
+                    _release_consumed_sids(ctx, fp.root)
         for fp in dag.roots:
-            if fp.factor_name not in out:
+            if fp.factor_name not in out and fp.factor_name not in backend_paths:
                 result, path = _run_root(fp)
-                out[fp.factor_name] = result
-                backend_paths[fp.factor_name] = path
+                _handle_result(result_policy, sink, out, fp.factor_name, result, path, backend_paths)
+                _release_consumed_sids(ctx, fp.root)
     batch_out: dict[str, Any] = {
         "results": out,
         "dag": dag,
@@ -444,7 +519,111 @@ def execute_run_many(
     lazy_cache = summarize_lazy_caches(ctx)
     if lazy_cache:
         batch_out["lazy_cache_summary"] = lazy_cache
+    from runtime.resource_telemetry import record_resource_telemetry
+
+    ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
+    batch_out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})
     return batch_out
+
+
+def execute_run_many_iter(
+    engine: "FactorEngine",
+    factors: Sequence[Factor],
+    *,
+    perf: PerfConfig | None = None,
+    enable_cse: bool | None = None,
+    auto_warmup: bool = False,
+    trim_warmup: bool = True,
+    market: str | None = None,
+    input_dq_check: bool = False,
+    input_dq_strict: bool = True,
+    input_dq_thresholds=None,
+    pit_enforce: bool = False,
+    pit_forbid_forward_fill: bool = False,
+    precompiled: tuple | None = None,
+):
+    """``FactorEngine.run_many_iter`` 实现体：生成器，每算完一个因子根立即 yield。
+
+    共享子树照常先物化；每个 root 完成后 ``yield (name, result, path)``，同时做
+    CSE 引用计数释放。调用方每次取走一个结果后即可落盘/筛选并释放，内存峰值
+    不随因子数线性增长。
+
+    ``precompiled=(dag, analyses)`` 时跳过重复编译（供 materialize_many 预编译
+    后流式物化使用）。
+    """
+    from runtime.production_policy import is_production_mode
+
+    pit_enforce = bool(pit_enforce or is_production_mode(engine.run_mode))
+    if precompiled is not None:
+        dag, analyses = precompiled
+    else:
+        dag, analyses = engine._dag_from_factors(
+            factors,
+            enable_cse=enable_cse,
+            perf=perf,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+        )
+    perf = perf or PerfConfig.from_env()
+    engine_to_use, per_windows = _maybe_prepare_batch_warmup(
+        engine,
+        factors,
+        analyses,
+        auto_warmup=auto_warmup,
+        trim_warmup=trim_warmup,
+        market=market,
+    )
+    run_mode = engine_to_use.run_mode
+    input_report = _maybe_prepare_batch_data(
+        engine_to_use,
+        dag,
+        analyses,
+        input_dq_check=input_dq_check,
+        input_dq_strict=input_dq_strict,
+        input_dq_thresholds=input_dq_thresholds,
+    )
+    ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
+    from backend.routing_env import routing_execution_scope
+    from planner.dependency_graph import build_factor_batch_graph
+
+    batch_graph = build_factor_batch_graph(factors, analyses)
+    root_by_name = {fp.factor_name: fp for fp in dag.roots}
+    source_bars_per_day = _batch_source_bars_per_day(engine_to_use)
+
+    with routing_execution_scope(perf):
+        if ctx.shared_result_cache is not None:
+            for sid, sub in dag.shared_nodes.items():
+                _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
+            _clear_polars_long_shared_sid(ctx)
+            _setup_cse_refcounts(ctx, dag.roots)
+        seen: set[str] = set()
+        for layer in batch_graph.parallel_layers:
+            for name in layer:
+                fp = root_by_name.get(name)
+                if fp is None:
+                    continue
+                result, path = _execute_root_with_path(
+                    engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
+                )
+                if per_windows and fp.factor_name in per_windows:
+                    result = _trim_batch_result(
+                        result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+                    )
+                seen.add(fp.factor_name)
+                _release_consumed_sids(ctx, fp.root)
+                yield fp.factor_name, result, path
+        for fp in dag.roots:
+            if fp.factor_name in seen:
+                continue
+            result, path = _execute_root_with_path(
+                engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
+            )
+            if per_windows and fp.factor_name in per_windows:
+                result = _trim_batch_result(
+                    result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+                )
+            _release_consumed_sids(ctx, fp.root)
+            yield fp.factor_name, result, path
 
 
 def execute_run_many_parallel(
@@ -462,6 +641,8 @@ def execute_run_many_parallel(
     input_dq_thresholds=None,
     pit_enforce: bool = False,
     pit_forbid_forward_fill: bool = False,
+    result_policy: str = "return",
+    sink: Any = None,
 ) -> dict[str, Any]:
     """``FactorEngine.run_many_parallel`` 实现体：根节点层内并行。
 
@@ -509,18 +690,17 @@ def execute_run_many_parallel(
     )
     perf = perf or PerfConfig.from_env()
     workers = n_jobs if n_jobs is not None else perf.max_workers
-    # #34 统一 CPU budget：n_jobs × duckdb_threads <= physical cores，避免 oversubscription
+    # Phase 5 R1/R15：统一 ExecutionResourcePlan（CPU+RAM 双约束），并包裹
+    # ExecutionResourceScope 在退出时恢复线程/内存设置，避免共享 mutable 状态污染。
     try:
-        from runtime.execution_resources import (
-            apply_live_duckdb_threads,
-            resource_plan,
-            set_duckdb_max_threads,
-        )
+        from runtime.execution_resources import resource_plan
+        from runtime.resource_governor import ExecutionResourceScope
 
         plan = resource_plan(n_jobs=workers)
         workers = plan.n_jobs
-        set_duckdb_max_threads(plan)
-        apply_live_duckdb_threads(plan.duckdb_threads)
+        resource_scope = ExecutionResourceScope(
+            plan, duckdb_threads=plan.duckdb_threads
+        )
         logger.info(
             "execution_resources: jobs=%d duckdb_threads=%d total_runnable=%d",
             plan.n_jobs,
@@ -528,7 +708,7 @@ def execute_run_many_parallel(
             plan.total_runnable,
         )
     except Exception:  # noqa: BLE001
-        pass
+        resource_scope = None
     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
         factors,
@@ -547,6 +727,9 @@ def execute_run_many_parallel(
         input_dq_thresholds=input_dq_thresholds,
     )
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
+    from runtime.resource_telemetry import record_resource_telemetry
+
+    ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
     from backend.routing_env import routing_execution_scope
     from planner.dependency_graph import build_factor_batch_graph
 
@@ -564,18 +747,42 @@ def execute_run_many_parallel(
             )
         return fp.factor_name, result, path
 
-    with routing_execution_scope(perf):
-        if ctx.shared_result_cache is not None:
-            for sid, sub in dag.shared_nodes.items():
-                _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
-            _clear_polars_long_shared_sid(ctx)
+    _enter_scope = (lambda: resource_scope.__enter__()) if resource_scope is not None else (lambda: None)
+    _exit_scope = (lambda *a: resource_scope.__exit__(*a)) if resource_scope is not None else (lambda *a: None)
+    _enter_scope()
+    try:
+        with routing_execution_scope(perf):
+            if ctx.shared_result_cache is not None:
+                for sid, sub in dag.shared_nodes.items():
+                    _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
+                _clear_polars_long_shared_sid(ctx)
+                _setup_cse_refcounts(ctx, dag.roots)
 
-        results: dict[str, Any] = {}
-        backend_paths: dict[str, dict[str, Any]] = {}
-        for layer in batch_graph.parallel_layers:
-            fps = [root_by_name[n] for n in layer if n in root_by_name]
-            if len(fps) <= 1:
+            results: dict[str, Any] = {}
+            backend_paths: dict[str, dict[str, Any]] = {}
+            for layer in batch_graph.parallel_layers:
+                fps = [root_by_name[n] for n in layer if n in root_by_name]
+                if len(fps) <= 1:
+                    for fp in fps:
+                        result, path = _execute_root_with_path(
+                            engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
+                        )
+                        if per_windows and fp.factor_name in per_windows:
+                            result = _trim_batch_result(
+                                result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+                            )
+                        _handle_result(result_policy, sink, results, fp.factor_name, result, path, backend_paths)
+                else:
+                    raw = Parallel(n_jobs=workers, backend="threading")(
+                        delayed(_one)(fp) for fp in fps
+                    )
+                    for name, result, path in raw:
+                        _handle_result(result_policy, sink, results, name, result, path, backend_paths)
+                # Phase 5 R5：本层完成，引用计数归零的共享子树立即释放
                 for fp in fps:
+                    _release_consumed_sids(ctx, fp.root)
+            for fp in dag.roots:
+                if fp.factor_name not in results and fp.factor_name not in backend_paths:
                     result, path = _execute_root_with_path(
                         engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
                     )
@@ -583,26 +790,10 @@ def execute_run_many_parallel(
                         result = _trim_batch_result(
                             result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
                         )
-                    results[fp.factor_name] = result
-                    backend_paths[fp.factor_name] = path
-            else:
-                raw = Parallel(n_jobs=workers, backend="threading")(
-                    delayed(_one)(fp) for fp in fps
-                )
-                for name, result, path in raw:
-                    results[name] = result
-                    backend_paths[name] = path
-        for fp in dag.roots:
-            if fp.factor_name not in results:
-                result, path = _execute_root_with_path(
-                    engine_to_use.backend, fp.root, ctx, run_mode=run_mode, factor_name=fp.factor_name
-                )
-                if per_windows and fp.factor_name in per_windows:
-                    result = _trim_batch_result(
-                        result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
-                    )
-                results[fp.factor_name] = result
-                backend_paths[fp.factor_name] = path
+                    _handle_result(result_policy, sink, results, fp.factor_name, result, path, backend_paths)
+                    _release_consumed_sids(ctx, fp.root)
+    finally:
+        _exit_scope()
     parallel_out: dict[str, Any] = {
         "results": results,
         "dag": dag,
@@ -626,4 +817,8 @@ def execute_run_many_parallel(
     lazy_cache = summarize_lazy_caches(ctx)
     if lazy_cache:
         parallel_out["lazy_cache_summary"] = lazy_cache
+    from runtime.resource_telemetry import record_resource_telemetry
+
+    ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
+    parallel_out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})
     return parallel_out

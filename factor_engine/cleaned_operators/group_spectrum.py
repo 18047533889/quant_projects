@@ -5,11 +5,11 @@ Within each group (industry / sector / relation), each date, the members'
 2..4 feature vectors are stacked, z-scored in the group and SVD'd.  One
 decomposition yields three regime / crowding signals broadcast to every member:
 
-* ``group_corr_mode_share``        — σ1²/Σσ²: how dominant the top mode is
+* ``group_feature_mode_share``        — σ1²/Σσ²: how dominant the top mode is
   (group collapsing into one common trading pattern).
-* ``group_corr_effective_rank``    — exp(-Σ p log p), p=σ²/Σσ²: how many
+* ``group_feature_effective_rank``    — exp(-Σ p log p), p=σ²/Σσ²: how many
   effective dimensions the group uses.
-* ``group_corr_mode_localization`` — Σ u1^4 (inverse participation ratio of the
+* ``group_feature_mode_localization`` — Σ u1^4 (inverse participation ratio of the
   top left singular vector across members): a leader-only mode is localized in
   a few names.
 
@@ -93,13 +93,20 @@ def _group_spectrum_series(feats: np.ndarray, group: np.ndarray, which: str) -> 
             if idx.size < 2:
                 continue
             Z = row[idx].astype(float)
-            med = np.median(Z, axis=0)
-            mad = 1.4826 * np.median(np.abs(Z - med), axis=0)
-            scale = np.where(mad > _EPS, mad, np.std(Z, axis=0))
+            # Audit P1-G: only members with ALL features finite enter the group
+            # statistic — one NaN member must not poison the whole group.  The
+            # excluded members keep NaN (never a fabricated group value).
+            finite_members = np.all(np.isfinite(Z), axis=1)
+            Zv = Z[finite_members]
+            if Zv.shape[0] < 2:
+                continue
+            med = np.median(Zv, axis=0)
+            mad = 1.4826 * np.median(np.abs(Zv - med), axis=0)
+            scale = np.where(mad > _EPS, mad, np.std(Zv, axis=0))
             if np.any(~np.isfinite(scale)) or np.any(scale <= _EPS):
                 continue
-            Z = (Z - med) / scale
-            stats = _spectrum_stats(Z)
+            Zv = (Zv - med) / scale
+            stats = _spectrum_stats(Zv)
             if stats is None:
                 continue
             if which == "mode_share":
@@ -114,18 +121,18 @@ def _group_spectrum_series(feats: np.ndarray, group: np.ndarray, which: str) -> 
                 value = stats[4]
             else:
                 value = np.nan
-            out[t, idx] = value
+            out[t, idx[finite_members]] = value
     return out
 
 
 @register_operator(
-    name="group_corr_mode_share",
+    name="group_feature_mode_share",
     category="group_structure",
     business_category="group_structure",
-    canonical="group_corr_mode_share",
+    canonical="group_feature_mode_share",
     source="group_spectrum",
 )
-class GroupCorrModeShare(SeriesOperator):
+class GroupFeatureModeShare(SeriesOperator):
     """组内特征谱 top-mode 占比 ``σ1²/Σσ²``。
 
     每组每日对成员的特征矩阵做组内 z-score + SVD；接近 1 = 整个组的横截面
@@ -134,7 +141,7 @@ class GroupCorrModeShare(SeriesOperator):
     """
 
     metadata = _metadata(
-        "group_corr_mode_share",
+        "group_feature_mode_share",
         "组内特征谱 top-mode 占比 σ1²/Σσ²（拥挤/同步化）。",
         ["f1", "f2", "f3", "group"],
         unit="ratio",
@@ -149,13 +156,13 @@ class GroupCorrModeShare(SeriesOperator):
 
 
 @register_operator(
-    name="group_corr_effective_rank",
+    name="group_feature_effective_rank",
     category="group_structure",
     business_category="group_structure",
-    canonical="group_corr_effective_rank",
+    canonical="group_feature_effective_rank",
     source="group_spectrum",
 )
-class GroupCorrEffectiveRank(SeriesOperator):
+class GroupFeatureEffectiveRank(SeriesOperator):
     """组内特征谱有效秩 ``exp(-Σ p log p)``。
 
     p = σ²/Σσ²。有效秩低（接近 1）= 组内只有一两个有效维度（风格解体 /
@@ -164,7 +171,7 @@ class GroupCorrEffectiveRank(SeriesOperator):
     """
 
     metadata = _metadata(
-        "group_corr_effective_rank",
+        "group_feature_effective_rank",
         "组内特征谱有效秩 exp(-Σp log p)。",
         ["f1", "f2", "f3", "group"],
         unit="count",
@@ -179,13 +186,13 @@ class GroupCorrEffectiveRank(SeriesOperator):
 
 
 @register_operator(
-    name="group_corr_mode_localization",
+    name="group_feature_mode_localization",
     category="group_structure",
     business_category="group_structure",
-    canonical="group_corr_mode_localization",
+    canonical="group_feature_mode_localization",
     source="group_spectrum",
 )
-class GroupCorrModeLocalization(SeriesOperator):
+class GroupFeatureModeLocalization(SeriesOperator):
     """组内主导模式的成员局域化 ``Σ u1^4``（inverse participation ratio）。
 
     top 左奇异向量 u1 在成员上的四次方和：接近 1 = 主导模式由极少数股票驱动
@@ -193,7 +200,7 @@ class GroupCorrModeLocalization(SeriesOperator):
     """
 
     metadata = _metadata(
-        "group_corr_mode_localization",
+        "group_feature_mode_localization",
         "组内 top-mode 局域化 Σu1^4（leader-only vs 均匀）。",
         ["f1", "f2", "f3", "group"],
         unit="ratio",
@@ -208,13 +215,13 @@ class GroupCorrModeLocalization(SeriesOperator):
 
 
 @register_operator(
-    name="group_corr_spectral_gap",
+    name="group_feature_spectral_gap",
     category="group_structure",
     business_category="group_structure",
-    canonical="group_corr_spectral_gap",
+    canonical="group_feature_spectral_gap",
     source="group_spectrum",
 )
-class GroupCorrSpectralGap(SeriesOperator):
+class GroupFeatureSpectralGap(SeriesOperator):
     """组内谱隙 ``(σ1² - σ2²) / Σσ²``（前两主导模式之间的相对差距）。
 
     高 = 市场只有一个绝对 dominant 方向（单主题抱团）；低 = 第二主题与第一
@@ -223,7 +230,7 @@ class GroupCorrSpectralGap(SeriesOperator):
     """
 
     metadata = _metadata(
-        "group_corr_spectral_gap",
+        "group_feature_spectral_gap",
         "组内谱隙 (σ1²-σ2²)/Σσ²（单主题 vs 双主题竞争）。",
         ["f1", "f2", "f3", "group"],
         unit="ratio",
@@ -238,22 +245,22 @@ class GroupCorrSpectralGap(SeriesOperator):
 
 
 @register_operator(
-    name="group_corr_second_mode_localization",
+    name="group_feature_second_mode_localization",
     category="group_structure",
     business_category="group_structure",
-    canonical="group_corr_second_mode_localization",
+    canonical="group_feature_second_mode_localization",
     source="group_spectrum",
 )
-class GroupCorrSecondModeLocalization(SeriesOperator):
+class GroupFeatureSecondModeLocalization(SeriesOperator):
     """组内第二主导模式的成员局域化 ``(N·Σu2⁴ - 1)/(N-1)``（[0,1]）。
 
     第一特征向量常是 market/sector 共同模式；第二特征向量更像组内分裂轴。高 =
     第二主题主要由少数股票驱动（个别龙头的二分结构）；低 = 板块系统性二分
-    （均匀两派）。与 ``group_corr_mode_localization``（第一模式）互补。
+    （均匀两派）。与 ``group_feature_mode_localization``（第一模式）互补。
     """
 
     metadata = _metadata(
-        "group_corr_second_mode_localization",
+        "group_feature_second_mode_localization",
         "组内第二模式局域化 (N·Σu2⁴-1)/(N-1)。",
         ["f1", "f2", "f3", "group"],
         unit="ratio",
@@ -269,17 +276,40 @@ class GroupCorrSecondModeLocalization(SeriesOperator):
 
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
+    from cleaned_operators.registry import OperatorRegistry
 
+    # P1-G rename: the SVD is over the members' FEATURE matrix (not a
+    # correlation matrix), so the canonical names are group_feature_*.  The old
+    # group_corr_* names are pure aliases (kept for compatibility).
     _surface.EXTENDED_ONLY_CANONICALS = frozenset(
         set(_surface.EXTENDED_ONLY_CANONICALS)
         | {
-            "group_corr_mode_share",
-            "group_corr_effective_rank",
-            "group_corr_mode_localization",
-            "group_corr_spectral_gap",
-            "group_corr_second_mode_localization",
+            "group_feature_mode_share",
+            "group_feature_effective_rank",
+            "group_feature_mode_localization",
+            "group_feature_spectral_gap",
+            "group_feature_second_mode_localization",
         }
     )
+    _corr_to_feature = {
+        "group_corr_mode_share": "group_feature_mode_share",
+        "group_corr_effective_rank": "group_feature_effective_rank",
+        "group_corr_mode_localization": "group_feature_mode_localization",
+        "group_corr_spectral_gap": "group_feature_spectral_gap",
+        "group_corr_second_mode_localization": "group_feature_second_mode_localization",
+    }
+    for alias, canonical in _corr_to_feature.items():
+        try:
+            OperatorRegistry.register_alias(
+                alias,
+                canonical,
+                replacement_reason=(
+                    "renamed: SVD over the members' feature matrix, not a "
+                    "correlation-matrix eigenspectrum"
+                ),
+            )
+        except Exception:  # pragma: no cover - idempotent across reloads
+            pass
 
 
 _register_surface()

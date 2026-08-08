@@ -343,7 +343,8 @@ _DAILY_GEOMETRY_MATH_2026_08 = frozenset({
     "ts_autocorrelation_time", "ts_fractional_difference",
     # L-moments / Hartigan dip / intrinsic dimension / persistence entropy
     "ts_l_skewness", "ts_l_kurtosis", "ts_hartigan_dip",
-    "ts_delay_intrinsic_dimension", "ts_persistence_entropy",
+    "ts_delay_intrinsic_dimension",
+    "ts_persistence_entropy_h0", "ts_persistence_entropy_h1",
     # cs / group locality
     "cs_knn_local_moran", "cs_isotonic_residual",
     "group_tail_coexceedance_density", "group_corr_mst_length",

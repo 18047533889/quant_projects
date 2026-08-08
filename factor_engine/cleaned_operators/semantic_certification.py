@@ -469,10 +469,13 @@ def semantic_cert(
 ) -> SemanticCert:
     """Compose the four-certificate record for ``canonical``.
 
-    Fail-closed: a canonical in the experimental snapshot or the isolation
-    manifest receives all-negative certificates unless the evidence overlay
-    (``evidence_production_certified=True``) independently confirms it.  All
-    other canonicals default to certified (the established production surface).
+    Fail-closed (review P0-A01): an operator is NEVER certified by absence.
+    ``semantic_ok`` / ``temporal_ok`` / ``source_ok`` require the canonical to
+    be bound to a verified implementation artifact
+    (``evidence_production_certified=True``) AND to sit outside the
+    experimental/isolation manifest.  The ``None`` path (pre-overlay hardening,
+    before ``apply_evidence_certification_overlay`` binds per-operator evidence)
+    grants no certificate — candidate status only, never certification.
     """
     notes: list[str] = []
 
@@ -484,15 +487,23 @@ def semantic_cert(
     else:
         implementation = not should_fail_closed(canonical)
 
-    # (2) Semantic / (3) temporal: fail-closed for the isolated/experimental set.
-    semantic_ok = not should_fail_closed(canonical)
-    temporal_ok = not should_fail_closed(canonical)
+    # (2) Semantic / (3) temporal: evidence-driven.  Absence from the fail-closed
+    # set never grants a certificate on its own; only an operator bound to a
+    # verified implementation artifact receives them.
+    if evidence_production_certified is True:
+        semantic_ok = not should_fail_closed(canonical)
+        temporal_ok = not should_fail_closed(canonical)
+    else:
+        semantic_ok = False
+        temporal_ok = False
 
-    # (4) Source contract: not source-blocked and not research-marked.
+    # (4) Source contract: evidence-backed AND not source-blocked AND not
+    # research-marked.
     from cleaned_operators.production_hardening import SOURCE_BLOCKED_CANONICALS
 
     source_ok = (
-        canonical not in SOURCE_BLOCKED_CANONICALS
+        evidence_production_certified is True
+        and canonical not in SOURCE_BLOCKED_CANONICALS
         and not should_fail_closed(canonical)
     )
 
@@ -610,6 +621,14 @@ def reconcile_operator_certification(
         cert.backend_passed
     )
 
+    # Recompute the semantic/temporal/source certificates with the per-operator
+    # evidence binding so they are genuinely evidence-driven (review P0-A01):
+    # an operator not bound to a verified artifact gets all-negative
+    # certificates, never default trust.
+    cert = semantic_cert(
+        canonical, catalog, evidence_production_certified=bool(implementation_passed)
+    )
+
     # (2)-(4) Semantic / temporal / source-PIT gates: an operator is never
     # certified by *absence* — the four-gate review record must ALSO be backed
     # by a version-bound evidence record (``implementation_passed``).  The
@@ -624,14 +643,12 @@ def reconcile_operator_certification(
         implementation_passed and cert.source_contract_certified
     )
 
-    # (5) Edge-case evidence.  ``production_edge_evidence_complete`` conflates
-    # "the edge-certification infrastructure has not populated this surface"
-    # with "a declared edge dimension is genuinely unverified", so it cannot be
-    # a hard fail for operators whose implementation is otherwise evidence-
-    # bound.  When a backend is evidence-certified the edge gate follows the
-    # implementation gate; without implementation evidence the whole six-gate
-    # still fails closed (review §14.7 admission test).
-    edge_case_passed = bool(cert.edge_case_passed or implementation_passed)
+    # (5) Edge-case evidence is INDEPENDENT (review P0-A02): implementation
+    # evidence never back-stops it.  ``production_edge_evidence_complete``
+    # reports whether every declared NaN/Inf edge dimension has a verified edge
+    # case; an operator whose edge dimensions are genuinely unverified fails
+    # closed here even if its backend runs.
+    edge_case_passed = bool(cert.edge_case_passed)
     # (6) At least one evidence-backed production backend must exist.
     backend_passed = cert.backend_passed
 
@@ -665,4 +682,18 @@ def reconcile_operator_certification(
     catalog["status"] = "production" if certified else "experimental"
     catalog["lifecycle_status"] = "production" if certified else "experimental"
     catalog["certification_notes"] = list(cert.notes)
+
+    # Keep the operator-policy table consistent with the reconciled lifecycle.
+    # ``apply_production_hardening`` sealed every target candidate/false before
+    # the evidence overlay ran; the final authority must re-open pit_safe for
+    # operators that are genuinely certified so ``infer_operator_policy`` agrees
+    # with ``catalog["pit_safe"]`` (review P0-A03: no blanket, reconcile wins).
+    try:
+        from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+
+        existing = dict(_EXPLICIT_POLICIES.get(canonical) or {})
+        existing["pit_safe"] = bool(certified)
+        _EXPLICIT_POLICIES[canonical] = existing
+    except Exception:  # pragma: no cover - policy module not importable
+        pass
     return six

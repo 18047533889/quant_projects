@@ -86,23 +86,53 @@ def _fit_garch(rets: np.ndarray) -> tuple[float, float, float] | None:
         return None
 
 
+def _variance_path(
+    seg: np.ndarray,
+    w: float,
+    a: float,
+    b: float,
+    h_init: float,
+    gamma: float = 0.0,
+    *,
+    asymmetric: bool = False,
+) -> float:
+    """Recurse the GARCH/GJR conditional variance over ``seg``.
+
+    ``h_init`` seeds the recursion and the result is the conditional variance
+    governing the LAST observation of ``seg`` (information strictly before it).
+    The caller chooses ``h_init`` so the current return can never seed its own
+    standardisation denominator (audit P0: the init must exclude r_t).
+    """
+    h = h_init
+    for i in range(1, len(seg)):
+        prev_r = seg[i - 1]
+        if asymmetric:
+            lev = gamma if prev_r < 0 else 0.0
+            h = w + (a + lev) * prev_r ** 2 + b * h
+        else:
+            h = w + a * prev_r ** 2 + b * h
+    return h
+
+
 def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: float) -> float:
     """Rolling GARCH(1,1) / GJR statistic.
 
-    Timing convention: ``h_prev`` is the conditional variance for the *last*
-    observed return (computed from information strictly before it), and ``h``
-    afterwards is the one-step-ahead forecast for the next period.  The
-    standardised shock therefore divides by ``sqrt(h_prev)``, the variance that
-    actually governed the observed return.
+    Timing convention: the returned conditional variance ``h_last`` governs the
+    *last* observed return (computed from information strictly before it), and
+    ``h_next = w + a*r_t^2 + b*h_last`` is the one-step-ahead forecast for the
+    next period.  The standardised shock divides ``r_t`` by ``sqrt(h_last)`` —
+    the variance that actually governed it.
     """
     if len(rets) < max(window, 12):
         return np.nan
     seg = rets[-int(window):]
-    # P0-040: the standardised shock of the current return must not be
-    # standardised by parameters fitted on that same return.  Fit on the window
-    # *excluding* the current observation (<= t-1), then evaluate r_t against
-    # the variance that governed it.  Forecast / persistence stats may use the
-    # current return (they legitimately forecast the *next* period).
+    # P0-040 / P0 (this audit): the standardised shock / surprise of the current
+    # return must not be standardised by parameters fitted on that same return,
+    # and must not leak the current return into its own denominator through the
+    # *initial* variance either.  Fit on the window excluding the current
+    # observation (<= t-1) AND seed the variance recursion from the variance of
+    # that same fit segment.  Forecast / persistence stats may use the current
+    # return (they legitimately forecast the *next* period).
     fit_seg = seg[:-1] if stat == "shock" else seg
     if len(fit_seg) < 12:
         return np.nan
@@ -118,27 +148,22 @@ def _garch_path(rets: np.ndarray, window: int, stat: str, asymmetric: bool, r: f
         w, a, gamma, b = params
     else:
         w, a, b = params
-    h = float(np.var(seg))
-    h_prev = h
-    for i in range(1, len(seg)):
-        prev_r = seg[i - 1]
-        if asymmetric:
-            lev = gamma if prev_r < 0 else 0.0
-            h_new = w + (a + lev) * prev_r ** 2 + b * h
-        else:
-            h_new = w + a * prev_r ** 2 + b * h
-        if i == len(seg) - 1:
-            h_prev = h  # conditional variance of the last observed return
-        h = h_new
-    if stat == "forecast":
-        # h now conditions on the last observed return -> next-period forecast.
-        return float(np.sqrt(max(h, 1e-12)))
     if stat == "persistence":
         return float(a + b) if not asymmetric else float(a + 0.5 * gamma + b)
+    # Seed the variance recursion from the fit segment only (excludes the
+    # current return for the shock stat — no self-leak through the init).
+    h_last = _variance_path(
+        seg, w, a, b, float(np.var(fit_seg)), gamma, asymmetric=asymmetric
+    )
+    if stat == "forecast":
+        # h_last governs the current return; the next-period forecast conditions
+        # on it.
+        h_next = w + a * seg[-1] ** 2 + b * h_last
+        return float(np.sqrt(max(h_next, 1e-12)))
     # standardized shock of the last return uses the variance that governed it
     if not np.isfinite(seg[-1]):
         return np.nan
-    return float(seg[-1] / np.sqrt(max(h_prev, 1e-12)))
+    return float(seg[-1] / np.sqrt(max(h_last, 1e-12)))
 
 
 def _fit_gjr(rets: np.ndarray) -> tuple[float, float, float, float] | None:
@@ -209,25 +234,20 @@ def _garch_vol_surprise(vals: np.ndarray, window: int) -> float:
     if len(vals) < max(window, 12):
         return np.nan
     seg = vals[-int(window):]
-    # P0-040: params fit on <= t-1 (exclude the current return), so rv_t/h_t is
-    # a genuine out-of-sample surprise rather than in-sample.
+    # P0-040 / P0 (this audit): params fit on <= t-1 (exclude the current
+    # return) AND the variance recursion is seeded from that same fit segment,
+    # so rv_t/h_t is a genuine out-of-sample surprise and the current return
+    # cannot leak into its own denominator through the initial variance.
     if len(seg) < 13:
         return np.nan
     params = _fit_garch(seg[:-1])
     if params is None:
         return np.nan
     w, a, b = params
-    h = float(np.var(seg))
-    h_prev = h
-    for i in range(1, len(seg)):
-        prev_r = seg[i - 1]
-        h_new = w + a * prev_r ** 2 + b * h
-        if i == len(seg) - 1:
-            h_prev = h
-        h = h_new
-    if not np.isfinite(seg[-1]) or h_prev <= 1e-12:
+    h_last = _variance_path(seg, w, a, b, float(np.var(seg[:-1])))
+    if not np.isfinite(seg[-1]) or h_last <= 1e-12:
         return np.nan
-    return float(seg[-1] ** 2 / h_prev - 1.0)
+    return float(seg[-1] ** 2 / h_last - 1.0)
 
 
 def _gjr_leverage(vals: np.ndarray, window: int) -> float:

@@ -24,6 +24,9 @@ class ExecutionContext:
     materialize_sql_as_long_lazy: bool = False
     panel_cache: dict[int, Any] | None = None
     template_series: Any | None = None
+    # Phase 5 R16：panel-native 模板只保留 axis（MultiIndex），不再整份保留 stacked
+    # Series 值——宽表 panel + 完整 stacked Series 同时存在的双份拷贝是内存放大主因。
+    template_index: Any | None = None
     materialized_series: dict[str, Any] | None = None
     prefer_long_table: bool = False
     perf: Any | None = None

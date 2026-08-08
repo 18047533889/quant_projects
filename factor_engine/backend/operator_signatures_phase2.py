@@ -456,7 +456,7 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         ArgSpec("high", _F), ArgSpec("low", _F), ArgSpec("smooth_window", _W),
     )
     signatures["ts_roll_effective_spread"] = _sig(
-        "ts_roll_effective_spread", ArgSpec("x", _F), ArgSpec("window", _W)
+        "ts_roll_effective_spread", ArgSpec("price", _F), ArgSpec("window", _W)
     )
     # J. Local non-linear cross-section.
     signatures["cs_knn_local_linear_residual"] = _sig(

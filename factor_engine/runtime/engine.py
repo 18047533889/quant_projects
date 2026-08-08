@@ -581,6 +581,37 @@ class FactorEngine:
                 engine, _, _, _ = batch[0]
                 run_kwargs = {"enable_cse": enable_cse, **base_opts.to_run_kwargs()}
                 factors = [f for _, f, _, _ in batch]
+                meta = {
+                    f.name: (f, config, path)
+                    for (_, f, config, path) in batch
+                }
+                if not parallel:
+                    # Phase 5 R17：流式物化——先编译一次拿 analyses，再
+                    # run_many_iter 每算完一个因子立即落盘，结果不全部驻留。
+                    dag, analyses = engine._dag_from_factors(
+                        factors,
+                        enable_cse=enable_cse,
+                    )
+                    for name, result, _ in engine.run_many_iter(
+                        factors,
+                        precompiled=(dag, analyses),
+                        **run_kwargs,
+                    ):
+                        factor, config, path = meta[name]
+                        opts = resolve_materialize_kwargs_for_pipeline(config, pipeline_overrides)
+                        output = {
+                            "factor": factor,
+                            "analysis": analyses[name],
+                            "result": result,
+                        }
+                        out = execute_materialize_from_resolved(engine, factor, output, opts)
+                        out["config"] = config
+                        out["config_path"] = str(path)
+                        out["batched_run"] = True
+                        outputs[name] = out
+                    continue
+
+                # 并行路径：整批计算后逐因子落盘（保留并发，结果驻留在 batch 期间）
                 if parallel:
                     run_out = engine.run_many_parallel(
                         factors,
@@ -1391,7 +1422,9 @@ class FactorEngine:
             )
         ctx = engine_to_use._make_context()
         from runtime.production_policy import record_production_fastpath_check
+        from runtime.resource_telemetry import record_resource_telemetry
 
+        ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
         record_production_fastpath_check(ctx, plan, mode=engine_to_use.run_mode)
         result = engine_to_use.backend.execute(plan, ctx)
         from runtime.production_policy import assert_production_fastpath_runtime
@@ -1414,6 +1447,15 @@ class FactorEngine:
                 end=trim_end,
             )
 
+        from runtime.perf_config import PerfConfig
+        from runtime.result_budget import enforce_result_budget
+
+        enforce_result_budget(
+            result,
+            PerfConfig.from_env(),
+            factor_name=factor.name,
+            run_mode=self.run_mode,
+        )
         non_null_count = int(result.notna().sum()) if hasattr(result, "notna") else None
         logger.info(
             "完成执行因子 '%s'，结果行数=%s，非空=%s，耗时 %.2fs",
@@ -1491,7 +1533,9 @@ class FactorEngine:
                 out[key] = runtime[key]
         from backend.path_summary import build_backend_path_summary, snapshot_backend_path
         from backend.runtime_labels import resolve_runtime_backend_label
+        from runtime.resource_telemetry import record_resource_telemetry
 
+        ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
         runtime = dict(getattr(ctx, "runtime_stats", None) or {})
         from backend.runtime_labels import resolve_runtime_backend_label
         from backend.path_summary import build_backend_path_summary, snapshot_backend_path
@@ -1793,6 +1837,8 @@ class FactorEngine:
         input_dq_thresholds=None,
         pit_enforce: bool = False,
         pit_forbid_forward_fill: bool = False,
+        result_policy: str = "return",
+        sink: Any | None = None,
     ) -> dict[str, Any]:
         """多因子求值：先执行共享子树，再各因子根。
 
@@ -1810,6 +1856,9 @@ class FactorEngine:
             auto_warmup/trim_warmup/market: warmup 参数。
             input_dq_check/input_dq_strict/input_dq_thresholds: 输入 DQ。
             pit_enforce/pit_forbid_forward_fill: PIT 参数。
+            result_policy: Phase 5 R4 ``return``（全部驻留）| ``sink``（即算即写，
+                结果不驻留）| ``yield``/``materialize``（与 ``return`` 累积）。
+            sink: ``result_policy="sink"`` 时的回调 ``sink(factor_name, result)``。
 
         Returns:
             含 ``results``、``dag``、``analyses`` 及可选 ``batch_graph``、
@@ -1830,6 +1879,50 @@ class FactorEngine:
             input_dq_thresholds=input_dq_thresholds,
             pit_enforce=pit_enforce,
             pit_forbid_forward_fill=pit_forbid_forward_fill,
+            result_policy=result_policy,
+            sink=sink,
+        )
+
+    def run_many_iter(
+        self,
+        factors: Sequence[Factor],
+        *,
+        perf: PerfConfig | None = None,
+        enable_cse: bool | None = None,
+        auto_warmup: bool = False,
+        trim_warmup: bool = True,
+        market: str | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds=None,
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
+        precompiled: tuple | None = None,
+    ):
+        """Phase 5 R4：``run_many`` 的生成器形态——每算完一个因子根立即 ``yield``。
+
+        ``run_many_iter`` 不把全部因子结果驻留在内存，适合「算一个 → DQ →
+        筛选/落盘 → 释放 → 下一个」的生产挖因子管线。yield 元素为
+        ``(factor_name, result, backend_path_dict)``。
+
+        ``precompiled=(dag, analyses)``：跳过重复编译（materialize_many 流式路径用）。
+        """
+        from runtime.batch_service import execute_run_many_iter
+
+        yield from execute_run_many_iter(
+            self,
+            factors,
+            perf=perf,
+            enable_cse=enable_cse,
+            auto_warmup=auto_warmup,
+            trim_warmup=trim_warmup,
+            market=market,
+            input_dq_check=input_dq_check,
+            input_dq_strict=input_dq_strict,
+            input_dq_thresholds=input_dq_thresholds,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+            precompiled=precompiled,
         )
 
     def run_many_parallel(
@@ -1847,15 +1940,19 @@ class FactorEngine:
         input_dq_thresholds=None,
         pit_enforce: bool = False,
         pit_forbid_forward_fill: bool = False,
+        result_policy: str = "return",
+        sink: Any | None = None,
     ) -> dict[str, Any]:
         """多因子求值：共享子树串行、因子根并行。
 
         在 ``run_many`` 基础上，同一依赖层内的因子根通过 joblib 线程池并行。
-        共享子树仍必须先串行物化。
+        共享子树仍必须先串行物化。资源设置包裹在 ``ExecutionResourceScope`` 中，
+        执行结束自动恢复（R15）。
 
         Args:
             factors: 待求值因子序列。
             n_jobs: 并行 worker 数；缺省取 ``perf.max_workers``。
+            result_policy/sink: 同 ``run_many``（R4）。
             其余参数同 ``run_many``。
 
         Returns:
@@ -1880,6 +1977,8 @@ class FactorEngine:
             input_dq_thresholds=input_dq_thresholds,
             pit_enforce=pit_enforce,
             pit_forbid_forward_fill=pit_forbid_forward_fill,
+            result_policy=result_policy,
+            sink=sink,
         )
 
     def with_data_source(self, data_source, *, fresh_cache: bool = False) -> FactorEngine:

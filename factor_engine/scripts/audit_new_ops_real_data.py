@@ -88,12 +88,17 @@ def _build_panel() -> dict[str, pd.DataFrame]:
                          index=dates, columns=symbols)
     mark = pd.DataFrame(np.abs(ret), index=dates, columns=symbols)
 
-    # minute returns: reuse daily ret scaled, resampled into ~48 min bars/day
-    minute_ret = pd.DataFrame(
-        np.nan, index=pd.date_range(_DATE0, periods=_D * 48, freq="min"),
-        columns=symbols[:12],
-    )
+    # minute returns: 48 bars per trading day (09:30..15:00 style), scaled to the
+    # day's own daily return magnitude.
     rngm = np.random.default_rng(3)
+    bar_times = []
+    for d in range(_D):
+        day = dates[d]
+        for b in range(48):
+            bar_times.append(day + pd.Timedelta(minutes=30 + b))
+    minute_ret = pd.DataFrame(
+        np.nan, index=pd.DatetimeIndex(bar_times), columns=symbols[:12],
+    )
     for c in minute_ret.columns:
         for d in range(_D):
             base = ret[d, int(c.split(".")[0]) - 1]
@@ -138,6 +143,7 @@ _OP_FIELD_OVERRIDE = {
     "ts_modwt_band_corr": {"y": "volume"},
     "ts_expectile_beta": {"x": "volume"},
     "ts_beta_break_score": {"x": "volume"},
+    "ts_roll_effective_spread": {"price": "close"},
 }
 _SCALAR_PARAMS = {
     "window", "recent_window", "prior_window", "quantile", "target_q", "source_q",

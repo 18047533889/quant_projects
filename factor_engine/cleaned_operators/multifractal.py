@@ -60,6 +60,11 @@ def _check_window(window: int) -> int:
     return w
 
 
+_MIN_PAIRS_PER_LAG = 8
+_MIN_LAGS_FOR_FIT = 3
+_MIN_SCALING_R2 = 0.9
+
+
 def _structure_function(vals: np.ndarray, lag: int, q: float) -> float:
     """``mean |X_{t+tau} - X_t|^q`` over aligned finite pairs in the window."""
     n = int(vals.shape[0])
@@ -68,7 +73,9 @@ def _structure_function(vals: np.ndarray, lag: int, q: float) -> float:
     x = vals[: n - lag]
     y = vals[lag:]
     m = np.isfinite(x) & np.isfinite(y)
-    if int(m.sum()) < 2:
+    # Audit P1-D: every lag needs a minimum number of valid aligned pairs —
+    # two points would let a single outlier dominate the moment.
+    if int(m.sum()) < _MIN_PAIRS_PER_LAG:
         return np.nan
     d = np.abs(x[m] - y[m])
     s = float(np.mean(d ** q))
@@ -78,24 +85,30 @@ def _structure_function(vals: np.ndarray, lag: int, q: float) -> float:
 
 
 def _hurst_generalized(vals: np.ndarray, q: float) -> float:
-    """Generalised Hurst exponent ``H(q)`` from the dyadic-lag OLS fit."""
+    """Generalised Hurst exponent ``H(q)`` from the dyadic-lag OLS fit.
+
+    Audit P1-D: the log-log scaling fit needs at least three valid lags and a
+    minimum R² — a two-point line would produce a spuriously precise Hurst.
+    """
     log_t: list[float] = []
     log_s: list[float] = []
-    max_lag = _LAGS[-1]
     for lag in _LAGS:
         s = _structure_function(vals, lag, q)
         if not np.isfinite(s):
-            # The contract: NaN if the window lacks enough aligned pairs for
-            # the *largest* lag.
-            if lag == max_lag:
-                return np.nan
             continue
         log_t.append(np.log(float(lag)))
         log_s.append(np.log(s))
-    if len(log_t) < 2:
+    if len(log_t) < _MIN_LAGS_FOR_FIT:
         return np.nan
-    slope, _intercept = np.polyfit(log_t, log_s, 1)
+    slope, intercept = np.polyfit(log_t, log_s, 1)
     if not np.isfinite(slope):
+        return np.nan
+    # R² of the log-log fit: fail closed when the scaling law is not clean.
+    fitted = slope * np.asarray(log_t) + intercept
+    ss_res = float(np.sum((np.asarray(log_s) - fitted) ** 2))
+    ss_tot = float(np.sum((np.asarray(log_s) - np.mean(log_s)) ** 2))
+    r2 = 1.0 - ss_res / ss_tot if ss_tot > 1e-12 else np.nan
+    if not np.isfinite(r2) or r2 < _MIN_SCALING_R2:
         return np.nan
     return float(slope) / q
 

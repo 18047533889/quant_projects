@@ -297,6 +297,12 @@ def _diffusion_series(xv: np.ndarray, gv: np.ndarray, alpha: float, steps: int) 
             for k in range(1, int(steps) + 1):
                 v = P @ v
                 cascade += (1.0 - alpha) * (alpha ** (k - 1)) * v
+            # Truncation remainder assigned to the terminal power: the scalar
+            # geometric weights sum to 1-α^K, so without the remainder a constant
+            # graph signal is shrunk by (1-α^K) and every stock gets the same
+            # spurious "diffusion residual".  Adding α^K·(P^steps x) makes the
+            # weights sum to exactly 1 and preserves constants — P0-05.
+            cascade += (alpha ** int(steps)) * v
             for pos, i in enumerate(idx):
                 out[r, i] = float(cascade[pos])
     return out

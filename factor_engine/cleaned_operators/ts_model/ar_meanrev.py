@@ -167,9 +167,14 @@ def _mean_reversion_half_life(vals: np.ndarray, window: int, min_periods: int) -
     if beta is None:
         return np.nan
     b = float(beta[1])
-    if not np.isfinite(b) or b >= 0.0:
+    # Exact discrete AR(1) half-life (audit P1-E): x_t = a + phi*x_{t-1} with
+    # phi = 1 + b.  Only 0 < phi < 1 is mean-reverting; half_life =
+    # ln(0.5)/ln(phi).  The old OU approximation -ln(2)/b is exposed separately
+    # as ts_mean_reversion_ou_approx_half_life.
+    phi = 1.0 + b
+    if not np.isfinite(phi) or not (0.0 < phi < 1.0):
         return np.nan
-    return float(-np.log(2.0) / b)
+    return float(np.log(0.5) / np.log(phi))
 
 
 @register_operator(
@@ -182,10 +187,10 @@ def _mean_reversion_half_life(vals: np.ndarray, window: int, min_periods: int) -
     status="experimental",
 )
 class TsMeanReversionHalfLife(SeriesOperator):
-    """均值回复半衰期 -log(2)/beta（beta<0 时定义）。"""
+    """均值回复半衰期 ln(0.5)/ln(1+beta)（离散 AR(1) 精确解）。"""
 
     metadata = metadata(
-        "ts_mean_reversion_half_life", "均值回复半衰期。", ["x", "window", "min_periods"], unit="count", cost=3,
+        "ts_mean_reversion_half_life", "均值回复半衰期（AR(1) 精确离散）。", ["x", "window", "min_periods"], unit="count", cost=3,
     )
 
     def _calculate_series(self, x, window=120, min_periods=20, **_):
@@ -195,6 +200,61 @@ class TsMeanReversionHalfLife(SeriesOperator):
         for col in range(cols):
             for row in range(rows):
                 out[row, col] = _mean_reversion_half_life(xv[: row + 1, col], int(window), int(min_periods))
+        return frame_like(x, out)
+
+
+def _mean_reversion_ou_half_life(vals: np.ndarray, window: int, min_periods: int) -> float:
+    n = len(vals)
+    start = max(0, n - window)
+    seg = vals[start:]
+    xprev = seg[:-1]
+    d = np.diff(seg)
+    valid = np.isfinite(xprev) & np.isfinite(d)
+    x, y = xprev[valid], d[valid]
+    if len(x) < max(min_periods, 4) or np.std(x) <= 0.0:
+        return np.nan
+    design = np.column_stack([np.ones(len(x)), x])
+    beta = ols_fit(design, y)
+    if beta is None:
+        return np.nan
+    b = float(beta[1])
+    if not np.isfinite(b) or b >= 0.0:
+        return np.nan
+    # OU continuous-time approximation -ln(2)/b (audit P1-E: kept under an
+    # explicit _ou_approx name; the production canonical is the exact discrete
+    # AR(1) half-life above).
+    return float(-np.log(2.0) / b)
+
+
+@register_operator(
+    name="ts_mean_reversion_ou_approx_half_life",
+    category="time_series_regression",
+    business_category="time_series_regression",
+    canonical="ts_mean_reversion_ou_approx_half_life",
+    source="ts_model.ar_meanrev",
+    backend="pandas_numpy",
+    status="experimental",
+)
+class TsMeanReversionOuApproxHalfLife(SeriesOperator):
+    """均值回复半衰期 OU 近似 -log(2)/beta（beta<0 时定义）。"""
+
+    metadata = metadata(
+        "ts_mean_reversion_ou_approx_half_life",
+        "均值回复半衰期（OU 连续近似 -ln2/beta）。",
+        ["x", "window", "min_periods"],
+        unit="count",
+        cost=3,
+    )
+
+    def _calculate_series(self, x, window=120, min_periods=20, **_):
+        xv = x.to_numpy(dtype=float)
+        rows, cols = xv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for col in range(cols):
+            for row in range(rows):
+                out[row, col] = _mean_reversion_ou_half_life(
+                    xv[: row + 1, col], int(window), int(min_periods)
+                )
         return frame_like(x, out)
 
 
@@ -262,6 +322,7 @@ _CANONICALS.extend(
         "ts_ar_innovation",
         "ts_ar_innovation_z",
         "ts_mean_reversion_half_life",
+        "ts_mean_reversion_ou_approx_half_life",
         "ts_variance_ratio_slope",
         "ts_ar_prior_forecast",
         "ts_ar_prior_innovation",

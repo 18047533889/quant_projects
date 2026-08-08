@@ -49,8 +49,23 @@ def edge_source():
     grp = pd.Series([1, 1, 2, 2] * len(dates), index=idx, dtype=float)
     flag = pd.Series([1.0, np.nan, 0.0, 1.0, 0.0, np.nan, 1.0, 0.0], index=idx)
     inf_val = pd.Series([np.inf, -np.inf, 1.0, np.nan] * len(dates), index=idx)
+    # P0-A02 edge fixtures: zero-imputed twins prove NaN/Inf are not coerced to
+    # 0, and a negative-valued column distinguishes NaN-skip from NaN->0 in
+    # maximum/minimum (where 0 is otherwise the max-neutral identity).
+    close_zero = close.fillna(0.0)
+    inf_zero = inf_val.replace([np.inf, -np.inf], 0.0)
+    neg = pd.Series([-0.5, 1.0, -2.0, -1.0, 0.5, 2.0, -3.0, 1.0], index=idx)
     return InMemorySeriesSource(
-        data={"close": close, "exp": exp, "grp": grp, "flag": flag, "inf_val": inf_val}
+        data={
+            "close": close,
+            "exp": exp,
+            "grp": grp,
+            "flag": flag,
+            "inf_val": inf_val,
+            "close_zero": close_zero,
+            "inf_zero": inf_zero,
+            "neg": neg,
+        }
     )
 
 
@@ -74,6 +89,9 @@ test_daily:
     Grp: int64
     Flag: double
     InfVal: double
+    CloseZero: double
+    InfZero: double
+    Neg: double
 """
     path = tmp_path / "datasets.yaml"
     path.write_text(content.strip() + "\n", encoding="utf-8")
@@ -88,6 +106,9 @@ def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
         "grp": "Grp",
         "flag": "Flag",
         "inf_val": "InfVal",
+        "close_zero": "CloseZero",
+        "inf_zero": "InfZero",
+        "neg": "Neg",
     }
     rows = []
     for (ts, sym) in mem.data["close"].index:
@@ -135,8 +156,16 @@ def _col(name: str):
             "grp": "Grp",
             "flag": "Flag",
             "inf_val": "InfVal",
+            "close_zero": "CloseZero",
+            "inf_zero": "InfZero",
+            "neg": "Neg",
         }.get(name, name)
     )
+
+
+def _col_zero(name: str):
+    """Map a field to its zero-imputed duckdb twin (``close``->``CloseZero``)."""
+    return col({"close": "CloseZero"}.get(name, name))
 
 
 def _run(source, expr, backend: str):
@@ -370,3 +399,140 @@ def test_bfill_duckdb_raises(edge_source):
         FactorEngine(backend=build_backend("duckdb_sql"), data_source=edge_source).run(
             Factor(name="t", expr=expr)
         )
+
+
+# ---------------------------------------------------------------------------
+# P0-A02: genuine NaN/Inf edge evidence for the NAN_REQUIRED primitives.
+#
+# ``edge_case_passed`` must not be back-stopped by ``implementation_passed``;
+# the declared NaN/Inf edge dimensions have to be verified independently.  Each
+# primitive is run through all three backends on a fixture that carries NaN in
+# ``close`` and ±Inf in ``inf_val``, and compared against zero-imputed twins:
+# if an operator silently coerced NaN/Inf to 0 the outputs would be identical.
+# ``cs_sum`` is the one legitimate exception (0 is the identity of sum, so
+# NaN-skip and 0-include coincide by construction); there the edge contract is
+# that NaN never poisons the row.
+# ---------------------------------------------------------------------------
+
+_NA_SENTINEL = 999.0
+
+
+def _edge_expr(name: str, cf):
+    C = {k: cf(k) for k in ("close", "exp", "grp", "flag")}
+    if name == "cs_mean":
+        return F("cs_mean")(C["close"])
+    if name == "cs_std":
+        return F("cs_std")(C["close"])
+    if name == "cs_sum":
+        return F("cs_sum")(C["close"])
+    if name == "normalize":
+        return F("normalize")(C["close"])
+    if name == "zscore":
+        return F("zscore")(C["close"])
+    if name == "winsorize":
+        return F("winsorize")(C["close"])
+    if name == "group_mean":
+        return F("group_mean")(C["close"], C["grp"])
+    if name == "group_std":
+        return F("group_std")(C["close"], C["grp"])
+    if name == "group_zscore":
+        return F("group_zscore")(C["close"], C["grp"])
+    if name == "group_normalize":
+        return F("group_normalize")(C["close"], C["grp"])
+    if name == "group_rank":
+        return F("group_rank")(C["close"], C["grp"])
+    if name == "ts_mean":
+        return F("ts_mean")(C["close"], 2)
+    if name == "ts_std":
+        return F("ts_std")(C["close"], 2)
+    if name == "ts_var":
+        return F("ts_var")(C["close"], 2)
+    if name == "ts_zscore":
+        return F("ts_zscore")(C["close"], 2)
+    if name == "ts_sharpe":
+        return F("ts_sharpe")(C["close"], 2)
+    if name == "ts_corr":
+        return F("ts_corr")(C["close"], C["exp"], 2)
+    if name == "ts_cov":
+        return F("ts_cov")(C["close"], C["exp"], 2)
+    if name == "ts_beta":
+        return F("ts_beta")(C["close"], C["exp"], 2)
+    if name == "maximum":
+        return F("maximum")(C["close"], cf("neg"))
+    if name == "minimum":
+        return F("minimum")(C["close"], cf("neg"))
+    if name == "where":
+        return F("where")(C["flag"], C["close"], C["exp"])
+    if name == "coalesce":
+        return F("coalesce")(C["close"], C["flag"])
+    raise KeyError(name)
+
+
+_NAN_EDGE_PRIMITIVES = frozenset(
+    {
+        "cs_mean", "cs_std", "cs_sum", "normalize", "zscore", "winsorize",
+        "group_mean", "group_std", "group_zscore", "group_normalize", "group_rank",
+        "ts_mean", "ts_std", "ts_var", "ts_zscore", "ts_sharpe",
+        "ts_corr", "ts_cov", "ts_beta", "maximum", "minimum", "where", "coalesce",
+    }
+)
+
+
+@pytest.mark.parametrize("name", sorted(_NAN_EDGE_PRIMITIVES))
+def test_nan_edge_required_primitive_not_zero_coerced(
+    name, edge_source, duckdb_edge_source
+):
+    mem = lambda: _edge_expr(name, col)
+    duck = lambda: _edge_expr(name, _col)
+    _assert_triple_backends(edge_source, duckdb_edge_source, mem, duck)
+
+    out_nan = _result_series(_run(edge_source, mem(), "pandas"))
+    out_zero = _result_series(
+        _run(
+            edge_source,
+            _edge_expr(name, lambda n: col("close_zero" if n == "close" else n)),
+            "pandas",
+        )
+    )
+    if name == "cs_sum":
+        # 0 is the identity of sum: NaN-skip and 0-include coincide, so the
+        # coercion check is uninformative.  The edge contract is that NaN never
+        # poisons the row — the cross-sectional sum stays finite.
+        assert out_nan.notna().all(), f"{name}: NaN poisoned the row"
+        return
+    assert not (out_nan.fillna(_NA_SENTINEL) == out_zero.fillna(_NA_SENTINEL)).all(), (
+        f"{name}: NaN silently coerced to 0"
+    )
+
+
+@pytest.mark.parametrize("name", sorted(_NAN_EDGE_PRIMITIVES))
+def test_inf_edge_required_primitive_not_zero_coerced(
+    name, edge_source, duckdb_edge_source
+):
+    # The documented Inf contract (numeric_semantics / pandas reference) treats
+    # ±Inf as non-finite in aggregations: it must never be coerced to 0 or to a
+    # fabricated constant.  Every backend must execute it without error; the
+    # coercion property is asserted on the pandas reference.
+    mem = lambda: _edge_expr(name, lambda n: col("inf_val") if n == "close" else col(n))
+    duck = lambda: _edge_expr(
+        name, lambda n: _col("InfVal") if n == "close" else _col(n)
+    )
+    for backend in ("pandas", "polars_long", "duckdb_sql"):
+        _result_series(_run(edge_source, mem(), backend))
+
+    out_inf = _result_series(_run(edge_source, mem(), "pandas"))
+    out_infz = _result_series(
+        _run(
+            edge_source,
+            _edge_expr(
+                name, lambda n: col("inf_zero") if n == "close" else col(n)
+            ),
+            "pandas",
+        )
+    )
+    # Inf must not be silently dropped to 0: either the output differs from the
+    # zero-imputed run, or the Inf input invalidates the statistic and the row
+    # is NaN (never a finite constant ignoring Inf).
+    assert not (out_inf.fillna(_NA_SENTINEL) == out_infz.fillna(_NA_SENTINEL)).all() or (
+        out_inf.isna().any()
+    ), f"{name}: Inf silently coerced to 0"

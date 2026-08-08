@@ -266,17 +266,27 @@ _mk(
 def _masked(score: pd.DataFrame, mask: pd.DataFrame | None) -> pd.DataFrame:
     if mask is None:
         return score
-    return score.where(mask.astype(bool), np.nan)
+    # An *unknown* applicability (NaN) must stay NaN — never coerce to truthy.
+    # ``NaN.astype(bool)`` is True in NumPy/Pandas, which silently kept unknown
+    # names in the factor — 3rd-round audit P0-09.
+    valid_mask = mask.notna() & mask.ne(0)
+    return score.where(valid_mask, np.nan)
 
 
 def _fin_piotroski_f_score(roa, ocf, net_profit, leverage, current_ratio, total_capital,
                            gross_margin, asset_turnover, period_id, mask=None):
-    roa_up = roa > roa.shift(1)
-    lev_down = leverage < leverage.shift(1)
-    cr_up = current_ratio > current_ratio.shift(1)
-    cap_flat = total_capital.abs() <= total_capital.shift(1).abs() * 1.05
-    gm_up = gross_margin > gross_margin.shift(1)
-    at_up = asset_turnover > asset_turnover.shift(1)
+    # Period-over-period comparisons must use fiscal ordinals, never trading-day
+    # shifts: with daily PubDate as-of ffill, ``roa.shift(1)`` is almost always
+    # the SAME report period (both Q1), so every improvement test was pinned
+    # False.  ``_delta``/``_growth`` walk the visible report-period sequence —
+    # 3rd-round audit P0-08.
+    roa_up = _delta(roa, period_id) > 0
+    lev_down = _delta(leverage, period_id) < 0
+    cr_up = _delta(current_ratio, period_id) > 0
+    gm_up = _delta(gross_margin, period_id) > 0
+    at_up = _delta(asset_turnover, period_id) > 0
+    # Equity issuance: paid-in+reserves grew >5% from the prior fiscal period.
+    cap_flat = _growth(total_capital.abs(), period_id) <= 0.05
     score = (
         (roa > 0).astype(float) + (ocf > 0).astype(float) + roa_up.astype(float)
         + (ocf > net_profit).astype(float) + lev_down.astype(float) + cr_up.astype(float)

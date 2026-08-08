@@ -308,14 +308,15 @@ class ParquetMaterializer:
         work_df = attach_partition_columns(df, policy)
 
         if write_local:
-            partition_items = list(iter_partition_groups(work_df, policy))
+            # Phase 5 R17：直接迭代 generator，禁止 ``list(iter_partition_groups(...))``
+            # ——那会把所有分区组同时引用在内存里，10 年因子等于多一份全量 DataFrame。
             progress = ProgressLogger(
                 logger,
                 desc=f"落盘因子 {factor_id}",
-                total=len(partition_items),
+                total=None,
                 unit="partition",
             )
-            for part_values, partition_df in partition_items:
+            for part_values, partition_df in iter_partition_groups(work_df, policy):
                 pkey = partition_key(part_values)
                 ck_year = checkpoint_year(part_values)
                 if resume:

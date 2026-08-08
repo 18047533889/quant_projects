@@ -18,16 +18,18 @@ def panel_native_enabled(ctx: ExecutionContext) -> bool:
 
 
 def ensure_template_from_series(ctx: ExecutionContext, series: pd.Series) -> None:
-    if getattr(ctx, "template_series", None) is None:
-        ctx.template_series = series
+    # Phase 5 R16：只保留 index，不保留整份 Series 值
+    if getattr(ctx, "template_index", None) is None:
+        ctx.template_index = series.index
 
 
 def ensure_template_from_panel(ctx: ExecutionContext, panel: pd.DataFrame) -> None:
-    if getattr(ctx, "template_series", None) is not None:
+    if getattr(ctx, "template_index", None) is not None:
         return
-    stacked = panel.stack(future_stack=True)
-    stacked.index.names = [ctx.timestamp_col, ctx.instrument_col]
-    ctx.template_series = stacked
+    # 只取 stack 的索引（axis），丢弃 stacked 值数组，避免宽表 + stacked 双份拷贝
+    idx = panel.stack(future_stack=True).index
+    idx.names = [ctx.timestamp_col, ctx.instrument_col]
+    ctx.template_index = idx
 
 
 def load_column_as_panel(data_source: Any, name: str, ctx: ExecutionContext) -> pd.DataFrame:
@@ -69,14 +71,23 @@ def to_panel(val: Any, ctx: ExecutionContext) -> Any:
     return val
 
 
+def _template_for_reindex(ctx: ExecutionContext, val: Any) -> Any:
+    """返回可传给 ``panel_to_series`` 的 template（Series 或 MultiIndex 均可）。"""
+    idx = getattr(ctx, "template_index", None)
+    if idx is not None:
+        return idx
+    series = getattr(ctx, "template_series", None)
+    if series is not None:
+        return series
+    ensure_template_from_panel(ctx, val)
+    return getattr(ctx, "template_index", None)
+
+
 def finalize_panel_result(val: Any, ctx: ExecutionContext) -> Any:
     if not panel_native_enabled(ctx):
         return val
     if isinstance(val, pd.DataFrame):
         from .cleaned_bridge import panel_to_series
-        template = getattr(ctx, "template_series", None)
-        if template is None:
-            ensure_template_from_panel(ctx, val)
-            template = ctx.template_series
+        template = _template_for_reindex(ctx, val)
         return panel_to_series(val, ctx, template=template)
     return val

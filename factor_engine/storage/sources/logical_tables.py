@@ -21,6 +21,9 @@ class LogicalTableContract:
     dataset: str | None
     join_policy: JoinPolicy
     required_parameter: str | None = None
+    #: Phase 5 R14：``one_to_many`` 的 relation 表（一股多股东等）不能被静默标量化，
+    #: 必须显式指定 rank selector / aggregate 降维，否则 production fail-closed。
+    cardinality: str = "many_to_one"
 
 
 ASHARE_LOGICAL_TABLES: dict[str, LogicalTableContract] = {
@@ -38,8 +41,12 @@ ASHARE_LOGICAL_TABLES: dict[str, LogicalTableContract] = {
     "StockIncome": LogicalTableContract("ashare_stock_income", "financial_pit"),
     "StockCashFlow": LogicalTableContract("ashare_stock_cashflow", "financial_pit"),
     "StockDividend": LogicalTableContract("ashare_stock_dividend", "effective_only"),
-    "StockTopTenShareholder": LogicalTableContract("ashare_stock_topten_shareholder", "relation_pit"),
-    "StockTopTenFloatShareholder": LogicalTableContract("ashare_stock_topten_float_shareholder", "relation_pit"),
+    "StockTopTenShareholder": LogicalTableContract(
+        "ashare_stock_topten_shareholder", "relation_pit", cardinality="one_to_many"
+    ),
+    "StockTopTenFloatShareholder": LogicalTableContract(
+        "ashare_stock_topten_float_shareholder", "relation_pit", cardinality="one_to_many"
+    ),
     "StockIndustry": LogicalTableContract("ashare_stock_industry", "asof_backward", "IndustrySource"),
     # Historical alias retained for old formulas.
     "IndustryDaily": LogicalTableContract("ashare_stock_industry", "asof_backward", "IndustrySource"),

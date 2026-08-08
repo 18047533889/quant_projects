@@ -83,7 +83,13 @@ def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
 
 
 def _bin(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
-    return np.clip(np.searchsorted(edges, values, side="right") - 1, 0, len(edges) - 2)
+    out = np.clip(np.searchsorted(edges, values, side="right") - 1, 0, len(edges) - 2)
+    # Fail-closed (audit P0): NaN/±Inf must never become a legal state.
+    # ``np.searchsorted`` sorts NaN to the END, so a raw call would silently
+    # map missing data into the top bin and pollute state counts, the transition
+    # matrix, D1/D2 and the AIS blocks.  Return a -1 sentinel that callers mask.
+    out = np.where(np.isfinite(values), out, -1)
+    return out
 
 
 def _state_dynamics_series(
@@ -134,8 +140,11 @@ def _state_dynamics_series(
         k = int(_bin(np.asarray([cur]), edges)[0])
         state[t] = k
         states_past = _bin(past, edges)
-        counts[t] = np.bincount(states_past, minlength=B).astype(float)
-        total = float(len(states_past))
+        # Fail-closed on missing values: NaN/Inf states are -1 sentinels and are
+        # excluded from every statistic (audit P0).
+        valid_states = states_past >= 0
+        counts[t] = np.bincount(states_past[valid_states], minlength=B).astype(float)
+        total = float(int(valid_states.sum()))
         pi[t] = counts[t] / max(total, 1.0)
 
         d1_row = np.full(B, np.nan)
@@ -144,9 +153,16 @@ def _state_dynamics_series(
             base = past[:-lg]
             inc = past[lg:] - base
             base_bin = states_past[:-lg]
-            N = np.bincount(base_bin * B + states_past[lg:], minlength=B * B).reshape(B, B)
+            nxt_bin = states_past[lg:]
+            trans_ok = (base_bin >= 0) & (nxt_bin >= 0)
+            N = np.zeros((B, B), dtype=float)
+            if np.any(trans_ok):
+                N[...] = np.bincount(
+                    base_bin[trans_ok] * B + nxt_bin[trans_ok],
+                    minlength=B * B,
+                ).reshape(B, B)
             for bbin in range(B):
-                sel = base_bin == bbin
+                sel = trans_ok & (base_bin == bbin)
                 if int(sel.sum()) < mc:
                     continue
                 dx = inc[sel]
@@ -156,9 +172,9 @@ def _state_dynamics_series(
                 d2_row[bbin] = float(np.mean(dx * dx)) / (2.0 * lg)
         D1[t] = d1_row
         D2[t] = d2_row
-        total_trans[t] = float(len(past) - lg)
-        if len(past) > lg:
-            N = np.bincount(base_bin * B + states_past[lg:], minlength=B * B).reshape(B, B)
+        n_trans = int(trans_ok.sum()) if len(past) > lg else 0
+        total_trans[t] = float(n_trans)
+        if n_trans > 0:
             P[t] = (N + 0.5) / (N.sum(axis=1, keepdims=True) + 0.5 * B)
     return {
         "state": state,
@@ -543,6 +559,11 @@ def _ais_series(series: np.ndarray, window: int, bins: int, history_length: int)
         joint = np.zeros((B, B ** k), dtype=np.float64)
         n_blocks = 0
         for s in range(k, len(S)):
+            # Fail-closed on missing values: any NaN/Inf in the k-history block
+            # or the next state (the -1 sentinel) invalidates the block (audit
+            # P0 — missing data must not be re-encoded as the top bin).
+            if np.any(S[s - k : s + 1] < 0):
+                continue
             hcode = 0
             for m in range(k):
                 hcode = hcode * B + int(S[s - k + m])

@@ -179,25 +179,30 @@ def _roll_spread_series(xv: np.ndarray, window: int) -> np.ndarray:
 class TsRollEffectiveSpread(SeriesOperator):
     """Roll 有效 spread（log 价格差分一阶协方差）。
 
-    ``S = 2 sqrt(max(-Cov(dx_t, dx_{t-1}), 0))``，x 视为价格序列（内部取 log
-    差分）。负协方差条件使其经常为 0（流动性极好或协方差为正），这是 Roll
-    估计器的固有特性。A 股无 L2 时的 cheap liquidity transform。P2 / Research。
+    ``S = 2 sqrt(max(-Cov(dP_t, dP_{t-1}), 0))``，``price`` 为正价格序列（内部
+    取 log 差分；误传收益率会因 log(负值) 静默 NaN，故参数名明确为 price）。
+    负协方差条件使其经常为 0（流动性极好或协方差为正），这是 Roll 估计器的
+    固有特性。A 股无 L2 时的 cheap liquidity transform。P2 / Research。
     """
 
     metadata = _metadata(
         "ts_roll_effective_spread",
         "Roll 有效 spread 2 sqrt(max(-Cov(dx_t, dx_{t-1}), 0))。",
-        ["x", "window"],
+        ["price", "window"],
         domain="price_volume",
         unit="fraction",
         cost=4,
     )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, price: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
         w = int(window)
         if w < 5:
             raise ValueError("ts_roll_effective_spread requires window >= 5")
-        return frame_like(x, _roll_spread_series(x.to_numpy(dtype=float), w))
+        # The kernel is ``2*sqrt(max(-Cov(d log P), 0))`` and requires a POSITIVE
+        # price series: feeding a signed return series silently produces NaN for
+        # every negative log(·) (a data-understanding footgun).  The param is
+        # named ``price`` so the contract is explicit.
+        return frame_like(price, _roll_spread_series(price.to_numpy(dtype=float), w))
 
 
 def _register_surface() -> None:

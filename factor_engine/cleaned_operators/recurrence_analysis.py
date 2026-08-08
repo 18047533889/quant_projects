@@ -35,6 +35,18 @@ from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 _EPS = 1e-12
 
 
+def _trailing_contiguous_finite(chunk: np.ndarray) -> np.ndarray:
+    """Longest trailing contiguous finite run (never re-connects across a gap)."""
+    n = chunk.shape[0]
+    end = n
+    while end > 0 and not np.isfinite(chunk[end - 1]):
+        end -= 1
+    start = end
+    while start > 0 and np.isfinite(chunk[start - 1]):
+        start -= 1
+    return chunk[start:end]
+
+
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -152,7 +164,11 @@ def _recurrence_series(
         for r in range(rows):
             lo = max(0, r - w + 1)
             chunk = values[lo : r + 1, c]
-            v = chunk[np.isfinite(chunk)]
+            # Audit P1-B: never compress NaN out of the time axis.  A phase-space
+            # embedding coordinate that is missing invalidates the embedding; the
+            # longest trailing contiguous finite run keeps the time structure and
+            # never re-connects data across a gap.
+            v = _trailing_contiguous_finite(chunk)
             if v.size < mp:
                 continue
             stats = _recurrence_stats_window(v, dim, delay, eps_fraction, min_line)

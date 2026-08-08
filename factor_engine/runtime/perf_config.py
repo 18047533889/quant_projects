@@ -86,6 +86,47 @@ class PerfConfig:
     query_max_rows: int | None = None
     #: SQL/读路径结果字节硬上限
     query_max_result_bytes: int | None = None
+    #: Phase 5 资源预算：有效内存上限（字节）；``None`` 表示自动探测
+    memory_limit_bytes: int | None = None
+    #: Phase 5 进程预算占有效内存比例（默认 0.75）
+    process_fraction: float | None = None
+    #: Phase 5 进程外保留内存（GB）；``None`` 表示按有效内存 20% 自动
+    reserve_gb: float | None = None
+    #: Phase 5 结果字节预算（``results.max_in_memory_bytes``）；``None`` 表示按比例
+    result_budget_bytes: int | None = None
+    #: Phase 5 spill 目录；``None`` 表示系统 temp
+    spill_dir: str | None = None
+    #: Phase 5 spill 上限；``None`` 表示自动
+    spill_budget_bytes: int | None = None
+
+    def build_resource_plan(self, config: dict | None = None) -> Any:
+        """构造 Phase 5 ``ExecutionResourcePlan``（resources 配置 + 环境变量合并）。"""
+        from runtime.resource_governor import (
+            ExecutionResourcePlan,
+            _cfg_bytes,
+            effective_memory_limit_bytes,
+        )
+
+        cfg: dict = dict(config or {})
+        mem_cfg = dict(cfg.get("memory") or {})
+        results_cfg = dict(cfg.get("results") or {})
+        spill_cfg = dict(cfg.get("spill") or {})
+        if self.memory_limit_bytes is not None:
+            mem_cfg["limit"] = self.memory_limit_bytes
+        if self.process_fraction is not None:
+            mem_cfg["process_fraction"] = self.process_fraction
+        if self.reserve_gb is not None:
+            mem_cfg["reserve_gb"] = self.reserve_gb
+        if self.result_budget_bytes is not None:
+            results_cfg["max_in_memory_bytes"] = self.result_budget_bytes
+        if self.spill_dir is not None:
+            spill_cfg["directory"] = self.spill_dir
+        if self.spill_budget_bytes is not None:
+            spill_cfg["max_size"] = self.spill_budget_bytes
+        cfg["memory"], cfg["results"], cfg["spill"] = mem_cfg, results_cfg, spill_cfg
+        if not cfg.get("mode"):
+            cfg["mode"] = "auto"
+        return ExecutionResourcePlan.from_dict(cfg)
 
     def build_query_budget(self) -> Any | None:
         """构造 ``data_access.QueryBudget`` 供执行上下文使用。
@@ -143,6 +184,12 @@ class PerfConfig:
             "FACTOR_ENGINE_OPERATOR_BACKEND",
             "FACTOR_ENGINE_QUERY_MAX_ROWS",
             "FACTOR_ENGINE_QUERY_MAX_RESULT_BYTES",
+            "FACTOR_ENGINE_MAX_MEMORY_BYTES",
+            "FACTOR_ENGINE_PROCESS_FRACTION",
+            "FACTOR_ENGINE_RESERVE_GB",
+            "FACTOR_ENGINE_RESULT_BUDGET_BYTES",
+            "FACTOR_ENGINE_SPILL_DIR",
+            "FACTOR_ENGINE_SPILL_BUDGET_BYTES",
         )
         cache_key = tuple(os.environ.get(name) for name in cache_names)
         if _ENV_CACHE is not None and _ENV_CACHE_KEY == cache_key:
@@ -176,6 +223,12 @@ class PerfConfig:
             operator_backend=op_backend,  # type: ignore[arg-type]
             query_max_rows=_env_int("FACTOR_ENGINE_QUERY_MAX_ROWS", None),
             query_max_result_bytes=_env_int("FACTOR_ENGINE_QUERY_MAX_RESULT_BYTES", None),
+            memory_limit_bytes=_env_int("FACTOR_ENGINE_MAX_MEMORY_BYTES", None),
+            process_fraction=_env_float("FACTOR_ENGINE_PROCESS_FRACTION", None),
+            reserve_gb=_env_float("FACTOR_ENGINE_RESERVE_GB", None),
+            result_budget_bytes=_env_int("FACTOR_ENGINE_RESULT_BUDGET_BYTES", None),
+            spill_dir=_env_str("FACTOR_ENGINE_SPILL_DIR", "").strip() or None,
+            spill_budget_bytes=_env_int("FACTOR_ENGINE_SPILL_BUDGET_BYTES", None),
         )
         _ENV_CACHE_KEY = cache_key
         return _ENV_CACHE

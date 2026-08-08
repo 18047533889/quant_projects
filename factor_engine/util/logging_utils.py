@@ -99,8 +99,7 @@ class ProgressLogger:
             log_every: 每隔多少步打一条；默认 total/10
         """
         self.logger = logger
-        self.desc = desc
-        self.total = max(int(total), 0)
+        self.total = None if total is None else max(int(total), 0)
         self.unit = unit
         self.width = max(int(width), 8)
         self.level = level
@@ -111,15 +110,17 @@ class ProgressLogger:
         self.log(force=True)
 
     def _default_log_every(self) -> int:
-        """总步数少时每步都打；否则约 10 次日志。"""
+        """总步数少时每步都打；否则约 10 次日志。``total=None`` 时每步都打。"""
+        if self.total is None:
+            return 1
         if self.total <= 10:
             return 1
         return max(1, self.total // 10)
 
     def _ratio(self) -> float:
-        """当前完成比例 [0, 1]。"""
-        if self.total <= 0:
-            return 1.0
+        """当前完成比例 [0, 1]；``total=None``（indeterminate）返回 0。"""
+        if self.total is None or self.total <= 0:
+            return 0.0
         return min(1.0, self.current / self.total)
 
     def _bar(self) -> str:
@@ -138,8 +139,9 @@ class ProgressLogger:
                 return
 
         elapsed = time.perf_counter() - self.started_at
+        total_str = "?" if self.total is None else str(self.total)
         message = (
-            f"{self.desc} {self._bar()} {self.current}/{self.total} {self.unit} "
+            f"{self.desc} {self._bar()} {self.current}/{total_str} {self.unit} "
             f"({self._ratio():.1%}, {elapsed:.2f}s)"
         )
         if detail:
@@ -148,11 +150,16 @@ class ProgressLogger:
         self._last_logged = self.current
 
     def advance(self, step: int = 1, *, detail: str | None = None) -> None:
-        """前进一步并尝试打日志；完成时 force 输出。"""
-        self.current = min(self.total, self.current + step)
-        self.log(detail=detail, force=self.current >= self.total)
+        """前进一步并尝试打日志；完成时 force 输出。``total=None`` 时不截断。"""
+        if self.total is None:
+            self.current += max(int(step), 0)
+        else:
+            self.current = min(self.total, self.current + step)
+        done = self.total is not None and self.current >= self.total
+        self.log(detail=detail, force=done)
 
     def finish(self, *, detail: str | None = None) -> None:
         """标记完成并打最终日志。"""
-        self.current = self.total
+        if self.total is not None:
+            self.current = self.total
         self.log(detail=detail, force=True)

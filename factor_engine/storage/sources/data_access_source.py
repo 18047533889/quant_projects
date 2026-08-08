@@ -58,6 +58,29 @@ def _positive_int_env(name: str, default: int) -> int:
     return max(1, value)
 
 
+def _default_data_cache_budget() -> int:
+    """DataAccessSource 数据缓存默认预算：显式 env > 进程预算 × 15%。
+
+    Phase 5 R7：8GB 默认写死对 8GB 服务器是灾难、对 512GB 服务器又太保守。
+    改为跟随 ``ExecutionResourcePlan.process_budget_bytes`` 自动缩放。
+    """
+    raw = os.environ.get("FACTOR_ENGINE_DATA_CACHE_MAX_BYTES", "").strip()
+    if raw:
+        try:
+            value = int(raw)
+            if value > 0:
+                return value
+        except ValueError as exc:
+            raise ValueError(f"FACTOR_ENGINE_DATA_CACHE_MAX_BYTES must be an integer") from exc
+    try:
+        from runtime.resource_governor import ExecutionResourcePlan
+
+        plan = ExecutionResourcePlan.auto()
+        return max(128 * 1024 * 1024, int(plan.process_budget_bytes * 0.15))
+    except Exception:
+        return 4 * 1024 * 1024 * 1024
+
+
 class DataAccessSource(DataSource):
     """FactorEngine DataAccess source with snapshot-bound caches and preflight."""
 
@@ -119,10 +142,10 @@ class DataAccessSource(DataSource):
         self._max_cache_columns = _positive_int_env(
             "FACTOR_ENGINE_DATA_CACHE_MAX_COLUMNS", 64
         )
-        # #42 字节感知缓存上限（默认 8GB）；超限按列数 LRU 淘汰
-        self._max_cache_bytes = _positive_int_env(
-            "FACTOR_ENGINE_DATA_CACHE_MAX_BYTES", 8 * 1024 * 1024 * 1024
-        )
+        # #42 字节感知缓存上限。Phase 5 R7：默认不再固定 8GB，而是跟随进程预算
+        # （process_budget × 15%），8GB 服务器上自然变小、512GB 服务器上自动变大；
+        # 显式 env 仍可覆盖。
+        self._max_cache_bytes = _default_data_cache_budget()
         self._cache_bytes = 0
         self._closed = False
 
@@ -384,11 +407,10 @@ class DataAccessSource(DataSource):
 
     @staticmethod
     def _series_bytes(value: Any) -> int:
-        """估算缓存对象的字节占用（pd.Series/DataFrame 用 nbytes，容错 0）。"""
-        try:
-            return int(value.nbytes)
-        except Exception:
-            return 0
+        """估算缓存对象的字节占用（Phase 5 R7：deep 感知，不再只看 nbytes）。"""
+        from runtime.resource_governor import estimate_object_bytes
+
+        return estimate_object_bytes(value)
 
     def column_cache_stats(self) -> dict[str, int]:
         return {
