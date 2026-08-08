@@ -50,6 +50,11 @@ _EPS = 1e-12
 _RHO_EPS = 0.05  # |Spearman| below this → try both monotone fits, keep the better.
 _MIN_Q_ROWS = 3  # trailing rows needed to compute a stock's own quantile threshold.
 _MIN_ALIGNED = 3  # aligned trailing rows needed for a valid pairwise joint stat.
+# R9-OP-018: the group coexceedance factor is the mean excess over *valid*
+# pairs; if fewer than this fraction of the group's pairs can be estimated at a
+# date, the group sample is too sparse and the factor emits NaN rather than a
+# denominator-biased value.
+_MIN_PAIR_COVERAGE = 0.5
 # R6-136: a pairwise Pearson on ~3 aligned samples lands near ±1 trivially and
 # then flows straight into the MST.  Require a real sample: max(20, window/2)
 # aligned rows, or the edge is unknown and excluded.
@@ -301,8 +306,8 @@ def _tail_coexceedance_series(x2d: np.ndarray, g2d: np.ndarray, window: int, qua
             N = int(idx.size)
             if N < 3:
                 continue
-            pair_sum = 0.0
-            valid_pairs = 0
+            total_pairs = 0.5 * N * (N - 1)
+            pair_excess: list[float] = []
             for a in range(N):
                 i = int(idx[a])
                 for b in range(a + 1, N):
@@ -315,20 +320,30 @@ def _tail_coexceedance_series(x2d: np.ndarray, g2d: np.ndarray, window: int, qua
                     cnt = int(aligned.sum())
                     if cnt < _MIN_ALIGNED:
                         continue
-                    both = (E[lo : t + 1, i] == 1.0) & (E[lo : t + 1, j] == 1.0)
-                    p_ij = float(np.sum(both & aligned)) / cnt
-                    pair_sum += p_ij
-                    valid_pairs += 1
-            if valid_pairs == 0:
+                    ei = (E[lo : t + 1, i] == 1.0) & aligned
+                    ej = (E[lo : t + 1, j] == 1.0) & aligned
+                    p_i = float(ei.sum()) / cnt
+                    p_j = float(ej.sum()) / cnt
+                    p_ij = float((ei & ej).sum()) / cnt
+                    # R9-OP-019 (empirical independence baseline): a fixed
+                    # ``(1-q)²`` assumes P(tail) == 1-q for BOTH stocks, which
+                    # breaks with ties / discrete values / idiosyncratic tail
+                    # rates.  The honest excess is per-pair ``p_ij - p_i·p_j``
+                    # on the SAME aligned cohort; averaging it over valid pairs
+                    # removes each pair's own marginal tail probability.
+                    pair_excess.append(float(p_ij - p_i * p_j))
+            if not pair_excess:
                 continue
-            # Independence baseline: two independent stocks are both in the
-            # *tail* event with probability p_tail².  With the threshold built
-            # at quantile q (upper) / 1-q (lower), P(tail) = 1-q for both sides,
-            # so the correct baseline is (1-q)².  The previous q² (0.81 at the
-            # 0.9 default) was two orders of magnitude too large and depressed
-            # every coexceedance factor — 3rd-round audit P0-06.
-            baseline = (1.0 - q) * (1.0 - q)
-            tc = (2.0 / (N * (N - 1))) * pair_sum - baseline
+            # R9-OP-018 (missing-pair normalisation): the old code averaged over
+            # ALL ``N(N-1)/2`` pairs but accumulated only the VALID ones, so a
+            # pair with no aligned data silently counted as 0 in the denominator
+            # and depressed the factor as data went missing.  Average over the
+            # valid pairs only, and gate on the pair-coverage ratio: if too many
+            # pairs cannot be estimated, emit NaN instead of a biased value.
+            pair_coverage = len(pair_excess) / total_pairs
+            if pair_coverage < _MIN_PAIR_COVERAGE:
+                continue
+            tc = float(np.mean(pair_excess))
             out[t, idx] = tc
     return out
 
