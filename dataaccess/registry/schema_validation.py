@@ -153,19 +153,48 @@ class SchemaCheckResult:
 _VALID_MODES = ("off", "warn", "strict")
 
 
+def _production_mode() -> bool:
+    fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
+    if fe == "production":
+        return True
+    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
+
+
+def _break_glass() -> bool:
+    return os.environ.get("BREAK_GLASS_SCHEMA_CHECK", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
 def _resolve_mode() -> str:
-    """读 QUANT_SCHEMA_CHECK；production 默认 strict。"""
+    """读 QUANT_SCHEMA_CHECK；production 默认 strict。
+
+    #P0-51 production 下非法值 → **启动失败**（配置 typo 不能把 strict 降级成 warn）。
+    #P0-52 production 显式 ``QUANT_SCHEMA_CHECK=off`` → 拒绝；只有
+    ``BREAK_GLASS_SCHEMA_CHECK=1``（带审计语义的显式 break-glass）才允许临时降级。
+    """
     raw = os.environ.get("QUANT_SCHEMA_CHECK", "").strip().lower()
+    strict = _production_mode() or os.environ.get("DATA_ACCESS_STRICT_READ", "").lower() in {"1", "true", "yes"}
     if not raw:
-        prod = os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
-        strict_read = os.environ.get("DATA_ACCESS_STRICT_READ", "").lower() in {"1", "true", "yes"}
-        raw = "strict" if (prod or strict_read) else "warn"
+        raw = "strict" if strict else "warn"
     if raw not in _VALID_MODES:
+        if strict:
+            raise ValidationError(
+                f"QUANT_SCHEMA_CHECK={raw!r} 非法（合法值: {sorted(_VALID_MODES)}）。"
+                "production 下配置 typo 必须启动失败，不能静默降级成 warn。"
+            )
         logger.warning(
             "QUANT_SCHEMA_CHECK='%s' 不合法，使用默认 'warn'（合法值：%s）",
             raw, _VALID_MODES,
         )
         return "warn"
+    if raw == "off" and _production_mode() and not _break_glass():
+        raise ValidationError(
+            "production 禁止 QUANT_SCHEMA_CHECK=off：schema 校验是生产 floor。"
+            "仅当显式 BREAK_GLASS_SCHEMA_CHECK=1（operator 审计）时才允许临时降级。"
+        )
     return raw
 
 

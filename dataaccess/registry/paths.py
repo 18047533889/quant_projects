@@ -76,18 +76,42 @@ def path_is_under(child: Path, parent: Path) -> bool:
         return False
 
 
+def _production_mode() -> bool:
+    fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
+    if fe == "production":
+        return True
+    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
+
+
 def extra_allowed_roots_from_env() -> list[Path]:
     """``DATA_ACCESS_EXTRA_ALLOWED_ROOTS``：逗号分隔的额外白名单根。
 
     其他服务器自选读/写目录时，把自定义根加到这里，否则 PathAuthorizer 会拒越界。
     例：``export DATA_ACCESS_EXTRA_ALLOWED_ROOTS=/data/my_ws,/data/my_cache``
+
+    #P0-48 production 拒绝 ``/``、``$HOME``、过宽祖先——普通环境变量不能实质取消
+    本地路径沙箱。额外根应由部署配置提供，不直接信任任意 env。
     """
     raw = os.environ.get("DATA_ACCESS_EXTRA_ALLOWED_ROOTS", "")
     roots: list[Path] = []
     for part in raw.split(","):
         part = part.strip()
-        if part:
-            roots.append(canonicalize(part))
+        if not part:
+            continue
+        resolved = canonicalize(part)
+        if _production_mode():
+            if resolved == Path("/"):
+                raise ValidationError(
+                    "DATA_ACCESS_EXTRA_ALLOWED_ROOTS=/ 在 production 被拒绝："
+                    "会实质取消本地路径沙箱。请改为具体数据集目录。"
+                )
+            home = canonicalize(Path.home())
+            if resolved == home:
+                raise ValidationError(
+                    f"DATA_ACCESS_EXTRA_ALLOWED_ROOTS={resolved} 在 production 被拒绝"
+                    "（$HOME 过宽）。请改为具体数据集目录。"
+                )
+        roots.append(resolved)
     return roots
 
 

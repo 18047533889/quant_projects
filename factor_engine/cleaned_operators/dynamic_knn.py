@@ -143,7 +143,7 @@ class CsKnnPeerMeanExSelf(SeriesOperator):
 
     metadata = _metadata(
         "cs_knn_peer_mean_ex_self",
-        "动态 k-NN 同行均值（风格相似股，排除自身）。",
+        "动态 k-NN 同行均值（风格相似股，排除自身；kth-radius tie-inclusive，可>k）。",
         ["target", "f1", "f2", "f3", "k"],
         unit="ratio",
         cost=7,
@@ -202,7 +202,7 @@ class CsKnnNeighborRetention(SeriesOperator):
 
     metadata = _metadata(
         "cs_knn_neighbor_retention",
-        "KNN 同行集合保持率 Jaccard（今天 vs lag 天前）。",
+        "KNN 同行集合保持率 Jaccard（今天 vs lag 天前；kth-radius tie-inclusive）。",
         ["f1", "f2", "f3", "k", "lag"],
         unit="ratio",
         cost=7,
@@ -262,7 +262,7 @@ class CsKnnGraphDirichletEnergy(SeriesOperator):
 
     metadata = _metadata(
         "cs_knn_graph_dirichlet_energy",
-        "目标在风格 kNN 图上的 Dirichlet energy（低=平滑）。",
+        "目标在风格 kNN 图上的 Dirichlet energy（低=平滑；kth-radius tie-inclusive）。",
         ["target", "f1", "f2", "f3", "k"],
         unit="ratio",
         cost=7,

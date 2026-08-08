@@ -339,6 +339,7 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
             "instrument_column": "inst",
             "source_paths": source_paths,
         },
+        order_by=getattr(req, "order_by", None),
     )
 
     start_clock = _perf_counter()

@@ -300,6 +300,7 @@ class ReadPlan:
             params_by_dataset=params_by_dataset,
             universe=(req.universe if time_varying else None),
             time_varying_universe=time_varying,
+            order_by=req.order_by,
         )
 
     def __repr__(self) -> str:
