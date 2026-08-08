@@ -87,25 +87,27 @@ def main() -> int:
 
     out_dir = ds.root if isinstance(getattr(ds, "root", None), Path) else Path(ds.root)
     written = 0
-    for year, fps in sorted(groups.items()):
-        if not fps:
-            continue
-        chunks = [pq.read_table(f) for f in fps]
-        table = pa.concat_tables(chunks, promote_options="permissive")
-        out = out_dir / f"{year}.parquet"
-        tmp = out_dir / f".{year}.parquet.compact_tmp"
-        pq.write_table(table, tmp, compression="zstd")
-        tmp.replace(out)
-        written += 1
-        print(f"  compacted {len(fps)} files -> {out.name} ({len(fps)} 合并)")
-        for f in fps:
-            if Path(f) != out and Path(f).name != out.name:
-                try:
-                    Path(f).unlink()
-                except OSError:
-                    pass
-    store.touch_manifest_epoch(args.dataset, **params)
-    print(f"完成：写入 {written} 个大文件并 bump manifest epoch")
+    # compaction 也是 mutation：走统一事务（bump source_epoch + 重建 manifest，
+    # 合并后 min/max/rows 全部变化，旧 manifest 必须失效重建）。
+    with store._dataset_mutation(args.dataset, **params):
+        for year, fps in sorted(groups.items()):
+            if not fps:
+                continue
+            chunks = [pq.read_table(f) for f in fps]
+            table = pa.concat_tables(chunks, promote_options="permissive")
+            out = out_dir / f"{year}.parquet"
+            tmp = out_dir / f".{year}.parquet.compact_tmp"
+            pq.write_table(table, tmp, compression="zstd")
+            tmp.replace(out)
+            written += 1
+            print(f"  compacted {len(fps)} files -> {out.name} ({len(fps)} 合并)")
+            for f in fps:
+                if Path(f) != out and Path(f).name != out.name:
+                    try:
+                        Path(f).unlink()
+                    except OSError:
+                        pass
+    print(f"完成：写入 {written} 个大文件并重建 manifest（source_epoch bump）")
     return 0
 
 

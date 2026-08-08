@@ -174,10 +174,17 @@ def _cluster_factors_by_cost(
 
     避免一个 full-history 因子把整批 union 窗口拉成全历史（拖累 999 个短因子）。
     """
-    from runtime.run_window import factor_effective_lookback
-
     clusters: list[list[Factor]] = []
     buckets: dict[str, list[Factor]] = {"full_history": [], "long": [], "medium": [], "short": []}
+    total = 252
+    try:
+        start, end = extract_source_date_bounds(engine.data_source)
+        if start and end:
+            import pandas as pd
+
+            total = max(1, len(pd.bdate_range(start, end)))
+    except Exception:
+        pass
     for factor in factors:
         analysis = analyses.get(factor.name)
         rw = None
@@ -197,16 +204,8 @@ def _cluster_factors_by_cost(
         if rw is not None and rw.full_history_required:
             buckets["full_history"].append(factor)
             continue
-        lookback = 0
-        if analysis is not None:
-            lookback = factor_effective_lookback(analysis)
-        try:
-            from runtime.run_window import source_window_bars
-
-            total = max(1, source_window_bars(engine.data_source))
-        except Exception:
-            total = 252
-        ratio = lookback / total
+        lookback = int(getattr(analysis, "lookback", None) or 0) if analysis else 0
+        ratio = lookback / total if total > 0 else 0.0
         if ratio >= 0.9:
             buckets["long"].append(factor)
         elif ratio >= 0.5:

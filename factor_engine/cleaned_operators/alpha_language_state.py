@@ -21,6 +21,7 @@ number.
 """
 from __future__ import annotations
 
+from collections import deque
 from typing import Any
 
 import numpy as np
@@ -113,37 +114,41 @@ class TsRunStrength(SeriesOperator):
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            run_sum = 0.0
+            # ``buf`` keeps only the latest ``max_run`` rows of the current run,
+            # so ``max_run`` genuinely caps the accumulation (P0-27); the
+            # uncapped ``run_len`` still drives the min_periods gate.
+            buf: deque[float] = deque(maxlen=w)
             run_len = 0
             prev_state = None
             for row in range(rows):
                 finite_x = bool(np.isfinite(xv[row, col]))
                 if not s_valid[row, col]:
-                    run_sum = 0.0
+                    buf.clear()
                     run_len = 0
                     prev_state = None
                     continue
                 cur = s_val[row, col]
                 if cur == 0.0:
-                    run_sum = 0.0
+                    buf.clear()
                     run_len = 0
                     prev_state = None
                     out[row, col] = 0.0
                     continue
                 if prev_state is not None and cur == prev_state:
                     if finite_x:
-                        run_sum = run_sum + xv[row, col]
+                        buf.append(xv[row, col])
                         run_len = run_len + 1
                     else:
-                        run_sum = 0.0
+                        buf.clear()
                         run_len = 0
                 else:
-                    run_sum = xv[row, col] if finite_x else 0.0
+                    buf = deque([xv[row, col]], maxlen=w) if finite_x else deque(maxlen=w)
                     run_len = 1 if finite_x else 0
                 prev_state = cur
                 if run_len < mp or run_len == 0:
                     out[row, col] = np.nan
                     continue
+                run_sum = float(sum(buf))
                 if normalize:
                     lo = max(0, row - w + 1)
                     base = valid_values(xv[lo : row + 1, col])
