@@ -537,7 +537,9 @@ class SemanticFieldCatalog:
         if yaml is None:
             raise ValidationError("缺少 PyYAML 依赖，无法加载 SemanticFieldCatalog")
         with path.open("r", encoding="utf-8") as fh:
-            raw = yaml.safe_load(fh) or {}
+            from data_access.registry.yaml_loader import strict_yaml_load
+
+            raw = strict_yaml_load(fh.read(), context=str(path)) or {}
         if not isinstance(raw, dict):
             raise ValidationError(
                 f"{path}: 顶层必须是 mapping（字段名 → 声明）"

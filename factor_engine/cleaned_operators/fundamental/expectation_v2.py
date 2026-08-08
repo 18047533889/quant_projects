@@ -94,22 +94,62 @@ def _same_target(expected, target_period_id):
     return period.eq(period.shift(1)) & period.notna()
 
 
+def _expectation_masks(expected, target_period_id):
+    """Complete-data masks for same-target expectation revision.
+
+    A revision can only be asserted when the current expectation, prior
+    expectation, current target period and prior target period are ALL present.
+    Any missing input (or a data gap in the prior row) makes the row
+    undetermined -> NaN, never a guessed 0 (review R4-26).  The first row is a
+    valid baseline (no prior estimate to revise -> 0), matching the parity
+    contract.
+    """
+    period = target_period_id.reindex(index=expected.index, columns=expected.columns)
+    prev_exp = expected.shift(1)
+    prev_period = period.shift(1)
+    first_row = pd.DataFrame(False, index=expected.index, columns=expected.columns)
+    first_row.iloc[0] = True
+    prev_ok = prev_exp.notna() & prev_period.notna()
+    complete = expected.notna() & period.notna() & (prev_ok | first_row)
+    same = period.eq(prev_period) & prev_ok
+    delta = expected - prev_exp
+    changed = delta.abs().gt(0) & prev_ok
+    return complete, same, changed, delta
+
+
+def _expectation_complete(expected, target_period_id):
+    period = target_period_id.reindex(index=expected.index, columns=expected.columns)
+    prev_ok = expected.shift(1).notna() & period.shift(1).notna()
+    first_row = pd.DataFrame(False, index=expected.index, columns=expected.columns)
+    first_row.iloc[0] = True
+    return expected.notna() & period.notna() & (prev_ok | first_row)
+
+
 def fin_expectation_revision(expected, target_period_id):
-    return (expected - expected.shift(1)).where(
-        _same_target(expected, target_period_id), 0.0
-    )
+    complete, same, changed, delta = _expectation_masks(expected, target_period_id)
+    revision = complete & same & changed
+    # 0 only when data is complete and a same-target revision is confirmed
+    # absent; missing inputs -> NaN (review R4-26).
+    out = delta.where(revision, 0.0)
+    return out.where(complete, np.nan)
 
 
 def fin_expectation_revision_pct(expected, target_period_id):
-    revision = _safe(expected, expected.shift(1)) - 1.0
-    return revision.where(_same_target(expected, target_period_id), 0.0)
+    complete, same, changed, _ = _expectation_masks(expected, target_period_id)
+    revision = complete & same & changed
+    prev_exp = expected.shift(1)
+    denom = prev_exp.where(prev_exp.ne(0))
+    pct = (expected / denom - 1.0).replace([np.inf, -np.inf], np.nan)
+    out = pct.where(revision, 0.0)
+    return out.where(complete, np.nan)
 
 
 def fin_expectation_revision_speed(expected, target_period_id, window_days=60):
     window = _pos_int(window_days, "window_days", 2)
-    return fin_expectation_revision_pct(expected, target_period_id).rolling(
+    speed = fin_expectation_revision_pct(expected, target_period_id).rolling(
         window, min_periods=1
     ).sum()
+    return speed.where(_expectation_complete(expected, target_period_id), np.nan)
 
 
 def _revision_event(expected, target_period_id):
@@ -119,16 +159,18 @@ def _revision_event(expected, target_period_id):
 
 def fin_expectation_revision_count(expected, target_period_id, window_days=60):
     window = _pos_int(window_days, "window_days", 2)
-    return _revision_event(expected, target_period_id).astype(float).rolling(
+    count = _revision_event(expected, target_period_id).astype(float).rolling(
         window, min_periods=1
     ).sum()
+    return count.where(_expectation_complete(expected, target_period_id), np.nan)
 
 
 def fin_expectation_revision_magnitude(expected, target_period_id, window_days=60):
     window = _pos_int(window_days, "window_days", 2)
-    return fin_expectation_revision_pct(expected, target_period_id).abs().rolling(
+    magnitude = fin_expectation_revision_pct(expected, target_period_id).abs().rolling(
         window, min_periods=1
     ).sum()
+    return magnitude.where(_expectation_complete(expected, target_period_id), np.nan)
 
 
 def fin_days_since_expectation_revision(
@@ -138,13 +180,32 @@ def fin_days_since_expectation_revision(
 ):
     cap = _pos_int(max_days, "max_days")
     events = _revision_event(expected, target_period_id)
+    period = target_period_id.reindex(index=expected.index, columns=expected.columns)
     output = pd.DataFrame(np.nan, index=expected.index, columns=expected.columns)
     for column in expected.columns:
+        ev = expected[column].to_numpy(dtype=float)
+        pv = period[column].to_numpy()
+        event = events[column].fillna(False).to_numpy(dtype=bool)
         age = cap
         values: list[float] = []
-        for event in events[column].fillna(False).to_numpy(dtype=bool):
-            age = 0 if event else min(cap, age + 1)
-            values.append(float(age))
+        for i in range(len(expected)):
+            complete = bool(np.isfinite(ev[i]) and not pd.isna(pv[i]))
+            if not complete:
+                # R4-27: cannot observe an update today -> NaN, and never age
+                # blindly across an unobservable gap.
+                values.append(np.nan)
+                age = None
+                continue
+            if event[i]:
+                values.append(0.0)
+                age = 0
+            elif age is not None:
+                age = min(cap, age + 1)
+                values.append(float(age))
+            else:
+                # Observed-clock resume after a gap: fresh reference (age 0).
+                values.append(0.0)
+                age = 0
         output[column] = values
     return output
 
@@ -167,18 +228,13 @@ def _beat_miss_streak(
 ):
     count = _pos_int(max_periods, "max_periods", 2)
     difference = actual - expected
-
-    def calculate(order, visible, current):
-        values = _values(order, visible, current, count)
-        streak = 0
-        for value in values[::-1]:
-            condition = value > 0 if beat else value < 0
-            if not condition:
-                break
-            streak += 1
-        return float(streak)
-
-    return _walk_periods(difference, period_id, calculate)
+    # A beat/miss streak must only bridge *adjacent* fiscal periods: a skipped
+    # report's surprise sign is unknown, so it ends the streak (review R4-23).
+    return _walk_periods(
+        difference,
+        period_id,
+        lambda o, v, c: _value_streak_span(o, v, c, positive=beat, max_periods=count),
+    )
 
 
 def fin_beat_streak(actual, expected, period_id, max_periods=8):

@@ -460,13 +460,17 @@ class DatasetRegistry:
         return sorted(self._datasets)
 
     def allowed_roots(self) -> list[Path]:
-        """收集所有数据集的可白名单化根目录，供 PathAuthorizer 使用。"""
+        """收集所有数据集的可白名单化根目录，供 PathAuthorizer 使用。
+
+        #P0-49 ParametricDataset 优先用显式 ``authorized_root``（比静态前缀更窄、
+        更安全），缺省回退 static_root。
+        """
         roots: list[Path] = []
         for ds in self._datasets.values():
             if isinstance(ds, StaticDataset):
                 roots.append(ds.root)
             elif isinstance(ds, ParametricDataset):
-                roots.append(ds.static_root)
+                roots.append(ds.authorized_root or ds.static_root)
         return roots
 
 

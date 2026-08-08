@@ -2884,6 +2884,7 @@ class DataAccessStore:
         seed_window: bool = True,
         universe: str | None = None,
         anchor_override: Mapping[str, Any] | None = None,
+        order_by: Sequence[str] | None = None,
     ) -> tuple[str, list[Any], list[str], dict[str, list[str]]]:
         """生成 read_joined 的单条 SQL：每张物理表一个子查询，DuckDB 内 join。
 
@@ -3324,6 +3325,19 @@ class DataAccessStore:
             f"SELECT {', '.join(outer_cols)} "
             f"FROM ({anchor_sub}) AS a " + " ".join(join_clauses)
         )
+        # #P1-28 显式 ORDER BY（确定性 panel；raw read 默认无序）。"-col" 表示
+        # 降序，"col"/"+col" 升序。
+        if order_by:
+            ord_parts: list[str] = []
+            for c in order_by:
+                text = str(c)
+                if text.startswith("-"):
+                    ord_parts.append(f"{_quote_ident(text[1:])} DESC")
+                elif text.startswith("+"):
+                    ord_parts.append(_quote_ident(text[1:]))
+                else:
+                    ord_parts.append(_quote_ident(text))
+            sql = f"{sql} ORDER BY {', '.join(ord_parts)}"
         if limit is not None:
             sql = f"{sql} LIMIT {int(limit)}"
         return sql, params_list, datasets, per_ds_paths

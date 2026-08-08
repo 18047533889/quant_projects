@@ -45,6 +45,24 @@ class ParamSpec:
                 f"params_schema['{name}'] 必须是字符串或 mapping，收到 {type(raw).__name__}"
             )
 
+        # #P0-50 unknown-key reject：ParamSpec 规格写错必须启动失败，不能静默忽略。
+        _KNOWN_KEYS = {
+            "type",
+            "pattern",
+            "path_segment",
+            "values",
+            "enum",
+            "min",
+            "max",
+            "max_length",
+        }
+        unknown = sorted(set(payload) - _KNOWN_KEYS)
+        if unknown:
+            raise ValidationError(
+                f"params_schema['{name}'] 未知配置 key {unknown}；"
+                f"应为 {sorted(_KNOWN_KEYS)} 之一"
+            )
+
         ptype = _TYPE_ALIASES.get(
             str(payload.get("type", "str")).strip().lower(),
             str(payload.get("type", "str")).strip().lower(),
