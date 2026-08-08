@@ -137,10 +137,65 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
-def _bool_or_default(value: Any, default: bool = True) -> bool:
+# #31 合法枚举集合
+_VALID_AVAILABILITY = {"same_day", "next_trading_day", "session"}
+_VALID_DUPLICATE_POLICIES = {"keep_first", "keep_last", "latest_revision", "error"}
+_VALID_PERIOD_SELECTIONS = {
+    "latest_period",
+    "exact_period",
+    "annual",
+    "quarterly",
+    "ttm",
+    "all",
+}
+_VALID_MARKETS = {"any", "ashare", "us", "a", "u"}
+
+
+def _strict_bool(value: Any, *, context: str, default: bool) -> bool:
+    """#31 严格 bool 解析：``"false"`` 字符串 → False；非法值报错。"""
     if value is None:
         return default
-    return bool(value)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"true", "1", "yes", "on"}:
+            return True
+        if text in {"false", "0", "no", "off", ""}:
+            return False
+    raise ValidationError(f"{context}: 非法布尔值 {value!r}（应为 true/false）")
+
+
+def _strict_scale(value: Any, *, context: str) -> float | None:
+    """#31 非法 scale 直接报错，禁止静默变 None（单位换算语义不容丢失）。"""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except (TypeError, ValueError):
+            pass
+    raise ValidationError(f"{context}: 非法 scale {value!r}（应为数值）")
+
+
+def _strict_enum(
+    value: Any,
+    *,
+    allowed: frozenset[str],
+    context: str,
+    default: str,
+) -> str:
+    """#31 枚举字段严格校验；非法值报错。"""
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text not in allowed:
+        raise ValidationError(
+            f"{context}: {text!r} 不在合法集合 {sorted(allowed)} 内"
+        )
+    return text
 
 
 def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
@@ -156,31 +211,99 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
     logical = str(raw.get("logical_name") or name)
     if not dataset:
         raise ValidationError(f"{context}: 缺少 dataset（逻辑字段必须落到某个数据集）")
+    temporal_model = _str_or_none(raw.get("temporal_model"))
+    # #9：财务事件字段默认 latest_period——「最新可见会计期 + 该期内最新修订」。
+    # 未显式写 period_selection 时，financial_event/event 字段默认 latest_period，
+    # 除非用户明确要 exact_period/annual/quarterly/all。
+    period_selection = _str_or_none(raw.get("period_selection"))
+    if period_selection is None:
+        period_selection = (
+            "latest_period"
+            if temporal_model in {"financial_event", "event", "financial", "e2"}
+            else "all"
+        )
+    # #31 strict schema：未知 key 拒绝、bool/enum/scale 严格校验。
+    _KNOWN_KEYS = {
+        "dataset",
+        "physical_name",
+        "physical",
+        "logical_name",
+        "market",
+        "dtype",
+        "frequency",
+        "grain",
+        "source_unit",
+        "canonical_unit",
+        "scale",
+        "time_role",
+        "temporal_model",
+        "knowledge_time",
+        "effective_time",
+        "period_time",
+        "join_policy",
+        "required_filters",
+        "revision_order",
+        "availability",
+        "primary_key",
+        "duplicate_policy",
+        "aliases",
+        "mining_allowed",
+        "period_selection",
+        "period_values",
+    }
+    unknown = sorted(set(raw) - _KNOWN_KEYS)
+    if unknown:
+        raise ValidationError(
+            f"{context}: 未知配置 key {unknown}（应为 {sorted(_KNOWN_KEYS)} 之一）"
+        )
+    market = _str_or_none(raw.get("market")) or "any"
+    if market not in _VALID_MARKETS:
+        raise ValidationError(f"{context}: market={market!r} 非法（应为 any/ashare/us）")
+    availability = _strict_enum(
+        raw.get("availability"),
+        allowed=_VALID_AVAILABILITY,
+        context=context,
+        default="same_day",
+    )
+    duplicate_policy = _strict_enum(
+        raw.get("duplicate_policy"),
+        allowed=_VALID_DUPLICATE_POLICIES,
+        context=context,
+        default="latest_revision",
+    )
+    period_selection = _strict_enum(
+        period_selection,
+        allowed=_VALID_PERIOD_SELECTIONS,
+        context=context,
+        default="all",
+    )
     return SemanticField(
         logical_name=logical,
         dataset=str(dataset),
         physical_name=str(physical),
-        market=str(raw.get("market") or "any"),
+        market=market,
         dtype=_str_or_none(raw.get("dtype")),
         frequency=_str_or_none(raw.get("frequency")),
         grain=_str_or_none(raw.get("grain")),
         source_unit=_str_or_none(raw.get("source_unit")),
         canonical_unit=_str_or_none(raw.get("canonical_unit")),
-        scale=_float_or_none(raw.get("scale")),
+        scale=_strict_scale(raw.get("scale"), context=context),
         time_role=_str_or_none(raw.get("time_role")),
-        temporal_model=_str_or_none(raw.get("temporal_model")),
+        temporal_model=temporal_model,
         knowledge_time=_str_or_none(raw.get("knowledge_time")),
         effective_time=_str_or_none(raw.get("effective_time")),
         period_time=_str_or_none(raw.get("period_time")),
         join_policy=_str_or_none(raw.get("join_policy")),
         required_filters=_tuple_of(raw.get("required_filters")),
         revision_order=_tuple_of(raw.get("revision_order")),
-        availability=_str_or_none(raw.get("availability")) or "same_day",
+        availability=availability,
         primary_key=_tuple_of(raw.get("primary_key")),
-        duplicate_policy=_str_or_none(raw.get("duplicate_policy")) or "latest_revision",
+        duplicate_policy=duplicate_policy,
         aliases=_tuple_of(raw.get("aliases")),
-        mining_allowed=_bool_or_default(raw.get("mining_allowed"), True),
-        period_selection=_str_or_none(raw.get("period_selection")) or "all",
+        mining_allowed=_strict_bool(
+            raw.get("mining_allowed"), context=context, default=True
+        ),
+        period_selection=period_selection,
         period_values=_tuple_of(raw.get("period_values")) if raw.get("period_values") else (),
     )
 
@@ -307,6 +430,76 @@ class SemanticFieldCatalog:
 
     def to_dict(self) -> dict[str, Any]:
         return {name: f.to_dict() for name, f in self._fields.items()}
+
+    def fingerprint(self) -> str:
+        """语义 catalog 稳定指纹（#3：缓存 key 必须覆盖 catalog 语义版本）。"""
+        import hashlib
+        import json
+
+        payload = json.dumps(
+            {k: f.to_dict() for k, f in self._fields.items()},
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+    def semantic_coverage_audit(self, registry: Any) -> dict[str, Any]:
+        """#30 语义覆盖审计：registry 物理字段 vs catalog。
+
+        每个 registry 物理列 → FULL_SEMANTIC / PHYSICAL_ONLY / AMBIGUOUS；
+        catalog 引用了 registry 里不存在的 dataset/column → BLOCKED。
+
+        物理列可以读，但进入 PIT/join/因子挖掘前必须有完整 semantic contract——
+        本审计是 coverage 的看板，供 CI 对齐。
+        """
+        from data_access.core.exceptions import ValidationError
+
+        by_phys: dict[tuple[str, str], list[str]] = {}
+        for f in self._fields.values():
+            by_phys.setdefault((f.dataset, f.physical_name), []).append(f.logical_name)
+
+        fields_report: dict[str, dict[str, Any]] = {}
+        for name in registry.names():
+            ds = registry.get(name)
+            schema = getattr(ds, "schema", None) or {}
+            for col in sorted(schema):
+                refs = by_phys.get((name, col), [])
+                status = "FULL_SEMANTIC"
+                if len(refs) > 1:
+                    status = "AMBIGUOUS"
+                elif not refs:
+                    status = "PHYSICAL_ONLY"
+                fields_report[f"{name}.{col}"] = {
+                    "status": status,
+                    "logical": sorted(refs),
+                }
+
+        blocked: dict[str, str] = {}
+        for f in self._fields.values():
+            try:
+                ds = registry.get(f.dataset)
+            except ValidationError:
+                blocked[f"{f.logical_name} -> {f.dataset}.{f.physical_name}"] = (
+                    "DATASET_MISSING"
+                )
+                continue
+            schema = getattr(ds, "schema", None) or {}
+            if f.physical_name not in schema:
+                blocked[f"{f.logical_name} -> {f.dataset}.{f.physical_name}"] = (
+                    "COLUMN_MISSING"
+                )
+
+        counts = {"FULL_SEMANTIC": 0, "PHYSICAL_ONLY": 0, "AMBIGUOUS": 0}
+        for r in fields_report.values():
+            counts[r["status"]] = counts.get(r["status"], 0) + 1
+        return {
+            "fields": fields_report,
+            "blocked": blocked,
+            "counts": counts,
+            "total_physical_columns": len(fields_report),
+            "blocked_count": len(blocked),
+        }
 
     @classmethod
     def from_yaml(

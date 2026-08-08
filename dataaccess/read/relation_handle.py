@@ -52,6 +52,15 @@ class RelationHandle:
         self._snapshot = snapshot
         self._lineage = lineage
 
+    @staticmethod
+    def _validate_sandbox(sql: str) -> None:
+        """#7 production/strict：SQL 沙箱校验（挡 read_parquet/COPY/ATTACH 等）。"""
+        from data_access.read import sql_escape
+        from data_access.read.query_budget import _production_mode, _strict_read_mode
+
+        if _production_mode() or _strict_read_mode():
+            sql_escape.validate_sql_sandbox(sql)
+
     # ---- 追加表达式 ----
 
     def sql(self, select_sql: str, *, params: Sequence[Any] | None = None) -> "RelationHandle":
@@ -60,6 +69,7 @@ class RelationHandle:
         ``select_sql`` 可以是完整 SELECT（引用 ``_sub`` 作为 FROM 源），或仅表达式列表
         （自动包成 ``SELECT <expr> FROM (<current>) AS _sub``）。
         """
+        self._validate_sandbox(select_sql)
         text = select_sql.strip()
         if text.lower().startswith("select"):
             # 用户写完整 SELECT：把第一个 "FROM _sub" 替换为当前句柄的子查询
@@ -144,6 +154,7 @@ class RelationHandle:
         用 ``FROM {sub}``），参数只包含外层 SELECT 自身的；子查询参数自动
         在内部保持自己的顺序。
         """
+        self._validate_sandbox(select_sql)
         text = select_sql.strip()
         if "{sub}" not in text:
             raise ValueError("sql_fragment 的 SELECT 必须用 {sub} 作为子查询占位")
@@ -161,11 +172,12 @@ class RelationHandle:
     # ---- 受控 collect ----
 
     def arrow(self) -> Any:
-        """执行 SQL，返回 Arrow Table（强制 budget + audit）。"""
+        """执行 SQL，返回 Arrow Table（强制 budget + audit + 沙箱校验）。"""
         import time
 
         from data_access.core import audit
 
+        self._validate_sandbox(self._sql)
         start = time.perf_counter()
         table = self._store._engine.execute_arrow(
             self._sql, self._params, deadline_ms=self._budget.max_elapsed_ms

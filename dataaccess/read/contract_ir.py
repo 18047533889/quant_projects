@@ -31,7 +31,13 @@ from typing import Any, Mapping, Sequence
 
 @dataclass
 class ContractIRDataset:
-    """一个数据集的统一契约视图（编译产物）。"""
+    """一个数据集的统一契约视图（编译产物）。
+
+    #34：除表级时间语义外，扩展字段级契约（knowledge/effective/period_time、
+    revision_order、required_filters、allowed_filter_values、unique_key、
+    duplicate_policy）与存储/查询策略（partitioning、storage_backend、
+    query_policy、coverage_policy），让运行时不再分别读三套定义。
+    """
 
     name: str
     in_registry: bool = False
@@ -39,6 +45,7 @@ class ContractIRDataset:
     market: str | None = None
     temporal_model: str | None = None
     panel_policy: str | None = None
+    join_policy: str | None = None
     pit_policy: str | None = None
     calendar_domain: str | None = None
     grain: str | None = None
@@ -47,7 +54,20 @@ class ContractIRDataset:
     schema: dict[str, Any] = field(default_factory=dict)
     fields: list[str] = field(default_factory=list)
     storage_layout: str | None = None
-    issues: list[str] = field(default_factory=list)
+    # ---- #34 字段级/查询级契约 ----
+    knowledge_time: str | None = None       # 数据可见时间列（availability_column）
+    effective_time: str | None = None       # 数据生效时间列
+    period_time: str | None = None          # 会计期间列
+    revision_order: list[str] = field(default_factory=list)
+    availability: str | None = None         # same_day / next_trading_day / session
+    required_filters: list[str] = field(default_factory=list)
+    allowed_filter_values: dict[str, Any] = field(default_factory=dict)
+    unique_key: list[str] = field(default_factory=list)
+    duplicate_policy: str | None = None
+    partitioning: dict[str, Any] = field(default_factory=dict)
+    storage_backend: str | None = None
+    query_policy: dict[str, Any] = field(default_factory=dict)
+    coverage_policy: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -140,6 +160,7 @@ def build_contract_ir(
             entry.market = contract.market
             entry.temporal_model = contract.temporal_model
             entry.panel_policy = contract.panel_policy
+            entry.join_policy = contract.join_policy
             entry.pit_policy = contract.pit_policy
             entry.calendar_domain = contract.calendar_domain
             entry.grain = contract.grain
@@ -155,12 +176,59 @@ def build_contract_ir(
                     "missing_partition_semantics",
                 )
             }
+            # #34 字段级契约
+            entry.knowledge_time = contract.availability_column
+            entry.effective_time = contract.event_column
+            entry.period_time = contract.period_column
+            entry.revision_order = list(contract.revision_columns or ())
+            entry.unique_key = list(contract.unique_key or ())
+            entry.required_filters = list(
+                dict.fromkeys(
+                    list(contract.required_panel_filters or ())
+                    + list(contract.required_dimension_filters or ())
+                )
+            )
+            entry.allowed_filter_values = dict(contract.allowed_filter_values or ())
+            entry.coverage_policy = contract.missing_partition_semantics
+        if reg_ds is not None:
+            entry.partitioning = dict(getattr(reg_ds, "partitioning", None) or {})
+            entry.storage_backend = _storage_backend_of(reg_ds)
+            qp = getattr(reg_ds, "query_policy", None)
+            if qp is not None:
+                entry.query_policy = {
+                    k: getattr(qp, k)
+                    for k in (
+                        "require_explicit_columns",
+                        "require_time_range",
+                        "max_rows",
+                        "max_result_bytes",
+                        "max_elapsed_ms",
+                        "max_scan_files",
+                    )
+                    if getattr(qp, k, None) is not None
+                }
         if catalog is not None:
             entry.fields = sorted(
                 f.logical_name
                 for f in catalog._fields.values()
                 if f.dataset == name
             )
+            if not entry.availability:
+                avail = {
+                    getattr(f, "availability", None)
+                    for f in catalog._fields.values()
+                    if f.dataset == name and getattr(f, "availability", None)
+                }
+                if len(avail) == 1:
+                    entry.availability = next(iter(avail))
+            if not entry.duplicate_policy:
+                dup = {
+                    getattr(f, "duplicate_policy", None)
+                    for f in catalog._fields.values()
+                    if f.dataset == name and getattr(f, "duplicate_policy", None)
+                }
+                if len(dup) == 1:
+                    entry.duplicate_policy = next(iter(dup))
         # 一致性 issue：契约在但 registry 没有 → 未标记 external
         if entry.in_contracts and not entry.in_registry and name not in external:
             entry.issues.append(
@@ -177,6 +245,20 @@ def _market_of_name(name: str) -> str | None:
     if name.startswith("ashare_") or name.startswith("a_share"):
         return "ashare"
     return None
+
+
+def _storage_backend_of(ds: Any) -> str | None:
+    """从 registry 数据集的 storage/engine 声明推断 storage backend（#34）。"""
+    storage = getattr(ds, "storage", None)
+    if isinstance(storage, dict):
+        src = storage.get("source")
+        if isinstance(src, dict):
+            return str(src.get("type") or "local")
+        if isinstance(src, str):
+            return src
+    if getattr(ds, "storage_format", None):
+        return str(ds.storage_format)
+    return "local"
 
 
 __all__ = ["ContractIR", "ContractIRDataset", "build_contract_ir"]

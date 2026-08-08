@@ -69,6 +69,10 @@ def _normalise_scales(scales: Any) -> list[int]:
         out.append(iv)
     if not out:
         raise ValueError("scales must contain at least one scale")
+    # Duplicate scales would double-weight one horizon and silently change the
+    # statistic — reject them (P1-43).
+    if len(set(out)) != len(out):
+        raise ValueError("scales must be unique (duplicate scales are rejected)")
     return out
 
 

@@ -53,7 +53,12 @@ def _column_map(xv: np.ndarray, fn) -> np.ndarray:
 def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: float, min_tail_count: int) -> np.ndarray:
     n = series.shape[0]
     w = max(2, int(window))
-    frac = min(max(_EPS, float(tail_fraction)), 0.5)
+    # Invalid tail_fraction must fail loudly, never silently clip to a legal
+    # value — silent clipping turns different ASTs into the same parameter and
+    # corrupts the search space (P1-16).
+    frac = float(tail_fraction)
+    if not (0.0 < frac <= 0.5):
+        raise ValueError("tail_fraction must satisfy 0 < tail_fraction <= 0.5")
     mtc = max(3, int(min_tail_count))
     out = np.full(n, np.nan)
     for t in range(n):
@@ -410,7 +415,9 @@ def _gpd_shape_pwm_series(
     """
     n = series.shape[0]
     w = max(2, int(window))
-    frac = min(max(_EPS, float(tail_fraction)), 0.5)
+    frac = float(tail_fraction)
+    if not (0.0 < frac <= 0.5):
+        raise ValueError("tail_fraction must satisfy 0 < tail_fraction <= 0.5")
     mtc = max(3, int(min_tail_count))
     out = np.full(n, np.nan)
     for t in range(n):

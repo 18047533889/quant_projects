@@ -218,9 +218,9 @@ _DAILY_DYNAMICS_PACK_2026_08 = frozenset({
     "event_historical_response_mean", "event_historical_response_sign_balance",
     # multivariate distribution break
     "ts_joint_energy_shift", "ts_energy_break_score",
-    # cross-sectional spectral crowding
-    "group_corr_mode_share", "group_corr_effective_rank",
-    "group_corr_mode_localization",
+    # cross-sectional spectral crowding (P1-G rename: feature-matrix SVD)
+    "group_feature_mode_share", "group_feature_effective_rank",
+    "group_feature_mode_localization",
     # session recovery + volume-clock path geometry (minute → daily)
     "session_event_recovery_score",
     "intraday_volume_clock_path_efficiency", "intraday_volume_clock_roughness",
@@ -262,8 +262,8 @@ _DAILY_DEEPENING_PACK_2026_08 = frozenset({
     # chip-cost shape
     "ts_turnover_cost_entropy", "ts_turnover_cost_mode_distance",
     "ts_turnover_cost_skew", "ts_turnover_age_dispersion",
-    # group spectral deep-dive
-    "group_corr_spectral_gap", "group_corr_second_mode_localization",
+    # group spectral deep-dive (P1-G rename)
+    "group_feature_spectral_gap", "group_feature_second_mode_localization",
     # style-graph smoothness
     "cs_knn_graph_dirichlet_energy",
     # intraday volatility signature

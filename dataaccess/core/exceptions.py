@@ -62,3 +62,30 @@ class AmbiguousSemanticFieldError(ValidationError):
     ``market_cap`` 在 A股/美股都登记了——生产模式直接抛错，禁止 YAML 顺序
     决定市场。
     """
+
+
+class AmbiguousFieldError(ValidationError):
+    """字段回退到 registry 全局查找时命中多个候选（#33 fail ambiguous）。
+
+    典型场景：``resolve_fields("Close")`` 未传 dataset，registry 里几十张表都
+    有 Close 物理列——生产模式抛错，禁止「取 registry 第一个」。
+    """
+
+
+class MatrixUnavailable(DataAccessError):
+    """factor_matrix 物化层不可用（未登记 / 无数据）。
+
+    只表示「矩阵不存在」，不表示版本/schema/参数错误——fallback 逻辑只捕这个。
+    """
+
+
+class MatrixCoverageMiss(DataAccessError):
+    """factor_matrix 物化层存在但覆盖不到请求的 (universe, frequency, 因子)。"""
+
+
+class SnapshotBuildError(DataAccessError):
+    """read_joined / sql 的多数据集 snapshot 构建不完整（#14 fail-closed）。
+
+    任意参与数据集没有成功构建 snapshot → 抛此错，禁止「查询成功但 lineage /
+    cache / replay 不可靠」。
+    """

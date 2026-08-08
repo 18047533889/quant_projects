@@ -466,6 +466,9 @@ def pit_tree(tmp_path, monkeypatch):
                                datetime(2024, 1, 3, 8, 0),
                                datetime(2024, 1, 3, 16, 0),
                                datetime(2024, 1, 3, 12, 0)],
+                # #9：financial_event 字段默认 latest_period → period_time 列必须存在
+                "ReportPeriodEndDate": [date(2023, 12, 31), date(2024, 1, 1),
+                                        date(2024, 1, 1), date(2024, 1, 1)],
                 "TotalAssets": [1.0, 2.0, 3.0, 30.0],
             }
         ),
@@ -498,6 +501,7 @@ ashare_stock_balance:
     Symbol: string
     PubDate: date
     UpdateTime: timestamp
+    ReportPeriodEndDate: date
     TotalAssets: double
 """,
         encoding="utf-8",

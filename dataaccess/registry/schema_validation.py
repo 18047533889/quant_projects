@@ -171,6 +171,26 @@ def _resolve_mode() -> str:
 
 # ---- 核心 API ---------------------------------------------------------------
 
+def _partition_columns_of(ds) -> set[str]:
+    """数据集的分区列集合（partitioning / partition_columns / hive 布局 / bucket）。
+
+    #35：hive 分区列存在目录名而非 parquet header，schema 自检时应豁免。
+    """
+    cols: set[str] = set()
+    partitioning = getattr(ds, "partitioning", None)
+    if isinstance(partitioning, dict):
+        keys = partitioning.get("columns") or partitioning.get("partition_by")
+        if isinstance(keys, (list, tuple)):
+            cols.update(str(k) for k in keys)
+    pcols = getattr(ds, "partition_columns", ()) or ()
+    cols.update(str(c) for c in pcols)
+    layout_policy = getattr(ds, "layout_policy", None)
+    bucket = getattr(layout_policy, "bucket", None)
+    if bucket is not None and getattr(bucket, "column", None):
+        cols.add(str(bucket.column))
+    return cols
+
+
 def _fetch_actual_schema(
     engine: "DuckDBEngine",
     ds: "Dataset",
@@ -234,10 +254,15 @@ def check_schema(
     actual_pairs = _fetch_actual_schema(engine, ds, paths)
     actual_map = {name: typ for name, typ in actual_pairs}
 
+    # #35 分区列豁免：hive 分区列（partitioning/partition_columns 声明的）存在
+    # 于目录名而非 parquet header，不能算「missing」。
+    partition_cols = _partition_columns_of(ds)
     missing: list[str] = []
     type_mismatch: list[tuple[str, str, str]] = []
     for col, declared_type in declared.items():
         if col not in actual_map:
+            if col in partition_cols:
+                continue
             missing.append(col)
             continue
         if not _is_compatible(declared_type, actual_map[col]):

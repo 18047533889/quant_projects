@@ -187,5 +187,49 @@ latest-period serving 11. minute SourceRef 显式带 market/session + 一次 sca
 budget 约束 18. spill disk 有 quota + free-space guard 19. materialize 流式按 partition 写
 20. CI 全绿
 
-## 状态（2026-08-08）
-- 实施中：见 Task #60-#66。
+## 状态（2026-08-08，v0.8.1+local）
+
+**P0 全部落地**：
+- R1 真实资源发现：`runtime/resource_governor.py`（`effective_cpu_slots` / `effective_memory_limit_bytes`
+  cgroup v2/v1 / SLURM / RLIMIT / host；`ExecutionResourcePlan`）；`execution_resources.py` 委托重构
+- R2 运行时 RSS Governor：`MemoryGovernor`（分档 throttle / evict hook / fail-fast `ResourceBudgetExceeded`）
+- R3 worker 数 CPU×RAM 双约束（`resource_plan`）
+- R4 `run_many(result_policy=return|sink)` + `run_many_iter`（生成器）
+- R5 CSE 引用计数（`cse_consumer_counts` / `collect_consumed_sids` / `_release_consumed_sids` 归零立即释放）
+- R6 统一缓存预算：`ExpressionCache`/`PanelCache`/`CacheManager`/`PersistentPlanCache` 字节感知 LRU +
+  `global_memory_governor` evict hooks
+- R7 `_series_bytes` deep 感知 + `FACTOR_ENGINE_DATA_CACHE_MAX_BYTES` 默认 = process_budget×15%
+- R8 `LazyColumnBundle._materialized` → 有界 LRU
+- R9 plan cache 数据版本：`compute_data_scope` 已含 `data_snapshot_id`，补 plan cache 字节治理
+- R10 VWAP 单次 scan bundle（Amount/Volume 同扫）；minute fallback 分级
+- R11 异常分层 `runtime/resource_errors.py`：仅 CapabilityMiss/CompilationUnsupported 可 fallback；
+  SQL/minute pushdown 的 `except Exception → fallback` 全部改守卫（production fail-closed）
+- R13 `ScanHandle.native_lazyframe()` 正式接口，FE 不再访问 `._lf`
+- R14 one-to-many relation 无 rank/aggregate 降维 → `SemanticContractError`/`MissingDataDependencyError`
+- R15 `ExecutionResourceScope`（进入设置、退出恢复，含 DuckDB threads/memory/temp）
+- R16 panel-native template 只存 `template_index`（axis），不再整份 stacked Series
+- R17 materializer 去掉 `list(iter_partition_groups())`；`materialize_many` 流式
+  （run_many_iter + 预编译 analyses）
+- R18 `runtime/result_budget.py`：最终结果字节预算（显式配置才强制）
+
+**P1 落地**：
+- P1-1 router 峰值内存（`estimate_plan_peak_memory`，显式预算下超限候选移出）
+- P1-2 benchmark fingerprint 加 CPU model / effective cores / RAM / storage class
+- P1-3 cgroup CPU quota（`effective_cpu_slots`）
+- P1-4 warmup 成本聚类（`warmup_clusters=True` 时按 lookback 分 waves）
+- P1-8 LQTP legacy/base 标注，v2 canonical（production 已装 v2）
+- P1-9 `_anchor_index` broad except 收窄
+- P1-12 matrix 按因子列分块 merge（`FACTOR_ENGINE_MATRIX_COLUMNS_PER_BLOCK`）
+- P1-13 spill disk governance（`spill_disk_available`/`spill_disk_speed_class` + DuckDB temp settings）
+- P1-14 统一 `resources:` YAML（`ExecutionResourcePlan.from_dict`，非法配置 fail）
+- P1-15 telemetry（`runtime/resource_telemetry.py` 写入 runtime_stats["resource"]）
+- P1-16 `make audit-factor-engine` + `scripts/audit_factor_engine.sh`
+
+**测试**：`tests/unit/test_resource_governance.py`（14）+ `tests/unit/test_run_many_streaming.py`（4）。
+回归：cache/batch/materializer/plan_cache 子系统 58 过；dataaccess 侧 52 过。其余失败均为
+并发会话算子 evidence/certification（ts_mean 等 status=experimental）既有问题，非本次改动引入。
+
+**说明**：minute_bar/minute_resample 的完整 AggregationBundle 语义对齐、DQ 全量下推、
+ClickHouse RecordBatch 流式 属于高风险/低活跃路径，本轮以 guarded-fallback 兜底，
+留待单独 wave；financial PIT 走 DataAccess latest-period serving 依赖数据源已登记
+（现有 `_financial_raw_multi` + `pit_asof_join` 路径保留兼容）。

@@ -5,6 +5,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.registry import OperatorRegistry
 
 _EPS=1e-12
 
@@ -104,3 +105,12 @@ _SPECS=[
 ("zero_return_ratio",["ret","window","epsilon"],zero_return_ratio,"Fraction of near-zero returns in recent window."),("roll_spread_proxy",["ret","window"],roll_spread_proxy,"Roll implied-spread proxy from negative first-order return covariance."),("corwin_schultz_spread",["high","low","window"],corwin_schultz_spread,"Corwin-Schultz high-low spread proxy."),("high_low_spread_proxy",["high","low","window"],high_low_spread_proxy,"Rolling log high-low spread proxy."),("turnover_adjusted_volatility",["ret","turnover","window"],turnover_adjusted_volatility,"Return volatility scaled by trading activity."),("volume_to_range",["volume","high","low","window"],volume_to_range,"Rolling volume per unit intraday range."),
 ]
 for _name,_params,_fn,_desc in _SPECS:_register(_name,_params,_fn,_desc)
+
+# P1-86: EaseOfMovement's ``volume_scale`` is a pure unit-conversion constant —
+# it multiplies the whole output uniformly and leaves cross-sectional ordering
+# invariant, so treating it as an alpha-search dimension only manufactures
+# linearly-scaled duplicates.  Tag it ``unit_conversion_only`` so a dead-parameter
+# audit exempts it (its output-sensitivity is a fixed constant, by design).
+_em_op = OperatorRegistry.get("EaseOfMovement", "pandas_numpy")
+if _em_op is not None and "unit_conversion_only" not in (_em_op.metadata.tags or ()):
+    _em_op.metadata.tags = [*(_em_op.metadata.tags or ()), "unit_conversion_only"]

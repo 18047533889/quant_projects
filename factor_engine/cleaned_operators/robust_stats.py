@@ -135,7 +135,10 @@ class TsTrimmedMean(SeriesOperator):
             ordered = np.sort(valid)
             cut = int(np.floor(trim * ordered.size))
             if cut * 2 >= ordered.size:
-                return float(np.mean(ordered))
+                # Parameter/sample infeasible: trimming would remove everything.
+                # Falling back to the plain mean silently changes the operator —
+                # return NaN instead (P1-77).
+                return np.nan
             return float(np.mean(ordered[cut : ordered.size - cut]))
 
         return _frame_like(x, _rolling_apply_2d(x.to_numpy(dtype=float), w, _fn, mp))
@@ -176,6 +179,17 @@ class TsRobustZscore(SeriesOperator):
         w = int(window)
         center_name = str(center or "median").lower()
         scale_name = str(scale or "mad").lower()
+        # Enum validation: an invalid string must fail loudly, never silently
+        # fall back to mean/MAD (P1-75).
+        if center_name not in ("median", "mean"):
+            raise ValueError("center must be 'median' or 'mean'")
+        if scale_name not in ("mad", "std"):
+            raise ValueError("scale must be 'mad' or 'std'")
+        if clip is not None:
+            bound = float(clip)
+            # A non-positive clip would invert the clamp (P1-76).
+            if not np.isfinite(bound) or bound <= 0.0:
+                raise ValueError("clip must be None or > 0")
 
         def _fn(chunk: np.ndarray) -> float:
             valid = chunk[np.isfinite(chunk)]
@@ -190,7 +204,6 @@ class TsRobustZscore(SeriesOperator):
                 return np.nan
             value = (float(chunk[-1]) - center_value) / spread if np.isfinite(chunk[-1]) else np.nan
             if clip is not None and np.isfinite(value):
-                bound = float(clip)
                 value = max(-bound, min(bound, value))
             return value
 

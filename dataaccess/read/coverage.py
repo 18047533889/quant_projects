@@ -175,6 +175,8 @@ def compute_coverage(
         if d_lo and d_hi and o_lo and o_hi:
             if d_lo >= o_lo and d_hi <= o_hi:
                 report.status = "complete"
+                # #24 max_staleness 判定：末个 partition 落后超过阈值 → stale
+                _maybe_mark_stale(report)
                 return report
             if o_lo and o_hi:
                 report.status = "partial"
@@ -186,9 +188,45 @@ def compute_coverage(
                     report.problems.append(
                         f"观测终止 {o_hi.isoformat()} 早于声明终止 {d_hi.isoformat()}"
                     )
+                _maybe_mark_stale(report)
                 return report
     report.status = "complete" if files else "unavailable"
+    _maybe_mark_stale(report)
     return report
+
+
+def _maybe_mark_stale(report: CoverageReport) -> None:
+    """#24 max_staleness 真正执行：末个 partition 落后超过阈值 → status=stale。
+
+    ``max_staleness`` 格式：``"5d"``（自然日）或 ``"5t"``（交易日）。无该声明或
+    无 observed_end 时不判定。
+    """
+    ms = (report.max_staleness or "").strip().lower()
+    if not ms or not report.observed_end:
+        return
+    try:
+        unit = ms[-1]
+        num = int(ms[:-1])
+    except (ValueError, IndexError):
+        return
+    try:
+        o_hi = _dt.date.fromisoformat(report.observed_end)
+    except ValueError:
+        return
+    today = _dt.date.today()
+    if unit == "d":
+        lag = (today - o_hi).days
+    elif unit == "t":
+        # 交易日滞后：自然日 / 7 * 5 近似（无日历时）；有日历可精确算
+        lag = max(0, int(round((today - o_hi).days * 5 / 7)))
+    else:
+        return
+    if lag > num:
+        report.status = "stale"
+        report.problems.append(
+            f"末个 partition {o_hi.isoformat()} 落后 {lag}（{'交易' if unit == 't' else '自然'}日），"
+            f"超过 max_staleness={report.max_staleness}"
+        )
 
 
 def coverage_status(store: Any, dataset: str, **kwargs: Any) -> str:

@@ -280,6 +280,54 @@ def _iter_years(start: date, end: date) -> list[int]:
     return list(range(start.year, end.year + 1))
 
 
+def _calendar_domain_of(dataset_name: str) -> str:
+    """#25 数据集声明的 calendar_domain（trade_day/calendar_day）；缺省 trade_day。"""
+    try:
+        from data_access.cos_contract import get_cos_contract
+
+        c = get_cos_contract(dataset_name)
+        if c is not None and c.calendar_domain:
+            return c.calendar_domain
+    except Exception:
+        pass
+    return "trade_day"
+
+
+def _market_trading_days(dataset_name: str, start: date, end: date) -> list[date]:
+    """#25 用市场交易日历返回 [start, end] 内的交易日；无日历回退自然日。"""
+    try:
+        from data_access.read.session_calendar import get_market_calendar
+
+        market = None
+        if dataset_name.startswith("us_"):
+            market = "us"
+        elif dataset_name.startswith("ashare_") or dataset_name.startswith("a_share"):
+            market = "ashare"
+        if market is None:
+            return _iter_dates(start, end)
+        cal = get_market_calendar(market, store=None)
+        if cal is None or not getattr(cal, "has_data", False):
+            return _iter_dates(start, end)
+        days = [d for d in cal.trading_days if start <= d <= end]
+        return sorted(days) if days else _iter_dates(start, end)
+    except Exception:
+        return _iter_dates(start, end)
+
+
+def _expected_dates(dataset_name: str, start: date, end: date) -> list[date]:
+    """#25 决定哪些 partition 应该存在：trade_day 用交易日历，calendar_day 用自然日。
+
+    避免「交易日型数据按自然日枚举」导致周末/节假日被当成缺失 partition，进而
+    误判 mirror 不完整 / 误切 remote。
+    """
+    domain = _calendar_domain_of(dataset_name)
+    if domain == "calendar_day":
+        return _iter_dates(start, end)
+    # trade_day（缺省）：优先交易日历，回退自然日
+    tdays = _market_trading_days(dataset_name, start, end)
+    return tdays or _iter_dates(start, end)
+
+
 def _run_cos_cli(args: Sequence[str]) -> None:
     cmd = [COS_CLI, *args]
     logger.info("cos_mirror: %s", " ".join(cmd))
@@ -306,23 +354,41 @@ def _local_table_dir(spec: MirrorSpec) -> Path:
     return spec.local_root
 
 
-def _write_download_manifest(dest: Path) -> None:
-    """写入本地镜像 manifest（size + mtime），供弱一致跳过决策。"""
+def _write_download_manifest(dest: Path, *, remote_key: str | None = None) -> None:
+    """#27 写入本地镜像 manifest（size + mtime + checksum + 下载时间 + verified）。
+
+    供 mirror inventory（``load_mirror_inventory``）判定镜像是否真正正确——单纯
+    ``Path.exists()`` 不足以发现下载中断 / 文件损坏 / 上游同名更新。
+    """
+    import hashlib
+    import time as _time
+
     manifest = dest.with_suffix(dest.suffix + ".manifest.json")
     try:
         st = dest.stat()
     except OSError:
         return
-    payload = {
+    payload: dict[str, Any] = {
+        "remote_key": remote_key or str(dest.name),
         "path": str(dest),
         "size": st.st_size,
         "mtime_ns": st.st_mtime_ns,
+        "downloaded_at": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+        "verified": True,
     }
+    try:
+        h = hashlib.sha256()
+        with dest.open("rb") as fh:
+            for _chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(_chunk)
+        payload["checksum_sha256"] = h.hexdigest()[:32]
+    except OSError:
+        payload["verified"] = False
     manifest.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
 
 
-def _local_file_fresh(dest: Path) -> bool:
-    """本地文件存在且 manifest 与 stat 一致时视为已同步。"""
+def _verify_mirror_file(dest: Path) -> bool:
+    """#27 校验本地镜像文件是否与 manifest 一致（size/mtime/checksum）。"""
     if not dest.exists():
         return False
     st = dest.stat()
@@ -335,7 +401,59 @@ def _local_file_fresh(dest: Path) -> bool:
         payload = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    return payload.get("size") == st.st_size and payload.get("mtime_ns") == st.st_mtime_ns
+    if payload.get("size") != st.st_size or payload.get("mtime_ns") != st.st_mtime_ns:
+        return False
+    if payload.get("verified") is False:
+        return False
+    return True
+
+
+def load_mirror_inventory(store: Any, dataset: str) -> dict[str, Any]:
+    """#27 本地 mirror 的下载清单：remote_key / size / checksum / downloaded_at /
+    verified，以及按文件聚合的完整性统计。
+
+    供 metadata plane（#38）与运维看板使用。返回:
+        {files: [{path, remote_key, size, checksum_sha256, downloaded_at, verified}],
+         total_files, verified_files, corrupt_files}
+    """
+    spec = mirror_spec_for_dataset(dataset)
+    if spec is None:
+        return {"files": [], "total_files": 0, "verified_files": 0, "corrupt_files": 0}
+    base = _local_table_dir(spec) if spec.table else spec.local_root
+    if not base.exists():
+        return {"files": [], "total_files": 0, "verified_files": 0, "corrupt_files": 0}
+    files: list[dict[str, Any]] = []
+    for mp in sorted(base.rglob("*.parquet.manifest.json")):
+        try:
+            payload = json.loads(mp.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        data_file = Path(str(payload.get("path") or mp).replace(".manifest.json", ""))
+        payload["verified"] = bool(payload.get("verified")) and (
+            data_file.exists()
+            and data_file.stat().st_size == payload.get("size")
+        )
+        files.append(
+            {
+                "path": str(data_file),
+                "remote_key": payload.get("remote_key"),
+                "size": payload.get("size"),
+                "checksum_sha256": payload.get("checksum_sha256"),
+                "downloaded_at": payload.get("downloaded_at"),
+                "verified": payload.get("verified"),
+            }
+        )
+    return {
+        "files": files,
+        "total_files": len(files),
+        "verified_files": sum(1 for f in files if f["verified"]),
+        "corrupt_files": sum(1 for f in files if not f["verified"]),
+    }
+
+
+def _local_file_fresh(dest: Path) -> bool:
+    """#27 本地文件存在且 manifest 与 stat 一致（含 verified）时视为已同步。"""
+    return _verify_mirror_file(dest)
 
 
 def _sync_cos_file(cos_uri: str, dest: Path) -> None:
@@ -356,7 +474,7 @@ def _sync_cos_file(cos_uri: str, dest: Path) -> None:
                 tmp.unlink()
             return
         tmp.replace(dest)
-        _write_download_manifest(dest)
+        _write_download_manifest(dest, remote_key=cos_uri)
     except subprocess.CalledProcessError as exc:
         if tmp.exists():
             try:
@@ -497,17 +615,20 @@ def ensure_local_mirror(
         return
 
     if spec.layout == "daily_parquet":
+        # #25 交易日型数据按交易日历枚举期望 partition，周末/节假日不判缺失
+        expected = _expected_dates(dataset_name, start, end)
         missing = [
             day
-            for day in _iter_dates(start, end)
+            for day in expected
             if not (_local_table_dir(spec) / f"{day.isoformat()}.parquet").exists()
         ]
         for day in missing:
             _sync_daily_file(spec, day)
     elif spec.layout == "hive_date":
+        expected = _expected_dates(dataset_name, start, end)
         missing = [
             day
-            for day in _iter_dates(start, end)
+            for day in expected
             if not (spec.local_root / f"date={day.isoformat()}" / spec.file_name).exists()
         ]
         for day in missing:

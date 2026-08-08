@@ -613,6 +613,23 @@ class DuckDBEngine:
         with self._write_lock:
             self._conn.execute(f"CREATE OR REPLACE VIEW {view_name} AS {sql}")
 
+    def register_arrow_table(self, table_name: str, table: Any) -> None:
+        """把已物化 Arrow Table 注册为 DuckDB 虚拟表（PhysicalPlanExecutor 用）。
+
+        供节点式计划把「已聚合的锚点」作为中间表参与后续 join。用 ``_tmp`` 前缀
+        避免与数据表冲突；连接关闭自动失效。
+        """
+        with self._write_lock:
+            self._conn.register(table_name, table)
+
+    def unregister_table(self, table_name: str) -> None:
+        """注销 DuckDB 虚拟表（PhysicalPlanExecutor 组合执行后清理）。"""
+        try:
+            with self._write_lock:
+                self._conn.unregister(table_name)
+        except (duckdb.Error, Exception):
+            pass
+
     def close(self) -> None:
         """显式关闭。一般不用调，进程退出时 Python 会自动回收。"""
         try:

@@ -119,6 +119,94 @@ class Not(Filter):
 
 
 # ---------------------------------------------------------------------------
+# 规范化序列化 / 指纹（缓存 key、审计用）—— 不依赖 repr()
+# ---------------------------------------------------------------------------
+
+
+def _canon_value(value: Any) -> Any:
+    """把过滤值规范化为可 JSON 序列化的稳定表示（日期→iso，numpy→标量）。"""
+    import datetime as _dt
+
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, _dt.datetime):
+        return f"dt:{value.isoformat()}"
+    if isinstance(value, _dt.date):
+        return f"d:{value.isoformat()}"
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_canon_value(v) for v in value]
+    try:
+        import numpy as _np  # 本地 import：只在非原生标量出现时触发
+
+        if isinstance(value, _np.generic):
+            return _canon_value(value.item())
+    except ImportError:
+        pass
+    return str(value)
+
+
+def canonical_filter_ast(filters: Any) -> dict[str, Any]:
+    """把 Filter AST 序列化成规范化 dict（不排序版本；And/Or 子节点排序）。
+
+    供 ``canonical_filter_hash`` 用。``filters`` 接受 parse_filters 的所有
+    输入形态（Filter / dict / list / None）。
+    """
+    node = parse_filters(filters) if filters is not None else None
+    if node is None:
+        return {"kind": "all"}
+
+    def _ser(f: Filter) -> dict[str, Any]:
+        cls = type(f).__name__
+        if isinstance(f, ColumnFilter):
+            base: dict[str, Any] = {"node": cls, "column": f.column}
+            if cls in ("Eq", "Ne", "Lt", "Le", "Gt", "Ge"):
+                base["value"] = _canon_value(f.value)
+            elif cls in ("In", "NotIn"):
+                base["values"] = sorted(
+                    (_canon_value(v) for v in f.values), key=str
+                )
+            elif cls == "Between":
+                base["lower"] = _canon_value(f.lower)
+                base["upper"] = _canon_value(f.upper)
+                base["lower_inclusive"] = f.lower_inclusive
+                base["upper_inclusive"] = f.upper_inclusive
+            return base
+        if isinstance(f, (And, Or)):
+            return {
+                "node": cls,
+                "children": sorted(
+                    (_ser(c) for c in f.children),
+                    key=lambda d: d.get("node", "") + "|" + str(d.get("column", "")),
+                ),
+            }
+        if isinstance(f, Not):
+            return {"node": "Not", "child": _ser(f.child)}
+        return {"node": cls}
+
+    return _ser(node)
+
+
+def canonical_filter_hash(filters: Any) -> str:
+    """Filter AST 的规范化指纹（sha256[:24]）。None/空 → "no_filter"。
+
+    两个语义等价的过滤（列顺序/And 顺序不同）得到同一个 hash——缓存 key 不因
+    调用方书写顺序不同而 miss。
+    """
+    if filters is None:
+        return "no_filter"
+    import hashlib
+    import json
+
+    payload = json.dumps(
+        canonical_filter_ast(filters),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+
+# ---------------------------------------------------------------------------
 # 输入归一化
 # ---------------------------------------------------------------------------
 

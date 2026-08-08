@@ -99,6 +99,7 @@ class ProgressLogger:
             log_every: 每隔多少步打一条；默认 total/10
         """
         self.logger = logger
+        self.desc = desc
         self.total = None if total is None else max(int(total), 0)
         self.unit = unit
         self.width = max(int(width), 8)

@@ -196,7 +196,10 @@ class TsTimeUnderWater(SeriesOperator):
 
 
 def _best_lag_corr(x: np.ndarray, y: np.ndarray, row: int, window: int, max_lag: int) -> float:
-    best = 0.0
+    # NaN means "no lag was computable"; a *finite* 0.0 is a legitimate result
+    # (all valid-lag correlations were exactly zero) and must survive as 0.0,
+    # not be coerced to NaN — P0-30.
+    best = np.nan
     for lag in range(0, max_lag + 1):
         end = row + 1 - lag
         start = max(0, end - window)
@@ -209,7 +212,7 @@ def _best_lag_corr(x: np.ndarray, y: np.ndarray, row: int, window: int, max_lag:
             continue
         if np.std(xs[valid]) > 0 and np.std(ys[valid]) > 0:
             value = abs(float(np.corrcoef(xs[valid], ys[valid])[0, 1]))
-            best = max(best, value)
+            best = value if not np.isfinite(best) else max(best, value)
     return best
 
 
@@ -242,7 +245,8 @@ class TsBestLagCorr(SeriesOperator):
         for col in range(cols):
             for row in range(rows):
                 value = _best_lag_corr(xv[:, col], yv[:, col], row, w, ml)
-                out[row, col] = value if value > 0 else np.nan
+                # NaN (no computable lag) propagates; a genuine 0.0 stays 0.0.
+                out[row, col] = value
         return _frame_like(y, out)
 
 

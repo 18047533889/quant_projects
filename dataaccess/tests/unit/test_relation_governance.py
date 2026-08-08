@@ -67,16 +67,35 @@ def test_relation_handle_safe_inspection_no_fetch(store):
 
 
 def test_relation_handle_production_ban_fetch(store, monkeypatch):
-    """#31：production 禁公开活 relation（逃生口），只留只读检查 API。"""
+    """#7/#31：production 下 sql_relation 走 SQL 沙箱。
+
+    - 未声明 snapshot_datasets（= read_datasets）→ 拒绝；
+    - SQL 含 read_parquet / COPY 等禁词 → 拒绝（不再允许绕过 DataAccess）。
+    """
     monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
+    root = str(store._registry.get("ds").root / "*.parquet")
+    # 无 snapshot_datasets → 拒绝
+    with pytest.raises(ValidationError):
+        store.sql_relation(
+            "SELECT ts, asset, value FROM read_parquet(?)",
+            params=[root],
+        )
+    # 有 snapshot_datasets 但 SQL 含 read_parquet → 仍拒绝（沙箱）
+    with pytest.raises(ValidationError):
+        store.sql_relation(
+            "SELECT ts, asset, value FROM read_parquet(?)",
+            params=[root],
+            snapshot_datasets=["ds"],
+            snapshot_params={"ds": {}},
+        )
+    # 合法 SELECT + 声明数据集 → 构造成功，但 .relation 逃生口仍被禁
     rh = store.sql_relation(
-        "SELECT ts, asset, value FROM read_parquet(?)",
-        params=[str(store._registry.get("ds").root / "*.parquet")],
+        "SELECT ts, asset, value FROM {{ds}}",
+        snapshot_datasets=["ds"],
+        snapshot_params={"ds": {}},
     )
     with pytest.raises(ValidationError):
         _ = rh.relation
-    # 只读检查仍可用
-    assert len(rh.columns()) == 3
 
 
 def test_relation_handle_sql_fragment_param_order(store):

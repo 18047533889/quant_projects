@@ -184,8 +184,16 @@ def register_operator(
     source: str = "",
     backend: str | None = None,
     status: str = "implemented",
+    replace: bool = False,
+    replacement_reason: str = "",
 ):
-    """Instantiate and register an operator class."""
+    """Instantiate and register an operator class.
+
+    ``replace``/``replacement_reason`` are the explicit escape hatch for the
+    registry's silent-overwrite ban (P0-31): a compatibility/override layer
+    re-registering an existing canonical+backend must declare it, or load_all
+    raises.
+    """
 
     def decorator(cls):
         instance = cls()
@@ -216,6 +224,8 @@ def register_operator(
             aliases=name_aliases,
             status=status,
             backend_explicit=backend_explicit,
+            replace=replace,
+            replacement_reason=replacement_reason,
         )
         return cls
 

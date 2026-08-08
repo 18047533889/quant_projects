@@ -570,6 +570,87 @@ class FieldCatalogMismatchError(ValueError):
     """A persisted FieldRef was built against a different field catalog."""
 
 
+# ---------------------------------------------------------------------------
+# P1-T typed input contracts: an operator family that requires a specific
+# price basis / level type must reject an illegal input BEFORE execution.
+# ---------------------------------------------------------------------------
+_RETURN_NAME_MARKERS = ("ret", "return", "pct_chg", "pct_change", "momentum", "mom")
+_RAW_PRICE_FIELDS = frozenset({"close", "open", "high", "low", "pre_close", "vwap"})
+_CONTINUOUS_PRICE_FIELDS = frozenset({
+    "continuous_close", "continuous_open", "continuous_high", "continuous_low",
+    "continuous_vwap",
+})
+_DRAWDOWN_FAMILY = frozenset({
+    "drawdown", "drawdown_area", "drawdown_depth", "drawdown_duration",
+    "drawdown_recovery_half_life", "ts_max_drawdown", "ts_max_drawdown_activity_cost",
+    "ts_current_drawdown_area", "ts_current_drawdown_duration",
+})
+_SPECTRAL_FAMILY = frozenset({
+    "spectral_concentration", "spectral_gap", "spectral_entropy",
+    "ts_spectral_centroid", "ts_spectral_entropy", "ts_spectral_flatness",
+    "ts_spectral_low_frequency_ratio", "ts_periodogram_energy",
+})
+
+
+class TypedInputContractError(ValueError):
+    pass
+
+
+def _leaf_fields(node: IRNode, out: set[str]) -> None:
+    if node.op == "column":
+        name = str((node.attrs or {}).get("field") or (node.attrs or {}).get("name") or "")
+        if name:
+            out.add(name)
+    for child in node.inputs:
+        _leaf_fields(child, out)
+
+
+def _is_return_field(name: str) -> bool:
+    low = name.lower()
+    return any(marker in low for marker in _RETURN_NAME_MARKERS)
+
+
+def validate_typed_input_contracts(ir: IRNode) -> list[str]:
+    """Reject operator families whose typed input contract is violated.
+
+    Audit P1-T: ``drawdown(return_series)`` is rejected (drawdown needs a
+    level/wealth-index); spectral analysis on a raw split-sensitive close is
+    rejected (continuous/return required); A-share limit operators on a
+    continuous price are rejected (they need RAW official limit prices).
+    """
+    errors: list[str] = []
+
+    def walk(node: IRNode) -> None:
+        leaves: set[str] = set()
+        _leaf_fields(node, leaves)
+        if node.op in _DRAWDOWN_FAMILY:
+            for leaf in leaves:
+                if _is_return_field(leaf):
+                    errors.append(
+                        f"{node.op} on return input {leaf}: drawdown requires a "
+                        "level / wealth-index input (audit P1-T)"
+                    )
+        elif node.op in _SPECTRAL_FAMILY:
+            for leaf in leaves:
+                if leaf in _RAW_PRICE_FIELDS:
+                    errors.append(
+                        f"{node.op} on raw split-sensitive price {leaf}: spectral "
+                        "analysis requires continuous/return input (audit P1-T)"
+                    )
+        elif str(node.op).startswith("ashare_limit_"):
+            for leaf in leaves:
+                if leaf in _CONTINUOUS_PRICE_FIELDS:
+                    errors.append(
+                        f"{node.op} on continuous price {leaf}: A-share limit "
+                        "operators require RAW official limit prices (audit P1-T)"
+                    )
+        for child in node.inputs:
+            walk(child)
+
+    walk(ir)
+    return errors
+
+
 def validate_fundamental_zero_imputation(ir: IRNode) -> list[str]:
     """Return errors for zero/mean imputation applied to fundamental data.
 
@@ -934,6 +1015,9 @@ class Analyzer:
         grain_errors = validate_field_grain_contracts(ir)
         if grain_errors:
             raise FieldGrainContractError("; ".join(grain_errors))
+        typed_errors = validate_typed_input_contracts(ir)
+        if typed_errors:
+            raise TypedInputContractError("; ".join(typed_errors))
         return AnalysisResult(
             ir=ir,
             lookback=lookback,

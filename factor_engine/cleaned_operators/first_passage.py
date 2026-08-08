@@ -76,9 +76,11 @@ def _first_passage_series(
             down = xs - b * sc
             tau = 0
             d = 0.0
+            fully_observed = True
             for h in range(1, H + 1):
                 val = x[s + h]
                 if not np.isfinite(val):
+                    fully_observed = False
                     break
                 if val >= up:
                     tau = h
@@ -88,9 +90,16 @@ def _first_passage_series(
                     tau = h
                     d = -1.0
                     break
+            if not fully_observed:
+                continue  # no information: exclude the anchor entirely
             if tau > 0:
                 wgt = (H + 1 - tau) / H
                 signs.append(d * wgt)
+            else:
+                # Full-observed non-hit anchor contributes 0, so the mean is the
+                # direction × speed × hit-probability (audit Q02, option A) —
+                # not a conditional-on-hit statistic.
+                signs.append(0.0)
         if len(signs) < ma:
             continue
         out[t] = float(np.mean(signs))

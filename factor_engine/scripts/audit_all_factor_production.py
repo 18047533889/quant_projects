@@ -133,8 +133,8 @@ _PANEL_FORCE: frozenset[tuple[str, str]] = frozenset({
     # (the level recorded at event time), not the scalar ``level`` default.
     ("event_level_survival_share", "level"),
     # 2026-08 concurrent episode / envelope families: ``scale`` and envelope
-    # band panels collide with scalar names.
-    ("state_episode_excursion_balance", "scale"),
+    # band panels collide with scalar names.  (``state_episode_excursion_balance``
+    # dropped its dead ``scale`` param in the 3rd-round audit — P0-14.)
     ("state_episode_mae", "scale"),
     ("state_episode_mfe", "scale"),
     ("ts_envelope_boundary_dwell", "upper"),

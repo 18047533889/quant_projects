@@ -101,6 +101,16 @@ def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: flo
     for t in range(n):
         x = vals[t]
         if not np.isfinite(x):
+            if np.isfinite(level):
+                # Predict-only on a missing observation (audit P0-N): propagate
+                # the state AND the covariance — never silently drop the
+                # uncertainty growth.
+                level = level + trend
+                p11_p = p11 + q_level + 2 * p12 + p22
+                p12_p = p12 + p22
+                p22_p = p22 + q_trend
+                p11, p12, p22 = p11_p, p12_p, p22_p
+                slope[t] = trend
             continue
         if not np.isfinite(level):
             level = x
@@ -130,6 +140,9 @@ _register("ts_kalman_trend", "局部线性趋势模型的潜在斜率。", ["x",
            lambda x, q_level=1e-5, q_trend=1e-5, r=1.0: _apply_col(x, lambda v: _kalman_trend_slope(v, float(q_level), float(q_trend), float(r))))
 
 
+_BETA_WARMUP = 5
+
+
 def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str) -> np.ndarray:
     n = len(y)
     beta = np.full(n, np.nan, dtype=float)
@@ -138,16 +151,36 @@ def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str
     b = np.nan
     p = 1.0
     b_prev = np.nan
+    warmup_y: list[float] = []
+    warmup_x: list[float] = []
     for t in range(n):
         yv, xv = y[t], x[t]
         if not (np.isfinite(yv) and np.isfinite(xv)):
+            if np.isfinite(b):
+                # Predict-only on a missing observation (audit P0-N): the random
+                # walk beta keeps its covariance growth (F P F' + Q with F=1).
+                p = p + q
+                unc[t] = p
             continue
         if not np.isfinite(b):
-            b = yv / xv if abs(xv) > 1e-12 else 0.0
-            b_prev = b
-            p = 1.0
-            beta[t] = b
-            unc[t] = p
+            # Audit P0-N: never initialise beta from the unstable single ratio
+            # y/x (it explodes when x ~ 0).  Use a trailing warmup OLS through
+            # the origin; fall back to a diffuse prior when it is degenerate.
+            warmup_y.append(yv)
+            warmup_x.append(xv)
+            if len(warmup_y) >= _BETA_WARMUP:
+                wy = np.asarray(warmup_y, dtype=float)
+                wx = np.asarray(warmup_x, dtype=float)
+                denom = float(np.dot(wx, wx))
+                if denom > 1e-12:
+                    b = float(np.dot(wx, wy) / denom)
+                    p = r / max(denom, 1e-12)
+                else:
+                    b = 0.0  # diffuse prior fallback
+                    p = 1e3
+                b_prev = b
+                beta[t] = b
+                unc[t] = p
             continue
         p_pred = p + q
         denom = p_pred * xv * xv + r

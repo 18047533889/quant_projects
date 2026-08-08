@@ -176,6 +176,14 @@ class ReadPlan:
         if self._store is None:
             raise RuntimeError("ReadPlan 未绑定 DataAccessStore，无法 execute")
         store = self._store
+        # #11 节点式执行：聚合+join 组合先交给 PhysicalPlanExecutor；
+        # 非组合场景返回 None，走下方现有 read/read_joined/aggregate 路径。
+        if self.physical is not None:
+            from data_access.read.physical_plan import execute_physical_plan
+
+            composed = execute_physical_plan(store, self)
+            if composed is not None:
+                return composed
         tr = self.time_range
         insts = self.instruments
         req = self.request

@@ -81,6 +81,7 @@ class StaticDataset(DatasetBase):
     partitioning: dict[str, Any] | None = None                    # 时间/分区裁剪声明
     semantic: str | None = None                                   # panel/event/factor/...
     engine: dict[str, Any] | None = None                          # 优先/兜底执行引擎
+    schema_version: str | None = None                             # #36 schema 版本号
 
     @property
     def kind(self) -> str:
@@ -123,6 +124,7 @@ class ParametricDataset(DatasetBase):
     partitioning: dict[str, Any] | None = None                    # 时间/分区裁剪声明
     semantic: str | None = None                                   # panel/event/factor/...
     engine: dict[str, Any] | None = None                          # 优先/兜底执行引擎
+    schema_version: str | None = None                             # #36 schema 版本号
 
     @property
     def kind(self) -> str:
@@ -150,6 +152,24 @@ def _require_str(data: dict, key: str, *, context: str) -> str:
     if not isinstance(value, str) or not value:
         raise ValidationError(f"{context}: 字段 '{key}' 必填且为非空字符串")
     return value
+
+
+def _strict_bool(value: Any, *, key: str, context: str) -> bool:
+    """#32 严格 bool 解析：``"false"`` 字符串 → False；非 bool 类型报错。
+
+    避免 ``bool("false") == True`` 这类 YAML 字符串串味 bug（hive_partitioning /
+    union_by_name 等生产配置）。
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"true", "1", "yes", "on"}:
+            return True
+        if text in {"false", "0", "no", "off", ""}:
+            return False
+        raise ValidationError(f"{context}: 字段 '{key}' 必须是布尔值，收到 {value!r}")
+    raise ValidationError(f"{context}: 字段 '{key}' 必须是布尔值，收到 {value!r}")
 
 
 def _parse_partition_columns(raw: Any, *, context: str) -> tuple[str, ...]:
@@ -204,8 +224,14 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     time_column = str(time_column) if time_column is not None else None
     instrument_column = str(instrument_column) if instrument_column is not None else None
 
-    hive_partitioning = bool(raw.get("hive_partitioning", layout == "hive"))
-    union_by_name = bool(raw.get("union_by_name", False))
+    hive_partitioning = _strict_bool(
+        raw.get("hive_partitioning", layout == "hive"),
+        key="hive_partitioning",
+        context=context,
+    )
+    union_by_name = _strict_bool(
+        raw.get("union_by_name", False), key="union_by_name", context=context
+    )
 
     # ---- 通用 Data IO Layer 字段解析 ----
     format_spec = FormatSpec.from_yaml(raw.get("format", "parquet"), context=context)
@@ -262,6 +288,10 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             root_expanded = root_expanded.replace("${RUN_NAMESPACE}", ns)
         root = canonicalize(root_expanded)
         glob = raw.get("glob", default_glob_for_format(format_spec.type))
+        sv_raw = raw.get("schema_version")
+        schema_version = (
+            str(sv_raw) if isinstance(sv_raw, str) and sv_raw.strip() else None
+        )
         return StaticDataset(
             name=name,
             access_mode=access_mode,
@@ -276,6 +306,7 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             partitioning=partitioning,
             semantic=semantic,
             engine=engine,
+            schema_version=schema_version,
             root=root,
             glob=glob,
             schema=schema_decl,
@@ -301,6 +332,10 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     static_prefix = root_template[:first_brace] if first_brace >= 0 else root_template
     static_root = canonicalize(static_prefix.rstrip("/") or "/")
 
+    sv_raw = raw.get("schema_version")
+    schema_version = (
+        str(sv_raw) if isinstance(sv_raw, str) and sv_raw.strip() else None
+    )
     return ParametricDataset(
         name=name,
         access_mode=access_mode,
@@ -315,6 +350,7 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         partitioning=partitioning,
         semantic=semantic,
         engine=engine,
+        schema_version=schema_version,
         root_template=root_template,
         glob_template=glob_template,
         params_schema=params_schema,

@@ -1839,6 +1839,7 @@ class FactorEngine:
         pit_forbid_forward_fill: bool = False,
         result_policy: str = "return",
         sink: Any | None = None,
+        warmup_clusters: bool = False,
     ) -> dict[str, Any]:
         """多因子求值：先执行共享子树，再各因子根。
 
@@ -1859,6 +1860,8 @@ class FactorEngine:
             result_policy: Phase 5 R4 ``return``（全部驻留）| ``sink``（即算即写，
                 结果不驻留）| ``yield``/``materialize``（与 ``return`` 累积）。
             sink: ``result_policy="sink"`` 时的回调 ``sink(factor_name, result)``。
+            warmup_clusters: Phase 5 P1-4 按 lookback 成本聚类成 waves，各自独立
+                union 窗口，避免一个 full-history 因子拖累整批。
 
         Returns:
             含 ``results``、``dag``、``analyses`` 及可选 ``batch_graph``、
@@ -1881,6 +1884,7 @@ class FactorEngine:
             pit_forbid_forward_fill=pit_forbid_forward_fill,
             result_policy=result_policy,
             sink=sink,
+            warmup_clusters=warmup_clusters,
         )
 
     def run_many_iter(

@@ -96,6 +96,8 @@ def install_registration_audit() -> None:
             source=source,
             status=status,
             backend_explicit=backend_explicit,
+            replace=replace,
+            replacement_reason=replacement_reason,
         )
 
     OperatorRegistry.register = classmethod(audited_register)

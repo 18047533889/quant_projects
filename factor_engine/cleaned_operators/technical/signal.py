@@ -174,8 +174,11 @@ class Aroon(SeriesOperator):
     def _calculate_series(self, close: pd.DataFrame, window: int = 25, **kwargs) -> pd.DataFrame:
         w = max(1, int(window))
         roll = close.rolling(window=w + 1, min_periods=w + 1)
-        aroon_up = 100 * roll.apply(lambda x: np.argmax(x), raw=True) / w
-        aroon_down = 100 * roll.apply(lambda x: np.argmin(x), raw=True) / w
+        # Audit P1-I: Aroon counts periods since the HIGHEST high / LOWEST low;
+        # on a tie it must use the MOST RECENT extremum (``argmax[::-1]``), not
+        # the first occurrence that ``np.argmax`` returns.
+        aroon_up = 100 * roll.apply(lambda x: w - np.argmax(x[::-1]), raw=True) / w
+        aroon_down = 100 * roll.apply(lambda x: w - np.argmin(x[::-1]), raw=True) / w
         return aroon_up - aroon_down
 
 
@@ -196,7 +199,10 @@ class AroonDown(SeriesOperator):
 
     def _calculate_series(self, close: pd.DataFrame, window: int = 25, **kwargs) -> pd.DataFrame:
         w = max(1, int(window))
-        return 100 * close.rolling(window=w + 1, min_periods=w + 1).apply(lambda x: np.argmin(x), raw=True) / w
+        # Most recent extremum on ties (audit P1-I).
+        return 100 * close.rolling(window=w + 1, min_periods=w + 1).apply(
+            lambda x: w - np.argmin(x[::-1]), raw=True
+        ) / w
 
 
 
@@ -216,7 +222,10 @@ class AroonUp(SeriesOperator):
 
     def _calculate_series(self, close: pd.DataFrame, window: int = 25, **kwargs) -> pd.DataFrame:
         w = max(1, int(window))
-        return 100 * close.rolling(window=w + 1, min_periods=w + 1).apply(lambda x: np.argmax(x), raw=True) / w
+        # Most recent extremum on ties (audit P1-I).
+        return 100 * close.rolling(window=w + 1, min_periods=w + 1).apply(
+            lambda x: w - np.argmax(x[::-1]), raw=True
+        ) / w
 
 
 

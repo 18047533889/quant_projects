@@ -77,13 +77,18 @@ def _state_density_series(series: np.ndarray, window: int, bandwidth: float, min
         mad = 1.4826 * float(np.median(np.abs(finite - med)))
         scale = mad if mad > _EPS else float(np.std(finite))
         if scale <= _EPS:
-            # Degenerate history: point mass at the constant value.
-            out[t] = 1.0 if float(finite[0]) == float(cur) else 0.0
+            # Degenerate history: a point mass has no kernel density — the
+            # previous arbitrary 1.0 was discontinuous with the kernel's peak
+            # (P1-05).  Fail closed to NaN instead.
+            out[t] = np.nan
             continue
         h = bw * scale
         u = (finite - cur) / (h + _EPS)
         kern = 0.75 * (1.0 - u * u) * (np.abs(u) <= 1.0)
-        out[t] = float(np.mean(kern))
+        # Proper kernel-density normalisation: f̂(x) = (1/n) Σ K(u)/h, NOT the
+        # raw kernel mass mean(K) — otherwise this is a "local proximity" score,
+        # not a density (P1-05).
+        out[t] = float(np.mean(kern)) / (h + _EPS)
     return out
 
 

@@ -18,6 +18,8 @@ def _restore_compiler_internal(canonical: str) -> None:
             status="internal",
             backend_explicit=True,
             semantic_version="2.0",
+            replace=True,
+            replacement_reason="restore compiler-internal lowering node after research-tool migration",
         )
     if canonical in OperatorRegistry._catalog:
         OperatorRegistry._catalog[canonical].update({

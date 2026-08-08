@@ -465,6 +465,46 @@ def execute_run_many(
     )
     assert_production_factors(factors, mode=engine.run_mode, context="run_many")
 
+    # Phase 5 P1-4：warmup 按成本聚类——先编译拿 analyses，按 lookback 分 waves，
+    # 每个 wave 单独 union 窗口，避免一个 full-history 因子拖累整批。
+    if warmup_clusters and auto_warmup and len(factors) > 1:
+        _dag, analyses = engine._dag_from_factors(
+            factors,
+            enable_cse=enable_cse,
+            perf=perf,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+        )
+        waves = _cluster_factors_by_cost(engine, factors, analyses)
+        if len(waves) > 1:
+            merged: dict[str, Any] = {"results": {}, "analyses": analyses}
+            for wave in waves:
+                partial = execute_run_many(
+                    engine,
+                    wave,
+                    perf=perf,
+                    enable_cse=enable_cse,
+                    auto_warmup=auto_warmup,
+                    trim_warmup=trim_warmup,
+                    market=market,
+                    input_dq_check=input_dq_check,
+                    input_dq_strict=input_dq_strict,
+                    input_dq_thresholds=input_dq_thresholds,
+                    pit_enforce=pit_enforce,
+                    pit_forbid_forward_fill=pit_forbid_forward_fill,
+                    result_policy=result_policy,
+                    sink=sink,
+                )
+                merged["results"].update(partial.get("results") or {})
+                for key in ("input_dq", "batch_graph", "backend_paths", "plan_costs"):
+                    if key in partial and key not in merged:
+                        merged[key] = partial[key]
+            merged["warmup_clustered"] = True
+            merged["warmup_waves"] = [
+                [getattr(f, "name", "") for f in wave] for wave in waves
+            ]
+            return merged
+
     # PIT 审计在编译期做（assert_pit_safe 是纯审计、不改计划），与执行解耦，
     # 因此 production 的 pit_enforce 不再让 run_many 退化为逐因子 run()。
     dag, analyses = engine._dag_from_factors(

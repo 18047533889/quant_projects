@@ -187,3 +187,215 @@ def render_plan(root: PlanNode | None) -> str:
 def plan_uses_aggregation(request: Any) -> bool:
     """DataRequest 是否声明了分钟→日聚合（execute 走 bundle 路径）。"""
     return bool(getattr(request, "aggregations", None))
+
+
+# ---------------------------------------------------------------------------
+# #11 PhysicalPlanExecutor —— 节点式执行（聚合 + join 组合）
+# ---------------------------------------------------------------------------
+
+_QI = '"{}"'
+
+
+def _qi(name: str) -> str:
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def execute_physical_plan(store: Any, plan: Any) -> Any:
+    """#11 节点式执行：聚合（Scan→Aggregate）与 join（TemporalJoin）组合。
+
+    目前真正需要组合的是「分钟锚点聚合 + 财务/行业 join」：旧 ``ReadPlan.execute()``
+    遇到 aggregations 会提前返回，join 被丢弃。本函数把锚点聚合结果注册成
+    DuckDB 虚拟表，再对右表做 ASOF/exact join——一次 SQL 输出。
+
+    非组合场景（无聚合 / 单数据集）返回 None，由 ``ReadPlan.execute()`` 走
+    现有 read/read_joined/aggregate_minute_bundle 路径（节点语义等价）。
+    """
+    req = plan.request
+    if not getattr(req, "aggregations", None) or len(plan.datasets) <= 1:
+        return None
+    return _execute_composed(store, plan, req)
+
+
+def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
+    """聚合锚点 → 虚拟表 → 右表 join（DuckDB 单 SQL）。"""
+    import uuid
+
+    from data_access.core.exceptions import ValidationError
+    from data_access.read.aggregation import AggregationItem, aggregate_minute_bundle
+    from data_access.read.read_contract import (
+        ReadStats,
+        SqlReadLineage,
+        merge_sql_data_snapshots,
+    )
+    from data_access.read.read_handle import ReadHandle
+    from data_access.read.temporal_join import parse_join_spec
+
+    anchor = plan.anchor
+    items: list[AggregationItem] = []
+    for raw in req.aggregations:
+        if isinstance(raw, AggregationItem):
+            items.append(raw)
+            continue
+        if isinstance(raw, Mapping):
+            fld = str(raw.get("field") or raw.get("column") or "")
+            if not fld:
+                raise ValidationError(f"aggregations 项缺少 field: {raw!r}")
+            # 兼容限定名：minute_ds.Volume → Volume（aggregate_minute_bundle 只认
+            # 锚点数据集的物理列名）。
+            fld = fld.split(".", 1)[1] if "." in fld else fld
+            items.append(
+                AggregationItem(
+                    field=fld,
+                    spec=raw.get("spec"),
+                    output_name=(
+                        str(raw["output_name"]) if raw.get("output_name") else None
+                    ),
+                )
+            )
+        else:
+            raise ValidationError("aggregations 项必须是 AggregationItem 或 dict")
+    if not items:
+        raise ValidationError("aggregations 为空")
+
+    ds_params = req.dataset_params(anchor)
+    market = str(ds_params.get("market") or "") or None
+    timezone = str(ds_params.get("timezone") or "") or None
+    agg_handle = aggregate_minute_bundle(
+        store,
+        anchor,
+        items,
+        time_range=plan.time_range,
+        instrument_filter=plan.instruments,
+        params=ds_params,
+        market=market,
+        timezone=timezone,
+    )
+    agg_table = agg_handle.to_arrow()
+
+    # 把聚合后的锚点写到系统临时 parquet，作为 join 的中间表（DuckDB 游标对
+    # register() 的对象不可见，临时文件最稳、可移植）。
+    import tempfile
+
+    import pyarrow.parquet as pq
+
+    anchor_fd, anchor_path = tempfile.mkstemp(suffix=".parquet", prefix="da_plan_agg_")
+    import os
+
+    os.close(anchor_fd)
+    pq.write_table(agg_table, anchor_path)
+    try:
+        table = _join_aggregated_anchor(store, plan, req, anchor_path, agg_table)
+    finally:
+        try:
+            os.unlink(anchor_path)
+        except OSError:
+            pass
+
+    # 多数据集 snapshot（组合读的 lineage 基础）
+    snapshots = []
+    for ds in plan.datasets:
+        try:
+            dsobj = store._registry.get(ds)
+            paths = store._prepare_dataset_read(
+                dsobj,
+                time_range=plan.time_range,
+                params=req.dataset_params(ds),
+                instrument_filter=plan.instruments,
+            )
+            snapshots.append(
+                store._build_snapshot(
+                    dataset=ds, ds=dsobj, paths=paths, params=req.dataset_params(ds)
+                )
+            )
+        except Exception:
+            if _strict_mode():
+                from data_access.core.exceptions import SnapshotBuildError
+
+                raise SnapshotBuildError(
+                    f"组合读参与数据集 '{ds}' snapshot 构建失败"
+                ) from None
+    snapshot = (
+        merge_sql_data_snapshots(snapshots, registry_hash=store.registry_fingerprint())
+        if snapshots
+        else None
+    )
+    lineage = SqlReadLineage(datasets=tuple(plan.datasets), query_preview="composed")
+    stats = ReadStats(rows=table.num_rows, bytes=table.nbytes, elapsed_ms=0.0)
+    return ReadHandle(table=table, snapshot=snapshot, stats=stats, lineage=lineage)
+
+
+def _join_aggregated_anchor(
+    store: Any, plan: Any, req: Any, anchor_path: str, agg_table: Any
+) -> Any:
+    """对聚合后的锚点（临时 parquet）做右表 join（ASOF/exact），返回结果表。"""
+    from data_access.core.exceptions import ValidationError
+    from data_access.read.formats import format_adapter_for_dataset
+    from data_access.read.temporal_join import parse_join_spec
+
+    agg_cols = [c for c in agg_table.column_names if c not in ("ts", "inst")]
+    outer: list[str] = ['a."ts" AS "ts"', 'a."inst" AS "inst"']
+    joins: list[str] = []
+    params: list[Any] = [anchor_path]
+    for i, ds in enumerate(plan.datasets):
+        if ds == plan.anchor:
+            continue
+        dsobj = store._registry.get(ds)
+        t_col = dsobj.time_column
+        inst_col = dsobj.instrument_column
+        if not t_col or not inst_col:
+            raise ValidationError(
+                f"组合读右表 '{ds}' 未声明 time/instrument 列，无法 join"
+            )
+        spec = parse_join_spec(
+            dict(req.joins or {}).get(ds) if req.joins and ds in req.joins else None
+        )
+        right_time = spec.effective_knowledge_time(t_col)
+        paths = store._prepare_dataset_read(
+            dsobj,
+            time_range=plan.time_range,
+            params=req.dataset_params(ds),
+            instrument_filter=plan.instruments,
+        )
+        if not paths:
+            cols = [f"NULL AS {_qi(c)}" for c in plan.per_dataset_columns.get(ds, [])]
+            outer.extend(cols)
+            continue
+        path_param = paths if len(paths) > 1 else paths[0]
+        adapter = format_adapter_for_dataset(dsobj)
+        from_clause = adapter.build_from_clause(
+            path_param,
+            hive_partitioning=dsobj.hive_partitioning,
+            union_by_name=dsobj.union_by_name,
+        )
+        alias = f"b{i}"
+        params.append(path_param)
+        right_sub = f"(SELECT * FROM {from_clause})"
+        if spec.is_asof:
+            joins.append(
+                f'ASOF LEFT JOIN {right_sub} AS {alias} ON '
+                f'a."inst" = {alias}.{_qi(inst_col)} '
+                f'AND a."ts" >= {alias}.{_qi(right_time)}'
+            )
+        else:
+            joins.append(
+                f'LEFT JOIN {right_sub} AS {alias} ON '
+                f'a."inst" = {alias}.{_qi(inst_col)} '
+                f'AND a."ts" = {alias}.{_qi(right_time)}'
+            )
+        for c in plan.per_dataset_columns.get(ds, []):
+            outer.append(f'{alias}.{_qi(c)} AS {_qi(c)}')
+    for c in agg_cols:
+        outer.append(f'a.{_qi(c)} AS {_qi(c)}')
+    sql = (
+        f'SELECT {", ".join(outer)} '
+        f'FROM (SELECT * FROM read_parquet(?)) AS a ' + " ".join(joins)
+    )
+    ds = store._registry.get(plan.anchor)
+    budget = store._resolve_read_budget(ds, None)
+    return store._engine.execute_arrow(sql, params, deadline_ms=budget.max_elapsed_ms)
+
+
+def _strict_mode() -> bool:
+    from data_access.read.query_budget import _production_mode, _strict_read_mode
+
+    return _production_mode() or _strict_read_mode()

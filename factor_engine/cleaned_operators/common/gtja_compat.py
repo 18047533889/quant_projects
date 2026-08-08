@@ -145,7 +145,7 @@ def _safe_divide(left, right, *, epsilon: float, default: float, missing_default
     return pd.DataFrame(raw, index=x.index, columns=x.columns)
 
 
-@register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="gtja_compat", backend="pandas_numpy")
+@register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
 class GTJATSArgmax(SeriesOperator):
     metadata = OperatorMetadata(name="ts_argmax", category="time_series", description="窗口最大值距当前 bar 的距离（0=当前，tie 取最近）", examples=["ts_argmax(high, 20)"], param_names=["x", "d"], return_type="series", tags=["time_series", "gtja", "pit_safe"])
 
@@ -154,7 +154,7 @@ class GTJATSArgmax(SeriesOperator):
         return x.apply(lambda s: _rolling_days_since_extreme_1d(s.to_numpy(), w, maximum=True))
 
 
-@register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="gtja_compat", backend="pandas_numpy")
+@register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
 class GTJATSArgmin(SeriesOperator):
     metadata = OperatorMetadata(name="ts_argmin", category="time_series", description="窗口最小值距当前 bar 的距离（0=当前，tie 取最近）", examples=["ts_argmin(low, 20)"], param_names=["x", "d"], return_type="series", tags=["time_series", "gtja", "pit_safe"])
 
@@ -163,7 +163,7 @@ class GTJATSArgmin(SeriesOperator):
         return x.apply(lambda s: _rolling_days_since_extreme_1d(s.to_numpy(), w, maximum=False))
 
 
-@register_operator(name="ts_regression", category="time_series", business_category="time_series", canonical="ts_regression", source="gtja_compat", backend="pandas_numpy")
+@register_operator(name="ts_regression", category="time_series", business_category="time_series", canonical="ts_regression", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
 class GTJATSRegression(SeriesOperator):
     metadata = OperatorMetadata(name="ts_regression", category="time_series", description="pairwise-finite 滚动 OLS", examples=["ts_regression(y, x, 20, 0, 'slope')"], param_names=["y", "x", "window", "lag", "retval"], return_type="series", tags=["time_series", "regression", "gtja", "pit_safe"])
 
@@ -171,7 +171,7 @@ class GTJATSRegression(SeriesOperator):
         return _rolling_pairwise_ols(y, x, window=int(window), min_periods=int(kwargs.get("min_periods", min(3, int(window)))), lag=int(lag), retval=str(retval))
 
 
-@register_operator(name="ts_time_slope", category="time_series", business_category="time_series", canonical="ts_time_slope", source="gtja_compat", backend="pandas_numpy")
+@register_operator(name="ts_time_slope", category="time_series", business_category="time_series", canonical="ts_time_slope", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
 class GTJATimeSlope(SeriesOperator):
     metadata = OperatorMetadata(name="ts_time_slope", category="time_series", description="窗口内序列对时间位置的 OLS 斜率", examples=["ts_time_slope(close, 20)"], param_names=["x", "d"], return_type="series", tags=["time_series", "regression", "gtja", "pit_safe"])
 
@@ -181,7 +181,7 @@ class GTJATimeSlope(SeriesOperator):
         return x.apply(lambda s: _rolling_time_slope_1d(s.to_numpy(), w, mp))
 
 
-@register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="gtja_compat", backend="pandas_numpy")
+@register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
 class GTJATSProduct(SeriesOperator):
     metadata = OperatorMetadata(name="ts_product", category="time_series", description="保留零与负号的滚动乘积", examples=["ts_product(x, 5)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"])
 
@@ -191,7 +191,7 @@ class GTJATSProduct(SeriesOperator):
         return _rolling_product(x, w, mp)
 
 
-@register_operator(name="protected_div", category="data_cleaning", business_category="data_cleaning", canonical="protected_div", source="gtja_compat", backend="pandas_numpy")
+@register_operator(name="protected_div", category="data_cleaning", business_category="data_cleaning", canonical="protected_div", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
 class GTJAProtectedDiv(SeriesOperator):
     metadata = OperatorMetadata(name="protected_div", category="data_cleaning", description="支持 Series/标量双向广播的安全除法", examples=["x / 20", "1 / x"], param_names=["x", "y", "epsilon", "default"], return_type="series", tags=["data_cleaning", "gtja", "scalar_broadcast"])
 
@@ -199,7 +199,7 @@ class GTJAProtectedDiv(SeriesOperator):
         return _safe_divide(x, y, epsilon=float(epsilon), default=float(default), missing_default=False)
 
 
-@register_operator(name="div_or_default", category="data_cleaning", business_category="data_cleaning", canonical="div_or_default", source="gtja_compat", backend="pandas_numpy")
+@register_operator(name="div_or_default", category="data_cleaning", business_category="data_cleaning", canonical="div_or_default", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
 class GTJADivOrDefault(SeriesOperator):
     metadata = OperatorMetadata(name="div_or_default", category="data_cleaning", description="支持 Series/标量双向广播的填充安全除法", examples=["div_or_default(x, y)"], param_names=["x", "y", "epsilon", "default"], return_type="series", tags=["data_cleaning", "gtja", "scalar_broadcast"])
 

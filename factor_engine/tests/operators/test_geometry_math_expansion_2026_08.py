@@ -178,7 +178,7 @@ CALLS: dict[str, tuple[tuple[str, ...], dict]] = {
     "state_episode_mae": (("close", "state", "volume"), {}),
     "state_episode_efficiency": (("close", "state"), {}),
     "state_episode_retrace_ratio": (("close", "state"), {}),
-    "state_episode_excursion_balance": (("close", "state", "volume"), {}),
+    "state_episode_excursion_balance": (("close", "state"), {}),
     "intraday_medrv": (("ret_min",), {"window": 240}),
     "intraday_minrv": (("ret_min",), {"window": 240}),
     "intraday_jump_test_stat": (("ret_min",), {"window": 240}),

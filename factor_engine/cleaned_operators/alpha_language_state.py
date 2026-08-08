@@ -476,7 +476,7 @@ class TsStateIntegral(SeriesOperator):
         lo = float(lower)
         if not (0.0 <= lo < hi):
             raise ValueError("require 0 <= lower < upper")
-        check_window(int(max_run), name="max_run")
+        w_run = check_window(int(max_run), name="max_run")
         lamb: float | None = None
         if half_life is not None and half_life != "":
             lamb = float(half_life)

@@ -451,6 +451,25 @@ def _reject_forbidden_tokens(query: str) -> None:
         )
 
 
+def validate_sql_sandbox(query: str) -> None:
+    """sql_relation（#7）等直接执行 SQL 的入口复用的沙箱校验。
+
+    比 ``sql()`` 的 TEMP VIEW 治理弱（无法约束 FROM 表集合），但至少在
+    production/strict 下挡住：
+        - 空查询 / 非 SELECT/WITH 开头（多语句、DDL）；
+        - 禁用关键字（INSERT/UPDATE/DELETE/COPY/ATTACH/LOAD/INSTALL/
+          read_parquet/read_csv/glob 等）。
+    """
+    if not query or not query.strip():
+        raise ValidationError("sql_relation 拒绝执行空查询")
+    first = query.lstrip().split(None, 1)[0].upper() if query.lstrip() else ""
+    if first not in {"SELECT", "WITH"}:
+        raise ValidationError(
+            f"sql_relation 只允许单个 SELECT/WITH，收到 {first!r} 开头的语句"
+        )
+    _reject_forbidden_tokens(query)
+
+
 def _inline_path_params(sql: str, params: Sequence[Any]) -> str:
     """把参数化 SQL 的 ? 替换成 DuckDB 字面量。
 

@@ -43,7 +43,12 @@ if TYPE_CHECKING:
 from data_access.core import audit
 from data_access.read.adapters import arrow_table_to_multiindex_columns
 from data_access.core.engine import DuckDBEngine, get_shared_engine, reset_shared_engine
-from data_access.core.exceptions import DataError, ValidationError
+from data_access.core.exceptions import (
+    DataError,
+    MatrixCoverageMiss,
+    MatrixUnavailable,
+    ValidationError,
+)
 from data_access.registry.params_validation import ParamSpec, params_fingerprint, validate_params
 from data_access.read.query_budget import (
     QueryBudget,
@@ -704,6 +709,54 @@ class DataAccessStore:
             production=_production_mode() or _strict_read_mode(),
         )
 
+    def _prepare_read_request(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
+        filters: Any = None,
+        params: Mapping[str, Any] | None = None,
+        fields_meta: Sequence[Any] | None = None,
+    ) -> list[Any]:
+        """#5 统一读前语义门禁：所有 read engine 先过同一组检查。
+
+        顺序：
+            1. temporal contract（``_enforce_read_contract``）——mode/稀疏/事件；
+            2. event cutoff（``_event_cutoff_for_contract``）；
+            3. required_filters（catalog 字段声明，如行业 IndustrySource / 美股
+               财务 timeframe / IndexSymbol）——**所有引擎一致**，不再只有
+               read_result/read_joined 强制；
+            4. allowed_filter_values 值校验。
+
+        返回解析出的 fields_meta（供 normalize 等复用；无 columns 时为空）。
+        """
+        self._enforce_read_contract(
+            dataset,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+        )
+        self._event_cutoff_for_contract(dataset, time_range=time_range)
+        if fields_meta is None:
+            fields_meta = self._fields_meta_for_columns(dataset, columns)
+        if fields_meta:
+            params_by_dataset = {str(dataset): dict(params or {})}
+            self._enforce_required_filters(
+                fields_meta,
+                params_by_dataset,
+                filters=filters,
+            )
+            self._validate_allowed_filter_values(
+                fields_meta,
+                params_by_dataset,
+                filters=filters,
+            )
+        return list(fields_meta)
+
     def _schema_fingerprint(
         self,
         ds: Dataset,
@@ -771,14 +824,18 @@ class DataAccessStore:
         allow_effective_time: bool = False,
     ) -> ReadResult:
         """按已解析的 ``Dataset`` 对象执行一次读（read_result / read_uri 共用）。"""
-        # #44 Store 级 temporal model 强制 + #16 effective-only 事件未来 cutoff
-        self._enforce_read_contract(
+        # #5 统一读前语义门禁：temporal contract + event cutoff + required_filters
+        # + allowed_filter_values（read_arrow_stream / scan_polars 也走同一入口）
+        self._prepare_read_request(
             dataset,
+            columns=columns,
+            time_range=time_range,
             mode=mode,
             allow_sparse=allow_sparse,
             allow_effective_time=allow_effective_time,
+            filters=filters,
+            params=params,
         )
-        self._event_cutoff_for_contract(dataset, time_range=time_range)
         _assert_instrument_filter_supported(ds, instrument_filter)
         budget = self._resolve_read_budget(ds, query_budget)
         validate_query_request(
@@ -802,21 +859,6 @@ class DataAccessStore:
             time_range=time_range,
             instrument_filter=tuple(instrument_filter) if instrument_filter else (),
             params=snapshot.params,
-        )
-
-        # #8/#42 required_filters：单表读同样强制（行业 IndustrySource、
-        # 美股财务 timeframe 是列过滤，传 filters 覆盖即可）。避免 read_joined
-        # 强制而 read() 放行的不一致。
-        self._enforce_required_filters(
-            self._fields_meta_for_columns(dataset, columns),
-            {dataset: dict(params)},
-            filters=filters,
-        )
-        # #52 allowed_filter_values 值校验（production fail-closed）
-        self._validate_allowed_filter_values(
-            self._fields_meta_for_columns(dataset, columns),
-            {dataset: dict(params)},
-            filters=filters,
         )
 
         sql, sql_params = self._build_select_sql(
@@ -1016,14 +1058,17 @@ class DataAccessStore:
             ...     total += batch.num_rows
         """
         ds = self._registry.get(dataset)
-        # #44 流式读同样强制 temporal model（EMPTY/X0/事件表面板读语义）
-        self._enforce_read_contract(
+        # #5 流式读同样强制 temporal contract + required_filters + allowed values
+        self._prepare_read_request(
             dataset,
+            columns=columns,
+            time_range=time_range,
             mode=mode,
             allow_sparse=allow_sparse,
             allow_effective_time=allow_effective_time,
+            filters=filters,
+            params=params,
         )
-        self._event_cutoff_for_contract(dataset, time_range=time_range)
         _assert_instrument_filter_supported(ds, instrument_filter)
         budget = self._resolve_read_budget(ds, query_budget)
         validate_query_request(
@@ -1114,14 +1159,17 @@ class DataAccessStore:
 
         scan_start = time.perf_counter()
         ds = self._registry.get(dataset)
-        # #44 Polars 扫描同样强制 temporal model + #16 effective-only cutoff
-        self._enforce_read_contract(
+        # #5 Polars 扫描同样强制 temporal contract + required_filters + allowed values
+        self._prepare_read_request(
             dataset,
+            columns=columns,
+            time_range=time_range,
             mode=mode,
             allow_sparse=allow_sparse,
             allow_effective_time=allow_effective_time,
+            filters=filters,
+            params=params,
         )
-        self._event_cutoff_for_contract(dataset, time_range=time_range)
         _assert_instrument_filter_supported(ds, instrument_filter)
         budget = self._resolve_read_budget(ds, query_budget)
         validate_query_request(
@@ -1596,7 +1644,10 @@ class DataAccessStore:
 
         **开发环境**：URI 静态前缀须在 PathAuthorizer 白名单根（已登记数据集根 +
         DATA_ACCESS_EXTRA_ALLOWED_ROOTS + DATA_ACCESS_READ_URI_ROOTS）下。
-        **production / strict 读模式**：只允许落在已登记数据集根下，任意 URI 被拒。
+        **production / strict 读模式**（#6）：URI 必须**唯一反查到已登记数据集**
+        并复用其 Dataset Contract（temporal model / PIT / required_filters），否则
+        拒绝——禁止用 ``_uri:parquet:xxx`` 临时 Dataset 绕过财务 PIT / 行业过滤等
+        语义门禁。
 
         ``format`` 不传时按扩展名推断（parquet/csv/tsv/jsonl/arrow/feather）。
         arrow/feather 自动走 PyArrow 引擎。
@@ -1606,6 +1657,33 @@ class DataAccessStore:
         uri = str(uri)  # 兼容 Path 对象
         fmt = _infer_format_from_uri(uri, format)
         self._assert_uri_allowed(uri, format=fmt)
+        strict = _production_mode() or _strict_read_mode()
+        if strict:
+            registered = self._resolve_registered_dataset_for_uri(uri, fmt)
+            if registered is None:
+                raise ValidationError(
+                    f"production/strict 下 read_uri 必须唯一对应已登记数据集；"
+                    f"{uri!r} 无法唯一匹配。请改用 store.read(<dataset>, ...) 或先"
+                    f"在 datasets.yaml 登记该数据集，再走其 Contract 读取。"
+                )
+            rds = self._registry.get(registered)
+            return self._read_handle(
+                rds,
+                dataset=registered,
+                registered_name=registered,
+                columns=columns,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                filters=filters,
+                limit=limit,
+                engine=engine,
+                result=result,
+                prefer_polars=prefer_polars,
+                batch_size=batch_size,
+                query_budget=query_budget,
+                params=kwargs,
+                normalize_units=normalize_units,
+            )
         ds = self._uri_dataset(
             uri,
             format=fmt,
@@ -1629,6 +1707,47 @@ class DataAccessStore:
             params=kwargs,
             normalize_units=normalize_units,
         )
+
+    def _resolve_registered_dataset_for_uri(self, uri: str, fmt: str) -> str | None:
+        """#6 production read_uri：URI → 唯一已登记数据集（复用其 Contract）。
+
+        匹配规则：URI 的绝对路径必须落在数据集的 root / static_root 下，且格式
+        一致。多个候选 → 返回 None（调用方拒绝，禁止 YAML 顺序决定语义）。
+        """
+        from pathlib import Path
+
+        from data_access.registry import ParametricDataset, StaticDataset
+
+        p = Path(uri).expanduser()
+        try:
+            resolved = p.resolve()
+        except OSError:
+            resolved = p
+        candidates: list[str] = []
+        for name in self._registry.names():
+            dsobj = self._registry.get(name)
+            dformat = str(getattr(dsobj, "format", "parquet")).lower()
+            if fmt not in {"auto", dformat, "parquet"}:
+                continue
+            if isinstance(dsobj, StaticDataset):
+                root = getattr(dsobj, "root", None)
+                if root is None:
+                    continue
+                try:
+                    resolved.relative_to(Path(root).resolve())
+                except (ValueError, OSError):
+                    continue
+                candidates.append(name)
+            elif isinstance(dsobj, ParametricDataset):
+                static = getattr(dsobj, "static_root", None)
+                if static is None:
+                    continue
+                try:
+                    resolved.relative_to(Path(static).resolve())
+                except (ValueError, OSError):
+                    continue
+                candidates.append(name)
+        return candidates[0] if len(candidates) == 1 else None
 
     # ---- 集成层：DataRequest/ReadPlan / read_joined / RelationHandle ----
 
@@ -1743,6 +1862,7 @@ class DataAccessStore:
         )
 
         snapshots = []
+        missing_snapshot: list[str] = []
         for ds in datasets:
             dsobj = self._registry.get(ds)
             try:
@@ -1758,12 +1878,28 @@ class DataAccessStore:
                         files=files,
                     )
                 )
-            except Exception:
-                continue
-        snapshot = (
-            merge_sql_data_snapshots(snapshots, registry_hash=self.registry_fingerprint())
-            if snapshots
-            else None
+            except Exception as exc:
+                missing_snapshot.append(ds)
+                if _production_mode() or _strict_read_mode():
+                    # #14 fail-closed：参与数据集 snapshot 必须完整，否则 lineage/
+                    # replay/cache/audit 都不可靠——禁止「查询成功但只记了部分快照」。
+                    raise SnapshotBuildError(
+                        f"read_joined 参与数据集 '{ds}' snapshot 构建失败："
+                        f"{type(exc).__name__}: {exc}。"
+                        "查询已中止（production fail-closed）。"
+                    ) from exc
+        if not snapshots:
+            raise SnapshotBuildError(
+                "read_joined 没有任何参与数据集成功构建 snapshot；"
+                "多数据集读取的 lineage/缓存将不可靠，禁止静默继续。"
+            )
+        if missing_snapshot:
+            logger.warning(
+                "read_joined snapshot 不完整（research 放行）：缺失 %s",
+                missing_snapshot,
+            )
+        snapshot = merge_sql_data_snapshots(
+            snapshots, registry_hash=self.registry_fingerprint()
         )
         lineage = SqlReadLineage(datasets=tuple(datasets), query_preview=sql[:200])
 
@@ -1829,8 +1965,23 @@ class DataAccessStore:
             - ``.relation`` 只读底层 DuckDB Relation（schema/explain 检查用）
 
         ``snapshot_datasets`` 提供后，collect 绑定合并的 DataSnapshot（lineage 复现用）。
+
+        **#7 production/strict**：与 ``store.sql()`` 一样走 SQL 沙箱——必须显式声明
+        ``snapshot_datasets``（= read_datasets），SQL 用 ``validate_sql_sandbox`` 挡
+        掉 read_parquet/COPY/ATTACH/LOAD/INSTALL 等，禁止 ``FROM '/some/path.parquet'``
+        绕过 DataAccess。
         """
         from data_access.read.relation_handle import RelationHandle
+
+        if _production_mode() or _strict_read_mode():
+            from data_access.read import sql_escape
+
+            if not snapshot_datasets:
+                raise ValidationError(
+                    "production/strict 下 sql_relation 必须显式声明 snapshot_datasets"
+                    "（= read_datasets），与 store.sql() 的治理一致。"
+                )
+            sql_escape.validate_sql_sandbox(sql)
 
         snapshot = lineage = None
         if snapshot_datasets:
@@ -1840,6 +1991,7 @@ class DataAccessStore:
             )
 
             snapshots = []
+            missing_snapshot: list[str] = []
             for ds in snapshot_datasets:
                 try:
                     dsobj = self._registry.get(ds)
@@ -1860,15 +2012,29 @@ class DataAccessStore:
                             files=files,
                         )
                     )
-                except Exception:
-                    continue
-            if snapshots:
-                snapshot = merge_sql_data_snapshots(
-                    snapshots, registry_hash=self.registry_fingerprint()
+                except Exception as exc:
+                    missing_snapshot.append(ds)
+                    if _production_mode() or _strict_read_mode():
+                        raise SnapshotBuildError(
+                            f"sql_relation 参与数据集 '{ds}' snapshot 构建失败："
+                            f"{type(exc).__name__}: {exc}（production fail-closed）。"
+                        ) from exc
+            if not snapshots:
+                raise SnapshotBuildError(
+                    "sql_relation 没有任何参与数据集成功构建 snapshot"
+                    "（production fail-closed）。"
                 )
-                lineage = SqlReadLineage(
-                    datasets=tuple(snapshot_datasets), query_preview=sql[:200]
+            if missing_snapshot:
+                logger.warning(
+                    "sql_relation snapshot 不完整（research 放行）：缺失 %s",
+                    missing_snapshot,
                 )
+            snapshot = merge_sql_data_snapshots(
+                snapshots, registry_hash=self.registry_fingerprint()
+            )
+            lineage = SqlReadLineage(
+                datasets=tuple(snapshot_datasets), query_preview=sql[:200]
+            )
         return RelationHandle(
             self,
             sql,
@@ -1877,6 +2043,77 @@ class DataAccessStore:
             snapshot=snapshot,
             lineage=lineage,
         )
+
+    def _validate_pit_semantics(
+        self,
+        fields: Sequence[Any],
+        *,
+        anchor: str,
+        joins: Mapping[str, Any] | None,
+    ) -> None:
+        """#10 ``DataRequest(pit=True)`` 强语义：每个非 anchor 字段必须可证明 PIT 安全。
+
+        规则（production/strict fail-closed，research 告警放行）：
+            - 非 anchor 字段的 join 策略必须是 asof / pit_asof（backward-looking，
+              ``decision_time >= knowledge_time`` 天然成立）；exact join 无法证明
+              可用性 → 拒绝；
+            - 字段必须能解析出 temporal contract（knowledge_time 或 join 规格），
+              无任何时间可见性语义 → 拒绝；
+            - 显式 ``joins`` 提供的规格优先于字段自身声明的 join 语义。
+        """
+        from data_access.read.temporal_join import parse_join_spec
+
+        strict = _production_mode() or _strict_read_mode()
+        problems: list[str] = []
+        for f in fields:
+            ds = getattr(f, "dataset", None)
+            if not ds or ds == anchor:
+                continue  # 锚点即决策侧，不需要 join 证明
+            spec = parse_join_spec(
+                dict(joins or {}).get(ds) if joins and ds in joins else None
+            )
+            if spec is None or spec.policy == "exact":
+                problems.append(
+                    f"字段 '{getattr(f, 'logical_name', '?')}'（{ds}.{f.physical_name}）"
+                    "用 exact join，无法证明 PIT 可用性（decision_time >= "
+                    "availability_time）。pit=True 要求 asof/pit_asof。"
+                )
+                continue
+            # 时间可见性契约：字段声明（knowledge/effective/period）或数据集
+            # COS 契约（availability_column/period_column）至少存在一个。
+            has_contract = bool(
+                getattr(f, "knowledge_time", None)
+                or getattr(f, "effective_time", None)
+                or getattr(f, "period_time", None)
+                or getattr(f, "temporal_model", None)
+                or getattr(f, "time_role", None) in {"knowledge_time", "effective_time"}
+                or spec.knowledge_time
+            )
+            if not has_contract:
+                try:
+                    from data_access.cos_contract import get_cos_contract
+
+                    c = get_cos_contract(ds)
+                    has_contract = bool(
+                        c is not None
+                        and (c.availability_column or c.period_column)
+                    )
+                except Exception:
+                    pass
+            if not has_contract:
+                problems.append(
+                    f"字段 '{getattr(f, 'logical_name', '?')}'（{ds}）无 temporal "
+                    "contract（knowledge_time/availability/period 均缺失），无法证明"
+                    " PIT 安全。"
+                )
+        if not problems:
+            return
+        detail = "; ".join(problems)
+        if strict:
+            raise ValidationError(
+                f"DataRequest(pit=True) 语义不满足（production fail-closed）：{detail}"
+            )
+        logger.warning("DataRequest(pit=True) 语义不满足（research 放行）：%s", detail)
 
     def resolve_fields(
         self,
@@ -1919,21 +2156,34 @@ class DataAccessStore:
                         )
                     )
                     continue
-            found: tuple[str, str] | None = None
+            found: list[tuple[str, str]] = []
             for dsn in self._registry.names():
                 d = self._registry.get(dsn)
                 schema = getattr(d, "schema", None) or {}
                 if name in schema:
-                    found = (dsn, schema[name])
-                    break
-            if found is None:
+                    found.append((dsn, schema[name]))
+            if not found:
                 raise ValidationError(
                     f"字段 '{name}' 未在 SemanticFieldCatalog，也不在任何数据集 schema 中。"
                     f"请先在 config/semantic_fields.yaml 登记逻辑字段。"
                 )
+            if len(found) > 1:
+                # #33 fail ambiguous：不能「取 registry 第一个」——Close/Symbol/
+                # TradeDate 几十张表都有，YAML 顺序决定语义是隐患。
+                datasets_with_col = sorted({dsn for dsn, _ in found})
+                from data_access.core.exceptions import AmbiguousFieldError
+
+                msg = (
+                    f"字段 '{name}' 在多个数据集都有物理列 "
+                    f"({datasets_with_col})。请用 'dataset.column' 限定名或传 "
+                    f"dataset= 消歧；禁止取 registry 第一个。"
+                )
+                if _production_mode() or _strict_read_mode():
+                    raise AmbiguousFieldError(msg)
+                logger.warning("%s（research 放行，取第一个）", msg)
             out.append(
                 SemanticField(
-                    logical_name=name, dataset=found[0], physical_name=name, dtype=found[1]
+                    logical_name=name, dataset=found[0][0], physical_name=name, dtype=found[0][1]
                 )
             )
         return out
@@ -2000,6 +2250,10 @@ class DataAccessStore:
                 joins[ds] = parse_join_spec(raw_joins[ds]).policy
             else:
                 joins[ds] = "exact"
+
+        # #10：DataRequest(pit=True) 强语义——每个非 anchor 字段必须可证明 PIT 安全。
+        if getattr(request, "pit", False):
+            self._validate_pit_semantics(fields, anchor=anchor, joins=raw_joins)
 
         scan_costs: dict[str, Any] = {}
         storage: dict[str, str] = {}
@@ -2181,12 +2435,18 @@ class DataAccessStore:
         instrument_filter: Sequence[str] | None = None,
         filters: Any = None,
         limit: int | None = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
+        normalize_units: bool = False,
         **params: Any,
     ) -> Any:
         """带查询结果缓存的 read_arrow（默认关闭，enable_result_cache(True) 开启）。
 
-        key 含 manifest 版本 token：写路径 bump epoch 后自动失效。
-        命中返回 Arrow Table；未命中走 read_arrow 并写入缓存。
+        key 含 manifest source_epoch（写路径 bump 后自动失效）+ **canonical
+        Filter AST hash** + limit + mode + allow_sparse + allow_effective_time +
+        normalize_units + 语义 catalog 指纹 + Contract IR 指纹（#3：缺这些会命中
+        错误结果）。命中返回 Arrow Table；未命中走 read_arrow 并写入缓存。
         """
         from data_access.read.query_cache import (
             get_query_cache,
@@ -2202,6 +2462,10 @@ class DataAccessStore:
                 instrument_filter=instrument_filter,
                 filters=filters,
                 limit=limit,
+                mode=mode,
+                allow_sparse=allow_sparse,
+                allow_effective_time=allow_effective_time,
+                normalize_units=normalize_units,
                 **params,
             )
         cache = get_query_cache()
@@ -2209,6 +2473,16 @@ class DataAccessStore:
             token = self.manifest_version(dataset, **params)
         except Exception:
             token = None
+        try:
+            from data_access.read.semantic_catalog import get_semantic_catalog
+
+            cat_fp = get_semantic_catalog().fingerprint()
+        except Exception:
+            cat_fp = None
+        try:
+            ir_fp = self.contract_ir_fingerprint()
+        except Exception:
+            ir_fp = None
         key = query_cache_key(
             dataset=dataset,
             params=dict(params),
@@ -2216,6 +2490,14 @@ class DataAccessStore:
             instruments=instrument_filter,
             columns=columns,
             manifest_token=token,
+            filters=filters,
+            limit=limit,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+            normalize_units=normalize_units,
+            catalog_fingerprint=cat_fp,
+            contract_ir_fingerprint=ir_fp,
         )
         hit = cache.get(key)
         if hit is not None:
@@ -2227,10 +2509,14 @@ class DataAccessStore:
             instrument_filter=instrument_filter,
             filters=filters,
             limit=limit,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+            normalize_units=normalize_units,
             **params,
         )
         if table.num_rows is not None:
-            cache.set(key, table)
+            cache.set_with_size(key, table, nbytes=table.nbytes)
         return table
 
     def coverage(self, dataset: str, **params: Any) -> Any:
@@ -2238,6 +2524,12 @@ class DataAccessStore:
         from data_access.read.coverage import compute_coverage
 
         return compute_coverage(self, dataset, params=params)
+
+    def metadata_plane(self, dataset: str, **params: Any) -> Any:
+        """#38 统一元数据访问层：manifest/coverage/PIT index/schema/contract 一处拿。"""
+        from data_access.read.metadata_plane import DatasetMetadataPlane
+
+        return DatasetMetadataPlane(self, dataset, params=dict(params))
 
     def contract_ir(self) -> Any:
         """#12 统一 Contract IR：registry + COS 契约 + 语义字段 的合并视图。"""
@@ -2766,8 +3058,14 @@ class DataAccessStore:
                     )
                 join_clauses.append(f"ASOF LEFT JOIN ({sub}) AS {alias} ON {cond}")
             else:
+                # #8 exact join 也一律显式区分左/右时间列：锚点侧用
+                # decision_time（缺省 anchor time_column），右表侧用
+                # knowledge_time（缺省右表 time_column）。绝不用
+                # ``a.{right_t_col} = b.{right_t_col}``——anchor 可能根本没有
+                # 右表的列名（如 anchor.trade_date vs right.date）。
                 cond = (
-                    f"{prev}.{_quote_ident(t_col)} = {alias}.{_quote_ident(t_col)} "
+                    f"{prev}.{_quote_ident(decision_time)} = "
+                    f"{alias}.{_quote_ident(right_time)} "
                     f"AND {prev}.{_quote_ident(anchor_inst)} = "
                     f"{alias}.{_quote_ident(inst_col)}"
                 )
@@ -2885,6 +3183,10 @@ class DataAccessStore:
 
         逐因子读一列样本（limit=1）取 factor_version / data_snapshot_id；违反
         一致性要求抛 ValidationError。
+
+        **#12 fail-closed**：production/strict 下无法证明相同 == 不相同——任何
+        因子 probe 读取失败（``actual=None`` / probe 为空）直接拒绝，禁止静默
+        放行「可能混版本」的训练矩阵。
         """
         ds = self._registry.get("factor_lake")
         check_cols = []
@@ -2895,6 +3197,7 @@ class DataAccessStore:
         if require_same_universe:
             check_cols.append("universe" if "universe" in (ds.schema or {}) else "")
         check_cols = [c for c in check_cols if c]
+        strict = _production_mode() or _strict_read_mode()
 
         seen_snapshots: set[str] = set()
         seen_universes: set[str] = set()
@@ -2917,9 +3220,22 @@ class DataAccessStore:
                         if probe.num_rows
                         else None
                     )
-                except Exception:
+                except Exception as exc:
+                    if strict:
+                        raise DataError(
+                            f"factor {fid}: 无法读取 factor_version（probe 失败："
+                            f"{type(exc).__name__}: {exc}）。require_same 无法证明 → "
+                            "禁止混入训练矩阵。"
+                        ) from exc
                     actual = None
-                if actual is not None and actual != str(expected):
+                if actual is None:
+                    if strict:
+                        raise DataError(
+                            f"factor {fid}: 无法确认 factor_version（probe 无数据）。"
+                            "require_same 无法证明 → 禁止混入训练矩阵。"
+                        )
+                    continue
+                if actual != str(expected):
                     raise ValidationError(
                         f"factor {fid}: 期望版本 {expected}，实际 {actual}。"
                         "禁止在训练矩阵里混入不同版本。"
@@ -2935,15 +3251,27 @@ class DataAccessStore:
                         limit=1,
                         **params,
                     ).to_arrow()
-                except Exception:
+                except Exception as exc:
+                    if strict:
+                        raise DataError(
+                            f"factor {fid}: 无法读取 data_snapshot_id/universe（probe "
+                            f"失败：{type(exc).__name__}: {exc}）。require_same 无法证明 "
+                            "→ 禁止混入训练矩阵。"
+                        ) from exc
                     probe = None
-                if probe is not None and probe.num_rows:
-                    if require_same_data_snapshot:
-                        snap = str(probe.column("data_snapshot_id").to_pylist()[0])
-                        seen_snapshots.add(snap)
-                    if require_same_universe and "universe" in probe.column_names:
-                        uni = str(probe.column("universe").to_pylist()[0])
-                        seen_universes.add(uni)
+                if probe is None or probe.num_rows == 0:
+                    if strict:
+                        raise DataError(
+                            f"factor {fid}: probe 无数据，无法证明 data_snapshot/"
+                            "universe 一致 → 禁止混入训练矩阵。"
+                        )
+                    continue
+                if require_same_data_snapshot:
+                    snap = str(probe.column("data_snapshot_id").to_pylist()[0])
+                    seen_snapshots.add(snap)
+                if require_same_universe and "universe" in probe.column_names:
+                    uni = str(probe.column("universe").to_pylist()[0])
+                    seen_universes.add(uni)
         if require_same_data_snapshot and len(seen_snapshots) > 1:
             raise ValidationError(
                 f"因子混用不同 data_snapshot：{sorted(seen_snapshots)}。"
@@ -3161,14 +3489,17 @@ class DataAccessStore:
         allow_effective_time: bool = False,
     ) -> ReadHandle:
         """PyArrow 引擎（arrow/feather 格式）：直读文件 + pc 表达式过滤。"""
-        # #44 PyArrow 引擎同样强制 temporal model
-        self._enforce_read_contract(
+        # #5 PyArrow 引擎同样强制 temporal contract + required_filters + allowed values
+        self._prepare_read_request(
             dataset,
+            columns=columns,
+            time_range=time_range,
             mode=mode,
             allow_sparse=allow_sparse,
             allow_effective_time=allow_effective_time,
+            filters=filters,
+            params=params,
         )
-        self._event_cutoff_for_contract(dataset, time_range=time_range)
         import pyarrow.compute as pc
 
         from data_access.read.formats import pyarrow_engine_read
@@ -3408,11 +3739,15 @@ class DataAccessStore:
                     query_budget=query_budget,
                     **params,
                 )
-            except ValidationError:
-                pass  # factor_matrix 未登记 → 回退长表 pivot
+            except (MatrixUnavailable, MatrixCoverageMiss):
+                # #13 只捕「矩阵不存在/覆盖不到」——版本错/schema 错/参数错等
+                # ValidationError 一律上抛，禁止用 fallback 掩盖真实错误。
+                pass
 
         # #41 版本 / data_snapshot / universe 一致性检查（训练矩阵防混版本）
         if versions or require_same_data_snapshot or require_same_universe:
+            # #12 fail-closed：production/strict 下 probe 失败直接抛（_check_factor_versions
+            # 内部处理）；research 下保持宽容（读不了 probe 就跳过一致性核对）。
             try:
                 self._check_factor_versions(
                     fids,
@@ -3422,9 +3757,14 @@ class DataAccessStore:
                     time_range=time_range,
                     **params,
                 )
-            except DataError:
+            except (DataError, ValidationError):
                 raise
             except Exception:
+                if _production_mode() or _strict_read_mode():
+                    raise DataError(
+                        "read_factors: 版本一致性检查失败且无法证明一致"
+                        "（production fail-closed）。"
+                    )
                 pass
 
         ds = self._registry.get("factor_lake")
@@ -3512,10 +3852,19 @@ class DataAccessStore:
         query_budget: QueryBudget | None,
         **params: Any,
     ) -> ReadHandle:
-        """走 factor_matrix 物化层读宽矩阵（universe + frequency）。"""
+        """走 factor_matrix 物化层读宽矩阵（universe + frequency）。
+
+        未登记/覆盖不到 → ``MatrixUnavailable``/``MatrixCoverageMiss``（只捕这两
+        种，版本/schema/参数错误仍抛 ValidationError——#13）。
+        """
         from data_access.read.read_handle import ReadHandle
 
-        matrix = self._registry.get("factor_matrix")  # 未登记会抛 ValidationError
+        try:
+            matrix = self._registry.get("factor_matrix")
+        except ValidationError as exc:
+            raise MatrixUnavailable(
+                f"factor_matrix 未登记：{exc}"
+            ) from exc
         matrix_params = dict(params, universe=universe, frequency=frequency)
         handle = self.read(
             "factor_matrix",
@@ -4175,19 +4524,33 @@ class DataAccessStore:
         snapshots: list[DataSnapshot] = []
         for name in sorted(read_datasets):
             ds = self._registry.get(name)
-            paths = self._prepare_dataset_read(
-                ds,
-                time_range=time_ranges.get(name),
-                params=dict(params_map.get(name, {})),
-            )
-            path_by_ds[name] = paths
-            snapshots.append(
-                self._build_snapshot(
-                    dataset=name,
-                    ds=ds,
-                    paths=paths,
+            try:
+                paths = self._prepare_dataset_read(
+                    ds,
+                    time_range=time_ranges.get(name),
                     params=dict(params_map.get(name, {})),
                 )
+                path_by_ds[name] = paths
+                snapshots.append(
+                    self._build_snapshot(
+                        dataset=name,
+                        ds=ds,
+                        paths=paths,
+                        params=dict(params_map.get(name, {})),
+                    )
+                )
+            except Exception as exc:
+                if _production_mode() or _strict_read_mode():
+                    raise SnapshotBuildError(
+                        f"sql_result 参与数据集 '{name}' snapshot 构建失败："
+                        f"{type(exc).__name__}: {exc}（production fail-closed）。"
+                    ) from exc
+                logger.warning("sql_result snapshot 缺失 %s（research 放行）", name)
+                path_by_ds[name] = []
+        if not snapshots:
+            raise SnapshotBuildError(
+                "sql_result 没有任何参与数据集成功构建 snapshot"
+                "（production fail-closed）。"
             )
         snapshot = merge_sql_data_snapshots(
             snapshots,

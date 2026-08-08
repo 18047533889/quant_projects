@@ -621,7 +621,9 @@ def _aroon_component(close: pl.Expr, window: int, *, up: bool) -> pl.Expr:
     def _pos(arr: np.ndarray) -> float:
         if len(arr) == 0:
             return np.nan
-        return float(np.argmax(arr) if up else np.argmin(arr))
+        # Audit P1-I: periods since the MOST RECENT extremum — a tie must use
+        # the last occurrence, not the first that np.argmax/argmin returns.
+        return float(w - (np.argmax(arr[::-1]) if up else np.argmin(arr[::-1])))
 
     pos = close.rolling_map(_pos, window_size=w + 1, min_samples=w + 1)
     return 100.0 * pos / float(w)

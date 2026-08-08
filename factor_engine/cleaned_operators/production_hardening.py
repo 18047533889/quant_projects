@@ -76,6 +76,22 @@ FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
     "SupertrendDirection",
     "PSAR",
     "ts_sma_cn",
+    # 2026-08 stateful rule / episode pack (audit P0-B03): these recursive
+    # operators have internal state but no serialize_state/restore_state
+    # contract, so an incremental segment must NEVER treat the first row of a
+    # segment as a true history start — they require full-history replay.
+    "state_latch",
+    "state_hold",
+    "state_slew_limit",
+    "state_deadband",
+    "state_ewm_if",
+    "state_since_reduce",
+    "event_refractory",
+    "cross_event",
+    "directional_change_state",
+    "directional_change_extent",
+    "state_since_trend_tstat",
+    "ts_cusum_break_score",
 })
 
 # These schemas document the minimum state needed by a future segmented runtime.

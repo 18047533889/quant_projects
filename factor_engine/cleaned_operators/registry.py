@@ -41,6 +41,28 @@ class RegistryInitializationError(RuntimeError):
     """Registry bootstrap was attempted from an impossible lifecycle state."""
 
 
+def _impl_source_hash(operator: Any) -> str:
+    """Deterministic source hash of a registered implementation for the
+    overwrite audit log (P0-31).  Falls back to the class's module+qualname so
+    the log is meaningful even when the operator exposes no callable source."""
+    import hashlib
+    import inspect as _inspect
+
+    src: str | None = None
+    fn = getattr(operator, "calculate", None)
+    if fn is None and hasattr(operator, "_calculate_series"):
+        fn = operator._calculate_series  # type: ignore
+    if callable(fn):
+        try:
+            src = _inspect.getsource(fn)
+        except (OSError, TypeError):  # pragma: no cover - interactive/no-source
+            src = None
+    if src is None:
+        cls = operator.__class__
+        src = f"{cls.__module__}.{cls.__qualname__}"
+    return hashlib.sha256(src.encode("utf-8")).hexdigest()[:16]
+
+
 def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> list[str]:
     """Preserve the first canonical positional contract across backend adapters."""
     old = list(existing or [])
@@ -73,6 +95,57 @@ class OperatorRegistry:
     _catalog: Dict[str, dict] = {}
     _lifecycle: Lifecycle = Lifecycle.BUILDING
     _version: int = 0
+    # Intentional same-backend overwrites (replace=True): canonical/backend,
+    # old/new source, old/new impl hash, reason (P0-31 audit trail).
+    _overwrite_log: List[dict] = []
+    # Hard-fail on undeclared same-backend duplicates (P0-31).  A bootstrap
+    # probe may set this False to enumerate every collision site at once.
+    _hard_fail_duplicates: bool = True
+    # Sources that are declared *bootstrap override layers*.  FactorEngine's
+    # loader deliberately layers audited implementations over base registrations
+    # (faster native backends, compatibility semantics, parity repairs); each of
+    # these modules is an explicit, durable declaration that its same-backend
+    # re-registration is intentional.  Every such override is still written to
+    # ``_overwrite_log`` with old/new source + implementation hashes, so nothing
+    # is silent.  A collision from any source NOT in this set is a hard error.
+    _DECLARED_OVERRIDE_SOURCES: frozenset[str] = frozenset({
+        "ashare.ops",
+        "bounded_structure_repairs",
+        "candle_pattern_engine_repairs_v2",
+        "composite_fastpath_native_polars",
+        "composite_fastpath_primitives",
+        "factor_dsl_polars",
+        "factor_dsl_polars_bridge",
+        "factor_dsl_polars_native",
+        "fundamental_transforms_repairs_v2",
+        "gtja_compat",
+        "layer_composite_fixes",
+        "layer_governance_native_polars",
+        "layer_governance_primitives",
+        "operator_overhaul_audited",
+        "operator_overhaul_compat",
+        "operator_overhaul_native_polars",
+        "polars_chip_tail",
+        "polars_cs_misc",
+        "polars_geometry_math",
+        "polars_misc_utils",
+        "polars_robust_stats",
+        "polars_state_event",
+        "production_repairs",
+        "production_technical_extensions",
+        "scalar_compare",
+        "scalar_where",
+        "semantic_hardening",
+        "sequence_complexity",
+        "stable_high_moments_v2",
+        "structure_patterns_extra_repairs_v2",
+        "technical_indicators_v2",
+    })
+
+    @classmethod
+    def overwrite_log(cls) -> List[dict]:
+        """Audit trail of intentional canonical+backend overrides."""
+        return list(cls._overwrite_log)
 
     @classmethod
     def lifecycle(cls) -> str:
@@ -130,6 +203,9 @@ class OperatorRegistry:
         source: str = "",
         status: str = "implemented",
         backend_explicit: bool = True,
+        replace: bool = False,
+        replacement_reason: str = "",
+        expected_old_source: str = "",
     ) -> None:
         """注册一个已实现算子到 registry。
 
@@ -141,15 +217,58 @@ class OperatorRegistry:
             source: 溯源标记，写入 catalog。
             status: 生命周期状态，默认 ``implemented``。
             backend_explicit: 是否显式声明 backend（Polars production 门禁用）。
+            replace: 是否允许覆盖同一 canonical+backend 的既有实现。
+            replacement_reason: 覆盖原因（replace=True 时必填）。
+            expected_old_source: 期望被覆盖的旧 source；提供时与实测不一致会报错。
 
         返回:
             None
+
+        覆盖治理（P0-31）：默认对同一 canonical+backend 的重复注册报错——静默
+        覆盖会制造 load-order 相关的运行时语义漂移（DSL 认为参数=A、运行时实际
+        参数=B）。只有显式 ``replace=True`` + ``replacement_reason`` 才允许覆盖，
+        且每次覆盖都会写入 ``cls._overwrite_log`` 审计日志。
         """
         canonical = canonical or operator.metadata.name
         cls._assert_writable()
         if canonical in cls._aliases:
             raise ValueError(f"canonical already declared as alias: {canonical!r}")
-        cls._operators.setdefault(canonical, {})[backend] = operator
+        existing_ops = cls._operators.setdefault(canonical, {})
+        if backend in existing_ops:
+            old_source = str((cls._catalog.get(canonical, {}).get("backend_meta") or {}).get(backend, {}).get("source", "") or "")
+            declared = source in cls._DECLARED_OVERRIDE_SOURCES
+            if cls._hard_fail_duplicates and not declared:
+                if not replace:
+                    raise ValueError(
+                        f"duplicate registration of canonical {canonical!r} backend "
+                        f"{backend!r} (old source={old_source!r}, new source={source!r}). "
+                        "Silent overwrite is forbidden; pass replace=True with a "
+                        "replacement_reason, or add the source to "
+                        "_DECLARED_OVERRIDE_SOURCES to declare it an override layer."
+                    )
+                if expected_old_source and old_source != expected_old_source:
+                    raise ValueError(
+                        f"replace of {canonical!r}/{backend}: expected old source "
+                        f"{expected_old_source!r} but registry holds {old_source!r}"
+                    )
+                if not replacement_reason:
+                    raise ValueError(
+                        f"replace of {canonical!r}/{backend} requires a non-empty "
+                        "replacement_reason"
+                    )
+            # Record the audit trail for every same-backend overwrite — including
+            # soft-probe mode (``_hard_fail_duplicates=False``) so a bootstrap
+            # sweep can enumerate every collision site at once.
+            cls._overwrite_log.append({
+                "canonical": canonical,
+                "backend": backend,
+                "old_source": old_source,
+                "new_source": source,
+                "old_hash": _impl_source_hash(existing_ops[backend]),
+                "new_hash": _impl_source_hash(operator),
+                "reason": replacement_reason or f"declared override layer ({source})",
+            })
+        existing_ops[backend] = operator
         existing = cls._catalog.get(canonical, {})
         if existing and status == "implemented":
             # Adding another backend is capability metadata, not a lifecycle

@@ -49,24 +49,36 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
     )
 
 
-def _fill_window(chunk: np.ndarray) -> np.ndarray | None:
-    """Linear-interp fill of NaNs over the window's own time grid.
+def _fill_window(chunk: np.ndarray, missing_mode: str = "strict_contiguous") -> np.ndarray | None:
+    """Prepare a window for Hankel/SSA.
 
-    Returns ``None`` when fewer than 50% of the rows are finite.
+    Audit P1-A: the production default is ``strict_contiguous`` — the longest
+    trailing contiguous finite run, with a 50%-finite coverage gate.  Linear
+    interpolation (which uses data *after* a gap to reconstruct observations
+    before it) is research-only and requires ``missing_mode="interpolate"``.
     """
-    n = chunk.size
-    if n == 0:
+    if chunk.size == 0:
         return None
     finite = np.isfinite(chunk)
     n_fin = int(np.count_nonzero(finite))
-    if n_fin / float(n) < _MIN_FINITE_FRAC:
+    if n_fin / float(chunk.size) < _MIN_FINITE_FRAC:
         return None
-    if n_fin == n:
+    if n_fin == chunk.size:
         return chunk.astype(float)
-    t = np.arange(n, dtype=float)
-    filled = chunk.astype(float).copy()
-    filled[~finite] = np.interp(t[~finite], t[finite], chunk[finite].astype(float))
-    return filled
+    if missing_mode == "interpolate":
+        n = chunk.size
+        t = np.arange(n, dtype=float)
+        filled = chunk.astype(float).copy()
+        filled[~finite] = np.interp(t[~finite], t[finite], chunk[finite].astype(float))
+        return filled
+    # strict_contiguous (default): never re-connect data across a gap.
+    end = chunk.size
+    while end > 0 and not np.isfinite(chunk[end - 1]):
+        end -= 1
+    start = end
+    while start > 0 and np.isfinite(chunk[start - 1]):
+        start -= 1
+    return chunk[start:end].astype(float)
 
 
 def _hankel_singular_values(filled: np.ndarray, emb: int) -> np.ndarray | None:
@@ -82,7 +94,7 @@ def _hankel_singular_values(filled: np.ndarray, emb: int) -> np.ndarray | None:
     return s
 
 
-def _hankel_effective_rank_series(x2d: np.ndarray, window: int, emb: int) -> np.ndarray:
+def _hankel_effective_rank_series(x2d: np.ndarray, window: int, emb: int, missing_mode: str = "strict_contiguous") -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w, e = int(window), int(emb)
@@ -90,7 +102,7 @@ def _hankel_effective_rank_series(x2d: np.ndarray, window: int, emb: int) -> np.
         col = x2d[:, c]
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            filled = _fill_window(col[i0 : r + 1])
+            filled = _fill_window(col[i0 : r + 1], missing_mode)
             if filled is None:
                 continue
             s = _hankel_singular_values(filled, e)
@@ -112,7 +124,7 @@ def _hankel_effective_rank_series(x2d: np.ndarray, window: int, emb: int) -> np.
     return out
 
 
-def _hankel_singular_gap_series(x2d: np.ndarray, window: int, emb: int) -> np.ndarray:
+def _hankel_singular_gap_series(x2d: np.ndarray, window: int, emb: int, missing_mode: str = "strict_contiguous") -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w, e = int(window), int(emb)
@@ -120,7 +132,7 @@ def _hankel_singular_gap_series(x2d: np.ndarray, window: int, emb: int) -> np.nd
         col = x2d[:, c]
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            filled = _fill_window(col[i0 : r + 1])
+            filled = _fill_window(col[i0 : r + 1], missing_mode)
             if filled is None:
                 continue
             s = _hankel_singular_values(filled, e)
@@ -133,7 +145,7 @@ def _hankel_singular_gap_series(x2d: np.ndarray, window: int, emb: int) -> np.nd
     return out
 
 
-def _ssa_reconstruction_residual_series(x2d: np.ndarray, window: int, emb: int, n_components: int) -> np.ndarray:
+def _ssa_reconstruction_residual_series(x2d: np.ndarray, window: int, emb: int, n_components: int, missing_mode: str = "strict_contiguous") -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w, e, k = int(window), int(emb), int(n_components)
@@ -141,7 +153,7 @@ def _ssa_reconstruction_residual_series(x2d: np.ndarray, window: int, emb: int, 
         col = x2d[:, c]
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            filled = _fill_window(col[i0 : r + 1])
+            filled = _fill_window(col[i0 : r + 1], missing_mode)
             if filled is None:
                 continue
             n = filled.size
