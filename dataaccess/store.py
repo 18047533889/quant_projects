@@ -2279,6 +2279,21 @@ class DataAccessStore:
                     (filters_by_dataset or {}).get(ds) if filters_by_dataset else None
                 ),
             )
+            # #53 join fan-out 守卫：exact join 右表相对面板 one_to_many 时，
+            # production 拒绝静默行放大（除非维度过滤已 resolve / join key 覆盖唯一键）。
+            if ds != anchor and policy == "exact":
+                from data_access.cos_contract import get_cos_contract, validate_join_fanout
+
+                fcontract = get_cos_contract(ds)
+                if fcontract is not None:
+                    applied_cols = set(filter_columns(parse_filters(filters)))
+                    applied_cols |= filter_columns(ds_filters)
+                    validate_join_fanout(
+                        fcontract,
+                        join_key=tuple(k for k in (t_col, inst_col) if k),
+                        production=_production_mode() or _strict_read_mode(),
+                        applied_filter_columns=sorted(applied_cols),
+                    )
             # instrument_filter 对锚点/右表一律下推（join key 同为 instrument 轴）
             ds_inst = instrument_filter
             hive = self._bucket_hive_filters(dsobj, ds_inst)
