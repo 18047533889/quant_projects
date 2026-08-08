@@ -93,6 +93,77 @@ class StorageSpec:
     def scheme(self) -> str:
         return "s3" if self.backend in {StorageBackend.S3, StorageBackend.COS} else self.type
 
+    @classmethod
+    def from_yaml(cls, raw: Any, *, context: str = "storage") -> "StorageSpec":
+        """**唯一** ``storage:`` 解析入口（#P0-final closure 4）。
+
+        - typed ``StorageSpec`` 原样返回（对象自身即合法，不依赖创建入口）；
+        - 字符串 ``"cos"`` / ``"cos://bucket/prefix"``；
+        - dict：顶层与嵌套 ``source``（``{source: {type: cos, ...}}``）合并解析，
+          顶层字段优先；**任何 unknown key fail-closed**（``storage: {typo: ...}``
+          不再静默忽略走默认 local）。
+        """
+        if isinstance(raw, cls):
+            return raw
+        if isinstance(raw, str):
+            text = str(raw).strip()
+            if text.lower().startswith(("cos://", "s3://", "oss://", "http://", "https://")):
+                raw = {"uri": text}
+            else:
+                raw = {"type": text}
+        if not isinstance(raw, dict):
+            raise ValidationError(
+                f"{context} 必须是字符串或 mapping，收到 {type(raw).__name__}"
+            )
+        _reject_unknown_storage_keys(raw, allowed=_STORAGE_TOP_KEYS, context=context)
+        src = raw.get("source")
+        if src is not None:
+            if isinstance(src, str):
+                src = {"uri": str(src)}
+            if not isinstance(src, dict):
+                raise ValidationError(
+                    f"{context}.source 必须是 mapping 或 uri 字符串，"
+                    f"收到 {type(src).__name__}"
+                )
+            _reject_unknown_storage_keys(
+                src, allowed=_STORAGE_SOURCE_KEYS, context=f"{context}.source"
+            )
+        merged: dict[str, Any] = {}
+        if isinstance(src, dict):
+            merged.update(src)
+        for k, v in raw.items():
+            if k != "source":
+                merged[k] = v  # 顶层字段优先
+
+        stype = str(merged.get("type") or "local").strip().lower()
+        try:
+            backend = StorageBackend(stype)
+        except ValueError:
+            raise ValidationError(
+                f"{context}: 未知 storage.type={stype!r}。支持: "
+                f"{[b.value for b in StorageBackend]}"
+            )
+        options = merged.get("options") or {}
+        if not isinstance(options, dict):
+            raise ValidationError(f"{context}.options 必须是 mapping")
+        return cls(
+            type=backend.value,
+            uri=merged.get("uri"),
+            root=merged.get("root"),
+            bucket=merged.get("bucket"),
+            prefix=merged.get("prefix"),
+            endpoint=merged.get("endpoint"),
+            region=merged.get("region"),
+            secret=merged.get("secret"),
+            mode=str(merged.get("mode", "")).strip() or None,
+            layout=str(merged.get("layout", "")).strip() or None,
+            format=str(merged.get("format", "")).strip() or None,
+            credential_profile=(
+                str(merged.get("credential_profile", "")).strip() or None
+            ),
+            options={str(k): v for k, v in options.items()},
+        )
+
 
 # #P0-final closure 4：唯一 ``StorageSpec`` schema。顶层与嵌套 ``source`` 都收，
 # 合并后编译成 typed ``StorageSpec``——registry 保存 typed spec，任何模块不再

@@ -29,6 +29,8 @@ from .params_validation import ParamSpec, parse_params_schema, validate_params
 from data_access.read.query_budget import DatasetQueryPolicy, parse_dataset_query_policy
 from data_access.read.formats import FormatSpec, default_glob_for_format, normalize_format_name
 from data_access.core.namespace import resolve_namespace
+from data_access.core.storage import StorageSpec
+from data_access.read.partition_planner import parse_partitioning
 from .paths import canonicalize, expand_env
 
 
@@ -89,9 +91,9 @@ class StaticDataset(DatasetBase):
     layout_policy: LayoutPolicy | None = None
     # ---- 通用 Data IO Layer 新增字段（全部带默认值，向后兼容） ----
     format_spec: FormatSpec = field(default_factory=FormatSpec)   # 物理文件格式（parquet/csv/...）
-    storage: dict[str, Any] | None = None                         # storage backend 声明
+    storage: StorageSpec | None = None                            # #P0-final closure 4 typed StorageSpec
     roles: Mapping[str, str] = field(default_factory=dict)        # 语义角色（event_time/instrument/...）
-    partitioning: dict[str, Any] | None = None                    # 时间/分区裁剪声明
+    partitioning: "PartitionSpec | None" = None                   # #P0-final closure 3 typed PartitionSpec
     semantic: str | None = None                                   # panel/event/factor/...
     engine: dict[str, Any] | None = None                          # 优先/兜底执行引擎
     schema_version: str | None = None                             # #36 schema 版本号
@@ -133,9 +135,9 @@ class ParametricDataset(DatasetBase):
     layout_policy: LayoutPolicy | None = None
     # ---- 通用 Data IO Layer 新增字段（全部带默认值，向后兼容） ----
     format_spec: FormatSpec = field(default_factory=FormatSpec)   # 物理文件格式（parquet/csv/...）
-    storage: dict[str, Any] | None = None                         # storage backend 声明
+    storage: StorageSpec | None = None                            # #P0-final closure 4 typed StorageSpec
     roles: Mapping[str, str] = field(default_factory=dict)        # 语义角色（event_time/instrument/...）
-    partitioning: dict[str, Any] | None = None                    # 时间/分区裁剪声明
+    partitioning: "PartitionSpec | None" = None                   # #P0-final closure 3 typed PartitionSpec
     semantic: str | None = None                                   # panel/event/factor/...
     engine: dict[str, Any] | None = None                          # 优先/兜底执行引擎
     schema_version: str | None = None                             # #36 schema 版本号
@@ -340,36 +342,17 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
 
     # ---- 通用 Data IO Layer 字段解析 ----
     format_spec = FormatSpec.from_yaml(raw.get("format", "parquet"), context=context)
-    storage = raw.get("storage")
-    if storage is not None:
-        if not isinstance(storage, dict):
-            raise ValidationError(
-                f"{context}: storage 必须是 mapping，收到 {type(storage).__name__}"
-            )
-        _validate_known_keys(
-            storage,
-            allowed={"source", "type", "uri", "layout", "credential_profile"},
-            context=f"{context}: storage",
-        )
-        src = storage.get("source")
-        if isinstance(src, dict):
-            _validate_known_keys(
-                src,
-                allowed={"type", "uri", "layout", "endpoint", "region",
-                         "credential_profile", "bucket"},
-                context=f"{context}: storage.source",
-            )
-    partitioning = raw.get("partitioning")
-    if partitioning is not None:
-        if not isinstance(partitioning, dict):
-            raise ValidationError(
-                f"{context}: partitioning 必须是 mapping，收到 {type(partitioning).__name__}"
-            )
-        _validate_known_keys(
-            partitioning,
-            allowed={"columns", "partition_by", "bucket", "granularity", "time_column"},
-            context=f"{context}: partitioning",
-        )
+    # #P0-final closure 4：storage 统一走 ``StorageSpec.from_yaml`` 编译成 typed
+    # ``StorageSpec`` 保存——任何模块不再各自解析 raw dict。``{source:{type:cos}}``
+    # 合法配置不再被静默当 local；unknown key 启动即失败。
+    storage = None
+    if raw.get("storage") is not None:
+        storage = StorageSpec.from_yaml(raw.get("storage"), context=f"{context}: storage")
+    # #P0-final closure 3：partitioning 统一走 ``parse_partitioning`` 编译成 typed
+    # ``PartitionSpec``（planner 与 loader 读同一份 schema，不再 split-brain）。
+    partitioning = None
+    if raw.get("partitioning") is not None:
+        partitioning = parse_partitioning(raw.get("partitioning"), context=f"{context}: partitioning")
     semantic = raw.get("semantic")
     if semantic is not None and not isinstance(semantic, str):
         raise ValidationError(f"{context}: semantic 必须是字符串")

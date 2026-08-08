@@ -7,13 +7,7 @@ import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.price_volume.structure_patterns_extra_v2 import _pf, _pi, _similar
-from cleaned_operators.price_volume.structure_patterns_v2 import (
-    ts_nth_pivot_high,
-    ts_nth_pivot_low,
-    ts_pivot_high_spacing,
-    ts_pivot_low_spacing,
-    _seq_features,
-)
+from cleaned_operators.price_volume.structure_patterns_v2 import _seq_features
 
 
 def _between(frame: pd.DataFrame, lower: float, upper: float) -> pd.DataFrame:

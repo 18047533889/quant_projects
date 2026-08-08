@@ -357,21 +357,18 @@ def _storage_of(ds: Any) -> tuple[str | None, str | None, str | None]:
 
     修复：旧 ``_storage_backend_of`` 会把 ``storage_format``（long/wide，本质是
     layout）当作 backend 回退，导致 ContractIR 语义错位。
+
+    #P0-final closure 4：registry 现在保存 typed ``StorageSpec``（旧 raw dict
+    也兼容）——统一走 core.storage 的 declared_* 读取，不再在此解析 dict。
     """
-    storage = getattr(ds, "storage", None)
-    backend: str | None = None
-    layout: str | None = None
+    from data_access.core.storage import (
+        declared_storage_layout,
+        declared_storage_type,
+    )
+
+    backend = declared_storage_type(ds)
+    layout = declared_storage_layout(ds)
     fmt: str | None = None
-    if isinstance(storage, dict):
-        src = storage.get("source")
-        if isinstance(src, dict):
-            backend = str(src.get("type") or "local")
-            layout = src.get("layout")
-            fmt = src.get("format")
-        elif isinstance(src, str):
-            backend = src
-        layout = layout or storage.get("layout")
-        fmt = fmt or storage.get("format")
     if backend in (None, "", "local") and getattr(ds, "storage_format", None):
         # 无显式 backend 时，storage_format（long/wide/daily…）只当 layout。
         layout = layout or str(ds.storage_format)
