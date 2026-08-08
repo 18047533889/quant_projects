@@ -91,15 +91,31 @@ def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
     return U, valid
 
 
-def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int) -> np.ndarray:
+def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int, peer_mask: np.ndarray | None = None) -> np.ndarray:
+    """Tie-inclusive nearest neighbours of query ``i`` (R4-83).
+
+    ``peer_mask`` restricts which stocks may serve as peers (feature-valid AND
+    target-observed for the regression ops — R4-82 k-peer eligibility); for the
+    tangent operator it is the feature-valid mask.  ``k`` nearest are selected;
+    when several peers tie at the k-th distance **all** of them are included so
+    the neighbourhood does not depend on the stock-column ordering (a plain
+    ``argsort(...)[:k]`` would silently pick an arbitrary subset of a tied group
+    and make the result column-order-dependent).  Self is always excluded.
+    """
+    mask = valid if peer_mask is None else peer_mask
     dist = np.sqrt(np.sum((U - U[i]) ** 2, axis=1))
-    dist = np.where(valid, dist, np.inf)
+    dist = np.where(mask, dist, np.inf)
     dist[i] = np.inf
-    count = int(valid.sum())
-    k_eff = min(max(1, int(k)), count - 1 if count > 0 else 0)
+    peer_count = int(mask.sum())
+    if peer_count < 2:
+        return np.array([], dtype=int)
+    k_eff = min(max(1, int(k)), peer_count - 1)
     if k_eff < 1:
         return np.array([], dtype=int)
-    return np.argsort(dist, kind="stable")[:k_eff]
+    kth = float(np.partition(dist, k_eff - 1)[k_eff - 1])
+    if not np.isfinite(kth):
+        return np.array([], dtype=int)
+    return np.where((dist <= kth) & np.isfinite(dist))[0]
 
 
 def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: float) -> np.ndarray:
@@ -107,17 +123,25 @@ def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: f
     out = np.full((rows, n), np.nan, dtype=float)
     for t in range(rows):
         U, valid = _rank_features(feats, t)
+        y_t = target[t]
+        target_fin = np.isfinite(y_t)
+        # R4-82: peers for the local regression must have an *observed target* —
+        # a feature-near stock with a missing target cannot contribute a y value,
+        # so counting it toward k would silently shrink the effective regression
+        # sample below k.
+        peer_mask = valid & target_fin
         for i in range(n):
             if not valid[i]:
                 continue
-            y_i = target[t, i]
+            y_i = y_t[i]
             if not np.isfinite(y_i):
                 continue
-            nbrs = _neighbors(U, valid, k, i)
+            nbrs = _neighbors(U, valid, k, i, peer_mask)
             if nbrs.size < 4:
                 continue
             Z = U[nbrs]
-            y = target[t, nbrs]
+            y = y_t[nbrs]
+            # all neighbours are target-finite by construction; keep the guard.
             fin = np.isfinite(y)
             if int(fin.sum()) < 4:
                 continue
@@ -142,14 +166,18 @@ def _local_gradient_series(target: np.ndarray, feats: np.ndarray, k: int, ridge:
     out = np.full((rows, n), np.nan, dtype=float)
     for t in range(rows):
         U, valid = _rank_features(feats, t)
+        y_t = target[t]
+        target_fin = np.isfinite(y_t)
+        # R4-82: same target-observed peer eligibility as the linear residual.
+        peer_mask = valid & target_fin
         for i in range(n):
             if not valid[i]:
                 continue
-            nbrs = _neighbors(U, valid, k, i)
+            nbrs = _neighbors(U, valid, k, i, peer_mask)
             if nbrs.size < 4:
                 continue
             Z = U[nbrs]
-            y = target[t, nbrs]
+            y = y_t[nbrs]
             fin = np.isfinite(y)
             if int(fin.sum()) < 4:
                 continue
@@ -307,18 +335,28 @@ def _copula_cross_series(a: np.ndarray, b: np.ndarray, grid: int, entropy: bool)
     for t in range(rows):
         U = _rank_transform(np.stack([a[t], b[t]], axis=1))
         fin = np.isfinite(U).all(axis=1)
-        if int(fin.sum()) < max(2 * g * g, 16):
+        N = int(fin.sum())
+        if N < max(2 * g * g, 16):  # P1-21: estimator resolution requires N >> grid²
             continue
         u = np.clip((U[fin, 0] * g).astype(int), 0, g - 1)
         v = np.clip((U[fin, 1] * g).astype(int), 0, g - 1)
-        joint = np.zeros((g, g), dtype=np.float64)
+        raw = np.zeros((g, g), dtype=np.float64)
         for i in range(u.shape[0]):
-            joint[u[i], v[i]] += 1.0
-        joint += _ALPHA  # Jeffreys smoothing, deterministic
+            raw[u[i], v[i]] += 1.0
+        # P1-21 finite-sample correction (Miller-Madow): the plug-in entropy/MI
+        # is upward biased by ~(K-1)/(2N); occupied-cell counts are taken from
+        # the unsmoothed joint so the correction reflects real occupancy.
+        k_xy = int((raw > 0).sum())
+        k_u = int((raw.sum(axis=1) > 0).sum())
+        k_v = int((raw.sum(axis=0) > 0).sum())
+        joint = raw + _ALPHA  # Jeffreys smoothing, deterministic
         joint /= joint.sum()
         if entropy:
             ent = float(-np.sum(joint * np.log(joint)))
-            out[t, :] = ent  # per-day scalar broadcast to each stock
+            # Miller-Madow entropy bias + normalize by log(grid²) so entropy is
+            # a resolution-independent [0,1] concentration measure (P1-21).
+            ent = ent + float(k_xy - 1) / (2.0 * N)
+            out[t, :] = ent / np.log(float(g * g))
         else:
             pu = joint.sum(axis=1)
             pv = joint.sum(axis=0)
@@ -330,6 +368,8 @@ def _copula_cross_series(a: np.ndarray, b: np.ndarray, grid: int, entropy: bool)
                     if p <= _EPS or denom <= _EPS:
                         continue
                     mi += p * np.log(p / denom)
+            # Miller-Madow MI bias correction (P1-21).
+            mi = mi + float(k_xy - k_u - k_v + 1) / (2.0 * N)
             out[t, :] = float(mi)
     return out
 
@@ -337,8 +377,11 @@ def _copula_cross_series(a: np.ndarray, b: np.ndarray, grid: int, entropy: bool)
 def _register_copula_op(canonical: str, description: str, entropy: bool) -> SeriesOperator:
     def _calculate_series(self, a: pd.DataFrame, b: pd.DataFrame, grid: int = 8, **_: Any) -> pd.DataFrame:
         g = int(grid)
-        if not (3 <= g <= 16):
-            raise ValueError(f"{canonical} requires 3 <= grid <= 16")
+        # P1-21: ``grid`` is an *estimator resolution*, not a searchable alpha
+        # parameter — vary it and you change plug-in bias / finite-sample noise
+        # rather than market structure.  Only a small verified set is allowed.
+        if g not in (4, 8, 16):
+            raise ValueError(f"{canonical} requires grid in {{4, 8, 16}} (verified estimator resolutions)")
         return frame_like(
             a,
             _copula_cross_series(a.to_numpy(dtype=float), b.to_numpy(dtype=float), g, entropy),

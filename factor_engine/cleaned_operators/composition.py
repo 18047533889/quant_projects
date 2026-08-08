@@ -58,7 +58,8 @@ def _comp_logs(frames: Sequence[pd.DataFrame]) -> tuple[np.ndarray, np.ndarray]:
     """Stacked logs of aligned parts and the all-finite cell mask."""
     aligned = _align(*frames)
     arrs = [a.to_numpy(dtype=float) for a in aligned]
-    logs = np.stack([np.log(a) for a in arrs])  # (P, R, C)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        logs = np.stack([np.log(a) for a in arrs])  # (P, R, C) — non-positive -> -inf/nan
     valid = np.all(np.isfinite(logs), axis=0)
     return logs, valid
 

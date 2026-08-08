@@ -108,17 +108,25 @@ _register("multi_index_entry_intensity", "多指数同时纳入强度（Polars�
           lambda a, b, c, window=20: _multi_index_entry(a, b, c, int(window)))
 
 
-def _event_decay(entry_event, window, decay):
+def _event_decay(entry_event, window, decay, missing_policy="break"):
     w = int(window)
     d = float(decay)
+    policy = str(missing_policy or "break").lower()
     import numpy as np
 
     weights = np.array([d ** k for k in range(w)], dtype=float)
 
     def _apply(vals):
         arr = np.asarray(vals, dtype=float)
-        arr = np.where(np.isfinite(arr), arr, 0.0)
         if len(arr) < w:
+            return float("nan")
+        # R4 (unknown != no-event): a NaN event is UNKNOWN, never a 0 event.
+        # Feeding a gap through as zeros manufactures a fake "no event" window.
+        # Both policies leave the output undefined while a gap is inside the
+        # window; "break" also resets the observed state, "carry" keeps the
+        # weight state (rolling_map recomputes per window, so the observable
+        # difference is limited to the reset behavior documented on pandas).
+        if not np.all(np.isfinite(arr)):
             return float("nan")
         return float(np.dot(arr[::-1], weights))
 
@@ -128,5 +136,8 @@ def _event_decay(entry_event, window, decay):
     )
 
 
-_register("index_event_decay", "指数事件衰减近因信号（Polars）。", ["entry_event", "window", "decay"],
-          lambda e, window=20, decay=0.9: _event_decay(e, int(window), float(decay)))
+_register("index_event_decay", "指数事件衰减近因信号（Polars）。",
+          ["entry_event", "window", "decay", "missing_policy"],
+          lambda e, window=20, decay=0.9, missing_policy="break": _event_decay(
+              e, int(window), float(decay), missing_policy,
+          ))

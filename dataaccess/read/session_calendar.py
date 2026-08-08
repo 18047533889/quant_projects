@@ -66,17 +66,47 @@ class SessionSegment:
 
 @dataclass(frozen=True)
 class MarketSession:
-    """一个市场的完整交易时段定义（含午休）。"""
+    """一个市场的完整交易时段定义（含午休）。
+
+    #P0-8：支持 date-specific early close（美股 half day，如 13:00 收市）。
+    ``early_close_dates`` 命中时，当日收盘时间 = ``early_close_time``；否则用
+    各 segment 的常规 end。
+    """
 
     market: str
     timezone: str
     segments: tuple[SessionSegment, ...]
+    early_close_dates: frozenset[_dt.date] = frozenset()
+    early_close_time: _dt.time | None = None
 
     # ---- 纯 Python 侧 ----
 
     @property
     def total_bars(self) -> int:
         return sum(s.bar_count for s in self.segments)
+
+    def is_early_close(self, d: _dt.date) -> bool:
+        """该日是否提前收市（early close / half day）。"""
+        return d in self.early_close_dates
+
+    def close_on(self, d: _dt.date) -> _dt.time:
+        """该日收盘时间：early close 日取 early_close_time，否则末段 end。"""
+        if d in self.early_close_dates and self.early_close_time is not None:
+            return self.early_close_time
+        if self.segments:
+            return self.segments[-1].end
+        return _dt.time(0, 0)
+
+    def bar_count_on(self, d: _dt.date) -> int:
+        """该日 bar 数：early close 日按提前收盘计算（最后一根 <= early_close）。"""
+        if d in self.early_close_dates and self.early_close_time is not None:
+            total = 0
+            for seg in self.segments:
+                if seg.start <= self.early_close_time:
+                    end = min(seg.end, self.early_close_time)
+                    total += _minutes_between(seg.start, end) + 1
+            return max(total, 1)
+        return self.total_bars
 
     def elapsed_index(self, t: _dt.time) -> int | None:
         """把本地时间标签映射到 session elapsed bar index（0 = 当日第一根）。
@@ -153,18 +183,57 @@ def build_ashare_session() -> MarketSession:
     )
 
 
-def build_us_session() -> MarketSession:
+def build_us_session(
+    early_close_dates: Iterable[_dt.date] | None = None,
+) -> MarketSession:
+    """#P0-8 美股 session；``early_close_dates`` 提供提前收市日（13:00 收市）。"""
     return MarketSession(
         market="us",
         timezone="America/New_York",
         segments=tuple(
             SessionSegment(name, s, e, off) for (name, s, e, off) in _US_SEGMENTS
         ),
+        early_close_dates=frozenset(early_close_dates or ()),
+        early_close_time=_dt.time(13, 0),
     )
 
 
+def load_us_early_close_dates(store: Any) -> frozenset[_dt.date]:
+    """#P0-8 从 ``us_is_early_close`` 数据集加载提前收市日期（half day）。
+
+    数据集不存在/读不到时返回空集（session 回退常规 16:00 收市）。
+    用 ``mode="dimension"`` 读 STATIC 维表。
+    """
+    try:
+        ds = store.registry.get("us_is_early_close")
+    except Exception:
+        return frozenset()
+    time_col = getattr(ds, "time_column", None) or getattr(ds, "instrument_column", None)
+    if not time_col:
+        return frozenset()
+    try:
+        tbl = store.read_arrow(
+            "us_is_early_close", columns=[time_col], limit=50_000, mode="dimension"
+        )
+    except Exception:
+        return frozenset()
+    if tbl is None or tbl.num_rows == 0:
+        return frozenset()
+    out: set[_dt.date] = set()
+    for v in tbl.column(0).to_pylist():
+        d = _as_date(v)
+        if d is not None:
+            out.add(d)
+    return frozenset(out)
+
+
 def get_market_session(market: str | None) -> MarketSession | None:
-    """按市场名取 session 定义；无法识别返回 None（调用方用旧行为）。"""
+    """按市场名取 session 定义；无法识别返回 None（调用方用旧行为）。
+
+    美股 session 不在此处注入 early-close 数据（需要 store 才能读
+    ``us_is_early_close``）；需要时用 ``store.get_market_session(market)``
+    或 ``get_market_session_with_early_close(market, store)``。
+    """
     if not market:
         return None
     key = str(market).strip().lower()
@@ -175,8 +244,25 @@ def get_market_session(market: str | None) -> MarketSession | None:
     return None
 
 
+def get_market_session_with_early_close(
+    market: str | None, store: Any = None
+) -> MarketSession | None:
+    """#P0-8 取 session 并注入美股 early-close 日期（store 提供时）。"""
+    if not market:
+        return None
+    key = str(market).strip().lower()
+    if key in {"us", "usa", "am", "nyse"}:
+        dates = load_us_early_close_dates(store) if store is not None else frozenset()
+        return build_us_session(early_close_dates=dates)
+    return get_market_session(market)
+
+
 class MarketCalendar:
-    """一个市场的交易日历（本地日期，不含时区）。"""
+    """一个市场的交易日历（本地日期，不含时区）。
+
+    ``source`` 标记数据来源（registry / explicit / fallback），供缓存与
+    production fail-closed 判断（#P0-5）：fallback 日历不得被当作权威日历。
+    """
 
     def __init__(
         self,
@@ -185,14 +271,18 @@ class MarketCalendar:
         trading_days: Sequence[_dt.date] | None = None,
         timezone: str | None = None,
         holidays: set[_dt.date] | None = None,
+        source: str = "unknown",
+        session: "MarketSession | None" = None,
     ) -> None:
         self.market = market
         days = sorted(set(trading_days or ()))
         self.trading_days: tuple[_dt.date, ...] = tuple(days)
         self._day_set = set(days)
-        session = get_market_session(market)
+        # #P0-8 允许注入带 early-close 数据的 session（美股 half day）。
+        session = session if session is not None else get_market_session(market)
         self.session = session
         self.timezone = timezone or (session.timezone if session else None) or "UTC"
+        self.source = source
 
     @classmethod
     def from_business_days(
@@ -208,6 +298,7 @@ class MarketCalendar:
 
         **注意**：这只是兜底，春节/国庆等法定假日不在默认表里。真实部署请
         注入交易所日历（trading_days= 或 registry 的 ashare_calendar）。
+        ``source="fallback"``——不得被当作权威日历缓存（#P0-5）。
         """
         import pandas as pd
 
@@ -219,7 +310,7 @@ class MarketCalendar:
         days = [d.date() for d in bdays]
         if holidays:
             days = [d for d in days if d not in holidays]
-        return cls(market, trading_days=days)
+        return cls(market, trading_days=days, source="fallback")
 
     @property
     def has_data(self) -> bool:
@@ -250,20 +341,22 @@ class MarketCalendar:
     ) -> Any:
         """把 knowledge 时间编译成「数据真正可用」的时间。
 
-        - same_day          ：可用时间 = knowledge 本身
-        - next_trading_day  ：可用时间 = 下一交易日 00:00（knowledge 是日期时）
-                              或 下一交易日 session 起点（knowledge 是 datetime 时）
-        - session           ：按 session 边界：盘前 → 当日 session 起点；
-                              盘中/盘后 → 下一 session 起点
+        #P0-7 细粒度 availability：
+        - same_instant / same_day / effective_date_only ：可用 = knowledge 本身
+        - next_bar / after_close_next_open              ：下一交易日（严格）
+        - next_session_open / session                   ：按 session 边界：
+          盘前 → 当日 session 起点；盘中/盘后 → 下一 session 起点
+        - next_trading_day                              ：下一交易日 00:00
+          （knowledge 是日期时）或 下一交易日 session 起点（datetime 时）
         """
         av = str(availability or "same_day").lower()
-        if av == "same_day":
+        if av in {"same_day", "same_instant", "effective_date_only"}:
             return knowledge
         kdate = _as_date(knowledge)
         if kdate is None:
             # 无法识别的 knowledge 时间：回退严格 >=（保守可见）
             return knowledge
-        if av == "session":
+        if av in {"session", "next_session_open"}:
             # knowledge 携带时刻时按 session 边界判断
             if isinstance(knowledge, _dt.datetime):
                 t = knowledge.time()
@@ -330,6 +423,7 @@ class MarketCalendar:
         return {
             "market": self.market,
             "timezone": self.timezone,
+            "source": self.source,
             "trading_days": len(self.trading_days),
             "first": self.trading_days[0].isoformat() if self.trading_days else None,
             "last": self.trading_days[-1].isoformat() if self.trading_days else None,
@@ -359,7 +453,10 @@ def _combine(d: _dt.date, t: _dt.time) -> _dt.datetime:
 def _load_calendar_from_registry(store: Any, market: str) -> tuple[_dt.date, ...] | None:
     """尝试从 registry 的 ashare_calendar / us_calendar 数据集加载真实交易日。
 
-    失败（未注册 / 读不到 / 无数据）返回 None，调用方回退兜底日历。
+    #P0-4：日历文件可能包含自然日（周末/节假日）——必须按交易日标志过滤：
+    A股 ``IsTradeDay=True``，美股 ``is_trading_day=True``。用 ``mode="dimension"``
+    读 STATIC 维表，避免 production/strict 下被面板契约拒绝。
+    失败（未注册 / 读不到 / 无数据）返回 None，调用方决定回退或 fail-closed。
     """
     dataset = "ashare_calendar" if market == "ashare" else "us_calendar"
     try:
@@ -369,21 +466,36 @@ def _load_calendar_from_registry(store: Any, market: str) -> tuple[_dt.date, ...
     time_col = ds.time_column or ds.instrument_column
     if not time_col:
         return None
+    schema = dict(getattr(ds, "schema", None) or {})
+    flag_col = None
+    for cand in ("IsTradeDay", "is_trading_day"):
+        if cand in schema:
+            flag_col = cand
+            break
+    cols = [time_col] + ([flag_col] if flag_col else [])
     try:
-        tbl = store.read_arrow(dataset, columns=[time_col], limit=100_000)
+        tbl = store.read_arrow(dataset, columns=cols, limit=100_000, mode="dimension")
     except Exception:
         return None
     if tbl is None or tbl.num_rows == 0:
         return None
-    days: list[_dt.date] = []
-    for v in tbl.column(0).to_pylist():
-        if v is None:
-            continue
-        try:
-            days.append(_as_date(v))  # type: ignore[arg-type]
-        except Exception:
-            continue
+    time_vals = tbl.column(0).to_pylist()
+    if flag_col:
+        flag_vals = tbl.column(1).to_pylist()
+        days = [
+            _as_date(v)
+            for v, flag in zip(time_vals, flag_vals)
+            if flag is True and v is not None
+        ]
+    else:
+        days = [_as_date(v) for v in time_vals if v is not None]
     return [d for d in days if d is not None]
+
+
+def _strict_calendar_mode() -> bool:
+    from data_access.read.query_budget import is_strict_semantics
+
+    return is_strict_semantics()
 
 
 # ---- 进程内单例 ----
@@ -403,22 +515,44 @@ def get_market_calendar(
 
     优先使用显式 ``trading_days``；否则尝试从 ``store`` 的日历数据集加载；
     都没有时回退纯工作日日历（含显式 ``holidays``）。
+
+    #P0-5：fallback（business-day）日历**不得污染** authoritative 缓存键——
+    缓存里出现 fallback 后，后续带真实 store 的调用可能误命中。fallback 缓存到
+    独立的 ``{market}::fallback`` 键。production/strict 下真实日历不可用
+    直接 fail-closed，不静默退回 business-day。
     """
     key = str(market).strip().lower()
-    if not force_reload and not trading_days and key in _calendars:
-        return _calendars[key]
+    if not force_reload and not trading_days:
+        cached = _calendars.get(key)
+        if cached is not None:
+            return cached
     if trading_days:
-        cal = MarketCalendar(key, trading_days=trading_days)
+        cal = MarketCalendar(key, trading_days=trading_days, source="explicit")
         _calendars[key] = cal
         return cal
-    loaded = None
     if store is not None:
         loaded = _load_calendar_from_registry(store, key)
-    if loaded:
-        cal = MarketCalendar(key, trading_days=loaded)
-    else:
-        cal = MarketCalendar.from_business_days(key, holidays=holidays)
-    _calendars[key] = cal
+        if loaded:
+            cal = MarketCalendar(
+                key,
+                trading_days=loaded,
+                source="registry",
+                session=get_market_session_with_early_close(key, store),
+            )
+            _calendars[key] = cal
+            return cal
+    if _strict_calendar_mode():
+        raise ValidationError(
+            f"market={key!r} 真实交易日历不可用（registry 无 {key}_calendar 或读不到），"
+            "production/strict fail-closed：禁止静默退回 business-day 日历。"
+        )
+    # fallback：独立缓存键，绝不当权威日历
+    fkey = f"{key}::fallback"
+    cached = _calendars.get(fkey)
+    if cached is not None:
+        return cached
+    cal = MarketCalendar.from_business_days(key, holidays=holidays)
+    _calendars[fkey] = cal
     return cal
 
 
@@ -432,7 +566,9 @@ __all__ = [
     "MarketSession",
     "MarketCalendar",
     "get_market_session",
+    "get_market_session_with_early_close",
     "get_market_calendar",
+    "load_us_early_close_dates",
     "build_ashare_session",
     "build_us_session",
     "reset_calendars",

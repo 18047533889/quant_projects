@@ -17,13 +17,13 @@ data_access.registry —— 数据集登记表
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-import yaml
-
 from data_access.core.exceptions import ValidationError
+from .yaml_loader import strict_yaml_load
 from .layout_policy import LayoutPolicy, parse_layout_policy
 from .params_validation import ParamSpec, parse_params_schema, validate_params
 from data_access.read.query_budget import DatasetQueryPolicy, parse_dataset_query_policy
@@ -71,7 +71,7 @@ class StaticDataset(DatasetBase):
     # PR8：可选 schema，格式 {列名: 类型字符串}，首访自检用。空 = 不校验。
     schema: Mapping[str, str] = field(default_factory=dict)
     query_policy: DatasetQueryPolicy = field(default_factory=DatasetQueryPolicy)
-    partition_columns: tuple[str, ...] = field(default_factory=lambda: ("year",))
+    partition_columns: tuple[str, ...] = field(default_factory=tuple)
     storage_format: str = "long"
     layout_policy: LayoutPolicy | None = None
     # ---- 通用 Data IO Layer 新增字段（全部带默认值，向后兼容） ----
@@ -82,6 +82,7 @@ class StaticDataset(DatasetBase):
     semantic: str | None = None                                   # panel/event/factor/...
     engine: dict[str, Any] | None = None                          # 优先/兜底执行引擎
     schema_version: str | None = None                             # #36 schema 版本号
+    authorized_root: Path | None = None                           # #P0-49 显式授权根
 
     @property
     def kind(self) -> str:
@@ -114,7 +115,7 @@ class ParametricDataset(DatasetBase):
     # PR8：可选 schema，格式 {列名: 类型字符串}，首访自检用。空 = 不校验。
     schema: Mapping[str, str] = field(default_factory=dict)
     query_policy: DatasetQueryPolicy = field(default_factory=DatasetQueryPolicy)
-    partition_columns: tuple[str, ...] = field(default_factory=lambda: ("year",))
+    partition_columns: tuple[str, ...] = field(default_factory=tuple)
     storage_format: str = "long"
     layout_policy: LayoutPolicy | None = None
     # ---- 通用 Data IO Layer 新增字段（全部带默认值，向后兼容） ----
@@ -125,6 +126,7 @@ class ParametricDataset(DatasetBase):
     semantic: str | None = None                                   # panel/event/factor/...
     engine: dict[str, Any] | None = None                          # 优先/兜底执行引擎
     schema_version: str | None = None                             # #36 schema 版本号
+    authorized_root: Path | None = None                           # #P0-49 显式授权根
 
     @property
     def kind(self) -> str:
@@ -173,8 +175,13 @@ def _strict_bool(value: Any, *, key: str, context: str) -> bool:
 
 
 def _parse_partition_columns(raw: Any, *, context: str) -> tuple[str, ...]:
+    """#P0-53 默认/空 → ``()``，不再用 ``("year",)``。
+
+    之前默认 ``("year",)`` 会让 schema checker 把 ``year`` 当分区列豁免 missing——
+    普通非 hive 数据集真声明了 ``year`` 列、但物理文件丢了 ``year`` 会被错误豁免。
+    """
     if raw is None:
-        return ("year",)
+        return ()
     if isinstance(raw, str):
         raw = [raw]
     if not isinstance(raw, (list, tuple)):
@@ -182,7 +189,7 @@ def _parse_partition_columns(raw: Any, *, context: str) -> tuple[str, ...]:
             f"{context}: partition_columns 必须是字符串列表，收到 {type(raw).__name__}"
         )
     cols = tuple(str(c) for c in raw if str(c))
-    return cols or ("year",)
+    return cols
 
 
 def _parse_dataset(name: str, raw: dict) -> Dataset:
@@ -418,10 +425,11 @@ def load_registry(config_path: str | Path | None = None) -> DatasetRegistry:
         raise ValidationError(f"datasets.yaml 不存在：{config_path}")
 
     with config_path.open("r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
+        raw = strict_yaml_load(f.read(), context=str(config_path)) or {}
 
     if not isinstance(raw, dict):
         raise ValidationError(f"{config_path}: 顶层必须是 mapping（数据集名 → 配置）")
+    _assert_no_unresolved_env(raw, context=str(config_path))
 
     datasets = {
         name: _parse_dataset(name, body)

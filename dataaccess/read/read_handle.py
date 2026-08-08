@@ -37,11 +37,17 @@ class ReadHandle:
         stream: Iterator[pa.RecordBatch] | None = None,
         lazy: Any = None,
         batch_size: int = 100_000,
+        budget: Any = None,
+        govern_lazy: bool = False,
     ) -> None:
         self.snapshot = snapshot
         self.stats = stats
         self.lineage = lineage
         self._batch_size = batch_size
+        # #P0-21 governed lazy：production 不暴露 raw LazyFrame，collect 必须走
+        # 预算/deadline 治理；``to_lazy()`` 在 governed 时拒绝裸 LazyFrame。
+        self._budget = budget
+        self._govern_lazy = bool(govern_lazy)
         self._polars_df: Any = None
         self._pandas_df: Any = None
         if table is not None:
@@ -56,6 +62,12 @@ class ReadHandle:
         else:
             self._source = None
             self._kind = "none"
+
+    def _collect_lazy(self) -> Any:
+        """#P0-21 governed lazy collect：带 QueryBudget 的受控终点。"""
+        from data_access.read.query_budget import collect_polars_with_budget
+
+        return collect_polars_with_budget(self._source, query_budget=self._budget)
 
     # ---- 基本信息 ----
 
@@ -90,9 +102,10 @@ class ReadHandle:
             self._kind = "table"
             return self._source
         if self._kind == "lazy":
-            import polars as pl
-
-            table = self._source.collect().to_arrow()
+            if self._govern_lazy:
+                table = self._collect_lazy().to_arrow()
+            else:
+                table = self._source.collect().to_arrow()
             self._source = table
             self._kind = "table"
             return table
@@ -112,7 +125,10 @@ class ReadHandle:
 
         if self._polars_df is None:
             if self._kind == "lazy":
-                self._polars_df = self._source.collect()
+                if self._govern_lazy:
+                    self._polars_df = self._collect_lazy()
+                else:
+                    self._polars_df = self._source.collect()
             else:
                 self._polars_df = pl.from_arrow(self.to_arrow())
         return self._polars_df
@@ -120,6 +136,13 @@ class ReadHandle:
     def to_lazy(self):
         import polars as pl
 
+        if self._govern_lazy:
+            # #P0-21 production 不暴露 raw LazyFrame：collect 会绕过 budget/
+            # deadline 治理。要裸 LazyFrame 请显式 unsafe_scan_polars()。
+            raise RuntimeError(
+                "governed lazy handle 不暴露 raw LazyFrame（production fail-closed）；"
+                "请用 to_arrow()/to_polars()/stream() 受控终点。"
+            )
         if self._kind == "lazy":
             return self._source
         return self.to_polars().lazy()
@@ -130,6 +153,12 @@ class ReadHandle:
             yield from self._source
             return
         if self._kind == "lazy":
+            if self._govern_lazy:
+                for batch in self._collect_lazy().to_batches(
+                    max_chunksize=batch_size or self._batch_size
+                ):
+                    yield batch
+                return
             for batch in self._source.collect_stream():
                 yield batch
             return

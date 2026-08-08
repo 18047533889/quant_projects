@@ -137,6 +137,33 @@ def finalize_registration_audit() -> None:
         unique_signatures = {tuple(value) for value in signatures.values() if value}
         catalog["backend_signature_consistent"] = len(unique_signatures) <= 1
 
+    # R4-100: positional-arity gate for ALL canonicals.  The pandas_numpy
+    # backend is the semantic reference; any other backend that accepts FEWER
+    # positional parameters would silently mis-read a positional call that is
+    # valid against the reference (e.g. KAMA(close, 10, 2, 30) once broke the
+    # polars ``(close, window)`` backend).  Backends may EXTEND the contract
+    # with defaulted trailing params, never shrink it.  Variable NAMES are not
+    # compared — numerator/denominator vs float_shares/total_shares is fine when
+    # arity and roles match (audit: "不要只比较参数变量名字").
+    for canonical in sorted(OperatorRegistry._operators):
+        signatures = OperatorRegistry._catalog.get(canonical, {}).get(
+            "backend_signatures", {}
+        )
+        pandas_params = signatures.get("pandas_numpy")
+        if not pandas_params:
+            continue
+        for backend, params in signatures.items():
+            if backend == "pandas_numpy" or not params:
+                continue
+            if len(params) < len(pandas_params):
+                raise RuntimeError(
+                    f"backend signature arity mismatch for {canonical}/{backend}: "
+                    f"{len(params)} positional params < pandas reference "
+                    f"{len(pandas_params)} ({tuple(params)} vs {tuple(pandas_params)}). "
+                    "A positional call valid against the reference would mis-read "
+                    "or break this backend (R4-100)."
+                )
+
     for canonical, expected in _FISCAL_SIGNATURES.items():
         implementations = OperatorRegistry._operators.get(canonical, {})
         if not implementations:

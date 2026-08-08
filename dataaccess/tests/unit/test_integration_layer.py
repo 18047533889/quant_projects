@@ -327,13 +327,14 @@ def test_read_joined_right_table_instrument_filter_pushdown(tree, monkeypatch):
 
     orig = store._prepare_dataset_read
 
-    def spy(dsobj, *, time_range, params, instrument_filter=None):
+    def spy(dsobj, *, time_range, params, instrument_filter=None, **kwargs):
         captured[dsobj.name] = instrument_filter
         return orig(
             dsobj,
             time_range=time_range,
             params=params,
             instrument_filter=instrument_filter,
+            **kwargs,  # #P0-9 time_column 时钟参数
         )
 
     monkeypatch.setattr(store, "_prepare_dataset_read", spy)

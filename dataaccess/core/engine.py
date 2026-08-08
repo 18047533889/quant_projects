@@ -42,59 +42,94 @@ logger = logging.getLogger("data_access.engine")
 
 
 class _DeadlineConnectionPool:
-    """隔离连接池（#33）：deadline 查询复用连接，避免每查询 ``connect(":memory:")``。
+    """隔离连接池（#33 + #P0-6..8）：deadline 查询复用连接，避免每查询 ``connect``。
 
-    每次 acquire 的查询都可被 ``interrupt()`` 单查询取消；连接归还池子后复用
-    （保住 httpfs 配置 / metadata cache / 启动成本）。池满时溢出连接临时借用、
-    归还即关。线程安全。
+    #P0-8 **真正限并发**：``_active + len(_idle)`` 上限为 ``_max``，达上限后
+    ``acquire`` 在 admission deadline 内等待（``Condition``），超时抛
+    ``ResourceBudgetExceeded``——不再无限溢出创建连接（每个连接都占
+    threads/memory_limit，overflow 会放大并发内存峰值）。
+
+    #P0-7 **interrupt/timeout 连接必须 discard**：``release(healthy=False)``
+    直接关闭连接，不回到 idle 队列——被 interrupt 的 DuckDB 连接没有证明回到
+    干净可复用状态前不能重新进池。
+
+    #P0-10 关闭后 acquire → ``EngineClosedError``。
     """
 
     def __init__(self, size: int = 4) -> None:
         self._max = max(1, size)
-        self._lock = threading.Lock()
+        self._cond = threading.Condition()
         self._idle: list[duckdb.DuckDBPyConnection] = []
-        self._created = 0
-        self._overflow_ids: dict[int, bool] = {}
+        self._active = 0
+        self._closed = False
 
-    def acquire(self, config: Any) -> "duckdb.DuckDBPyConnection":
-        with self._lock:
-            if self._idle:
-                return self._idle.pop()
-            if self._created < self._max:
-                conn = duckdb.connect(":memory:")
-                self._created += 1
-                overflow = False
-            else:
-                conn = duckdb.connect(":memory:")
-                overflow = True
+    def acquire(self, config: Any, *, wait_seconds: float = 5.0) -> "duckdb.DuckDBPyConnection":
+        from data_access.core.exceptions import EngineClosedError, ResourceBudgetExceeded
+
+        with self._cond:
+            if self._closed:
+                raise EngineClosedError("deadline connection pool 已关闭")
+            deadline = time.monotonic() + max(0.0, wait_seconds)
+            while True:
+                if self._idle:
+                    conn = self._idle.pop()
+                    self._active += 1
+                    break
+                if self._active + len(self._idle) < self._max:
+                    conn = duckdb.connect(":memory:")
+                    self._active += 1
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ResourceBudgetExceeded(
+                        f"Deadline connection pool 已达并发上限 {self._max}，"
+                        f"等待 {wait_seconds:.1f}s 后仍无空闲连接。"
+                        "请降低并发或提高查询 deadline。"
+                    )
+                self._cond.wait(min(remaining, 0.1))
         apply_pragmas(conn, config)
-        # DuckDB 连接是 C 扩展对象，不支持属性赋值 → 用内部 dict 按 id 跟踪
-        self._overflow_ids[id(conn)] = overflow
         return conn
 
-    def release(self, conn: "duckdb.DuckDBPyConnection") -> None:
-        overflow = bool(self._overflow_ids.pop(id(conn), False))
-        with self._lock:
-            if overflow or len(self._idle) >= self._max:
+    def release(self, conn: "duckdb.DuckDBPyConnection", *, healthy: bool = True) -> None:
+        """归还连接。``healthy=False``（interrupt/timeout/错误）→ 直接丢弃不重用。"""
+        with self._cond:
+            if self._closed:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                return
+            if not healthy:
+                try:
+                    conn.close()
+                except Exception:
+                    logger.debug("deadline pool: 丢弃 unhealthy 连接 close 失败", exc_info=True)
+                self._active -= 1
+                self._cond.notify()
+                return
+            if len(self._idle) >= self._max:
                 try:
                     conn.close()
                 except Exception:
                     logger.debug("deadline pool: conn.close 失败", exc_info=True)
-                if overflow and self._created > self._max:
-                    self._created -= 1
+                self._active -= 1
+                self._cond.notify()
                 return
             self._idle.append(conn)
+            self._active -= 1
+            self._cond.notify()
 
     def close(self) -> None:
-        with self._lock:
+        with self._cond:
+            self._closed = True
             for conn in self._idle:
                 try:
                     conn.close()
                 except Exception:
                     pass
             self._idle.clear()
-            self._overflow_ids.clear()
-            self._created = 0
+            self._active = 0
+            self._cond.notify_all()
 
 
 class DuckDBEngine:
@@ -210,6 +245,7 @@ class DuckDBEngine:
     ) -> "ManagedBatchReader":
         from data_access.read.managed_reader import ManagedBatchReader
 
+        setup_start = time.perf_counter()
         cursor = self._conn.cursor()
         try:
             if params is not None:
@@ -220,7 +256,15 @@ class DuckDBEngine:
                 reader = result.to_arrow_reader(batch_size)
             else:
                 reader = result.fetch_record_batch(batch_size)
-            return ManagedBatchReader(reader, cursor=cursor)
+            setup_ms = (time.perf_counter() - setup_start) * 1000.0
+            # #P1-7 setup_ms 只记 reader 构建耗时；真实 stream lifetime 由 reader
+            # close 时上报（含 first_batch / stream_duration）。
+            return ManagedBatchReader(
+                reader,
+                cursor=cursor,
+                telemetry_fn=self._record_reader_stream,
+                setup_ms=setup_ms,
+            )
         except Exception:
             cursor.close()
             raise
@@ -301,6 +345,43 @@ class DuckDBEngine:
                 op="arrow",
             )
 
+    def _requires_remote_storage(self, sql: str, params: Sequence[Any] | None) -> bool:
+        """#P0-11 判断本次执行是否需要 S3 配置。
+
+        **不再只 sniff SQL 字符串**：远程 URI 常常在绑定 params 里（``?`` 传
+        ``read_parquet(?)`` 的路径）。这里扫 sql + bound URI params。完整修复是
+        PhysicalPlan 显式携带 ``requires_remote_storage``（本轮短期方案）。
+        """
+        if "s3://" in sql:
+            return True
+        if params:
+            for p in params:
+                if isinstance(p, str) and "s3://" in p:
+                    return True
+                if isinstance(p, (list, tuple)) and any(
+                    isinstance(x, str) and "s3://" in x for x in p
+                ):
+                    return True
+        return False
+
+    def _configure_isolated_s3_if_needed(self, conn, sql: str, params: Sequence[Any] | None) -> None:
+        from data_access.cos.s3_duckdb import configure_fresh_duckdb_s3
+
+        if self._requires_remote_storage(sql, params):
+            configure_fresh_duckdb_s3(conn)
+
+    def _record_reader_stream(self, metrics: dict[str, Any]) -> None:
+        """#P1-7 流式 reader 真实生命周期上报（close 时调用）。"""
+        try:
+            record_query(
+                elapsed_ms=float(metrics.get("total_duration_ms", 0.0) or 0.0),
+                sql=f"reader_stream rows={metrics.get('rows')} "
+                    f"ttf={metrics.get('time_to_first_batch_ms')}",
+                op="reader_stream",
+            )
+        except Exception:  # noqa: BLE001 — telemetry 失败不能影响主路径
+            pass
+
     def _execute_isolated_with_deadline(
         self,
         sql: str,
@@ -311,15 +392,25 @@ class DuckDBEngine:
         """独立连接池 + watchdog：超时 interrupt，避免拖死共享连接。
 
         #33 连接来自 ``_deadline_pool``（复用 warm 连接），查询结束归还。
+
+        #P0-9 deadline 用 **absolute monotonic**，查询正常返回后**再检查**一次
+        timed_out / absolute deadline——watchdog 已触发但查询恰好正常结束时，丢弃
+        结果抛 DeadlineExceeded（否则会返回「超时却成功」的错结果）。
+
+        #P0-7 超时 / interrupt / 任何异常路径连接标记 unhealthy → 直接丢弃，
+        不重新进池。
         """
         from data_access.core.exceptions import DeadlineExceeded
 
         deadline_sec = max(0.001, deadline_ms / 1000.0)
+        absolute_deadline = time.monotonic() + deadline_sec
         conn = self._deadline_pool.acquire(self._config)
         timed_out = threading.Event()
+        healthy = True
 
         def _watchdog() -> None:
-            if not timed_out.wait(deadline_sec):
+            wait = absolute_deadline - time.monotonic()
+            if wait > 0 and not timed_out.wait(wait):
                 timed_out.set()
                 try:
                     conn.interrupt()
@@ -329,30 +420,38 @@ class DuckDBEngine:
         thread = threading.Thread(target=_watchdog, daemon=True)
         thread.start()
         try:
-            if "s3://" in sql:
-                from data_access.cos.s3_duckdb import configure_fresh_duckdb_s3
-
-                configure_fresh_duckdb_s3(conn)
+            self._configure_isolated_s3_if_needed(conn, sql, params)
             if params is not None:
                 result = conn.execute(sql, list(params))
             else:
                 result = conn.execute(sql)
-            return (
+            table = (
                 result.to_arrow_table()
                 if hasattr(result, "to_arrow_table")
                 else result.fetch_arrow_table()
             )
+            # #P0-9 deadline race：超时标记已触发但查询正常返回 → 丢弃结果 fail。
+            if timed_out.is_set() or time.monotonic() >= absolute_deadline:
+                healthy = False
+                raise DeadlineExceeded(
+                    f"查询超过 deadline={deadline_ms:.0f}ms 被取消。"
+                    "请缩小 time_range / instrument_filter / 指定 columns，"
+                    "或提高 query_budget.max_elapsed_ms。"
+                )
+            return table
         except duckdb.Error as exc:
             if timed_out.is_set():
+                healthy = False
                 raise DeadlineExceeded(
                     f"查询超过 deadline={deadline_ms:.0f}ms 被取消。"
                     "请缩小 time_range / instrument_filter / 指定 columns，"
                     "或提高 query_budget.max_elapsed_ms。"
                 ) from exc
+            healthy = False
             raise
         finally:
             timed_out.set()
-            self._deadline_pool.release(conn)
+            self._deadline_pool.release(conn, healthy=healthy)
 
     def _execute_isolated_reader_with_deadline(
         self,
@@ -363,17 +462,25 @@ class DuckDBEngine:
         deadline_ms: float,
     ) -> "ManagedBatchReader":
         """流式读 + deadline（#32）：独立池连接 + watchdog，ManagedBatchReader
-        close 时取消 watchdog 并归还连接。"""
+        close 时取消 watchdog 并归还连接。
+
+        #P0-6 pooled 连接**不**作为 ``cursor`` 交给 reader（reader.close() 会关
+        cursor）——传 ``cursor=None``，归还完全由 ``on_close`` 负责（reader 关闭
+        本身不会碰连接）。health 由 reader 的 ``had_error`` + timed_out 判定：
+        interrupt / 异常 → unhealthy → 连接丢弃不重用（#P0-7）。
+        """
         from data_access.core.exceptions import DeadlineExceeded
         from data_access.read.managed_reader import ManagedBatchReader
 
         deadline_sec = max(0.001, deadline_ms / 1000.0)
+        absolute_deadline = time.monotonic() + deadline_sec
         conn = self._deadline_pool.acquire(self._config)
         timed_out = threading.Event()
         finished = threading.Event()
 
         def _watchdog() -> None:
-            if not finished.wait(deadline_sec):
+            wait = absolute_deadline - time.monotonic()
+            if wait > 0 and not finished.wait(wait):
                 timed_out.set()
                 try:
                     conn.interrupt()
@@ -383,15 +490,21 @@ class DuckDBEngine:
         thread = threading.Thread(target=_watchdog, daemon=True)
         thread.start()
 
-        def _on_close() -> None:
+        def _on_close(reader: ManagedBatchReader) -> None:
             finished.set()
-            self._deadline_pool.release(conn)
+            unhealthy = timed_out.is_set() or getattr(reader, "had_error", False)
+            self._deadline_pool.release(conn, healthy=not unhealthy)
 
+        def _on_before_read() -> None:
+            # deadline 触发后下一次 read 立即失败，不返回「超时却成功」的剩余 batch。
+            if timed_out.is_set():
+                raise DeadlineExceeded(
+                    f"流式查询超过 deadline={deadline_ms:.0f}ms 被取消。"
+                )
+
+        setup_start = time.perf_counter()
         try:
-            if "s3://" in sql:
-                from data_access.cos.s3_duckdb import configure_fresh_duckdb_s3
-
-                configure_fresh_duckdb_s3(conn)
+            self._configure_isolated_s3_if_needed(conn, sql, params)
             if params is not None:
                 result = conn.execute(sql, list(params))
             else:
@@ -400,10 +513,18 @@ class DuckDBEngine:
                 reader = result.to_arrow_reader(batch_size)
             else:
                 reader = result.fetch_record_batch(batch_size)
-            return ManagedBatchReader(reader, cursor=conn, on_close=_on_close)
+            setup_ms = (time.perf_counter() - setup_start) * 1000.0
+            return ManagedBatchReader(
+                reader,
+                cursor=None,  # #P0-6 pooled 连接绝不交给 reader.close
+                on_close=_on_close,
+                on_before_read=_on_before_read,
+                telemetry_fn=self._record_reader_stream,
+                setup_ms=setup_ms,
+            )
         except duckdb.Error as exc:
             finished.set()
-            self._deadline_pool.release(conn)
+            self._deadline_pool.release(conn, healthy=False)
             if timed_out.is_set():
                 raise DeadlineExceeded(
                     f"流式查询超过 deadline={deadline_ms:.0f}ms 被取消。"
@@ -411,7 +532,7 @@ class DuckDBEngine:
             raise
         except Exception:
             finished.set()
-            self._deadline_pool.release(conn)
+            self._deadline_pool.release(conn, healthy=False)
             raise
 
     def execute_reader(
@@ -483,17 +604,26 @@ class DuckDBEngine:
         finally:
             conn.close()
 
-    @staticmethod
     def _configure_scoped_s3_if_needed(
+        self,
         conn,
         register_specs: Sequence[tuple[str, str]],
+        params: Sequence[Any] | None = None,
     ) -> None:
-        """scoped 连接是全新 :memory:，共享 engine 上的 S3 配置不会继承。"""
-        if not any("s3://" in inlined for _, inlined in register_specs):
-            return
-        from data_access.cos.s3_duckdb import configure_fresh_duckdb_s3
+        """scoped 连接是全新 :memory:，共享 engine 上的 S3 配置不会继承。
 
-        configure_fresh_duckdb_s3(conn)
+        #P0-11 不再只 sniff 视图内联 SQL——用户绑定 params（``?`` 路径）含
+        ``s3://`` 同样触发 S3 配置。
+        """
+        if any("s3://" in inlined for _, inlined in register_specs):
+            from data_access.cos.s3_duckdb import configure_fresh_duckdb_s3
+
+            configure_fresh_duckdb_s3(conn)
+            return
+        if params and self._requires_remote_storage("", params):
+            from data_access.cos.s3_duckdb import configure_fresh_duckdb_s3
+
+            configure_fresh_duckdb_s3(conn)
 
     def execute_scoped_sql_arrow(
         self,
@@ -528,7 +658,7 @@ class DuckDBEngine:
             thread.start()
         try:
             apply_pragmas(conn, self._config)
-            self._configure_scoped_s3_if_needed(conn, register_specs)
+            self._configure_scoped_s3_if_needed(conn, register_specs, params)
             for view_name, inlined_sql in register_specs:
                 conn.execute(f"CREATE TEMP VIEW {view_name} AS {inlined_sql}")
             if params is not None:
@@ -576,7 +706,7 @@ class DuckDBEngine:
             conn = duckdb.connect(":memory:")
             try:
                 apply_pragmas(conn, self._config)
-                self._configure_scoped_s3_if_needed(conn, register_specs)
+                self._configure_scoped_s3_if_needed(conn, register_specs, params)
                 for view_name, inlined_sql in register_specs:
                     conn.execute(f"CREATE TEMP VIEW {view_name} AS {inlined_sql}")
                 if params is not None:
@@ -587,8 +717,9 @@ class DuckDBEngine:
                     reader = rel.to_arrow_reader(batch_size)
                 else:
                     reader = rel.fetch_record_batch(batch_size)
-                # ManagedBatchReader 显式托管 reader + conn 生命周期
-                mbr = ManagedBatchReader(reader, on_close=conn.close)
+                # ManagedBatchReader 显式托管 reader + conn 生命周期（非 pooled，
+                # on_close=conn.close 直接关）
+                mbr = ManagedBatchReader(reader, on_close=lambda _r: conn.close())
                 try:
                     for batch in mbr:
                         yield batch
@@ -631,7 +762,9 @@ class DuckDBEngine:
             pass
 
     def close(self) -> None:
-        """显式关闭。一般不用调，进程退出时 Python 会自动回收。"""
+        """#P0-10 显式关闭：先关 deadline 连接池（idle 连接一起 shutdown），
+        再关共享连接。关闭后 acquire/execute → EngineClosedError fail-fast。"""
+        self._deadline_pool.close()
         try:
             self._conn.close()
         except duckdb.Error:

@@ -166,16 +166,58 @@ def _strict_read_mode() -> bool:
     return os.environ.get("DATA_ACCESS_STRICT_READ", "").lower() in {"1", "true", "yes"}
 
 
+def is_strict_semantics() -> bool:
+    """#P0-11 唯一 fail-closed 语义开关：production OR strict_read。
+
+    所有 required/allowed filter / PIT / schema / cardinality / snapshot 的
+    fail-closed 判定都用它，不再有的地方只查 ``_production_mode()``、有的地方
+    查 ``_production_mode() or _strict_read_mode()`` 两套漂移。
+    """
+    return _production_mode() or _strict_read_mode()
+
+
+# 生产/严格读模式的**最低保障线**（#P0-14）：显式传入的宽松 QueryBudget 永远不能
+# 把 production 默认放得更松——生产基线是 floor，显式 budget 只能在其上收紧。
+_PRODUCTION_FLOOR = QueryBudget(
+    max_rows=50_000_000,
+    require_columns=True,
+    require_time_range=False,
+)
+
+
+def merge_production_floor(budget: QueryBudget) -> QueryBudget:
+    """把显式 budget 与生产/严格读 floor 合并，**取更严**（fail-closed）。"""
+    return QueryBudget(
+        max_rows=_tighter_int(budget.max_rows, _PRODUCTION_FLOOR.max_rows),
+        max_result_bytes=_tighter_int(
+            budget.max_result_bytes, _PRODUCTION_FLOOR.max_result_bytes
+        ),
+        max_elapsed_ms=_tighter_float(
+            budget.max_elapsed_ms, _PRODUCTION_FLOOR.max_elapsed_ms
+        ),
+        max_scan_files=_tighter_int(
+            budget.max_scan_files, _PRODUCTION_FLOOR.max_scan_files
+        ),
+        require_columns=budget.require_columns or _PRODUCTION_FLOOR.require_columns,
+        require_time_range=(
+            budget.require_time_range or _PRODUCTION_FLOOR.require_time_range
+        ),
+    )
+
+
 def resolve_query_budget(budget: QueryBudget | None = None) -> QueryBudget:
-    """解析有效预算；显式传入优先，否则生产/严格读模式默认更严。"""
+    """解析有效预算。
+
+    #P0-14 显式传入的 budget 在 production/strict 下**不能反向放宽**默认限制：
+    ``QueryBudget(max_rows=None, require_columns=False)`` 会把生产默认 50m /
+    require_columns 直接取消——现在显式 budget 先与 production floor 合并取更严。
+    只有非生产/非 strict 模式下才原样信任显式 budget。
+    """
+    strict = _production_mode() or _strict_read_mode()
     if budget is not None:
-        return budget
-    if _production_mode() or _strict_read_mode():
-        return QueryBudget(
-            max_rows=50_000_000,
-            require_columns=True,
-            require_time_range=False,
-        )
+        return merge_production_floor(budget) if strict else budget
+    if strict:
+        return _PRODUCTION_FLOOR
     default_max_rows = os.environ.get("DATA_ACCESS_DEFAULT_MAX_ROWS")
     if default_max_rows is not None and str(default_max_rows).strip():
         try:

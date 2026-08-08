@@ -61,6 +61,11 @@ def _episode_map(x: np.ndarray, state: np.ndarray):
     ``|x_k - x_{k-1}|`` from the entry row) and ``entry`` (episode entry index;
     ``-1`` outside any episode).  Rows that are breaks, have a non-finite price,
     or belong to an episode whose entry price is non-finite are ``NaN``/``-1``.
+
+    A non-finite price also *breaks* the episode: the row is unmeasurable (NaN)
+    and the next finite price starts a fresh episode — an episode never
+    continues across a data gap, so MFE/MAE/path can not span missing prices
+    (R4-06).
     """
     n = len(x)
     sign = np.zeros(n, dtype=np.int8)
@@ -91,7 +96,10 @@ def _episode_map(x: np.ndarray, state: np.ndarray):
             last_fin = np.nan
             broken = False
             continue
-        if sign[t] != cur_dir:
+        if sign[t] != cur_dir or broken:
+            # New direction, or the previous row broke the episode (non-finite
+            # price): start a fresh episode here instead of continuing across a
+            # data gap (R4-06).
             cur_dir = sign[t]
             cur_entry = t
             run_max = 0.0
@@ -101,11 +109,17 @@ def _episode_map(x: np.ndarray, state: np.ndarray):
             broken = not np.isfinite(x[t])
         e = cur_entry
         entry[t] = e
-        if broken or not np.isfinite(x[t]):
+        if not np.isfinite(x[t]):
+            # Non-finite price at the entry or mid-episode: the row is NaN and
+            # the episode is broken — the next finite price restarts it.
+            broken = True
             continue
-        # Value-contiguous arc length: bridge interior gaps with the segment to
-        # the last finite price so ``path >= |x_t - x_e|`` always (triangle
-        # inequality) and efficiency can never exceed 1 — P0-16.
+        if broken:
+            continue
+        # Value-contiguous arc length: since a non-finite price breaks the
+        # episode, every interior step here is a consecutive finite price, so
+        # ``path >= |x_t - x_e|`` always (triangle inequality) and efficiency
+        # can never exceed 1 — P0-16.
         if t > e and np.isfinite(last_fin):
             cum_path += abs(x[t] - last_fin)
         last_fin = x[t]

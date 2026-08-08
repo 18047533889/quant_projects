@@ -675,6 +675,19 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_recurrence_divergence", "delay"): 1,
     ("ts_recurrence_rate", "delay"): 1,
     ("ts_recurrence_trapping_time", "delay"): 1,
+    # 2026-08-08 Gemini V2 round: "delay" collides with the concurrent
+    # panel-parameter name, so force a scalar for the RQA / DMD embeddings;
+    # research ops with a hard minimum window need a fixture window override.
+    ("ts_recurrence_determinism", "delay"): 1,
+    ("ts_recurrence_laminarity", "delay"): 1,
+    ("ts_recurrence_mean_diagonal_length", "delay"): 1,
+    ("ts_recurrence_longest_vertical_length", "delay"): 1,
+    ("ts_dmd_dominant_growth_rate", "delay"): 1,
+    ("ts_dmd_dominant_frequency", "delay"): 1,
+    ("ts_dmd_mode_concentration", "delay"): 1,
+    ("ts_bds_statistic", "window"): 60,
+    ("ts_kernel_granger_score", "window"): 60,
+    ("ts_residualized_hsic", "window"): 60,
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
@@ -735,6 +748,7 @@ _MINUTE_PANEL_PARAMS: dict[str, str] = {
     "vwap": "minute_vwap",
     "return": "minute_ret",
     "returns": "minute_ret",
+    "ret": "minute_ret",
     "x": "minute_close",
     # 2026-08 order-flow family inputs.
     "flow": "minute_ret",

@@ -30,6 +30,36 @@ from typing import Any, Mapping, Sequence
 
 
 @dataclass
+class TemporalAxes:
+    """#9 一个数据集的多根时间轴（#P0-9 多时钟）。
+
+    真实数据往往不止一根时间列：
+    - ``partition_time``  物理分区/排序时间（registry ``time_column``，manifest 统计基于它）
+    - ``event_time``      事件发生时间
+    - ``knowledge_time``  数据可见时间（PIT availability 基准，filing/PubDate）
+    - ``effective_time``  数据生效时间（如 Dividend/Split 的 ex_date）
+    - ``period_time``     会计期间列（财务报告期）
+    - ``decision_time``   决策/回测时钟（join 的 anchor 时间）
+    - ``storage_timezone`` / ``semantic_timezone`` 存储与语义时区
+
+    用途：PreparedRead 声明 ``predicate_clock / pruning_clock / join_clock``，
+    manifest 若没有对应 clock 的统计则禁止基于另一根时间轴 prune（宁可多扫）。
+    """
+
+    partition_time: str | None = None
+    event_time: str | None = None
+    knowledge_time: str | None = None
+    effective_time: str | None = None
+    period_time: str | None = None
+    decision_time: str | None = None
+    storage_timezone: str | None = None
+    semantic_timezone: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
 class ContractIRDataset:
     """一个数据集的统一契约视图（编译产物）。
 
@@ -37,6 +67,7 @@ class ContractIRDataset:
     revision_order、required_filters、allowed_filter_values、unique_key、
     duplicate_policy）与存储/查询策略（partitioning、storage_backend、
     query_policy、coverage_policy），让运行时不再分别读三套定义。
+    #9：增加 ``temporal_axes`` 多根时间轴（#P0-9）。
     """
 
     name: str
@@ -66,8 +97,13 @@ class ContractIRDataset:
     duplicate_policy: str | None = None
     partitioning: dict[str, Any] = field(default_factory=dict)
     storage_backend: str | None = None
+    file_format: str | None = None
     query_policy: dict[str, Any] = field(default_factory=dict)
     coverage_policy: str | None = None
+    # ---- #9 多根时间轴（#P0-9）----
+    temporal_axes: TemporalAxes | None = None
+    # ---- 审计问题（#P0-33：audit() 引用 d.issues，必须声明）----
+    issues: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -192,7 +228,9 @@ def build_contract_ir(
             entry.coverage_policy = contract.missing_partition_semantics
         if reg_ds is not None:
             entry.partitioning = dict(getattr(reg_ds, "partitioning", None) or {})
-            entry.storage_backend = _storage_backend_of(reg_ds)
+            entry.storage_backend, entry.storage_layout, entry.file_format = (
+                _storage_of(reg_ds)
+            )
             qp = getattr(reg_ds, "query_policy", None)
             if qp is not None:
                 entry.query_policy = {
@@ -229,6 +267,27 @@ def build_contract_ir(
                 }
                 if len(dup) == 1:
                     entry.duplicate_policy = next(iter(dup))
+            if entry.temporal_axes is None:
+                axes = _temporal_axes_of(
+                    reg_ds=reg_ds,
+                    contract=contract,
+                    fields=[
+                        f
+                        for f in catalog._fields.values()
+                        if f.dataset == name
+                    ],
+                )
+                if any(
+                    v is not None
+                    for v in (
+                        axes.partition_time,
+                        axes.event_time,
+                        axes.knowledge_time,
+                        axes.effective_time,
+                        axes.period_time,
+                    )
+                ):
+                    entry.temporal_axes = axes
         # 一致性 issue：契约在但 registry 没有 → 未标记 external
         if entry.in_contracts and not entry.in_registry and name not in external:
             entry.issues.append(
@@ -247,18 +306,76 @@ def _market_of_name(name: str) -> str | None:
     return None
 
 
-def _storage_backend_of(ds: Any) -> str | None:
-    """从 registry 数据集的 storage/engine 声明推断 storage backend（#34）。"""
+def _storage_of(ds: Any) -> tuple[str | None, str | None, str | None]:
+    """#P1-21 严格区分 storage_backend / storage_layout / file_format。
+
+    - backend：数据物理存放位置（local / cos / s3 / oss / httpfs / cli）。
+    - layout：记录组织方式（daily_parquet / hive_date / hive_year / long / wide）。
+    - format：底层文件格式（parquet / arrow / feather / csv）。
+
+    修复：旧 ``_storage_backend_of`` 会把 ``storage_format``（long/wide，本质是
+    layout）当作 backend 回退，导致 ContractIR 语义错位。
+    """
     storage = getattr(ds, "storage", None)
+    backend: str | None = None
+    layout: str | None = None
+    fmt: str | None = None
     if isinstance(storage, dict):
         src = storage.get("source")
         if isinstance(src, dict):
-            return str(src.get("type") or "local")
-        if isinstance(src, str):
-            return src
-    if getattr(ds, "storage_format", None):
-        return str(ds.storage_format)
-    return "local"
+            backend = str(src.get("type") or "local")
+            layout = src.get("layout")
+            fmt = src.get("format")
+        elif isinstance(src, str):
+            backend = src
+        layout = layout or storage.get("layout")
+        fmt = fmt or storage.get("format")
+    if backend in (None, "", "local") and getattr(ds, "storage_format", None):
+        # 无显式 backend 时，storage_format（long/wide/daily…）只当 layout。
+        layout = layout or str(ds.storage_format)
+    if fmt is None:
+        fmt = getattr(ds, "file_format", None) or "parquet"
+    return backend or "local", layout, fmt
 
 
-__all__ = ["ContractIR", "ContractIRDataset", "build_contract_ir"]
+def _temporal_axes_of(reg_ds: Any, contract: Any, fields: Sequence[Any]) -> TemporalAxes:
+    """从 registry + 契约 + 语义字段编译一个数据集的多根时间轴（#P0-9）。"""
+    partition_time = None
+    if reg_ds is not None:
+        partition_time = getattr(reg_ds, "time_column", None)
+    knowledge_time = (
+        getattr(contract, "availability_column", None)
+        if contract is not None
+        else None
+    )
+    effective_time = getattr(contract, "event_column", None) if contract is not None else None
+    period_time = getattr(contract, "period_column", None) if contract is not None else None
+    event_time = None
+    decision_time = None
+    for f in fields:
+        role = getattr(f, "time_role", None)
+        if role == "event_time" and event_time is None:
+            event_time = getattr(f, "physical_name", None) or getattr(f, "logical_name", None)
+        if getattr(f, "time_role", None) == "decision_time" and decision_time is None:
+            decision_time = getattr(f, "physical_name", None) or getattr(f, "logical_name", None)
+        if knowledge_time is None and getattr(f, "knowledge_time", None):
+            knowledge_time = getattr(f, "knowledge_time", None)
+        if period_time is None and getattr(f, "period_time", None):
+            period_time = getattr(f, "period_time", None)
+    return TemporalAxes(
+        partition_time=partition_time,
+        event_time=event_time,
+        knowledge_time=knowledge_time,
+        effective_time=effective_time,
+        period_time=period_time,
+        decision_time=decision_time,
+        storage_timezone=getattr(contract, "storage_timezone", None)
+        if contract is not None
+        else None,
+        semantic_timezone=getattr(contract, "semantic_timezone", None)
+        if contract is not None
+        else None,
+    )
+
+
+__all__ = ["ContractIR", "ContractIRDataset", "TemporalAxes", "build_contract_ir"]

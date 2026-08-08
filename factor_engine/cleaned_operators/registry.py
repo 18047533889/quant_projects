@@ -181,6 +181,26 @@ class OperatorRegistry:
         if cls._lifecycle is cls.Lifecycle.BUILDING:
             raise RuntimeError("operator registry must be finalized before freezing")
         if cls._lifecycle is not cls.Lifecycle.FROZEN:
+            # R4-102: the catalog backend set must equal the runtime backend set
+            # for every canonical.  A split (e.g. a catalog-only overlay that
+            # cleared backends, or a runtime registration that never refreshed
+            # the catalog) would let the manifest / surface layer advertise a
+            # different backend capability than the runtime actually holds.
+            # ``register_catalog_only(..., merge_existing=True)`` already blocks
+            # the intentional split (P1-38); this freeze gate catches any
+            # residual drift from renames / unregisters / overlay layers.
+            for _canonical, _implementations in cls._operators.items():
+                _runtime = sorted(_implementations.keys())
+                _catalog_backends = sorted(
+                    cls._catalog.get(_canonical, {}).get("backends") or []
+                )
+                if _runtime != _catalog_backends:
+                    raise RuntimeError(
+                        f"R4-102 catalog/runtime backend split for {_canonical!r}: "
+                        f"catalog backends {_catalog_backends} != runtime {_runtime}. "
+                        "A catalog overlay desynchronized the manifest from the "
+                        "runtime; fix the registration, not the check."
+                    )
             cls._lifecycle = cls.Lifecycle.FROZEN
             cls._version += 1
 
@@ -207,6 +227,7 @@ class OperatorRegistry:
         replace: bool = False,
         replacement_reason: str = "",
         expected_old_source: str = "",
+        semantic_version: str = "1.0",
     ) -> None:
         """注册一个已实现算子到 registry。
 
@@ -247,7 +268,17 @@ class OperatorRegistry:
                         "replacement_reason, or add the source to "
                         "_DECLARED_OVERRIDE_SOURCES to declare it an override layer."
                     )
-                if expected_old_source and old_source != expected_old_source:
+                # R4-101: a module-level blanket override is banned for undeclared
+                # sources — every replacement must pin the exact old source it
+                # expects to replace, so a future import-order shuffle cannot
+                # silently swap implementations.
+                if not expected_old_source:
+                    raise ValueError(
+                        f"replace of {canonical!r}/{backend} requires a non-empty "
+                        "expected_old_source (review R4-101): pin the exact source "
+                        "being replaced"
+                    )
+                if old_source != expected_old_source:
                     raise ValueError(
                         f"replace of {canonical!r}/{backend}: expected old source "
                         f"{expected_old_source!r} but registry holds {old_source!r}"
@@ -268,6 +299,7 @@ class OperatorRegistry:
                 "old_hash": _impl_source_hash(existing_ops[backend]),
                 "new_hash": _impl_source_hash(operator),
                 "reason": replacement_reason or f"declared override layer ({source})",
+                "semantic_version": str(semantic_version or "1.0"),
             })
         existing_ops[backend] = operator
         existing = cls._catalog.get(canonical, {})
@@ -421,6 +453,7 @@ class OperatorRegistry:
         business_category: str = "",
         description: str = "",
         source: str = "",
+        merge_existing: bool = False,
     ) -> None:
         """登记仅文档/catalog 占位条目（无 runtime 实现）。
 
@@ -431,11 +464,21 @@ class OperatorRegistry:
             business_category: 业务分类标签。
             description: 人类可读说明。
             source: 溯源标记。
+            merge_existing: 若 canonical 已有 runtime 而仍要覆盖 catalog，必须
+                显式置 True（P1-38），否则拒绝——避免
+                ``runtime 存在但 catalog.backends=[]/param_names=[]`` 的分裂状态。
 
         返回:
             None
         """
         cls._assert_writable()
+        if canonical in cls._operators and not merge_existing:
+            raise ValueError(
+                f"canonical {canonical!r} already has runtime backends "
+                f"{sorted(cls._operators[canonical])}; register_catalog_only would split "
+                "the catalog (backends=[]) from the runtime. Pass merge_existing=True to "
+                "declare it an intentional catalog-only overlay (P1-38)."
+            )
         if canonical in cls._aliases:
             raise ValueError(f"canonical already declared as alias: {canonical!r}")
         previous = cls._catalog.get(canonical, {})
@@ -443,13 +486,21 @@ class OperatorRegistry:
         for alias in stale_aliases:
             if cls._aliases.get(alias) == canonical:
                 cls._aliases.pop(alias, None)
+        # P1-38: with merge_existing=True, preserve the runtime-backed contract
+        # (backends / param_names) instead of resetting it to [] — that split
+        # state is what the guard above exists to prevent.
         cls._catalog[canonical] = {
             "canonical": canonical,
             "aliases": sorted(set(aliases or [])),
-            "backends": [],
+            "backends": list(
+                previous.get("backends")
+                or sorted(cls._operators[canonical].keys())
+                if merge_existing
+                else []
+            ),
             "status": status,
             "description": description,
-            "param_names": [],
+            "param_names": list(previous.get("param_names") or []) if merge_existing else [],
             "business_category": business_category,
         }
         for alias in aliases or []:

@@ -52,19 +52,36 @@ def _apply(x: pd.DataFrame, fn) -> pd.DataFrame:
     return frame_like(x, out)
 
 
+def _trailing_contiguous_finite(vals: np.ndarray) -> np.ndarray:
+    """Trailing contiguous finite suffix of ``vals`` (no gap bridging).
+
+    A wavelet / spectral transform needs a real time axis; deleting NaN and
+    splicing the remaining points shifts scale / frequency / phase.  We keep the
+    original axis and transform only the *trailing* contiguous finite block so a
+    recent gap never reaches back into stale pre-gap data (review R4-64 / P1-15).
+    """
+    n = len(vals)
+    j = n
+    while j > 0 and not np.isfinite(vals[j - 1]):
+        j -= 1
+    i = j
+    while i > 0 and np.isfinite(vals[i - 1]):
+        i -= 1
+    return vals[i:j].astype(float)
+
+
 def _haar_energy(vals: np.ndarray, window: int) -> list[float]:
     """Return per-level detail energy for a power-of-two Haar DWT."""
     seg = vals[-int(window):]
-    finite = seg[np.isfinite(seg)]
+    finite = _trailing_contiguous_finite(seg)
     n = len(finite)
     if n < 8:
         return []
     m = 2 ** int(np.floor(np.log2(n)))
-    # Keep the NEWEST m observations, not the oldest: a trailing window that
-    # truncates to a power of two must retain the data closest to ``t`` — the
-    # oldest prefix carries stale information for a trailing factor (review
-    # P0-12).  Missing values are compacted only within the trailing window,
-    # never across a gap (the wavelet already requires a contiguous block).
+    # Keep the NEWEST m observations within the contiguous run: a trailing
+    # window that truncates to a power of two must retain the data closest to
+    # ``t`` — the oldest prefix carries stale information for a trailing factor
+    # (review P0-12).
     x = finite[-m:].copy()
     levels: list[float] = []
     while len(x) >= 2:
@@ -123,7 +140,10 @@ _register("ts_wavelet_energy_slope", "小波能量随尺度变化的斜率。", 
 
 def _spectral_low_ratio(vals: np.ndarray, window: int) -> float:
     seg = vals[-int(window):]
-    finite = seg[np.isfinite(seg)]
+    # P1-15: same no-time-axis-compression rule as the Haar kernel — use the
+    # trailing contiguous finite suffix (frequency/phase semantics need a real
+    # time axis; review R4-64).
+    finite = _trailing_contiguous_finite(seg)
     if len(finite) < 16:
         return np.nan
     m = len(finite)

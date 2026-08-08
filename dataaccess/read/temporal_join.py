@@ -41,7 +41,28 @@ from typing import Any, Mapping
 from data_access.core.exceptions import ValidationError
 
 _VALID_POLICIES = frozenset({"exact", "asof", "pit_asof"})
-_VALID_AVAILABILITY = frozenset({"same_day", "next_trading_day", "session"})
+# #P0-7 细粒度 availability：命名如实反映语义，不再把一切归到 session。
+#   same_instant          —— knowledge 时刻即可用（decision >= knowledge 同刻）
+#   same_day              —— 当日可见（向后看，>=）
+#   next_bar              —— 下一根 bar 起可用（日频近似 next_trading_day）
+#   next_session_open     —— 下一交易时段开盘起可用（交易日历感知）
+#   next_trading_day      —— 下一交易日起可用（交易日历感知）
+#   after_close_next_open —— 盘后披露，下一开盘起可用（交易日历感知）
+#   effective_date_only   —— 仅生效日语义（>=，且 future_cutoff 生效）
+#   session               —— 兼容旧名：按 session 边界映射（同 next_session_open）
+_VALID_AVAILABILITY = frozenset({
+    "same_instant", "same_day", "next_bar", "next_session_open",
+    "next_trading_day", "after_close_next_open", "effective_date_only", "session",
+})
+# #P0-7 需要交易日历把 knowledge 映射成 available_from 的 availability 种类。
+_CALENDAR_AVAILABILITIES = frozenset({
+    "next_bar", "next_session_open", "next_trading_day",
+    "after_close_next_open", "session",
+})
+# #P0-7 语义上等价于「严格下一交易日」的种类（比较符 / 日历映射用）。
+_STRICT_NEXT_KINDS = frozenset({
+    "next_bar", "next_session_open", "next_trading_day", "after_close_next_open",
+})
 _VALID_DUPLICATE_POLICIES = frozenset({"keep_first", "keep_last", "latest_revision", "error"})
 _VALID_PERIOD_SELECTIONS = frozenset(
     {"latest_period", "exact_period", "annual", "quarterly", "ttm", "all"}
@@ -79,17 +100,24 @@ class TemporalJoinSpec:
     period_values: tuple[Any, ...] = ()    # exact_period 的目标 period 值列表
     # ---- #16 事件未来数据 cutoff ----
     future_cutoff: bool = True             # effective_time_only 事件右表不读未来生效事件
+    # ---- #P0-7 availability_latency：额外可见性延迟（如分钟/bar 数）----
+    availability_latency: int | None = None
 
     @property
     def is_asof(self) -> bool:
         return self.policy in {"asof", "pit_asof"}
 
     @property
+    def is_calendar_availability(self) -> bool:
+        """是否需要交易日历把 knowledge 映射成 available_from（#P0-7）。"""
+        return self.availability in _CALENDAR_AVAILABILITIES
+
+    @property
     def comparison_operator(self) -> str:
-        """ASOF 条件比较符：next_trading_day 用严格大于（盘后落地可见性）。"""
+        """ASOF 条件比较符：严格下一交易日/时段类用严格大于，其余向后看 >=。"""
         if not self.is_asof:
             raise ValueError("exact join 不使用比较操作符")
-        return ">" if self.availability == "next_trading_day" else ">="
+        return ">" if self.availability in _STRICT_NEXT_KINDS else ">="
 
     @property
     def needs_period_selection(self) -> bool:
@@ -116,6 +144,7 @@ class TemporalJoinSpec:
             "period_selection": self.period_selection,
             "period_values": list(self.period_values),
             "future_cutoff": self.future_cutoff,
+            "availability_latency": self.availability_latency,
         }
 
 
@@ -236,6 +265,7 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
             f"period_selection 必须是 {sorted(_VALID_PERIOD_SELECTIONS)}，"
             f"收到 {period_selection!r}"
         )
+    latency = raw.get("availability_latency")
     return TemporalJoinSpec(
         policy=policy,
         decision_time=_str_or_none(raw.get("decision_time")),
@@ -249,4 +279,5 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
         period_selection=period_selection,
         period_values=_period_values_of(raw.get("period_values")),
         future_cutoff=bool(raw.get("future_cutoff", True)),
+        availability_latency=int(latency) if latency is not None else None,
     )

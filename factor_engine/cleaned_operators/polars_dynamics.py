@@ -428,13 +428,14 @@ _mk(
 # Historical event response.
 # ---------------------------------------------------------------------------
 
-def _event_response_pair(response_frame, event_frame, history_window, horizon, mode, min_events, sign_balance):
+def _event_response_pair(response_frame, event_frame, history_window, horizon, mode, min_events, sign_balance, require_full_horizon=True):
     cols = _cols(response_frame)
     out: dict[str, np.ndarray] = {}
     for c in cols:
         out[c] = _horizon_response(
             _col(response_frame, c), _col(event_frame, c),
             history_window, horizon, mode, min_events, sign_balance,
+            require_full_horizon=bool(require_full_horizon),
         )
     return _rebuild(response_frame, out)
 
@@ -442,17 +443,17 @@ def _event_response_pair(response_frame, event_frame, history_window, horizon, m
 _mk(
     "event_historical_response_mean",
     "历史事件平均 horizon 响应（Polars）。",
-    ["response", "event", "history_window", "horizon", "mode", "min_events"],
-    lambda response, event, history_window=120, horizon=5, mode="mean", min_events=5: _event_response_pair(
-        response, event, history_window, horizon, mode, min_events, False
+    ["response", "event", "history_window", "horizon", "mode", "min_events", "require_full_horizon"],
+    lambda response, event, history_window=120, horizon=5, mode="mean", min_events=5, require_full_horizon=True: _event_response_pair(
+        response, event, history_window, horizon, mode, min_events, False, require_full_horizon,
     ),
 )
 _mk(
     "event_historical_response_sign_balance",
     "历史事件响应符号平衡（Polars）。",
-    ["response", "event", "history_window", "horizon", "min_events"],
-    lambda response, event, history_window=120, horizon=5, min_events=5: _event_response_pair(
-        response, event, history_window, horizon, "mean", min_events, True
+    ["response", "event", "history_window", "horizon", "min_events", "require_full_horizon"],
+    lambda response, event, history_window=120, horizon=5, min_events=5, require_full_horizon=True: _event_response_pair(
+        response, event, history_window, horizon, "mean", min_events, True, require_full_horizon,
     ),
 )
 

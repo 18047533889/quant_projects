@@ -23,6 +23,10 @@ _EPS = 1e-12
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+    # R4-87: the lower tail is defined against a low threshold (``threshold - x``)
+    # so positive price/valuation series have a well-defined lower tail; the input
+    # is nevertheless declared as a signed series (returns / centred residual /
+    # signed signal) where a tail shape is meaningful.
     return OperatorMetadata(
         name=name,
         category="extreme_tail",
@@ -35,6 +39,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        input_units={"x": "signed_return_or_centred_residual_or_signed_signal"},
     )
 
 
@@ -50,6 +55,23 @@ def _column_map(xv: np.ndarray, fn) -> np.ndarray:
 # ts_hill_tail_index
 # ---------------------------------------------------------------------------
 
+def _lower_tail_magnitude(valid: np.ndarray) -> np.ndarray:
+    """R4-87 lower-tail magnitudes ``u - x > 0`` below a reference threshold.
+
+    ``u`` is the median of the finite window values, so the lower-tail sample is
+    the bottom half of the window — the sample-size mirror image of the upper
+    tail's ``x > 0`` filter for a centred return series (median ≈ 0, so
+    ``u - x ≈ -x``).  Using ``threshold - x`` instead of ``-x`` keeps the lower
+    tail well-defined for *positive* price/valuation series, where ``-x`` is
+    always negative and ``y > 0`` deleted the whole lower tail.
+    """
+    if valid.size == 0:
+        return valid
+    u = float(np.quantile(valid, 0.5))
+    y = u - valid
+    return y[y > 0.0]
+
+
 def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: float, min_tail_count: int) -> np.ndarray:
     n = series.shape[0]
     w = max(2, int(window))
@@ -64,8 +86,13 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
     for t in range(n):
         lo = max(0, t - w + 1)
         chunk = series[lo : t + 1]
-        y = chunk if side == "upper" else -chunk
-        y = y[np.isfinite(y)]
+        valid = chunk[np.isfinite(chunk)]
+        if valid.size < mtc:
+            continue
+        if side == "upper":
+            y = valid
+        else:
+            y = _lower_tail_magnitude(valid)
         y = y[y > 0.0]
         if y.size < mtc:
             continue
@@ -92,10 +119,11 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
 class TsHillTailIndex(SeriesOperator):
     """Hill 尾部指数 ξ（上/下尾厚度形状，非大小）。
 
-    对窗口内 Y（upper=+x / lower=-x，仅保留 Y>0）排序，取 ``k=floor(n*frac)``
-    个大值：``ξ = (1/k) Σ log(Y_{n-j+1}/Y_{n-k})``。ξ 越大尾部越厚、极端观测越
-    容易远离普通观测。``min_tail_count`` 内样本不足则 NaN。与 ES/partial
-    moment（尾部大小）互补。P1。
+    上尾对窗口内 X>0 排序;下尾对低阈值超量 ``u - x > 0``(u 为 frac 分位数,
+    R4-87)——正价格/估值序列也有定义良好的下尾,而非被 ``-x`` 全删。取
+    ``k=floor(n*frac)`` 个大值:``ξ = (1/k) Σ log(Y_{n-j+1}/Y_{n-k})``。ξ 越大
+    尾部越厚。``min_tail_count`` 内样本不足则 NaN。与 ES/partial moment(尾部
+    大小)互补。P1。
     """
 
     metadata = _metadata(
@@ -246,21 +274,35 @@ def _extremal_index_series(
     for t in range(n):
         lo = max(0, t - w + 1)
         chunk = series[lo : t + 1]
-        y = chunk if side == "upper" else -chunk
-        valid = y[np.isfinite(y)]
+        valid = chunk[np.isfinite(chunk)]
         if valid.size < 3:
             continue
-        thr = float(np.quantile(valid, quant))
-        exceed = y > thr  # strict exceedance over threshold (no mode ties)
-        count = int(exceed.sum())
-        if count < mex:
-            continue
+        if side == "upper":
+            thr = float(np.quantile(valid, quant))
+            is_exceed = lambda v: v > thr  # noqa: E731
+        else:
+            # R4-87: lower tail = strictly below the (1-quant) quantile, so a
+            # positive price/valuation series keeps a well-defined lower tail.
+            thr = float(np.quantile(valid, 1.0 - quant))
+            is_exceed = lambda v: v < thr  # noqa: E731
+        # R4-88: missing bars are censored, NOT counted as non-exceedances.
+        # A missing bar between two extreme bars must not split one cluster into
+        # two: ``prev`` is carried across NaN so an extreme after a gap continues
+        # the current run.
+        count = 0
         clusters = 0
         prev = False
-        for v in exceed:
-            if v and not prev:
-                clusters += 1
-            prev = v
+        for v in chunk:
+            if not np.isfinite(v):
+                continue  # censor: leave ``prev`` unchanged
+            e = bool(is_exceed(v))
+            if e:
+                count += 1
+                if not prev:
+                    clusters += 1
+            prev = e
+        if count < mex:
+            continue
         out[t] = float(clusters / count)
     return out
 
@@ -276,8 +318,10 @@ class TsExtremalIndex(SeriesOperator):
     """Leadbetter 极值指数 θ（runs 估计：簇数 / 超阈次数）。
 
     ≈1 = 极端观测以孤立单点到达（类 Poisson，可独立处理）；→0 = 极端高度成簇
-    （regime 型，波动聚集）。与 ``ts_extreme_cluster_ratio``（相邻极端对数/极端
-    数）数学不同：连续 3 个极端前者 2/3、这里 1/3。PIT 安全、确定性。
+    （regime 型，波动聚集）。缺失 bar 按 R4-88 截删（censor）：缺失不当作
+    non-extreme，故两个极端之间的一个缺失不会把同一簇拆成两簇；已确认的
+    non-extreme 仍会断开运行。与 ``ts_extreme_cluster_ratio``（相邻极端对数/极
+    端数）数学不同：连续 3 个极端前者 2/3、这里 1/3。PIT 安全、确定性。
     """
 
     metadata = _metadata(
@@ -330,15 +374,21 @@ def _mean_excess_slope_series(
     for t in range(n):
         lo = max(0, t - w + 1)
         chunk = series[lo : t + 1]
-        y = chunk if side == "upper" else -chunk
-        y = y[np.isfinite(y)]
-        if y.size < mtc + 3:
+        valid = chunk[np.isfinite(chunk)]
+        if valid.size < mtc + 3:
             continue
         us: list[float] = []
         mes: list[float] = []
         for p in np.linspace(0.55, 0.95, 9):
-            u = float(np.quantile(y, p))
-            exc = y[y > u] - u
+            if side == "upper":
+                u = float(np.quantile(valid, p))
+                exc = valid[valid > u] - u
+            else:
+                # R4-87: lower-tail thresholds are the (1-p) quantiles and the
+                # exceedances are ``u - x``, keeping the lower tail defined for
+                # positive price/valuation series.
+                u = float(np.quantile(valid, 1.0 - p))
+                exc = u - valid[valid < u]
             if exc.size < mtc:
                 continue
             us.append(u)
@@ -423,12 +473,17 @@ def _gpd_shape_pwm_series(
     for t in range(n):
         lo = max(0, t - w + 1)
         chunk = series[lo : t + 1]
-        y = chunk if side == "upper" else -chunk
-        y = y[np.isfinite(y)]
-        if y.size < mtc + 2:
+        valid = chunk[np.isfinite(chunk)]
+        if valid.size < mtc + 2:
             continue
-        u = float(np.quantile(y, 1.0 - frac))
-        exc = y[y > u] - u
+        if side == "upper":
+            u = float(np.quantile(valid, 1.0 - frac))
+            exc = valid[valid > u] - u
+        else:
+            # R4-87: lower tail = excess ``u - x`` below the frac-quantile
+            # threshold; defined for positive price/valuation series too.
+            u = float(np.quantile(valid, frac))
+            exc = u - valid[valid < u]
         if exc.size < mtc:
             continue
         exc = np.sort(exc)

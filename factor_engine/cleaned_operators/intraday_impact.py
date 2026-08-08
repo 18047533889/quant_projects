@@ -135,17 +135,20 @@ class IntradayImpactDecayRate(SeriesOperator):
         idx = ret.index
         r_arr = ret.to_numpy(dtype=float)
         a_arr = amount.to_numpy(dtype=float)
+        pos = np.arange(r_arr.shape[0])
+        day_groups: dict[pd.Timestamp, np.ndarray] = {}
+        for day, g in pd.Series(pos, index=idx).groupby(idx.normalize()):
+            day_groups[day] = np.asarray(g, dtype=int)
         out: dict[str, pd.Series] = {}
-        for inst in ret.columns:
-            col_idx = inst
+        for j, inst in enumerate(ret.columns):
+            r_col = r_arr[:, j]
+            a_col = a_arr[:, j]
             day_map: dict[pd.Timestamp, float] = {}
-            pos = np.arange(r_arr.shape[0])
-            for day, g in pd.Series(pos, index=idx).groupby(idx.normalize()):
-                positions = np.asarray(g, dtype=int)
+            for day, positions in day_groups.items():
                 day_map[day] = _impact_decay_day(
-                    r_arr[positions], a_arr[positions], idx[positions], h, sq
+                    r_col[positions], a_col[positions], idx[positions], h, sq
                 )
-            out[col_idx] = pd.Series(day_map, dtype=float)
+            out[inst] = pd.Series(day_map, dtype=float)
         if not out:
             return pd.DataFrame(dtype=float)
         return pd.DataFrame(out).sort_index()

@@ -71,12 +71,12 @@ def _bicoherence_max(v: np.ndarray, n_segments: int) -> float:
         Xf = X[1 : max_freq + 1]
         for f1 in range(1, max_freq + 1):
             x1 = Xf[f1 - 1]
-            for f2 in range(1, max_freq - f1 + 2):
+            for f2 in range(1, max_freq - f1 + 1):
                 B_sum[f1 - 1, f2 - 1] += x1 * Xf[f2 - 1] * np.conj(Xf[f1 + f2 - 1])
         S_sum += np.abs(Xf) ** 2
     best = 0.0
     for f1 in range(1, max_freq + 1):
-        for f2 in range(1, max_freq - f1 + 2):
+        for f2 in range(1, max_freq - f1 + 1):
             denom = S_sum[f1 - 1] * S_sum[f2 - 1] * S_sum[f1 + f2 - 1]
             if denom <= _EPS:
                 continue

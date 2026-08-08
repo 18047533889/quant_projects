@@ -16,8 +16,11 @@ The family characterises the temporal rhythm of those cycles:
   duration to the median down-leg (``U→L``) duration, mapped to ``[-1, 1]``.
 
 Both operators are trailing-window, per-column, deterministic and NaN-safe.
-A non-finite ``x`` holds the prior state; degenerate windows (no completed
-cycle / no up- or down-legs) emit NaN.  ``upper <= lower`` raises ``ValueError``.
+A non-finite ``x`` censors the state machine: the L/U state becomes UNKNOWN
+and any cycle/leg whose span would cross the gap is broken (never measured as
+if the data were continuous); the output row is NaN.  Degenerate windows (no
+completed cycle / no up- or down-legs) also emit NaN.  ``upper <= lower``
+raises ``ValueError``.
 """
 from __future__ import annotations
 
@@ -58,13 +61,19 @@ def _state_series(x: np.ndarray, lower: float, upper: float) -> np.ndarray:
     sitting inside the deadband at the window start must not be coerced to L
     (P0-13); that artificial initialisation made the first "leg" depend on
     where the window happened to start.
+
+    A non-finite ``x`` is *not* allowed to hold the previous L/U state (R4-05):
+    a missing bar means the machine's state is unknown from there on, so it is
+    set to UNKNOWN.  ``_legs``/``_full_cycles`` then treat any span that crosses
+    an UNKNOWN row as censored, so a cycle duration can never straddle a data
+    gap.
     """
     n = len(x)
     s = np.full(n, -1, dtype=np.int8)
     for t in range(n):
         xt = x[t]
         if not np.isfinite(xt):
-            s[t] = s[t - 1] if t > 0 else -1
+            s[t] = -1
         elif xt <= lower:
             s[t] = 0
         elif xt >= upper:
@@ -82,7 +91,9 @@ def _legs(s: np.ndarray) -> list[tuple[int, int, int]]:
     U-run), ``is_up == 0`` when it is ``L`` (a ``U→L`` down-leg, the L-run).
     Duration of the leg is ``b - a`` bars.  Transitions involving the UNKNOWN
     state are ignored: a run whose start is censored by the window is not
-    measured as a phantom leg.
+    measured as a phantom leg.  A leg whose span crosses an UNKNOWN row (a
+    missing ``x``) is also censored — R4-05: a gap must never be silently
+    bridged as if the state machine had stayed defined.
     """
     n = len(s)
     tr = [
@@ -92,6 +103,8 @@ def _legs(s: np.ndarray) -> list[tuple[int, int, int]]:
     out: list[tuple[int, int, int]] = []
     for i in range(len(tr) - 1):
         a, b = tr[i], tr[i + 1]
+        if np.any(s[a + 1:b] == -1):
+            continue
         out.append((a, b, int(s[a])))
     return out
 
@@ -102,7 +115,8 @@ def _full_cycles(s: np.ndarray) -> list[tuple[int, int, int]]:
     States alternate after every transition, so any two consecutive defined
     transitions ``tr[i]``/``tr[i+2]`` delimit a full ``L→U→L`` or ``U→L→U``
     cycle; its duration is ``tr[i+2] - tr[i]`` bars (P0-12 — the previous
-    "period" actually measured a single leg/half-cycle).
+    "period" actually measured a single leg/half-cycle).  A cycle whose span
+    crosses an UNKNOWN row is censored (R4-05) — the gap breaks the round trip.
     """
     n = len(s)
     tr = [
@@ -111,7 +125,10 @@ def _full_cycles(s: np.ndarray) -> list[tuple[int, int, int]]:
     ]
     out: list[tuple[int, int, int]] = []
     for i in range(len(tr) - 2):
-        out.append((tr[i], tr[i + 2], tr[i + 2] - tr[i]))
+        a, c = tr[i], tr[i + 2]
+        if np.any(s[a + 1:c] == -1):
+            continue
+        out.append((a, c, c - a))
     return out
 
 
@@ -122,6 +139,8 @@ def _cycle_period_series(x2d: np.ndarray, lower: float, upper: float, window: in
     for c in range(cols):
         cycles = _full_cycles(_state_series(x2d[:, c], lower, upper))
         for r in range(rows):
+            if not np.isfinite(x2d[r, c]):
+                continue  # missing x -> unknown state -> NaN (R4-05)
             lo = max(0, r - w + 1)
             dur = [d for (a, cc, d) in cycles if a >= lo and cc <= r]
             if dur:
@@ -136,6 +155,8 @@ def _cycle_asymmetry_series(x2d: np.ndarray, lower: float, upper: float, window:
     for c in range(cols):
         legs = _legs(_state_series(x2d[:, c], lower, upper))
         for r in range(rows):
+            if not np.isfinite(x2d[r, c]):
+                continue  # missing x -> unknown state -> NaN (R4-05)
             lo = max(0, r - w + 1)
             up: list[int] = []
             down: list[int] = []

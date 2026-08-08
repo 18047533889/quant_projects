@@ -23,6 +23,20 @@ _LAG_PARAM_NAMES = {
     "MOM": ("window", "d", "n"),
     "ROC": ("window", "d", "n"),
 }
+
+# review #4 R4-03: canonical-authoritative history requirements.  A canonical
+# registers its own ``history_requirement(params) -> int`` instead of the
+# analyzer guessing from parameter NAMES, because a composite lookback is almost
+# never ``max(...)`` — ``rolling_corr(x, shift(y, lag), window)`` needs
+# ``(window-1) + lag`` rows, and ``volume_autocorr(volume, window, lag)`` needs
+# ``window-1+lag``.  The analyzer prefers this registry, then a
+# ``history_requirement`` method on the implementation, then its own rules.
+_HISTORY_REQUIREMENT_FUNCS: dict[str, Any] = {}
+
+
+def register_history_requirement(canonical: str, fn: Any) -> None:
+    """Register a deterministic ``fn(params: dict) -> int`` for a canonical."""
+    _HISTORY_REQUIREMENT_FUNCS[canonical] = fn
 _FIXED_LAGS = {
     "prev": 1,
     "ts_ratio": 1,
@@ -175,6 +189,14 @@ _STRUCTURE_PATTERNS = frozenset({
 _FLAG_PATTERNS = frozenset({"pattern_bull_flag", "pattern_bear_flag"})
 _PENNANT_PATTERNS = frozenset({"pattern_bull_pennant", "pattern_bear_pennant"})
 _RETEST_PATTERNS = frozenset({"pattern_breakout_retest", "pattern_breakdown_retest"})
+# review #4 R4-89: structural-level operators confirm a pivot `confirmation`
+# bars past the bar, so the causal history is window-1 + confirmation (the
+# pivot at the window's left edge must already be confirmed).
+_STRUCTURAL_LEVEL_CANONICALS = frozenset({
+    "ts_structural_level_density",
+    "ts_nearest_structural_level_distance",
+    "ts_structural_level_strength",
+})
 
 # Report-period operators need a conservative conversion from report count to
 # pre-start trading rows. Daily-window and elementwise fundamental operators do
@@ -228,6 +250,35 @@ _FIN_DAILY_WINDOW_CANONICALS = frozenset({
     "fin_surprise_zscore",
     "fin_expectation_revision_speed",
 })
+
+# R4-03: explicit canonical-registered history requirements for the compound
+# lookback families the audit called out.  These override the name-guessing
+# rules with the exact formula the kernel uses (addition, never max).
+def _compound_history(params: dict[str, Any], window_name: str = "window", *extra: str) -> int:
+    w = _positive_int(params.get(window_name)) or 1
+    total = max(0, w - 1)
+    for name in extra:
+        total += _positive_int(params.get(name)) or 0
+    return total
+
+
+register_history_requirement(
+    "volume_autocorr", lambda p: _compound_history(p, "window", "lag")
+)
+register_history_requirement(
+    "turnover_autocorr", lambda p: _compound_history(p, "window", "lag")
+)
+# event-response: an event at s needs its ENTIRE response path s+1..s+H, so the
+# lookback is history_window-1 + horizon (the horizon is NOT a warm-up, it is a
+# forward reach the historical window must cover).
+register_history_requirement(
+    "event_historical_response_mean",
+    lambda p: _compound_history(p, "history_window", "horizon"),
+)
+register_history_requirement(
+    "event_historical_response_sign_balance",
+    lambda p: _compound_history(p, "history_window", "horizon"),
+)
 
 
 def _positive_int(value: Any) -> int | None:
@@ -309,6 +360,20 @@ def _operator_lookback_increment(
     params = _operator_param_values(node, op_impl)
     increment = _financial_lookback(canonical, params)
 
+    # R4-03: a canonical-registered history requirement is authoritative.  Prefer
+    # the registry, then a ``history_requirement`` method on the implementation,
+    # before falling back to the name-based rules below.
+    history_fn = _HISTORY_REQUIREMENT_FUNCS.get(canonical)
+    if history_fn is None and op_impl is not None:
+        history_fn = getattr(op_impl, "history_requirement", None)
+    if history_fn is not None:
+        try:
+            required = int(history_fn(params))
+        except (TypeError, ValueError):
+            required = 0
+        if required > 0:
+            return max(increment, required)
+
     if canonical in _FIXED_LAGS:
         increment = max(increment, _FIXED_LAGS[canonical])
 
@@ -343,6 +408,25 @@ def _operator_lookback_increment(
         increment = max(increment, window - 1)
         if canonical in _WINDOW_PLUS_ONE_CANONICALS:
             increment = max(increment, window)
+
+    # R4-03: an internal lag parameter is additional lookback, NOT a max — a
+    # window+lag kernel (volume_autocorr / turnover_autocorr / lagged MI /
+    # lagged dependence / cross-lag) needs ``window-1 + lag`` rows.  Canonicals
+    # in ``_LAG_PARAM_NAMES`` already returned with their lag handled; these are
+    # single-series kernels that consume ``lag`` as a parameter.
+    if canonical not in _LAG_PARAM_NAMES:
+        for lag_name in ("lag", "max_lag", "event_lag", "match_lag", "fit_lag"):
+            lag = _positive_int(params.get(lag_name))
+            if lag is not None:
+                increment += lag
+                break
+
+    # R4-89: structural-level pivots must be confirmed past the bar, so add the
+    # confirmation window to the history budget (window-1 is already counted).
+    if canonical in _STRUCTURAL_LEVEL_CANONICALS:
+        confirmation = _positive_int(params.get("confirmation")) or 0
+        if confirmation:
+            increment += confirmation
 
     if canonical == "candlestick_pattern":
         body = _positive_int(params.get("body_window")) or 1

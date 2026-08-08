@@ -81,18 +81,24 @@ def allowed_s3_prefixes() -> tuple[str, ...]:
     return tuple(sorted(prefixes))
 
 
-def authorize_s3_path(path: str) -> None:
-    """远程路径必须落在已登记 COS 前缀下。"""
+def authorize_s3_path(path: str, extra_prefixes: Sequence[str] | None = None) -> None:
+    """远程路径必须落在已登记 COS 前缀下。
+
+    ``extra_prefixes``（#P0-2）：generic ``storage.source`` 数据集把自己的声明根
+    （归一化后的 ``s3://`` 前缀）作为授权边界一并校验，不要求手工 mirror 登记。
+    """
     normalized = path.rstrip("/")
-    for prefix in allowed_s3_prefixes():
+    prefixes: set[str] = set(allowed_s3_prefixes())
+    if extra_prefixes:
+        prefixes.update(p.rstrip("/") for p in extra_prefixes if p)
+    for prefix in prefixes:
         base = prefix.rstrip("/")
         if normalized == base or normalized.startswith(base + "/"):
             return
-    hint = "\n  ".join(allowed_s3_prefixes()[:5])
+    hint = "\n  ".join(sorted(prefixes)[:5])
     raise ValidationError(
-        f"S3 路径越界（不在已登记 COS mirror 前缀下）：{path}\n"
-        f"示例允许前缀：\n  {hint}\n"
-        f"如需新增，请在 cos_mirror.DATASET_MIRROR_REGISTRY 登记。"
+        f"S3 路径越界（不在已登记 COS mirror 前缀或声明 storage.source.uri 下）："
+        f"{path}\n示例允许前缀：\n  {hint}"
     )
 
 
@@ -297,6 +303,11 @@ def _remote_paths_from_storage(
 
     ``storage.source.uri`` 是 COS 前缀；``layout`` 决定路径形态（daily_parquet /
     hive_date / hive_year / plain）。ParametricDataset 用 params 填 glob 占位符。
+
+    **#P0-2 / #P0-3**：所有远程路径离开 planner 前统一 normalize + authorize，
+    生成 canonical ``s3://`` execution URI；params/glob format 错误、missing param、
+    unknown layout 一律 ``ValidationError`` fail-closed——禁止宽泛 ``except`` 降级成
+    ``**/*.parquet`` 扫描整个数据集。
     """
     from data_access.registry import ParametricDataset
 
@@ -312,31 +323,89 @@ def _remote_paths_from_storage(
     uri = uri.rstrip("/")
     if not uri:
         raise ValidationError(f"数据集 '{ds.name}' 声明 storage.source=cos 但缺 uri")
+    layout = str(layout).strip().lower()
+
+    if layout not in {"plain", "daily_parquet", "hive_date", "hive_year"}:
+        raise ValidationError(
+            f"数据集 '{ds.name}' storage.source.layout={layout!r} 未知；"
+            f"允许 plain|daily_parquet|hive_date|hive_year（fail-closed）"
+        )
 
     glob = getattr(ds, "glob", None)
     if isinstance(ds, ParametricDataset):
+        validated = dict(params or {})
+        if not ds.glob_template:
+            raise ValidationError(
+                f"数据集 '{ds.name}' 是 ParametricDataset 但未声明 glob_template；"
+                "无法推导 glob（fail-closed，禁止扫描整个数据集）"
+            )
         try:
-            validated = dict(params or {})
-            glob = (ds.glob_template or "**/*.parquet").format(**validated)
-        except Exception:
-            glob = glob or "**/*.parquet"
-    glob = glob or "**/*.parquet"
+            glob = ds.glob_template.format(**validated)
+        except (KeyError, ValueError, IndexError, AttributeError) as exc:
+            raise ValidationError(
+                f"数据集 '{ds.name}' glob_template 参数格式化失败: {exc}。"
+                f"缺参数或非法参数，禁止降级全库扫描"
+            ) from exc
+        # 防止 .format 未消费的占位符/残留花括号产生意外路径形态
+        if "{" in glob or "}" in glob:
+            raise ValidationError(
+                f"数据集 '{ds.name}' glob_template 格式化后仍含占位符: {glob!r}"
+            )
+    if glob is None:
+        glob = "**/*.parquet"
 
+    # 授权边界 = 数据集声明的存储根（cos:// → s3:// 归一化后）。
+    auth_prefix = cos_uri_to_s3_uri(uri)
     if layout == "daily_parquet" and time_range and time_range[0]:
         start, end = time_range
         lo = _parse_date(start)
         hi = _parse_date(end)
         if lo is not None and hi is not None:
-            return [f"{uri}/{day.isoformat()}.parquet" for day in _iter_dates(lo, hi)]
+            return _resolve_storage_paths(
+                (f"{uri}/{day.isoformat()}.parquet" for day in _iter_dates(lo, hi)),
+                authorized_prefix=auth_prefix,
+            )
     if layout in {"hive_date", "hive_year"} and time_range and time_range[0]:
         start, end = time_range
         lo = _parse_date(start)
         hi = _parse_date(end)
         if lo is not None and hi is not None:
             if layout == "hive_date":
-                return [f"{uri}/date={day.isoformat()}/data.parquet" for day in _iter_dates(lo, hi)]
-            return [f"{uri}/year={y}/data.parquet" for y in _iter_years(lo, hi)]
-    return [f"{uri}/{glob}"]
+                return _resolve_storage_paths(
+                    (
+                        f"{uri}/date={day.isoformat()}/data.parquet"
+                        for day in _iter_dates(lo, hi)
+                    ),
+                    authorized_prefix=auth_prefix,
+                )
+            return _resolve_storage_paths(
+                (f"{uri}/year={y}/data.parquet" for y in _iter_years(lo, hi)),
+                authorized_prefix=auth_prefix,
+            )
+    return _resolve_storage_paths([f"{uri}/{glob}"], authorized_prefix=auth_prefix)
+
+
+def _resolve_storage_paths(
+    paths: Sequence[str],
+    *,
+    authorized_prefix: str | None = None,
+) -> list[str]:
+    """#P0-2 / #P0-4：统一 normalize + authorize + canonical s3:// execution URI。
+
+    - ``cos://`` / ``s3://`` 统一为 canonical ``s3://bucket/key``（DuckDB httpfs）；
+    - 每个路径经 ``authorize_s3_path`` 白名单校验后才放行。``authorized_prefix``
+      是调用方声明的存储根（storage.source.uri 归一化后的 s3:// 前缀），用于
+      generic storage 数据集（不在手工 mirror registry 时，uri 本身就是授权边界）；
+    - 各模块（generic storage、hybrid）禁止自己拼 scheme——executor 只见到一种
+      canonical representation。
+    """
+    out: list[str] = []
+    extra = [authorized_prefix] if authorized_prefix else None
+    for raw in paths:
+        normalized = cos_uri_to_s3_uri(str(raw)).rstrip("/")
+        authorize_s3_path(normalized, extra_prefixes=extra)
+        out.append(normalized)
+    return out
 
 
 def _local_daily_complete(spec: MirrorSpec, time_range: tuple[Any, Any]) -> bool:
@@ -476,12 +545,15 @@ def hybrid_cos_read_paths(
     if local_mirror_complete_for_range(ds.name, time_range=time_range):
         return None  # 本地齐全 → 纯本地，不混合
 
-    from .mirror import _cos_table_uri, _expected_dates, _local_table_dir
+    from .mirror import _expected_dates, _local_table_dir
 
     start = _parse_date(time_range[0])
     end = _parse_date(time_range[1])
     if start is None or end is None:
         return None
+    # #P0-4 hybrid remote fragment 必须用 canonical s3:// execution URI。
+    # 不再 _cos_table_uri（返回 cos://）——executor 对 remote 只识别 s3://。
+    remote_base = _s3_table_base(spec)
     local: list[str] = []
     remote: list[str] = []
     if spec.layout == "daily_parquet":
@@ -491,23 +563,27 @@ def hybrid_cos_read_paths(
             if lp.exists():
                 local.append(str(lp))
             else:
-                remote.append(f"{_cos_table_uri(spec)}/{day.isoformat()}.parquet")
+                rp = f"{remote_base}/{day.isoformat()}.parquet"
+                authorize_s3_path(rp)
+                remote.append(rp)
     elif spec.layout == "hive_date":
         for day in _expected_dates(ds.name, start, end):
             lp = spec.local_root / f"date={day.isoformat()}" / spec.file_name
             if lp.exists():
                 local.append(str(lp))
             else:
-                remote.append(
-                    f"{_cos_table_uri(spec)}/date={day.isoformat()}/{spec.file_name}"
-                )
+                rp = f"{remote_base}/date={day.isoformat()}/{spec.file_name}"
+                authorize_s3_path(rp)
+                remote.append(rp)
     elif spec.layout == "hive_year":
         for year in _iter_years(start, end):
             lp = spec.local_root / f"year={year}" / spec.file_name
             if lp.exists():
                 local.append(str(lp))
             else:
-                remote.append(f"{_cos_table_uri(spec)}/year={year}/{spec.file_name}")
+                rp = f"{remote_base}/year={year}/{spec.file_name}"
+                authorize_s3_path(rp)
+                remote.append(rp)
     else:
         return None
     if not remote:

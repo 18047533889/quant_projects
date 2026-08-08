@@ -217,8 +217,18 @@ def execute_physical_plan(store: Any, plan: Any) -> Any:
 
 
 def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
-    """聚合锚点 → 虚拟表 → 右表 join（DuckDB 单 SQL）。"""
-    import uuid
+    """#P0-1 聚合锚点 → 统一 JoinCompiler（``_read_joined_sql``）组合执行。
+
+    删除旧 ``_join_aggregated_anchor`` 的「第二套 join 语义」：聚合结果物化到
+    临时 parquet 作为 ``anchor_override``，交给与 ``read_joined`` **同一个**
+    ``store._read_joined_sql`` 编译——period_selection / revision 去重 /
+    session availability / seed+window / future_cutoff / fanout 守卫 / universe /
+    filters_by_dataset / budget 全部与普通 read_joined 逐字一致。
+    """
+    import os
+    import tempfile
+
+    import pyarrow.parquet as pq
 
     from data_access.core.exceptions import ValidationError
     from data_access.read.aggregation import AggregationItem, aggregate_minute_bundle
@@ -228,7 +238,6 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
         merge_sql_data_snapshots,
     )
     from data_access.read.read_handle import ReadHandle
-    from data_access.read.temporal_join import parse_join_spec
 
     anchor = plan.anchor
     items: list[AggregationItem] = []
@@ -272,31 +281,90 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     )
     agg_table = agg_handle.to_arrow()
 
-    # 把聚合后的锚点写到系统临时 parquet，作为 join 的中间表（DuckDB 游标对
-    # register() 的对象不可见，临时文件最稳、可移植）。
-    import tempfile
-
-    import pyarrow.parquet as pq
-
+    # 聚合锚点 → 临时 parquet（DuckDB 游标对 register() 的对象不可见，临时文件
+    # 最稳、可移植）。行空间列固定为 ts / inst（aggregate_minute_bundle 输出）。
     anchor_fd, anchor_path = tempfile.mkstemp(suffix=".parquet", prefix="da_plan_agg_")
-    import os
-
     os.close(anchor_fd)
     pq.write_table(agg_table, anchor_path)
+
+    # 锚点投影 = ts/inst + 聚合输出列（非 ts/inst 的物化列）
+    agg_cols = [c for c in agg_table.column_names if c not in ("ts", "inst")]
+    per_ds: dict[str, list[str]] = dict(plan.per_dataset_columns)
+    anchor_out = [
+        c
+        for c in per_ds.get(anchor, [])
+        if c not in ("ts", "inst")
+    ]
+    for c in agg_cols:
+        if c not in anchor_out:
+            anchor_out.append(c)
+    per_ds[anchor] = [c for c in anchor_out if c in agg_cols]
+
+    # #P0-2 统一 effective_join_specs：字段语义 → COS 契约 → 显式覆盖。
+    raw_joins: dict[str, Any] = {}
+    raw_joins.update(dict(req.joins or {}))
+    raw_joins.update(dict(req.join_specs or {}))
+    effective_specs = store._effective_join_specs(per_ds, plan.fields, raw_joins)
+
+    pbd: dict[str, dict[str, Any]] = {
+        ds: dict(req.dataset_params(ds)) for ds in plan.datasets
+    }
+
+    anchor_dsobj = store._registry.get(anchor)
+    source_paths = []
     try:
-        table = _join_aggregated_anchor(store, plan, req, anchor_path, agg_table)
+        source_paths = store._prepare_dataset_read(
+            anchor_dsobj,
+            time_range=plan.time_range,
+            params=ds_params,
+            instrument_filter=plan.instruments,
+        )
+    except Exception:
+        source_paths = []
+
+    sql, sql_params, datasets, per_ds_paths = store._read_joined_sql(
+        anchor,
+        per_ds,
+        effective_specs,
+        time_range=plan.time_range,
+        instrument_filter=plan.instruments,
+        filters=req.filters,
+        filters_by_dataset=getattr(req, "filters_by_dataset", None),
+        params_by_dataset=pbd,
+        limit=getattr(req, "limit", None),
+        universe=plan.universe,
+        anchor_override={
+            "path": anchor_path,
+            "time_column": "ts",
+            "instrument_column": "inst",
+            "source_paths": source_paths,
+        },
+    )
+
+    start_clock = _perf_counter()
+    try:
+        budget = store._resolve_read_budget(anchor_dsobj, None)
+        table = store._engine.execute_arrow(
+            sql, sql_params, deadline_ms=budget.max_elapsed_ms
+        )
     finally:
         try:
             os.unlink(anchor_path)
         except OSError:
             pass
+    elapsed_ms = (_perf_counter() - start_clock) * 1000
 
-    # 多数据集 snapshot（组合读的 lineage 基础）
+    if getattr(req, "normalize_units", False) and plan.fields:
+        from data_access.read.semantic_catalog import normalize_table_units
+
+        table = normalize_table_units(table, plan.fields)
+
+    # 多数据集 snapshot（组合读的 lineage 基础；#14 fail-closed）
     snapshots = []
-    for ds in plan.datasets:
+    for ds in datasets:
         try:
             dsobj = store._registry.get(ds)
-            paths = store._prepare_dataset_read(
+            paths = per_ds_paths.get(ds) or store._prepare_dataset_read(
                 dsobj,
                 time_range=plan.time_range,
                 params=req.dataset_params(ds),
@@ -319,83 +387,18 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
         if snapshots
         else None
     )
-    lineage = SqlReadLineage(datasets=tuple(plan.datasets), query_preview="composed")
-    stats = ReadStats(rows=table.num_rows, bytes=table.nbytes, elapsed_ms=0.0)
+    lineage = SqlReadLineage(datasets=tuple(datasets), query_preview="composed:" + sql[:120])
+    stats = ReadStats(rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms)
     return ReadHandle(table=table, snapshot=snapshot, stats=stats, lineage=lineage)
 
 
-def _join_aggregated_anchor(
-    store: Any, plan: Any, req: Any, anchor_path: str, agg_table: Any
-) -> Any:
-    """对聚合后的锚点（临时 parquet）做右表 join（ASOF/exact），返回结果表。"""
-    from data_access.core.exceptions import ValidationError
-    from data_access.read.formats import format_adapter_for_dataset
-    from data_access.read.temporal_join import parse_join_spec
+def _perf_counter() -> float:
+    import time
 
-    agg_cols = [c for c in agg_table.column_names if c not in ("ts", "inst")]
-    outer: list[str] = ['a."ts" AS "ts"', 'a."inst" AS "inst"']
-    joins: list[str] = []
-    params: list[Any] = [anchor_path]
-    for i, ds in enumerate(plan.datasets):
-        if ds == plan.anchor:
-            continue
-        dsobj = store._registry.get(ds)
-        t_col = dsobj.time_column
-        inst_col = dsobj.instrument_column
-        if not t_col or not inst_col:
-            raise ValidationError(
-                f"组合读右表 '{ds}' 未声明 time/instrument 列，无法 join"
-            )
-        spec = parse_join_spec(
-            dict(req.joins or {}).get(ds) if req.joins and ds in req.joins else None
-        )
-        right_time = spec.effective_knowledge_time(t_col)
-        paths = store._prepare_dataset_read(
-            dsobj,
-            time_range=plan.time_range,
-            params=req.dataset_params(ds),
-            instrument_filter=plan.instruments,
-        )
-        if not paths:
-            cols = [f"NULL AS {_qi(c)}" for c in plan.per_dataset_columns.get(ds, [])]
-            outer.extend(cols)
-            continue
-        path_param = paths if len(paths) > 1 else paths[0]
-        adapter = format_adapter_for_dataset(dsobj)
-        from_clause = adapter.build_from_clause(
-            path_param,
-            hive_partitioning=dsobj.hive_partitioning,
-            union_by_name=dsobj.union_by_name,
-        )
-        alias = f"b{i}"
-        params.append(path_param)
-        right_sub = f"(SELECT * FROM {from_clause})"
-        if spec.is_asof:
-            joins.append(
-                f'ASOF LEFT JOIN {right_sub} AS {alias} ON '
-                f'a."inst" = {alias}.{_qi(inst_col)} '
-                f'AND a."ts" >= {alias}.{_qi(right_time)}'
-            )
-        else:
-            joins.append(
-                f'LEFT JOIN {right_sub} AS {alias} ON '
-                f'a."inst" = {alias}.{_qi(inst_col)} '
-                f'AND a."ts" = {alias}.{_qi(right_time)}'
-            )
-        for c in plan.per_dataset_columns.get(ds, []):
-            outer.append(f'{alias}.{_qi(c)} AS {_qi(c)}')
-    for c in agg_cols:
-        outer.append(f'a.{_qi(c)} AS {_qi(c)}')
-    sql = (
-        f'SELECT {", ".join(outer)} '
-        f'FROM (SELECT * FROM read_parquet(?)) AS a ' + " ".join(joins)
-    )
-    ds = store._registry.get(plan.anchor)
-    budget = store._resolve_read_budget(ds, None)
-    return store._engine.execute_arrow(sql, params, deadline_ms=budget.max_elapsed_ms)
+    return time.perf_counter()
 
 
 def _strict_mode() -> bool:
-    from data_access.read.query_budget import _production_mode, _strict_read_mode
+    from data_access.read.query_budget import is_strict_semantics
 
-    return _production_mode() or _strict_read_mode()
+    return is_strict_semantics()

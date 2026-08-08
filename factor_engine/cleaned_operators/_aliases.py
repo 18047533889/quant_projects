@@ -180,4 +180,28 @@ OperatorRegistry.register_alias("cs_zscore", "zscore")
 # intraday_return 是 open_close_return 的挖掘侧别名（close/open - 1）。
 OperatorRegistry.register_alias("intraday_return", "open_close_return")
 
+# ---------------------------------------------------------------------------
+# Review #4 R4-22 / R4-101 (governance verification — no behavioural change).
+# ---------------------------------------------------------------------------
+# R4-22 (legacy fiscal names are compat, not a second implementation):
+#   * ``period_lag`` is registered by ``common/daily_panel`` as a legacy
+#     implementation, but ``load_all()`` pops its pandas/polars backends and
+#     ``fiscal_strict.register()`` (then the overhaul audit layer) re-registers
+#     the SAME canonical with the strict ``(x, period_id, periods,
+#     revision_policy)`` signature.  At runtime there is exactly ONE
+#     implementation; the daily-panel legacy name never survives as a second
+#     implementation.  Confirmed via ``OperatorRegistry.backends_for("period_lag")``.
+#   * ``fin_mad`` / ``fin_mean_abs_deviation`` (P1-41 naming): the fundamental
+#     module registers BOTH names pointing at the SAME kernel function object
+#     (source ``fundamental_transforms_v2``), so the "old name" is a compat
+#     name, not a second divergent implementation.  They remain separate
+#     canonicals by design in ``fundamental/transforms_v2._SPECS``; making
+#     ``fin_mad`` a true registry alias would require unregistering the
+#     canonical there (a ``_dedupe`` concern, out of this file's scope).
+# R4-101 (no blanket alias bypass): every alias in this module (and in the
+#   curated dicts of ``alpha_language_aliases`` / ``layer_governance``) points
+#   at one explicit canonical.  No loop over a family auto-registers aliases;
+#   ``OperatorRegistry.finalize()`` still hard-fails on dangling / non-flattened
+#   aliases.
+
 # dedupe 在 load_all() 全部模块加载后执行，见 cleaned_operators.__init__.load_all

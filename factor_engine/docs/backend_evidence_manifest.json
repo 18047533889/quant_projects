@@ -4920,6 +4920,21 @@
       "polars_reference_parity": false,
       "surface": "daily"
     },
+    "fin_mean_abs_deviation": {
+      "duckdb_edge_parity": false,
+      "duckdb_implemented": false,
+      "duckdb_production_safe": false,
+      "duckdb_real_sql_tested": false,
+      "duckdb_reference_parity": false,
+      "pandas_runtime": true,
+      "polars_edge_parity": false,
+      "polars_execution_kind": "unsupported",
+      "polars_implemented": false,
+      "polars_no_fallback": false,
+      "polars_production_safe": false,
+      "polars_reference_parity": false,
+      "surface": "extended"
+    },
     "fin_minority_profit_share": {
       "duckdb_edge_parity": false,
       "duckdb_implemented": false,
@@ -12197,7 +12212,7 @@
     },
     "ts_abdi_ranaldo_spread": {
       "duckdb_edge_parity": false,
-      "duckdb_implemented": false,
+      "duckdb_implemented": true,
       "duckdb_production_safe": false,
       "duckdb_real_sql_tested": false,
       "duckdb_reference_parity": false,
@@ -20314,7 +20329,7 @@
   "schema_version": 1,
   "surface_counts": {
     "daily": 1185,
-    "extended": 64,
+    "extended": 65,
     "internal": 3,
     "legacy": 1,
     "research": 94,

@@ -25,7 +25,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-import threading
+import contextvars
 from contextlib import contextmanager
 from functools import lru_cache
 from typing import Any
@@ -35,9 +35,12 @@ _NAMESPACE_ENV = "QUANT_RUN_NAMESPACE"
 _OPERATOR_ENV = "QUANT_OPERATOR"
 _SANITIZE_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
-# #37：session-scoped namespace 覆盖（DataAccessSession）。thread-local，比全局
-# 环境变量更安全——长期 worker 里不同请求可以各自绑定 namespace。
-_session = threading.local()
+# #37 / #P0-32：session-scoped namespace 覆盖（DataAccessSession）。
+# 用 ``contextvars.ContextVar`` 而不是 ``threading.local()`` —— 前者随 asyncio
+# task 传播，同一线程内不同协程可各自绑定 namespace，不会串。
+_session: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "data_access_session_namespace", default=None
+)
 
 
 def _sanitize(value: str, *, fallback: str = "anon") -> str:
@@ -81,7 +84,7 @@ def resolve_namespace() -> str:
 
     # #37：session-scoped 覆盖（thread-local）优先于全局环境变量。
     """
-    session_ns = getattr(_session, "namespace", None)
+    session_ns = _session.get()
     if session_ns:
         return _sanitize(session_ns)
     explicit = os.environ.get(_NAMESPACE_ENV, "").strip()
@@ -94,27 +97,27 @@ def resolve_namespace() -> str:
 
 
 def set_session_namespace(namespace: str | None) -> None:
-    """#37 设置当前线程的 session namespace（``None`` 清除，回退环境变量）。
+    """#37 设置当前 context 的 session namespace（``None`` 清除，回退环境变量）。
 
     用于 ``DataAccessSession(namespace=...)``：请求级绑定，路径 resolve 时再
     生效——不再依赖全局环境变量决定多租户路径。
+    #P0-32：基于 ``contextvars.ContextVar``，随 asyncio task 传播。
     """
-    _session.namespace = _sanitize(namespace) if namespace else None
+    _session.set(_sanitize(namespace) if namespace else None)
 
 
 def session_namespace() -> str | None:
-    return getattr(_session, "namespace", None)
+    return _session.get()
 
 
 @contextmanager
 def namespace_scope(namespace: str | None):
     """#37 上下文管理器：进入时绑定 session namespace，退出时恢复。"""
-    prev = getattr(_session, "namespace", None)
-    set_session_namespace(namespace)
+    token = _session.set(_sanitize(namespace) if namespace else None)
     try:
         yield
     finally:
-        _session.namespace = prev
+        _session.reset(token)
 
 
 class DataAccessSession:
@@ -126,19 +129,23 @@ class DataAccessSession:
             store.write_arrow("factor_lake_staging", tbl, factor_id="x")
 
     内部所有 ``resolve_namespace()``（写路径目录绑定）在该作用域内使用
-    ``run_123``，退出后恢复环境变量兜底。避免「loader 加载时就把
-    ${RUN_NAMESPACE} 替换死」导致长期 worker 多租户串路径。
+    ``run_123``，退出后恢复进入前的 namespace（嵌套场景不丢外层）。
+    避免「loader 加载时就把 ${RUN_NAMESPACE} 替换死」导致长期 worker
+    多租户串路径。
     """
 
     def __init__(self, namespace: str) -> None:
         self.namespace = namespace
 
     def __enter__(self) -> "DataAccessSession":
-        set_session_namespace(self.namespace)
+        self._token = _session.set(_sanitize(self.namespace) if self.namespace else None)
         return self
 
     def __exit__(self, *exc: Any) -> None:
-        set_session_namespace(None)
+        # #P0-32：restore 进入前的 namespace，而不是无条件清成 None。
+        token = getattr(self, "_token", None)
+        if token is not None:
+            _session.reset(token)
 
 
 _OPERATOR_SANITIZE_RE = re.compile(r"[^A-Za-z0-9._@+-]+")
@@ -161,9 +168,12 @@ def resolve_operator() -> str | None:
 
 
 def is_namespace_explicit() -> bool:
-    """判断 namespace 是否来自显式环境变量（而非兜底生成）。
+    """判断 namespace 是否来自显式来源（环境变量或 session context）。
 
     用于告警：如果写入了 namespaced 数据集但 namespace 是兜底生成的，
     说明用户可能忘记 export 了，日志里打个 warning。
+    #P0-32：同时认可 session namespace（``DataAccessSession``/``namespace_scope``）。
     """
+    if _session.get():
+        return True
     return bool(os.environ.get(_NAMESPACE_ENV, "").strip())

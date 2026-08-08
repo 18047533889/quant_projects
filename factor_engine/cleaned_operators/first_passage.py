@@ -26,10 +26,13 @@ import pandas as pd
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like
 
-_EPS = 1e-12
-
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+    # R4-85: ``barrier * scale`` is added to ``x``, so ``scale`` must share the
+    # units of ``x``.  x = price with scale = return-volatility violates the
+    # contract (adding return-vol to a price level); x = log(price) with
+    # scale = return-volatility is consistent.  The typed grammar enforces this;
+    # ``input_units`` documents the contract for the operator surface.
     return OperatorMetadata(
         name=name,
         category="first_passage",
@@ -42,7 +45,25 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        input_units={
+            "x": "price_or_log_price",
+            "scale": "volatility_with_same_unit_as_x",
+        },
+        compatible_units={"scale": ("log_price_volatility", "return_volatility")},
     )
+
+
+def _check_barrier(barrier: Any) -> float:
+    """Validate ``barrier > 0``.
+
+    R4-86: ``b = max(EPS, float(barrier))`` silently collapsed ``-1 / 0 /
+    1e-20`` into the same value, manufacturing duplicate ASTs out of different
+    parameters.  Non-positive barriers are rejected loudly.
+    """
+    b = float(barrier)
+    if not np.isfinite(b) or b <= 0.0:
+        raise ValueError("barrier must be a finite positive number")
+    return b
 
 
 def _first_passage_series(
@@ -56,7 +77,7 @@ def _first_passage_series(
     n = x.shape[0]
     w = max(2, int(window))
     H = max(1, int(horizon))
-    b = max(_EPS, float(barrier))
+    b = _check_barrier(barrier)
     ma = max(1, int(min_anchors))
     out = np.full(n, np.nan)
     for t in range(n):
@@ -140,6 +161,7 @@ class TsFirstPassageBias(SeriesOperator):
         min_anchors: int = 3,
         **_: Any,
     ) -> pd.DataFrame:
+        _check_barrier(barrier)
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -171,7 +193,7 @@ def _fp_stats_series(
     n = x.shape[0]
     w = max(2, int(window))
     H = max(1, int(horizon))
-    b = max(_EPS, float(barrier))
+    b = _check_barrier(barrier)
     ma = max(1, int(min_anchors))
     up_frac = np.full(n, np.nan)
     dn_frac = np.full(n, np.nan)
@@ -256,6 +278,7 @@ class TsFirstPassageHitProbability(SeriesOperator):
         side: str = "upper",
         **_: Any,
     ) -> pd.DataFrame:
+        _check_barrier(barrier)
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -303,6 +326,7 @@ class TsFirstPassageConditionalTime(SeriesOperator):
         side: str = "upper",
         **_: Any,
     ) -> pd.DataFrame:
+        _check_barrier(barrier)
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
         rows, cols = xv.shape

@@ -52,7 +52,26 @@ def read_cos_panel(self: Any, dataset: str, *, columns: Sequence[str] | None = N
         query = f"SELECT {projection} FROM {{{{{dataset}}}}}"
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
-        table = self.sql(query, read_datasets=[dataset], read_params={dataset: params} if params else None, read_time_ranges={dataset: time_range}, params=bind)
+        # #P0-26 官方 semantic helper 不撞 production view_columns 门禁 + 跳过
+        # user-SQL semantic gate（本 helper 入口已 validate_panel_request）。
+        ds_time = None
+        reg = getattr(self, "_registry", None)
+        if reg is not None:
+            try:
+                ds_time = getattr(reg.get(dataset), "time_column", None)
+            except Exception:
+                ds_time = None
+        base_cols = [contract.instrument_column, *( [ds_time] if ds_time else [])]
+        view_cols = list(dict.fromkeys([*(selected or []), *base_cols]))
+        table = self.sql(
+            query,
+            read_datasets=[dataset],
+            read_params={dataset: params} if params else None,
+            read_time_ranges={dataset: time_range},
+            view_columns={dataset: view_cols},
+            params=bind,
+            _semantic_gate=False,
+        )
     else:
         table = self.read_arrow(dataset, columns=selected, time_range=time_range, instrument_filter=instrument_filter, **params)
     if normalize_returns:

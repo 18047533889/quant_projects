@@ -50,6 +50,11 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:scaling",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        # R4-95: the trailing ``window`` is a real horizon — it must be fully
+        # accumulated before an estimate is emitted (R4-94).  Values inside the
+        # window are used as aligned finite pairs, so at most ``window`` rows
+        # are consumed (gaps reduce the pair count, never the row requirement).
+        window_semantics="max_rows",
     )
 
 
@@ -120,7 +125,15 @@ def _hurst_series(x2d: np.ndarray, window: int, q: float) -> np.ndarray:
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
-            i0 = max(0, r - w + 1)
+            # R4-94: ``window`` is a real horizon — the trailing window must be
+            # fully accumulated before an H estimate is emitted.  Previously the
+            # ``max(0, r - w + 1)`` truncation let a partial window start
+            # estimating H as soon as the aligned-pair floor was met (e.g.
+            # ~10 rows into a window=120 series), which is not the same scaling
+            # law as the full window and produced unstable early values.
+            if r + 1 < w:
+                continue
+            i0 = r - w + 1
             out[r, c] = _hurst_generalized(col[i0 : r + 1], q)
     return out
 
@@ -132,7 +145,9 @@ def _width_series(x2d: np.ndarray, window: int) -> np.ndarray:
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
-            i0 = max(0, r - w + 1)
+            if r + 1 < w:
+                continue
+            i0 = r - w + 1
             chunk = col[i0 : r + 1]
             h1 = _hurst_generalized(chunk, 1.0)
             h4 = _hurst_generalized(chunk, 4.0)
@@ -149,7 +164,9 @@ def _curvature_series(x2d: np.ndarray, window: int) -> np.ndarray:
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
-            i0 = max(0, r - w + 1)
+            if r + 1 < w:
+                continue
+            i0 = r - w + 1
             chunk = col[i0 : r + 1]
             hs = np.asarray([_hurst_generalized(chunk, q_) for q_ in qs], dtype=float)
             ok = np.isfinite(hs)

@@ -446,14 +446,22 @@ def _kama_numpy(values: np.ndarray, smoothing: np.ndarray) -> np.ndarray:
     return out
 
 
-def pd_kama(close, window=10, **_):
-    w = positive_int(window, "window")
+def pd_kama(close, er_window=10, fast_window=2, slow_window=30, **_):
+    # R4-100: aligned to the canonical ``(close, er_window, fast_window,
+    # slow_window)`` contract (technical.indicators_v2.KAMA is the pandas
+    # reference).  The old fast-path signature ``(close, window)`` accepted a
+    # different simplified formula under the same canonical.
+    w = positive_int(er_window, "er_window")
+    fast = positive_int(fast_window, "fast_window")
+    slow = positive_int(slow_window, "slow_window")
+    if fast >= slow:
+        raise ValueError("fast_window must be < slow_window")
     delayed = _pd_delay(close, w)
     direction = (close - delayed).abs()
-    volatility = _call("ts_sum", "pandas_numpy", (close - _pd_delay(close, 1)).abs(), w, min_periods=1)
+    volatility = _call("ts_sum", "pandas_numpy", (close - _pd_delay(close, 1)).abs(), w, min_periods=w)
     efficiency = direction / volatility.replace(0, np.nan)
-    fast_sc = 2.0 / 3.0
-    slow_sc = 2.0 / 31.0
+    fast_sc = 2.0 / (fast + 1.0)
+    slow_sc = 2.0 / (slow + 1.0)
     smoothing = (efficiency * (fast_sc - slow_sc) + slow_sc).pow(2)
     return pd.DataFrame(
         _kama_numpy(close.to_numpy(dtype=float), smoothing.to_numpy(dtype=float)),
@@ -462,17 +470,21 @@ def pd_kama(close, window=10, **_):
     )
 
 
-def pl_kama(close, window=10, **_):
-    w = positive_int(window, "window")
+def pl_kama(close, er_window=10, fast_window=2, slow_window=30, **_):
+    w = positive_int(er_window, "er_window")
+    fast = positive_int(fast_window, "fast_window")
+    slow = positive_int(slow_window, "slow_window")
+    if fast >= slow:
+        raise ValueError("fast_window must be < slow_window")
     cols = pl_cols(close)
-    fast_sc = 2.0 / 3.0
-    slow_sc = 2.0 / 31.0
+    fast_sc = 2.0 / (fast + 1.0)
+    slow_sc = 2.0 / (slow + 1.0)
     smoothing = close.select(
         [
             (
                 (
                     (pl.col(c) - pl.col(c).shift(w)).abs()
-                    / pl.col(c).diff().abs().rolling_sum(window_size=w, min_samples=1)
+                    / pl.col(c).diff().abs().rolling_sum(window_size=w, min_samples=w)
                 )
                 * (fast_sc - slow_sc)
                 + slow_sc
@@ -778,7 +790,7 @@ def register_composite_fastpaths() -> None:
         ("WilliamsR", "technical_signal", ["high", "low", "close", "window"], "复用 StochasticK 的 Williams R", pd_williams_r, pl_williams_r),
         ("TRIX", "technical_signal", ["close", "window"], "复用三层 ts_ema 与 ROC", pd_trix, pl_trix),
         ("OBV", "technical_signal", ["price", "volume"], "复用滞后方向并累计成交量", pd_obv, pl_obv),
-        ("KAMA", "technical_signal", ["close", "window"], "共享效率比并按行向量化递归", pd_kama, pl_kama),
+        ("KAMA", "technical_signal", ["close", "er_window", "fast_window", "slow_window"], "共享效率比并按行向量化递归", pd_kama, pl_kama),
         ("vp_weighted_price", "technical_signal", ["close", "volume", "open", "high", "low", "window"], "VP-MACD 共享量价加权价格内核", pd_vp_weighted_price, pl_vp_weighted_price),
         ("vpmacd", "technical_signal", ["close", "volume", "open", "high", "low", "lambda_param"], "一次计算 weighted price、MACD line 和 signal", pd_vpmacd, pl_vpmacd),
         ("vpmacd_signal", "technical_signal", ["close", "volume", "open", "high", "low", "lambda_param"], "复用同一次 VP-MACD 中间量的离散交叉信号", pd_vpmacd_signal, pl_vpmacd_signal),

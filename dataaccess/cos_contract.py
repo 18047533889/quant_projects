@@ -209,7 +209,18 @@ def enforce_event_cutoff(
     if end is None and as_of is not None:
         end = as_of
     if end is None:
-        return
+        # #P0-13 无 end 的无界查询：effective_time_only 事件没有可靠公告时点，
+        # 无界读取可能读到未来生效事件（前视）。
+        import datetime as _dt
+
+        if production:
+            name = getattr(contract, "name", None) or getattr(contract, "dataset", None)
+            raise ValidationError(
+                f"数据集 {name!r} 是 effective_time_only 事件表，读取必须给出"
+                "生效日上界（time_range.end 或 as_of）；无界读取可能读到未来生效"
+                "事件（前视），production fail-closed。"
+            )
+        end = _dt.date.today()  # research 默认 cutoff 到今天
     import datetime as _dt
 
     def _to_date(v: Any) -> _dt.date | None:
@@ -245,6 +256,7 @@ def validate_join_fanout(
     join_key: tuple[str, ...],
     production: bool = False,
     applied_filter_columns: Sequence[str] | None = None,
+    applied_filter_values: Mapping[str, Sequence[Any]] | None = None,
 ) -> None:
     """#10 join fan-out 守卫。
 
@@ -256,7 +268,9 @@ def validate_join_fanout(
         - ``cardinality == one_to_one``；
         - join key 覆盖 unique_key；
         - ``required_dimension_filters`` 已全部出现在 applied_filter_columns
-          （如 IndustrySource 已 filter → 行业表退化为每日每标的一行）。
+          **且每个 filter 值都是单值**（#P0-14 单值证明）——如
+          ``IndustrySource = 'sw_l1'`` 才能证明行业表退化为每日每标的一行；
+          ``IndustrySource IN ('sw_l1','sw_l2')`` 每个标的多行业仍 one-to-many。
     """
     if contract.cardinality == "one_to_one":
         return
@@ -266,7 +280,14 @@ def validate_join_fanout(
     if contract.required_dimension_filters:
         applied = set(applied_filter_columns or ())
         if set(contract.required_dimension_filters) <= applied:
-            return
+            # #P0-14 单值证明：IN 多值 / 范围过滤不能证明退化为一行
+            vals = applied_filter_values or {}
+            single = all(
+                len(tuple(vals.get(col, ()))) == 1
+                for col in contract.required_dimension_filters
+            )
+            if single:
+                return
     if contract.cardinality in {"one_to_many", "many_to_many"}:
         msg = (
             f"数据集 {contract.name!r} cardinality={contract.cardinality}，"

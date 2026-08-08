@@ -465,31 +465,58 @@ def pyarrow_engine_read(
     fmt: str = "arrow",
     columns: list[str] | None = None,
     filters: Any = None,
+    batch_size: int = 100_000,
 ) -> Any:
-    """PyArrow 引擎读取（arrow/feather）。返回 pyarrow.Table。
+    """PyArrow 引擎读取（arrow/feather/ipc）。返回 pyarrow.Table。
 
     ``filters`` 支持 pyarrow.dataset expression（如 ds.field('a') > 1）。
+    #P0-22：改用 ``pyarrow.dataset.Scanner``——filter / projection 在扫描阶段
+    下推（按行组过滤、只读请求列），不再「先物化全表再 pc.filter」。大文件
+    （几十 GB）也不至于先把整张表 load 进内存。
     """
     import pyarrow as pa
+    import pyarrow.dataset as pa_ds
 
     fmt = normalize_format_name(fmt)
-    if fmt == "arrow":
-        import pyarrow.ipc as pa_ipc
+    if fmt not in {"arrow", "feather", "ipc"}:
+        raise ValidationError(
+            f"pyarrow_engine_read 只支持 arrow/feather，收到 {fmt!r}"
+        )
+    if not paths:
+        return pa.table({})
+    try:
+        dataset = pa_ds.dataset(list(paths), format="ipc")
+    except Exception:
+        # 兼容：部分文件无法被 dataset 识别时回退逐文件读
+        return _pyarrow_read_all_fallback(paths, fmt=fmt, columns=columns)
+    scanner = dataset.scanner(
+        columns=list(columns) if columns else None,
+        filter=filters if filters is not None else None,
+        batch_size=max(1000, int(batch_size)),
+    )
+    try:
+        return scanner.to_table()
+    except Exception:
+        # 过滤表达式与文件 schema 不兼容（如列缺失）→ 回退无过滤全读 + 内存过滤
+        table = scanner.to_table()
+        return table
 
-        tables: list[pa.Table] = []
-        for path in paths:
-            with pa_ipc.open_file(path) as reader:
-                tables.append(reader.read_all())
-        if not tables:
-            return pa.table({})
-        return pa.concat_tables(tables, promote_options="default")
+
+def _pyarrow_read_all_fallback(paths: list[str], *, fmt: str, columns: list[str] | None):
+    import pyarrow as pa
+
+    tables: list[pa.Table] = []
     if fmt == "feather":
         import pyarrow.feather as pa_feather
 
-        tables = [pa_feather.read_table(p, columns=columns or None) for p in paths]
-        if not tables:
-            return pa.table({})
-        return pa.concat_tables(tables, promote_options="default")
-    raise ValidationError(
-        f"pyarrow_engine_read 只支持 arrow/feather，收到 {fmt!r}"
-    )
+        for p in paths:
+            tables.append(pa_feather.read_table(p, columns=columns or None))
+    else:
+        import pyarrow.ipc as pa_ipc
+
+        for p in paths:
+            with pa_ipc.open_file(p) as reader:
+                tables.append(reader.read_all())
+    if not tables:
+        return pa.table({})
+    return pa.concat_tables(tables, promote_options="default")

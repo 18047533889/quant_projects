@@ -15,10 +15,16 @@ characterise the *shape* of the drawn path:
 * ``ts_vector_self_intersection_rate``— fraction of segment pairs that properly
   intersect (2D segment-intersection test).  Uses raw coordinates.
 
-All operators are trailing-window, prefix-causal and deterministic.  Only
-same-position finite ``(f1, f2)`` pairs are used; degenerate windows (too few
-points, zero rolling std) emit NaN (fail-closed).  Invalid parameters raise
-``ValueError``.
+All operators are trailing-window, prefix-causal and deterministic.  The
+path is computed over a trailing *contiguous* run of same-position valid
+``(f1, f2)`` pairs: a missing pair inside the window makes the window invalid
+(fail-closed, review R4-51) — the remaining points are never re-connected
+across a gap into a fake straight line.  ``ts_vector_path_curvature`` uses
+rolling-standardized coordinates (review R4-52) so a unit change on one axis
+(e.g. amount in yuan vs. 10k yuan) cannot rescale the curvature, and
+``ts_vector_self_intersection_rate`` excludes adjacent segment pairs from its
+denominator (review R4-53).  Degenerate windows (too few points, zero rolling
+std) emit NaN (fail-closed).  Invalid parameters raise ``ValueError``.
 """
 from __future__ import annotations
 

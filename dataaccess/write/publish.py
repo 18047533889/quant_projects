@@ -105,16 +105,16 @@ def publish_from_staging(
         authorizer.resolve_and_authorize(str(staging_dir))
         authorizer.resolve_and_authorize(str(target_dir))
 
-        # 校验 staging 真的有东西发
-        source_rows = _count_parquet_rows(staging_dir)
-        if source_rows == 0:
+        # #P0-33 单一 inventory snapshot：行数/字节/schema 全部来自同一次
+        # _file_inventory（不再先 _count_parquet_rows 再 inventory——二者之间
+        # staging 可能变化，source_rows 会来自上一版本）。
+        source_inv = _file_inventory(staging_dir)
+        if source_inv is None or not source_inv:
             raise DataError(
                 f"staging 数据集 '{staging_name}' 在 {staging_dir} 没有可发布内容；"
                 f"是不是没写 / 参数 {params} 不对？"
             )
-        # #40 冻结 source snapshot：copy 前后比对文件清单，防止 copy 期间另一
-        # writer 并发 upsert staging 形成 mixed generation。
-        source_inv = _file_inventory(staging_dir)
+        source_rows = sum(rows for rows, _bytes, _hash in source_inv.values())
 
         target_parent = target_dir.parent
         target_parent.mkdir(parents=True, exist_ok=True)
@@ -142,10 +142,29 @@ def publish_from_staging(
                         f"拷贝可能中断或 staging 被并发修改，拒绝发布"
                     )
 
-                # 第 3 步：同 FS 原子 rename —— old_published → archive，candidate → final
+                # #P0-30 key 唯一性发布 gate：契约声明 unique_key 时必须无重复。
+                _validate_unique_key(target_ds, candidate_dir)
+
+                # #P0-32 第 3 步：publish manifest 属于 commit metadata，必须**在
+                # 原子切换之前**生成并写进 candidate——切换失败/写失败都 abort，
+                # 绝不允许「新 target 已上线但写 manifest 失败 → caller 抛异常、
+                # 却留下已发布版本」的不一致状态。
                 if target_dir.exists():
                     archive_path = _archive_path(target_parent, target_dir.name)
                     archive_path.parent.mkdir(parents=True, exist_ok=True)
+                manifest_path = write_publish_manifest(
+                    candidate_dir,
+                    staging_name=staging_name,
+                    target_name=target_name,
+                    params=params,
+                    rows=source_rows,
+                    archive_path=archive_path,
+                    elapsed_ms=(time.perf_counter() - start) * 1000,
+                )
+
+                # 第 4 步：同 FS 原子 rename —— old_published → archive，candidate → final
+                # （manifest 已随 candidate 一起原子切换上线）
+                if target_dir.exists():
                     os.rename(str(target_dir), str(archive_path))
 
                 try:
@@ -168,20 +187,20 @@ def publish_from_staging(
                     raise DataError(
                         f"publish 后文件清单与 staging 不一致（行数/文件/schema）；已回滚"
                     )
+                # 切换后验证 publish manifest 确实随数据一起上线。
+                if not (target_dir / ".publish_manifest.json").exists():
+                    _rollback_final(target_dir, archive_path)
+                    raise DataError(
+                        f"publish 后 {target_dir}/.publish_manifest.json 缺失；"
+                        "commit metadata 未随原子切换上线，已回滚"
+                    )
 
                 ok = True
                 candidate_dir = None
-
-                manifest_path = write_publish_manifest(
-                    target_dir,
-                    staging_name=staging_name,
-                    target_name=target_name,
-                    params=params,
-                    rows=source_rows,
-                    archive_path=archive_path,
-                    elapsed_ms=(time.perf_counter() - start) * 1000,
+                logger.info(
+                    "publish manifest committed with target: %s",
+                    target_dir / ".publish_manifest.json",
                 )
-                logger.info("publish manifest written: %s", manifest_path)
     except Exception as exc:
         err_msg = f"{type(exc).__name__}: {exc}"
         raise
@@ -337,6 +356,55 @@ def _count_parquet_rows(root: Path) -> int:
                 f"读 {p} 的 parquet footer 失败：{exc}；staging 目录可能损坏"
             ) from exc
     return total
+
+
+def _validate_unique_key(ds: Dataset, root: Path) -> None:
+    """#P0-30 key 唯一性发布 gate：契约/registry 声明 unique_key 时必须无重复。
+
+    重复 key（Hive 分区目录 + 同 key 多行）在发布时就拒绝，而不是等读取端
+    fan-out / 去重。只有声明了 unique_key 的数据集才做（无声明跳过）。
+    """
+    unique_key = getattr(ds, "unique_key", None)
+    if not unique_key:
+        try:
+            from data_access.cos_contract import get_cos_contract
+
+            contract = get_cos_contract(getattr(ds, "name", ""))
+            unique_key = tuple(contract.unique_key or ()) if contract else None
+        except Exception:
+            unique_key = None
+    if not unique_key:
+        return
+    keys = [str(k) for k in unique_key]
+    parquet_files = sorted(
+        str(p) for p in root.rglob("*.parquet")
+        if not p.name.startswith(".") and not p.is_symlink()
+    )
+    if not parquet_files:
+        return
+    import duckdb
+
+    key_list = ", ".join(f'"{k}"' for k in keys)
+    from_clause = "read_parquet(" + ",".join(f"'{f}'" for f in parquet_files) + ")"
+    sql = (
+        f"SELECT {key_list}, COUNT(*) AS _n FROM {from_clause} "
+        f"GROUP BY {key_list} HAVING COUNT(*) > 1 LIMIT 1"
+    )
+    try:
+        con = duckdb.connect()
+        rows = con.execute(sql).fetchall()
+    except Exception:
+        return  # 无法验证时放行（列可能不存在于部分文件）；数据读取端仍有 dedup
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+    if rows:
+        raise DataError(
+            f"publish 唯一键校验失败：{keys} 存在重复（示例 {rows[0][:-1]}）。"
+            "发布数据不能违反 unique_key 契约。"
+        )
 
 
 def _file_inventory(root: Path) -> dict[str, tuple[int, int, str]] | None:

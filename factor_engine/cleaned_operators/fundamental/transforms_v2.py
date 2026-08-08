@@ -98,14 +98,14 @@ def _walk_periods(
     return out
 
 
-def _values(
+def _window_keys(
     order: list[object],
     visible: OrderedDict,
     current: object,
     count: int | None = None,
     require_consecutive: bool = False,
-):
-    """Values of the most recent ``count`` visible report periods ending at
+) -> list[object]:
+    """Keys of the most recent ``count`` visible report periods ending at
     ``current`` (or the full visible history when ``count`` is None).
 
     ``require_consecutive=True`` fails closed on a skipped fiscal period: the
@@ -114,7 +114,11 @@ def _values(
     report (e.g. a vendor gap at 2025Q2) would silently substitute a
     non-adjacent quarter — acceptable for "historical distribution" summaries
     but wrong for sums/averages whose math requires adjacent periods (review
-    P0-03).
+    P0-03).  Operators that MUST treat fiscal time as real time (TTM, average
+    balance, period trends, growth sequences, monotonicity, streaks, sign
+    change counts) pass ``require_consecutive=True``; distribution / percentile
+    / dispersion summaries intentionally use the last-N-*visible* window and
+    document that missing reports are skipped.
     """
     try:
         pos = order.index(current)
@@ -130,8 +134,132 @@ def _values(
         for prev_o, o in zip(ords, ords[1:]):
             if o != prev_o + 1:
                 return []
+    return list(keys)
+
+
+def _values(
+    order: list[object],
+    visible: OrderedDict,
+    current: object,
+    count: int | None = None,
+    require_consecutive: bool = False,
+):
+    """Values of the most recent ``count`` visible report periods ending at
+    ``current`` (or the full visible history when ``count`` is None).
+
+    ``require_consecutive=True`` fails closed on a skipped fiscal period (see
+    ``_window_keys``).  Without it the window is the last-N-*visible* reports:
+    missing report periods are skipped, which is valid for distribution /
+    percentile / dispersion summaries but NOT for sums, averages, trends or
+    other math that requires adjacent fiscal periods (review R4-23).
+    """
+    keys = _window_keys(order, visible, current, count, require_consecutive)
     vals = [float(visible[k]) for k in keys if k in visible and np.isfinite(visible[k])]
     return vals
+
+
+def _streak_span(
+    order: list[object],
+    visible: OrderedDict,
+    current: object,
+    *,
+    positive: bool,
+    max_periods: int | None = None,
+) -> float:
+    """Count consecutive report-to-report value *changes* with the given sign.
+
+    Each counted step must be between *adjacent* fiscal periods: a skipped
+    report (e.g. Q2 missing between Q1 and Q3) ends the streak instead of being
+    silently treated as a single step (review R4-23).  ``max_periods`` bounds
+    how far back the streak may look.  Unparseable period ids (no fiscal
+    ordinal) fall back to position-based appearance order — the only notion of
+    "consecutive" available for them.
+    """
+    try:
+        pos = order.index(current)
+    except ValueError:
+        return 0.0
+    cur_ord = period_ordinal(current)
+    if cur_ord is None:
+        start = max(0, pos - max_periods + 1) if max_periods else 0
+        vals = [float(visible[order[i]]) for i in range(start, pos + 1)]
+        if len(vals) < 2:
+            return 0.0
+        count = 0
+        for z in np.diff(vals)[::-1]:
+            if (z > 0) if positive else (z < 0):
+                count += 1
+            else:
+                break
+        return float(count)
+    start = max(0, pos - max_periods + 1) if max_periods else 0
+    count = 0
+    prev_key = current
+    for key in reversed(order[start:pos]):
+        key_ord = period_ordinal(key)
+        if key_ord is None or cur_ord - key_ord != 1:
+            break
+        d = float(visible[prev_key]) - float(visible[key])
+        if (d > 0) if positive else (d < 0):
+            count += 1
+        else:
+            break
+        prev_key = key
+        cur_ord = key_ord
+    return float(count)
+
+
+def _value_streak_span(
+    order: list[object],
+    visible: OrderedDict,
+    current: object,
+    *,
+    positive: bool,
+    max_periods: int | None = None,
+) -> float:
+    """Count consecutive visible report periods whose *value* has the given sign.
+
+    The walk breaks at a skipped fiscal period (a missing report's sign is
+    unknown — it must not bridge two non-adjacent quarters, review R4-23).
+    ``max_periods`` bounds how many periods (including the current one) may
+    contribute.  Unparseable period ids fall back to appearance order.
+    """
+    try:
+        pos = order.index(current)
+    except ValueError:
+        return 0.0
+    cur_ord = period_ordinal(current)
+    if cur_ord is None:
+        start = max(0, pos - max_periods + 1) if max_periods else 0
+        vals = [float(visible[order[i]]) for i in range(start, pos + 1)]
+        streak = 0
+        for v in vals[::-1]:
+            if (v > 0) if positive else (v < 0):
+                streak += 1
+            else:
+                break
+        return float(streak)
+    cur_val = float(visible[current])
+    if (cur_val > 0) if positive else (cur_val < 0):
+        streak = 1
+    else:
+        return 0.0
+    prev_ord = cur_ord
+    walked = 0
+    for key in reversed(order[:pos]):
+        if max_periods is not None and walked >= max_periods - 1:
+            break
+        key_ord = period_ordinal(key)
+        if key_ord is None or prev_ord - key_ord != 1:
+            break
+        val = float(visible[key])
+        if (val > 0) if positive else (val < 0):
+            streak += 1
+            walked += 1
+            prev_ord = key_ord
+        else:
+            break
+    return float(streak)
 
 
 def _lag_value(order, visible, current, periods: int):
@@ -262,10 +390,10 @@ def fin_growth_change(x, period_id, growth_periods=4, compare_periods=1):
     return g - fin_lag(g, period_id, _pos_int(compare_periods, "compare_periods"))
 
 
-def _rolling_period_stat(x, period_id, periods: int, reducer):
+def _rolling_period_stat(x, period_id, periods: int, reducer, require_consecutive: bool = False):
     n = _pos_int(periods, "periods", 2)
     def calc(o, v, c):
-        vals = np.asarray(_values(o, v, c, n), dtype=float)
+        vals = np.asarray(_values(o, v, c, n, require_consecutive), dtype=float)
         return float(reducer(vals)) if len(vals) == n else np.nan
     return _walk_periods(x, period_id, calc)
 
@@ -274,8 +402,25 @@ def fin_std(x, period_id, periods=8):
     return _rolling_period_stat(x, period_id, periods, lambda a: np.std(a, ddof=1))
 
 
-def fin_mad(x, period_id, periods=8):
+def fin_mean_abs_deviation(x, period_id, periods=8):
+    """Mean absolute deviation: mean(|x - mean(x)|).
+
+    This is the (non-robust) L1 dispersion of reporting-period values.  The
+    legacy name ``fin_mad`` is retained as an alias, but the truly robust
+    median-based MAD lives under ``fin_median_abs_deviation`` (review R4-28).
+    """
     return _rolling_period_stat(x, period_id, periods, lambda a: np.mean(np.abs(a - np.mean(a))))
+
+
+# ``fin_mad`` historically implemented mean absolute deviation, NOT the robust
+# median(|x - median|) MAD.  Keep it as a compatibility alias of
+# ``fin_mean_abs_deviation``; the real MAD is ``fin_median_abs_deviation``.
+fin_mad = fin_mean_abs_deviation
+
+
+def fin_median_abs_deviation(x, period_id, periods=8):
+    """Robust median absolute deviation: median(|x - median(x)|) (review R4-28)."""
+    return _rolling_period_stat(x, period_id, periods, lambda a: float(np.median(np.abs(a - np.median(a)))))
 
 
 def fin_cv(x, period_id, periods=8):
@@ -295,6 +440,13 @@ def fin_range(x, period_id, periods=8):
 
 
 def fin_zscore_history(x, period_id, periods=8):
+    """INCLUSIVE z-score: the current report is part of the reference sample.
+
+    This mechanically compresses extremity (the current observation is always
+    inside the sample it is scored against).  Prefer
+    ``fin_zscore_vs_prior_history`` when the current report should be scored
+    out-of-history against the previous reports only (review R4-25).
+    """
     n = _pos_int(periods, "periods", 2)
     def calc(o, v, c):
         vals = np.asarray(_values(o, v, c, n), dtype=float)
@@ -308,7 +460,32 @@ def fin_zscore_history(x, period_id, periods=8):
     return _walk_periods(x, period_id, calc)
 
 
+def fin_zscore_vs_prior_history(x, period_id, periods=8):
+    """Z-score of the current report against the PRIOR reports only.
+
+    The reference sample is the previous ``periods - 1`` visible reports; the
+    current report is an out-of-history observation, so its extremity is not
+    mechanically compressed by inclusion in its own reference distribution
+    (review R4-25).  Skips missing report periods (last-N-visible).
+    """
+    n = _pos_int(periods, "periods", 3)
+    def calc(o, v, c):
+        vals = np.asarray(_values(o, v, c, n), dtype=float)
+        if len(vals) != n:
+            return np.nan
+        history = vals[:-1]
+        current = float(vals[-1])
+        sd = float(np.std(history, ddof=1))
+        return (current - float(np.mean(history))) / sd if sd > _EPS else np.nan
+    return _walk_periods(x, period_id, calc)
+
+
 def fin_percentile_history(x, period_id, periods=8):
+    """INCLUSIVE percentile: the current report is part of the reference sample.
+
+    Prefer ``fin_percentile_vs_prior_history`` to score the current report
+    against the previous reports only (review R4-25).
+    """
     n = _pos_int(periods, "periods", 2)
     def calc(o, v, c):
         vals = np.asarray(_values(o, v, c, n), dtype=float)
@@ -318,13 +495,38 @@ def fin_percentile_history(x, period_id, periods=8):
     return _walk_periods(x, period_id, calc)
 
 
-def _trend_stat(x, period_id, periods, which: str):
+def fin_percentile_vs_prior_history(x, period_id, periods=8):
+    """Percentile of the current report against the PRIOR reports only.
+
+    The reference sample is the previous ``periods - 1`` visible reports; the
+    current report is an out-of-history observation (review R4-25).  Skips
+    missing report periods (last-N-visible).
+    """
+    n = _pos_int(periods, "periods", 2)
+    def calc(o, v, c):
+        vals = np.asarray(_values(o, v, c, n), dtype=float)
+        if len(vals) != n:
+            return np.nan
+        history = vals[:-1]
+        current = float(vals[-1])
+        return float((np.sum(history < current) + 0.5 * np.sum(history == current)) / len(history))
+    return _walk_periods(x, period_id, calc)
+
+
+def _trend_stat(x, period_id, periods, which: str, require_consecutive: bool = True):
     n = _pos_int(periods, "periods", 3)
     def calc(o, v, c):
-        y = np.asarray(_values(o, v, c, n), dtype=float)
-        if len(y) != n:
+        keys = _window_keys(o, v, c, n, require_consecutive)
+        if len(keys) != n:
             return np.nan
-        xx = np.arange(n, dtype=float)
+        y = np.asarray([float(v[k]) for k in keys], dtype=float)
+        # R4-24: the trend time axis is the *fiscal ordinal* (period_id's fiscal
+        # sequence), not arange(n): a skipped Q2 between Q1 and Q3 must not be
+        # counted as a single step.  require_consecutive additionally fails the
+        # window closed on any gap, so the ordinals are guaranteed contiguous.
+        xx = np.asarray([float(period_ordinal(k)) for k in keys], dtype=float)
+        if not np.all(np.isfinite(xx)) or not np.all(np.isfinite(y)):
+            return np.nan
         xb, yb = float(xx.mean()), float(y.mean())
         den = float(np.sum((xx-xb)**2))
         if den <= _EPS:
@@ -359,9 +561,12 @@ def fin_trend_acceleration(x, period_id, short_periods=4, long_periods=8):
 
 
 def fin_monotonicity(x, period_id, periods=8):
+    # Monotonicity is measured over *adjacent* fiscal periods: a skipped report
+    # (missing Q2) must fail closed rather than being treated as a single step
+    # (review R4-23).
     n=_pos_int(periods,"periods",2)
     def calc(o,v,c):
-        vals=np.asarray(_values(o,v,c,n),dtype=float)
+        vals=np.asarray(_values(o,v,c,n,require_consecutive=True),dtype=float)
         if len(vals)!=n:return np.nan
         d=np.diff(vals)
         return float((np.sum(d>0)-np.sum(d<0))/max(1,len(d)))
@@ -369,15 +574,11 @@ def fin_monotonicity(x, period_id, periods=8):
 
 
 def _streak(x, period_id, positive: bool):
-    def calc(o,v,c):
-        vals=np.asarray(_values(o,v,c,None),dtype=float)
-        if len(vals)<2:return 0.0
-        d=np.diff(vals); count=0
-        for z in d[::-1]:
-            if (z>0) if positive else (z<0): count+=1
-            else: break
-        return float(count)
-    return _walk_periods(x,period_id,calc)
+    # A streak counts report-to-report changes only between *adjacent* fiscal
+    # periods; a skipped report ends the streak (review R4-23).
+    return _walk_periods(
+        x, period_id, lambda o, v, c: _streak_span(o, v, c, positive=positive)
+    )
 
 
 def fin_positive_streak(x,period_id): return _streak(x,period_id,True)
@@ -385,9 +586,11 @@ def fin_negative_streak(x,period_id): return _streak(x,period_id,False)
 
 
 def fin_sign_change_count(x,period_id,periods=8):
+    # Direction reversals are counted over *adjacent* fiscal periods (review
+    # R4-23): a skipped report fails the window closed.
     n=_pos_int(periods,"periods",3)
     def calc(o,v,c):
-        vals=np.asarray(_values(o,v,c,n),dtype=float)
+        vals=np.asarray(_values(o,v,c,n,require_consecutive=True),dtype=float)
         if len(vals)!=n:return np.nan
         signs=np.sign(np.diff(vals)); signs=signs[signs!=0]
         return float(np.sum(signs[1:]!=signs[:-1])) if len(signs)>1 else 0.0
@@ -395,8 +598,14 @@ def fin_sign_change_count(x,period_id,periods=8):
 
 
 def fin_growth_volatility(x,period_id,growth_periods=1,window_periods=8):
+    # The growth sequence is measured over *adjacent* fiscal periods: a skipped
+    # report fails the window closed instead of mixing multi-period changes
+    # into the volatility (review R4-23).
     g=fin_pct_change(x,period_id,_pos_int(growth_periods,"growth_periods"))
-    return fin_std(g,period_id,_pos_int(window_periods,"window_periods",2))
+    return _rolling_period_stat(
+        g, period_id, _pos_int(window_periods, "window_periods", 2),
+        lambda a: np.std(a, ddof=1), require_consecutive=True,
+    )
 
 
 def fin_growth_stability(x,period_id,growth_periods=1,window_periods=8):
@@ -408,7 +617,7 @@ def fin_growth_persistence(x,period_id,growth_periods=1,window_periods=8):
     g=fin_pct_change(x,period_id,_pos_int(growth_periods,"growth_periods"))
     n=_pos_int(window_periods,"window_periods",2)
     def calc(o,v,c):
-        vals=np.asarray(_values(o,v,c,n),dtype=float)
+        vals=np.asarray(_values(o,v,c,n,require_consecutive=True),dtype=float)
         return float(np.mean(vals>0)) if len(vals)==n else np.nan
     return _walk_periods(g,period_id,calc)
 
@@ -453,30 +662,34 @@ _SPECS = [
     ("fin_log_change",["x","period_id","periods"],fin_log_change,"Log change versus a prior visible report period."),
     ("fin_qoq",["x","period_id"],fin_qoq,"Quarter-over-quarter/one-report-period growth."),
     ("fin_yoy",["x","period_id","periods_per_year"],fin_yoy,"Year-over-year growth with configurable periods per year."),
-    ("fin_ttm",["x","period_id","periods_per_year"],fin_ttm,"Rolling sum over visible report periods."),
-    ("fin_average_balance",["x","period_id","periods"],fin_average_balance,"Average balance over visible report periods."),
+    ("fin_ttm",["x","period_id","periods_per_year"],fin_ttm,"Rolling sum over *adjacent* fiscal report periods; a skipped report fails closed to NaN (review R4-23)."),
+    ("fin_average_balance",["x","period_id","periods"],fin_average_balance,"Average balance over *adjacent* fiscal report periods; a skipped report fails closed to NaN (review R4-23)."),
     ("fin_growth",["x","period_id","periods"],fin_growth,"Generic reporting-period growth."),
     ("fin_cagr",["x","period_id","periods","periods_per_year"],fin_cagr,"Reporting-period CAGR with configurable annualization."),
     ("fin_growth_acceleration",["x","period_id","short_periods","long_periods"],fin_growth_acceleration,"Short-horizon minus long-horizon fundamental growth."),
     ("fin_growth_change",["x","period_id","growth_periods","compare_periods"],fin_growth_change,"Change in a reporting-period growth rate."),
-    ("fin_growth_volatility",["x","period_id","growth_periods","window_periods"],fin_growth_volatility,"Volatility of period growth across visible reports."),
-    ("fin_growth_stability",["x","period_id","growth_periods","window_periods"],fin_growth_stability,"Inverse growth-volatility stability score."),
-    ("fin_growth_persistence",["x","period_id","growth_periods","window_periods"],fin_growth_persistence,"Fraction of recent visible reports with positive growth."),
-    ("fin_std",["x","period_id","periods"],fin_std,"Historical reporting-period standard deviation."),
-    ("fin_mad",["x","period_id","periods"],fin_mad,"Historical reporting-period mean absolute deviation."),
-    ("fin_cv",["x","period_id","periods"],fin_cv,"Historical reporting-period coefficient of variation."),
-    ("fin_stability",["x","period_id","periods"],fin_stability,"Generic bounded fundamental stability score."),
-    ("fin_range",["x","period_id","periods"],fin_range,"Historical reporting-period range."),
-    ("fin_zscore_history",["x","period_id","periods"],fin_zscore_history,"Current value z-score versus own visible reporting history."),
-    ("fin_percentile_history",["x","period_id","periods"],fin_percentile_history,"Current value percentile versus own visible reporting history."),
-    ("fin_trend_slope",["x","period_id","periods"],fin_trend_slope,"OLS slope across recent visible report periods."),
-    ("fin_trend_r2",["x","period_id","periods"],fin_trend_r2,"OLS trend R-squared across recent visible report periods."),
-    ("fin_trend_tstat",["x","period_id","periods"],fin_trend_tstat,"OLS trend slope t-statistic across recent visible report periods."),
-    ("fin_trend_acceleration",["x","period_id","short_periods","long_periods"],fin_trend_acceleration,"Difference between short and long reporting-period slopes."),
-    ("fin_monotonicity",["x","period_id","periods"],fin_monotonicity,"Signed monotonicity score of recent reporting-period changes."),
-    ("fin_positive_streak",["x","period_id"],fin_positive_streak,"Current streak of positive report-to-report changes."),
-    ("fin_negative_streak",["x","period_id"],fin_negative_streak,"Current streak of negative report-to-report changes."),
-    ("fin_sign_change_count",["x","period_id","periods"],fin_sign_change_count,"Number of growth-direction reversals in recent reports."),
+    ("fin_growth_volatility",["x","period_id","growth_periods","window_periods"],fin_growth_volatility,"Volatility of period growth across *adjacent* fiscal periods; a skipped report fails closed to NaN (review R4-23)."),
+    ("fin_growth_stability",["x","period_id","growth_periods","window_periods"],fin_growth_stability,"Inverse growth-volatility stability score over adjacent fiscal periods (skips fail closed, review R4-23)."),
+    ("fin_growth_persistence",["x","period_id","growth_periods","window_periods"],fin_growth_persistence,"Fraction of recent *adjacent* fiscal reports with positive growth (review R4-23)."),
+    ("fin_std",["x","period_id","periods"],fin_std,"Historical reporting-period standard deviation over the last-N-visible reports; missing report periods are skipped (review R4-23)."),
+    ("fin_mad",["x","period_id","periods"],fin_mad,"Compatibility alias of fin_mean_abs_deviation: mean(|x-mean|), NOT median-based MAD (review R4-28); last-N-visible, missing reports skipped."),
+    ("fin_mean_abs_deviation",["x","period_id","periods"],fin_mean_abs_deviation,"Mean absolute deviation mean(|x-mean|) over the last-N-visible reports; missing report periods are skipped (review R4-28 naming)."),
+    ("fin_median_abs_deviation",["x","period_id","periods"],fin_median_abs_deviation,"Robust median absolute deviation median(|x-median|) over the last-N-visible reports; missing report periods are skipped (review R4-28)."),
+    ("fin_cv",["x","period_id","periods"],fin_cv,"Historical reporting-period coefficient of variation over the last-N-visible reports; missing report periods are skipped."),
+    ("fin_stability",["x","period_id","periods"],fin_stability,"Generic bounded fundamental stability score over the last-N-visible reports; missing report periods are skipped."),
+    ("fin_range",["x","period_id","periods"],fin_range,"Historical reporting-period range over the last-N-visible reports; missing report periods are skipped."),
+    ("fin_zscore_history",["x","period_id","periods"],fin_zscore_history,"INCLUSIVE z-score: current report is inside the reference sample (review R4-25); last-N-visible, missing reports skipped."),
+    ("fin_zscore_vs_prior_history",["x","period_id","periods"],fin_zscore_vs_prior_history,"Z-score of the current report vs the PRIOR reports only (out-of-history; review R4-25); last-N-visible, missing reports skipped."),
+    ("fin_percentile_history",["x","period_id","periods"],fin_percentile_history,"INCLUSIVE percentile: current report is inside the reference sample (review R4-25); last-N-visible, missing reports skipped."),
+    ("fin_percentile_vs_prior_history",["x","period_id","periods"],fin_percentile_vs_prior_history,"Percentile of the current report vs the PRIOR reports only (out-of-history; review R4-25); last-N-visible, missing reports skipped."),
+    ("fin_trend_slope",["x","period_id","periods"],fin_trend_slope,"OLS slope across recent report periods on the fiscal-ordinal time axis; a skipped report fails closed (reviews R4-23/24)."),
+    ("fin_trend_r2",["x","period_id","periods"],fin_trend_r2,"OLS trend R-squared across recent report periods on the fiscal-ordinal time axis; a skipped report fails closed (reviews R4-23/24)."),
+    ("fin_trend_tstat",["x","period_id","periods"],fin_trend_tstat,"OLS trend slope t-statistic across recent report periods on the fiscal-ordinal time axis; a skipped report fails closed (reviews R4-23/24)."),
+    ("fin_trend_acceleration",["x","period_id","short_periods","long_periods"],fin_trend_acceleration,"Difference between short and long reporting-period slopes (fiscal-ordinal axis, skips fail closed)."),
+    ("fin_monotonicity",["x","period_id","periods"],fin_monotonicity,"Signed monotonicity of recent reporting-period changes over *adjacent* fiscal periods; a skipped report fails closed (review R4-23)."),
+    ("fin_positive_streak",["x","period_id"],fin_positive_streak,"Current streak of positive report-to-report changes between adjacent fiscal periods; a skipped report ends the streak (review R4-23)."),
+    ("fin_negative_streak",["x","period_id"],fin_negative_streak,"Current streak of negative report-to-report changes between adjacent fiscal periods; a skipped report ends the streak (review R4-23)."),
+    ("fin_sign_change_count",["x","period_id","periods"],fin_sign_change_count,"Number of growth-direction reversals in recent reports over *adjacent* fiscal periods; a skipped report fails closed (review R4-23)."),
     ("fin_ratio",["numerator","denominator"],fin_ratio,"Generic finite ratio; domain ratios should be recipes over this primitive."),
     ("fin_common_size",["x","base"],fin_common_size,"Common-size accounting transform x/base."),
     ("fin_turnover",["flow","balance","period_id","average_periods"],fin_turnover,"Flow divided by average reporting-period balance."),
@@ -489,3 +702,21 @@ _SPECS = [
 
 for _name,_params,_fn,_desc in _SPECS:
     _register(_name,_params,_fn,_desc)
+
+# New/renamed canonicals (review R4-25 / R4-28) must join the audited
+# fundamental-v2 surface so production governance and the daily/extended
+# partitions cover them (mirrors transforms_repairs_v2 / expectation_v2).
+import cleaned_operators.operator_surface as _surface
+
+_NEW_V2_CANONICALS = frozenset({
+    "fin_mean_abs_deviation",
+    "fin_median_abs_deviation",
+    "fin_zscore_vs_prior_history",
+    "fin_percentile_vs_prior_history",
+})
+_surface._FUNDAMENTAL_V2_CANONICALS = frozenset(
+    set(_surface._FUNDAMENTAL_V2_CANONICALS) | _NEW_V2_CANONICALS
+)
+_surface.EXTENDED_ONLY_CANONICALS = frozenset(
+    set(_surface.EXTENDED_ONLY_CANONICALS) | _NEW_V2_CANONICALS
+)

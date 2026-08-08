@@ -17,9 +17,14 @@ responds to sampling frequency:
 * ``intraday_rv_signature_curvature`` — curvature ``c`` of the volatility
   signature ``log RV(Delta) = a + b*log Delta + c*(log Delta)^2``.
 
-All operators are trailing-window, prefix-causal and deterministic.  NaN
-returns are dropped from the window; a window with fewer than 5 finite returns
-emits NaN, and degenerate windows (zero variance, insufficient scales) emit NaN.
+All operators are trailing-window, prefix-causal and deterministic.
+Session-slot aware (review R4-21): the real minute-slot axis is preserved —
+missing slots keep their coordinate and their return contributes no RV mass
+(shape operators), and the RV-signature operator fails closed on an interior
+gap because block aggregation across a gap is meaningless.  A leading NaN
+prefix (session warm-up) is dropped to the trailing contiguous finite run.
+Windows with fewer than 5 finite returns emit NaN, and degenerate windows
+(zero variance, insufficient scales) emit NaN.
 """
 from __future__ import annotations
 
@@ -53,7 +58,13 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 
 def _rolling_returns(returns: np.ndarray, window: int, fn: Callable[[np.ndarray], float]) -> np.ndarray:
-    """Trailing-window per-column reduction over a minute-return panel."""
+    """Trailing-window per-column reduction over a minute-return panel.
+
+    Session-slot aware (review R4-21): the raw window slice (missing minutes
+    kept as NaN at their true slot positions) is passed to ``fn``.  Shape
+    kernels mask missing slots (their return contributes no RV mass) while
+    ``_rv_curvature`` fails closed on an interior gap.  Never drop-and-reconnect.
+    """
     rows, cols = returns.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
@@ -62,8 +73,7 @@ def _rolling_returns(returns: np.ndarray, window: int, fn: Callable[[np.ndarray]
         for r in range(rows):
             i0 = max(0, r - w + 1)
             v = col[i0 : r + 1]
-            v = v[np.isfinite(v)]
-            if v.size < _MIN_FINITE:
+            if np.isfinite(v).sum() < _MIN_FINITE:
                 continue
             out[r, c] = fn(v)
     return out
@@ -73,16 +83,21 @@ def _time_centroid(v: np.ndarray) -> float:
     n = int(v.size)
     if n < 2:
         return np.nan
-    w = v * v
+    finite = np.isfinite(v)
+    w = np.where(finite, v * v, 0.0)
     total = float(np.sum(w))
     if not np.isfinite(total) or total <= _EPS:
         return np.nan
+    # Real minute-slot positions within the session window (0..n-1).  A missing
+    # slot keeps its coordinate and contributes zero RV mass — the centroid is
+    # NOT re-derived on a compressed/drop-reconnected axis.
     tau = np.arange(n, dtype=float) / (n - 1.0)
     return float(2.0 * float(np.sum(tau * w)) / total - 1.0)
 
 
 def _concentration(v: np.ndarray) -> float:
-    w = v * v
+    finite = np.isfinite(v)
+    w = np.where(finite, v * v, 0.0)
     rv = float(np.sum(w))
     if not np.isfinite(rv) or rv <= _EPS:
         return np.nan
@@ -91,10 +106,11 @@ def _concentration(v: np.ndarray) -> float:
 
 
 def _entropy(v: np.ndarray) -> float:
-    n = int(v.size)
-    if n < 2:
+    finite = np.isfinite(v)
+    n_finite = int(finite.sum())
+    if n_finite < 2:
         return np.nan
-    w = v * v
+    w = np.where(finite, v * v, 0.0)
     rv = float(np.sum(w))
     if not np.isfinite(rv) or rv <= _EPS:
         return np.nan
@@ -102,16 +118,27 @@ def _entropy(v: np.ndarray) -> float:
     with np.errstate(divide="ignore", invalid="ignore"):
         contrib = p * np.log(p)
     contrib[~np.isfinite(contrib)] = 0.0  # 0*log(0) -> 0
-    return float(-float(np.sum(contrib)) / np.log(n))
+    return float(-float(np.sum(contrib)) / np.log(n_finite))
 
 
 def _semi_balance(v: np.ndarray) -> float:
-    pos = float(np.sum(v[v > 0.0] ** 2))
-    neg = float(np.sum(v[v < 0.0] ** 2))
+    finite = np.isfinite(v)
+    pos = float(np.sum(v[finite & (v > 0.0)] ** 2))
+    neg = float(np.sum(v[finite & (v < 0.0)] ** 2))
     return float((pos - neg) / (pos + neg + _EPS))
 
 
 def _rv_curvature(v: np.ndarray) -> float:
+    finite = np.isfinite(v)
+    if not np.any(finite):
+        return np.nan
+    first = int(np.flatnonzero(finite)[0])
+    # Block aggregation across an interior gap would span a real-time hole and
+    # is meaningless (review R4-21): a NaN after the first finite value fails
+    # the window.  A leading warm-up prefix is dropped to the contiguous suffix.
+    if np.any(~finite[first:]):
+        return np.nan
+    v = v[first:]
     n = int(v.size)
     pts: list[tuple[float, float]] = []
     for s in _RV_SCALES:

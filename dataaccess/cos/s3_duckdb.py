@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import threading
+import weakref
 
 from .remote import S3Credentials, resolve_s3_credentials
 from data_access.core.exceptions import ValidationError
@@ -25,6 +27,36 @@ def _creds_fingerprint(creds: S3Credentials) -> str:
     )
 
 
+def _production_mode() -> bool:
+    fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
+    if fe == "production":
+        return True
+    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
+
+
+def _load_httpfs(conn) -> None:
+    """#P1-3 production 只 ``LOAD httpfs``，禁止 query-time 联网 INSTALL。
+
+    production 启动 health check（``httpfs_probe``）保证扩展已预装——运行时缺
+    扩展是 deployment 错误，不是自动安装的时机；dev/research 才允许 INSTALL。
+    """
+    try:
+        conn.execute("LOAD httpfs;")
+    except Exception as load_exc:
+        if _production_mode():
+            raise ValidationError(
+                "production 环境缺少 DuckDB httpfs 扩展（LOAD 失败）。"
+                "httpfs 必须在部署阶段固定预装，禁止 query-time INSTALL 联网安装。"
+            ) from load_exc
+        try:
+            conn.execute("INSTALL httpfs; LOAD httpfs;")
+        except Exception as exc:
+            raise ValidationError(
+                f"DuckDB httpfs 扩展不可用（LOAD 失败: {load_exc}; "
+                f"INSTALL 失败: {exc}）。请检查 duckdb 安装/网络/扩展目录。"
+            ) from exc
+
+
 def apply_s3_credentials(conn, creds: S3Credentials) -> None:
     """对 DuckDB 连接注入 S3/COS 访问参数。
 
@@ -32,10 +64,7 @@ def apply_s3_credentials(conn, creds: S3Credentials) -> None:
     credential chain / refresh / scope）；老版本回退 ``SET s3_*``。选择由
     DuckDBCapabilities 决定，不硬编码版本号。
     """
-    try:
-        conn.execute("LOAD httpfs;")
-    except Exception:
-        conn.execute("INSTALL httpfs; LOAD httpfs;")
+    _load_httpfs(conn)
 
     from data_access.core.duckdb_capabilities import get_duckdb_capabilities
 
@@ -90,19 +119,23 @@ def _apply_s3_legacy(conn, creds: S3Credentials) -> None:
 
 
 class S3ConfigState:
-    """进程内 httpfs 是否已配置（凭证变更需 reset engine）。"""
+    """**Per-connection** httpfs/S3 配置状态。
+
+    #P0-5：S3 credential 是 connection 级属性，不是进程全局。`configure_fresh()`
+    给 isolated 连接配完凭证**绝不能**设置全局短路——否则共享连接会误以为自己也配了。
+    这里用 ``WeakKeyDictionary[conn, fingerprint]`` 按连接记录，连接 GC 自动清理。
+    """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._configured = False
-        self._fingerprint: str | None = None
+        self._by_conn: "weakref.WeakKeyDictionary[Any, str]" = weakref.WeakKeyDictionary()
 
     def ensure(self, conn) -> None:
-        """对共享连接：同指纹跳过；指纹变更则重新注入。"""
+        """对本连接：同指纹跳过；指纹变更（含从未配置）则重新注入。"""
         creds = resolve_s3_credentials()
         fp = _creds_fingerprint(creds)
         with self._lock:
-            if self._configured and self._fingerprint == fp:
+            if self._by_conn.get(conn) == fp:
                 return
             try:
                 apply_s3_credentials(conn, creds)
@@ -111,11 +144,13 @@ class S3ConfigState:
                     f"DuckDB httpfs 配置失败: {exc}. "
                     "请确认已安装 duckdb 且 LOAD httpfs 可用，并检查 COS 凭证/endpoint。"
                 ) from exc
-            self._configured = True
-            self._fingerprint = fp
+            self._by_conn[conn] = fp
 
     def configure_fresh(self, conn) -> None:
-        """对新建 ``:memory:`` 连接始终注入凭证（scoped sql 用）。"""
+        """对新建 ``:memory:`` 连接始终注入凭证（scoped sql 用）。
+
+        只记录**本连接**，绝不影响其他连接状态（#P0-5）。
+        """
         creds = resolve_s3_credentials()
         fp = _creds_fingerprint(creds)
         try:
@@ -126,13 +161,11 @@ class S3ConfigState:
                 "请确认已安装 duckdb 且 LOAD httpfs 可用，并检查 COS 凭证/endpoint。"
             ) from exc
         with self._lock:
-            self._configured = True
-            self._fingerprint = fp
+            self._by_conn[conn] = fp
 
     def reset(self) -> None:
         with self._lock:
-            self._configured = False
-            self._fingerprint = None
+            self._by_conn.clear()
 
 
 _s3_state = S3ConfigState()

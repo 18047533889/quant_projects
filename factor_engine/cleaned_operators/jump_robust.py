@@ -14,10 +14,15 @@ z-statistic.
 * ``intraday_jump_test_stat`` — standard Barndorff-Nielsen–Shephard (2006)
   linear jump-test z-statistic ``(RV-BV)/sqrt((θ-2)/3·Σr⁴)``, θ-2=(π/2)²+π-5.
 
-All operators are trailing-window, prefix-causal and deterministic.  NaN
-returns are dropped from the window; a window with fewer than 5 finite returns
-emits NaN, and a degenerate window (too few observations for the estimator)
-also emits NaN.  Values are never Inf and never fabricated zeros.
+All operators are trailing-window, prefix-causal and deterministic.  The
+minute-slot axis is never compressed (review R4-20): a missing minute inside
+the window makes the window invalid (fail-closed -> NaN) — the surrounding
+returns are NEVER re-connected and treated as adjacent.  A leading NaN prefix
+(session warm-up: the first minute has no prior price) is the only NaN allowed
+and the estimator runs on the trailing contiguous finite run.  A window with
+fewer than 5 minutes emits NaN, and a degenerate window (too few observations
+for the estimator) also emits NaN.  Values are never Inf and never fabricated
+zeros.
 """
 from __future__ import annotations
 
@@ -63,7 +68,15 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 
 def _rolling_returns(returns: np.ndarray, window: int, fn: Callable[[np.ndarray], float]) -> np.ndarray:
-    """Trailing-window per-column reduction over a minute-return panel."""
+    """Trailing-window per-column reduction over a minute-return panel.
+
+    Session-slot semantics (review R4-20): the minute axis is never compressed.
+    A NaN AFTER the first finite value is a genuine missing minute (10:01 gone
+    between 10:00 and 10:02) — the estimator must NOT treat 10:00 and 10:02 as
+    adjacent, so the whole window fails closed (NaN).  A leading NaN prefix
+    (session warm-up, first minute has no prior price) is dropped to the
+    trailing contiguous finite run.
+    """
     rows, cols = returns.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
@@ -72,10 +85,14 @@ def _rolling_returns(returns: np.ndarray, window: int, fn: Callable[[np.ndarray]
         for r in range(rows):
             i0 = max(0, r - w + 1)
             v = col[i0 : r + 1]
-            v = v[np.isfinite(v)]
-            if v.size < _MIN_FINITE:
+            finite = np.isfinite(v)
+            n_fin = int(finite.sum())
+            if n_fin < _MIN_FINITE:
                 continue
-            out[r, c] = fn(v)
+            first = int(np.flatnonzero(finite)[0])
+            if np.any(~finite[first:]):
+                continue  # interior missing minute -> window invalid
+            out[r, c] = fn(v[first:])
     return out
 
 
@@ -120,8 +137,9 @@ class IntradayMedRV(SeriesOperator):
     """日内 MedRV 已实现方差（中位数跳跃稳健估计）。
 
     ``C * N/(N-2) * sum_i med(|r_i|,|r_{i-1}|,|r_{i-2}|)^2``，``C=pi/(6-4sqrt3+pi)``。
-    相比 RV 对单根分钟跳跃不敏感；缺失分钟先剔除，随后前 2 个观测无三元组 → 仅
-    贡献窗口计数。单位 variance，窗口内 <5 个有限值 → NaN。P1。
+    相比 RV 对单根分钟跳跃不敏感。分钟 slot 轴不压缩：窗口内缺失分钟 → 窗口
+    invalid（NaN），绝不剔除后把相邻分钟重连；仅允许前导 NaN（开盘无前价）并
+    在尾部连续有限段上计算。单位 variance，窗口内 <5 个有限值 → NaN。P1。
     """
 
     metadata = _metadata(

@@ -172,9 +172,19 @@ eps:
   dtype: double
   frequency: daily
   grain: instrument
-  time_role: event_time
-  temporal_model: panel
-  join_policy: exact
+  # #P0-15 与 ROE 同类：eps 是财务指标，编译成 financial PIT——
+  # knowledge=PubDate 可见、period=ReportPeriodEndDate、UpdateTime 修订、
+  # 下一交易日可用、latest_period 选择。不是随行情 exact join 的日频面板。
+  time_role: knowledge_time
+  temporal_model: financial_event
+  knowledge_time: PubDate
+  effective_time: ReportPeriodEndDate
+  period_time: ReportPeriodEndDate
+  revision_order: [UpdateTime]
+  availability: next_trading_day
+  join_policy: pit_asof_backward
+  period_selection: latest_period
+  mining_allowed: true
 
 roe:
   market: ashare
@@ -355,6 +365,9 @@ high_low_ratio:
   mining_allowed: true
 
 # ---- 美股估值（X0 稀疏；比率已是小数，禁止再 /100） ----
+# #P0-23 X0 稀疏原始字段 mining_allowed=false：原始估值表不是完整日频横截面，
+# 逐股常有缺失，不能当默认因子挖掘字段。只有构建成明确的 serving daily panel 后，
+# 才对 serving 字段设 mining_allowed=true。
 dividend_yield:
   market: us
   dataset: us_stock_valuation_daily
@@ -365,7 +378,7 @@ dividend_yield:
   time_role: event_time
   temporal_model: sparse_event
   join_policy: exact
-  mining_allowed: true
+  mining_allowed: false
 
 return_on_equity:
   market: us
@@ -377,7 +390,7 @@ return_on_equity:
   time_role: event_time
   temporal_model: sparse_event
   join_policy: exact
-  mining_allowed: true
+  mining_allowed: false
 
 return_on_assets:
   market: us
@@ -389,7 +402,7 @@ return_on_assets:
   time_role: event_time
   temporal_model: sparse_event
   join_policy: exact
-  mining_allowed: true
+  mining_allowed: false
 
 price_to_earnings:
   market: us
@@ -401,7 +414,7 @@ price_to_earnings:
   time_role: event_time
   temporal_model: sparse_event
   join_policy: exact
-  mining_allowed: true
+  mining_allowed: false
 
 price_to_book:
   market: us
@@ -413,7 +426,7 @@ price_to_book:
   time_role: event_time
   temporal_model: sparse_event
   join_policy: exact
-  mining_allowed: true
+  mining_allowed: false
 
 us_market_cap:
   market: us
@@ -426,6 +439,24 @@ us_market_cap:
   time_role: event_time
   temporal_model: sparse_event
   join_policy: exact
+  mining_allowed: false
+
+# ---- 美股真实市值（derived，字典 §C23.2 / #P0-24） ----
+# X0 market_cap 只作为 sparse raw reference；挖掘/因子用 derived 日频市值
+# = us_stock_daily.Close × us_ticker_shares_snapshot.weighted_shares_outstanding。
+us_market_cap_daily:
+  market: us
+  logical_name: market_cap_daily
+  dtype: double
+  frequency: daily
+  grain: instrument
+  time_role: event_time
+  temporal_model: panel
+  join_policy: exact
+  derived_expression: >-
+    us_stock_daily.Close *
+    us_ticker_shares_snapshot.weighted_shares_outstanding
+  derived_from: [us_stock_daily.Close, us_ticker_shares_snapshot.weighted_shares_outstanding]
   mining_allowed: true
 
 # ---- 美股财务（E2 事件；PIT=filing_date；必须 filter timeframe） ----

@@ -1,5 +1,5 @@
 {
-  "operator_count": 1354,
+  "operator_count": 1355,
   "operators": {
     "ADL": {
       "aliases": [],
@@ -48109,8 +48109,7 @@
             "asset_deal_income",
             "other_earnings",
             "revenue",
-            "period_id",
-            "scale"
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -48136,8 +48135,7 @@
           "asset_deal_income",
           "other_earnings",
           "revenue",
-          "period_id",
-          "scale"
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -48159,8 +48157,7 @@
             "asset_deal_income",
             "other_earnings",
             "revenue",
-            "period_id",
-            "scale"
+            "period_id"
           ]
         },
         "backends": [
@@ -48181,8 +48178,7 @@
           "asset_deal_income",
           "other_earnings",
           "revenue",
-          "period_id",
-          "scale"
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -48215,8 +48211,7 @@
         "asset_deal_income",
         "other_earnings",
         "revenue",
-        "period_id",
-        "scale"
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -48242,7 +48237,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:operating_profit,investment_income,fair_value_income,asset_deal_income,other_earnings,revenue,period_id,scale->series",
+        "signature:operating_profit,investment_income,fair_value_income,asset_deal_income,other_earnings,revenue,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -54863,7 +54858,7 @@
         "version": "2.1"
       },
       "contract_version": "2.1",
-      "description": "Historical reporting-period mean absolute deviation.",
+      "description": "Historical reporting-period mean absolute deviation (mean(|x-mean|); NOT median-based MAD — see fin_mean_abs_deviation for the explicit name).",
       "earliest_trade_time": "input_dependent",
       "edge_case_passed": true,
       "implementation_certified": false,
@@ -55038,6 +55033,134 @@
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
+      ],
+      "temporal_certified": false
+    },
+    "fin_mean_abs_deviation": {
+      "aliases": [],
+      "backend_meta": {
+        "pandas_numpy": {
+          "certification_source": "factor_operator_verified.json",
+          "certification_tier": "candidate",
+          "execution_kind": "pandas_numpy_reference",
+          "explicit": true,
+          "implementation_type": "FundamentalV2_fin_mean_abs_deviation",
+          "materializes_full_panel": true,
+          "param_names": [
+            "x",
+            "period_id",
+            "periods"
+          ],
+          "production_certified": false,
+          "reference_backend": true,
+          "source": "fundamental_transforms_v2",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": false,
+          "supports_min_periods": true,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": false,
+          "supports_window": false
+        }
+      },
+      "backend_passed": false,
+      "backend_signature_consistent": true,
+      "backend_signatures": {
+        "pandas_numpy": [
+          "x",
+          "period_id",
+          "periods"
+        ]
+      },
+      "backend_status": "implemented",
+      "backends": [
+        "pandas_numpy"
+      ],
+      "canonical": "fin_mean_abs_deviation",
+      "category": "fundamental_period",
+      "certification_notes": [
+        "source contract not certified",
+        "no evidence-backed production backend"
+      ],
+      "contract": {
+        "backend_signatures": {
+          "pandas_numpy": [
+            "x",
+            "period_id",
+            "periods"
+          ]
+        },
+        "backends": [
+          "pandas_numpy"
+        ],
+        "canonical": "fin_mean_abs_deviation",
+        "lifecycle_status": "experimental",
+        "lookback": {
+          "kind": "fiscal_period",
+          "parameter": "periods",
+          "requires_period_id": true,
+          "revision_aware": true
+        },
+        "param_names": [
+          "x",
+          "period_id",
+          "periods"
+        ],
+        "parameter_constraints": {},
+        "pit_safe": false,
+        "production_policy": "denied",
+        "scope": "fundamental_period",
+        "shape_preserving": true,
+        "stateful": false,
+        "surface": "extended",
+        "version": "2.1"
+      },
+      "contract_version": "2.1",
+      "description": "Explicit alias of fin_mad: mean absolute deviation of reporting-period values (review P1-41 naming).",
+      "earliest_trade_time": "input_dependent",
+      "edge_case_passed": true,
+      "implementation_certified": false,
+      "lifecycle_status": "experimental",
+      "lookback_contract": {
+        "kind": "fiscal_period",
+        "parameter": "periods",
+        "requires_period_id": true,
+        "revision_aware": true
+      },
+      "lookback_fn": "periods",
+      "lookback_param_names": [],
+      "operator_certification": false,
+      "param_names": [
+        "x",
+        "period_id",
+        "periods"
+      ],
+      "parameter_constraints": {},
+      "pit_safe": false,
+      "production_backend_policy": "at_least_one_certified_backend",
+      "production_certified": false,
+      "production_hardening": "factor_operator_v2",
+      "production_policy": "denied",
+      "production_portability_required": false,
+      "replacement_history": [],
+      "replacement_policy": "sealed_after_bootstrap",
+      "required_cutoff": "input_dependent",
+      "scope": "fundamental_period",
+      "semantic_certified": false,
+      "semantic_pit_review_passed": false,
+      "semantic_version": "1.0",
+      "source_contract_certified": false,
+      "stateful": false,
+      "status": "experimental",
+      "surface": "extended",
+      "tags": [
+        "fundamental",
+        "period_aware",
+        "pit_safe",
+        "causal",
+        "production_extension"
       ],
       "temporal_certified": false
     },
@@ -134592,6 +134715,23 @@
           "supports_scalar_broadcast": true,
           "supports_streaming": true,
           "supports_window": true
+        },
+        "sql": {
+          "execution_kind": "sql_expression_native",
+          "explicit": true,
+          "implementation_type": "SqlCapableOperator",
+          "materializes_full_panel": false,
+          "param_names": [],
+          "source": "backend/sql_pushdown",
+          "supports_group": false,
+          "supports_inf": true,
+          "supports_lazy": true,
+          "supports_min_periods": false,
+          "supports_nan": true,
+          "supports_nulls": true,
+          "supports_scalar_broadcast": true,
+          "supports_streaming": true,
+          "supports_window": true
         }
       },
       "backend_passed": false,
@@ -134604,12 +134744,14 @@
           "window",
           "correction"
         ],
-        "polars": []
+        "polars": [],
+        "sql": []
       },
       "backend_status": "implemented",
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "canonical": "ts_abdi_ranaldo_spread",
       "category": "market_microstructure",
@@ -134626,11 +134768,13 @@
             "window",
             "correction"
           ],
-          "polars": []
+          "polars": [],
+          "sql": []
         },
         "backends": [
           "pandas_numpy",
-          "polars"
+          "polars",
+          "sql"
         ],
         "canonical": "ts_abdi_ranaldo_spread",
         "lifecycle_status": "experimental",
@@ -134695,7 +134839,7 @@
       "scope": "time_series",
       "semantic_certified": false,
       "semantic_pit_review_passed": false,
-      "semantic_version": "2.0",
+      "semantic_version": "1.0",
       "source_contract_certified": false,
       "stateful": false,
       "status": "experimental",
@@ -146754,7 +146898,7 @@
         "version": "2.1"
       },
       "contract_version": "2.1",
-      "description": "窗口内每日回撤深度之和(深度×时长积分)。",
+      "description": "当前未收复回撤的每日深度之和(自最后一个新高起)。",
       "earliest_trade_time": "input_dependent",
       "edge_case_passed": true,
       "implementation_certified": false,

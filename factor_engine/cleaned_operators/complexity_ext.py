@@ -29,6 +29,23 @@ from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 _EPS = 1e-12
 
 
+def _trailing_contiguous_finite(chunk: np.ndarray) -> np.ndarray:
+    """Trailing contiguous finite suffix ending at the window's last row.
+
+    Complexity operators must never re-connect values across a gap: after a
+    recent missing value only the trailing contiguous finite block is a valid
+    sample for the *current* complexity (review R4-62 / R4-64).
+    """
+    n = len(chunk)
+    j = n
+    while j > 0 and not np.isfinite(chunk[j - 1]):
+        j -= 1
+    i = j
+    while i > 0 and np.isfinite(chunk[i - 1]):
+        i -= 1
+    return chunk[i:j].astype(float)
+
+
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -95,9 +112,11 @@ def _symbolize_pit_trailing_quantile(chunk: np.ndarray, bins: int) -> np.ndarray
 
     Each finite value ``v`` is mapped to ``floor( PIT(v) * bins )`` where
     ``PIT(v) = #{w in window : w <= v} / N``; the last bin is the closed one.
-    Returns a length-N symbol array or ``None`` when fewer than 2 finite values.
+    Only the trailing contiguous finite suffix is symbolized (review R4-62):
+    a gap must not splice [1,2,NaN,4] into [1,2,4].  Returns a length-N symbol
+    array or ``None`` when fewer than 2 finite values.
     """
-    v = chunk[np.isfinite(chunk)]
+    v = _trailing_contiguous_finite(chunk)
     n = v.size
     if n < 2:
         return None
@@ -120,7 +139,11 @@ def _lz_complexity_series(x2d: np.ndarray, window: int, bins: int) -> np.ndarray
                 continue
             n = symbols.size
             c_lz = _lz76_complexity(symbols)
-            out[r, c] = c_lz * math.log(float(n)) / float(n)
+            # Normalize by the alphabet size (review R4-17): a random string over
+            # ``bins`` symbols has c(N) ~ N·ln(bins)/ln(N), so C_norm =
+            # c(N)·ln(N)/(N·ln(bins)) → 1 for random data.  The old c(N)·ln(N)/N
+            # made different ``bins`` incomparable and the binary baseline ≠ 1.
+            out[r, c] = c_lz * math.log(float(n)) / (float(n) * math.log(float(b)))
     return out
 
 
@@ -148,21 +171,29 @@ def _forbidden_ordinal_ratio_series(x2d: np.ndarray, window: int, order: int, de
         for r in range(rows):
             i0 = max(0, r - w + 1)
             chunk = col[i0 : r + 1]
-            n = chunk.size
+            run = _trailing_contiguous_finite(chunk)  # review R4-64
+            n = run.size
             if n < embed_len:
                 continue
             patterns: set[tuple[int, ...]] = set()
+            n_emb = 0
             for start in range(n - embed_len + 1):
-                vals = chunk[start + np.arange(o) * d]
-                if not np.isfinite(vals).all():
-                    continue
+                vals = run[start + np.arange(o) * d]
+                n_emb += 1
                 code = _ordinal_pattern_code(vals)
                 if code is not None:
                     patterns.add(code)
-            if not patterns:
+            if not patterns or n_emb < 1:
                 continue
             n_obs = len(patterns)
-            out[r, c] = 1.0 - n_obs / fact
+            # Finite-sample baseline (review R4-63): with n_emb embeddings of a
+            # random series, E[F] = (1 - 1/fact)^n_emb — so order=6 / window=120
+            # (only ~115 embeddings vs 720 patterns) mechanically reports ~0.84
+            # even for white noise.  Report the *excess* forbiddenness above the
+            # random null: F_excess = F_obs - E[F_random | n_emb, order].
+            f_obs = 1.0 - n_obs / fact
+            f_null = float((1.0 - 1.0 / fact) ** n_emb)
+            out[r, c] = max(0.0, f_obs - f_null)
     return out
 
 
@@ -190,16 +221,16 @@ def _check_complexity_params(window: int, bins: int | None = None, order: int | 
     source="complexity_ext",
 )
 class TsLempelZivComplexity(SeriesOperator):
-    """Lempel-Ziv 76 复杂度（按 N/log(N) 归一）。
+    """Lempel-Ziv 76 复杂度（按 N·ln(bins)/ln(N) 归一）。
 
     先把窗口内每个值经"窗口自身经验 CDF"（trailing PIT 分位）符号化成 ``bins`` 个
-    符号，再做 LZ76 贪心切分计数 ``c(N)``，输出 ``c(N)·log(N)/N``。随机串 → 接近 1；
-    结构化/周期串 → 明显更低。P2。
+    符号，再做 LZ76 贪心切分计数 ``c(N)``，输出 ``c(N)·ln(N)/(N·ln(bins))``。
+    随机串 → 接近 1；结构化/周期串 → 明显更低；不同 ``bins`` 可比（R4-17）。P2。
     """
 
     metadata = _metadata(
         "ts_lempel_ziv_complexity",
-        "LZ76 贪心解析复杂度，按 N/log(N) 归一（随机性程度）。",
+        "LZ76 贪心解析复杂度，按 N·ln(bins)/ln(N) 归一（随机性程度，bins 可比）。",
         ["x", "window", "bins"],
         unit="ratio",
         cost=4,
@@ -218,15 +249,18 @@ class TsLempelZivComplexity(SeriesOperator):
     source="complexity_ext",
 )
 class TsForbiddenOrdinalPatternRatio(SeriesOperator):
-    """禁序模式比例：``F = 1 - N_obs/factorial(order)``。
+    """禁序模式比例（随机零假设超额）：``F_excess = F_obs - (1-1/order!)^N_emb``。
 
-    N_obs 为窗口内出现过的（无并列）长度 ``order``、延迟 ``delay`` 的序数模式种数。
-    F 高 → 大量序数模式缺失（结构受限 / 强有序）；F≈0 → 接近随机。P2。
+    ``F_obs = 1 - N_obs/factorial(order)``，N_obs 为窗口内出现过的（无并列）长度
+    ``order``、延迟 ``delay`` 的序数模式种数，N_emb 为有效嵌入数。减去的
+    ``(1-1/order!)^N_emb`` 是随机序列在 N_emb 个嵌入下"某模式从未出现"的期望
+    （有限样本下限修正，R4-63）——order=6 / window=120 时随机基准 ≈0.84，因此裸
+    F_obs 会高估结构受限。F_excess>0 → 相对随机显著缺失序数模式。P2。
     """
 
     metadata = _metadata(
         "ts_forbidden_ordinal_pattern_ratio",
-        "1 - 观测序数模式种数 / order!（结构受限程度）。",
+        "禁序模式比例超出随机零假设期望的部分（结构受限程度）。",
         ["x", "window", "order", "delay"],
         unit="ratio",
         cost=4,

@@ -167,7 +167,9 @@ def query_cache_key(
         "params": dict(params or {}),
         "time_range": tuple(map(str, time_range)) if time_range else None,
         "instruments": sorted(instruments) if instruments else None,
-        "columns": sorted(columns) if columns else None,
+        # #P0-35 保留列顺序：read 输出列顺序与请求一致，[A,B] 和 [B,A] 是不同结果，
+        # 不能用 sorted 合并成同一 key（会命中错误列序的缓存）。
+        "columns": tuple(columns) if columns else None,
         "filters": canonical_filter_hash(filters),
         "limit": limit,
         "mode": mode,

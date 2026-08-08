@@ -149,12 +149,29 @@ _CATEGORIES: dict[str, str] = {
     "ts_dominant_cycle_period": "spectral",
 }
 
+# R4-95: the shared ``_periodogram`` kernel (spectral._periodogram) requires the
+# trailing window to be FULLY finite (a missing value never zero-pads the FFT),
+# so the window semantics are ``trailing_contiguous``.
+_WINDOW_SEMANTICS: dict[str, str] = {
+    "ts_spectral_entropy": "trailing_contiguous",
+    "ts_dominant_cycle_period": "trailing_contiguous",
+}
+
+# R4-98: the spectrum describes the return-generating process.  Inputs must be a
+# continuous price or a return series (a raw un-adjusted close injects spurious
+# low-frequency energy from the level path).
+_INPUT_UNITS: dict[str, dict[str, str]] = {
+    "ts_spectral_entropy": {"x": "return_or_continuous_price"},
+    "ts_dominant_cycle_period": {"x": "return_or_continuous_price"},
+}
+
 _SKIP = frozenset({"date", "stock_code"})
 
 
 def _register() -> None:
     from cleaned_operators.base import Operator as PandasOperator
     from cleaned_operators.base import OperatorMetadata as PandasMetadata
+    from cleaned_operators.base import validate_operator_call
 
     for canonical, fn in _KERNELS.items():
         params = _PARAMS[canonical]
@@ -171,10 +188,15 @@ def _register() -> None:
                 tags=["daily", "panel", "pit_safe", "causal", "deterministic",
                       f"signature:{','.join(params)}->series",
                       "domain:spectral", "unit:level", "cost:5"],
+                window_semantics=_WINDOW_SEMANTICS[canonical],
+                input_units=_INPUT_UNITS[canonical],
             )
 
             def calculate(self, *args, _fn=fn, **kwargs):
-                return _fn(*args, **kwargs)
+                # R4-02: route the direct-``calculate`` kernel through the central
+                # logical-call validator (integer / panel-axis / param checks).
+                processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
+                return _fn(*processed_args, **processed_kwargs)
 
         OperatorRegistry.register(
             _PandasOp(), canonical=canonical, backend="pandas_numpy",

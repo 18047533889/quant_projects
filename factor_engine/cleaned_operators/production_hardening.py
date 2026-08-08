@@ -115,6 +115,20 @@ FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
     "directional_change_extent",
     "state_since_trend_tstat",
     "ts_cusum_break_score",
+    # review #4 R4-05/06/07: recursive-state operators that were still running
+    # as if they were bounded-window.  threshold_cycle inherits U/L across bars
+    # (infinite-history state); state_episode_* track entry/direction/mfe/mae/
+    # path; ts_interval_nesting_depth is depth_t = depth_{t-1}+1.  None have a
+    # serialize/restore checkpoint, so segmented execution must NEVER treat a
+    # segment start as a fresh history — they require full-history replay.
+    "ts_threshold_cycle_period",
+    "ts_threshold_cycle_asymmetry",
+    "state_episode_mfe",
+    "state_episode_mae",
+    "state_episode_efficiency",
+    "state_episode_retrace_ratio",
+    "state_episode_excursion_balance",
+    "ts_interval_nesting_depth",
 })
 
 # These schemas document the minimum state needed by a future segmented runtime.
@@ -122,6 +136,17 @@ FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
 STATEFUL_CHECKPOINTS: dict[str, tuple[str, ...]] = {
     "ts_sma_cn": ("last_value", "last_timestamp"),
     "hump_decay": ("last_output", "last_timestamp"),
+    # review #4 R4-05/06/07: document the minimum state a future segmented
+    # runtime would need to resume these operators (presence here is the
+    # state schema, NOT a promise that segmented execution is implemented).
+    "ts_threshold_cycle_period": ("last_defined_state", "last_transition_time"),
+    "ts_threshold_cycle_asymmetry": ("last_defined_state", "last_transition_time"),
+    "state_episode_mfe": ("direction", "entry_price", "entry_scale", "mfe", "last_valid_price"),
+    "state_episode_mae": ("direction", "entry_price", "entry_scale", "mae", "last_valid_price"),
+    "state_episode_efficiency": ("direction", "entry_price", "entry_scale", "path_length", "last_valid_price"),
+    "state_episode_retrace_ratio": ("direction", "entry_price", "entry_scale", "mfe", "mae", "last_valid_price"),
+    "state_episode_excursion_balance": ("direction", "entry_price", "entry_scale", "mfe", "mae", "last_valid_price"),
+    "ts_interval_nesting_depth": ("last_depth", "last_valid"),
 }
 
 # Only operators that have real restore/resume implementations may enter this

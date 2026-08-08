@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import (
     aligned_pairs,
     check_window,
@@ -38,7 +38,15 @@ from cleaned_operators.rolling_pack import (
 _EPS = 1e-12
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    cost: int,
+    param_specs: dict | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="binned_response",
@@ -51,6 +59,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:response_shape",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        param_specs=dict(param_specs) if param_specs else {},
     )
 
 
@@ -102,41 +111,45 @@ def _binned_medians(yv: np.ndarray, xv: np.ndarray, bins: int) -> tuple[np.ndarr
     return medians, counts
 
 
-def _monotonicity_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int) -> np.ndarray:
+def _monotonicity_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int, min_per_bin: int = 3) -> np.ndarray:
     rows, cols = y2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w, b = int(window), int(bins)
+    w, b, mpb = int(window), int(bins), int(min_per_bin)
     for c in range(cols):
         for r in range(rows):
             i0 = max(0, r - w + 1)
             yv, xv = aligned_pairs(y2d[i0 : r + 1, c], x2d[i0 : r + 1, c])
-            if yv.size < b:
+            # R4-47: a per-bin median from 1 observation is noise.  Require a
+            # minimum of ``min_per_bin`` observations per used bin and a total
+            # sample large enough to plausibly fill every bin.
+            if yv.size < b * mpb:
                 continue
             medians, counts = _binned_medians(yv, xv, b)
-            nz = counts > 0
-            if int(nz.sum()) < 3:
+            usable = counts >= mpb
+            if int(usable.sum()) < 3:
                 continue
-            gi = np.arange(1, b + 1, dtype=float)[nz]
-            out[r, c] = _spearman(gi, medians[nz])
+            gi = np.arange(1, b + 1, dtype=float)[usable]
+            out[r, c] = _spearman(gi, medians[usable])
     return out
 
 
-def _curvature_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int) -> np.ndarray:
+def _curvature_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int, min_per_bin: int = 3) -> np.ndarray:
     rows, cols = y2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w, b = int(window), int(bins)
+    w, b, mpb = int(window), int(bins), int(min_per_bin)
     for c in range(cols):
         for r in range(rows):
             i0 = max(0, r - w + 1)
             yv, xv = aligned_pairs(y2d[i0 : r + 1, c], x2d[i0 : r + 1, c])
-            if yv.size < b:
+            # R4-47: same per-bin sample floor as monotonicity.
+            if yv.size < b * mpb:
                 continue
             medians, counts = _binned_medians(yv, xv, b)
-            nz = counts > 0
-            if int(nz.sum()) < 3:
+            usable = counts >= mpb
+            if int(usable.sum()) < 3:
                 continue
             q = (np.arange(b) + 0.5) / b
-            qq, mm = q[nz], medians[nz]
+            qq, mm = q[usable], medians[usable]
             X = np.column_stack([np.ones_like(qq), qq, qq ** 2])
             coeff, *_ = np.linalg.lstsq(X, mm, rcond=None)
             sd = float(np.std(mm))
@@ -144,19 +157,15 @@ def _curvature_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int) 
     return out
 
 
-def _ols_slope_resid(xv: np.ndarray, yv: np.ndarray) -> tuple[float, float]:
+def _ols_beta(xv: np.ndarray, yv: np.ndarray) -> float:
     n = xv.size
     if n < 2:
-        return np.nan, np.nan
+        return np.nan
     xm, ym = float(xv.mean()), float(yv.mean())
     sxx = float(np.dot(xv - xm, xv - xm))
     if sxx <= _EPS:
-        return np.nan, np.nan
-    beta = float(np.dot(xv - xm, yv - ym) / sxx)
-    alpha = ym - beta * xm
-    resid = yv - (alpha + beta * xv)
-    scale = float(np.sqrt(np.mean(resid ** 2)))
-    return beta, scale
+        return np.nan
+    return float(np.dot(xv - xm, yv - ym) / sxx)
 
 
 def _slope_asymmetry_series(y2d: np.ndarray, x2d: np.ndarray, window: int, split_quantile: float) -> np.ndarray:
@@ -175,12 +184,20 @@ def _slope_asymmetry_series(y2d: np.ndarray, x2d: np.ndarray, window: int, split
             hi = ~lo
             if lo.sum() < 2 or hi.sum() < 2:
                 continue
-            bL, sL = _ols_slope_resid(xv[lo], yv[lo])
-            bH, sH = _ols_slope_resid(xv[hi], yv[hi])
+            bL = _ols_beta(xv[lo], yv[lo])
+            bH = _ols_beta(xv[hi], yv[hi])
             if not (np.isfinite(bL) and np.isfinite(bH)):
                 continue
-            bLn = bL / (sL + _EPS)
-            bHn = bH / (sH + _EPS)
+            sxL, syL = float(np.std(xv[lo])), float(np.std(yv[lo]))
+            sxH, syH = float(np.std(xv[hi])), float(np.std(yv[hi]))
+            if not (sxL > _EPS and syL > _EPS and sxH > _EPS and syH > _EPS):
+                continue
+            # R4-48: standardised slope β·σx/σy (a within-side correlation), NOT
+            # β/residual-RMSE.  The old denominator mixed residual-volatility
+            # asymmetry into the "slope asymmetry": β_L == β_H with different
+            # residual spreads produced a spurious non-zero asymmetry.
+            bLn = bL * sxL / syL
+            bHn = bH * sxH / syH
             denom = abs(bHn) + abs(bLn) + _EPS
             out[r, c] = (bHn - bLn) / denom
     return out
@@ -206,17 +223,31 @@ class TsBinnedResponseMonotonicity(SeriesOperator):
     metadata = _metadata(
         "ts_binned_response_monotonicity",
         "x 分位组索引与组内 y 中位数的 Spearman 秩相关（单调性）。",
-        ["y", "x", "window", "bins"],
+        ["y", "x", "window", "bins", "min_per_bin"],
         unit="corr",
         cost=4,
+        # R4-93: ``bins`` is an estimator resolution, not an alpha to search — it
+        # changes economic scale, plug-in bias and finite-sample variance together.
+        # Only a small verified grid {3, 5} is allowed.
+        param_specs={
+            "bins": ParamSpec(dtype=int, min=3, choices=(3, 5)),
+            "min_per_bin": ParamSpec(dtype=int, min=2),
+        },
     )
 
-    def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 120, bins: int = 5, **_: Any) -> pd.DataFrame:
+    def _calculate_series(
+        self, y: pd.DataFrame, x: pd.DataFrame, window: int = 120, bins: int = 5, min_per_bin: int = 3, **_: Any
+    ) -> pd.DataFrame:
         w = check_window(window)
         b = int(bins)
         if b < 2:
             raise ValueError("bins must be >= 2")
-        return frame_like(y, _monotonicity_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float), w, b))
+        mpb = int(min_per_bin)
+        if mpb < 2:
+            raise ValueError("min_per_bin must be >= 2")
+        return frame_like(
+            y, _monotonicity_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float), w, b, mpb)
+        )
 
 
 @register_operator(
@@ -235,17 +266,29 @@ class TsBinnedResponseCurvature(SeriesOperator):
     metadata = _metadata(
         "ts_binned_response_curvature",
         "分位响应曲线二次项系数,按 std(m_b) 归一（曲率）。",
-        ["y", "x", "window", "bins"],
+        ["y", "x", "window", "bins", "min_per_bin"],
         unit="ratio",
         cost=4,
+        # R4-93: bins is a small verified estimator-resolution grid, not searchable.
+        param_specs={
+            "bins": ParamSpec(dtype=int, min=3, choices=(3, 5)),
+            "min_per_bin": ParamSpec(dtype=int, min=2),
+        },
     )
 
-    def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 120, bins: int = 5, **_: Any) -> pd.DataFrame:
+    def _calculate_series(
+        self, y: pd.DataFrame, x: pd.DataFrame, window: int = 120, bins: int = 5, min_per_bin: int = 3, **_: Any
+    ) -> pd.DataFrame:
         w = check_window(window)
         b = int(bins)
         if b < 3:
             raise ValueError("bins must be >= 3 for a quadratic fit")
-        return frame_like(y, _curvature_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float), w, b))
+        mpb = int(min_per_bin)
+        if mpb < 2:
+            raise ValueError("min_per_bin must be >= 2")
+        return frame_like(
+            y, _curvature_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float), w, b, mpb)
+        )
 
 
 @register_operator(
@@ -256,10 +299,11 @@ class TsBinnedResponseCurvature(SeriesOperator):
     source="binned_response",
 )
 class TsResponseSlopeAsymmetry(SeriesOperator):
-    """响应斜率不对称：x 高位侧与低位侧 OLS 斜率差的归一化符号。
+    """响应斜率不对称：x 高位侧与低位侧标准化 OLS 斜率差的归一化符号。
 
-    A=(β_H-β_L)/(|β_H|+|β_L|+eps),斜率各自按残差尺度归一。正 → 高位斜率更大
-    （凸响应）；负 → 凹响应。split_quantile 必须落在 (0,1)。P2。
+    A=(β̃_H-β̃_L)/(|β̃_H|+|β̃_L|+eps),β̃=β·σx/σy(标准化 slope,即组内相关系数),
+    不除 residual RMSE——避免把残差波动不对称混入"斜率不对称"。正 → 高位斜率
+    更大(凸响应);负 → 凹响应。split_quantile 必须落在 (0,1)。P2。
     """
 
     metadata = _metadata(

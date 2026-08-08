@@ -38,17 +38,66 @@ def _parquet_files(spec: Any) -> list[Path]:
     return sorted(p for p in root.rglob("*.parquet") if p.is_file() and p.stat().st_size > 0)
 
 
+def _inventory_hash(root: Path, files: list[Path]) -> str:
+    """#P1-1 本地 parquet 清单指纹：(相对路径|size|mtime_ns) 的 sha256。
+
+    marker 必须绑定本地对象清单，否则上游新增文件后「永久 complete」——本地一旦
+    出现 marker 里没有的新文件/变更，指纹即 mismatch → 视为 stale，强制重同步。
+    """
+    import hashlib
+
+    digest = hashlib.sha256()
+    for p in files:
+        try:
+            st = p.stat()
+            rel = p.relative_to(root)
+        except (OSError, ValueError):
+            continue
+        digest.update(f"{rel}|{st.st_size}|{st.st_mtime_ns}\n".encode("utf-8"))
+    return digest.hexdigest()[:16]
+
+
 def _write_complete_marker(spec: Any, *, source: str) -> None:
     root = _local_dir(spec)
     root.mkdir(parents=True, exist_ok=True)
+    files = _parquet_files(spec)
     payload = {
         "source": source,
         "completed_at": datetime.now(timezone.utc).isoformat(),
         "layout": spec.layout,
         "cos_prefix": spec.cos_prefix,
         "table": spec.table,
+        # #P1-1 RemoteSnapshot 字段：object_count / inventory_hash 让 marker 不再是
+        # 「永久 complete」，本地/上游清单变化 → 指纹 mismatch → stale。
+        "object_count": len(files),
+        "inventory_hash": _inventory_hash(root, files),
     }
     _marker_path(spec).write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+
+def _complete_marker_valid(spec: Any) -> bool:
+    """#P1-1 marker 存在 + parquet 存在 + 本地清单指纹与 marker 一致才算 complete。
+
+    指纹 mismatch（新文件被同步进来但 marker 没更新）→ stale，要求重新 full sync，
+    避免「今天 sync 完，明天上游加文件，本地永远 complete 不更新」。
+    """
+    marker = _marker_path(spec)
+    if not marker.is_file():
+        return False
+    try:
+        payload = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    files = _parquet_files(spec)
+    if not files:
+        return False
+    recorded_hash = payload.get("inventory_hash")
+    if isinstance(recorded_hash, str) and recorded_hash:
+        if _inventory_hash(_local_dir(spec), files) != recorded_hash:
+            return False
+    return True
 
 
 def _full_sync(spec: Any, *, source: str) -> list[Path]:
@@ -91,7 +140,7 @@ def _patched_ensure_local_mirror(dataset_name: str, *, time_range: tuple[Any, An
     if spec is None or spec.layout not in _RECURSIVE_LAYOUTS:
         return _originals["mirror.ensure_local_mirror"](dataset_name, time_range=time_range)
     files = _parquet_files(spec)
-    if _marker_path(spec).is_file() and files:
+    if _complete_marker_valid(spec):
         return
     if files:
         raise ValidationError(
@@ -125,17 +174,29 @@ def _month_globs(spec: Any, time_range: tuple[Any, Any] | None) -> list[str]:
     return [f"{base}/{year:04d}-{month:02d}-*.parquet" for year, month in months]
 
 
-def _patched_build_remote_paths(dataset_name: str, *, time_range: tuple[Any, Any] | None = None) -> list[str]:
+def _patched_build_remote_paths(
+    dataset_name: str,
+    *,
+    time_range: tuple[Any, Any] | None = None,
+    ds: Any = None,
+    params: Any = None,
+) -> list[str]:
+    # #P0-1 新版 canonical 签名带 ds/params；旧 patch 必须原样透传，否则
+    # install_cos_storage_runtime 会把 ParametricDataset generic remote 弄残。
     from data_access.cos import remote
     spec = remote.mirror_spec_for_dataset(dataset_name)
     if spec is None:
-        return _originals["remote.build_remote_paths"](dataset_name, time_range=time_range)
+        return _originals["remote.build_remote_paths"](
+            dataset_name, time_range=time_range, ds=ds, params=params
+        )
     if spec.layout == "daily_parquet":
         # Exact day lists include weekends and holidays. Month globs preserve
         # object pruning while the structured predicate enforces the exact range.
         return _month_globs(spec, time_range)
     if spec.layout not in _RECURSIVE_LAYOUTS:
-        return _originals["remote.build_remote_paths"](dataset_name, time_range=time_range)
+        return _originals["remote.build_remote_paths"](
+            dataset_name, time_range=time_range, ds=ds, params=params
+        )
     base = remote._s3_table_base(spec)
     remote.authorize_s3_path(base + "/")
     # Availability time cannot infer period_end/event filenames. DuckDB filters
@@ -148,17 +209,26 @@ def _patched_local_complete(dataset_name: str, *, time_range: tuple[Any, Any] | 
     spec = remote.mirror_spec_for_dataset(dataset_name)
     if spec is None or spec.layout not in _RECURSIVE_LAYOUTS:
         return _originals["remote.local_mirror_complete_for_range"](dataset_name, time_range=time_range)
-    return _marker_path(spec).is_file() and bool(_parquet_files(spec))
+    return _complete_marker_valid(spec)
 
 
-def _patched_materialize_remote_via_cli(dataset_name: str, *, time_range: tuple[Any, Any] | None = None) -> list[str]:
+def _patched_materialize_remote_via_cli(
+    dataset_name: str,
+    *,
+    time_range: tuple[Any, Any] | None = None,
+    ds: Any = None,
+    params: Any = None,
+) -> list[str]:
+    # #P0-1 与 _patched_build_remote_paths 同：ds/params 原样透传 canonical。
     from data_access.cos import remote
     spec = remote.mirror_spec_for_dataset(dataset_name)
     if spec is None or spec.layout not in _RECURSIVE_LAYOUTS:
-        return _originals["remote.materialize_remote_via_cli"](dataset_name, time_range=time_range)
+        return _originals["remote.materialize_remote_via_cli"](
+            dataset_name, time_range=time_range, ds=ds, params=params
+        )
     cache_spec = remote._cache_mirror_spec(spec)
     files = _parquet_files(cache_spec)
-    if _marker_path(cache_spec).is_file() and files:
+    if _complete_marker_valid(cache_spec):
         return [str(path) for path in files]
     _require_full_sync_opt_in(dataset_name)
     files = _full_sync(cache_spec, source="remote_cli_cache")

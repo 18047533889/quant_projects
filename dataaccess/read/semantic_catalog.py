@@ -52,8 +52,8 @@ class SemanticField:
     """一个逻辑字段的完整语义声明（catalog 的原子条目）。"""
 
     logical_name: str
-    dataset: str                       # 物理数据集（registry 名）
-    physical_name: str                 # 数据集内的物理列名
+    dataset: str | None = None         # 物理数据集（registry 名）；#P0-24 derived 字段可无
+    physical_name: str | None = None   # 数据集内的物理列名（derived 字段为表达式描述）
     market: str = "any"                # ashare / us / any（any=跨市场通用）
     dtype: str | None = None           # float64 / int64 / string / date ...
     frequency: str | None = None       # daily / minute / tick / quarterly ...
@@ -76,6 +76,11 @@ class SemanticField:
     mining_allowed: bool = True
     period_selection: str = "all"            # latest_period/exact_period/annual/quarterly/ttm/all
     period_values: tuple[Any, ...] = ()      # exact_period 的目标 period 值
+    # #P0-24 derived 字段：不是某张物理表的列，而是多表/多列的派生表达式。
+    # derived_from 列出依赖的 (dataset.column)；coverage audit 对 derived 字段跳过
+    # COLUMN_MISSING 检查（它们不落盘）。
+    derived_expression: str | None = None
+    derived_from: tuple[str, ...] = ()
 
     @property
     def is_scale_applicable(self) -> bool:
@@ -109,6 +114,8 @@ class SemanticField:
             "mining_allowed": self.mining_allowed,
             "period_selection": self.period_selection,
             "period_values": list(self.period_values),
+            "derived_expression": self.derived_expression,
+            "derived_from": list(self.derived_from),
         }
 
 
@@ -209,7 +216,9 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
     dataset = raw.get("dataset")
     physical = raw.get("physical_name") or raw.get("physical") or name
     logical = str(raw.get("logical_name") or name)
-    if not dataset:
+    derived_expr = _str_or_none(raw.get("derived_expression"))
+    # #P0-24 derived 字段不落在单一物理表：允许无 dataset，但必须有 derived_expression。
+    if not dataset and not derived_expr:
         raise ValidationError(f"{context}: 缺少 dataset（逻辑字段必须落到某个数据集）")
     temporal_model = _str_or_none(raw.get("temporal_model"))
     # #9：财务事件字段默认 latest_period——「最新可见会计期 + 该期内最新修订」。
@@ -250,6 +259,8 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         "mining_allowed",
         "period_selection",
         "period_values",
+        "derived_expression",
+        "derived_from",
     }
     unknown = sorted(set(raw) - _KNOWN_KEYS)
     if unknown:
@@ -279,7 +290,7 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
     )
     return SemanticField(
         logical_name=logical,
-        dataset=str(dataset),
+        dataset=str(dataset) if dataset else None,
         physical_name=str(physical),
         market=market,
         dtype=_str_or_none(raw.get("dtype")),
@@ -305,6 +316,8 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         ),
         period_selection=period_selection,
         period_values=_tuple_of(raw.get("period_values")) if raw.get("period_values") else (),
+        derived_expression=_str_or_none(raw.get("derived_expression")),
+        derived_from=_tuple_of(raw.get("derived_from")),
     )
 
 
@@ -477,6 +490,9 @@ class SemanticFieldCatalog:
 
         blocked: dict[str, str] = {}
         for f in self._fields.values():
+            if f.derived_expression:
+                # #P0-24 derived 字段不落盘，不做物理列存在性检查。
+                continue
             try:
                 ds = registry.get(f.dataset)
             except ValidationError:

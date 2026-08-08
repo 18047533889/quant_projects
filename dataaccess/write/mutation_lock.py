@@ -122,11 +122,23 @@ def _read_payload(path: Path) -> dict | None:
 
 
 def _owner_is_dead(payload: dict) -> bool:
+    """#P0-31 判断锁 owner 进程是否已死。
+
+    跨机器共享文件系统（NFS/Lustre）上，锁可能来自另一台 host：
+    - owner host != 本机 → **绝不能用本机 os.kill(pid, 0) 判定死亡**（本机恰好
+      没有该 PID 不代表 owner 死了），视为"活着"，只能靠 lease 过期回收。
+    - owner host == 本机 → 用 os.kill(pid, 0) 探测本地进程。
+    """
+    pid_raw = payload.get("pid")
     try:
-        pid = int(payload.get("pid", 0))
+        pid = int(pid_raw)
     except (TypeError, ValueError):
         return False
     if pid <= 0:
+        return False
+    owner_host = str(payload.get("host") or "")
+    if owner_host and owner_host != socket.gethostname():
+        # 锁来自别的机器：本地没有这个 PID 是正常现象，不能据此打破锁。
         return False
     try:
         os.kill(pid, 0)

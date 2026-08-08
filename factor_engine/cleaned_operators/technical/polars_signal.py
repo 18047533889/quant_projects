@@ -675,24 +675,42 @@ class AroonPolars(SeriesOperator):
 
 @register_operator(name="KAMA", category="financial", business_category="technical_signal", canonical="KAMA", source="factor_dsl_polars")
 class KAMAPolars(SeriesOperator):
-    """Polars 考夫曼自适应移动平均"""
+    """Polars 考夫曼自适应移动平均.
+
+    R4-100: aligned to the canonical ``(close, er_window, fast_window, slow_window)``
+    contract (pandas reference: technical.indicators_v2.KAMA).  The previous
+    ``(close, window)`` signature silently accepted a DIFFERENT simplified
+    formula under the same canonical — positional drift across backends.
+    """
     metadata = OperatorMetadata(
         name="KAMA", category="financial", description="考夫曼自适应移动平均",
-        param_names=["close", "window"], return_type="series", tags=["financial", "polars"],
+        param_names=["close", "er_window", "fast_window", "slow_window"],
+        return_type="series", tags=["financial", "polars"],
     )
 
-    def _calculate_series(self, close: pl.DataFrame, window: int = 10, **kwargs) -> pl.DataFrame:
-        w = max(int(kwargs.get("d", window)), 1)
-        fast_sc = 2.0 / (2.0 + 1.0)
-        slow_sc = 2.0 / (30.0 + 1.0)
+    def _calculate_series(
+        self,
+        close: pl.DataFrame,
+        er_window: int = 10,
+        fast_window: int = 2,
+        slow_window: int = 30,
+        **kwargs,
+    ) -> pl.DataFrame:
+        er = max(int(kwargs.get("d", er_window)), 1)
+        fast = max(int(kwargs.get("p", fast_window)), 1)
+        slow = max(int(kwargs.get("q", slow_window)), 1)
+        if fast >= slow:
+            raise ValueError("fast_window must be < slow_window")
+        fast_sc = 2.0 / (fast + 1.0)
+        slow_sc = 2.0 / (slow + 1.0)
         cols = _numeric_cols(close)
         out_data: dict[str, np.ndarray] = {}
         for c in cols:
             col = pl.col(c)
-            direction = (col - col.shift(w)).abs()
-            volatility = col.diff().abs().rolling_sum(window_size=w, min_samples=1)
-            er = direction / volatility
-            sc = (er * (fast_sc - slow_sc) + slow_sc).pow(2)
+            direction = (col - col.shift(er)).abs()
+            volatility = col.diff().abs().rolling_sum(window_size=er, min_samples=er)
+            efficiency = direction / volatility
+            sc = (efficiency * (fast_sc - slow_sc) + slow_sc).pow(2)
             sc_arr = close.select(sc.alias("_sc")).to_series().to_numpy()
             vals = close[c].to_numpy()
             out_data[c] = _kama_1d(vals, sc_arr)

@@ -193,12 +193,18 @@ def _prepare_sql_views(
     build_select_sql,
     resolve_paths,
     read_time_ranges: Mapping[str, tuple[Any, Any] | None] | None = None,
+    semantic_gate=None,
 ) -> tuple[dict[str, str], list[tuple[str, str]]]:
     """返回 (view_map, register_specs)；register_specs = [(view_name, inlined_sql), ...]。
 
     ``resolve_paths`` 签名兼容：
       ``(ds, params)`` 或 ``(ds, params, *, time_range=...)``
     后者用于 COS remote：按 time_range 生成 ``s3://`` 日文件列表。
+
+    ``semantic_gate``（#P0-12）：store 注入的 ``_prepare_read_request`` 包装。
+    每个 read dataset 在构建视图**之前**先过完整 semantic gate（temporal model /
+    event cutoff / required filters / allowed values）——sql() 不能绕过 generic
+    read() 会拒绝的 E1/E2/RAW_EVENT/X0/effective-time-only。
     """
     view_map = _build_view_map(read_datasets, scope_id)
     time_ranges = dict(read_time_ranges or {})
@@ -208,11 +214,19 @@ def _prepare_sql_views(
         ds = registry.get(name)
         ds_params = dict(read_params.get(name, {}))
         time_range = time_ranges.get(name)
+        cols = list(view_columns[name]) if view_columns and name in view_columns else None
+        if semantic_gate is not None:
+            # #P0-12 语义门禁：失败即拒绝（fail-closed），视图不会生成。
+            semantic_gate(
+                name,
+                columns=cols,
+                time_range=time_range,
+                params=ds_params,
+            )
         paths = _resolve_paths_compat(
             resolve_paths, ds, ds_params, time_range,
             supports_time_range=supports_time_range,
         )
-        cols = list(view_columns[name]) if view_columns and name in view_columns else None
         sql, sql_params = build_select_sql(
             ds=ds,
             paths=paths,
@@ -239,6 +253,7 @@ def run_sql(
     query_budget: QueryBudget | None = None,
     build_select_sql,  # store._build_select_sql，避开循环 import
     resolve_paths,     # store._prepare_dataset_read 包装，同上
+    semantic_gate=None,  # #P0-12 store._prepare_read_request 包装
 ) -> pa.Table:
     """执行一条只读 SELECT；只能 FROM 预先声明的数据集。
 
@@ -270,6 +285,7 @@ def run_sql(
         )
 
     _reject_forbidden_tokens(query)
+    _reject_denied_table_functions(query)
 
     read_params = dict(read_params) if read_params else {}
     budget = resolve_query_budget(query_budget)
@@ -285,6 +301,7 @@ def run_sql(
         build_select_sql=build_select_sql,
         resolve_paths=resolve_paths,
         read_time_ranges=read_time_ranges,
+        semantic_gate=semantic_gate,
     )
     bounded_query = apply_sql_row_limit(
         _rewrite_query_tables(query, view_map),
@@ -354,6 +371,7 @@ def run_sql_stream(
     batch_size: int = 100_000,
     build_select_sql,
     resolve_paths,
+    semantic_gate=None,
 ) -> Iterator[pa.RecordBatch]:
     """流式执行只读 SELECT；语义与 ``run_sql`` 一致，按 batch 返回。"""
     if not query or not query.strip():
@@ -362,6 +380,7 @@ def run_sql_stream(
         raise ValidationError("sql_stream() 必须显式声明 read_datasets")
 
     _reject_forbidden_tokens(query)
+    _reject_denied_table_functions(query)
     read_params = dict(read_params) if read_params else {}
     budget = resolve_query_budget(query_budget)
     validate_sql_view_columns(budget, read_datasets, view_columns)
@@ -376,6 +395,7 @@ def run_sql_stream(
         build_select_sql=build_select_sql,
         resolve_paths=resolve_paths,
         read_time_ranges=read_time_ranges,
+        semantic_gate=semantic_gate,
     )
     bounded_query = apply_sql_row_limit(
         _rewrite_query_tables(query, view_map),
@@ -435,20 +455,127 @@ def run_sql_stream(
     return _iter_batches()
 
 
-def _reject_forbidden_tokens(query: str) -> None:
-    """扫用户 SQL 里是否有禁用关键字。
+def _iter_code_chunks(query: str) -> Iterator[str]:
+    """#P2-2 只产出 SQL「code」段（跳过字符串/引号标识符/注释），
+    避免 ``SELECT 'read_parquet' AS note`` 这类字符串里的关键字被误伤。"""
+    i = 0
+    state = "code"
+    chunk_start = 0
+    while i < len(query):
+        if state == "code":
+            if query.startswith("--", i):
+                yield query[chunk_start:i]
+                state = "line_comment"
+                i += 2
+                chunk_start = i
+                continue
+            if query.startswith("/*", i):
+                yield query[chunk_start:i]
+                state = "block_comment"
+                i += 2
+                chunk_start = i
+                continue
+            if query[i] in "'\"":
+                yield query[chunk_start:i]
+                quote = query[i]
+                state = "string" if quote == "'" else "quoted_ident"
+                i += 1
+                chunk_start = i
+                continue
+            i += 1
+            continue
+        if state == "string":
+            if query[i] == "'":
+                if i + 1 < len(query) and query[i + 1] == "'":
+                    i += 2
+                    continue
+                state = "code"
+                chunk_start = i + 1
+            i += 1
+            continue
+        if state == "quoted_ident":
+            if query[i] == '"':
+                if i + 1 < len(query) and query[i + 1] == '"':
+                    i += 2
+                    continue
+                state = "code"
+                chunk_start = i + 1
+            i += 1
+            continue
+        if state == "line_comment":
+            if query[i] == "\n":
+                state = "code"
+                chunk_start = i + 1
+            i += 1
+            continue
+        if state == "block_comment":
+            if query.startswith("*/", i):
+                state = "code"
+                i += 2
+                chunk_start = i
+            else:
+                i += 1
+    if chunk_start < len(query):
+        yield query[chunk_start:]
 
-    注意：正则只挡最常见的 DML/DDL/文件函数；真要绕（比如 `ins` + `ert`
-    字符串拼接）DuckDB parser 也会接受。这道防线的目的是"笔误/无意绕过"，
-    真正的恶意场景得靠「只开 TEMP VIEW 不开 read_parquet」的设计本身兜底。
+
+def _reject_forbidden_tokens(query: str) -> None:
+    """扫用户 SQL 的 **code 段**里是否有禁用关键字。
+
+    #P2-2 字符串/注释里的关键字不误伤（``SELECT 'read_parquet' AS note`` 合法）。
+
+    注意：这道防线的目的是"笔误/无意绕过"——真正的恶意场景靠「只开 TEMP VIEW
+    不开 read_parquet」+ 下一层 table-function deny-by-default（见
+    ``_reject_denied_table_functions``）。
     """
-    m = _FORBIDDEN_RE.search(query)
-    if m:
-        raise ValidationError(
-            f"sql() 拒绝执行：查询含禁用关键字 {m.group(0)!r}。"
-            f"sql() 只允许 SELECT/WITH；写操作请走 write_arrow / upsert / "
-            f"publish_from_staging；读外部文件请先在 datasets.yaml 登记"
-        )
+    for chunk in _iter_code_chunks(query):
+        m = _FORBIDDEN_RE.search(chunk)
+        if m:
+            raise ValidationError(
+                f"sql() 拒绝执行：查询含禁用关键字 {m.group(0)!r}。"
+                f"sql() 只允许 SELECT/WITH；写操作请走 write_arrow / upsert / "
+                f"publish_from_staging；读外部文件请先在 datasets.yaml 登记"
+            )
+
+
+# #P0-13 deny-by-default 的 table function 名单：未来 DuckDB 加新函数不被自动放行。
+_DENIED_TABLE_FUNCTIONS = (
+    "read_parquet",
+    "read_parquet_auto",
+    "read_csv",
+    "read_csv_auto",
+    "read_json",
+    "read_json_auto",
+    "read_ndjson",
+    "parquet_scan",
+    "csv_scan",
+    "glob",
+    "read_blob",
+    "httpfs_",
+    "sqlite_scan",
+    "delta_scan",
+    "iceberg_scan",
+    "postgres_scan",
+    "mysql_scan",
+    "sql_scan",
+)
+
+
+def _reject_denied_table_functions(query: str) -> None:
+    """#P0-13 对 code 段做 table-function deny-by-default 检查。
+
+    识别 ``name(`` 形态（后跟括号即函数调用）；任何名单内函数直接拒绝。名单外的
+    DuckDB 内建聚合/窗口函数（sum/avg/row_number 等）不在名单，天然放行。
+    """
+    import re as _re
+
+    code = " ".join(_iter_code_chunks(query))
+    for fn in _DENIED_TABLE_FUNCTIONS:
+        if _re.search(_re.escape(fn) + r"\s*\(", code, flags=_re.IGNORECASE):
+            raise ValidationError(
+                f"sql() 拒绝执行：table function {fn!r} 默认禁用（deny-by-default）。"
+                "读外部文件请先在 datasets.yaml 登记数据集。"
+            )
 
 
 def validate_sql_sandbox(query: str) -> None:
@@ -458,7 +585,8 @@ def validate_sql_sandbox(query: str) -> None:
     production/strict 下挡住：
         - 空查询 / 非 SELECT/WITH 开头（多语句、DDL）；
         - 禁用关键字（INSERT/UPDATE/DELETE/COPY/ATTACH/LOAD/INSTALL/
-          read_parquet/read_csv/glob 等）。
+          read_parquet/read_csv/glob 等）——只在 code 段扫（#P2-2）；
+        - deny-by-default 的 table function（#P0-13）。
     """
     if not query or not query.strip():
         raise ValidationError("sql_relation 拒绝执行空查询")
@@ -468,6 +596,56 @@ def validate_sql_sandbox(query: str) -> None:
             f"sql_relation 只允许单个 SELECT/WITH，收到 {first!r} 开头的语句"
         )
     _reject_forbidden_tokens(query)
+    _reject_denied_table_functions(query)
+
+
+def _query_from_tables(query: str) -> list[str]:
+    """#P0-18 提取 SQL 里 FROM/JOIN 的表名（code 段，跳过字符串/注释）。
+
+    返回表名列表（含 ``{{name}}`` 占位与引号标识符去引号）。
+    """
+    import re
+
+    out: list[str] = []
+    for chunk in _iter_code_chunks(query):
+        for m in re.finditer(
+            r"(?i)\b(?:FROM|JOIN)\s+"
+            r"(?:\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}"
+            r"|\"([^\"]+)\""
+            r"|([A-Za-z_][A-Za-z0-9_.]*))",
+            chunk,
+        ):
+            name = m.group(1) or m.group(2) or m.group(3)
+            if name and name not in out:
+                out.append(name)
+    return out
+
+
+def assert_sql_tables_declared(query: str, declared: Sequence[str]) -> None:
+    """#P0-18 production sql_relation 的 FROM 表集合绑定。
+
+    ``snapshot_datasets`` 不再是纯 lineage——查询 FROM/JOIN 的每一张表都必须在
+    声明集合内（token 黑名单只能挡 read_parquet/COPY 这类函数，挡不住用户
+    ``FROM 其它系统表`` 绕过 DataAccess）。
+    """
+    if not query or not declared:
+        return
+    table_set = set(declared)
+    # 允许大小写不敏感匹配（数据集名在 registry 是 snake_case）
+    lower_declared = {str(d).lower() for d in table_set}
+    unknown: list[str] = []
+    for t in _query_from_tables(query):
+        if t.lower() in lower_declared:
+            continue
+        if t.lower().startswith("__scope") or t.startswith("_"):
+            # run_sql 作用域视图 / 内部临时名
+            continue
+        unknown.append(t)
+    if unknown:
+        raise ValidationError(
+            f"sql_relation FROM/JOIN 引用了未声明的表：{sorted(set(unknown))}。"
+            "production/strict 下必须全部出现在 snapshot_datasets 里。"
+        )
 
 
 def _inline_path_params(sql: str, params: Sequence[Any]) -> str:

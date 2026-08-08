@@ -204,11 +204,17 @@ def _up_ratio(ret, volume, window, *, positive):
     values = {}
     for c in _cols(ret, volume):
         frame = pl.DataFrame({"ret": ret[c], "volume": volume[c]})
-        # pandas where(NaN 条件) -> 0.0；polars 需把 NaN 归一为 null 后 when(null) 才走 otherwise。
+        # R4-29: a missing/unknown return must NOT count as "not up/down"
+        # volume (unknown != zero).  Mirror the pandas reference exactly:
+        # invalid rows are masked to null so a window with any missing input
+        # emits NaN; only a fully-known window with zero up/down volume -> 0.
         retf = pl.col("ret").fill_nan(None)
+        voln = pl.col("volume").fill_nan(None)
+        valid = retf.is_not_null() & voln.is_not_null()
         cond = retf > 0 if positive else retf < 0
-        up = pl.when(cond).then(pl.col("volume")).otherwise(0.0).rolling_sum(w, min_samples=w)
-        total = pl.col("volume").abs().rolling_sum(w, min_samples=w)
+        contrib = pl.when(valid & cond).then(pl.col("volume")).otherwise(0.0)
+        up = pl.when(valid).then(contrib).otherwise(None).rolling_sum(w, min_samples=w)
+        total = voln.abs().rolling_sum(w, min_samples=w)
         values[c] = _one(frame, c, _safe_div(up, total))
     return _result(ret, values)
 

@@ -55,6 +55,21 @@ class DeadlineExceeded(DataAccessError):
     """
 
 
+class ResourceBudgetExceeded(DataAccessError):
+    """资源预算超限（#P0-8：deadline 连接池并发上限等待超时等）。
+
+    不同于 DeadlineExceeded（查询本身超时），这里是**准入失败**——池容量满、
+    等待超时仍未获得连接。
+    """
+
+
+class EngineClosedError(EngineError):
+    """在 ``DuckDBEngine.close()`` 之后仍尝试 acquire/execute。
+
+    #P0-10：关闭后的 engine 必须 fail-fast，不能静默复用已关闭连接。
+    """
+
+
 class AmbiguousSemanticFieldError(ValidationError):
     """跨市场逻辑字段无法在无上下文下消歧（#54 fail-closed）。
 

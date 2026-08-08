@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 
 
 def _pi(v, name, minimum=1):
@@ -32,6 +32,11 @@ def _near(a, b, tol):
 
 def _shift(x, n):
     return x.shift(int(n))
+
+
+def _sign_direction(c, o):
+    """Direction of close vs open; 0 for a doji (close==open), review R4-12."""
+    return np.sign(c.to_numpy(float) - o.to_numpy(float))
 
 
 # Pattern -> params that actually affect the output.  Varying an inactive
@@ -89,6 +94,19 @@ def candlestick_active_params(pattern: str) -> frozenset[str]:
     if deps is None:
         raise ValueError(f"unsupported candlestick pattern: {pattern!r}")
     return frozenset({"pattern"}) | deps
+
+
+def _candle_active_param_patterns(param: str) -> tuple[str, ...]:
+    """Pattern names (with and without the ``cdl_`` prefix) for which ``param``
+    actually affects the output (ParamSpec.active_when, review R4-91)."""
+    out = {p for p, deps in _CANDLE_PARAM_DEPS.items() if param in deps}
+    return tuple(sorted(out | {"cdl_" + p for p in out}))
+
+
+_CANDLE_PATTERNS_ALL = tuple(sorted(set(_CANDLE_PARAM_DEPS) | {"cdl_" + p for p in _CANDLE_PARAM_DEPS}))
+_CANDLE_BODY_ACTIVE = _candle_active_param_patterns("body_window")
+_CANDLE_SHADOW_ACTIVE = _candle_active_param_patterns("shadow_window")
+_CANDLE_PENETRATION_ACTIVE = _candle_active_param_patterns("penetration")
 
 
 def _engine(o, h, l, c, pattern, body_window, shadow_window, penetration):
@@ -154,20 +172,23 @@ def _engine(o, h, l, c, pattern, body_window, shadow_window, penetration):
         return base.where(~mask, values.astype(float))
 
     if p == "long_line":
-        return emit(long_body, np.where(bull, 1, -1), cur & has_b)
+        return emit(long_body, _sign_direction(c, o), cur & has_b)
     if p == "short_line":
-        return emit(short_body, np.where(bull, 1, -1), cur & has_b)
+        return emit(short_body, _sign_direction(c, o), cur & has_b)
     if p == "high_wave":
-        return emit(short_body & long_upper & long_lower, np.where(bull, 1, -1), cur & has_b & has_r)
+        return emit(short_body & long_upper & long_lower, _sign_direction(c, o), cur & has_b & has_r)
     if p == "long_legged_doji":
-        return emit(doji & long_upper & long_lower, 1, cur & has_b & has_r)
+        # Directionless pattern (review R4-12): no bull/bear connotation.  The
+        # output is the EventBool (1 = present, 0 = not, NaN = cannot judge);
+        # the direction component is 0/neutral and must not be read as bullish.
+        return emit(doji & long_upper & long_lower, 1.0, cur & has_b & has_r)
     if p == "rickshaw_man":
         return emit(
             doji
             & long_upper
             & long_lower
             & (((o + c) / 2 - (h + l) / 2).abs() <= 0.15 * rng),
-            1,
+            1.0,
             cur & has_b & has_r,
         )
     if p == "takuri":
@@ -175,13 +196,13 @@ def _engine(o, h, l, c, pattern, body_window, shadow_window, penetration):
     if p == "belt_hold":
         return emit(
             long_body & ((bull & (o - l <= 0.1 * rng)) | (bear & (h - o <= 0.1 * rng))),
-            np.where(bull, 1, -1),
+            _sign_direction(c, o),
             cur & has_b,
         )
     if p == "closing_marubozu":
         return emit(
             long_body & ((bull & (h - c <= 0.05 * rng)) | (bear & (c - l <= 0.05 * rng))),
-            np.where(bull, 1, -1),
+            _sign_direction(c, o),
             cur & has_b,
         )
     if p == "homing_pigeon":
@@ -189,11 +210,11 @@ def _engine(o, h, l, c, pattern, body_window, shadow_window, penetration):
     if p == "matching_low":
         return emit(pbear & bear & _near(c, pc, tol), 1, cur & prev1 & has_r)
     if p == "counterattack":
-        return emit(((pbear & bull) | (pbull & bear)) & _near(c, pc, tol), np.where(bull, 1, -1), cur & prev1 & has_r)
+        return emit(((pbear & bull) | (pbull & bear)) & _near(c, pc, tol), _sign_direction(c, o), cur & prev1 & has_r)
     if p == "separating_lines":
         return emit(
             ((pbear & bull) | (pbull & bear)) & _near(o, po, tol) & long_body,
-            np.where(bull, 1, -1),
+            _sign_direction(c, o),
             cur & prev1 & has_r & has_b,
         )
     if p in {"on_neck", "in_neck", "thrusting"}:
@@ -207,7 +228,7 @@ def _engine(o, h, l, c, pattern, body_window, shadow_window, penetration):
             mask = bull2 & (c > pc + 0.25 * pbody) & (c < prev_mid)
         return emit(mask, -1, cur & prev1)
     if p == "doji_star":
-        return emit(doji & ((pbear & (h < pc)) | (pbull & (l > pc))), np.where(pbear, 1, -1), cur & prev1 & has_b)
+        return emit(doji & ((pbear & (h < pc)) | (pbull & (l > pc))), np.sign(pc.to_numpy(float) - po.to_numpy(float)), cur & prev1 & has_b)
 
     bull2 = c2 > o2
     bear2 = c2 < o2
@@ -307,6 +328,17 @@ def _engine(o, h, l, c, pattern, body_window, shadow_window, penetration):
 
 
 class CandlestickPatternEngine(SeriesOperator):
+    """Adaptive bounded Japanese-candlestick pattern engine.
+
+    Output contract (review R4-12): directional patterns emit ``+1`` (bullish) /
+    ``-1`` (bearish); directionless doji-family patterns emit ``+1`` as the
+    *EventBool* with a neutral direction component (0) — consume them as
+    event/magnitude, not as a bullish call.  Warmup / missing-history rows are
+    NaN, never 0.  Custom adaptive patterns (``tristar``/``breakaway``/
+    ``advance_block`` …) are *adaptive* re-readings of the classic names, not
+    byte-for-byte TA-Lib definitions (semantic_family=adaptive_custom, R4-92).
+    """
+
     metadata = OperatorMetadata(
         name="candlestick_pattern",
         category="candle_pattern",
@@ -322,7 +354,19 @@ class CandlestickPatternEngine(SeriesOperator):
             "penetration",
         ],
         return_type="series",
-        tags=["pit_safe", "causal", "bounded_history", "production_extension"],
+        tags=[
+            "pit_safe", "causal", "bounded_history", "production_extension",
+            "semantic_family:adaptive_custom",  # R4-92: not byte-for-byte TA-Lib
+        ],
+        param_specs={
+            "pattern": ParamSpec(dtype=str, searchable=True),
+            # R4-91: each window/penetration knob only enters the search/GP
+            # grammar for the patterns that actually read it (dead knobs are
+            # excluded via active_when).
+            "body_window": ParamSpec(dtype=int, min=2, active_when=("pattern", _CANDLE_BODY_ACTIVE)),
+            "shadow_window": ParamSpec(dtype=int, min=2, active_when=("pattern", _CANDLE_SHADOW_ACTIVE)),
+            "penetration": ParamSpec(dtype=float, min=0.0, max=1.0, active_when=("pattern", _CANDLE_PENETRATION_ACTIVE)),
+        },
     )
 
     def _calculate_series(

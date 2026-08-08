@@ -49,8 +49,28 @@ class DatasetMetadataPlane:
 
     # ---- manifest ----
 
+    def _observe_epoch(self) -> str | None:
+        """重新读取当前 source_epoch；若与缓存不同则清除派生的元数据缓存。
+
+        #P0-34：plane 实例创建后若数据被 mutation，``source_epoch`` 变化，
+        所有 accessor 下一次调用必须感知变化并重建派生缓存，而不是返回旧对象。
+        """
+        try:
+            token = self.store.manifest_version(self.dataset, **self.params)
+            current = token.get("source_epoch") or token.get("manifest_epoch")
+        except Exception:
+            current = None
+        if current != self._source_epoch:
+            self._manifest = None
+            self._manifest_fresh = False
+            self._coverage = None
+            self._pit_index = None
+            self._source_epoch = current
+        return current
+
     def manifest(self) -> Any | None:
         """加载数据集 manifest（仅当双 epoch fresh）。"""
+        self._observe_epoch()
         if self._manifest is None:
             from data_access.read.manifest import (
                 DatasetManifest,
@@ -89,13 +109,7 @@ class DatasetMetadataPlane:
 
     def source_epoch(self) -> str | None:
         """当前 source_epoch（数据版本；mutation 后递增）。"""
-        if self._source_epoch is None:
-            try:
-                token = self.store.manifest_version(self.dataset, **self.params)
-                self._source_epoch = token.get("manifest_epoch")
-            except Exception:
-                self._source_epoch = None
-        return self._source_epoch
+        return self._observe_epoch()
 
     def schema(self) -> dict[str, str]:
         """registry 声明的 schema。"""
@@ -109,6 +123,7 @@ class DatasetMetadataPlane:
 
     def coverage(self) -> Any:
         """覆盖/完整性/陈旧度报告（含 max_staleness 判定）。"""
+        self._observe_epoch()
         if self._coverage is None:
             from data_access.read.coverage import compute_coverage
 
@@ -121,6 +136,7 @@ class DatasetMetadataPlane:
 
     def pit_event_index(self) -> Any | None:
         """PIT 事件索引（仅当 authoritative：complete + 源匹配）。"""
+        self._observe_epoch()
         if self._pit_index is None:
             from data_access.read.pit_event_index import _index_path_for, load_pit_event_index
 
@@ -138,7 +154,7 @@ class DatasetMetadataPlane:
                 return None
             if (
                 idx.metadata.manifest_epoch is not None
-                and idx.metadata.manifest_epoch != self.source_epoch()
+                and idx.metadata.manifest_epoch != self._source_epoch
             ):
                 return None
             self._pit_index = idx

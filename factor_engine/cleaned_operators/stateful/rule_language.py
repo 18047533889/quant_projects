@@ -61,7 +61,12 @@ class StateLatch(SeriesOperator):
         set_condition, reset_condition = _aligned(set_condition, reset_condition)
         sc = set_condition.to_numpy(dtype=float)
         rc = reset_condition.to_numpy(dtype=float)
-        init = 1.0 if float(initial_state) != 0.0 else 0.0
+        # P1-28: ``initial_state`` is strictly a boolean state — 2 or -1 must
+        # not silently coerce to active.  Reject anything outside {0, 1}.
+        init_v = float(initial_state)
+        if init_v not in (0.0, 1.0):
+            raise ValueError("state_latch requires initial_state in {0, 1}")
+        init = 1.0 if init_v == 1.0 else 0.0
         rows, cols = sc.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
@@ -129,8 +134,11 @@ class StateHold(SeriesOperator):
                     continue
                 if rv is not None and bool(rv[row, col] != 0.0):
                     held = np.nan
-                elif bool(uc[row, col] != 0.0) and np.isfinite(vv[row, col]):
-                    held = float(vv[row, col])
+                elif bool(uc[row, col] != 0.0):
+                    # P1-29: an explicit update whose payload is NaN means "we
+                    # cannot confirm the new value" — it must clear the hold,
+                    # not silently keep the previous snapshot.
+                    held = float(vv[row, col]) if np.isfinite(vv[row, col]) else np.nan
                 out[row, col] = held
         return frame_like(value, out)
 

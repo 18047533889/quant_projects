@@ -158,10 +158,11 @@ def test_us_financial_required_timeframe(catalog):
 
 def test_required_filters_accept_params(catalog):
     from data_access.read.semantic_catalog import SemanticField
-    from data_access.store import _production_mode
+    from data_access.read.query_budget import is_strict_semantics
     # 用 index_weight（required_filters=[IndexSymbol]）验证 params 途径仍工作
     f = catalog.resolve_one("index_weight")
     assert f is not None and "IndexSymbol" in f.required_filters
+    assert isinstance(is_strict_semantics(), bool)
 
 
 def test_catalog_required_filters_flag_present(catalog):

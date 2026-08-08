@@ -111,6 +111,10 @@ def register_dual(
     tags_extra: Sequence[str] = (),
     input_units: Mapping[str, str] | None = None,
     output_unit: str | None = None,
+    # R4-95: optional window-semantics label (meaning of the window-like params),
+    # forwarded to the pandas OperatorMetadata.  Backward-compatible: None keeps
+    # the previous behaviour for the other register_dual callers.
+    window_semantics: str | None = None,
 ) -> None:
     """Register ``fn`` under ``canonical`` for both pandas_numpy and polars.
 
@@ -140,6 +144,7 @@ def register_dual(
             tags=tag_list,
             input_units=units,
             output_unit=output_unit,
+            window_semantics=window_semantics,
         )
 
         def calculate(self, *args, _fn=fn, **kwargs):

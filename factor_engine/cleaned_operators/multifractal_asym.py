@@ -56,7 +56,13 @@ def _ts_multifractal_asymmetry(x: pd.DataFrame, window: int = 120, min_periods: 
     for c in range(cols):
         col = arr[:, c]
         for r in range(rows):
-            lo = max(0, r - w + 1)
+            # R4-94: ``window`` is a real horizon — the trailing window must be
+            # fully accumulated before an asymmetry estimate is emitted.
+            # ``min_periods`` still acts as the finite-contiguous floor for the
+            # (possibly gapped) full window.
+            if r + 1 < w:
+                continue
+            lo = r - w + 1
             v = trailing_contiguous_finite(col[lo : r + 1])
             if v.size < mp:
                 continue
@@ -78,6 +84,10 @@ def _register() -> None:
         source="multifractal_asym",
         tags_extra=[],
         output_unit="level",
+        # R4-95: the trailing ``window`` is a real horizon (R4-94); at most
+        # ``window`` rows are consumed, gapped rows reduce the finite
+        # contiguous run below the ``min_periods`` floor.
+        window_semantics="max_rows",
     )
     union_extended("ts_multifractal_asymmetry")
 

@@ -150,14 +150,16 @@ def estimate_scan_cost(
         estimated_rows = sum(f.rows or 0 for f in selected)
         file_count = len(by_path)
         if manifest.row_groups:
-            # row-group 级统计：统计选中文件覆盖的 row-group 数（近似）
-            rg_paths = {rg.path for rg in manifest.row_groups}
-            selected_rowgroups = sum(
-                1
-                for rg in manifest.row_groups
-                if rg.path in {f.path for f in selected}
+            # #P1-17 row-group 统计按 (path, row_group) 去重：ManifestRowGroup 是
+            # path × column × row_group 的**列统计**，不是物理 row-group 数。
+            selected_files_set = {f.path for f in selected}
+            selected_rowgroups = len(
+                {
+                    (rg.path, rg.row_group)
+                    for rg in manifest.row_groups
+                    if rg.path in selected_files_set
+                }
             ) or None
-            del rg_paths
     else:
         try:
             stats = store.dataset_read_stats(

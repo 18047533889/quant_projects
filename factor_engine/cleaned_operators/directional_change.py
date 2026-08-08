@@ -12,11 +12,14 @@ that clock:
 * ``ts_dc_duration_asymmetry`` / ``ts_dc_overshoot_asymmetry`` — do up vs down
   legs last longer / extend further (slow-rise-fast-crash etc.).
 
-``theta`` is not a fixed percentage: ``theta = threshold * scale_t`` where
-``scale`` is a per-row series (ATR / realised vol / MAD), so the same operator
-adapts its sensitivity to each name's own volatility.  The threshold uses the
-scale *at the current row* and scans the trailing window with that fixed theta
-(documented choice, deterministic and prefix-causal).
+``theta`` is not a fixed percentage: the confirmation threshold at bar ``i`` is
+``theta * scale_i`` where ``scale_i`` is the historical scale value available
+*at that bar* (ATR / realised vol / MAD), so the same operator adapts its
+sensitivity to each name's own volatility.  The clock is online: it walks the
+series bar-by-bar, confirms a leg the moment the move exceeds the per-bar
+threshold, freezes the event (confirm-then-freeze) and only then looks for the
+opposite confirmation.  It never rescans a historical window under today's
+end-of-window scale (PIT-correct per-bar historical scale).
 """
 from __future__ import annotations
 
@@ -56,13 +59,16 @@ def _metadata(
     )
 
 
-def _dc_events(x: np.ndarray, theta: float) -> list[tuple[int, str]]:
-    """Alternating DC confirmations ``(index, kind)`` with kind in {up, down}.
+def _dc_events(x: np.ndarray, scale: np.ndarray, theta: float) -> list[tuple[int, str]]:
+    """Online intrinsic-time DC confirmations ``(index, kind)``, kind in {up, down}.
 
-    A DC confirms when price moves ``theta`` away from the tracked extreme;
-    during the overshoot the extreme is updated to the most extreme price, and
-    the next confirmation is the opposite kind.  NaN bars are skipped (the clock
-    keeps running, the price observation is missing).
+    Walks the series bar-by-bar.  At bar ``i`` the confirmation threshold is
+    ``theta * scale[i]`` — the historical scale available *at that bar*, not the
+    current end-of-window scale.  A DC confirms when price moves ``theta*scale_i``
+    away from the tracked extreme; during the overshoot the extreme is updated
+    to the most extreme price, and the next confirmation is the opposite kind
+    (confirm-then-freeze).  NaN price bars are skipped (clock keeps running, the
+    observation is missing); NaN/non-positive scale bars admit no confirmation.
     """
     n = x.shape[0]
     events: list[tuple[int, str]] = []
@@ -77,17 +83,21 @@ def _dc_events(x: np.ndarray, theta: float) -> list[tuple[int, str]]:
         if not np.isfinite(extreme):
             extreme = p
             continue
+        s = float(scale[i]) if i < scale.shape[0] else np.nan
+        if not np.isfinite(s) or s <= 0:
+            continue
+        thr = theta * s
         if direction != -1:
             if p > extreme:
                 extreme = p
-            if extreme - p >= theta:
+            if extreme - p >= thr:
                 events.append((i, "down"))
                 direction = -1
                 extreme = p
         if direction != 1:
             if p < extreme:
                 extreme = p
-            if p - extreme >= theta:
+            if p - extreme >= thr:
                 events.append((i, "up"))
                 direction = 1
                 extreme = p
@@ -95,10 +105,10 @@ def _dc_events(x: np.ndarray, theta: float) -> list[tuple[int, str]]:
 
 
 def _dc_completed_overshoots(
-    x: np.ndarray, theta: float
+    x: np.ndarray, scale: np.ndarray, theta: float
 ) -> tuple[list[float], list[float]]:
     """Per-event overshoot magnitudes for up and down completed legs."""
-    events = _dc_events(x, theta)
+    events = _dc_events(x, scale, theta)
     up_o: list[float] = []
     dn_o: list[float] = []
     if len(events) < 2:
@@ -115,8 +125,10 @@ def _dc_completed_overshoots(
     return up_o, dn_o
 
 
-def _dc_durations(x: np.ndarray, theta: float) -> tuple[list[float], list[float]]:
-    events = _dc_events(x, theta)
+def _dc_durations(
+    x: np.ndarray, scale: np.ndarray, theta: float
+) -> tuple[list[float], list[float]]:
+    events = _dc_events(x, scale, theta)
     up_d: list[float] = []
     dn_d: list[float] = []
     if len(events) < 2:
@@ -143,12 +155,12 @@ def _dc_rolling(xv: np.ndarray, sv: np.ndarray, w: int, threshold: float, fn) ->
             if not np.isfinite(s) or s <= 0:
                 continue
             lo = max(0, r - w + 1)
-            out[r, c] = fn(xv[lo : r + 1, c], threshold * float(s))
+            out[r, c] = fn(xv[lo : r + 1, c], sv[lo : r + 1, c], threshold)
     return out
 
 
-def _overshoot_ratio_chunk(chunk: np.ndarray, theta: float) -> float:
-    events = _dc_events(chunk, theta)
+def _overshoot_ratio_chunk(chunk: np.ndarray, scale_chunk: np.ndarray, theta: float) -> float:
+    events = _dc_events(chunk, scale_chunk, theta)
     if len(events) < 2:
         return np.nan
     i_m, kind = events[-2]  # last *completed* leg (overshoot ended at events[-1])
@@ -161,24 +173,27 @@ def _overshoot_ratio_chunk(chunk: np.ndarray, theta: float) -> float:
         os = float(np.max(seg) - chunk[i_m])
     else:
         os = float(chunk[i_m] - np.min(seg))
-    return float(os / theta)
+    thr = float(scale_chunk[i_n]) if i_n < scale_chunk.shape[0] else np.nan
+    if not np.isfinite(thr) or thr <= 0:
+        return np.nan
+    return float(os / (theta * thr))
 
 
-def _event_rate_chunk(chunk: np.ndarray, theta: float) -> float:
-    events = _dc_events(chunk, theta)
+def _event_rate_chunk(chunk: np.ndarray, scale_chunk: np.ndarray, theta: float) -> float:
+    events = _dc_events(chunk, scale_chunk, theta)
     n_fin = int(np.isfinite(chunk).sum())
     if n_fin < 2:
         return np.nan
     return float(len(events) / n_fin)
 
 
-def _duration_asym_chunk(chunk: np.ndarray, theta: float) -> float:
-    up_d, dn_d = _dc_durations(chunk, theta)
+def _duration_asym_chunk(chunk: np.ndarray, scale_chunk: np.ndarray, theta: float) -> float:
+    up_d, dn_d = _dc_durations(chunk, scale_chunk, theta)
     return _median_asym(up_d, dn_d)
 
 
-def _overshoot_asym_chunk(chunk: np.ndarray, theta: float) -> float:
-    up_o, dn_o = _dc_completed_overshoots(chunk, theta)
+def _overshoot_asym_chunk(chunk: np.ndarray, scale_chunk: np.ndarray, theta: float) -> float:
+    up_o, dn_o = _dc_completed_overshoots(chunk, scale_chunk, theta)
     return _median_asym(up_o, dn_o)
 
 

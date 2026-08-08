@@ -90,8 +90,11 @@ def _make_panels(n: int = 140, m: int = 8, seed: int = 3) -> dict[str, pd.DataFr
     rng = np.random.default_rng(seed)
     idx = pd.date_range("2023-01-01", periods=n, freq="D")
     cols = [f"s{i}" for i in range(m)]
-    close = 100.0 * np.exp(np.cumsum(0.01 * rng.standard_normal((n, m)), axis=0))
-    logr = np.vstack([np.zeros(m), np.diff(np.log(close), axis=0)])
+    close = pd.DataFrame(
+        100.0 * np.exp(np.cumsum(0.01 * rng.standard_normal((n, m)), axis=0)),
+        index=idx, columns=cols,
+    )
+    logr = np.vstack([np.zeros(m), np.diff(np.log(close.to_numpy()), axis=0)])
     ret = pd.DataFrame(logr, index=idx, columns=cols)
     vol = pd.DataFrame(1.0e4 + rng.integers(0, 3.0e4, (n, m)), index=idx, columns=cols).astype(float)
     amt = (vol.to_numpy() * close.to_numpy())
@@ -226,7 +229,9 @@ def test_deterministic_20_runs(_loaded, canonical):
 # golden parity: EDGE vs official bidask, dip vs reference diptest
 # ---------------------------------------------------------------------------
 def test_edge_golden_vs_bidask(_loaded):
-    bidask = pytest.importorskip("bidask.edge.edge")
+    pytest.importorskip("bidask")
+    from bidask.edge import edge as bidask_edge
+
     rng = np.random.default_rng(7)
     n = 60
     p = 100.0 * np.exp(np.cumsum(0.01 * rng.standard_normal(n)))
@@ -234,7 +239,7 @@ def test_edge_golden_vs_bidask(_loaded):
     c = p * np.exp(rng.normal(0, 0.002, n))
     h = np.maximum(o, c) * np.exp(np.abs(rng.normal(0, 0.004, n)))
     l = np.minimum(o, c) * np.exp(-np.abs(rng.normal(0, 0.004, n)))
-    official = float(bidask(o, h, l, c))
+    official = float(bidask_edge(o, h, l, c))
     op = OperatorRegistry.get("ts_edge_effective_spread", "pandas_numpy")
     frame = lambda a: pd.DataFrame({"s0": a})
     out = op.calculate(frame(o), frame(h), frame(l), frame(c), window=n).to_numpy()[-1, 0]
@@ -243,7 +248,9 @@ def test_edge_golden_vs_bidask(_loaded):
 
 
 def test_hartigan_dip_golden(_loaded):
-    dipstat = pytest.importorskip("diptest.dipstat")
+    pytest.importorskip("diptest")
+    from diptest import dipstat
+
     rng = np.random.default_rng(5)
     samples = {
         "normal": rng.standard_normal(200),
@@ -253,9 +260,9 @@ def test_hartigan_dip_golden(_loaded):
     op = OperatorRegistry.get("cs_hartigan_dip", "pandas_numpy")
     for label, data in samples.items():
         ref = float(dipstat(np.sort(data)))
-        frame = pd.DataFrame({"a": data})
-        # dip = out / sqrt(N)
-        out_dip = op.calculate(frame, min_cross=2).to_numpy()[-1, 0] / np.sqrt(data.size)
+        # one row whose cross-section is the whole sample (dip over N values)
+        frame = pd.DataFrame(data.reshape(1, -1))
+        out_dip = op.calculate(frame, min_cross=2).to_numpy()[0, 0] / np.sqrt(data.size)
         assert abs(ref - out_dip) <= 1e-12 * max(1.0, abs(ref)), label
 
 
@@ -263,14 +270,19 @@ def test_hartigan_dip_golden(_loaded):
 # semantic pinned references
 # ---------------------------------------------------------------------------
 def test_hvg_reversibility_symmetry(_loaded):
+    from cleaned_operators.hvg_ext import _hvg_stats
+
     rng = np.random.default_rng(2)
     wn = rng.standard_normal(200)
     op = OperatorRegistry.get("ts_hvg_forward_backward_asymmetry", "pandas_numpy")
     f1 = op.calculate(pd.DataFrame({"a": wn}), window=100).to_numpy()[-1, 0]
-    f2 = op.calculate(pd.DataFrame({"a": wn[::-1]}), window=100).to_numpy()[-1, 0]
-    assert np.isfinite(f1) and np.isfinite(f2)
-    assert abs(f1 - f2) < 1e-12  # reversal-invariant
+    assert np.isfinite(f1)
     assert f1 < 0.5  # white noise is near-reversible -> asymmetry small
+    # the asymmetry of a *fixed window* is invariant to time reversal
+    v = wn[:100]
+    a_fwd = _hvg_stats(v)["asymmetry"]
+    a_rev = _hvg_stats(v[::-1])["asymmetry"]
+    assert abs(a_fwd - a_rev) < 1e-12
 
 
 def test_glr_detects_mean_break(_loaded):

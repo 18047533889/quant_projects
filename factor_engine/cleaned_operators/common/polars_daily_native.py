@@ -581,7 +581,7 @@ class GroupWinsorizeNative(SeriesOperator):
         name="group_winsorize",
         category="cross_sectional",
         description="组内缩尾",
-        param_names=["x", "group", "lower", "upper"],
+        param_names=["x", "group", "a"],
         return_type="series",
         tags=["group", "polars", "native"],
     )
@@ -590,12 +590,15 @@ class GroupWinsorizeNative(SeriesOperator):
         self,
         x: pl.DataFrame,
         group: pl.DataFrame | None = None,
-        lower: float = 0.05,
-        upper: float = 0.95,
+        a: float = 0.05,
         **kwargs,
     ) -> pl.DataFrame:
-        lo_q = float(lower)
-        hi_q = float(upper)
+        # R4-100: align to the canonical ``(x, group, a)`` contract (clip at
+        # quantiles Q_a / Q_{1-a}).  The old native signature exposed ``lower/
+        # upper`` at position 3 — positional drift against the pandas ``a``.
+        # Explicit ``lower=/upper=`` kwargs remain honored for existing callers.
+        lo_q = float(kwargs.get("lower", a))
+        hi_q = float(kwargs.get("upper", 1.0 - a))
 
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
             key = ["_r", "_g"] if "_g" in long.columns else ["_r"]

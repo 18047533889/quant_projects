@@ -47,48 +47,74 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
     )
 
 
-def _longest_finite_run(chunk: np.ndarray) -> np.ndarray:
-    """Longest contiguous finite run (never re-connects across a gap)."""
-    best: list[float] = []
-    current: list[float] = []
-    for value in chunk:
-        if np.isfinite(value):
-            current.append(float(value))
-        else:
-            if len(current) > len(best):
-                best = current
-            current = []
-    if len(current) > len(best):
-        best = current
-    return np.asarray(best, dtype=float)
+def _trailing_finite_suffix(chunk: np.ndarray) -> np.ndarray:
+    """Trailing contiguous finite suffix ending at the window's last row.
+
+    Complexity estimators must never reach back across a gap into an older
+    finite block: after a recent missing value only the trailing contiguous
+    finite points are a valid sample for the *current* complexity (review
+    R4-64).  Values are never re-connected across a gap.
+    """
+    n = len(chunk)
+    j = n
+    while j > 0 and not np.isfinite(chunk[j - 1]):
+        j -= 1
+    i = j
+    while i > 0 and np.isfinite(chunk[i - 1]):
+        i -= 1
+    return chunk[i:j].astype(float)
 
 
-def _permutation_pattern(values: np.ndarray) -> int:
-    """Stable ordinal permutation pattern of a finite embedding."""
-    order = np.argsort(values, kind="stable")
-    pattern = np.argsort(order, kind="stable")
-    code = 0
-    for rank in pattern:
-        code = code * (len(values) + 1) + int(rank)
-    return code
+def _permutation_pattern(values: np.ndarray) -> tuple[float, ...]:
+    """Average-tie-rank ordinal pattern of a finite embedding.
+
+    Tied values share the mean rank (review R4-65): a double stable argsort
+    would give tied values *distinct* ranks in arrival order, so the
+    permutation entropy of a heavily tied window would measure the tie-break
+    rule rather than complexity.  Average ranks canonicalise ties; the
+    ``has_ties`` ratio fail-closed (P1-14) still reports windows where ties
+    dominate.
+    """
+    n = len(values)
+    order = np.argsort(values, kind="mergesort")
+    s = values[order]
+    avg = np.empty(n, dtype=float)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and s[j + 1] == s[i]:
+            j += 1
+        avg[order[i : j + 1]] = 0.5 * (i + j)
+        i = j + 1
+    return tuple(avg)
 
 
-def _permutation_codes(chunk: np.ndarray, order: int, delay: int) -> list[tuple[int, int]]:
-    """Valid permutation (code, start_index) over the raw window.
+# P1-14: stable-index tie-breaking manufactures an artificial ordering for tied
+# values (0-return days, limit bars, discrete financials), so the permutation
+# entropy of a heavily tied window measures the tie-break rule, not complexity.
+# Windows whose embeddings are mostly tied fail closed to NaN.
+_TIE_RATIO_FAIL_CLOSED = 0.5
+
+
+def _permutation_codes(chunk: np.ndarray, order: int, delay: int) -> list[tuple[tuple[float, ...], int, bool]]:
+    """Valid permutation (pattern_key, start_index, has_ties) over the raw window.
 
     NaN embeddings are dropped, but the original start index is kept so a
     transition can only be formed between *genuinely adjacent* embeddings
     (audit R02): after an invalid embedding is removed, ``zip(codes[1:])`` must
-    not bridge the gap into a transition.
+    not bridge the gap into a transition.  ``has_ties`` reports whether the
+    embedding contained repeated values (review P1-14).  The pattern key is the
+    average-tie-rank vector (review R4-65).
     """
-    codes: list[tuple[int, int]] = []
+    codes: list[tuple[tuple[float, ...], int, bool]] = []
     embed_len = (order - 1) * delay + 1
     n = len(chunk)
     for i in range(n - embed_len + 1):
         idx = [i + d * delay for d in range(order)]
         vals = chunk[idx]
         if np.isfinite(vals).all():
-            codes.append((_permutation_pattern(vals), i))
+            has_ties = np.unique(vals).size < vals.size
+            codes.append((_permutation_pattern(vals), i, has_ties))
     return codes
 
 
@@ -136,13 +162,15 @@ class TsPermutationEntropy(SeriesOperator):
         min_p = 2 if min_patterns is None else max(2, int(min_patterns))
 
         def _fn(chunk: np.ndarray) -> float:
-            codes = [c for c, _ in _permutation_codes(chunk, ord_, dl)]
-            if len(codes) < min_p:
+            coded = _permutation_codes(chunk, ord_, dl)
+            if len(coded) < min_p:
                 return np.nan
-            counts: dict[int, int] = {}
-            for c in codes:
+            if sum(1 for _, _, ties in coded if ties) / len(coded) > _TIE_RATIO_FAIL_CLOSED:
+                return np.nan  # P1-14: windows whose embeddings are mostly tied
+            counts: dict[tuple[float, ...], int] = {}
+            for c, _, _ in coded:
                 counts[c] = counts.get(c, 0) + 1
-            return _entropy_from_counts(list(counts.values()), len(codes), math.factorial(ord_) if norm else None)
+            return _entropy_from_counts(list(counts.values()), len(coded), math.factorial(ord_) if norm else None)
 
         return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
 
@@ -190,20 +218,25 @@ class TsWeightedPermutationEntropy(SeriesOperator):
             embed_len = (ord_ - 1) * dl + 1
             n = len(chunk)
             weights: list[float] = []
-            codes: list[int] = []
+            codes: list[tuple[float, ...]] = []
+            n_tied = 0
             for i in range(n - embed_len + 1):
                 idx = [i + d * dl for d in range(ord_)]
                 vals = chunk[idx]
                 if not np.isfinite(vals).all():
                     continue
                 codes.append(_permutation_pattern(vals))
+                if np.unique(vals).size < vals.size:
+                    n_tied += 1
                 weights.append(_embedding_variance(vals) if weight_kind == "variance" else _embedding_range(vals))
             if len(codes) < 2:
                 return np.nan
+            if n_tied / len(codes) > _TIE_RATIO_FAIL_CLOSED:
+                return np.nan  # P1-14: tied values -> artificial ordering
             total_weight = float(sum(weights))
             if total_weight <= 0.0:
                 return np.nan
-            pattern_weight: dict[int, float] = {}
+            pattern_weight: dict[tuple[float, ...], float] = {}
             for code, wgt in zip(codes, weights):
                 pattern_weight[code] = pattern_weight.get(code, 0.0) + wgt
             value = 0.0
@@ -250,13 +283,15 @@ class TsPermutationTransitionEntropy(SeriesOperator):
             coded = _permutation_codes(chunk, ord_, dl)
             if len(coded) < 3:
                 return np.nan
-            states = sorted({c for c, _ in coded})
+            if sum(1 for _, _, ties in coded if ties) / len(coded) > _TIE_RATIO_FAIL_CLOSED:
+                return np.nan  # P1-14: tied values -> artificial ordering
+            states = sorted({c for c, _, _ in coded})
             if len(states) < 2:
                 return np.nan
             state_index = {state: i for i, state in enumerate(states)}
             transitions = [[0.0] * len(states) for _ in range(len(states))]
             n_trans = 0
-            for (prev, start), (cur, start_next) in zip(coded, coded[1:]):
+            for (prev, start, _), (cur, start_next, _) in zip(coded, coded[1:]):
                 # Only genuinely adjacent embeddings form a transition (audit
                 # R02): a dropped NaN embedding must not turn two non-adjacent
                 # patterns into a fake next-pattern link.  Embeddings are the
@@ -344,7 +379,7 @@ class TsSampleEntropy(SeriesOperator):
         min_p = (m + 2) if min_periods is None else max(m + 2, int(min_periods))
 
         def _fn(chunk: np.ndarray) -> float:
-            run = _longest_finite_run(chunk)
+            run = _trailing_finite_suffix(chunk)
             if run.size < min_p:
                 return np.nan
             std = float(np.std(run, ddof=0))
@@ -415,7 +450,7 @@ class TsHurstDfa(SeriesOperator):
         ns = max(3, int(n_scales))
 
         def _fn(chunk: np.ndarray) -> float:
-            run = _longest_finite_run(chunk)
+            run = _trailing_finite_suffix(chunk)
             if run.size < max_s * 2 + 4:
                 return np.nan
             return _dfa_hurst(run, min_s, min(max_s, run.size // 2), ns)
@@ -478,7 +513,7 @@ class TsHiguchiFractalDimension(SeriesOperator):
             raise ValueError("k_max must be in [1, 32]")
 
         def _fn(chunk: np.ndarray) -> float:
-            run = _longest_finite_run(chunk)
+            run = _trailing_finite_suffix(chunk)
             if run.size < 2 * km + 2:
                 return np.nan
             return _higuchi_fd(run, km)
@@ -487,16 +522,14 @@ class TsHiguchiFractalDimension(SeriesOperator):
 
 
 def _variogram_slope(chunk: np.ndarray, max_lag: int, min_valid_lags: int) -> float:
-    n = len(chunk)
+    run = _trailing_finite_suffix(chunk)  # R4-64: never bridge a recent gap
+    n = len(run)
     max_lag = min(max_lag, n - 1)
     log_lag: list[float] = []
     log_var: list[float] = []
     for k in range(1, max_lag + 1):
-        diffs = chunk[k:] - chunk[: n - k]
-        finite = diffs[np.isfinite(diffs)]
-        if finite.size < 2:
-            continue
-        var = float(np.mean(finite * finite))
+        diffs = run[k:] - run[: n - k]
+        var = float(np.mean(diffs * diffs))
         if var <= 1e-12:
             continue
         log_lag.append(math.log(float(k)))
@@ -539,18 +572,16 @@ class TsVariogramSlope(SeriesOperator):
 
 
 def _autocorr_half_life(chunk: np.ndarray, max_lag: int, use_abs: bool, min_periods: int) -> float:
-    n = len(chunk)
+    run = _trailing_finite_suffix(chunk)  # R4-64: never bridge a recent gap
+    n = len(run)
     max_lag = min(max_lag, n - 1)
     log_ac: list[float] = []
     lags: list[float] = []
     for k in range(1, max_lag + 1):
-        x0 = chunk[: n - k]
-        xk = chunk[k:]
-        finite = np.isfinite(x0) & np.isfinite(xk)
-        if int(finite.sum()) < max(2, int(min_periods)):
+        if n - k < max(2, int(min_periods)):
             continue
-        a = x0[finite]
-        b = xk[finite]
+        a = run[: n - k]
+        b = run[k:]
         var = float(np.var(a, ddof=0))
         if var <= 1e-12:
             continue

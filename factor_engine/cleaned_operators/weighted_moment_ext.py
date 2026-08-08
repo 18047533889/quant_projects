@@ -21,6 +21,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.base_polars import OperatorMetadata as PolarsMetadata
 from cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
 from cleaned_operators.registry import OperatorRegistry
@@ -246,12 +247,37 @@ _UNITS: dict[str, str] = {
     "cs_multi_robust_resid": "unit(y)",
 }
 
+# R4-97: EnumSpec declarations.  ``order`` is a genuine enum (weighted skew=3 /
+# weighted kurtosis=4) and ``add_intercept`` a bool switch; declaring choices
+# makes ``validate_operator_call`` reject out-of-set values instead of silently
+# accepting them (the kernels also raise, but the central validator now reports
+# the contract error uniformly at dispatch time).
+_PARAM_SPECS: dict[str, dict[str, ParamSpec]] = {
+    "ts_weighted_standardized_moment": {
+        "order": ParamSpec(dtype=int, choices=(3, 4)),
+    },
+    "ts_cov_if": {},
+    "cs_multi_robust_resid": {
+        "add_intercept": ParamSpec(dtype=bool, choices=(True, False)),
+    },
+}
+
+# R4-95: trailing-window semantics.  Both rolling operators estimate from the
+# finite observations inside the trailing window (gaps are skipped, negative
+# weights/zero-condition invalidate); they are not contiguous-window kernels.
+_WINDOW_SEMANTICS: dict[str, str] = {
+    "ts_weighted_standardized_moment": "finite_observations",
+    "ts_cov_if": "finite_observations",
+    "cs_multi_robust_resid": None,
+}
+
 _SKIP = frozenset({"date", "stock_code"})
 
 
 def _register() -> None:
     from cleaned_operators.base import Operator as PandasOperator
     from cleaned_operators.base import OperatorMetadata as PandasMetadata
+    from cleaned_operators.base import validate_operator_call
 
     for canonical, fn in _KERNELS.items():
         params = _PARAMS[canonical]
@@ -268,10 +294,15 @@ def _register() -> None:
                 tags=["daily", "panel", "pit_safe", "causal", "deterministic",
                       f"signature:{','.join(params)}->series",
                       "domain:statistics", f"unit:{_UNITS[canonical]}", "cost:4"],
+                param_specs=_PARAM_SPECS[canonical],
+                window_semantics=_WINDOW_SEMANTICS[canonical],
             )
 
             def calculate(self, *args, _fn=fn, **kwargs):
-                return _fn(*args, **kwargs)
+                # R4-02: route the direct-``calculate`` kernel through the central
+                # logical-call validator (integer / panel-axis / param checks).
+                processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
+                return _fn(*processed_args, **processed_kwargs)
 
         OperatorRegistry.register(
             _PandasOp(), canonical=canonical, backend="pandas_numpy",

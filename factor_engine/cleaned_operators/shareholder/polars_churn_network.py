@@ -157,5 +157,17 @@ def _np_slope(vals):
     return float(np.cov(t, v)[0, 1] / np.var(t))
 
 
-_register("holder_concentration_slope", "集中度趋势斜率（Polars）。", ["concentration", "window"],
-          lambda c, window=8: _concentration_slope(c, int(window)))
+def _slope_no_snapshot(concentration, window=8, snapshot_date=None):
+    # R4-100: the pandas contract is ``(concentration, window, snapshot_date)``;
+    # the snapshot-aligned slope is not implemented in the polars backend, so
+    # fail closed instead of silently computing a trading-day slope.
+    if snapshot_date is not None:
+        raise NotImplementedError(
+            "holder_concentration_slope: snapshot_date-aligned slope is not "
+            "implemented in the polars backend"
+        )
+    return _concentration_slope(concentration, int(window))
+
+
+_register("holder_concentration_slope", "集中度趋势斜率（Polars）。",
+          ["concentration", "window", "snapshot_date"], _slope_no_snapshot)

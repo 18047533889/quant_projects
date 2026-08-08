@@ -53,9 +53,23 @@ def volume_acceleration(volume,short_window,long_window):
     return volume.rolling(s,min_periods=s).mean()/volume.rolling(l,min_periods=l).mean().replace(0,np.nan)-1.0
 def turnover_acceleration(turnover,short_window,long_window): return volume_acceleration(turnover,short_window,long_window)
 def up_volume_ratio(ret,volume,window):
-    w=_pi(window,"window"); up=volume.where(ret>0,0.0).rolling(w,min_periods=w).sum(); total=volume.abs().rolling(w,min_periods=w).sum(); return up/total.replace(0,np.nan)
+    w=_pi(window,"window")
+    # A bar whose return is missing/unknown must NOT be counted as "not up"
+    # volume: the old ``where(ret>0, 0.0)`` mapped ``NaN -> False -> 0.0``,
+    # silently deflating the up share (unknown != zero volume / zero direction).
+    # Mask invalid rows to NaN so a window containing any missing input emits
+    # NaN, and only a fully-known window with zero up-volume emits 0 — R4-29.
+    valid=ret.notna()&volume.notna()
+    up=volume.where((ret>0)&valid,0.0).where(valid)
+    total=volume.abs().where(valid)
+    return up.rolling(w,min_periods=w).sum()/total.rolling(w,min_periods=w).sum().replace(0,np.nan)
 def down_volume_ratio(ret,volume,window):
-    w=_pi(window,"window"); dn=volume.where(ret<0,0.0).rolling(w,min_periods=w).sum(); total=volume.abs().rolling(w,min_periods=w).sum(); return dn/total.replace(0,np.nan)
+    w=_pi(window,"window")
+    # Same unknown != zero discipline as up_volume_ratio (R4-29).
+    valid=ret.notna()&volume.notna()
+    dn=volume.where((ret<0)&valid,0.0).where(valid)
+    total=volume.abs().where(valid)
+    return dn.rolling(w,min_periods=w).sum()/total.rolling(w,min_periods=w).sum().replace(0,np.nan)
 def signed_volume_imbalance(ret,volume,window): return up_volume_ratio(ret,volume,window)-down_volume_ratio(ret,volume,window)
 def up_down_volume_ratio(ret,volume,window): return up_volume_ratio(ret,volume,window)/down_volume_ratio(ret,volume,window).replace(0,np.nan)
 def volume_weighted_return(ret,volume,window):

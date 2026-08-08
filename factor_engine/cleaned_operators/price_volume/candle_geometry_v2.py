@@ -37,14 +37,28 @@ def candle_lower_shadow_zscore(open,low,close,window):return _z(_lower(open,low,
 def candle_body_percentile(open,close,window):return _pct_rank(_body(open,close),window)
 def candle_range_percentile(high,low,window):return _pct_rank(_range(high,low),window)
 def candle_gap_atr(open,high,low,close,atr_window):
-    w=_pi(atr_window,"atr_window",2);atr=_tr(high,low,close).rolling(w,min_periods=w).mean();return (open-close.shift(1))/atr.replace(0,np.nan)
+    w=_pi(atr_window,"atr_window",2)
+    # P1-13: unify "ATR" with the engine's Wilder definition (indicators_v2
+    # ``_wilder``) instead of a plain rolling mean of true range — one ATR
+    # object across the engine.
+    atr=_tr(high,low,close).ewm(alpha=1.0/w,adjust=False,min_periods=w).mean()
+    return (open-close.shift(1))/atr.replace(0,np.nan)
 def candle_body_position(open,high,low,close):return (((open+close)/2.0)-low)/(high-low).replace(0,np.nan)
 def candle_overlap_ratio(high,low):
     overlap=(pd.DataFrame(np.minimum(high.to_numpy(float),high.shift(1).to_numpy(float)),index=high.index,columns=high.columns)-pd.DataFrame(np.maximum(low.to_numpy(float),low.shift(1).to_numpy(float)),index=low.index,columns=low.columns)).clip(lower=0)
     union=pd.DataFrame(np.maximum(high.to_numpy(float),high.shift(1).to_numpy(float)),index=high.index,columns=high.columns)-pd.DataFrame(np.minimum(low.to_numpy(float),low.shift(1).to_numpy(float)),index=low.index,columns=low.columns)
     return overlap/union.replace(0,np.nan)
 def candle_inside_ratio(high,low):
-    prev=(high.shift(1)-low.shift(1)).replace(0,np.nan);current=high-low;inside=(high<=high.shift(1))&(low>=low.shift(1));return (current/prev).where(inside,1.0+(current/prev).clip(lower=0))
+    prev=(high.shift(1)-low.shift(1)).replace(0,np.nan);current=high-low
+    inside=(high<=high.shift(1))&(low>=low.shift(1))
+    outside=(high>=high.shift(1))&(low<=low.shift(1))  # engulfing containment
+    # P1-12: a shifted-up / shifted-down / gap bar is NEITHER inside NOR
+    # outside containment; the old code dumped every non-inside bar into the
+    # >1 "outside" region, fabricating a containment relationship.  Only true
+    # containment states get a value; ambiguous bars are NaN.
+    in_v=(current/prev).where(inside)                  # (0,1]
+    out_v=(1.0+prev/current).where(outside & ~inside)  # (1,2]
+    return in_v.fillna(out_v).where(prev.notna() & current.notna() & (inside|outside))
 def candle_close_strength(high,low,close):return 2.0*(close-low)/(high-low).replace(0,np.nan)-1.0
 def candle_rejection_upper(open,high,low,close):return _upper(open,high,close)/(high-low).replace(0,np.nan)
 def candle_rejection_lower(open,high,low,close):return _lower(open,low,close)/(high-low).replace(0,np.nan)

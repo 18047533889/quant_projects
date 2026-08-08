@@ -571,7 +571,10 @@ class _PandasDailyPanelOperator(PandasOperator):
         )
 
     def calculate(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
-        return self._fn(*args, **kwargs)
+        from cleaned_operators.base import validate_operator_call
+
+        processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
+        return self._fn(*processed_args, **processed_kwargs)
 
 
 def _pl_to_pandas(frame: Any) -> pd.DataFrame:
@@ -592,6 +595,9 @@ class _PolarsDailyPanelOperator(PolarsOperator):
         )
 
     def calculate(self, *args: Any, **kwargs: Any) -> Any:
+        from cleaned_operators.base import validate_operator_call
+
+        validate_operator_call(self, args, kwargs)
         if pl is None:
             raise ImportError("polars is required for the Polars daily-panel backend")
         pandas_args = [_pl_to_pandas(arg) if isinstance(arg, pl.DataFrame) else arg for arg in args]

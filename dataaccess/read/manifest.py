@@ -31,6 +31,7 @@ import hashlib
 import json
 import os
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -38,6 +39,23 @@ from typing import Any, Mapping, Sequence
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+
+def uuid4_hex() -> str:
+    """#P0-30 manifest generation id（uuid4 短 hex）。"""
+    return uuid.uuid4().hex[:16]
+
+
+def _fsync_parent(path: Path) -> None:
+    """#P1-23 关键文件替换后 fsync 父目录，保证 power-loss 下 rename 可见。"""
+    try:
+        fd = os.open(str(Path(path).parent), os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
 
 MANIFEST_FILENAME = "_manifest.parquet"
 _MANIFEST_META_FILENAME = "_manifest.json"
@@ -53,6 +71,7 @@ _MANIFEST_COLUMNS = [
     "schema_hash",
     "mtime_ns",
     "etag",
+    "footer_bytes",
 ]
 
 
@@ -98,6 +117,9 @@ class ManifestFile:
     schema_hash: str | None = None
     mtime_ns: int | None = None
     etag: str | None = None
+    # #P0-29 footer_bytes 单独记（ParquetFileMetadata.serialized_size 是 footer 的
+    # 大小，不是整个物理文件）；``bytes`` 一律用 stat().st_size。
+    footer_bytes: int | None = None
 
     def to_row(self) -> dict[str, Any]:
         return {
@@ -111,6 +133,7 @@ class ManifestFile:
             "schema_hash": self.schema_hash,
             "mtime_ns": self.mtime_ns,
             "etag": self.etag,
+            "footer_bytes": self.footer_bytes,
         }
 
 
@@ -145,6 +168,9 @@ class DatasetManifest:
     manifest_built_epoch: str | None = None
     # 兼容：老 sidecar 只有 manifest_epoch；load 时映射成 source==built（trust）。
     manifest_epoch: str | None = None
+    # #P0-30 manifest generation id：parquet + JSON sidecar 都带同一 generation。
+    # 两份不一致（进程死在两次 replace 之间）→ 视为 mixed generation → 不 fresh。
+    manifest_generation_id: str | None = None
 
     @property
     def is_fresh_epoch(self) -> bool:
@@ -223,14 +249,26 @@ class DatasetManifest:
         return pa.table(arrays)
 
     def save(self, root: Path) -> Path:
-        """写入 ``{root}/_manifest.parquet`` + ``_manifest.json``（meta，原子替换）。"""
+        """写入 ``{root}/_manifest.parquet`` + ``_manifest.json``（meta，原子替换）。
+
+        #P0-30 两份文件都写同一 ``manifest_generation_id``（parquet 走 schema
+        metadata，JSON 走字段）。进程死在两次 replace 之间 → generation 不一致 →
+        load 判 mixed → 不 fresh（fail-closed，planner 回退 glob 全文件列表）。
+        """
         root = Path(root)
         root.mkdir(parents=True, exist_ok=True)
         table = self.to_table()
+        # 复用既有 generation（增量重建）或生成新的
+        gen = self.manifest_generation_id or uuid4_hex()
+        schema = table.schema.with_metadata(
+            {b"manifest_generation_id": gen.encode("utf-8")}
+        )
         out = root / MANIFEST_FILENAME
         tmp = root / f".{MANIFEST_FILENAME}.tmp"
-        pq.write_table(table, tmp)
+        pq.write_table(table.cast(schema), tmp)
+        _fsync_parent(tmp)
         os.replace(str(tmp), str(out))
+        _fsync_parent(out)
         if self.row_groups:
             _save_row_groups(root, self.row_groups)
         # meta 放独立 JSON sidecar（footer key-value metadata 各版本 pyarrow 行为不稳）
@@ -251,6 +289,7 @@ class DatasetManifest:
                     "source_epoch": src,
                     "manifest_built_epoch": built,
                     "manifest_epoch": src,  # 兼容老读取方（等价 source_epoch）
+                    "manifest_generation_id": gen,
                     "created_at": self.created_at,
                     "file_count": self.file_count,
                     "dataset_version": self.dataset_version,
@@ -261,7 +300,9 @@ class DatasetManifest:
             ),
             encoding="utf-8",
         )
+        _fsync_parent(tmp_meta)
         os.replace(str(tmp_meta), str(meta_path))
+        _fsync_parent(meta_path)
         return out
 
     @classmethod
@@ -289,9 +330,16 @@ class DatasetManifest:
                     schema_hash=_str_or_none(_at(data, "schema_hash", i)),
                     mtime_ns=_int_or_none(_at(data, "mtime_ns", i)),
                     etag=_str_or_none(_at(data, "etag", i)),
+                    footer_bytes=_int_or_none(_at(data, "footer_bytes", i)),
                 )
             )
         meta = _read_manifest_meta_json(root)
+        # #P0-30 parquet 与 JSON sidecar 的 generation 必须一致——进程死在两次
+        # replace 之间会留下 mixed generation，绝不能当权威 manifest 用。
+        parquet_gen = _parquet_generation_id(path)
+        sidecar_gen = meta.get("manifest_generation_id")
+        if parquet_gen is not None and sidecar_gen is not None and parquet_gen != sidecar_gen:
+            return None
         src = meta.get("source_epoch")
         built = meta.get("manifest_built_epoch")
         legacy = meta.get("manifest_epoch")
@@ -310,6 +358,7 @@ class DatasetManifest:
             source_epoch=src,
             manifest_built_epoch=built,
             manifest_epoch=legacy,
+            manifest_generation_id=sidecar_gen or parquet_gen,
         )
 
     def prune_by_time(
@@ -405,6 +454,24 @@ def _str_or_none(value: Any) -> str | None:
     return str(value)
 
 
+def _parquet_generation_id(path: Path) -> str | None:
+    """#P0-30 读 ``_manifest.parquet`` schema metadata 里的 generation id。"""
+    try:
+        meta = pq.read_metadata(str(path))
+    except Exception:
+        return None
+    kv = meta.metadata
+    if kv is None:
+        return None
+    raw = kv.get(b"manifest_generation_id")
+    if raw is None:
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def _read_manifest_meta_json(root: Path) -> dict[str, str]:
     """读 ``_manifest.json`` sidecar（dataset/time_column/format/created_at）。"""
     path = Path(root) / _MANIFEST_META_FILENAME
@@ -430,13 +497,27 @@ def _read_manifest_meta_json(root: Path) -> dict[str, str]:
 
 
 def manifest_root_for_paths(paths: Sequence[str]) -> Path | None:
-    """从解析出的 glob 路径推断 manifest 根目录（第一个路径的静态前缀）。"""
+    """从解析出的 glob 路径推断 manifest 根目录。
+
+    #P0-31 三种形态分开处理：
+        - 精确单文件路径（无 glob）→ 返回**父目录**（manifest 不可能以数据文件
+          自身为根）；
+        - glob 路径 → 返回通配符前的静态目录前缀；
+        - 目录 → 返回自身。
+    """
     for p in paths:
         if not p:
             continue
-        static = p.split("*", 1)[0].rstrip("/")
-        if static:
-            return Path(static)
+        text = str(p)
+        if "*" in text or "?" in text or "[" in text:
+            static = text.split("*", 1)[0].rstrip("/")
+            if static:
+                return Path(static)
+            continue
+        path = Path(text)
+        if path.suffix.lower() in {".parquet", ".csv", ".tsv", ".jsonl", ".arrow", ".feather"}:
+            return path.parent if path.name else path
+        return path
     return None
 
 
@@ -550,6 +631,8 @@ def bump_source_epoch(root: Path) -> str | None:
     payload["source_epoch"] = src
     payload["manifest_epoch"] = src  # 兼容读取方（等价 source_epoch）
     # manifest_built_epoch 保持原值 → source != built，manifest 变 dirty。
+    # #P0-30 保留 generation，避免 bump 后与 parquet 侧不一致被判 mixed。
+    payload.setdefault("manifest_generation_id", _parquet_generation_id(meta_path.parent / MANIFEST_FILENAME))
     tmp_meta = meta_path.with_name(f".{_MANIFEST_META_FILENAME}.tmp")
     tmp_meta.write_text(
         json.dumps(payload, ensure_ascii=False, sort_keys=True),
@@ -693,10 +776,18 @@ def build_manifest_for_dataset(
     for fp in files:
         try:
             meta = pq.read_metadata(str(fp))
-        except Exception:
-            continue
+        except Exception as exc:
+            # #P0-28 构建权威 manifest 时任意 parquet footer 读失败 → 整个构建失败。
+            # 静默跳过 + 保存成 fresh manifest 会让 planner 误以为坏文件不存在。
+            raise DataError(
+                f"构建 {dataset} 的 manifest 时读取 {fp} 的 parquet footer 失败: {exc}；"
+                "坏文件必须 fail-closed，禁止静默跳过并保存成 fresh manifest"
+            ) from exc
         rows = meta.num_rows
-        fbytes = meta.serialized_size or _safe_stat(fp)
+        # #P0-29 bytes 用真实物理文件大小（serialized_size 只是 footer 大小，会让
+        # scan cost / CBO / QueryBudget 系统性低估）；footer 大小单独记 footer_bytes。
+        fbytes = _safe_stat(fp)
+        footer_bytes = meta.serialized_size
         schema_names = list(meta.schema.names)
         schema_hash = _schema_hash(meta.schema)
         min_t = max_t = min_i = max_i = None
@@ -746,6 +837,7 @@ def build_manifest_for_dataset(
                 max_instrument=max_i,
                 schema_hash=schema_hash,
                 mtime_ns=mtime_ns,
+                footer_bytes=footer_bytes,
             )
         )
 

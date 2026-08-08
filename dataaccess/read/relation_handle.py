@@ -56,9 +56,9 @@ class RelationHandle:
     def _validate_sandbox(sql: str) -> None:
         """#7 production/strict：SQL 沙箱校验（挡 read_parquet/COPY/ATTACH 等）。"""
         from data_access.read import sql_escape
-        from data_access.read.query_budget import _production_mode, _strict_read_mode
+        from data_access.read.query_budget import is_strict_semantics
 
-        if _production_mode() or _strict_read_mode():
+        if is_strict_semantics():
             sql_escape.validate_sql_sandbox(sql)
 
     # ---- 追加表达式 ----
@@ -105,9 +105,9 @@ class RelationHandle:
         QueryBudget/audit/deadline 直接 fetchall）——只允许通过受控的
         ``schema() / explain() / columns() / types()`` 做只读检查。
         """
-        from data_access.read.query_budget import _production_mode, _strict_read_mode
+        from data_access.read.query_budget import is_strict_semantics
 
-        if _production_mode() or _strict_read_mode():
+        if is_strict_semantics():
             raise ValidationError(
                 "production/strict 模式禁止访问 RelationHandle.relation（逃生口）。"
                 "请使用 schema()/explain()/columns()/types() 做只读检查。"
@@ -216,9 +216,15 @@ class RelationHandle:
     # ---- 检查 ----
 
     def explain(self) -> str:
-        """返回 DuckDB 的物理计划文本（只读检查，不 collect 数据）。"""
+        """返回 DuckDB 的物理计划文本（只读检查，不 collect 数据）。
+
+        #P2-3 直接走安全 engine 的 ``explain()``（只读 SQL 检查），**不**经过被
+        production/strict 禁止的 ``self.relation``——之前 explain 在 production
+        只会返回 ``<explain failed ...>``。
+        """
+        self._validate_sandbox(self._sql)
         try:
-            return str(self.relation.explain())
+            return self._store._engine.explain(self._sql, self._params)
         except Exception as exc:
             return f"<explain failed: {exc}>"
 

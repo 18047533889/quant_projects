@@ -24,6 +24,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.base_polars import OperatorMetadata as PolarsMetadata
 from cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
 from cleaned_operators.registry import OperatorRegistry
@@ -203,7 +204,12 @@ def _ts_max_drawdown_activity_cost(
                 # not NaN (the row is fully observed and flat / monotone up).
                 out[r, c] = 0.0
                 continue
-            peak = int(np.argmax(seg[: trough + 1]))
+            # R4-71: with a flat (equal) peak plateau ``np.argmax`` returns the
+            # FIRST maximum, which can be far earlier than the actual peak the
+            # drawdown departed from.  Take the MOST RECENT maximum instead so a
+            # sideways-then-drawdown episode is measured from the last peak.
+            pre = seg[: trough + 1]
+            peak = int(len(pre) - 1 - int(np.argmax(pre[::-1])))
             seg_act = float(act[peak : trough + 1].sum())
             out[r, c] = float(seg_act / total_act)
     return _frame_like(x, out)
@@ -236,12 +242,69 @@ _CATEGORIES: dict[str, str] = {
     "ts_max_drawdown_activity_cost": "time_series_risk",
 }
 
+# Output unit per operator (R4-70).  ``same_as:target`` is only correct for the
+# lagged-value operator (returns ``x`` at the activity-clock lag).  The age
+# operator returns a back-distance in bars / activity-time units, and the
+# max-drawdown cost is a dimensionless share of window activity (a ratio).
+_UNITS: dict[str, str] = {
+    "ts_activity_clock_lagged_value": "same_as:target",
+    "ts_activity_clock_age": "bars",
+    "ts_max_drawdown_activity_cost": "ratio",
+}
+
+# R4-69: ``scale_window < 5`` is a dead parameter region.  The kernel's internal
+# scale estimate requires ``min_scale = max(5, scale_window//2)`` finite prior
+# observations, so a scale_window of 2/3/4 can never satisfy its own sample
+# floor and the operator degrades to a permanent NaN.  Expose that floor as a
+# ParamSpec so ``validate_operator_call`` rejects it and the search grammar
+# excludes the dead range.
+_PARAM_SPECS: dict[str, dict[str, ParamSpec]] = {
+    "ts_activity_clock_lagged_value": {
+        "scale_window": ParamSpec(dtype=int, min=5),
+        "include_current": ParamSpec(dtype=bool, choices=(True, False)),
+    },
+    "ts_activity_clock_age": {
+        "scale_window": ParamSpec(dtype=int, min=5),
+        "include_current": ParamSpec(dtype=bool, choices=(True, False)),
+    },
+    "ts_max_drawdown_activity_cost": {},
+}
+
+# R4-98: explicit input unit contracts (enforced as documentation metadata and
+# consumed by the unit-aware catalog consumers).
+_INPUT_UNITS: dict[str, dict[str, str]] = {
+    "ts_activity_clock_lagged_value": {
+        "x": "target_value",
+        "activity": "non_negative_activity",
+    },
+    "ts_activity_clock_age": {
+        "activity": "non_negative_activity",
+    },
+    "ts_max_drawdown_activity_cost": {
+        "x": "positive_level",
+        "activity": "non_negative_activity",
+    },
+}
+
+# R4-95: meaning of the window-like parameters.
+#   - scale_window: trailing *finite-observation* window for the scale estimate
+#     (gaps do not invalidate; a minimum number of finite observations is
+#     required, and negative activity invalidates).
+#   - max_drawdown window: trailing contiguous window (the whole segment and
+#     activity series must be finite for the drawdown episode).
+_WINDOW_SEMANTICS: dict[str, str] = {
+    "ts_activity_clock_lagged_value": "finite_observations",
+    "ts_activity_clock_age": "finite_observations",
+    "ts_max_drawdown_activity_cost": "trailing_contiguous",
+}
+
 _SKIP = frozenset({"date", "stock_code"})
 
 
 def _register() -> None:
     from cleaned_operators.base import Operator as PandasOperator
     from cleaned_operators.base import OperatorMetadata as PandasMetadata
+    from cleaned_operators.base import validate_operator_call
 
     for canonical, fn in _KERNELS.items():
         params = _PARAMS[canonical]
@@ -257,11 +320,18 @@ def _register() -> None:
                 return_type="series",
                 tags=["daily", "panel", "pit_safe", "causal", "deterministic",
                       f"signature:{','.join(params)}->series",
-                      "domain:activity_clock", "unit:same_as:target", "cost:4"],
+                      "domain:activity_clock", f"unit:{_UNITS[canonical]}", "cost:4"],
+                param_specs=_PARAM_SPECS[canonical],
+                input_units=_INPUT_UNITS.get(canonical),
+                window_semantics=_WINDOW_SEMANTICS.get(canonical),
             )
 
             def calculate(self, *args, _fn=fn, **kwargs):
-                return _fn(*args, **kwargs)
+                # R4-02: this module registered ``calculate`` directly, bypassing
+                # the central integer / panel-axis / param validation.  Route it
+                # through the registry-level logical-call validator.
+                processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
+                return _fn(*processed_args, **processed_kwargs)
 
         OperatorRegistry.register(
             _PandasOp(), canonical=canonical, backend="pandas_numpy",

@@ -61,11 +61,19 @@ def _confirmed_extrema(x: np.ndarray, prominence: float, confirmation: int) -> n
     ``-1`` = confirmed trough, ``0`` = no confirmed extremum.  Bar ``j`` is
     decided at time ``t = j + confirmation`` (its confirmation window is
     complete), so the result at any row only uses rows ``<= t``.
+
+    R4-45: peaks and troughs *strictly alternate*.  After a confirmed peak only a
+    trough may be confirmed next (and vice-versa); a same-side candidate that is
+    more extreme than the last confirmed extremum of that side *replaces* it
+    instead of appending.  Two peaks are therefore never confirmed without an
+    intervening trough and a monotone run is never double-counted as several
+    turning points.  NaN bars are skipped: they neither break nor seed the chain.
     """
     n = len(x)
     ext = np.zeros(n, dtype=np.int8)
     last_peak = -1
     last_trough = -1
+    last_side = 0  # 0 = none yet, +1 = last was a peak, -1 = last was a trough
     conf = int(confirmation)
     prom = float(prominence)
     for t in range(2 * conf, n):
@@ -76,14 +84,38 @@ def _confirmed_extrema(x: np.ndarray, prominence: float, confirmation: int) -> n
         xj = x[j]
         left = seg[:conf]
         right = seg[conf + 1 :]
-        if np.all(xj > left) and np.all(xj > right):
-            # strict peak: prominence requires a drop from the latest trough
-            if last_trough < 0 or xj - x[last_trough] > prom * xj:
+        is_peak = bool(np.all(xj > left) and np.all(xj > right))
+        is_trough = bool(np.all(xj < left) and np.all(xj < right))
+        if is_peak:
+            if last_side == -1:
+                # previous confirmed extremum is a trough: the new peak must
+                # clear a prominence rise from that trough.
+                if last_trough >= 0 and xj - x[last_trough] > prom * xj:
+                    ext[j] = 1
+                    last_peak = j
+                    last_side = 1
+            elif last_side == 0:
+                # seed the chain (first confirmed extremum needs no reference).
                 ext[j] = 1
                 last_peak = j
-        elif np.all(xj < left) and np.all(xj < right):
-            # strict trough: prominence requires a drop from the latest peak
-            if last_peak < 0 or x[last_peak] - xj > prom * xj:
+                last_side = 1
+            elif last_peak >= 0 and xj > x[last_peak]:
+                # same-side candidate more extreme: replace, never append.
+                ext[last_peak] = 0
+                ext[j] = 1
+                last_peak = j
+        if is_trough:
+            if last_side == 1:
+                if last_peak >= 0 and x[last_peak] - xj > prom * xj:
+                    ext[j] = -1
+                    last_trough = j
+                    last_side = -1
+            elif last_side == 0:
+                ext[j] = -1
+                last_trough = j
+                last_side = -1
+            elif last_trough >= 0 and xj < x[last_trough]:
+                ext[last_trough] = 0
                 ext[j] = -1
                 last_trough = j
     return ext
@@ -123,6 +155,43 @@ def _match_y(
     return best if best >= 0 else None
 
 
+def _match_y_pair(
+    ext_y: np.ndarray,
+    sgn: int,
+    p1: int,
+    p2: int,
+    r: int,
+    lag: int,
+    confirmation: int,
+) -> tuple[int, int] | None:
+    """One-to-one monotonic match of two x-extrema ``p1 < p2`` onto two distinct
+    same-side y-extrema ``q1 < q2``, each within ``±lag`` of its counterpart and
+    confirmed by row ``r``.
+
+    R4-46: independent nearest-neighbour matching let both x-extrema land on the
+    *same* y-extremum when ``lag`` is large (``q1 == q2`` → ``dy = 0``, a false
+    divergence).  The pair minimises ``|q1-p1| + |q2-p2|`` subject to ``q1 < q2``.
+    """
+    n = len(ext_y)
+    lo1 = max(0, p1 - lag)
+    hi1 = min(n - 1, p1 + lag)
+    lo2 = max(0, p2 - lag)
+    hi2 = min(n - 1, p2 + lag)
+    cand1 = [q for q in range(lo1, hi1 + 1) if ext_y[q] == sgn and q + confirmation <= r]
+    cand2 = [q for q in range(lo2, hi2 + 1) if ext_y[q] == sgn and q + confirmation <= r]
+    best: tuple[int, int] | None = None
+    best_cost: int | None = None
+    for q1 in cand1:
+        for q2 in cand2:
+            if q1 >= q2:
+                continue
+            cost = abs(q1 - p1) + abs(q2 - p2)
+            if best_cost is None or cost < best_cost:
+                best_cost = cost
+                best = (q1, q2)
+    return best
+
+
 def _divergence_series(
     x2d: np.ndarray,
     y2d: np.ndarray,
@@ -152,10 +221,10 @@ def _divergence_series(
             sy = float(np.nanstd(y[i0 : r + 1]))
             if not (np.isfinite(sx) and sx > 0 and np.isfinite(sy) and sy > 0):
                 continue
-            q1 = _match_y(ext_y, sgn, p1, r, lag, conf)
-            q2 = _match_y(ext_y, sgn, p2, r, lag, conf)
-            if q1 is None or q2 is None:
+            q_pair = _match_y_pair(ext_y, sgn, p1, p2, r, lag, conf)
+            if q_pair is None:
                 continue
+            q1, q2 = q_pair
             dx = (x[p2] - x[p1]) / sx
             dy = (y[q2] - y[q1]) / sy
             out[r, c] = (dx - dy) / (abs(dx) + abs(dy) + _EPS)

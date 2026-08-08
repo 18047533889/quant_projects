@@ -63,12 +63,15 @@ def _cs_pair_spread(h1: float, h2: float, l1: float, l2: float) -> float:
     single-day sum as gamma), which is not the standard estimator — under a
     pure-spread construction it returns 0 instead of the spread.
     """
-    if h1 <= l1 or h2 <= l2:
-        return np.nan
+    if h1 < l1 or h2 < l2:
+        return np.nan  # only inverted bars are data errors
     H = max(h1, h2)
     L = min(l1, l2)
-    if H <= L:
+    if H < L:
         return np.nan
+    # ``H == L`` (a one-price / 一字板 bar) is not a data error: log(H/L) = 0 is
+    # mathematically valid and falls through to the alpha <= 0 -> 0.0 spread
+    # branch below (review P1-18).  Only H < L is rejected.
     c = 3.0 - 2.0 * np.sqrt(2.0)  # ~0.171573
     beta = np.log(h1 / l1) ** 2.0 + np.log(h2 / l2) ** 2.0
     gamma = np.log(H / L) ** 2.0
@@ -86,7 +89,10 @@ def _rolling_mean_trailing(v: np.ndarray, w: int) -> np.ndarray:
     for r in range(rows):
         lo = max(0, r - w + 1)
         c = cnt[r] - (cnt[lo - 1] if lo > 0 else 0.0)
-        if c < 1:
+        # P1-19: ``smooth_window`` means the estimator must actually have
+        # ``smooth_window`` samples — a single finite observation must not start
+        # the mean early (the parameter then meant nothing).
+        if c < w:
             continue
         s = cum[r] - (cum[lo - 1] if lo > 0 else 0.0)
         out[r] = s / c

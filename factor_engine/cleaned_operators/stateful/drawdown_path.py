@@ -77,10 +77,12 @@ class TsRecoveryFraction(SeriesOperator):
                 seg = _trailing_contiguous(xv[lo : row + 1, col])
                 # P0-006/007: a NaN current value yields an empty block -> NaN,
                 # never a stale last-valid recovery fraction; gaps never bridge.
-                valid = seg > 0.0
-                if int(valid.sum()) < 2:
+                # P1-26: a non-positive price inside the active segment must
+                # break the path — deleting it and re-connecting (100 -> 90 from
+                # [100, 0, 90]) silently fabricates a valid sequence.
+                if seg.size < 2 or not np.all(seg > 0.0):
                     continue
-                vals = seg[valid]
+                vals = seg
                 p = float(np.max(vals))
                 p_pos = int(np.argmax(vals))
                 t = float(np.min(vals[p_pos:]))
@@ -100,17 +102,21 @@ class TsRecoveryFraction(SeriesOperator):
     source="stateful.drawdown_path",
 )
 class TsCurrentDrawdownArea(SeriesOperator):
-    """Trailing sum of daily drawdown depths from the running peak
-    (drawdown depth x duration integral).
+    """Sum of daily drawdown depths of the *current* (not-yet-recovered)
+    drawdown episode (drawdown depth x duration integral).
 
-    For each valid positive observation ``DD_s = 1 - x_s / running_max_s``;
-    the output is the sum of ``DD_s`` over the trailing window.  NaN when fewer
-    than two valid positive observations are available.
+    P1-27: the earlier implementation summed every daily depth inside the
+    trailing window, so a drawdown that had fully recovered still contributed
+    area — that is a *trailing* drawdown area.  The current-episode semantic
+    resets at the last new high: only rows from that peak onward count, so a
+    fully recovered series has area 0.  NaN when fewer than two valid positive
+    observations are available or the path contains a non-positive price
+    (P1-26).
     """
 
     metadata = metadata(
         "ts_current_drawdown_area",
-        "窗口内每日回撤深度之和(深度×时长积分)。",
+        "当前未收复回撤的每日深度之和(自最后一个新高起)。",
         ["x", "window"],
         domain="price_volume",
         unit="ratio",
@@ -128,14 +134,19 @@ class TsCurrentDrawdownArea(SeriesOperator):
                 seg = _trailing_contiguous(xv[lo : row + 1, col])
                 # P0-007: no time-axis compression — the running peak and the
                 # depth sum run over the contiguous block only, so the duration
-                # dimension is real; a NaN current row emits NaN.
-                valid = seg > 0.0
-                if int(valid.sum()) < 2:
+                # dimension is real; a NaN current row emits NaN.  P1-26: a
+                # non-positive price breaks the path.
+                if seg.size < 2 or not np.all(seg > 0.0):
                     continue
-                vals = seg[valid]
+                vals = seg
                 running_max = np.maximum.accumulate(vals)
+                # Last new-high position = last index where the running max
+                # increased (or the first row).  Only rows from there on are the
+                # current, not-yet-recovered episode.
+                new_high = np.r_[True, running_max[1:] > running_max[:-1]]
+                last_peak = int(np.flatnonzero(new_high)[-1])
                 dd = 1.0 - vals / running_max
-                out[row, col] = float(np.sum(dd))
+                out[row, col] = float(np.sum(dd[last_peak:]))
         return frame_like(x, out)
 
 

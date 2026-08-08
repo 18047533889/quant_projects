@@ -34,7 +34,20 @@ def read_cos_events(self: Any, dataset: str, *, columns: Sequence[str] | None = 
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
     physical_range = (start, end) if contract.pit_policy == "strict" and (start is not None or end is not None) else None
-    table = self.sql(query, read_datasets=[dataset], read_params={dataset: params} if params else None, read_time_ranges={dataset: physical_range}, params=bind)
+    # #P0-26 官方 semantic helper 不能撞 production 的 view_columns 门禁：显式传
+    # 视图所需列（含 PIT 必要内部列）。本 helper 在入口已做 contract 校验
+    # （resolve_event_clock / validate_event_filters），是语义层自身，跳过
+    # sql() 的用户级 semantic gate（_semantic_gate=False）。
+    view_cols = list(selected) if selected else list(_required(contract, clock))
+    table = self.sql(
+        query,
+        read_datasets=[dataset],
+        read_params={dataset: params} if params else None,
+        read_time_ranges={dataset: physical_range},
+        view_columns={dataset: view_cols},
+        params=bind,
+        _semantic_gate=False,
+    )
     return table.to_pandas(split_blocks=True)
 
 
@@ -105,6 +118,21 @@ def read_cos_events_asof(self: Any, dataset: str, decisions: pd.DataFrame, *, de
     contract, clock = resolve_event_clock(dataset, allow_effective_time=allow_effective_time)
     if contract.pit_policy != "strict":
         raise ValidationError(f"数据集 {dataset!r} 只有事件生效时间；一对一 as-of 会丢失多事件/累计语义，请先 read_cos_events 后显式聚合")
+    # #P0-25 RAW_EVENT / one-to-many 禁止 generic latest-asof：新闻等不是 state
+    # table，"挑一条 latest event"会静默退化成最后一条新闻，丢失多事件/累计语义。
+    # 必须显式 window 聚合（count / sentiment mean / latest N / decay / embedding）。
+    if contract.is_raw_event:
+        raise ValidationError(
+            f"数据集 {dataset!r} 是 RAW_EVENT（one_to_many 事件流，非 state table）；"
+            "禁止 generic latest-asof。请先 read_cos_events 后显式做 window "
+            "aggregation（count / sentiment mean / latest N / decay / event "
+            "embedding aggregation），否则 ValidationError。"
+        )
+    if getattr(contract, "cardinality", None) == "one_to_many":
+        raise ValidationError(
+            f"数据集 {dataset!r} cardinality=one_to_many，不是 state table；"
+            "generic latest-asof 会静默退化。请显式 window/aggregate 后使用。"
+        )
     validate_event_filters(contract, event_filters)
     if decision_time not in decisions or decision_instrument not in decisions:
         raise ValidationError(f"decisions 必须包含 {decision_time!r} 和 {decision_instrument!r}")

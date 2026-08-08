@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
 """Hankel / SSA structure operators (2026-08 geometry/math expansion).
 
-The shared kernel fills the trailing window's NaNs by *linear interpolation over
-the window's own time grid* (a window with fewer than 50% finite rows emits
-NaN), forms the trajectory ``Hankel`` matrix ``H`` of shape
+The shared kernel prepares the trailing window as a *strict trailing contiguous
+finite run* (production default — data on either side of a gap is never
+re-connected), then forms the trajectory ``Hankel`` matrix ``H`` of shape
 ``(N - embedding_dim + 1, embedding_dim)`` from lagged rows, and performs an
 SVD → singular values ``σ``.  The family then reads the singular spectrum:
+
+* R4-66: the contiguous run must cover at least ``min_contiguous_fraction``
+  (default 0.8) of the window, otherwise the row emits NaN.  Without this gate a
+  sparse day could build an 18-point Hankel matrix and a full day a 60-point one
+  under the same operator name — a different factor from one row to the next.
+* R4-67: linear interpolation across a gap (``missing_mode="interpolate"``) is
+  research-only and requires explicit opt-in; the production default is
+  ``strict_contiguous``.
 
 * ``ts_hankel_effective_rank``       — exponential of the entropy of the
   normalized squared-singular-value distribution, normalized by ``min(H.shape)``.
@@ -34,6 +42,8 @@ _MIN_FINITE_FRAC = 0.5
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+    # R4-95: the trailing window is consumed as a strict trailing contiguous run;
+    # exact row count is NOT required — rows with too short a run emit NaN.
     return OperatorMetadata(
         name=name,
         category="hankel",
@@ -46,16 +56,26 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:ts_structure",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        window_semantics="trailing_contiguous",
     )
 
 
-def _fill_window(chunk: np.ndarray, missing_mode: str = "strict_contiguous") -> np.ndarray | None:
+def _fill_window(
+    chunk: np.ndarray,
+    missing_mode: str = "strict_contiguous",
+    min_contiguous_fraction: float = 0.8,
+) -> np.ndarray | None:
     """Prepare a window for Hankel/SSA.
 
     Audit P1-A: the production default is ``strict_contiguous`` — the longest
     trailing contiguous finite run, with a 50%-finite coverage gate.  Linear
     interpolation (which uses data *after* a gap to reconstruct observations
     before it) is research-only and requires ``missing_mode="interpolate"``.
+
+    R4-66: the contiguous run must cover at least ``min_contiguous_fraction`` of
+    the window (default 0.8), otherwise ``None`` is returned so the row emits
+    NaN.  Without this gate the same operator would alternate between an
+    18-point and a 60-point Hankel matrix from day to day.
     """
     if chunk.size == 0:
         return None
@@ -78,6 +98,9 @@ def _fill_window(chunk: np.ndarray, missing_mode: str = "strict_contiguous") -> 
     start = end
     while start > 0 and np.isfinite(chunk[start - 1]):
         start -= 1
+    run_len = end - start
+    if run_len / float(chunk.size) < float(min_contiguous_fraction):
+        return None
     return chunk[start:end].astype(float)
 
 
@@ -94,7 +117,13 @@ def _hankel_singular_values(filled: np.ndarray, emb: int) -> np.ndarray | None:
     return s
 
 
-def _hankel_effective_rank_series(x2d: np.ndarray, window: int, emb: int, missing_mode: str = "strict_contiguous") -> np.ndarray:
+def _hankel_effective_rank_series(
+    x2d: np.ndarray,
+    window: int,
+    emb: int,
+    missing_mode: str = "strict_contiguous",
+    min_contiguous_fraction: float = 0.8,
+) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w, e = int(window), int(emb)
@@ -102,7 +131,7 @@ def _hankel_effective_rank_series(x2d: np.ndarray, window: int, emb: int, missin
         col = x2d[:, c]
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            filled = _fill_window(col[i0 : r + 1], missing_mode)
+            filled = _fill_window(col[i0 : r + 1], missing_mode, min_contiguous_fraction)
             if filled is None:
                 continue
             s = _hankel_singular_values(filled, e)
@@ -124,7 +153,13 @@ def _hankel_effective_rank_series(x2d: np.ndarray, window: int, emb: int, missin
     return out
 
 
-def _hankel_singular_gap_series(x2d: np.ndarray, window: int, emb: int, missing_mode: str = "strict_contiguous") -> np.ndarray:
+def _hankel_singular_gap_series(
+    x2d: np.ndarray,
+    window: int,
+    emb: int,
+    missing_mode: str = "strict_contiguous",
+    min_contiguous_fraction: float = 0.8,
+) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w, e = int(window), int(emb)
@@ -132,7 +167,7 @@ def _hankel_singular_gap_series(x2d: np.ndarray, window: int, emb: int, missing_
         col = x2d[:, c]
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            filled = _fill_window(col[i0 : r + 1], missing_mode)
+            filled = _fill_window(col[i0 : r + 1], missing_mode, min_contiguous_fraction)
             if filled is None:
                 continue
             s = _hankel_singular_values(filled, e)
@@ -145,7 +180,14 @@ def _hankel_singular_gap_series(x2d: np.ndarray, window: int, emb: int, missing_
     return out
 
 
-def _ssa_reconstruction_residual_series(x2d: np.ndarray, window: int, emb: int, n_components: int, missing_mode: str = "strict_contiguous") -> np.ndarray:
+def _ssa_reconstruction_residual_series(
+    x2d: np.ndarray,
+    window: int,
+    emb: int,
+    n_components: int,
+    missing_mode: str = "strict_contiguous",
+    min_contiguous_fraction: float = 0.8,
+) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w, e, k = int(window), int(emb), int(n_components)
@@ -153,7 +195,7 @@ def _ssa_reconstruction_residual_series(x2d: np.ndarray, window: int, emb: int, 
         col = x2d[:, c]
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            filled = _fill_window(col[i0 : r + 1], missing_mode)
+            filled = _fill_window(col[i0 : r + 1], missing_mode, min_contiguous_fraction)
             if filled is None:
                 continue
             n = filled.size
@@ -181,21 +223,39 @@ def _ssa_reconstruction_residual_series(x2d: np.ndarray, window: int, emb: int, 
     return out
 
 
-def _check_hankel_params(window: int, emb: int, n_components: int | None = None) -> tuple[int, int]:
-    w, e = int(window), int(emb)
-    if e < 2:
-        raise ValueError("embedding_dim must be >= 2")
+def _check_int(value: Any, name: str, minimum: int) -> int:
+    """R4-68: strict integer contract — reject bools and non-integer floats so
+    ``5.9`` never silently truncates to ``5`` and compiles to the same factor as
+    ``5.0`` (a false search space)."""
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{name} must be an integer, not bool")
+    fv = float(value)
+    if not np.isfinite(fv) or fv != float(int(fv)):
+        raise ValueError(f"{name} must be an integer")
+    iv = int(fv)
+    if iv < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    return iv
+
+
+def _check_hankel_params(
+    window: int, emb: int, n_components: int | None = None, min_contiguous_fraction: float = 0.8
+) -> tuple[int, int, int | None, float]:
+    w = _check_int(window, "window", 2)
+    e = _check_int(emb, "embedding_dim", 2)
     if w - e + 1 < 1:
         raise ValueError("window must be >= embedding_dim")
+    mcf = float(min_contiguous_fraction)
+    if not np.isfinite(mcf) or not 0.0 < mcf <= 1.0:
+        raise ValueError("min_contiguous_fraction must be in (0, 1]")
+    k = None
     if n_components is not None:
-        k = int(n_components)
-        if k < 1:
-            raise ValueError("n_components must be >= 1")
+        k = _check_int(n_components, "n_components", 1)
         if k >= min(w - e + 1, e):
             raise ValueError(
                 "n_components must be < min(window-embedding_dim+1, embedding_dim)"
             )
-    return w, e
+    return w, e, k, mcf
 
 
 @register_operator(
@@ -215,14 +275,16 @@ class TsHankelEffectiveRank(SeriesOperator):
     metadata = _metadata(
         "ts_hankel_effective_rank",
         "奇异值能量分布的熵指数 / min(H.shape)（有效自由度）。",
-        ["x", "window", "embedding_dim"],
+        ["x", "window", "embedding_dim", "min_contiguous_fraction"],
         unit="ratio",
         cost=6,
     )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 60, embedding_dim: int = 15, **_: Any) -> pd.DataFrame:
-        w, e = _check_hankel_params(window, embedding_dim)
-        return frame_like(x, _hankel_effective_rank_series(x.to_numpy(dtype=float), w, e))
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 60, embedding_dim: int = 15, min_contiguous_fraction: float = 0.8, **_: Any
+    ) -> pd.DataFrame:
+        w, e, _, mcf = _check_hankel_params(window, embedding_dim, None, min_contiguous_fraction)
+        return frame_like(x, _hankel_effective_rank_series(x.to_numpy(dtype=float), w, e, "strict_contiguous", mcf))
 
 
 @register_operator(
@@ -242,14 +304,16 @@ class TsHankelSingularGap(SeriesOperator):
     metadata = _metadata(
         "ts_hankel_singular_gap",
         "最大与次大奇异值的相对间隙（主导结构强度）。",
-        ["x", "window", "embedding_dim"],
+        ["x", "window", "embedding_dim", "min_contiguous_fraction"],
         unit="ratio",
         cost=6,
     )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 60, embedding_dim: int = 15, **_: Any) -> pd.DataFrame:
-        w, e = _check_hankel_params(window, embedding_dim)
-        return frame_like(x, _hankel_singular_gap_series(x.to_numpy(dtype=float), w, e))
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 60, embedding_dim: int = 15, min_contiguous_fraction: float = 0.8, **_: Any
+    ) -> pd.DataFrame:
+        w, e, _, mcf = _check_hankel_params(window, embedding_dim, None, min_contiguous_fraction)
+        return frame_like(x, _hankel_singular_gap_series(x.to_numpy(dtype=float), w, e, "strict_contiguous", mcf))
 
 
 @register_operator(
@@ -270,16 +334,22 @@ class TsSsaReconstructionResidual(SeriesOperator):
     metadata = _metadata(
         "ts_ssa_reconstruction_residual",
         "前 n_components 个 SVD 模式重构窗口的归一化均方残差。",
-        ["x", "window", "embedding_dim", "n_components"],
+        ["x", "window", "embedding_dim", "n_components", "min_contiguous_fraction"],
         unit="ratio",
         cost=7,
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 60, embedding_dim: int = 15, n_components: int = 3, **_: Any
+        self,
+        x: pd.DataFrame,
+        window: int = 60,
+        embedding_dim: int = 15,
+        n_components: int = 3,
+        min_contiguous_fraction: float = 0.8,
+        **_: Any,
     ) -> pd.DataFrame:
-        w, e = _check_hankel_params(window, embedding_dim, n_components)
-        return frame_like(x, _ssa_reconstruction_residual_series(x.to_numpy(dtype=float), w, e, n_components))
+        w, e, k, mcf = _check_hankel_params(window, embedding_dim, n_components, min_contiguous_fraction)
+        return frame_like(x, _ssa_reconstruction_residual_series(x.to_numpy(dtype=float), w, e, k, "strict_contiguous", mcf))
 
 
 _NEW_CANONICALS = (

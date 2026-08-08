@@ -85,19 +85,35 @@ def upsert_table(
     if partition_by:
         _require_columns(new_table, list(partition_by), label="partition_by")
 
+    # #P0-34 new_table 自身必须对 upsert_on 唯一：重复 key 的 tie-break 只依赖
+    # __src 且两条 new rows 优先级相同，最终选哪条取决于执行顺序——拒绝。
+    _assert_unique_keys(new_table, list(upsert_on), label="upsert new_table")
+
     target_dir = _authorize_write_path(target_dir, authorizer)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     err_msg: str | None = None
     ok = False
     partitions_written: list[str] = []
+    staged: list[tuple[Path, Path]] = []  # (final_path, tmp_path) —— 全部 merge 成功后才 promote
     rows_written = 0
     elapsed_ms = 0.0
     transaction_id = uuid.uuid4().hex[:12]
 
     try:
         with mutation_lock(target_dir):
+            # ---- #P0-28 Phase 1（prepare）：逐分区 read-merge-write 到 staging tmp。
+            # 任何分区 merge 失败（schema 不一致 / DuckDB 错）→ 全部不 promote，
+            # 已存在的分区文件保持原样，不会「前几个分区已提交」。
             if partition_by:
+                # #P0-35 upsert_on ∩ partition_by 重叠时，partition key 已由目录固定，
+                # 局部合并键 = upsert_on - partition_by（否则引用已被 drop 的列）。
+                local_merge_key = [c for c in upsert_on if c not in partition_by]
+                if not local_merge_key:
+                    raise ValidationError(
+                        "upsert_on 完全被 partition_by 覆盖：合并键为空，无法去重。"
+                        "请去掉 upsert_on 中已被分区固定的列，或减少 partition_by。"
+                    )
                 for part_values, part_table in _split_by_partitions(new_table, partition_by):
                     partition_dir = target_dir
                     for col, val in zip(partition_by, part_values):
@@ -106,34 +122,46 @@ def upsert_table(
                     partition_dir = _authorize_write_path(
                         partition_dir, authorizer, expected_root=target_dir
                     )
-                    _upsert_single_dir(
+                    final_path, tmp_path = _stage_upsert(
                         partition_dir=partition_dir,
                         new_table=part_table,
-                        upsert_on=upsert_on,
+                        upsert_on=local_merge_key,
                         data_filename="data.parquet",
                     )
-                    partitions_written.append(str(partition_dir))
+                    staged.append((final_path, tmp_path))
                     rows_written += part_table.num_rows
             else:
-                _upsert_single_dir(
+                final_path, tmp_path = _stage_upsert(
                     partition_dir=target_dir,
                     new_table=new_table,
                     upsert_on=upsert_on,
                     data_filename="data.parquet",
                 )
-                partitions_written.append(str(target_dir))
+                staged.append((final_path, tmp_path))
                 rows_written = new_table.num_rows
+            # ---- Phase 2（promote）：全部 merge 成功后统一原子晋级。
+            # os.replace 单文件原子；中途失败会留下可检测的部分状态
+            # （.transactions.jsonl status=failed + manifest 保持 dirty）。
+            for final_path, tmp_path in staged:
+                os.replace(str(tmp_path), str(final_path))
+                partitions_written.append(str(final_path.parent))
             ok = True
     except Exception as exc:
         err_msg = f"{type(exc).__name__}: {exc}"
+        for _, tmp_path in staged:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
         raise
     finally:
-        # #42 TransactionManifest：全部分区成功才记 committed；任一失败记 failed。
-        # 供 audit / lineage / 后续 dataset-level watermark 前进判定。
+        # #42 / #P0-28 TransactionManifest：全部分区成功才记 committed；任一失败
+        # 记 failed（含 staged partitions）。供 audit / lineage / watermark 判定。
         _record_transaction(
             target_dir,
             transaction_id=transaction_id,
             partitions=partitions_written,
+            staged_partitions=[str(fp.parent) for fp, _ in staged],
             rows=rows_written,
             ok=ok,
         )
@@ -171,22 +199,25 @@ def upsert_table(
 # ---- 核心：单目录的 read-merge-write 原子合并 --------------------------------
 
 
-def _upsert_single_dir(
+def _stage_upsert(
     *,
     partition_dir: Path,
     new_table: pa.Table,
     upsert_on: Sequence[str],
     data_filename: str,
-) -> int:
+) -> tuple[Path, Path]:
     """
-    单个分区目录（或无分区的整个 target_dir）内做 read-merge-write。
+    #P0-28 单目录 read-merge-write 的 **prepare 阶段**：把合并结果写到 staging
+    tmp 文件，**不落最终路径**。调用方在所有分区 merge 成功后统一 promote
+    （os.replace），保证「前几个分区已提交、后面失败」不发生。
 
     锁：在 partition_dir 的**父目录**下开 O_EXCL 锁文件，防止同 partition_dir
     被并发 upsert（lost update）。选父目录是因为 partition_dir 可能还不存在。
 
     **#43**：不再全量 pandas merge——DuckDB COW（UNION ALL + row_number 去重，
-    new 优先覆盖 old），只把最终结果落盘。schema 不一致仍报错（schema 演进请走
-    overwrite）。
+    new 优先覆盖 old）。schema 不一致仍报错（schema 演进请走 overwrite）。
+
+    返回 ``(final_path, tmp_path)``。
     """
     partition_dir.mkdir(parents=True, exist_ok=True)
     final_path = partition_dir / data_filename
@@ -203,11 +234,10 @@ def _upsert_single_dir(
         else:
             merged = new_table
 
-        # 3. tmp + rename 原子落盘
-        tmp_path = partition_dir / f".{data_filename}.tmp.{uuid.uuid4().hex[:8]}"
+        # 3. 只写 staging tmp，不 replace 到 final（promote 由调用方统一做）
+        tmp_path = partition_dir / f".{data_filename}.staging.{uuid.uuid4().hex[:8]}.parquet"
         pq.write_table(merged, str(tmp_path))
-        os.replace(str(tmp_path), str(final_path))
-    return merged.num_rows
+    return final_path, tmp_path
 
 
 def _duckdb_merge(
@@ -313,12 +343,13 @@ def _record_transaction(
     partitions: list[str],
     rows: int,
     ok: bool,
+    staged_partitions: list[str] | None = None,
 ) -> None:
     """#42 追加一条 TransactionManifest 记录（``{root}/.transactions.jsonl``）。
 
     ``committed`` 表示全部分区写入成功；``failed`` 表示部分/全部失败（此时
-    dataset 级 watermark / snapshot 不应前进）。用于 audit / lineage / 多分区
-    一致性观测。
+    dataset 级 watermark / snapshot 不应前进）。``staged_partitions``（#P0-28）
+    记录 prepare 阶段完成、但 promote 未完成的候选分区，供修复/审计定位。
     """
     import json as _json
 
@@ -332,6 +363,8 @@ def _record_transaction(
             "affected_partition_count": len(partitions),
             "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
+        if staged_partitions is not None:
+            record["staged_partitions"] = staged_partitions
         with log_path.open("a", encoding="utf-8") as fh:
             fh.write(_json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
     except OSError as exc:
@@ -365,6 +398,36 @@ def _require_columns(table: pa.Table, cols: Sequence[str], *, label: str) -> Non
         raise ValidationError(
             f"upsert 的 {label} 声明了 {list(cols)}，但 table 里缺列 {missing}；"
             f"实际列：{table.column_names}"
+        )
+
+
+def _assert_unique_keys(table: pa.Table, cols: Sequence[str], *, label: str) -> None:
+    """#P0-34 断言 table 对 cols 唯一；重复 → ValidationError。"""
+    if not cols:
+        return
+    import duckdb
+
+    key_list = ", ".join(f'"{c}"' for c in cols)
+    con = duckdb.connect()
+    try:
+        con.register("__u", table)
+        row = con.execute(
+            f"SELECT COUNT(*) FROM ("
+            f"SELECT {key_list} FROM __u GROUP BY {key_list} HAVING COUNT(*) > 1"
+            f")"
+        ).fetchone()
+        dup_groups = int(row[0]) if row else 0
+    except Exception as exc:
+        raise ValidationError(
+            f"{label} 无法校验 {cols} 唯一性（DuckDB 失败: {exc}）"
+        ) from exc
+    finally:
+        con.close()
+    if dup_groups:
+        raise ValidationError(
+            f"{label} 在合并键 {list(cols)} 上存在 {dup_groups} 组重复 key；"
+            "upsert 语义要求 new_table 对 upsert_on 唯一，不允许依赖输入/执行顺序"
+            "的 tie-break。业务确实允许多修订时请显式声明 revision_order。"
         )
 
 
@@ -447,8 +510,20 @@ def delete_rows_from_dataset(
     max_rows: int | None = None,
     reason: str | None = None,
     ticket_id: str | None = None,
+    best_effort: bool = False,
 ) -> dict[str, Any]:
-    """从 staging/namespaced hive 分区删除指定时间范围内的行。"""
+    """从 staging/namespaced hive 分区删除指定时间范围内的行。
+
+    #P0-37 **two-phase preflight**：
+        PHASE 1 —— 扫描每个 candidate 文件的 footer + 谓词，构建完整 delete plan
+        （path → kept rows），累计行数并先验证 ``max_rows``（超限 → 抛错，**0 行
+        实际删除**）；
+        PHASE 2 —— plan 全部通过后统一 commit（删除/重写）。
+
+    #P0-36 任意 candidate 文件读取失败：production fail-closed（整个 delete abort）；
+    ``best_effort=True``（研究/手动）才允许跳过，并返回 ``failed_files`` /
+    ``remaining_unverified_rows``。
+    """
     import pandas as pd
 
     from data_access.core.exceptions import ValidationError
@@ -466,19 +541,26 @@ def delete_rows_from_dataset(
             "dry_run": dry_run,
         }
 
+    t0 = time.perf_counter()
+    # ---- PHASE 1：构建 delete plan（不落盘、不删） ----
+    plan: list[tuple[Path, pd.DataFrame]] = []  # (parquet_path, kept_rows)
+    failed_files: list[str] = []
     rows_deleted = 0
     partitions: list[str] = []
-    t0 = time.perf_counter()
-
     for parquet_path in sorted(target_dir.rglob("*.parquet")):
         try:
             df = pq.read_table(str(parquet_path), partitioning=None).to_pandas()
         except Exception as exc:
-            logger.warning("delete_rows 跳过 %s: %s", parquet_path, exc)
+            if not best_effort:
+                raise DataError(
+                    f"delete_rows 读取 {parquet_path} 失败: {exc}；"
+                    "production fail-closed：整个 delete 中止，未删除任何行。"
+                ) from exc
+            logger.warning("delete_rows best_effort 跳过 %s: %s", parquet_path, exc)
+            failed_files.append(str(parquet_path))
             continue
         if df.empty or time_column not in df.columns:
             continue
-
         dt = pd.to_datetime(df[time_column])
         if after_ts is not None and start_ts is None and end_ts is None:
             delete_mask = dt > after_ts
@@ -490,33 +572,34 @@ def delete_rows_from_dataset(
                 delete_mask &= dt <= end_ts
             if after_ts is not None:
                 delete_mask &= dt > after_ts
-
         removed = int(delete_mask.sum())
         if removed <= 0:
             continue
-
+        # max_rows 是 safety guard：超限必须在**删除任何行之前**失败（#P0-37）。
         if max_rows is not None and rows_deleted + removed > max_rows:
             raise ValidationError(
                 f"delete_rows 将删除 {rows_deleted + removed} 行，超过 max_rows={max_rows}。"
-                "请缩小时间范围或提高 max_rows。"
+                "已 abort（0 行实际删除）。请缩小时间范围或提高 max_rows。"
             )
-
         rows_deleted += removed
         partitions.append(str(parquet_path.parent))
-
-        if dry_run:
-            continue
-
         kept = df.loc[~delete_mask]
+        plan.append((parquet_path, kept))
 
-        if kept.empty:
-            parquet_path.unlink(missing_ok=True)
-            continue
-
-        with _upsert_lock(parquet_path.parent):
-            tmp_path = parquet_path.parent / f".delete.tmp.{uuid.uuid4().hex[:8]}.parquet"
-            pq.write_table(pa.Table.from_pandas(kept, preserve_index=False), str(tmp_path))
-            os.replace(str(tmp_path), str(parquet_path))
+    remaining_unverified = rows_deleted  # best_effort 下跳过文件的行数未知
+    # ---- PHASE 2：commit plan ----
+    if dry_run:
+        committed = 0
+    else:
+        for parquet_path, kept in plan:
+            if kept.empty:
+                parquet_path.unlink(missing_ok=True)
+                continue
+            with _upsert_lock(parquet_path.parent):
+                tmp_path = parquet_path.parent / f".delete.tmp.{uuid.uuid4().hex[:8]}.parquet"
+                pq.write_table(pa.Table.from_pandas(kept, preserve_index=False), str(tmp_path))
+                os.replace(str(tmp_path), str(parquet_path))
+        committed = rows_deleted
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
     audit_extra: dict[str, Any] = {"time_column": time_column}
@@ -526,11 +609,15 @@ def delete_rows_from_dataset(
         audit_extra["ticket_id"] = ticket_id
     if dry_run:
         audit_extra["dry_run"] = True
+    if best_effort:
+        audit_extra["best_effort"] = True
+    if failed_files:
+        audit_extra["failed_files"] = failed_files[:20]
 
     audit.record(
         op="delete_rows",
         dataset=ds.name,
-        ok=True,
+        ok=not failed_files or best_effort,
         mode="delete",
         rows=rows_deleted,
         paths=partitions[:20],
@@ -538,9 +625,13 @@ def delete_rows_from_dataset(
         elapsed_ms=elapsed_ms,
         extra=audit_extra,
     )
-    return {
-        "rows_deleted": rows_deleted,
+    result: dict[str, Any] = {
+        "rows_deleted": committed if not dry_run else rows_deleted,
         "partitions": partitions,
         "elapsed_ms": elapsed_ms,
         "dry_run": dry_run,
     }
+    if failed_files:
+        result["failed_files"] = failed_files
+        result["remaining_unverified_rows"] = remaining_unverified
+    return result

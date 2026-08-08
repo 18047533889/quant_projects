@@ -283,7 +283,10 @@ _mk(
 # § Core vs non-core income
 # ---------------------------------------------------------------------------
 
-def _fin_core_earnings_ratio(op, inv_income, fv_income, asset_deal, other_earnings, revenue, period_id, scale="revenue"):
+def _fin_core_earnings_ratio(op, inv_income, fv_income, asset_deal, other_earnings, revenue, period_id):
+    # P1-40: the old ``scale`` param was dead — the denominator was always
+    # revenue, so scale=A and scale=B produced byte-identical factors (search
+    # space pollution).  Removed; denominator is revenue by contract.
     core = op - inv_income - fv_income - asset_deal - other_earnings
     return core / revenue.replace(0, np.nan)
 
@@ -291,7 +294,7 @@ def _fin_core_earnings_ratio(op, inv_income, fv_income, asset_deal, other_earnin
 _mk(
     "fin_core_earnings_ratio",
     "核心利润占比：(OperatingProfit-投资收益-公允价值变动-资产处置-其他收益)/营业收入。",
-    ["operating_profit", "investment_income", "fair_value_income", "asset_deal_income", "other_earnings", "revenue", "period_id", "scale"],
+    ["operating_profit", "investment_income", "fair_value_income", "asset_deal_income", "other_earnings", "revenue", "period_id"],
     _fin_core_earnings_ratio,
 )
 

@@ -96,6 +96,9 @@ class ReadPlan:
     time_range: tuple[Any, Any] | None = None
     instruments: Sequence[str] | None = None
     universe: str | None = None
+    # #P0-2 统一 effective_join_specs（字段语义 → COS 契约 → 显式覆盖）：
+    # PIT validator / 组合执行 / explain 消费同一份 join 语义。
+    join_specs_effective: dict[str, Any] = field(default_factory=dict)
     # #4 物理计划 DAG（由 store.plan 注入；explain() 渲染，execute() 消费）
     physical: Any = field(default=None, repr=False)
     # 绑定到 store 以便 execute（由 store.plan 注入）

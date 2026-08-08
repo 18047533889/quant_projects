@@ -133,7 +133,12 @@ class PITEventIndex:
         timeframe: str | None = None,
         tickers: Sequence[str] | None = None,
     ) -> list[str]:
-        """按 filing_date / timeframe / ticker 返回匹配的文件路径子集。"""
+        """按 filing_date / timeframe / ticker 返回匹配的文件路径子集。
+
+        #P0-15 文件级剪枝：先用 ``_by_file`` 的 min/max filing 区间淘汰不可能
+        命中的文件（O(files)），再只扫候选文件内的记录（O(候选文件内记录数)），
+        不再遍历全部事件记录。
+        """
         if not self.records:
             return []
         lo, hi = filing_range if filing_range else (None, None)
@@ -141,9 +146,30 @@ class PITEventIndex:
         hi_ts = _as_ts(hi) if hi is not None else None
         ticker_set = set(tickers) if tickers else None
         tf = str(timeframe).lower() if timeframe else None
+        # 1) 文件级 min/max 淘汰
+        candidate_files: set[str] = set()
+        for fp, meta in self._by_file.items():
+            if lo_ts is not None and _as_ts(meta["max_filing"]) < lo_ts:
+                continue
+            if hi_ts is not None and _as_ts(meta["min_filing"]) > hi_ts:
+                continue
+            candidate_files.add(fp)
+        if not candidate_files:
+            return []
+        # 2) ticker 维：直接查 _by_ticker 的候选文件
+        if ticker_set is not None:
+            ticker_files: set[str] = set()
+            for tk in ticker_set:
+                for r in self._by_ticker.get(tk, ()):
+                    if r.file_path in candidate_files:
+                        ticker_files.add(r.file_path)
+            candidate_files &= ticker_files
+            if not candidate_files:
+                return []
+        # 3) 记录级：只扫候选文件（timeframe 与 filing 精确匹配）
         out: set[str] = set()
         for r in self.records:
-            if ticker_set is not None and r.ticker not in ticker_set:
+            if r.file_path not in candidate_files:
                 continue
             if tf and (r.timeframe or "").lower() != tf:
                 continue
@@ -252,16 +278,36 @@ def _meta_path(root: Path) -> Path:
     return root / _INDEX_META_FILENAME
 
 
-def _schema_hash_of(records: Sequence[PITEventRecord]) -> str:
+def _schema_hash_of(ds: Any) -> str:
+    """#P0-16 真 schema hash：源数据集的列名 + 类型 + 语义角色。
+
+    旧实现只对 records 的 timeframe 取值集合做 hash，加/删列根本检测不到。
+    现在对 registry 声明的源 schema（name→dtype）+ 索引使用的语义角色
+    （instrument/filing/period/timeframe 列）一起 hash。
+    """
     import hashlib
     import json
 
-    payload = json.dumps(
-        sorted({r.timeframe or "" for r in records}),
-        sort_keys=True,
-        separators=(",", ":"),
+    schema = dict(getattr(ds, "schema", None) or {})
+    payload = sorted(
+        (str(k), str(v)) for k, v in schema.items()
     )
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+    contract = None
+    try:
+        from data_access.cos_contract import get_cos_contract
+
+        contract = get_cos_contract(getattr(ds, "name", ""))
+    except Exception:
+        contract = None
+    roles = [
+        ("instrument", getattr(ds, "instrument_column", None)),
+        ("filing", getattr(contract, "availability_column", None) if contract else None),
+        ("period", getattr(contract, "period_column", None) if contract else None),
+    ]
+    payload.extend(sorted((r, str(c) or "") for r, c in roles))
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:12]
 
 
 def build_pit_event_index(
@@ -346,6 +392,8 @@ def build_pit_event_index(
     records: list[PITEventRecord] = []
     failed_files: list[str] = []
     read_cols = [c for c in (inst_col, filing_col, period_col, timeframe_column) if c]
+    truncated = False
+    indexed_files = 0  # #P0-15 已完整索引的**文件**数（不是记录数）
     for fp in files:
         try:
             t = pq.read_table(fp, columns=read_cols)
@@ -353,6 +401,7 @@ def build_pit_event_index(
             # #15：单文件读取失败 → 记录并置 incomplete，禁止拿不完整索引裁剪
             failed_files.append(fp)
             continue
+        file_done = True
         for row in t.to_pylist():
             if timeframe_filter and timeframe_column:
                 if str(row.get(timeframe_column) or "") != timeframe_filter:
@@ -368,18 +417,24 @@ def build_pit_event_index(
                 )
             )
             if limit is not None and len(records) >= limit:
+                truncated = True
+                file_done = False
                 break
-        if limit is not None and len(records) >= limit:
+        if file_done:
+            indexed_files += 1
+        if truncated:
             break
     metadata = PITIndexMetadata(
         source_snapshot=source_snapshot,
         manifest_epoch=manifest_epoch,
         source_file_count=source_file_count,
-        indexed_file_count=len(records),
+        indexed_file_count=indexed_files,
         failed_files=tuple(failed_files),
-        schema_hash=_schema_hash_of(records),
+        schema_hash=_schema_hash_of(ds),
         created_at=_dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
-        complete=(not failed_files),
+        # #P0-15/#P0-16：完整 = 无失败文件 + 未截断 + 文件数全对。
+        # limit 截断构建 → complete=False（is_authoritative 必须完整）。
+        complete=(not failed_files and not truncated and indexed_files == source_file_count),
     )
     idx = PITEventIndex(records, metadata=metadata)
     try:

@@ -89,9 +89,22 @@ def _chatterjee_xi(xv: np.ndarray, yv: np.ndarray) -> float:
         return np.nan
     if float(np.std(xv)) <= _EPS or float(np.std(yv)) <= _EPS:
         return np.nan
-    order = np.argsort(xv, kind="stable")
-    r = _rankdata(yv[order])
-    return float(1.0 - 3.0 * np.sum(np.abs(np.diff(r))) / (n * n - 1.0))
+    # Tie-aware Chatterjee ξ (review R4-49).  The no-tie formula
+    # 1 - 3·Σ|Δr|/(n²-1) assumes continuous data; A-share series have many
+    # zero-return / limit / discrete values.  The general formula uses
+    # r_i = #{j: Y_j ≤ Y_i} (max-rank) and l_i = #{j: Y_j ≥ Y_i}:
+    #   ξ = 1 - n·Σ_{i<n}|r_{i+1}-r_i| / (2·Σ_i l_i(n-l_i)).
+    # X ties are resolved deterministically by sorting on Y within each tied-X
+    # group (canonical, independent of the row order the stable sort would use).
+    order = np.lexsort((yv, xv))  # primary X, secondary Y
+    sy = yv[order]
+    s_sorted = np.sort(sy)
+    r = np.searchsorted(s_sorted, sy, side="right").astype(float)  # max-rank
+    l = (n - np.searchsorted(s_sorted, sy, side="left")).astype(float)  # #{≥}
+    denom = 2.0 * float(np.sum(l * (n - l)))
+    if denom <= _EPS:
+        return np.nan
+    return float(1.0 - n * np.sum(np.abs(np.diff(r))) / denom)
 
 
 def _rbf_kernel(v: np.ndarray) -> np.ndarray | None:
@@ -115,16 +128,22 @@ def _hsic(xv: np.ndarray, yv: np.ndarray) -> float:
     if K is None or L is None:
         return np.nan
     H = np.eye(n) - np.ones((n, n)) / n
+    # Centered kernel alignment (review R4-14): Kc = H K H, Lc = H L H and
+    # HSIC_norm = <Kc,Lc>_F / (||Kc||_F·||Lc||_F).  For symmetric kernels,
+    # <Kc,Lc>_F = tr(K H L H) and ||Kc||_F² = tr(K H K H) — the old denominator
+    # tr(K H K)·tr(L H L) was missing one centering H on each side.
     num = float(np.trace(K @ H @ L @ H))
-    denom = float(np.sqrt(np.trace(K @ H @ K) * np.trace(L @ H @ L)))
+    denom = float(np.sqrt(np.trace(K @ H @ K @ H) * np.trace(L @ H @ L @ H)))
     if denom <= _EPS:
         return np.nan
-    return float(min(1.0, max(0.0, num / denom)))
+    return float(num / denom)
 
 
 def _cmi(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray, bins: int) -> float:
     n = xv.size
-    if n < 2:
+    # Plug-in empirical entropy over bins^3 cells has huge finite-sample bias;
+    # require N >= 2·bins^3 aligned triples (review R4-50).
+    if n < 2 * bins * bins * bins:
         return np.nan
     bx = _value_bins(xv, bins)
     by = _value_bins(yv, bins)
@@ -175,7 +194,10 @@ def _partial_dcor(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray) -> float:
     if not (np.isfinite(r_xy) and np.isfinite(r_xz) and np.isfinite(r_yz)):
         return np.nan
     num = r_xy - r_xz * r_yz
-    denom = float(np.sqrt((1.0 - r_xz) * (1.0 - r_yz) + _EPS))
+    # Standard partial-distance-correlation combination (review R4-15): the
+    # partial correlation denominator needs the *squared* conditioning
+    # correlations, sqrt((1-r_xz²)(1-r_yz²)), not sqrt((1-r_xz)(1-r_yz)).
+    denom = float(np.sqrt((1.0 - r_xz * r_xz) * (1.0 - r_yz * r_yz) + _EPS))
     if not np.isfinite(denom) or denom <= _EPS:
         return np.nan
     return float(num / denom)
@@ -285,8 +307,8 @@ class TsConditionalMutualInformation(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, z: pd.DataFrame, window: int = 120, bins: int = 3, **_: Any) -> pd.DataFrame:
         w = check_window(window)
         b = int(bins)
-        if b < 2:
-            raise ValueError("bins must be >= 2")
+        if b not in (2, 3):
+            raise ValueError("bins must be 2 or 3 (production grid, review R4-50)")
         return frame_like(
             x,
             _triple_series(
