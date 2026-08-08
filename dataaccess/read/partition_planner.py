@@ -28,6 +28,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Sequence
 
+from data_access.core.exceptions import ValidationError
+
 
 @dataclass(frozen=True)
 class TimePartitionSpec:
@@ -49,28 +51,70 @@ class PartitionSpec:
     hive: tuple[str, ...] = ()     # hive 分区列（year/month/date...）
 
 
-def parse_partitioning(raw: Any) -> PartitionSpec | None:
-    """解析 YAML ``partitioning:`` 块。未知结构保守返回 None（不裁剪）。"""
+# #P0-final closure 3：唯一 ``partitioning:`` schema。loader 与 planner 读同一份
+# 结构——顶层 ``time``（source/field/frequency/pattern）+ ``hive`` / ``partition_columns``。
+# 旧 loader 曾允许的 ``columns/partition_by/bucket/granularity/time_column`` 不在
+# schema 内：写错必报错，**不再静默不裁剪然后全量扫文件**。
+_PARTITIONING_KEYS = frozenset({"time", "hive", "partition_columns"})
+_TIME_PARTITION_KEYS = frozenset({"source", "field", "frequency", "pattern"})
+
+
+def parse_partitioning(raw: Any, *, context: str = "partitioning") -> PartitionSpec | None:
+    """解析 YAML ``partitioning:`` 块 → typed ``PartitionSpec``。
+
+    - typed ``PartitionSpec`` 原样返回（registry 已保存 typed spec，对象自身即合法）；
+    - dict：``time`` + ``hive``/``partition_columns``；unknown key **fail-closed**；
+    - None/空 → None（不裁剪）。
+    """
+    if isinstance(raw, PartitionSpec):
+        return raw
     if raw is None:
         return None
     if not isinstance(raw, dict):
-        return None
+        raise ValidationError(
+            f"{context} 必须是 mapping，收到 {type(raw).__name__}"
+        )
+    unknown = sorted(set(raw) - _PARTITIONING_KEYS)
+    if unknown:
+        raise ValidationError(
+            f"{context} 含未知配置 key {unknown}；应为 {sorted(_PARTITIONING_KEYS)} 之一"
+        )
     time_spec: TimePartitionSpec | None = None
     time_raw = raw.get("time")
-    if isinstance(time_raw, dict):
+    if time_raw is not None:
+        if not isinstance(time_raw, dict):
+            raise ValidationError(f"{context}.time 必须是 mapping")
+        t_unknown = sorted(set(time_raw) - _TIME_PARTITION_KEYS)
+        if t_unknown:
+            raise ValidationError(
+                f"{context}.time 含未知配置 key {t_unknown}；"
+                f"应为 {sorted(_TIME_PARTITION_KEYS)} 之一"
+            )
         pattern = time_raw.get("pattern")
+        freq = str(time_raw.get("frequency", "daily")) or "daily"
+        if freq not in {"daily", "monthly", "yearly"}:
+            raise ValidationError(
+                f"{context}.time.frequency 必须是 daily/monthly/yearly，收到 {freq!r}"
+            )
         time_spec = TimePartitionSpec(
             source=str(time_raw.get("source", "filename")) or "filename",
             field=str(time_raw.get("field", "date")) or "date",
-            frequency=str(time_raw.get("frequency", "daily")) or "daily",
+            frequency=freq,
             pattern=str(pattern) if pattern else None,
         )
-    hive_raw = raw.get("hive") or raw.get("partition_columns")
+    hive_raw = raw.get("hive")
+    if hive_raw is None:
+        hive_raw = raw.get("partition_columns")
     hive: tuple[str, ...] = ()
-    if isinstance(hive_raw, (list, tuple)):
-        hive = tuple(str(c) for c in hive_raw if str(c))
-    elif isinstance(hive_raw, str) and hive_raw:
-        hive = (hive_raw,)
+    if hive_raw is not None:
+        if isinstance(hive_raw, (list, tuple)):
+            hive = tuple(str(c) for c in hive_raw if str(c))
+        elif isinstance(hive_raw, str) and hive_raw:
+            hive = (hive_raw,)
+        else:
+            raise ValidationError(
+                f"{context}.hive 必须是字符串/字符串列表，收到 {hive_raw!r}"
+            )
     if time_spec is None and not hive:
         return None
     return PartitionSpec(time=time_spec, hive=hive)

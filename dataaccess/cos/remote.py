@@ -311,15 +311,12 @@ def _remote_paths_from_storage(
     """
     from data_access.registry import ParametricDataset
 
-    storage = getattr(ds, "storage", None) or {}
-    src = storage.get("source", {})
-    uri: str = ""
-    layout: str = "plain"
-    if isinstance(src, dict):
-        uri = str(src.get("uri") or "")
-        layout = str(src.get("layout") or getattr(ds, "layout", "plain"))
-    elif isinstance(src, str):
-        uri = str(src)
+    # #P0-final closure 4：registry 保存 typed StorageSpec（旧 raw dict 兼容），
+    # 统一走 core.storage 的 declared_* 读取，不再各自解析 dict。
+    from data_access.core.storage import declared_storage_layout, declared_storage_uri
+
+    uri: str = str(declared_storage_uri(ds) or "")
+    layout: str = str(declared_storage_layout(ds) or getattr(ds, "layout", "plain"))
     uri = uri.rstrip("/")
     if not uri:
         raise ValidationError(f"数据集 '{ds.name}' 声明 storage.source=cos 但缺 uri")
@@ -474,7 +471,14 @@ def declares_cos_storage(ds: "Dataset") -> bool:
     mirror registry——factor lake / model outputs / features 等 ParametricDataset
     也能走 COS remote。
     """
+    # #P0-final closure 4：typed StorageSpec / 旧 raw dict 都支持。
+    from data_access.core.storage import StorageSpec
+
     storage = getattr(ds, "storage", None)
+    if isinstance(storage, StorageSpec):
+        return storage.type in {"cos", "s3", "oss"} or str(storage.uri or "").startswith(
+            ("cos://", "s3://")
+        )
     if isinstance(storage, dict):
         src = storage.get("source")
         if isinstance(src, dict) and str(src.get("type") or "").lower() in {

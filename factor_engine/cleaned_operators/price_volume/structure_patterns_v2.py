@@ -126,7 +126,6 @@ def _seq_features(high, low, left_window, right_window, history_window, n, seq):
     """
     stream = _pivot_stream(high, low, left_window, right_window, history_window)
     rows, cols = high.shape
-    nseq = len(seq)
     ok = np.zeros((rows, cols), dtype=bool)
     price_arr = [np.full((rows, cols), np.nan, dtype=float) for _ in range(n)]
     pos_arr = [np.full((rows, cols), np.nan, dtype=float) for _ in range(n)]
