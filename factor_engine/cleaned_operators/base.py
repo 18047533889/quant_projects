@@ -367,6 +367,12 @@ def _kernel_param_defaults(operator: Any) -> dict[str, Any]:
     parameter is only tolerated when it equals its canonical default (the "dead
     knob set to its no-op value" case).  Fall back to ``ParamSpec.default`` when
     the kernel signature is not introspectable.
+
+    R6-24: the ``register_dual`` bridge binds the real kernel as the ``_fn``
+    default of ``_calculate_series(*args, _fn=fn, **kwargs)`` — signature
+    introspection of the bridge itself yields only ``_fn``.  Resolve through the
+    ``_fn`` default so relational specs see the kernel's real per-parameter
+    defaults (window/dim/delay/min_line/…), not just the bridge.
     """
     import inspect
 
@@ -377,11 +383,23 @@ def _kernel_param_defaults(operator: Any) -> dict[str, Any]:
         sig = inspect.signature(fn)
     except (TypeError, ValueError):
         return {}
-    return {
+    params = {
         name: param.default
         for name, param in sig.parameters.items()
         if param.default is not inspect.Parameter.empty
     }
+    # Resolve through a ``_fn`` bridge default when present.
+    bridged = params.get("_fn")
+    if bridged is not None and callable(bridged):
+        try:
+            bsig = inspect.signature(bridged)
+        except (TypeError, ValueError):
+            bsig = None
+        if bsig is not None:
+            for name, param in bsig.parameters.items():
+                if param.default is not inspect.Parameter.empty and name not in params:
+                    params[name] = param.default
+    return params
 
 
 def _active_allows(allowed: Any, ctrl_val: Any) -> bool:
