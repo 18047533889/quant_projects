@@ -358,14 +358,11 @@ for _name, _params, _function, _description in _SPECS:
 # surface covers the final registry exactly.
 import cleaned_operators.operator_surface as _surface  # noqa: E402
 
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    set(_surface.EXTENDED_ONLY_CANONICALS)
-    | {
+_surface.extend_extended_only({
         "ashare_limit_up_touch",
         "ashare_limit_down_touch",
         "ashare_open_at_upper_limit",
         "ashare_limit_open_failed",
         "ashare_limit_one_price",
         "ashare_limit_failed",
-    }
-)
+    })

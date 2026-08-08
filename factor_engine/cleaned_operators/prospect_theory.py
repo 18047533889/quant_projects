@@ -171,9 +171,7 @@ class TsCptValue(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {"ts_cpt_value"}
-    )
+    _surface.extend_extended_only({"ts_cpt_value"})
     from cleaned_operators.rolling_pack import register_polars_bridge
 
     register_polars_bridge("ts_cpt_value")

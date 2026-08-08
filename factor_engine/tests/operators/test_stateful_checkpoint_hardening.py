@@ -67,7 +67,9 @@ def test_checkpoint_json_is_strict_standard_json() -> None:
     )
     payload = result.checkpoint.to_json()
     assert "NaN" not in payload and "Infinity" not in payload
-    assert json.loads(payload)["state"]["last_ema"] is None
+    # R5-09: the EMA state is the (weighted_avg, old_wt, valid_count) tuple; an
+    # all-NaN segment never seeds the average, so weighted_avg is null.
+    assert json.loads(payload)["state"]["ema"]["weighted_avg"] is None
 
 
 def test_rejects_duplicate_and_out_of_order_timestamps() -> None:

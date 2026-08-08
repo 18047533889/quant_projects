@@ -201,15 +201,12 @@ TsUpdateDirectionPersistence = _update_kernel("update_direction_persistence", 3,
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "update_path_efficiency",
             "update_acceleration",
             "update_surprise",
             "update_direction_persistence",
-        }
-    )
+        })
     for _canon in (
         "update_path_efficiency",
         "update_acceleration",

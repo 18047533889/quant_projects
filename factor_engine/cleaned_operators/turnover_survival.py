@@ -589,9 +589,7 @@ class TsTurnoverAgeDispersion(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_turnover_reference_price",
             "ts_turnover_cost_dispersion",
             "ts_turnover_profit_share",
@@ -602,8 +600,7 @@ def _register_surface() -> None:
             "ts_turnover_cost_mode_distance",
             "ts_turnover_cost_skew",
             "ts_turnover_age_dispersion",
-        }
-    )
+        })
     from cleaned_operators.rolling_pack import register_polars_bridge
 
     for _canon in (

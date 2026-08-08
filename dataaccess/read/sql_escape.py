@@ -424,6 +424,9 @@ def run_sql_stream(
                 bounded_query,
                 params,
                 batch_size=batch_size,
+                # #P0-41 max_elapsed_ms 下推到流式执行：第一批数据永远不返回时
+                # watchdog 也能取消，不再只等第一批出来才查 elapsed。
+                deadline_ms=budget.max_elapsed_ms,
             )
             for batch in batch_iter:
                 if batch.num_rows == 0:

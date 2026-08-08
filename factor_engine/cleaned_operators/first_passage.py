@@ -343,14 +343,11 @@ class TsFirstPassageConditionalTime(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_first_passage_bias",
             "ts_first_passage_hit_probability",
             "ts_first_passage_conditional_time",
-        }
-    )
+        })
 
 
 _register_surface()

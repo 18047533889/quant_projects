@@ -85,15 +85,16 @@
         "status": "CERTIFIED_NATIVE",
         "dataset": "us_stock_dividend",
         "physical": [
-          "StockDividend.cash_amount"
+          "StockDividend.cash_amount",
+          "StockDividend.declaration_date"
         ],
-        "transform": "identity",
+        "transform": "cash_amount with declaration_date strict-PIT guard (missing declaration_date -> NaN; never ex-date fallback)",
         "source_unit": "USD/share",
         "canonical_unit": "USD/share",
         "coverage": "PARTIAL",
         "pit": "financial_pit",
         "knowledge_time": "declaration_date",
-        "effective_time": null,
+        "effective_time": "ex_dividend_date",
         "available_at": "declaration",
         "required_filters": [
           {
@@ -109,7 +110,7 @@
         "providers": [
           "us_cash_dividend_declared"
         ],
-        "notes": "declaration_date PIT (0.51% null); ~12.2% non-USD excluded (no COS FX table); ex_date may be future"
+        "notes": "declaration_date PIT (~0.51% null; missing rows fail closed to NaN, never ex-date fallback); effective_time=ex_dividend_date; ~12.2% non-USD excluded (no COS FX table); ex_date may be future; DataAccess contract us_stock_dividend pit=strict/declaration_date"
       }
     },
     "continuous_close": {
@@ -1414,7 +1415,7 @@
       "domain": "price_volume",
       "value_kind": "return",
       "cross_market_comparable": true,
-      "price_basis": null,
+      "price_basis": "RETURN",
       "ashare": {
         "status": "CERTIFIED_NATIVE",
         "dataset": "ashare_stock_daily",
@@ -1671,7 +1672,7 @@
         "physical": [
           "StockDailyBar.IsSuspend"
         ],
-        "transform": "NOT IsSuspend (tradable = listed AND not suspended)",
+        "transform": "NOT IsSuspend (not_suspended_state; known-suspended->0, known-not-suspended->1, NaN->NaN; does NOT claim listing membership)",
         "source_unit": "boolean",
         "canonical_unit": "boolean",
         "coverage": "FULL",
@@ -1684,15 +1685,16 @@
         "providers": [
           "ashare_tradability"
         ],
-        "notes": "IsSuspend lives in StockDailyBar; transform actually negates it"
+        "notes": "IsSuspend lives in StockDailyBar; transform negates it preserving NaN (unknown suspension stays unknown); no listing/public-status mask is included"
       },
       "us": {
         "status": "SEMANTIC_EQUIVALENT",
         "dataset": "us_stock_list",
         "physical": [
-          "StockList.type"
+          "StockList.type",
+          "StockDailyBar.Close"
         ],
-        "transform": "CS universe + valid price/volume",
+        "transform": "StockList.type=='CS' AND finite DailyBar close -> 1/0 (unknown membership -> 0)",
         "source_unit": "boolean",
         "canonical_unit": "boolean",
         "coverage": "PARTIAL",
@@ -1700,12 +1702,29 @@
         "knowledge_time": null,
         "effective_time": null,
         "available_at": "local_close",
-        "required_filters": [],
+        "required_filters": [
+          {
+            "field": "universe_daily",
+            "operator": "present",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          },
+          {
+            "field": "StockDailyBar",
+            "operator": "present",
+            "value": null,
+            "allowed": [],
+            "exactly_one": false,
+            "required": true
+          }
+        ],
         "source_certified": false,
         "providers": [
           "us_tradability_universe"
         ],
-        "notes": "is_ticker_halt is extremely sparse; cannot serve as IsSuspend equivalent"
+        "notes": "real boolean from CS list type + finite DailyBar close (universe_daily membership declared via required_filters); is_ticker_halt is far too sparse to be an IsSuspend equivalent"
       }
     },
     "turnover_ratio_decimal": {

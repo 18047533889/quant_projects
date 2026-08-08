@@ -118,11 +118,14 @@ def NATR(high, low, close, window):
     values = {}
     for column in _cols(high, low, close):
         frame = _ohlc(high[column], low[column], close[column])
-        denominator = pl.col("close").abs()
+        # R5-38: close is PositivePrice — a non-positive close is bad data; the
+        # pandas backend masks it to NaN instead of ``abs()``, so the polars
+        # backend must not launder it either.
+        denominator = pl.when(pl.col("close") > 0.0).then(pl.col("close")).otherwise(None)
         values[column] = _one(
             frame,
             column,
-            pl.when(denominator != 0)
+            pl.when(denominator.is_not_null())
             .then(100.0 * _wilder(_tr_expr(), window) / denominator)
             .otherwise(None),
         )

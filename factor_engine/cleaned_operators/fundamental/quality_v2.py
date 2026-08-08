@@ -68,9 +68,7 @@ def _mk(name: str, description: str, params: list[str], fn: Callable[..., Any]):
     # modules that reuse ``_mk`` (e.g. ``accruals_scores``) stay surfaced.
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {name}
-    )
+    _surface.extend_extended_only({name})
     return cls
 
 
@@ -204,7 +202,7 @@ def _fin_roe_cash_gap(net_profit, ocf, avg_equity, period_id=None):
 _mk(
     "fin_roe_cash_gap",
     "会计ROE与现金ROE之差：(NetProfit-OCF)/AvgEquity。period_id 仅对齐契约，不参与计算。",
-    ["net_profit", "ocf", "avg_equity"],
+    ["net_profit", "ocf", "avg_equity", "period_id"],
     _fin_roe_cash_gap,
 )
 
@@ -308,7 +306,7 @@ def _fin_core_earnings_ratio(op, inv_income, fv_income, asset_deal, other_earnin
 _mk(
     "fin_core_earnings_ratio",
     "核心利润占比：(OperatingProfit-投资收益-公允价值变动-资产处置-其他收益)/营业收入。period_id 仅对齐契约，不参与计算。",
-    ["operating_profit", "investment_income", "fair_value_income", "asset_deal_income", "other_earnings", "revenue"],
+    ["operating_profit", "investment_income", "fair_value_income", "asset_deal_income", "other_earnings", "revenue", "period_id"],
     _fin_core_earnings_ratio,
 )
 
@@ -322,7 +320,7 @@ def _fin_noncore_income_ratio(inv_income, fv_income, asset_deal, other_earnings,
 _mk(
     "fin_noncore_income_ratio",
     "非核心收益占比：(投资收益+公允价值变动+资产处置+其他收益+营业外收入-营业外支出)/|利润总额|。period_id 仅对齐契约，不参与计算。",
-    ["investment_income", "fair_value_income", "asset_deal_income", "other_earnings", "non_operating_revenue", "non_operating_expense", "total_profit"],
+    ["investment_income", "fair_value_income", "asset_deal_income", "other_earnings", "non_operating_revenue", "non_operating_expense", "total_profit", "period_id"],
     _fin_noncore_income_ratio,
 )
 
@@ -364,7 +362,7 @@ def _fin_comprehensive_income_gap(total_composite_income, net_profit, avg_equity
 _mk(
     "fin_comprehensive_income_gap",
     "综合收益与净利润之差 / 平均权益。period_id 仅对齐契约，不参与计算。",
-    ["total_composite_income", "net_profit", "avg_equity"],
+    ["total_composite_income", "net_profit", "avg_equity", "period_id"],
     _fin_comprehensive_income_gap,
 )
 
@@ -377,7 +375,7 @@ def _fin_oci_to_equity(oci, avg_equity, period_id=None):
 _mk(
     "fin_oci_to_equity",
     "其他综合收益 / 平均权益。period_id 仅对齐契约，不参与计算。",
-    ["other_comprehensive_income", "avg_equity"],
+    ["other_comprehensive_income", "avg_equity", "period_id"],
     _fin_oci_to_equity,
 )
 
@@ -390,7 +388,7 @@ def _fin_discontinued_operation_ratio(discon_profit, net_profit, period_id=None)
 _mk(
     "fin_discontinued_operation_ratio",
     "终止经营损益 / |净利润|。period_id 仅对齐契约，不参与计算。",
-    ["discontinued_operation_profit", "net_profit"],
+    ["discontinued_operation_profit", "net_profit", "period_id"],
     _fin_discontinued_operation_ratio,
 )
 
@@ -403,7 +401,7 @@ def _fin_minority_profit_share(minority_profit, net_profit, period_id=None):
 _mk(
     "fin_minority_profit_share",
     "少数股东损益 / |净利润|。period_id 仅对齐契约，不参与计算。",
-    ["minority_profit", "net_profit"],
+    ["minority_profit", "net_profit", "period_id"],
     _fin_minority_profit_share,
 )
 

@@ -151,6 +151,71 @@ def apply_universe_mask(
     return p
 
 
+def apply_universe_mask_to_panel(
+    panel: Any,
+    market: str,
+    mask_columns: dict[str, Any] | None = None,
+) -> tuple[Any, Any, float]:
+    """Build and apply the universe mask for ``panel`` (P0-034).
+
+    Returns ``(masked_panel, mask_df, coverage_ratio)`` where ``mask_df`` is the
+    combined boolean mask (same axes as ``panel``) and ``coverage_ratio`` is the
+    fraction of finite panel cells that stay in-universe after masking.
+
+    ``mask_columns`` keys the per-market mask components by name — e.g.
+    ``{"tradability_state": <panel>, "close": <panel>}`` for A-share or
+    ``{"stock_list.type": <panel>, "universe_daily": <panel>, "close": <panel>}``
+    for US (see ``universe_mask_contract``).  Each value is a 2-D array/DataFrame
+    aligned to ``panel`` or a 1-D Series/array of per-date masks (broadcast
+    across instruments).  A missing component contributes no constraint; a
+    NaN/Inf/0 cell in any supplied component fails closed to OUT-of-universe
+    (matching ``apply_universe_mask``'s NaN policy).
+
+    This is the single integration point the CS materialization entry calls
+    BEFORE ranking/regression so the universe mask is applied once and the
+    coverage is recorded in the run lineage (P1-24).
+    """
+    import numpy as np
+    import pandas as pd
+
+    contract = universe_mask_contract(market)  # raises on unknown market
+    shape = np.asarray(panel).shape
+    if mask_columns is None or not mask_columns:
+        mask = np.ones(shape, dtype=float)
+    else:
+        mask = np.ones(shape, dtype=float)
+        for name, comp in mask_columns.items():
+            if comp is None:
+                continue
+            if isinstance(comp, pd.DataFrame):
+                comp_arr = comp.reindex(
+                    index=getattr(panel, "index", None),
+                    columns=getattr(panel, "columns", None),
+                ).to_numpy(dtype=float)
+            elif isinstance(comp, pd.Series):
+                comp_arr = comp.reindex(getattr(panel, "index", None)).to_numpy(dtype=float)
+                if comp_arr.shape[0] == shape[0] and shape[1] > 1:
+                    comp_arr = np.tile(comp_arr.reshape(-1, 1), (1, shape[1]))
+            else:
+                comp_arr = np.asarray(comp, dtype=float)
+                if comp_arr.ndim == 1 and comp_arr.shape[0] == shape[0] and shape[1] > 1:
+                    comp_arr = np.tile(comp_arr.reshape(-1, 1), (1, shape[1]))
+            if comp_arr.shape != shape:
+                raise ValueError(
+                    f"universe mask component {name!r} has shape {comp_arr.shape}, "
+                    f"panel is {shape}"
+                )
+            # Fail-closed truth: finite & nonzero = in-universe; NaN/Inf/0 = out.
+            mask = mask * (np.isfinite(comp_arr) & (comp_arr != 0)).astype(float)
+
+    masked = apply_universe_mask(panel, mask)
+    panel_finite = np.isfinite(np.asarray(panel, dtype=float))
+    in_universe = np.isfinite(np.asarray(masked, dtype=float))
+    total = int(panel_finite.sum())
+    coverage_ratio = float(in_universe.sum() / total) if total else 0.0
+    return masked, mask, coverage_ratio
+
+
 def is_market_eligible(market: str, field_names: tuple[str, ...]) -> bool:
     """True when every required universe field for ``market`` is available."""
     required = universe_mask_contract(market).required_fields
@@ -162,6 +227,7 @@ __all__ = [
     "US_MASK_FIELDS",
     "UniverseMaskContract",
     "apply_universe_mask",
+    "apply_universe_mask_to_panel",
     "is_market_eligible",
     "universe_mask_contract",
 ]

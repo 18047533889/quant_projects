@@ -998,14 +998,11 @@ _surface.EXTENDED_ONLY_CANONICALS = frozenset(set(_surface.EXTENDED_ONLY_CANONIC
 
 from cleaned_operators import operator_surface as _surface  # noqa: E402
 
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    set(_surface.EXTENDED_ONLY_CANONICALS)
-    | {
+_surface.extend_extended_only({
         "relation_distinct_count", "relation_overlap_ratio", "index_weight",
         "event_return_since_last", "event_arithmetic_return_sum",
         "event_log_return_sum", "event_active_count",
-    }
-)
+    })
 
 # ``event_compounded_return`` 是 ``event_return_since_last`` 的语义别名（复利口径）。
 from cleaned_operators.registry import OperatorRegistry as _registry  # noqa: E402

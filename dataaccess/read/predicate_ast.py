@@ -249,9 +249,24 @@ def _build_column_filter(column: str, value: Any) -> Filter:
                 cls = NotIn if op_s in {"notin", "not_in"} else In
                 clauses.append(cls(column, tuple(values)))
             elif op_s in {"isnull", "is_null", "null"}:
-                clauses.append(IsNull(column))
+                # #P0-6 boolean-aware：isnull:true → IS NULL，isnull:false → IS NOT NULL。
+                # 之前识别 operator 却忽略布尔值，isnull:false 仍生成 IS NULL（错语义）。
+                # None（YAML null）按「请求空值检查」处理 = True（向后兼容既有写法）。
+                if arg is None:
+                    arg = True
+                if not isinstance(arg, bool):
+                    raise ValueError(
+                        f"column '{column}': {op_s} 的值必须是布尔 true/false，收到 {arg!r}"
+                    )
+                clauses.append(IsNull(column) if arg else IsNotNull(column))
             elif op_s in {"isnotnull", "is_not_null", "notnull", "not_null"}:
-                clauses.append(IsNotNull(column))
+                if arg is None:
+                    arg = True
+                if not isinstance(arg, bool):
+                    raise ValueError(
+                        f"column '{column}': {op_s} 的值必须是布尔 true/false，收到 {arg!r}"
+                    )
+                clauses.append(IsNotNull(column) if arg else IsNull(column))
             elif op_s in _COMPARISON_OPS:
                 clauses.append(_COMPARISON_OPS[op_s](column, arg))
             else:

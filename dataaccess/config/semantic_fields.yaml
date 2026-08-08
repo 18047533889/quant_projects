@@ -200,6 +200,8 @@ roe:
   knowledge_time: PubDate
   effective_time: ReportPeriodEndDate
   period_time: ReportPeriodEndDate
+  # #P0-4 与同数据集 eps/net_profit 等财务指标一致：PubDate 可见、下一交易日可用。
+  availability: next_trading_day
   join_policy: pit_asof_backward
   mining_allowed: true
 

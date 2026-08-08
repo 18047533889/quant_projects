@@ -35,6 +35,32 @@ def _market_ctx(market: str) -> MarketContext:
     return market_context(market)
 
 
+# P0-029: production coverage floor.  A provider whose ``coverage_gate`` is below
+# this floor is not certified for FULL-UNIVERSE production use: size-neutralized
+# cross-sections over a partially-covered universe systematically select names
+# with data.  Research keeps a warning; production fails closed to UNSUPPORTED.
+COVERAGE_FLOOR = 0.8
+
+# P0-035: market-mechanism operator families with NO explicit/derived contract
+# must fail closed to UNSUPPORTED_MARKET_MECHANISM instead of the generic
+# INPUT_DEPENDENT (which claims both markets and defers to field providers).
+# Pure math/TS/CS operators never start with these prefixes and stay
+# INPUT_DEPENDENT.
+_MECHANISM_PREFIXES = (
+    "holder_", "event_", "minute_", "intra_", "micro_", "session_",
+    "fiscal_", "relation_",
+)
+
+
+class ProviderCoverageError(RuntimeError):
+    """Production full-universe use of a below-floor-coverage provider.
+
+    Raised (or surfaced as a ``COVERAGE_GATE`` failed node) when a concept whose
+    provider covers less than ``COVERAGE_FLOOR`` of the target universe would be
+    used in production full-universe mode.  Restricted-universe use is allowed
+    only when the universe mask is applied and recorded in lineage (P1-24)."""
+
+
 class ProductionCertificationUnavailable(RuntimeError):
     """Production certification evidence could not be loaded — fail closed.
 
@@ -152,12 +178,38 @@ def operator_support(
     # (minute session, group semantics, event clock, price basis...), so the
     # verdict is explicitly INPUT_DEPENDENT and the real gate is the expression
     # walk over the input field providers (P1-9).
-    if contract is None or not contract.required_capabilities:
+    #
+    # P0-035: a market-mechanism family (holder/event/minute/fiscal/relation)
+    # with NO explicit/derived contract must fail closed to
+    # UNSUPPORTED_MARKET_MECHANISM instead of INPUT_DEPENDENT — claiming "both
+    # markets, input-dependent" for a mechanism op would silently grant US (or
+    # any future market) capabilities it does not have.  Pure math/TS/CS ops
+    # (add/ts_mean/rank/...) do not match the mechanism prefixes and stay
+    # INPUT_DEPENDENT.
+    if contract is None:
+        if name.startswith(_MECHANISM_PREFIXES):
+            return MarketSupport(
+                canonical=raw_name, market=market,
+                status=MarketStatus.UNSUPPORTED_MARKET_MECHANISM,
+                reason_codes=("NO_MARKET_CONTRACT",),
+                notes=(
+                    "market-mechanism operator has no explicit market/capability "
+                    "contract; fail-closed to UNSUPPORTED (unclassified) instead "
+                    "of INPUT_DEPENDENT"
+                ),
+            )
         return MarketSupport(
             canonical=raw_name, market=market,
             status=MarketStatus.INPUT_DEPENDENT,
             depends_on_inputs=True,
             notes="generic operator; actual support determined by input field providers",
+        )
+    if not contract.required_capabilities:
+        return MarketSupport(
+            canonical=raw_name, market=market,
+            status=MarketStatus.INPUT_DEPENDENT,
+            depends_on_inputs=True,
+            notes="typed contract without capability requirements; input-dependent",
         )
 
     return MarketSupport(
@@ -316,18 +368,37 @@ def _check_column(name: Any, market: str, production: bool, failed: list[dict[st
                 }
             )
             return
-        # P1-002 coverage gate: EXACT_DERIVED quality must not certify a provider
-        # that only covers part of the target universe (e.g. US market cap at
-        # ~42% via TickerSharesSnapshot).  Below the 80% floor the production use
-        # is surfaced as a WARNING: size-neutralization over a partially-covered
-        # universe systematically selects names with shares data, so any
-        # restricted-universe use must carry the coverage mask in its lineage.
-        if production and b.coverage_gate is not None and b.coverage_gate < 0.8:
+        # P0-029 / P1-002 coverage gate: a provider that only covers part of the
+        # target universe (e.g. US market cap at ~42% via TickerSharesSnapshot)
+        # must NOT certify FULL-UNIVERSE production use.  Below the floor the
+        # production path is UNSUPPORTED (a failed node -> the expression fails
+        # compile-time), NOT a warning: size-neutralization over a partially-
+        # covered universe systematically selects names with shares data.
+        # Research keeps a warning.  Restricted-universe use is allowed only when
+        # the coverage mask is applied and recorded in lineage (P0-034/P1-24).
+        if b.coverage_gate is not None and b.coverage_gate < COVERAGE_FLOOR:
+            detail = (
+                f"concept {concept!r} provider {b.provider_id!r} covers "
+                f"~{b.coverage_gate:.0%} of the target universe"
+            )
+            if production:
+                failed.append(
+                    {
+                        "node": name,
+                        "kind": "field",
+                        "reason": "COVERAGE_GATE",
+                        "missing_capabilities": [],
+                        "detail": (
+                            f"{detail}; production FULL-UNIVERSE use is not certified. "
+                            "Restricted-universe use must apply the universe mask and "
+                            "record coverage in lineage (P0-034/P1-24)."
+                        ),
+                    }
+                )
+                return
             warnings.append(
-                f"COVERAGE_GATE: concept {concept!r} provider {b.provider_id!r} covers "
-                f"~{b.coverage_gate:.0%} of the target universe; production full-universe "
-                "use is not certified — restricted-universe use must carry the coverage "
-                "mask in lineage"
+                f"COVERAGE_GATE: {detail} (research: restricted-universe use must "
+                "carry the coverage mask in lineage)"
             )
         return
 

@@ -652,9 +652,7 @@ class AshareLimitDownVolumeRatio(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ashare_limit_up_streak", "ashare_limit_down_streak",
             "ashare_days_since_limit_up", "ashare_days_since_limit_down",
             "ashare_limit_touch_count", "ashare_failed_limit_count",
@@ -662,8 +660,7 @@ def _register_surface() -> None:
             "ashare_limit_asymmetry", "ashare_suspension_episode_length",
             "ashare_limit_open_up_streak", "ashare_limit_open_down_streak",
             "ashare_limit_up_volume_ratio", "ashare_limit_down_volume_ratio",
-        }
-    )
+        })
     for _canon in (
         "ashare_limit_up_streak", "ashare_limit_down_streak",
         "ashare_days_since_limit_up", "ashare_days_since_limit_down",

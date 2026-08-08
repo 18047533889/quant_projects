@@ -29,23 +29,34 @@ def metadata(
     domain: str = "price_volume",
     input_units: dict[str, str] | None = None,
     output_unit: str | None = None,
+    diagnostic_only: bool = False,
 ) -> OperatorMetadata:
     # P1-89: the typed-v2 surface carries explicit input_units / output_unit
     # field semantics.  Regression kernels that previously wrote a generic
     # ``unit`` tag now also declare the concrete unit relationships (e.g. beta
     # -> unit(y)/unit(x), residual -> unit(y)); ``unit`` remains in the tags for
     # backward compatibility with legacy consumers.
+    #
+    # Round-6 §20: ``diagnostic_only`` marks in-sample self-fit operators
+    # (``fit_lag=0`` residuals / R² / AR fitted values) whose current-row output
+    # is influenced by the current sample itself.  That is not future leakage,
+    # but default factor mining should prefer the out-of-sample
+    # ``*_prior`` / ``*_forecast_error`` / ``*_prior_innovation`` variants; the
+    # tag lets the mining surface hide the self-fit diagnostics.
+    tags = [
+        "time_series_regression", "daily", "pit_safe", "causal", "typed_v2",
+        f"signature:{','.join(params)}->series", f"domain:{domain}",
+        f"unit:{unit}", f"cost:{cost}",
+    ]
+    if diagnostic_only:
+        tags.append("diagnostic_only")
     return OperatorMetadata(
         name=name,
         category="time_series_regression",
         description=description,
         param_names=params,
         return_type="series",
-        tags=[
-            "time_series_regression", "daily", "pit_safe", "causal", "typed_v2",
-            f"signature:{','.join(params)}->series", f"domain:{domain}",
-            f"unit:{unit}", f"cost:{cost}",
-        ],
+        tags=tags,
         input_units=dict(input_units) if input_units else {},
         output_unit=output_unit,
     )
@@ -73,13 +84,19 @@ def trailing_contiguous_finite(vals: np.ndarray) -> np.ndarray:
 
 
 def aligned(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
-    base = frames[0]
-    result = [base]
-    for frame in frames[1:]:
-        if not frame.index.equals(base.index) or not frame.columns.equals(base.columns):
-            frame = frame.reindex(index=base.index, columns=base.columns)
-        result.append(frame)
-    return tuple(result)
+    """Strict multi-panel alignment (round-6 P0-25): fail closed, never reindex.
+
+    Two panels with different instrument columns or a shifted index must never
+    be paired positionally — silently reindexing hides a missing symbol or a
+    one-day date shift as NaN.  The central ``validate_operator_call`` gate
+    already rejects misaligned panels before this helper runs; strictness here
+    is defense-in-depth for direct kernel calls.
+    """
+    if not frames:
+        return ()
+    from cleaned_operators.alignment import align_panel_inputs
+
+    return align_panel_inputs(*frames, strict_axes=True)
 
 
 def ols_fit(design: np.ndarray, y: np.ndarray) -> np.ndarray | None:
@@ -114,13 +131,17 @@ def huber_fit(
     beta = ols_fit(design, y)
     if beta is None:
         return None
+    converged = False
     for _ in range(iterations):
         resid = y - design @ beta
         scale = 1.4826 * np.median(np.abs(resid - np.median(resid)))
         if scale <= 0.0:
             scale = float(np.std(resid))
         if scale <= 0.0:
-            break
+            # Residual scale is exactly zero: a degenerate/exact residual vector
+            # gives no robust scale to normalise by.  Fail closed (None) so the
+            # caller emits NaN instead of re-using the last coefficient.
+            return None
         z = resid / scale
         abs_z = np.abs(z)
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -130,8 +151,15 @@ def huber_fit(
         if beta_new is None:
             return None
         if np.max(np.abs(beta_new - beta)) < tolerance:
-            return beta_new
+            converged = True
+            beta = beta_new
+            break
         beta = beta_new
+    if not converged:
+        # Iterations exhausted without meeting the convergence tolerance: the
+        # last ``beta`` is a half-converged fit and must not be accepted.  The
+        # caller emits NaN (fail-closed) rather than a spurious coefficient.
+        return None
     return beta
 
 
@@ -175,7 +203,12 @@ def quantile_fit(design: np.ndarray, y: np.ndarray, q: float, iterations: int = 
         resid = y - design @ beta
         weight = np.where(resid > 0, q, 1.0 - q)
         weight = np.clip(weight, 1e-6, None)
-        beta = ols_fit(design * weight[:, None], y * weight)
+        # WLS with asymmetric weights minimises ``sum w_i e_i^2``; the correct
+        # design is ``sqrt(w_i) * X_i, sqrt(w_i) * y_i``.  Multiplying by
+        # ``weight`` itself would minimise ``sum w_i^2 e_i^2``, over-weighting
+        # the asymmetric side (review P0: expectile family).
+        sqrt_w = np.sqrt(weight)
+        beta = ols_fit(design * sqrt_w[:, None], y * sqrt_w)
         if beta is None:
             return None
     return beta

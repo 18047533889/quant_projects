@@ -71,12 +71,17 @@ class ManagedBatchReader:
         return self._had_error
 
     def read_next_batch(self) -> pa.RecordBatch:
-        """#P1-8 EOF / 异常都自动 close，连接生命周期不依赖调用方手工收。"""
+        """#P1-8 EOF / 异常都自动 close，连接生命周期不依赖调用方手工收。
+
+        #P0-39 ``on_before_read``（deadline 检查）抛异常也必须走 had_error+close
+        +pool release——整个 before_read→actual_read→after_read 在同一
+        try/except/finally 内，不能漏在 try 外面。
+        """
         if self._closed:
             raise StopIteration
-        if self._on_before_read is not None:
-            self._on_before_read()
         try:
+            if self._on_before_read is not None:
+                self._on_before_read()
             batch = self._reader.read_next_batch()
         except StopIteration:
             self.close()
@@ -103,16 +108,21 @@ class ManagedBatchReader:
             return
         self._closed = True
         self._closed_at = time.perf_counter()
+        # #P0-40 close 自身失败说明连接不可信：had_error 置 True，on_close（pool
+        # 归还）据此把连接判 unhealthy 丢弃，不能把一个 close 都失败的连接当
+        # healthy 重新进池。
         try:
             if hasattr(self._reader, "close"):
                 self._reader.close()
         except Exception:
+            self._had_error = True
             logger.debug("managed_reader: reader.close 失败", exc_info=True)
         # #P0-6 pooled 连接（cursor=None）不在这里 close；由 on_close 归还 pool。
         if self._cursor is not None and hasattr(self._cursor, "close"):
             try:
                 self._cursor.close()
             except Exception:
+                self._had_error = True
                 logger.debug("managed_reader: cursor.close 失败", exc_info=True)
         self._reader = None
         self._cursor = None

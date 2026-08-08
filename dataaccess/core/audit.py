@@ -21,11 +21,14 @@ data_access.audit —— 审计日志（JSONL，append-only）
 
 from __future__ import annotations
 
+import enum
 import json
+import math
 import os
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -51,13 +54,58 @@ def _resolve_audit_path() -> Path:
     return path
 
 
+def _canonical_default(value: Any) -> Any:
+    """#P1-65 审计 canonical serializer：datetime/date/Path/Decimal/Enum/numpy
+    等非 JSON 对象统一转成可序列化表示——一个坏值不能让整条审计日志丢失。"""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, Decimal):
+        return float(value) if value.is_finite() else str(value)
+    if isinstance(value, enum.Enum):
+        return value.value
+    if isinstance(value, (bytes, bytearray)):
+        return value.hex()
+    try:
+        import numpy as np
+
+        if isinstance(value, np.generic):
+            return value.item()
+    except ImportError:
+        pass
+    try:
+        import pyarrow as pa
+
+        if isinstance(value, pa.Scalar):
+            return value.as_py()
+    except ImportError:
+        pass
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)  # NaN/Inf 不是合法 JSON 数
+    return str(value)
+
+
 def _should_audit_reads() -> bool:
     flag = os.environ.get("QUANT_AUDIT_READS", "").lower()
     if flag in {"0", "false", "no"}:
         return False
     if flag in {"1", "true", "yes"}:
         return True
-    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
+    # #P1-66 production 判定与 query_budget/telemetry 统一（不能只看
+    # QUANT_PRODUCTION_MODE，FACTOR_ENGINE_RUN_MODE=production 也要开 read audit）。
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        return is_strict_semantics()
+    except Exception:
+        return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
 
 
 def record(
@@ -116,7 +164,14 @@ def record(
 
     try:
         path = _resolve_audit_path()
-        line = json.dumps(record_obj, ensure_ascii=False, separators=(",", ":"))
+        # #P1-65 canonical serializer：datetime/Path/Decimal/numpy/Enum 等非 JSON
+        # 对象不再让 json.dumps 抛异常（否则整条 audit 静默丢失）。
+        line = json.dumps(
+            record_obj,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            default=_canonical_default,
+        )
         with _write_lock:
             with path.open("a", encoding="utf-8") as f:
                 f.write(line + "\n")

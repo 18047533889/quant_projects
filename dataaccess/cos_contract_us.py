@@ -27,7 +27,7 @@ for _name in ("balance", "income", "cashflow"):
     US_COS_CONTRACTS[key] = _c(key, "us", "E2", "asof", "ticker", availability_column="filing_date", period_column="period_end", required_event_filters=("timeframe",), allowed_filter_values=(("timeframe", _TIMEFRAME),), availability_must_follow_period=True, storage_layout="period_files")
 
 US_COS_CONTRACTS.update({
-    "us_stock_dividend": _c("us_stock_dividend", "us", "E2", "event", "ticker", pit="effective_time_only", event_column="ex_dividend_date", period_column="ex_dividend_date", event_id_columns=("id",), storage_layout="event_files", note="No announcement timestamp; explicit ex-date use only."),
+    "us_stock_dividend": _c("us_stock_dividend", "us", "E2", "event", "ticker", pit="strict", availability_column="declaration_date", event_column="ex_dividend_date", period_column="ex_dividend_date", event_id_columns=("id",), storage_layout="event_files", note="Knowledge-time = declaration_date (~0.51% null; rows missing it fail closed, never ex-date fallback); effective/event date = ex_dividend_date (secondary)."),
     # StockCapitalDaily 目录混放两种 schema（C13）：{date}.parquet=拆分事件，
     # shares_{date}.parquet=稀疏 PIT 股本。拆成两个数据集，各自 storage_layout
     # 归递归布局（全量 sync + complete marker），绝不按决策日枚举文件名。

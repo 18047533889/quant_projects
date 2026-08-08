@@ -394,7 +394,9 @@ def test_fanout_in_multiple_values_still_fanout():
 def test_effective_event_unbounded_query_rejected_in_production():
     from data_access.cos_contract import enforce_event_cutoff, get_cos_contract
 
-    contract = get_cos_contract("us_stock_dividend")
+    # us_stock_dividend 已升级为 strict-PIT（declaration_date），不再走
+    # effective-only 路径；这里用仍为 effective_time_only 的 split 验证。
+    contract = get_cos_contract("us_stock_capital_split")
     assert contract is not None and contract.pit_policy == "effective_time_only"
     with pytest.raises(Exception):
         enforce_event_cutoff(contract, time_range=None, production=True)

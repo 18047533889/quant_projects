@@ -500,6 +500,54 @@ PIT_UNSAFE_CANONICALS: frozenset[str] = frozenset(
 # 破坏 panel shape 的算子（即使 PIT-safe 也不进 production）
 NON_SHAPE_PRESERVING_CANONICALS: frozenset[str] = frozenset({"dropna"})
 
+# WS4 P0-07: minute -> daily grain-changing canonicals (``intra_*`` /
+# ``intraday_*`` minute→daily aggregation operators in the intraday package).
+# These consume a minute-frequency panel and emit one scalar per (TradeDate,
+# Symbol), so they are NOT shape/index-preserving — the daily-aggregation axis
+# is strictly shorter than the input axis.  ``shape_preserving`` /
+# ``index_preserving`` / ``columns_preserving`` must therefore be ``False`` for
+# them, even though they are PIT-safe.  Ops carrying the
+# ``grain_minute_to_daily`` metadata tag are treated the same way regardless of
+# whether their canonical is enumerated here.
+GRAIN_CHANGING_CANONICALS: frozenset[str] = frozenset(
+    {
+        "intra_bar_range_deviation", "intra_bar_range_persistence",
+        "intra_beta_asymmetry", "intra_close_participation",
+        "intra_continuous_variance", "intra_down_down_semibeta",
+        "intra_down_up_semibeta", "intra_drawdown_depth",
+        "intra_drawdown_duration", "intra_drawdown_recovery_half_life",
+        "intra_high_low_affinity", "intra_idiosyncratic_kurtosis",
+        "intra_idiosyncratic_kurtosis_ex_self", "intra_idiosyncratic_skewness",
+        "intra_idiosyncratic_skewness_ex_self", "intra_idiosyncratic_variance",
+        "intra_idiosyncratic_variance_ex_self", "intra_industry_lead_lag_ex_self",
+        "intra_interval_amount_share", "intra_interval_illiquidity",
+        "intra_interval_realized_variance", "intra_interval_return",
+        "intra_interval_volume_share", "intra_interval_vwap_deviation",
+        "intra_jump_clustering", "intra_jump_concentration", "intra_jump_count",
+        "intra_jump_first_time", "intra_jump_last_time", "intra_jump_variation",
+        "intra_longest_above_vwap_streak", "intra_longest_below_vwap_streak",
+        "intra_market_lead_lag_ex_self", "intra_market_model_r2",
+        "intra_market_model_r2_ex_self", "intra_max_drawdown", "intra_max_drawup",
+        "intra_negative_jump_variation", "intra_positive_jump_variation",
+        "intra_price_vwap_max_negative_excursion",
+        "intra_price_vwap_max_positive_excursion", "intra_realized_beta",
+        "intra_realized_beta_ex_self", "intra_realized_correlation",
+        "intra_realized_correlation_ex_self", "intra_realized_kurtosis",
+        "intra_realized_quarticity", "intra_realized_skewness",
+        "intra_same_slot_momentum", "intra_same_slot_reversal",
+        "intra_session_return_asymmetry", "intra_signed_jump_ratio",
+        "intra_signed_tail_variation_ratio", "intra_slot_amount_surprise",
+        "intra_slot_volatility_surprise", "intra_slot_volume_surprise",
+        "intra_tail_volume_share", "intra_time_above_vwap",
+        "intra_tripower_quarticity", "intra_up_down_semibeta",
+        "intra_up_up_semibeta", "intra_ute_high", "intra_ute_low",
+        "intra_volume_price_alignment", "intra_vwap_path_curvature",
+        "intra_vwap_path_curvature_pct", "intra_vwap_path_slope",
+        "intra_vwap_path_slope_pct", "intra_vwap_reversion_speed",
+        "intraday_rv_signature_slope",
+    }
+)
+
 # 显式声明的核心算子策略（Tier-1 + 特殊语义；其余由 infer_operator_policy 推断）
 _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "tanh": {"scope": "elementwise", "pit_safe": True},
@@ -1614,13 +1662,28 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
         pass
     if canon in _EXPLICIT_POLICIES:
         base = {"scope": "unknown", "pit_safe": False}
-        if canon in NON_SHAPE_PRESERVING_CANONICALS:
+        if canon in NON_SHAPE_PRESERVING_CANONICALS or canon in GRAIN_CHANGING_CANONICALS:
             base.update(
                 shape_preserving=False,
                 index_preserving=False,
                 columns_preserving=False,
             )
-        return OperatorPolicy(**{**base, **_EXPLICIT_POLICIES[canon]})
+        policy = OperatorPolicy(**{**base, **_EXPLICIT_POLICIES[canon]})
+        # An intentionally-experimental / isolated canonical (e.g. the
+        # in-sample diagnostic family: ts_ar_forecast, ts_ar_innovation, the
+        # *_resid variants) is reviewed *not to be admitted*: its explicit
+        # structural policy may say pit_safe=True, but the fail-closed
+        # classification wins so ``infer_operator_policy`` agrees with the
+        # experimental lifecycle and the manifest/catalog surfaces stay
+        # consistent (audit P0-A03 / convergence test).
+        try:
+            from cleaned_operators.semantic_certification import should_fail_closed
+
+            if should_fail_closed(canon):
+                policy.pit_safe = False
+        except Exception:  # pragma: no cover - module not importable
+            pass
+        return policy
 
     meta = getattr(op, "metadata", None)
     category = (getattr(meta, "category", "") or "").lower()
@@ -1698,7 +1761,14 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
         lookback = None
         min_periods = None
 
-    shape_preserving = canon not in NON_SHAPE_PRESERVING_CANONICALS
+    # WS4 P0-07: grain-changing (minute -> daily) operators are not shape /
+    # index preserving even though they are PIT-safe.  Enumerated canonicals in
+    # GRAIN_CHANGING_CANONICALS, or any op that declares the
+    # ``grain_minute_to_daily`` metadata tag, are treated as non-shape-preserving.
+    _grain_changing = (
+        canon in GRAIN_CHANGING_CANONICALS or "grain_minute_to_daily" in tags
+    )
+    shape_preserving = canon not in NON_SHAPE_PRESERVING_CANONICALS and not _grain_changing
     index_preserving = shape_preserving
     columns_preserving = shape_preserving
 

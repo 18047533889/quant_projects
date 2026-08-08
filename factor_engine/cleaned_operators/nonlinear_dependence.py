@@ -376,14 +376,11 @@ class TsLowerTailDependence(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_distance_corr", "ts_distance_cov", "ts_mutual_information",
             "ts_lagged_mutual_information", "ts_upper_tail_dependence",
             "ts_lower_tail_dependence",
-        }
-    )
+        })
     for _canon in (
         "ts_distance_corr", "ts_distance_cov", "ts_mutual_information",
         "ts_lagged_mutual_information", "ts_upper_tail_dependence",

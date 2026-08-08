@@ -40,7 +40,20 @@ class ScalarBroadcastWhere(Operator):
         tags=["pit_safe", "causal", "scalar_broadcast"],
     )
 
+    # R5-02: direct ``calculate`` that routes through validate_operator_call.
+    _HANDLES_CALL_CONTRACT = True
+
     def calculate(self, condition, x, y, **kwargs) -> pd.DataFrame:
+        # R5-02: this operator overrides ``calculate`` directly (its
+        # scalar/panel symmetric broadcast does not fit the SeriesOperator
+        # kernel shape), but it must still pass the central logical-call
+        # validator so integer / panel-axis / unknown-kwarg checks apply.
+        from cleaned_operators.base import validate_operator_call
+
+        processed, processed_kwargs = validate_operator_call(
+            self, (condition, x, y), kwargs
+        )
+        condition, x, y = processed
         template = next(
             (v for v in (condition, x, y) if isinstance(v, pd.DataFrame)),
             None,

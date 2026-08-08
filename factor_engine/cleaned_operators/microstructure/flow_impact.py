@@ -523,15 +523,12 @@ def _register_surface() -> None:
     # is P2 / research-only (BV-C estimation error, minute bars are not ticks, the
     # VPIN literature is contested) and must never enter the default production
     # mining whitelist — it stays on the research surface.
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "intraday_bvc_imbalance",
             "intraday_impact_beta",
             "intraday_impact_asymmetry",
             "intraday_return_wasserstein_shift",
-        }
-    )
+        })
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS) | {"micro_bvc_vpin"}
     )

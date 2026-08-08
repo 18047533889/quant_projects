@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Iterable
 import numpy as np
 import pandas as pd
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 
 _EPS=1e-12
 
@@ -33,9 +33,9 @@ def _tr(high,low,close):
     arr=np.maximum.reduce([(high-low).to_numpy(float),(high-prev).abs().to_numpy(float),(low-prev).abs().to_numpy(float)])
     return pd.DataFrame(arr,index=high.index,columns=high.columns)
 
-def _register(name,params,fn,desc,*,tags=()):
+def _register(name,params,fn,desc,*,tags=(),param_specs=None):
     meta=OperatorMetadata(name=name,category="technical_signal",description=desc,param_names=list(params),return_type="series",
-        tags=["pit_safe","causal","production_extension",*tags])
+        tags=["pit_safe","causal","production_extension",*tags], param_specs=dict(param_specs or {}))
     def _calculate_series(self,*args,**kwargs): return fn(*args,**kwargs)
     cls=type(f"TechnicalV2_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})
     register_operator(name=name,category="technical_signal",business_category="technical",canonical=name,
@@ -58,7 +58,12 @@ def DMI_plus(high,low,close,window): return _dmi(high,low,close,window)[0]
 def DMI_minus(high,low,close,window): return _dmi(high,low,close,window)[1]
 def DX(high,low,close,window):
     p,m=_dmi(high,low,close,window); return 100.0*(p-m).abs()/(p+m).replace(0,np.nan)
-def NATR(high,low,close,window): return 100.0*_wilder(_tr(high,low,close),window)/close.abs().replace(0,np.nan)
+def NATR(high,low,close,window):
+    # R5-38: close is a PositivePrice input — a non-positive close is bad data,
+    # not something to be laundered by ``abs()`` (a negative price would have
+    # produced a negative/meaningless "normalized" ATR).  Keep the numerator,
+    # mask the normalization to strict-positive so bad bars become NaN.
+    return 100.0*_wilder(_tr(high,low,close),window)/close.where(close>0.0)
 
 def PPO(close,fast_window,slow_window):
     f=_pi(fast_window,"fast_window"); s=_pi(slow_window,"slow_window")
@@ -80,9 +85,16 @@ def VortexPlus(high,low,close,window):
 def VortexMinus(high,low,close,window):
     w=_pi(window,"window",2); vm=(low-high.shift(1)).abs().rolling(w,min_periods=w).sum(); tr=_tr(high,low,close).rolling(w,min_periods=w).sum(); return vm/tr.replace(0,np.nan)
 
+def _keltner_multiplier(v):
+    # R5-36: multiplier=0 degenerates KeltnerUpper/Lower into KeltnerMid and
+    # makes KeltnerPosition divide by zero — a false search node that renames
+    # the band to a different canonical.  The multiplier is a strict positive.
+    x=_pf(v,"multiplier",0.0)
+    if x<=0: raise ValueError("multiplier must be > 0 (Keltner multiplier=0 degenerates to the mid band)")
+    return x
 def KeltnerMid(close,ema_window): return _ema(close,ema_window)
-def KeltnerUpper(high,low,close,ema_window,atr_window,multiplier): return KeltnerMid(close,ema_window)+_pf(multiplier,"multiplier",0)*_wilder(_tr(high,low,close),atr_window)
-def KeltnerLower(high,low,close,ema_window,atr_window,multiplier): return KeltnerMid(close,ema_window)-_pf(multiplier,"multiplier",0)*_wilder(_tr(high,low,close),atr_window)
+def KeltnerUpper(high,low,close,ema_window,atr_window,multiplier): return KeltnerMid(close,ema_window)+_keltner_multiplier(multiplier)*_wilder(_tr(high,low,close),atr_window)
+def KeltnerLower(high,low,close,ema_window,atr_window,multiplier): return KeltnerMid(close,ema_window)-_keltner_multiplier(multiplier)*_wilder(_tr(high,low,close),atr_window)
 def KeltnerPosition(high,low,close,ema_window,atr_window,multiplier):
     u=KeltnerUpper(high,low,close,ema_window,atr_window,multiplier); l=KeltnerLower(high,low,close,ema_window,atr_window,multiplier)
     return (close-l)/(u-l).replace(0,np.nan)
@@ -98,7 +110,14 @@ def UltimateOscillator(high,low,close,short_window,medium_window,long_window,sho
     pc=close.shift(1); minl=pd.DataFrame(np.minimum(low.to_numpy(float),pc.to_numpy(float)),index=low.index,columns=low.columns); maxh=pd.DataFrame(np.maximum(high.to_numpy(float),pc.to_numpy(float)),index=high.index,columns=high.columns)
     bp=close-minl; tr=maxh-minl
     def avg(w): return bp.rolling(w,min_periods=w).sum()/tr.rolling(w,min_periods=w).sum().replace(0,np.nan)
-    ws,wm,wl=_pf(short_weight,"short_weight",0),_pf(medium_weight,"medium_weight",0),_pf(long_weight,"long_weight",0); den=ws+wm+wl
+    ws,wm,wl=_pf(short_weight,"short_weight",0),_pf(medium_weight,"medium_weight",0),_pf(long_weight,"long_weight",0)
+    if wl<=0: raise ValueError("long_weight must be > 0")
+    # R5-35: the formula divides by (ws+wm+wl), so (4,2,1) == (40,20,10) — the
+    # three weights are ONE ratio dimension (2 free parameters).  Canonicalize
+    # to ``w3 = 1`` so the effective search space collapses to the two ratios
+    # ws/wl and wm/wl instead of a false 3-D hypercube of duplicate nodes.
+    ws, wm, wl = ws/wl, wm/wl, 1.0
+    den=ws+wm+wl
     if den<=0: raise ValueError("oscillator weights must sum to > 0")
     return 100.0*(ws*avg(s)+wm*avg(m)+wl*avg(l))/den
 
@@ -197,10 +216,16 @@ def PSAR(high,low,acceleration,maximum,missing_policy="interrupt",max_gap=0):
     gap_max=max(int(max_gap),0)
     h,l=high.to_numpy(float),low.to_numpy(float); rows,cols=h.shape; out=np.full((rows,cols),np.nan)
     for c in range(cols):
-        if rows<2: continue
-        bull=True; sar=l[0,c]; ep=h[0,c]; af=af0; live=True; gap=0
-        for t in range(1,rows):
-            if not (np.isfinite(h[t,c]) and np.isfinite(l[t,c])):
+        # R5-37: seed from the FIRST jointly-valid (h,l) bar, never from row 0
+        # (a missing first row would poison ``sar``/``ep`` and every following
+        # state).  The t-1/t-2 references use a *valid-bar* history — after a
+        # gap / re-seed the history is reset, so SAR never reads raw rows from
+        # inside a suspension (half-carry / half-raw-index mixing).
+        bull=True; sar=None; ep=None; af=af0; live=False; gap=0; seeded_once=False
+        prev1_h=prev1_l=prev2_h=prev2_l=None
+        for t in range(rows):
+            hv, lv = h[t,c], l[t,c]
+            if not (np.isfinite(hv) and np.isfinite(lv)):
                 # Unified missing-state policy (audit 13.6): a missing bar must
                 # not silently bridge a suspension / data gap.  ``interrupt``
                 # (default) -> NaN and break the recursion (next finite bar
@@ -214,21 +239,31 @@ def PSAR(high,low,acceleration,maximum,missing_policy="interrupt",max_gap=0):
                 continue
             gap = 0
             if not live:
-                # Re-seed after a gap from the current bar's own range.
-                bull=True; sar=l[t,c]; ep=h[t,c]; af=af0; live=True
-                out[t,c]=sar
+                # Seed / re-seed from this jointly-valid bar and reset the
+                # valid-bar history (a gap breaks the sequence; the pre-gap
+                # bars must not resurface as t-1/t-2 references).  The FIRST
+                # seed does not emit (matches the legacy row-0=NaN contract);
+                # a mid-series re-seed emits like the legacy interrupt path.
+                bull=True; sar=lv; ep=hv; af=af0; live=True
+                prev1_h, prev1_l = hv, lv
+                prev2_h, prev2_l = None, None
+                if seeded_once:
+                    out[t,c]=sar
+                seeded_once = True
                 continue
             sar=sar+af*(ep-sar)
             if bull:
-                if t>=2: sar=min(sar,l[t-1,c],l[t-2,c])
-                else: sar=min(sar,l[t-1,c])
-                if l[t,c]<sar: bull=False; sar=ep; ep=l[t,c]; af=af0
-                elif h[t,c]>ep: ep=h[t,c]; af=min(af+af0,afmax)
+                if prev2_l is not None: sar=min(sar,prev1_l,prev2_l)
+                else: sar=min(sar,prev1_l)
+                if lv<sar: bull=False; sar=ep; ep=lv; af=af0
+                elif hv>ep: ep=hv; af=min(af+af0,afmax)
             else:
-                if t>=2: sar=max(sar,h[t-1,c],h[t-2,c])
-                else: sar=max(sar,h[t-1,c])
-                if h[t,c]>sar: bull=True; sar=ep; ep=h[t,c]; af=af0
-                elif l[t,c]<ep: ep=l[t,c]; af=min(af+af0,afmax)
+                if prev2_h is not None: sar=max(sar,prev1_h,prev2_h)
+                else: sar=max(sar,prev1_h)
+                if hv>sar: bull=True; sar=ep; ep=hv; af=af0
+                elif lv<ep: ep=lv; af=min(af+af0,afmax)
+            prev2_h, prev2_l = prev1_h, prev1_l
+            prev1_h, prev1_l = hv, lv
             out[t,c]=sar
     return pd.DataFrame(out,index=high.index,columns=high.columns)
 
@@ -278,6 +313,20 @@ _RECURSIVE_EWM = {
     "KeltnerMid", "KeltnerUpper", "KeltnerLower", "KeltnerPosition",
     "TSI", "TSI_signal", "DEMA", "TEMA",
 }
+# R5-35/36: search-space contracts — the UltimateOscillator weight triple is ONE
+# ratio dimension (kernel normalizes to ``w3=1``), so the individual weights must
+# not be independently mined; Keltner multiplier is a strict positive (0
+# degenerates to the mid band and is rejected by the kernel).
+_PARAM_SPECS = {
+    "UltimateOscillator": {
+        "short_weight": ParamSpec(dtype=float, searchable=False),
+        "medium_weight": ParamSpec(dtype=float, searchable=False),
+        "long_weight": ParamSpec(dtype=float, searchable=False),
+    },
+    "KeltnerUpper": {"multiplier": ParamSpec(dtype=float, min=1e-9)},
+    "KeltnerLower": {"multiplier": ParamSpec(dtype=float, min=1e-9)},
+    "KeltnerPosition": {"multiplier": ParamSpec(dtype=float, min=1e-9)},
+}
 for _name,_params,_fn,_desc in _SPECS:
     _tags=("stateful","full_replay") if _name in _RECURSIVE_EWM or _name in {"KAMA","Supertrend","SupertrendDirection","PSAR"} else ()
-    _register(_name,_params,_fn,_desc,tags=_tags)
+    _register(_name,_params,_fn,_desc,tags=_tags,param_specs=_PARAM_SPECS.get(_name))

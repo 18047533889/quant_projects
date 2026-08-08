@@ -18,15 +18,17 @@ from cleaned_operators.fundamental.transforms_v2 import _pos_int
 
 
 def _aligned(*frames):
-    """Reindex every auxiliary frame onto the primary panel's axes."""
-    primary = frames[0]
-    aligned = []
-    for frame in frames:
-        if frame is primary:
-            aligned.append(frame)
-        else:
-            aligned.append(frame.reindex(index=primary.index, columns=primary.columns))
-    return tuple(aligned)
+    """Strict multi-panel alignment (round-6 P0-25): fail closed, never reindex.
+
+    A period-id panel that is not on the exact same date/instrument grid as the
+    value panel is a caller bug — silently reindexing would pair values with
+    the wrong fiscal period.
+    """
+    if not frames:
+        return ()
+    from cleaned_operators.alignment import align_panel_inputs
+
+    return align_panel_inputs(*frames, strict_axes=True)
 
 
 def fin_ttm_quarterly(x, period_id, periods_per_year=4):

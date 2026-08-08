@@ -60,10 +60,14 @@ logger = logging.getLogger("data_access.schema_validation")
 # DuckDB 的 DESCRIBE 会返回形如 "TIMESTAMP WITH TIME ZONE" / "TIMESTAMP_NS" /
 # "DECIMAL(18,4)" 等带括号和修饰的类型，我们只按大写前缀匹配。
 _TYPE_ALIASES: dict[str, tuple[str, ...]] = {
-    # 时间戳：覆盖 TIMESTAMP / TIMESTAMP_NS / TIMESTAMP_MS / TIMESTAMPTZ /
-    # TIMESTAMP WITH TIME ZONE
+    # 时间戳（naive）：TIMESTAMP / TIMESTAMP_NS / TIMESTAMP_MS。
+    # #P1-58 保持宽松前缀匹配（向后兼容），TIMESTAMPTZ 用专门别名精确匹配。
     "timestamp": ("TIMESTAMP",),
     "datetime": ("TIMESTAMP",),
+    # #P1-58 timezone-aware 别名：只匹配 TIMESTAMP WITH TIME ZONE / TIMESTAMPTZ。
+    "timestamptz": ("TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ"),
+    "timestamp_tz": ("TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ"),
+    "timestamp_with_tz": ("TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ"),
     "date": ("DATE",),
     "time": ("TIME",),
     # 整数：INTEGER / BIGINT / SMALLINT / TINYINT / HUGEINT
@@ -104,6 +108,14 @@ def _is_compatible(declared: str, actual: str) -> bool:
         return False
     declared_lc = declared.strip().lower()
     actual_upper = actual.strip().upper()
+
+    # #P1-58 timezone-aware 别名精确匹配：TIMESTAMP 前缀会同时匹配
+    # "TIMESTAMP WITH TIME ZONE"，tz 别名不能走通用前缀逻辑。
+    if declared_lc in {"timestamptz", "timestamp_tz", "timestamp_with_tz"}:
+        return any(
+            actual_upper == t or actual_upper.startswith(t)
+            for t in ("TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ")
+        )
 
     # 别名命中
     if declared_lc in _TYPE_ALIASES:
@@ -195,6 +207,26 @@ def _resolve_mode() -> str:
             "production 禁止 QUANT_SCHEMA_CHECK=off：schema 校验是生产 floor。"
             "仅当显式 BREAK_GLASS_SCHEMA_CHECK=1（operator 审计）时才允许临时降级。"
         )
+    # #P1-60 break-glass 降级必须留审计：事后要知道「为什么这次错 schema 被放行」。
+    if raw != "strict" and strict and _break_glass():
+        try:
+            from data_access.core import audit as _audit
+            from data_access.core.namespace import resolve_namespace, resolve_operator
+
+            _audit.record(
+                op="schema_check_break_glass",
+                dataset="<config>",
+                ok=True,
+                mode="schema_check",
+                error=None,
+                extra={
+                    "downgraded_to": raw,
+                    "break_glass": True,
+                    "reason": "BREAK_GLASS_SCHEMA_CHECK 显式降级 schema 校验",
+                },
+            )
+        except Exception:
+            pass
     return raw
 
 
@@ -297,6 +329,14 @@ def check_schema(
         if not _is_compatible(declared_type, actual_map[col]):
             type_mismatch.append((col, declared_type, actual_map[col]))
 
+    # #P1-57 union schema 通过 ≠ 每个文件都有 required 列：``read_parquet([a,b],
+    # union_by_name=true)`` 的 DESCRIBE 只给 union schema，B 缺列会被 A 补齐。
+    # parquet 数据集逐文件 footer 校验每个声明列都存在（只读 footer，不读数据）。
+    per_file_missing = _missing_required_columns_per_file(ds, paths, declared, partition_cols)
+    for col in per_file_missing:
+        if col not in missing:
+            missing.append(col)
+
     ok = not missing and not type_mismatch
     return SchemaCheckResult(
         ok=ok,
@@ -305,6 +345,47 @@ def check_schema(
         type_mismatch=tuple(type_mismatch),
         actual_schema=tuple(actual_pairs),
     )
+
+
+def _missing_required_columns_per_file(
+    ds, paths: list[str], declared: dict[str, str], partition_cols: set[str]
+) -> list[str]:
+    """#P1-57 逐文件校验 declared 列存在（parquet 只读 footer）。
+
+    union schema 通过不代表每个文件都有 required 列——B 文件缺 C 会被 A 文件
+    union 补齐，但读 B 文件单文件时 C 就丢了。对 parquet 数据集做 per-file
+    footer 检查；非 parquet 跳过（无法廉价读 footer）。
+    """
+    if str(getattr(ds, "format", "parquet")) not in {"parquet", "pq"}:
+        return []
+    try:
+        import pyarrow.parquet as pq
+    except ImportError:
+        return []
+    required = [c for c in declared if c not in partition_cols]
+    if not required:
+        return []
+    missing: list[str] = []
+    for p in paths:
+        # glob 路径逐个展开到文件
+        import glob as _glob
+
+        if "*" in p or "?" in p:
+            matches = _glob.glob(p, recursive=True)
+        else:
+            matches = [p]
+        for fp in matches:
+            if not str(fp).endswith(".parquet"):
+                continue
+            try:
+                schema_names = set(pq.read_metadata(fp).schema.names)
+            except Exception:
+                continue  # 读 footer 失败不在这里判（构建 manifest 路径已 fail-closed）
+            absent = [c for c in required if c not in schema_names]
+            for c in absent:
+                if c not in missing:
+                    missing.append(c)
+    return missing
 
 
 def enforce_schema_or_raise(result: SchemaCheckResult, *, mode: str | None = None) -> None:
@@ -339,9 +420,14 @@ def schema_cache_key(
     *,
     params_fingerprint: str = "",
     manifest_hash: str = "",
+    declared_schema_hash: str = "",
 ) -> str:
-    """首访 schema 校验缓存键（含 params 与 manifest，避免 factor_id 间漂移漏检）。"""
-    return f"{dataset_name}:{params_fingerprint}:{manifest_hash}"
+    """首访 schema 校验缓存键。
+
+    #P1-59 必须绑定 declared schema identity：同进程两个 Store 用相同 dataset +
+    params + files、但不同 registry schema 时，不能复用前一个的校验成功。
+    """
+    return f"{dataset_name}:{params_fingerprint}:{manifest_hash}:{declared_schema_hash}"
 
 
 def mark_validated(cache_key: str) -> None:

@@ -364,12 +364,16 @@ def _bounded_nvi_pvi(close, volume, window, *, volume_up):
     values = {}
     for c in _cols(close, volume):
         frame = pl.DataFrame({"close": close[c], "volume": volume[c]})
-        # pandas: 条件为 NaN -> where 走 0.0；polars 中 NaN < x 视为 True，
-        # 需先把 volume 的 NaN 归一为 null，when(null) 才走 otherwise。
+        # R4-29/R4-96: a missing volume or missing volume-growth bar must NOT
+        # become a silent "no-volume day".  ``when(null)`` falls through to
+        # ``otherwise(0.0)``, which injected fabricated zero-return bars into the
+        # index (the pandas reference NaN-outs the invalid rows via a ``valid``
+        # mask).  Only a KNOWN volume comparison with a known return contributes.
         vol = pl.col("volume").fill_nan(None)
-        r = pl.when(
-            (vol > vol.shift(1)) if volume_up else (vol < vol.shift(1))
-        ).then(_pct_change(pl.col("close"))).otherwise(0.0)
+        ret = _pct_change(pl.col("close"))
+        cond = (vol > vol.shift(1)) if volume_up else (vol < vol.shift(1))
+        valid = cond.is_not_null() & ret.is_not_null()
+        r = pl.when(valid).then(pl.when(cond).then(ret).otherwise(0.0)).otherwise(None)
         log_sum = r.clip(lower_bound=-0.999999).log1p().rolling_sum(w, min_samples=w)
         values[c] = _one(frame, c, log_sum.exp() - 1.0)
     return _result(close, values)
@@ -389,10 +393,13 @@ def zero_return_ratio(ret, window, epsilon=1e-12):
     values = {}
     for c in _cols(ret):
         val = pl.col(c).abs()
+        # R4-29/R4-96: a missing return is NaN (cannot judge), never a
+        # "non-zero" bar — ``NaN <= eps`` is False and would inflate the ratio
+        # with a 0 (the pandas reference NaN-outs invalid rows first).
+        valid = pl.col(c).is_not_null() & pl.col(c).is_not_nan()
         flag = (
-            pl.when(val.is_nan() | val.is_null()).then(0.0)
-            .when(val <= eps).then(1.0)
-            .otherwise(0.0)
+            pl.when(valid).then(pl.when(val <= eps).then(1.0).otherwise(0.0))
+            .otherwise(None)
         )
         values[c] = _one(ret, c, flag.rolling_mean(w, min_samples=w))
     return _result(ret, values)

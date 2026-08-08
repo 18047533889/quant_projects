@@ -396,6 +396,4 @@ register_operator(
 
 import cleaned_operators.operator_surface as _surface
 
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    set(_surface.EXTENDED_ONLY_CANONICALS) | {"candlestick_pattern"}
-)
+_surface.extend_extended_only({"candlestick_pattern"})

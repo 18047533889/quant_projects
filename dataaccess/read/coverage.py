@@ -133,6 +133,8 @@ def compute_coverage(
     # 具体文件：manifest min/max 优先，否则 glob 展开
     obs_start, obs_end = _observed_from_manifest(store, ds)
     files: list[str] = []
+    glob_failed = False
+    glob_truncated = False
     for g in paths:
         if str(g).startswith(("s3://", "cos://")):
             continue
@@ -141,8 +143,18 @@ def compute_coverage(
                 "SELECT file FROM glob(?) LIMIT ?", [str(g), max_glob], deadline_ms=None
             )
         except Exception:
+            # #P1-46 任一 glob root 失败 → 观测不完整，绝不能判 complete。
+            glob_failed = True
+            report.problems.append(f"glob 失败: {g}")
             continue
-        files.extend(str(r["file"]) for r in tbl.to_pylist())
+        rows = [str(r["file"]) for r in tbl.to_pylist()]
+        files.extend(rows)
+        # #P1-45 enumeration 触顶（安全阈值截断）→ 观测不完整。
+        if len(rows) >= max_glob:
+            glob_truncated = True
+            report.problems.append(
+                f"glob {g} 达到枚举上限 {max_glob}，可能被截断"
+            )
     files = sorted(set(files))
     report.observed_files = len(files)
 
@@ -174,7 +186,14 @@ def compute_coverage(
         o_hi = _dt.date.fromisoformat(report.observed_end) if report.observed_end else None
         if d_lo and d_hi and o_lo and o_hi:
             if d_lo >= o_lo and d_hi <= o_hi:
-                report.status = "complete"
+                # #P1-45/#P1-46 枚举触顶或某 root glob 失败 → 观测不完整，不能判 complete。
+                if glob_failed or glob_truncated:
+                    report.status = "partial"
+                    report.problems.append(
+                        "观测枚举不完整（glob 失败或触顶），无法证明声明区间全覆盖"
+                    )
+                else:
+                    report.status = "complete"
                 # #24 max_staleness 判定：末个 partition 落后超过阈值 → stale
                 _maybe_mark_stale(report)
                 return report
@@ -190,7 +209,13 @@ def compute_coverage(
                     )
                 _maybe_mark_stale(report)
                 return report
-    report.status = "complete" if files else "unavailable"
+    if glob_failed or glob_truncated:
+        report.status = "partial"
+        report.problems.append(
+            "观测枚举不完整（glob 失败或触顶），不能判 complete"
+        )
+    else:
+        report.status = "complete" if files else "unavailable"
     _maybe_mark_stale(report)
     return report
 

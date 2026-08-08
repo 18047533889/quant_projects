@@ -25,7 +25,9 @@ def _ema_checkpoint():
         "ts_ema",
         instrument="AAPL",
         as_of=datetime(2026, 7, 16, 20, 0, tzinfo=timezone.utc),
-        state={"last_ema": 203.5, "last_timestamp": "2026-07-16T20:00:00+00:00"},
+        # R5-09: ts_ema checkpoint carries the pandas-EWM state tuple.
+        state={"ema": {"weighted_avg": 203.5, "old_wt": 1.0, "valid_count": 1},
+               "last_timestamp": "2026-07-16T20:00:00+00:00"},
         input_identity=identity,
     )
     return checkpoint, identity

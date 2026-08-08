@@ -111,11 +111,9 @@ __all__ = ["fin_component_score"]
 
 
 import cleaned_operators.operator_surface as _surface  # noqa: E402
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(set(_surface.EXTENDED_ONLY_CANONICALS) | {"fin_component_score"})
+_surface.extend_extended_only({"fin_component_score"})
 
 
 from cleaned_operators import operator_surface as _surface  # noqa: E402
 
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    set(_surface.EXTENDED_ONLY_CANONICALS) | {"fin_component_score"}
-)
+_surface.extend_extended_only({"fin_component_score"})

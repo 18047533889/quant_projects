@@ -11,6 +11,7 @@ from logging_utils import get_logger
 from workspace_paths import quant_projects_root
 
 from .datasource import DataSource
+from .field_plan import NormalizedFieldPlan, plan_from_catalog_field, plan_from_field_spec
 
 logger = get_logger("storage.data_access_source")
 
@@ -33,6 +34,22 @@ class UnknownFieldSemanticError(DataAccessColumnPreflightError):
 
 class FieldNormalizationError(DataAccessColumnPreflightError):
     """A registered field could not be normalized to its canonical unit/scale."""
+
+
+class CatalogUnavailable(DataAccessColumnPreflightError):
+    """SemanticFieldCatalog could not be reached (API-level failure)."""
+
+
+class CatalogNotConfigured(DataAccessColumnPreflightError):
+    """SemanticFieldCatalog is not configured/available for this dataset."""
+
+
+class CatalogResolutionError(DataAccessColumnPreflightError):
+    """SemanticFieldCatalog resolution failed with an unexpected error."""
+
+
+class CatalogCorrupt(DataAccessColumnPreflightError):
+    """SemanticFieldCatalog data is corrupt or unreadable."""
 
 
 def _ensure_data_access_importable() -> None:
@@ -81,6 +98,46 @@ def _default_data_cache_budget() -> int:
         return 4 * 1024 * 1024 * 1024
 
 
+def _is_clean_catalog_miss(exc: Exception) -> bool:
+    """True when the catalog reported a genuine "field not in catalog" miss.
+
+    ``store.resolve_fields`` raises ``ValidationError`` when a logical name is
+    not in the catalog and not in any dataset schema.  That is a clean miss (the
+    requested field is simply unknown) and should fall through to the FE
+    FIELD_REGISTRY.  Everything else from the catalog API is an availability /
+    corruption / resolution error (P0-12).
+    """
+    from data_access.core.exceptions import ValidationError
+
+    if not isinstance(exc, ValidationError):
+        return False
+    msg = str(exc)
+    return "SemanticFieldCatalog" in msg and ("未在" in msg or "不在" in msg)
+
+
+def _catalog_config_error_kind(exc: Exception) -> type[DataAccessColumnPreflightError]:
+    """Classify a failure to *load* the SemanticFieldCatalog (config layer)."""
+    from data_access.core.exceptions import DataAccessError, ValidationError
+
+    if isinstance(exc, ValidationError):
+        msg = str(exc)
+        if "不存在" in msg or "PyYAML" in msg or "依赖" in msg:
+            return CatalogNotConfigured
+        return CatalogCorrupt
+    if isinstance(exc, DataAccessError):
+        return CatalogUnavailable
+    return CatalogCorrupt
+
+
+def _catalog_resolution_error_kind(exc: Exception) -> type[DataAccessColumnPreflightError]:
+    """Classify a failure of ``store.resolve_fields`` itself (resolution layer)."""
+    from data_access.core.exceptions import DataAccessError
+
+    if isinstance(exc, DataAccessError):
+        return CatalogUnavailable
+    return CatalogResolutionError
+
+
 class DataAccessSource(DataSource):
     """FactorEngine DataAccess source with snapshot-bound caches and preflight."""
 
@@ -111,7 +168,16 @@ class DataAccessSource(DataSource):
 
                 strict_unknown_fields = bool(is_production_mode())
             except Exception:
-                strict_unknown_fields = False
+                # P0-12: do NOT silently default to research (lenient) when the
+                # production-policy module is unavailable.  Fail closed to strict
+                # so unknown fields never pass through as raw physical columns in
+                # an unclassified run mode.  Genuine research mode still resolves
+                # via is_production_mode() == False above.
+                logger.warning(
+                    "is_production_mode() unavailable; defaulting "
+                    "strict_unknown_fields=True (fail-closed)"
+                )
+                strict_unknown_fields = True
         self.strict_unknown_fields = bool(strict_unknown_fields)
         self.start_date = start_date
         self.end_date = end_date
@@ -128,6 +194,10 @@ class DataAccessSource(DataSource):
             else bool(self.params.pop("read_auto", False))
         )
         self._lazy_scan = bool(self.params.pop("lazy_scan", False))
+        #: Unified field-resolution plans keyed by logical name (P0-11).  Produced
+        #: by ``_resolve_columns`` / ``_ensure_field_plans`` and consumed by scale
+        #: normalization so the catalog/registry unit contract is a single object.
+        self._field_plans: dict[str, NormalizedFieldPlan] = {}
         self._column_cache: OrderedDict[str, Any] = OrderedDict()
         self._panel_cache: OrderedDict[str, Any] = OrderedDict()
         self._lazy_bundle: Any | None = None
@@ -246,45 +316,152 @@ class DataAccessSource(DataSource):
                 f"{mistaken_ops}. Expand the formula/template before data access."
             )
 
+    def _resolve_catalog_fields(self, names: list[str]) -> list[Any] | None:
+        """Resolve logical fields via ``store.resolve_fields`` (SemanticFieldCatalog).
+
+        Returns the aligned list of ``SemanticField`` objects on success, or
+        ``None`` when the catalog is unavailable / reports a clean miss and the
+        caller should fall back to the FE FIELD_REGISTRY.
+
+        P0-12 error hardening: catalog *failures* are classified —
+          * not configured / corrupt / unavailable are FATAL in production
+            (``strict_unknown_fields=True``) and warn + fall back in research;
+          * a genuine "field not found in catalog" (clean miss) always falls
+            through to FIELD_REGISTRY so the registry stays the compatibility
+            source of truth.
+        """
+        try:
+            from data_access.read.semantic_catalog import get_semantic_catalog
+
+            get_semantic_catalog()
+        except Exception as exc:
+            self._raise_or_fallback(
+                _catalog_config_error_kind(exc), exc, "semantic catalog not available"
+            )
+            return None
+        try:
+            result = _get_store().resolve_fields(list(names), dataset=self.dataset)
+        except Exception as exc:
+            if _is_clean_catalog_miss(exc):
+                logger.debug(
+                    "semantic catalog clean miss dataset=%s fields=%s: %s",
+                    self.dataset, names, exc,
+                )
+                return None
+            self._raise_or_fallback(
+                _catalog_resolution_error_kind(exc), exc, "semantic catalog resolution failed"
+            )
+            return None
+        if result is None:
+            return None
+        try:
+            return list(result)
+        except TypeError:
+            self._raise_or_fallback(
+                CatalogResolutionError,
+                TypeError(
+                    f"catalog resolve_fields returned a non-iterable for dataset={self.dataset!r}"
+                ),
+                "semantic catalog resolution returned a non-iterable",
+            )
+            return None
+
+    def _raise_or_fallback(
+        self,
+        exc_cls: type[DataAccessColumnPreflightError],
+        exc: Exception,
+        context: str,
+    ) -> None:
+        """Production raises a ``Catalog*`` error; research warns and falls back."""
+        catalog_exc = exc_cls(f"{context} dataset={self.dataset!r}: {exc}")
+        if self.strict_unknown_fields:
+            raise catalog_exc from exc
+        logger.warning("%s (research fallback) dataset=%s: %s", context, self.dataset, exc)
+
+    def _field_spec(self, name: str) -> Any:
+        """Look up a registered FE ``FieldSpec`` for this dataset (registry)."""
+        try:
+            from fields import FIELD_REGISTRY
+
+            return FIELD_REGISTRY.get(name, table=self.dataset)
+        except Exception:
+            return None
+
+    def _build_field_plans(self, names: list[str]) -> dict[str, NormalizedFieldPlan]:
+        """Build unified field plans (P0-11): catalog first, then FE registry.
+
+        The returned plans are keyed by logical name and are the *single* object
+        consumed by ``_resolve_columns`` (physical read) and by scale
+        normalization, so the unit/scale contract comes from one source.
+        """
+        plans: dict[str, NormalizedFieldPlan] = {}
+        catalog_fields = self._resolve_catalog_fields(names)
+        catalog_by_name: dict[str, Any] = {}
+        if catalog_fields is not None:
+            for raw_name, f in zip(names, catalog_fields):
+                if f is not None and getattr(f, "physical_name", None):
+                    catalog_by_name[raw_name] = f
+        for name in names:
+            f = catalog_by_name.get(name)
+            if f is not None:
+                plans[name] = plan_from_catalog_field(name, f)
+                continue
+            spec = self._field_spec(name)
+            if spec is not None:
+                plans[name] = plan_from_field_spec(name, spec)
+                continue
+            plans[name] = NormalizedFieldPlan(logical_concept=name, physical_fields=(name,))
+        return plans
+
+    def _ensure_field_plans(self, names: Iterable[str]) -> dict[str, NormalizedFieldPlan]:
+        """Return cached plans for ``names``, building only the missing ones."""
+        names = list(names)
+        missing = [n for n in names if n not in self._field_plans]
+        if missing:
+            self._field_plans.update(self._build_field_plans(missing))
+        return self._field_plans
+
+    @staticmethod
+    def _detect_source_frequency(ds) -> str | None:
+        """Detect daily vs minute source grain from the dataset schema (P0-10).
+
+        ``date`` time column → daily; ``timestamp``/``datetime`` → intraday
+        (minute).  Returns ``None`` when undetectable — the caller then defaults
+        to the daily ``(instrument, time)`` ordering contract.
+        """
+        schema = getattr(ds, "schema", None) or {}
+        tcol = getattr(ds, "time_column", None)
+        if tcol and tcol in schema:
+            dtype = str(schema[tcol]).lower()
+            if dtype == "date":
+                return "daily"
+            if "timestamp" in dtype or "datetime" in dtype:
+                return "minute"
+        return None
+
     def _resolve_columns(self, names: Iterable[str]) -> tuple[list[str], dict[str, str]]:
         names = list(names)
         self._preflight_logical_columns(names)
-        # #9 SemanticFieldCatalog 是字段解析的单一事实源：先走 store.resolve_fields()
-        # （含 aliases / 物理列反查 / 单位 scale），catalog 没有才回退 FE FIELD_REGISTRY
-        # 与 raw physical pass-through。
-        try:
-            catalog_fields = _get_store().resolve_fields(list(names), dataset=self.dataset)
-        except Exception:
-            catalog_fields = None
-        catalog_physical = {}
-        if catalog_fields is not None:
-            for raw_name, f in zip(names, catalog_fields):
-                catalog_physical[raw_name] = f.physical_name
+        # #9 SemanticFieldCatalog 是字段解析的单一事实源；``_ensure_field_plans``
+        # 产出统一 NormalizedFieldPlan（catalog → FE FIELD_REGISTRY → raw），
+        # 物理列读取与 scale 归一化共享同一个 plan 对象（P0-11）。
+        plans = self._ensure_field_plans(names)
 
         physical: list[str] = []
         output_names: dict[str, str] = {}
         for name in names:
             src = self.fields.get(name)
-            spec = None
-            if src is None:
-                # catalog 优先
-                if name in catalog_physical:
-                    src = catalog_physical[name]
-                else:
-                    try:
-                        from fields import FIELD_REGISTRY
-
-                        spec = FIELD_REGISTRY.get(name, table=self.dataset)
-                    except Exception:
-                        spec = None
-                    if spec is not None:
-                        if spec.dataset == self.dataset:
-                            src = spec.source_name
-                        elif self.strict_unknown_fields:
-                            raise UnknownFieldSemanticError(
-                                f"dataset={self.dataset!r} has no field {name!r}: it belongs "
-                                f"to dataset {spec.dataset!r}"
-                            )
+            plan = plans.get(name)
+            # Only a real catalog/registry plan maps to a physical column; a
+            # ``raw`` plan (no registered contract) must stay unresolved so the
+            # production fail-closed check below still fires for unknown fields.
+            if (
+                src is None
+                and plan is not None
+                and plan.source != "raw"
+                and plan.primary_physical
+            ):
+                src = plan.primary_physical
             if src is None and self.strict_unknown_fields and name not in self.fields:
                 # Production fail-closed: a request that matches neither an explicit
                 # alias mapping nor a registered field of this dataset has no unit /
@@ -531,54 +708,44 @@ class DataAccessSource(DataSource):
     def _normalize_contract_columns(self, fetched: dict[str, Any], names: list[str]) -> None:
         """Normalize every registered logical field before it enters the cache.
 
-        #9/#12：SemanticFieldCatalog 覆盖的字段已由 ``store.read(normalize_units=True)``
-        在 DataAccess 输出层归一化（scale 是单一事实源），这里**跳过**它们避免二次
-        乘 scale；只有 catalog 未覆盖的字段才按 FE FIELD_REGISTRY 归一化（长尾兼容）。
+        #9/#12（P0-11）：scale 归一化读取 ``_ensure_field_plans`` 产出的**同一个**
+        NormalizedFieldPlan 对象。catalog 覆盖的字段（``source == "catalog"``）已由
+        ``store.read(normalize_units=True)`` 在 DataAccess 输出层归一化，eager 路径
+        跳过避免二次乘 scale；lazy scan 路径补 catalog scale（否则 A 股 Return/10000
+        lazy 路径是 raw 单位、eager 是 decimal，parity bug）。FE FIELD_REGISTRY 覆盖的
+        字段（``source == "registry"``）按 plan.scale 归一化（长尾兼容）。
 
         Production is fail-closed: a unit/scale failure raises instead of
         silently caching the raw vendor value (which would contaminate every
         downstream operator with a 10000× or 100× error).
         """
-        # catalog-covered field -> SemanticField (for its scale), so the LAZY scan
-        # path can apply the same normalization DataAccess applies on the EAGER path.
-        catalog_covered: dict[str, Any] = {}
-        try:
-            resolved = _get_store().resolve_fields(list(names), dataset=self.dataset)
-            for f in resolved:
-                if getattr(f, "is_scale_applicable", False):
-                    catalog_covered[f.logical_name] = f
-                    for alias in getattr(f, "aliases", ()) or ():
-                        catalog_covered[alias] = f
-        except Exception:
-            # 解析失败 → 不跳过任何字段（回退全 FE registry 归一化，旧行为）
-            catalog_covered = {}
+        plans = self._ensure_field_plans(names)
 
         normalized: set[str] = set()
         try:
-            from fields import FIELD_REGISTRY
-
             for name in names:
-                f = catalog_covered.get(name)
-                if f is not None:
+                plan = plans.get(name)
+                if plan is not None and plan.source == "catalog":
                     # Eager path: ``store.read(normalize_units=True)`` already applied
                     # the catalog scale, so nothing to do.  Lazy scan path
                     # (``store.scan`` / ``scan_polars``) does NOT apply the output-layer
-                    # unit normalization, so apply the catalog scale here — otherwise a
-                    # catalog-covered field (e.g. A-share Return/10000) stays in raw
-                    # units on the lazy path while the eager path is decimal (parity bug).
-                    if self._lazy_scan:
-                        scale = getattr(f, "scale", None)
-                        if scale is not None and float(scale) != 1.0:
-                            fetched[name] = fetched[name] * float(scale)
-                            normalized.add(name)
+                    # unit normalization, so apply the catalog scale here.
+                    if self._lazy_scan and plan.is_scale_applicable:
+                        fetched[name] = fetched[name] * float(plan.scale)
+                        normalized.add(name)
                     continue
-                spec = FIELD_REGISTRY.get(name)
-                if spec is None or spec.dataset != self.dataset or name not in fetched:
+                if plan is not None and plan.source == "registry":
+                    if name not in fetched or (
+                        plan.physical_dataset
+                        and plan.physical_dataset != self.dataset
+                    ):
+                        continue
+                    scale = float(plan.scale) if plan.scale is not None else 1.0
+                    if scale != 1.0:
+                        fetched[name] = fetched[name] * scale
+                    normalized.add(name)
                     continue
-                scale = float(spec.scale_to_canonical or 1.0)
-                if scale != 1.0:
-                    fetched[name] = fetched[name] * scale
-                normalized.add(name)
+                # source == "raw"（无登记契约，research pass-through）→ 不归一化
         except Exception as exc:
             if self.strict_unknown_fields:
                 raise FieldNormalizationError(
@@ -694,11 +861,23 @@ class DataAccessSource(DataSource):
         return _get_store().dataset_axis_columns(self.dataset)
 
     def scan_polars_long(self, columns: list[str]):
+        """Scan a long Polars LazyFrame for ``columns``.
+
+        Ordering guarantee (P0-10): the returned LazyFrame is sorted ascending by
+        ``(instrument, time)`` for daily data — ``(instrument, time, session)`` for
+        minute sources when a session column is available.  ``build_scan_polars_long``
+        applies the sort at the scan boundary; this method re-asserts it after the
+        scale-normalization step so the contract holds for every path.
+
+        Unit normalization (P0-11): scale reads from the SAME ``NormalizedFieldPlan``
+        produced by ``_resolve_columns`` (catalog → FE FIELD_REGISTRY → raw).
+        """
         self.refresh_snapshot()
         physical, output_names = self._resolve_columns(columns)
         store = _get_store()
         ds = store.get_dataset(self.dataset)
-        from backend.polars_lazy import build_scan_polars_long
+        frequency = self._detect_source_frequency(ds)
+        from backend.polars_lazy import build_scan_polars_long, enforce_source_ordering
 
         lf = build_scan_polars_long(
             store,
@@ -711,24 +890,32 @@ class DataAccessSource(DataSource):
             time_range=self._time_range(),
             instrument_filter=self.instrument_filter,
             params=dict(self.params),
+            frequency=frequency,
         )
+        # scale normalization reads from the same plan object (P0-11)
+        plans = self._ensure_field_plans(columns)
         try:
             import polars as pl
-            from fields import FIELD_REGISTRY
 
             expressions = []
             for name in columns:
-                spec = FIELD_REGISTRY.get(name, table=self.dataset)
-                if spec is None or spec.dataset != self.dataset:
+                plan = plans.get(name)
+                if plan is None or not plan.is_scale_applicable:
                     continue
-                scale = float(spec.scale_to_canonical or 1.0)
+                scale = float(plan.scale)
                 if scale != 1.0:
                     expressions.append((pl.col(name).cast(pl.Float64) * scale).alias(name))
             if expressions:
                 lf = lf.with_columns(expressions)
         except ImportError:
             pass
-        return lf
+        # Scan-boundary ordering contract (P0-10): re-assert after the scale step.
+        return enforce_source_ordering(
+            lf,
+            instrument_col="inst",
+            time_col="ts",
+            frequency=frequency,
+        )
 
     def scan_index_long(self):
         self.refresh_snapshot()

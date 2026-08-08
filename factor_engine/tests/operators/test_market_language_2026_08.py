@@ -254,12 +254,13 @@ def test_modwt_band_corr_identical_is_one():
 
 
 def test_conditional_transfer_entropy_constant_fail_closed():
-    # window=60 keeps the bins=3 parameter combination feasible (window-lag 59 >=
-    # the floor of 54); a constant input must still fail closed to NaN (with < 2
-    # distinct states the quantile bins would invent information).
+    # bins=2 is the feasible configuration for window=60 (kernel requires
+    # 3*2^4 = 48 transitions; window-lag 59 >= 48).  A constant input must still
+    # fail closed to NaN (with < 2 distinct states the quantile bins would
+    # invent information).
     x = _col([1.0] * 60)
     out = OperatorRegistry.get("ts_conditional_transfer_entropy", "pandas_numpy").calculate(
-        x, x, x, window=60, bins=3, lag=1
+        x, x, x, window=60, bins=2, lag=1
     )
     assert np.isnan(out.iloc[-1, 0])
 

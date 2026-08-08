@@ -87,7 +87,19 @@ class _DeadlineConnectionPool:
                         "请降低并发或提高查询 deadline。"
                     )
                 self._cond.wait(min(remaining, 0.1))
-        apply_pragmas(conn, config)
+        try:
+            apply_pragmas(conn, config)
+        except Exception:
+            # #P0-38 pragma 配置失败：conn 已从池里取出（_active += 1），必须
+            # 丢回/销毁并递减，否则反复失败会把池容量永久占满。
+            with self._cond:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                self._active -= 1
+                self._cond.notify()
+            raise
         return conn
 
     def release(self, conn: "duckdb.DuckDBPyConnection", *, healthy: bool = True) -> None:
@@ -698,12 +710,37 @@ class DuckDBEngine:
         params: Sequence[Any] | None = None,
         *,
         batch_size: int = 100_000,
+        deadline_ms: float | None = None,
     ) -> Iterator[pa.RecordBatch]:
-        """独立连接流式 scoped sql；返回 batch iterator，迭代完自动关闭连接。"""
+        """独立连接流式 scoped sql；返回 batch iterator，迭代完自动关闭连接。
+
+        #P0-41 ``deadline_ms`` 下推：watchdog 在绝对 deadline 触发 ``interrupt()``，
+        ManagedBatchReader 的 on_before_read 在下次 read 时抛 ``DeadlineExceeded``
+        ——流式查询第一批数据不返回时外层 budget 也能强制取消（不再只能等
+        第一批出来才查 elapsed）。
+        """
+        from data_access.core.exceptions import DeadlineExceeded
         from data_access.read.managed_reader import ManagedBatchReader
 
         def _iter() -> Iterator[pa.RecordBatch]:
             conn = duckdb.connect(":memory:")
+            timed_out = threading.Event()
+            finished = threading.Event()
+            watchdog: threading.Thread | None = None
+
+            def _watch() -> None:
+                if deadline_ms is not None:
+                    wait = max(0.001, deadline_ms / 1000.0)
+                    if not finished.wait(wait):
+                        timed_out.set()
+                        try:
+                            conn.interrupt()
+                        except Exception:
+                            pass
+
+            if deadline_ms is not None:
+                watchdog = threading.Thread(target=_watch, daemon=True)
+                watchdog.start()
             try:
                 apply_pragmas(conn, self._config)
                 self._configure_scoped_s3_if_needed(conn, register_specs, params)
@@ -717,19 +754,36 @@ class DuckDBEngine:
                     reader = rel.to_arrow_reader(batch_size)
                 else:
                     reader = rel.fetch_record_batch(batch_size)
+
+                def _on_before_read() -> None:
+                    if timed_out.is_set():
+                        raise DeadlineExceeded(
+                            f"sql_stream 查询超过 deadline={deadline_ms:.0f}ms 被取消。"
+                            "请缩小 time_range / 指定 view_columns，或提高 max_elapsed_ms。"
+                        )
+
                 # ManagedBatchReader 显式托管 reader + conn 生命周期（非 pooled，
                 # on_close=conn.close 直接关）
-                mbr = ManagedBatchReader(reader, on_close=lambda _r: conn.close())
+                mbr = ManagedBatchReader(
+                    reader,
+                    on_close=lambda _r: conn.close(),
+                    on_before_read=_on_before_read if deadline_ms is not None else None,
+                )
                 try:
                     for batch in mbr:
                         yield batch
                 finally:
                     mbr.close()
             except duckdb.Error as exc:
+                if deadline_ms is not None and timed_out.is_set():
+                    raise DeadlineExceeded(
+                        f"sql_stream 查询超过 deadline={deadline_ms:.0f}ms 被取消。"
+                    ) from exc
                 raise EngineError(
                     f"DuckDB scoped sql stream 失败: {exc}\nSQL: {sql[:500]}"
                 ) from exc
             finally:
+                finished.set()
                 conn.close()
 
         return _iter()

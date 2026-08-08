@@ -27,9 +27,53 @@ import pandas as pd
 from data_access.core.exceptions import ValidationError
 
 
+def ensure_sequence_arg(value: Any, *, name: str) -> Any:
+    """#P0-5 拒绝 str/bytes 冒充 Sequence（``instrument_filter="AAPL"`` 会被逐字符
+    展开成 A/A/P/L）。所有 sequence 型 API 边界统一用它：
+    instrument_filter / columns / partition_by / upsert_on / order_by / factor_ids。
+    """
+    if isinstance(value, (str, bytes)):
+        raise ValidationError(
+            f"{name} 必须是序列（list/tuple/set），收到 str/bytes {value!r}。"
+            "字符串会被误当成字符序列逐项过滤，是典型的 silent semantic inversion。"
+        )
+    return value
+
+
+def _normalize_time_range(value: Any) -> Any:
+    """#P0-4 ``(None, None)`` → None（两个端点都空 = 无时间约束，不能生成空 WHERE）。"""
+    if isinstance(value, tuple) and len(value) == 2:
+        if value[0] is None and value[1] is None:
+            return None
+    if isinstance(value, list) and len(value) == 2:
+        if value[0] is None and value[1] is None:
+            return None
+    return value
+
+
+def _normalize_sequence(value: Any, *, name: str) -> Any:
+    """序列型参数：None 保持 None；str/bytes 拒绝；list/tuple/set/frozenset 原样。"""
+    if value is None:
+        return None
+    ensure_sequence_arg(value, name=name)
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return value
+    raise ValidationError(
+        f"{name} 必须是序列（list/tuple/set），收到 {type(value).__name__}"
+    )
+
+
 @dataclass
 class Predicate:
-    """结构化谓词。None 表示该维度不过滤。"""
+    """结构化谓词。None 表示该维度不过滤。
+
+    #P0-2/#P0-3 空集合语义（silent semantic inversion 修复）：
+        - ``instrument_filter=None``   → 不限制标的
+        - ``instrument_filter=[]``     → **空股票池 → WHERE FALSE**（不是全市场！）
+        - ``instrument_filter=["A"]``  → IN (...)
+        空 hive filter ``{"year": []}`` 同理 → WHERE FALSE。
+    """
+
     time_range: tuple[Any, Any] | None = None           # (start, end)，闭区间
     instrument_filter: Sequence[str] | None = None      # 标的白名单
     hive_filters: dict[str, Sequence[Any]] | None = None  # hive 分区列 IN 过滤
@@ -39,10 +83,30 @@ class Predicate:
     time_lower_exclusive: bool = False                  # start 用严格 >（PIT seed 分支）
     time_upper_exclusive: bool = False                  # end 用严格 <（PIT seed 分支）
 
+    def __post_init__(self) -> None:
+        # #P0-4 归一化 (None, None) → None
+        object.__setattr__(self, "time_range", _normalize_time_range(self.time_range))
+        # #P0-5 拒绝 str/bytes；非 None 必须是序列
+        object.__setattr__(
+            self,
+            "instrument_filter",
+            _normalize_sequence(self.instrument_filter, name="instrument_filter"),
+        )
+        if self.hive_filters is not None:
+            if not isinstance(self.hive_filters, dict):
+                raise ValidationError(
+                    f"hive_filters 必须是 dict（分区列→值列表），收到 {type(self.hive_filters).__name__}"
+                )
+            normalized = {}
+            for col, values in self.hive_filters.items():
+                normalized[col] = _normalize_sequence(values, name=f"hive_filters.{col}")
+            object.__setattr__(self, "hive_filters", normalized)
+
     def is_empty(self) -> bool:
+        """无任何过滤维度。注意空集合（``[]``）不是空——它是 WHERE FALSE。"""
         return (
             self.time_range is None
-            and not self.instrument_filter
+            and self.instrument_filter is None
             and not self.hive_filters
             and self.filters is None
             and not self.extra
@@ -104,20 +168,29 @@ def compile_predicate(
             clauses.append(f"{t_col} {hi_op} ?")
             params.append(end_value)
 
-    if predicate.instrument_filter:
-        if not instrument_column:
-            raise ValidationError(
-                "该数据集未声明 instrument_column，无法应用 instrument_filter 过滤"
-            )
-        i_col = _quote_ident(instrument_column)
-        # list 作为单个参数绑定到 IN ?
-        clauses.append(f"{i_col} IN ?")
-        params.append(list(predicate.instrument_filter))
+    # #P0-2 空股票池（[]）→ WHERE FALSE，绝不能等价于全市场。
+    if predicate.instrument_filter is not None:
+        if len(predicate.instrument_filter) == 0:
+            clauses.append("1 = 0")  # 空股票池 → 空结果（无需 instrument 列）
+        else:
+            if not instrument_column:
+                raise ValidationError(
+                    "该数据集未声明 instrument_column，无法应用 instrument_filter 过滤"
+                )
+            i_col = _quote_ident(instrument_column)
+            # list 作为单个参数绑定到 IN ?
+            clauses.append(f"{i_col} IN ?")
+            params.append(list(predicate.instrument_filter))
 
     if predicate.hive_filters:
         for col_name in sorted(predicate.hive_filters.keys()):
-            values = list(predicate.hive_filters[col_name] or [])
-            if not values:
+            values = predicate.hive_filters[col_name]
+            if values is None:
+                continue  # 该分区列无约束
+            values = list(values)
+            # #P0-3 空 hive filter → WHERE FALSE（不是跳过 = 全年份扫描）。
+            if len(values) == 0:
+                clauses.append("1 = 0")
                 continue
             clauses.append(f"{_quote_ident(col_name)} IN ?")
             params.append(values)

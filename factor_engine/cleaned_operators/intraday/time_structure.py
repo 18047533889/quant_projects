@@ -24,6 +24,7 @@ from cleaned_operators.intraday._core import (
     minute_of_day,
     np_errstate,
     register_surface,
+    require_same_session_grid,
     safe_div,
 )
 
@@ -193,6 +194,10 @@ class IntraIntervalVwapDeviation(SeriesOperator):
         frame = session_local(close, session_tz)
         amt = session_local(amount, session_tz)
         vol = session_local(volume, session_tz)
+        # P0-08: the concat+dropna below would silently compress a mismatched
+        # session grid; require the same grid first, then keep the dropna (it
+        # only removes rows where the PRIMARY column is NaN).
+        require_same_session_grid(frame, amt, vol)
         out = {}
         for inst in frame.columns:
             joined = pd.concat([frame[inst], amt[inst], vol[inst]], axis=1, keys=["c", "a", "v"]).dropna(subset=["c"])
@@ -248,6 +253,9 @@ class IntraIntervalIlliquidity(SeriesOperator):
         from cleaned_operators.intraday._core import session_local
         frame = session_local(close, session_tz)
         amt = session_local(amount, session_tz)
+        # P0-08: fail closed on a session-grid mismatch instead of splicing the
+        # axis; the dropna below only removes rows where the PRIMARY column is NaN.
+        require_same_session_grid(frame, amt)
         out = {}
         for inst in frame.columns:
             joined = pd.concat([frame[inst], amt[inst]], axis=1, keys=["c", "a"]).dropna(subset=["c"])

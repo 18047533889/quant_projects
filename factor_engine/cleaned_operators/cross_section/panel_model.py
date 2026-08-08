@@ -333,17 +333,25 @@ def _gather(args: tuple[Any, ...], count: int, y: Any) -> tuple[np.ndarray, np.n
     return feats, yv, y
 
 
-def _forecast_loop(feats, yv, window, fn_train_predict, fit_lag: int = 1) -> np.ndarray:
+def _forecast_loop(feats, yv, window, fn_train_predict, fit_lag: int = 1, label_horizon: int = 1) -> np.ndarray:
     """Walk-forward supervised forecast loop.
 
     ``fit_lag>=1`` (default) trains each model on rows strictly before the
     current row and predicts the *current* row's features, so the current
     label/features never enter the model that produces the current prediction
     (no same-row leakage even when the caller hands in an un-lagged label).
+
+    ``label_horizon`` (default 1) is the P0-32/P0-33 maturity rule: a label
+    anchored at row ``s`` is only *mature* at ``s + label_horizon``, so the
+    last ``label_horizon`` rows of the training window are excluded from the
+    fit.  ``fit_lag=1`` alone is not enough — with a forward-H label, even
+    ``y_{t-1}`` needs prices through ``t-1+H`` to be knowable.  The operator
+    enforces maturity itself instead of trusting the caller to lag/embargo.
     """
     n_rows, n_cols = yv.shape
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
     lag = max(0, int(fit_lag))
+    h = max(1, int(label_horizon))
     for col in range(n_cols):
         Xstock = np.column_stack([f[:, col] for f in feats])
         ystock = yv[:, col]
@@ -352,8 +360,11 @@ def _forecast_loop(feats, yv, window, fn_train_predict, fit_lag: int = 1) -> np.
             if fit_end < 0:
                 continue
             start = max(0, fit_end - int(window) + 1)
-            X = Xstock[start : fit_end + 1]
-            y = ystock[start : fit_end + 1]
+            train_end = fit_end - h
+            if train_end < start:
+                continue
+            X = Xstock[start : train_end + 1]
+            y = ystock[start : train_end + 1]
             out[row, col] = fn_train_predict(X, y, Xstock[row])
     return out
 
@@ -390,6 +401,14 @@ def _pls1_predict(X: np.ndarray, y: np.ndarray, n_components: int, x_new: np.nda
 
     Audit M05: ``n_components`` must extract that many latent components
     (deflate X and y per component), not silently ignore the extra ones.
+    Round-6 P0-37: the NEW sample must be deflated in lockstep with the
+    training X/y deflation.  Reusing the original ``x_new`` for every
+    component's score ``dot(x_new, w)`` is algebraically wrong for 2+ latent
+    components — it is correct only for PLS1's first component.  Each component
+    scores the *residual* new sample ``x_new -= t_new * p`` after the previous
+    component's loading ``p`` has been removed, which is exactly the NIPALS
+    prediction rule and matches sklearn's ``PLSRegression.predict`` to numerical
+    precision.
     """
     n = min(n_components, X.shape[1], X.shape[0] - 1)
     if n < 1:
@@ -397,6 +416,7 @@ def _pls1_predict(X: np.ndarray, y: np.ndarray, n_components: int, x_new: np.nda
     Xc = X.copy()
     yc = y - y.mean()
     pred = y.mean()
+    x_resid = np.asarray(x_new, dtype=float).copy()
     for _ in range(n):
         w = Xc.T @ yc
         nw = np.linalg.norm(w)
@@ -409,7 +429,12 @@ def _pls1_predict(X: np.ndarray, y: np.ndarray, n_components: int, x_new: np.nda
             break
         p = (Xc.T @ t) / tt
         q = float(np.dot(t, yc)) / tt
-        pred += float(np.dot(x_new, w)) * q
+        t_new = float(np.dot(x_resid, w))
+        pred += t_new * q
+        # P0-37: deflate the new sample with the same loading ``p`` used to
+        # deflate the training X, so component 2+ scores the residual and the
+        # multi-component regression coefficient is consistent.
+        x_resid = x_resid - t_new * p
         Xc = Xc - np.outer(t, p)
         yc = yc - q * t
     return float(pred)
@@ -450,60 +475,65 @@ def _enet_predict(X: np.ndarray, y: np.ndarray, alpha: float, l1_ratio: float, x
 def _mk_forecast(name: str, method: str, description: str, params: list[str]):
     _mk(
         name, description, params, unit="forecast", pit_safe=False,
-        fn=lambda y, x1=None, x2=None, x3=None, x4=None, window=120, n_components=5, alpha=0.01, l1_ratio=0.5: _forecast_generic(
-            y, (x1, x2, x3, x4), int(window), method, int(n_components), float(alpha), float(l1_ratio),
+        fn=lambda y, x1=None, x2=None, x3=None, x4=None, window=120, n_components=5, alpha=0.01, l1_ratio=0.5, label_horizon=1: _forecast_generic(
+            y, (x1, x2, x3, x4), int(window), method, int(n_components), float(alpha), float(l1_ratio), int(label_horizon),
         ),
     )
 
 
-def _forecast_generic(y, feats, window, method, n_components, alpha, l1_ratio):
+def _forecast_generic(y, feats, window, method, n_components, alpha, l1_ratio, label_horizon=1):
     yv = y.to_numpy(dtype=float)
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
     return _frame_like(y, _forecast_loop(collected, yv, window,
-                                         lambda X, yy, xc: _model_predict(X, yy, xc, method, n_components, alpha, l1_ratio)))
+                                         lambda X, yy, xc: _model_predict(X, yy, xc, method, n_components, alpha, l1_ratio),
+                                         label_horizon=int(label_horizon)))
 
 
-_mk_forecast("panel_rolling_pcr_forecast", "pcr", "滚动 PCR 预测（训练标签须已结束）。", ["y", "x1", "x2", "x3", "x4", "window", "n_components"])
-_mk_forecast("panel_rolling_pls_forecast", "pls", "滚动 PLS 预测。", ["y", "x1", "x2", "x3", "x4", "window", "n_components"])
-_mk_forecast("panel_rolling_elastic_net_forecast", "enet", "滚动 ElasticNet 预测。", ["y", "x1", "x2", "x3", "x4", "window", "alpha", "l1_ratio"])
+_mk_forecast("panel_rolling_pcr_forecast", "pcr", "滚动 PCR 预测（label_horizon 内训练标签自动排除，未成熟标签不参与拟合）。", ["y", "x1", "x2", "x3", "x4", "window", "n_components", "label_horizon"])
+_mk_forecast("panel_rolling_pls_forecast", "pls", "滚动 PLS 预测（label_horizon 内未成熟标签自动排除）。", ["y", "x1", "x2", "x3", "x4", "window", "n_components", "label_horizon"])
+_mk_forecast("panel_rolling_elastic_net_forecast", "enet", "滚动 ElasticNet 预测（label_horizon 内未成熟标签自动排除）。", ["y", "x1", "x2", "x3", "x4", "window", "alpha", "l1_ratio", "label_horizon"])
 
 
-def _regime_forecast(y, feats, market_state, window, n_regimes):
+def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1):
     yv = y.to_numpy(dtype=float)
     mv = market_state.to_numpy(dtype=float)
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
-
-    def _fn(X, yy):
-        # regime of current row is the last value of market_state column
-        return np.nan
 
     # per-stock, per-row regime assignment from market_state quantiles.  Both
     # the regime quantile edges and the training rows use the window *ending at
     # the previous row* (``start:row``), so the current market state is never
     # used to place itself into a regime and the current label never trains the
-    # model that predicts it.
+    # model that predicts it.  Round-6 P0-40: ``label_horizon`` additionally
+    # excludes the last ``label_horizon`` rows from training — a forward-H label
+    # is not mature at ``fit_end`` (P0-33), so un-matured labels must not fit.
     n_rows, n_cols = yv.shape
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
     nr = max(2, int(n_regimes))
+    h = max(1, int(label_horizon))
     for col in range(n_cols):
         ms = mv[:, col]
         for row in range(n_rows):
             if row < 1 or not np.isfinite(ms[row]):
                 continue
             start = max(0, row - int(window))
+            hi = row - h
+            if hi <= start:
+                continue
             win_ms = ms[start:row]
             win_valid = np.isfinite(win_ms)
             if win_valid.sum() < nr * 5:
                 continue
             edges = np.quantile(win_ms[win_valid], np.linspace(0, 1, nr + 1)[1:-1])
             reg = int(np.digitize(ms[row], edges))
-            Xc = np.column_stack([f[start:row, col] for f in collected])
-            yc = yv[start:row, col]
+            win_ms_tr = win_ms[: hi - start]
+            win_valid_tr = win_valid[: hi - start]
+            Xc = np.column_stack([f[start:hi, col] for f in collected])
+            yc = yv[start:hi, col]
             mask = (
                 np.all(np.isfinite(Xc), axis=1)
                 & np.isfinite(yc)
-                & win_valid
-                & (np.digitize(win_ms, edges) == reg)
+                & win_valid_tr
+                & (np.digitize(win_ms_tr, edges) == reg)
             )
             if mask.sum() < 8:
                 continue
@@ -520,47 +550,55 @@ def _regime_forecast(y, feats, market_state, window, n_regimes):
 
 _mk(
     "panel_regime_conditioned_forecast",
-    "按市场状态分 regime 训练的条件线性预测（训练窗口截至前一日）。",
-    ["y", "x1", "x2", "x3", "x4", "market_state", "window", "n_regimes"],
-    lambda y, x1=None, x2=None, x3=None, x4=None, market_state=None, window=120, n_regimes=3: _regime_forecast(
-        y, (x1, x2, x3, x4), market_state, int(window), int(n_regimes)),
+    "按市场状态分 regime 训练的条件线性预测（训练窗口截至前一日，label_horizon 内未成熟标签自动排除）。",
+    ["y", "x1", "x2", "x3", "x4", "market_state", "window", "n_regimes", "label_horizon"],
+    lambda y, x1=None, x2=None, x3=None, x4=None, market_state=None, window=120, n_regimes=3, label_horizon=1: _regime_forecast(
+        y, (x1, x2, x3, x4), market_state, int(window), int(n_regimes), int(label_horizon)),
     unit="forecast",
     pit_safe=False,
 )
 
 
-def _moe_forecast(y, feats, market_state, window, n_experts):
+def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
     yv = y.to_numpy(dtype=float)
     mv = market_state.to_numpy(dtype=float)
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
     n_rows, n_cols = yv.shape
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
     ne = max(2, int(n_experts))
+    h = max(1, int(label_horizon))
     for col in range(n_cols):
         ms = mv[:, col]
         for row in range(n_rows):
             if row < 1 or not np.isfinite(ms[row]):
                 continue
             start = max(0, row - int(window))
+            hi = row - h
+            if hi <= start:
+                continue
             win_ms = ms[start:row]
             win_valid = np.isfinite(win_ms)
             if win_valid.sum() < ne * 6:
                 continue
             # Expert centers and gating scale are computed causally from the
             # window ending at the previous row (the current market state never
-            # places itself into an expert bin).
+            # places itself into an expert bin).  Round-6 P0-40: training rows
+            # stop at ``hi = row - label_horizon`` so un-matured forward-H
+            # labels never fit the experts.
             centers = np.quantile(win_ms[win_valid], np.linspace(0, 1, ne + 1)[1:-1])
-            Xc = np.column_stack([f[start:row, col] for f in collected])
-            yc = yv[start:row, col]
+            win_ms_tr = win_ms[: hi - start]
+            win_valid_tr = win_valid[: hi - start]
+            Xc = np.column_stack([f[start:hi, col] for f in collected])
+            yc = yv[start:hi, col]
             if Xc.shape[1] == 0 or len(yc) < 15:
                 continue
             x_cur = np.array([f[row, col] for f in collected], dtype=float)
             preds = []
             for e in range(ne):
                 if e < len(centers):
-                    mask = (np.digitize(win_ms, centers) == e) & np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc)
+                    mask = (np.digitize(win_ms_tr, centers) == e) & np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc)
                 else:
-                    mask = (np.digitize(win_ms, centers) == ne - 1) & np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc)
+                    mask = (np.digitize(win_ms_tr, centers) == ne - 1) & np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc)
                 if mask.sum() < 5:
                     preds.append(np.nan)
                     continue
@@ -599,10 +637,10 @@ def _moe_forecast(y, feats, market_state, window, n_experts):
 
 _mk(
     "panel_mixture_of_experts_score",
-    "基于市场状态的 Mixture-of-Experts 加权预测（训练窗口截至前一日）。",
-    ["y", "x1", "x2", "x3", "x4", "market_state", "window", "n_experts"],
-    lambda y, x1=None, x2=None, x3=None, x4=None, market_state=None, window=120, n_experts=3: _moe_forecast(
-        y, (x1, x2, x3, x4), market_state, int(window), int(n_experts)),
+    "基于市场状态的 Mixture-of-Experts 加权预测（训练窗口截至前一日，label_horizon 内未成熟标签自动排除）。",
+    ["y", "x1", "x2", "x3", "x4", "market_state", "window", "n_experts", "label_horizon"],
+    lambda y, x1=None, x2=None, x3=None, x4=None, market_state=None, window=120, n_experts=3, label_horizon=1: _moe_forecast(
+        y, (x1, x2, x3, x4), market_state, int(window), int(n_experts), int(label_horizon)),
     unit="forecast",
     pit_safe=False,
 )
@@ -618,12 +656,18 @@ def _autoencoder_error(feats, window, n_components: int = 2):
     components is ``n_components`` (must be strictly less than the feature
     count) so the reconstruction is a genuine low-rank compression instead of a
     near-perfect copy.
+
+    Round-6 P0-38: the rank bound is the FEATURE count ``len(collected)``, not
+    the instrument count ``collected[0].shape[1]``.  P0-39: features that are
+    all-NaN / constant / sub-coverage within the training window are dropped
+    from the active feature space before ``nanmean``/SVD (a degenerate feature
+    must not inject NaN into the shared decomposition).
     """
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
     if not collected:
         raise ValueError("at least one feature panel is required")
-    p = collected[0].shape[1]
-    rank = max(1, min(int(n_components), p - 1))
+    n_features = len(collected)
+    rank = max(1, min(int(n_components), n_features - 1))
     n_rows, n_cols = collected[0].shape
     out = np.full((n_rows, n_cols), np.nan, dtype=float)
     for col in range(n_cols):
@@ -633,14 +677,29 @@ def _autoencoder_error(feats, window, n_components: int = 2):
             Xw = X[start:row]
             if Xw.shape[0] < 10:
                 continue
-            mu = np.nanmean(Xw, axis=0)
-            sd = np.nanstd(Xw, axis=0)
+            # P0-39 coverage gate: a feature with < 2 finite rows in the window
+            # is INACTIVE (all-NaN column would otherwise leak NaN into the
+            # SVD); a constant feature is kept with unit scale.  Fail closed
+            # when fewer than 2 features survive.
+            finite_count = np.sum(np.isfinite(Xw), axis=0)
+            active = finite_count >= 2
+            n_active = int(active.sum())
+            if n_active < 2:
+                continue
+            sub = Xw[:, active]
+            mu = np.nanmean(sub, axis=0)
+            sd = np.nanstd(sub, axis=0)
             sd = np.where(sd > _EPS, sd, 1.0)
-            Xc = np.where(np.isfinite(Xw), Xw, mu)
+            Xc = np.where(np.isfinite(sub), sub, mu)
             Xs = (Xc - mu) / sd
             _, _, Vt = np.linalg.svd(Xs, full_matrices=False)
-            r = min(rank, Vt.shape[0])
-            z = (X[row] - mu) / sd
+            r = min(rank, n_active - 1, Vt.shape[0])
+            if r < 1:
+                continue
+            row_active = X[row][active]
+            z = (row_active - mu) / sd
+            if not np.all(np.isfinite(z)):
+                continue
             recon = Vt[:r].T @ (Vt[:r] @ z)
             out[row, col] = float(np.sqrt(np.sum((z - recon) ** 2)))
     return _frame_like(feats[0], out)

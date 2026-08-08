@@ -45,6 +45,15 @@ def _hashes() -> dict[str, str]:
         "run_window_hash": FE_ROOT / "runtime" / "run_window.py",
         "source_window_contract_hash": FE_ROOT / "runtime" / "source_window_contract_v2.py",
         "time_window_hash": FE_ROOT / "storage" / "time_window.py",
+        # P0-21: stateful runtime / contract and session / calendar logic are
+        # execution-semantic inputs — a change must invalidate the artifact.
+        "stateful_runtime_hash": FE_ROOT / "stateful_runtime.py",
+        "stateful_contract_hash": FE_ROOT / "stateful_contract.py",
+        "session_calendar_hash": FE_ROOT / "runtime" / "session_calendar.py",
+        "trading_calendar_hash": FE_ROOT / "storage" / "trading_calendar.py",
+        "market_session_hash": FE_ROOT / "market" / "session.py",
+        "read_session_hash": FE_ROOT / "storage" / "read_session.py",
+        "composite_lowering_hash": FE_ROOT / "planner" / "composite_lowering.py",
     }
     hashes = {
         "cleaned_operator_python_tree_hash": _tree_hash(
@@ -54,6 +63,12 @@ def _hashes() -> dict[str, str]:
         "ir_python_tree_hash": _tree_hash(FE_ROOT / "ir", patterns=("*.py",)),
         "planner_python_tree_hash": _tree_hash(
             FE_ROOT / "planner", patterns=("*.py",)
+        ),
+        # P0-21: composite lowerings and the session/calendar modules are hash-
+        # covered explicitly so a change to any lowering / calendar file
+        # invalidates the execution-semantic evidence.
+        "composite_lowerings_python_tree_hash": _tree_hash(
+            FE_ROOT / "planner" / "lowerings", patterns=("*.py",)
         ),
         "logical_source_python_tree_hash": _tree_hash(
             FE_ROOT / "storage" / "sources", patterns=("*.py",)
@@ -174,7 +189,10 @@ def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
             )
 
     try:
-        from backend.evidence_provenance import evidence_artifact_valid
+        from backend.evidence_provenance import (
+            evidence_artifact_valid,
+            implementation_hashes_for,
+        )
 
         if not evidence_artifact_valid():
             errors.append("primitive evidence is invalid")
@@ -182,17 +200,46 @@ def _inherited_validation_errors(payload: dict[str, Any]) -> list[str]:
     except Exception as exc:
         return errors + [f"target resolution failed: {type(exc).__name__}: {exc}"]
 
-    expected_all = int(payload.get("audited_factor_target_count") or -1)
-    expected_nonprimitive = int(payload.get("audited_nonprimitive_target_count") or -1)
-    if len(all_targets) != expected_all:
-        errors.append(
-            f"factor target count changed: expected={expected_all} actual={len(all_targets)}"
+    # P0-20: compare the EXACT audited canonical set (not just cardinality) plus
+    # per-canonical implementation hashes.  A same-count target swap must now
+    # fail closed.  Legacy inherited payloads that only recorded cardinality
+    # keep the count fallback so an old artifact still validates by count.
+    expected_canonicals = [
+        str(c) for c in (payload.get("audited_factor_canonicals") or [])
+    ]
+    if expected_canonicals:
+        if sorted(all_targets) != sorted(expected_canonicals):
+            errors.append(
+                "factor target set changed: "
+                f"expected={sorted(expected_canonicals)!r} "
+                f"actual={sorted(all_targets)!r}"
+            )
+    else:
+        expected_all = int(payload.get("audited_factor_target_count") or -1)
+        expected_nonprimitive = int(
+            payload.get("audited_nonprimitive_target_count") or -1
         )
-    if len(nonprimitive) != expected_nonprimitive:
-        errors.append(
-            "non-primitive target count changed: "
-            f"expected={expected_nonprimitive} actual={len(nonprimitive)}"
-        )
+        if len(all_targets) != expected_all:
+            errors.append(
+                f"factor target count changed: expected={expected_all} actual={len(all_targets)}"
+            )
+        if len(nonprimitive) != expected_nonprimitive:
+            errors.append(
+                "non-primitive target count changed: "
+                f"expected={expected_nonprimitive} actual={len(nonprimitive)}"
+            )
+    expected_hashes = dict(
+        payload.get("audited_factor_implementation_hashes") or {}
+    )
+    if expected_hashes:
+        actual_hashes = {
+            canon: implementation_hashes_for(canon) for canon in sorted(all_targets)
+        }
+        if actual_hashes != expected_hashes:
+            errors.append(
+                "factor target implementation hashes changed: "
+                f"expected={expected_hashes!r} actual={actual_hashes!r}"
+            )
     return errors
 
 

@@ -12,6 +12,7 @@ from expr.field import FieldRef
 from expr.literal import Literal
 from ir.nodes import IRNode
 from ir.schema import DEFAULT_COLUMN_SCHEMA, Schema
+from ir.types import semantic_type_of
 
 _LAG_PARAM_NAMES = {
     "ts_delay": ("n", "d", "lag", "periods", "window"),
@@ -37,6 +38,18 @@ _HISTORY_REQUIREMENT_FUNCS: dict[str, Any] = {}
 def register_history_requirement(canonical: str, fn: Any) -> None:
     """Register a deterministic ``fn(params: dict) -> int`` for a canonical."""
     _HISTORY_REQUIREMENT_FUNCS[canonical] = fn
+
+
+class HistoryRequirementError(ValueError):
+    """A registered ``history_requirement(params)`` failed to evaluate.
+
+    P1-13: a history-requirement evaluation error is a PLANNING error — it must
+    not silently downgrade to 0 (which would under-allocate causal lookback and
+    silently corrupt the factor).  Only an explicit "not applicable" history
+    function returning 0 may yield zero lookback.
+    """
+
+
 _FIXED_LAGS = {
     "prev": 1,
     "ts_ratio": 1,
@@ -344,11 +357,26 @@ def _report_period_count(canonical: str, params: dict[str, Any]) -> int:
 def _financial_lookback(canonical: str, params: dict[str, Any]) -> int:
     if canonical not in _FIN_REPORT_PERIOD_CANONICALS:
         return 0
+    n_events = _report_period_count(canonical, params)
+    # P1-14: prefer a data-driven fiscal-event lookback from the active financial
+    # source's period calendar when one is registered; fall back to the fixed
+    # ``FACTOR_ENGINE_REPORT_PERIOD_LOOKBACK_ROWS`` env heuristic otherwise.
+    try:
+        from backend.financial_semantics import (
+            fiscal_event_lookback,
+            get_active_financial_source,
+        )
+
+        data_driven = fiscal_event_lookback(get_active_financial_source(), None, n_events)
+    except Exception:
+        data_driven = None
+    if data_driven is not None:
+        return data_driven
     rows_per_period = (
         _positive_int(os.environ.get("FACTOR_ENGINE_REPORT_PERIOD_LOOKBACK_ROWS", "80"))
         or 80
     )
-    return rows_per_period * _report_period_count(canonical, params)
+    return rows_per_period * n_events
 
 
 def _operator_lookback_increment(
@@ -369,8 +397,15 @@ def _operator_lookback_increment(
     if history_fn is not None:
         try:
             required = int(history_fn(params))
-        except (TypeError, ValueError):
-            required = 0
+        except (TypeError, ValueError) as exc:
+            # P1-13: a history-requirement evaluation failure is a PLANNING error,
+            # not a silent downgrade to 0 — 0 would under-allocate causal lookback
+            # and silently corrupt the factor.  Only an explicit "not applicable"
+            # history function returning 0 may do so.
+            raise HistoryRequirementError(
+                f"history_requirement for canonical {canonical!r} failed with "
+                f"params {params!r}: {exc}"
+            ) from exc
         if required > 0:
             return max(increment, required)
 
@@ -657,6 +692,12 @@ class FieldCatalogMismatchError(ValueError):
 # ---------------------------------------------------------------------------
 # P1-T typed input contracts: an operator family that requires a specific
 # price basis / level type must reject an illegal input BEFORE execution.
+#
+# P0-31: the price-basis decisions consult the field concept's ``price_basis``
+# metadata (via ``fields.registry.resolve_field`` -> ``FieldSpec.price_basis``,
+# then the canonical concept registry for legacy DSL spellings) instead of the
+# hardcoded name-sets.  The name-sets remain a fast fallback for legacy columns
+# that carry no typed basis.
 # ---------------------------------------------------------------------------
 _RETURN_NAME_MARKERS = ("ret", "return", "pct_chg", "pct_change", "momentum", "mom")
 _RAW_PRICE_FIELDS = frozenset({"close", "open", "high", "low", "pre_close", "vwap"})
@@ -689,9 +730,62 @@ def _leaf_fields(node: IRNode, out: set[str]) -> None:
         _leaf_fields(child, out)
 
 
+def _leaf_field_attrs(node: IRNode, out: list[tuple[str, dict[str, Any]]]) -> None:
+    """Collect ``(leaf_field_name, semantic_attrs)`` pairs under ``node``."""
+    if node.op == "column":
+        name = str((node.attrs or {}).get("field") or (node.attrs or {}).get("name") or "")
+        if name:
+            out.append((name, node.semantic_attrs or {}))
+    for child in node.inputs:
+        _leaf_field_attrs(child, out)
+
+
 def _is_return_field(name: str) -> bool:
     low = name.lower()
     return any(marker in low for marker in _RETURN_NAME_MARKERS)
+
+
+def _price_basis_of_field(name: str) -> str | None:
+    """Resolve a leaf field's canonical ``price_basis`` metadata.
+
+    Prefers the registered ``FieldSpec.price_basis`` (populated by the catalog),
+    then the canonical-concept registry (legacy DSL spellings such as ``close``
+    -> ``raw_close``).  ``None`` means neither carries a price basis, so callers
+    keep the legacy name-set as a fallback.
+    """
+    from fields import resolve_field
+
+    try:
+        spec = resolve_field(name)
+        basis = getattr(spec, "price_basis", None)
+        if basis:
+            return basis
+    except Exception:
+        pass
+    try:
+        from fields.concepts import concept_alias_map, get_concept
+
+        concept_id = concept_alias_map().get(str(name).lower())
+        if concept_id:
+            concept = get_concept(concept_id)
+            if concept is not None and concept.price_basis:
+                return concept.price_basis
+    except Exception:
+        pass
+    return None
+
+
+def _flow_semantics_of_field(name: str) -> str | None:
+    """Resolve a leaf field's reporting-flow semantics from its ``FieldSpec``."""
+    from fields import resolve_field
+
+    try:
+        spec = resolve_field(name)
+    except Exception:
+        spec = None
+    if spec is None:
+        return None
+    return getattr(spec, "flow_semantics", None)
 
 
 def validate_typed_input_contracts(ir: IRNode) -> list[str]:
@@ -701,32 +795,82 @@ def validate_typed_input_contracts(ir: IRNode) -> list[str]:
     level/wealth-index); spectral analysis on a raw split-sensitive close is
     rejected (continuous/return required); A-share limit operators on a
     continuous price are rejected (they need RAW official limit prices).
+
+    Price-basis decisions consult the field concept's ``price_basis`` (via
+    ``fields.registry.resolve_field`` -> ``FieldSpec.price_basis``, then the
+    canonical concept registry), falling back to the legacy hardcoded name-sets
+    when a field carries no typed basis.
     """
     errors: list[str] = []
 
     def walk(node: IRNode) -> None:
-        leaves: set[str] = set()
-        _leaf_fields(node, leaves)
+        leaves: list[tuple[str, dict[str, Any]]] = []
+        _leaf_field_attrs(node, leaves)
         if node.op in _DRAWDOWN_FAMILY:
-            for leaf in leaves:
-                if _is_return_field(leaf):
+            for name, sem in leaves:
+                basis = sem.get("price_basis") or _price_basis_of_field(name)
+                if _is_return_field(name) or basis in {"RETURN"}:
                     errors.append(
-                        f"{node.op} on return input {leaf}: drawdown requires a "
+                        f"{node.op} on return input {name}: drawdown requires a "
                         "level / wealth-index input (audit P1-T)"
                     )
         elif node.op in _SPECTRAL_FAMILY:
-            for leaf in leaves:
-                if leaf in _RAW_PRICE_FIELDS:
+            for name, sem in leaves:
+                basis = sem.get("price_basis") or _price_basis_of_field(name)
+                if name in _RAW_PRICE_FIELDS or basis in {"RAW"}:
                     errors.append(
-                        f"{node.op} on raw split-sensitive price {leaf}: spectral "
+                        f"{node.op} on raw split-sensitive price {name}: spectral "
                         "analysis requires continuous/return input (audit P1-T)"
                     )
         elif str(node.op).startswith("ashare_limit_"):
-            for leaf in leaves:
-                if leaf in _CONTINUOUS_PRICE_FIELDS:
+            for name, sem in leaves:
+                basis = sem.get("price_basis") or _price_basis_of_field(name)
+                if name in _CONTINUOUS_PRICE_FIELDS or basis in {"CONTINUOUS", "RETURN"}:
                     errors.append(
-                        f"{node.op} on continuous price {leaf}: A-share limit "
+                        f"{node.op} on continuous price {name}: A-share limit "
                         "operators require RAW official limit prices (audit P1-T)"
+                    )
+        for child in node.inputs:
+            walk(child)
+
+    walk(ir)
+    return errors
+
+
+def validate_semantic_kind_contracts(ir: IRNode) -> list[str]:
+    """Reject operator/input combos that violate typed-IR semantic kinds (P0-30).
+
+    This is the semantic-kind enforcement pass.  It uses the semantic kinds
+    propagated onto ``IRNode.semantic_attrs`` (``PriceRaw`` / ``PriceContinuous``
+    / ``ReturnDecimal`` / ...) rather than field-name guessing, and is additive
+    to :func:`validate_typed_input_contracts` (which keeps the name-set fallback
+    for unresolvable legacy columns).
+    """
+    errors: list[str] = []
+
+    def walk(node: IRNode) -> None:
+        leaves: list[tuple[str, dict[str, Any]]] = []
+        _leaf_field_attrs(node, leaves)
+        if node.op in _DRAWDOWN_FAMILY:
+            for name, sem in leaves:
+                if sem.get("semantic_kind") == "ReturnDecimal" or _is_return_field(name):
+                    errors.append(
+                        f"{node.op} on return input {name}: drawdown requires a "
+                        "level / wealth-index input (typed-IR P0-30)"
+                    )
+        elif node.op in _SPECTRAL_FAMILY:
+            for name, sem in leaves:
+                if sem.get("semantic_kind") == "PriceRaw" or name in _RAW_PRICE_FIELDS:
+                    errors.append(
+                        f"{node.op} on raw split-sensitive price {name}: spectral "
+                        "analysis requires continuous/return input (typed-IR P0-30)"
+                    )
+        elif str(node.op).startswith("ashare_limit_"):
+            for name, sem in leaves:
+                if sem.get("semantic_kind") in {"PriceContinuous", "ReturnDecimal"}:
+                    errors.append(
+                        f"{node.op} on continuous price {name}: A-share limit "
+                        "operators require RAW official limit prices (typed-IR P0-30)"
                     )
         for child in node.inputs:
             walk(child)
@@ -942,6 +1086,9 @@ class Analyzer:
                         }
                     )
                 if spec is not None:
+                    price_basis = getattr(spec, "price_basis", None) or _price_basis_of_field(
+                        node.name
+                    )
                     attrs.update({
                         "field_id": str(spec.field_id),
                         "field_registry_hash": FIELD_REGISTRY.catalog_hash(),
@@ -956,7 +1103,46 @@ class Analyzer:
                         "temporal_model": spec.temporal_model,
                         "pit_safe": spec.strict_pit_allowed,
                     })
-                semantic = {"grain": tuple(spec.grain)} if spec is not None else {}
+                    if price_basis:
+                        attrs["price_basis"] = price_basis
+                # Propagate typed price-basis / flow-semantics / semantic-kind
+                # into semantic_attrs (never attrs, to keep IR hash stable).
+                semantic: dict[str, Any] = {}
+                if spec is not None:
+                    semantic["grain"] = tuple(spec.grain)
+                    flow_semantics = getattr(spec, "flow_semantics", None)
+                    if flow_semantics:
+                        semantic["flow_semantics"] = flow_semantics
+                    price_basis = attrs.get("price_basis")
+                    if price_basis:
+                        semantic["price_basis"] = price_basis
+                # Round-6 P0-50: propagate the field's PIT/availability
+                # coordinate so a factor's root schema can answer
+                # "available_at = max(inputs)" (audit §51).  ``schema`` carries
+                # the explicit knowledge time and the name-based EOD defaults
+                # (close/high/low/vwap/volume/amount -> session_close, P0-13);
+                # for unresolvable raw DSL columns fall back to the same
+                # name-based default directly.
+                if schema.available_at is None:
+                    from ir.schema import _available_at_of
+
+                    name_default = _available_at_of(type("_Spec", (), {"name": node.name})())
+                    semantic["available_at"] = name_default
+                else:
+                    semantic["available_at"] = schema.available_at
+                semantic["knowledge_model"] = schema.knowledge_model
+                semantic["fiscal_grain"] = schema.fiscal_grain
+                semantic["source_vintage"] = schema.source_vintage
+                semantic["universe_id"] = schema.universe_id
+                if spec is not None:
+                    kind = semantic_type_of(
+                        price_basis=semantic.get("price_basis"),
+                        flow_semantics=semantic.get("flow_semantics"),
+                        frequency=schema.frequency,
+                        domain=schema.domain,
+                    )
+                    if kind is not None:
+                        semantic["semantic_kind"] = kind.value
                 return IRNode(op="column", attrs=attrs, semantic_attrs=semantic), 0
             if isinstance(node, Literal):
                 return IRNode(op="literal", attrs={"value": node.value}), 0
@@ -1067,7 +1253,15 @@ class Analyzer:
             if inputs:
                 first_sem = inputs[0].semantic_attrs or {}
                 first_col = inputs[0].attrs or {}
-                for key in ("domain", "frequency", "cardinality", "temporal_model", "unit"):
+                for key in (
+                    "domain",
+                    "frequency",
+                    "cardinality",
+                    "temporal_model",
+                    "unit",
+                    "price_basis",
+                    "flow_semantics",
+                ):
                     val = first_sem.get(key) if first_sem.get(key) is not None else first_col.get(key)
                     if val is not None:
                         semantic[key] = val
@@ -1075,8 +1269,40 @@ class Analyzer:
                     child.semantic_attrs.get("pit_safe", (child.attrs or {}).get("pit_safe", True))
                     for child in inputs
                 )
+                # Round-6 P0-50: ``available_at`` propagates bottom-up as the
+                # LATEST input's knowledge-time descriptor — the factor cannot be
+                # used before its last-arriving input is knowable (audit §51).
+                # knowledge_model / fiscal_grain / source_vintage / universe_id
+                # inherit from the primary (first) input.
+                from ir.schema import propagate_available_at
+
+                child_availabilities = tuple(
+                    (child.semantic_attrs or {}).get("available_at")
+                    for child in inputs
+                )
+                available_at = propagate_available_at(child_availabilities)
+                if available_at is not None:
+                    semantic["available_at"] = available_at
+                for key in (
+                    "knowledge_model",
+                    "fiscal_grain",
+                    "source_vintage",
+                    "universe_id",
+                ):
+                    val = first_sem.get(key)
+                    if val is not None:
+                        semantic[key] = val
             if signature is not None and signature.output_unit and signature.output_unit != "inherit":
                 semantic["unit"] = signature.output_unit
+            # P0-30: derive the typed-IR semantic kind from the propagated attrs.
+            kind = semantic_type_of(
+                price_basis=semantic.get("price_basis"),
+                flow_semantics=semantic.get("flow_semantics"),
+                frequency=semantic.get("frequency"),
+                domain=semantic.get("domain"),
+            )
+            if kind is not None:
+                semantic["semantic_kind"] = kind.value
 
             return (
                 IRNode(op=canonical, inputs=inputs, attrs=attrs, semantic_attrs=semantic),
@@ -1102,6 +1328,9 @@ class Analyzer:
         typed_errors = validate_typed_input_contracts(ir)
         if typed_errors:
             raise TypedInputContractError("; ".join(typed_errors))
+        semantic_kind_errors = validate_semantic_kind_contracts(ir)
+        if semantic_kind_errors:
+            raise TypedInputContractError("; ".join(semantic_kind_errors))
         return AnalysisResult(
             ir=ir,
             lookback=lookback,

@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from data_access.core import audit
@@ -144,6 +145,12 @@ def publish_from_staging(
 
                 # #P0-30 key 唯一性发布 gate：契约声明 unique_key 时必须无重复。
                 _validate_unique_key(target_ds, candidate_dir)
+
+                # #P0-3 candidate 实际数据必须符合 target 声明 schema 契约。
+                # ``_file_inventory`` 证明的是 "candidate == staging"（两边 hash
+                # 一致）；这里是 "candidate == target contract"——target 声明列
+                # 缺失 / 类型不符都拒绝发布，禁止靠 DuckDB 隐式 cast 蒙混过关。
+                _validate_candidate_contract(target_ds, candidate_dir)
 
                 # #P0-32 第 3 步：publish manifest 属于 commit metadata，必须**在
                 # 原子切换之前**生成并写进 candidate——切换失败/写失败都 abort，
@@ -294,6 +301,35 @@ def _validate_publish_pair(
             f"vs target={target_ds.hive_partitioning}，拒绝发布"
         )
 
+    # #P0-31 staging 与 target 契约对齐：schema_version / 声明 schema /
+    # partition_columns / 物理格式。仅校验「双方都显式声明」的字段——空声明
+    # （未启用 schema 校验）不代表契约冲突。
+    if staging_ds.schema_version != target_ds.schema_version:
+        raise ValidationError(
+            f"schema_version 不一致：staging={staging_ds.schema_version!r} "
+            f"vs target={target_ds.schema_version!r}，拒绝发布"
+        )
+    _staging_schema = dict(getattr(staging_ds, "schema", None) or {})
+    _target_schema = dict(getattr(target_ds, "schema", None) or {})
+    if _staging_schema and _target_schema and _staging_schema != _target_schema:
+        raise ValidationError(
+            f"声明 schema 不一致：staging={_staging_schema} "
+            f"vs target={_target_schema}，拒绝发布（发布的 schema 必须与 target 契约一致）"
+        )
+    if tuple(getattr(staging_ds, "partition_columns", ()) or ()) != tuple(
+        getattr(target_ds, "partition_columns", ()) or ()
+    ):
+        raise ValidationError(
+            f"partition_columns 不一致：staging={getattr(staging_ds, 'partition_columns', ())} "
+            f"vs target={getattr(target_ds, 'partition_columns', ())}，拒绝发布"
+        )
+    _sfmt = str(getattr(staging_ds, "format", "parquet") or "parquet")
+    _tfmt = str(getattr(target_ds, "format", "parquet") or "parquet")
+    if _sfmt != _tfmt:
+        raise ValidationError(
+            f"物理格式不一致：staging={_sfmt} vs target={_tfmt}，拒绝发布"
+        )
+
     # 参数化数据集：两边参数 schema 必须一致，调用方提供的 params 也要覆盖
     staging_params = _params_schema(staging_ds)
     target_params = _params_schema(target_ds)
@@ -385,16 +421,23 @@ def _validate_unique_key(ds: Dataset, root: Path) -> None:
     import duckdb
 
     key_list = ", ".join(f'"{k}"' for k in keys)
-    from_clause = "read_parquet(" + ",".join(f"'{f}'" for f in parquet_files) + ")"
+    # #P0-30 多文件用 list 参数绑定 read_parquet(?)，不再字符串拼路径（路径含
+    # 单引号/特殊字符会直接 SQL 语法错）。
     sql = (
-        f"SELECT {key_list}, COUNT(*) AS _n FROM {from_clause} "
+        f"SELECT {key_list}, COUNT(*) AS _n FROM read_parquet(?) "
         f"GROUP BY {key_list} HAVING COUNT(*) > 1 LIMIT 1"
     )
+    # #P0-29 unique-key 是 production publish gate，必须 **fail-closed**：DuckDB
+    # 坏 / key 列缺失 / parquet 读失败 / SQL 错 → 一律拒绝发布（不能吞掉放行）。
+    con = duckdb.connect()
     try:
-        con = duckdb.connect()
-        rows = con.execute(sql).fetchall()
-    except Exception:
-        return  # 无法验证时放行（列可能不存在于部分文件）；数据读取端仍有 dedup
+        rows = con.execute(sql, [parquet_files]).fetchall()
+    except Exception as exc:
+        raise DataError(
+            f"publish 唯一键校验无法执行（fail-closed）：{type(exc).__name__}: {exc}。"
+            f"数据集 '{getattr(ds, 'name', '')}' 声明了 unique_key={keys}，但验证失败——"
+            "不能在不验证唯一性的情况下发布。请检查 key 列存在性与 parquet 完整性。"
+        ) from exc
     finally:
         try:
             con.close()
@@ -405,6 +448,105 @@ def _validate_unique_key(ds: Dataset, root: Path) -> None:
             f"publish 唯一键校验失败：{keys} 存在重复（示例 {rows[0][:-1]}）。"
             "发布数据不能违反 unique_key 契约。"
         )
+
+
+_SCHEMA_TYPE_NORMALIZED = {
+    "double": "double", "float": "double", "float64": "double",
+    "float32": "float",
+    "int": "int64", "integer": "int64", "long": "int64",
+    "int8": "int8", "int16": "int16", "int32": "int32", "int64": "int64",
+    "short": "int16",
+    "string": "string", "str": "string", "text": "string", "varchar": "string",
+    "bool": "bool", "boolean": "bool",
+    "date": "date",
+    "timestamp": "timestamp", "datetime": "timestamp",
+    "decimal": "decimal",
+}
+
+
+def _normalize_schema_type(raw: Any) -> str | None:
+    """把 datasets.yaml 声明的类型字符串归一成可比较的 token。
+
+    无法识别的声明类型（object/null/任意）→ None（只查列存在，不查类型）。
+    """
+    if raw is None:
+        return None
+    text = str(raw).strip().lower()
+    if text in {"object", "null", "any", "list", "dict"}:
+        return None
+    return _SCHEMA_TYPE_NORMALIZED.get(text)
+
+
+def _normalize_arrow_type(t: Any) -> str | None:
+    """把 pyarrow DataType 归一成与声明类型同尺度的 token。"""
+    if not isinstance(t, pa.DataType):
+        return None
+    if pa.types.is_timestamp(t):
+        return "timestamp"
+    if pa.types.is_date(t):
+        return "date"
+    if pa.types.is_decimal(t):
+        return "decimal"
+    if pa.types.is_floating(t):
+        return "double" if t.bit_width == 64 else "float"
+    if pa.types.is_integer(t):
+        return {8: "int8", 16: "int16", 32: "int32", 64: "int64"}.get(t.bit_width)
+    if pa.types.is_boolean(t):
+        return "bool"
+    if pa.types.is_string(t) or pa.types.is_large_string(t):
+        return "string"
+    return None
+
+
+def _validate_candidate_contract(ds: Dataset, root: Path) -> None:
+    """#P0-3 candidate 实际数据 vs target 声明 schema 的正式发布门。
+
+    publish pair 只比较 staging/target 双方**声明**的 schema；本门验证 candidate
+    里**实际** parquet 数据的列/类型符合 target 契约：
+        - target 声明 schema 为空（未启用 schema 校验）→ 跳过
+        - 声明列必须全部出现在 candidate 数据里（缺列 fail-closed）
+        - 声明类型可识别时，与 candidate 实际类型必须一致（不允许隐式 cast）
+        - 同一列跨文件类型不一致 → fail-closed（mixed schema）
+    Hive 分区列在目录名里、payload 未必有，不做 payload 要求。
+    """
+    declared = dict(getattr(ds, "schema", None) or {})
+    if not declared:
+        return
+    fields: dict[str, pa.DataType] = {}
+    for p in root.rglob("*.parquet"):
+        if p.name.startswith(".") or p.is_symlink():
+            continue
+        try:
+            schema = pq.read_schema(str(p))
+        except Exception as exc:
+            raise DataError(
+                f"publish 契约校验读 {p} 失败（fail-closed）：{exc}"
+            ) from exc
+        for i in range(len(schema)):
+            fld = schema.field(i)
+            existing = fields.get(fld.name)
+            if existing is not None and existing != fld.type:
+                raise DataError(
+                    f"publish 契约校验失败：列 {fld.name!r} 在不同文件类型不一致 "
+                    f"（{existing} vs {fld.type}），mixed schema 拒绝发布"
+                )
+            fields[fld.name] = fld.type
+    missing = [c for c in declared if c not in fields]
+    if missing:
+        raise DataError(
+            f"publish 契约校验失败：target 声明 schema 列 {missing} 在 candidate "
+            f"数据里缺失（实际列：{sorted(fields)}）。拒绝发布。"
+        )
+    for col, declared_type in declared.items():
+        actual = fields[col]
+        want = _normalize_schema_type(str(declared_type))
+        got = _normalize_arrow_type(actual)
+        if want and got and want != got:
+            raise DataError(
+                f"publish 契约校验失败：列 {col!r} target 声明类型 "
+                f"{declared_type!r}（归一 {want}），candidate 实际 {actual}（归一 "
+                f"{got}）。隐式 cast 不允许发生在发布门；请修正 staging 数据。"
+            )
 
 
 def _file_inventory(root: Path) -> dict[str, tuple[int, int, str]] | None:
@@ -465,11 +607,26 @@ def _archive_path(parent: Path, target_name: str) -> Path:
 
 
 def _copy_tree(src: Path, dst: Path) -> None:
-    """跨 FS 安全的目录拷贝；dst 预期不存在（我们自己生成的唯一名）。"""
+    """跨 FS 安全的目录拷贝；dst 预期不存在（我们自己生成的唯一名）。
+
+    #P0-32 ``shutil.copytree(symlinks=False)`` 的语义是**跟随** symlink 并把
+    目标内容复制过来（不是"不跟"）。发布前先逐层拒绝 staging 里任何 symlink
+    组件——否则 copytree 可能把白名单外的文件带进 candidate。
+    """
     if dst.exists():
         raise RuntimeError(f"内部错误：candidate 目录已存在 {dst}")
-    # copytree 不跟 symlink，避免拷贝到白名单外的文件
+    _assert_no_symlinks(src)
     shutil.copytree(src, dst, symlinks=False)
+
+
+def _assert_no_symlinks(root: Path) -> None:
+    """#P0-32 递归拒绝 staging 目录里任何 symlink 文件/目录组件。"""
+    for p in root.rglob("*"):
+        if p.is_symlink():
+            raise ValidationError(
+                f"publish 拒绝包含 symlink 的 staging：{p} 是软链接。"
+                "发布源必须全是真实文件（避免把白名单外内容带进 candidate）。"
+            )
 
 
 def _rollback_final(target_dir: Path, archive_path: Path | None) -> None:

@@ -281,16 +281,13 @@ def _register_surface() -> None:
     # P1-G rename: the SVD is over the members' FEATURE matrix (not a
     # correlation matrix), so the canonical names are group_feature_*.  The old
     # group_corr_* names are pure aliases (kept for compatibility).
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "group_feature_mode_share",
             "group_feature_effective_rank",
             "group_feature_mode_localization",
             "group_feature_spectral_gap",
             "group_feature_second_mode_localization",
-        }
-    )
+        })
     _corr_to_feature = {
         "group_corr_mode_share": "group_feature_mode_share",
         "group_corr_effective_rank": "group_feature_effective_rank",

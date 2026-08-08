@@ -71,7 +71,14 @@ class PITEventRecord:
 
 @dataclass(frozen=True)
 class PITIndexMetadata:
-    """索引的权威性元数据（#15）：完整 + 源匹配才允许 authoritative prune。"""
+    """索引的权威性元数据（#15）：完整 + 源匹配才允许 authoritative prune。
+
+    #P0-17 generation：index.parquet 与 metadata.json 必须同 generation（复刻
+    manifest 双写模型），进程死在两次 replace 之间 → 非权威。
+    #P0-15/#P0-16 IndexScope：只记录局部构建（time_range / timeframe_filter /
+    列 override）的覆盖范围，请求超出 scope → fail-open，绝不能把局部 index
+    当全局 authoritative。
+    """
 
     source_snapshot: str | None = None       # 源文件版本指纹（paths+size+mtime）
     manifest_epoch: str | None = None        # 构建时数据集 source_epoch
@@ -81,6 +88,14 @@ class PITIndexMetadata:
     schema_hash: str | None = None
     created_at: str | None = None
     complete: bool = False
+    # ---- #P0-17 generation（parquet + JSON 双写，防 partial write）----
+    generation_id: str | None = None
+    # ---- #P0-15/#P0-16 IndexScope ----
+    filing_scope_min: str | None = None      # 构建时扫描到的 min filing_date（iso）
+    filing_scope_max: str | None = None      # 构建时扫描到的 max filing_date（iso）
+    timeframe_scope: str | None = None       # 构建时 timeframe_filter（None=全 timeframe）
+    # ---- #P0-18 列 override 身份（自定义列构建的 index 不能当默认构建复用）----
+    columns_used: tuple[str, ...] = ()
 
     @property
     def is_authoritative(self) -> bool:
@@ -96,6 +111,11 @@ class PITIndexMetadata:
             "schema_hash": self.schema_hash,
             "created_at": self.created_at,
             "complete": self.complete,
+            "generation_id": self.generation_id,
+            "filing_scope_min": self.filing_scope_min,
+            "filing_scope_max": self.filing_scope_max,
+            "timeframe_scope": self.timeframe_scope,
+            "columns_used": list(self.columns_used),
         }
 
 
@@ -358,15 +378,24 @@ def build_pit_event_index(
     if timeframe_column:
         cols.append(timeframe_column)
 
+    columns_used = tuple(dict.fromkeys(c for c in cols if c))
+
     root = _index_root(store, dataset)
     if root is None:
         raise ValidationError(f"无法解析数据集 {dataset!r} 的根目录")
     index_path = root / _INDEX_FILENAME
     if index_path.exists() and not force:
         try:
-            return load_pit_event_index(index_path)
+            existing = load_pit_event_index(index_path)
         except Exception:
-            pass
+            existing = None
+        if existing is not None and _reuse_matches_current(
+            store, dataset, existing.metadata, columns_used=columns_used,
+            timeframe_filter=timeframe_filter,
+        ):
+            return existing
+        # #P0-14 旧 index stale（数据已变 / 列 override 不同 / 局部构建）→ 重建，
+        # 绝不把 stale index 直接返回给调用方。
 
     paths = store._prepare_dataset_read(
         ds, time_range=time_range, params={}, instrument_filter=None
@@ -424,6 +453,18 @@ def build_pit_event_index(
             indexed_files += 1
         if truncated:
             break
+    # #P0-15/#P0-16 IndexScope：记录本次构建的 filing 覆盖范围与 timeframe 过滤，
+    # 局部 index 不能冒充全局 authoritative。
+    filing_dates = [_as_ts(r.filing_date) for r in records]
+    filing_min = (
+        min(filing_dates).isoformat() if filing_dates and min(filing_dates) is not None else None
+    )
+    filing_max = (
+        max(filing_dates).isoformat() if filing_dates and max(filing_dates) is not None else None
+    )
+    from data_access.read.manifest import uuid4_hex
+
+    generation = uuid4_hex()
     metadata = PITIndexMetadata(
         source_snapshot=source_snapshot,
         manifest_epoch=manifest_epoch,
@@ -435,10 +476,21 @@ def build_pit_event_index(
         # #P0-15/#P0-16：完整 = 无失败文件 + 未截断 + 文件数全对。
         # limit 截断构建 → complete=False（is_authoritative 必须完整）。
         complete=(not failed_files and not truncated and indexed_files == source_file_count),
+        generation_id=generation,
+        filing_scope_min=filing_min,
+        filing_scope_max=filing_max,
+        timeframe_scope=timeframe_filter if timeframe_filter else None,
+        columns_used=columns_used,
     )
     idx = PITEventIndex(records, metadata=metadata)
     try:
-        pq.write_table(idx.to_arrow(), str(index_path))
+        # #P0-17 generation 双写：index.parquet schema metadata + metadata.json。
+        arrow = idx.to_arrow().cast(
+            idx.to_arrow().schema.with_metadata(
+                {b"manifest_generation_id": generation.encode("utf-8")}
+            )
+        )
+        pq.write_table(arrow, str(index_path))
         _meta_path(root).write_text(
             json.dumps(metadata.to_dict(), ensure_ascii=False, sort_keys=True),
             encoding="utf-8",
@@ -454,7 +506,11 @@ def build_pit_event_index(
 
 
 def load_pit_event_index(path: Any) -> PITEventIndex:
-    """从 sidecar parquet 加载索引（不带权威性元数据判定）。"""
+    """从 sidecar parquet 加载索引（不带权威性元数据判定）。
+
+    #P0-17 generation 校验：index.parquet 与 metadata.json 任一侧缺失/不一致 →
+    视为 partial write，metadata 回退成非权威（complete=False）。
+    """
     import json
 
     import pyarrow.parquet as pq
@@ -472,6 +528,7 @@ def load_pit_event_index(path: Any) -> PITEventIndex:
         )
         for r in table.to_pylist()
     ]
+    parquet_gen = _index_parquet_generation(path)
     metadata = PITIndexMetadata()
     meta_file = path.with_name(_INDEX_META_FILENAME)
     if meta_file.exists():
@@ -486,10 +543,43 @@ def load_pit_event_index(path: Any) -> PITEventIndex:
                 schema_hash=payload.get("schema_hash"),
                 created_at=payload.get("created_at"),
                 complete=bool(payload.get("complete", False)),
+                generation_id=payload.get("generation_id"),
+                filing_scope_min=payload.get("filing_scope_min"),
+                filing_scope_max=payload.get("filing_scope_max"),
+                timeframe_scope=payload.get("timeframe_scope"),
+                columns_used=tuple(str(c) for c in (payload.get("columns_used") or ())),
             )
+            # #P0-17 新格式任一侧缺 generation → partial write → 非权威
+            if parquet_gen is not None or metadata.generation_id is not None:
+                if (
+                    parquet_gen is None
+                    or metadata.generation_id is None
+                    or parquet_gen != metadata.generation_id
+                ):
+                    metadata = PITIndexMetadata()  # mixed generation → 非权威
         except (OSError, json.JSONDecodeError, TypeError, ValueError):
             metadata = PITIndexMetadata()  # 元数据损坏 → 非权威
     return PITEventIndex(records, metadata=metadata)
+
+
+def _index_parquet_generation(path: Path) -> str | None:
+    """读 index.parquet schema metadata 里的 generation id。"""
+    import pyarrow.parquet as pq
+
+    try:
+        meta = pq.read_metadata(str(path))
+    except Exception:
+        return None
+    kv = meta.metadata
+    if kv is None:
+        return None
+    raw = kv.get(b"manifest_generation_id")
+    if raw is None:
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def _index_path_for(store: Any, dataset: str) -> Path | None:
@@ -498,6 +588,47 @@ def _index_path_for(store: Any, dataset: str) -> Path | None:
         return None
     p = root / _INDEX_FILENAME
     return p if p.exists() else None
+
+
+def _reuse_matches_current(
+    store: Any,
+    dataset: str,
+    meta: PITIndexMetadata,
+    *,
+    columns_used: tuple[str, ...],
+    timeframe_filter: str | None,
+) -> bool:
+    """#P0-14/#P0-18 判断旧 index 是否与当前源 + 本次构建请求一致，可安全复用。
+
+    任一项不满足 → False（调用方应重建，不能直接返回 stale index）。
+    """
+    if not meta.is_authoritative:
+        return False
+    # #P0-18 列 override 身份：自定义列构建的 index 不能当默认构建复用
+    if meta.columns_used and tuple(meta.columns_used) != tuple(columns_used):
+        return False
+    if meta.timeframe_scope != (timeframe_filter if timeframe_filter else None):
+        return False
+    cur_epoch = _manifest_epoch_of(store, dataset)
+    if meta.manifest_epoch is not None and cur_epoch != meta.manifest_epoch:
+        return False  # 数据已变 → stale
+    try:
+        raw_paths = store._prepare_dataset_read(
+            store._registry.get(dataset), time_range=None, params={}
+        )
+        cur_snap = _source_snapshot(store, dataset, raw_paths)
+    except Exception:
+        cur_snap = None
+    if meta.source_snapshot is not None and cur_snap != meta.source_snapshot:
+        return False  # 源文件已变 → stale
+    ds = store._registry.get(dataset)
+    if meta.schema_hash and meta.schema_hash != _schema_hash_of(ds):
+        return False  # schema 声明已变 → stale
+    return True
+
+
+def _filing_ts(value: Any):
+    return _as_ts(value)
 
 
 def prune_paths_by_filing_range(
@@ -513,6 +644,10 @@ def prune_paths_by_filing_range(
     **#15 fail-open**：只有索引 ``complete`` 且当前源（manifest_epoch +
     source snapshot）与构建时一致时才做 authoritative prune；否则返回空列表
     （调用方回退全量路径），**绝不**用不完整/过期索引做 false-negative 裁剪。
+
+    #P0-15/#P0-16 IndexScope：请求超出索引构建时的覆盖范围（timeframe 或
+    filing_range）→ fail-open。局部 index（只建了 quarterly / 只建了 2025 年）
+    不能回答 annual / 2024 的查询——没有记录 ≠ 源数据不存在。
     """
     path = _index_path_for(store, dataset)
     if path is None:
@@ -536,6 +671,21 @@ def prune_paths_by_filing_range(
         cur_snap = None
     if meta.source_snapshot is not None and cur_snap != meta.source_snapshot:
         return []  # 源文件已变 → fail-open
+    # ---- #P0-15/#P0-16 IndexScope ----
+    if timeframe is not None and meta.timeframe_scope is not None:
+        if str(timeframe).lower() != str(meta.timeframe_scope).lower():
+            return []  # index 只覆盖别的 timeframe → 无法回答
+    if filing_range is not None:
+        req_lo = _filing_ts(filing_range[0]) if filing_range[0] is not None else None
+        req_hi = _filing_ts(filing_range[1]) if filing_range[1] is not None else None
+        scope_lo = _filing_ts(meta.filing_scope_min) if meta.filing_scope_min else None
+        scope_hi = _filing_ts(meta.filing_scope_max) if meta.filing_scope_max else None
+        if scope_lo is not None and scope_hi is not None:
+            outside = (req_lo is not None and req_lo < scope_lo) or (
+                req_hi is not None and req_hi > scope_hi
+            )
+            if outside:
+                return []  # 请求范围超出 index 覆盖 → 不能声称「没有记录」
     return idx.prune_paths(
         filing_range=filing_range,
         timeframe=timeframe,

@@ -45,25 +45,118 @@ def _times(multiplier: float) -> Transform:
 
 
 def _not_bool(x: Any) -> Any:
-    """Boolean negation: ``tradable = NOT IsSuspend``.
+    """Boolean negation that PRESERVES unknown: ``tradable = NOT IsSuspend``.
 
     The A-share ``IsSuspend`` field is True when the stock is suspended, so the
-    ``tradability_state`` concept (tradable?) is its negation.  Previously the
-    binding used ``_identity`` and only *documented* the negation in
-    ``transform_description`` — the executable transform returned IsSuspend
-    as-is, inverting the semantic.
+    ``tradability_state`` concept (tradable?) is its negation.  Only a KNOWN
+    state flips: known suspended (1) -> 0, known not-suspended (0) -> 1, and an
+    unknown suspension state (NaN) STAYS NaN — an unknown tradability must never
+    be forced to "not tradable" (or "tradable").  This concept is the
+    not-suspended state only; it does NOT claim listing/public-status membership.
     """
+    import numpy as _np
+
     try:
         import pandas as _pd
 
         if isinstance(x, _pd.Series):
-            return (~x.astype(bool)).astype(bool)
+            return _pd.Series(
+                _not_bool(x.to_numpy()), index=x.index, name=x.name
+            )
+        if isinstance(x, _pd.DataFrame):
+            return _pd.DataFrame(
+                {c: _not_bool(x[c].to_numpy()) for c in x.columns},
+                index=x.index,
+            )
     except Exception:  # pragma: no cover - defensive
         pass
-    import numpy as _np
+    arr = _np.asarray(x, dtype=float)  # preserve NaN; bool -> 1.0/0.0
+    return _np.where(arr == 1, 0.0, _np.where(arr == 0, 1.0, _np.nan))
 
-    arr = _np.asarray(x, dtype=bool)
-    return _np.logical_not(arr)
+
+def _us_tradable(fields: dict[str, Any]) -> Any:
+    """US tradability = ``StockList.type == "CS"`` AND a finite DailyBar close.
+
+    P0-027: the old binding was ``_identity`` over ``StockList.type`` while the
+    ``transform_description`` claimed "CS universe + valid price/volume".  This
+    real boolean (1/0) composes the CS list membership with a valid-bar mask:
+    any row whose membership is UNKNOWN — missing/NaN type, non-finite close,
+    or absent DailyBar column — fails closed to 0 (not tradable), never 1.
+    ``universe_daily`` membership is declared on the binding via required_filters
+    (the read must supply it); it is not silently substituted.
+    """
+    import numpy as _np
+    import pandas as _pd
+
+    if "StockList.type" not in fields:
+        raise KeyError(
+            f"US tradability provider needs StockList.type; got {sorted(fields)}"
+        )
+    type_col = fields["StockList.type"]
+
+    def _series(v: Any, name: str) -> _pd.Series:
+        if isinstance(v, _pd.Series):
+            return v
+        if isinstance(v, _pd.DataFrame):
+            return v.iloc[:, 0]
+        return _pd.Series(_np.asarray(v, dtype=object), name=name)
+
+    type_s = _series(type_col, "type")
+    # Only Common Stock ("CS") is in the tradable US universe; ETN/ETF/ADT and
+    # any NaN/unknown type are out (fail closed).
+    is_cs = type_s.notna() & (type_s.astype(str).str.strip() == "CS")
+
+    close_col = fields.get("StockDailyBar.Close")
+    if close_col is None:
+        # Valid-bar anchor not supplied -> every row's membership is unknown.
+        return _np.zeros(len(is_cs), dtype=float)
+    close_s = _series(close_col, "close")
+    try:
+        close_num = _pd.to_numeric(close_s, errors="coerce").to_numpy(dtype=float)
+        finite_close = _np.isfinite(close_num)
+    except Exception:  # pragma: no cover - defensive
+        finite_close = close_s.notna().to_numpy()
+    return (is_cs.to_numpy(dtype=float) * finite_close.astype(float))
+
+
+def _dividend_declared_fail_closed(fields: dict[str, Any]) -> Any:
+    """US dividend strict-PIT guard: knowledge-time is ``declaration_date``.
+
+    P0-026: a row whose ``declaration_date`` is missing fails closed to NaN —
+    it must never silently fall back to the ex-date as knowledge time
+    (look-ahead hazard).  The DataAccess contract ``us_stock_dividend`` is now
+    ``pit=strict`` / ``availability_column=declaration_date``; this is the
+    provider-side enforcement.  The ``declaration_date`` column being absent
+    entirely is a provider misconfiguration -> raise.
+    """
+    import numpy as _np
+    import pandas as _pd
+
+    if "StockDividend.cash_amount" not in fields:
+        raise KeyError(
+            f"US dividend provider needs StockDividend.cash_amount; got {sorted(fields)}"
+        )
+    if "StockDividend.declaration_date" not in fields:
+        raise KeyError(
+            "US dividend provider needs StockDividend.declaration_date (strict "
+            "PIT); refusing to fall back to ex-date as knowledge time"
+        )
+    amount = fields["StockDividend.cash_amount"]
+    decl = fields["StockDividend.declaration_date"]
+
+    def _series(v: Any, name: str) -> _pd.Series:
+        if isinstance(v, _pd.Series):
+            return v
+        if isinstance(v, _pd.DataFrame):
+            return v.iloc[:, 0]
+        return _pd.Series(_np.asarray(v, dtype=object), name=name)
+
+    amount_s = _pd.to_numeric(_series(amount, "amount"), errors="coerce")
+    decl_s = _series(decl, "declaration_date")
+    decl_valid = decl_s.notna() & (decl_s.astype(str).str.strip() != "")
+    out = amount_s.to_numpy(dtype=float).copy()
+    out[~decl_valid.to_numpy(dtype=bool)] = _np.nan
+    return out
 
 
 def _mul_two(field_a: str, field_b: str):
@@ -612,18 +705,27 @@ _b(
     dataset="ashare_stock_daily", physical=("StockDailyBar.IsSuspend",),
     quality=_NATIVE, coverage=_FULL, source_unit=UnitSpec(dimension="boolean"),
     canonical_unit=UnitSpec(dimension="boolean"),
-    transform=_not_bool, transform_description="NOT IsSuspend (tradable = listed AND not suspended)",
+    transform=_not_bool,
+    transform_description="NOT IsSuspend (not_suspended_state; known-suspended->0, known-not-suspended->1, NaN->NaN; does NOT claim listing membership)",
     temporal_model="exact_daily", available_at="local_open",
-    source_certified=True, notes="IsSuspend lives in StockDailyBar; transform actually negates it",
+    source_certified=True, notes="IsSuspend lives in StockDailyBar; transform negates it preserving NaN (unknown suspension stays unknown); no listing/public-status mask is included",
 )
 _b(
     "tradability_state", "us", "us_tradability_universe",
-    dataset="us_stock_list", physical=("StockList.type",),
+    dataset="us_stock_list",
+    physical=("StockList.type", "StockDailyBar.Close"),
     quality=ProviderQuality.SEMANTIC_EQUIVALENT, coverage=CoverageClass.PARTIAL,
     source_unit=UnitSpec(dimension="boolean"), canonical_unit=UnitSpec(dimension="boolean"),
-    transform=_identity, transform_description="CS universe + valid price/volume",
+    transform=_us_tradable,
+    transform_description="StockList.type=='CS' AND finite DailyBar close -> 1/0 (unknown membership -> 0)",
     temporal_model="exact_daily", available_at="local_close",
-    source_certified=False, notes="is_ticker_halt is extremely sparse; cannot serve as IsSuspend equivalent",
+    source_certified=False,
+    derived_expression="us_tradable = (StockList.type=='CS') AND isfinite(StockDailyBar.Close)",
+    required_filters=(
+        FilterRequirement(field="universe_daily", operator="present", required=True),
+        FilterRequirement(field="StockDailyBar", operator="present", required=True),
+    ),
+    notes="real boolean from CS list type + finite DailyBar close (universe_daily membership declared via required_filters); is_ticker_halt is far too sparse to be an IsSuspend equivalent",
 )
 
 # --- index ---------------------------------------------------------------------
@@ -673,14 +775,19 @@ _b(
 )
 _b(
     "cash_dividend_per_share", "us", "us_cash_dividend_declared",
-    dataset="us_stock_dividend", physical=("StockDividend.cash_amount",),
+    dataset="us_stock_dividend",
+    physical=("StockDividend.cash_amount", "StockDividend.declaration_date"),
     quality=_NATIVE, coverage=_PARTIAL,
     source_unit=USD_PER_SHARE, canonical_unit=USD_PER_SHARE,
-    transform=_identity, temporal_model="financial_pit",
-    knowledge_time="declaration_date", available_at="declaration",
+    transform=_dividend_declared_fail_closed,
+    transform_description="cash_amount with declaration_date strict-PIT guard (missing declaration_date -> NaN; never ex-date fallback)",
+    temporal_model="financial_pit",
+    knowledge_time="declaration_date", effective_time="ex_dividend_date",
+    available_at="declaration",
     required_filters=("currency=USD",),
     source_certified=True,
-    notes="declaration_date PIT (0.51% null); ~12.2% non-USD excluded (no COS FX table); ex_date may be future",
+    derived_expression="guard(cash_amount, declaration_date): NaN when declaration_date missing",
+    notes="declaration_date PIT (~0.51% null; missing rows fail closed to NaN, never ex-date fallback); effective_time=ex_dividend_date; ~12.2% non-USD excluded (no COS FX table); ex_date may be future; DataAccess contract us_stock_dividend pit=strict/declaration_date",
 )
 
 # --- financial statements (amounts, local currency) ---------------------------
@@ -866,12 +973,27 @@ class FinancialPeriodAdapter:
         on: str | None = None,
         direction: str = "backward",
         by: str | None = None,
+        same_day: bool = False,
     ) -> Any:
         """As-of merge of event rows onto signal dates.
 
         The ``on`` column defaults to the market knowledge-time column
         (ashare=PubDate, us=filing_date).  Look-ahead is impossible because the
         merge only uses rows with knowledge_time <= signal_date.
+
+        ``same_day`` (round-6 P0-02/P0-03) controls date-level knowledge-time
+        visibility:
+
+        * ``same_day=False`` (default, conservative) — a signal dated exactly
+          on the knowledge-time date CANNOT see that day's filing.  A-share
+          PubDate / US filing_date carry a date, not a time-of-day, and a filing
+          lands after close; assuming ``00:00:00`` availability would let an
+          after-close announcement drive the same-day close (look-ahead).  The
+          value is only visible to the first signal strictly after it.
+        * ``same_day=True`` — only when the caller asserts the knowledge-time
+          column carries a REAL timestamp (``filing_timestamp``) such that
+          ``knowledge_time <= decision_time`` is a sound same-day gate.  Never
+          pass ``True`` for a midnight-normalized date column.
 
         ``by`` MUST be the instrument column (Symbol/Ticker) whenever the
         ``events`` frame mixes several instruments: without ``by`` a stock's
@@ -945,7 +1067,11 @@ class FinancialPeriodAdapter:
                     left_on="__signal_date__",
                     right_on=key,
                     direction=direction,
-                    allow_exact_matches=True,
+                    # round-6 P0-02: date-level knowledge time is conservative —
+                    # a signal dated on the PubDate must NOT see that day's
+                    # after-close filing.  ``allow_exact_matches=False`` makes the
+                    # asof strictly ``knowledge_time < signal_date``.
+                    allow_exact_matches=bool(same_day),
                 )
                 parts.append(joined)
             merged = pd.concat(parts, ignore_index=True)
@@ -960,6 +1086,9 @@ class FinancialPeriodAdapter:
             left_on="__signal_date__",
             right_on=key,
             direction=direction,
+            # round-6 P0-02: conservative date-level knowledge time (same rule as
+            # the per-instrument branch above).
+            allow_exact_matches=bool(same_day),
         )
         return merged
 

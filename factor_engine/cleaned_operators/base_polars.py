@@ -39,6 +39,15 @@ class OperatorMetadata:
     return_type: str = "series"
     enabled: bool = True
     tags: List[str] = field(default_factory=list)
+    # review #5 R5-01: polars metadata mirrors the pandas contract fields so the
+    # central ``validate_operator_call`` gate sees the same ParamSpec / alias
+    # information instead of a backend-local signature copy.
+    param_specs: Dict[str, Any] = field(default_factory=dict)
+    param_aliases: Dict[str, str] = field(default_factory=dict)
+    window_semantics: str | None = None
+    # WS4 P0-07: time-frequency grain contract (mirror of base.OperatorMetadata).
+    input_grain: str | None = None
+    output_grain: str | None = None
 
 
 class Operator(ABC):
@@ -74,6 +83,16 @@ class Operator(ABC):
         """
         return True
 
+    def _prepare_call(self, args: tuple[Any, ...], kwargs: dict[str, Any]):
+        # review #5 R5-01: every polars backend call passes through the SAME
+        # central logical-call validator as pandas — ParamSpec / param_types /
+        # integer validation, panel-axis alignment (incl. typed broadcast) and
+        # the unknown-kwarg / extra-positional gate.  A polars kernel can no
+        # longer silently ``int(5.9)`` a window that pandas would reject.
+        from cleaned_operators.base import validate_operator_call
+
+        return validate_operator_call(self, args, kwargs)
+
     def __repr__(self):
         return f"<Operator: {self.metadata.name}>"
 
@@ -86,15 +105,8 @@ class SeriesOperator(Operator):
 
     def calculate(self, *args, **kwargs) -> pl.DataFrame:
         """在宽表 panel 上计算本算子；参数见 operators_semantics.md。"""
-        processed_args = []
-        for a in args:
-            if isinstance(a, float) and a == int(a):
-                processed_args.append(int(a))
-            elif isinstance(a, pl.DataFrame):
-                processed_args.append(a)
-            else:
-                processed_args.append(a)
-        return self._calculate_series(*processed_args, **kwargs)
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+        return self._calculate_series(*processed_args, **processed_kwargs)
 
     @abstractmethod
     def _calculate_series(self, *args, **kwargs) -> pl.DataFrame:
@@ -115,7 +127,8 @@ class ScalarOperator(Operator):
 
     def calculate(self, *args, **kwargs) -> Any:
         """在宽表 panel 上计算本算子；参数见 operators_semantics.md。"""
-        return self._calculate_scalar(*args, **kwargs)
+        processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+        return self._calculate_scalar(*processed_args, **processed_kwargs)
 
     @abstractmethod
     def _calculate_scalar(self, *args, **kwargs) -> Any:
@@ -148,7 +161,8 @@ class TransformOperator(Operator):
 
     def calculate(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         """在宽表 panel 上计算本算子；参数见 operators_semantics.md。"""
-        return self._calculate_series(x, **kwargs)
+        processed_args, processed_kwargs = self._prepare_call((x,), kwargs)
+        return self._calculate_series(processed_args[0], **processed_kwargs)
 
 
 class TwoVarOperator(Operator):
@@ -169,7 +183,8 @@ class TwoVarOperator(Operator):
 
     def calculate(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
         """在宽表 panel 上计算本算子；参数见 operators_semantics.md。"""
-        return self._calculate_series(x, y, **kwargs)
+        processed_args, processed_kwargs = self._prepare_call((x, y), kwargs)
+        return self._calculate_series(processed_args[0], processed_args[1], **processed_kwargs)
 
 
 def register_operator(
@@ -546,7 +561,14 @@ def apply_numba_rank(df: pl.DataFrame, axis: int = 1) -> pl.DataFrame:
     return result_df
 
 
-_SKIP_PANEL = frozenset({"date", "stock_code"})
+# WS4 P1-17: single shared constant for the wide-panel metadata columns that do
+# not participate in factor computation.  Several modules (polars_dynamics,
+# rolling_pack, polars_chip_tail, polars_geometry_math, spectral_ext, …) still
+# define their own local ``_SKIP_PANEL`` / ``_SKIP`` copy — replacing them is
+# tracked separately (P1-17) so this shared constant is the canonical source for
+# new code.  ``_SKIP_PANEL`` remains as a backward-compatible alias.
+PANEL_SKIP_COLUMNS = frozenset({"date", "stock_code"})
+_SKIP_PANEL = PANEL_SKIP_COLUMNS
 
 
 def panel_pandas_bridge(x: "pl.DataFrame", fn, *args, **kwargs) -> "pl.DataFrame":
@@ -561,7 +583,7 @@ def panel_pandas_bridge(x: "pl.DataFrame", fn, *args, **kwargs) -> "pl.DataFrame
     返回:
         数值列替换为 ``fn`` 结果后的 Polars DataFrame。
     """
-    cols = [c for c in x.columns if c not in _SKIP_PANEL]
+    cols = [c for c in x.columns if c not in PANEL_SKIP_COLUMNS]
     if not cols:
         return x
     pdf = x.select(cols).to_pandas()

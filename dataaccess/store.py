@@ -75,6 +75,7 @@ from data_access.read.read_contract import (
     build_file_manifest,
     file_manifest_hash,
     merge_sql_data_snapshots,
+    schema_hash_from_decl,
 )
 from data_access.read.scan_handle import ScanHandle
 from data_access.read.read_handle import ReadHandle
@@ -85,7 +86,11 @@ from data_access.registry.paths import (
     dataset_env_root,
     extra_allowed_roots_from_env,
 )
-from data_access.read.predicate import Predicate, compile_predicate
+from data_access.read.predicate import (
+    Predicate,
+    compile_predicate,
+    ensure_sequence_arg,
+)
 from data_access.registry import (
     Dataset,
     DatasetRegistry,
@@ -863,7 +868,14 @@ class DataAccessStore:
         pf = params_fingerprint(read_params if isinstance(ds, ParametricDataset) else None)
         file_versions = files if files is not None else build_file_manifest(paths)
         manifest = file_manifest_hash(file_versions)
-        return schema_cache_key(ds.name, params_fingerprint=pf, manifest_hash=manifest)
+        # #P1-59 schema cache key 绑定 declared schema identity：不同 registry
+        # schema（同 dataset/params/files）不能复用彼此的校验成功。
+        return schema_cache_key(
+            ds.name,
+            params_fingerprint=pf,
+            manifest_hash=manifest,
+            declared_schema_hash=schema_hash_from_decl(getattr(ds, "schema", None)),
+        )
 
     def read_result(
         self,
@@ -919,6 +931,11 @@ class DataAccessStore:
         physical_scope: str | Sequence[str] | None = None,
     ) -> ReadResult:
         """按已解析的 ``Dataset`` 对象执行一次读（read_result / read_uri 共用）。"""
+        # #P0-5 拒绝 str/bytes 冒充序列（instrument_filter="AAPL" 会逐字符过滤）
+        if instrument_filter is not None:
+            ensure_sequence_arg(instrument_filter, name="instrument_filter")
+        if columns is not None:
+            ensure_sequence_arg(columns, name="columns")
         # #5 统一读前语义门禁：temporal contract + event cutoff + required_filters
         # + allowed_filter_values（read_arrow_stream / scan_polars 也走同一入口）
         self._prepare_read_request(
@@ -4630,6 +4647,8 @@ class DataAccessStore:
             raise ValidationError(
                 f"write_arrow mode 必须是 {_VALID_WRITE_MODES}，收到 {mode!r}"
             )
+        if partition_by is not None:
+            ensure_sequence_arg(partition_by, name="write_arrow.partition_by")
         if not isinstance(table, pa.Table):
             raise ValidationError(
                 f"write_arrow 只接受 pyarrow.Table，收到 {type(table).__name__}；"
@@ -4808,6 +4827,10 @@ class DataAccessStore:
                 f"upsert 只接受 pyarrow.Table，收到 {type(table).__name__}；"
                 f"DataFrame 请先 pyarrow.Table.from_pandas(df)"
             )
+        # #P0-5 拒绝 str/bytes 冒充序列（upsert_on="ts" 会被逐字符当合并键）
+        ensure_sequence_arg(upsert_on, name="upsert.upsert_on")
+        if partition_by is not None:
+            ensure_sequence_arg(partition_by, name="upsert.partition_by")
 
         ds = self._registry.get(dataset)
 
@@ -4856,6 +4879,7 @@ class DataAccessStore:
         max_rows: int | None = None,
         reason: str | None = None,
         ticket_id: str | None = None,
+        delete_all: bool = False,
         **params: Any,
     ) -> dict[str, Any]:
         """从 namespaced/staging 数据集删除时间范围内的行（行级补偿删除）。"""
@@ -4882,6 +4906,7 @@ class DataAccessStore:
                 max_rows=max_rows,
                 reason=reason,
                 ticket_id=ticket_id,
+                delete_all=delete_all,
             )
 
         # #2：delete_rows 也是 mutation —— 必须走统一 manifest 失效事务。

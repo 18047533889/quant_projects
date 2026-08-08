@@ -466,6 +466,9 @@ def semantic_cert(
     catalog: dict[str, Any] | None = None,
     *,
     evidence_production_certified: bool | None = None,
+    semantic_golden_verified: bool | None = None,
+    temporal_prefix_verified: bool | None = None,
+    source_contract_verified: bool | None = None,
 ) -> SemanticCert:
     """Compose the four-certificate record for ``canonical``.
 
@@ -476,8 +479,26 @@ def semantic_cert(
     experimental/isolation manifest.  The ``None`` path (pre-overlay hardening,
     before ``apply_evidence_certification_overlay`` binds per-operator evidence)
     grants no certificate — candidate status only, never certification.
+
+    Per-gate independence (review P0-18): each of the semantic / temporal /
+    source-contract gates requires its OWN verified evidence record
+    (``semantic_golden_verified`` / ``temporal_prefix_verified`` /
+    ``source_contract_verified``).  Implementation evidence proves the backend
+    ran; it never back-stops the other gates.  Absent per-gate records default
+    to False (fail-closed) and are sourced from the catalog when the caller does
+    not supply them explicitly.
     """
     notes: list[str] = []
+
+    # Resolve each gate's OWN independent evidence.  Implementation evidence must
+    # never grant the semantic/temporal/source certificates (review P0-18); an
+    # operator with no per-gate record fails closed on that gate.
+    if semantic_golden_verified is None:
+        semantic_golden_verified = bool((catalog or {}).get("semantic_golden_verified", False))
+    if temporal_prefix_verified is None:
+        temporal_prefix_verified = bool((catalog or {}).get("temporal_prefix_verified", False))
+    if source_contract_verified is None:
+        source_contract_verified = bool((catalog or {}).get("source_contract_verified", False))
 
     # (1) Implementation: evidence overlay result is authoritative when given.
     if evidence_production_certified is True:
@@ -487,22 +508,27 @@ def semantic_cert(
     else:
         implementation = not should_fail_closed(canonical)
 
-    # (2) Semantic / (3) temporal: evidence-driven.  Absence from the fail-closed
-    # set never grants a certificate on its own; only an operator bound to a
-    # verified implementation artifact receives them.
-    if evidence_production_certified is True:
-        semantic_ok = not should_fail_closed(canonical)
-        temporal_ok = not should_fail_closed(canonical)
-    else:
-        semantic_ok = False
-        temporal_ok = False
+    # (2) Semantic / (3) temporal: each gate is granted only when the operator
+    # has BOTH a verified implementation artifact AND its own per-gate evidence
+    # record.  ``not should_fail_closed`` alone never certifies.
+    semantic_ok = bool(
+        evidence_production_certified is True
+        and semantic_golden_verified
+        and not should_fail_closed(canonical)
+    )
+    temporal_ok = bool(
+        evidence_production_certified is True
+        and temporal_prefix_verified
+        and not should_fail_closed(canonical)
+    )
 
-    # (4) Source contract: evidence-backed AND not source-blocked AND not
-    # research-marked.
+    # (4) Source contract: evidence-backed AND own source/PIT record AND not
+    # source-blocked AND not research-marked.
     from cleaned_operators.production_hardening import SOURCE_BLOCKED_CANONICALS
 
-    source_ok = (
+    source_ok = bool(
         evidence_production_certified is True
+        and source_contract_verified
         and canonical not in SOURCE_BLOCKED_CANONICALS
         and not should_fail_closed(canonical)
     )
@@ -624,9 +650,22 @@ def reconcile_operator_certification(
     # Recompute the semantic/temporal/source certificates with the per-operator
     # evidence binding so they are genuinely evidence-driven (review P0-A01):
     # an operator not bound to a verified artifact gets all-negative
-    # certificates, never default trust.
+    # certificates, never default trust.  Each gate also requires its OWN
+    # per-gate evidence record (review P0-18) — implementation evidence alone
+    # never grants the semantic/temporal/source certificates.
     cert = semantic_cert(
-        canonical, catalog, evidence_production_certified=bool(implementation_passed)
+        canonical,
+        catalog,
+        evidence_production_certified=bool(implementation_passed),
+        semantic_golden_verified=bool(
+            catalog.get("semantic_golden_verified", False)
+        ),
+        temporal_prefix_verified=bool(
+            catalog.get("temporal_prefix_verified", False)
+        ),
+        source_contract_verified=bool(
+            catalog.get("source_contract_verified", False)
+        ),
     )
 
     # (2)-(4) Semantic / temporal / source-PIT gates: an operator is never
@@ -688,11 +727,31 @@ def reconcile_operator_certification(
     # the evidence overlay ran; the final authority must re-open pit_safe for
     # operators that are genuinely certified so ``infer_operator_policy`` agrees
     # with ``catalog["pit_safe"]`` (review P0-A03: no blanket, reconcile wins).
+    #
+    # ``pit_safe`` in ``_EXPLICIT_POLICIES`` is a *structural* property: an
+    # elementwise / cross-sectional / group / trailing-window operator is causal
+    # by construction and its policy stays True regardless of evidence state.
+    # Certification gates production *admission* (``catalog["pit_safe"]``), not
+    # structural causality.  So reconcile only re-opens pit_safe for genuinely
+    # certified operators; it never downgrades an explicit structural True to
+    # False (that would deadlock the primitive/factor certifier bootstrap,
+    # whose convergence stage runs before the artifact is written).
+    #
+    # Exception: an intentionally-experimental / isolated canonical (the
+    # in-sample diagnostic family — ts_ar_forecast/innovation*, *_resid without
+    # the *_prior / forecast_error suffix, etc.) must stay pit_safe=False even
+    # though it carries an explicit structural policy entry: those operators are
+    # reviewed *not to be admitted*, so ``should_fail_closed`` wins over the
+    # structural table.  ``infer_operator_policy`` then agrees with the
+    # fail-closed lifecycle and the manifest/catalog surfaces stay consistent.
     try:
         from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
 
         existing = dict(_EXPLICIT_POLICIES.get(canonical) or {})
-        existing["pit_safe"] = bool(certified)
+        if should_fail_closed(canonical):
+            existing["pit_safe"] = False
+        else:
+            existing["pit_safe"] = existing.get("pit_safe", False) or bool(certified)
         _EXPLICIT_POLICIES[canonical] = existing
     except Exception:  # pragma: no cover - policy module not importable
         pass

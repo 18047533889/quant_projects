@@ -272,8 +272,11 @@ class DatasetManifest:
         os.replace(str(tmp), str(out))
         _fsync_parent(out)
         if self.row_groups:
-            _save_row_groups(root, self.row_groups)
-        # meta 放独立 JSON sidecar（footer key-value metadata 各版本 pyarrow 行为不稳）
+            _save_row_groups(root, self.row_groups, generation=gen)
+        else:
+            # #P0-13 重建不生成 row-group sidecar 时删掉旧的——否则新 manifest
+            # （generation B，无 rowgroups）会 load 到旧 sidecar（generation A）。
+            _remove_stale_row_group_sidecar(root)
         old_epoch = _read_epoch(root)
         src = self.source_epoch or self.manifest_epoch or _next_epoch(old_epoch)
         built = self.manifest_built_epoch or src
@@ -338,10 +341,13 @@ class DatasetManifest:
         meta = _read_manifest_meta_json(root)
         # #P0-30 parquet 与 JSON sidecar 的 generation 必须一致——进程死在两次
         # replace 之间会留下 mixed generation，绝不能当权威 manifest 用。
+        # #P0-12 新格式任一侧缺 generation 也算 mixed（partial write）→ 不 fresh。
         parquet_gen = _parquet_generation_id(path)
         sidecar_gen = meta.get("manifest_generation_id")
-        if parquet_gen is not None and sidecar_gen is not None and parquet_gen != sidecar_gen:
-            return None
+        if parquet_gen is not None or sidecar_gen is not None:
+            if parquet_gen is None or sidecar_gen is None or parquet_gen != sidecar_gen:
+                return None  # 单侧缺失 / 不一致 → mixed generation
+        generation = parquet_gen or sidecar_gen
         src = meta.get("source_epoch")
         built = meta.get("manifest_built_epoch")
         legacy = meta.get("manifest_epoch")
@@ -354,13 +360,13 @@ class DatasetManifest:
             instrument_column=meta.get("instrument_column"),
             format=meta.get("format", "parquet"),
             files=tuple(files),
-            row_groups=_load_row_groups(root),
+            row_groups=_load_row_groups(root, expected_generation=generation),
             created_at=meta.get("created_at"),
             time_dtype=meta.get("time_dtype"),
             source_epoch=src,
             manifest_built_epoch=built,
             manifest_epoch=legacy,
-            manifest_generation_id=sidecar_gen or parquet_gen,
+            manifest_generation_id=generation,
         )
 
     def prune_by_time(
@@ -495,6 +501,9 @@ def _read_manifest_meta_json(root: Path) -> dict[str, str]:
         "source_epoch": payload.get("source_epoch"),
         "manifest_built_epoch": payload.get("manifest_built_epoch"),
         "manifest_epoch": payload.get("manifest_epoch"),
+        # #P0-12 必须把 generation 完整带回来——之前读回时丢字段，load() 的
+        # parquet vs JSON mismatch 检测无法可靠生效。
+        "manifest_generation_id": payload.get("manifest_generation_id"),
     }
 
 
@@ -683,31 +692,77 @@ def rebuild_manifest_for_dataset(
         return None
 
 
-def _save_row_groups(root: Path, row_groups: Sequence[ManifestRowGroup]) -> Path:
-    """把 row-group 级统计持久化到 ``{root}/_manifest_rowgroups.parquet``。"""
+def _remove_stale_row_group_sidecar(root: Path) -> None:
+    """#P0-13 删除过期 row-group sidecar（重建不生成 rowgroups 时必须调用）。"""
+    path = Path(root) / _ROW_GROUPS_FILENAME
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _row_groups_generation(path: Path) -> str | None:
+    """读 row-group sidecar parquet schema metadata 里的 manifest generation。"""
+    try:
+        meta = pq.read_metadata(str(path))
+    except Exception:
+        return None
+    kv = meta.metadata
+    if kv is None:
+        return None
+    raw = kv.get(b"manifest_generation_id")
+    if raw is None:
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _save_row_groups(
+    root: Path, row_groups: Sequence[ManifestRowGroup], *, generation: str | None = None
+) -> Path:
+    """把 row-group 级统计持久化到 ``{root}/_manifest_rowgroups.parquet``。
+
+    #P0-13 把 manifest generation 写入 sidecar 的 schema metadata——旧 sidecar
+    不能被新 generation 的 manifest load（文件级 metadata 与 rowgroup 统计必须同代）。
+    """
     root = Path(root)
-    rows = [
+    # #P0-14 ``pa.table(list_of_dicts)`` 在 pyarrow 25 不支持（"Must pass names or
+    # schema"），旧代码 rowgroup sidecar 实际从未成功持久化过。改成列数组字典。
+    table = pa.table(
         {
-            "path": rg.path,
-            "row_group": rg.row_group,
-            "column": rg.column,
-            "min": _norm_value(rg.min),
-            "max": _norm_value(rg.max),
-            "null_count": rg.null_count,
-            "rows": rg.rows,
+            "path": [rg.path for rg in row_groups],
+            "row_group": [rg.row_group for rg in row_groups],
+            "column": [rg.column for rg in row_groups],
+            "min": [_norm_value(rg.min) for rg in row_groups],
+            "max": [_norm_value(rg.max) for rg in row_groups],
+            "null_count": [rg.null_count for rg in row_groups],
+            "rows": [rg.rows for rg in row_groups],
         }
-        for rg in row_groups
-    ]
-    table = pa.table(rows)
+    )
+    if generation:
+        table = table.cast(
+            table.schema.with_metadata(
+                {b"manifest_generation_id": generation.encode("utf-8")}
+            )
+        )
     out = root / _ROW_GROUPS_FILENAME
     tmp = root / f".{_ROW_GROUPS_FILENAME}.tmp"
     pq.write_table(table, tmp)
+    _fsync_parent(tmp)
     os.replace(str(tmp), str(out))
     return out
 
 
-def _load_row_groups(root: Path) -> tuple[ManifestRowGroup, ...] | None:
-    """读取持久化的 row-group 级统计；无则返回 None。"""
+def _load_row_groups(
+    root: Path, *, expected_generation: str | None = None
+) -> tuple[ManifestRowGroup, ...] | None:
+    """读取持久化的 row-group 级统计；无则返回 None。
+
+    #P0-13 只接受与 manifest 同 generation 的 sidecar；generation 不一致或
+    单侧缺失（旧 sidecar 配新 manifest）→ 忽略（返回 None，读路径回退文件级）。
+    """
     path = Path(root) / _ROW_GROUPS_FILENAME
     if not path.exists():
         return None
@@ -715,6 +770,13 @@ def _load_row_groups(root: Path) -> tuple[ManifestRowGroup, ...] | None:
         table = pq.read_table(str(path))
     except Exception:
         return None
+    sidecar_gen = _row_groups_generation(path)
+    if expected_generation is not None:
+        if sidecar_gen is None or sidecar_gen != expected_generation:
+            return None  # 旧 sidecar / 异代 sidecar 不能配新 manifest
+    elif sidecar_gen is not None:
+        return None  # 新 sidecar 配无 generation 的旧 manifest → 也拒（fail-closed）
+    data = table.to_pydict()
     data = table.to_pydict()
     out: list[ManifestRowGroup] = []
     paths = data.get("path", [])

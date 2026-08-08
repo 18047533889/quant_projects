@@ -646,15 +646,12 @@ class TsTransferEntropyPeakLag(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_transfer_entropy",
             "ts_score_rank_weighted_mean",
             "ts_transfer_entropy_peak_strength",
             "ts_transfer_entropy_peak_lag",
-        }
-    )
+        })
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS)
         | {"ts_effective_transfer_entropy", "report_benford_js_divergence"}

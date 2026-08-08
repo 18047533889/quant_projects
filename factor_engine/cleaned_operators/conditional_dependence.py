@@ -59,14 +59,14 @@ def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
         n_bins = 2
     edges = np.unique(np.quantile(finite, np.linspace(0.0, 1.0, n_bins + 1)))
     if edges.size == 1:
-        edges = np.array([edges[0] - 1.0, edges[0] + 1.0])
-    elif edges.size < n_bins + 1:
-        lo, hi = float(edges[0]), float(edges[-1])
-        if hi - lo <= _EPS:
-            lo, hi = lo - 1.0, hi + 1.0
-        edges = np.linspace(lo, hi, n_bins + 1)
-        edges[0] = -np.inf
-        edges[-1] = np.inf
+        # single distinct value: the caller's ``< 2 unique states`` check
+        # normally guards this; keep a minimal 2-cell split defensively.
+        return np.array([edges[0] - 1.0, edges[0] + 1.0], dtype=float)
+    # Round-7 P0: keep the ACTUAL quantile cell structure.  With heavy ties the
+    # unique quantile edges can be fewer than ``n_bins + 1``; the old fallback
+    # silently re-binned with equal-width ``linspace`` edges, so the estimator
+    # changed meaning with the data's tie rate.  Fewer unique edges simply mean
+    # fewer effective cells — the kernel's digitize/clip handles that honestly.
     return edges
 
 
@@ -193,20 +193,26 @@ class TsConditionalTransferEntropy(SeriesOperator):
             raise ValueError("ts_conditional_transfer_entropy requires lag >= 1")
         if w < lg + 2:
             raise ValueError("ts_conditional_transfer_entropy requires window >= lag + 2")
-        # ``min_transitions`` floor stays feasible for the default window=60 /
-        # bins=3 (the old ``max(80, 6*bins^3)`` silently produced an all-NaN
-        # column).  The stricter ``N >> bins^4`` requirement is enforced at
-        # runtime by the kernel (fail-closed NaN, R5 P1-43(a)) so this operator
-        # never emits a noisy CTE from a near-empty contingency table.
+        # Feasibility gate (R5 P1-43(a) / round-7 P0): the 4-D joint
+        # ``(t', t, s, c)`` needs ``3*bins^4`` transitions to be estimable.  The
+        # gate must use the SAME requirement as the kernel — the older looser
+        # floor ``2*bins^3`` let the default ``window=60 / bins=3`` pass the gate
+        # (59 >= 54) while the kernel silently returned all-NaN (3*3^4 = 243
+        # required), i.e. a dead operator.  Reject infeasible (window, bins,
+        # lag) combinations loudly at execution time instead of failing inside
+        # the kernel.
         if min_transitions is None:
             mt = max(30, 2 * nb * nb * nb)
         else:
             mt = max(lg + 2, int(min_transitions))
+        required = 3 * (nb ** 4)
+        mt = max(mt, required)
         if w - lg < mt:
             raise ValueError(
                 "ts_conditional_transfer_entropy window-lag "
-                f"({w - lg}) < min_transitions ({mt}) with bins={nb}; raise window "
-                "or lower bins (default window=60 supports bins<=3)"
+                f"({w - lg}) < required transitions ({mt}) with bins={nb}; "
+                "raise window or lower bins (bins=3 needs window >= "
+                f"{mt + lg}, bins=2 needs window >= {3 * 16 + lg})"
             )
         return frame_like(
             target,

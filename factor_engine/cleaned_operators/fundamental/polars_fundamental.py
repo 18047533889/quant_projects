@@ -869,9 +869,11 @@ def fin_days_since_expectation_revision(expected, target_period_id, max_days=252
         xv = expected[c].to_numpy()
         pv = _pv_of(target_period_id, c)
         event = _revision_event_1d(xv, pv)
-        # Observed clock (R4-27): never age blindly across an unobservable gap.
-        # A gap row -> NaN and the age reference is reset; the first complete
-        # observation after a gap is treated as a fresh revision boundary (0).
+        # Observed clock (R4-27 / P1-06): never age blindly across an
+        # unobservable gap.  A gap row -> NaN and the age reference is reset; a
+        # complete non-event after a gap stays censored (NaN, NOT 0 — a 0 would
+        # read as "revision happened today") and only resumes at a NEW revision
+        # event (the ``event`` branch emits 0 and restarts the clock).
         # ``age`` starts at ``cap`` (matching the pandas reference) so the first
         # complete non-event row reads as ``cap``, not 0.
         age = cap
@@ -888,9 +890,10 @@ def fin_days_since_expectation_revision(expected, target_period_id, max_days=252
                 age = min(cap, age + 1)
                 arr[t] = float(age)
             else:
-                # Observed-clock resume after a gap: fresh reference (age 0).
-                arr[t] = 0.0
-                age = 0
+                # P1-06: after a gap the revision age is censored — output NaN,
+                # NOT 0.  Only a new revision event resumes the clock.
+                arr[t] = np.nan
+                age = None
         out[:, i] = arr
     return _make(expected, cols, out)
 

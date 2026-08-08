@@ -637,15 +637,12 @@ class TsAutocorrDecayHalfLife(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_permutation_entropy", "ts_weighted_permutation_entropy",
             "ts_permutation_transition_entropy", "ts_sample_entropy",
             "ts_hurst_dfa", "ts_higuchi_fractal_dimension",
             "ts_variogram_slope", "ts_autocorr_decay_half_life",
-        }
-    )
+        })
     # ``ts_permutation_entropy`` / ``ts_sample_entropy`` are also registered by
     # the ts_model.complexity research family (loaded earlier).  This module is
     # the reviewed production implementation, so pull those names off the

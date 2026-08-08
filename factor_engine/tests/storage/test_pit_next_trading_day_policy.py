@@ -41,7 +41,24 @@ def _events(*rows: tuple[str, str, float], instrument: str = "A") -> pd.DataFram
     )
 
 
-def test_default_same_day_keeps_historical_behaviour() -> None:
+def test_same_day_opt_in_keeps_historical_behaviour() -> None:
+    events = _events(("2024-03-31", "2024-04-30", 100.0))
+    joined = pit_asof_join(
+        _decisions("2024-04-30", "2024-05-02"),
+        events,
+        columns=PITColumns(),
+        max_age_days=None,
+        available_policy="same_day",
+    )
+    # same_day: a decision dated PubDate sees the event announced that day.
+    assert joined["value"].iloc[0] == 100.0
+    assert joined["value"].iloc[1] == 100.0
+
+
+def test_default_policy_is_conservative_next_trading_day() -> None:
+    """Round-6 P0-03: a date-level knowledge time must NOT default to same-day
+    visibility — an after-close filing on PubDate would otherwise drive that
+    day's close (look-ahead).  The default is next_trading_day."""
     events = _events(("2024-03-31", "2024-04-30", 100.0))
     joined = pit_asof_join(
         _decisions("2024-04-30", "2024-05-02"),
@@ -49,8 +66,7 @@ def test_default_same_day_keeps_historical_behaviour() -> None:
         columns=PITColumns(),
         max_age_days=None,
     )
-    # same_day: a decision dated PubDate sees the event announced that day.
-    assert joined["value"].iloc[0] == 100.0
+    assert pd.isna(joined["value"].iloc[0])
     assert joined["value"].iloc[1] == 100.0
 
 

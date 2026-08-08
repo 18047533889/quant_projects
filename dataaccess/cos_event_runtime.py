@@ -2,23 +2,46 @@
 """Correct point-in-time event reads and latest-period state selection."""
 from __future__ import annotations
 
+import datetime as _dt
 from typing import Any, Mapping, Sequence
+
 import numpy as np
 import pandas as pd
 
 from data_access.core.exceptions import ValidationError
+from data_access.read.temporal_join import (
+    availability_strict_next,
+    availability_uses_calendar,
+)
 from .cos_contract import COSDatasetContract, resolve_event_clock, validate_event_filters
 from .cos_panel_runtime import compile_filters, quote
+from data_access.read.predicate import ensure_sequence_arg
 
 
 def _required(contract: COSDatasetContract, clock: str) -> list[str]:
     return list(dict.fromkeys([contract.instrument_column, clock, contract.period_column, *contract.revision_columns, *contract.event_id_columns, *contract.required_event_filters]))
 
 
+def _declared_schema(self: Any, dataset: str) -> list[str]:
+    """数据集 registry 声明的完整 schema 列（用于 columns=None → 全列）。"""
+    reg = getattr(self, "_registry", None)
+    if reg is None:
+        return []
+    try:
+        ds = reg.get(dataset)
+        schema = dict(getattr(ds, "schema", None) or {})
+        return list(dict.fromkeys(str(c) for c in schema))
+    except Exception:
+        return []
+
+
 def read_cos_events(self: Any, dataset: str, *, columns: Sequence[str] | None = None, start: Any | None = None, end: Any | None = None, instrument_filter: Sequence[str] | None = None, event_filters: Mapping[str, Any] | None = None, allow_effective_time: bool = False, **params: Any) -> pd.DataFrame:
     contract, clock = resolve_event_clock(dataset, allow_effective_time=allow_effective_time)
     filters = validate_event_filters(contract, event_filters)
-    selected = None if columns is None else list(dict.fromkeys([*columns, *_required(contract, clock)]))
+    if instrument_filter is not None:
+        ensure_sequence_arg(instrument_filter, name="instrument_filter")
+    required = _required(contract, clock)
+    selected = None if columns is None else list(dict.fromkeys([*columns, *required]))
     projection = "*" if selected is None else ", ".join(quote(c) for c in selected)
     clauses, bind = compile_filters(filters)
     if start is not None:
@@ -38,7 +61,14 @@ def read_cos_events(self: Any, dataset: str, *, columns: Sequence[str] | None = 
     # 视图所需列（含 PIT 必要内部列）。本 helper 在入口已做 contract 校验
     # （resolve_event_clock / validate_event_filters），是语义层自身，跳过
     # sql() 的用户级 semantic gate（_semantic_gate=False）。
-    view_cols = list(selected) if selected else list(_required(contract, clock))
+    # #P0-33 columns=None → TEMP VIEW 必须是完整 declared schema（否则 SELECT *
+    # 只看得见 PIT 必需列）。
+    # #P0-34 event filter 引用的列必须进 view projection——WHERE 引用但 view 里
+    # 没有 → DuckDB Binder Error。
+    if selected is None:
+        view_cols = list(dict.fromkeys([*_declared_schema(self, dataset), *required]))
+    else:
+        view_cols = list(dict.fromkeys([*selected, *required, *filters.keys()]))
     table = self.sql(
         query,
         read_datasets=[dataset],
@@ -90,9 +120,53 @@ def _normalize(events: pd.DataFrame, contract: COSDatasetContract, clock: str) -
     return out
 
 
-def _select(decisions: pd.DataFrame, events: pd.DataFrame, contract: COSDatasetContract, decision_time: str, decision_instrument: str, clock: str, mode: str) -> list[pd.Series | None]:
+def _select(
+    decisions: pd.DataFrame,
+    events: pd.DataFrame,
+    contract: COSDatasetContract,
+    decision_time: str,
+    decision_instrument: str,
+    clock: str,
+    mode: str,
+    *,
+    availability: str = "same_day",
+    calendar: Any = None,
+) -> list[pd.Series | None]:
+    """#P0-12 PIT asof 选择，availability 语义与 read_joined 共用同一套。
+
+    不再写死 ``event_clock <= decision``：先解析数据集 availability——
+        - 需日历的种类（next_trading_day / next_session_open / session …）且
+          有市场日历 → 用 ``MarketCalendar.available_from`` 把 knowledge 编译成
+          available_from，条件变 ``available_from <= decision``（与 read_joined
+          的 ``_session_avail_sql`` 同一语义）；
+        - 无日历 → 按统一 availability 回退：严格下一交易日类用 ``<``，其余
+          ``<=``（与 ``TemporalJoinSpec.comparison_operator`` 同一语义）。
+    """
     if mode not in {"latest_period", "latest_available"}:
         raise ValidationError("period_selection 只能是 latest_period 或 latest_available")
+    strict_next = availability_strict_next(availability)
+    use_calendar = (
+        availability_uses_calendar(availability)
+        and calendar is not None
+        and bool(getattr(calendar, "has_data", False))
+    )
+    cal_tz = getattr(calendar, "timezone", "UTC") if use_calendar else "UTC"
+
+    def _to_utc(avail: Any) -> Any:
+        """``available_from`` 返回交易所本地 naive datetime/date → 统一 UTC aware。"""
+        if isinstance(avail, _dt.datetime):
+            if avail.tzinfo is None:
+                return pd.Timestamp(avail).tz_localize(cal_tz).tz_convert("UTC")
+            return avail
+        if isinstance(avail, _dt.date):
+            return pd.Timestamp(avail, tz=cal_tz).tz_convert("UTC")
+        return avail
+
+    def _visible(knowledge: Any, decision: Any) -> bool:
+        if use_calendar:
+            return _to_utc(calendar.available_from(knowledge, availability)) <= decision
+        return (knowledge < decision) if strict_next else (knowledge <= decision)
+
     chosen: list[pd.Series | None] = [None] * len(decisions)
     groups = {str(k): g.sort_values([clock, *([contract.period_column] if contract.period_column else [])], kind="mergesort") for k, g in events.groupby(contract.instrument_column, sort=False)}
     for instrument, left_group in decisions.groupby(decision_instrument, sort=False):
@@ -104,7 +178,7 @@ def _select(decisions: pd.DataFrame, events: pd.DataFrame, contract: COSDatasetC
         latest = None
         by_period = {}
         for _, decision in left_group.sort_values(decision_time, kind="mergesort").iterrows():
-            while cursor < len(rows) and rows[cursor][1][clock] <= decision[decision_time]:
+            while cursor < len(rows) and _visible(rows[cursor][1][clock], decision[decision_time]):
                 latest = rows[cursor][1]
                 if contract.period_column:
                     by_period[latest[contract.period_column]] = latest
@@ -112,6 +186,29 @@ def _select(decisions: pd.DataFrame, events: pd.DataFrame, contract: COSDatasetC
             selected = by_period[max(by_period)] if mode == "latest_period" and contract.period_column and by_period else latest
             chosen[int(decision["__pit_position"])] = selected
     return chosen
+
+
+def _resolve_event_availability(self: Any, dataset: str) -> str:
+    """解析事件数据集在 asof 里的 availability（与 read_joined 同源）。
+
+    优先字段级一致声明（financial 数据集标 ``next_trading_day``）；否则契约
+    默认 ``same_day``——与 ``_effective_join_specs`` 的「字段语义 → COS 契约
+    默认」合成顺序一致。字段级互相冲突时不猜测，回退 same_day。
+    """
+    try:
+        from data_access.read.semantic_catalog import get_semantic_catalog
+
+        avail = {
+            str(f.availability)
+            for f in get_semantic_catalog()._fields.values()
+            if getattr(f, "dataset", None) == dataset
+            and getattr(f, "availability", None)
+        }
+        if len(avail) == 1:
+            return next(iter(avail))
+    except Exception:
+        pass
+    return "same_day"
 
 
 def read_cos_events_asof(self: Any, dataset: str, decisions: pd.DataFrame, *, decision_time: str = "decision_timestamp", decision_instrument: str = "instrument", columns: Sequence[str] | None = None, event_filters: Mapping[str, Any] | None = None, max_age_days: int | None = None, period_selection: str = "latest_period", allow_effective_time: bool = False, **params: Any) -> pd.DataFrame:
@@ -136,8 +233,15 @@ def read_cos_events_asof(self: Any, dataset: str, decisions: pd.DataFrame, *, de
     validate_event_filters(contract, event_filters)
     if decision_time not in decisions or decision_instrument not in decisions:
         raise ValidationError(f"decisions 必须包含 {decision_time!r} 和 {decision_instrument!r}")
-    if max_age_days is not None and int(max_age_days) < 0:
-        raise ValidationError("max_age_days 必须为非负整数或 None")
+    # #P2-80 max_age_days 严格整数：1.9 静默截断成 1 会悄悄放宽 staleness 阈值，
+    # bool 也不该当 0/1。
+    if max_age_days is not None:
+        if isinstance(max_age_days, bool) or not isinstance(max_age_days, int):
+            raise ValidationError(
+                f"max_age_days 必须是非负整数或 None，收到 {max_age_days!r}"
+            )
+        if max_age_days < 0:
+            raise ValidationError("max_age_days 必须为非负整数或 None")
     left = decisions.copy()
     left[decision_time] = pd.to_datetime(left[decision_time], errors="coerce", utc=True)
     left[decision_instrument] = left[decision_instrument].astype("string").str.strip()
@@ -150,7 +254,26 @@ def read_cos_events_asof(self: Any, dataset: str, decisions: pd.DataFrame, *, de
         return output
     events = read_cos_events(self, dataset, columns=columns, end=left[decision_time].max(), instrument_filter=sorted(set(left[decision_instrument].astype(str))), event_filters=event_filters, allow_effective_time=allow_effective_time, **params)
     right = _normalize(events, contract, clock)
-    selected = _select(left, right, contract, decision_time, decision_instrument, clock, period_selection)
+    # #P0-12 统一 availability：与 read_joined 共用同一套语义（financial 事件表
+    # 字段级标 next_trading_day → 事件下一交易日起才可见；无日历按 strict 回退）。
+    availability = _resolve_event_availability(self, dataset)
+    market = getattr(contract, "market", None)
+    calendar = (
+        self.get_calendar(market)
+        if market and hasattr(self, "get_calendar")
+        else None
+    )
+    selected = _select(
+        left,
+        right,
+        contract,
+        decision_time,
+        decision_instrument,
+        clock,
+        period_selection,
+        availability=availability,
+        calendar=calendar,
+    )
     output = left.copy()
     event_cols = [c for c in right.columns if c != contract.instrument_column]
     names = {c: c if c not in output.columns else f"{c}_event" for c in event_cols}
@@ -170,7 +293,12 @@ def read_cos_events_asof(self: Any, dataset: str, decisions: pd.DataFrame, *, de
         ages.append(age)
     for target, vals in values.items():
         output[target] = vals
-    output["fundamental_staleness_days"] = ages
+    # #P2-81 保留输出名冲突防护：decisions 自身已有 fundamental_staleness_days
+    # 时不能覆盖——改名 _event 后缀。
+    staleness_name = "fundamental_staleness_days"
+    if staleness_name in output.columns:
+        staleness_name = "fundamental_staleness_days_event"
+    output[staleness_name] = ages
     return output.sort_values("__pit_position", kind="mergesort").drop(columns=["__pit_position"])
 
 

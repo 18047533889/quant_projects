@@ -152,13 +152,10 @@ class IntradayVolumeClockRoughness(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "intraday_volume_clock_path_efficiency",
             "intraday_volume_clock_roughness",
-        }
-    )
+        })
 
 
 _register_surface()

@@ -72,20 +72,38 @@ class RelationHandle:
         self._validate_sandbox(select_sql)
         text = select_sql.strip()
         if text.lower().startswith("select"):
-            # 用户写完整 SELECT：把第一个 "FROM _sub" 替换为当前句柄的子查询
             import re
 
+            # #P0-11 替换前先断言原 SQL 真的用 `FROM _sub` 引用子查询——之前替换后
+            # 检查 `"_sub" in new_sql` 恒通过（替换本身会引入 AS _sub），连
+            # `SELECT 1 AS _sub` 这种根本没 FROM 的输入都放行。
+            from_match = re.search(r"(?i)\bFROM\s+_sub\b", text)
+            if from_match is None:
+                raise ValueError(
+                    "追加的完整 SELECT 必须用 `FROM _sub` 引用当前句柄作为数据源"
+                )
             new_sql = re.sub(
                 r"(?i)\bFROM\s+_sub\b",
                 f"FROM ({self._sql}) AS _sub",
                 text,
                 count=1,
             )
-            if "_sub" not in new_sql and "_SUB" not in new_sql.upper():
-                raise ValueError("追加的 SELECT 必须引用 _sub 作为 FROM 源")
+            # #P0-10 参数顺序：外层 `?` 若出现在 `FROM _sub` 之前，替换后它的位置
+            # 在子查询之前——不能简单地把 inner params 全放前面。按原文本里
+            # `FROM _sub` 之前的 `?` 数切分外层参数。
+            n_before = text[: from_match.start()].count("?")
+            outer = list(params or [])
+            if n_before > len(outer):
+                raise ValueError(
+                    f"外层 SELECT 在 `FROM _sub` 前有 {n_before} 个 `?` 占位符，"
+                    f"但只提供了 {len(outer)} 个外层参数——无法可靠对齐绑定顺序。"
+                    "建议改用 sql_fragment()（{sub} 占位 + 子查询参数隔离）。"
+                )
+            combined = [*outer[:n_before], *self._params, *outer[n_before:]]
         else:
+            # 表达式列表：自动包成 `SELECT <expr> FROM (sub) AS _sub`，子查询参数在前
             new_sql = f"SELECT {text} FROM ({self._sql}) AS _sub"
-        combined = [*self._params, *(list(params or []))]
+            combined = [*self._params, *(list(params or []))]
         return RelationHandle(
             self._store,
             new_sql,
@@ -158,12 +176,22 @@ class RelationHandle:
         text = select_sql.strip()
         if "{sub}" not in text:
             raise ValueError("sql_fragment 的 SELECT 必须用 {sub} 作为子查询占位")
+        # #P0-10 与 .sql() 同源问题：外层 `?` 若出现在 {sub} 之前，替换后它在
+        # 子查询之前，不能把 inner params 无条件放前面。
+        pos = text.index("{sub}")
+        n_before = text[:pos].count("?")
+        outer = list(params or [])
+        if n_before > len(outer):
+            raise ValueError(
+                f"外层 SELECT 在 {{sub}} 前有 {n_before} 个 `?` 占位符，"
+                f"但只提供了 {len(outer)} 个外层参数——无法可靠对齐绑定顺序。"
+            )
         new_sql = text.replace("{sub}", f"({self._sql}) AS _sub")
-        # SQL 文本里子查询先出现 → 子查询参数在前，外层 SELECT 参数在后
+        combined = [*outer[:n_before], *self._params, *outer[n_before:]]
         return RelationHandle(
             self._store,
             new_sql,
-            params=[*self._params, *(list(params or []))],
+            params=combined,
             query_budget=self._budget,
             snapshot=self._snapshot,
             lineage=self._lineage,
@@ -172,27 +200,39 @@ class RelationHandle:
     # ---- 受控 collect ----
 
     def arrow(self) -> Any:
-        """执行 SQL，返回 Arrow Table（强制 budget + audit + 沙箱校验）。"""
+        """执行 SQL，返回 Arrow Table（强制 budget + audit + 沙箱校验）。
+
+        #P1-42 失败（deadline / SQL error / budget error）也审计 ok=False——
+        relation collect 失败不留痕迹会让下游以为只是没结果。
+        """
         import time
 
         from data_access.core import audit
 
         self._validate_sandbox(self._sql)
         start = time.perf_counter()
-        table = self._store._engine.execute_arrow(
-            self._sql, self._params, deadline_ms=self._budget.max_elapsed_ms
-        )
-        elapsed_ms = (time.perf_counter() - start) * 1000
-        enforce_arrow_budget(self._budget, table, elapsed_ms=elapsed_ms)
-        audit.record(
-            op="relation_collect",
-            dataset=getattr(self._snapshot, "dataset", None) or "<sql>",
-            ok=True,
-            rows=table.num_rows,
-            elapsed_ms=elapsed_ms,
-            extra={"sql": self._sql[:300], "params_count": len(self._params)},
-        )
-        return table
+        err_msg: str | None = None
+        table = None
+        try:
+            table = self._store._engine.execute_arrow(
+                self._sql, self._params, deadline_ms=self._budget.max_elapsed_ms
+            )
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            enforce_arrow_budget(self._budget, table, elapsed_ms=elapsed_ms)
+            return table
+        except Exception as exc:
+            err_msg = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            audit.record(
+                op="relation_collect",
+                dataset=getattr(self._snapshot, "dataset", None) or "<sql>",
+                ok=table is not None,
+                rows=table.num_rows if table is not None else None,
+                elapsed_ms=(time.perf_counter() - start) * 1000,
+                error=err_msg,
+                extra={"sql": self._sql[:300], "params_count": len(self._params)},
+            )
 
     def collect(self) -> Any:
         """``arrow()`` 的别名。"""

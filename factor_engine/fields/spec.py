@@ -35,6 +35,8 @@ class FieldSpec:
     domain: str = "auxiliary"
     value_kind: str = "numeric"
     temporal_model: str = "exact"
+    price_basis: str | None = None
+    flow_semantics: str | None = None
     grain: tuple[str, ...] | str = ("instrument", "time")
     cardinality: str = "many_to_one"
     time_column: str | None = None
@@ -72,6 +74,16 @@ class FieldSpec:
         if isinstance(raw_grain, str):
             raw_grain = tuple(part for part in raw_grain.split("_") if part)
         object.__setattr__(self, "grain", tuple(raw_grain))
+        if self.flow_semantics is None:
+            # Derive the reporting-flow semantics from the economic grain when a
+            # catalog field does not declare it explicitly.  A-share
+            # Income/CashFlow statements carry ``flow_ytd`` (fiscal-year-to-date
+            # cumulative); StockBalance carries ``balance`` (point-in-time stock).
+            raw_grain_set = set(self.grain)
+            if "ytd" in raw_grain_set:
+                object.__setattr__(self, "flow_semantics", "cumulative_ytd_flow")
+            elif "balance" in raw_grain_set:
+                object.__setattr__(self, "flow_semantics", "stock")
         object.__setattr__(self, "revision_columns", tuple(self.revision_columns))
         object.__setattr__(self, "required_filters", tuple(self.required_filters))
         object.__setattr__(self, "applicability", tuple(self.applicability))

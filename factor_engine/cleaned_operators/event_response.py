@@ -509,17 +509,14 @@ class EventResponseReversalStrength(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "event_historical_response_mean",
             "event_historical_response_sign_balance",
             "event_response_peak_lag",
             "event_response_decay_rate",
             "event_response_dispersion",
             "event_response_reversal_strength",
-        }
-    )
+        })
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS) | {"event_hawkes_branching_ratio_proxy"}
     )

@@ -2,6 +2,27 @@
 
 ## 执行状态（2026-08-08 完成）
 
+### 第四轮最终 P0 收口（0.9.2，HEAD=`6c1453f` 之上）
+
+14 个最终 P0 全部落地（10 项为已修复项补回归锁住，4 项为真实代码改动）：
+- ✅ **Publish 契约门**：`_validate_candidate_contract`（candidate 实际数据 vs
+  target 声明 schema：缺列 / 类型不符 / mixed schema → fail-closed）；manifest
+  `base_dir="."`（相对路径恒有效）；symlink 复核（copytree 前拒绝）。
+- ✅ **asof 统一 availability**：`read_cos_events_asof` 与 read_joined 共用
+  `availability_uses_calendar/availability_strict_next`——有日历用
+  `available_from <= decision`，无日历按 strict-next `<` 回退；financial
+  next_trading_day 真正生效。
+- ✅ **ContractIR 时间轴硬化**：event_time 只来自契约时钟列 / registry
+  time_column，不再从值字段 time_role 推导（`event_time="Close"` bug 消除）；
+  修 `roe` 缺失 availability → audit 重新 71 一致。
+- ✅ **Manifest rowgroup 持久化**：`_save_row_groups` 改列数组字典构造（旧
+  `pa.table(list_of_dicts)` 在 pyarrow 25 直接崩，sidecar 从未成功写过）；
+  save/load 双侧 generation 校验。
+- ✅ 回归：`tests/unit/test_final_closure_round4.py` 22 条 + 全量 `tests/` 626
+  passed + ContractIR audit 71 一致。
+- 并发协调：并发会话把 `us_stock_dividend` 升级为 strict-PIT；3 处旧语义测试
+  改指 `us_stock_capital_split`，验证目标不变。
+
 ### 第三轮增量收口（0.9.1，HEAD=`6d66e9c` 之上）
 
 第三层审计清单（P0 1-23 / P1 24-40）全部落地：

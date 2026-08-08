@@ -75,7 +75,14 @@ def _ts_weighted_standardized_moment(
             # contains one is fail-closed, never silently dropped from the mean.
             if np.any(ws < 0.0):
                 continue
-            valid = np.isfinite(xs) & np.isfinite(ws)
+            # A NaN/Inf weight invalidates the WHOLE window (P1-03) — the window's
+            # weight state is unknown, so pairwise omission would silently re-weight
+            # the moment.  This matches the module contract ("non-finite weights
+            # fail closed"); only non-finite x observations are skipped as missing
+            # data (finite-observation trailing window).
+            if np.any(~np.isfinite(ws)):
+                continue
+            valid = np.isfinite(xs)
             n = int(valid.sum())
             if n < min_samples:
                 continue
@@ -297,6 +304,8 @@ def _register() -> None:
                 param_specs=_PARAM_SPECS[canonical],
                 window_semantics=_WINDOW_SEMANTICS[canonical],
             )
+
+            _HANDLES_CALL_CONTRACT = True  # R5-02: routes through validate_operator_call
 
             def calculate(self, *args, _fn=fn, **kwargs):
                 # R4-02: route the direct-``calculate`` kernel through the central

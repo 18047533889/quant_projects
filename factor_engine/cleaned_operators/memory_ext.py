@@ -171,8 +171,13 @@ class TsAutocorrelationTime(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, window: int = 120, max_lag: int = 20, **_: Any) -> pd.DataFrame:
         w = _check_window(window)
         ml = int(max_lag)
+        # R5-39: lag truncation is capped by the window — ``max_lag >= window``
+        # is a nonsensical search node (lags beyond the window are never
+        # computed, so it manufactures duplicate factors).
         if ml < 1:
             raise ValueError("max_lag must be >= 1")
+        if ml >= w:
+            raise ValueError("max_lag must be < window")
         return frame_like(x, _autocorrelation_time_series(x.to_numpy(dtype=float), w, ml))
 
 

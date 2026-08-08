@@ -55,7 +55,7 @@ def _binary(a, b, expr_fn):
 
 
 _register(
-    "fin_roe_cash_gap", "会计ROE与现金ROE之差（Polars）。", ["net_profit", "ocf", "avg_equity"],
+    "fin_roe_cash_gap", "会计ROE与现金ROE之差（Polars）。", ["net_profit", "ocf", "avg_equity", "period_id"],
     lambda np_, ocf, ae, period_id=None: _roe_cash_gap(np_, ocf, ae),
 )
 _register(
@@ -71,19 +71,19 @@ _register(
     lambda oe, tp, period_id=None: _binary(oe, tp, lambda a, b: _safe_div_expr(a, b.abs())),
 )
 _register(
-    "fin_comprehensive_income_gap", "综合收益与净利润之差/权益（Polars）。", ["total_composite_income", "net_profit", "avg_equity"],
+    "fin_comprehensive_income_gap", "综合收益与净利润之差/权益（Polars）。", ["total_composite_income", "net_profit", "avg_equity", "period_id"],
     lambda tci, np_, ae, period_id=None: _comp_gap(tci, np_, ae),
 )
 _register(
-    "fin_oci_to_equity", "其他综合收益/权益（Polars）。", ["other_comprehensive_income", "avg_equity"],
+    "fin_oci_to_equity", "其他综合收益/权益（Polars）。", ["other_comprehensive_income", "avg_equity", "period_id"],
     lambda oci, ae, period_id=None: _binary(oci, ae, lambda a, e: _safe_div_expr(a, e)),
 )
 _register(
-    "fin_discontinued_operation_ratio", "终止经营损益/|净利润|（Polars）。", ["discontinued_operation_profit", "net_profit"],
+    "fin_discontinued_operation_ratio", "终止经营损益/|净利润|（Polars）。", ["discontinued_operation_profit", "net_profit", "period_id"],
     lambda d, np_, period_id=None: _binary(d, np_, lambda a, b: _safe_div_expr(a, b.abs())),
 )
 _register(
-    "fin_minority_profit_share", "少数股东损益/|净利润|（Polars）。", ["minority_profit", "net_profit"],
+    "fin_minority_profit_share", "少数股东损益/|净利润|（Polars）。", ["minority_profit", "net_profit", "period_id"],
     lambda m, np_, period_id=None: _binary(m, np_, lambda a, b: _safe_div_expr(a, b.abs())),
 )
 _register(

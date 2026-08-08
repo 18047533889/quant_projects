@@ -226,10 +226,7 @@ class EventIntervalMarkCoupling(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {"event_mark_autocorr", "event_interval_mark_coupling"}
-    )
+    _surface.extend_extended_only({"event_mark_autocorr", "event_interval_mark_coupling"})
     for _canon in ("event_mark_autocorr", "event_interval_mark_coupling"):
         register_polars_udf(_canon)
 

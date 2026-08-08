@@ -56,6 +56,44 @@ def _snapshot_id_from_scan(scan_obj: Any) -> str | None:
     return None
 
 
+def enforce_source_ordering(
+    lf_or_df: Any,
+    *,
+    instrument_col: str,
+    time_col: str,
+    session_col: str | None = None,
+    frequency: str | None = None,
+) -> Any:
+    """Enforce the source long-table ordering contract (P0-10).
+
+    Ordering guarantee: every source scan returns a long table sorted ascending
+    by ``(instrument, time)`` — the daily-panel contract — so engine window /
+    forward iterators that step instrument-by-instrument see a stable order.
+    Minute/intraday data additionally sorts by ``(instrument, time, session)``
+    when ``session_col`` is provided.  ``frequency=None`` defaults to the daily
+    ``(instrument, time)`` contract.
+
+    Accepts a polars ``LazyFrame``/``DataFrame`` (returned unchanged in type) or
+    a pandas ``DataFrame``.  This is a pure helper (no ``DataAccessSource``
+    dependency) so it can be unit-tested in isolation.
+    """
+    import polars as pl
+
+    sort_cols = [instrument_col, time_col]
+    if frequency == "minute" and session_col:
+        sort_cols = [instrument_col, time_col, session_col]
+    if isinstance(lf_or_df, pl.LazyFrame) or isinstance(lf_or_df, pl.DataFrame):
+        return lf_or_df.sort(sort_cols)
+    from .pandas_compat import pd
+
+    if isinstance(lf_or_df, pd.DataFrame):
+        return lf_or_df.sort_values(sort_cols)
+    raise TypeError(
+        "enforce_source_ordering expects a polars LazyFrame/DataFrame or pandas "
+        f"DataFrame, got {type(lf_or_df)!r}"
+    )
+
+
 @dataclass
 class LazyColumnBundle:
     """共享 LazyFrame 扫描图；``materialize_columns`` 只做一次 collect。"""
@@ -273,9 +311,19 @@ def build_scan_polars_long(
     time_range: tuple[Any, Any] | None,
     instrument_filter: list[str] | None,
     params: dict[str, Any] | None = None,
+    frequency: str | None = None,
+    session_column: str | None = None,
 ) -> Any:
-    """``store.scan_polars`` → long LazyFrame（``ts / inst / <logical cols>``），无 pandas 往返。"""
+    """``store.scan_polars`` → long LazyFrame（``ts / inst / <logical cols>``），无 pandas 往返。
+
+    Ordering guarantee (P0-10): the returned LazyFrame is sorted ascending by
+    ``(instrument, time)`` — ``(instrument, time, session)`` for minute data when
+    ``session_column`` is provided.  ``frequency`` is detected by the caller from
+    the source's grain metadata; ``None`` defaults to the daily contract.
+    """
     all_cols = list(dict.fromkeys([time_column, instrument_column, *physical_columns]))
+    if frequency == "minute" and session_column and session_column not in all_cols:
+        all_cols.append(session_column)
     read_kwargs: dict[str, Any] = {
         "columns": all_cols,
         "time_range": time_range,
@@ -284,7 +332,16 @@ def build_scan_polars_long(
     if params:
         read_kwargs.update(params)
     lf = _store_scan_polars_native(store, dataset, read_kwargs)
+    lf = enforce_source_ordering(
+        lf,
+        instrument_col=instrument_column,
+        time_col=time_column,
+        session_col=session_column,
+        frequency=frequency,
+    )
     rename: dict[str, str] = {time_column: "ts", instrument_column: "inst"}
+    if frequency == "minute" and session_column:
+        rename[session_column] = "session"
     for phys in physical_columns:
         logical = output_names.get(phys, phys)
         if phys != logical:
@@ -342,9 +399,14 @@ def build_clickhouse_scan_sql(
     physical_columns: list[str],
     time_range: tuple[Any, Any] | None = None,
     instrument_filter: list[str] | None = None,
+    frequency: str | None = None,
+    session_column: str | None = None,
 ) -> str:
-    """构造 ClickHouse long-table scan SQL。"""
-    cols = [timestamp_column, instrument_column, *physical_columns]
+    """构造 ClickHouse long-table scan SQL（含强制 ORDER BY 排序契约，P0-10）。"""
+    cols = [timestamp_column, instrument_column]
+    if frequency == "minute" and session_column:
+        cols.append(session_column)
+    cols += list(physical_columns)
     quoted = ", ".join(quote_ch_ident(c) for c in cols)
     sql = f"SELECT {quoted} FROM {quote_ch_ident(table)}"
     clauses: list[str] = []
@@ -359,6 +421,10 @@ def build_clickhouse_scan_sql(
         clauses.append(f"{quote_ch_ident(instrument_column)} IN ({insts})")
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
+    order_cols = [instrument_column, timestamp_column]
+    if frequency == "minute" and session_column:
+        order_cols = [instrument_column, timestamp_column, session_column]
+    sql += " ORDER BY " + ", ".join(quote_ch_ident(c) for c in order_cols)
     return sql
 
 
@@ -372,8 +438,15 @@ def scan_clickhouse_long(
     output_names: dict[str, str],
     time_range: tuple[Any, Any] | None = None,
     instrument_filter: list[str] | None = None,
+    frequency: str | None = None,
+    session_column: str | None = None,
 ) -> Any:
-    """ClickHouse SQL → Polars LazyFrame（``ts / inst / logical cols``）。"""
+    """ClickHouse SQL → Polars LazyFrame（``ts / inst / logical cols``）。
+
+    Ordering guarantee (P0-10): the SQL carries ``ORDER BY <instrument>, <time>``
+    and the post-query result is re-sorted via ``enforce_source_ordering`` so the
+    contract holds for every path (``(instrument, time, session)`` for minute).
+    """
     import polars as pl
 
     from data_access.clickhouse.panel import execute_query
@@ -385,14 +458,25 @@ def scan_clickhouse_long(
         physical_columns=physical_columns,
         time_range=time_range,
         instrument_filter=instrument_filter,
+        frequency=frequency,
+        session_column=session_column,
     )
     table_arrow = execute_query(config, sql)
     lf = pl.from_arrow(table_arrow)
     rename: dict[str, str] = {timestamp_column: "ts", instrument_column: "inst"}
+    if frequency == "minute" and session_column:
+        rename[session_column] = "session"
     for phys in physical_columns:
         logical = output_names.get(phys, phys)
         if phys != logical:
             rename[phys] = logical
     if rename:
         lf = lf.rename(rename)
-    return lf.lazy()
+    lf = lf.lazy()
+    return enforce_source_ordering(
+        lf,
+        instrument_col="inst",
+        time_col="ts",
+        session_col="session" if (frequency == "minute" and session_column) else None,
+        frequency=frequency,
+    )

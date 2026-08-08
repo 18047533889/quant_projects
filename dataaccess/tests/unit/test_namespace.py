@@ -8,6 +8,7 @@ import os
 import pytest
 
 from data_access.core import namespace as ns
+from data_access.core.exceptions import ValidationError
 
 
 @pytest.fixture(autouse=True)
@@ -27,14 +28,18 @@ def test_namespace_explicit_env_wins(monkeypatch):
 
 
 def test_namespace_env_gets_sanitized(monkeypatch):
-    """用户可能写 'zhang/san 01'，不安全字符要清掉。"""
+    """#P1-63 显式坏 namespace（斜杠/空格）→ 拒绝（不静默清洗成 anon 仍当显式）。"""
     monkeypatch.setenv("QUANT_RUN_NAMESPACE", "zhang/san 01")
+    with pytest.raises(ValidationError, match="非法字符"):
+        ns.resolve_namespace()
+
+
+def test_namespace_env_valid_passes_through(monkeypatch):
+    """合法显式 namespace 原样返回，不 sanitize。"""
+    monkeypatch.setenv("QUANT_RUN_NAMESPACE", "zhang.san_01-run")
     result = ns.resolve_namespace()
-    # 斜杠和空格都被替换成下划线
-    assert "/" not in result
-    assert " " not in result
-    assert "zhang" in result
-    assert "san" in result
+    assert result == "zhang.san_01-run"
+    assert ns.is_namespace_explicit() is True
 
 
 def test_namespace_fallback_when_not_set(monkeypatch):

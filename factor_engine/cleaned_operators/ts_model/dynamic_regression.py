@@ -219,7 +219,8 @@ _DEFAULT_OUTPUT_UNIT = {
 def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], extra: Any, stat: str, unit: str,
                     *, fit_lag: int = 0, stability_k: int = 0, cost: int = 5,
                     input_units: dict[str, str] | None = None,
-                    output_unit: str | None = None):
+                    output_unit: str | None = None,
+                    diagnostic_only: bool = False):
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -236,6 +237,7 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
             unit=unit, cost=cost,
             input_units=input_units if input_units is not None else _DEFAULT_INPUT_UNITS,
             output_unit=output_unit if output_unit is not None else _DEFAULT_OUTPUT_UNIT.get(stat),
+            diagnostic_only=diagnostic_only,
         )
 
         def _calculate_series(self, y, x1=None, x2=None, x3=None, x4=None,
@@ -256,15 +258,15 @@ _register_multi(
 )
 _register_multi(
     "ts_multi_regression_resid", "多变量滚动回归当前残差。",
-    ols_fit, None, "resid", "level",
+    ols_fit, None, "resid", "level", diagnostic_only=True,
 )
 _register_multi(
     "ts_multi_regression_resid_z", "多变量滚动回归标准化残差。",
-    ols_fit, None, "resid_z", "level",
+    ols_fit, None, "resid_z", "level", diagnostic_only=True,
 )
 _register_multi(
     "ts_multi_regression_r2", "多变量滚动回归 R²。",
-    ols_fit, None, "r2", "r2",
+    ols_fit, None, "r2", "r2", diagnostic_only=True,
 )
 _register_multi(
     "ts_huber_regression_coeff", "Huber 稳健回归斜率。",
@@ -272,7 +274,7 @@ _register_multi(
 )
 _register_multi(
     "ts_huber_regression_resid_z", "Huber 稳健回归标准化残差。",
-    huber_fit, None, "resid_z", "level",
+    huber_fit, None, "resid_z", "level", diagnostic_only=True,
 )
 _register_multi(
     "ts_ridge_regression_coeff", "岭回归系数。",
@@ -280,7 +282,7 @@ _register_multi(
 )
 _register_multi(
     "ts_ridge_regression_resid_z", "岭回归标准化残差。",
-    ridge_fit, 0.1, "resid_z", "level",
+    ridge_fit, 0.1, "resid_z", "level", diagnostic_only=True,
 )
 
 # ---------------------------------------------------------------------------
@@ -360,7 +362,7 @@ def _single_regression(
     )
 
 
-def _expectile_op(name: str, description: str, stat: str, *, fit_lag: int = 0):
+def _expectile_op(name: str, description: str, stat: str, *, fit_lag: int = 0, diagnostic_only: bool = False):
     """Register an explicitly-named expectile regression operator.
 
     The underlying kernel is the IRLS asymmetric-weighted least squares that is
@@ -381,6 +383,7 @@ def _expectile_op(name: str, description: str, stat: str, *, fit_lag: int = 0):
             name, description, ["y", "x", "window", "q", "min_periods"], unit="level",
             input_units={"y": "target", "x": "predictor"},
             output_unit="unit(y)/unit(x) (intercept: unit(y))" if stat == "coeff" else "unit(y)",
+            diagnostic_only=diagnostic_only,
         )
 
         def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
@@ -395,7 +398,7 @@ def _expectile_op(name: str, description: str, stat: str, *, fit_lag: int = 0):
 
 
 _expectile_op("ts_expectile_regression_coeff", "expectile 回归斜率（IRLS 非对称加权最小二乘）。", "coeff")
-_expectile_op("ts_expectile_regression_resid", "expectile 回归当前残差。", "resid")
+_expectile_op("ts_expectile_regression_resid", "expectile 回归当前残差。", "resid", diagnostic_only=True)
 _expectile_op("ts_expectile_regression_coeff_prior", "expectile 回归斜率（截至 t-1 训练）。", "coeff", fit_lag=1)
 _expectile_op("ts_expectile_regression_forecast_error", "expectile 回归预测误差（截至 t-1 训练）。", "resid", fit_lag=1)
 
@@ -474,6 +477,7 @@ class TsQuantileRegressionResid(SeriesOperator):
         ["y", "x", "window", "q", "min_periods"], unit="level",
         input_units={"y": "target", "x": "predictor"},
         output_unit="unit(y)",
+        diagnostic_only=True,
     )
 
     def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):

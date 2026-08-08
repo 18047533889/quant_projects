@@ -707,16 +707,13 @@ class IntradayProfilePhaseShift(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "intraday_wasserstein_pair_distance",
             "intraday_barrier_approach_acceleration",
             "intraday_subsampled_rv_dispersion",
             "intraday_volatility_signature_slope",
             "intraday_profile_surprise_energy",
-        }
-    )
+        })
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS)
         | {

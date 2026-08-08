@@ -132,9 +132,7 @@ class IntradayActivityDurationCurvature(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {"intraday_activity_duration_curvature"}
-    )
+    _surface.extend_extended_only({"intraday_activity_duration_curvature"})
     from cleaned_operators.rolling_pack import register_polars_udf
 
     register_polars_udf("intraday_activity_duration_curvature")

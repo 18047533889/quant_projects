@@ -24,16 +24,20 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import subprocess
 import contextvars
 from contextlib import contextmanager
 from functools import lru_cache
 from typing import Any
 
+from data_access.core.exceptions import ValidationError
+
 
 _NAMESPACE_ENV = "QUANT_RUN_NAMESPACE"
 _OPERATOR_ENV = "QUANT_OPERATOR"
 _SANITIZE_RE = re.compile(r"[^A-Za-z0-9._-]+")
+_VALID_NS_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # #37 / #P0-32：session-scoped namespace 覆盖（DataAccessSession）。
 # 用 ``contextvars.ContextVar`` 而不是 ``threading.local()`` —— 前者随 asyncio
@@ -43,8 +47,34 @@ _session: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 )
 
 
+def validate_namespace_chars(value: str, *, context: str = "namespace") -> str:
+    """#P1-62/#P1-63 显式 namespace 只允许 ``[A-Za-z0-9._-]``。
+
+    sanitizer 用 ``_`` 替换非法字符不是 injective（``a/b`` 和 ``a_b`` 都变
+    ``a_b``），且 ``..`` / ``///`` 会被清洗成 anon 但仍被当「显式设置」——
+    这两个都靠显式校验拒绝：坏 namespace 直接报错，绝不静默替换/汇聚。
+    """
+    if not isinstance(value, str) or not value:
+        raise ValidationError(f"{context} 必须是非空字符串")
+    if not _VALID_NS_RE.match(value):
+        raise ValidationError(
+            f"{context}={value!r} 含非法字符。只允许 [A-Za-z0-9._-]。"
+            "非法 namespace 会被错误地清洗/汇聚，请改用合法名字。"
+        )
+    # 纯点/纯下划线（"." / ".." / "___"）会被清洗成 anon 但仍被当「显式设置」——
+    # 显式拒绝，防路径穿越 / 汇聚到 anon。
+    if not value.strip("._-") or value in {".", ".."}:
+        raise ValidationError(
+            f"{context}={value!r} 非法：不能是纯 . / _ / -（会汇聚成 anon 或被当路径穿越）"
+        )
+    return value
+
+
 def _sanitize(value: str, *, fallback: str = "anon") -> str:
-    """清洗不安全字符，防止 namespace 被拼到路径里造成目录穿越或奇怪文件名。"""
+    """清洗不安全字符（只用于**生成的**兜底段，如 git 分支/pid/hostname）。
+
+    #P1-62 显式 namespace 不走这里——显式值必须先过 ``validate_namespace_chars``。
+    """
     cleaned = _SANITIZE_RE.sub("_", value).strip("._-")
     return cleaned or fallback
 
@@ -89,11 +119,16 @@ def resolve_namespace() -> str:
         return _sanitize(session_ns)
     explicit = os.environ.get(_NAMESPACE_ENV, "").strip()
     if explicit:
-        return _sanitize(explicit)
+        # #P1-63 显式坏 namespace（.. / /// / 空格）直接拒绝，不能清洗成 anon
+        # 却仍被 is_namespace_explicit() 当显式。
+        return validate_namespace_chars(explicit)
 
     branch = _git_branch() or "nobranch"
     pid = os.getpid()
-    return _sanitize(f"anon__{branch}__{pid}")
+    # #P1-61 兜底并入 hostname：PID 只在本机唯一，共享 NFS 下两个 host 的
+    # pid=1234 会写进同一个 namespace，必须加 host 维度。
+    host = _sanitize(socket.gethostname() or "host")
+    return _sanitize(f"anon__{host}__{branch}__{pid}")
 
 
 def set_session_namespace(namespace: str | None) -> None:
@@ -102,8 +137,13 @@ def set_session_namespace(namespace: str | None) -> None:
     用于 ``DataAccessSession(namespace=...)``：请求级绑定，路径 resolve 时再
     生效——不再依赖全局环境变量决定多租户路径。
     #P0-32：基于 ``contextvars.ContextVar``，随 asyncio task 传播。
+    # #P1-62/#P1-63 显式 session namespace 非法字符 → 拒绝，不静默替换。
     """
-    _session.set(_sanitize(namespace) if namespace else None)
+    if namespace:
+        validate_namespace_chars(namespace)
+        _session.set(namespace)
+    else:
+        _session.set(None)
 
 
 def session_namespace() -> str | None:
@@ -113,7 +153,9 @@ def session_namespace() -> str | None:
 @contextmanager
 def namespace_scope(namespace: str | None):
     """#37 上下文管理器：进入时绑定 session namespace，退出时恢复。"""
-    token = _session.set(_sanitize(namespace) if namespace else None)
+    if namespace:
+        validate_namespace_chars(namespace)
+    token = _session.set(namespace)
     try:
         yield
     finally:
@@ -138,7 +180,9 @@ class DataAccessSession:
         self.namespace = namespace
 
     def __enter__(self) -> "DataAccessSession":
-        self._token = _session.set(_sanitize(self.namespace) if self.namespace else None)
+        if self.namespace:
+            validate_namespace_chars(self.namespace)
+        self._token = _session.set(self.namespace if self.namespace else None)
         return self
 
     def __exit__(self, *exc: Any) -> None:
@@ -150,6 +194,24 @@ class DataAccessSession:
 
 _OPERATOR_SANITIZE_RE = re.compile(r"[^A-Za-z0-9._@+-]+")
 
+# #P1-64 request-scoped operator：async 多用户服务里 QUANT_OPERATOR 是进程级，
+# 同一进程多 job/user 时需要 ContextVar 作用域（operator_scope）。
+_operator_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "data_access_operator", default=None
+)
+
+
+@contextmanager
+def operator_scope(operator: str | None):
+    """#P1-64 请求级 operator 覆盖（ContextVar，随 asyncio task 传播）。"""
+    if operator is not None and not isinstance(operator, str):
+        raise ValidationError(f"operator 必须是字符串，收到 {type(operator).__name__}")
+    token = _operator_ctx.set(operator)
+    try:
+        yield
+    finally:
+        _operator_ctx.reset(token)
+
 
 def resolve_operator() -> str | None:
     """返回审计用的 operator 名字；没配就返回 None（由调用方决定要不要告警）。
@@ -157,9 +219,13 @@ def resolve_operator() -> str | None:
     WHY：publish / 写 published_root 的动作必须记录「是谁干的」才有意义；
          共用 uid 下 os.getlogin() 永远是 yluel，没参考价值。
 
+    #P1-64 优先级：request-scoped ``operator_scope`` context > 环境变量。
     operator 只进审计日志（不拼进路径），所以允许 `@` 和 `+` 这类邮箱/身份标识常用字符；
     namespace 则严格（走 _sanitize），因为会被拼进文件路径。
     """
+    scoped = _operator_ctx.get()
+    if scoped:
+        return scoped
     explicit = os.environ.get(_OPERATOR_ENV, "").strip()
     if not explicit:
         return None

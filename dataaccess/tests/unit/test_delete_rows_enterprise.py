@@ -82,6 +82,8 @@ def test_delete_rows_max_rows_guard(staging_dataset, tmp_path):
             authorizer=authorizer,
             target_dir=target_dir,
             time_column="datetime",
+            start="2024-01-01",
+            end="2024-12-31",
             max_rows=0,
             params={"factor_id": "test_f"},
         )

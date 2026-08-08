@@ -27,6 +27,12 @@ class RunLineage:
     dq_passed: bool | None = None
     row_count: int | None = None
     non_null_count: int | None = None
+    # P1-024: universe-mask coverage recorded at materialization.  ``coverage_mask``
+    # is a compact serializable summary of the applied universe mask; None when no
+    # universe mask was applied (full-universe use).
+    coverage_mask: dict[str, Any] | None = None
+    coverage_ratio: float | None = None
+    drop_reason: str | None = None
     engine_version: str = "factor_engine"
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     extra: dict[str, Any] = field(default_factory=dict)
@@ -55,6 +61,9 @@ def build_run_lineage(
     dq_report=None,
     run_id: str | None = None,
     extra: dict[str, Any] | None = None,
+    coverage_mask: dict[str, Any] | None = None,
+    coverage_ratio: float | None = None,
+    drop_reason: str | None = None,
 ) -> RunLineage:
     """从分析结果与执行输出组装 :class:`RunLineage`。"""
     row_count = len(result) if result is not None else None
@@ -80,6 +89,9 @@ def build_run_lineage(
         dq_passed=dq_passed,
         row_count=row_count,
         non_null_count=non_null,
+        coverage_mask=coverage_mask,
+        coverage_ratio=coverage_ratio,
+        drop_reason=drop_reason,
         extra=extra or {},
     )
 

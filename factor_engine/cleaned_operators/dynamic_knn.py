@@ -278,14 +278,11 @@ class CsKnnGraphDirichletEnergy(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "cs_knn_peer_mean_ex_self",
             "cs_knn_neighbor_retention",
             "cs_knn_graph_dirichlet_energy",
-        }
-    )
+        })
 
 
 _register_surface()

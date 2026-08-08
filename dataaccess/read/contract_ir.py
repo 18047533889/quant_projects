@@ -265,6 +265,13 @@ def build_contract_ir(
                 }
                 if len(avail) == 1:
                     entry.availability = next(iter(avail))
+                elif len(avail) > 1:
+                    # #P2-78 多字段 availability 冲突不能静默留 None（unknown）——
+                    # 那是 ContractIR conflict，必须形成 issue 供 audit 暴露。
+                    entry.issues.append(
+                        f"字段级 availability 冲突 {sorted(avail)}（数据集 {name!r}）："
+                        "无法收敛单一 availability，ContractIR 不得视为确定值"
+                    )
             if not entry.duplicate_policy:
                 dup = {
                     getattr(f, "duplicate_policy", None)
@@ -369,12 +376,31 @@ def _storage_of(ds: Any) -> tuple[str | None, str | None, str | None]:
         # 无显式 backend 时，storage_format（long/wide/daily…）只当 layout。
         layout = layout or str(ds.storage_format)
     if fmt is None:
-        fmt = getattr(ds, "file_format", None) or "parquet"
+        # #P2-77 file_format 统一走 registry 的 FormatSpec（此前 fallback 到
+        # 不存在的 ``ds.file_format`` 属性 → 恒 "parquet"，CSV/Arrow/Feather 会报错格式）。
+        fmt = getattr(getattr(ds, "format_spec", None), "type", None) or getattr(
+            ds, "file_format", None
+        ) or "parquet"
     return backend or "local", layout, fmt
 
 
+def _is_temporal_dtype(f: Any) -> bool:
+    """字段 dtype 是否像时间类型（防止把值字段当时间轴列的兜底判定）。"""
+    text = str(getattr(f, "dtype", "") or "").lower()
+    return any(tok in text for tok in ("time", "date"))
+
+
 def _temporal_axes_of(reg_ds: Any, contract: Any, fields: Sequence[Any]) -> TemporalAxes:
-    """从 registry + 契约 + 语义字段编译一个数据集的多根时间轴（#P0-9）。"""
+    """从 registry + 契约 + 语义字段编译一个数据集的多根时间轴（#P0-9）。
+
+    #P0-38 事件时间轴**禁止从值字段的 time_role 推导**：catalog 里 Close/Open/
+    Volume/PeRatio 等值字段也标了 ``time_role: event_time``（那是"行级事件时刻"
+    标注，不是时间轴列），旧代码会把它们编译成 ``event_time="Close"`` 这类
+    无意义的时间轴。时间轴只能来自：
+        - 契约时钟列：strict-PIT 事件表用 ``availability_column``（事件时钟），
+          effective_time_only 用 ``event_column``；
+        - registry roles / ``time_column``：panel 数据集的 bar 时间即事件时间。
+    """
     partition_time = None
     if reg_ds is not None:
         partition_time = getattr(reg_ds, "time_column", None)
@@ -385,13 +411,23 @@ def _temporal_axes_of(reg_ds: Any, contract: Any, fields: Sequence[Any]) -> Temp
     )
     effective_time = getattr(contract, "event_column", None) if contract is not None else None
     period_time = getattr(contract, "period_column", None) if contract is not None else None
+    # 事件时间轴只来自契约时钟列 / registry time_column，绝不取自值字段。
     event_time = None
+    if contract is not None:
+        event_time = (
+            getattr(contract, "availability_column", None)
+            or getattr(contract, "event_column", None)
+        )
+    if event_time is None and partition_time is not None:
+        event_time = partition_time
     decision_time = None
     for f in fields:
-        role = getattr(f, "time_role", None)
-        if role == "event_time" and event_time is None:
-            event_time = getattr(f, "physical_name", None) or getattr(f, "logical_name", None)
-        if getattr(f, "time_role", None) == "decision_time" and decision_time is None:
+        # decision_time 同样不取自值字段：只接受显式标注且 dtype 像时间列。
+        if (
+            getattr(f, "time_role", None) == "decision_time"
+            and decision_time is None
+            and _is_temporal_dtype(f)
+        ):
             decision_time = getattr(f, "physical_name", None) or getattr(f, "logical_name", None)
         if knowledge_time is None and getattr(f, "knowledge_time", None):
             knowledge_time = getattr(f, "knowledge_time", None)

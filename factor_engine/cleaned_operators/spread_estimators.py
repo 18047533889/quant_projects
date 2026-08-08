@@ -237,9 +237,7 @@ class TsRollEffectiveSpread(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {"ohlc_corwin_schultz_spread"}
-    )
+    _surface.extend_extended_only({"ohlc_corwin_schultz_spread"})
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS) | {"ts_roll_effective_spread"}
     )

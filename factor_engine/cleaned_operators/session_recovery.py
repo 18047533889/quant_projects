@@ -139,9 +139,7 @@ class SessionEventRecoveryScore(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {"session_event_recovery_score"}
-    )
+    _surface.extend_extended_only({"session_event_recovery_score"})
 
 
 _register_surface()

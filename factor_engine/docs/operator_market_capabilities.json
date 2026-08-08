@@ -2,11 +2,11 @@
   "schema_version": "factor_engine.operator_market_capabilities.v2",
   "generated_by": "market/capability_resolver.build_market_operator_manifest",
   "counts": {
-    "total": 1315,
+    "total": 1360,
     "unknown": 0,
     "not_reviewed": 0,
     "explicit_contract": 63,
-    "fallback_default": 1090
+    "fallback_default": 1134
   },
   "operators": {
     "ADL": {
@@ -5283,6 +5283,186 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "composition_aitchison_distance": {
+      "canonical": "composition_aitchison_distance",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "composition_aitchison_distance",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "composition_aitchison_distance",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "composition_clr_component": {
+      "canonical": "composition_clr_component",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "composition_clr_component",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "composition_clr_component",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "composition_entropy": {
+      "canonical": "composition_entropy",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "composition_entropy",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "composition_entropy",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "composition_ilr_balance": {
+      "canonical": "composition_ilr_balance",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "composition_ilr_balance",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "composition_ilr_balance",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "composition_js_divergence": {
+      "canonical": "composition_js_divergence",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "composition_js_divergence",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "composition_js_divergence",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "constant": {
       "canonical": "constant",
       "contract_origin": "fallback_default",
@@ -5883,6 +6063,42 @@
       },
       "us": {
         "canonical": "cs_fill_median",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "cs_hartigan_dip": {
+      "canonical": "cs_hartigan_dip",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "cs_hartigan_dip",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "cs_hartigan_dip",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -8283,28 +8499,32 @@
       "ashare": {
         "canonical": "event_abnormal_return_past",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_abnormal_return_past",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_active_count": {
@@ -8319,28 +8539,152 @@
       "ashare": {
         "canonical": "event_active_count",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_active_count",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      }
+    },
+    "event_allan_factor": {
+      "canonical": "event_allan_factor",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "event_allan_factor",
+        "market": "ashare",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      },
+      "us": {
+        "canonical": "event_allan_factor",
+        "market": "us",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      }
+    },
+    "event_allan_log_mean": {
+      "canonical": "event_allan_log_mean",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "event_allan_log_mean",
+        "market": "ashare",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      },
+      "us": {
+        "canonical": "event_allan_log_mean",
+        "market": "us",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      }
+    },
+    "event_allan_scaling_slope": {
+      "canonical": "event_allan_scaling_slope",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "event_allan_scaling_slope",
+        "market": "ashare",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      },
+      "us": {
+        "canonical": "event_allan_scaling_slope",
+        "market": "us",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_arithmetic_return_sum": {
@@ -8355,28 +8699,32 @@
       "ashare": {
         "canonical": "event_arithmetic_return_sum",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_arithmetic_return_sum",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_cluster_count": {
@@ -8391,28 +8739,32 @@
       "ashare": {
         "canonical": "event_cluster_count",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_cluster_count",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_cluster_mean_size": {
@@ -8427,28 +8779,32 @@
       "ashare": {
         "canonical": "event_cluster_mean_size",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_cluster_mean_size",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_cumulative_return_past": {
@@ -8463,28 +8819,32 @@
       "ashare": {
         "canonical": "event_cumulative_return_past",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_cumulative_return_past",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_decay_asof": {
@@ -8499,28 +8859,32 @@
       "ashare": {
         "canonical": "event_decay_asof",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_decay_asof",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_fano_factor": {
@@ -8535,28 +8899,32 @@
       "ashare": {
         "canonical": "event_fano_factor",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_fano_factor",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_frequency": {
@@ -8571,28 +8939,32 @@
       "ashare": {
         "canonical": "event_frequency",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_frequency",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_hawkes_branching_ratio_proxy": {
@@ -8607,28 +8979,32 @@
       "ashare": {
         "canonical": "event_hawkes_branching_ratio_proxy",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_hawkes_branching_ratio_proxy",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_historical_response_mean": {
@@ -8643,28 +9019,32 @@
       "ashare": {
         "canonical": "event_historical_response_mean",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_historical_response_mean",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_historical_response_sign_balance": {
@@ -8679,28 +9059,32 @@
       "ashare": {
         "canonical": "event_historical_response_sign_balance",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_historical_response_sign_balance",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_interval_mark_coupling": {
@@ -8715,28 +9099,32 @@
       "ashare": {
         "canonical": "event_interval_mark_coupling",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_interval_mark_coupling",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_interval_memory": {
@@ -8751,28 +9139,32 @@
       "ashare": {
         "canonical": "event_interval_memory",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_interval_memory",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_level_survival_share": {
@@ -8787,28 +9179,32 @@
       "ashare": {
         "canonical": "event_level_survival_share",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_level_survival_share",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_local_variation": {
@@ -8823,28 +9219,32 @@
       "ashare": {
         "canonical": "event_local_variation",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_local_variation",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_log_return_sum": {
@@ -8859,28 +9259,32 @@
       "ashare": {
         "canonical": "event_log_return_sum",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_log_return_sum",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_mark_autocorr": {
@@ -8895,28 +9299,32 @@
       "ashare": {
         "canonical": "event_mark_autocorr",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_mark_autocorr",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_refractory": {
@@ -8931,28 +9339,32 @@
       "ashare": {
         "canonical": "event_refractory",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_refractory",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_response_decay_rate": {
@@ -8967,28 +9379,32 @@
       "ashare": {
         "canonical": "event_response_decay_rate",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_response_decay_rate",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_response_dispersion": {
@@ -9003,28 +9419,32 @@
       "ashare": {
         "canonical": "event_response_dispersion",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_response_dispersion",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_response_peak_lag": {
@@ -9039,28 +9459,32 @@
       "ashare": {
         "canonical": "event_response_peak_lag",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_response_peak_lag",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_response_reversal_strength": {
@@ -9075,28 +9499,32 @@
       "ashare": {
         "canonical": "event_response_reversal_strength",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_response_reversal_strength",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "event_return_since_last": {
@@ -9111,28 +9539,32 @@
       "ashare": {
         "canonical": "event_return_since_last",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "event_return_since_last",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "exp": {
@@ -11727,6 +12159,78 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "fin_mean_abs_deviation": {
+      "canonical": "fin_mean_abs_deviation",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "fin_mean_abs_deviation",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "fin_mean_abs_deviation",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "fin_median_abs_deviation": {
+      "canonical": "fin_median_abs_deviation",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "fin_median_abs_deviation",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "fin_median_abs_deviation",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "fin_minority_profit_share": {
       "canonical": "fin_minority_profit_share",
       "contract_origin": "fallback_default",
@@ -12111,6 +12615,42 @@
       },
       "us": {
         "canonical": "fin_percentile_history",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "fin_percentile_vs_prior_history": {
+      "canonical": "fin_percentile_vs_prior_history",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "fin_percentile_vs_prior_history",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "fin_percentile_vs_prior_history",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -13491,8 +14031,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "fiscal_accrual_quality": {
-      "canonical": "fiscal_accrual_quality",
+    "fin_zscore_vs_prior_history": {
+      "canonical": "fin_zscore_vs_prior_history",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -13501,7 +14041,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "fiscal_accrual_quality",
+        "canonical": "fin_zscore_vs_prior_history",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -13514,7 +14054,7 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "fiscal_accrual_quality",
+        "canonical": "fin_zscore_vs_prior_history",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -13525,6 +14065,46 @@
         "coverage": "UNKNOWN",
         "depends_on_inputs": true,
         "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "fiscal_accrual_quality": {
+      "canonical": "fiscal_accrual_quality",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "fiscal_accrual_quality",
+        "market": "ashare",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
+      },
+      "us": {
+        "canonical": "fiscal_accrual_quality",
+        "market": "us",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_ar_resid_std": {
@@ -13539,28 +14119,32 @@
       "ashare": {
         "canonical": "fiscal_ar_resid_std",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_ar_resid_std",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_asymmetric_elasticity": {
@@ -13575,28 +14159,32 @@
       "ashare": {
         "canonical": "fiscal_asymmetric_elasticity",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_asymmetric_elasticity",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_autocorr": {
@@ -13611,28 +14199,32 @@
       "ashare": {
         "canonical": "fiscal_autocorr",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_autocorr",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_change_direction_agreement": {
@@ -13647,28 +14239,32 @@
       "ashare": {
         "canonical": "fiscal_change_direction_agreement",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_change_direction_agreement",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_direction_consistency": {
@@ -13683,28 +14279,32 @@
       "ashare": {
         "canonical": "fiscal_direction_consistency",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_direction_consistency",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_pair_direction_agreement": {
@@ -13719,28 +14319,32 @@
       "ashare": {
         "canonical": "fiscal_pair_direction_agreement",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_pair_direction_agreement",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_perpetual_inventory": {
@@ -13755,28 +14359,32 @@
       "ashare": {
         "canonical": "fiscal_perpetual_inventory",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_perpetual_inventory",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_regression_resid_std": {
@@ -13791,28 +14399,32 @@
       "ashare": {
         "canonical": "fiscal_regression_resid_std",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_regression_resid_std",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_reversal_ratio": {
@@ -13827,28 +14439,32 @@
       "ashare": {
         "canonical": "fiscal_reversal_ratio",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_reversal_ratio",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_sign_agreement": {
@@ -13863,28 +14479,32 @@
       "ashare": {
         "canonical": "fiscal_sign_agreement",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_sign_agreement",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_sign_consistency": {
@@ -13899,28 +14519,32 @@
       "ashare": {
         "canonical": "fiscal_sign_consistency",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_sign_consistency",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_standardized_surprise": {
@@ -13935,28 +14559,32 @@
       "ashare": {
         "canonical": "fiscal_standardized_surprise",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_standardized_surprise",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fiscal_true_streak": {
@@ -13971,28 +14599,32 @@
       "ashare": {
         "canonical": "fiscal_true_streak",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "fiscal_true_streak",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "fix": {
@@ -15977,6 +16609,42 @@
       },
       "us": {
         "canonical": "group_valid_count",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "group_wasserstein_barycenter_distance": {
+      "canonical": "group_wasserstein_barycenter_distance",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "group_wasserstein_barycenter_distance",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "group_wasserstein_barycenter_distance",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -20641,7 +21309,7 @@
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
         "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "notes": "typed contract without capability requirements; input-dependent"
       },
       "us": {
         "canonical": "intra_lunch_gap_return",
@@ -23493,6 +24161,52 @@
       },
       "us": {
         "canonical": "intraday_impact_beta",
+        "market": "us",
+        "status": "PROVIDER_REQUIRED",
+        "required_capabilities": [
+          "FULL_MINUTE_OHLCV"
+        ],
+        "missing_capabilities": [
+          "FULL_MINUTE_OHLCV"
+        ],
+        "reason_codes": [
+          "MISSING_CAPABILITY"
+        ],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "minute-microstructure family requires FULL_MINUTE_OHLCV (A supported; US provider_required)"
+      }
+    },
+    "intraday_impact_decay_rate": {
+      "canonical": "intraday_impact_decay_rate",
+      "contract_origin": "typed_derived",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [
+        "FULL_MINUTE_OHLCV"
+      ],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "intraday_impact_decay_rate",
+        "market": "ashare",
+        "status": "CERTIFIED_NATIVE",
+        "required_capabilities": [
+          "FULL_MINUTE_OHLCV"
+        ],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": false,
+        "notes": "minute-microstructure family requires FULL_MINUTE_OHLCV (A supported; US provider_required)"
+      },
+      "us": {
+        "canonical": "intraday_impact_decay_rate",
         "market": "us",
         "status": "PROVIDER_REQUIRED",
         "required_capabilities": [
@@ -27885,28 +28599,32 @@
       "ashare": {
         "canonical": "relation_category_share",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_category_share",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_concentration_acceleration": {
@@ -27921,28 +28639,32 @@
       "ashare": {
         "canonical": "relation_concentration_acceleration",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_concentration_acceleration",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_diffusion_score": {
@@ -27957,28 +28679,32 @@
       "ashare": {
         "canonical": "relation_diffusion_score",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_diffusion_score",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_distinct_count": {
@@ -27993,28 +28719,32 @@
       "ashare": {
         "canonical": "relation_distinct_count",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_distinct_count",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_distribution_kurtosis": {
@@ -28029,28 +28759,32 @@
       "ashare": {
         "canonical": "relation_distribution_kurtosis",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_distribution_kurtosis",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_distribution_skew": {
@@ -28065,28 +28799,32 @@
       "ashare": {
         "canonical": "relation_distribution_skew",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_distribution_skew",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_entropy": {
@@ -28101,28 +28839,32 @@
       "ashare": {
         "canonical": "relation_entropy",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_entropy",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_entropy_change": {
@@ -28137,28 +28879,32 @@
       "ashare": {
         "canonical": "relation_entropy_change",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_entropy_change",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_entry_count": {
@@ -28173,28 +28919,32 @@
       "ashare": {
         "canonical": "relation_entry_count",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_entry_count",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_exit_count": {
@@ -28209,28 +28959,32 @@
       "ashare": {
         "canonical": "relation_exit_count",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_exit_count",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_hhi": {
@@ -28245,28 +28999,32 @@
       "ashare": {
         "canonical": "relation_hhi",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_hhi",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_hhi_change": {
@@ -28281,28 +29039,32 @@
       "ashare": {
         "canonical": "relation_hhi_change",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_hhi_change",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_overlap_ratio": {
@@ -28317,28 +29079,32 @@
       "ashare": {
         "canonical": "relation_overlap_ratio",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_overlap_ratio",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_peer_weighted_mean_ex_self": {
@@ -28353,28 +29119,32 @@
       "ashare": {
         "canonical": "relation_peer_weighted_mean_ex_self",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_peer_weighted_mean_ex_self",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_rank_mobility": {
@@ -28389,28 +29159,32 @@
       "ashare": {
         "canonical": "relation_rank_mobility",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_rank_mobility",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_rank_weighted_sum": {
@@ -28425,28 +29199,32 @@
       "ashare": {
         "canonical": "relation_rank_weighted_sum",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_rank_weighted_sum",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_share_mobility": {
@@ -28461,28 +29239,32 @@
       "ashare": {
         "canonical": "relation_share_mobility",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_share_mobility",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_topk_concentration": {
@@ -28497,28 +29279,32 @@
       "ashare": {
         "canonical": "relation_topk_concentration",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_topk_concentration",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_topk_sum": {
@@ -28533,28 +29319,32 @@
       "ashare": {
         "canonical": "relation_topk_sum",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_topk_sum",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_weighted_change": {
@@ -28569,28 +29359,32 @@
       "ashare": {
         "canonical": "relation_weighted_change",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_weighted_change",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relation_weighted_std_ex_self": {
@@ -28605,28 +29399,32 @@
       "ashare": {
         "canonical": "relation_weighted_std_ex_self",
         "market": "ashare",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       },
       "us": {
         "canonical": "relation_weighted_std_ex_self",
         "market": "us",
-        "status": "INPUT_DEPENDENT",
+        "status": "UNSUPPORTED_MARKET_MECHANISM",
         "required_capabilities": [],
         "missing_capabilities": [],
-        "reason_codes": [],
+        "reason_codes": [
+          "NO_MARKET_CONTRACT"
+        ],
         "providers": [],
         "provider_quality": "UNAVAILABLE",
         "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
+        "depends_on_inputs": false,
+        "notes": "market-mechanism operator has no explicit market/capability contract; fail-closed to UNSUPPORTED (unclassified) instead of INPUT_DEPENDENT"
       }
     },
     "relative_volume": {
@@ -30973,6 +31771,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_abdi_ranaldo_spread": {
+      "canonical": "ts_abdi_ranaldo_spread",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_abdi_ranaldo_spread",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_abdi_ranaldo_spread",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_abs_concentration": {
       "canonical": "ts_abs_concentration",
       "contract_origin": "fallback_default",
@@ -31909,6 +32743,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_bds_statistic": {
+      "canonical": "ts_bds_statistic",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_bds_statistic",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_bds_statistic",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_best_lag_corr": {
       "canonical": "ts_best_lag_corr",
       "contract_origin": "fallback_default",
@@ -32077,6 +32947,42 @@
       },
       "us": {
         "canonical": "ts_betti_1_max_persistence",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_bicoherence_max": {
+      "canonical": "ts_bicoherence_max",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_bicoherence_max",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_bicoherence_max",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -33277,6 +34183,78 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_cross_spectral_coherence": {
+      "canonical": "ts_cross_spectral_coherence",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_cross_spectral_coherence",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_cross_spectral_coherence",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_cross_spectral_phase": {
+      "canonical": "ts_cross_spectral_phase",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_cross_spectral_phase",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_cross_spectral_phase",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_crossing_acceleration": {
       "canonical": "ts_crossing_acceleration",
       "contract_origin": "fallback_default",
@@ -34213,6 +35191,114 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_dmd_dominant_frequency": {
+      "canonical": "ts_dmd_dominant_frequency",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_dmd_dominant_frequency",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_dmd_dominant_frequency",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_dmd_dominant_growth_rate": {
+      "canonical": "ts_dmd_dominant_growth_rate",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_dmd_dominant_growth_rate",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_dmd_dominant_growth_rate",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_dmd_mode_concentration": {
+      "canonical": "ts_dmd_mode_concentration",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_dmd_mode_concentration",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_dmd_mode_concentration",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_dominant_cycle_period": {
       "canonical": "ts_dominant_cycle_period",
       "contract_origin": "fallback_default",
@@ -34273,6 +35359,42 @@
       },
       "us": {
         "canonical": "ts_downside_deviation",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_edge_effective_spread": {
+      "canonical": "ts_edge_effective_spread",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_edge_effective_spread",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_edge_effective_spread",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -34597,6 +35719,42 @@
       },
       "us": {
         "canonical": "ts_event_spacing_mean",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_evt_threshold_stability": {
+      "canonical": "ts_evt_threshold_stability",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_evt_threshold_stability",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_evt_threshold_stability",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -36085,6 +37243,78 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_glr_mean_shift_score": {
+      "canonical": "ts_glr_mean_shift_score",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_glr_mean_shift_score",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_glr_mean_shift_score",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_glr_variance_shift_score": {
+      "canonical": "ts_glr_variance_shift_score",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_glr_variance_shift_score",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_glr_variance_shift_score",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_gpd_shape_pwm": {
       "canonical": "ts_gpd_shape_pwm",
       "contract_origin": "fallback_default",
@@ -36517,6 +37747,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_hodges_lehmann_location": {
+      "canonical": "ts_hodges_lehmann_location",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_hodges_lehmann_location",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_hodges_lehmann_location",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_hsic": {
       "canonical": "ts_hsic",
       "contract_origin": "fallback_default",
@@ -36793,6 +38059,186 @@
       },
       "us": {
         "canonical": "ts_hurst_dfa",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_hvg_assortativity": {
+      "canonical": "ts_hvg_assortativity",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_hvg_assortativity",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_hvg_assortativity",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_hvg_clustering_coefficient": {
+      "canonical": "ts_hvg_clustering_coefficient",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_hvg_clustering_coefficient",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_hvg_clustering_coefficient",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_hvg_degree_entropy": {
+      "canonical": "ts_hvg_degree_entropy",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_hvg_degree_entropy",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_hvg_degree_entropy",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_hvg_forward_backward_asymmetry": {
+      "canonical": "ts_hvg_forward_backward_asymmetry",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_hvg_forward_backward_asymmetry",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_hvg_forward_backward_asymmetry",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_hvg_motif_entropy": {
+      "canonical": "ts_hvg_motif_entropy",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_hvg_motif_entropy",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_hvg_motif_entropy",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -37523,6 +38969,42 @@
       },
       "us": {
         "canonical": "ts_kalman_trend",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_kernel_granger_score": {
+      "canonical": "ts_kernel_granger_score",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_kernel_granger_score",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_kernel_granger_score",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -40091,6 +41573,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_multifractal_asymmetry": {
+      "canonical": "ts_multifractal_asymmetry",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_multifractal_asymmetry",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_multifractal_asymmetry",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_multifractal_curvature": {
       "canonical": "ts_multifractal_curvature",
       "contract_origin": "fallback_default",
@@ -40991,6 +42509,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_pastor_stambaugh_liquidity_gamma": {
+      "canonical": "ts_pastor_stambaugh_liquidity_gamma",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_pastor_stambaugh_liquidity_gamma",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_pastor_stambaugh_liquidity_gamma",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_path_efficiency": {
       "canonical": "ts_path_efficiency",
       "contract_origin": "fallback_default",
@@ -41411,6 +42965,78 @@
       },
       "us": {
         "canonical": "ts_persistence_entropy_h1",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_pettitt_change_score": {
+      "canonical": "ts_pettitt_change_score",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_pettitt_change_score",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_pettitt_change_score",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_pickands_tail_index": {
+      "canonical": "ts_pickands_tail_index",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_pickands_tail_index",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_pickands_tail_index",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -41879,6 +43505,42 @@
       },
       "us": {
         "canonical": "ts_product",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_qn_scale": {
+      "canonical": "ts_qn_scale",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_qn_scale",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_qn_scale",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -42611,6 +44273,42 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_recurrence_determinism": {
+      "canonical": "ts_recurrence_determinism",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_recurrence_determinism",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_recurrence_determinism",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_recurrence_diagonal_entropy": {
       "canonical": "ts_recurrence_diagonal_entropy",
       "contract_origin": "fallback_default",
@@ -42671,6 +44369,114 @@
       },
       "us": {
         "canonical": "ts_recurrence_divergence",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_recurrence_laminarity": {
+      "canonical": "ts_recurrence_laminarity",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_recurrence_laminarity",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_recurrence_laminarity",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_recurrence_longest_vertical_length": {
+      "canonical": "ts_recurrence_longest_vertical_length",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_recurrence_longest_vertical_length",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_recurrence_longest_vertical_length",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_recurrence_mean_diagonal_length": {
+      "canonical": "ts_recurrence_mean_diagonal_length",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_recurrence_mean_diagonal_length",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_recurrence_mean_diagonal_length",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -43139,6 +44945,42 @@
       },
       "us": {
         "canonical": "ts_regression_tstat",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_residualized_hsic": {
+      "canonical": "ts_residualized_hsic",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_residualized_hsic",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_residualized_hsic",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -44327,6 +46169,42 @@
       },
       "us": {
         "canonical": "ts_spectral_quality_factor",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_sr_gaussian_mean_shift_score": {
+      "canonical": "ts_sr_gaussian_mean_shift_score",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_sr_gaussian_mean_shift_score",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_sr_gaussian_mean_shift_score",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],

@@ -31,7 +31,14 @@ from .units_v2 import (
 PRICE_BASIS_RAW = "RAW"
 PRICE_BASIS_CONTINUOUS = "CONTINUOUS"
 PRICE_BASIS_RAW_OFFICIAL_LIMIT = "RAW_OFFICIAL_LIMIT"
+PRICE_BASIS_RETURN = "RETURN"
 PRICE_BASIS_EITHER = "EITHER"
+
+# reporting-flow semantics vocabulary
+FLOW_SEMANTICS_STOCK = "stock"
+FLOW_SEMANTICS_SINGLE_PERIOD = "single_period_flow"
+FLOW_SEMANTICS_CUMULATIVE_YTD = "cumulative_ytd_flow"
+FLOW_SEMANTICS_TTM = "ttm_flow"
 
 # role vocabulary
 ROLE_FEATURE = "feature"
@@ -52,7 +59,8 @@ class FieldConceptSpec:
     frequency: str = "daily"
     grain: str = "instrument_trade_date"
     role: str = ROLE_FEATURE
-    price_basis: str | None = None  # RAW / CONTINUOUS / RAW_OFFICIAL_LIMIT
+    price_basis: str | None = None  # RAW / CONTINUOUS / RAW_OFFICIAL_LIMIT / RETURN
+    flow_semantics: str | None = None  # stock / single_period_flow / cumulative_ytd_flow / ttm_flow
     cross_market_comparable: bool = False
     market_local_only: bool = False
     allowed_operator_families: tuple[str, ...] = ()
@@ -69,6 +77,7 @@ class FieldConceptSpec:
             "grain": self.grain,
             "role": self.role,
             "price_basis": self.price_basis,
+            "flow_semantics": self.flow_semantics,
             "cross_market_comparable": self.cross_market_comparable,
             "market_local_only": self.market_local_only,
             "allowed_operator_families": list(self.allowed_operator_families),
@@ -97,6 +106,7 @@ def _c(
     unit,
     *,
     price_basis=None,
+    flow_semantics=None,
     cross_market_comparable=False,
     market_local_only=False,
     role=ROLE_FEATURE,
@@ -110,6 +120,7 @@ def _c(
             value_kind=value_kind,
             canonical_unit=unit,
             price_basis=price_basis,
+            flow_semantics=flow_semantics,
             cross_market_comparable=cross_market_comparable,
             market_local_only=market_local_only,
             role=role,
@@ -121,7 +132,8 @@ def _c(
 
 # --- price/volume ---------------------------------------------------------
 _c("return_decimal", "price_volume", "return", RATIO,
-  cross_market_comparable=True, aliases=("ret", "return", "returns"),
+  price_basis=PRICE_BASIS_RETURN, cross_market_comparable=True,
+  aliases=("ret", "return", "returns"),
   description="Daily return as a decimal (0.02 == 2%). A: Return/10000; US: Ret identity.")
 
 _c("raw_open", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
@@ -191,14 +203,24 @@ _c("dividend_yield_decimal", "fundamental", "ratio", RATIO,
   cross_market_comparable=True, description="Dividend yield as decimal. A: DividendRatio/100; US: dividend_yield identity.")
 
 # --- financial statements (flow / stock amounts, local currency) ----------
+# The canonical statement concepts default to the A-share reporting-flow
+# semantics (fiscal-year-to-date cumulative for Income/CashFlow, point-in-time
+# stock for Balance); the US market binding overrides per ``timeframe``
+# (quarterly/annual -> single_period_flow, trailing_twelve_months -> ttm_flow).
 _c("operating_revenue", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
+  flow_semantics=FLOW_SEMANTICS_CUMULATIVE_YTD,
   aliases=("revenue",), description="Revenue for the period in local currency.")
 _c("net_profit", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
+  flow_semantics=FLOW_SEMANTICS_CUMULATIVE_YTD,
   aliases=("net_income",))
-_c("operating_cash_flow", "fundamental", "amount", LOCAL_MONEY, market_local_only=True, aliases=("ocf",))
-_c("total_assets", "fundamental", "amount", LOCAL_MONEY, market_local_only=True)
-_c("total_liabilities", "fundamental", "amount", LOCAL_MONEY, market_local_only=True)
+_c("operating_cash_flow", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
+  flow_semantics=FLOW_SEMANTICS_CUMULATIVE_YTD, aliases=("ocf",))
+_c("total_assets", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
+  flow_semantics=FLOW_SEMANTICS_STOCK)
+_c("total_liabilities", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
+  flow_semantics=FLOW_SEMANTICS_STOCK)
 _c("equity", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
+  flow_semantics=FLOW_SEMANTICS_STOCK,
   aliases=("shareholders_equity", "total_equity"))
 _c("earnings_per_share", "fundamental", "price", LOCAL_PRICE_PER_SHARE, aliases=("eps",))
 
@@ -249,10 +271,15 @@ def concept_alias_map() -> dict[str, str]:
 
 
 __all__ = [
+    "FLOW_SEMANTICS_CUMULATIVE_YTD",
+    "FLOW_SEMANTICS_SINGLE_PERIOD",
+    "FLOW_SEMANTICS_STOCK",
+    "FLOW_SEMANTICS_TTM",
     "PRICE_BASIS_CONTINUOUS",
     "PRICE_BASIS_EITHER",
     "PRICE_BASIS_RAW",
     "PRICE_BASIS_RAW_OFFICIAL_LIMIT",
+    "PRICE_BASIS_RETURN",
     "FieldConceptSpec",
     "concept_alias_map",
     "get_concept",

@@ -1033,9 +1033,7 @@ _surface.EXTENDED_ONLY_CANONICALS = frozenset(
 # a certified minute dataset is available.
 from cleaned_operators import operator_surface as _surface  # noqa: E402
 
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    set(_surface.EXTENDED_ONLY_CANONICALS)
-    | {
+_surface.extend_extended_only({
         "intra_segment_return", "intra_segment_volume_share", "intra_segment_amount_share",
         "intra_segment_vwap_deviation", "intra_segment_realized_vol",
         "intra_realized_variance", "intra_realized_semivariance", "intra_bipower_variation",
@@ -1045,5 +1043,4 @@ _surface.EXTENDED_ONLY_CANONICALS = frozenset(
         "intra_amihud", "intra_kyle_lambda_proxy", "intra_extreme_bar_return",
         "intra_lunch_gap_return", "intra_limit_first_hit_time", "intra_limit_duration",
         "intra_limit_reopen_count",
-    }
-)
+    })

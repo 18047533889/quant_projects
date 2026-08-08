@@ -28,15 +28,18 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.base import register_operator
 from cleaned_operators.intraday._core import (
     _EPS,
+    DataDegeneracy,
+    SessionAggregationOperator,
     as_panel,
     daily_agg,
     metadata,
     minute_of_day,
     np_errstate,
     register_surface,
+    require_same_session_grid,
     seg_mask,
     session_local,
 )
@@ -73,6 +76,10 @@ def _daily_pair_with_times(
 ) -> pd.DataFrame:
     """Per-(instrument, day) fn(a_vals, b_vals, times) with aligned minute bars."""
     frame_a, frame_b = as_panel(frame_a), as_panel(frame_b)
+    # P0-08: a mismatched session grid would be silently compressed by the
+    # concat+dropna below; fail closed instead.  The dropna only removes rows
+    # where the PRIMARY column (``a``) is NaN.
+    require_same_session_grid(frame_a, frame_b)
     out: dict[str, pd.Series] = {}
     for inst in frame_a.columns:
         if inst not in frame_b.columns:
@@ -84,12 +91,12 @@ def _daily_pair_with_times(
             vals_a = np.asarray(group["a"], dtype=float)
             vals_b = np.asarray(group["b"], dtype=float)
             times = np.asarray(group.index, dtype="datetime64[ns]")
-            if not np.any(np.isfinite(vals_a)):
+            if int(np.sum(np.isfinite(vals_a))) < 2:
                 per_day[day] = np.nan
                 continue
             try:
                 per_day[day] = float(fn(vals_a, vals_b, times))
-            except (ValueError, ZeroDivisionError, OverflowError):
+            except (DataDegeneracy, ZeroDivisionError, OverflowError):
                 per_day[day] = np.nan
         out[inst] = pd.Series(per_day, dtype=float)
     return pd.DataFrame(out).sort_index()
@@ -278,7 +285,7 @@ def _lead_lag_panel(
     canonical="intra_bar_range_persistence",
     source="intraday.time_structure_v2",
 )
-class IntraBarRangePersistence(SeriesOperator):
+class IntraBarRangePersistence(SessionAggregationOperator):
     """当日分钟区间（high-low）形状与历史均值曲线的余弦相似度。"""
 
     metadata = metadata(
@@ -303,7 +310,7 @@ class IntraBarRangePersistence(SeriesOperator):
     canonical="intra_bar_range_deviation",
     source="intraday.time_structure_v2",
 )
-class IntraBarRangeDeviation(SeriesOperator):
+class IntraBarRangeDeviation(SessionAggregationOperator):
     """当日分钟区间水平相对历史均值的整体偏差（同槽位平均差异）。"""
 
     metadata = metadata(
@@ -332,7 +339,7 @@ class IntraBarRangeDeviation(SeriesOperator):
     canonical="intra_tail_volume_share",
     source="intraday.time_structure_v2",
 )
-class IntraTailVolumeShare(SeriesOperator):
+class IntraTailVolumeShare(SessionAggregationOperator):
     """最大 |分钟收益| 尾部 bar 的成交量占全天比例。"""
 
     metadata = metadata(
@@ -372,7 +379,7 @@ class IntraTailVolumeShare(SeriesOperator):
     canonical="intra_volume_price_alignment",
     source="intraday.time_structure_v2",
 )
-class IntraVolumePriceAlignment(SeriesOperator):
+class IntraVolumePriceAlignment(SessionAggregationOperator):
     """分钟收益与分钟成交量的日内相关（上涨放量 vs 下跌放量）。"""
 
     metadata = metadata(
@@ -408,7 +415,7 @@ class IntraVolumePriceAlignment(SeriesOperator):
     canonical="intra_ute_high",
     source="intraday.time_structure_v2",
 )
-class IntraUteHigh(SeriesOperator):
+class IntraUteHigh(SessionAggregationOperator):
     """U 型时间效应-两翼：开收盘边缘窗口已实现方差占全天比例。"""
 
     metadata = metadata(
@@ -451,7 +458,7 @@ class IntraUteHigh(SeriesOperator):
     canonical="intra_ute_low",
     source="intraday.time_structure_v2",
 )
-class IntraUteLow(SeriesOperator):
+class IntraUteLow(SessionAggregationOperator):
     """U 型时间效应-午间低谷：中午窗口已实现方差占全天比例。"""
 
     metadata = metadata(
@@ -489,7 +496,7 @@ class IntraUteLow(SeriesOperator):
     canonical="intra_slot_volume_surprise",
     source="intraday.time_structure_v2",
 )
-class IntraSlotVolumeSurprise(SeriesOperator):
+class IntraSlotVolumeSurprise(SessionAggregationOperator):
     """同槽位成交量相对历史均值的平均偏离（log 尺度）。"""
 
     metadata = metadata(
@@ -512,7 +519,7 @@ class IntraSlotVolumeSurprise(SeriesOperator):
     canonical="intra_slot_amount_surprise",
     source="intraday.time_structure_v2",
 )
-class IntraSlotAmountSurprise(SeriesOperator):
+class IntraSlotAmountSurprise(SessionAggregationOperator):
     """同槽位成交额相对历史均值的平均偏离（log 尺度）。"""
 
     metadata = metadata(
@@ -535,7 +542,7 @@ class IntraSlotAmountSurprise(SeriesOperator):
     canonical="intra_slot_volatility_surprise",
     source="intraday.time_structure_v2",
 )
-class IntraSlotVolatilitySurprise(SeriesOperator):
+class IntraSlotVolatilitySurprise(SessionAggregationOperator):
     """同槽位 bar 区间（波动代理）相对历史均值的平均偏离。"""
 
     metadata = metadata(
@@ -564,7 +571,7 @@ class IntraSlotVolatilitySurprise(SeriesOperator):
     canonical="intra_market_lead_lag_ex_self",
     source="intraday.time_structure_v2",
 )
-class IntraMarketLeadLagExSelf(SeriesOperator):
+class IntraMarketLeadLagExSelf(SessionAggregationOperator):
     """日内 ex-self 市场领先滞后：corr(r_t, m_{t-k}) - corr(r_t, m_{t+k})。"""
 
     metadata = metadata(
@@ -586,7 +593,7 @@ class IntraMarketLeadLagExSelf(SeriesOperator):
     canonical="intra_industry_lead_lag_ex_self",
     source="intraday.time_structure_v2",
 )
-class IntraIndustryLeadLagExSelf(SeriesOperator):
+class IntraIndustryLeadLagExSelf(SessionAggregationOperator):
     """日内同行业（剔除自身）领先滞后。industry 为日频标签面板。"""
 
     metadata = metadata(
@@ -613,7 +620,7 @@ class IntraIndustryLeadLagExSelf(SeriesOperator):
     canonical="intra_session_return_asymmetry",
     source="intraday.time_structure_v2",
 )
-class IntraSessionReturnAsymmetry(SeriesOperator):
+class IntraSessionReturnAsymmetry(SessionAggregationOperator):
     """上午/下午绝对收益强度不对称：(morning - afternoon)/(morning + afternoon)。"""
 
     metadata = metadata(
@@ -645,7 +652,7 @@ class IntraSessionReturnAsymmetry(SeriesOperator):
     canonical="intra_close_participation",
     source="intraday.time_structure_v2",
 )
-class IntraCloseParticipation(SeriesOperator):
+class IntraCloseParticipation(SessionAggregationOperator):
     """收盘前 tail_minutes 分钟成交量占全天比例（尾盘参与度）。"""
 
     metadata = metadata(
@@ -684,7 +691,7 @@ class IntraCloseParticipation(SeriesOperator):
     canonical="intra_high_low_affinity",
     source="intraday.time_structure_v2",
 )
-class IntraHighLowAffinity(SeriesOperator):
+class IntraHighLowAffinity(SessionAggregationOperator):
     """日内高点/低点出现时刻与历史均值时刻的相似度（越固定越接近 1）。"""
 
     metadata = metadata(

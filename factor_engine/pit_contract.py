@@ -101,7 +101,7 @@ def pit_asof_join(
     decision_time: str = "decision_timestamp",
     columns: PITColumns = PITColumns(),
     max_age_days: int | None = 180,
-    available_policy: AvailablePolicy = "same_day",
+    available_policy: AvailablePolicy = "next_trading_day",
 ) -> pd.DataFrame:
     """Backward as-of join enforcing ``available_at <= decision_timestamp``.
 
@@ -110,11 +110,14 @@ def pit_asof_join(
 
     ``available_policy`` controls when an event becomes visible:
 
-    * ``same_day`` — ``available_at <= decision`` (historical behaviour);
-    * ``next_trading_day`` — an announcement on ``PubDate`` is only visible to
-      the first decision strictly after it.  A-share earnings/top-ten filings
-      land after close, so production reads use this conservative policy to avoid
-      acting on a same-day announcement at that day's close (audit §2.9).
+    * ``next_trading_day`` (default, round-6 P0-03) — an announcement on
+      ``PubDate`` is only visible to the first decision strictly after it.
+      A-share earnings/top-ten filings land after close and carry a date, not a
+      time-of-day; assuming ``00:00:00`` same-day availability would let an
+      after-close announcement drive that day's close.  Conservative by default.
+    * ``same_day`` — ``available_at <= decision`` (legacy behaviour, only when
+      the caller asserts the events carry real timestamps such that the
+      comparison is sound).
     """
     if available_policy not in {"same_day", "next_trading_day"}:
         raise ValueError(f"unknown available policy {available_policy!r}")
@@ -179,16 +182,17 @@ def select_visible_row_bundles(
     selector: VisiblePeriodSelector = "latest_visible_period",
     decision_time: str = "decision_timestamp",
     columns: PITColumns = PITColumns(),
-    available_policy: AvailablePolicy = "same_day",
+    available_policy: AvailablePolicy = "next_trading_day",
 ) -> pd.DataFrame:
     """Select one whole visible report row for every decision.
 
     Rows are selected by availability first, then by the latest eligible report
     period and revision.  All value columns therefore come from the same row.
 
-    ``available_policy`` mirrors :func:`pit_asof_join`: with
-    ``next_trading_day`` a same-day announcement is only visible to the first
-    decision strictly after ``PubDate``.
+    ``available_policy`` mirrors :func:`pit_asof_join`: the default is
+    ``next_trading_day`` (round-6 P0-03) so a date-level announcement is only
+    visible to the first decision strictly after ``PubDate``; ``same_day`` is
+    the legacy exact-match behaviour for callers with real timestamps.
     """
     if available_policy not in {"same_day", "next_trading_day"}:
         raise ValueError(f"unknown available policy {available_policy!r}")

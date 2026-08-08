@@ -17,15 +17,18 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.base import register_operator
 from cleaned_operators.intraday._core import (
     _EPS,
+    DataDegeneracy,
+    SessionAggregationOperator,
     as_panel,
     broadcast_daily_panel,
     log_returns,
     metadata,
     np_errstate,
     register_surface,
+    require_same_session_grid,
 )
 
 _CANONICALS: list[str] = []
@@ -84,6 +87,11 @@ def _beta_daily(close: pd.DataFrame, weights: pd.DataFrame, fn: Callable[[np.nda
     rets, mkt = _aligned_market(close, weights)
     w_bc = broadcast_daily_panel(close, weights)
     w_ret = w_bc.where(rets.notna())
+    # P0-08: the concat+dropna below would silently compress a mismatched
+    # session grid; require the same grid first (once — every per-stock market
+    # return shares the minute index of ``rets``), then keep the dropna (it
+    # only removes rows where the PRIMARY column is NaN).
+    require_same_session_grid(rets, mkt)
     out: dict[str, pd.Series] = {}
     for inst in close.columns:
         m = _market_return_ex_self(rets, w_bc, w_ret, inst) if ex_self else mkt
@@ -93,12 +101,12 @@ def _beta_daily(close: pd.DataFrame, weights: pd.DataFrame, fn: Callable[[np.nda
         for day, group in joined.groupby("day"):
             rr = np.asarray(group["r"], dtype=float)
             mm = np.asarray(group["m"], dtype=float)
-            if not np.any(np.isfinite(mm)):
+            if int(np.sum(np.isfinite(mm))) < 2:
                 per_day[day] = np.nan
                 continue
             try:
                 per_day[day] = float(fn(rr, mm))
-            except (ValueError, ZeroDivisionError, OverflowError):
+            except (DataDegeneracy, ZeroDivisionError, OverflowError):
                 per_day[day] = np.nan
         out[inst] = pd.Series(per_day, dtype=float)
     if not out:
@@ -232,43 +240,43 @@ def _op(name: str, description: str, unit: str):
 
 
 @_op("intra_realized_beta", "日内已实现 Beta：分钟收益对市场分钟收益回归。", "level")
-class IntraRealizedBeta(SeriesOperator):
+class IntraRealizedBeta(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _realized_beta)
 
 
 @_op("intra_realized_correlation", "日内已实现相关系数。", "corr")
-class IntraRealizedCorrelation(SeriesOperator):
+class IntraRealizedCorrelation(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _realized_corr)
 
 
 @_op("intra_down_down_semibeta", "市场下跌且个股下跌象限协同 Beta。", "level")
-class IntraDownDownSemibeta(SeriesOperator):
+class IntraDownDownSemibeta(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _down_down)
 
 
 @_op("intra_up_up_semibeta", "市场上涨且个股上涨象限协同 Beta。", "level")
-class IntraUpUpSemibeta(SeriesOperator):
+class IntraUpUpSemibeta(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _up_up)
 
 
 @_op("intra_down_up_semibeta", "市场上涨、个股下跌象限协同暴露。", "level")
-class IntraDownUpSemibeta(SeriesOperator):
+class IntraDownUpSemibeta(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _down_up)
 
 
 @_op("intra_up_down_semibeta", "市场下跌、个股上涨象限协同暴露。", "level")
-class IntraUpDownSemibeta(SeriesOperator):
+class IntraUpDownSemibeta(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _up_down)
 
 
 @_op("intra_beta_asymmetry", "下-下半 Beta 减 上-上半 Beta。", "level")
-class IntraBetaAsymmetry(SeriesOperator):
+class IntraBetaAsymmetry(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         out = _beta_daily(close, free_market_cap, _down_down)
         up = _beta_daily(close, free_market_cap, _up_up)
@@ -276,25 +284,25 @@ class IntraBetaAsymmetry(SeriesOperator):
 
 
 @_op("intra_idiosyncratic_variance", "分钟市场模型残差方差。", "variance")
-class IntraIdiosyncraticVariance(SeriesOperator):
+class IntraIdiosyncraticVariance(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _idio_variance)
 
 
 @_op("intra_idiosyncratic_skewness", "分钟市场模型残差偏度。", "level")
-class IntraIdiosyncraticSkewness(SeriesOperator):
+class IntraIdiosyncraticSkewness(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _idio_skewness)
 
 
 @_op("intra_idiosyncratic_kurtosis", "分钟市场模型残差峰度。", "level")
-class IntraIdiosyncraticKurtosis(SeriesOperator):
+class IntraIdiosyncraticKurtosis(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _idio_kurtosis)
 
 
 @_op("intra_market_model_r2", "分钟市场模型 R²。", "r2")
-class IntraMarketModelR2(SeriesOperator):
+class IntraMarketModelR2(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _market_r2)
 
@@ -305,37 +313,37 @@ class IntraMarketModelR2(SeriesOperator):
 # inflate their own beta / correlation / market-model fit.
 # ---------------------------------------------------------------------------
 @_op("intra_realized_beta_ex_self", "日内已实现 Beta(市场收益剔除自身)。", "level")
-class IntraRealizedBetaExSelf(SeriesOperator):
+class IntraRealizedBetaExSelf(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _realized_beta, ex_self=True)
 
 
 @_op("intra_realized_correlation_ex_self", "日内已实现相关系数(市场收益剔除自身)。", "corr")
-class IntraRealizedCorrelationExSelf(SeriesOperator):
+class IntraRealizedCorrelationExSelf(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _realized_corr, ex_self=True)
 
 
 @_op("intra_idiosyncratic_variance_ex_self", "分钟市场模型残差方差(市场收益剔除自身)。", "variance")
-class IntraIdiosyncraticVarianceExSelf(SeriesOperator):
+class IntraIdiosyncraticVarianceExSelf(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _idio_variance, ex_self=True)
 
 
 @_op("intra_idiosyncratic_skewness_ex_self", "分钟市场模型残差偏度(市场收益剔除自身)。", "level")
-class IntraIdiosyncraticSkewnessExSelf(SeriesOperator):
+class IntraIdiosyncraticSkewnessExSelf(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _idio_skewness, ex_self=True)
 
 
 @_op("intra_idiosyncratic_kurtosis_ex_self", "分钟市场模型残差峰度(市场收益剔除自身)。", "level")
-class IntraIdiosyncraticKurtosisExSelf(SeriesOperator):
+class IntraIdiosyncraticKurtosisExSelf(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _idio_kurtosis, ex_self=True)
 
 
 @_op("intra_market_model_r2_ex_self", "分钟市场模型 R²(市场收益剔除自身)。", "r2")
-class IntraMarketModelR2ExSelf(SeriesOperator):
+class IntraMarketModelR2ExSelf(SessionAggregationOperator):
     def _calculate_series(self, close, free_market_cap, **_):
         return _beta_daily(close, free_market_cap, _market_r2, ex_self=True)
 

@@ -53,9 +53,7 @@ def _register(name: str, category: str, params: list[str], description: str, pan
     # blocks by construction; they are NOT fail-closed by the S2 gate.
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {name}
-    )
+    _surface.extend_extended_only({name})
 
 
 # --------------------------------------------------------------------------

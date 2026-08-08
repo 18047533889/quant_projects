@@ -9,8 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from data_access.read.read_contract import FileVersion
-
 
 MANIFEST_NAME = ".publish_manifest.json"
 
@@ -21,8 +19,13 @@ def _content_hash(file_rows: list[Any]) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
-def _parquet_files_under(root: Path) -> tuple[FileVersion, ...]:
-    files: list[FileVersion] = []
+def _parquet_files_under(root: Path) -> tuple[tuple[str, int, int], ...]:
+    """#P0-28 返回 ``(rel_path, size, mtime_ns)`` —— **相对路径**。
+
+    manifest 在 candidate 目录里生成，candidate 随后 rename 成 target；绝对
+    candidate 路径上线后即失效。相对路径对 target 目录恒有效。
+    """
+    entries: list[tuple[str, int, int]] = []
     if not root.exists():
         return ()
     for p in sorted(root.rglob("*.parquet")):
@@ -30,12 +33,12 @@ def _parquet_files_under(root: Path) -> tuple[FileVersion, ...]:
             continue
         try:
             st = p.stat()
-            files.append(
-                FileVersion(path=str(p), size=st.st_size, mtime_ns=st.st_mtime_ns)
-            )
+            rel = str(p.relative_to(root))
+            entries.append((rel, st.st_size, st.st_mtime_ns))
         except OSError:
-            files.append(FileVersion(path=str(p)))
-    return tuple(files)
+            rel = str(p.relative_to(root))
+            entries.append((rel, 0, 0))
+    return tuple(entries)
 
 
 def write_publish_manifest(
@@ -48,16 +51,20 @@ def write_publish_manifest(
     archive_path: Path | None,
     elapsed_ms: float,
 ) -> Path:
-    """原子写入 ``{target_dir}/.publish_manifest.json``（tmp → replace）。"""
+    """原子写入 ``{target_dir}/.publish_manifest.json``（tmp → replace）。
+
+    #P0-28 ``files[].path`` 一律存**相对路径**（相对 target_dir）——manifest 在
+    candidate 里生成、随 candidate rename 上线，绝对 candidate 路径上线后已失效。
+    """
     target_dir.mkdir(parents=True, exist_ok=True)
     files = _parquet_files_under(target_dir)
     file_entries = [
         {
-            "path": f.path,
-            "size": f.size,
-            "mtime_ns": f.mtime_ns,
+            "path": rel,
+            "size": size,
+            "mtime_ns": mtime_ns,
         }
-        for f in files
+        for rel, size, mtime_ns in files
     ]
     payload = {
         "published_at": datetime.now(timezone.utc).isoformat(),
@@ -69,12 +76,16 @@ def write_publish_manifest(
         "elapsed_ms": float(elapsed_ms),
         "files": file_entries,
         "file_count": len(files),
+        # #P0-4 base_dir 一律 "."（相对本 manifest 所在目录）。manifest 在
+        # candidate 目录生成、随 rename 上线，绝对 candidate 路径上线后已失效；
+        # files[].path 相对 "." 恒有效。
+        "base_dir": ".",
         # #P0-30 发布代次的 content hash：文件清单指纹，供下游/审计验证该
         # generation 是否被改动（行数/大小/mtime 变化 → hash 变化）。
         "content_hash": _content_hash(
             [(e["path"], e["size"], e["mtime_ns"]) for e in file_entries]
         ),
-        "manifest_version": 1,
+        "manifest_version": 3,
     }
     tmp = target_dir / f"{MANIFEST_NAME}.tmp"
     text = json.dumps(payload, sort_keys=True, indent=2, default=str)

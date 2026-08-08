@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Iterable
 import numpy as np
 import pandas as pd
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.registry import OperatorRegistry
 
 _EPS=1e-12
@@ -100,18 +100,23 @@ def EaseOfMovement(high,low,volume,window,volume_scale=1.0):
     w=_pi(window,"window",2); midpoint=(high+low)/2.0; distance=midpoint.diff(); box=(high-low)/(volume.replace(0,np.nan)/float(volume_scale)); raw=distance*box; return raw.rolling(w,min_periods=w).mean()
 def bounded_nvi(close,volume,window):
     w=_pi(window,"window",2)
-    # A missing volume / missing volume-growth bar must not become a silent
-    # "no-volume day" (the old ``where(cond, 0.0)`` mapped NaN comparisons to
-    # False -> 0.0) — that injected fabricated zero-return bars into the index.
+    # R5-33: ``NaN < value`` evaluates to False (bool), NOT NaN — so
+    # ``cond.notna()`` was True even for a missing volume and the old
+    # ``r.where(cond, 0.0)`` injected a fabricated zero-return bar.  The volume
+    # *known* condition and the *unknown* condition are tracked separately: a
+    # genuinely-known volume decrease takes the return; a known non-decrease
+    # takes 0.0; a MISSING volume/return bar is NaN (cannot judge), never 0.
     r=close.pct_change(fill_method=None)
-    cond=(volume<volume.shift(1)); valid=cond.notna()&r.notna()
-    r=r.where(cond,0.0).where(valid)
+    down=(volume<volume.shift(1))
+    vol_valid=volume.notna()&volume.shift(1).notna()&r.notna()
+    r=r.where(down&vol_valid,0.0).where(vol_valid)
     return np.exp(np.log1p(r.clip(lower=-0.999999)).rolling(w,min_periods=w).sum())-1.0
 def bounded_pvi(close,volume,window):
     w=_pi(window,"window",2)
     r=close.pct_change(fill_method=None)
-    cond=(volume>volume.shift(1)); valid=cond.notna()&r.notna()
-    r=r.where(cond,0.0).where(valid)
+    up=(volume>volume.shift(1))
+    vol_valid=volume.notna()&volume.shift(1).notna()&r.notna()
+    r=r.where(up&vol_valid,0.0).where(vol_valid)
     return np.exp(np.log1p(r.clip(lower=-0.999999)).rolling(w,min_periods=w).sum())-1.0
 def zero_return_ratio(ret,window,epsilon=1e-12):
     w=_pi(window,"window")
@@ -144,11 +149,17 @@ _SPECS=[
 ]
 for _name,_params,_fn,_desc in _SPECS:_register(_name,_params,_fn,_desc)
 
-# P1-86: EaseOfMovement's ``volume_scale`` is a pure unit-conversion constant —
-# it multiplies the whole output uniformly and leaves cross-sectional ordering
-# invariant, so treating it as an alpha-search dimension only manufactures
-# linearly-scaled duplicates.  Tag it ``unit_conversion_only`` so a dead-parameter
-# audit exempts it (its output-sensitivity is a fixed constant, by design).
+# P1-86 / R5-34: EaseOfMovement's ``volume_scale`` is a pure unit-conversion
+# constant — it multiplies the whole output uniformly and leaves cross-sectional
+# ordering invariant, so treating it as an alpha-search dimension only
+# manufactures linearly-scaled duplicates.  Tag it ``unit_conversion_only`` AND
+# declare ``ParamSpec(searchable=False)`` so it is excluded from the mining
+# grammar, not just exempted from a dead-parameter audit.
 _em_op = OperatorRegistry.get("EaseOfMovement", "pandas_numpy")
 if _em_op is not None and "unit_conversion_only" not in (_em_op.metadata.tags or ()):
     _em_op.metadata.tags = [*(_em_op.metadata.tags or ()), "unit_conversion_only"]
+if _em_op is not None:
+    _em_op.metadata.param_specs = {
+        "volume_scale": ParamSpec(dtype=float, searchable=False),
+        **_em_op.metadata.param_specs,
+    }

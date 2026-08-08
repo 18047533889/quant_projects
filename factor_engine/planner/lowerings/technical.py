@@ -8,17 +8,30 @@ from planner.lowerings import _helpers as H
 
 
 def _macd_windows(node: PlanNode) -> tuple[int, int, int] | None:
-    """读取显式 MACD 参数；无参数时保留原始 operator 语义。"""
+    """读取显式 MACD 参数；无参数时保留原始 operator 语义。
+
+    R5-08: 不再 ``int(...)`` 截断——lowering 必须发生在参数校验之后，因此
+    ``fast=5.9`` 之类会在此处报错而不是静默变成 5。
+    """
     explicit = any(k in node.attrs for k in ("fast", "slow", "signal")) or len(node.inputs) >= 3
     if not explicit:
         return None
-    fast = int(node.attrs.get("fast", H._literal_input(node, 1) or 12))
-    slow = int(node.attrs.get("slow", H._literal_input(node, 2) or 26))
-    signal = int(node.attrs.get("signal", H._literal_input(node, 3) or 9))
+    fast_attr = node.attrs.get("fast")
+    fast = H.strict_int(fast_attr, "fast") if fast_attr is not None else H.strict_int(
+        H._literal_input(node, 1) or 12, "fast"
+    )
+    slow_attr = node.attrs.get("slow")
+    slow = H.strict_int(slow_attr, "slow") if slow_attr is not None else H.strict_int(
+        H._literal_input(node, 2) or 26, "slow"
+    )
+    signal_attr = node.attrs.get("signal")
+    signal = H.strict_int(signal_attr, "signal") if signal_attr is not None else H.strict_int(
+        H._literal_input(node, 3) or 9, "signal"
+    )
     return fast, slow, signal
 
 
-@register_lowering("MACD_line")
+@register_lowering("MACD_line", deps=("fast", "slow", "signal"), min_inputs=3)
 def lower_macd_line(node: PlanNode) -> PlanNode:
     if not node.inputs:
         return node
@@ -32,7 +45,7 @@ def lower_macd_line(node: PlanNode) -> PlanNode:
     return H.binop("subtract", H.ts_ema(x, fast), H.ts_ema(x, slow))
 
 
-@register_lowering("MACD_signal")
+@register_lowering("MACD_signal", deps=("fast", "slow", "signal"), min_inputs=3)
 def lower_macd_signal(node: PlanNode) -> PlanNode:
     if not node.inputs:
         return node
@@ -47,7 +60,7 @@ def lower_macd_signal(node: PlanNode) -> PlanNode:
     return H.ts_ema(line, signal)
 
 
-@register_lowering("MACD_hist")
+@register_lowering("MACD_hist", deps=("fast", "slow", "signal"), min_inputs=3)
 def lower_macd_hist(node: PlanNode) -> PlanNode:
     if not node.inputs:
         return node
@@ -62,7 +75,7 @@ def lower_macd_hist(node: PlanNode) -> PlanNode:
     return H.binop("subtract", line, H.ts_ema(line, signal))
 
 
-@register_lowering("MOM")
+@register_lowering("MOM", deps=("window",), min_inputs=2)
 def lower_mom(node: PlanNode) -> PlanNode:
     """``ts_delta(price, w)``（与 PIT-safe causal lag 一致）。"""
     if not node.inputs:
@@ -72,7 +85,7 @@ def lower_mom(node: PlanNode) -> PlanNode:
     return H.ts_delta(price, w)
 
 
-@register_lowering("ROC")
+@register_lowering("ROC", deps=("window",), min_inputs=2)
 def lower_roc(node: PlanNode) -> PlanNode:
     """``100 × ts_pct(price, w)``（与 Pandas ROC 百分比口径一致）。"""
     if not node.inputs:
@@ -97,17 +110,17 @@ def _bollinger_band(node: PlanNode, *, upper: bool) -> PlanNode:
     return H.binop("subtract", mean, scaled)
 
 
-@register_lowering("BollingerUpper")
+@register_lowering("BollingerUpper", deps=("window", "std_dev", "k"), min_inputs=2)
 def lower_bollinger_upper(node: PlanNode) -> PlanNode:
     return _bollinger_band(node, upper=True)
 
 
-@register_lowering("BollingerLower")
+@register_lowering("BollingerLower", deps=("window", "std_dev", "k"), min_inputs=2)
 def lower_bollinger_lower(node: PlanNode) -> PlanNode:
     return _bollinger_band(node, upper=False)
 
 
-@register_lowering("DPO")
+@register_lowering("DPO", deps=("window",), min_inputs=2)
 def lower_dpo(node: PlanNode) -> PlanNode:
     """``close - delay(ts_mean(close, w), w//2 + 1)``"""
     if not node.inputs:
@@ -120,7 +133,7 @@ def lower_dpo(node: PlanNode) -> PlanNode:
     return H.binop("subtract", close, delayed_mean)
 
 
-@register_lowering("WilliamsR")
+@register_lowering("WilliamsR", deps=("window",), min_inputs=4)
 def lower_williams_r(node: PlanNode) -> PlanNode:
     """``-100 × (ts_max(high,w) - close) / (ts_max(high,w) - ts_min(low,w))``"""
     if len(node.inputs) < 3:
@@ -143,7 +156,7 @@ def _stochastic_k(high: PlanNode, low: PlanNode, close: PlanNode, window: int) -
     return H.binop("multiply", H.safe_div(num, den), H.literal(100.0))
 
 
-@register_lowering("BollingerBands")
+@register_lowering("BollingerBands", deps=("window", "std_dev", "k"), min_inputs=2)
 def lower_bollinger_bands(node: PlanNode) -> PlanNode:
     """布林带中轨 = ts_mean(price, window)。"""
     if not node.inputs:
@@ -153,7 +166,7 @@ def lower_bollinger_bands(node: PlanNode) -> PlanNode:
     return H.ts_mean(x, w)
 
 
-@register_lowering("StochasticK")
+@register_lowering("StochasticK", deps=("window",), min_inputs=4)
 def lower_stochastic_k(node: PlanNode) -> PlanNode:
     if len(node.inputs) < 3:
         return node
@@ -162,7 +175,7 @@ def lower_stochastic_k(node: PlanNode) -> PlanNode:
     return _stochastic_k(high, low, close, w)
 
 
-@register_lowering("StochasticD")
+@register_lowering("StochasticD", deps=("window",), min_inputs=4)
 def lower_stochastic_d(node: PlanNode) -> PlanNode:
     if len(node.inputs) < 3:
         return node
@@ -172,7 +185,7 @@ def lower_stochastic_d(node: PlanNode) -> PlanNode:
     return H.ts_mean(k, 3)
 
 
-@register_lowering("OBV")
+@register_lowering("OBV", min_inputs=2)
 def lower_obv(node: PlanNode) -> PlanNode:
     """``cum_sum(sign(ts_delta(price,1)) * volume)``"""
     if len(node.inputs) < 2:

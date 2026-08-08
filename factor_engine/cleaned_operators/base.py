@@ -58,16 +58,24 @@ _INTEGER_PARAM_NAMES = frozenset(
         # 3.4 -> 3 compiled to the SAME factor, manufacturing a false search
         # space.  A kernel that legitimately needs a fractional value for one of
         # these must declare ``param_types`` (float) / ``ParamSpec(dtype=float)``.
-        "confirmation", "tolerance", "horizon", "min_anchors",
-        "min_tail_count", "min_bin_count", "cutoff", "block", "tau",
+        #
+        # review #5 R5-07: ``tolerance``/``tau`` are removed from the name
+        # whitelist — both are float-ratio semantics in pattern / expectile /
+        # decay operators (``pattern_double_top(tolerance=0.02)``,
+        # ``_expectile_chunk(..., tau=0.1)``).  Guessing their type from the
+        # *name* was exactly the failure the whitelist was meant to fix in one
+        # direction; operators that use ``tau`` as an integer embedding lag or
+        # ``tolerance``/``confirmation`` as integer counts now declare
+        # ``ParamSpec(dtype=int)`` explicitly.
+        "confirmation", "horizon", "min_anchors",
+        "min_tail_count", "min_bin_count", "cutoff", "block",
         "max_iter", "n_iter", "segments", "min_segments", "max_segments",
         "left", "right", "up_count", "down_count", "n_levels", "n_buckets",
     }
 )
 _NONNEGATIVE_INTEGER_PARAMS = frozenset(
     {"lag", "periods", "d", "ddof", "max_lag", "event_lag", "match_lag",
-     "fit_lag", "delay", "max_shift", "max_gap", "lookback_days", "tau",
-     "tolerance", "block"}
+     "fit_lag", "delay", "max_shift", "max_gap", "lookback_days", "block"}
 )
 
 
@@ -131,6 +139,19 @@ class OperatorMetadata:
     param_specs: Dict[str, ParamSpec] = field(default_factory=dict)
     # review #4 R4-95: meaning of the window-like parameters in this operator.
     window_semantics: str | None = None
+    # review #5 R5-06: declared keyword aliases -> canonical parameter.  Kernels
+    # historically read both ``d`` and ``window`` (or ``p``/``q``,
+    # ``std_dev``/``k``) for the same positional slot; those aliases are now an
+    # explicit, catalog-visible declaration so the strict unknown-kwarg gate can
+    # reject genuinely hidden parameters without breaking documented aliases.
+    param_aliases: Dict[str, str] = field(default_factory=dict)
+    # WS4 P0-07: time-frequency grain contract.  A ``SessionAggregationOperator``
+    # (or any operator that changes frequency — e.g. minute panel -> daily panel)
+    # declares its input/output grain here so the catalog and policy layer can
+    # see the frequency change instead of guessing from the return shape.  ``None``
+    # means same-grain / undeclared.
+    input_grain: str | None = None
+    output_grain: str | None = None
 
 
 def _normalise_integer(
@@ -206,6 +227,22 @@ def _normalise_integer(
     return _check_int(int(value))
 
 
+# review #5 R5-06: keyword aliases that kernels across the codebase legitimately
+# read for the same positional slot (``d``/``window``, ``p``/``q``,
+# ``std_dev``/``k`` …).  The strict unknown-kwarg gate below allows these names
+# even when an operator has not yet declared ``param_aliases``, so a long tail of
+# legacy kernels keeps working while truly hidden parameters (names in neither
+# ``param_names`` nor this set) are rejected.  New operators should declare
+# ``param_aliases`` instead of relying on this set.
+_LEGACY_KERNEL_ALIASES = frozenset(
+    {
+        "d", "window", "p", "q", "n", "k", "m", "min", "max", "span", "lo", "hi",
+        "std_dev", "fast", "slow", "signal", "alpha", "lambda_param", "method",
+        "field", "value", "strategy",
+    }
+)
+
+
 def _normalise_call(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]):
     # ``getattr`` keeps this compatible with the parallel polars metadata class
     # (base_polars.OperatorMetadata has no param_specs / param_types on every
@@ -213,6 +250,18 @@ def _normalise_call(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: d
     names = list(getattr(metadata, "param_names", None) or [])
     types = getattr(metadata, "param_types", None) or {}
     specs = getattr(metadata, "param_specs", None) or {}
+    aliases = set(getattr(metadata, "param_aliases", None) or {})
+    tags = {str(t).lower() for t in (getattr(metadata, "tags", None) or [])}
+    variadic = "variadic" in tags or "dynamic_inputs" in tags
+    # R5-06: reject extra positional arguments past the declared contract unless
+    # the operator is explicitly variadic.  A fifth panel silently accepted by a
+    # four-parameter kernel is a contract violation, not a feature.
+    if not variadic and len(args) > len(names):
+        raise OperatorParameterError(
+            f"{metadata.name}: received {len(args)} positional arguments but "
+            f"declares {len(names)} parameters {names}; extra positional "
+            "arguments are rejected unless the operator declares variadic"
+        )
     processed_args = [
         _normalise_integer(
             value,
@@ -222,46 +271,88 @@ def _normalise_call(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: d
         )
         for index, value in enumerate(args)
     ]
-    processed_kwargs = {
-        key: _normalise_integer(value, key, types.get(key), specs.get(key))
-        for key, value in kwargs.items()
-    }
+    processed_kwargs: dict[str, Any] = {}
+    for key, value in kwargs.items():
+        if key in names or key in aliases or key in _LEGACY_KERNEL_ALIASES or variadic:
+            processed_kwargs[key] = _normalise_integer(
+                value, key, types.get(key), specs.get(key)
+            )
+            continue
+        raise OperatorParameterError(
+            f"{metadata.name}: undeclared keyword parameter {key!r}; parameters "
+            f"are {names}.  A hidden keyword that changes results without being "
+            "visible in the catalog is rejected (R5-06); declare it in "
+            "param_names / param_aliases or tag the operator variadic."
+        )
     return tuple(processed_args), processed_kwargs
 
 
-def _frame_instruments(frame: pd.DataFrame) -> set | None:
+def _frame_instruments(frame: Any) -> set | None:
     """Instrument set of a panel, or None when there is no instrument level."""
-    index = frame.index
-    if isinstance(index, pd.MultiIndex) and "instrument" in index.names:
+    index = getattr(frame, "index", None)
+    if index is not None and isinstance(index, pd.MultiIndex) and "instrument" in index.names:
         return set(index.get_level_values("instrument"))
+    # Polars wide panels carry the instrument identity as a metadata column.
+    for key in ("inst", "instrument", "stock_code"):
+        if key in getattr(frame, "columns", ()) or key in getattr(frame, "schema", ()):
+            series = frame[key]
+            try:
+                values = list(series.to_list())
+            except AttributeError:  # pandas column
+                values = list(series)
+            return set(values)
     return None
 
 
+def _is_panel(value: Any) -> bool:
+    """A multi-column panel (pandas wide, polars wide/long) rather than a scalar."""
+    if isinstance(value, (int, float, str, bool, np.number)) or value is None:
+        return False
+    columns = getattr(value, "columns", None)
+    if columns is None:
+        return False
+    try:
+        n = len(list(columns))
+    except TypeError:
+        return False
+    return n > 0
+
+
 def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
-    frames = [value for value in (*args, *kwargs.values()) if isinstance(value, pd.DataFrame)]
+    frames = [value for value in (*args, *kwargs.values()) if _is_panel(value)]
     if not frames:
         return
     for position, frame in enumerate(frames):
-        if not frame.index.is_unique:
-            raise ValueError(f"{metadata.name}: input panel {position} has duplicate index values")
-        if not frame.columns.is_unique:
+        columns = list(frame.columns)
+        if len(columns) != len(set(columns)):
             raise ValueError(f"{metadata.name}: input panel {position} has duplicate columns")
+        index = getattr(frame, "index", None)
+        if index is not None and not index.is_unique:
+            raise ValueError(f"{metadata.name}: input panel {position} has duplicate index values")
     if len(frames) < 2:
         return
     tags = set(metadata.tags or [])
     if tags & _TYPED_BROADCAST_TAGS or "allow_panel_broadcast" in tags:
-        # Review #4 R4-99: a bare ``allow_panel_broadcast`` is the legacy blanket
-        # waiver; typed tags (daily_to_minute_broadcast / scalar_to_cross_section
-        # _broadcast / same_trading_date_broadcast / session_boundary_broadcast)
-        # declare the SPECIFIC shape.  Either way the instrument identity is
-        # enforced: a panel cannot be broadcast across a different instrument set.
+        # Review #4 R4-99 / review #5 R5-05: a bare ``allow_panel_broadcast`` is
+        # the legacy blanket waiver; typed tags declare the SPECIFIC shape.
+        # Beyond column *count* and instrument identity, the column *labels* are
+        # now compared too — a wide panel whose columns are [A,B] must never be
+        # silently broadcast onto a same-width panel whose columns are [B,C].
         base_cols = frames[0].shape[1]
+        base_columns = list(frames[0].columns)
         base_instruments = _frame_instruments(frames[0])
         for position, frame in enumerate(frames[1:], start=1):
             if frame.shape[1] != base_cols:
                 raise ValueError(
                     f"{metadata.name}: broadcast input panel {position} has "
                     f"{frame.shape[1]} columns != base {base_cols}"
+                )
+            if list(frame.columns) != base_columns:
+                raise ValueError(
+                    f"{metadata.name}: broadcast input panel {position} columns "
+                    f"{list(frame.columns)} != base {base_columns} — same-width "
+                    "panels with different instrument/column identities cannot be "
+                    "broadcast (R5-05)"
                 )
             if base_instruments is not None:
                 other = _frame_instruments(frame)
@@ -273,11 +364,14 @@ def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwar
                     )
         return
     base = frames[0]
+    base_columns = list(base.columns)
+    base_index = getattr(base, "index", None)
     for position, frame in enumerate(frames[1:], start=1):
-        if not frame.index.equals(base.index):
-            raise ValueError(f"{metadata.name}: input panel {position} index is misaligned")
-        if not frame.columns.equals(base.columns):
+        if list(frame.columns) != base_columns:
             raise ValueError(f"{metadata.name}: input panel {position} columns are misaligned")
+        other_index = getattr(frame, "index", None)
+        if base_index is not None and other_index is not None and not other_index.equals(base_index):
+            raise ValueError(f"{metadata.name}: input panel {position} index is misaligned")
 
 
 def validate_operator_call(

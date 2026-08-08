@@ -69,8 +69,13 @@ def _metadata(
 
 def _check_q(q: float) -> float:
     qq = float(q)
-    if not (0.0 < qq < 1.0):
-        raise ValueError("quantile must be in (0, 1)")
+    # Round-7 P0: these operators model *extreme/tail states* — the hit process
+    # of a tail event.  A "tail" cannot cover more than half the distribution:
+    # q > 0.5 as a lower-tail threshold means "the bottom 80% is extreme", a
+    # semantic contradiction (the upper side mirrors at 1-q, so (0, 0.5] spans
+    # every meaningful tail fraction on both sides).
+    if not (0.0 < qq <= 0.5):
+        raise ValueError("tail-state quantile must be in (0, 0.5]")
     return qq
 
 
@@ -631,15 +636,12 @@ class TsExtremalDependenceDecay(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_quantilogram",
             "ts_cross_quantilogram",
             "ts_extremogram",
             "ts_cross_extremogram",
-        }
-    )
+        })
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS)
         | {

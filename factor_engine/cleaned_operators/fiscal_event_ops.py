@@ -21,9 +21,7 @@ from cleaned_operators import operator_surface as _surface
 
 # New strict fiscal primitives start on the reviewed extended surface until
 # their independent backend evidence is issued.
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    set(_surface.EXTENDED_ONLY_CANONICALS)
-    | {
+_surface.extend_extended_only({
         "row_sum_skipna", "fiscal_perpetual_inventory", "fiscal_standardized_surprise",
         "fiscal_sign_consistency", "fiscal_direction_consistency",
         "fiscal_change_direction_agreement", "fiscal_sign_agreement",
@@ -32,8 +30,7 @@ _surface.EXTENDED_ONLY_CANONICALS = frozenset(
         "fiscal_regression_resid_std", "fiscal_accrual_quality",
         "fin_seasonal_zscore", "fin_seasonal_percentile", "fiscal_true_streak",
         "date_diff_days", "cash_flow_lifecycle_stage",
-    }
-)
+    })
 
 try:
     import polars as pl
@@ -565,9 +562,16 @@ class _RowSum(SeriesOperator):
 
 
 class _PolarsRowSum:
-    metadata = OperatorMetadata(name="row_sum_skipna", category="elementwise", description="finite row sum with explicit minimum valid count", param_names=["...", "min_count"], return_type="series", tags=["production", "pit_safe", "polars_native"])
+    # R5-02: direct ``calculate`` that routes through validate_operator_call.
+    _HANDLES_CALL_CONTRACT = True
+    metadata = OperatorMetadata(name="row_sum_skipna", category="elementwise", description="finite row sum with explicit minimum valid count", param_names=["...", "min_count"], return_type="series", tags=["production", "pit_safe", "polars_native", "variadic"])
     def calculate(self, *args, min_count=1, **kwargs):
-        return pl_row_sum_skipna(*args, min_count=min_count)
+        # R5-02: direct-``calculate`` op must still pass the central logical-call
+        # validator (row sums are variadic, hence the variadic tag).
+        from cleaned_operators.base import validate_operator_call
+
+        processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
+        return pl_row_sum_skipna(*processed_args, min_count=processed_kwargs.get("min_count", min_count))
 
 
 class _FunctionOperator(SeriesOperator):

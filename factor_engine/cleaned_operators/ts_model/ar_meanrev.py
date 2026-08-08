@@ -109,7 +109,7 @@ def _ar_apply(vals: np.ndarray, window: int, order: int, stat: str, *, fit_lag: 
     return out
 
 
-def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 0, stability_k: int = 0, cost: int = 4):
+def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 0, stability_k: int = 0, cost: int = 4, diagnostic_only: bool = False):
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -120,7 +120,7 @@ def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 
         status="experimental",
     )
     class _ArOp(SeriesOperator):
-        metadata = metadata(name, description, ["x", "window", "order"], unit=unit, cost=cost)
+        metadata = metadata(name, description, ["x", "window", "order"], unit=unit, cost=cost, diagnostic_only=diagnostic_only)
 
         def _calculate_series(self, x, window=60, order=1, **_):
             xv = x.to_numpy(dtype=float)
@@ -138,11 +138,11 @@ def _ar_op(name: str, description: str, unit: str, stat: str, *, fit_lag: int = 
 # row and report the fitted value / residual.  These are the honest names; the
 # legacy ``ts_ar_forecast`` / ``ts_ar_innovation`` are aliases of the same
 # kernels (fit_lag=0 is NOT a one-step-ahead forecast).
-_ar_op("ts_ar_fitted_value", "AR(order) 窗口内拟合值(fit_lag=0, in-sample)。", "level", "forecast")
-_ar_op("ts_ar_in_sample_resid", "当前实际值减窗口内 AR 拟合值(in-sample resid)。", "level", "innovation")
-_ar_op("ts_ar_forecast", "AR(order) 当前值预测（legacy 名称——实为窗口内拟合值，见 ts_ar_fitted_value）。", "level", "forecast")
-_ar_op("ts_ar_innovation", "当前实际值减 AR 预测（legacy 名称——实为样本内残差，见 ts_ar_in_sample_resid）。", "level", "innovation")
-_ar_op("ts_ar_innovation_z", "AR 创新标准化。", "level", "innovation_z")
+_ar_op("ts_ar_fitted_value", "AR(order) 窗口内拟合值(fit_lag=0, in-sample)。", "level", "forecast", diagnostic_only=True)
+_ar_op("ts_ar_in_sample_resid", "当前实际值减窗口内 AR 拟合值(in-sample resid)。", "level", "innovation", diagnostic_only=True)
+_ar_op("ts_ar_forecast", "AR(order) 当前值预测（legacy 名称——实为窗口内拟合值，见 ts_ar_fitted_value）。", "level", "forecast", diagnostic_only=True)
+_ar_op("ts_ar_innovation", "当前实际值减 AR 预测（legacy 名称——实为样本内残差，见 ts_ar_in_sample_resid）。", "level", "innovation", diagnostic_only=True)
+_ar_op("ts_ar_innovation_z", "AR 创新标准化。", "level", "innovation_z", diagnostic_only=True)
 
 # Prior-window (out-of-sample) AR forms: fit on t-window..t-1, forecast t.
 _ar_op("ts_ar_prior_forecast", "AR(order) 截至 t-1 训练的一步预测。", "level", "forecast", fit_lag=1)

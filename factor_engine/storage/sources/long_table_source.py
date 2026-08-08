@@ -89,10 +89,13 @@ class LongTableDataSource(DataSource):
 
     def scan_polars_long(self, columns: list[str]):
         """优先 inner.scan_polars_long；否则从 Series 拼 long LazyFrame。
-        
+
+        Ordering guarantee (P0-10): the assembled long LazyFrame is sorted
+        ascending by ``(instrument, time)`` via ``enforce_source_ordering``.
+
         参数:
             columns: 列名列表
-        
+
         返回:
             无
         """
@@ -122,8 +125,16 @@ class LongTableDataSource(DataSource):
             raise ValueError("scan_polars_long: no columns")
         renamed = merged.rename(columns={ts: "ts", inst: "inst"})
         from backend.long_frame import long_table_to_polars_lazy
+        from backend.polars_lazy import enforce_source_ordering
 
-        return long_table_to_polars_lazy(renamed, float_cols=columns)
+        lf = long_table_to_polars_lazy(renamed, float_cols=columns)
+        frequency = getattr(self._inner, "frequency", None)
+        return enforce_source_ordering(
+            lf,
+            instrument_col="inst",
+            time_col="ts",
+            frequency=frequency,
+        )
 
     def scan_index_long(self):
         """代理 inner.scan_index_long（universe 对齐用，不落列缓存）。"""

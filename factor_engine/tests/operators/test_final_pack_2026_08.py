@@ -237,6 +237,13 @@ def test_final_pack_deterministic_and_axes(canonical):
             kw = {"window": 60}
         template = close
 
+    # R5-06: only pass keyword parameters the operator actually declares.  The
+    # old test forwarded a shared kw dict (tick_tolerance/window) to every ashare
+    # op, some of which neither declare nor use them; the strict unknown-kwarg
+    # gate now rejects undeclared kwargs.
+    declared = set(getattr(op.metadata, "param_names", None) or ())
+    declared |= set(getattr(op.metadata, "param_aliases", None) or ())
+    kw = {k: v for k, v in kw.items() if k in declared}
     first = op.calculate(*panels, **kw)
     second = op.calculate(*panels, **kw)
     assert first.index.equals(template.index), f"{canonical}: index changed"

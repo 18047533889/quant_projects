@@ -63,6 +63,31 @@ _STATEFUL_RULE_CANONICALS=frozenset({
 "ts_state_exit_hazard","ts_state_residual_life",
 })
 EXTENDED_ONLY_CANONICALS=EXTENDED_ONLY_CANONICALS|_PROMOTED_RESEARCH_FACTORS|_TECHNICAL_EXTENSION_CANONICALS|_STRUCTURE_V2_CANONICALS|_LIQUIDITY_V2_CANONICALS|_TECHNICAL_V2_CANONICALS|_FUNDAMENTAL_V2_CANONICALS|_CANDLE_GEOMETRY_V2_CANONICALS|_OPERATOR_EXPANSION_CANONICALS|_RELATION_EXPANSION_CANONICALS|_REGRESSION_MODEL_CANONICALS|_STATEFUL_RULE_CANONICALS|frozenset({"fin_mean_abs_deviation"})
+
+# R5-50: the extended surface must NOT be mutated by ``EXTENDED_ONLY_CANONICALS =
+# frozenset(set(old)|new)`` reassignments.  A consumer that did
+# ``from ... import EXTENDED_ONLY_CANONICALS`` at import time keeps the OLD
+# frozenset object, so a later module's reassignment silently never reaches it
+# (module A sees 800 canonicals while module B sees 850).  Modules register via
+# ``extend_extended_only`` (a live mutator) and consumers read via
+# ``extended_only_canonicals()`` (always the current module global).
+
+
+def extend_extended_only(names: frozenset[str] | set[str] | list[str]) -> None:
+    """Register a batch of canonical names onto the extended-only surface.
+
+    Mutates the module global in place (re-binding the frozenset) instead of
+    letting each registering module reassign a private copy.  Every caller sees
+    the union regardless of import order.
+    """
+    global EXTENDED_ONLY_CANONICALS
+    EXTENDED_ONLY_CANONICALS = EXTENDED_ONLY_CANONICALS | frozenset(names)
+
+
+def extended_only_canonicals() -> frozenset[str]:
+    """Live read of the extended-only surface — always current, never a stale
+    import-time snapshot."""
+    return EXTENDED_ONLY_CANONICALS
 # Factor-shaped extended operators that have passed semantic/PIT review and are
 # NOT fail-closed migrate to the daily surface.  Recursive/stateful, source-blocked,
 # non-factor, promoted-research (still under certification) and experimental model

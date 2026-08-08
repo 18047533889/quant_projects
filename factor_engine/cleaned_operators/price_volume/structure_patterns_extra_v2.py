@@ -94,4 +94,4 @@ _SPECS=[
 ]
 for n,p,f in _SPECS:_register(n,p,f,n.replace("_"," "))
 import cleaned_operators.operator_surface as _surface
-_surface.EXTENDED_ONLY_CANONICALS=frozenset(set(_surface.EXTENDED_ONLY_CANONICALS)|{x[0] for x in _SPECS})
+_surface.extend_extended_only({x[0] for x in _SPECS})

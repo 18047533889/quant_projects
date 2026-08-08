@@ -378,12 +378,17 @@ def test_minute_bundle_multi_output(minute_store):
 # ---------------------------------------------------------------------------
 
 def test_dividend_future_cutoff():
-    """effective_time_only 事件表：时间窗上界晚于今天必须拒绝（production）。"""
+    """effective_time_only 事件表：时间窗上界晚于今天必须拒绝（production）。
+
+    （us_stock_dividend 已被升级为 strict-PIT + declaration_date availability，
+    不再走 effective-only 路径；这里用仍为 effective_time_only 的
+    us_stock_capital_split 验证同一条 cutoff 语义。）
+    """
     import os
 
     from data_access.cos_contract import enforce_event_cutoff, require_cos_contract
 
-    contract = require_cos_contract("us_stock_dividend")
+    contract = require_cos_contract("us_stock_capital_split")
     os.environ["QUANT_PRODUCTION_MODE"] = "1"
     try:
         with pytest.raises(ValidationError):

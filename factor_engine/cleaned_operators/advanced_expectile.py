@@ -214,10 +214,7 @@ class TsExpectileBeta(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {"ts_expectile", "ts_expectile_beta"}
-    )
+    _surface.extend_extended_only({"ts_expectile", "ts_expectile_beta"})
     for _canon in ("ts_expectile", "ts_expectile_beta"):
         register_polars_udf(_canon)
 

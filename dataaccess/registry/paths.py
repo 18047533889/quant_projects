@@ -52,7 +52,9 @@ def expand_env(template: str) -> str:
     # Never expand variables introduced by a default value; only the original
     # template's ${...} tokens are configuration inputs.
     expanded = _ENV_PATTERN.sub(replace, template)
-    return os.path.expanduser(expanded)
+    # #P1-69 docstring 承诺支持 `$VAR`：${...} 处理完再让 os.path.expandvars
+    # 补 `$VAR`（裸形式），两者行为对齐文档。
+    return os.path.expandvars(os.path.expanduser(expanded))
 
 
 def canonicalize(path: str | Path) -> Path:

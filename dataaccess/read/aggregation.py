@@ -519,8 +519,14 @@ def _audit_and_handle(
     elapsed_ms: float,
     budget: Any,
     kind: str,
+    spec_info: dict[str, Any] | None = None,
 ) -> Any:
-    """budget 强制 + 审计 + 构建带 snapshot 的 ReadHandle（#7）。"""
+    """budget 强制 + 审计 + 构建带 snapshot 的 ReadHandle（#7）。
+
+    #P1-43 ``spec_info`` 把真实聚合请求（field/spec/output_name/market/timezone/
+    transform hash）并入审计——仅靠 snapshot 无法复现「这列日频数字怎么从分钟
+    数据聚出来的」。
+    """
     from data_access.core import audit as _audit
     from data_access.read.query_budget import enforce_arrow_budget
     from data_access.read.read_contract import (
@@ -546,6 +552,9 @@ def _audit_and_handle(
         params=params or None,
     )
     stats = ReadStats(rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms)
+    extra: dict[str, Any] = {"aggregation": True}
+    if spec_info:
+        extra["aggregation_spec"] = spec_info
     _audit.record(
         op=kind,
         dataset=dataset,
@@ -554,7 +563,7 @@ def _audit_and_handle(
         paths=paths[:5] if paths else None,
         params=params or None,
         elapsed_ms=elapsed_ms,
-        extra={"aggregation": True},
+        extra=extra,
     )
     return ReadHandle(table=table, snapshot=snapshot, stats=stats, lineage=lineage)
 
@@ -584,6 +593,16 @@ def aggregate_minute_to_daily(
     ds = store._registry.get(dataset)
     if not ds.time_column or not ds.instrument_column:
         raise ValidationError(f"分钟数据集 '{dataset}' 未声明 time/instrument 列")
+    # #P0-7 public 聚合入口走统一读前语义门禁（temporal contract / event cutoff /
+    # required_filters / allowed values）——不再让 aggregation 成为绕过 gate 的
+    # 第四条 read path。
+    store._prepare_read_request(
+        dataset,
+        columns=[field],
+        time_range=time_range,
+        mode="auto",
+        params=dict(params or {}),
+    )
     agg = parse_aggregation_spec(spec, field=field)
     budget = _resolve_budget(store, dataset, query_budget)
 
@@ -600,6 +619,7 @@ def aggregate_minute_to_daily(
             store, dataset, pa.table({"ts": [], "inst": [], "value": []}),
             paths=[], params=dict(params or {}), elapsed_ms=0.0, budget=budget,
             kind="aggregate",
+            spec_info={"field": field, "spec": agg.to_dict()},
         )
 
     adapter = format_adapter_for_dataset(ds)
@@ -639,6 +659,7 @@ def aggregate_minute_to_daily(
     return _audit_and_handle(
         store, dataset, table, paths=paths, params=dict(params or {}),
         elapsed_ms=elapsed_ms, budget=budget, kind="aggregate",
+        spec_info={"field": field, "spec": agg.to_dict()},
     )
 
 
@@ -671,7 +692,50 @@ def aggregate_minute_bundle(
     ds = store._registry.get(dataset)
     if not ds.time_column or not ds.instrument_column:
         raise ValidationError(f"分钟数据集 '{dataset}' 未声明 time/instrument 列")
+    # #P0-7 与 aggregate_minute_to_daily 同 gate
+    store._prepare_read_request(
+        dataset,
+        columns=[i.field for i in items],
+        time_range=time_range,
+        mode="auto",
+        params=dict(params or {}),
+    )
     budget = _resolve_budget(store, dataset, query_budget)
+
+    # #P0-9 输出列名必须唯一：两个 item 同名输出 → DuckDB 会产生重复列，语义不明。
+    parsed_items = [
+        (item, parse_aggregation_spec(item.spec, field=item.field)) for item in items
+    ]
+    out_names = [item.effective_output_name(spec) for item, spec in parsed_items]
+    dup = {name for name in out_names if out_names.count(name) > 1}
+    if dup:
+        raise ValidationError(
+            f"aggregate_minute_bundle 输出列名重复: {sorted(dup)}。"
+            "每个 AggregationItem 必须用 output_name 区分，否则聚合结果列语义不明。"
+        )
+
+    # #P0-8 同一 bundle 必须 clock-compatible：各 item 自己声明的 market/timezone
+    # 不一致时不能编译到同一条 SQL（时区换算/时段不同会串味）。
+    declared_markets = {
+        spec.market for _, spec in parsed_items if spec.market is not None
+    }
+    declared_timezones = {
+        spec.timezone for _, spec in parsed_items if spec.timezone is not None
+    }
+    if market is not None:
+        declared_markets.add(market)
+    if timezone is not None:
+        declared_timezones.add(timezone)
+    if len(declared_markets) > 1:
+        raise ValidationError(
+            f"aggregate_minute_bundle 的 items 声明了不一致的 market: {sorted(declared_markets)}；"
+            "同一 bundle 必须 clock-compatible（同一 market/timezone）。"
+        )
+    if len(declared_timezones) > 1:
+        raise ValidationError(
+            f"aggregate_minute_bundle 的 items 声明了不一致的 timezone: {sorted(declared_timezones)}；"
+            "同一 bundle 必须 clock-compatible（同一 market/timezone）。"
+        )
 
     import time as _time
 
@@ -683,13 +747,25 @@ def aggregate_minute_bundle(
     )
     if not paths:
         cols = ["ts", "inst"]
-        for item in items:
-            spec = parse_aggregation_spec(item.spec, field=item.field)
+        for item, spec in parsed_items:
             cols.append(item.effective_output_name(spec))
         return _audit_and_handle(
             store, dataset, pa.table({c: [] for c in cols}),
             paths=[], params=dict(params or {}), elapsed_ms=0.0, budget=budget,
             kind="aggregate",
+            spec_info={
+                "bundle": True,
+                "items": [
+                    {
+                        "field": item.field,
+                        "output_name": item.effective_output_name(spec),
+                        "spec": spec.to_dict(),
+                    }
+                    for item, spec in parsed_items
+                ],
+                "market": effective_market,
+                "timezone": timezone,
+            },
         )
 
     adapter = format_adapter_for_dataset(ds)
@@ -710,8 +786,9 @@ def aggregate_minute_bundle(
         pred, time_column=ds.time_column, instrument_column=ds.instrument_column
     )
 
+    # #P0-8 已校验所有 item 的 market 一致；effective = 全局 market 或 item 声明值
     effective_market = market or next(
-        (getattr(parse_aggregation_spec(i.spec, field=i.field), "market", None) for i in items),
+        (spec.market for _, spec in parsed_items if spec.market is not None),
         None,
     )
     sql, agg_params = _build_bundle_sql(
@@ -733,4 +810,17 @@ def aggregate_minute_bundle(
     return _audit_and_handle(
         store, dataset, table, paths=paths, params=dict(params or {}),
         elapsed_ms=elapsed_ms, budget=budget, kind="aggregate",
+        spec_info={
+            "bundle": True,
+            "items": [
+                {
+                    "field": item.field,
+                    "output_name": item.effective_output_name(spec),
+                    "spec": spec.to_dict(),
+                }
+                for item, spec in parsed_items
+            ],
+            "market": effective_market,
+            "timezone": timezone,
+        },
     )

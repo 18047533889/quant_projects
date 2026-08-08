@@ -17,15 +17,17 @@ from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_op
 
 
 def _aligned_float_frames(*frames: pd.DataFrame) -> list[pd.DataFrame]:
+    """Strict alignment + float coercion (round-6 P0-25): never silently reindex."""
     if not frames:
         return []
-    index = frames[0].index
-    columns = frames[0].columns
+    from cleaned_operators.alignment import align_panel_inputs
+
+    aligned = align_panel_inputs(*frames, strict_axes=True)
     out: list[pd.DataFrame] = []
-    for frame in frames:
+    for frame in aligned:
         if not isinstance(frame, pd.DataFrame):
             raise TypeError("production repair expects DataFrame panel inputs")
-        out.append(frame.reindex(index=index, columns=columns).astype(float))
+        out.append(frame.astype(float))
     return out
 
 

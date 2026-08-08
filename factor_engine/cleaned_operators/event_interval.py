@@ -64,12 +64,21 @@ def _window_taus(
     hi_idx: int,
     i0: int,
     unknown_mask: np.ndarray,
+    max_pre_window_age: int,
 ) -> np.ndarray | None:
     """Inter-event intervals ``τ`` for events in ``[i0, r]``.
 
     The gap from the last known pre-window event (``ev_pos[lo_idx-1] < i0``,
-    when it exists) into the first in-window event is prepended.  Returns
-    ``None`` when the window contains no event rows.
+    when it exists) into the first in-window event is prepended — but only when
+    that pre-window event lies within ``max_pre_window_age`` rows of the window
+    start.  Round-7 P0: without this bound the operator silently reaches back an
+    *arbitrary* distance for a sparse event process (window=240 could read a
+    pre-window event from 1000 rows earlier), so ``event_interval_memory``'s
+    effective history is unbounded and ``chunk != full`` / incremental restart
+    parity breaks.  Bounding the reach to ``max_pre_window_age`` makes the
+    operator's history exactly ``window + max_pre_window_age`` rows.
+
+    Returns ``None`` when the window contains no event rows.
 
     Review R4-54: an interval whose open range crosses an *unknown* (NaN) row
     is censored — the inter-event distance is undefined across an unknown
@@ -80,7 +89,7 @@ def _window_taus(
     pos = ev_pos[lo_idx:hi_idx]
     if lo_idx > 0:
         prev = ev_pos[lo_idx - 1]
-        if prev < i0:
+        if i0 - max_pre_window_age <= prev < i0:
             pos = np.concatenate([[prev], pos])
     if pos.size < 2:
         return None
@@ -92,7 +101,7 @@ def _window_taus(
     return taus
 
 
-def _interval_memory_series(event2d: np.ndarray, window: int) -> np.ndarray:
+def _interval_memory_series(event2d: np.ndarray, window: int, max_pre_window_age: int) -> np.ndarray:
     rows, cols = event2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
@@ -104,7 +113,7 @@ def _interval_memory_series(event2d: np.ndarray, window: int) -> np.ndarray:
             i0 = max(0, r - w + 1)
             lo = np.searchsorted(ev_pos, i0, side="left")
             hi = np.searchsorted(ev_pos, r, side="right")
-            taus = _window_taus(ev_pos, lo, hi, i0, unknown)
+            taus = _window_taus(ev_pos, lo, hi, i0, unknown, max_pre_window_age)
             if taus is None or taus.size < 4:
                 continue
             corr = np.corrcoef(taus[:-1], taus[1:])
@@ -114,7 +123,7 @@ def _interval_memory_series(event2d: np.ndarray, window: int) -> np.ndarray:
     return out
 
 
-def _local_variation_series(event2d: np.ndarray, window: int) -> np.ndarray:
+def _local_variation_series(event2d: np.ndarray, window: int, max_pre_window_age: int) -> np.ndarray:
     rows, cols = event2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
@@ -126,7 +135,7 @@ def _local_variation_series(event2d: np.ndarray, window: int) -> np.ndarray:
             i0 = max(0, r - w + 1)
             lo = np.searchsorted(ev_pos, i0, side="left")
             hi = np.searchsorted(ev_pos, r, side="right")
-            taus = _window_taus(ev_pos, lo, hi, i0, unknown)
+            taus = _window_taus(ev_pos, lo, hi, i0, unknown, max_pre_window_age)
             if taus is None or taus.size < 3:
                 continue
             n = taus.size
@@ -203,14 +212,20 @@ class EventIntervalMemory(SeriesOperator):
     metadata = _metadata(
         "event_interval_memory",
         "连续事件间隔的 Pearson 相关（间隔记忆 / 聚集性）。",
-        ["event", "window"],
+        ["event", "window", "max_pre_window_age"],
         unit="corr",
         cost=3,
     )
 
-    def _calculate_series(self, event: pd.DataFrame, window: int = 240, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, event: pd.DataFrame, window: int = 240, max_pre_window_age: Any = None, **_: Any) -> pd.DataFrame:
         w, _ = _check_event_params(window)
-        return frame_like(event, _interval_memory_series(event.to_numpy(dtype=float), w))
+        # Round-7 P0: the pre-window event may only reach ``max_pre_window_age``
+        # rows before the window (default = window), so the effective history is
+        # bounded to ``2 * window`` and full/chunk/incremental parity holds.
+        pre = int(max_pre_window_age) if max_pre_window_age is not None else w
+        if pre < 1:
+            raise ValueError("max_pre_window_age must be >= 1")
+        return frame_like(event, _interval_memory_series(event.to_numpy(dtype=float), w, pre))
 
 
 @register_operator(
@@ -230,14 +245,17 @@ class EventLocalVariation(SeriesOperator):
     metadata = _metadata(
         "event_local_variation",
         "事件间隔的局部变异系数（规则 vs 不规则）。",
-        ["event", "window"],
+        ["event", "window", "max_pre_window_age"],
         unit="ratio",
         cost=3,
     )
 
-    def _calculate_series(self, event: pd.DataFrame, window: int = 240, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, event: pd.DataFrame, window: int = 240, max_pre_window_age: Any = None, **_: Any) -> pd.DataFrame:
         w, _ = _check_event_params(window)
-        return frame_like(event, _local_variation_series(event.to_numpy(dtype=float), w))
+        pre = int(max_pre_window_age) if max_pre_window_age is not None else w
+        if pre < 1:
+            raise ValueError("max_pre_window_age must be >= 1")
+        return frame_like(event, _local_variation_series(event.to_numpy(dtype=float), w, pre))
 
 
 @register_operator(

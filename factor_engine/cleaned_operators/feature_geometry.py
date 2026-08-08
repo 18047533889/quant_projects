@@ -405,15 +405,12 @@ class TsBetaBreakScore(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_feature_mode_share",
             "ts_feature_effective_rank",
             "ts_feature_subspace_rotation",
             "ts_beta_break_score",
-        }
-    )
+        })
     for _canon in (
         "ts_feature_mode_share",
         "ts_feature_effective_rank",

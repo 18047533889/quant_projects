@@ -50,7 +50,12 @@ class DatasetReadStats:
 
 @dataclass(frozen=True)
 class DatasetStatsSnapshot:
-    """数据集 sidecar 统计（持久化）。"""
+    """数据集 sidecar 统计（持久化）。
+
+    #P1-71 绑定 source identity：数据更新后旧 sidecar 不能继续参与 CBO /
+    read_auto 路由——``source_epoch`` / ``manifest_generation`` 与当前不一致
+    时视为 stale。
+    """
 
     dataset: str
     num_rows: int
@@ -61,6 +66,11 @@ class DatasetStatsSnapshot:
     instruments: int | None = None
     #: 列名 → 非空率（0~1）；由采样 parquet 估算
     column_null_ratio: dict[str, float] | None = None
+    # #P1-71 source identity
+    source_epoch: str | None = None
+    manifest_generation: str | None = None
+    # #P1-72 versioned schema
+    version: int = 1
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -71,6 +81,9 @@ class DatasetStatsSnapshot:
             "min_time": self.min_time,
             "max_time": self.max_time,
             "instruments": self.instruments,
+            "source_epoch": self.source_epoch,
+            "manifest_generation": self.manifest_generation,
+            "version": self.version,
         }
         if self.column_null_ratio:
             payload["column_null_ratio"] = dict(self.column_null_ratio)
@@ -78,20 +91,47 @@ class DatasetStatsSnapshot:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "DatasetStatsSnapshot":
+        if not isinstance(payload, dict):
+            raise ValueError("stats sidecar 必须是 mapping")
         raw_ratios = payload.get("column_null_ratio")
         ratios: dict[str, float] | None = None
         if isinstance(raw_ratios, dict) and raw_ratios:
             ratios = {str(k): float(v) for k, v in raw_ratios.items()}
+        # #P1-72 严格 bounds validation：脏数值（num_rows=-100 / null_ratio=2.5）
+        # 不能进入 CBO / read_auto 路由。
+        try:
+            num_rows = int(payload.get("num_rows", 0))
+            num_files = int(payload.get("num_files", 0))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"stats sidecar num_rows/num_files 必须是整数: {exc}"
+            ) from exc
+        if num_rows < 0 or num_files < 0:
+            raise ValueError(
+                f"stats sidecar 非法：num_rows={num_rows} num_files={num_files}（不能为负）"
+            )
+        if ratios is not None:
+            bad = [
+                k for k, v in ratios.items()
+                if not isinstance(v, (int, float)) or not (0.0 <= float(v) <= 1.0)
+            ]
+            if bad:
+                raise ValueError(
+                    f"stats sidecar column_null_ratio 越界 {bad}（null 率必须在 [0,1]）"
+                )
         return cls(
             dataset=str(payload.get("dataset", "")),
-            num_rows=int(payload.get("num_rows", 0)),
-            num_files=int(payload.get("num_files", 0)),
+            num_rows=num_rows,
+            num_files=num_files,
             # #P2-4 与 registry 默认一致：不再残留 ("year",)，缺省即无分区列。
             partition_columns=tuple(payload.get("partition_columns") or ()),
             min_time=payload.get("min_time"),
             max_time=payload.get("max_time"),
             instruments=payload.get("instruments"),
             column_null_ratio=ratios,
+            source_epoch=payload.get("source_epoch"),
+            manifest_generation=payload.get("manifest_generation"),
+            version=int(payload.get("version", 1)),
         )
 
 
@@ -190,7 +230,11 @@ def load_stats_sidecar(root: Path) -> DatasetStatsSnapshot | None:
         return None
     if not isinstance(payload, dict):
         return None
-    return DatasetStatsSnapshot.from_dict(payload)
+    try:
+        return DatasetStatsSnapshot.from_dict(payload)
+    except (ValueError, TypeError):
+        # #P1-72 脏 sidecar（越界/坏类型）不能进 CBO → 视为不存在
+        return None
 
 
 def estimate_column_null_ratios(
@@ -249,14 +293,27 @@ def build_dataset_stats_snapshot(
             schema_cols or None,
             sample_files=null_ratio_sample_files,
         )
+    # #P1-71 记录 source identity：数据 mutation 后 sidecar 自动 stale，
+    # read_auto 不再用旧统计做路由。
+    source_epoch: str | None = None
+    manifest_generation: str | None = None
+    try:
+        token = store.manifest_version(dataset)
+        if isinstance(token, dict):
+            source_epoch = token.get("source_epoch") or token.get("manifest_epoch")
+            manifest_generation = token.get("manifest_generation_id")
+    except Exception:
+        pass
     return DatasetStatsSnapshot(
         dataset=dataset,
         num_rows=num_rows,
         num_files=len(parquet_files),
-        partition_columns=tuple(getattr(ds, "partition_columns", ("year",))),
+        partition_columns=tuple(getattr(ds, "partition_columns", ())),
         min_time=min_time,
         max_time=max_time,
         column_null_ratio=column_null_ratio,
+        source_epoch=source_epoch,
+        manifest_generation=manifest_generation,
     )
 
 

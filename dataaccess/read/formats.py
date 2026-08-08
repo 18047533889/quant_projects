@@ -197,6 +197,16 @@ def validate_format_extra(fmt_type: str, extra: dict[str, Any], *, context: str)
             f"{context}: format.extra 含未知 option {unknown}（{fmt_type} 只允许 "
             f"{sorted(allowed)}）。禁止 raw option 名进 SQL。"
         )
+    # #P1-56 production/strict 读语义禁止 managed read 静默吞坏行。
+    if "ignore_errors" in extra and extra["ignore_errors"]:
+        from data_access.read.query_budget import is_strict_semantics
+
+        if is_strict_semantics():
+            raise ValidationError(
+                f"{context}: format.extra.ignore_errors=true 在 production/strict 读 "
+                "语义下被拒绝——坏行静默跳过会污染研究输入。仅 ingestion_recovery "
+                "模式才允许（并需 audit rows_rejected/errors）。"
+            )
 
 
 def _sql_string(value: str) -> str:
@@ -286,6 +296,11 @@ class ParquetAdapter(FormatAdapter):
 
     def scan_options(self, *, hive_partitioning: bool, union_by_name: bool) -> str:
         opts: list[str] = []
+        # #P1-55 白名单内的 extra option 必须真正渲染进 SQL（之前只校验不执行）。
+        for key, val in sorted(self.spec.extra.items()):
+            kv = _kv(key, val)
+            if kv:
+                opts.append(kv)
         if hive_partitioning:
             opts.append("hive_partitioning=true")
         if union_by_name:
@@ -361,11 +376,18 @@ class JSONLAdapter(FormatAdapter):
 
     def scan_options(self, *, hive_partitioning: bool, union_by_name: bool) -> str:
         opts: list[str] = []
+        # #P1-55 JSONL 的 compression / 白名单 extra option 也要真正渲染。
+        if self.spec.compression:
+            opts.append(_kv("compression", self.spec.compression) or "")
+        for key, val in sorted(self.spec.extra.items()):
+            kv = _kv(key, val)
+            if kv:
+                opts.append(kv)
         if union_by_name:
             opts.append("union_by_name=true")
         if hive_partitioning:
             opts.append("hive_partitioning=true")
-        return (", " + ", ".join(opts)) if opts else ""
+        return (", " + ", ".join(o for o in opts if o)) if opts else ""
 
     def build_from_clause(
         self,

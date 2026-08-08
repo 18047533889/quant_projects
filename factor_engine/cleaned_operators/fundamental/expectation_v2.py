@@ -203,9 +203,12 @@ def fin_days_since_expectation_revision(
                 age = min(cap, age + 1)
                 values.append(float(age))
             else:
-                # Observed-clock resume after a gap: fresh reference (age 0).
-                values.append(0.0)
-                age = 0
+                # P1-06: after a gap (age=None) the revision age is censored —
+                # output NaN, NOT 0 (a 0 would read as "revision happened today").
+                # The age only resumes at a NEW revision event (the ``event[i]``
+                # branch above emits 0 and restarts the clock).
+                values.append(np.nan)
+                age = None
         output[column] = values
     return output
 

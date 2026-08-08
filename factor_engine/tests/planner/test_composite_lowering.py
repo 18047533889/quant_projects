@@ -2,11 +2,14 @@
 """Composite lowering：高级算子 → 基础 DAG。"""
 from __future__ import annotations
 
+import pytest
+
 from planner.composite_lowering import (
     collect_plan_ops,
     composite_dual_backend_capable,
     lower_composite_operators,
     lowered_primitives,
+    register_lowering,
 )
 from planner.logical_plan import PlanNode
 from planner.optimizer import Optimizer
@@ -207,3 +210,91 @@ def test_removed_obv_is_not_claimed_dual_backend_capable():
 
     load_all()
     assert composite_dual_backend_capable("OBV") is False
+
+
+# ---------------------------------------------------------------------------
+# R6 P0-04 / P0-05 / P0-06 composite-lowering hardening
+# ---------------------------------------------------------------------------
+
+def test_lowered_primitives_macd_fires_ema_branches():
+    # The static probe must use declared deps (fast/slow/signal) with distinct
+    # representative values so MACD's fast < slow branch actually fires.
+    prims = lowered_primitives("MACD_line")
+    assert prims is not None
+    assert "ts_ema" in prims
+
+
+def test_lowered_primitives_bollinger_reads_std_dev():
+    prims = lowered_primitives("BollingerUpper")
+    assert prims is not None
+    assert "ts_std" in prims
+
+
+def test_declared_parameter_defaults_drive_probe_not_fake_stub():
+    # P0-06: probe uses the composite's registered defaults / declared deps —
+    # MACD_signal must expand to the EMA-of-EMA chain, not a fabricated window=3.
+    prims = lowered_primitives("MACD_signal")
+    assert "ts_ema" in prims
+
+
+def test_duplicate_lowering_rejected_with_both_sources():
+    from planner.composite_lowering import (
+        _LOWERING_SOURCES,
+        CompositeLoweringDuplicateError,
+    )
+
+    # Re-registering an existing composite without a declared replacement fails
+    # and names the original source.
+    with pytest.raises(CompositeLoweringDuplicateError):
+
+        @register_lowering("MOM")
+        def _dup_mom(node):
+            return node
+
+    assert _LOWERING_SOURCES.get("MOM") == "planner.lowerings.technical"
+
+
+def test_declared_replacement_authorises_reregister():
+    from planner.composite_lowering import declare_lowering_replacement
+
+    declare_lowering_replacement("__r6_test_canonical__", "test override")
+    register_lowering("__r6_test_canonical__")(lambda node: node)
+    register_lowering("__r6_test_canonical__")(lambda node: node)  # second OK
+
+
+def test_optimizer_rejects_fractional_window_before_lowering():
+    # P0-04: Composite(window=5.9) must be rejected at planning, never lowered to
+    # ts_mean(x, 5).  Use a pure PlanNode so no DSL/field plumbing is needed.
+    plan = PlanNode(op="MOM", inputs=[_col()], attrs={"window": 5.9})
+    from planner.optimizer import Optimizer
+
+    with pytest.raises(Exception):
+        Optimizer().optimize(plan, production=True)
+
+
+def test_optimizer_accepts_integral_window_unchanged():
+    plan = PlanNode(op="MOM", inputs=[_col()], attrs={"window": 5})
+    out = Optimizer().optimize(plan)
+    assert out.op == "ts_delta"
+
+
+def test_strict_float_rejects_bool_and_nan_params():
+    from planner.lowerings import _helpers as H
+
+    with pytest.raises(ValueError):
+        H.strict_float(True, "std_dev")
+    with pytest.raises(ValueError):
+        H.strict_float(float("nan"), "std_dev")
+    with pytest.raises(ValueError):
+        H.strict_float(float("inf"), "std_dev")
+    assert H.strict_float(2.5, "std_dev") == 2.5
+
+
+def test_canonicalize_parameter_values_normalises_proportional_weights():
+    from planner.canonicalize_params import canonicalize_parameter_values
+
+    a = canonicalize_parameter_values({"weights": [1.0, 1.0, 1.0]})
+    b = canonicalize_parameter_values({"weights": [0.1, 0.1, 0.1]})
+    assert a == b
+    total = sum(a["weights"])
+    assert abs(total - 1.0) < 1e-9

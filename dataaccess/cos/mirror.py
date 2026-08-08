@@ -384,7 +384,12 @@ def _write_download_manifest(dest: Path, *, remote_key: str | None = None) -> No
         payload["checksum_sha256"] = h.hexdigest()[:32]
     except OSError:
         payload["verified"] = False
-    manifest.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    # #P1-74 data 与 manifest 组成 atomic pair：manifest 先写 tmp 再 os.replace。
+    # 进程死在 data.replace 与 manifest.replace 之间 → 旧 manifest 与 stat 不匹配
+    # → _verify_mirror_file 判 stale → 自动 resync（fail-open 而非误判已同步）。
+    tmp_manifest = manifest.with_suffix(manifest.suffix + ".tmp")
+    tmp_manifest.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    os.replace(str(tmp_manifest), str(manifest))
 
 
 def _verify_mirror_file(dest: Path) -> bool:
@@ -454,6 +459,23 @@ def load_mirror_inventory(store: Any, dataset: str) -> dict[str, Any]:
 def _local_file_fresh(dest: Path) -> bool:
     """#27 本地文件存在且 manifest 与 stat 一致（含 verified）时视为已同步。"""
     return _verify_mirror_file(dest)
+
+
+def _local_file_usable(dest: Path) -> bool:
+    """#P1-73 增量检查用判定：verified 或「存在且非空」。
+
+    整目录 ``cos sync`` 出来的文件没有 per-file manifest；strict ``_local_file_fresh``
+    对它们恒 False，会导致每次 ensure 全量重拉。增量路径用本判定：verified-stale
+    或损坏（有 manifest 对不上）→ resync；manifest-less 的完整文件视为可用。
+    """
+    if _verify_mirror_file(dest):
+        return True
+    if not dest.exists():
+        return False
+    try:
+        return dest.stat().st_size > 0
+    except OSError:
+        return False
 
 
 def _sync_cos_file(cos_uri: str, dest: Path) -> None:
@@ -572,14 +594,16 @@ def ensure_local_mirror(
 
     if spec.layout == "single_full":
         dest = _local_table_dir(spec) / spec.file_name
-        if not dest.exists():
+        # #P1-73 exists 不够：文件存在但损坏/无 manifest 也会被误判已同步。
+        if not _local_file_fresh(dest):
             logger.info("cos_mirror: 拉取单文件 %s", dataset_name)
             _sync_single_full(spec)
         return
 
     if spec.layout == "root_file":
         dest = spec.local_root / spec.file_name
-        if not dest.exists():
+        # #P1-73 同上：统一 verified mirror object 判定。
+        if not _local_file_fresh(dest):
             logger.info("cos_mirror: 拉取根文件 %s", dataset_name)
             _sync_root_file(spec)
         return
@@ -616,11 +640,13 @@ def ensure_local_mirror(
 
     if spec.layout == "daily_parquet":
         # #25 交易日型数据按交易日历枚举期望 partition，周末/节假日不判缺失
+        # #P1-73 增量判定：verified-stale / 损坏 resync；manifest-less 完整文件
+        # 不强制重拉（整目录 cos sync 无 per-file manifest）。
         expected = _expected_dates(dataset_name, start, end)
         missing = [
             day
             for day in expected
-            if not (_local_table_dir(spec) / f"{day.isoformat()}.parquet").exists()
+            if not _local_file_usable(_local_table_dir(spec) / f"{day.isoformat()}.parquet")
         ]
         for day in missing:
             _sync_daily_file(spec, day)
@@ -629,7 +655,7 @@ def ensure_local_mirror(
         missing = [
             day
             for day in expected
-            if not (spec.local_root / f"date={day.isoformat()}" / spec.file_name).exists()
+            if not _local_file_usable(spec.local_root / f"date={day.isoformat()}" / spec.file_name)
         ]
         for day in missing:
             _sync_hive_date(spec, day)
@@ -637,7 +663,7 @@ def ensure_local_mirror(
         missing = [
             year
             for year in _iter_years(start, end)
-            if not (spec.local_root / f"year={year}" / spec.file_name).exists()
+            if not _local_file_usable(spec.local_root / f"year={year}" / spec.file_name)
         ]
         for year in missing:
             _sync_hive_year(spec, year)

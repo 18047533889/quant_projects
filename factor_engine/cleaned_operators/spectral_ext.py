@@ -192,6 +192,8 @@ def _register() -> None:
                 input_units=_INPUT_UNITS[canonical],
             )
 
+            _HANDLES_CALL_CONTRACT = True  # R5-02: routes through validate_operator_call
+
             def calculate(self, *args, _fn=fn, **kwargs):
                 # R4-02: route the direct-``calculate`` kernel through the central
                 # logical-call validator (integer / panel-axis / param checks).

@@ -55,7 +55,15 @@ def _align(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
     out = [base]
     for frame in frames[1:]:
         if not frame.index.equals(base.index) or not frame.columns.equals(base.columns):
-            frame = frame.reindex(index=base.index, columns=base.columns)
+            # P1-01: a genuinely misaligned panel must fail loudly, not be
+            # silently reindexed to the base.  Reindexing misaligned panels pairs
+            # e.g. x_t with score_{t'} or target with a shifted peer — a silent
+            # cross-sectional/point-in-time corruption the operator contract
+            # forbids.  Callers are expected to pass aligned panels.
+            raise ValueError(
+                "multi-panel inputs must share identical index/columns; "
+                "reindexing misaligned panels is not allowed"
+            )
         out.append(frame)
     return tuple(out)
 
@@ -199,7 +207,14 @@ def _cs_weighted_percentile_rank(x: pd.DataFrame, weight: pd.DataFrame) -> pd.Da
     for r in range(rows):
         xr = xv[r]
         wr = wv[r]
-        valid = np.isfinite(xr) & np.isfinite(wr) & (wr >= 0.0)
+        # A finite NEGATIVE weight is an invalid state (NonNegativeWeight): it
+        # fails the WHOLE row closed (NaN) rather than being silently dropped and
+        # the percentile re-normalized over the survivors.  NaN weights stay
+        # "missing" and are excluded pairwise (they carry no weight information),
+        # but a finite negative weight is a contract violation (P1-02).
+        if np.any(np.isfinite(wr) & (wr < 0.0)):
+            continue
+        valid = np.isfinite(xr) & np.isfinite(wr)
         valid_idx = np.flatnonzero(valid)
         total = float(wr[valid].sum())
         if total <= _EPS:
@@ -473,8 +488,16 @@ def _register() -> None:
                       "domain:cross_section", f"unit:{_UNITS[canonical]}", "cost:3"],
             )
 
+            _HANDLES_CALL_CONTRACT = True  # R5-02: routes through validate_operator_call
+
             def calculate(self, *args, _fn=fn, **kwargs):
-                return _fn(*args, **kwargs)
+                # R5-02: this module registered ``calculate`` directly without
+                # routing through the central validator, so integer / panel-axis
+                # / unknown-kwarg checks were bypassed for every gather_* op.
+                from cleaned_operators.base import validate_operator_call
+
+                processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
+                return _fn(*processed_args, **processed_kwargs)
 
         OperatorRegistry.register(
             _PandasOp(), canonical=canonical, backend="pandas_numpy",

@@ -107,7 +107,22 @@
 - ✅ **polars_fundamental.py R4-26/27 parity**：revision/days_since 族 polars 后端按 pandas 参考重写（`_revision_masks_1d`/`_revision_event_1d`/`_revision_complete_1d`；complete/same/changed/delta 掩码；observed clock）。`test_polars_fundamental.py` 66 passed（原 14 failed）。
 - ✅ **ts_extrema_divergence_strength finite fraction**：瞬态（Batch C 观察 0.18 系并发编辑期间），现稳定通过（F 自测 0.39）。
 - ✅ **candle_pattern_engine_repairs_v2 shim metadata**：registry 可见的 candlestick_pattern 补齐 param_specs（body_window/shadow_window/penetration active_when）+ semantic_family:adaptive_custom（R4-91/92 现在 registry 层生效）。`test_fourth_batch_fixes.py` 14 passed。
-- ⏳ 全量回归 + manifest 重生成。
+- ✅ **polars_liquidity_v2 R4-29 parity**：`_bounded_nvi_pvi`/`zero_return_ratio` 按 pandas 有效掩码对齐（`valid = is_not_null & is_not_nan`；else→None）。`test_polars_liquidity_v2.py` 59 passed（原 12 failed）。
+- ✅ **polars_candle R4-10/Wilder parity**：`candle_gap_atr` 改 `ewm_mean(alpha=1/w, adjust=False, min_samples=w)`（Wilder，匹配 pandas）；`candle_inside_ratio` 按 P1-12 inside/outside 掩码重写。`test_polars_candle.py` 49 passed（原 14 failed）。
+- ✅ **composite_lowering `_COMPOSITE_LOWERINGS` 恢复**：并发会话 R5-29 编辑删了模块级 dict 定义导致 load_all NameError，已恢复模块级定义。
+- ✅ **polars_fundamental P1-06 censor 同步**：并发会话把 pandas 参考 `expectation_v2.fin_days_since_expectation_revision` 改为 gap 后 censor→NaN（P1-06，age=None 后非事件行输出 NaN 而非 0），同步修正 polars 同算子 else 分支（此前 gap 后输出 0）。`test_polars_fundamental.py` 66 passed（P1-06 语义对齐后）。
+- ✅ **并发 R6 编辑的 3 个 load_all 阻断修复**（最小 additive）：`LoweringContract.param_branches` 可变默认 `dict()` → `field(default_factory=dict)`；`lowerings/_helpers.py literal()` NaN 合法化（where 分支必须允许 NaN else 值）；`intraday/_core.py SessionAggregationOperator` 补 `_HANDLES_CALL_CONTRACT = True`（R5-02 门要求自定义 calculate 声明走中央校验）。
+- ✅ **manifest 重生成**：`docs/operator_market_capabilities.json`（1360 canonicals，unknown=0，CI OK）+ `docs/market_field_manifest.json`（41 concepts）+ `docs/operator_manifest.json` + `evidence/operator_upgrade_matrix.yaml`。
+- ✅ 全量回归 #3（428 failed / 4309 passed）——失败分类见 §3.1。
+- ✅ 验收自测（2026-08-08 22:1x，当前树）：`test_fourth_batch_fixes` + `test_polars_fundamental` + `test_polars_candle` + `test_polars_liquidity_v2` + `test_composite_lowering` = **215 passed / 1 failed**（唯一失败 `test_composite_dual_backend_capable_mom` 为证据空集依赖：`PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE=∅` ← `evidence_artifact_valid()==False`，由并发会话 evidence regen 恢复）。
+- ✅ manifest freshness：`test_operator_manifest_freshness` + `test_operator_upgrade_matrix` = 6 passed。
+- ⏳ 并发会话 evidence regen 完成后复跑验收。
+
+### 3.1 全量回归 #3 失败分类（2026-08-08，跑在并发 R6 编辑中的移动树上）
+- **根因 A（约 200+，非本批引入）**：`evidence_artifact_valid()==False`（case_registry_hash/emitter_hashes/operator_policy_hash 未匹配）→ `_load_verified_set` fail-closed → `POLARS_REFERENCE_PARITY_VERIFIED`/`PRIMITIVE_BACKEND_EXECUTION_CERTIFIED` 全空 → 所有依赖认证的测试失败：production_core_smoke(63)、fastpath(5+16+5+3+2+1)、capability(6)、recipe cert(17)、pandas_only_boundary、batch_mirror、partial_sql、emitter-sync(8+8)。**由并发会话 evidence regen（factor→primitive 顺序）恢复**，内存已确认。
+- **根因 B（本会话修复后重跑消失）**：load_all 被并发 R6 编辑阻断（composite_lowering 可变默认 / literal NaN / R5-02 SessionAggregationOperator）→ 大面积 setup ERROR。已逐个最小修复。
+- **根因 C（已重生成解决）**：`test_operator_manifest_freshness` / `test_operator_upgrade_matrix_yaml_fresh` —— manifest 过期，已重生成。
+- **残余（少量，多为并发 dataaccess/stateful pack 噪音）**：test_stateful_pack_policies_pit_safe、test_pipeline_cli、test_run_many_streaming、test_dq_gates、test_phase_a/b/24_platform、test_lqtp_*、test_gtja_compat_semantics、test_data_access_normalizes_registered_units —— 均不在本批改动文件范围，归并发会话（内存既有项）。
 
 ## 4. 执行进度追踪
 

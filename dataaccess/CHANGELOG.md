@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.9.2 — 第四轮最终 P0 收口（publish 契约门 / asof 统一 availability / 时间轴硬化）
+
+按最终 audit 的 14 个 P0 correctness 尾巴收口。其中 10 项（P0-1/2/5/6/7/8/9/10/11/14）
+经核实已在 0.9.1 磁盘版本修好，本轮补齐回归测试锁住；真实代码改动如下：
+
+**Publish 契约门（P0-3 / P0-4 / P0-5 复核）**
+- `_validate_candidate_contract`：candidate **实际数据**必须符合 target 声明
+  schema 契约——声明列缺失 / 类型不符（归一比较，禁止隐式 cast）/ 同列跨文件
+  类型不一致 → 拒绝发布。此前只证明了 candidate==staging（inventory hash），
+  candidate==target contract 未证明。
+- publish manifest `files[].path` 已是相对路径；本轮把 `base_dir` 从绝对
+  candidate 路径改为 `"."`（manifest 随 rename 上线后恒有效），`manifest_version=3`。
+- symlink 复核：`_copy_tree` 已先 `_assert_no_symlinks` 拒绝任何软链接，不再
+  让 `copytree(symlinks=False)` 跟随复制。
+
+**read_cos_events_asof 统一 availability（P0-12）**
+- `_select` 不再写死 `event_clock <= decision`：新增
+  `availability_uses_calendar / availability_strict_next`（temporal_join 公开），
+  asof 与 read_joined 共用同一套语义——
+    - 需日历的 availability（next_trading_day / next_session_open / session …）
+      且有市场日历 → 用 `MarketCalendar.available_from` 编译 available_from，
+      条件变 `available_from <= decision`；
+    - 无日历 → 按 `TemporalJoinSpec.comparison_operator` 回退（严格下一交易日
+      类用 `<`，其余 `<=`）。
+  `_resolve_event_availability` 复用「字段级一致声明 → 契约默认 same_day」的
+  解析顺序（financial 数据集 next_trading_day 生效）。
+
+**ContractIR 时间轴硬化（P0-13）**
+- `_temporal_axes_of` 不再从值字段的 `time_role` 推导 event_time（catalog 里
+  Close/Open/Volume/PeRatio 等值字段都标了 `time_role: event_time`，旧代码会编译出
+  `event_time="Close"`）。事件时间轴现在只来自 契约时钟列（strict→
+  availability_column，effective_time_only→event_column）或 registry time_column
+  （panel 的 bar 时间即事件时间）；decision_time 也要求 dtype 像时间列。
+- 修复 `ashare_stock_indicator` 的 `roe` 字段缺失 `availability: next_trading_day`
+  （与同数据集 eps/net_profit 冲突）→ ContractIR audit 重新 71 数据集一致。
+
+**Manifest rowgroup 持久化真实可用（P0-14）**
+- `_save_row_groups` 用 `pa.table(list_of_dicts)`，pyarrow 25 报 "Must pass names
+  or schema"——rowgroup sidecar 实际从未成功写过。改为列数组字典构造；save/load
+  双侧都校验 generation（异代 sidecar 配新 manifest → 忽略，fail-closed）。
+
+**回归**：`tests/unit/test_final_closure_round4.py` 新增 22 条（覆盖全部 14 项）；
+全量 `tests/` 626 passed；ContractIR audit 71 数据集一致。
+（注：并发会话把 `us_stock_dividend` 从 effective_time_only 升级为 strict-PIT +
+`declaration_date`，3 处依赖旧语义的测试改指仍为 effective_time_only 的
+`us_stock_capital_split`，语义验证目标不变。）
+
 ## 0.9.1 — 第三轮增量收口（compiled 计划 / 谓词门 / 精确快照）
 
 在 `6d66e9c` 之上按第三层审计清单（P0 1-23 / P1 24-40）收口，全部为「新模块

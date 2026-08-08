@@ -326,6 +326,8 @@ def _register() -> None:
                 window_semantics=_WINDOW_SEMANTICS.get(canonical),
             )
 
+            _HANDLES_CALL_CONTRACT = True  # R5-02: routes through validate_operator_call
+
             def calculate(self, *args, _fn=fn, **kwargs):
                 # R4-02: this module registered ``calculate`` directly, bypassing
                 # the central integer / panel-axis / param validation.  Route it

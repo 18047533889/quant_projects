@@ -15,8 +15,15 @@ class Optimizer:
         folded = self._fold_literals(plan)
         from planner.composite_lowering import lower_composite_operators
         from planner.rewrite_fastpath import rewrite_plan_for_fastpath
-        from planner.canonicalize_params import canonicalize_plan_parameters
+        from planner.canonicalize_params import (
+            canonicalize_plan_parameters,
+            validate_plan_params,
+        )
 
+        # R6 P0-04: parameters must be validated BEFORE composite lowering so a
+        # lowering can never truncate a 5.9 or accept a NaN/Inf that runtime
+        # validation rejects.  Lowering only reads already-canonicalized values.
+        validate_plan_params(folded, production=production)
         lowered = lower_composite_operators(folded)
         refolded = self._fold_literals(lowered)
         rewritten = rewrite_plan_for_fastpath(
@@ -27,9 +34,13 @@ class Optimizer:
 
     def lower_only(self, plan: PlanNode) -> PlanNode:
         from planner.composite_lowering import lower_composite_operators
-        from planner.canonicalize_params import canonicalize_plan_parameters
+        from planner.canonicalize_params import (
+            canonicalize_plan_parameters,
+            validate_plan_params,
+        )
 
         folded = self._fold_literals(plan)
+        validate_plan_params(folded)
         lowered = lower_composite_operators(folded)
         return canonicalize_plan_parameters(self._fold_literals(lowered))
 
@@ -38,9 +49,13 @@ class Optimizer:
     ) -> tuple[PlanNode, PlanNode, tuple[tuple[str, tuple[str, ...]], ...]]:
         from planner.composite_lowering import build_lowering_trace, lower_composite_operators
         from planner.rewrite_fastpath import rewrite_plan_for_fastpath
-        from planner.canonicalize_params import canonicalize_plan_parameters
+        from planner.canonicalize_params import (
+            canonicalize_plan_parameters,
+            validate_plan_params,
+        )
 
         folded = self._fold_literals(plan)
+        validate_plan_params(folded, production=production)
         lowered = lower_composite_operators(folded)
         refolded = self._fold_literals(lowered)
         final = rewrite_plan_for_fastpath(

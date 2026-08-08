@@ -41,15 +41,20 @@ def _nonnegative_int(value: Any, name: str) -> int:
 
 
 def _aligned(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
+    """Strict multi-panel alignment (round-6 P0-25).
+
+    Two panels with different instrument columns or a shifted index must never
+    be paired positionally — silently reindexing hides a missing symbol / a
+    one-day date shift as NaN.  Production defaults to fail-closed; the central
+    ``validate_operator_call`` gate already rejects misaligned panels before
+    this helper is reached, so this strictness is defense-in-depth for direct
+    kernel calls.
+    """
     if not frames:
         return ()
-    base = frames[0]
-    result = [base]
-    for frame in frames[1:]:
-        if not frame.index.equals(base.index) or not frame.columns.equals(base.columns):
-            frame = frame.reindex(index=base.index, columns=base.columns)
-        result.append(frame)
-    return tuple(result)
+    from cleaned_operators.alignment import align_panel_inputs
+
+    return align_panel_inputs(*frames, strict_axes=True)
 
 
 def _rolling_apply_2d(
@@ -585,6 +590,9 @@ _OPERATORS: dict[str, tuple[str, list[str], Callable[..., pd.DataFrame], str]] =
 
 
 class _PandasDailyPanelOperator(PandasOperator):
+    # R5-02: direct ``calculate`` that routes through validate_operator_call.
+    _HANDLES_CALL_CONTRACT = True
+
     def __init__(self, name: str, category: str, params: list[str], fn: Callable[..., pd.DataFrame], description: str):
         self._fn = fn
         self.metadata = PandasMetadata(
@@ -609,6 +617,9 @@ def _pl_to_pandas(frame: Any) -> pd.DataFrame:
 
 
 class _PolarsDailyPanelOperator(PolarsOperator):
+    # R5-02: direct ``calculate`` that routes through validate_operator_call.
+    _HANDLES_CALL_CONTRACT = True
+
     def __init__(self, name: str, category: str, params: list[str], fn: Callable[..., pd.DataFrame], description: str):
         self._fn = fn
         self.metadata = PolarsMetadata(

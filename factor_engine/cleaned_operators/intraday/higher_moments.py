@@ -12,9 +12,10 @@ from typing import Any
 
 import numpy as np
 
-from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.base import register_operator
 from cleaned_operators.intraday._core import (
     _EPS,
+    SessionAggregationOperator,
     daily_agg,
     log_returns,
     metadata,
@@ -24,6 +25,12 @@ from cleaned_operators.intraday._core import (
 )
 
 _CANONICALS: list[str] = []
+
+# P0-09: minimum number of finite within-session returns required before a
+# realized skewness / kurtosis estimate is emitted.  30 returns == at least 31
+# closes; below that the sample is too degenerate to identify a third/fourth
+# moment (n=1 trivially yields +/-1 skewness and 1.0 kurtosis, n=2 is noise).
+_REALIZED_MIN_RETURNS = 30
 
 
 def _realized_var(r: np.ndarray) -> float:
@@ -91,10 +98,14 @@ def _jump_mask(r: np.ndarray, threshold_scale: float) -> np.ndarray:
 
 def _realized_skewness(close_v: np.ndarray) -> float:
     r = log_returns(close_v)
+    n = int(np.sum(np.isfinite(r)))
+    # P0-09: a degenerate (n<30) sample must not emit a spurious moment; n=1
+    # trivially returns +/-1 and n=2 is noise.
+    if n < _REALIZED_MIN_RETURNS:
+        return np.nan
     r2 = np.nansum(r * r)
     if not np.isfinite(r2) or r2 <= _EPS:
         return np.nan
-    n = int(np.sum(np.isfinite(r)))
     r3 = np.nansum(r ** 3)
     return float(np.sqrt(n) * r3 / r2 ** 1.5)
 
@@ -108,7 +119,7 @@ def _realized_skewness(close_v: np.ndarray) -> float:
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraRealizedSkewness(SeriesOperator):
+class IntraRealizedSkewness(SessionAggregationOperator):
     """日内已实现偏度 sqrt(N)*sum(r^3)/(sum(r^2))^(3/2)。"""
 
     metadata = metadata("intra_realized_skewness", "日内已实现偏度 RSK。", ["close"], unit="level")
@@ -119,10 +130,14 @@ class IntraRealizedSkewness(SeriesOperator):
 
 def _realized_kurtosis(close_v: np.ndarray) -> float:
     r = log_returns(close_v)
+    n = int(np.sum(np.isfinite(r)))
+    # P0-09: same degenerate-sample guard as skewness (n=1 kurtosis is trivially
+    # 1.0; below 30 returns there is no meaningful fourth moment).
+    if n < _REALIZED_MIN_RETURNS:
+        return np.nan
     r2 = np.nansum(r * r)
     if not np.isfinite(r2) or r2 <= _EPS:
         return np.nan
-    n = int(np.sum(np.isfinite(r)))
     r4 = np.nansum(r ** 4)
     return float(n * r4 / (r2 * r2))
 
@@ -136,7 +151,7 @@ def _realized_kurtosis(close_v: np.ndarray) -> float:
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraRealizedKurtosis(SeriesOperator):
+class IntraRealizedKurtosis(SessionAggregationOperator):
     """日内已实现峰度 N*sum(r^4)/(sum(r^2))^2。"""
 
     metadata = metadata("intra_realized_kurtosis", "日内已实现峰度 RKT。", ["close"], unit="level")
@@ -162,7 +177,7 @@ def _realized_quarticity(close_v: np.ndarray) -> float:
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraRealizedQuarticity(SeriesOperator):
+class IntraRealizedQuarticity(SessionAggregationOperator):
     """日内已实现四次变差 RQ = N/3 * sum(r^4)。"""
 
     metadata = metadata("intra_realized_quarticity", "日内已实现四次变差。", ["close"], unit="quarticity")
@@ -200,7 +215,7 @@ def _tripower_quarticity(close_v: np.ndarray) -> float:
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraTripowerQuarticity(SeriesOperator):
+class IntraTripowerQuarticity(SessionAggregationOperator):
     """日内三次幂四次变差（跳跃稳健）。"""
 
     metadata = metadata("intra_tripower_quarticity", "Tripower quarticity 估计。", ["close"], unit="quarticity")
@@ -233,7 +248,7 @@ def _continuous_and_jump(close_v: np.ndarray) -> tuple[float, float]:
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraContinuousVariance(SeriesOperator):
+class IntraContinuousVariance(SessionAggregationOperator):
     """日内连续方差分量 min(RV, BV)。"""
 
     metadata = metadata("intra_continuous_variance", "日内连续方差分量 min(RV,BV)。", ["close"], unit="variance")
@@ -255,7 +270,7 @@ class IntraContinuousVariance(SeriesOperator):
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraJumpVariation(SeriesOperator):
+class IntraJumpVariation(SessionAggregationOperator):
     """日内跳跃方差分量 max(RV-BV, 0)。"""
 
     metadata = metadata("intra_jump_variation", "日内跳跃方差分量 max(RV-BV,0)。", ["close"], unit="variance")
@@ -309,7 +324,7 @@ def _signed_jump_stats(close_v: np.ndarray, threshold_scale: float) -> tuple[flo
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraPositiveJumpVariation(SeriesOperator):
+class IntraPositiveJumpVariation(SessionAggregationOperator):
     """日内正向尾部收益平方和（阈值判定；非 BNS 跳跃分解，见 tail 别名）。"""
 
     metadata = metadata(
@@ -334,7 +349,7 @@ class IntraPositiveJumpVariation(SeriesOperator):
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraNegativeJumpVariation(SeriesOperator):
+class IntraNegativeJumpVariation(SessionAggregationOperator):
     """日内负向尾部收益平方和（阈值判定；非 BNS 跳跃分解，见 tail 别名）。"""
 
     metadata = metadata(
@@ -359,7 +374,7 @@ class IntraNegativeJumpVariation(SeriesOperator):
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraSignedJumpRatio(SeriesOperator):
+class IntraSignedJumpRatio(SessionAggregationOperator):
     """有符号跳跃比 (posTail-negTail)/(posTail+negTail+eps)。
 
     基于阈值尾部平方和 (|r|>threshold*sqrt(RV/N) 的正负尾部), 不是 BNS
@@ -396,7 +411,7 @@ class IntraSignedJumpRatio(SeriesOperator):
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraJumpCount(SeriesOperator):
+class IntraJumpCount(SessionAggregationOperator):
     """日内跳跃分钟数量（阈值判定）。"""
 
     metadata = metadata("intra_jump_count", "日内跳跃分钟数。", ["close", "threshold_scale"], unit="count")
@@ -428,7 +443,7 @@ def _tail_op(name: str, description: str, unit: str, index: int):
         backend="pandas_numpy",
         status="experimental",
     )
-    class _TailOp(SeriesOperator):
+    class _TailOp(SessionAggregationOperator):
         metadata = metadata(name, description, ["close", "threshold_scale"], unit=unit)
 
         def _calculate_series(self, close, threshold_scale=3.0, **_):
@@ -469,7 +484,7 @@ _tail_op(
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraSignedTailVariationRatio(SeriesOperator):
+class IntraSignedTailVariationRatio(SessionAggregationOperator):
     """有符号尾部比 (pos-neg)/(pos+neg+eps)。"""
 
     metadata = metadata(
@@ -497,7 +512,7 @@ class IntraSignedTailVariationRatio(SeriesOperator):
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraJumpConcentration(SeriesOperator):
+class IntraJumpConcentration(SessionAggregationOperator):
     """跳跃集中度 sum(jump_share_i^2)，单根集中为 1、分散趋近 0。"""
 
     metadata = metadata(
@@ -522,7 +537,7 @@ class IntraJumpConcentration(SeriesOperator):
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraJumpFirstTime(SeriesOperator):
+class IntraJumpFirstTime(SessionAggregationOperator):
     """首次跳跃的标准化时点（0=首根, 1=末根）。"""
 
     metadata = metadata(
@@ -547,7 +562,7 @@ class IntraJumpFirstTime(SeriesOperator):
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraJumpLastTime(SeriesOperator):
+class IntraJumpLastTime(SessionAggregationOperator):
     """末次跳跃的标准化时点（0=首根, 1=末根）。"""
 
     metadata = metadata(
@@ -572,7 +587,7 @@ class IntraJumpLastTime(SeriesOperator):
     backend="pandas_numpy",
     status="experimental",
 )
-class IntraJumpClustering(SeriesOperator):
+class IntraJumpClustering(SessionAggregationOperator):
     """跳跃事件间隔变异系数（>=3 次跳跃时定义）。"""
 
     metadata = metadata(
@@ -633,7 +648,7 @@ def _rv_signature_slope(close_v: np.ndarray) -> float:
     source="intraday.higher_moments",
     backend="pandas_numpy",
 )
-class IntradayRvSignatureSlope(SeriesOperator):
+class IntradayRvSignatureSlope(SessionAggregationOperator):
     """日内 volatility signature 斜率（采样间隔 1/2/5/10 分钟）。
 
     对固定 Δ 网格计算 ``RV(Δ)=Σ r_Δ²``（非重叠块），拟合

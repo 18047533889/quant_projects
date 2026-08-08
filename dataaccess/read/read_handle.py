@@ -67,11 +67,24 @@ class ReadHandle:
             self._source = None
             self._kind = "none"
 
-    def _collect_lazy(self) -> Any:
-        """#P0-21 governed lazy collect：带 QueryBudget 的受控终点。"""
+    def _collect_lazy_arrow(self) -> pa.Table:
+        """#P0-1 governed lazy collect 的统一 Arrow 终点。
+
+        ``collect_polars_with_budget`` 返回的是 ``pa.Table``（预算强制在 Arrow
+        物化之后）。所有受控终点（to_arrow / to_polars / stream）都必须从这一个
+        Arrow 源派生，避免把 Arrow Table 误当 Polars DataFrame / 调用不存在的
+        ``.to_arrow()``。
+        """
         from data_access.read.query_budget import collect_polars_with_budget
 
-        return collect_polars_with_budget(self._source, query_budget=self._budget)
+        table = collect_polars_with_budget(self._source, query_budget=self._budget)
+        if not isinstance(table, pa.Table):
+            # 防御：budget 层语义回归（返回非 Arrow）直接 fail，不静默透传。
+            raise TypeError(
+                f"governed lazy collect 必须返回 pyarrow.Table，收到 "
+                f"{type(table).__name__}"
+            )
+        return table
 
     # ---- 基本信息 ----
 
@@ -113,8 +126,10 @@ class ReadHandle:
             self._kind = "table"
             return self._source
         if self._kind == "lazy":
+            # #P0-1 governed lazy 的 _collect_lazy_arrow 已返回 pa.Table（预算强制
+            # 在 Arrow 物化后），不再调用不存在的 ``.to_arrow()``。
             if self._govern_lazy:
-                table = self._collect_lazy().to_arrow()
+                table = self._collect_lazy_arrow()
             else:
                 table = self._source.collect().to_arrow()
             self._source = table
@@ -136,8 +151,10 @@ class ReadHandle:
 
         if self._polars_df is None:
             if self._kind == "lazy":
+                # #P0-1 governed lazy 先物化 Arrow（带预算），再 ``pl.from_arrow``
+                # 转 polars——之前直接把 pa.Table 存成 _polars_df 是类型 bug。
                 if self._govern_lazy:
-                    self._polars_df = self._collect_lazy()
+                    self._polars_df = pl.from_arrow(self._collect_lazy_arrow())
                 else:
                     self._polars_df = self._source.collect()
             else:
@@ -172,7 +189,8 @@ class ReadHandle:
             return
         if self._kind == "lazy":
             if self._govern_lazy:
-                for batch in self._collect_lazy().to_batches(
+                # #P0-1 从统一 Arrow 源切 batch（pa.Table.to_batches）。
+                for batch in self._collect_lazy_arrow().to_batches(
                     max_chunksize=batch_size or self._batch_size
                 ):
                     yield batch

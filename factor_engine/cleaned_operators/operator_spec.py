@@ -763,25 +763,37 @@ def check_production_plan_ops(plan: Any) -> list[str]:
 
 
 _QOQ_FAMILY = {"fin_qoq", "fin_pct_change", "fin_log_change", "fin_diff"}
+# Report periods per fiscal year for quarterly statements.  A cumulative-ytd
+# comparison is only meaningful between the SAME fiscal-quarter position across
+# years (同比), i.e. an offset that is a whole number of years.
+_CUMULATIVE_PERIODS_PER_YEAR = 4
 
 
 def check_financial_grain_contract(formula: str) -> list[str]:
     """Reject single-period growth operators on cumulative (``flow_ytd``) fields.
 
     ``fin_qoq`` always compares one report period back; a year-to-date cumulative
-    field (grain ``flow_ytd``) is a running sum, so QoQ on it computes a spurious
-    current-YTD vs previous-YTD change.  ``fin_pct_change`` / ``fin_log_change`` /
-    ``fin_diff`` are also single-period by default and inherit the same trap; a
-    ``periods >= 2`` (e.g. YoY over 4 periods) is valid on cumulative because the
-    two points are the same position in their respective YTD curves (review §5.1).
+    field (grain ``flow_ytd`` / flow_semantics ``cumulative_ytd_flow``) is a
+    running sum, so QoQ on it computes a spurious current-YTD vs previous-YTD
+    change.  ``fin_pct_change`` / ``fin_log_change`` / ``fin_diff`` are also
+    single-period by default and inherit the same trap; a whole-year offset
+    (``periods`` a multiple of ``periods_per_year``, e.g. 4 for quarterly
+    statements) is valid on cumulative because the two points are the same
+    fiscal-quarter position in their respective YTD curves (review §5.1).
+
+    P0-33: the check uses the field's typed ``flow_semantics``
+    (``cumulative_ytd_flow``) instead of AST-name guessing.  When the field has
+    no typed flow semantics it falls back to the legacy grain-name rule and logs.
 
     The correct sequence for a quarterly change of a cumulative flow is
     ``fin_qoq(fin_quarter_from_cumulative(x, period_id), period_id)``.
     """
     import ast
+    import logging
 
-    from fields import FIELD_REGISTRY
+    from fields import resolve_field
 
+    logger = logging.getLogger(__name__)
     errors: list[str] = []
     try:
         tree = ast.parse(str(formula or ""), mode="eval")
@@ -805,18 +817,40 @@ def check_financial_grain_contract(formula: str) -> list[str]:
             continue
         if not node.args or not isinstance(node.args[0], ast.Name):
             continue
-        if _periods_of(node) != 1:
-            continue
-        spec = FIELD_REGISTRY.get(node.args[0].id, strict=False)
+        field_name = node.args[0].id
+        periods = _periods_of(node)
+        spec = resolve_field(field_name)
         if spec is None:
             continue
-        grain = tuple(spec.grain or ())
-        if "ytd" in grain:
-            errors.append(
-                f"{node.func.id}({node.args[0].id}) 作用于累计字段 "
-                f"(grain=flow_ytd): 单期变化前需先用 "
-                f"fin_quarter_from_cumulative 去累计"
-            )
+        flow = getattr(spec, "flow_semantics", None)
+        if flow == "cumulative_ytd_flow":
+            # Cumulative YTD fields: only same fiscal-quarter-position YTD
+            # comparisons across years (同比) are meaningful.  A cross-quarter
+            # offset subtracts a running total against a different position of
+            # the fiscal year and is an accounting error.
+            if periods % _CUMULATIVE_PERIODS_PER_YEAR != 0:
+                errors.append(
+                    f"{node.func.id}({field_name}) 作用于累计字段 "
+                    f"(flow_semantics=cumulative_ytd_flow): 跨季累计值相减无意义，"
+                    f"仅同比（同一财年季度位置、periods 为 "
+                    f"{_CUMULATIVE_PERIODS_PER_YEAR} 的整数倍）有效；"
+                    f"单期变化前需先用 fin_quarter_from_cumulative 去累计"
+                )
+        else:
+            # Untyped fallback: the field carries no typed flow_semantics, so
+            # keep the legacy grain-name rule for fiscal-YTD cumulative fields.
+            if "ytd" in tuple(spec.grain or ()):
+                if periods == 1:
+                    errors.append(
+                        f"{node.func.id}({field_name}) 作用于累计字段 "
+                        f"(grain=flow_ytd): 单期变化前需先用 "
+                        f"fin_quarter_from_cumulative 去累计"
+                    )
+                logger.info(
+                    "check_financial_grain_contract fell back to grain-based rule "
+                    "for untyped field %r",
+                    field_name,
+                )
     return errors
 
 

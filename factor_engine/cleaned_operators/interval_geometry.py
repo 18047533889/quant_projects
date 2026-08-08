@@ -53,6 +53,10 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 def _valid_pairs(lo: np.ndarray, hi: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     m = np.isfinite(lo) & np.isfinite(hi)
+    # Inverted candles (low > high) are invalid interval data, not a price
+    # state: a window made of them must emit NaN, and a mixed window must not
+    # let an inverted pair corrupt the envelope (review P0: interval inputs).
+    m &= lo <= hi
     return lo[m].astype(float), hi[m].astype(float)
 
 
@@ -179,13 +183,30 @@ def _exploration_efficiency_series(hi2d: np.ndarray, lo2d: np.ndarray, cl2d: np.
         hi, lo, cl = hi2d[:, c], lo2d[:, c], cl2d[:, c]
         prev_cl = np.concatenate([[np.nan], cl[:-1]])
         tr = np.maximum(hi - lo, np.maximum(np.abs(hi - prev_cl), np.abs(lo - prev_cl)))
+        # A missing previous close makes the |high-low|-extension to the prior
+        # close genuinely unknown; ``np.maximum`` would collapse that row to
+        # ``high-low`` (a lower bound), silently hiding the gap.  Mark the row
+        # NaN so the gap breaks the travel path instead of undercounting it.
+        tr = np.where(np.isfinite(prev_cl), tr, np.nan)
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            h, l = _valid_pairs(lo[i0 : r + 1], hi[i0 : r + 1])
+            # ``_valid_pairs`` returns (low, high); a swapped assignment made
+            # ``span = max(low) - min(high)`` instead of ``max(high) - min(low)``
+            # (review P0: interval-exploration variable reversal).
+            l, h = _valid_pairs(lo[i0 : r + 1], hi[i0 : r + 1])
             if l.size == 0:
                 continue
             span = float(h.max() - l.min())
-            travel = float(np.nansum(tr[i0 : r + 1]))
+            # Gap handling: a missing previous close makes that row's TR
+            # undefined.  Counting it as zero (``np.nansum``) would pretend an
+            # unobserved price step has no path cost, overstating efficiency;
+            # the gap breaks the path, so travel is only the *trailing
+            # contiguous* run of known TRs (review P0: interval path cost).
+            seg_tr = tr[i0 : r + 1]
+            j = len(seg_tr) - 1
+            while j >= 0 and np.isfinite(seg_tr[j]):
+                j -= 1
+            travel = float(np.sum(seg_tr[j + 1 :]))
             if not np.isfinite(travel) or travel <= 0:
                 continue
             out[r, c] = span / (travel + _EPS)

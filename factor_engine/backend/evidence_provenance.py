@@ -416,6 +416,22 @@ def semantic_hashes_for(canonical: str) -> dict[str, str]:
     variant_source = _source_hash(
         FE_ROOT / "tests" / "backend_parity" / "evidence_case_registry.py"
     )
+    # P0-21: stateful runtime / contract and session / calendar logic are
+    # execution-semantic inputs; a change to any of them must invalidate the
+    # evidence artifact.  Composite lowerings are covered both by the planner
+    # tree and explicitly by file + lowerings-tree hashes.
+    stateful_runtime_hash = _source_hash(FE_ROOT / "stateful_runtime.py")
+    stateful_contract_hash = _source_hash(FE_ROOT / "stateful_contract.py")
+    session_calendar_hash = _source_hash(FE_ROOT / "runtime" / "session_calendar.py")
+    trading_calendar_hash = _source_hash(FE_ROOT / "storage" / "trading_calendar.py")
+    market_session_hash = _source_hash(FE_ROOT / "market" / "session.py")
+    read_session_hash = _source_hash(FE_ROOT / "storage" / "read_session.py")
+    composite_lowering_hash = _source_hash(
+        FE_ROOT / "planner" / "composite_lowering.py"
+    )
+    composite_lowerings_tree_hash = _tree_hash(
+        FE_ROOT / "planner" / "lowerings", ("*.py",)
+    )
     return {
         "operator_policy_hash": compute_payload_hash({"canonical": canonical, "source": policy_source}),
         "parameter_signature_hash": compute_payload_hash({"canonical": canonical, "source": signature_source}),
@@ -433,6 +449,14 @@ def semantic_hashes_for(canonical: str) -> dict[str, str]:
             "parity_helpers": _source_hash(FE_ROOT / "tests" / "backend_parity" / "duckdb_parity_helpers.py"),
         }),
         "execution_variant_hash": compute_payload_hash({"canonical": canonical, "source": variant_source}),
+        "stateful_runtime_hash": stateful_runtime_hash,
+        "stateful_contract_hash": stateful_contract_hash,
+        "session_calendar_hash": session_calendar_hash,
+        "trading_calendar_hash": trading_calendar_hash,
+        "market_session_hash": market_session_hash,
+        "read_session_hash": read_session_hash,
+        "composite_lowering_hash": composite_lowering_hash,
+        "composite_lowerings_python_tree_hash": composite_lowerings_tree_hash,
     }
 
 

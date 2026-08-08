@@ -240,6 +240,31 @@ def _stage_upsert(
     return final_path, tmp_path
 
 
+def _assert_schema_compatible(existing: pa.Table, new_table: pa.Table) -> None:
+    """#P0-24/#P0-25 upsert 前严格 schema 对齐：列名、列序、dtype、nullability。
+
+    UNION ALL 按**位置**对齐（不按列名）；列序不同会把 A↔C 错位，类型不同
+    DuckDB 可能静默 cast 改变最终 schema——两者都必须在合并前拒绝。
+    """
+    ex = existing.schema
+    ne = new_table.schema
+    if ex.names != ne.names:
+        raise ValidationError(
+            f"upsert 的 new 和已有数据 schema 不一致（列名/列序）：\n"
+            f"  existing: {ex.names}\n"
+            f"  new:      {ne.names}\n"
+            f"UNION ALL 按位置对齐，列序不同会错位。请按 existing 列序重排 new。"
+        )
+    for f_ex, f_ne in zip(ex, ne):
+        if f_ex.type != f_ne.type or f_ex.nullable != f_ne.nullable:
+            raise ValidationError(
+                f"upsert 的 new 和已有数据 schema 不一致：列 '{f_ex.name}' "
+                f"existing={f_ex.type}{'/NULL' if f_ex.nullable else ''} "
+                f"vs new={f_ne.type}{'/NULL' if f_ne.nullable else ''}。"
+                f"schema 演进请走 overwrite 而非 upsert。"
+            )
+
+
 def _duckdb_merge(
     existing: pa.Table,
     new_table: pa.Table,
@@ -247,20 +272,16 @@ def _duckdb_merge(
 ) -> pa.Table:
     """#43 用 DuckDB 做 read-merge-write：new 覆盖 old，不经过 pandas。
 
-    列不一致直接报错（upsert 语义前提是 schema 一致；schema 演进走 overwrite）。
-    返回合并后的 Arrow Table。
+    #P0-24/#P0-25 合并前先 ``_assert_schema_compatible``（列名/列序/dtype/
+    nullability），然后按 existing 列序显式 SELECT 对齐两侧，UNION ALL 不再
+    依赖输入列序。返回合并后的 Arrow Table。
     """
     import duckdb
 
-    missing_in_new = set(existing.column_names) - set(new_table.column_names)
-    missing_in_existing = set(new_table.column_names) - set(existing.column_names)
-    if missing_in_new or missing_in_existing:
-        raise ValidationError(
-            f"upsert 的 new 和已有数据 schema 不一致；"
-            f"new 缺列 {sorted(missing_in_new)}，existing 缺列 {sorted(missing_in_existing)}。"
-            f"schema 演进请走 overwrite 而非 upsert。"
-        )
+    _assert_schema_compatible(existing, new_table)
     key_list = ", ".join(f'"{c}"' for c in upsert_on)
+    # #P0-24 显式按 existing 列序投影两侧，保证 UNION ALL 位置对齐正确。
+    cols_sql = ", ".join(f'"{c}"' for c in existing.column_names)
     con = duckdb.connect()
     try:
         con.register("__existing", existing)
@@ -269,9 +290,9 @@ def _duckdb_merge(
             f"SELECT * EXCLUDE (__src, __rn) FROM ("
             f"  SELECT *, row_number() OVER (PARTITION BY {key_list} "
             f"    ORDER BY __src) AS __rn "
-            f"  FROM (SELECT 0 AS __src, * FROM __new "
+            f"  FROM (SELECT 0 AS __src, {cols_sql} FROM __new "
             f"        UNION ALL "
-            f"        SELECT 1 AS __src, * FROM __existing)"
+            f"        SELECT 1 AS __src, {cols_sql} FROM __existing)"
             f") WHERE __rn = 1"
         )
         result = con.execute(sql)
@@ -511,6 +532,7 @@ def delete_rows_from_dataset(
     reason: str | None = None,
     ticket_id: str | None = None,
     best_effort: bool = False,
+    delete_all: bool = False,
 ) -> dict[str, Any]:
     """从 staging/namespaced hive 分区删除指定时间范围内的行。
 
@@ -523,10 +545,26 @@ def delete_rows_from_dataset(
     #P0-36 任意 candidate 文件读取失败：production fail-closed（整个 delete abort）；
     ``best_effort=True``（研究/手动）才允许跳过，并返回 ``failed_files`` /
     ``remaining_unverified_rows``。
+
+    #P0-26 **无范围 footgun 防护**：start/end/after 全 None 时拒绝全删，除非显式
+    ``delete_all=True``（并要求 reason/ticket_id break-glass 语义）。
     """
     import pandas as pd
 
     from data_access.core.exceptions import ValidationError
+
+    # #P0-26 全删必须显式 opt-in；无范围 + 非 delete_all → 拒绝（防手滑清库）。
+    if start is None and end is None and after is None:
+        if not delete_all:
+            raise ValidationError(
+                "delete_rows 未指定 start/end/after 任何范围：会删除整个数据集。"
+                "这是 destructive footgun。确实要全删请显式 delete_all=True 并填 "
+                "reason/ticket_id。"
+            )
+        if not reason:
+            raise ValidationError(
+                "delete_all=True 必须提供 reason（审计/break-glass 语义）。"
+            )
 
     start_ts = pd.Timestamp(start) if start is not None else None
     end_ts = pd.Timestamp(end) if end is not None else None
@@ -559,7 +597,24 @@ def delete_rows_from_dataset(
             logger.warning("delete_rows best_effort 跳过 %s: %s", parquet_path, exc)
             failed_files.append(str(parquet_path))
             continue
-        if df.empty or time_column not in df.columns:
+        if df.empty:
+            continue
+        # #P0-27 破坏性操作语义：无法证明该文件没有符合删除条件的行，就不能
+        # 静默跳过。缺谓词列 → production abort；best_effort 记 failed_files。
+        if time_column not in df.columns:
+            if not best_effort:
+                raise DataError(
+                    f"delete_rows 的 candidate {parquet_path} 缺时间列 "
+                    f"{time_column!r}；无法证明该文件没有符合条件的行。"
+                    "production fail-closed：整个 delete 中止（0 行删除）。"
+                    "Hive 分区目录已表达时间时请在 payload 保留时间列，或显式 "
+                    "best_effort=True（研究用，会跳过并记录）。"
+                )
+            logger.warning(
+                "delete_rows best_effort 跳过缺时间列文件 %s（无 %s 列）",
+                parquet_path, time_column,
+            )
+            failed_files.append(str(parquet_path))
             continue
         dt = pd.to_datetime(df[time_column])
         if after_ts is not None and start_ts is None and end_ts is None:

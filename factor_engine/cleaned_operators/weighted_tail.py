@@ -63,7 +63,14 @@ def _weighted_quantile(
 
 
 def _validate_nonneg_weight(weight: pd.DataFrame, name: str) -> None:
-    """Reject negative weights before they can enter any risk statistic (P1-80)."""
+    """Reject negative weights *at the current window* before risk statistics.
+
+    The check runs inside the trailing-window kernel (``wv < 0 -> NaN``), never
+    as a whole-panel pre-scan: scanning the entire DataFrame would let a future
+    bad weight invalidate every earlier row — program success/failure looking
+    ahead (round-7 P0).  Kept as a module helper for direct kernel tests; the
+    operators enforce the same rule per window.
+    """
     arr = weight.to_numpy(dtype=float)
     if np.any(arr < 0.0):
         raise ValueError(f"{name}: weights must be non-negative (got a negative weight)")
@@ -182,10 +189,14 @@ class TsWeightedSemivariance(SeriesOperator):
         tgt = float(target)
         mp = int(min_periods) if min_periods is not None else 2
         mp = max(2, mp)
-        _validate_nonneg_weight(weight, "ts_weighted_semivariance")
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
             xv, wv = aligned_pairs(a, b)
+            # Per-window (prefix-safe) non-negativity: a negative weight in the
+            # current trailing window makes the risk statistic ill-defined, so
+            # fail closed for this row.  Never scan the future panel.
+            if np.any(wv < 0.0):
+                return np.nan
             if xv.size < mp:
                 return np.nan
             total = float(wv.sum())
@@ -236,12 +247,16 @@ class TsWeightedExpectedShortfall(SeriesOperator):
     ) -> pd.DataFrame:
         w = max(2, int(window))
         q = float(quantile)
-        if not 0.0 < q < 1.0:
-            raise ValueError("quantile must be in (0, 1)")
+        # Expected shortfall's ``quantile`` is a *tail fraction*: values above
+        # 0.5 are not tail-risk semantics (a q=0.8 "lower tail" is the bottom
+        # 80% of the distribution).  Restrict to (0, 0.5]; production search
+        # should use a small grid like {0.01, 0.025, 0.05, 0.10, 0.20} (round-7
+        # P0).
+        if not 0.0 < q <= 0.5:
+            raise ValueError("quantile must be in (0, 0.5] for expected-shortfall tail semantics")
         kind = str(side).lower()
         if kind not in {"lower", "upper"}:
             raise ValueError("side must be 'lower' or 'upper'")
-        _validate_nonneg_weight(weight, "ts_weighted_expected_shortfall")
         if min_tail_count is not None:
             min_tail = max(2, int(min_tail_count))
         else:
@@ -249,6 +264,9 @@ class TsWeightedExpectedShortfall(SeriesOperator):
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
             xv, wv = aligned_pairs(a, b)
+            # Per-window (prefix-safe) non-negativity; see round-7 P0.
+            if np.any(wv < 0.0):
+                return np.nan
             if xv.size < max(min_tail, 3):
                 return np.nan
             total = float(wv.sum())
@@ -306,7 +324,6 @@ class TsWeightedDrawdownArea(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         w = max(2, int(window))
-        _validate_nonneg_weight(weight, "ts_weighted_drawdown_area")
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
             # P1-85: do NOT compress the time axis with aligned_pairs before
@@ -315,6 +332,9 @@ class TsWeightedDrawdownArea(SeriesOperator):
             # each contiguous valid run and never reconnects across a gap.  A
             # missing *weight* does not break the price path — its drawdown is
             # simply excluded from the weighted mean.
+            if np.any(b < 0.0):
+                # Per-window (prefix-safe) non-negativity; round-7 P0.
+                return np.nan
             price_ok = np.isfinite(a) & (a > 0.0)
             if int(price_ok.sum()) < 2:
                 return np.nan
@@ -347,15 +367,12 @@ class TsWeightedDrawdownArea(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_stratified_mean_spread",
             "ts_weighted_semivariance",
             "ts_weighted_expected_shortfall",
             "ts_weighted_drawdown_area",
-        }
-    )
+        })
     from cleaned_operators.rolling_pack import register_polars_bridge
 
     for _canon in (

@@ -147,8 +147,10 @@ class TsExpectedShortfall(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, q: float = 0.05, side: str = "lower", min_tail_count: int = 5, **_: Any) -> pd.DataFrame:
         w = check_window(window)
         quantile = float(q)
-        if not 0.0 < quantile < 1.0:
-            raise ValueError("q must be in (0, 1)")
+        # Round-7 P0: ES ``q`` is a *tail fraction* — q > 0.5 is not tail-risk
+        # semantics (a q=0.8 "lower tail" is the bottom 80% of the distribution).
+        if not 0.0 < quantile <= 0.5:
+            raise ValueError("q must be in (0, 0.5] for expected-shortfall tail semantics")
         side_kind = str(side).lower()
         if side_kind not in {"lower", "upper"}:
             raise ValueError("side must be 'lower' or 'upper'")
@@ -368,14 +370,11 @@ class TsExtremeClusterRatio(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_lower_partial_moment", "ts_upper_partial_moment",
             "ts_expected_shortfall", "ts_quantile_skew", "ts_quantile_kurtosis",
             "ts_tail_ratio", "ts_extreme_cluster_ratio",
-        }
-    )
+        })
     for _canon in (
         "ts_lower_partial_moment", "ts_upper_partial_moment",
         "ts_expected_shortfall", "ts_quantile_skew", "ts_quantile_kurtosis",

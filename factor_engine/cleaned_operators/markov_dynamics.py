@@ -1167,9 +1167,7 @@ class TsKmQuasipotentialDepth(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_markov_persistence",
             "ts_markov_state_entropy",
             "ts_markov_transition_surprisal",
@@ -1181,8 +1179,7 @@ def _register_surface() -> None:
             "ts_km_equilibrium_distance",
             "ts_km_diffusion_gradient",
             "ts_km_quasipotential_depth",
-        }
-    )
+        })
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS)
         | {

@@ -352,15 +352,12 @@ TsDcOvershootAsymmetry = _make_dc_op(
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_dc_overshoot_ratio",
             "ts_dc_event_rate",
             "ts_dc_duration_asymmetry",
             "ts_dc_overshoot_asymmetry",
-        }
-    )
+        })
     for _canon in (
         "ts_dc_overshoot_ratio",
         "ts_dc_event_rate",

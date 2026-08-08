@@ -69,6 +69,20 @@ _VALID_PERIOD_SELECTIONS = frozenset(
 )
 
 
+def availability_uses_calendar(availability: str | None) -> bool:
+    """#P0-7 统一 availability 语义：该种类是否需交易日历把 knowledge 映射成
+    ``available_from``（next_bar / next_session_open / next_trading_day /
+    after_close_next_open / session）。same_instant/same_day/effective_date_only
+    直接可见，无需日历。"""
+    return (availability or "same_day") in _CALENDAR_AVAILABILITIES
+
+
+def availability_strict_next(availability: str | None) -> bool:
+    """#P0-7 统一 availability 语义：该种类是否等价「严格下一交易日」——
+    ASOF 无日历回退时用严格 ``>``（可见 iff knowledge < decision）。"""
+    return (availability or "same_day") in _STRICT_NEXT_KINDS
+
+
 @dataclass(frozen=True)
 class TemporalJoinSpec:
     """一次时间 join 的完整语义规格。

@@ -41,10 +41,57 @@ class RegistryInitializationError(RuntimeError):
     """Registry bootstrap was attempted from an impossible lifecycle state."""
 
 
+def _freeze_const(value: Any) -> Any:
+    """Deterministic representation of a code-object constant (P0-23).
+
+    Nested code objects recurse through :func:`_code_payload` so their digest
+    never embeds a memory address; other non-primitive constants fall back to
+    ``repr`` (e.g. frozensets), which is stable for the same source.
+    """
+    if isinstance(value, tuple):
+        return tuple(_freeze_const(v) for v in value)
+    if value is None or isinstance(value, (bool, int, float, complex, str, bytes)):
+        return value
+    if getattr(value, "co_code", None) is not None:  # nested function code
+        return _code_payload(value, include_names=True)
+    return repr(value)
+
+
+def _code_payload(code: Any, *, include_names: bool) -> str:
+    """Deterministic digest of a ``types.CodeType`` object.
+
+    Hashes bytecode (``co_code``) plus the (sorted) constants and, when
+    requested, the (sorted) ``co_names``.  Sorting keeps the digest stable under
+    compiler reorderings while still distinguishing genuinely different kernels.
+    """
+    import hashlib
+
+    consts = tuple(
+        sorted((_freeze_const(c) for c in code.co_consts), key=repr)
+    )
+    names = tuple(sorted(code.co_names)) if include_names else ()
+    payload = (code.co_code, consts, names)
+    return hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()[:16]
+
+
 def _impl_source_hash(operator: Any) -> str:
-    """Deterministic source hash of a registered implementation for the
-    overwrite audit log (P0-31).  Falls back to the class's module+qualname so
-    the log is meaningful even when the operator exposes no callable source."""
+    """Deterministic hash of the ACTUAL kernel implementation (P0-23).
+
+    ``inspect.getsource`` on the ``calculate`` / ``_calculate_series`` method
+    conflates closures and base-class delegation: two different kernels sharing
+    a framework method produce identical source hashes.  This hashes the real
+    kernel instead:
+
+    * when the method is a closure (``__closure__`` is set), hash the method's
+      ``__code__`` (``co_code`` / ``co_consts``) plus the identity of every
+      closed-over cell value;
+    * otherwise hash the method's ``__code__`` (``co_code`` + ``co_consts`` +
+      ``co_names``) plus the class ``module.qualname`` so two classes that share
+      a base-class ``calculate`` still hash differently.
+
+    Falls back to the legacy source hash when no code object is available, and
+    finally to the class module+qualname so the audit log is always meaningful.
+    """
     import hashlib
     import inspect as _inspect
 
@@ -54,13 +101,61 @@ def _impl_source_hash(operator: Any) -> str:
         fn = operator._calculate_series  # type: ignore
     if callable(fn):
         try:
-            src = _inspect.getsource(fn)
+            code = getattr(fn, "__code__", None)
+            closure = getattr(fn, "__closure__", None)
+            if code is not None and closure:
+                parts = [_code_payload(code, include_names=False)]
+                cells: list[str] = []
+                for cell in closure:
+                    try:
+                        cells.append(repr(id(cell.cell_contents)))
+                    except ValueError:  # uninitialised cell
+                        cells.append("<empty>")
+                parts.append("cells=" + ",".join(sorted(cells)))
+                src = "|".join(parts)
+            elif code is not None:
+                qualname = f"{operator.__class__.__module__}.{operator.__class__.__qualname__}"
+                src = _code_payload(code, include_names=True) + "|" + qualname
+            else:  # pragma: no cover - interactive/no-code-object
+                src = _inspect.getsource(fn)
         except (OSError, TypeError):  # pragma: no cover - interactive/no-source
             src = None
     if src is None:
         cls = operator.__class__
         src = f"{cls.__module__}.{cls.__qualname__}"
     return hashlib.sha256(src.encode("utf-8")).hexdigest()[:16]
+
+
+def _calculate_is_framework_or_declared(operator: Any) -> bool:
+    """R5-02: does ``operator`` compute through a framework ``calculate`` that
+    routes into ``_prepare_call`` / ``validate_operator_call``, or through a
+    direct ``calculate`` that the class explicitly declares to handle the call
+    contract?  Anything else (a direct ``calculate`` that skips the central
+    validator) is a registration-time error."""
+    callee = getattr(type(operator), "calculate", None)
+    if callee is None:
+        # Marker-only records (e.g. ``SqlCapableOperator``, whose execution goes
+        # through an emitter) carry no direct ``calculate`` and cannot compute on
+        # their own, so there is no validator to bypass.
+        return True
+    from cleaned_operators import base as _base
+    from cleaned_operators import base_polars as _base_polars
+
+    framework = {
+        _base.Operator.calculate,
+        _base.SeriesOperator.calculate,
+        _base.ScalarOperator.calculate,
+        _base.TransformOperator.calculate,
+        _base.TwoVarOperator.calculate,
+        _base_polars.Operator.calculate,
+        _base_polars.SeriesOperator.calculate,
+        _base_polars.ScalarOperator.calculate,
+        _base_polars.TransformOperator.calculate,
+        _base_polars.TwoVarOperator.calculate,
+    }
+    if callee in framework:
+        return True
+    return bool(getattr(type(operator), "_HANDLES_CALL_CONTRACT", False))
 
 
 def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> list[str]:
@@ -142,11 +237,63 @@ class OperatorRegistry:
         "structure_patterns_extra_repairs_v2",
         "technical_indicators_v2",
     })
+    # Exact-manifest override model (P0-22).  Unlike the source-wide allowlist
+    # above — which lets ANY override from a declared module bypass the
+    # expected_old_source/replace requirement for ANY canonical — an entry here
+    # pins a canonical to an EXACT (expected_old_source, allowed_new_source)
+    # pair.  When an entry exists for a canonical, ``register`` enforces an
+    # exact old-source match and that the new source is the declared one.  When
+    # no entry exists, the legacy source-wide rule remains the fallback, so the
+    # ~31 declared bootstrap layers keep working (additive only).  Registered via
+    # :meth:`register_declared_override`.
+    _DECLARED_OVERRIDE_MANIFEST: dict[str, tuple[str, str]] = {}
 
     @classmethod
     def overwrite_log(cls) -> List[dict]:
         """Audit trail of intentional canonical+backend overrides."""
         return list(cls._overwrite_log)
+
+    @classmethod
+    def register_declared_override(
+        cls,
+        canonical: str,
+        backend: str,
+        expected_old_source: str,
+        new_source: str,
+        reason: str,
+    ) -> None:
+        """Pin an exact same-backend override in the declared-override manifest.
+
+        P0-22: the legacy ``_DECLARED_OVERRIDE_SOURCES`` frozenset is a
+        source-wide allowlist — any override from a declared module bypasses the
+        expected_old_source/replace requirement for ANY canonical.  Registering a
+        canonical here replaces that blanket trust with an exact contract: the
+        registry must currently hold ``expected_old_source`` for
+        ``canonical``/``backend`` and the re-registration must supply
+        ``new_source`` as the new source.  ``reason`` is recorded in the
+        overwrite audit trail.
+        """
+        if not str(expected_old_source or "").strip():
+            raise ValueError(
+                "register_declared_override requires a non-empty expected_old_source"
+            )
+        if not str(new_source or "").strip():
+            raise ValueError(
+                "register_declared_override requires a non-empty new_source"
+            )
+        if not str(reason or "").strip():
+            raise ValueError("register_declared_override requires a reason")
+        cls._DECLARED_OVERRIDE_MANIFEST[canonical] = (
+            str(expected_old_source),
+            str(new_source),
+        )
+        cls._overwrite_log.append({
+            "canonical": canonical,
+            "backend": backend,
+            "old_source": expected_old_source,
+            "new_source": new_source,
+            "reason": f"declared override manifest: {reason}",
+        })
 
     @classmethod
     def lifecycle(cls) -> str:
@@ -253,41 +400,75 @@ class OperatorRegistry:
         """
         canonical = canonical or operator.metadata.name
         cls._assert_writable()
+        if not _calculate_is_framework_or_declared(operator):
+            raise TypeError(
+                f"operator {canonical!r} overrides ``calculate`` without routing "
+                "through the central validator (R5-02).  Implement "
+                "``_calculate_series`` / ``_calculate_scalar`` (or, for a direct "
+                "``calculate``, call ``validate_operator_call`` and set "
+                "_HANDLES_CALL_CONTRACT = True on the class) so integer / "
+                "panel-axis / unknown-kwarg contracts cannot be bypassed."
+            )
         if canonical in cls._aliases:
             raise ValueError(f"canonical already declared as alias: {canonical!r}")
         existing_ops = cls._operators.setdefault(canonical, {})
         if backend in existing_ops:
             old_source = str((cls._catalog.get(canonical, {}).get("backend_meta") or {}).get(backend, {}).get("source", "") or "")
-            declared = source in cls._DECLARED_OVERRIDE_SOURCES
-            if cls._hard_fail_duplicates and not declared:
-                if not replace:
+            manifest = cls._DECLARED_OVERRIDE_MANIFEST.get(canonical)
+            if manifest is not None:
+                # P0-22 exact-manifest override: the old source must match the
+                # pinned value exactly and the new source must be the declared
+                # one.  This replaces the legacy source-wide allowlist for this
+                # canonical — blanket trust is never granted here.
+                expected_old, allowed_new = manifest
+                if old_source != expected_old:
                     raise ValueError(
-                        f"duplicate registration of canonical {canonical!r} backend "
-                        f"{backend!r} (old source={old_source!r}, new source={source!r}). "
-                        "Silent overwrite is forbidden; pass replace=True with a "
-                        "replacement_reason, or add the source to "
-                        "_DECLARED_OVERRIDE_SOURCES to declare it an override layer."
+                        f"declared override of {canonical!r}/{backend}: expected "
+                        f"old source {expected_old!r} but registry holds "
+                        f"{old_source!r} (P0-22)"
                     )
-                # R4-101: a module-level blanket override is banned for undeclared
-                # sources — every replacement must pin the exact old source it
-                # expects to replace, so a future import-order shuffle cannot
-                # silently swap implementations.
-                if not expected_old_source:
+                if source != allowed_new:
                     raise ValueError(
-                        f"replace of {canonical!r}/{backend} requires a non-empty "
-                        "expected_old_source (review R4-101): pin the exact source "
-                        "being replaced"
-                    )
-                if old_source != expected_old_source:
-                    raise ValueError(
-                        f"replace of {canonical!r}/{backend}: expected old source "
-                        f"{expected_old_source!r} but registry holds {old_source!r}"
+                        f"declared override of {canonical!r}/{backend}: new source "
+                        f"{source!r} does not equal declared {allowed_new!r} (P0-22)"
                     )
                 if not replacement_reason:
                     raise ValueError(
-                        f"replace of {canonical!r}/{backend} requires a non-empty "
-                        "replacement_reason"
+                        f"declared override of {canonical!r}/{backend} requires a "
+                        "non-empty replacement_reason"
                     )
+                declared = True
+            else:
+                declared = source in cls._DECLARED_OVERRIDE_SOURCES
+                if cls._hard_fail_duplicates and not declared:
+                    if not replace:
+                        raise ValueError(
+                            f"duplicate registration of canonical {canonical!r} backend "
+                            f"{backend!r} (old source={old_source!r}, new source={source!r}). "
+                            "Silent overwrite is forbidden; pass replace=True with a "
+                            "replacement_reason, or add the source to "
+                            "_DECLARED_OVERRIDE_SOURCES to declare it an override layer."
+                        )
+                    # R4-101: a module-level blanket override is banned for undeclared
+                    # sources — every replacement must pin the exact old source it
+                    # expects to replace, so a future import-order shuffle cannot
+                    # silently swap implementations.
+                    if not expected_old_source:
+                        raise ValueError(
+                            f"replace of {canonical!r}/{backend} requires a non-empty "
+                            "expected_old_source (review R4-101): pin the exact source "
+                            "being replaced"
+                        )
+                    if old_source != expected_old_source:
+                        raise ValueError(
+                            f"replace of {canonical!r}/{backend}: expected old source "
+                            f"{expected_old_source!r} but registry holds {old_source!r}"
+                        )
+                    if not replacement_reason:
+                        raise ValueError(
+                            f"replace of {canonical!r}/{backend} requires a non-empty "
+                            "replacement_reason"
+                        )
             # Record the audit trail for every same-backend overwrite — including
             # soft-probe mode (``_hard_fail_duplicates=False``) so a bootstrap
             # sweep can enumerate every collision site at once.
@@ -326,6 +507,19 @@ class OperatorRegistry:
             prev.get("param_names"),
             getattr(operator.metadata, "param_names", []),
         )
+        # R6 P0-25: a backend adapter (polars bridge, SQL marker, …) frequently
+        # registers with its own empty ``param_names``.  The canonical positional
+        # contract is owned by the first registration; every backend operator's
+        # *instance* metadata must carry it so the central validator
+        # (``validate_operator_call`` — including the R5-06 extra-positional
+        # gate ``len(args) > len(names)``) sees the SAME signature on every
+        # backend.  Without this, a legitimate ``bridge(x, y)`` call is rejected
+        # because the bridge declares zero parameters.
+        if canonical_params and not getattr(operator.metadata, "param_names", []):
+            try:
+                operator.metadata.param_names = list(canonical_params)
+            except (AttributeError, TypeError):
+                pass  # frozen metadata: the catalog contract still carries it
         # R4-95/98: surface the field-semantic metadata on the catalog dict so
         # catalog consumers see unit / window-semantics labels.  First
         # non-None wins: the pandas backend (registered first) typically carries

@@ -60,20 +60,17 @@ def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "rati
     _CANONICALS.append(name)
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {name}
-    )
+    _surface.extend_extended_only({name})
     return cls
 
 
 def _aligned(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
-    base = frames[0]
-    result = [base]
-    for frame in frames[1:]:
-        if not frame.index.equals(base.index) or not frame.columns.equals(base.columns):
-            frame = frame.reindex(index=base.index, columns=base.columns)
-        result.append(frame)
-    return tuple(result)
+    """Strict multi-panel alignment (round-6 P0-25): fail closed, never reindex."""
+    if not frames:
+        return ()
+    from cleaned_operators.alignment import align_panel_inputs
+
+    return align_panel_inputs(*frames, strict_axes=True)
 
 
 def _peer_weighted_mean_ex_self_row(x_row: np.ndarray, g_row: np.ndarray, w_row: np.ndarray) -> np.ndarray:

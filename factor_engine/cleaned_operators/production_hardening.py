@@ -335,7 +335,12 @@ def _bars_from_tags(catalog: dict[str, Any]) -> int | None:
 
 def _policy_patch(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
     scope = _infer_scope(canonical, catalog)
-    patch: dict[str, Any] = {"scope": scope, "pit_safe": True}
+    # Fail-closed intermediate (round-7 P0): a patch must never write
+    # ``pit_safe=True`` *before* certification.  The final reconcile below is
+    # the only writer of ``pit_safe`` from ``catalog``; any consumer that reads
+    # this patch (an intermediate manifest, a bootstrap allowlist, a cache)
+    # must see UNKNOWN/False, never an over-certified True.
+    patch: dict[str, Any] = {"scope": scope, "pit_safe": False}
     if scope in {"ts", "fundamental_period", "session_intraday"}:
         patch["min_periods"] = _MIN_PERIODS_OVERRIDES.get(canonical, 1)
     bars = _bars_from_tags(catalog)

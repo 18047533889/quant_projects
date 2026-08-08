@@ -154,6 +154,8 @@ class RelationDistributionSkew(SeriesOperator):
         category="relation",
         unit="level",
     )
+    # R5-06: genuinely variadic (3+ ranked panels in one positional slot).
+    metadata.tags = list(metadata.tags) + ["variadic"]
 
     def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
         if len(args) < 3:
@@ -185,6 +187,8 @@ class RelationDistributionKurtosis(SeriesOperator):
         category="relation",
         unit="level",
     )
+    # R5-06: genuinely variadic (4+ ranked panels in one positional slot).
+    metadata.tags = list(metadata.tags) + ["variadic"]
 
     def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
         if len(args) < 4:
@@ -544,17 +548,14 @@ class GroupTailRatio(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "relation_topk_concentration", "relation_distribution_skew",
             "relation_distribution_kurtosis", "relation_hhi_change",
             "relation_entropy_change", "relation_concentration_acceleration",
             "relation_rank_mobility", "relation_share_mobility",
             "group_skewness", "group_kurtosis", "group_quantile_spread",
             "group_tail_ratio",
-        }
-    )
+        })
     for _canon in (
         "relation_topk_concentration", "relation_distribution_skew",
         "relation_distribution_kurtosis", "relation_hhi_change",

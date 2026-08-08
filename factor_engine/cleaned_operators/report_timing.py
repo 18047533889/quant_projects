@@ -212,9 +212,7 @@ class ReportRevisionMagnitude(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {"report_filing_delay_surprise"}
-    )
+    _surface.extend_extended_only({"report_filing_delay_surprise"})
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS) | {"report_revision_magnitude"}
     )

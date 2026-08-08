@@ -418,7 +418,10 @@ def candle_gap_atr(open_, high, low, close, atr_window):
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         tr = _tr_propagate(pl.col("high"), pl.col("low"), pl.col("close"))
-        atr = tr.rolling_mean(w, min_samples=w)
+        # R4: unify ATR with the engine's Wilder definition (pandas
+        # ``ewm(alpha=1/w, adjust=False, min_periods=w).mean()``), NOT a plain
+        # rolling mean — one ATR object across the engine.
+        atr = tr.ewm_mean(alpha=1.0 / w, adjust=False, min_samples=w)
         gap = pl.col("open") - pl.col("close").shift(1)
         values[c] = _one(frame, c, _safe_div(gap, atr))
     return _result(close, values)
@@ -453,7 +456,15 @@ def candle_inside_ratio(high, low):
         current = h - l
         ratio = current / prev
         inside = (h <= h.shift(1)) & (l >= l.shift(1))
-        values[c] = _one(frame, c, pl.when(inside).then(ratio).otherwise(1.0 + ratio.clip(lower_bound=0.0)))
+        outside = (h >= h.shift(1)) & (l <= l.shift(1))
+        # R4/P1-12: a shifted-up / shifted-down / gap bar is NEITHER inside NOR
+        # outside containment — only true containment states get a value, and
+        # ambiguous bars are NaN.  Mirrors the pandas reference exactly.
+        in_v = pl.when(inside).then(ratio).otherwise(None)
+        out_v = pl.when(outside & ~inside).then(1.0 + prev / current).otherwise(None)
+        result = in_v.fill_null(out_v)
+        keep = prev.is_not_null() & current.is_not_null() & (inside | outside)
+        values[c] = _one(frame, c, pl.when(keep).then(result).otherwise(None))
     return _result(high, values)
 
 

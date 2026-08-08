@@ -7,7 +7,7 @@ from planner.logical_plan import PlanNode
 from planner.lowerings import _helpers as H
 
 
-@register_lowering("ts_ratio")
+@register_lowering("ts_ratio", deps=("window", "lag"), min_inputs=2)
 def lower_ts_ratio(node: PlanNode) -> PlanNode:
     """``safe_div(x, delay(x, lag))``；默认 lag=1。"""
     if not node.inputs:

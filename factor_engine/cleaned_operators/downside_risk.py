@@ -158,7 +158,21 @@ class TsCurrentDrawdownDuration(SeriesOperator):
                 # silently reporting the stale duration from the older peers.
                 if not valid_mask.any() or not valid_mask[-1]:
                     continue
-                running_peak = np.maximum.accumulate(np.where(valid_mask, chunk, -np.inf))
+                # P1-07: the running peak must NOT carry across a missing row — a
+                # value after a NaN gap is compared only against the post-gap
+                # segment, otherwise a disconnected earlier peak makes a fresh
+                # value look like it is still in drawdown.  Reset the running peak
+                # at every gap so the next valid observation starts a fresh
+                # reference (drawdown duration restarts from the current level).
+                running_peak = np.full(len(chunk), np.nan)
+                peak = -np.inf
+                for k in range(len(chunk)):
+                    if not valid_mask[k]:
+                        peak = -np.inf
+                        continue
+                    if chunk[k] > peak:
+                        peak = chunk[k]
+                    running_peak[k] = peak
                 streak = 0
                 for back in range(len(chunk) - 1, -1, -1):
                     if not valid_mask[back]:

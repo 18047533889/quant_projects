@@ -200,9 +200,7 @@ def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "rati
     _CANONICALS.append(name)
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | {name}
-    )
+    _surface.extend_extended_only({name})
     return cls
 
 

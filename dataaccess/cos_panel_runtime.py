@@ -8,6 +8,7 @@ import pyarrow as pa
 from data_access.core.exceptions import ValidationError
 from data_access.read.adapters import arrow_table_to_multiindex_columns
 from data_access.read.key_policy import resolve_key_policy
+from data_access.read.predicate import ensure_sequence_arg
 from .cos_contract import get_cos_contract, normalize_return_values, validate_panel_request
 
 
@@ -36,6 +37,8 @@ def compile_filters(filters: Mapping[str, Any] | None) -> tuple[list[str], list[
 
 def read_cos_panel(self: Any, dataset: str, *, columns: Sequence[str] | None = None, time_range: tuple[Any, Any] | None = None, instrument_filter: Sequence[str] | None = None, semantic_filters: Mapping[str, Any] | None = None, normalize_returns: bool = False, return_output_column: str = "return_decimal", allow_sparse: bool = False, **params: Any) -> pa.Table:
     contract = validate_panel_request(dataset, semantic_filters=semantic_filters, allow_sparse=allow_sparse)
+    if instrument_filter is not None:
+        ensure_sequence_arg(instrument_filter, name="instrument_filter")
     selected = list(columns) if columns is not None else None
     if normalize_returns:
         if contract.return_column is None:
@@ -58,11 +61,27 @@ def read_cos_panel(self: Any, dataset: str, *, columns: Sequence[str] | None = N
         reg = getattr(self, "_registry", None)
         if reg is not None:
             try:
-                ds_time = getattr(reg.get(dataset), "time_column", None)
+                reg_ds = reg.get(dataset)
+                ds_time = getattr(reg_ds, "time_column", None)
+                declared = list(dict.fromkeys(str(c) for c in (getattr(reg_ds, "schema", {}) or {}).keys()))
             except Exception:
                 ds_time = None
+                declared = []
+        else:
+            declared = []
         base_cols = [contract.instrument_column, *( [ds_time] if ds_time else [])]
-        view_cols = list(dict.fromkeys([*(selected or []), *base_cols]))
+        # #P0-35 columns=None → TEMP VIEW 必须完整 schema（SELECT * 才看得到全列）。
+        # #P0-36 normalize_returns + columns=None → return_column 必须进 view。
+        # #P0-34 filter 引用的列必须进 view projection（否则 Binder Error）。
+        view_source = (
+            [*declared, *base_cols]
+            if selected is None
+            else [*selected, *base_cols]
+        )
+        if normalize_returns and contract.return_column is not None:
+            view_source.append(contract.return_column)
+        view_source.extend(filters.keys())
+        view_cols = list(dict.fromkeys(view_source))
         table = self.sql(
             query,
             read_datasets=[dataset],

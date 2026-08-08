@@ -561,8 +561,13 @@ class SemanticFieldCatalog:
 
 
 # ---- 进程内缓存（惰性加载） ----
+#
+# #P1-79 按**解析后的路径**缓存：默认路径与 env 覆盖路径（DATA_ACCESS_
+# SEMANTIC_FIELDS）各自独立 cache，同一进程不同调用不会看到不同文件状态，
+# 也不会在不同路径间串。
 
 _catalog: SemanticFieldCatalog | None = None
+_catalog_cache: dict[str, SemanticFieldCatalog] = {}
 _catalog_lock = threading.Lock()
 
 
@@ -572,28 +577,43 @@ def get_semantic_catalog(
     """进程级 SemanticFieldCatalog 单例。
 
     默认读 ``config/semantic_fields.yaml``；可用环境变量 ``DATA_ACCESS_SEMANTIC_FIELDS``
-    覆盖路径（部署/测试用）。显式传 ``path`` 时不缓存。
+    覆盖路径（部署/测试用）。
+
+    #P1-79 默认路径（env 未设置）走全局单例；env/显式覆盖路径按解析后路径缓存——
+    长期服务里 override 路径不会反复 load YAML，也不会在同一进程看到文件状态漂移。
     """
     global _catalog
     if path is None:
         env_path = os.environ.get("DATA_ACCESS_SEMANTIC_FIELDS")
-        if env_path and not _catalog:
-            path = env_path
-    if _catalog is not None and path is None:
-        return _catalog
-    with _catalog_lock:
-        if _catalog is not None and path is None:
+        if env_path and env_path.strip():
+            path = Path(env_path.strip())
+    if path is None:
+        if _catalog is not None:
             return _catalog
+        with _catalog_lock:
+            if _catalog is not None:
+                return _catalog
+            _catalog = SemanticFieldCatalog.from_yaml(None)
+            return _catalog
+    # 显式/环境覆盖路径：按解析后路径缓存（冻结，避免文件中途变化）
+    key = str(Path(path).resolve())
+    cached = _catalog_cache.get(key)
+    if cached is not None:
+        return cached
+    with _catalog_lock:
+        cached = _catalog_cache.get(key)
+        if cached is not None:
+            return cached
         built = SemanticFieldCatalog.from_yaml(path)
-        if path is None:
-            _catalog = built
+        _catalog_cache[key] = built
         return built
 
 
 def reset_semantic_catalog() -> None:
     """清空缓存（测试用）。"""
-    global _catalog
+    global _catalog, _catalog_cache
     _catalog = None
+    _catalog_cache = {}
 
 
 def normalize_table_units(

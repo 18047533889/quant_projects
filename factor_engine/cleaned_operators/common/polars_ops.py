@@ -44,18 +44,32 @@ def _numeric_cols(df: pl.DataFrame) -> list[str]:
 
 
 def _align_cols(*dfs: pl.DataFrame) -> list[str]:
-    """多输入宽表按列名取交集。
+    """多输入宽表严格对齐（review #5 R5-03）。
+
+    生产语义：Panel×Panel 二元/多元算子要求 index 完全相同、column 完全相同、
+    column 顺序完全相同。历史实现按列名取交集——当 x=[A,B,C]、y=[A,B] 时只算
+    A/B 而把 C 留在结果 frame，制造"列对不上"的静默漂移。现在列集不一致直接
+    raise，只有显式 Join/Broadcast 算子（tag）才允许例外。
 
 参数:
     *dfs: 一个或多个 Polars 宽表。
 
 返回:
-    所有输入共有的数值列名列表。
+    第一个输入的全部数值列名列表。
+
+异常:
+    ValueError: 任一输入的数值列集与第一个输入不一致时。
 """
-    cols = _numeric_cols(dfs[0])
+    base = _numeric_cols(dfs[0])
     for df in dfs[1:]:
-        cols = [c for c in cols if c in df.columns]
-    return cols
+        other = _numeric_cols(df)
+        if other != base:
+            raise ValueError(
+                f"polars panel column mismatch: base {base} vs input {other}; "
+                "Panel×Panel operators require identical column sets in the "
+                "same order (R5-03)"
+            )
+    return base
 
 
 def _binary_colwise(combine):
@@ -286,11 +300,23 @@ class WherePolars(SeriesOperator):
         b: pl.DataFrame,
         **kwargs,
     ) -> pl.DataFrame:
-        cols = [c for c in _numeric_cols(cond) if c in a.columns and c in b.columns]
+        # R5-04: unknown condition -> null output (never the false branch).  The
+        # old ``cast(pl.Boolean, strict=False)`` mapped NaN/null to False, so a
+        # missing condition silently returned ``b`` — the exact drift pandas'
+        # ``where`` fixed.  Mirror the pandas contract: condition NaN/null -> NaN
+        # output, condition != 0 -> a, condition == 0 -> b.
+        cols = _align_cols(cond, a, b)
         return cond.select([
-            pl.when(pl.col(c).cast(pl.Boolean, strict=False))
-            .then(a[c])
-            .otherwise(b[c])
+            pl.when(
+                pl.col(c).cast(pl.Float64, strict=False).is_not_null()
+                & pl.col(c).cast(pl.Float64, strict=False).is_finite()
+            )
+            .then(
+                pl.when(pl.col(c).cast(pl.Float64, strict=False) != 0.0)
+                .then(a[c])
+                .otherwise(b[c])
+            )
+            .otherwise(None)
             .alias(c)
             for c in cols
         ])

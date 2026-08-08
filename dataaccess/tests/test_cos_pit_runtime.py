@@ -85,9 +85,11 @@ def test_full_payload_and_required_timeframe():
 
 
 def test_effective_event_rejects_lossy_one_row_asof():
+    # us_stock_dividend 已升级为 strict-PIT；用仍为 effective_time_only 的 split
+    # 验证「effective-only 事件禁止 generic latest-asof」的语义。
     events = pd.DataFrame({
         "ticker": ["A"],
-        "ex_dividend_date": ["2024-01-01"],
+        "execution_date": ["2024-01-01"],
         "id": ["x"],
     })
     decisions = pd.DataFrame({
@@ -96,8 +98,8 @@ def test_effective_event_rejects_lossy_one_row_asof():
     })
     with pytest.raises(ValidationError, match="显式聚合"):
         _read_cos_events_asof(
-            FakeEventStore({"us_stock_dividend": events}),
-            "us_stock_dividend",
+            FakeEventStore({"us_stock_capital_split": events}),
+            "us_stock_capital_split",
             decisions,
             allow_effective_time=True,
         )

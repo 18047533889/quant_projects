@@ -665,17 +665,14 @@ class HolderClassJsShift(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {
+    _surface.extend_extended_only({
             "ts_bures_corr_shift",
             "ts_kramers_moyal_drift",
             "ts_kramers_moyal_diffusion",
             "cs_sliced_wasserstein_copula_shift",
             "group_spd_feature_structure_shift",
             "holder_class_js_shift",
-        }
-    )
+        })
 
 
 _register_surface()

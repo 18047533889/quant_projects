@@ -47,13 +47,15 @@ def test_panel_contracts_fail_closed():
 
 
 def test_effective_date_requires_opt_in():
+    # us_stock_dividend 已升级为 strict-PIT（declaration_date），不再走
+    # effective-only；这里用仍为 effective_time_only 的 split 验证。
     with pytest.raises(ValidationError, match="可靠公告"):
-        resolve_event_clock("us_stock_dividend")
+        resolve_event_clock("us_stock_capital_split")
     contract, clock = resolve_event_clock(
-        "us_stock_dividend", allow_effective_time=True
+        "us_stock_capital_split", allow_effective_time=True
     )
     assert contract.pit_policy == "effective_time_only"
-    assert clock == "ex_dividend_date"
+    assert clock == "execution_date"
 
 
 class FakePanelStore:

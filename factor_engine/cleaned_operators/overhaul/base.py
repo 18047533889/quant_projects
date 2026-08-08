@@ -120,6 +120,9 @@ def pl_unary_rolling_map(
 
 
 class PandasFunctionOperator(PandasOperator):
+    # R5-02: direct ``calculate`` that routes through ``_prepare_call``.
+    _HANDLES_CALL_CONTRACT = True
+
     def __init__(
         self,
         name: str,
@@ -144,6 +147,9 @@ class PandasFunctionOperator(PandasOperator):
 
 
 class PolarsFunctionOperator(PolarsOperator):
+    # R5-02: direct ``calculate`` that routes through ``_prepare_call``.
+    _HANDLES_CALL_CONTRACT = True
+
     def __init__(
         self,
         name: str,

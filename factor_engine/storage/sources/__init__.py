@@ -3,6 +3,7 @@
 from .composite_source import CompositeDataSource
 from .data_access_source import DataAccessSource
 from .datasource import DataSource
+from .field_plan import NormalizedFieldPlan
 from .kline_parquet_source import KlineParquetSource
 from .long_table_source import LongTableDataSource
 from .logical_tables import ASHARE_LOGICAL_TABLES, LogicalTableContract, logical_table_contract
@@ -26,6 +27,7 @@ __all__ = [
     "DataSourceReadSession",
     "KlineParquetSource",
     "LongTableDataSource",
+    "NormalizedFieldPlan",
     "ASHARE_LOGICAL_TABLES",
     "LogicalTableContract",
     "logical_table_contract",

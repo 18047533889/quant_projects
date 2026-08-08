@@ -30,6 +30,9 @@ class OperatorMarketContract:
     price_basis: str = PRICE_BASIS_EITHER
     cross_market_comparable: bool = True
     depends_on_inputs: bool = False
+    # P0-035: input grain the operator needs to be meaningful — "daily" /
+    # "minute" / "either" (default).  Minute-mechanism families declare "minute".
+    required_grain: str = "either"
     notes: str = ""
 
 
@@ -286,6 +289,7 @@ def _fallback_contract(canonical: str) -> OperatorMarketContract | None:
             canonical=name,
             intrinsic_markets=("ashare",),
             cross_market_comparable=False,
+            required_grain="minute",
             notes="intra_lunch_gap_return measures the A-share lunch-break mechanism itself; US has no lunch break",
         )
     if name in _MINUTE_WITH_LIMITS:
@@ -297,6 +301,7 @@ def _fallback_contract(canonical: str) -> OperatorMarketContract | None:
                 _Cap.DAILY_PRICE_LIMITS.value,
             ),
             cross_market_comparable=False,
+            required_grain="minute",
             notes="minute bars + daily price limits; US has neither as a daily mechanism",
         )
     if name in _TURNOVER_FAMILY or name in _CHIP_FAMILY:
@@ -318,6 +323,7 @@ def _fallback_contract(canonical: str) -> OperatorMarketContract | None:
             canonical=name,
             required_capabilities=(_Cap.FULL_MINUTE_OHLCV.value,),
             cross_market_comparable=False,
+            required_grain="minute",
             notes="minute-microstructure family requires FULL_MINUTE_OHLCV (A supported; US provider_required)",
         )
     return None

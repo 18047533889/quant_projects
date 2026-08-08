@@ -134,6 +134,16 @@ def build_materialize_lineage(
     data_source: Any,
     mode: str = "full",
     incremental: dict | None = None,
+    # P0-034 / P1-024: universe-mask coverage recorded on the run lineage.
+    # ``universe_mask`` is either a dict of per-market mask components (e.g.
+    # ``{"tradability_state": <panel>, "close": <panel>}``) passed to
+    # ``market.universe.apply_universe_mask_to_panel``, or a precomputed 2-D
+    # boolean mask.  ``coverage_ratio``/``drop_reason`` may be passed directly
+    # by the CS materialization entry when it already applied the mask.
+    market: str | None = None,
+    universe_mask: dict[str, Any] | Any | None = None,
+    coverage_ratio: float | None = None,
+    drop_reason: str | None = None,
 ):
     from backend.cleaned_bridge import ensure_cleaned_loaded
 
@@ -179,6 +189,68 @@ def build_materialize_lineage(
         "original_source_expr": getattr(factor, "source_expr", None),
     })
 
+    # P0-034 / P1-024: record the applied universe mask + coverage on the lineage.
+    # The CS materialization entry passes ``universe_mask`` (component dict or
+    # precomputed 2-D mask) + optional ``market``; coverage is computed here from
+    # the factor panel so it stays reproducible.
+    coverage_mask_summary: dict[str, Any] | None = None
+    if universe_mask is not None or coverage_ratio is not None or drop_reason is not None:
+        try:
+            import numpy as _np
+
+            from market.universe import (
+                apply_universe_mask,
+                apply_universe_mask_to_panel,
+                universe_mask_contract,
+            )
+
+            mkt = market or getattr(analysis, "market", None) or getattr(factor, "market", None)
+            result = output.get("result")
+            is_panel = result is not None and getattr(result, "ndim", 1) == 2
+            if isinstance(universe_mask, dict) and universe_mask:
+                if mkt is not None and is_panel:
+                    _masked, _mask, _cov = apply_universe_mask_to_panel(
+                        result, mkt, universe_mask
+                    )
+                    if coverage_ratio is None:
+                        coverage_ratio = _cov
+                    try:
+                        _contract = universe_mask_contract(mkt)
+                        _components = list(_contract.required_fields)
+                    except Exception:  # pragma: no cover - defensive
+                        _components = sorted(universe_mask.keys())
+                    coverage_mask_summary = {
+                        "market": mkt,
+                        "component_fields": _components,
+                        "coverage_ratio": float(_cov),
+                        "shape": list(getattr(result, "shape", None) or list(_mask.shape)),
+                    }
+                else:
+                    # Non-2-D result or unknown market: record the requested
+                    # components without computing a panel coverage ratio.
+                    coverage_mask_summary = {
+                        "market": mkt,
+                        "component_fields": sorted(universe_mask.keys()),
+                        "coverage_ratio": None if coverage_ratio is None else float(coverage_ratio),
+                        "note": "result not a 2-D panel or market unknown; coverage not computed",
+                    }
+            elif universe_mask is not None and is_panel:
+                # Precomputed 2-D boolean mask.
+                _masked = apply_universe_mask(result, universe_mask)
+                _pfinite = _np.isfinite(_np.asarray(result, dtype=float))
+                _ufinite = _np.isfinite(_np.asarray(_masked, dtype=float))
+                _total = int(_pfinite.sum())
+                _cov = float(_ufinite.sum() / _total) if _total else 0.0
+                if coverage_ratio is None:
+                    coverage_ratio = _cov
+                coverage_mask_summary = {
+                    "coverage_ratio": float(_cov),
+                    "shape": list(_np.asarray(result).shape),
+                }
+        except Exception as exc:  # pragma: no cover - defensive
+            if drop_reason is None:
+                drop_reason = f"universe_mask application failed: {exc}"
+
     return build_run_lineage(
         factor_id=factor_id or factor.name,
         factor_name=factor.name,
@@ -188,6 +260,9 @@ def build_materialize_lineage(
         lookback=lookback,
         referenced_columns=analysis.referenced_columns,
         result=output["result"],
+        coverage_mask=coverage_mask_summary,
+        coverage_ratio=coverage_ratio,
+        drop_reason=drop_reason,
         extra=build_lineage_extra(
             data_source_config=data_source_config,
             snapshot_id=primary_snapshot_id,

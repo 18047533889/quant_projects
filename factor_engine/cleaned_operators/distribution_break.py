@@ -288,10 +288,7 @@ class TsCopulaCentralAsymmetry(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS)
-        | {"ts_joint_energy_shift", "ts_energy_break_score"}
-    )
+    _surface.extend_extended_only({"ts_joint_energy_shift", "ts_energy_break_score"})
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS) | {"ts_copula_central_asymmetry"}
     )

@@ -41,6 +41,8 @@ def resolve_read_auto_mode(
         sidecar = None
         if isinstance(ds, StaticDataset):
             sidecar = load_stats_sidecar(ds.root)
+            if sidecar is not None and not _stats_sidecar_fresh(store, dataset, sidecar):
+                sidecar = None  # #P1-71 数据已变 → 旧 sidecar 不参与路由
         stats = dataset_read_stats(
             store,
             dataset,
@@ -67,3 +69,22 @@ def resolve_read_auto_mode(
         )
 
     return resolved_mode, stats
+
+
+def _stats_sidecar_fresh(store: "DataAccessStore", dataset: str, sidecar: Any) -> bool:
+    """#P1-71 sidecar 的 source identity 必须与当前数据集一致才参与 CBO。
+
+    无 source_epoch 的旧 sidecar：视为 fresh（向后兼容，无法判过期）；有
+    source_epoch 但当前 manifest 不一致 → stale。
+    """
+    epoch = getattr(sidecar, "source_epoch", None)
+    if epoch is None:
+        return True
+    try:
+        token = store.manifest_version(dataset)
+    except Exception:
+        return True
+    if not isinstance(token, dict):
+        return True
+    cur = token.get("source_epoch") or token.get("manifest_epoch")
+    return cur == epoch
