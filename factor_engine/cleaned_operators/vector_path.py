@@ -35,7 +35,6 @@ import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import (
-    aligned_pairs,
     check_window,
     frame_like,
     register_polars_bridge,
@@ -114,8 +113,15 @@ def _path_curvature(f1: np.ndarray, f2: np.ndarray) -> float:
     n = f1.size
     if n < 3:
         return np.nan
-    dx = np.diff(f1)
-    dy = np.diff(f2)
+    # Review R4-52: curvature in RAW coordinates is unit-dependent (f2 scaled
+    # yuan->10k yuan changes every kappa).  Compute in rolling-standardized
+    # coordinates so the path shape is invariant to per-axis units.
+    z = _standardize(f1, f2)
+    if z is None:
+        return np.nan
+    z1, z2 = z
+    dx = np.diff(z1)
+    dy = np.diff(z2)
     ddx = np.diff(dx)
     ddy = np.diff(dy)
     kappas = []
@@ -150,11 +156,23 @@ def _self_intersection_rate(f1: np.ndarray, f2: np.ndarray) -> float:
     m = n - 1  # number of segments
     if m < 2:
         return np.nan
-    total = m * (m - 1) // 2
+    # Review R4-53: the denominator counts only *non-adjacent* segment pairs.
+    # Adjacent segments share an endpoint and can never properly intersect;
+    # counting them biases the rate downward, worst for short windows.
+    total = m * (m - 1) // 2 - (m - 1)
+    closed = bool(np.allclose(pts[0], pts[-1]))
+    if closed:
+        total -= 1  # first & last segments share an endpoint on a closed path
+    if total < 1:
+        return np.nan
     inter = 0
     for i in range(m):
         p1, p2 = pts[i], pts[i + 1]
         for j in range(i + 1, m):
+            if j == i + 1:
+                continue  # adjacent segments: share endpoint, never proper
+            if closed and i == 0 and j == m - 1:
+                continue  # closed path: first & last segments share endpoint
             p3, p4 = pts[j], pts[j + 1]
             if _segments_properly_intersect(p1, p2, p3, p4):
                 inter += 1
@@ -168,10 +186,16 @@ def _pair_series(a2d: np.ndarray, b2d: np.ndarray, window: int, kernel: Callable
     for c in range(cols):
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            f1, f2 = aligned_pairs(a2d[i0 : r + 1, c], b2d[i0 : r + 1, c])
-            if f1.size < 2:
+            fa = a2d[i0 : r + 1, c]
+            fb = b2d[i0 : r + 1, c]
+            # Review R4-51: a gap (either field non-finite at a slot) makes the
+            # window invalid — dropping the missing pair and re-connecting the
+            # remaining points would draw a fake straight line across the gap.
+            if not (np.isfinite(fa).all() and np.isfinite(fb).all()):
                 continue
-            out[r, c] = kernel(f1, f2)
+            if fa.size < 2:
+                continue
+            out[r, c] = kernel(fa, fb)
     return out
 
 
@@ -240,7 +264,8 @@ class TsVectorTurningCoherence(SeriesOperator):
 class TsVectorPathCurvature(SeriesOperator):
     """2D 路径曲率：一阶差分导数下的 κ 的窗口稳健中位数。
 
-    高 → 轨迹弯曲剧烈；低 → 接近直线。使用原始坐标。P2。
+    高 → 轨迹弯曲剧烈；低 → 接近直线。坐标按窗口滚动 std 标准化（R4-52），
+    单位变换（如金额元→万元）不会改变曲率。P2。
     """
 
     metadata = _metadata(
@@ -264,9 +289,11 @@ class TsVectorPathCurvature(SeriesOperator):
     source="vector_path",
 )
 class TsVectorSelfIntersectionRate(SeriesOperator):
-    """2D 轨迹自交率：正确相交的线段对占全部线段对的比例,∈[0,1]。
+    """2D 轨迹自交率：正确相交的线段对占非相邻线段对的比例,∈[0,1]。
 
-    高 → 轨迹反复缠绕穿越自身（chop）；低 → 大致单调前进。使用原始坐标。P2。
+    高 → 轨迹反复缠绕穿越自身（chop）；低 → 大致单调前进。分母排除相邻线段
+    （共享端点，不可能 proper intersection；R4-53），闭合路径的首尾线段也排除。
+    使用原始坐标。P2。
     """
 
     metadata = _metadata(

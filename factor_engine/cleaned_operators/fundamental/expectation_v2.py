@@ -10,6 +10,7 @@ import pandas as pd
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.fundamental.transforms_v2 import (
     _pos_int,
+    _value_streak_span,
     _values,
     _walk_periods,
 )

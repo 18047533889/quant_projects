@@ -152,12 +152,14 @@ def _nesting_depth_series(lo2d: np.ndarray, hi2d: np.ndarray, mode: str) -> np.n
                 out[r, c] = np.nan
                 continue
             if r == 0:
-                out[r, c] = 0.0
+                # No previous bar: the nesting state is unknown, not 0 (R4-07).
                 depth[c] = 0.0
                 continue
             plo, phi = lo2d[r - 1, c], hi2d[r - 1, c]
             if not (np.isfinite(plo) and np.isfinite(phi)):
-                out[r, c] = 0.0
+                # Previous bar missing -> cannot tell whether nesting continues;
+                # emit NaN (unknown) and reset the chain (R4-07).  A fresh
+                # depth=0 at this row would silently claim a non-nesting break.
                 depth[c] = 0.0
                 continue
             if mode == "inside":
@@ -334,6 +336,7 @@ class TsIntervalNestingDepth(SeriesOperator):
 
     inside 模式: ``high<=prev_high and low>=prev_low`` 则深度 +1,否则归零;
     outside 模式反向。输出 0,1,2,3,... 直接表达压缩/扩张已经持续几层。P1。
+    首根 bar 或上一 bar 缺失时输出 NaN(无法判断是否延续 nesting,R4-07)。
     """
 
     metadata = _metadata(

@@ -192,6 +192,70 @@ def _parse_partition_columns(raw: Any, *, context: str) -> tuple[str, ...]:
     return cols
 
 
+def _parse_schema_version(raw: dict, *, context: str) -> str | None:
+    """#P0-45 ``schema_version`` key 出现但非法（非字符串/空串）→ 启动失败。
+
+    之前 ``schema_version: 3`` 会静默变 None——配置写错不能被吞掉。
+    """
+    if "schema_version" not in raw:
+        return None
+    sv = raw.get("schema_version")
+    if not isinstance(sv, str) or not sv.strip():
+        raise ValidationError(
+            f"{context}: schema_version 必须是字符串，收到 {sv!r}"
+        )
+    return sv.strip()
+
+
+def _parse_authorized_root(
+    raw: dict,
+    *,
+    static_prefix: str | None,
+    context: str,
+) -> Path | None:
+    """#P0-49 显式 ``authorized_root``（授权安全边界）；缺省回退静态前缀。"""
+    ar = raw.get("authorized_root")
+    if ar is None:
+        if static_prefix is None:
+            return None
+        # 向后兼容：静态前缀（模板里第一个 { 之前部分）
+        expanded = expand_env(str(static_prefix))
+        cleaned = expanded.replace("${RUN_NAMESPACE}", resolve_namespace())
+        return canonicalize(cleaned.rstrip("/") or "/")
+    if not isinstance(ar, str) or not ar.strip():
+        raise ValidationError(f"{context}: authorized_root 必须是非空字符串")
+    return canonicalize(expand_env(ar.strip()))
+
+
+_UNRESOLVED_ENV_RE = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}")
+_UNRESOLVED_DOLLAR_RE = re.compile(r"(?<!\\)\$[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _assert_no_unresolved_env(payload: Any, *, context: str) -> None:
+    """#P0-47 registry compile 后任何残留 ``${...}`` / ``$VAR`` → 启动失败。
+
+    ``expand_env`` 未设 env 且无 default 时保留原样——不能把配置问题变成奇怪的
+    路径问题，生产必须启动即失败。
+    """
+
+    def walk(node: Any, path: str) -> None:
+        if isinstance(node, str):
+            m = _UNRESOLVED_ENV_RE.search(node) or _UNRESOLVED_DOLLAR_RE.search(node)
+            if m:
+                raise ValidationError(
+                    f"{context}: 字段 {path} 含未解析环境变量 {m.group(0)!r}。"
+                    "请设置该 env，或在 YAML 里提供 ${VAR:-default} 默认值。"
+                )
+        elif isinstance(node, dict):
+            for k, v in node.items():
+                walk(v, f"{path}.{k}")
+        elif isinstance(node, list):
+            for i, v in enumerate(node):
+                walk(v, f"{path}[{i}]")
+
+    walk(payload, "$")
+
+
 def _parse_dataset(name: str, raw: dict) -> Dataset:
     """解析单个数据集条目。raw 是 YAML 里该数据集 name 下的字典。"""
     context = f"数据集 '{name}'"
@@ -295,10 +359,8 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             root_expanded = root_expanded.replace("${RUN_NAMESPACE}", ns)
         root = canonicalize(root_expanded)
         glob = raw.get("glob", default_glob_for_format(format_spec.type))
-        sv_raw = raw.get("schema_version")
-        schema_version = (
-            str(sv_raw) if isinstance(sv_raw, str) and sv_raw.strip() else None
-        )
+        schema_version = _parse_schema_version(raw, context=context)
+        authorized_root = _parse_authorized_root(raw, static_prefix=None, context=context)
         return StaticDataset(
             name=name,
             access_mode=access_mode,
@@ -314,6 +376,7 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             semantic=semantic,
             engine=engine,
             schema_version=schema_version,
+            authorized_root=authorized_root,
             root=root,
             glob=glob,
             schema=schema_decl,
@@ -333,16 +396,16 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     param_specs = parse_params_schema(params_schema_raw)
     params_schema = {k: spec.type for k, spec in param_specs.items()}
 
-    # 算出静态前缀用于白名单：把模板里第一个 { 之前的部分当做可白名单化的根。
-    # 这是一个保守但够用的做法；如果以后需要更细的路径鉴权再升级。
+    # #P0-49 算出静态前缀用于白名单：优先显式 ``authorized_root``；缺省时才用
+    # 「模板里第一个 { 之前的部分」（保守但过宽——如 /data/{market}/{factor_id}
+    # 会授权整个 /data）。新数据集请显式声明 authorized_root；本层保留静态前缀
+    # 作为向后兼容回退。
     first_brace = root_template.find("{")
     static_prefix = root_template[:first_brace] if first_brace >= 0 else root_template
     static_root = canonicalize(static_prefix.rstrip("/") or "/")
+    authorized_root = _parse_authorized_root(raw, static_prefix=static_prefix, context=context)
 
-    sv_raw = raw.get("schema_version")
-    schema_version = (
-        str(sv_raw) if isinstance(sv_raw, str) and sv_raw.strip() else None
-    )
+    schema_version = _parse_schema_version(raw, context=context)
     return ParametricDataset(
         name=name,
         access_mode=access_mode,
@@ -358,6 +421,7 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         semantic=semantic,
         engine=engine,
         schema_version=schema_version,
+        authorized_root=authorized_root,
         root_template=root_template,
         glob_template=glob_template,
         params_schema=params_schema,

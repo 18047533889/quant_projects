@@ -66,6 +66,11 @@ class DataRequest:
     transforms: Mapping[str, str] | None = None  # 每字段变换（minute_at/financial_lag/...）
     aggregations: Sequence[Any] | None = None    # 分钟→日聚合规格（AggregationSpec，预留 pushdown）
     time_varying_universe: bool = True           # universe 按 (date, instrument) 时变成员过滤
+    # #P1-28 deterministic ordering：DataAccess 的 raw read 是**无序**的（DuckDB/
+    # Parquet 不保证扫描顺序稳定）。需要确定性 panel（如 FactorEngine 回测面板）
+    # 时显式声明 order_by=[time, instrument]，SQL 端加 ORDER BY；ordering 进
+    # cache key / lineage / plan，保证同一请求稳定复现。
+    order_by: Sequence[str] | None = None
 
     @property
     def time_range(self) -> tuple[Any, Any] | None:

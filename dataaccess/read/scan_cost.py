@@ -211,7 +211,11 @@ def estimate_scan_cost(
     col_factor = (projected / total_columns) if (projected and total_columns) else 1.0
     remote_factor = 3.0 if remote else 1.0
     file_factor = 1.0 + 0.05 * max(0, selected_files - 1)  # 大量小文件惩罚
-    score = rows_factor * col_factor * remote_factor * (selectivity or 1.0) * file_factor
+    # #P1-14：manifest 路径下 ``estimated_rows`` 已经来自裁剪后的 selected 文件
+    # （selection effect 已算进去），score 再乘 selectivity 会算两次。只有无
+    # manifest（estimated_rows 是全集估算）时才用 selectivity 折扣。
+    sel_effective = 1.0 if manifest is not None else (selectivity or 1.0)
+    score = rows_factor * col_factor * remote_factor * sel_effective * file_factor
     if remote:
         score += (selected_bytes or 0) / 1024.0  # 远程按字节加成本
 
