@@ -265,8 +265,8 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("overnight_return", ("open", "pre_close"), overnight_return, "open / pre_close - 1."),
     ("vwap_to_close_return", ("vwap", "close"), vwap_to_close_return, "close / vwap - 1."),
     ("ts_max_buildup", ("x", "d"), ts_max_buildup, "Rolling count of running-max updates."),
-    ("ts_transition_count", ("condition", "window"), ts_transition_count, "Count of state transitions in a window."),
-    ("ts_time_since_change", ("condition", "max_lookback"), ts_time_since_change, "Rows since the latest state change."),
+    ("ts_transition_count", ("condition", "window", "missing_policy"), ts_transition_count, "Count of state transitions in a window."),
+    ("ts_time_since_change", ("condition", "max_lookback", "missing_policy"), ts_time_since_change, "Rows since the latest state change."),
     ("ts_event_spacing_mean", ("condition", "window", "min_events"), ts_event_spacing_mean, "Mean event spacing in a window."),
     ("ts_event_spacing_cv", ("condition", "window", "min_events"), ts_event_spacing_cv, "CV of event spacing in a window."),
 )

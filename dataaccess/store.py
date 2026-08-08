@@ -3912,16 +3912,16 @@ class DataAccessStore:
 
         from data_access.write import upsert as upsert_mod
 
-        result = upsert_mod.upsert_table(
-            ds=ds,
-            authorizer=self._authorizer,
-            target_dir=target_dir,
-            new_table=table,
-            upsert_on=upsert_on,
-            partition_by=partition_by,
-            params=params,
-        )
-        self.touch_manifest_epoch(dataset, **params)
+        with self._dataset_mutation(dataset, **params):
+            result = upsert_mod.upsert_table(
+                ds=ds,
+                authorizer=self._authorizer,
+                target_dir=target_dir,
+                new_table=table,
+                upsert_on=upsert_on,
+                partition_by=partition_by,
+                params=params,
+            )
         return result
 
     def delete_rows(
@@ -3948,20 +3948,28 @@ class DataAccessStore:
         target_dir = self._resolve_write_dir(ds, params)
         from data_access.write import upsert as upsert_mod
 
-        return upsert_mod.delete_rows_from_dataset(
-            ds=ds,
-            authorizer=self._authorizer,
-            target_dir=target_dir,
-            time_column=tc,
-            start=start,
-            end=end,
-            after=after,
-            params=params,
-            dry_run=dry_run,
-            max_rows=max_rows,
-            reason=reason,
-            ticket_id=ticket_id,
-        )
+        def _do_delete() -> dict[str, Any]:
+            return upsert_mod.delete_rows_from_dataset(
+                ds=ds,
+                authorizer=self._authorizer,
+                target_dir=target_dir,
+                time_column=tc,
+                start=start,
+                end=end,
+                after=after,
+                params=params,
+                dry_run=dry_run,
+                max_rows=max_rows,
+                reason=reason,
+                ticket_id=ticket_id,
+            )
+
+        # #2：delete_rows 也是 mutation —— 必须走统一 manifest 失效事务。
+        # dry_run 不产生真实变更，跳过失效（避免无意义的 manifest rebuild）。
+        if dry_run:
+            return _do_delete()
+        with self._dataset_mutation(dataset, **params):
+            return _do_delete()
 
     def resolve_dataset_path(self, dataset: str, **params: Any) -> Path:
         """解析已登记数据集在当前 params 下的物理目录。"""
@@ -4008,14 +4016,15 @@ class DataAccessStore:
         """
         from data_access.write import publish
 
-        result = publish.publish_from_staging(
-            registry=self._registry,
-            authorizer=self._authorizer,
-            staging_name=staging_dataset,
-            target_name=target_dataset,
-            **params,
-        )
-        self.touch_manifest_epoch(target_dataset, **params)
+        # 发布是 target 的 mutation：统一失效 + 重建 target 的 manifest。
+        with self._dataset_mutation(target_dataset, **params):
+            result = publish.publish_from_staging(
+                registry=self._registry,
+                authorizer=self._authorizer,
+                staging_name=staging_dataset,
+                target_name=target_dataset,
+                **params,
+            )
         return result
 
     def sql(

@@ -160,6 +160,65 @@ def _execute_root_with_path(
     return result, path
 
 
+def _cluster_factors_by_cost(
+    engine: "FactorEngine",
+    factors: Sequence[Factor],
+    analyses: dict[str, AnalysisResult],
+) -> list[list[Factor]]:
+    """Phase 5 P1-4：按成本把因子聚成 waves。
+
+    - ``full_history``：需要全历史（lookback 覆盖全窗）
+    - ``long``：lookback 覆盖 2/3 窗
+    - ``medium``：lookback 覆盖 1/3 窗
+    - ``short``：其余
+
+    避免一个 full-history 因子把整批 union 窗口拉成全历史（拖累 999 个短因子）。
+    """
+    from runtime.run_window import factor_effective_lookback
+
+    clusters: list[list[Factor]] = []
+    buckets: dict[str, list[Factor]] = {"full_history": [], "long": [], "medium": [], "short": []}
+    for factor in factors:
+        analysis = analyses.get(factor.name)
+        rw = None
+        if analysis is not None:
+            try:
+                wctx = prepare_run_warmup(
+                    engine,
+                    factor,
+                    analysis,
+                    auto_warmup=True,
+                    trim_warmup=True,
+                    market=None,
+                )
+                rw = wctx.run_window
+            except Exception:
+                rw = None
+        if rw is not None and rw.full_history_required:
+            buckets["full_history"].append(factor)
+            continue
+        lookback = 0
+        if analysis is not None:
+            lookback = factor_effective_lookback(analysis)
+        try:
+            from runtime.run_window import source_window_bars
+
+            total = max(1, source_window_bars(engine.data_source))
+        except Exception:
+            total = 252
+        ratio = lookback / total
+        if ratio >= 0.9:
+            buckets["long"].append(factor)
+        elif ratio >= 0.5:
+            buckets["medium"].append(factor)
+        else:
+            buckets["short"].append(factor)
+    for name in ("short", "medium", "long", "full_history"):
+        if buckets[name]:
+            clusters.append(buckets[name])
+    return clusters
+
+
 def _handle_result(
     policy: str,
     sink: Any,
