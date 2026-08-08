@@ -94,38 +94,73 @@ class StorageSpec:
         return "s3" if self.backend in {StorageBackend.S3, StorageBackend.COS} else self.type
 
 
+# #P0-final closure 4：唯一 ``StorageSpec`` schema。顶层与嵌套 ``source`` 都收，
+# 合并后编译成 typed ``StorageSpec``——registry 保存 typed spec，任何模块不再
+# 各自解析 raw dict（旧 split-brain：registry 认 ``storage.source.type``，而
+# ``parse_storage_spec`` 只读顶层 ``type``，合法的 ``{source:{type:cos}}`` 会
+# 被默认成 local）。
+_STORAGE_TOP_KEYS = frozenset({
+    "type", "source", "uri", "root", "bucket", "prefix", "endpoint", "region",
+    "secret", "mode", "options", "layout", "format", "credential_profile",
+})
+_STORAGE_SOURCE_KEYS = frozenset({
+    "type", "uri", "bucket", "prefix", "endpoint", "region", "secret", "mode",
+    "options", "layout", "format", "credential_profile",
+})
+
+
+def _reject_unknown_storage_keys(mapping: Mapping[str, Any], *, allowed: frozenset[str], context: str) -> None:
+    unknown = sorted(set(mapping) - allowed)
+    if unknown:
+        raise ValidationError(
+            f"{context} 含未知配置 key {unknown}；应为 {sorted(allowed)} 之一"
+        )
+
+
 def parse_storage_spec(raw: Any) -> StorageSpec | None:
-    """解析 YAML ``storage:`` 块。None/空返回 None。"""
+    """解析 YAML ``storage:`` 块。None/空返回 None。typed StorageSpec 原样返回。"""
     if raw is None:
         return None
-    if isinstance(raw, str):
-        raw = {"type": raw}
-    if not isinstance(raw, dict):
-        raise ValidationError(
-            f"storage 必须是字符串或 mapping，收到 {type(raw).__name__}"
-        )
-    stype = str(raw.get("type", "local")).strip().lower()
-    try:
-        backend = StorageBackend(stype)
-    except ValueError:
-        raise ValidationError(
-            f"未知 storage.type={stype!r}。支持: {[b.value for b in StorageBackend]}"
-        )
-    options = raw.get("options") or {}
-    if not isinstance(options, dict):
-        raise ValidationError("storage.options 必须是 mapping")
-    return StorageSpec(
-        type=backend.value,
-        uri=raw.get("uri"),
-        root=raw.get("root"),
-        bucket=raw.get("bucket"),
-        prefix=raw.get("prefix"),
-        endpoint=raw.get("endpoint"),
-        region=raw.get("region"),
-        secret=raw.get("secret"),
-        mode=str(raw.get("mode", "")).strip() or None,
-        options={str(k): v for k, v in options.items()},
-    )
+    return StorageSpec.from_yaml(raw, context="storage")
+
+
+def _storage_attr(ds: Any, key: str) -> Any:
+    """从 ``ds.storage`` 取声明字段：typed ``StorageSpec`` 或旧 raw dict 都支持。"""
+    storage = getattr(ds, "storage", None)
+    if isinstance(storage, StorageSpec):
+        return getattr(storage, key, None)
+    if isinstance(storage, dict):
+        src = storage.get("source")
+        if isinstance(src, dict):
+            return storage.get(key) if key in storage else src.get(key)
+        if isinstance(src, str) and key == "uri":
+            return src
+        return storage.get(key)
+    return None
+
+
+def declared_storage_type(ds: Any) -> str | None:
+    """数据集声明的 storage backend 类型（local/s3/cos/...）。"""
+    val = _storage_attr(ds, "type")
+    if val:
+        return str(val).strip().lower()
+    return None
+
+
+def declared_storage_uri(ds: Any) -> str | None:
+    """数据集声明的 storage uri（cos://... / s3://... / 远程前缀）。"""
+    val = _storage_attr(ds, "uri")
+    if val:
+        return str(val).strip()
+    return None
+
+
+def declared_storage_layout(ds: Any) -> str | None:
+    """数据集声明的远程路径形态（daily_parquet / hive_date / hive_year / plain）。"""
+    val = _storage_attr(ds, "layout")
+    if val:
+        return str(val).strip().lower()
+    return None
 
 
 def resolve_storage_for_dataset(ds: Any) -> StorageSpec:
