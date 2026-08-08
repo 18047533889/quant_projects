@@ -98,6 +98,12 @@ class ParamSpec:
     active_when: tuple | None = None      # (param_name, allowed_values): conditional activation
     history_semantics: str | None = None  # exact_rows/max_rows/finite_observations/
     #                                      # trailing_contiguous/report_events/session_slots
+    # round-7: the canonical default value.  Required for ``active_when`` runtime
+    # enforcement — an INACTIVE parameter (its controller is not in the allowed
+    # values) must be unprovided or exactly equal to this default, otherwise the
+    # call is rejected (a dead knob that silently changes nothing must not create
+    # a second AST).
+    default: Any = None
 
 
 # Typed broadcast tags (review #4 R4-99): a bare ``allow_panel_broadcast`` is a
@@ -152,6 +158,18 @@ class OperatorMetadata:
     # means same-grain / undeclared.
     input_grain: str | None = None
     output_grain: str | None = None
+    # round-7: explicit positional PANEL-input arity for zero-parameter operators
+    # whose panel contract is not expressible in ``param_names`` (``log``=1,
+    # ``add``=2).  ``None`` = kernel-implied (legacy).  When set, the
+    # extra-positional gate uses it instead of ``len(param_names)`` so an
+    # over-long call is rejected even for an op with ``param_names=[]``.
+    input_arity: int | None = None
+    # round-7: declared PANEL-input names (vs scalar parameters).  Empty = the
+    # manifest layer falls back to kernel-signature inference (params without a
+    # default are panel inputs).  Lets the machine manifest distinguish
+    # ``input_fields`` from ``scalar_parameters`` instead of listing ``window`` /
+    # ``lag`` as data fields.
+    panel_params: tuple[str, ...] = ()
 
 
 def _normalise_integer(
@@ -195,7 +213,13 @@ def _normalise_integer(
             if not np.isfinite(float(value)) or float(value) != float(int(value)):
                 raise OperatorParameterError(f"{name} must be an integer")
             return _check_int(int(value))
-        return value
+        # round-7 P0: a declared-int parameter receiving a non-numeric (e.g. the
+        # string ``"20"``) is a contract violation, NOT a silent ``int("20")``.
+        # Numeric string literals are converted to numbers at the DSL parser
+        # layer; the runtime never guesses.
+        raise OperatorParameterError(
+            f"{name} must be an integer, not {type(value).__name__} ({value!r})"
+        )
     if spec is not None and spec.dtype is float:
         # Explicitly declared float: validate numeric and bounds, never truncate.
         if isinstance(value, (int, float, np.integer, np.floating)):
@@ -206,7 +230,19 @@ def _normalise_integer(
                 raise OperatorParameterError(f"{name} must be >= {lower}")
             if upper is not None and numeric > upper:
                 raise OperatorParameterError(f"{name} must be <= {upper}")
-        return value
+            # round-7 P0: ``choices`` must be enforced for EVERY dtype.  The
+            # old flow only checked choices on the no-dtype EnumSpec branch, so
+            # ``ParamSpec(dtype=float, choices=(0.05, 0.1, 0.2))`` accepted any
+            # float (``tail_fraction`` / ``quantile`` / ``alpha`` / ``bandwidth`` /
+            # ``split_quantile`` — a false search space).
+            if choices is not None and numeric not in choices:
+                raise OperatorParameterError(
+                    f"{name}={numeric} is not an allowed choice {list(choices)}"
+                )
+            return value
+        raise OperatorParameterError(
+            f"{name} must be a real number, not {type(value).__name__} ({value!r})"
+        )
     if spec is not None and spec.choices is not None and name not in _INTEGER_PARAM_NAMES:
         # EnumSpec: string/bool/numeric choices are canonicalized and checked.
         if isinstance(value, (bool, np.bool_)) and True not in choices and False not in choices:
@@ -227,23 +263,126 @@ def _normalise_integer(
     return _check_int(int(value))
 
 
-# review #5 R5-06: keyword aliases that kernels across the codebase legitimately
-# read for the same positional slot (``d``/``window``, ``p``/``q``,
-# ``std_dev``/``k`` …).  The strict unknown-kwarg gate below allows these names
-# even when an operator has not yet declared ``param_aliases``, so a long tail of
-# legacy kernels keeps working while truly hidden parameters (names in neither
-# ``param_names`` nor this set) are rejected.  New operators should declare
-# ``param_aliases`` instead of relying on this set.
-_LEGACY_KERNEL_ALIASES = frozenset(
-    {
-        "d", "window", "p", "q", "n", "k", "m", "min", "max", "span", "lo", "hi",
-        "std_dev", "fast", "slow", "signal", "alpha", "lambda_param", "method",
-        "field", "value", "strategy",
+# review #5 R5-06 / round-7 P0: legacy keyword aliases that kernels read for the
+# same positional slot (``d``/``window``, ``p``/``q``, ``std_dev``/``k`` …).
+# Each alias maps to the CANONICAL parameter names it is a synonym for.  A legacy
+# alias kwarg is accepted ONLY when the operator actually declares one of those
+# canonical targets in ``param_names`` / ``param_aliases`` — so
+# ``operator(x, alpha=0.1)`` is rejected when the operator has no ``alpha`` /
+# ``halflife`` / ``lambda_param`` parameter (the kernel would silently swallow it
+# and ``alpha=0.1`` vs ``alpha=0.9`` would manufacture two identical ASTs).
+# New operators must declare ``param_aliases`` instead of relying on this set.
+_LEGACY_KERNEL_ALIASES: dict[str, tuple[str, ...]] = {
+    "d": ("window", "lag", "periods", "delay", "horizon", "lookback"),
+    "window": ("window", "period", "span", "n"),
+    "p": ("order", "window", "period", "p"),
+    "q": ("q", "order", "max_q"),
+    "n": ("window", "n", "period", "min_periods"),
+    "k": ("window", "k", "n_components", "top_k", "order"),
+    "m": ("window", "m", "order"),
+    "min": ("min", "lower", "lo"),
+    "max": ("max", "upper", "hi"),
+    "span": ("span", "window", "halflife"),
+    "lo": ("lo", "lower", "min"),
+    "hi": ("hi", "upper", "max"),
+    "std_dev": ("std_dev", "k", "window"),
+    "fast": ("fast", "fast_period", "fast_window"),
+    "slow": ("slow", "slow_period", "slow_window"),
+    "signal": ("signal", "signal_period", "signal_window"),
+    "alpha": ("alpha", "halflife", "lambda_param", "decay"),
+    "lambda_param": ("lambda_param", "alpha", "halflife"),
+    "method": ("method", "strategy"),
+    "field": ("field", "column", "value"),
+    "value": ("value", "field", "threshold"),
+    "strategy": ("strategy", "method"),
+}
+
+
+def _kernel_param_defaults(operator: Any) -> dict[str, Any]:
+    """Canonical default values from the operator kernel signature.
+
+    Used for ``ParamSpec.active_when`` runtime enforcement: an INACTIVE
+    parameter is only tolerated when it equals its canonical default (the "dead
+    knob set to its no-op value" case).  Fall back to ``ParamSpec.default`` when
+    the kernel signature is not introspectable.
+    """
+    import inspect
+
+    fn = getattr(operator, "_calculate_series", None) or getattr(operator, "calculate", None)
+    if fn is None:
+        return {}
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return {}
+    return {
+        name: param.default
+        for name, param in sig.parameters.items()
+        if param.default is not inspect.Parameter.empty
     }
-)
 
 
-def _normalise_call(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]):
+def _active_allows(allowed: Any, ctrl_val: Any) -> bool:
+    """Membership test for a ``ParamSpec.active_when`` allowed-values set."""
+    if isinstance(allowed, (set, frozenset, tuple, list)):
+        return ctrl_val in allowed
+    return ctrl_val == allowed
+
+
+def _enforce_active_when(
+    metadata: OperatorMetadata,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    defaults: dict[str, Any] | None,
+) -> None:
+    """Round-7 P0: enforce ``ParamSpec.active_when`` at runtime.
+
+    A parameter is INACTIVE when its controlling parameter's value is not in the
+    declared allowed set.  An inactive parameter must be unprovided or exactly
+    equal to its canonical default — otherwise the call is rejected, because
+    varying a dead knob creates two ASTs with identical output (a false search
+    space).  When the controller is unbound, the judge is skipped (fail-open).
+    """
+    names = list(getattr(metadata, "param_names", None) or [])
+    specs = getattr(metadata, "param_specs", None) or {}
+    if not specs:
+        return
+    bound: dict[str, Any] = {name: args[index] for index, name in enumerate(names[: len(args)])}
+    bound.update(kwargs)
+    defaults = defaults or {}
+    for pname, spec in specs.items():
+        if spec is None or spec.active_when is None:
+            continue
+        controller, allowed = spec.active_when
+        ctrl_val = bound.get(controller)
+        if ctrl_val is None:
+            continue  # controller unbound -> cannot judge; fail-open
+        if _active_allows(allowed, ctrl_val):
+            continue  # active
+        # INACTIVE: only tolerate unprovided, or equal to the canonical default.
+        if pname not in bound:
+            continue
+        provided = bound[pname]
+        canonical_default = (
+            spec.default if spec.default is not None else defaults.get(pname)
+        )
+        if canonical_default is not None and provided == canonical_default:
+            continue
+        raise OperatorParameterError(
+            f"{metadata.name}: parameter {pname!r} is inactive when "
+            f"{controller}={ctrl_val!r} (allowed: {sorted(allowed) if isinstance(allowed, (tuple, list, set, frozenset)) else allowed}); "
+            "provide only its canonical default or omit it (round-7 P0 — a dead "
+            "knob must not create a second AST)"
+        )
+
+
+def _normalise_call(
+    metadata: OperatorMetadata,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    defaults: dict[str, Any] | None = None,
+):
     # ``getattr`` keeps this compatible with the parallel polars metadata class
     # (base_polars.OperatorMetadata has no param_specs / param_types on every
     # instance); both classes share the param_names contract.
@@ -265,12 +404,25 @@ def _normalise_call(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: d
     # extra-positional gate applies only to operators that DO declare a
     # parameter contract; zero-parameter ops keep their implicit panel arity
     # (an over-long call still fails inside the kernel).
-    if not variadic and names and len(args) > len(names):
-        raise OperatorParameterError(
-            f"{metadata.name}: received {len(args)} positional arguments but "
-            f"declares {len(names)} parameters {names}; extra positional "
-            "arguments are rejected unless the operator declares variadic"
-        )
+    #
+    # round-7: an operator that explicitly declares ``input_arity`` gets an exact
+    # positional contract regardless of ``param_names`` (``log``=1, ``add``=2),
+    # so a zero-param op with a ``*args`` kernel cannot silently swallow extra
+    # panels.
+    if not variadic:
+        declared_arity = getattr(metadata, "input_arity", None)
+        if declared_arity is not None:
+            if len(args) != int(declared_arity):
+                raise OperatorParameterError(
+                    f"{metadata.name}: declares input_arity={declared_arity} but "
+                    f"received {len(args)} positional arguments"
+                )
+        elif names and len(args) > len(names):
+            raise OperatorParameterError(
+                f"{metadata.name}: received {len(args)} positional arguments but "
+                f"declares {len(names)} parameters {names}; extra positional "
+                "arguments are rejected unless the operator declares variadic"
+            )
     processed_args = [
         _normalise_integer(
             value,
@@ -282,7 +434,24 @@ def _normalise_call(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: d
     ]
     processed_kwargs: dict[str, Any] = {}
     for key, value in kwargs.items():
-        if key in names or key in aliases or key in _LEGACY_KERNEL_ALIASES or variadic:
+        if key in names or key in aliases:
+            processed_kwargs[key] = _normalise_integer(
+                value, key, types.get(key), specs.get(key)
+            )
+            continue
+        if not variadic and key in _LEGACY_KERNEL_ALIASES:
+            # round-7 P0: a legacy alias is only accepted when the operator
+            # declares the canonical parameter it is a synonym for.  ``window=``
+            # stays legal for a ``window``-declaring kernel; ``alpha=`` on an op
+            # with no alpha/halflife/lambda_param parameter is rejected instead
+            # of silently swallowed by ``**_``.
+            targets = _LEGACY_KERNEL_ALIASES[key]
+            if any(t in names or t in aliases for t in targets):
+                processed_kwargs[key] = _normalise_integer(
+                    value, key, types.get(key), specs.get(key)
+                )
+                continue
+        if variadic:
             processed_kwargs[key] = _normalise_integer(
                 value, key, types.get(key), specs.get(key)
             )
@@ -290,9 +459,10 @@ def _normalise_call(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: d
         raise OperatorParameterError(
             f"{metadata.name}: undeclared keyword parameter {key!r}; parameters "
             f"are {names}.  A hidden keyword that changes results without being "
-            "visible in the catalog is rejected (R5-06); declare it in "
-            "param_names / param_aliases or tag the operator variadic."
+            "visible in the catalog is rejected (R5-06 / round-7 P0); declare it "
+            "in param_names / param_aliases or tag the operator variadic."
         )
+    _enforce_active_when(metadata, args, kwargs, defaults)
     return tuple(processed_args), processed_kwargs
 
 
@@ -325,6 +495,65 @@ def _is_panel(value: Any) -> bool:
     except TypeError:
         return False
     return n > 0
+
+
+def _verify_typed_broadcast_axes(
+    metadata: OperatorMetadata, tags: set[str], frames: list[Any]
+) -> None:
+    """Round-7 P0: real timestamp/session verification for typed broadcasts.
+
+    The typed broadcast tags declare the SPECIFIC mapping the operator needs; a
+    broadcast must satisfy that mapping, not just the structural column checks.
+    Checks are best-effort — they run only when both axes are ``DatetimeIndex``
+    and skip otherwise (exotic MultiIndex / polars long axes keep the structural
+    guards already applied).
+    """
+    if len(frames) < 2:
+        return
+    base_idx = getattr(frames[0], "index", None)
+    if not isinstance(base_idx, pd.DatetimeIndex):
+        return
+
+    def _dates(idx: Any):
+        try:
+            return idx.normalize()
+        except (TypeError, ValueError):
+            return None
+
+    base_dates = _dates(base_idx)
+    if base_dates is None:
+        return
+
+    if "same_trading_date_broadcast" in tags:
+        for position, frame in enumerate(frames[1:], start=1):
+            other_idx = getattr(frame, "index", None)
+            if isinstance(other_idx, pd.DatetimeIndex) and len(other_idx) == len(base_idx):
+                other_dates = _dates(other_idx)
+                if other_dates is not None and not other_dates.equals(base_dates):
+                    raise ValueError(
+                        f"{metadata.name}: same_trading_date_broadcast input panel "
+                        f"{position} is NOT row-aligned on the same trading dates as "
+                        "the base — broadcasting a value onto a different day is a "
+                        "silent look-ahead (round-7 P0)"
+                    )
+
+    if "daily_to_minute_broadcast" in tags:
+        base_set = set(base_dates)
+        for position, frame in enumerate(frames[1:], start=1):
+            other_idx = getattr(frame, "index", None)
+            if not isinstance(other_idx, pd.DatetimeIndex):
+                continue
+            other_dates = _dates(other_idx)
+            if other_dates is None:
+                continue
+            missing = base_set - set(other_dates)
+            if missing:
+                raise ValueError(
+                    f"{metadata.name}: daily_to_minute_broadcast daily base carries "
+                    f"trading dates absent from the minute panel "
+                    f"({sorted(missing)[:3]} ...) — a daily row must map to minute "
+                    "slots on the SAME trading date (round-7 P0)"
+                )
 
 
 def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
@@ -371,6 +600,12 @@ def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwar
                         f"instruments outside the base panel (daily->minute or "
                         f"cross-symbol broadcast across different symbols is not allowed)"
                     )
+        # round-7 P0: the typed broadcast tags are NOT a waiver — verify the
+        # actual date/session mapping, not just the tag name.  A daily value
+        # broadcast to minute t+1 (or a same_trading_date row shifted a day) is a
+        # silent look-ahead.  Checks are best-effort: they fire only when both
+        # axes are ``DatetimeIndex`` and skip gracefully on exotic axes.
+        _verify_typed_broadcast_axes(metadata, tags, frames)
         return
     base = frames[0]
     base_columns = list(base.columns)
@@ -401,7 +636,9 @@ def validate_operator_call(
     metadata = getattr(operator, "metadata", None)
     if metadata is None:
         raise ValueError(f"{operator!r} has no metadata; cannot validate call")
-    processed_args, processed_kwargs = _normalise_call(metadata, args, kwargs)
+    processed_args, processed_kwargs = _normalise_call(
+        metadata, args, kwargs, defaults=_kernel_param_defaults(operator)
+    )
     _validate_panel_axes(metadata, processed_args, processed_kwargs)
     _validate_common_integer_relations(metadata, processed_args, processed_kwargs)
     valid = operator.validate_params(*processed_args, **processed_kwargs)

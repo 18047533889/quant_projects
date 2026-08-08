@@ -37,6 +37,9 @@ INF_REQUIRED = frozenset({
     "divide", "protected_div", "safe_div", "ratio", "ts_pct", "returns",
     "log", "log_returns", "ts_mean", "ts_std", "ts_beta", "ts_corr",
     "volatility", "zscore", "normalize", "winsorize",
+    # cs_mean/c_mean: an Inf input must not silently produce a finite-looking
+    # cross-sectional average — fail-closed requires inf-edge evidence too.
+    "cs_mean",
 })
 
 # Operators explicitly declared edge-insensitive: they only move/reshape values

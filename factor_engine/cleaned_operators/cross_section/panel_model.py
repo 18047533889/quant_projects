@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.ts_model._rolling_core import fit_linear_model_checked
 
 _EPS = 1e-12
 _CANONICALS: list[str] = []
@@ -541,7 +542,11 @@ def _regime_forecast(y, feats, market_state, window, n_regimes, label_horizon=1)
             mu, sd = Xm.mean(axis=0), np.std(Xm, axis=0)
             sd = np.where(sd > _EPS, sd, 1.0)
             Xs = (Xm - mu) / sd
-            beta, *_ = np.linalg.lstsq(np.column_stack([np.ones(len(ym)), Xs]), ym, rcond=None)
+            # ModelDesignGate: a rank-deficient / ill-conditioned regime design
+            # fails closed (NaN) instead of returning a meaningless coefficient.
+            beta = fit_linear_model_checked(np.column_stack([np.ones(len(ym)), Xs]), ym)
+            if beta is None:
+                continue
             x_cur = np.array([f[row, col] for f in collected], dtype=float)
             z = (x_cur - mu) / sd
             out[row, col] = float(beta[0] + beta[1:] @ z)
@@ -595,17 +600,24 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
             x_cur = np.array([f[row, col] for f in collected], dtype=float)
             preds = []
             for e in range(ne):
+                # A NaN market_state must never place a training sample into an
+                # expert: win_valid_tr excludes missing-regime rows (np.digitize
+                # would otherwise still assign a bin).
                 if e < len(centers):
-                    mask = (np.digitize(win_ms_tr, centers) == e) & np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc)
+                    mask = (np.digitize(win_ms_tr, centers) == e) & np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc) & win_valid_tr
                 else:
-                    mask = (np.digitize(win_ms_tr, centers) == ne - 1) & np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc)
+                    mask = (np.digitize(win_ms_tr, centers) == ne - 1) & np.all(np.isfinite(Xc), axis=1) & np.isfinite(yc) & win_valid_tr
                 if mask.sum() < 5:
                     preds.append(np.nan)
                     continue
                 Xm, ym = Xc[mask], yc[mask]
                 mu, sd = Xm.mean(axis=0), np.std(Xm, axis=0)
                 sd = np.where(sd > _EPS, sd, 1.0)
-                beta, *_ = np.linalg.lstsq(np.column_stack([np.ones(len(ym)), (Xm - mu) / sd]), ym, rcond=None)
+                # ModelDesignGate: an ill-conditioned expert design fails closed.
+                beta = fit_linear_model_checked(np.column_stack([np.ones(len(ym)), (Xm - mu) / sd]), ym)
+                if beta is None:
+                    preds.append(np.nan)
+                    continue
                 z = (x_cur - mu) / sd
                 preds.append(float(beta[0] + beta[1:] @ z))
             valid_preds = [p for p in preds if np.isfinite(p)]
@@ -625,13 +637,16 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
                 pred_arr = np.array(preds)
                 # Audit M04: a NaN expert prediction must not silently lose its
                 # gate mass.  Renormalize the gates over the FINITE experts only
-                # and weight by that conditional distribution.
+                # and weight by that conditional distribution.  The gate vector
+                # is indexed by the boolean mask FIRST (shape (n_finite,)) so the
+                # subsequent multiply / dot never mixes shape(ne) x shape(n_finite).
                 finite_experts = np.isfinite(pred_arr)
                 if not np.any(finite_experts):
                     continue
-                gates_valid = gates * finite_experts
-                gates_valid = gates_valid / max(gates_valid.sum(), _EPS)
-                out[row, col] = float(np.sum(gates_valid * pred_arr[finite_experts]))
+                g = gates[finite_experts]
+                p = pred_arr[finite_experts]
+                g = g / g.sum()
+                out[row, col] = float(np.dot(g, p))
     return _frame_like(y, out)
 
 

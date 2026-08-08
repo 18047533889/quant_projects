@@ -310,11 +310,16 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
             anchor_out.append(c)
     per_ds[anchor] = [c for c in anchor_out if c in agg_cols]
 
-    # #P0-2 统一 effective_join_specs：字段语义 → COS 契约 → 显式覆盖。
-    raw_joins: dict[str, Any] = {}
-    raw_joins.update(dict(req.joins or {}))
-    raw_joins.update(dict(req.join_specs or {}))
-    effective_specs = store._effective_join_specs(per_ds, plan.fields, raw_joins)
+    # #P0-2/#P1-final closure 4 统一 effective_join_specs：直接用 plan 阶段冻结的
+    # ``plan.join_specs_effective``（字段语义 → COS 契约 → 显式覆盖已由
+    # store.plan 编译），**不再重新推导**——组合执行与普通 read_joined / explain
+    # 消费同一份 join 语义（旧代码在这里重算，可能与 plan 时刻的冻结 spec 漂移）。
+    effective_specs = dict(plan.join_specs_effective or {})
+    if not effective_specs:
+        raw_joins: dict[str, Any] = {}
+        raw_joins.update(dict(req.joins or {}))
+        raw_joins.update(dict(req.join_specs or {}))
+        effective_specs = store._effective_join_specs(per_ds, plan.fields, raw_joins)
 
     pbd: dict[str, dict[str, Any]] = {
         ds: dict(req.dataset_params(ds)) for ds in plan.datasets
@@ -384,19 +389,60 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     )
     lineage = SqlReadLineage(datasets=tuple(datasets), query_preview="composed:" + sql[:120])
 
-    budget = store._resolve_read_budget(anchor_dsobj, None)
+    # #P1-final closure 4 预算 parity：与 read_joined 一致，合并**全部参与数据集**
+    # 的 query_policy 取最严——旧代码只取 anchor 的 policy（``_resolve_read_budget
+    # (anchor_dsobj, None)``），非 anchor 表 max_rows/max_scan_files 全被绕过。
+    budget = store._resolve_sql_budget(list(plan.datasets), None)
+
+    # #P1-final closure 4 max_scan_files：组合读同样对每张参与表的实际匹配文件数
+    # 做硬限制（read_joined 在 snapshot 阶段 enforce，这里逐 dataset 补上）。
+    # **注意**：只有「路径解析失败」才在非严格模式下放行；``_enforce_scan_files``
+    # 抛出的 max_scan_files ValidationError 是预算强制，必须始终传播。
+    for ds in datasets:
+        try:
+            paths_ds = per_ds_paths.get(ds)
+            if not paths_ds:
+                paths_ds = store._prepare_dataset_read(
+                    store._registry.get(ds),
+                    time_range=plan.time_range,
+                    params=req.dataset_params(ds),
+                    instrument_filter=insts,
+                )
+        except Exception:
+            if _strict_mode():
+                raise
+            # 非严格模式：路径解析失败不拦组合读（snapshot 已尽力构建）
+            continue
+        store._enforce_scan_files(budget, paths_ds)
+
     need_normalize = bool(getattr(req, "normalize_units", False) and plan.fields)
     result_mode = str(getattr(req, "result", "auto") or "auto")
 
     if result_mode == "stream" and not need_normalize:
         # #2 组合路径也 honor result="stream"：直接跑 engine reader，不物化整表。
+        # #P1-final closure 4：流式分支累计 max_rows/max_result_bytes 硬限制
+        # （逐 batch 累计，超限立即抛，不物化到超限才发现）。
+        from data_access.read.query_budget import enforce_stream_budget
+
         reader = store._engine.execute_reader(
             sql, sql_params, batch_size=100_000, deadline_ms=budget.max_elapsed_ms
         )
+        acc_rows = 0
+        acc_bytes = 0
+        stream_start = _perf_counter()
 
         def _gen() -> Any:
+            nonlocal acc_rows, acc_bytes
             try:
                 for batch in reader:
+                    acc_rows += batch.num_rows
+                    acc_bytes += int(getattr(batch, "nbytes", 0) or 0)
+                    enforce_stream_budget(
+                        budget,
+                        total_rows=acc_rows,
+                        total_bytes=acc_bytes,
+                        elapsed_ms=(_perf_counter() - stream_start) * 1000,
+                    )
                     yield batch
             finally:
                 try:
@@ -432,6 +478,11 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
 
         table = normalize_table_units(table, plan.fields)
 
+    # #P1-final closure 4：物化分支补 enforce_arrow_budget（与 aggregate_minute_bundle
+    # / read 一致）——旧组合路径只有 deadline，没有 max_rows/max_result_bytes。
+    from data_access.read.query_budget import enforce_arrow_budget
+
+    enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
     stats = ReadStats(rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms)
     return ReadHandle(table=table, snapshot=snapshot, stats=stats, lineage=lineage)
 

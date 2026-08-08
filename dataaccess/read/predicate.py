@@ -40,6 +40,48 @@ def ensure_sequence_arg(value: Any, *, name: str) -> Any:
     return value
 
 
+def strict_sequence(
+    value: Any,
+    *,
+    name: str,
+    element_type: type = str,
+    allow_none: bool = True,
+    allow_empty: bool = True,
+) -> tuple | None:
+    """#P0-C12 严格序列解析（DataRequest / SemanticField 共用）。
+
+    拒绝裸 str/bytes（会被误当字符序列逐项拆成 c/l/o/s/e，是典型的 silent
+    semantic inversion）；非序列容器 → ValidationError；元素类型不对 → 立即
+    ValidationError（不再静默 str() 化非法对象 / 返回空 tuple 丢语义）。
+
+    - None → None（``allow_none=True``）或 ()（``allow_none=False``）
+    - str/bytes → ValidationError
+    - list/tuple/set/frozenset/生成器 → tuple，逐元素校验 ``element_type``
+    """
+    if value is None:
+        return None if allow_none else ()
+    if isinstance(value, (str, bytes)):
+        raise ValidationError(
+            f"{name} 必须是序列（list/tuple/set），收到 str/bytes {value!r}。"
+            "裸字符串会被误当成字符序列逐项拆开。"
+        )
+    try:
+        items = tuple(value)
+    except TypeError:
+        raise ValidationError(
+            f"{name} 必须是序列（list/tuple/set），收到 {type(value).__name__} {value!r}"
+        )
+    if not allow_empty and not items:
+        raise ValidationError(f"{name} 不能为空序列")
+    for item in items:
+        if not isinstance(item, element_type):
+            raise ValidationError(
+                f"{name} 的元素必须是 {element_type.__name__}，"
+                f"收到 {type(item).__name__} {item!r}"
+            )
+    return items
+
+
 def _normalize_time_range(value: Any) -> Any:
     """#P0-4 ``(None, None)`` → None（两个端点都空 = 无时间约束，不能生成空 WHERE）。"""
     if isinstance(value, tuple) and len(value) == 2:

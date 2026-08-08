@@ -41,18 +41,21 @@ DEFAULT_WORK = ROOT / "data/cogalpha_lqtp_production"
 COS_CLI = os.environ.get("CANDIDATE_COS_CLI", "candidate-cos-ro")
 POOLS = (
     {
-        "source": "evoalpha",
-        "label": "Evoalpha（lizhuo_factors_neutral）",
+        "source": "pool_a",
+        "label": "外部中性化候选 A",
         "prefix": "cos://qs-cold/candidate_pool/lizhuo_factors_neutral/",
         "raw_prefix": "cos://qs-cold/candidate_pool/lizhuo_factors/",
         "id_prefix": "alpha_",
+        # legacy source key kept for existing local cache dirs
+        "cache_source": "evoalpha",
     },
     {
-        "source": "alphasage",
-        "label": "AlphaSage（alphasage_factors_neu）",
+        "source": "pool_b",
+        "label": "外部中性化候选 B",
         "prefix": "cos://qs-cold/candidate_pool/alphasage_factors_neu/",
         "raw_prefix": "cos://qs-cold/candidate_pool/alphasage_factors/",
         "id_prefix": "alphasage_",
+        "cache_source": "alphasage",
     },
 )
 YEARS_DEFAULT = list(range(2019, 2027))
@@ -137,6 +140,37 @@ def _wide_to_long(paths: list[Path]) -> pd.DataFrame:
     return out
 
 
+def _panel_qc(paths: list[Path]) -> dict[str, Any]:
+    """Reject all-zero / near-constant panels that can fabricate RankIC via ties."""
+    if not paths:
+        return {"degenerate": True, "reason": "no_files"}
+    path = paths[-1]
+    df = pq.read_table(path).to_pandas(date_as_object=True, ignore_metadata=True)
+    if "date" in df.columns:
+        df = df.set_index("date")
+    arr = df.to_numpy(dtype=np.float64)
+    with np.errstate(over="ignore", invalid="ignore"):
+        std = float(np.nanstd(arr))
+        absmean = float(np.nanmean(np.abs(arr)))
+    uniq_ratios: list[float] = []
+    for i in range(min(arr.shape[0], 40)):
+        row = arr[i]
+        m = np.isfinite(row)
+        if int(m.sum()) < 30:
+            continue
+        uniq_ratios.append(len(np.unique(np.round(row[m], 12))) / float(m.sum()))
+    med_uniq = float(np.median(uniq_ratios)) if uniq_ratios else 0.0
+    degenerate = (not np.isfinite(std)) or std < 1e-12 or absmean < 1e-12 or med_uniq < 0.01
+    return {
+        "year": int(path.stem),
+        "std": std if np.isfinite(std) else None,
+        "absmean": absmean if np.isfinite(absmean) else None,
+        "median_unique_ratio": med_uniq,
+        "degenerate": bool(degenerate),
+        "reason": "constant_or_zero" if degenerate else "ok",
+    }
+
+
 def _neutralization_probe(neu_path: Path, raw_path: Path | None) -> dict[str, Any]:
     neu = pq.read_table(neu_path).to_pandas(date_as_object=True, ignore_metadata=True)
     neu = neu.set_index("date")
@@ -190,6 +224,21 @@ def _eval_factor(
             "ok": False,
             "error": "empty_panel",
         }
+    qc = _panel_qc(paths)
+    if qc.get("degenerate"):
+        return {
+            "factor_id": factor_id,
+            "source": source,
+            "label": label,
+            "ok": True,
+            "ok_for_select": False,
+            "panel_qc": qc,
+            "mean_rank_ic": float("nan"),
+            "abs_mean_rank_ic": float("nan"),
+            "error": "degenerate_panel",
+            "n_rows": int(len(long)),
+            "n_days": int(long["trade_date"].nunique()),
+        }
     analysis = analyze_factor_long_df_duckdb(long, fwd_returns_path=fwd)
     mean_ic = float(analysis.get("mean_rank_ic", float("nan")))
     return {
@@ -197,6 +246,8 @@ def _eval_factor(
         "source": source,
         "label": label,
         "ok": True,
+        "ok_for_select": True,
+        "panel_qc": qc,
         "mean_rank_ic": mean_ic,
         "abs_mean_rank_ic": abs(mean_ic) if mean_ic == mean_ic else float("nan"),
         "rank_icir": float(analysis.get("rank_icir", float("nan"))),
@@ -245,7 +296,7 @@ def crawl_and_eval(args: argparse.Namespace) -> dict[str, Any]:
     years = list(args.years)
     jobs: list[dict[str, Any]] = []
     for pool in POOLS:
-        if args.source and pool["source"] not in args.source:
+        if args.source and pool["source"] not in args.source and pool.get("cache_source") not in args.source:
             continue
         ids = _list_factor_ids(pool["prefix"])
         print(f"[{pool['source']}] factors={len(ids)}", flush=True)
@@ -259,14 +310,16 @@ def crawl_and_eval(args: argparse.Namespace) -> dict[str, Any]:
         available = _list_years(job["prefix"], fid)
         use_years = [y for y in years if y in available] or available
         job["years"] = use_years
+        cache_key = str(job.get("cache_source") or job["source"])
+        job["cache_source"] = cache_key
         for y in use_years:
-            dest = cache / job["source"] / fid / f"{y}.parquet"
-            dl_tasks.append((job["prefix"], fid, job["source"], y, dest))
+            dest = cache / cache_key / fid / f"{y}.parquet"
+            dl_tasks.append((job["prefix"], fid, cache_key, y, dest))
             # optional raw year for neutralization probe (one year later)
         if args.probe_neutral and use_years:
             y = use_years[-2] if len(use_years) >= 2 else use_years[-1]
-            dest = cache / f"{job['source']}_raw" / fid / f"{y}.parquet"
-            dl_tasks.append((job["raw_prefix"], fid, f"{job['source']}_raw", y, dest))
+            dest = cache / f"{cache_key}_raw" / fid / f"{y}.parquet"
+            dl_tasks.append((job["raw_prefix"], fid, f"{cache_key}_raw", y, dest))
             job["probe_year"] = y
 
     print(f"download tasks={len(dl_tasks)} workers={args.download_workers}", flush=True)
@@ -295,10 +348,11 @@ def crawl_and_eval(args: argparse.Namespace) -> dict[str, Any]:
     eval_payloads: list[dict[str, Any]] = []
     for job in jobs:
         fid = job["factor_id"]
+        cache_key = str(job.get("cache_source") or job["source"])
         paths = [
-            cache / job["source"] / fid / f"{y}.parquet"
+            cache / cache_key / fid / f"{y}.parquet"
             for y in job.get("years", [])
-            if (cache / job["source"] / fid / f"{y}.parquet").exists()
+            if (cache / cache_key / fid / f"{y}.parquet").exists()
         ]
         if not paths:
             results.append(
@@ -314,8 +368,8 @@ def crawl_and_eval(args: argparse.Namespace) -> dict[str, Any]:
         probe = None
         if args.probe_neutral:
             y = job.get("probe_year") or int(paths[-1].stem)
-            neu_p = cache / job["source"] / fid / f"{y}.parquet"
-            raw_p = cache / f"{job['source']}_raw" / fid / f"{y}.parquet"
+            neu_p = cache / cache_key / fid / f"{y}.parquet"
+            raw_p = cache / f"{cache_key}_raw" / fid / f"{y}.parquet"
             if neu_p.exists():
                 probe = _neutralization_probe(neu_p, raw_p if raw_p.exists() else None)
                 probe.update({"factor_id": fid, "source": job["source"], "year": y})
@@ -359,6 +413,7 @@ def crawl_and_eval(args: argparse.Namespace) -> dict[str, Any]:
         r
         for r in results
         if r.get("ok")
+        and r.get("ok_for_select", True)
         and isinstance(r.get("abs_mean_rank_ic"), (int, float))
         and r["abs_mean_rank_ic"] == r["abs_mean_rank_ic"]
         and r["abs_mean_rank_ic"] > float(args.threshold)
@@ -443,35 +498,51 @@ def _weekly_section_html(payload: dict[str, Any], *, threshold: float) -> str:
         cov_s = f"{float(cov):.1%}" if isinstance(cov, (int, float)) and cov == cov else "—"
         sh = r.get("long_short_sharpe")
         sh_s = f"{float(sh):.3f}" if isinstance(sh, (int, float)) and sh == sh else "—"
-        fid = html_lib.escape(str(r.get("factor_id", "")))
-        src = html_lib.escape(str(r.get("label") or r.get("source") or ""))
+        fid_raw = str(r.get("factor_id", ""))
+        fid = html_lib.escape(fid_raw)
+        src = html_lib.escape(str(r.get("label") or r.get("source_label") or "外部中性化候选"))
+        href = str(r.get("report_href") or "")
+        name_cell = (
+            f'<a href="{html_lib.escape(href)}"><code>{fid}</code></a>'
+            if href
+            else f"<code>{fid}</code>"
+        )
+        plat = "本地" if str(r.get("platform_submit") or "").startswith("skipped") else (
+            "平台" if r.get("platform_submit") else "—"
+        )
         rows.append(
             "<tr>"
             f"<td>{i}</td>"
-            f"<td><code>{fid}</code></td>"
+            f"<td>{name_cell}</td>"
             f"<td>{src}</td>"
             f"<td>{ic:.4f}</td>"
             f"<td>{icir_s}</td>"
             f"<td>{cov_s}</td>"
             f"<td>{sh_s}</td>"
             f"<td>{flip}</td>"
+            f"<td>{plat}</td>"
             "</tr>"
         )
-        toc.append(f"<li><code>{fid}</code> <span class='muted'>({ic:.2%})</span></li>")
+        toc_name = (
+            f'<a href="{html_lib.escape(href)}"><code>{fid}</code></a>'
+            if href
+            else f"<code>{fid}</code>"
+        )
+        toc.append(f"<li>{toc_name} <span class='muted'>({ic:.2%})</span></li>")
 
     gen = html_lib.escape(str(payload.get("generated_at", "")))
+    plat = html_lib.escape(str(payload.get("platform_note") or "无公式则本地回测；有平台公式才提交平台。"))
     return f"""
 <section id="weekly-dug-neutral" class="week2-section">
-  <h2>本周新挖 · 中性化候选（Evoalpha / AlphaSage）</h2>
+  <h2>本周新挖 · 中性化候选</h2>
   <div class="notice">
-    <p><b>来源</b>：COS <code>lizhuo_factors_neutral/</code>（Evoalpha）与
-    <code>alphasage_factors_neu/</code>（AlphaSage）。路径名即中性化落盘；抽样核对截面均值≈0，
-    且与 raw 池数值不同（非简单拷贝）。</p>
+    <p><b>来源</b>：外部中性化候选池（面板已中性化落盘）。抽样核对截面均值≈0，且与未中性化副本数值不同。</p>
     <p><b>筛选</b>：VWAP→VWAP Mean |RankIC| &gt; {threshold:.0%}；表中 RankIC 取绝对值（负向已标注「取负」）。
-    与上方历史精选表<strong>分开列出</strong>，便于本周交付审阅。</p>
+    与上方历史精选表<strong>分开列出</strong>。</p>
+    <p><b>回测</b>：{plat}</p>
     <p class="muted">生成 {gen} · 爬取 {payload.get('n_crawled')} · 成功评估 {payload.get('n_ok')} ·
-    入选 {payload.get('n_selected')} · 中性抽样 looks_cs_neutral={neu.get('n_looks_cs_neutral')}/{neu.get('n_probed')} ·
-    differs_from_raw={neu.get('n_differs_from_raw')}/{neu.get('n_probed')}</p>
+    入选 {payload.get('n_selected')} · 中性抽样 {neu.get('n_looks_cs_neutral')}/{neu.get('n_probed')} ·
+    异于未中性化 {neu.get('n_differs_from_raw')}/{neu.get('n_probed')}</p>
   </div>
   <h3>快速目录</h3>
   <ul class="toc">{''.join(toc) if toc else '<li class="muted">（本周无过线因子）</li>'}</ul>
@@ -480,11 +551,11 @@ def _weekly_section_html(payload: dict[str, Any], *, threshold: float) -> str:
     <thead>
       <tr>
         <th>#</th><th>因子</th><th>来源</th><th>Mean RankIC</th><th>RankICIR</th>
-        <th>日覆盖率</th><th>多空Sharpe</th><th>取负显示</th>
+        <th>日覆盖率</th><th>多空Sharpe</th><th>取负显示</th><th>回测</th>
       </tr>
     </thead>
     <tbody>
-      {''.join(rows) if rows else '<tr><td colspan="8" class="muted">无 |RankIC|&gt;阈值 的因子</td></tr>'}
+      {''.join(rows) if rows else '<tr><td colspan="9" class="muted">无 |RankIC|&gt;阈值 的因子</td></tr>'}
     </tbody>
   </table>
 </section>
@@ -520,7 +591,7 @@ def patch_screening_html(args: argparse.Namespace, payload: dict[str, Any] | Non
     if 'href="#weekly-dug-neutral"' not in text:
         text = text.replace(
             "<h2>快速目录</h2>",
-            '<h2>快速目录</h2>\n    <p class="muted"><a href="#weekly-dug-neutral">↓ 跳到本周新挖（Evoalpha / AlphaSage 中性化）</a></p>',
+            '<h2>快速目录</h2>\n    <p class="muted"><a href="#weekly-dug-neutral">↓ 跳到本周新挖（中性化候选）</a></p>',
             1,
         )
     bak = html_path.with_suffix(html_path.suffix + f".bak_weekly_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
@@ -535,7 +606,7 @@ def main() -> int:
     p.add_argument("--work-dir", type=Path, default=DEFAULT_WORK)
     p.add_argument("--threshold", type=float, default=THRESHOLD_DEFAULT)
     p.add_argument("--years", type=int, nargs="+", default=YEARS_DEFAULT)
-    p.add_argument("--source", nargs="+", choices=["evoalpha", "alphasage"], default=None)
+    p.add_argument("--source", nargs="+", choices=["pool_a", "pool_b", "evoalpha", "alphasage"], default=None)
     p.add_argument("--download-workers", type=int, default=12)
     p.add_argument("--eval-workers", type=int, default=4)
     p.add_argument("--probe-neutral", action="store_true", default=True)

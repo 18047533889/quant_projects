@@ -139,9 +139,20 @@ def _effective_rank_chunk(c1, c2, c3, min_rows: int) -> float:
     return float(np.clip(np.exp(ent), 1.0, 3.0))
 
 
+_MIN_EIGENGAP = 0.02  # normalized ``(λ1-λ2)/sum(λ)`` below which the top direction is not identifiable
+
+
 def _dominant_direction(z: np.ndarray) -> np.ndarray | None:
     w = _corr_eigenvalues(z)
     if w is None:
+        return None
+    # Round-7 P0 (review §33): when the top two eigenvalues are nearly tied
+    # (``(λ1-λ2)/sum(λ) < _MIN_EIGENGAP``) the dominant eigenvector is not
+    # identifiable — small noise can flip the "rotation" to ~90° even though the
+    # covariance structure did not change.  Fail closed (None -> NaN) instead of
+    # emitting a spurious regime-rotation angle.
+    gap = float(w[-1] - (w[-2] if w.size >= 2 else 0.0))
+    if gap / float(w.sum()) < _MIN_EIGENGAP:
         return None
     c = np.corrcoef(z, rowvar=False)
     _, v = np.linalg.eigh(c)

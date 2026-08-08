@@ -148,6 +148,11 @@ def _engine(o, h, l, c, pattern, body_window, shadow_window, penetration):
     # would be read as "confirmed no pattern" — until every OHLC history /
     # body baseline / range baseline it references is available.
     cur = o.notna() & h.notna() & l.notna() & c.notna()
+    # Audit item 4 (A-share critical): a zero-amplitude 一字板 bar (O=H=L=C) has
+    # body=range=upper=lower=0, so every doji subtype would trivially fire.
+    # Gate it out of every pattern (emit NaN "cannot judge") on a tiny relative
+    # tick so a zero-range bar is never classified as any pattern.
+    cur = cur & (rng > 1e-6 * c.abs())
     prev1 = po.notna() & pc.notna() & ph.notna() & pl.notna()
     o2, c2, h2, l2 = _shift(o, 2), _shift(c, 2), _shift(h, 2), _shift(l, 2)
     o3, c3, h3, l3 = _shift(o, 3), _shift(c, 3), _shift(h, 3), _shift(l, 3)

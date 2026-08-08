@@ -138,7 +138,11 @@ class DatasetMetadataPlane:
         """PIT 事件索引（仅当 authoritative：complete + 源匹配）。"""
         self._observe_epoch()
         if self._pit_index is None:
-            from data_access.read.pit_event_index import _index_path_for, load_pit_event_index
+            from data_access.read.pit_event_index import (
+                _index_path_for,
+                load_pit_event_index,
+                validate_current_source,
+            )
 
             try:
                 path = _index_path_for(self.store, self.dataset)
@@ -150,12 +154,11 @@ class DatasetMetadataPlane:
                 idx = load_pit_event_index(path)
             except Exception:
                 return None
-            if not idx.metadata.is_authoritative:
-                return None
-            if (
-                idx.metadata.manifest_epoch is not None
-                and idx.metadata.manifest_epoch != self._source_epoch
-            ):
+            # #P0-C8 不再写第二套近似判断（只比 is_authoritative + manifest_epoch），
+            # 复用 PITIndex 自己的完整 validator：source_snapshot / schema_hash /
+            # columns identity 任一变化都判 stale——外部文件绕过 DataAccess 写入、
+            # schema 变化但 epoch 不变时也不会返回本应 stale 的 index。
+            if not validate_current_source(self.store, self.dataset, idx.metadata):
                 return None
             self._pit_index = idx
         return self._pit_index

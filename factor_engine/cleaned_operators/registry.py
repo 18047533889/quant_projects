@@ -597,6 +597,38 @@ class OperatorRegistry:
                 prev.get("output_unit"),
                 getattr(_metadata, "output_unit", None),
             ),
+            # round-7: persist the FULL canonical contract on the catalog dict so
+            # the Pandas metadata and the Polars/SQL adapter metadata are driven
+            # by the same contract (audit item 9).  First non-empty wins: the
+            # pandas backend (registered first) carries the annotations; backend
+            # markers must not wipe them.
+            "param_specs": dict(
+                prev.get("param_specs") or getattr(_metadata, "param_specs", None) or {}
+            ),
+            "compatible_units": dict(
+                prev.get("compatible_units")
+                or getattr(_metadata, "compatible_units", None)
+                or {}
+            ),
+            "param_aliases": dict(
+                prev.get("param_aliases") or getattr(_metadata, "param_aliases", None) or {}
+            ),
+            "input_grain": _first_non_null(
+                prev.get("input_grain"),
+                getattr(_metadata, "input_grain", None),
+            ),
+            "output_grain": _first_non_null(
+                prev.get("output_grain"),
+                getattr(_metadata, "output_grain", None),
+            ),
+            "input_fields": _first_non_null(
+                prev.get("input_fields"),
+                list(getattr(_metadata, "input_fields", None) or ()),
+            ),
+            "panel_params": _first_non_null(
+                prev.get("panel_params"),
+                tuple(getattr(_metadata, "panel_params", None) or ()),
+            ),
         })
         # Keep legacy catalog readers from seeing a registration-order-dependent
         # source.  New consumers must use backend_meta[backend].source.

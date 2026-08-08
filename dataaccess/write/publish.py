@@ -156,7 +156,11 @@ def publish_from_staging(
                 # 原子切换之前**生成并写进 candidate——切换失败/写失败都 abort，
                 # 绝不允许「新 target 已上线但写 manifest 失败 → caller 抛异常、
                 # 却留下已发布版本」的不一致状态。
-                if target_dir.exists():
+                # #P0-C13 只有「真有上一代发布内容」才算旧版本要归档。``_dataset_mutation``
+                # 的事务锁（mutation_lock）会 ``mkdir`` 出空 target 目录，旧代码
+                # ``if target_dir.exists()`` 把这种空目录也当旧版本归档——首次发布
+                # 也会生成 archive_path，产生垃圾归档目录。
+                if _target_has_published_content(target_dir):
                     archive_path = _archive_path(target_parent, target_dir.name)
                     archive_path.parent.mkdir(parents=True, exist_ok=True)
                 manifest_path = write_publish_manifest(
@@ -171,8 +175,13 @@ def publish_from_staging(
 
                 # 第 4 步：同 FS 原子 rename —— old_published → archive，candidate → final
                 # （manifest 已随 candidate 一起原子切换上线）
-                if target_dir.exists():
+                if _target_has_published_content(target_dir):
                     os.rename(str(target_dir), str(archive_path))
+                elif target_dir.exists():
+                    # #P0-C13 mutation 事务锁 mkdir 出的空 target（仅含锁文件，无
+                    # 发布内容）：先清掉，否则 candidate rename 会撞「目录非空」。
+                    # mutation_lock 的 finally 对缺失锁文件容错（FileNotFoundError）。
+                    shutil.rmtree(str(target_dir), ignore_errors=True)
 
                 try:
                     os.rename(str(candidate_dir), str(target_dir))
@@ -601,6 +610,22 @@ def _archive_path(parent: Path, target_name: str) -> Path:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     short = uuid.uuid4().hex[:8]
     return parent / _ARCHIVE_SUBDIR / f"{target_name}_{ts}_{short}"
+
+
+def _target_has_published_content(target_dir: Path) -> bool:
+    """target 是否真有上一代发布内容（#P0-C13）。
+
+    ``_dataset_mutation`` 事务锁（mutation_lock）会 ``mkdir`` 出空 target，锁文件
+    ``.data-access.mutation.lock`` 也落在这里——所以「目录存在」不等于「有旧版本」。
+    只认实际数据 parquet（含 hive 分区 year=*/*.parquet 与 manifest parquet）：
+    空目录 / 只有锁文件 → 不是旧版本（首次发布不归档）。
+    """
+    if not target_dir.exists():
+        return False
+    try:
+        return any(target_dir.rglob("*.parquet"))
+    except OSError:
+        return False
 
 
 # ---- 拷贝 / 回滚 ------------------------------------------------------------

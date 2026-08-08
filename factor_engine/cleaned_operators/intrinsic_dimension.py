@@ -58,15 +58,32 @@ def _delay_points(chunk: np.ndarray, dim: int, delay: int) -> np.ndarray | None:
     return pts
 
 
-def _delay_intrinsic_dim(chunk: np.ndarray, dim: int, k: int, delay: int) -> float:
+def _delay_intrinsic_dim(chunk: np.ndarray, dim: int, k: int, delay: int, theiler_window: int) -> float:
     pts = _delay_points(chunk, dim, delay)
     if pts is None:
         return np.nan
     n_pts = int(pts.shape[0])
+    # Round-7 P0 (review §30): require *genuinely distinct* embedding points.
+    # Duplicate vectors (identical values at different times) share a zero
+    # nearest-neighbour distance; demanding ``n_unique >= k+1`` before the KNN
+    # prevents a near-empty point cloud from manufacturing a dimension.
+    if np.unique(pts.round(10), axis=0).shape[0] < k + 1:
+        return np.nan
     if n_pts < k + 1:
         return np.nan
     d = np.sqrt(np.maximum(((pts[:, None, :] - pts[None, :, :]) ** 2).sum(-1), 0.0))
     np.fill_diagonal(d, np.inf)
+    # Round-7 P0 (review §29): Theiler window.  Takens-embedded points that are
+    # close in *time* share most coordinates and are artificially-near nearest
+    # neighbours; they must not count as state-space neighbours or the local
+    # dimension is biased downward.  Exclude ``|i - j| <= theiler_window`` from
+    # each point's neighbour set.  Default (``embedding_dim * delay``) is the
+    # embedding span recommended by the review.
+    if theiler_window > 0:
+        idx = np.arange(n_pts)
+        temporal = np.abs(idx[:, None] - idx[None, :]) <= theiler_window
+        np.fill_diagonal(temporal, False)
+        d[temporal] = np.inf
     d_sorted = np.sort(d, axis=1)[:, :k]          # T_1..T_k per point, ascending
     t_k = d_sorted[:, -1]                          # T_k
     t_j = d_sorted[:, :-1]                         # T_1..T_{k-1}
@@ -88,7 +105,7 @@ def _delay_intrinsic_dim(chunk: np.ndarray, dim: int, k: int, delay: int) -> flo
     return float(np.median(dims))
 
 
-def _intrinsic_dim_series(x2d: np.ndarray, window: int, dim: int, k: int, delay: int) -> np.ndarray:
+def _intrinsic_dim_series(x2d: np.ndarray, window: int, dim: int, k: int, delay: int, theiler_window: int) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
@@ -96,7 +113,7 @@ def _intrinsic_dim_series(x2d: np.ndarray, window: int, dim: int, k: int, delay:
         col = x2d[:, c]
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            out[r, c] = _delay_intrinsic_dim(col[i0 : r + 1], dim, k, delay)
+            out[r, c] = _delay_intrinsic_dim(col[i0 : r + 1], dim, k, delay, theiler_window)
     return out
 
 
@@ -117,13 +134,13 @@ class TsDelayIntrinsicDimension(SeriesOperator):
     metadata = _metadata(
         "ts_delay_intrinsic_dimension",
         "Takens 延迟嵌入的 Levina-Bickel 局部维度中位数。",
-        ["x", "window", "embedding_dim", "k", "delay"],
+        ["x", "window", "embedding_dim", "k", "delay", "theiler_window"],
         unit="dim",
         cost=8,
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 120, embedding_dim: int = 3, k: int = 5, delay: int = 1, **_: Any
+        self, x: pd.DataFrame, window: int = 120, embedding_dim: int = 3, k: int = 5, delay: int = 1, theiler_window: Any = None, **_: Any
     ) -> pd.DataFrame:
         w = int(window)
         if w < 2:
@@ -137,7 +154,13 @@ class TsDelayIntrinsicDimension(SeriesOperator):
         dl = int(delay)
         if dl < 1:
             raise ValueError("delay must be >= 1")
-        return frame_like(x, _intrinsic_dim_series(x.to_numpy(dtype=float), w, dim, kk, dl))
+        # Theiler window (round-7 P0): default = embedding span ``dim * delay``;
+        # a point's temporal neighbours within that span are excluded from its
+        # state-space neighbour set so time-adjacency is not read as proximity.
+        tw = int(theiler_window) if theiler_window is not None else dim * dl
+        if tw < 0:
+            raise ValueError("theiler_window must be >= 0")
+        return frame_like(x, _intrinsic_dim_series(x.to_numpy(dtype=float), w, dim, kk, dl, tw))
 
 
 _NEW_CANONICALS = (

@@ -44,7 +44,15 @@ def _meta(name: str, description: str, params: list[str]) -> OperatorMetadata:
 
 
 def _mk(name: str, description: str, params: list[str], fn: Callable[..., Any]):
-    metadata = _meta(name, description, params)
+    # R6 P0-03: these financial kernels accept ``period_id`` (signature
+    # compatibility / quarter-alignment) even when it does not enter the math;
+    # declare it so the R5-06 extra-positional gate does not reject a valid
+    # ``(a, b, period_id)`` call on a wrapper that only listed the financial
+    # columns.
+    declared = list(params)
+    if "period_id" not in declared:
+        declared = declared + ["period_id"]
+    metadata = _meta(name, description, declared)
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)

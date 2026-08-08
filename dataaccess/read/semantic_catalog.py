@@ -70,6 +70,9 @@ class SemanticField:
     required_filters: tuple[str, ...] = ()   # 读取时必须附带的条件（如行业过滤）
     revision_order: tuple[str, ...] = ()     # join 前按 (instrument, knowledge_time) 去重的版本排序列
     availability: str = "same_day"           # same_day / next_trading_day（PIT 可见性）
+    # #P1-final closure 5 availability_latency：额外可见性延迟（bar 数）。事件
+    # helper（read_cos_events_asof）在编译出的 available_from 上叠加它。
+    availability_latency: int | None = None
     primary_key: tuple[str, ...] = ()        # exact join 唯一性契约（如 (TradeDate, Symbol)）
     duplicate_policy: str = "latest_revision"  # keep_first / keep_last / latest_revision / error
     aliases: tuple[str, ...] = ()            # 其它叫法（含 FactorEngine 里的别名）
@@ -119,14 +122,39 @@ class SemanticField:
         }
 
 
-def _tuple_of(value: Any) -> tuple[str, ...]:
+def _tuple_of(
+    value: Any,
+    *,
+    name: str = "字段配置",
+    element_type: type = str,
+) -> tuple:
+    """#P0-C12 严格序列解析（与 DataRequest 共用同一套规则）。
+
+    旧实现 fail-open：错误 mapping 类型静默返回空 tuple、list 里的非法对象还会
+    str() 化——``required_filters / revision_order / primary_key / derived_from``
+    配置写错会静默丢语义。现在：裸 str/bytes 拒绝；元素类型不对立即
+    ValidationError；非法容器类型立即 ValidationError。
+    """
     if value is None:
         return ()
-    if isinstance(value, str):
-        return (value,)
-    if isinstance(value, (list, tuple)):
-        return tuple(str(v) for v in value if v is not None)
-    return ()
+    if isinstance(value, (str, bytes)):
+        raise ValidationError(
+            f"{name} 必须是序列（list/tuple），收到裸 {type(value).__name__} "
+            f"{value!r}；请写成 [项1, 项2]"
+        )
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        raise ValidationError(
+            f"{name} 必须是序列，收到 {type(value).__name__} {value!r}"
+        )
+    out: list[Any] = []
+    for v in value:
+        if not isinstance(v, element_type):
+            raise ValidationError(
+                f"{name} 的元素必须是 {element_type.__name__}，"
+                f"收到 {type(v).__name__} {v!r}"
+            )
+        out.append(v)
+    return tuple(out)
 
 
 def _str_or_none(value: Any) -> str | None:
@@ -220,6 +248,17 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
     # #P0-24 derived 字段不落在单一物理表：允许无 dataset，但必须有 derived_expression。
     if not dataset and not derived_expr:
         raise ValidationError(f"{context}: 缺少 dataset（逻辑字段必须落到某个数据集）")
+    # #P1-final closure 7：DerivedFieldCompiler 尚未实现执行链。derived 字段
+    # **绝不能**宣称 mining_allowed=true——catalog 不能宣称可用而执行链没实现。
+    # 显式 mining_allowed: true 的 derived 字段在 load 时直接拒绝（fail-closed）。
+    if derived_expr:
+        mining_raw = raw.get("mining_allowed")
+        if mining_raw is None or _strict_bool(mining_raw, context=context, default=False):
+            raise ValidationError(
+                f"{context}: derived 字段（derived_expression）暂未实现执行链"
+                "（DerivedFieldCompiler 未落地），不允许 mining_allowed=true。"
+                "请先把该字段改为物理字段，或等 derived 执行链实现后再开放。"
+            )
     temporal_model = _str_or_none(raw.get("temporal_model"))
     # #9：财务事件字段默认 latest_period——「最新可见会计期 + 该期内最新修订」。
     # 未显式写 period_selection 时，financial_event/event 字段默认 latest_period，
@@ -253,6 +292,7 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         "required_filters",
         "revision_order",
         "availability",
+        "availability_latency",
         "primary_key",
         "duplicate_policy",
         "aliases",
@@ -267,6 +307,17 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         raise ValidationError(
             f"{context}: 未知配置 key {unknown}（应为 {sorted(_KNOWN_KEYS)} 之一）"
         )
+    latency_raw = raw.get("availability_latency")
+    if latency_raw is not None:
+        if isinstance(latency_raw, bool) or not isinstance(latency_raw, int):
+            raise ValidationError(
+                f"{context}: availability_latency 必须是非负整数（bar 数），"
+                f"收到 {latency_raw!r}"
+            )
+        if latency_raw < 0:
+            raise ValidationError(
+                f"{context}: availability_latency 必须是非负整数（bar 数）"
+            )
     market = _str_or_none(raw.get("market")) or "any"
     if market not in _VALID_MARKETS:
         raise ValidationError(f"{context}: market={market!r} 非法（应为 any/ashare/us）")
@@ -305,19 +356,36 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         effective_time=_str_or_none(raw.get("effective_time")),
         period_time=_str_or_none(raw.get("period_time")),
         join_policy=_str_or_none(raw.get("join_policy")),
-        required_filters=_tuple_of(raw.get("required_filters")),
-        revision_order=_tuple_of(raw.get("revision_order")),
+        required_filters=_tuple_of(
+            raw.get("required_filters"), name=f"{logical}.required_filters"
+        ),
+        revision_order=_tuple_of(
+            raw.get("revision_order"), name=f"{logical}.revision_order"
+        ),
         availability=availability,
-        primary_key=_tuple_of(raw.get("primary_key")),
+        availability_latency=latency_raw if latency_raw is not None else None,
+        primary_key=_tuple_of(
+            raw.get("primary_key"), name=f"{logical}.primary_key"
+        ),
         duplicate_policy=duplicate_policy,
-        aliases=_tuple_of(raw.get("aliases")),
+        aliases=_tuple_of(raw.get("aliases"), name=f"{logical}.aliases"),
         mining_allowed=_strict_bool(
             raw.get("mining_allowed"), context=context, default=True
         ),
         period_selection=period_selection,
-        period_values=_tuple_of(raw.get("period_values")) if raw.get("period_values") else (),
+        period_values=(
+            _tuple_of(
+                raw.get("period_values"),
+                name=f"{logical}.period_values",
+                element_type=object,
+            )
+            if raw.get("period_values")
+            else ()
+        ),
         derived_expression=_str_or_none(raw.get("derived_expression")),
-        derived_from=_tuple_of(raw.get("derived_from")),
+        derived_from=_tuple_of(
+            raw.get("derived_from"), name=f"{logical}.derived_from"
+        ),
     )
 
 
@@ -405,8 +473,14 @@ class SemanticFieldCatalog:
     def resolve_by_physical(self, dataset: str, physical_name: str) -> SemanticField | None:
         """按 (dataset, 物理列名) 反查逻辑字段（调用方传物理列时的单位归一化用）。
 
-        同一物理列可能被多个逻辑字段引用，返回第一个；优先返回与该数据集同市场
-        的字段（防止 A股/美股同名物理列串味）。
+        同一物理列可能被多个逻辑字段引用；优先返回与该数据集同市场的字段
+        （防止 A股/美股同名物理列串味）。
+
+        #P1-final closure 8 fail-closed：市场过滤后仍是**多个不同语义身份**
+        （不同 logical_name 或不同单位语义）时，production/strict 抛
+        ``AmbiguousSemanticFieldError``——单位归一化（``normalize_table_units``）
+        必须知道这列到底是哪个字段，YAML 顺序不能当决定因素；research 告警后
+        取第一个（确定性）。
         """
         candidates = [
             f
@@ -416,14 +490,40 @@ class SemanticFieldCatalog:
         if not candidates:
             return None
         effective = self._market_of(dataset)
+        pool = list(candidates)
         if effective and effective != "any":
-            for f in candidates:
-                if f.market == effective:
-                    return f
-        for f in candidates:
-            if f.market == "any":
-                return f
-        return candidates[0]
+            m = [f for f in candidates if f.market == effective]
+            if m:
+                pool = m
+        else:
+            a = [f for f in candidates if f.market == "any"]
+            if a:
+                pool = a
+        # 同一物理列多个不同语义身份（不同 logical_name / 不同单位）→ fail-closed
+        distinct: dict[tuple, SemanticField] = {}
+        for f in pool:
+            key = (
+                f.logical_name,
+                f.market,
+                f.scale,
+                f.source_unit,
+                f.canonical_unit,
+            )
+            distinct.setdefault(key, f)
+        if len(distinct) > 1:
+            identities = sorted({k[0] for k in distinct})
+            from data_access.core.exceptions import AmbiguousSemanticFieldError
+            from data_access.read.query_budget import is_strict_semantics
+
+            msg = (
+                f"(dataset={dataset}, physical={physical_name}) 对应多个语义身份"
+                f"（{identities}），无法确定该列属于哪个逻辑字段/单位。"
+                "请改用逻辑字段名解析，或消除 catalog 里的同名物理列歧义。"
+            )
+            if is_strict_semantics():
+                raise AmbiguousSemanticFieldError(msg)
+            logger.warning("%s（research 取第一个）", msg)
+        return pool[0]
 
     def get(self, name: str, market: str | None = None, *, dataset: str | None = None) -> SemanticField:
         """严格解析；找不到抛 ValidationError。"""
@@ -627,6 +727,10 @@ def normalize_table_units(
     只对浮点（含整型）数值列生效；找不到列的字段静默跳过。``column_of``
     预留：当输出列名与 physical_name 不同时，可传「该列对应哪个 SemanticField」，
     按 logical_name 匹配列名（read_joined 的多表输出就是 physical_name）。
+
+    #P1-final closure 8：按**列位置**重建输出（``Table.from_arrays`` + 名字列表），
+    不再用 ``dict[column_name] = arr``——合法重复列名（组合读里同名物理列）会被
+    dict 覆盖丢列。重复名 + 重复列都保留。
     """
     import pyarrow as pa
     import pyarrow.compute as pc
@@ -637,19 +741,26 @@ def normalize_table_units(
     if not needs:
         return table
     target_names = {f.physical_name for f in needs}
-    out_arrays: dict[str, Any] = {}
+    # ``column_of``（按列位置给字段身份）优先；否则按列名匹配。重复列名时
+    # column_of 才能区分哪一列对应哪个字段。
+    column_of_list = list(column_of or ())
+    out_names: list[str] = []
+    out_arrays: list[Any] = []
     for i, col in enumerate(table.column_names):
         arr = table.column(i)
-        applied = False
-        if col in target_names:
-            for f in needs:
-                if f.physical_name != col:
-                    continue
-                if pa.types.is_floating(arr.type):
-                    arr = pc.multiply(arr, pa.scalar(float(f.scale)))
-                elif pa.types.is_integer(arr.type):
-                    arr = pc.multiply(arr.cast(pa.float64()), pa.scalar(float(f.scale)))
-                applied = True
-                break
-        out_arrays[col] = arr
-    return pa.table(out_arrays)
+        col_field = column_of_list[i] if i < len(column_of_list) else None
+        matches: list[SemanticField] = []
+        if col_field is not None:
+            if col_field.is_scale_applicable:
+                matches = [col_field]
+        elif col in target_names:
+            matches = [f for f in needs if f.physical_name == col]
+        for f in matches:
+            if pa.types.is_floating(arr.type):
+                arr = pc.multiply(arr, pa.scalar(float(f.scale)))
+            elif pa.types.is_integer(arr.type):
+                arr = pc.multiply(arr.cast(pa.float64()), pa.scalar(float(f.scale)))
+            break
+        out_names.append(col)
+        out_arrays.append(arr)
+    return pa.Table.from_arrays(out_arrays, names=out_names)

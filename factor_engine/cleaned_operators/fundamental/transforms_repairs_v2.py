@@ -91,20 +91,73 @@ def fin_revision_direction(x, period_id):
     return np.sign(fin_revision_delta(x, period_id))
 
 
-def fin_revision_count(x, period_id, window_days=252):
+_REVISION_COVERAGE_THRESHOLD = 0.8
+
+
+def _revision_coverage_gate(x, period_id, window_days: int, coverage_threshold: float):
+    """Three-state revision observation plus a known-coverage gate.
+
+    Three-state (round-7 P0): a daily row is a revision (1), a confirmed
+    no-revision (0), or undetermined (NaN) when any input needed to assert a
+    revision is missing (a gap in the value or period-id panel).  The rolling
+    window statistic is only emitted when the fraction of *known* rows in the
+    window is at least ``coverage_threshold`` — otherwise the running sum would
+    silently treat missing history as "no revision" (rolling ``sum`` skips NaN).
+    """
+    complete = _revision_complete(x, period_id)
+    known = complete.astype(float)  # 1.0 known, 0.0 undetermined
+    known_sum = known.rolling(window_days, min_periods=1).sum()
+    coverage = known_sum / float(window_days)
+    return complete, coverage
+
+
+def fin_revision_count(x, period_id, window_days=252, coverage_threshold=0.8):
+    """Count of visible revisions in a bounded trading-day window.
+
+    Three-state observation (round-7 P0): missing historical input is NOT "no
+    revision" — the count is emitted only when ``known_coverage`` (fraction of
+    window rows with complete revision data) reaches ``coverage_threshold``,
+    else NaN.
+    """
     w = _pos_int(window_days, "window_days")
-    count = _revision_event(x, period_id).astype(float).rolling(w, min_periods=1).sum()
-    return count.where(_revision_complete(x, period_id), np.nan)
+    threshold = float(coverage_threshold)
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("coverage_threshold must be in [0, 1]")
+    complete, coverage = _revision_coverage_gate(x, period_id, w, threshold)
+    # Three-state revision series: 1.0 where a revision is observed, 0.0 where a
+    # no-revision is confirmed, NaN where the row is undetermined.
+    revision = _revision_event(x, period_id).astype(float).where(complete, np.nan)
+    count = revision.rolling(w, min_periods=1).sum()
+    return count.where(coverage >= threshold, np.nan).where(complete, np.nan)
 
 
-def fin_revision_magnitude(x, period_id, window_days=252):
+def fin_revision_magnitude(x, period_id, window_days=252, coverage_threshold=0.8):
+    """Absolute revision magnitude accumulated over a bounded window.
+
+    The magnitude of a same-period revision is accumulated only over rows with
+    complete revision data; a window whose known coverage is below
+    ``coverage_threshold`` emits NaN rather than treating missing history as a
+    zero-magnitude "no revision" (round-7 P0).
+    """
     w = _pos_int(window_days, "window_days")
-    magnitude = fin_revision_pct(x, period_id).abs().rolling(w, min_periods=1).sum()
-    return magnitude.where(_revision_complete(x, period_id), np.nan)
+    threshold = float(coverage_threshold)
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("coverage_threshold must be in [0, 1]")
+    complete, coverage = _revision_coverage_gate(x, period_id, w, threshold)
+    # fin_revision_pct already emits NaN for undetermined rows, 0 for confirmed
+    # no-revision, and the signed revision magnitude for a revision.
+    magnitude = fin_revision_pct(x, period_id).abs()
+    mag_sum = magnitude.rolling(w, min_periods=1).sum()
+    return mag_sum.where(coverage >= threshold, np.nan).where(complete, np.nan)
 
 
-def fin_restated_flag(x, period_id, window_days=252):
-    count = fin_revision_count(x, period_id, window_days)
+def fin_restated_flag(x, period_id, window_days=252, coverage_threshold=0.8):
+    """Whether a same-period revision occurred in the bounded window.
+
+    Inherits the three-state / known-coverage gate of ``fin_revision_count``:
+    NaN where the count is undetermined (round-7 P0).
+    """
+    count = fin_revision_count(x, period_id, window_days, coverage_threshold)
     flag = count.gt(0).astype(float)
     return flag.where(count.notna(), np.nan)
 
@@ -114,9 +167,15 @@ def fin_days_since_update(x, period_id, max_days=504):
 
     Observed-clock semantics (review R4-27): the age advances only across
     *complete*, confirmed no-update observations.  A missing current row (value
-    or period id unavailable) emits NaN instead of blindly ageing, and a
-    resumed observation after an unobservable gap is treated as a fresh update
-    boundary (age 0) — we cannot confirm the age across the gap.
+    or period id unavailable) emits NaN instead of blindly ageing.
+
+    Round-7 P1 gap recovery: ``last_confirmed_economic_update_time`` is tracked
+    separately from ``last_observed_time``.  A value that resumes after a
+    provider gap and is IDENTICAL to the last confirmed state is a provider-
+    outage recovery, NOT an economic disclosure update — the age is NOT reset to
+    0; the elapsed unobservable days are added to the confirmed age.  Only an
+    observed change in value or report period is an economic update and resets
+    the age.
     """
     cap = _pos_int(max_days, "max_days")
     pid = period_id.reindex(index=x.index, columns=x.columns)
@@ -124,36 +183,40 @@ def fin_days_since_update(x, period_id, max_days=504):
     for col in x.columns:
         xv = x[col].to_numpy(dtype=float)
         pv = pid[col].to_numpy()
-        age = None
-        last_x = None
-        last_pid = None
+        age = 0          # trading days since the last CONFIRMED economic update
+        last_x = None    # last confirmed value (retained across gaps)
+        last_pid = None  # last confirmed period id (retained across gaps)
+        gap_days = 0     # unobservable trading days currently in a provider gap
         arr = []
         for i in range(len(x)):
             complete = bool(np.isfinite(xv[i]) and not pd.isna(pv[i]))
             if not complete:
-                # Cannot observe an update event today -> age is unknown.
+                # Cannot observe an update event today -> age is unknown.  The
+                # confirmed state is retained across the gap so a resumed value
+                # identical to the pre-gap value is not mistaken for an update.
                 arr.append(np.nan)
-                age = None
+                gap_days += 1
                 continue
             if last_x is None:
                 # First complete observation: the value just became visible.
                 arr.append(0.0)
                 age = 0
+                gap_days = 0
                 last_x, last_pid = xv[i], pv[i]
                 continue
             update_event = bool(last_pid != pv[i] or last_x != xv[i])
             if update_event:
+                # A real economic disclosure update: reset the confirmed age.
                 arr.append(0.0)
                 age = 0
-            elif age is not None:
-                # Only advance across complete, confirmed no-update observations
-                # (observed clock).
-                age = min(cap, age + 1)
-                arr.append(float(age))
+                gap_days = 0
             else:
-                # Observed-clock resume after a gap: treat as a fresh update.
-                arr.append(0.0)
-                age = 0
+                # Confirmed no economic update.  A value identical to the last
+                # confirmed state after a provider gap is NOT an update — the age
+                # continues (confirmed age + elapsed unobservable days + today).
+                age = min(cap, age + gap_days + 1)
+                arr.append(float(age))
+                gap_days = 0
             last_x, last_pid = xv[i], pv[i]
         out[col] = arr
     return out
@@ -170,10 +233,10 @@ for _name,_params,_fn,_desc in [
 ("fin_revision_delta",["x","period_id"],fin_revision_delta,"Value change while the visible report period is unchanged; NaN when any required input is missing, 0 only on confirmed no-revision (review R4-26)."),
 ("fin_revision_pct",["x","period_id"],fin_revision_pct,"Percent revision while the visible report period is unchanged; NaN on missing inputs, 0 only on confirmed no-revision (review R4-26)."),
 ("fin_revision_direction",["x","period_id"],fin_revision_direction,"Sign of the latest same-period revision; NaN on missing inputs (review R4-26)."),
-("fin_revision_count",["x","period_id","window_days"],fin_revision_count,"Count of visible revisions in a bounded trading-day window; NaN where the current row is incomplete (review R4-26)."),
-("fin_revision_magnitude",["x","period_id","window_days"],fin_revision_magnitude,"Absolute revision magnitude accumulated over a bounded window; NaN where the current row is incomplete (review R4-26)."),
-("fin_restated_flag",["x","period_id","window_days"],fin_restated_flag,"Whether a same-period revision occurred in the bounded window; NaN where the count is undetermined (review R4-26)."),
-("fin_days_since_update",["x","period_id","max_days"],fin_days_since_update,"Observed-clock trading days since report-period or value update; missing rows emit NaN instead of blindly ageing (review R4-27)."),
+("fin_revision_count",["x","period_id","window_days","coverage_threshold"],fin_revision_count,"Count of visible revisions in a bounded trading-day window; three-state observation with a known-coverage gate — a window below coverage_threshold emits NaN instead of treating missing history as no-revision (round-7 P0)."),
+("fin_revision_magnitude",["x","period_id","window_days","coverage_threshold"],fin_revision_magnitude,"Absolute revision magnitude accumulated over a bounded window; three-state observation with a known-coverage gate (round-7 P0)."),
+("fin_restated_flag",["x","period_id","window_days","coverage_threshold"],fin_restated_flag,"Whether a same-period revision occurred in the bounded window; NaN where the count is undetermined by the known-coverage gate (round-7 P0)."),
+("fin_days_since_update",["x","period_id","max_days"],fin_days_since_update,"Observed-clock trading days since report-period or value update; missing rows emit NaN instead of blindly ageing, and a provider-gap recovery identical to the pre-gap value does NOT reset the confirmed-update age (round-7 P1)."),
 ("fin_staleness",["x","period_id","max_days"],fin_staleness,"Observed-clock accounting-data staleness in trading days; missing rows emit NaN (review R4-27)."),
 ]:
     _register(_name,_params,_fn,_desc);_EXTRA.add(_name)

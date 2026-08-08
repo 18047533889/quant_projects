@@ -302,7 +302,15 @@ def _hit_spectral_concentration_chunk(
     # sample), and mostly-missing windows fail closed via the coverage gate.
     if int(fin.sum()) < max(8, int(np.ceil(0.5 * n))):
         return np.nan
-    h = H[fin]  # observed hit process only (missing gaps compressed)
+    # Round-7 P0 (review §32): a spectral estimate requires a *contiguous* time
+    # axis.  Compressing the observed hits across gaps ("event, gap, no-event"
+    # -> "event, no-event") makes the FFT treat separated rows as adjacent
+    # equally-spaced observations, corrupting the frequency axis.  Use only the
+    # trailing contiguous run of finite hits so a gap breaks the segment.
+    i = n - 1
+    while i >= 0 and np.isfinite(H[i]):
+        i -= 1
+    h = H[i + 1 :]
     mu = float(h.mean())
     h = h - mu
     powers = np.abs(np.fft.rfft(h)) ** 2.0

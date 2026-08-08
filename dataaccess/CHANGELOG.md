@@ -1,5 +1,72 @@
 # Changelog
 
+## 0.9.3 — 第五轮二阶边界收口（Core Freeze blockers 1-7 + P1 收尾 8-12）
+
+按第二轮深扫发现的 12 个「二阶边界 bug」收口。这轮没有新增架构/subsystem——全部
+是已有架构没有完全贯穿到边界分支的问题。12 项全部落地：
+
+**P0 blockers**
+- **P0-C1 cache key 空池 vs 全市场**：`query_cache_key` 的 `instruments` 不再
+  `sorted(...) if instruments else None`（`[]` 被折叠成 `None`，全市场结果与空池
+  结果串 cache）；`None → null`、`[] → 空数组`、有值 → 排序数组。
+- **P0-C2 read_cached gates 前置**：缓存命中也必须经过与真实 read 相同的
+  semantic/budget gate（`_prepare_read_request` / `_assert_instrument_filter_supported`
+  / `validate_query_request`）。最终是 `gates → cache key → hit/miss`，不再是
+  `cache → gates`——同一进程先 research 缓存宽查询、后切 strict/production 时，
+  旧 cache 不能绕过 require_columns / query budget / semantic gate。
+- **P0-C3 COS helper `[] = empty`**：`read_cos_panel` / `read_cos_events` 的
+  `instrument_filter` 从 truthiness 改为 `is not None`；`[]` 生成 `1 = 0`
+  （WHERE FALSE），不再静默读出全市场。
+- **P0-C4 ReadHandle one-shot stream fail-closed**：流一旦开始消费，任何第二终点
+  （to_arrow / to_polars / to_lazy / 再次 stream）都 fail-closed——覆盖部分消费
+  （break 后物化截断 batch）**和**完整消费（迭代器耗尽后 list() 静默变空表）。
+  唯一例外：首次 `stream(buffer=True)` 显式固化。
+- **P0-C5 canonical materialization**：lazy 句柄第一次 terminal collect 后缓存
+  Arrow Table 作为 `_source`，后续 pandas/polars/stream 全部从这一份派生——
+  同一 ReadHandle 绝不重复执行底层 LazyFrame（to_polars 后 to_arrow 不再二次
+  扫描；中间数据变化时两个终点也不一致）。
+- **P0-C6 remote meta 缓存 TTL**：`_remote_meta_cache` 从永久 memo 改为 30s TTL；
+  失败的 `None`（无凭证/网络）不再永久缓存——首次无凭证、之后补凭证必须能重试。
+- **P0-C7 cos:// HEAD 解析**：`_remote_object_meta` 先 `cos_uri_to_s3_uri` 再切
+  bucket/key（旧代码对所有 scheme 用 `key[len("s3://"):]`，cos:// 长度不同导致
+  bucket/key 错位）。
+
+**P1 收尾**
+- **P1-C8 MetadataPlane 复用统一 validator**：`pit_event_index.py` 新增
+  `validate_current_source`（authoritative + manifest_epoch + source_snapshot +
+  schema_hash），MetadataPlane / prune / 构建复用三处共用——不再写第二套近似
+  （只比 epoch 会在「外部文件绕过 DataAccess 写入、schema 变化但 epoch 不变」
+  时返回 stale index）。
+- **P1-C9 sql() 参数计数 lexical-safe**：`RelationHandle.sql/sql_fragment` 的
+  `?` 计数改用 quote/comment-aware 扫描器（跳过字符串字面量 / 双引号/反引号
+  标识符 / `--` 行注释 / `/* */` 块注释），不再 `text[:pos].count("?")` 把
+  `SELECT '?' AS x, ? FROM _sub` 里字面量的 `?` 计入。
+- **P1-C10 stats sidecar fail-open**：`_stats_sidecar_fresh` 无 source_epoch 的
+  legacy sidecar 在 production/strict 视为 **stale**（重新统计，旧统计可能把很大
+  的表错误路由到 Arrow materialization）；`manifest_version()` 检查失败也 fail-closed。
+- **P1-C11 asof 输出列冲突统一**：`read_cos_events_asof` 用
+  `allocate_unique_column_name` 逐层分配（decisions 已有 `x` 且已有 `x_event` →
+  `x_event_2`，不再静默覆盖）；空 decisions 分支的
+  `fundamental_staleness_days` 同样走统一冲突策略。
+- **P1-C12 严格 sequence parser**：`predicate.strict_sequence`（DataRequest /
+  SemanticField 共用）拒绝裸 str/bytes（会被逐字符拆开）、元素类型不对立即
+  ValidationError；`SemanticField._tuple_of` 不再对错误 mapping 静默返回空 tuple
+  / `str()` 化非法对象。
+
+**顺带修复（非本批清单，但 suite 红）**
+- **publish 首次发布误归档（#P0-C13）**：`_dataset_mutation` 的事务锁
+  （mutation_lock）会 `mkdir` 出空 target 目录，旧 `if target_dir.exists()` 把它
+  当旧版本归档——首次发布也生成 archive_path + 垃圾归档目录。改
+  `_target_has_published_content`（认实际 `*.parquet` 内容），首次发布 `archive_path`
+  保持 None；二次发布正常归档。
+- **test_phase6_hardening 泄漏恢复**：`test_read_cos_events_asof_rejects_raw_event`
+  只恢复了 `resolve_event_clock`、漏掉 `validate_event_filters`（整个 pytest 进程
+  `filters=None`，后续 read_cos_events 在 `filters.keys()` 崩）——补齐 finally。
+
+**回归**：`tests/unit/test_final_closure_round5.py` 21 条 + 全量 `tests/` 通过
+（除并发会话 WIP 导致的 3 个失败：schema_validation naive/aware 语义变更 +
+dod2 未跟踪测试，非本批）。
+
 ## 0.9.2 — 第四轮最终 P0 收口（publish 契约门 / asof 统一 availability / 时间轴硬化）
 
 按最终 audit 的 14 个 P0 correctness 尾巴收口。其中 10 项（P0-1/2/5/6/7/8/9/10/11/14）

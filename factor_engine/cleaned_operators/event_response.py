@@ -30,7 +30,7 @@ from cleaned_operators.rolling_pack import frame_like
 _EPS = 1e-12
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int, output_unit: str | None = None) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="event_response",
@@ -43,12 +43,63 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        output_unit=output_unit,
     )
 
 
 def _aligned(rv: np.ndarray, ev: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     ok = np.isfinite(rv) & np.isfinite(ev)
     return rv[ok], ev[ok]
+
+
+def _collapse_events(event_times: np.ndarray, refractory: int) -> np.ndarray:
+    """First-event-of-episode collapse (P1, round 7).
+
+    Consecutive events separated by fewer than ``refractory`` bars belong to one
+    episode — 5 consecutive limit-ups must not count as 5 independent overlapping
+    response paths.  Returns only the FIRST event of each episode.
+    """
+    if refractory < 1 or event_times.size == 0:
+        return event_times
+    firsts: list[int] = []
+    prev = -10**9
+    for s in event_times:
+        if s - prev >= refractory:
+            firsts.append(int(s))
+        prev = int(s)
+    return np.asarray(firsts, dtype=int)
+
+
+def _event_episode_metrics_series(
+    event: np.ndarray, history_window: int, horizon: int, refractory: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-row episode quality metrics ``(effective_events, overlap_ratio)``.
+
+    ``effective_events`` is the number of *first events of episodes* in the
+    cohort ``[t-W, t-H]`` (same cohort the mean/dispersion kernels use);
+    ``overlap_ratio`` is ``1 - effective/raw`` — how much of the raw event count
+    is absorbed by episode collapse.  Both are 0/NaN when there are no events.
+    """
+    n = event.shape[0]
+    hw = max(2, int(history_window))
+    H = max(1, int(horizon))
+    refr = max(0, int(refractory))
+    eff = np.full(n, np.nan)
+    ovr = np.full(n, np.nan)
+    times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
+    for t in range(n):
+        lo = max(0, t - hw)
+        last_event = t - H
+        if last_event < lo:
+            continue
+        ev = times[(times >= lo) & (times <= last_event)]
+        if ev.size < 1:
+            continue
+        raw = int(ev.size)
+        firsts = _collapse_events(ev, refr) if refr > 0 else ev
+        eff[t] = int(firsts.size)
+        ovr[t] = 1.0 - firsts.size / raw
+    return eff, ovr
 
 
 def _horizon_response(
@@ -60,21 +111,28 @@ def _horizon_response(
     min_events: int,
     sign_balance: bool,
     require_full_horizon: bool = True,
+    refractory: int = 0,
 ) -> np.ndarray:
     n = response.shape[0]
     hw = max(2, int(history_window))
     H = max(1, int(horizon))
     me = max(1, int(min_events))
+    refr = max(0, int(refractory))
     out = np.full(n, np.nan)
+    times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
     for t in range(n):
         lo = max(0, t - hw)
         last_event = t - H                 # need s + H <= t
         if last_event < lo:
             continue
+        ev = times[(times >= lo) & (times <= last_event)]
+        # P1 (round 7): episode collapse — consecutive events within
+        # ``refractory`` bars are one episode; only the first event's response
+        # path enters, so 5 consecutive limit-ups do not count 5 times.
+        if refr > 0:
+            ev = _collapse_events(ev, refr)
         rs: list[float] = []
-        for s in range(lo, last_event + 1):
-            if not np.isfinite(event[s]) or event[s] == 0.0:
-                continue
+        for s in ev:
             window_vals = response[s + 1 : s + H + 1]
             # P1-005: unify cohort selection with the shape ops
             # (peak_lag/decay/dispersion/reversal): an event only enters the
@@ -114,16 +172,19 @@ class EventHistoricalResponseMean(SeriesOperator):
     """历史事件的平均 horizon 响应 ``mean_s(R_s)``。
 
     事件 s 满足 ``s+H ≤ t``；``R_s = sum/mean(response[s+1..s+H])``（mode
-    控制），输出这些历史事件的响应均值。事件与响应都由外部输入定义（涨停/
+    控制），输出这些历史事件的响应均值。输出单位继承 ``response``（返回序列的
+    均值仍是返回单位），不是无量纲比值；只有 ``sign_balance`` /
+    ``peak_lag_normalized`` 这类才是 ratio。事件与响应都由外部输入定义（涨停/
     炸板/成交量冲击/财报 surprise 都可），算子本身只学"过去这种事件发生后通常
     发生什么"。PIT 安全、确定性。
     """
 
     metadata = _metadata(
         "event_historical_response_mean",
-        "历史事件后的平均 horizon 响应（sum/mean 模式，full-horizon cohort）。",
-        ["response", "event", "history_window", "horizon", "mode", "min_events", "require_full_horizon"],
-        unit="ratio",
+        "历史事件后的平均 horizon 响应（sum/mean 模式，full-horizon cohort，可按 episode 聚合）。",
+        ["response", "event", "history_window", "horizon", "mode", "min_events", "require_full_horizon", "refractory"],
+        unit="same_as:response",
+        output_unit="same_as:response",
         cost=4,
     )
 
@@ -136,6 +197,7 @@ class EventHistoricalResponseMean(SeriesOperator):
         mode: str = "mean",
         min_events: int = 5,
         require_full_horizon: bool = True,
+        refractory: int = 0,
         **_: Any,
     ) -> pd.DataFrame:
         m = str(mode).lower()
@@ -149,6 +211,7 @@ class EventHistoricalResponseMean(SeriesOperator):
             out[:, c] = _horizon_response(
                 rv[:, c], ev[:, c], history_window, horizon, m, min_events,
                 sign_balance=False, require_full_horizon=bool(require_full_horizon),
+                refractory=refractory,
             )
         return frame_like(response, out)
 
@@ -171,7 +234,7 @@ class EventHistoricalResponseSignBalance(SeriesOperator):
     metadata = _metadata(
         "event_historical_response_sign_balance",
         "历史事件响应符号平衡 mean(sign(R_s))（[-1,1]，full-horizon cohort）。",
-        ["response", "event", "history_window", "horizon", "min_events", "require_full_horizon"],
+        ["response", "event", "history_window", "horizon", "min_events", "require_full_horizon", "refractory"],
         unit="ratio",
         cost=4,
     )
@@ -184,6 +247,7 @@ class EventHistoricalResponseSignBalance(SeriesOperator):
         horizon: int = 5,
         min_events: int = 5,
         require_full_horizon: bool = True,
+        refractory: int = 0,
         **_: Any,
     ) -> pd.DataFrame:
         rv = response.to_numpy(dtype=float)
@@ -194,6 +258,7 @@ class EventHistoricalResponseSignBalance(SeriesOperator):
             out[:, c] = _horizon_response(
                 rv[:, c], ev[:, c], history_window, horizon, "mean", min_events,
                 sign_balance=True, require_full_horizon=bool(require_full_horizon),
+                refractory=refractory,
             )
         return frame_like(response, out)
 
@@ -211,20 +276,42 @@ def _hawkes_branching_ratio_series(event: np.ndarray, window: int, max_lag: int,
     beta = 3.0 / max(L, 1)
     out = np.full(n, np.nan)
     times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
+    # P1 (round 7): observed-event-clock / exposure mask — a NaN row is NOT
+    # "no event", it is missing coverage.  Gaps advance time but hide events, so
+    # without this mask they look like quiet periods and bias the rate down.
+    obs = np.isfinite(event)
     for t in range(n):
         lo = max(0, t - w)
         events_in = times[(times >= lo) & (times < t)]
-        if events_in.size < me:
+        # P1 (round 7): right-censoring — a parent within ``max_lag`` of ``t``
+        # has not yet observed its full offspring window; counting it in the
+        # denominator biases the proxy down when events are recent.  Only
+        # *matured* parents (``parent_time + max_lag <= t - 1``) contribute.
+        matured = events_in[events_in + L <= t - 1]
+        if matured.size < me:
             continue
         total = 0.0
-        for i in range(events_in.shape[0]):
-            t_i = events_in[i]
+        denom = 0.0
+        for t_i in matured:
+            window_obs = obs[t_i + 1 : t_i + L + 1]
+            exposure = float(window_obs.mean()) if window_obs.size else 0.0
+            if exposure <= 0.0:
+                continue  # no observed coverage for this parent -> no information
             after = events_in[(events_in > t_i) & (events_in <= t_i + L)]
-            if after.size == 0:
-                continue
-            dt = after.astype(np.float64) - t_i
-            total += float(np.sum(np.exp(-beta * dt)))
-        out[t] = float(total / events_in.shape[0])
+            # Only count offspring reachable through a fully-observed path: a
+            # NaN gap may hide events and must not be read as "no event".
+            contrib = 0.0
+            for t_j in after:
+                if obs[t_i + 1 : t_j + 1].all():
+                    contrib += float(np.exp(-beta * (t_j - t_i)))
+            total += contrib
+            # Effective parent count = exposure-weighted, so a partially
+            # observed window counts proportionally (gaps look like "no events"
+            # otherwise).
+            denom += exposure
+        if denom <= _EPS:
+            continue
+        out[t] = float(total / denom)
     return out
 
 
@@ -240,10 +327,12 @@ class EventHawkesBranchingRatio(SeriesOperator):
     """Hawkes 分支比**代理**：每事件在 ``max_lag`` 内的指数衰减后代均值。
 
     ``n* = mean_i Σ_{j: t_i<t_j≤t_i+L} exp(-β(t_j-t_i))``，``β=3/max_lag``。
-    注意这是固定指数核的后代聚集 proxy，**没有**拟合真正的 Hawkes
-    ``λ(t)=μ+Σαe^{-β(t-t_i)}`` 也没有 MLE 求 ``α/β``；命名用
-    ``_proxy`` 以免后续被误读为拟合的分支比。度量事件自激/聚集强度；regime
-    shift 与模型误设会产生虚假高值，因此仅 P2 / Research。
+    只统计*成熟*父事件（``parent_time + max_lag ≤ t-1``，避免右删失把近期事件
+    分母压低）；对每个父事件的 offspring 窗口按观测覆盖（``obs = isfinite``）
+    做曝光修正，NaN 缺口不会假装成"没有事件"。注意这是固定指数核的后代聚集
+    proxy，**没有**拟合真正的 Hawkes ``λ(t)=μ+Σαe^{-β(t-t_i)}`` 也没有 MLE 求
+    ``α/β``；命名用 ``_proxy`` 以免后续被误读为拟合的分支比。度量事件自激/聚集
+    强度；regime shift 与模型误设会产生虚假高值，因此仅 P2 / Research。
     """
 
     metadata = _metadata(
@@ -275,6 +364,7 @@ def _response_curve_stats_series(
     history_window: int,
     horizon: int,
     min_events: int,
+    refractory: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Per-row event-response *curve* statistics (strictly causal, s+H <= t).
 
@@ -288,25 +378,32 @@ def _response_curve_stats_series(
                    R_s = Σ_ℓ r_s(ℓ) (heavy-tailed response distribution > 1)
       reversal   — early/late sign flip of the mean curve, signed magnitude
                    ``(m_late - m_early) / mean(|m|)``, 0 when no flip
+
+    ``refractory`` (P1, round 7) collapses consecutive events within that many
+    bars into episodes (first-event-only) so overlapping response paths are not
+    double counted when clustering dispersion / significance by episode.
     """
     n = response.shape[0]
     hw = max(2, int(history_window))
     H = max(1, int(horizon))
     me = max(1, int(min_events))
+    refr = max(0, int(refractory))
     peak_lag = np.full(n, np.nan)
     decay = np.full(n, np.nan)
     dispersion = np.full(n, np.nan)
     reversal = np.full(n, np.nan)
+    times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
     for t in range(n):
         lo = max(0, t - hw)
         last_event = t - H
         if last_event < lo:
             continue
+        ev = times[(times >= lo) & (times <= last_event)]
+        if refr > 0:
+            ev = _collapse_events(ev, refr)
         curves: list[np.ndarray] = []
         totals: list[float] = []
-        for s in range(lo, last_event + 1):
-            if not np.isfinite(event[s]) or event[s] == 0.0:
-                continue
+        for s in ev:
             seg = response[s + 1 : s + H + 1]
             if seg.size != H or not np.all(np.isfinite(seg)):
                 continue
@@ -438,8 +535,8 @@ class EventResponseDispersion(SeriesOperator):
 
     metadata = _metadata(
         "event_response_dispersion",
-        "事件响应分布离散度 std(R)/mean|R|（>1 胖尾）。",
-        ["response", "event", "history_window", "horizon", "min_events"],
+        "事件响应分布离散度 std(R)/mean|R|（>1 胖尾，可按 episode 聚合）。",
+        ["response", "event", "history_window", "horizon", "min_events", "refractory"],
         unit="ratio",
         cost=5,
     )
@@ -451,6 +548,7 @@ class EventResponseDispersion(SeriesOperator):
         history_window: int = 120,
         horizon: int = 10,
         min_events: int = 3,
+        refractory: int = 0,
         **_: Any,
     ) -> pd.DataFrame:
         rv = response.to_numpy(dtype=float)
@@ -458,7 +556,9 @@ class EventResponseDispersion(SeriesOperator):
         rows, cols = rv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for c in range(cols):
-            _, _, disp, _ = _response_curve_stats_series(rv[:, c], ev[:, c], history_window, horizon, min_events)
+            _, _, disp, _ = _response_curve_stats_series(
+                rv[:, c], ev[:, c], history_window, horizon, min_events, refractory=refractory
+            )
             out[:, c] = disp
         return frame_like(response, out)
 
@@ -506,6 +606,90 @@ class EventResponseReversalStrength(SeriesOperator):
         return frame_like(response, out)
 
 
+@register_operator(
+    name="event_response_effective_events",
+    category="event_response",
+    business_category="event_response",
+    canonical="event_response_effective_events",
+    source="event_response",
+)
+class EventResponseEffectiveEvents(SeriesOperator):
+    """历史响应 cohort 的有效事件数（episode 首事件数）。
+
+    P1 (round 7) 质量度量：``refractory`` 把间隔 < refractory 的连续事件折叠为
+    一个 episode，只计首事件。5 个连续涨停 → 有效事件数 1（而非 5）。与
+    ``event_response_overlap_ratio`` 一起用于判断 mean/dispersion 的显著性是否被
+    重叠响应路径灌水。refractory=None 时默认等于 horizon（重叠响应路径即同 episode）。
+    """
+
+    metadata = _metadata(
+        "event_response_effective_events",
+        "episode 折叠后的有效事件数（refractory=None 默认=horizon）。",
+        ["event", "history_window", "horizon", "refractory"],
+        unit="count",
+        cost=3,
+    )
+
+    def _calculate_series(
+        self,
+        event: pd.DataFrame,
+        history_window: int = 120,
+        horizon: int = 5,
+        refractory: int | None = None,
+        **_: Any,
+    ) -> pd.DataFrame:
+        ev = event.to_numpy(dtype=float)
+        rows, cols = ev.shape
+        refr = int(horizon) if refractory is None else int(refractory)
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for c in range(cols):
+            eff, _ = _event_episode_metrics_series(ev[:, c], history_window, horizon, refr)
+            out[:, c] = eff
+        return frame_like(event, out)
+
+
+@register_operator(
+    name="event_response_overlap_ratio",
+    category="event_response",
+    business_category="event_response",
+    canonical="event_response_overlap_ratio",
+    source="event_response",
+)
+class EventResponseOverlapRatio(SeriesOperator):
+    """历史响应 cohort 的重叠比 ``1 - effective/raw`` ∈ [0,1]。
+
+    P1 (round 7) 质量度量：raw 事件中多大比例被 episode 折叠吸收（连续涨停 /
+    同一事件簇内的重叠响应路径）。0 = 无重叠（事件彼此独立）；接近 1 = 几乎全是
+    同一 episode 的连续触发。配合 ``event_response_effective_events`` 判断
+    mean/dispersion 显著性是否被独立事件数夸大。
+    """
+
+    metadata = _metadata(
+        "event_response_overlap_ratio",
+        "episode 重叠比 1-effective/raw（[0,1]，质量诊断）。",
+        ["event", "history_window", "horizon", "refractory"],
+        unit="ratio",
+        cost=3,
+    )
+
+    def _calculate_series(
+        self,
+        event: pd.DataFrame,
+        history_window: int = 120,
+        horizon: int = 5,
+        refractory: int | None = None,
+        **_: Any,
+    ) -> pd.DataFrame:
+        ev = event.to_numpy(dtype=float)
+        rows, cols = ev.shape
+        refr = int(horizon) if refractory is None else int(refractory)
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for c in range(cols):
+            _, ovr = _event_episode_metrics_series(ev[:, c], history_window, horizon, refr)
+            out[:, c] = ovr
+        return frame_like(event, out)
+
+
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
@@ -516,6 +700,8 @@ def _register_surface() -> None:
             "event_response_decay_rate",
             "event_response_dispersion",
             "event_response_reversal_strength",
+            "event_response_effective_events",
+            "event_response_overlap_ratio",
         })
     _surface.RESEARCH_ONLY_CANONICALS = frozenset(
         set(_surface.RESEARCH_ONLY_CANONICALS) | {"event_hawkes_branching_ratio_proxy"}

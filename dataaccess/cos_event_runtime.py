@@ -35,6 +35,24 @@ def _declared_schema(self: Any, dataset: str) -> list[str]:
         return []
 
 
+def _allocate_column_name(used: set[str], base: str) -> str:
+    """从 ``used`` 之外分配输出列名（#P0-C11 统一冲突策略）。
+
+    base 未被占用 → base；占用 → ``base_event``；再被占 → ``base_event_2`` ...
+    decisions 已有 ``x`` 且事件也有 ``x`` 时事件列改名 ``x_event``；若 decisions
+    同时已有 ``x_event``，则继续递增（旧实现只改一层，会静默覆盖 ``x_event``）。
+    调用方每分配一个名字必须把结果加进 ``used``（事件列重命名也可能互相撞）。
+    """
+    if base not in used:
+        return base
+    candidate = f"{base}_event"
+    n = 2
+    while candidate in used:
+        candidate = f"{base}_event_{n}"
+        n += 1
+    return candidate
+
+
 def read_cos_events(self: Any, dataset: str, *, columns: Sequence[str] | None = None, start: Any | None = None, end: Any | None = None, instrument_filter: Sequence[str] | None = None, event_filters: Mapping[str, Any] | None = None, allow_effective_time: bool = False, **params: Any) -> pd.DataFrame:
     contract, clock = resolve_event_clock(dataset, allow_effective_time=allow_effective_time)
     filters = validate_event_filters(contract, event_filters)
@@ -50,9 +68,14 @@ def read_cos_events(self: Any, dataset: str, *, columns: Sequence[str] | None = 
     if end is not None:
         clauses.append(f"{quote(clock)} <= ?")
         bind.append(end)
-    if instrument_filter:
-        clauses.append(f"{quote(contract.instrument_column)} IN ({', '.join('?' for _ in instrument_filter)})")
-        bind.extend(str(v) for v in instrument_filter)
+    # #P0-C3 [] = 空股票池（≠ None = 全市场）：[] 必须生成 `1 = 0`（WHERE FALSE），
+    # 不能走 truthiness 跳过 → 否则静默读出全市场。
+    if instrument_filter is not None:
+        if not instrument_filter:
+            clauses.append("1 = 0")
+        else:
+            clauses.append(f"{quote(contract.instrument_column)} IN ({', '.join('?' for _ in instrument_filter)})")
+            bind.extend(str(v) for v in instrument_filter)
     query = f"SELECT {projection} FROM {{{{{dataset}}}}}"
     if clauses:
         query += " WHERE " + " AND ".join(clauses)
@@ -120,6 +143,28 @@ def _normalize(events: pd.DataFrame, contract: COSDatasetContract, clock: str) -
     return out
 
 
+def _apply_latency_minutes(avail: Any, latency: int | None) -> Any:
+    """#P1-final closure 5：在 available_from 上叠加 availability_latency（分钟）。
+
+    真实 MarketCalendar 的 ``compile_available_from`` 已把 latency 算进结果；
+    Duck 类型假日历只实现 ``available_from``，这里统一叠加，保证两种日历的
+    延迟语义一致（默认 1 bar = 1 分钟）。date 结果先转当日 00:00 datetime。
+    """
+    if not latency:
+        return avail
+    minutes = int(latency)
+    if isinstance(avail, _dt.datetime):
+        return avail + _dt.timedelta(minutes=minutes)
+    if isinstance(avail, _dt.date):
+        return _dt.datetime(avail.year, avail.month, avail.day) + _dt.timedelta(
+            minutes=minutes
+        )
+    try:
+        return avail + _dt.timedelta(minutes=minutes)
+    except Exception:
+        return avail
+
+
 def _select(
     decisions: pd.DataFrame,
     events: pd.DataFrame,
@@ -131,14 +176,16 @@ def _select(
     *,
     availability: str = "same_day",
     calendar: Any = None,
+    latency: int | None = None,
 ) -> list[pd.Series | None]:
     """#P0-12 PIT asof 选择，availability 语义与 read_joined 共用同一套。
 
     不再写死 ``event_clock <= decision``：先解析数据集 availability——
-        - 需日历的种类（next_trading_day / next_session_open / session …）且
-          有市场日历 → 用 ``MarketCalendar.available_from`` 把 knowledge 编译成
-          available_from，条件变 ``available_from <= decision``（与 read_joined
-          的 ``_session_avail_sql`` 同一语义）；
+        - 需日历的种类（next_trading_day / next_session_open / session …
+          next_bar / after_close_next_open）且有市场日历 → 用统一
+          ``compile_available_from`` 把 knowledge 编译成 available_from
+          （含 availability_latency 叠加），条件变 ``available_from <=
+          decision``（与 read_joined 的 ``_session_avail_sql`` 同一语义）；
         - 无日历 → 按统一 availability 回退：严格下一交易日类用 ``<``，其余
           ``<=``（与 ``TemporalJoinSpec.comparison_operator`` 同一语义）。
     """
@@ -164,7 +211,13 @@ def _select(
 
     def _visible(knowledge: Any, decision: Any) -> bool:
         if use_calendar:
-            return _to_utc(calendar.available_from(knowledge, availability)) <= decision
+            # 真实 MarketCalendar 的 available_from == compile_available_from（统一
+            # IR，含 next_bar/session 粒度）；鸭子类型假日历自行实现 available_from。
+            # availability_latency 在编译结果上统一叠加（默认 1 bar = 1 分钟）。
+            avail = calendar.available_from(knowledge, availability)
+            if latency:
+                avail = _apply_latency_minutes(avail, latency)
+            return _to_utc(avail) <= decision
         return (knowledge < decision) if strict_next else (knowledge <= decision)
 
     chosen: list[pd.Series | None] = [None] * len(decisions)
@@ -188,27 +241,70 @@ def _select(
     return chosen
 
 
-def _resolve_event_availability(self: Any, dataset: str) -> str:
-    """解析事件数据集在 asof 里的 availability（与 read_joined 同源）。
+# #P1-final closure 5 availability 严格度（research 冲突回退时取最严，绝不用
+# same_day 静默降级）。same_day/effective 最松，next_trading_day 最严。
+_AVAILABILITY_RANK = {
+    "same_instant": 0,
+    "same_day": 0,
+    "effective_date_only": 0,
+    "next_bar": 1,
+    "session": 2,
+    "next_session_open": 2,
+    "after_close_next_open": 2,
+    "next_trading_day": 3,
+}
 
-    优先字段级一致声明（financial 数据集标 ``next_trading_day``）；否则契约
-    默认 ``same_day``——与 ``_effective_join_specs`` 的「字段语义 → COS 契约
-    默认」合成顺序一致。字段级互相冲突时不猜测，回退 same_day。
+
+def _resolve_event_availability(
+    self: Any, dataset: str
+) -> tuple[str, int | None]:
+    """解析事件数据集在 asof 里的 availability + availability_latency。
+
+    与 read_joined 同源：字段级一致声明（financial 数据集标
+    ``next_trading_day``）；无声明 → 契约默认 ``same_day``。
+
+    #P1-final closure 5 fail-closed：字段级 availability **互相冲突时不再
+    静默回退 same_day**——production/strict 抛 ``AmbiguousSemanticFieldError``；
+    research 告警后取最严（最保守可见）的声明。latency 冲突取最大值
+    （额外延迟取最大 = 最保守，绝不提前可见）。
     """
     try:
         from data_access.read.semantic_catalog import get_semantic_catalog
 
-        avail = {
-            str(f.availability)
+        fields = [
+            f
             for f in get_semantic_catalog()._fields.values()
             if getattr(f, "dataset", None) == dataset
-            and getattr(f, "availability", None)
-        }
-        if len(avail) == 1:
-            return next(iter(avail))
+        ]
     except Exception:
-        pass
-    return "same_day"
+        return "same_day", None
+    declared = [
+        (str(f.availability), getattr(f, "availability_latency", None))
+        for f in fields
+        if getattr(f, "availability", None)
+    ]
+    if not declared:
+        return "same_day", None
+    avail_set = {a for a, _ in declared}
+    if len(avail_set) > 1:
+        from data_access.core.exceptions import AmbiguousSemanticFieldError
+        from data_access.read.query_budget import is_strict_semantics
+
+        msg = (
+            f"数据集 {dataset!r} 的语义字段 availability 声明冲突"
+            f"（{sorted(avail_set)}），无法确定事件可见性语义。"
+            "请统一这些字段的 availability 声明。"
+        )
+        if is_strict_semantics():
+            raise AmbiguousSemanticFieldError(msg)
+        logger.warning("%s（research 取最严 availability）", msg)
+        strictest = max(avail_set, key=lambda a: _AVAILABILITY_RANK.get(a, 0))
+        avail = strictest
+    else:
+        avail = next(iter(avail_set))
+    latencies = [lat for _, lat in declared if lat is not None]
+    latency = max(latencies) if latencies else None
+    return avail, latency
 
 
 def read_cos_events_asof(self: Any, dataset: str, decisions: pd.DataFrame, *, decision_time: str = "decision_timestamp", decision_instrument: str = "instrument", columns: Sequence[str] | None = None, event_filters: Mapping[str, Any] | None = None, max_age_days: int | None = None, period_selection: str = "latest_period", allow_effective_time: bool = False, **params: Any) -> pd.DataFrame:
@@ -250,13 +346,20 @@ def read_cos_events_asof(self: Any, dataset: str, decisions: pd.DataFrame, *, de
     left["__pit_position"] = np.arange(len(left), dtype=np.int64)
     if left.empty:
         output = left.drop(columns=["__pit_position"])
-        output["fundamental_staleness_days"] = pd.Series(dtype="float64")
+        # #P0-C11 空 decisions 分支同样走统一冲突策略：不静默覆盖 decisions 已有
+        # 的 fundamental_staleness_days 原列。
+        used = set(output.columns)
+        staleness_name = _allocate_column_name(used, "fundamental_staleness_days")
+        output[staleness_name] = pd.Series(dtype="float64")
         return output
     events = read_cos_events(self, dataset, columns=columns, end=left[decision_time].max(), instrument_filter=sorted(set(left[decision_instrument].astype(str))), event_filters=event_filters, allow_effective_time=allow_effective_time, **params)
     right = _normalize(events, contract, clock)
     # #P0-12 统一 availability：与 read_joined 共用同一套语义（financial 事件表
     # 字段级标 next_trading_day → 事件下一交易日起才可见；无日历按 strict 回退）。
-    availability = _resolve_event_availability(self, dataset)
+    # #P1-final closure 5：``_resolve_event_availability`` 现在同时解析
+    # availability_latency 并注入 ``compile_available_from``（next_bar/session 等
+    # 粒度 + 额外延迟全部走统一 IR）。
+    availability, latency = _resolve_event_availability(self, dataset)
     market = getattr(contract, "market", None)
     calendar = (
         self.get_calendar(market)
@@ -273,10 +376,17 @@ def read_cos_events_asof(self: Any, dataset: str, decisions: pd.DataFrame, *, de
         period_selection,
         availability=availability,
         calendar=calendar,
+        latency=latency,
     )
     output = left.copy()
     event_cols = [c for c in right.columns if c != contract.instrument_column]
-    names = {c: c if c not in output.columns else f"{c}_event" for c in event_cols}
+    # #P0-C11 统一冲突策略：事件列名分配逐层查 used（decisions 已有 x 且已有
+    # x_event 时 → x_event_2，不再静默覆盖）；事件列相互之间也不撞。
+    used = set(output.columns)
+    names: dict[str, str] = {}
+    for c in event_cols:
+        names[c] = _allocate_column_name(used, c)
+        used.add(names[c])
     values = {target: [] for target in names.values()}
     ages: list[float] = []
     limit = int(max_age_days) if max_age_days is not None else None
@@ -293,11 +403,8 @@ def read_cos_events_asof(self: Any, dataset: str, decisions: pd.DataFrame, *, de
         ages.append(age)
     for target, vals in values.items():
         output[target] = vals
-    # #P2-81 保留输出名冲突防护：decisions 自身已有 fundamental_staleness_days
-    # 时不能覆盖——改名 _event 后缀。
-    staleness_name = "fundamental_staleness_days"
-    if staleness_name in output.columns:
-        staleness_name = "fundamental_staleness_days_event"
+    # #P2-81/#P0-C11 staleness 列与 decisions 已有列、事件重命名列统一去冲突。
+    staleness_name = _allocate_column_name(used, "fundamental_staleness_days")
     output[staleness_name] = ages
     return output.sort_values("__pit_position", kind="mergesort").drop(columns=["__pit_position"])
 

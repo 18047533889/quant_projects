@@ -1175,9 +1175,9 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("fin_revision_delta", ("x", "period_id"), lambda x, period_id: _revision_compose(x, period_id, "delta"), "Value change while the visible report period is unchanged."),
     ("fin_revision_pct", ("x", "period_id"), lambda x, period_id: _revision_compose(x, period_id, "pct"), "Percent revision while the visible report period is unchanged."),
     ("fin_revision_direction", ("x", "period_id"), lambda x, period_id: _revision_compose(x, period_id, "direction"), "Sign of the latest same-period revision."),
-    ("fin_revision_count", ("x", "period_id", "window_days"), lambda x, period_id, window_days=252: _revision_compose(x, period_id, "count", window_days=window_days), "Count of visible revisions in a bounded trading-day window."),
-    ("fin_revision_magnitude", ("x", "period_id", "window_days"), lambda x, period_id, window_days=252: _revision_compose(x, period_id, "magnitude", window_days=window_days), "Absolute revision magnitude accumulated over a bounded window."),
-    ("fin_restated_flag", ("x", "period_id", "window_days"), lambda x, period_id, window_days=252: _revision_compose(x, period_id, "restated", window_days=window_days), "Whether a same-period revision occurred in the bounded window."),
+    ("fin_revision_count", ("x", "period_id", "window_days", "coverage_threshold"), lambda x, period_id, window_days=252, coverage_threshold=0.8: _revision_compose(x, period_id, "count", window_days=window_days, coverage_threshold=coverage_threshold), "Count of visible revisions in a bounded trading-day window; three-state observation with a known-coverage gate (round-7 P0)."),
+    ("fin_revision_magnitude", ("x", "period_id", "window_days", "coverage_threshold"), lambda x, period_id, window_days=252, coverage_threshold=0.8: _revision_compose(x, period_id, "magnitude", window_days=window_days, coverage_threshold=coverage_threshold), "Absolute revision magnitude accumulated over a bounded window; three-state observation with a known-coverage gate (round-7 P0)."),
+    ("fin_restated_flag", ("x", "period_id", "window_days", "coverage_threshold"), lambda x, period_id, window_days=252, coverage_threshold=0.8: _revision_compose(x, period_id, "restated", window_days=window_days, coverage_threshold=coverage_threshold), "Whether a same-period revision occurred in the bounded window; NaN where the count is undetermined by the known-coverage gate (round-7 P0)."),
     ("fin_days_since_update", ("x", "period_id", "max_days"), lambda x, period_id, max_days=504: _revision_compose(x, period_id, "days_since_update", max_days=max_days), "Bounded trading days since report-period or value update."),
     ("fin_staleness", ("x", "period_id", "max_days"), lambda x, period_id, max_days=504: _revision_compose(x, period_id, "days_since_update", max_days=max_days), "Bounded accounting-data staleness in trading days."),
     ("fin_ttm_quarterly", ("x", "period_id", "periods_per_year"), fin_ttm_quarterly, "Sum the latest complete set of single-period flow observations."),
@@ -1188,7 +1188,14 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
 )
 
 
-def _revision_compose(x, period_id, which, window_days=252, max_days=504):
+def _revision_compose(
+    x,
+    period_id,
+    which,
+    window_days=252,
+    max_days=504,
+    coverage_threshold=0.8,
+):
     if which == "delta":
         cols = _cols(x, period_id)
         rows = x.height
@@ -1228,6 +1235,9 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
             out[:, i] = np.sign(delta[c].to_numpy())
         return _make(delta, cols, out)
     window = _pi(window_days, "window_days")
+    threshold = float(coverage_threshold)
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("coverage_threshold must be in [0, 1]")
     if which == "count":
         cols = _cols(x, period_id)
         rows = x.height
@@ -1237,8 +1247,15 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
             pv = _pv_of(period_id, c)
             complete = _revision_complete_1d(xv, pv)
             event = _revision_event_1d(xv, pv)
-            count = _rolling_sum_1d(event.astype(float), window, 1)
-            out[:, i] = np.where(complete, count, np.nan)
+            # Three-state (round-7 P0): 1 revision / 0 confirmed no-revision /
+            # NaN undetermined — never silently treat missing history as 0.
+            revision = np.where(event, 1.0, 0.0).astype(float)
+            revision = np.where(complete, revision, np.nan)
+            count = _rolling_sum_1d(revision, window, 1)
+            known = _rolling_sum_1d(complete.astype(float), window, 1)
+            coverage = known / float(window)
+            result = np.where(coverage >= threshold, count, np.nan)
+            out[:, i] = np.where(complete, result, np.nan)
         return _make(x, cols, out)
     if which == "magnitude":
         pct = _revision_compose(x, period_id, "pct")
@@ -1250,10 +1267,16 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
             pv = _pv_of(period_id, c)
             complete = _revision_complete_1d(xv, pv)
             magnitude = _rolling_sum_nanmin_1d(np.abs(pct[c].to_numpy()), window)
-            out[:, i] = np.where(complete, magnitude, np.nan)
+            known = _rolling_sum_1d(complete.astype(float), window, 1)
+            coverage = known / float(window)
+            result = np.where(coverage >= threshold, magnitude, np.nan)
+            out[:, i] = np.where(complete, result, np.nan)
         return _make(pct, cols, out)
     if which == "restated":
-        count = _revision_compose(x, period_id, "count", window_days=window_days)
+        count = _revision_compose(
+            x, period_id, "count",
+            window_days=window_days, coverage_threshold=coverage_threshold,
+        )
         cols = _cols(count)
         rows = x.height
         out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -1263,9 +1286,11 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
             out[:, i] = np.where(np.isfinite(arr), flag, np.nan)
         return _make(count, cols, out)
     # days_since_update / staleness — observed clock (R4-27): never age blindly
-    # across an unobservable gap.  A missing current row emits NaN and resets the
-    # age reference; a resumed observation after a gap is treated as a fresh
-    # update boundary (age 0) because the age cannot be confirmed across it.
+    # across an unobservable gap.  A missing current row emits NaN, and the
+    # confirmed economic state is retained across the gap (round-7 P1): a value
+    # that resumes identical to the pre-gap state is a provider-outage recovery,
+    # NOT an economic update — the age continues (confirmed age + elapsed
+    # unobservable days + today) instead of resetting to 0.
     cap = _pi(max_days, "max_days")
     cols = _cols(x, period_id)
     rows = x.height
@@ -1273,33 +1298,35 @@ def _revision_compose(x, period_id, which, window_days=252, max_days=504):
     for i, c in enumerate(cols):
         xv = _xv_of(x, c)
         pv = _pv_of(period_id, c)
-        age = None
+        age = 0
         last_x = None
         last_pid = None
+        gap_days = 0
         arr = np.full(rows, np.nan, dtype=float)
         for t in range(rows):
             complete = bool(np.isfinite(xv[t]) and _period_key(pv[t]) is not None)
             if not complete:
                 # Cannot observe an update event today -> age is unknown.
-                age = None
+                gap_days += 1
                 continue
             if last_x is None:
                 # First complete observation: the value just became visible.
                 arr[t] = 0.0
                 age = 0
+                gap_days = 0
                 last_x, last_pid = xv[t], pv[t]
                 continue
             update_event = bool(last_pid != pv[t] or last_x != xv[t])
             if update_event:
+                # A real economic disclosure update: reset the confirmed age.
                 arr[t] = 0.0
                 age = 0
-            elif age is not None:
-                age = min(cap, age + 1)
-                arr[t] = float(age)
+                gap_days = 0
             else:
-                # Observed-clock resume after a gap: fresh reference (age 0).
-                arr[t] = 0.0
-                age = 0
+                # Confirmed no economic update: age continues across the gap.
+                age = min(cap, age + gap_days + 1)
+                arr[t] = float(age)
+                gap_days = 0
             last_x, last_pid = xv[t], pv[t]
         out[:, i] = arr
     return _make(x, cols, out)

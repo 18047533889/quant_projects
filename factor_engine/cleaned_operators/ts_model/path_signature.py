@@ -123,8 +123,39 @@ _register("ts_path_signature_area", "二维路径的有向面积（Levy 面积�
            lambda x, y, window=60: _apply_two(x, y, lambda a, b: _sig_area(a, b, int(window))))
 
 
+def _robust_scale(vals: np.ndarray) -> float:
+    """Past robust scale (MAD) of a series; std / 1.0 fallback.
+
+    Used to make two series dimensionless before forming the depth-2 signature
+    norm, so a single series with a much larger scale cannot dominate the norm.
+    """
+    med = float(np.median(vals))
+    mad = float(np.median(np.abs(vals - med)))
+    if np.isfinite(mad) and mad > 1e-12:
+        return mad
+    sd = float(np.std(vals))
+    if np.isfinite(sd) and sd > 1e-12:
+        return sd
+    return 1.0
+
+
 def _sig_depth2_norm(x: np.ndarray, y: np.ndarray, window: int) -> float:
-    out = _sig_level2(x, y, window)
+    """Depth-2 signature norm over *dimensionless* inputs.
+
+    The raw level-2 terms mix units (Sxx ~ unit(x)^2, Sxy ~ unit(x)*unit(y)), so
+    a series with the larger scale would dominate the Euclidean norm.  Each input
+    is standardised by its past robust scale (MAD over the trailing window)
+    before forming the signature, so every series contributes on equal footing.
+    The raw signature statistics remain available via the ``*_area`` / raw
+    kernels; only this factor-facing norm uses dimensionless inputs.
+    """
+    seg_x = x[-int(window):]
+    seg_y = y[-int(window):]
+    if len(seg_x) == 0 or len(seg_y) == 0:
+        return np.nan
+    sx = _robust_scale(seg_x)
+    sy = _robust_scale(seg_y)
+    out = _sig_level2(x / sx, y / sy, window)
     if out is None:
         return np.nan
     return float(np.sqrt(sum(c * c for c in out[:4])))

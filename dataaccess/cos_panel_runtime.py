@@ -49,9 +49,14 @@ def read_cos_panel(self: Any, dataset: str, *, columns: Sequence[str] | None = N
     if filters:
         projection = "*" if selected is None else ", ".join(quote(c) for c in selected)
         clauses, bind = compile_filters(filters)
-        if instrument_filter:
-            clauses.append(f"{quote(contract.instrument_column)} IN ({', '.join('?' for _ in instrument_filter)})")
-            bind.extend(str(v) for v in instrument_filter)
+        # #P0-C3 [] = 空股票池（≠ None = 全市场）：[] 必须生成 `1 = 0`（WHERE FALSE），
+        # 不能走 truthiness 跳过 → 否则静默读出全市场。
+        if instrument_filter is not None:
+            if not instrument_filter:
+                clauses.append("1 = 0")
+            else:
+                clauses.append(f"{quote(contract.instrument_column)} IN ({', '.join('?' for _ in instrument_filter)})")
+                bind.extend(str(v) for v in instrument_filter)
         query = f"SELECT {projection} FROM {{{{{dataset}}}}}"
         if clauses:
             query += " WHERE " + " AND ".join(clauses)

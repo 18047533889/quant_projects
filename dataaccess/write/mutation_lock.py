@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import socket
+import threading
 import time
 import uuid
 from contextlib import contextmanager
@@ -11,6 +12,14 @@ from pathlib import Path
 from typing import Iterator
 
 from data_access.core.exceptions import ValidationError
+
+# #P1-final closure 1：mutation_lock 改为**同线程同 root 可重入**。
+# ``_dataset_mutation`` 在「bump epoch → mutate → rebuild manifest」整个事务外
+# 持一把 dataset-root 级锁，而 write_arrow / upsert_table 正文里还会再对同一个
+# target_dir 调一次 ``mutation_lock``（二者正常情形下是同一个 root）。可重入后，
+# 内层调用直接 yield，不产生 FileExistsError 自锁；不同 root 的嵌套调用仍各自
+# 持锁（锁序固定：事务 root → body target，无死锁）。
+_held_local = threading.local()
 
 
 @contextmanager
@@ -32,10 +41,22 @@ def mutation_lock(
         - owner 进程已死（ProcessLookupError）；
         - lease 过期且超过 ``hard_break_seconds``（owner 卡死但进程仍在）——
           这是对「进程活但永久卡在写路径」的兜底，默认是 lease 的 2 倍。
+
+    同一线程已持有同一个 root 的锁时直接通过（可重入），供 ``_dataset_mutation``
+    的整事务锁与正文的 target 锁在 root 相同时共用。
     """
     root = Path(target).expanduser().resolve(strict=False)
     root.mkdir(parents=True, exist_ok=True)
     lock_path = root / ".data-access.mutation.lock"
+
+    held = getattr(_held_local, "roots", None)
+    if held is None:
+        held = _held_local.roots = set()
+    if lock_path in held:
+        # 同线程同 root 已持有 → 同一事务内的重入，直接放行。
+        yield
+        return
+
     deadline = time.monotonic() + timeout
     hard_break = stale_after if stale_after > 0 else lease_seconds * 2
     fd: int | None = None
@@ -73,9 +94,11 @@ def mutation_lock(
             if fd is not None:
                 os.close(fd)
             raise
+    held.add(lock_path)
     try:
         yield
     finally:
+        held.discard(lock_path)
         try:
             os.close(fd)
         finally:

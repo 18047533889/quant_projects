@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -137,31 +138,42 @@ def schema_hash_from_decl(schema: Mapping[str, str] | None) -> str:
     return _sha256_text(payload)[:16]
 
 
-# 进程内 memo：s3:// URI → 对象头元数据（避免每次 manifest 都 head 一次）
-_remote_meta_cache: dict[str, dict[str, Any] | None] = {}
+# 进程内 memo：s3:// URI → (ts, 对象头元数据)（避免每次 manifest 都 head 一次）。
+# #P0-C6 不永久缓存：remote 对象同 key 会被覆盖（ETag/version_id 变化，snapshot_id
+# 必须跟着变）；失败的 None（无凭证/网络）也不该永久缓存（首次无凭证、之后补凭证
+# 必须能重试）。统一短 TTL，过期即 revalidation——strict/pin 永远拿不到超过 TTL
+# 的陈旧 HEAD。
+_remote_meta_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
+_REMOTE_META_TTL_SECONDS = 30.0
 
 
 def _remote_object_meta(uri: str) -> dict[str, Any] | None:
-    """s3:// / cos:// 对象头元数据（best-effort，带进程内 memo）。
+    """s3:// / cos:// 对象头元数据（best-effort，带 TTL memo）。
 
     需要已配置 S3 凭证（``cos.remote.resolve_s3_credentials``）与 boto3。
     失败（无凭证/网络/未装 boto3）返回 None 并 memoize 为 None，**绝不阻塞**
     读路径。对象同 key 被覆盖 → etag/version_id 变化 → snapshot_id 跟着变。
     """
     key = str(uri)
-    if key in _remote_meta_cache:
-        return _remote_meta_cache[key]
+    now = time.monotonic()
+    cached = _remote_meta_cache.get(key)
+    if cached is not None and now - cached[0] < _REMOTE_META_TTL_SECONDS:
+        return cached[1]
     try:
-        from data_access.cos.remote import resolve_s3_credentials
+        from data_access.cos.remote import cos_uri_to_s3_uri, resolve_s3_credentials
 
         creds = resolve_s3_credentials()
         import boto3
         from botocore.config import Config
 
-        path = key[len("s3://") :]
+        # #P0-C7 先统一 cos:// → s3:// 再切 bucket/key：旧代码对所有 scheme 用
+        # ``key[len("s3://"):]``，cos:// 前缀长度不同导致 bucket/key 直接错位
+        # （generic cos:// 对象 snapshot 元数据解析错误）。
+        s3_uri = cos_uri_to_s3_uri(key)
+        path = s3_uri[len("s3://") :]
         bucket, sep, obj = path.partition("/")
         if not sep or not obj:
-            _remote_meta_cache[key] = None
+            _remote_meta_cache[key] = (now, None)
             return None
         s3 = boto3.client(
             "s3",
@@ -184,10 +196,10 @@ def _remote_object_meta(uri: str) -> dict[str, Any] | None:
             "content_length": resp.get("ContentLength"),
             "last_modified": resp.get("LastModified"),
         }
-        _remote_meta_cache[key] = meta
+        _remote_meta_cache[key] = (now, meta)
         return meta
     except Exception:
-        _remote_meta_cache[key] = None
+        _remote_meta_cache[key] = (now, None)
         return None
 
 

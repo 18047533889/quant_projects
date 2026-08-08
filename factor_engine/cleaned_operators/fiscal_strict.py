@@ -9,6 +9,7 @@ Polars implementations.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -79,10 +80,83 @@ def _strict_align(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
     return tuple(frames)
 
 
+@dataclass(frozen=True)
+class FiscalPeriod:
+    """A fiscal reporting period carrying real (possibly non-calendar) metadata.
+
+    ``fiscal_year`` is the fiscal year in which the period reports (e.g. 2025 for
+    the fiscal year ending 2025-06-30), ``fiscal_quarter`` is 1-4 within that
+    fiscal year, ``fiscal_year_end`` is the calendar month (1-12) in which the
+    fiscal year ends, and ``timeframe`` is the report scope (quarterly / annual /
+    trailing_twelve_months / ytd).
+
+    ``period_ordinal`` accepts a ``FiscalPeriod`` and derives its monotonic
+    ordinal from the *fiscal* year/quarter (not the calendar quarter), so US
+    companies with non-December fiscal year-ends convert correctly (round-7 P0).
+    """
+
+    fiscal_year: int
+    fiscal_quarter: int
+    fiscal_year_end: int | None = None
+    timeframe: str = "quarterly"
+
+    def __post_init__(self) -> None:
+        if not (1 <= int(self.fiscal_quarter) <= 4):
+            raise ValueError("fiscal_quarter must be in 1..4")
+        if self.fiscal_year_end is not None and not (1 <= int(self.fiscal_year_end) <= 12):
+            raise ValueError("fiscal_year_end must be a calendar month in 1..12")
+
+    @property
+    def ordinal(self) -> int:
+        return int(self.fiscal_year) * 4 + int(self.fiscal_quarter) - 1
+
+    @staticmethod
+    def from_timestamp(
+        value: Any, fiscal_year_end: int | None
+    ) -> "FiscalPeriod | None":
+        """Fiscal period of a timestamp under a given fiscal year-end month.
+
+        ``fiscal_year_end=None`` fails closed (returns ``None``) — a non-calendar
+        fiscal year can never be inferred from a bare timestamp (round-7 P0).
+        """
+        if fiscal_year_end is None:
+            return None
+        ts = pd.Timestamp(value)
+        if pd.isna(ts):
+            return None
+        m = int(fiscal_year_end)
+        if not (1 <= m <= 12):
+            raise ValueError("fiscal_year_end must be a calendar month in 1..12")
+        month = ts.month
+        # The fiscal year begins the month AFTER the year-end month.  A date whose
+        # calendar month exceeds the year-end month belongs to the NEXT fiscal year
+        # (e.g. 2024-07 under a 2025-06 year-end is FY2025); otherwise it belongs
+        # to the current calendar year's fiscal year.
+        fiscal_year = ts.year + (1 if month > m else 0)
+        fiscal_quarter = ((month - (m + 1)) % 12) // 3 + 1
+        return FiscalPeriod(
+            fiscal_year=fiscal_year,
+            fiscal_quarter=fiscal_quarter,
+            fiscal_year_end=m,
+        )
+
+
 def period_ordinal(value: Any) -> int | None:
-    """Parse an explicit fiscal-quarter identifier into a monotonic ordinal."""
+    """Parse an explicit fiscal-quarter identifier into a monotonic ordinal.
+
+    Accepted explicit formats (round-7 P1): ``FiscalPeriod``, ``YYYYQn`` /
+    ``YYYYQ n`` strings, ``YYYYn`` compact int (5 digits), ``YYYYMMDD`` (8-digit
+    int or ISO string), and ``Timestamp``/``datetime``.  Any other scalar — in
+    particular an arbitrary integer that is not one of the explicit encodings —
+    is rejected (returns ``None``) instead of being silently accepted as a raw
+    ordinal.  A bare Timestamp is interpreted with the *calendar* quarter; use a
+    ``FiscalPeriod`` (or ``fiscal_ordinal(ts, fiscal_year_end)``) for companies
+    with non-December fiscal year-ends (round-7 P0).
+    """
     if value is None or (isinstance(value, (float, np.floating)) and np.isnan(value)):
         return None
+    if isinstance(value, FiscalPeriod):
+        return value.ordinal
     if isinstance(value, (pd.Timestamp, np.datetime64)):
         ts = pd.Timestamp(value)
         return None if pd.isna(ts) else int(ts.year * 4 + (ts.month - 1) // 3)
@@ -100,8 +174,15 @@ def period_ordinal(value: Any) -> int | None:
                 ts = None
             if ts is not None and not pd.isna(ts):
                 return int(ts.year * 4 + (ts.month - 1) // 3)
-        year, quarter = divmod(number, 10)
-        return year * 4 + quarter - 1 if year >= 1000 and 1 <= quarter <= 4 else number
+        # The only accepted integer encoding is the compact 5-digit ``YYYYn``
+        # fiscal-quarter form (e.g. 20251 -> FY2025 Q1).  A 6+-digit arbitrary
+        # integer (e.g. 123456) is NOT a valid fiscal ordinal and must fail closed
+        # to None rather than pass through raw (round-7 P1).
+        if 10_000 <= number <= 99_999:
+            year, quarter = divmod(number, 10)
+            if year >= 1000 and 1 <= quarter <= 4:
+                return year * 4 + quarter - 1
+        return None
     if isinstance(value, (float, np.floating)) and float(value).is_integer():
         return period_ordinal(int(value))
     text = str(value).strip().upper()
@@ -113,6 +194,21 @@ def period_ordinal(value: Any) -> int | None:
     except Exception:
         return None
     return None if pd.isna(ts) else int(ts.year * 4 + (ts.month - 1) // 3)
+
+
+def fiscal_ordinal(value: Any, fiscal_year_end: int | None = None) -> int | None:
+    """Fiscal ordinal under a real year-end; ``None`` (fail closed) when unknown.
+
+    Unlike ``period_ordinal`` (which uses the calendar quarter for bare
+    timestamps), this resolves a timestamp with the company's actual fiscal
+    year-end month.  When ``fiscal_year_end`` is unknown it returns ``None`` so
+    YTD/quarter/TTM conversions fail closed instead of assuming the calendar year
+    (round-7 P0).
+    """
+    if isinstance(value, FiscalPeriod):
+        return value.ordinal
+    fp = FiscalPeriod.from_timestamp(value, fiscal_year_end)
+    return fp.ordinal if fp is not None else None
 
 
 def ordinal_frame(period_id: pd.DataFrame) -> pd.DataFrame:
@@ -266,7 +362,14 @@ def pd_quarter_from_cumulative(
     previous = pd_period_lag(x, period_id, 1, policy)
     previous_ordinal = _ordinal_lag(period_id, 1, policy)
     if fiscal_quarter is None:
-        quarter = ordinal.mod(4).add(1)
+        # Round-7 P0 fail-closed: without explicit fiscal metadata we cannot know
+        # which visible report is the first period of its fiscal year.  Assuming
+        # the calendar quarter (ordinal % 4) silently mis-converts companies with
+        # non-December fiscal year-ends.  Emit an all-NaN quarter panel so the
+        # cumulative->quarter conversion fails closed; callers with real fiscal
+        # metadata must pass a fiscal_quarter panel (e.g. derived from a
+        # FiscalPeriod period_id / fiscal_year_end).
+        quarter = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
     else:
         _, _, fiscal_quarter = _strict_align(x, period_id, fiscal_quarter)
         quarter = fiscal_quarter.astype(float)
@@ -421,11 +524,14 @@ if pl is not None:
 
         raw_num = raw_numeric if raw_numeric is not None else raw
         numeric_int = raw_num.cast(pl.Int64, strict=False)
-        numeric_float = raw_num.cast(pl.Float64, strict=False)
         numeric_year = numeric_int // 10
         numeric_quarter = numeric_int % 10
+        # Round-7 P1 parity: only the compact 5-digit ``YYYYn`` encoding is a
+        # valid integer fiscal period.  A 6+-digit arbitrary integer (e.g.
+        # 123456) must NOT pass through as a raw ordinal.
         encoded_quarter = (
             numeric_int.is_not_null()
+            & numeric_int.is_between(10_000, 99_999)
             & (numeric_year >= 1000)
             & numeric_quarter.is_between(1, 4)
         )
@@ -437,7 +543,7 @@ if pl is not None:
             .then(date_year * 4 + ((date_month - 1) // 3))
             .when(encoded_quarter)
             .then(numeric_year * 4 + numeric_quarter - 1)
-            .otherwise(numeric_float)
+            .otherwise(pl.lit(None))
             .cast(pl.Float64)
         )
 
@@ -692,7 +798,12 @@ if pl is not None:
         previous = pl_period_lag(x, period_id, 1, policy)
         previous_ordinal = pl_period_lag(ordinal, period_id, 1, policy)
         quarter_frame = (
-            ordinal.with_columns([((pl.col(c) % 4) + 1).alias(c) for c in pl_cols(ordinal)])
+            # Round-7 P0 fail-closed: mirror the pandas side — a missing
+            # fiscal_quarter panel must NOT fall back to the calendar quarter
+            # (non-December fiscal year-ends would be silently mangled).
+            ordinal.with_columns(
+                [pl.lit(None, dtype=pl.Float64).alias(c) for c in pl_cols(ordinal)]
+            )
             if fiscal_quarter is None
             else fiscal_quarter.with_columns(
                 [_pl_float_of(fiscal_quarter, c).alias(c) for c in pl_cols(fiscal_quarter)]

@@ -60,23 +60,34 @@ def _metadata(
     )
 
 
-def _extreme_indicator_panel(xv: np.ndarray, w: int, q: float, side: str, min_periods: int) -> np.ndarray:
+def _extreme_indicator_panel(xv: np.ndarray, w: int, q: float, side: str, min_periods: int, prior_threshold: bool = True) -> np.ndarray:
     """Per-stock trailing-quantile extreme indicator (0/1, NaN for missing).
 
     ``min_periods`` guards the cold start: with a one-row history the trailing
     quantile equals the row itself, so the first observation is *mechanically*
     its own extreme (``Q_0.1(x) == x``).  Until enough history is visible the
     indicator is NaN, never a spurious extreme=1 (review P0-14).
+
+    ``prior_threshold`` (round-7 P0, review §25): by default the quantile
+    threshold is estimated on the window *excluding* the current row, then the
+    current observation is classified against it ("is today extreme relative to
+    *history*").  ``prior_threshold=False`` restores the legacy self-normalising
+    estimate where an extreme current value inflates its own threshold.
     """
     rows, cols = xv.shape
     E = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         for r in range(rows):
             lo = max(0, r - w + 1)
-            chunk = xv[lo : r + 1, c]
-            if int(np.isfinite(chunk).sum()) < min_periods:
+            if prior_threshold:
+                if r - 1 < lo:
+                    continue  # no strictly-prior rows yet
+                est = xv[lo:r, c]
+            else:
+                est = xv[lo : r + 1, c]
+            if int(np.isfinite(est).sum()) < min_periods:
                 continue
-            thr = float(np.nanquantile(chunk, q if side == "lower" else 1.0 - q))
+            thr = float(np.nanquantile(est, q if side == "lower" else 1.0 - q))
             if not np.isfinite(thr) or not np.isfinite(xv[r, c]):
                 continue
             if side == "lower":
@@ -101,9 +112,9 @@ def _group_index_by_day(gv: np.ndarray) -> list[dict[Any, np.ndarray]]:
     return days
 
 
-def _tail_centrality_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: str, min_periods: int) -> np.ndarray:
+def _tail_centrality_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: str, min_periods: int, prior_threshold: bool = True) -> np.ndarray:
     rows, cols = xv.shape
-    E = _extreme_indicator_panel(xv, w, q, side, min_periods)
+    E = _extreme_indicator_panel(xv, w, q, side, min_periods, prior_threshold)
     by_day = _group_index_by_day(gv)
     out = np.full((rows, cols), np.nan, dtype=float)
     # Rolling-window centrality: per-day contributions live in a ring buffer and
@@ -165,7 +176,7 @@ class GroupTailCentrality(SeriesOperator):
     metadata = _metadata(
         "group_tail_centrality",
         "尾部系统性中心度（个股极值与同组极值共振程度）。",
-        ["x", "group_id", "window", "quantile", "side", "min_periods"],
+        ["x", "group_id", "window", "quantile", "side", "min_periods", "prior_threshold"],
         unit="probability",
         cost=6,
     )
@@ -178,13 +189,17 @@ class GroupTailCentrality(SeriesOperator):
         quantile: float = 0.1,
         side: str = "lower",
         min_periods: int = 10,
+        prior_threshold: bool = True,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
         q = float(quantile)
         mp = int(min_periods)
-        if not (0.0 < q < 1.0):
-            raise ValueError("group_tail_centrality requires 0 < quantile < 1")
+        # ``quantile`` defines an *extreme/tail state* — q > 0.5 is not a tail
+        # (the upper side mirrors at 1-q, so (0, 0.5] spans every meaningful
+        # tail fraction).
+        if not (0.0 < q <= 0.5):
+            raise ValueError("group_tail_centrality requires 0 < quantile <= 0.5 (tail state)")
         if side not in ("lower", "upper"):
             raise ValueError("side must be 'lower' or 'upper'")
         if w < 5:
@@ -193,13 +208,13 @@ class GroupTailCentrality(SeriesOperator):
             raise ValueError("group_tail_centrality requires 1 <= min_periods <= window")
         return frame_like(
             x,
-            _tail_centrality_series(x.to_numpy(dtype=float), group_id.to_numpy(dtype=object), w, q, side, mp),
+            _tail_centrality_series(x.to_numpy(dtype=float), group_id.to_numpy(dtype=object), w, q, side, mp, bool(prior_threshold)),
         )
 
 
-def _tail_lead_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: str, lag: int, min_periods: int) -> np.ndarray:
+def _tail_lead_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: str, lag: int, min_periods: int = 10, prior_threshold: bool = True) -> np.ndarray:
     rows, cols = xv.shape
-    E = _extreme_indicator_panel(xv, w, q, side, min_periods)
+    E = _extreme_indicator_panel(xv, w, q, side, min_periods, prior_threshold)
     by_day = _group_index_by_day(gv)
     out = np.full((rows, cols), np.nan, dtype=float)
     for r in range(rows):
@@ -267,7 +282,7 @@ class GroupTailLeadScore(SeriesOperator):
     metadata = _metadata(
         "group_tail_lead_score",
         "尾部领先分 P(E_peer,d+lag | E_i,d) - P(E_peer,d+lag)（completed-only）。",
-        ["x", "group_id", "window", "quantile", "side", "lag", "min_periods"],
+        ["x", "group_id", "window", "quantile", "side", "lag", "min_periods", "prior_threshold"],
         unit="probability",
         cost=7,
     )
@@ -281,14 +296,15 @@ class GroupTailLeadScore(SeriesOperator):
         side: str = "lower",
         lag: int = 1,
         min_periods: int = 10,
+        prior_threshold: bool = True,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
         q = float(quantile)
         lg = int(lag)
         mp = int(min_periods)
-        if not (0.0 < q < 1.0):
-            raise ValueError("group_tail_lead_score requires 0 < quantile < 1")
+        if not (0.0 < q <= 0.5):
+            raise ValueError("group_tail_lead_score requires 0 < quantile <= 0.5 (tail state)")
         if side not in ("lower", "upper"):
             raise ValueError("side must be 'lower' or 'upper'")
         if lg < 1:
@@ -299,7 +315,7 @@ class GroupTailLeadScore(SeriesOperator):
             raise ValueError("group_tail_lead_score requires 1 <= min_periods <= window")
         return frame_like(
             x,
-            _tail_lead_series(x.to_numpy(dtype=float), group_id.to_numpy(dtype=object), w, q, side, lg, mp),
+            _tail_lead_series(x.to_numpy(dtype=float), group_id.to_numpy(dtype=object), w, q, side, lg, mp, bool(prior_threshold)),
         )
 
 

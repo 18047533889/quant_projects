@@ -13,7 +13,8 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import SeriesOperator, register_operator
-from cleaned_operators.ts_model._rolling_core import frame_like, metadata
+from cleaned_operators.registry import OperatorRegistry
+from cleaned_operators.ts_model._rolling_core import fit_linear_model_checked, frame_like, metadata
 
 _CANONICALS: list[str] = []
 
@@ -65,7 +66,11 @@ def _fit_garch(rets: np.ndarray) -> tuple[float, float, float] | None:
         if a < 1e-6 or b < 1e-6 or a + b >= 0.999:
             return 1e12
         w = max(long_var * (1 - a - b), 1e-12)
-        h = np.full(len(rets), w, dtype=float)
+        # Unify the likelihood's initial variance with the output recursion's
+        # seed (_variance_path callers pass var(fit_seg)): both backcast from the
+        # unconditional variance long_var = omega/(1-alpha-beta), not the
+        # constant term omega alone.
+        h = np.full(len(rets), long_var, dtype=float)
         for t in range(1, len(rets)):
             h[t] = w + a * rets[t - 1] ** 2 + b * h[t - 1]
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -176,7 +181,9 @@ def _fit_gjr(rets: np.ndarray) -> tuple[float, float, float, float] | None:
         if min(a, b, g) < 1e-6 or a + 0.5 * g + b >= 0.999:
             return 1e12
         w = max(long_var * (1 - a - 0.5 * g - b), 1e-12)
-        h = np.full(len(rets), w, dtype=float)
+        # Unify with the output recursion seed: backcast from the unconditional
+        # variance long_var (= omega/(1-a-0.5g-b)), matching _variance_path.
+        h = np.full(len(rets), long_var, dtype=float)
         for t in range(1, len(rets)):
             lev = g if rets[t - 1] < 0 else 0.0
             h[t] = w + (a + lev) * rets[t - 1] ** 2 + b * h[t - 1]
@@ -216,9 +223,16 @@ _register("ts_garch_persistence", "GARCH(1,1) 波动持续 alpha+beta。", ["x",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "persistence", False, 0.0)))
 _register("ts_garch_standardized_shock", "GARCH 标准化冲击 return/条件波动率（参数于 t-1 及以前拟合）。", ["x", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "shock", False, 0.0)))
-# Deprecated alias for the next-period forecast (kept registered).
-_register("ts_garch_vol_forecast", "GARCH(1,1) 下一期条件波动率（deprecated 别名）。", ["x", "window"], "volatility",
-           lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", False, 0.0)))
+# Deprecated alias for the next-period forecast: a registry compatibility
+# alias, NOT a separate canonical — mining must not double-search the same
+# kernel under two independent research candidates.
+OperatorRegistry.register_compat_alias(
+    "ts_garch_vol_forecast",
+    "ts_garch_next_vol_forecast",
+    migration_reason="legacy name for the identical next-period GARCH forecast",
+    deprecated_since="2026-08",
+    removal_version="1.0",
+)
 _register("ts_gjr_garch_vol_forecast", "GJR-GARCH 波动预测（杠杆效应）。", ["x", "window"], "volatility",
            lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", True, 0.0)))
 _register("ts_gjr_leverage", "GJR 负收益冲击系数。", ["x", "window"], "level",
@@ -283,7 +297,10 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
             return np.nan
         Xs = X[valid_t]
         y = target[valid_t]
-        beta, *_ = np.linalg.lstsq(Xs, y, rcond=None)
+        # ModelDesignGate: reject rank-deficient / ill-conditioned HAR design.
+        beta = fit_linear_model_checked(Xs, y)
+        if beta is None:
+            return np.nan
         pred = float(np.dot(X[-1], beta))
         return float(np.sqrt(max(pred, 0.0)))
     # Current-period surprise RV_t - forecast(RV_t | t-1).  P0-039: the
@@ -297,8 +314,9 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     y = seg[fit_rows + 1][fit_valid]
     if Xs.shape[0] < 25 or Xs.shape[0] <= Xs.shape[1]:
         return np.nan
-    beta, *_ = np.linalg.lstsq(Xs, y, rcond=None)
-    if not np.all(np.isfinite(beta)):
+    # ModelDesignGate: an ill-conditioned HAR design fails closed (NaN).
+    beta = fit_linear_model_checked(Xs, y)
+    if beta is None:
         return np.nan
     pred_t = float(np.dot(X[n - 2], beta))  # forecast RV_{n-1} from t-1 info
     sd = float(np.std(y - Xs @ beta))

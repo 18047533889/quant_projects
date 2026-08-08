@@ -33,11 +33,19 @@ from data_access.registry.schema_validation import (
 @pytest.mark.parametrize(
     "declared,actual,expected",
     [
-        # 别名：timestamp
+        # 别名：timestamp —— #P1-final closure 11 正式规定 naive：绝不匹配 aware
         ("timestamp", "TIMESTAMP", True),
-        ("timestamp", "TIMESTAMP WITH TIME ZONE", True),
+        ("timestamp", "TIMESTAMP WITH TIME ZONE", False),
+        ("timestamp", "TIMESTAMPTZ", False),
         ("timestamp", "TIMESTAMP_NS", True),
-        ("datetime", "TIMESTAMP WITH TIME ZONE", True),
+        ("datetime", "TIMESTAMP", True),
+        ("datetime", "TIMESTAMP_MS", True),
+        ("datetime", "TIMESTAMP WITH TIME ZONE", False),
+        # timestamptz：只匹配 aware
+        ("timestamptz", "TIMESTAMP WITH TIME ZONE", True),
+        ("timestamptz", "TIMESTAMPTZ", True),
+        ("timestamptz", "TIMESTAMP", False),
+        ("timestamptz", "TIMESTAMP_NS", False),
         # 别名：int
         ("int", "BIGINT", True),
         ("int", "INTEGER", True),

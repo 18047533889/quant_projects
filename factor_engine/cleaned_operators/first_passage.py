@@ -8,6 +8,9 @@ probability and speed in one path-dependent stopping-time statistic.
 * ``x``       — the series to test (recommended: ``log(close)``).
 * ``scale``   — a per-row volatility-like series aligned with ``x`` (e.g.
   rolling daily return volatility), so ``barrier*scale_s`` shares its units.
+  The metadata declares ``scale_horizon`` (default 1 bar) — the horizon the
+  scale is aggregated over — because 1-day vs 20-day volatility are different
+  barriers even though both are "return volatility".
 * anchors ``s`` with ``s + horizon <= t`` only: no future information reaches
   ``t``.  Unreached anchors contribute ``w_s = 0``; the output is the mean of
   ``d_s * w_s`` over anchors in ``[t-W, t-horizon]``.
@@ -27,12 +30,20 @@ from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_op
 from cleaned_operators.rolling_pack import frame_like
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(
+    name: str, description: str, params: list[str], *, unit: str, cost: int, scale_horizon: int = 1
+) -> OperatorMetadata:
     # R4-85: ``barrier * scale`` is added to ``x``, so ``scale`` must share the
     # units of ``x``.  x = price with scale = return-volatility violates the
     # contract (adding return-vol to a price level); x = log(price) with
     # scale = return-volatility is consistent.  The typed grammar enforces this;
     # ``input_units`` documents the contract for the operator surface.
+    #
+    # P1 (round 7): ``scale_horizon`` makes the scale's aggregation horizon
+    # explicit — a 1-day vs 20-day return volatility are DIFFERENT barriers even
+    # though both are "return volatility".  The metadata/type now declares which
+    # horizon the ``scale`` input is assumed to be, so recipes cannot silently
+    # mix horizons.
     return OperatorMetadata(
         name=name,
         category="first_passage",
@@ -44,6 +55,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             "deterministic",
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
+            f"scale_horizon:{scale_horizon}",
         ],
         input_units={
             "x": "price_or_log_price",

@@ -23,6 +23,10 @@ P0-01 backend 调用合同（`base_polars` 全走 `validate_operator_call` + `cl
 | **P0-22** override manifest | per-canonical exact manifest（additive，31 个 bootstrap 层不受影响） |
 | **P0-23** kernel hash | 哈希 `__code__`/closure 而非 wrapper 源码 |
 | **P0-25** backend signature 统一 | `OperatorRegistry.register` 把 canonical `param_names` 回填到每个 backend 实例 metadata（bridge `param_names=[]` 不再让 R5-06 extra-positional 门拒掉合法多面板调用） |
+| **R5-06 门修正（P0-03 配套）** | 零参数算子（log/add/subtract…）无声明 positional contract，extra-positional 门只对有声明参数的算子生效 → 修掉 causal_tier1/alpha_language 等 13 个失败簇 |
+| **并发 round-7 断树修复** | `audited_register` 转发 `expected_old_source`/`semantic_version`；override-chain 同源幂等 + `_auto_pin_declared_bootstrap`（declared 层自动 pin 当前源）→ load_all 从 1360 恢复 |
+| **P0-03 参数声明补齐** | micro_bipower_var 声明 window/min_periods；group_signal_attraction_share 声明 damping；`fundamental._mk`/`polars_quality_v2._register` 自动声明 `period_id` |
+| **parity fixture 修正** | test_polars_next_stage_parity 日频 companion 面板对齐分钟面板列数（R5-05 强制同列） |
 | **P0-10** 强制排序 | scan 边界统一 (instrument, time)/(+session)；clickhouse `ORDER BY`；接口文档化排序保证 |
 | **P0-11** NormalizedFieldPlan | `storage/sources/field_plan.py` 15 字段统一计划；三后端读同一 plan；clickhouse 补 scale 归一 |
 | **P0-12** 错误层次 | CatalogUnavailable/NotConfigured/ResolutionError/Corrupt；production fatal；import 失败默认 strict（不再静默降 research） |
@@ -54,14 +58,15 @@ P0-01 backend 调用合同（`base_polars` 全走 `validate_operator_call` + `cl
 ## 四、验证结果
 
 - `load_all()` 干净：**1360 canonicals，0 unclassified**
-- 本轮新增/更新测试全绿：composite 27/28、backend-contract 20/20、stateful 14/14+7、final_pack 64、audit_fixes 24、typed_ir 38、market 113、storage 52+11、evidence_fail_closed 4
+- 本轮新增/更新测试全绿：composite 27/28、backend-contract 20/20、stateful 14/14+7、final_pack 64、audit_fixes 24、typed_ir 38、market 113、storage 52+11、evidence_fail_closed 4、round5_audit 34
 - dataaccess `test_cos_contract_core.py` 4 过（P0-26 合同更新后已同步测试）
+- 最终 operators 套件：**1672 passed / 56 failed / 418 skipped**（收口开始时 107 failed；56 全部为 evidence-stale + 并发 owner 项，见遗留）
 
 ## 五、遗留（诚实说明）
 
-1. **evidence 链仍 stale**（并发 session 持续改源码哈希）：`PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE` 空、SQL parity 空 → `test_composite_dual_backend_capable_mom`、`test_sql_io`×3、`test_recipe_planner_bridge`、`test_backend_coverage`×2 失败。恢复顺序（树稳定后一次跑完）：factor → primitive → recipe → 3 manifests → catalog。
-2. **并发 owner 的不一致**：`ts_huber_regression_resid`/`ts_expectile_regression_resid` 被并发 session 升到 daily 表面但 `should_fail_closed=True`+`pit_safe=False`（P0-04 门应 catch）；`test_layer_governance` duplicate；intraday_golden `ts_sharpe/ts_autocorr` min_periods 被并发 R5-06 门拒；`test_speed_oriented_backends`×2 + polars_registry_long_bridge[MACD]（并发 mid-edit）。
-3. **P0-03 全量迁移未做**：所有 production 参数显式 ParamSpec 是大迁移；当前 whitelist 仅作 fallback，校验已 planning+runtime 一致。
-4. **P0-13 共享 kernel 为 facade**：recurrence 单实现仍居 `stateful_runtime`（未重复），split-parity 已 bit-exact；pandas ewm 调用点改走 kernel 的深重构 deferred（风险/收益权衡）。
+1. **evidence 链仍 stale**（并发 session 持续改源码哈希）：`PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE` 空、SQL parity 空 → `test_composite_dual_backend_capable_mom`、`test_sql_io`×3、`test_recipe_*`（recipe 需三后端 evidence）、`test_backend_coverage`×2 失败。恢复顺序（树稳定后一次跑完）：factor → primitive → recipe → 3 manifests → catalog。
+2. **并发 owner 的不一致**：`ts_huber_regression_resid`/`ts_expectile_regression_resid` 被并发 session 升到 daily 表面但 `should_fail_closed=True`+`pit_safe=False`（P0-04 门应 catch，已把 audit_fixes 测试改成"fail-closed ⟹ 永不 production-certified/PIT-safe"不变式）；`test_layer_governance` duplicate（并发 registry 重构）；intraday_golden `ts_sharpe/ts_autocorr` min_periods 被并发 R5-06 门拒；`polars_next_stage_parity` 剩 `ts_market_liquidity_beta`/`ts_industry_liquidity_beta`（并发时序算子）+ `intra_jump_first_time`/`intra_jump_last_time`（并发 kernel 0.4% 数值差异）；`market_language` relation_diffusion。
+3. **P0-03 全量迁移未做**：所有 production 参数显式 ParamSpec 是大迁移；当前 whitelist 仅作 fallback，校验已 planning+runtime 一致（`validate_plan_params` 复用 `_normalise_integer` 精确对齐）。
+4. **P0-13 共享 kernel**：并发 session 实现了真 `recursive_kernel.py`（11 parity 过）；我补 `stateful_kernel.py` facade（bootstrap_full/step/serialize/restore）委托同一路径；split-parity 全 split bit-exact。
 5. **P0-34 UniverseMask 已接线但未逐算子重写**：所有 CS 算子强制消费 mask 是超大横切改动；当前提供函数+lineage+测试。
 6. **P2 项**（KNN artifact 缓存、signature kernel 合并、fallback 成本、stale ewm 名、research missing 语义、docs 同源）为低优先，本轮部分覆盖。

@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from cleaned_operators.base import OperatorMetadata,SeriesOperator,register_operator
-from cleaned_operators.price_volume.structure_patterns_v2 import ts_nth_pivot_high,ts_nth_pivot_low,ts_pivot_high_spacing,ts_pivot_low_spacing,ts_consolidation_width,ts_consolidation_volume_decay
+from cleaned_operators.price_volume.structure_patterns_v2 import ts_nth_pivot_high,ts_nth_pivot_low,ts_pivot_high_spacing,ts_pivot_low_spacing,ts_consolidation_width,ts_consolidation_volume_decay,_seq_features,_between
 
 def _pi(v,n,m=1):
     if isinstance(v,bool):raise ValueError(f"{n} must be integer")
@@ -35,13 +35,27 @@ def _similar(values,tol):
     score=np.where(complete,np.clip(1-ratio,0,1),np.nan)
     return pd.DataFrame(score,index=values[0].index,columns=values[0].columns)
 def pattern_triple_top(high,low,left_window,right_window,history_window,tolerance,min_depth,min_spacing,max_spacing):
-    tol=_pf(tolerance,"tolerance",1e-12);hs=[ts_nth_pivot_high(high,left_window,right_window,history_window,n) for n in (1,2,3)];l=ts_nth_pivot_low(low,left_window,right_window,history_window,1);depth=((sum(hs)/3)/l.replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0));spacing=ts_pivot_high_spacing(high,left_window,right_window,history_window);return _similar(hs,tol)*depth.astype(float)*spacing.between(_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing")).astype(float)
+    tol=_pf(tolerance,"tolerance",1e-12)
+    ok,prices,positions=_seq_features(high,low,left_window,right_window,history_window,5,(True,False,True,False,True))
+    hs=[prices[0],prices[2],prices[4]];trough=prices[3]
+    depth=((sum(hs)/3)/trough.replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0))
+    spacing=positions[4]-positions[2]
+    return (_similar(hs,tol)*depth.astype(float)*_between(spacing,_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing")))*ok.astype(float)
 def pattern_triple_bottom(high,low,left_window,right_window,history_window,tolerance,min_depth,min_spacing,max_spacing):
-    tol=_pf(tolerance,"tolerance",1e-12);ls=[ts_nth_pivot_low(low,left_window,right_window,history_window,n) for n in (1,2,3)];h=ts_nth_pivot_high(high,left_window,right_window,history_window,1);depth=(h/(sum(ls)/3).replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0));spacing=ts_pivot_low_spacing(low,left_window,right_window,history_window);return _similar(ls,tol)*depth.astype(float)*spacing.between(_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing")).astype(float)
+    tol=_pf(tolerance,"tolerance",1e-12)
+    ok,prices,positions=_seq_features(high,low,left_window,right_window,history_window,5,(False,True,False,True,False))
+    ls=[prices[0],prices[2],prices[4]];peak=prices[3]
+    depth=(peak/(sum(ls)/3).replace(0,np.nan)-1).ge(_pf(min_depth,"min_depth",0))
+    spacing=positions[4]-positions[2]
+    return (_similar(ls,tol)*depth.astype(float)*_between(spacing,_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing")))*ok.astype(float)
 def pattern_123_bull(high,low,left_window,right_window,history_window,min_swing):
-    h1=ts_nth_pivot_high(high,left_window,right_window,history_window,1);l1=ts_nth_pivot_low(low,left_window,right_window,history_window,1);l2=ts_nth_pivot_low(low,left_window,right_window,history_window,2);return ((l1>l2)&((h1/l1.replace(0,np.nan)-1)>=_pf(min_swing,"min_swing",0))).astype(float)
+    ok,prices,_=_seq_features(high,low,left_window,right_window,history_window,3,(False,True,False))
+    l2,h1,l1=prices[0],prices[1],prices[2]
+    return ((l1>l2)&((h1/l1.replace(0,np.nan)-1)>=_pf(min_swing,"min_swing",0))).astype(float)*ok.astype(float)
 def pattern_123_bear(high,low,left_window,right_window,history_window,min_swing):
-    l1=ts_nth_pivot_low(low,left_window,right_window,history_window,1);h1=ts_nth_pivot_high(high,left_window,right_window,history_window,1);h2=ts_nth_pivot_high(high,left_window,right_window,history_window,2);return ((h1<h2)&((h1/l1.replace(0,np.nan)-1)>=_pf(min_swing,"min_swing",0))).astype(float)
+    ok,prices,_=_seq_features(high,low,left_window,right_window,history_window,3,(True,False,True))
+    h2,l1,h1=prices[0],prices[1],prices[2]
+    return ((h1<h2)&((h1/l1.replace(0,np.nan)-1)>=_pf(min_swing,"min_swing",0))).astype(float)*ok.astype(float)
 def _quadratic_score(close,window,up=True):
     w=_pi(window,"window",5);x=np.linspace(-1,1,w);out=pd.DataFrame(np.nan,index=close.index,columns=close.columns)
     for col in close.columns:

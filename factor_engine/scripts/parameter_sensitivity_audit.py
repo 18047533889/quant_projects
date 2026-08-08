@@ -77,13 +77,27 @@ def _build_inputs(op: Any) -> tuple[list[str], dict[str, pd.DataFrame]]:
     panel = probe_panel(seed=7)
     inputs: dict[str, pd.DataFrame] = {}
     names: list[str] = []
+    slot = 0
     for p in params:
         if p in {"window", "min_periods", "lag", "periods", "bins", "order", "block", "max_q", "q", "coefficient_index", "d", "k", "level", "band", "short_periods", "long_periods"}:
             continue  # numeric control params get sampled, not fed
         if p in inputs:
             continue
         names.append(p)
-        inputs[p] = panel if p != "condition" else (panel > 0).astype(float)
+        # Feed DIFFERENT values per input slot so operators whose output is a
+        # cross-input relationship (e.g. ADL's money-flow multiplier) are not
+        # collapsed by feeding the identical panel to every argument.
+        if p == "condition":
+            inputs[p] = (panel > 0).astype(float)
+        elif slot == 0:
+            inputs[p] = panel
+        elif slot == 1:
+            inputs[p] = panel + 1.0
+        elif slot == 2:
+            inputs[p] = panel * 0.5 + 2.0
+        else:
+            inputs[p] = -panel + 0.5
+        slot += 1
     return names, inputs
 
 

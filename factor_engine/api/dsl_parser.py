@@ -38,7 +38,14 @@ class _ExprBuilder:
             from api.cleaned_ops import make_cleaned_call_factory
             return make_cleaned_call_factory("not_")(self._visit(node.operand))
         if isinstance(node,ast.Constant):
-            if isinstance(node.value,(str,int,float,bool)) or node.value is None:return node.value
+            if isinstance(node.value,(str,int,float,bool)) or node.value is None:
+                # round-7 P0: numeric STRING literals ("5", "0.05") are converted
+                # to numbers AT THE PARSER.  The runtime parameter validator never
+                # guesses ("window=\"20\"" must not reach a kernel as a string).
+                if isinstance(node.value,str):
+                    coerced=_coerce_numeric_string(node.value)
+                    return coerced if coerced is not None else node.value
+                return node.value
             raise DSLParseError(f"Unsupported literal: {node.value!r}")
         if isinstance(node,ast.Name):
             if node.id in self._allowed:raise DSLParseError(f"Bare name {node.id!r} is not a column reference; use {node.id}(...) for operators.")
@@ -85,6 +92,25 @@ class _ExprBuilder:
             from api.cleaned_ops import make_cleaned_call_factory
             return make_cleaned_call_factory("or_")(left,right)
         raise DSLParseError(f"Unsupported binary operator: {type(node.op).__name__}")
+
+def _coerce_numeric_string(value:str):
+    """Convert a numeric string literal to int/float; None if not numeric.
+
+    ``"20"`` -> 20, ``"0.05"`` -> 0.05, ``"-3"`` -> -3.  Non-numeric strings
+    (enum choices like ``"doji"`` / ``"upper"`` / ``"zero"``) are returned as
+    None so the caller keeps them as strings.
+    """
+    stripped=value.strip()
+    if not stripped:
+        return None
+    try:
+        if stripped.lstrip("+-").isdigit():
+            return int(stripped)
+        float(stripped)
+        return float(stripped)
+    except ValueError:
+        return None
+
 
 def _is_field_identifier(name:str)->bool:return bool(name) and not name[0].isdigit() and all(c.isalnum() or c=="_" for c in name)
 def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)

@@ -117,6 +117,19 @@ def _is_compatible(declared: str, actual: str) -> bool:
             for t in ("TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ")
         )
 
+    # #P1-final closure 11：``timestamp`` / ``datetime`` 正式规定为 **naive**——
+    # 匹配 TIMESTAMP / TIMESTAMP_NS / TIMESTAMP_MS / TIMESTAMP_S，但**绝不**匹配
+    # TIMESTAMP WITH TIME ZONE / TIMESTAMPTZ。naive 与 aware 从此显式分离：
+    # 声明 timestamp 的数据集如果实际是 aware 时间戳，schema 校验会明确报错
+    # （提示改用 timestamptz），不再被宽松前缀静默放行。
+    if declared_lc in {"timestamp", "datetime"}:
+        if (
+            actual_upper.startswith("TIMESTAMP WITH TIME ZONE")
+            or actual_upper == "TIMESTAMPTZ"
+        ):
+            return False
+        return any(actual_upper.startswith(pref) for pref in _TYPE_ALIASES[declared_lc])
+
     # 别名命中
     if declared_lc in _TYPE_ALIASES:
         return any(actual_upper.startswith(pref) for pref in _TYPE_ALIASES[declared_lc])

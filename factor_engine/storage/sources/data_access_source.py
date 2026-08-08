@@ -1,6 +1,8 @@
 """通过 ``data_access.get_store()`` 读取登记数据集并绑定快照缓存。"""
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import sys
 import time
@@ -194,10 +196,13 @@ class DataAccessSource(DataSource):
             else bool(self.params.pop("read_auto", False))
         )
         self._lazy_scan = bool(self.params.pop("lazy_scan", False))
-        #: Unified field-resolution plans keyed by logical name (P0-11).  Produced
-        #: by ``_resolve_columns`` / ``_ensure_field_plans`` and consumed by scale
+        #: Unified field-resolution plans keyed by ``(logical_name,
+        #: semantic_catalog_version)`` (P0-11, round-7 P0).  Produced by
+        #: ``_resolve_columns`` / ``_ensure_field_plans`` and consumed by scale
         #: normalization so the catalog/registry unit contract is a single object.
-        self._field_plans: dict[str, NormalizedFieldPlan] = {}
+        #: Keying by catalog version invalidates stale plans when the catalog's
+        #: scale/mapping semantics change.
+        self._field_plans: dict[tuple[str, str], NormalizedFieldPlan] = {}
         self._column_cache: OrderedDict[str, Any] = OrderedDict()
         self._panel_cache: OrderedDict[str, Any] = OrderedDict()
         self._lazy_bundle: Any | None = None
@@ -316,19 +321,24 @@ class DataAccessSource(DataSource):
                 f"{mistaken_ops}. Expand the formula/template before data access."
             )
 
-    def _resolve_catalog_fields(self, names: list[str]) -> list[Any] | None:
+    def _resolve_catalog_fields(self, names: list[str]) -> dict[str, Any] | None:
         """Resolve logical fields via ``store.resolve_fields`` (SemanticFieldCatalog).
 
-        Returns the aligned list of ``SemanticField`` objects on success, or
-        ``None`` when the catalog is unavailable / reports a clean miss and the
-        caller should fall back to the FE FIELD_REGISTRY.
+        Returns ``dict[logical_name, SemanticField]`` for the names the catalog
+        actually resolved, or ``None`` when the catalog itself is unavailable and
+        the caller should fall back to the FE FIELD_REGISTRY for ALL names.
+
+        Round-7 P1 partial resolution: a clean per-name catalog miss skips only
+        that name (the caller falls back to the FE registry per-name below), it
+        does NOT fail the whole batch.  Results are keyed by logical name — never
+        a positional ``zip``, which would silently truncate/reorder if the catalog
+        result ever diverged from the request order (round-7 P0).
 
         P0-12 error hardening: catalog *failures* are classified —
           * not configured / corrupt / unavailable are FATAL in production
             (``strict_unknown_fields=True``) and warn + fall back in research;
-          * a genuine "field not found in catalog" (clean miss) always falls
-            through to FIELD_REGISTRY so the registry stays the compatibility
-            source of truth.
+          * a genuine "field not found in catalog" (clean miss) falls through to
+            FIELD_REGISTRY so the registry stays the compatibility source of truth.
         """
         try:
             from data_access.read.semantic_catalog import get_semantic_catalog
@@ -339,32 +349,71 @@ class DataAccessSource(DataSource):
                 _catalog_config_error_kind(exc), exc, "semantic catalog not available"
             )
             return None
-        try:
-            result = _get_store().resolve_fields(list(names), dataset=self.dataset)
-        except Exception as exc:
-            if _is_clean_catalog_miss(exc):
-                logger.debug(
-                    "semantic catalog clean miss dataset=%s fields=%s: %s",
-                    self.dataset, names, exc,
+        catalog_by_name: dict[str, Any] = {}
+        for name in names:
+            try:
+                result = _get_store().resolve_fields([name], dataset=self.dataset)
+            except Exception as exc:
+                if _is_clean_catalog_miss(exc):
+                    logger.debug(
+                        "semantic catalog clean miss dataset=%s field=%s: %s",
+                        self.dataset, name, exc,
+                    )
+                    continue
+                self._raise_or_fallback(
+                    _catalog_resolution_error_kind(exc), exc, "semantic catalog resolution failed"
                 )
-                return None
-            self._raise_or_fallback(
-                _catalog_resolution_error_kind(exc), exc, "semantic catalog resolution failed"
-            )
-            return None
-        if result is None:
-            return None
+                continue
+            if result is None:
+                continue
+            try:
+                resolved = list(result)
+            except TypeError:
+                self._raise_or_fallback(
+                    CatalogResolutionError,
+                    TypeError(
+                        f"catalog resolve_fields returned a non-iterable for dataset={self.dataset!r}"
+                    ),
+                    "semantic catalog resolution returned a non-iterable",
+                )
+                continue
+            if len(resolved) != 1:
+                self._raise_or_fallback(
+                    CatalogResolutionError,
+                    ValueError(
+                        f"catalog resolve_fields returned {len(resolved)} rows for one "
+                        f"request field={name!r} dataset={self.dataset!r}"
+                    ),
+                    "semantic catalog resolution length mismatch",
+                )
+                continue
+            catalog_by_name[name] = resolved[0]
+        return catalog_by_name
+
+    @staticmethod
+    def _semantic_catalog_version() -> str:
+        """Deterministic version token over the loaded SemanticFieldCatalog.
+
+        The catalog is the single source of truth for field scale/mapping
+        semantics; keying the field-plan cache by this token invalidates stale
+        plans whenever the catalog's field declarations change (round-7 P0).
+        Returns ``"unavailable"`` when the catalog cannot be loaded — a stable
+        token so a later catalog availability change still busts the cache.
+        """
         try:
-            return list(result)
-        except TypeError:
-            self._raise_or_fallback(
-                CatalogResolutionError,
-                TypeError(
-                    f"catalog resolve_fields returned a non-iterable for dataset={self.dataset!r}"
-                ),
-                "semantic catalog resolution returned a non-iterable",
-            )
-            return None
+            from data_access.read.semantic_catalog import get_semantic_catalog
+
+            catalog = get_semantic_catalog()
+            payload: dict[str, Any] = {}
+            for name, f in getattr(catalog, "_fields", {}).items():
+                try:
+                    payload[name] = f.to_dict()
+                except Exception:
+                    payload[name] = str(f)
+            raw = json.dumps(payload, sort_keys=True, default=str)
+            return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+        except Exception:
+            return "unavailable"
 
     def _raise_or_fallback(
         self,
@@ -395,12 +444,9 @@ class DataAccessSource(DataSource):
         normalization, so the unit/scale contract comes from one source.
         """
         plans: dict[str, NormalizedFieldPlan] = {}
-        catalog_fields = self._resolve_catalog_fields(names)
-        catalog_by_name: dict[str, Any] = {}
-        if catalog_fields is not None:
-            for raw_name, f in zip(names, catalog_fields):
-                if f is not None and getattr(f, "physical_name", None):
-                    catalog_by_name[raw_name] = f
+        # Round-7 P1 partial resolution: only the names the catalog resolved use
+        # catalog plans; clean per-name misses fall back to the FE registry below.
+        catalog_by_name = self._resolve_catalog_fields(names) or {}
         for name in names:
             f = catalog_by_name.get(name)
             if f is not None:
@@ -414,12 +460,21 @@ class DataAccessSource(DataSource):
         return plans
 
     def _ensure_field_plans(self, names: Iterable[str]) -> dict[str, NormalizedFieldPlan]:
-        """Return cached plans for ``names``, building only the missing ones."""
+        """Return cached plans for ``names``, building only the missing ones.
+
+        Round-7 P0: the plan cache is keyed by ``(logical_name,
+        semantic_catalog_version)`` so a catalog semantic change (scale / mapping /
+        mining_allowed) invalidates the cached plans instead of silently serving
+        stale normalization contracts.  ``clear_cache()`` drops the whole cache.
+        """
         names = list(names)
-        missing = [n for n in names if n not in self._field_plans]
+        version = self._semantic_catalog_version()
+        missing = [n for n in names if (n, version) not in self._field_plans]
         if missing:
-            self._field_plans.update(self._build_field_plans(missing))
-        return self._field_plans
+            built = self._build_field_plans(missing)
+            for n, plan in built.items():
+                self._field_plans[(n, version)] = plan
+        return {n: self._field_plans[(n, version)] for n in names}
 
     @staticmethod
     def _detect_source_frequency(ds) -> str | None:
@@ -455,13 +510,28 @@ class DataAccessSource(DataSource):
             # Only a real catalog/registry plan maps to a physical column; a
             # ``raw`` plan (no registered contract) must stay unresolved so the
             # production fail-closed check below still fires for unknown fields.
+            # Round-7 P0: a derived field (``plan.is_derived``) is NOT a plain
+            # physical column — its ``primary_physical`` (if any) is the base read,
+            # never the derived value, so it must not be mapped here.
             if (
                 src is None
                 and plan is not None
                 and plan.source != "raw"
                 and plan.primary_physical
+                and not plan.is_derived
             ):
                 src = plan.primary_physical
+            if plan is not None and plan.is_derived and src is None:
+                # Round-7 P0: a catalog derived field carries a derived expression;
+                # production fails closed instead of silently reading the raw
+                # physical column as the value.  Research keeps the lenient raw
+                # fallback (the plan still carries the expression for awareness).
+                if self.strict_unknown_fields:
+                    raise MissingDataDependencyError(
+                        f"dataset={self.dataset!r} field {name!r} is a catalog derived "
+                        f"field ({plan.transform!r}); derived-expression lowering is "
+                        "not wired, so it cannot be read as a plain physical column"
+                    )
             if src is None and self.strict_unknown_fields and name not in self.fields:
                 # Production fail-closed: a request that matches neither an explicit
                 # alias mapping nor a registered field of this dataset has no unit /
@@ -555,6 +625,10 @@ class DataAccessSource(DataSource):
         return self._data_snapshot_id
 
     def clear_cache(self, *, reset_snapshot: bool = True) -> None:
+        # Round-7 P0: the field-plan cache is versioned by the semantic catalog and
+        # must be dropped too, otherwise a catalog change (scale/mapping) keeps
+        # serving stale normalization contracts.
+        self._field_plans.clear()
         self._column_cache.clear()
         self._panel_cache.clear()
         self._cache_bytes = 0

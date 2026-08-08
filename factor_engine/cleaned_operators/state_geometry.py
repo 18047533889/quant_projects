@@ -27,6 +27,17 @@ from cleaned_operators.rolling_pack import frame_like
 _EPS = 1e-12
 _LN2 = float(np.log(2.0))
 
+# P1 (round 7): ordinal-pattern sample floor.  order=5 has 5! = 120 possible
+# patterns but ``min_patterns=5`` would pass with a handful of embeddings — an
+# entropy estimate over fewer than ``c * order!`` effective patterns is
+# under-sampled and must not enter mining (emit NaN instead).
+_PE_FLOOR_C = 5
+
+
+def _effective_pattern_floor(order: int, min_patterns: int) -> int:
+    """Minimum effective ordinal patterns for a trustworthy estimate."""
+    return max(int(min_patterns), _PE_FLOOR_C * math.factorial(order))
+
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
     return OperatorMetadata(
@@ -88,7 +99,12 @@ def _state_density_series(series: np.ndarray, window: int, bandwidth: float, min
         # Proper kernel-density normalisation: f̂(x) = (1/n) Σ K(u)/h, NOT the
         # raw kernel mass mean(K) — otherwise this is a "local proximity" score,
         # not a density (P1-05).
-        out[t] = float(np.mean(kern)) / (h + _EPS)
+        # P1 (round 7): raw KDE density carries unit 1/unit(x), so price /
+        # market-cap / return densities are incomparable across series.  Multiply
+        # by the past robust scale to make the mining-facing output a
+        # standardized, dimensionless local density — density in MAD units,
+        # f̂(x)·s = mean(K)/bw (h = bw·s).
+        out[t] = float(np.mean(kern)) / max(bw, _EPS)
     return out
 
 
@@ -100,19 +116,21 @@ def _state_density_series(series: np.ndarray, window: int, bandwidth: float, min
     source="state_geometry",
 )
 class TsStateDensity(SeriesOperator):
-    """当前值附近历史状态空间的 Epanechnikov 密度。
+    """当前值附近历史状态空间的 Epanechnikov 密度（无量纲）。
 
     严格过去窗口 ``R_t = {x_{t-W},...,x_{t-1}}`` 提供状态空间，当前 ``x_t`` 仅作
     query。尺度用 ``s = 1.4826*MAD(R_t)``、带宽 ``h = bandwidth*s``，输出
-    ``(1/N) Σ 0.75(1-u²) I(|u|≤1)``。高 = 当前处于历史拥挤区；低 = 历史状态真空。
-    与筹码 ``near_cost_mass``（持仓成本空间）不同：这里测任意变量自己的历史状态空间。
+    ``f̂(x_t)·s = (1/N) Σ 0.75(1-u²) I(|u|≤1) / bandwidth``（MAD 单位下的标准化
+    密度，无量纲，跨价格/市值/收益序列可比）。高 = 当前处于历史拥挤区；低 =
+    历史状态真空。与筹码 ``near_cost_mass``（持仓成本空间）不同：这里测任意变量
+    自己的历史状态空间。
     """
 
     metadata = _metadata(
         "ts_state_density",
-        "当前状态的历史 Epanechnikov 密度（拥挤度，MAD 尺度）。",
+        "当前状态的历史 Epanechnikov 密度（拥挤度，无量纲 MAD 尺度）。",
         ["x", "window", "bandwidth", "min_periods"],
-        unit="density",
+        unit="ratio",
         cost=3,
     )
 
@@ -167,7 +185,9 @@ def _distribution(codes: list[int], n_patterns: int) -> np.ndarray:
 
 def _permutation_entropy(values: np.ndarray, order: int, delay: int) -> float:
     codes = _ordinal_patterns(values, order, delay)
-    if len(codes) < 2:
+    # P1 (round 7): under-sampled entropy must not enter mining — require at
+    # least ``c * order!`` effective patterns (order=5 needs 5·120 = 600).
+    if len(codes) < _PE_FLOOR_C * math.factorial(order):
         return np.nan
     n_patterns = math.factorial(order)
     p = _distribution(codes, n_patterns)
@@ -201,10 +221,12 @@ def _irreversibility_series(series: np.ndarray, window: int, order: int, delay: 
         if chunk.shape[0] < w:
             continue
         fwd = _ordinal_patterns(chunk, order, delay)
-        if len(fwd) < mp:
+        # P1 (round 7): the same order!-scaled sample floor guards the ordinal
+        # pattern distributions — a handful of embeddings cannot estimate them.
+        if len(fwd) < _effective_pattern_floor(order, mp):
             continue
         rvs = _ordinal_patterns(chunk[::-1], order, delay)
-        if len(rvs) < mp:
+        if len(rvs) < _effective_pattern_floor(order, mp):
             continue
         pf = _distribution(fwd, n_patterns)
         pr = _distribution(rvs, n_patterns)
@@ -278,9 +300,14 @@ def _multiscale_slope_series(series: np.ndarray, window: int, order: int, min_pa
             n_seg = int(len(chunk) // s)
             if n_seg < order + 1:
                 continue
-            coarse = chunk[: n_seg * s].reshape(n_seg, s).mean(axis=1)
+            # P1 (round 7): keep the NEWEST observations when the window is not
+            # a multiple of the scale — ``chunk[:n_seg*s]`` dropped the newest
+            # 1..scale-1 bars; trailing factors must preserve the newest info.
+            coarse = chunk[-n_seg * s :].reshape(n_seg, s).mean(axis=1)
             codes = _ordinal_patterns(coarse, order, 1)
-            if len(codes) < mp:
+            # P1 (round 7): sample floor scaled to order! — under-sampled
+            # entropy at a coarse scale must not feed the slope.
+            if len(codes) < _effective_pattern_floor(order, mp):
                 continue
             n_patterns = math.factorial(order)
             p = _distribution(codes, n_patterns)

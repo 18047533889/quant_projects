@@ -193,12 +193,15 @@ def test_intraday_polars_parity(name: str) -> None:
     kind, kw = spec
 
     if kind == "limit":
-        lim_up = _daily_panel(n=10, seed=5) * 1.1
-        lim_down = _daily_panel(n=10, seed=5) * 0.9
+        # R5-05 typed-broadcast: the daily limit panels must carry the SAME
+        # instrument columns as the minute panel (broadcast requires equal
+        # column count + identity).
+        lim_up = _daily_panel(n=10, seed=5, cols=pdf.shape[1]) * 1.1
+        lim_down = _daily_panel(n=10, seed=5, cols=pdf.shape[1]) * 0.9
         pkw = {"high_limit": lim_up, "low_limit": lim_down}
         plkw = {"high_limit": _to_pl(lim_up), "low_limit": _to_pl(lim_down)}
     elif kind == "beta":
-        cap = _daily_panel(n=2, seed=3)
+        cap = _daily_panel(n=2, seed=3, cols=pdf.shape[1])
         pkw = {"free_market_cap": cap}
         plkw = {"free_market_cap": _to_pl(cap)}
     else:

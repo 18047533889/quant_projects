@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from data_access.core.exceptions import ValidationError
+from data_access.read.predicate import strict_sequence
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -107,16 +108,54 @@ class CompiledDataRequest:
         }
 
 
+def _deep_freeze(value: Any) -> Any:
+    """把任意嵌套结构深拷贝成独立对象（彻底脱离活的 request）。
+
+    优先 ``copy.deepcopy``（对 dict/list/tuple/dataclass/Predicate 都正确）；
+    万一遇到不可 deepcopy 的奇葩对象（如带 file handle），回退浅拷贝——至少
+    顶层容器独立。调用方之后改原始 req 的嵌套 dict / join spec / aggregation
+    项都不会再影响编译结果。
+    """
+    import copy
+
+    try:
+        return copy.deepcopy(value)
+    except Exception:
+        try:
+            return copy.copy(value)
+        except Exception:
+            return value
+
+
+def _deep_freeze_mapping(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return dict(_deep_freeze(value))
+
+
+def _deep_freeze_nested_mapping(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return {k: dict(_deep_freeze(v)) for k, v in value.items()}
+
+
 def compile_data_request(request: Any) -> CompiledDataRequest:
     """把 DataRequest（或等价 dict）深拷贝成不可变 CompiledDataRequest。
 
-    sequences/映射深拷贝成 tuple/dict，调用方之后改原始 req 不会影响本对象。
+    #P1-final closure 2：嵌套结构（filters / joins / join_specs / aggregation 项
+    / source_params / field_params / transforms）全部 ``deepcopy``——不再保留
+    ``request.filters`` 原对象 / join dict 浅拷贝 / aggregation tuple 里可变的
+    dict。ReadPlan.execute()/explain()/anchor 只消费这份冻结 IR，plan() 之后改
+    req 的任何嵌套字段都不会造成执行漂移。
     """
     if isinstance(request, dict):
         request = DataRequest(**request)
     fields = tuple(
         list(request.fields) if request.fields is not None else ()
     )
+    aggregations = request.aggregations
+    if aggregations is not None:
+        aggregations = tuple(_deep_freeze(a) for a in aggregations)
     return CompiledDataRequest(
         fields=fields,
         start=request.start,
@@ -132,28 +171,14 @@ def compile_data_request(request: Any) -> CompiledDataRequest:
         engine=request.engine,
         result=request.result,
         limit=request.limit,
-        filters=request.filters,
-        filters_by_dataset=(
-            dict(request.filters_by_dataset)
-            if request.filters_by_dataset
-            else None
-        ),
-        joins=dict(request.joins) if request.joins else None,
-        join_specs=dict(request.join_specs) if request.join_specs else None,
-        source_params=(
-            {k: dict(v) for k, v in request.source_params.items()}
-            if request.source_params
-            else None
-        ),
-        field_params=(
-            {k: dict(v) for k, v in request.field_params.items()}
-            if request.field_params
-            else None
-        ),
-        transforms=dict(request.transforms) if request.transforms else None,
-        aggregations=(
-            tuple(request.aggregations) if request.aggregations is not None else None
-        ),
+        filters=_deep_freeze(request.filters),
+        filters_by_dataset=_deep_freeze_mapping(request.filters_by_dataset),
+        joins=_deep_freeze_mapping(request.joins),
+        join_specs=_deep_freeze_mapping(request.join_specs),
+        source_params=_deep_freeze_nested_mapping(request.source_params),
+        field_params=_deep_freeze_nested_mapping(request.field_params),
+        transforms=_deep_freeze_mapping(request.transforms),
+        aggregations=aggregations,
         time_varying_universe=bool(getattr(request, "time_varying_universe", True)),
         order_by=tuple(request.order_by) if request.order_by else None,
         snapshot_policy=str(getattr(request, "snapshot_policy", "latest") or "latest"),
@@ -197,6 +222,24 @@ class DataRequest:
     # 回测/训练/production 建议 fail_if_changed 或 pin，保证「计划即执行」。
     snapshot_policy: str = "latest"
 
+    def __post_init__(self) -> None:
+        """#P0-C12 严格序列边界：fields/instruments/order_by 拒绝裸 str/bytes 与
+        非法元素类型。``fields="close"`` 会被逐字符拆成 c/l/o/s/e，是典型的
+        silent semantic inversion；非法元素（int/对象）也立即报错而不是 str() 化。
+        """
+        self.fields = strict_sequence(
+            self.fields, name="request.fields", element_type=str, allow_none=False
+        )
+        self.instruments = strict_sequence(
+            self.instruments,
+            name="request.instruments",
+            element_type=str,
+            allow_none=True,
+        )
+        self.order_by = strict_sequence(
+            self.order_by, name="request.order_by", element_type=str, allow_none=True
+        )
+
     @property
     def time_range(self) -> tuple[Any, Any] | None:
         if self.start is None and self.end is None:
@@ -237,11 +280,20 @@ class ReadPlan:
     snapshot_policy: str = "latest"
     # #5 plan 时刻每数据集的 manifest token（execute 前对比，变化即拒绝）
     plan_snapshot_tokens: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # #P1-final closure 3：snapshot_policy=pin 时 plan 时刻每数据集冻结的
+    # 物理文件清单（path + size + mtime_ns / etag / version_id）。execute 必须
+    # 逐文件核对——不只看 source_epoch（外部系统直接替换 parquet、没走
+    # DataAccess epoch 时不变化，只有物理 pin 能证明）。
+    plan_pinned_files: dict[str, tuple[Any, ...]] = field(default_factory=dict)
     # 绑定到 store 以便 execute（由 store.plan 注入）
     _store: Any = field(default=None, repr=False)
 
     @property
     def anchor(self) -> str | None:
+        # #P1-final closure 2：只读 plan() 时冻结的 compiled.anchor，不再读活的
+        # request——调用方在 plan() 之后改 req.anchor 不影响执行/explain。
+        if self.compiled is not None:
+            return self.compiled.anchor or (self.datasets[0] if self.datasets else None)
         return self.request.anchor or (self.datasets[0] if self.datasets else None)
 
     def explain(self) -> str:
@@ -282,10 +334,14 @@ class ReadPlan:
             f"INSTRUMENTS  {len(self.instruments or [])}  "
             f"UNIVERSE  {self.universe or '-'}"
         )
-        if self.request.frequency:
-            lines.append(f"FREQUENCY    {self.request.frequency} (declared)")
+        # #P1-final closure 2：explain 读 plan 时冻结的 compiled（frequency /
+        # normalize_units），不再读活的 request——防 plan 后篡改造成 explain 与
+        # execute 语义漂移。
+        req = self.compiled if self.compiled is not None else self.request
+        if req.frequency:
+            lines.append(f"FREQUENCY    {req.frequency} (declared)")
         lines.append(f"ENGINE       {self.engine}   RESULT  {self.result}")
-        lines.append(f"NORMALIZE    {self.request.normalize_units}")
+        lines.append(f"NORMALIZE    {req.normalize_units}")
         snap = self.snapshot_info
         if snap:
             lines.append("SNAPSHOT")
@@ -314,8 +370,15 @@ class ReadPlan:
         """#5 snapshot_policy=fail_if_changed/pin：execute 前校验数据版本未变。
 
         plan 生成后数据可能被改写（上午计划、下午执行）。对比每数据集
-        source_epoch/manifest_epoch 与 plan 时刻 token：变化 → 拒绝执行，
-        保证「计划即执行」、lineage/缓存可复现。
+        source_epoch / manifest_generation 与 plan 时刻 token；``pin`` 额外
+        逐文件核对物理身份（path+size+mtime_ns / etag / version_id）——外部
+        系统直接替换 parquet、没走 DataAccess epoch 时也能证明变化。
+
+        #P1-final closure 3 fail-closed：
+          - plan 时有 manifest、execute 时 manifest 消失 → 一律视为「已变」，
+            不再把「无法证明有没有变化」当成「没变化」（旧逻辑 fail_if_changed
+            直接 continue）。
+          - pin 必须有权威 manifest 且文件清单与 plan 时刻逐文件一致。
         """
         if self.snapshot_policy == "latest":
             return
@@ -328,30 +391,64 @@ class ReadPlan:
             except Exception:
                 token = {"has_manifest": False}
             plan_tok = self.plan_snapshot_tokens.get(ds, {}) or {}
+            had_manifest = bool(plan_tok.get("has_manifest"))
             if not token.get("has_manifest"):
                 if self.snapshot_policy == "pin":
                     unpinnable.append(ds)
-                # fail_if_changed：无 manifest 无法判断 → 视为未变（不误伤）
+                elif had_manifest:
+                    # fail_if_changed：plan 时 manifest 存在、现在消失了 →
+                    # 数据已被替换/删除，不能当作未变。
+                    changed.append(f"{ds}（manifest 消失）")
+                # 两者都无 manifest → 无法判断，不误伤。
                 continue
-            cur = token.get("source_epoch") or token.get("manifest_epoch")
-            prev = plan_tok.get("source_epoch") or plan_tok.get("manifest_epoch")
-            if cur != prev:
+            cur_src = token.get("source_epoch") or token.get("manifest_epoch")
+            prev_src = plan_tok.get("source_epoch") or plan_tok.get("manifest_epoch")
+            cur_gen = token.get("manifest_generation_id")
+            prev_gen = plan_tok.get("manifest_generation_id")
+            if cur_src != prev_src or cur_gen != prev_gen:
                 changed.append(ds)
+                continue
+            if self.snapshot_policy == "pin":
+                # 物理 pin：逐文件对比 plan 冻结的文件清单。大小/mtime（本地）
+                # 或 etag/version_id（远程）任一变化 → 数据已变。
+                pinned = self.plan_pinned_files.get(ds)
+                if pinned is None:
+                    unpinnable.append(ds)
+                    continue
+                try:
+                    paths = store._prepare_dataset_read(
+                        store._registry.get(ds),
+                        time_range=None,
+                        params=req.dataset_params(ds),
+                        instrument_filter=None,
+                    )
+                    # 物理 pin 必须**实际 stat**，不能复用 manifest——外部系统直接
+                    # 替换 parquet 后 manifest 仍是「新鲜」的（epoch 没 bump），
+                    # _files_for_snapshot 会返回 manifest 里的旧 size/mtime，等于
+                    # 没核对。用 build_file_manifest 逐文件 stat 当前真实状态。
+                    from data_access.read.read_contract import build_file_manifest
+
+                    current = build_file_manifest(paths)
+                except Exception:
+                    changed.append(f"{ds}（无法重新枚举物理文件）")
+                    continue
+                if _physical_manifest_changed(pinned, current):
+                    changed.append(f"{ds}（物理文件变化）")
         if unpinnable:
             from data_access.core.exceptions import SnapshotBuildError
 
             raise SnapshotBuildError(
                 f"snapshot_policy=pin 需要权威 manifest：{', '.join(unpinnable)} "
-                "没有 manifest，无法 pin 数据版本。请用 fail_if_changed 或去掉 "
-                "snapshot_policy=pin。"
+                "没有 manifest 或没有 plan 时冻结的物理文件清单，无法 pin 数据版本。"
+                "请用 fail_if_changed 或去掉 snapshot_policy=pin。"
             )
         if changed:
             from data_access.core.exceptions import SnapshotBuildError
 
             raise SnapshotBuildError(
                 f"snapshot_policy={self.snapshot_policy}：plan 生成后以下数据集 "
-                f"版本已变化（source_epoch/manifest_epoch 不一致），拒绝执行："
-                f"{', '.join(changed)}。请重新 plan() 绑定最新版本。"
+                f"版本已变化（source_epoch/manifest_generation 不一致或物理文件"
+                f"变化），拒绝执行：{', '.join(changed)}。请重新 plan() 绑定最新版本。"
             )
 
     def execute(self) -> Any:
@@ -497,3 +594,34 @@ def normalize_join_policy(policy: str | None) -> str:
             f"join 策略必须是 {sorted(_VALID_JOIN_POLICIES)}，收到 {policy!r}"
         )
     return key
+
+
+def _file_identity(fv: Any) -> tuple[str, Any, Any, Any, Any]:
+    """FileVersion → 物理身份键 (path, size, mtime_ns, etag, version_id)。
+
+    本地文件用 size/mtime_ns；远程对象用 etag/version_id（size/mtime 不可靠）。
+    任一字段为 None 时仍参与对比——两边同 None 视为一致（无法证明变化时在
+    pin 场景由 ``_verify_snapshot_pin`` 上层判定不可 pin）。
+    """
+    return (
+        str(getattr(fv, "path", "")),
+        getattr(fv, "size", None),
+        getattr(fv, "mtime_ns", None),
+        getattr(fv, "etag", None),
+        getattr(fv, "version_id", None),
+    )
+
+
+def _physical_manifest_changed(pinned: Sequence[Any], current: Sequence[Any]) -> bool:
+    """对比 plan 冻结与 execute 时枚举的物理文件清单。
+
+    文件集合、顺序、size/mtime_ns（本地）或 etag/version_id（远程）任一变化
+    → True（数据已变）。**注意**：这是 fail-closed 对比——pinned 为空但 current
+    非空也判变化；集合内相同文件出现/消失也判变化。
+    """
+    pinned_keys = [_file_identity(f) for f in pinned]
+    current_keys = [_file_identity(f) for f in current]
+    # 去重 + 排序后逐条比较；文件集合大小不同直接判定变化。
+    if len(pinned_keys) != len(current_keys):
+        return True
+    return sorted(set(map(str, pinned_keys))) != sorted(set(map(str, current_keys)))

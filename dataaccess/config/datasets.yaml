@@ -65,7 +65,7 @@ ashare_stock_daily:
     Factor: double
     Vwap: double
     IsSuspend: bool
-    UpdateTime: timestamp
+    UpdateTime: timestamptz   # #P1-final closure 11: 实际 parquet 为 timestamp[ms, tz=UTC]（aware）
 
 ashare_stock_minute:
   <<: *ashare_lqtp_defaults
@@ -121,7 +121,7 @@ ashare_stock_valuation_daily:
     FreeMarketCap: double
     ACap: double
     AMarketCap: double
-    UpdateTime: timestamp
+    UpdateTime: timestamptz   # #P1-final closure 11: 实际 parquet 为 timestamp[ms, tz=UTC]（aware）
 
 ashare_stock_capital_daily:
   <<: *ashare_lqtp_defaults
@@ -172,7 +172,7 @@ ashare_stock_balance:
     Symbol: string
     PubDate: date
     ReportPeriodEndDate: date
-    UpdateTime: timestamp
+    UpdateTime: timestamptz   # #P1-final closure 11: 实际 parquet 为 timestamp[ms, tz=UTC]（aware）
     TotalAssets: double
     TotalLiability: double
     TotalOwnerEquities: double
@@ -336,7 +336,7 @@ ashare_stock_industry:
     IndustrySource: string
     IndustryCode: string
     IndustryName: string
-    UpdateTime: timestamp
+    UpdateTime: timestamptz   # #P1-final closure 11: 实际 parquet 为 timestamp[ms, tz=UTC]（aware）
 
 ashare_stock_status:
   <<: *ashare_lqtp_defaults

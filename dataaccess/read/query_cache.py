@@ -166,7 +166,15 @@ def query_cache_key(
         "dataset": dataset,
         "params": dict(params or {}),
         "time_range": tuple(map(str, time_range)) if time_range else None,
-        "instruments": sorted(instruments) if instruments else None,
+        # #P0-C1 严格区分 instrument_filter=[]（空股票池）与 None（全市场）：
+        # None → null；[] → 空数组；["A","B"] → 排序后数组。旧写法
+        # `sorted(...) if instruments else None` 把 [] 折叠成 None，全市场结果
+        # 和空池结果会串 cache，命中错误结果。
+        "instruments": (
+            None
+            if instruments is None
+            else tuple(sorted(str(i) for i in instruments))
+        ),
         # #P0-35 保留列顺序：read 输出列顺序与请求一致，[A,B] 和 [B,A] 是不同结果，
         # 不能用 sorted 合并成同一 key（会命中错误列序的缓存）。
         "columns": tuple(columns) if columns else None,

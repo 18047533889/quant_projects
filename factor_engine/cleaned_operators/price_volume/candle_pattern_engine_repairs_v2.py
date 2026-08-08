@@ -22,6 +22,9 @@ def _engine(o,h,l,c,pattern,body_window,shadow_window,penetration):
     # P0-08: warmup/suspension must emit NaN ("cannot judge"), never 0
     # ("confirmed no pattern").
     cur=o.notna()&h.notna()&l.notna()&c.notna()
+    # Audit item 4 (A-share critical): a zero-amplitude 一字板 bar (O=H=L=C)
+    # must never be classified as any pattern — gate it out (emit NaN).
+    cur=cur&((h-l).abs()>1e-6*c.abs())
     prev1=po.notna()&pc.notna()&ph.notna()&pl.notna()
     prev2=prev1&o2.notna()&c2.notna()&h2.notna()&l2.notna()
     if p=="2_crows":

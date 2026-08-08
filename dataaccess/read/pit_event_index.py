@@ -29,6 +29,7 @@ filing_year/month 分区物化湖见 ``docs/PIT_SERVING_LAYOUT.md``。
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 import datetime as _dt
 from pathlib import Path
@@ -38,6 +39,28 @@ from data_access.core.exceptions import ValidationError
 
 _INDEX_FILENAME = "_pit_event_index.parquet"
 _INDEX_META_FILENAME = "_pit_event_index.json"
+
+
+def _is_nan(value: Any) -> bool:
+    """float NaN 检测（np.float64/py float 共用）。"""
+    import math
+
+    try:
+        return math.isnan(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _fsync_parent(path: Path) -> None:
+    """#P1-final closure 6：对父目录做 fsync，保证 rename 后目录项落盘。"""
+    try:
+        fd = os.open(str(Path(path).parent), os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
 
 _FILING_SCHEMA_COLS = (
     "ticker",
@@ -88,6 +111,10 @@ class PITIndexMetadata:
     schema_hash: str | None = None
     created_at: str | None = None
     complete: bool = False
+    # #P1-final closure 6：源文件枚举（glob）失败标志。glob 失败意味着「源里
+    # 可能有文件根本没被看到」——``source_file_count`` 只数成功枚举出的文件，
+    # 单独记这个标志，否则漏枚举文件的 index 仍会被标 complete=True。
+    glob_failed: bool = False
     # ---- #P0-17 generation（parquet + JSON 双写，防 partial write）----
     generation_id: str | None = None
     # ---- #P0-15/#P0-16 IndexScope ----
@@ -111,6 +138,7 @@ class PITIndexMetadata:
             "schema_hash": self.schema_hash,
             "created_at": self.created_at,
             "complete": self.complete,
+            "glob_failed": self.glob_failed,
             "generation_id": self.generation_id,
             "filing_scope_min": self.filing_scope_min,
             "filing_scope_max": self.filing_scope_max,
@@ -405,6 +433,8 @@ def build_pit_event_index(
     manifest_epoch = _manifest_epoch_of(store, dataset)
 
     files: list[str] = []
+    failed_files: list[str] = []
+    enum_failed = False  # #P1-final closure 6：glob 枚举失败 → 索引不完整
     for g in paths:
         if str(g).startswith(("s3://", "cos://")):
             continue  # 远程不建本地索引
@@ -412,14 +442,18 @@ def build_pit_event_index(
             tbl = store._engine.execute_arrow(
                 "SELECT file FROM glob(?)", [str(g)], deadline_ms=None
             )
-        except Exception:
+        except Exception as exc:
+            # #P1-final closure 6：glob 失败不能 except:continue 静默吞掉——
+            # 源里可能有文件根本没被枚举到。记进 failed_files + 置 enum_failed，
+            # complete 必为 False，禁止拿「漏枚举文件」的索引做 authoritative prune。
+            failed_files.append(f"glob:{g}")
+            enum_failed = True
             continue
         files.extend(str(r["file"]) for r in tbl.to_pylist())
     files = sorted(set(files))
     source_file_count = len(files)
 
     records: list[PITEventRecord] = []
-    failed_files: list[str] = []
     read_cols = [c for c in (inst_col, filing_col, period_col, timeframe_column) if c]
     truncated = False
     indexed_files = 0  # #P0-15 已完整索引的**文件**数（不是记录数）
@@ -435,10 +469,26 @@ def build_pit_event_index(
             if timeframe_filter and timeframe_column:
                 if str(row.get(timeframe_column) or "") != timeframe_filter:
                     continue
+            # #P1-final closure 6：null ticker / 空 filing_date → 拒绝构建。
+            # 旧代码 ticker=str(None) 会把缺失 key 变成字符串 "None" 索引进倒排
+            # 表，剪枝时匹配到假 ticker；filing_date 为空则 min/max filing 范围
+            # 失真。fail-closed：整次构建拒绝（这些是坏数据，不允许索引）。
+            ticker_val = row.get(inst_col)
+            filing_val = row.get(filing_col)
+            if ticker_val is None or (isinstance(ticker_val, float) and _is_nan(ticker_val)):
+                raise ValidationError(
+                    f"构建 PIT 索引发现 null ticker（{fp} 列 {inst_col}）："
+                    "不允许把缺失 key 当 'None' 字符串索引。请修复源数据。"
+                )
+            if filing_val is None or _as_ts(filing_val) is None:
+                raise ValidationError(
+                    f"构建 PIT 索引发现空/非法 filing_date（{fp} 列 {filing_col}）："
+                    "min/max filing 范围会失真。请修复源数据。"
+                )
             records.append(
                 PITEventRecord(
-                    ticker=str(row[inst_col]),
-                    filing_date=row[filing_col],
+                    ticker=str(ticker_val),
+                    filing_date=filing_val,
                     period_end=row.get(period_col) if period_col else None,
                     timeframe=str(row[timeframe_column]) if timeframe_column else None,
                     file_path=fp,
@@ -473,9 +523,15 @@ def build_pit_event_index(
         failed_files=tuple(failed_files),
         schema_hash=_schema_hash_of(ds),
         created_at=_dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
-        # #P0-15/#P0-16：完整 = 无失败文件 + 未截断 + 文件数全对。
-        # limit 截断构建 → complete=False（is_authoritative 必须完整）。
-        complete=(not failed_files and not truncated and indexed_files == source_file_count),
+        # #P0-15/#P0-16 + #P1-final closure 6：完整 = 无失败文件 + 无 glob 枚举
+        # 失败 + 未截断 + 文件数全对。任何一项不满足 → complete=False。
+        complete=(
+            not failed_files
+            and not enum_failed
+            and not truncated
+            and indexed_files == source_file_count
+        ),
+        glob_failed=enum_failed,
         generation_id=generation,
         filing_scope_min=filing_min,
         filing_scope_max=filing_max,
@@ -485,16 +541,25 @@ def build_pit_event_index(
     idx = PITEventIndex(records, metadata=metadata)
     try:
         # #P0-17 generation 双写：index.parquet schema metadata + metadata.json。
+        # #P1-final closure 6：sidecar 用 tmp + fsync + atomic replace，不直接覆盖
+        # 上一份好 index（进程死在 replace 前旧索引仍完整）。
         arrow = idx.to_arrow().cast(
             idx.to_arrow().schema.with_metadata(
                 {b"manifest_generation_id": generation.encode("utf-8")}
             )
         )
-        pq.write_table(arrow, str(index_path))
-        _meta_path(root).write_text(
+        tmp_pq = index_path.with_name(f".{_INDEX_FILENAME}.tmp")
+        pq.write_table(arrow, str(tmp_pq))
+        _fsync_parent(tmp_pq)
+        os.replace(str(tmp_pq), str(index_path))
+        meta_path = _meta_path(root)
+        tmp_json = meta_path.with_name(f".{_INDEX_META_FILENAME}.tmp")
+        tmp_json.write_text(
             json.dumps(metadata.to_dict(), ensure_ascii=False, sort_keys=True),
             encoding="utf-8",
         )
+        _fsync_parent(tmp_json)
+        os.replace(str(tmp_json), str(meta_path))
     except Exception as exc:
         # 写失败不阻塞正确性，但必须告警（不再静默 pass）
         import logging
@@ -543,6 +608,7 @@ def load_pit_event_index(path: Any) -> PITEventIndex:
                 schema_hash=payload.get("schema_hash"),
                 created_at=payload.get("created_at"),
                 complete=bool(payload.get("complete", False)),
+                glob_failed=bool(payload.get("glob_failed", False)),
                 generation_id=payload.get("generation_id"),
                 filing_scope_min=payload.get("filing_scope_min"),
                 filing_scope_max=payload.get("filing_scope_max"),
@@ -590,24 +656,19 @@ def _index_path_for(store: Any, dataset: str) -> Path | None:
     return p if p.exists() else None
 
 
-def _reuse_matches_current(
+def validate_current_source(
     store: Any,
     dataset: str,
     meta: PITIndexMetadata,
-    *,
-    columns_used: tuple[str, ...],
-    timeframe_filter: str | None,
 ) -> bool:
-    """#P0-14/#P0-18 判断旧 index 是否与当前源 + 本次构建请求一致，可安全复用。
+    """#P0-C8 统一的 PIT index 源身份校验（唯一事实源）。
 
-    任一项不满足 → False（调用方应重建，不能直接返回 stale index）。
+    检查 authoritative + manifest_epoch + source_snapshot + schema_hash 全部与
+    当前源一致。MetadataPlane 的 ``pit_event_index()`` / 剪枝路径 / 构建复用路径
+    共用这一份判断——不再各自写第二套近似（只比 manifest_epoch 会在「外部文件
+    绕过 DataAccess 写入、schema 变化但 epoch 不变」时返回本应 stale 的 index）。
     """
     if not meta.is_authoritative:
-        return False
-    # #P0-18 列 override 身份：自定义列构建的 index 不能当默认构建复用
-    if meta.columns_used and tuple(meta.columns_used) != tuple(columns_used):
-        return False
-    if meta.timeframe_scope != (timeframe_filter if timeframe_filter else None):
         return False
     cur_epoch = _manifest_epoch_of(store, dataset)
     if meta.manifest_epoch is not None and cur_epoch != meta.manifest_epoch:
@@ -624,6 +685,29 @@ def _reuse_matches_current(
     ds = store._registry.get(dataset)
     if meta.schema_hash and meta.schema_hash != _schema_hash_of(ds):
         return False  # schema 声明已变 → stale
+    return True
+
+
+def _reuse_matches_current(
+    store: Any,
+    dataset: str,
+    meta: PITIndexMetadata,
+    *,
+    columns_used: tuple[str, ...],
+    timeframe_filter: str | None,
+) -> bool:
+    """#P0-14/#P0-18 判断旧 index 是否与当前源 + 本次构建请求一致，可安全复用。
+
+    源身份判断统一走 ``validate_current_source``；这里只叠加构建请求相关的列
+    override / timeframe scope 检查。任一项不满足 → False（调用方应重建）。
+    """
+    if not validate_current_source(store, dataset, meta):
+        return False
+    # #P0-18 列 override 身份：自定义列构建的 index 不能当默认构建复用
+    if meta.columns_used and tuple(meta.columns_used) != tuple(columns_used):
+        return False
+    if meta.timeframe_scope != (timeframe_filter if timeframe_filter else None):
+        return False
     return True
 
 
@@ -657,20 +741,10 @@ def prune_paths_by_filing_range(
     except Exception:
         return []
     meta = idx.metadata
-    if not meta.is_authoritative:
-        return []  # 不完整索引 → fail-open
-    cur_epoch = _manifest_epoch_of(store, dataset)
-    if meta.manifest_epoch is not None and cur_epoch != meta.manifest_epoch:
-        return []  # 数据已变 → 索引过期 → fail-open
-    try:
-        raw_paths = store._prepare_dataset_read(
-            store._registry.get(dataset), time_range=None, params={}
-        )
-        cur_snap = _source_snapshot(store, dataset, raw_paths)
-    except Exception:
-        cur_snap = None
-    if meta.source_snapshot is not None and cur_snap != meta.source_snapshot:
-        return []  # 源文件已变 → fail-open
+    # #P0-C8 统一源身份校验：authoritative + epoch + source snapshot + schema
+    # hash 一处判断，不再重复写第二套近似。
+    if not validate_current_source(store, dataset, meta):
+        return []  # 不完整/过期索引 → fail-open
     # ---- #P0-15/#P0-16 IndexScope ----
     if timeframe is not None and meta.timeframe_scope is not None:
         if str(timeframe).lower() != str(meta.timeframe_scope).lower():
@@ -700,4 +774,5 @@ __all__ = [
     "build_pit_event_index",
     "load_pit_event_index",
     "prune_paths_by_filing_range",
+    "validate_current_source",
 ]

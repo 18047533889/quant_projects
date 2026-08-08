@@ -437,7 +437,7 @@
           ],
           "previous_source": "factor_dsl_np",
           "previous_type": "ADX",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -459,7 +459,7 @@
           ],
           "previous_source": "factor_dsl_polars",
           "previous_type": "ADXPolars",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -2823,7 +2823,7 @@
           ],
           "previous_source": "composite_fastpath_primitives",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overrides composite fastpath layer (round-7 P0 chain pinning)",
           "semantic_version": "1.0"
         },
         {
@@ -3937,7 +3937,7 @@
           ],
           "previous_source": "factor_dsl_np",
           "previous_type": "MACDHist",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -3959,7 +3959,7 @@
           ],
           "previous_source": "factor_dsl_polars",
           "previous_type": "MACDHistPolars",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -4196,7 +4196,7 @@
           ],
           "previous_source": "factor_dsl_np",
           "previous_type": "MACDLine",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -4216,7 +4216,7 @@
           ],
           "previous_source": "factor_dsl_polars",
           "previous_type": "MACDLinePolars",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -4460,7 +4460,7 @@
           ],
           "previous_source": "factor_dsl_np",
           "previous_type": "MACDSignal",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -4482,7 +4482,7 @@
           ],
           "previous_source": "factor_dsl_polars",
           "previous_type": "MACDSignalPolars",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -29304,7 +29304,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -29324,7 +29324,7 @@
           ],
           "previous_source": "daily_panel_polars",
           "previous_type": "_PolarsDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -33816,7 +33816,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -38432,7 +38432,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -43965,7 +43965,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "event",
-            "window"
+            "window",
+            "max_pre_window_age"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -43989,7 +43990,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "event",
-            "window"
+            "window",
+            "max_pre_window_age"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "polars_geometry_math",
@@ -44009,11 +44011,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "event",
-          "window"
+          "window",
+          "max_pre_window_age"
         ],
         "polars": [
           "event",
-          "window"
+          "window",
+          "max_pre_window_age"
         ]
       },
       "backend_status": "implemented",
@@ -44031,11 +44035,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "event",
-            "window"
+            "window",
+            "max_pre_window_age"
           ],
           "polars": [
             "event",
-            "window"
+            "window",
+            "max_pre_window_age"
           ]
         },
         "backends": [
@@ -44050,7 +44056,8 @@
         },
         "param_names": [
           "event",
-          "window"
+          "window",
+          "max_pre_window_age"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -44078,7 +44085,8 @@
       "output_unit": null,
       "param_names": [
         "event",
-        "window"
+        "window",
+        "max_pre_window_age"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -44096,7 +44104,8 @@
           "new_type": "_PolarsGeometryMathBackend",
           "previous_params": [
             "event",
-            "window"
+            "window",
+            "max_pre_window_age"
           ],
           "previous_source": "pandas_bridge",
           "previous_type": "_PolarsBridge",
@@ -44123,7 +44132,7 @@
         "causal",
         "typed_v2",
         "deterministic",
-        "signature:event,window->series",
+        "signature:event,window,max_pre_window_age->series",
         "domain:event_process",
         "unit:corr",
         "cost:3"
@@ -44338,7 +44347,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "event",
-            "window"
+            "window",
+            "max_pre_window_age"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -44362,7 +44372,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "event",
-            "window"
+            "window",
+            "max_pre_window_age"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "polars_geometry_math",
@@ -44382,11 +44393,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "event",
-          "window"
+          "window",
+          "max_pre_window_age"
         ],
         "polars": [
           "event",
-          "window"
+          "window",
+          "max_pre_window_age"
         ]
       },
       "backend_status": "implemented",
@@ -44404,11 +44417,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "event",
-            "window"
+            "window",
+            "max_pre_window_age"
           ],
           "polars": [
             "event",
-            "window"
+            "window",
+            "max_pre_window_age"
           ]
         },
         "backends": [
@@ -44423,7 +44438,8 @@
         },
         "param_names": [
           "event",
-          "window"
+          "window",
+          "max_pre_window_age"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -44451,7 +44467,8 @@
       "output_unit": null,
       "param_names": [
         "event",
-        "window"
+        "window",
+        "max_pre_window_age"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -44469,7 +44486,8 @@
           "new_type": "_PolarsGeometryMathBackend",
           "previous_params": [
             "event",
-            "window"
+            "window",
+            "max_pre_window_age"
           ],
           "previous_source": "pandas_bridge",
           "previous_type": "_PolarsBridge",
@@ -44496,7 +44514,7 @@
         "causal",
         "typed_v2",
         "deterministic",
-        "signature:event,window->series",
+        "signature:event,window,max_pre_window_age->series",
         "domain:event_process",
         "unit:ratio",
         "cost:3"
@@ -46871,7 +46889,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "net_cash_from_subcompany",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -46895,7 +46914,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "net_cash_from_subcompany",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -46915,11 +46935,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "net_cash_from_subcompany",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "polars": [
           "net_cash_from_subcompany",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -46937,11 +46959,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "net_cash_from_subcompany",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "polars": [
             "net_cash_from_subcompany",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -46958,7 +46982,8 @@
         },
         "param_names": [
           "net_cash_from_subcompany",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -46988,7 +47013,8 @@
       "output_unit": null,
       "param_names": [
         "net_cash_from_subcompany",
-        "avg_assets"
+        "avg_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -47016,7 +47042,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:net_cash_from_subcompany,avg_assets->series",
+        "signature:net_cash_from_subcompany,avg_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -47846,7 +47872,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "cash_from_borrowing",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -47870,7 +47897,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "cash_from_borrowing",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -47890,11 +47918,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "cash_from_borrowing",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "polars": [
           "cash_from_borrowing",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -47912,11 +47942,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "cash_from_borrowing",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "polars": [
             "cash_from_borrowing",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -47933,7 +47965,8 @@
         },
         "param_names": [
           "cash_from_borrowing",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -47963,7 +47996,8 @@
       "output_unit": null,
       "param_names": [
         "cash_from_borrowing",
-        "avg_assets"
+        "avg_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -47991,7 +48025,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:cash_from_borrowing,avg_assets->series",
+        "signature:cash_from_borrowing,avg_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -48323,7 +48357,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "capex_cash",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -48347,7 +48382,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "capex_cash",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -48367,11 +48403,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "capex_cash",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "polars": [
           "capex_cash",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -48389,11 +48427,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "capex_cash",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "polars": [
             "capex_cash",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -48410,7 +48450,8 @@
         },
         "param_names": [
           "capex_cash",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -48440,7 +48481,8 @@
       "output_unit": null,
       "param_names": [
         "capex_cash",
-        "avg_assets"
+        "avg_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -48468,7 +48510,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:capex_cash,avg_assets->series",
+        "signature:capex_cash,avg_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -48489,7 +48531,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "cash_equivalents",
-            "annualized_ocf"
+            "annualized_ocf",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -48513,7 +48556,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "cash_equivalents",
-            "annualized_ocf"
+            "annualized_ocf",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -48533,11 +48577,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "cash_equivalents",
-          "annualized_ocf"
+          "annualized_ocf",
+          "period_id"
         ],
         "polars": [
           "cash_equivalents",
-          "annualized_ocf"
+          "annualized_ocf",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -48555,11 +48601,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "cash_equivalents",
-            "annualized_ocf"
+            "annualized_ocf",
+            "period_id"
           ],
           "polars": [
             "cash_equivalents",
-            "annualized_ocf"
+            "annualized_ocf",
+            "period_id"
           ]
         },
         "backends": [
@@ -48576,7 +48624,8 @@
         },
         "param_names": [
           "cash_equivalents",
-          "annualized_ocf"
+          "annualized_ocf",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -48606,7 +48655,8 @@
       "output_unit": null,
       "param_names": [
         "cash_equivalents",
-        "annualized_ocf"
+        "annualized_ocf",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -48634,7 +48684,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:cash_equivalents,annualized_ocf->series",
+        "signature:cash_equivalents,annualized_ocf,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -49922,7 +49972,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "contract_assets",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -49946,7 +49997,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "contract_assets",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -49966,11 +50018,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "contract_assets",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "polars": [
           "contract_assets",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -49988,11 +50042,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "contract_assets",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "polars": [
             "contract_assets",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -50009,7 +50065,8 @@
         },
         "param_names": [
           "contract_assets",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -50039,7 +50096,8 @@
       "output_unit": null,
       "param_names": [
         "contract_assets",
-        "total_assets"
+        "total_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -50067,7 +50125,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:contract_assets,total_assets->series",
+        "signature:contract_assets,total_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -50089,7 +50147,8 @@
           "param_names": [
             "contract_assets",
             "contract_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -50114,7 +50173,8 @@
           "param_names": [
             "contract_assets",
             "contract_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -50135,12 +50195,14 @@
         "pandas_numpy": [
           "contract_assets",
           "contract_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "polars": [
           "contract_assets",
           "contract_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -50159,12 +50221,14 @@
           "pandas_numpy": [
             "contract_assets",
             "contract_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "polars": [
             "contract_assets",
             "contract_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -50182,7 +50246,8 @@
         "param_names": [
           "contract_assets",
           "contract_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -50213,7 +50278,8 @@
       "param_names": [
         "contract_assets",
         "contract_liability",
-        "total_assets"
+        "total_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -50241,7 +50307,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:contract_assets,contract_liability,total_assets->series",
+        "signature:contract_assets,contract_liability,total_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -50395,7 +50461,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "contract_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -50419,7 +50486,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "contract_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -50439,11 +50507,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "contract_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "polars": [
           "contract_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -50461,11 +50531,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "contract_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "polars": [
             "contract_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -50482,7 +50554,8 @@
         },
         "param_names": [
           "contract_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -50512,7 +50585,8 @@
       "output_unit": null,
       "param_names": [
         "contract_liability",
-        "total_assets"
+        "total_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -50540,7 +50614,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:contract_liability,total_assets->series",
+        "signature:contract_liability,total_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -51230,7 +51304,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "borrowing_repayment",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -51254,7 +51329,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "borrowing_repayment",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -51274,11 +51350,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "borrowing_repayment",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "polars": [
           "borrowing_repayment",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -51296,11 +51374,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "borrowing_repayment",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "polars": [
             "borrowing_repayment",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -51317,7 +51397,8 @@
         },
         "param_names": [
           "borrowing_repayment",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -51347,7 +51428,8 @@
       "output_unit": null,
       "param_names": [
         "borrowing_repayment",
-        "avg_assets"
+        "avg_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -51375,7 +51457,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:borrowing_repayment,avg_assets->series",
+        "signature:borrowing_repayment,avg_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -51397,7 +51479,8 @@
           "param_names": [
             "ocf",
             "borrowing_repayment",
-            "interest_cost"
+            "interest_cost",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -51422,7 +51505,8 @@
           "param_names": [
             "ocf",
             "borrowing_repayment",
-            "interest_cost"
+            "interest_cost",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -51443,12 +51527,14 @@
         "pandas_numpy": [
           "ocf",
           "borrowing_repayment",
-          "interest_cost"
+          "interest_cost",
+          "period_id"
         ],
         "polars": [
           "ocf",
           "borrowing_repayment",
-          "interest_cost"
+          "interest_cost",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -51467,12 +51553,14 @@
           "pandas_numpy": [
             "ocf",
             "borrowing_repayment",
-            "interest_cost"
+            "interest_cost",
+            "period_id"
           ],
           "polars": [
             "ocf",
             "borrowing_repayment",
-            "interest_cost"
+            "interest_cost",
+            "period_id"
           ]
         },
         "backends": [
@@ -51490,7 +51578,8 @@
         "param_names": [
           "ocf",
           "borrowing_repayment",
-          "interest_cost"
+          "interest_cost",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -51521,7 +51610,8 @@
       "param_names": [
         "ocf",
         "borrowing_repayment",
-        "interest_cost"
+        "interest_cost",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -51549,7 +51639,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:ocf,borrowing_repayment,interest_cost->series",
+        "signature:ocf,borrowing_repayment,interest_cost,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -51571,7 +51661,8 @@
           "param_names": [
             "deferred_tax_assets",
             "deferred_tax_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -51596,7 +51687,8 @@
           "param_names": [
             "deferred_tax_assets",
             "deferred_tax_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -51617,12 +51709,14 @@
         "pandas_numpy": [
           "deferred_tax_assets",
           "deferred_tax_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "polars": [
           "deferred_tax_assets",
           "deferred_tax_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -51641,12 +51735,14 @@
           "pandas_numpy": [
             "deferred_tax_assets",
             "deferred_tax_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "polars": [
             "deferred_tax_assets",
             "deferred_tax_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -51664,7 +51760,8 @@
         "param_names": [
           "deferred_tax_assets",
           "deferred_tax_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -51695,7 +51792,8 @@
       "param_names": [
         "deferred_tax_assets",
         "deferred_tax_liability",
-        "total_assets"
+        "total_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -51723,7 +51821,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:deferred_tax_assets,deferred_tax_liability,total_assets->series",
+        "signature:deferred_tax_assets,deferred_tax_liability,total_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -54125,7 +54223,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "fair_value_income",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -54149,7 +54248,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "fair_value_income",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -54169,11 +54269,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "fair_value_income",
-          "total_profit"
+          "total_profit",
+          "period_id"
         ],
         "polars": [
           "fair_value_income",
-          "total_profit"
+          "total_profit",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -54191,11 +54293,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "fair_value_income",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ],
           "polars": [
             "fair_value_income",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ]
         },
         "backends": [
@@ -54212,7 +54316,8 @@
         },
         "param_names": [
           "fair_value_income",
-          "total_profit"
+          "total_profit",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -54242,7 +54347,8 @@
       "output_unit": null,
       "param_names": [
         "fair_value_income",
-        "total_profit"
+        "total_profit",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -54270,7 +54376,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:fair_value_income,total_profit->series",
+        "signature:fair_value_income,total_profit,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -54294,7 +54400,8 @@
             "debt_repayment",
             "dividend_interest_payment",
             "ocf",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -54321,7 +54428,8 @@
             "debt_repayment",
             "dividend_interest_payment",
             "ocf",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -54344,14 +54452,16 @@
           "debt_repayment",
           "dividend_interest_payment",
           "ocf",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "polars": [
           "capex",
           "debt_repayment",
           "dividend_interest_payment",
           "ocf",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -54372,14 +54482,16 @@
             "debt_repayment",
             "dividend_interest_payment",
             "ocf",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "polars": [
             "capex",
             "debt_repayment",
             "dividend_interest_payment",
             "ocf",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -54399,7 +54511,8 @@
           "debt_repayment",
           "dividend_interest_payment",
           "ocf",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -54432,7 +54545,8 @@
         "debt_repayment",
         "dividend_interest_payment",
         "ocf",
-        "avg_assets"
+        "avg_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -54460,7 +54574,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:capex,debt_repayment,dividend_interest_payment,ocf,avg_assets->series",
+        "signature:capex,debt_repayment,dividend_interest_payment,ocf,avg_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -54654,7 +54768,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "goodwill",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -54678,7 +54793,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "goodwill",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -54698,11 +54814,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "goodwill",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "polars": [
           "goodwill",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -54720,11 +54838,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "goodwill",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "polars": [
             "goodwill",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -54741,7 +54861,8 @@
         },
         "param_names": [
           "goodwill",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -54771,7 +54892,8 @@
       "output_unit": null,
       "param_names": [
         "goodwill",
-        "total_assets"
+        "total_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -54799,7 +54921,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:goodwill,total_assets->series",
+        "signature:goodwill,total_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -56029,7 +56151,8 @@
           "param_names": [
             "asset_impairment_loss",
             "credit_impairment_loss",
-            "operating_revenue"
+            "operating_revenue",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -56054,7 +56177,8 @@
           "param_names": [
             "asset_impairment_loss",
             "credit_impairment_loss",
-            "operating_revenue"
+            "operating_revenue",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -56075,12 +56199,14 @@
         "pandas_numpy": [
           "asset_impairment_loss",
           "credit_impairment_loss",
-          "operating_revenue"
+          "operating_revenue",
+          "period_id"
         ],
         "polars": [
           "asset_impairment_loss",
           "credit_impairment_loss",
-          "operating_revenue"
+          "operating_revenue",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -56099,12 +56225,14 @@
           "pandas_numpy": [
             "asset_impairment_loss",
             "credit_impairment_loss",
-            "operating_revenue"
+            "operating_revenue",
+            "period_id"
           ],
           "polars": [
             "asset_impairment_loss",
             "credit_impairment_loss",
-            "operating_revenue"
+            "operating_revenue",
+            "period_id"
           ]
         },
         "backends": [
@@ -56122,7 +56250,8 @@
         "param_names": [
           "asset_impairment_loss",
           "credit_impairment_loss",
-          "operating_revenue"
+          "operating_revenue",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -56153,7 +56282,8 @@
       "param_names": [
         "asset_impairment_loss",
         "credit_impairment_loss",
-        "operating_revenue"
+        "operating_revenue",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -56181,7 +56311,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:asset_impairment_loss,credit_impairment_loss,operating_revenue->series",
+        "signature:asset_impairment_loss,credit_impairment_loss,operating_revenue,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -56202,7 +56332,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "operating_profit",
-            "interest_cost"
+            "interest_cost",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -56226,7 +56357,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "operating_profit",
-            "interest_cost"
+            "interest_cost",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -56246,11 +56378,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "operating_profit",
-          "interest_cost"
+          "interest_cost",
+          "period_id"
         ],
         "polars": [
           "operating_profit",
-          "interest_cost"
+          "interest_cost",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -56268,11 +56402,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "operating_profit",
-            "interest_cost"
+            "interest_cost",
+            "period_id"
           ],
           "polars": [
             "operating_profit",
-            "interest_cost"
+            "interest_cost",
+            "period_id"
           ]
         },
         "backends": [
@@ -56289,7 +56425,8 @@
         },
         "param_names": [
           "operating_profit",
-          "interest_cost"
+          "interest_cost",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -56319,7 +56456,8 @@
       "output_unit": null,
       "param_names": [
         "operating_profit",
-        "interest_cost"
+        "interest_cost",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -56347,7 +56485,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:operating_profit,interest_cost->series",
+        "signature:operating_profit,interest_cost,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -56506,7 +56644,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "investment_income",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -56530,7 +56669,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "investment_income",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -56550,11 +56690,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "investment_income",
-          "total_profit"
+          "total_profit",
+          "period_id"
         ],
         "polars": [
           "investment_income",
-          "total_profit"
+          "total_profit",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -56572,11 +56714,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "investment_income",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ],
           "polars": [
             "investment_income",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ]
         },
         "backends": [
@@ -56593,7 +56737,8 @@
         },
         "param_names": [
           "investment_income",
-          "total_profit"
+          "total_profit",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -56623,7 +56768,8 @@
       "output_unit": null,
       "param_names": [
         "investment_income",
-        "total_profit"
+        "total_profit",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -56651,7 +56797,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:investment_income,total_profit->series",
+        "signature:investment_income,total_profit,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -56848,7 +56994,8 @@
           "param_names": [
             "usufruct_assets",
             "lease_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -56873,7 +57020,8 @@
           "param_names": [
             "usufruct_assets",
             "lease_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -56894,12 +57042,14 @@
         "pandas_numpy": [
           "usufruct_assets",
           "lease_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "polars": [
           "usufruct_assets",
           "lease_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -56918,12 +57068,14 @@
           "pandas_numpy": [
             "usufruct_assets",
             "lease_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "polars": [
             "usufruct_assets",
             "lease_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -56941,7 +57093,8 @@
         "param_names": [
           "usufruct_assets",
           "lease_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -56972,7 +57125,8 @@
       "param_names": [
         "usufruct_assets",
         "lease_liability",
-        "total_assets"
+        "total_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -57000,7 +57154,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:usufruct_assets,lease_liability,total_assets->series",
+        "signature:usufruct_assets,lease_liability,total_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -57022,7 +57176,8 @@
           "param_names": [
             "usufruct_assets",
             "lease_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -57047,7 +57202,8 @@
           "param_names": [
             "usufruct_assets",
             "lease_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -57068,12 +57224,14 @@
         "pandas_numpy": [
           "usufruct_assets",
           "lease_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "polars": [
           "usufruct_assets",
           "lease_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -57092,12 +57250,14 @@
           "pandas_numpy": [
             "usufruct_assets",
             "lease_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ],
           "polars": [
             "usufruct_assets",
             "lease_liability",
-            "total_assets"
+            "total_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -57115,7 +57275,8 @@
         "param_names": [
           "usufruct_assets",
           "lease_liability",
-          "total_assets"
+          "total_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -57146,7 +57307,8 @@
       "param_names": [
         "usufruct_assets",
         "lease_liability",
-        "total_assets"
+        "total_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -57174,7 +57336,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:usufruct_assets,lease_liability,total_assets->series",
+        "signature:usufruct_assets,lease_liability,total_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -58656,7 +58818,8 @@
             "cash_from_borrowing",
             "cash_from_bonds_issue",
             "borrowing_repayment",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -58682,7 +58845,8 @@
             "cash_from_borrowing",
             "cash_from_bonds_issue",
             "borrowing_repayment",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -58704,13 +58868,15 @@
           "cash_from_borrowing",
           "cash_from_bonds_issue",
           "borrowing_repayment",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "polars": [
           "cash_from_borrowing",
           "cash_from_bonds_issue",
           "borrowing_repayment",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -58730,13 +58896,15 @@
             "cash_from_borrowing",
             "cash_from_bonds_issue",
             "borrowing_repayment",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ],
           "polars": [
             "cash_from_borrowing",
             "cash_from_bonds_issue",
             "borrowing_repayment",
-            "avg_assets"
+            "avg_assets",
+            "period_id"
           ]
         },
         "backends": [
@@ -58755,7 +58923,8 @@
           "cash_from_borrowing",
           "cash_from_bonds_issue",
           "borrowing_repayment",
-          "avg_assets"
+          "avg_assets",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -58787,7 +58956,8 @@
         "cash_from_borrowing",
         "cash_from_bonds_issue",
         "borrowing_repayment",
-        "avg_assets"
+        "avg_assets",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -58815,7 +58985,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:cash_from_borrowing,cash_from_bonds_issue,borrowing_repayment,avg_assets->series",
+        "signature:cash_from_borrowing,cash_from_bonds_issue,borrowing_repayment,avg_assets,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -59321,7 +59491,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "other_earnings",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -59345,7 +59516,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "other_earnings",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -59365,11 +59537,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "other_earnings",
-          "total_profit"
+          "total_profit",
+          "period_id"
         ],
         "polars": [
           "other_earnings",
-          "total_profit"
+          "total_profit",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -59387,11 +59561,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "other_earnings",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ],
           "polars": [
             "other_earnings",
-            "total_profit"
+            "total_profit",
+            "period_id"
           ]
         },
         "backends": [
@@ -59408,7 +59584,8 @@
         },
         "param_names": [
           "other_earnings",
-          "total_profit"
+          "total_profit",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -59438,7 +59615,8 @@
       "output_unit": null,
       "param_names": [
         "other_earnings",
-        "total_profit"
+        "total_profit",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -59466,7 +59644,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:other_earnings,total_profit->series",
+        "signature:other_earnings,total_profit,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -60848,7 +61026,8 @@
           "materializes_full_panel": true,
           "param_names": [
             "capitalized_dev_increase",
-            "rd_expense"
+            "rd_expense",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -60872,7 +61051,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "capitalized_dev_increase",
-            "rd_expense"
+            "rd_expense",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -60892,11 +61072,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "capitalized_dev_increase",
-          "rd_expense"
+          "rd_expense",
+          "period_id"
         ],
         "polars": [
           "capitalized_dev_increase",
-          "rd_expense"
+          "rd_expense",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -60914,11 +61096,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "capitalized_dev_increase",
-            "rd_expense"
+            "rd_expense",
+            "period_id"
           ],
           "polars": [
             "capitalized_dev_increase",
-            "rd_expense"
+            "rd_expense",
+            "period_id"
           ]
         },
         "backends": [
@@ -60935,7 +61119,8 @@
         },
         "param_names": [
           "capitalized_dev_increase",
-          "rd_expense"
+          "rd_expense",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -60965,7 +61150,8 @@
       "output_unit": null,
       "param_names": [
         "capitalized_dev_increase",
-        "rd_expense"
+        "rd_expense",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -60993,7 +61179,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:capitalized_dev_increase,rd_expense->series",
+        "signature:capitalized_dev_increase,rd_expense,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -61015,7 +61201,8 @@
           "param_names": [
             "rd_expense",
             "capitalized_dev_increase",
-            "operating_revenue"
+            "operating_revenue",
+            "period_id"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -61040,7 +61227,8 @@
           "param_names": [
             "rd_expense",
             "capitalized_dev_increase",
-            "operating_revenue"
+            "operating_revenue",
+            "period_id"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "fundamental.polars_quality_v2",
@@ -61061,12 +61249,14 @@
         "pandas_numpy": [
           "rd_expense",
           "capitalized_dev_increase",
-          "operating_revenue"
+          "operating_revenue",
+          "period_id"
         ],
         "polars": [
           "rd_expense",
           "capitalized_dev_increase",
-          "operating_revenue"
+          "operating_revenue",
+          "period_id"
         ]
       },
       "backend_status": "implemented",
@@ -61085,12 +61275,14 @@
           "pandas_numpy": [
             "rd_expense",
             "capitalized_dev_increase",
-            "operating_revenue"
+            "operating_revenue",
+            "period_id"
           ],
           "polars": [
             "rd_expense",
             "capitalized_dev_increase",
-            "operating_revenue"
+            "operating_revenue",
+            "period_id"
           ]
         },
         "backends": [
@@ -61108,7 +61300,8 @@
         "param_names": [
           "rd_expense",
           "capitalized_dev_increase",
-          "operating_revenue"
+          "operating_revenue",
+          "period_id"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -61139,7 +61332,8 @@
       "param_names": [
         "rd_expense",
         "capitalized_dev_increase",
-        "operating_revenue"
+        "operating_revenue",
+        "period_id"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -61167,7 +61361,7 @@
         "pit_safe",
         "causal",
         "typed_v2",
-        "signature:rd_expense,capitalized_dev_increase,operating_revenue->series",
+        "signature:rd_expense,capitalized_dev_increase,operating_revenue,period_id->series",
         "domain:fundamental",
         "unit:ratio",
         "cost:3"
@@ -75916,7 +76110,8 @@
           "implementation_type": "GroupSignalAttractionShare",
           "param_names": [
             "x",
-            "group"
+            "group",
+            "damping"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -75931,7 +76126,8 @@
           "no_fallback_runtime_verified": false,
           "param_names": [
             "x",
-            "group"
+            "group",
+            "damping"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "polars_udf",
@@ -75951,11 +76147,13 @@
       "backend_signatures": {
         "pandas_numpy": [
           "x",
-          "group"
+          "group",
+          "damping"
         ],
         "polars": [
           "x",
-          "group"
+          "group",
+          "damping"
         ]
       },
       "backend_status": "implemented",
@@ -75974,11 +76172,13 @@
         "backend_signatures": {
           "pandas_numpy": [
             "x",
-            "group"
+            "group",
+            "damping"
           ],
           "polars": [
             "x",
-            "group"
+            "group",
+            "damping"
           ]
         },
         "backends": [
@@ -75993,7 +76193,8 @@
         },
         "param_names": [
           "x",
-          "group"
+          "group",
+          "damping"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -76021,7 +76222,8 @@
       "output_unit": null,
       "param_names": [
         "x",
-        "group"
+        "group",
+        "damping"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -76046,7 +76248,7 @@
         "pit_safe",
         "causal",
         "deterministic",
-        "signature:x,group->series",
+        "signature:x,group,damping->series",
         "domain:relation",
         "unit:level",
         "cost:6"
@@ -76717,7 +76919,8 @@
             "window",
             "quantile",
             "side",
-            "min_periods"
+            "min_periods",
+            "prior_threshold"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -76745,7 +76948,8 @@
             "window",
             "quantile",
             "side",
-            "min_periods"
+            "min_periods",
+            "prior_threshold"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "polars_udf",
@@ -76769,7 +76973,8 @@
           "window",
           "quantile",
           "side",
-          "min_periods"
+          "min_periods",
+          "prior_threshold"
         ],
         "polars": [
           "x",
@@ -76777,7 +76982,8 @@
           "window",
           "quantile",
           "side",
-          "min_periods"
+          "min_periods",
+          "prior_threshold"
         ]
       },
       "backend_status": "implemented",
@@ -76799,7 +77005,8 @@
             "window",
             "quantile",
             "side",
-            "min_periods"
+            "min_periods",
+            "prior_threshold"
           ],
           "polars": [
             "x",
@@ -76807,7 +77014,8 @@
             "window",
             "quantile",
             "side",
-            "min_periods"
+            "min_periods",
+            "prior_threshold"
           ]
         },
         "backends": [
@@ -76826,7 +77034,8 @@
           "window",
           "quantile",
           "side",
-          "min_periods"
+          "min_periods",
+          "prior_threshold"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -76858,7 +77067,8 @@
         "window",
         "quantile",
         "side",
-        "min_periods"
+        "min_periods",
+        "prior_threshold"
       ],
       "parameter_constraints": {},
       "pit_safe": true,
@@ -76887,7 +77097,7 @@
         "causal",
         "typed_v2",
         "deterministic",
-        "signature:x,group_id,window,quantile,side,min_periods->series",
+        "signature:x,group_id,window,quantile,side,min_periods,prior_threshold->series",
         "domain:price_volume",
         "unit:probability",
         "cost:6"
@@ -77117,7 +77327,8 @@
             "quantile",
             "side",
             "lag",
-            "min_periods"
+            "min_periods",
+            "prior_threshold"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -77137,7 +77348,8 @@
             "quantile",
             "side",
             "lag",
-            "min_periods"
+            "min_periods",
+            "prior_threshold"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "polars_udf",
@@ -77162,7 +77374,8 @@
           "quantile",
           "side",
           "lag",
-          "min_periods"
+          "min_periods",
+          "prior_threshold"
         ],
         "polars": [
           "x",
@@ -77171,7 +77384,8 @@
           "quantile",
           "side",
           "lag",
-          "min_periods"
+          "min_periods",
+          "prior_threshold"
         ]
       },
       "backend_status": "implemented",
@@ -77195,7 +77409,8 @@
             "quantile",
             "side",
             "lag",
-            "min_periods"
+            "min_periods",
+            "prior_threshold"
           ],
           "polars": [
             "x",
@@ -77204,7 +77419,8 @@
             "quantile",
             "side",
             "lag",
-            "min_periods"
+            "min_periods",
+            "prior_threshold"
           ]
         },
         "backends": [
@@ -77224,7 +77440,8 @@
           "quantile",
           "side",
           "lag",
-          "min_periods"
+          "min_periods",
+          "prior_threshold"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -77257,7 +77474,8 @@
         "quantile",
         "side",
         "lag",
-        "min_periods"
+        "min_periods",
+        "prior_threshold"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -77283,7 +77501,7 @@
         "causal",
         "typed_v2",
         "deterministic",
-        "signature:x,group_id,window,quantile,side,lag,min_periods->series",
+        "signature:x,group_id,window,quantile,side,lag,min_periods,prior_threshold->series",
         "domain:price_volume",
         "unit:probability",
         "cost:7"
@@ -126305,7 +126523,7 @@
           ],
           "previous_source": "factor_dsl_np",
           "previous_type": "_PeriodOp",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -134116,7 +134334,7 @@
           ],
           "previous_source": "basic_runtime",
           "previous_type": "SafeDivNullOp",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -134156,7 +134374,7 @@
           ],
           "previous_source": "factor_dsl_polars_bridge",
           "previous_type": "SafeDivNullPolarsBridge",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -140775,7 +140993,7 @@
           ],
           "previous_source": "layer_governance_primitives",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -140795,7 +141013,7 @@
           ],
           "previous_source": "layer_governance_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -143974,7 +144192,7 @@
           ],
           "previous_source": "gtja_compat",
           "previous_type": "GTJATSArgmax",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -143993,7 +144211,7 @@
           ],
           "previous_source": "factor_dsl_polars",
           "previous_type": "TSArgmaxPolars",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -144551,7 +144769,7 @@
           ],
           "previous_source": "gtja_compat",
           "previous_type": "GTJATSArgmin",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -144570,7 +144788,7 @@
           ],
           "previous_source": "factor_dsl_polars",
           "previous_type": "TSArgminPolars",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -147527,7 +147745,7 @@
           ],
           "previous_source": "operator_overhaul_audited",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -147549,7 +147767,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul polars-fix layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -147571,7 +147789,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -147789,7 +148007,7 @@
           ],
           "previous_source": "operator_overhaul_audited",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -147811,7 +148029,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul polars-fix layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -147833,7 +148051,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -148043,7 +148261,7 @@
           ],
           "previous_source": "operator_overhaul_audited",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -148065,7 +148283,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul polars-fix layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -148087,7 +148305,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -152059,7 +152277,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -152079,7 +152297,7 @@
           ],
           "previous_source": "daily_panel_polars",
           "previous_type": "_PolarsDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -155109,7 +155327,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -155145,7 +155363,7 @@
           ],
           "previous_source": "daily_panel_polars",
           "previous_type": "_PolarsDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -156969,7 +157187,8 @@
             "window",
             "embedding_dim",
             "k",
-            "delay"
+            "delay",
+            "theiler_window"
           ],
           "production_certified": false,
           "reference_backend": true,
@@ -156996,7 +157215,8 @@
             "window",
             "embedding_dim",
             "k",
-            "delay"
+            "delay",
+            "theiler_window"
           ],
           "production_native_source_of_truth": "verified_runtime_evidence",
           "source": "polars_geometry_math",
@@ -157019,14 +157239,16 @@
           "window",
           "embedding_dim",
           "k",
-          "delay"
+          "delay",
+          "theiler_window"
         ],
         "polars": [
           "x",
           "window",
           "embedding_dim",
           "k",
-          "delay"
+          "delay",
+          "theiler_window"
         ]
       },
       "backend_status": "implemented",
@@ -157047,14 +157269,16 @@
             "window",
             "embedding_dim",
             "k",
-            "delay"
+            "delay",
+            "theiler_window"
           ],
           "polars": [
             "x",
             "window",
             "embedding_dim",
             "k",
-            "delay"
+            "delay",
+            "theiler_window"
           ]
         },
         "backends": [
@@ -157075,7 +157299,8 @@
           "window",
           "embedding_dim",
           "k",
-          "delay"
+          "delay",
+          "theiler_window"
         ],
         "parameter_constraints": {},
         "pit_safe": false,
@@ -157111,7 +157336,8 @@
         "window",
         "embedding_dim",
         "k",
-        "delay"
+        "delay",
+        "theiler_window"
       ],
       "parameter_constraints": {},
       "pit_safe": false,
@@ -157132,7 +157358,8 @@
             "window",
             "embedding_dim",
             "k",
-            "delay"
+            "delay",
+            "theiler_window"
           ],
           "previous_source": "pandas_bridge",
           "previous_type": "_PolarsBridge",
@@ -157159,7 +157386,7 @@
         "causal",
         "typed_v2",
         "deterministic",
-        "signature:x,window,embedding_dim,k,delay->series",
+        "signature:x,window,embedding_dim,k,delay,theiler_window->series",
         "domain:geometry",
         "unit:dim",
         "cost:8"
@@ -178953,7 +179180,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -178973,7 +179200,7 @@
           ],
           "previous_source": "daily_panel_polars",
           "previous_type": "_PolarsDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -184739,7 +184966,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -185728,7 +185955,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -185750,7 +185977,7 @@
           ],
           "previous_source": "daily_panel_polars",
           "previous_type": "_PolarsDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -187109,7 +187336,7 @@
           ],
           "previous_source": "factor_dsl_polars_bridge",
           "previous_type": "TSMomentPolarsBridge",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "3-arg central moment overrides the 2-arg colwise bridge (round-7 P0 chain pinning)",
           "semantic_version": "1.0"
         },
         {
@@ -192504,7 +192731,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -193482,7 +193709,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -198685,7 +198912,7 @@
           ],
           "previous_source": "gtja_compat",
           "previous_type": "GTJATSProduct",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overflow-fail-closed product overrides the gtja compatibility layer (round-7 P0 chain pinning)",
           "semantic_version": "1.0"
         },
         {
@@ -205334,7 +205561,7 @@
           ],
           "previous_source": "operator_overhaul_compat",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "canonical rolling-OLS contract overrides the overhaul compat layer (round-7 P0 chain pinning)",
           "semantic_version": "1.0"
         }
       ],
@@ -205528,7 +205755,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -213205,7 +213432,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -213229,7 +213456,7 @@
           ],
           "previous_source": "daily_panel_polars",
           "previous_type": "_PolarsDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -214487,7 +214714,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -214509,7 +214736,7 @@
           ],
           "previous_source": "daily_panel_polars",
           "previous_type": "_PolarsDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -217591,7 +217818,7 @@
           ],
           "previous_source": "gtja_compat",
           "previous_type": "GTJATimeSlope",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -217610,7 +217837,7 @@
           ],
           "previous_source": "factor_dsl_polars",
           "previous_type": "SlopePolars",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -217992,7 +218219,7 @@
           ],
           "previous_source": "operator_overhaul_audited",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -218014,7 +218241,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul polars-fix layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -218036,7 +218263,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -218259,7 +218486,7 @@
           ],
           "previous_source": "operator_overhaul_audited",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -218281,7 +218508,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul polars-fix layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -218303,7 +218530,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -218516,7 +218743,7 @@
           ],
           "previous_source": "factor_dsl_np",
           "previous_type": "TSTopKSum",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -218538,7 +218765,7 @@
           ],
           "previous_source": "operator_overhaul_audited",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -218559,7 +218786,7 @@
           ],
           "previous_source": "factor_dsl_polars",
           "previous_type": "TSTopKSumPolars",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -218581,7 +218808,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul polars-fix layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -218603,7 +218830,7 @@
           ],
           "previous_source": "operator_overhaul_native_polars",
           "previous_type": "PolarsFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -219806,7 +220033,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -220182,7 +220409,7 @@
           ],
           "previous_source": "daily_panel",
           "previous_type": "_PandasDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -220198,7 +220425,7 @@
           ],
           "previous_source": "daily_panel_polars",
           "previous_type": "_PolarsDailyPanelOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -229331,7 +229558,7 @@
           ],
           "previous_source": "factor_dsl_np",
           "previous_type": "_PeriodOp",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         }
       ],
@@ -229578,7 +229805,7 @@
           ],
           "previous_source": "factor_dsl_np",
           "previous_type": "_PeriodOp",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -229601,7 +229828,7 @@
           ],
           "previous_source": "layer_governance_primitives",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -236869,7 +237096,7 @@
           ],
           "previous_source": "factor_dsl_np",
           "previous_type": "_PeriodOp",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {
@@ -236894,7 +237121,7 @@
           ],
           "previous_source": "layer_governance_primitives",
           "previous_type": "PandasFunctionOperator",
-          "replacement_reason": "bootstrap layer replacement",
+          "replacement_reason": "overhaul audit layer replaces prior bootstrap source",
           "semantic_version": "1.0"
         },
         {

@@ -52,38 +52,124 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 
 def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
-    """Deterministic quantile bin edges over a window; always returns n_bins+1.
+    """Deterministic tie-aware quantile bin edges over a window; n_bins+1 edges.
 
-    Constant / all-NaN windows get a fixed spread with open boundaries so the
-    number of cells stays ``n_bins`` (never a degenerate 2-cell fallback).
+    The raw quantile boundaries are used as-is (never silently switched to
+    equal-width linspace between runs — audit P1 tie-aware discretizer).  Under
+    heavy ties (A-share limit-up/down, integer states) consecutive quantile
+    boundaries coincide; those duplicate edges are kept, which yields zero-width
+    cells that stay empty — i.e. fewer *effective* states — the honest reflection
+    of the tied data.  ``_bin`` assigns a value to the *leftmost* cell whose
+    right edge is ``>= value`` (right-closed intervals, like ``pandas.cut``), so
+    a tied-but-distinct value (e.g. a 1-vs-100 bimodal series) still lands in a
+    distinct cell from the tied bulk.  Only a genuinely constant / all-NaN
+    window gets a fixed finite spread (documented degenerate fallback; edges are
+    finite so bin centers can never be ±Inf, audit P0).
     """
     finite = values[np.isfinite(values)]
     B = max(2, int(n_bins))
     if finite.size == 0:
-        edges = np.linspace(-1.0, 1.0, B + 1)
-        edges[0] = -np.inf
-        edges[-1] = np.inf
-        return edges
-    raw = np.unique(np.quantile(finite, np.linspace(0.0, 1.0, B + 1)))
-    if raw.size == 1:
+        return np.linspace(-1.0, 1.0, B + 1)
+    raw = np.quantile(finite, np.linspace(0.0, 1.0, B + 1))
+    if np.ptp(raw) <= _EPS:
         v = float(raw[0])
-        edges = np.linspace(v - 1.0, v + 1.0, B + 1)
-        edges[0] = -np.inf
-        edges[-1] = np.inf
-        return edges
-    if raw.size < B + 1:
-        lo, hi = float(raw[0]), float(raw[-1])
-        if hi - lo <= _EPS:
-            lo, hi = lo - 1.0, hi + 1.0
-        edges = np.linspace(lo, hi, B + 1)
-        edges[0] = -np.inf
-        edges[-1] = np.inf
-        return edges
+        return np.linspace(v - 1.0, v + 1.0, B + 1)
     return raw
 
 
+def _bin_centers(values: np.ndarray, states: np.ndarray, edges: np.ndarray, B: int) -> np.ndarray:
+    """Per-bin center for the drift/diffusion derivatives.
+
+    The outer-bin center of the naive ``0.5*(edges[:-1]+edges[1:])`` formula is
+    ±Inf whenever the edge is open; downstream derivative operators (local
+    stability, diffusion gradient, equilibrium interpolation) then go NaN.
+    Instead the center of every bin is the CONDITIONAL empirical median of the
+    samples that actually fall in that bin (finite by construction).  Empty bins
+    (zero width under ties, or a constant window) fall back to the midpoint of
+    the bin's finite edges clipped into the observed data range — always finite
+    (audit P0 bin-center ±Inf).
+    """
+    centers = np.full(B, np.nan)
+    valid = np.isfinite(values) & (states >= 0)
+    obs_lo = float(np.min(values[valid])) if np.any(valid) else -1.0
+    obs_hi = float(np.max(values[valid])) if np.any(valid) else 1.0
+    for b in range(B):
+        sel = valid & (states == b)
+        if np.any(sel):
+            centers[b] = float(np.median(values[sel]))
+            continue
+        lo, hi = edges[b], edges[b + 1]
+        if not np.isfinite(lo):
+            lo = obs_lo
+        if not np.isfinite(hi):
+            hi = obs_hi
+        mid = lo if hi <= lo else 0.5 * (lo + hi)
+        centers[b] = float(np.clip(mid, obs_lo, obs_hi))
+    return centers
+
+
+def _stationary_distribution(P: np.ndarray) -> np.ndarray | None:
+    """Left eigenvector of the (Jeffreys-smoothed) transition matrix ``πP = π``.
+
+    Used wherever a *stationary* measure is required (entropy production,
+    stationary surprisal) so that ``πP = π`` holds exactly — the empirical window
+    frequency does not (audit P0).  Guards against complex / un-normalisable
+    solutions and returns ``None`` to fail closed.
+    """
+    B = P.shape[0]
+    try:
+        evals, evecs = np.linalg.eig(P.T)
+    except np.linalg.LinAlgError:
+        return None
+    if evals.size == 0 or not np.all(np.isfinite(evals)):
+        return None
+    idx = int(np.argmin(np.abs(evals - 1.0)))
+    pi = np.real_if_close(evecs[:, idx])
+    if np.iscomplexobj(pi):
+        return None
+    pi = pi.astype(float)
+    if not np.all(np.isfinite(pi)):
+        return None
+    s = float(pi.sum())
+    if not np.isfinite(s) or abs(s) <= _EPS:
+        return None
+    pi = pi / s
+    if float(pi.min()) < -1e-8:
+        return None
+    pi = np.clip(pi, 0.0, None)
+    s2 = float(pi.sum())
+    if not np.isfinite(s2) or s2 <= _EPS:
+        return None
+    return pi / s2
+
+
+def _observed_reachable(N_obs: np.ndarray, start: int, target: int) -> bool:
+    """True if ``target`` is reachable from ``start`` through *observed*
+    transitions only (pre-pseudo-count support), self-reach inclusive.
+
+    Jeffreys smoothing makes every ``P_ij > 0``, so an unreachable state would
+    otherwise still produce a finite MFPT / committor.  This transitive closure
+    over the observed-support digraph is the reachability gate that makes those
+    quantities NaN for genuinely unreachable targets (audit P1).
+    """
+    B = N_obs.shape[0]
+    reach = (N_obs > 0).astype(bool)
+    np.fill_diagonal(reach, True)
+    for kk in range(B):
+        src = reach[:, kk]
+        if src.any():
+            reach[src] |= reach[kk]
+    return bool(reach[start, target])
+
+
 def _bin(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
-    out = np.clip(np.searchsorted(edges, values, side="right") - 1, 0, len(edges) - 2)
+    # Tie-aware binning (audit P1): right-closed intervals ``(edges[i-1], edges[i]]``,
+    # like ``pandas.cut``.  ``side="left"`` maps a value equal to a (possibly
+    # duplicated) interior edge to the *leftmost* cell containing that edge, so
+    # heavy ties never collapse distinct values into one top cell.  For strictly
+    # increasing edges this differs from ``side="right"`` only on exact-boundary
+    # hits (measure-zero for continuous data).
+    out = np.clip(np.searchsorted(edges, values, side="left") - 1, 0, len(edges) - 2)
     # Fail-closed (audit P0): NaN/±Inf must never become a legal state.
     # ``np.searchsorted`` sorts NaN to the END, so a raw call would silently
     # map missing data into the top bin and pollute state counts, the transition
@@ -106,9 +192,15 @@ def _state_dynamics_series(
       edges  — quantile edges used at each row
       P      — (n, B, B) smoothed transition matrix from ``[t-W, t-1]``
       counts — (n, B) empirical state frequencies in the window
-      pi     — (n, B) normalised state frequencies
-      D1/D2  — (n, B) per-state Kramers-Moyal coefficients (lagged increments)
-      centers— (n, B) bin centers
+      pi     — (n, B) stationary distribution of P (left eigenvector; NaN when
+               P is unavailable) — satisfies ``πP = π``
+      pi_empirical — (n, B) empirical window state frequency (historical-state
+               quantities), kept distinct from the stationary measure
+      N_obs  — (n, B, B) observed lagged transition counts *before* pseudo-count
+               (empirical-support matrix; used for reachability gates)
+      D1/D2  — (n, B) per-state Kramers-Moyal coefficients (lagged *rates*:
+               D1 = mean(Δx)/lag, D2 = mean(Δx²)/(2·lag))
+      centers— (n, B) bin centers (conditional empirical median per bin)
       total_trans — number of lagged transitions in the window
     """
     n = series.shape[0]
@@ -120,6 +212,8 @@ def _state_dynamics_series(
     P = np.full((n, B, B), np.nan)
     counts = np.full((n, B), np.nan)
     pi = np.full((n, B), np.nan)
+    pi_empirical = np.full((n, B), np.nan)
+    N_obs = np.zeros((n, B, B), dtype=float)
     D1 = np.full((n, B), np.nan)
     D2 = np.full((n, B), np.nan)
     centers = np.full((n, B), np.nan)
@@ -136,27 +230,29 @@ def _state_dynamics_series(
             continue
         edges = _quantile_edges(past, B)
         edges_out[t] = edges
-        centers[t] = 0.5 * (edges[:-1] + edges[1:])
+        states_past = _bin(past, edges)
+        centers[t] = _bin_centers(past, states_past, edges, B)
         k = int(_bin(np.asarray([cur]), edges)[0])
         state[t] = k
-        states_past = _bin(past, edges)
         # Fail-closed on missing values: NaN/Inf states are -1 sentinels and are
         # excluded from every statistic (audit P0).
         valid_states = states_past >= 0
         counts[t] = np.bincount(states_past[valid_states], minlength=B).astype(float)
         total = float(int(valid_states.sum()))
-        pi[t] = counts[t] / max(total, 1.0)
+        pi_empirical[t] = counts[t] / max(total, 1.0)
 
         d1_row = np.full(B, np.nan)
         d2_row = np.full(B, np.nan)
+        N = np.zeros((B, B), dtype=float)
+        n_trans = 0
         if len(past) > lg:
             base = past[:-lg]
             inc = past[lg:] - base
             base_bin = states_past[:-lg]
             nxt_bin = states_past[lg:]
             trans_ok = (base_bin >= 0) & (nxt_bin >= 0)
-            N = np.zeros((B, B), dtype=float)
-            if np.any(trans_ok):
+            n_trans = int(trans_ok.sum())
+            if n_trans > 0:
                 N[...] = np.bincount(
                     base_bin[trans_ok] * B + nxt_bin[trans_ok],
                     minlength=B * B,
@@ -168,20 +264,28 @@ def _state_dynamics_series(
                 dx = inc[sel]
                 if dx.size == 0:
                     continue
-                d1_row[bbin] = float(np.mean(dx))
+                # audit P0: D1 is a drift *rate* — divide by the lag step.
+                d1_row[bbin] = float(np.mean(dx)) / lg
                 d2_row[bbin] = float(np.mean(dx * dx)) / (2.0 * lg)
+        N_obs[t] = N
         D1[t] = d1_row
         D2[t] = d2_row
-        n_trans = int(trans_ok.sum()) if len(past) > lg else 0
         total_trans[t] = float(n_trans)
         if n_trans > 0:
             P[t] = (N + 0.5) / (N.sum(axis=1, keepdims=True) + 0.5 * B)
+            # audit P0: stationary measure as the left eigenvector of the
+            # *smoothed* P (πP = π), not the empirical frequency.
+            pi_s = _stationary_distribution(P[t])
+            if pi_s is not None:
+                pi[t] = pi_s
     return {
         "state": state,
         "edges": edges_out,
         "P": P,
         "counts": counts,
         "pi": pi,
+        "pi_empirical": pi_empirical,
+        "N_obs": N_obs,
         "D1": D1,
         "D2": D2,
         "centers": centers,
@@ -209,7 +313,7 @@ def _run_kernel(
     if int(lag) not in _KM_LAG_GRID:
         raise ValueError(f"lag must be in {_KM_LAG_GRID}, got {lag!r}")
     cols = x.shape[1]
-    keys = ["state", "P", "counts", "pi", "D1", "D2", "centers", "total_trans", "edges"]
+    keys = ["state", "P", "counts", "pi", "pi_empirical", "N_obs", "D1", "D2", "centers", "total_trans", "edges"]
     gathered: dict[str, list[np.ndarray]] = {k: [] for k in keys}
     xv = x.to_numpy(dtype=float)
     for c in range(cols):
@@ -422,6 +526,11 @@ def _entropy_production_series(res: dict[str, np.ndarray], col: int, min_periods
         if not np.all(np.isfinite(P)) or not np.all(np.isfinite(pi)):
             continue
         B = P.shape[0]
+        # audit P0: standard probability-flux form of the entropy-production rate
+        #   σ = Σ_ij (π_i P_ij) · log( (π_i P_ij) / (π_j P_ji) )
+        # (the stationary flux π_i P_ij belongs in both the ratio and the
+        # prefactor).  No max(σ, 0) clipping — a legitimately negative value is
+        # kept (NaN is only returned for genuinely undefined inputs).
         sigma = 0.0
         for i in range(B):
             if pi[i] <= 0.0:
@@ -433,8 +542,12 @@ def _entropy_production_series(res: dict[str, np.ndarray], col: int, min_periods
                 pji = P[j, i]
                 if pij <= 0.0 or pji <= 0.0:
                     continue
-                sigma += pi[i] * pij * np.log(pij / pji)
-        out[t] = float(max(sigma, 0.0))
+                flux_ij = pi[i] * pij
+                flux_ji = pi[j] * pji
+                if flux_ij <= 0.0 or flux_ji <= 0.0:
+                    continue
+                sigma += flux_ij * np.log(flux_ij / flux_ji)
+        out[t] = float(sigma)
     return out
 
 
@@ -447,16 +560,17 @@ def _entropy_production_series(res: dict[str, np.ndarray], col: int, min_periods
     status="experimental",
 )
 class TsMarkovEntropyProduction(SeriesOperator):
-    """滚动 Markov 熵产生率 ``σ = Σ π_i P_ij log(P_ij/P_ji)``（nats）。
+    """滚动 Markov 熵产生率 ``σ = Σ_ij (π_i P_ij) log((π_i P_ij)/(π_j P_ji))``（nats）。
 
-    窗口内经验状态频率 π 作为不变测度；对称过程 σ≈0，时间不可逆状态演化给出
-    正值。这是窗口级统计（不是单状态），用于探测状态动力学的时间不可逆性。
-    P2 / Research。
+    π 为转移矩阵 P 的平稳分布（左特征向量，πP=π，而非经验频率）。对称（细致
+    平衡）过程 σ=0；时间不可逆状态演化给出非零值。不裁剪负值：若修正后的公式
+    出现合法负值则保留。这是窗口级统计（不是单状态），用于探测状态动力学的时间
+    不可逆性。P2 / Research。
     """
 
     metadata = _metadata(
         "ts_markov_entropy_production",
-        "窗口 Markov 熵产生率 Σ π_i P_ij log(P_ij/P_ji)（nats）。",
+        "窗口 Markov 熵产生率 Σ_ij (π_i P_ij) log((π_i P_ij)/(π_j P_ji))（nats）。",
         ["x", "window", "bins", "lag", "min_periods"],
         unit="nats",
         cost=5,
@@ -569,7 +683,12 @@ def _ais_series(series: np.ndarray, window: int, bins: int, history_length: int)
                 hcode = hcode * B + int(S[s - k + m])
             joint[int(S[s]), hcode] += 1.0
             n_blocks += 1
-        if n_blocks < 3:
+        # audit P1 sufficiency gate: the Jeffreys prior (+0.5) dominates a joint
+        # histogram with far fewer blocks than cells.  Require at least
+        # ``c = 5`` valid blocks per joint cell (B * B^k cells) or fail closed
+        # to NaN instead of emitting a prior-dominated value.
+        n_cells = B * (B ** k)
+        if n_blocks < 5 * n_cells:
             continue
         joint += 0.5
         joint /= joint.sum()
@@ -599,7 +718,8 @@ class TsActiveInformationStorage(SeriesOperator):
 
     X 自己的 k 步历史块携带多少关于下一状态的信息——非线性多历史可预测性。
     ``bins`` 限制 [2,3]、``history_length`` 限制 [1,2] 以避免状态空间爆炸。
-    P2 / Research。
+    充分性门：要求有效块数 ``n_blocks >= 5 · B · B^k``（每联合单元至少 5 个
+    样本），否则输出 NaN 而非先验主导值（audit P1）。P2 / Research。
     """
 
     metadata = _metadata(
@@ -650,6 +770,18 @@ def _committor_series(res: dict[str, np.ndarray], col: int, min_count: int) -> n
             continue
         P = res["P"][t, col]
         if not np.all(np.isfinite(P)):
+            continue
+        # audit P1: empirical-support gate.  Jeffreys smoothing makes every
+        # P_ij > 0, so an unreachable target would otherwise still return a
+        # finite committor.  Require (a) a minimum observed edge count, (b) the
+        # upper target actually visited in the window, (c) an observed-support
+        # path from the current state to the target.
+        N_obs = res["N_obs"][t, col]
+        if int(np.count_nonzero(N_obs)) < 2:
+            continue
+        if int(res["counts"][t, col, B - 1]) < 1:
+            continue
+        if not _observed_reachable(N_obs, k, B - 1):
             continue
         if B == 2:
             out[t] = float(k)  # q_0 = 0, q_1 = 1 exactly
@@ -742,6 +874,18 @@ def _mfpt_series(res: dict[str, np.ndarray], col: int, min_count: int, target: s
             raise ValueError(f"unknown target {target!r}; expected upper/lower/extreme")
         if k in A:
             out[t] = 0.0
+            continue
+        # audit P1: empirical-support gate.  Jeffreys smoothing makes every
+        # P_ij > 0, so an unreachable target would otherwise still return a
+        # finite MFPT.  Require (a) a minimum observed edge count, (b) at least
+        # one target state actually visited in the window, (c) an observed-
+        # support path from the current state to some target.
+        N_obs = res["N_obs"][t, col]
+        if int(np.count_nonzero(N_obs)) < 2:
+            continue
+        if not any(int(res["counts"][t, col, a]) >= 1 for a in A):
+            continue
+        if not any(_observed_reachable(N_obs, k, a) for a in A):
             continue
         nonA = [i for i in range(B) if i not in A]
         if not nonA:
@@ -888,14 +1032,15 @@ def _stationary_surprisal_series(res: dict[str, np.ndarray], col: int, min_count
 class TsMarkovStationarySurprisal(SeriesOperator):
     """当前状态在长期动力学中的罕见度 ``-log(π_k)``（nats）。
 
-    π 为窗口内经验状态频率（平稳测度的一致估计）；输出当前状态 k 的负对数
-    频率。与 ``ts_markov_transition_surprisal`` 正交：那个回答"这次跳转怪不
-    怪"，这个回答"当前所处位置本身在长期动力学里有多稀有"。只用 ``[t-W,t-1]``。
+    π 为转移矩阵 P 的**平稳分布**（左特征向量，πP=π，由 P 计算而非经验频率，
+    audit P1 诚实命名）；输出当前状态 k 的负对数平稳概率。与
+    ``ts_markov_transition_surprisal`` 正交：那个回答"这次跳转怪不怪"，这个
+    回答"当前所处位置本身在长期动力学里有多稀有"。只用 ``[t-W,t-1]``。
     """
 
     metadata = _metadata(
         "ts_markov_stationary_surprisal",
-        "当前状态的历史长期稀有度 -log π_k（nats）。",
+        "当前状态在 P 的平稳分布下的长期稀有度 -log π_k（nats）。",
         ["x", "window", "bins", "lag", "min_count"],
         unit="nats",
         cost=4,

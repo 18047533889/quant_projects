@@ -218,6 +218,33 @@ class TsEnergyBreakScore(SeriesOperator):
 # ts_copula_central_asymmetry (P2 research)
 # ---------------------------------------------------------------------------
 
+def _midranks(a: np.ndarray) -> np.ndarray:
+    """Average ranks (midranks) of ``a``, ties sharing the mean rank.
+
+    ``np.argsort(np.argsort(x))`` assigns arbitrary *competition* ranks to ties
+    (ordered by original index), so a factor's copula pseudo-observations become
+    ticker/row-order sensitive on discrete fields (0 returns, rounded ratios,
+    limit states).  Average ranks are invariant to the input's original order
+    (round-7 P0, review §35).
+    """
+    n = a.size
+    if n == 0:
+        return a.astype(float)
+    order = np.argsort(a, kind="stable")
+    sorted_a = a[order]
+    ranks = np.empty(n, dtype=float)
+    i = 0
+    while i < n:
+        j = i + 1
+        while j < n and sorted_a[j] == sorted_a[i]:
+            j += 1
+        ranks[i:j] = (i + 1.0 + j) / 2.0  # mean of positions i+1..j
+        i = j
+    out = np.empty(n, dtype=float)
+    out[order] = ranks
+    return out
+
+
 def _copula_central_asymmetry_cell(xv: np.ndarray, yv: np.ndarray, grid: int) -> float:
     finite = np.isfinite(xv) & np.isfinite(yv)
     x = xv[finite]
@@ -225,8 +252,8 @@ def _copula_central_asymmetry_cell(xv: np.ndarray, yv: np.ndarray, grid: int) ->
     if x.size < 10:
         return np.nan
     G = max(4, int(grid))
-    u = (np.argsort(np.argsort(x)).astype(np.float64) + 0.5) / x.size
-    v = (np.argsort(np.argsort(y)).astype(np.float64) + 0.5) / y.size
+    u = (_midranks(x) - 0.5) / x.size
+    v = (_midranks(y) - 0.5) / y.size
     g = np.linspace(0.5 / G, 1.0 - 0.5 / G, G)
     C = np.empty((G, G), dtype=float)
     for a in range(G):

@@ -57,6 +57,12 @@ class StorageSpec:
     region: str | None = None
     secret: str | None = None       # DuckDB Secret 名
     mode: str | None = None         # cos: mirror | remote | auto
+    # #P0-final closure 4：remote 路径形态与文件格式（cos/remote 消费的
+    # ``storage.source.layout`` / ``source.format`` 归一化后落在 typed spec 上，
+    # 不再让各模块各自读 raw dict）。
+    layout: str | None = None       # plain / daily_parquet / hive_date / hive_year
+    format: str | None = None       # parquet / arrow / feather / csv ...
+    credential_profile: str | None = None  # COS 凭证 profile 名
     options: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

@@ -260,8 +260,14 @@ class DatasetManifest:
         root = Path(root)
         root.mkdir(parents=True, exist_ok=True)
         table = self.to_table()
-        # 复用既有 generation（增量重建）或生成新的
-        gen = self.manifest_generation_id or uuid4_hex()
+        # #P0-final closure 1：每次 logical manifest commit 都必须 mint **全新**
+        # generation id——即使本对象是从旧 manifest load 后重建，也绝不复用旧
+        # generation。否则进程死在 ``_manifest.parquet`` replace 之后、
+        # ``_manifest.json`` replace 之前，若新旧两代恰巧共用同一 generation，
+        # load() 的双 generation 一致性检查仍会通过，把「新 parquet + 旧 JSON」
+        # 误认为同一代（generation 机制就是为了防这个 crash 窗口）。
+        gen = uuid4_hex()
+        self.manifest_generation_id = gen  # 内存对象与落盘一致（后续 bump 保留）
         schema = table.schema.with_metadata(
             {b"manifest_generation_id": gen.encode("utf-8")}
         )
@@ -513,7 +519,10 @@ def manifest_root_for_paths(paths: Sequence[str]) -> Path | None:
     #P0-31 三种形态分开处理：
         - 精确单文件路径（无 glob）→ 返回**父目录**（manifest 不可能以数据文件
           自身为根）；
-        - glob 路径 → 返回通配符前的静态目录前缀；
+        - glob 路径 → 返回**通配符前最长静态目录前缀**（glob 的包含目录）——
+          文件 ``d/part-*.parquet`` / ``d/year=2024/part-*.parquet`` 都活在
+          ``d``（或 ``d/year=2024``）下，manifest 根是那个目录，而不是把
+          ``d/part-`` 这种文件名前缀当目录（会在不存在的地方建 phantom 目录）；
         - 目录 → 返回自身。
     """
     for p in paths:
@@ -521,7 +530,17 @@ def manifest_root_for_paths(paths: Sequence[str]) -> Path | None:
             continue
         text = str(p)
         if "*" in text or "?" in text or "[" in text:
-            static = text.split("*", 1)[0].rstrip("/")
+            import re as _re
+
+            m = _re.search(r"[*?[]", text)
+            static = text[: m.start()] if m else text
+            # 静态前缀可能停在文件名中间（如 part-*.parquet / year=*.parquet），
+            # 取到最后一个 '/' 之前才是真正目录；无 '/' 的相对 glob → 当前目录。
+            idx = static.rfind("/")
+            if idx >= 0:
+                static = static[:idx]
+            elif static:
+                static = "."
             if static:
                 return Path(static)
             continue
@@ -664,8 +683,9 @@ def rebuild_manifest_for_dataset(
     """mutation commit 后重建 manifest，使 ``manifest_built_epoch == source_epoch``。
 
     - 数据集没有 manifest sidecar → 不建（数据集主人才决定是否启用 manifest）。
-    - 重建失败 → 返回 None（manifest 保持 dirty，读路径安全回退 glob + 全文件
-      列表，不回退错误 prune）。
+    - **重建失败 → 向上抛**（本轮 closure 改动）：write caller 必须知道
+      manifest 没有重建成，不能再静默吞掉让调用方以为提交完整。读路径的安全
+      性不受影响——manifest 保持 dirty 时读路径照旧回退 glob + 全文件列表。
     - 成功后 ``manifest_built_epoch`` 追上 ``source_epoch``，prune 恢复。
     """
     from data_access.read.manifest import (
@@ -686,10 +706,7 @@ def rebuild_manifest_for_dataset(
         token.get("source_epoch") is not None or token.get("manifest_epoch") is not None
     ):
         return None  # 没有启用 manifest
-    try:
-        return _build(store, dataset, params=params or None, include_row_groups=False)
-    except Exception:
-        return None
+    return _build(store, dataset, params=params or None, include_row_groups=False)
 
 
 def _remove_stale_row_group_sidecar(root: Path) -> None:

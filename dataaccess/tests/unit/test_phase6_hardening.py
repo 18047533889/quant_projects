@@ -359,6 +359,7 @@ def test_read_cos_events_asof_rejects_raw_event():
     import data_access.cos_event_runtime as cer
 
     orig = cer.resolve_event_clock
+    orig_filters = cer.validate_event_filters
     cer.resolve_event_clock = lambda dataset, allow_effective_time=False: (
         _FakeContract(),
         "published_utc",
@@ -372,7 +373,11 @@ def test_read_cos_events_asof_rejects_raw_event():
                 pd.DataFrame({"decision_timestamp": ["2024-01-01"], "instrument": ["AAA"]}),
             )
     finally:
+        # 两个 monkeypatch 都必须恢复——漏掉 validate_event_filters 会让
+        # `filters=None` 泄漏到整个 pytest 进程，后续任何 read_cos_events 在
+        # `filters.keys()` 处崩（测试顺序敏感的静默失败）。
         cer.resolve_event_clock = orig
+        cer.validate_event_filters = orig_filters
 
 
 # ---- #P0-15 / #P0-23 semantic catalog contracts ----
@@ -407,4 +412,6 @@ def test_semantic_catalog_derived_market_cap_daily():
     catalog = get_semantic_catalog(_SEMANTIC_YAML)
     f = catalog.get("market_cap_daily", market="us")
     assert f.derived_expression is not None
-    assert f.mining_allowed is True
+    # #P1-final closure 7：DerivedFieldCompiler 未实现执行链 → mining_allowed=false
+    # （fail-closed，Planner 遇到 derived 字段给清晰 ValidationError，不宣称可挖掘）。
+    assert f.mining_allowed is False

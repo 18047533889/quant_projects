@@ -77,6 +77,76 @@ def ts_nth_pivot_high_age(high,left_window,right_window,history_window,n): retur
 def ts_nth_pivot_low_age(low,left_window,right_window,history_window,n): return _event_stat(low,left_window,right_window,history_window,n,high=False,which="pivot_age")
 
 
+def _pivot_stream(high, low, left_window, right_window, history_window):
+    """Chronological merged pivot stream (the single time-topology source).
+
+    Returns a rows×cols nested list: ``out[t][c]`` is a list of
+    ``(pivot_bar, is_high, price)`` tuples containing every pivot confirmed at
+    or before row ``t`` and inside the bounded history.  High and low pivots are
+    merged and sorted by *pivot-bar position* — a high pivot confirmed later than
+    a low pivot keeps its true chronological place.  Every pivot-sequence chart
+    pattern (double top/bottom, head & shoulders, triple top/bottom, 1-2-3)
+    derives its ordering from this helper (audit item 39-54, time-topology gate).
+    """
+    h_events = _recent_events(high, left_window, right_window, history_window, high=True)
+    l_events = _recent_events(low, left_window, right_window, history_window, high=False)
+    rows, cols = high.shape
+    out = [[[] for _ in range(cols)] for _ in range(rows)]
+    for t in range(rows):
+        for c in range(cols):
+            merged = [
+                (int(pos), True, float(px)) for _, pos, px in h_events[t][c]
+            ] + [
+                (int(pos), False, float(px)) for _, pos, px in l_events[t][c]
+            ]
+            if len(merged) > 1:
+                merged.sort(key=lambda e: e[0])
+            out[t][c] = merged
+    return out
+
+
+def _seq_features(high, low, left_window, right_window, history_window, n, seq):
+    """Extract trailing-``n`` pivot topology and the pivot prices/positions.
+
+    Returns ``(ok, prices, positions)``:
+
+    * ``ok``        — DataFrame bool; True where the trailing ``n`` merged pivots
+                      literally alternate per ``seq`` (True=high, False=low) in
+                      chronological order.  Cells with fewer than ``n`` pivots
+                      are False.
+    * ``prices``    — list of ``n`` DataFrames; ``prices[i]`` is the pivot price
+                      at offset ``i`` (0 = oldest) of the trailing window, NaN
+                      where fewer than ``n`` pivots exist.
+    * ``positions`` — parallel pivot-bar positions.
+
+    A wrong-order cell (enough pivots, bad alternation) yields a *number* for
+    prices but ``ok=False``, so callers multiply by ``ok.astype(float)`` to get a
+    confirmed 0; an insufficient-history cell yields NaN prices so the NaN
+    "cannot judge" contract survives the multiplication.
+    """
+    stream = _pivot_stream(high, low, left_window, right_window, history_window)
+    rows, cols = high.shape
+    nseq = len(seq)
+    ok = np.zeros((rows, cols), dtype=bool)
+    price_arr = [np.full((rows, cols), np.nan, dtype=float) for _ in range(n)]
+    pos_arr = [np.full((rows, cols), np.nan, dtype=float) for _ in range(n)]
+    for t in range(rows):
+        for c in range(cols):
+            ev = stream[t][c]
+            if len(ev) < n:
+                continue
+            tail = ev[-n:]
+            if tuple(e[1] for e in tail) == tuple(seq):
+                ok[t, c] = True
+            for i, (pos, _is_high, px) in enumerate(tail):
+                price_arr[i][t, c] = px
+                pos_arr[i][t, c] = float(pos)
+    ok_df = pd.DataFrame(ok, index=high.index, columns=high.columns)
+    prices = [pd.DataFrame(a, index=high.index, columns=high.columns) for a in price_arr]
+    positions = [pd.DataFrame(a, index=high.index, columns=high.columns) for a in pos_arr]
+    return ok_df, prices, positions
+
+
 def _event_count(frame,left,right,history,high):
     events=_recent_events(frame,left,right,history,high=high)
     return pd.DataFrame([[float(len(x)) for x in row] for row in events],index=frame.index,columns=frame.columns)
@@ -202,30 +272,50 @@ def _between(v,lo,hi): return v.ge(lo).astype(float)*v.le(hi).astype(float)
 
 
 def pattern_double_top(high,low,left_window,right_window,history_window,tolerance,min_depth,min_spacing,max_spacing):
-    h1=ts_nth_pivot_high(high,left_window,right_window,history_window,1); h2=ts_nth_pivot_high(high,left_window,right_window,history_window,2)
-    l1=ts_nth_pivot_low(low,left_window,right_window,history_window,1)
-    depth=((h1+l1*0)/l1.replace(0,np.nan)-1.0).clip(lower=0.0)
-    spacing=ts_pivot_high_spacing(high,left_window,right_window,history_window)
-    return _closeness(h1,h2,tolerance)*depth.ge(_pf(min_depth,"min_depth",0)).astype(float)*_between(spacing,_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing"))
+    # Time-topology gate (audit 39): the trailing pivots must literally alternate
+    # high -> low -> high with the neckline low strictly between the two highs.
+    ok, prices, positions = _seq_features(high,low,left_window,right_window,history_window,3,(True,False,True))
+    h2, mid_low, h1 = prices[0], prices[1], prices[2]
+    depth=(h1/mid_low.replace(0,np.nan)-1.0).clip(lower=0.0)
+    spacing=positions[2]-positions[0]
+    score=_closeness(h1,h2,tolerance)*depth.ge(_pf(min_depth,"min_depth",0)).astype(float)*_between(spacing,_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing"))
+    return score*ok.astype(float)
 
 def pattern_double_bottom(high,low,left_window,right_window,history_window,tolerance,min_depth,min_spacing,max_spacing):
-    l1=ts_nth_pivot_low(low,left_window,right_window,history_window,1); l2=ts_nth_pivot_low(low,left_window,right_window,history_window,2)
-    h1=ts_nth_pivot_high(high,left_window,right_window,history_window,1)
-    depth=(h1/l1.replace(0,np.nan)-1.0).clip(lower=0.0); spacing=ts_pivot_low_spacing(low,left_window,right_window,history_window)
-    return _closeness(l1,l2,tolerance)*depth.ge(_pf(min_depth,"min_depth",0)).astype(float)*_between(spacing,_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing"))
+    # Time-topology gate (audit 40): trailing pivots must literally alternate
+    # low -> high -> low with the middle high strictly between the two lows.
+    ok, prices, positions = _seq_features(high,low,left_window,right_window,history_window,3,(False,True,False))
+    l2, mid_high, l1 = prices[0], prices[1], prices[2]
+    depth=(mid_high/l1.replace(0,np.nan)-1.0).clip(lower=0.0)
+    spacing=positions[2]-positions[0]
+    score=_closeness(l1,l2,tolerance)*depth.ge(_pf(min_depth,"min_depth",0)).astype(float)*_between(spacing,_pi(min_spacing,"min_spacing"),_pi(max_spacing,"max_spacing"))
+    return score*ok.astype(float)
 
 
 def pattern_head_shoulders(high,low,left_window,right_window,history_window,shoulder_tolerance,head_min_prominence,max_neckline_slope):
-    r=ts_nth_pivot_high(high,left_window,right_window,history_window,1); h=ts_nth_pivot_high(high,left_window,right_window,history_window,2); l=ts_nth_pivot_high(high,left_window,right_window,history_window,3)
-    shoulders=_closeness(l,r,shoulder_tolerance); base=((l.abs()+r.abs())/2).replace(0,np.nan); prom=(h/base-1.0)
-    neckline=_bounded_line(low,left_window,right_window,history_window,2,high=False,output="slope").abs()
-    return shoulders*prom.ge(_pf(head_min_prominence,"head_min_prominence",0)).astype(float)*neckline.le(_pf(max_neckline_slope,"max_neckline_slope",0)).astype(float)
+    # Time-topology gate (audit 41): require the literal H-L-H-L-H alternation
+    # (shoulder-head-shoulder with two neckline lows), not separate high/low
+    # counts — which previously matched e.g. L-H-L-L-H.
+    ok, prices, positions = _seq_features(high,low,left_window,right_window,history_window,5,(True,False,True,False,True))
+    shoulder_l, neckline_l1, head, neckline_l2, shoulder_r = prices
+    shoulders=_closeness(shoulder_l,shoulder_r,shoulder_tolerance)
+    base=((shoulder_l.abs()+shoulder_r.abs())/2).replace(0,np.nan)
+    prom=(head/base-1.0)
+    neckline=(neckline_l2-neckline_l1)/(positions[3]-positions[1]).replace(0,np.nan)
+    score=shoulders*prom.ge(_pf(head_min_prominence,"head_min_prominence",0)).astype(float)*neckline.abs().le(_pf(max_neckline_slope,"max_neckline_slope",0)).astype(float)
+    return score*ok.astype(float)
 
 def pattern_inverse_head_shoulders(high,low,left_window,right_window,history_window,shoulder_tolerance,head_min_prominence,max_neckline_slope):
-    r=ts_nth_pivot_low(low,left_window,right_window,history_window,1); h=ts_nth_pivot_low(low,left_window,right_window,history_window,2); l=ts_nth_pivot_low(low,left_window,right_window,history_window,3)
-    shoulders=_closeness(l,r,shoulder_tolerance); base=((l.abs()+r.abs())/2).replace(0,np.nan); prom=(base/h.abs().replace(0,np.nan)-1.0)
-    neckline=_bounded_line(high,left_window,right_window,history_window,2,high=True,output="slope").abs()
-    return shoulders*prom.ge(_pf(head_min_prominence,"head_min_prominence",0)).astype(float)*neckline.le(_pf(max_neckline_slope,"max_neckline_slope",0)).astype(float)
+    # Time-topology gate (audit 42): literal L-H-L-H-L alternation for the
+    # inverse (bottom) head-and-shoulders.
+    ok, prices, positions = _seq_features(high,low,left_window,right_window,history_window,5,(False,True,False,True,False))
+    shoulder_l, neckline_h1, head, neckline_h2, shoulder_r = prices
+    shoulders=_closeness(shoulder_l,shoulder_r,shoulder_tolerance)
+    base=((shoulder_l.abs()+shoulder_r.abs())/2).replace(0,np.nan)
+    prom=(base/head.abs().replace(0,np.nan)-1.0)
+    neckline=(neckline_h2-neckline_h1)/(positions[3]-positions[1]).replace(0,np.nan)
+    score=shoulders*prom.ge(_pf(head_min_prominence,"head_min_prominence",0)).astype(float)*neckline.abs().le(_pf(max_neckline_slope,"max_neckline_slope",0)).astype(float)
+    return score*ok.astype(float)
 
 
 def _slopes(high,low,left,right,history,points):

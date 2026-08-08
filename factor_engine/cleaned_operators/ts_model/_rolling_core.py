@@ -99,9 +99,57 @@ def aligned(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
     return align_panel_inputs(*frames, strict_axes=True)
 
 
+def design_is_well_conditioned(design: np.ndarray) -> bool:
+    """ModelDesignGate: reject rank-deficient / ill-conditioned linear designs.
+
+    A design with a very large condition number (near-collinear columns) or
+    deficient rank makes the least-squares coefficients numerically meaningless,
+    so the fit is rejected *before* the solve.  The condition threshold (1e12)
+    matches numpy's default ``rcond`` behaviour for double precision; degenerate
+    (empty / zero-singular-value) designs are guarded so a 0/0 never propagates.
+    """
+    if design.ndim != 2 or design.shape[0] == 0 or design.shape[1] == 0:
+        return False
+    n, p = design.shape
+    if n < p:
+        return False
+    try:
+        s = np.linalg.svd(design, compute_uv=False)
+    except (np.linalg.LinAlgError, ValueError):
+        return False
+    if s.size == 0:
+        return False
+    s_max = float(s[0])
+    if not np.isfinite(s_max) or s_max <= 0.0:
+        return False
+    s_min = float(s[-1])
+    cond = np.inf if s_min <= 0.0 else s_max / s_min
+    if not np.isfinite(cond) or cond > 1e12:
+        return False
+    # Rank check: singular values above the standard numerical floor
+    # (S.max() * max(M, N) * eps), the same tolerance numpy.matrix_rank uses.
+    floor = s_max * max(n, p) * np.finfo(float).eps
+    if int(np.sum(s > floor)) < p:
+        return False
+    return True
+
+
+def fit_linear_model_checked(design: np.ndarray, y: np.ndarray) -> np.ndarray | None:
+    """Gate-wrapped OLS: ``None`` on a rank-deficient / ill-conditioned design.
+
+    Thin convenience wrapper around :func:`ols_fit` for callers (HAR-RV, regime /
+    MoE OLS paths) that want the ModelDesignGate without importing ``ols_fit``
+    directly; it returns ``None`` so they fail closed (emit NaN) instead of
+    accepting a numerically meaningless coefficient.
+    """
+    return ols_fit(design, y)
+
+
 def ols_fit(design: np.ndarray, y: np.ndarray) -> np.ndarray | None:
     """OLS coefficients, None if design is rank deficient / degenerate."""
     if design.shape[0] < design.shape[1]:
+        return None
+    if not design_is_well_conditioned(design):
         return None
     try:
         beta, *_ = np.linalg.lstsq(design, y, rcond=None)

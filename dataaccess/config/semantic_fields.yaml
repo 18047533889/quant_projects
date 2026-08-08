@@ -459,7 +459,9 @@ us_market_cap_daily:
     us_stock_daily.Close *
     us_ticker_shares_snapshot.weighted_shares_outstanding
   derived_from: [us_stock_daily.Close, us_ticker_shares_snapshot.weighted_shares_outstanding]
-  mining_allowed: true
+  # #P1-final closure 7：DerivedFieldCompiler 未实现执行链 → 明确 fail-closed。
+  # 不宣称 mining_allowed=true；Planner 遇到 derived 字段给清晰 ValidationError。
+  mining_allowed: false
 
 # ---- 美股财务（E2 事件；PIT=filing_date；必须 filter timeframe） ----
 revenue:

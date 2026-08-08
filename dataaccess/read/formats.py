@@ -134,6 +134,17 @@ class FormatSpec:
         if isinstance(raw, str):
             return cls(type=normalize_format_name(raw))
         if isinstance(raw, dict):
+            # #P1-final closure 10：顶层 unknown-key fail-closed——``delimeter:``
+            # 这类拼写错误再也不能静默忽略（旧代码不认识的顶层 key 直接丢）。
+            _TOP_LEVEL_KEYS = {
+                "type", "delimiter", "header", "encoding", "compression", "extra",
+            }
+            unknown_top = sorted(set(raw) - _TOP_LEVEL_KEYS)
+            if unknown_top:
+                raise ValidationError(
+                    f"{context}: format 顶层含未知 key {unknown_top}"
+                    f"（只允许 {sorted(_TOP_LEVEL_KEYS)}）。拼写错误不会被静默忽略。"
+                )
             fmt_type = normalize_format_name(raw.get("type", "parquet"))
             delimiter = raw.get("delimiter")
             header = raw.get("header")
@@ -148,7 +159,18 @@ class FormatSpec:
                 raise ValidationError(f"{context}: format.delimiter 必须是字符串")
             if header is not None and not isinstance(header, bool):
                 raise ValidationError(f"{context}: format.header 必须是布尔")
+            if encoding is not None and not isinstance(encoding, str):
+                raise ValidationError(f"{context}: format.encoding 必须是字符串")
+            if compression is not None and not isinstance(compression, str):
+                raise ValidationError(f"{context}: format.compression 必须是字符串")
             extra: dict[str, Any] = {str(k): v for k, v in extra_raw.items()}
+            # #P1-final closure 10：顶层 compression 与 extra.compression 重复 →
+            # 歧义（一个生效另一个被忽略），直接拒绝。
+            if compression is not None and "compression" in extra:
+                raise ValidationError(
+                    f"{context}: format.compression 与 format.extra.compression "
+                    "重复声明，两者含义冲突。请在顶层或 extra 里任选一处。"
+                )
             validate_format_extra(fmt_type, extra, context=context)
             return cls(
                 type=fmt_type,
@@ -187,9 +209,64 @@ _ALLOWED_EXTRA_OPTIONS: dict[str, frozenset[str]] = {
                           "hive_partitioning", "union_by_name"}),
 }
 
+# #P1-final closure 10：每个白名单 option 的**值类型**契约。旧代码只校验 option
+# 名不校验值——``sample_size: "many"`` 这种会被 `_kv()` str() 化后塞进 SQL，
+# DuckDB 报错前没人发现；``columns`` 这类结构值也会被错误 str() 化。
+_EXTRA_VALUE_TYPES: dict[str, dict[str, tuple[type, ...]]] = {
+    "csv": {
+        "sample_size": (int,),
+        "nullstr": (str,),
+        "dateformat": (str,),
+        "timestampformat": (str,),
+        "all_varchar": (bool,),
+        "auto_detect": (bool,),
+        "ignore_errors": (bool,),
+        "normalize_names": (bool,),
+        "escapechar": (str,),
+        "quotechar": (str,),
+        "skip": (int,),
+        "columns": (dict,),  # DuckDB read_csv columns：{col: 'TYPE'}
+        "compression": (str,),
+    },
+    "tsv": {
+        "sample_size": (int,),
+        "nullstr": (str,),
+        "dateformat": (str,),
+        "timestampformat": (str,),
+        "all_varchar": (bool,),
+        "auto_detect": (bool,),
+        "ignore_errors": (bool,),
+        "normalize_names": (bool,),
+        "escapechar": (str,),
+        "quotechar": (str,),
+        "skip": (int,),
+        "columns": (dict,),
+        "compression": (str,),
+    },
+    "jsonl": {
+        "sample_size": (int,),
+        "maximum_sample_files": (int,),
+        "ignore_errors": (bool,),
+        "compression": (str,),
+        "records": (str,),
+        "format": (str,),
+    },
+    "parquet": {
+        "compression": (str,),
+        "binary_as_string": (bool,),
+        "file_row_number": (bool,),
+        "hive_partitioning": (bool,),
+        "union_by_name": (bool,),
+    },
+}
+
 
 def validate_format_extra(fmt_type: str, extra: dict[str, Any], *, context: str) -> None:
-    """#P0-54 校验 format.extra 的 option 名在白名单内；未知 key fail-closed。"""
+    """#P0-54 校验 format.extra 的 option 名在白名单内；未知 key fail-closed。
+
+    #P1-final closure 10：同时校验每个 option 的**值类型**（per-option typed
+    schema）。非法类型在 registry load 时拒绝，不让坏值 str() 化后进 SQL。
+    """
     allowed = _ALLOWED_EXTRA_OPTIONS.get(fmt_type, frozenset())
     unknown = sorted(set(extra) - allowed)
     if unknown:
@@ -197,6 +274,21 @@ def validate_format_extra(fmt_type: str, extra: dict[str, Any], *, context: str)
             f"{context}: format.extra 含未知 option {unknown}（{fmt_type} 只允许 "
             f"{sorted(allowed)}）。禁止 raw option 名进 SQL。"
         )
+    value_types = _EXTRA_VALUE_TYPES.get(fmt_type, {})
+    for key, val in extra.items():
+        allowed_types = value_types.get(key)
+        if allowed_types is None:
+            continue
+        if isinstance(val, bool) and bool not in allowed_types:
+            # bool 是 int 子类：int option 必须显式拒 bool（true 当 1 会静默错）
+            raise ValidationError(
+                f"{context}: format.extra.{key} 不能是布尔，应为 {_type_names(allowed_types)}"
+            )
+        if not isinstance(val, allowed_types):
+            raise ValidationError(
+                f"{context}: format.extra.{key} 类型非法：收到 {type(val).__name__}"
+                f"（值 {val!r}），应为 {_type_names(allowed_types)}"
+            )
     # #P1-56 production/strict 读语义禁止 managed read 静默吞坏行。
     if "ignore_errors" in extra and extra["ignore_errors"]:
         from data_access.read.query_budget import is_strict_semantics
@@ -209,6 +301,10 @@ def validate_format_extra(fmt_type: str, extra: dict[str, Any], *, context: str)
             )
 
 
+def _type_names(types: tuple[type, ...]) -> str:
+    return " / ".join(t.__name__ for t in types)
+
+
 def _sql_string(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
@@ -218,13 +314,23 @@ def _bool(value: bool) -> str:
 
 
 def _kv(name: str, value: Any) -> str | None:
-    """把 {name: value} 渲染成 DuckDB 命名参数 ``name=value``；None 跳过。"""
+    """把 {name: value} 渲染成 DuckDB 命名参数 ``name=value``；None 跳过。
+
+    #P1-final closure 10：dict 值渲染成 DuckDB STRUCT literal（``{'col':'TYPE'}``），
+    不再被通用 ``str()`` 化——``columns`` 这类结构 option 之前会被塞成
+    ``"{'a': 'INTEGER'}"`` 一整串字符串，DuckDB 直接报错。
+    """
     if value is None:
         return None
     if isinstance(value, bool):
         return f"{name}={_bool(value)}"
     if isinstance(value, (int, float)):
         return f"{name}={value}"
+    if isinstance(value, dict):
+        inner = ", ".join(
+            f"{_sql_string(str(k))}: {_sql_string(str(v))}" for k, v in value.items()
+        )
+        return f"{name}={{{inner}}}"
     return f"{name}={_sql_string(str(value))}"
 
 

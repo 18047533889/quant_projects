@@ -19,7 +19,7 @@ import numpy as np
 import polars as pl
 
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
-from cleaned_operators.markov_dynamics import _state_dynamics_series
+from cleaned_operators.markov_dynamics import _state_dynamics_series, _observed_reachable
 from cleaned_operators.state_geometry import (
     _state_density_series,
     _irreversibility_series,
@@ -118,7 +118,7 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
             i_val = series[t - lag]
             if not np.isfinite(i_val):
                 continue
-            i = int(np.clip(np.searchsorted(edges, i_val, side="right") - 1, 0, B - 1))
+            i = int(np.clip(np.searchsorted(edges, i_val, side="left") - 1, 0, B - 1))
             if res["counts"][t, i] < min_count:
                 continue
             p = res["P"][t, i, k]
@@ -145,6 +145,16 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
                 continue
             P = res["P"][t]
             if not np.all(np.isfinite(P)):
+                continue
+            # audit P1 empirical-support gate (mirrors markov_dynamics): the
+            # upper target must be visited, reachable via observed edges, and
+            # the window must hold a minimum observed edge count.
+            N_obs = res["N_obs"][t]
+            if int(np.count_nonzero(N_obs)) < 2:
+                continue
+            if int(res["counts"][t, B - 1]) < 1:
+                continue
+            if not _observed_reachable(N_obs, k, B - 1):
                 continue
             if B == 2:
                 out[t] = float(k)
@@ -181,6 +191,16 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
                 raise ValueError(f"unknown target {target!r}")
             if k in A:
                 out[t] = 0.0
+                continue
+            # audit P1 empirical-support gate (mirrors markov_dynamics): minimum
+            # observed edge count, at least one target visited, and an observed-
+            # support path from the current state to some target.
+            N_obs = res["N_obs"][t]
+            if int(np.count_nonzero(N_obs)) < 2:
+                continue
+            if not any(int(res["counts"][t, a]) >= 1 for a in A):
+                continue
+            if not any(_observed_reachable(N_obs, k, a) for a in A):
                 continue
             nonA = [i for i in range(B) if i not in A]
             if not nonA:
@@ -428,7 +448,7 @@ _mk(
 # Historical event response.
 # ---------------------------------------------------------------------------
 
-def _event_response_pair(response_frame, event_frame, history_window, horizon, mode, min_events, sign_balance, require_full_horizon=True):
+def _event_response_pair(response_frame, event_frame, history_window, horizon, mode, min_events, sign_balance, require_full_horizon=True, refractory=0):
     cols = _cols(response_frame)
     out: dict[str, np.ndarray] = {}
     for c in cols:
@@ -436,6 +456,7 @@ def _event_response_pair(response_frame, event_frame, history_window, horizon, m
             _col(response_frame, c), _col(event_frame, c),
             history_window, horizon, mode, min_events, sign_balance,
             require_full_horizon=bool(require_full_horizon),
+            refractory=refractory,
         )
     return _rebuild(response_frame, out)
 
@@ -443,17 +464,17 @@ def _event_response_pair(response_frame, event_frame, history_window, horizon, m
 _mk(
     "event_historical_response_mean",
     "历史事件平均 horizon 响应（Polars）。",
-    ["response", "event", "history_window", "horizon", "mode", "min_events", "require_full_horizon"],
-    lambda response, event, history_window=120, horizon=5, mode="mean", min_events=5, require_full_horizon=True: _event_response_pair(
-        response, event, history_window, horizon, mode, min_events, False, require_full_horizon,
+    ["response", "event", "history_window", "horizon", "mode", "min_events", "require_full_horizon", "refractory"],
+    lambda response, event, history_window=120, horizon=5, mode="mean", min_events=5, require_full_horizon=True, refractory=0: _event_response_pair(
+        response, event, history_window, horizon, mode, min_events, False, require_full_horizon, refractory,
     ),
 )
 _mk(
     "event_historical_response_sign_balance",
     "历史事件响应符号平衡（Polars）。",
-    ["response", "event", "history_window", "horizon", "min_events", "require_full_horizon"],
-    lambda response, event, history_window=120, horizon=5, min_events=5, require_full_horizon=True: _event_response_pair(
-        response, event, history_window, horizon, "mean", min_events, True, require_full_horizon,
+    ["response", "event", "history_window", "horizon", "min_events", "require_full_horizon", "refractory"],
+    lambda response, event, history_window=120, horizon=5, min_events=5, require_full_horizon=True, refractory=0: _event_response_pair(
+        response, event, history_window, horizon, "mean", min_events, True, require_full_horizon, refractory,
     ),
 )
 
@@ -560,12 +581,13 @@ _mk(
 # Event-response curve shape (peak lag / decay / dispersion / reversal).
 # ---------------------------------------------------------------------------
 
-def _response_curve_pair(response_frame, event_frame, history_window, horizon, min_events, which):
+def _response_curve_pair(response_frame, event_frame, history_window, horizon, min_events, which, refractory=0):
     cols = _cols(response_frame)
     out: dict[str, np.ndarray] = {}
     for c in cols:
         pl_, dec, disp, rev = _response_curve_stats_series(
-            _col(response_frame, c), _col(event_frame, c), history_window, horizon, min_events
+            _col(response_frame, c), _col(event_frame, c), history_window, horizon, min_events,
+            refractory=refractory,
         )
         out[c] = (pl_, dec, disp, rev)[which]
     return _rebuild(response_frame, out)
@@ -590,9 +612,9 @@ _mk(
 _mk(
     "event_response_dispersion",
     "事件响应分布离散度（Polars）。",
-    ["response", "event", "history_window", "horizon", "min_events"],
-    lambda response, event, history_window=120, horizon=10, min_events=3: _response_curve_pair(
-        response, event, history_window, horizon, min_events, 2
+    ["response", "event", "history_window", "horizon", "min_events", "refractory"],
+    lambda response, event, history_window=120, horizon=10, min_events=3, refractory=0: _response_curve_pair(
+        response, event, history_window, horizon, min_events, 2, refractory
     ),
 )
 _mk(

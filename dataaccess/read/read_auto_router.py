@@ -72,19 +72,27 @@ def resolve_read_auto_mode(
 
 
 def _stats_sidecar_fresh(store: "DataAccessStore", dataset: str, sidecar: Any) -> bool:
-    """#P1-71 sidecar 的 source identity 必须与当前数据集一致才参与 CBO。
+    """#P1-71/#P0-C10 sidecar 的 source identity 必须与当前数据集一致才参与 CBO。
 
-    无 source_epoch 的旧 sidecar：视为 fresh（向后兼容，无法判过期）；有
-    source_epoch 但当前 manifest 不一致 → stale。
+    无 source_epoch 的 legacy sidecar：
+        - production/strict → **stale**（fail-closed，重新统计）——旧统计没有源
+          身份、无法判过期，可能把实际上很大的表错误路由到 Arrow materialization；
+        - research → 视为 fresh（向后兼容）。
+    有 source_epoch 但当前 manifest 不一致 → stale。``manifest_version()``
+    检查失败 → **stale**（fail-closed：宁可重统计，也不能拿可能过期的统计路由）。
     """
     epoch = getattr(sidecar, "source_epoch", None)
     if epoch is None:
+        from data_access.read.query_budget import is_strict_semantics
+
+        if is_strict_semantics():
+            return False
         return True
     try:
         token = store.manifest_version(dataset)
     except Exception:
-        return True
+        return False
     if not isinstance(token, dict):
-        return True
+        return False
     cur = token.get("source_epoch") or token.get("manifest_epoch")
     return cur == epoch

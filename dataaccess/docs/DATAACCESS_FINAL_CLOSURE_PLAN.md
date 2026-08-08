@@ -2,6 +2,88 @@
 
 ## 执行状态（2026-08-08 完成）
 
+### 最终收官轮（0.9.4，Core Freeze 前最后一轮 closure，HEAD=`a6e21d6`）
+
+用户给出的「最终收官轮」清单 1–11 全部落地（1–9 是 Freeze blocker，10–11 顺手
+收口），并新增组合场景 DoD 测试（`tests/unit/test_final_closure_dod2.py`，15 条）：
+- ✅ **1. 写路径统一事务**：`_dataset_mutation` 在 dataset-root 级 `mutation_lock`
+  内完成「bump epoch → mutate → rebuild → unlock」；`mutation_lock` 同线程同 root
+  可重入（正文的 target 锁共用）；rebuild 失败不再被吞（write caller 能看到）。
+  顺带修掉 `_crash_safe_overwrite` 每次 overwrite 清掉 manifest sidecar 的真 bug
+  （sidecar 是数据集元数据，overwrite 时从旧目录带过来）。
+- ✅ **2. CompiledDataRequest 深冻结**：filters/joins/join_specs/source_params/
+  field_params/transforms/aggregation 项全部 `deepcopy`；`ReadPlan.anchor` /
+  `explain()` 只读 `compiled`；`store.plan()` 用 compiled 编译物理计划 DAG。
+- ✅ **3. snapshot_policy 物理 pin**：`pin` 绑定 `manifest_generation` + 逐文件
+  (path, size, mtime_ns / etag / version_id)，execute 时实际 stat（不复用 manifest）；
+  `fail_if_changed` 在「plan 时有 manifest、execute 时消失」→ fail。顺带修
+  `manifest_root_for_paths` 把 `part-*.parquet` 的根错算成 `part-` 目录的 bug。
+- ✅ **4. 组合执行 budget parity**：composed 用 `plan.join_specs_effective`（不再
+  重推）；merged budget 覆盖全部参与数据集；物化分支 `enforce_arrow_budget`，
+  stream 分支累计 `max_rows/max_result_bytes`；逐 dataset `max_scan_files`。
+- ✅ **5. 统一 AvailabilityCompiler**：`compile_available_from`（same_instant /
+  next_bar / next_session_open / next_trading_day / after_close_next_open /
+  session + latency）；`next_bar` 算**当前 session 的下一根 bar**（盘中+1、午休
+  跨段、收盘/周末/节假日下一交易日）；`MarketCalendar.available_from` 委托；
+  事件 helper 消费同一 IR + latency；字段 availability 冲突不再静默回退 same_day
+  （strict 抛 AmbiguousSemanticFieldError）。
+- ✅ **6. PITEventIndex fail-closed**：glob 枚举失败进 `failed_files` +
+  `glob_failed`（complete=False）；null ticker / 空 filing → 拒绝构建；sidecar
+  tmp+fsync+atomic replace。
+- ✅ **7. derived 字段 fail-closed**：catalog load 拒绝 `mining_allowed=true` 的
+  derived 字段；Planner 遇 derived 字段给清晰 ValidationError；config 里
+  `us_market_cap_daily` 改为 `mining_allowed: false`。
+- ✅ **8. 语义歧义 + 重复列**：`resolve_by_physical` 市场过滤后仍多身份 →
+  production 抛 `AmbiguousSemanticFieldError`；`normalize_table_units` 按列位置
+  重建（`Table.from_arrays`），合法重复列不丢。
+- ✅ **9. 聚合治理**：aggregation 路径强制 `max_scan_files`；ReadLineage 写入
+  field / time_range / instruments（不再 `columns=(), time_range=None`）。
+- ✅ **10. FormatSpec strict typing**：顶层 unknown-key reject（`delimeter:` 不再
+  静默忽略）；extra 每 option 值类型校验；顶层 compression 与 extra.compression
+  重复拒绝；`columns` 结构值渲染成 DuckDB STRUCT literal（不再 str() 化）。
+- ✅ **11. TIMESTAMP/TIMESTAMPTZ 正式分离**：`timestamp`/`datetime` 只匹配 naive
+  （TIMESTAMP_NS/MS，**不**匹配 WITH TIME ZONE / TIMESTAMPTZ）；审计真实数据后
+  `ashare_stock_{daily,balance,industry,valuation_daily}.UpdateTime` 改为
+  `timestamptz`（实际是 `timestamp[ms, tz=UTC]`）。
+
+**回归**：全量 `tests/` 669 passed / 0 failed；allowlist 7 passed；新增
+`test_final_closure_dod2.py` 15 条组合场景 DoD。FE 侧 `test_catalog_us.py` /
+`test_data_access_catalog_errors.py` 全绿；FE 其余 5 个失败均为并发会话既有 WIP
+（operator arity mismatch / ListedState schema / FE 自身 catalog 归一化 test-code
+mismatch），与本批无关，未碰 GitHub。
+
+### 第五轮二阶边界收口（0.9.3，Core Freeze blockers）
+
+按第二轮深扫的 12 个「二阶边界 bug」收口（P0 1-7 + P1 8-12）。这轮没有新增
+架构/subsystem，全部是已有架构没有完全贯穿到边界分支的问题：
+- ✅ **cache**：`query_cache_key` 严格区分 `[]`（空池）与 `None`（全市场）；
+  `read_cached` gates 前置（`gates → cache key → hit/miss`），缓存命中不绕过
+  semantic/budget gate。
+- ✅ **COS helper `[] = empty`**：panel/events 的 `instrument_filter=[]` 生成
+  `WHERE FALSE`，不再静默全市场。
+- ✅ **ReadHandle**：one-shot stream 一旦消费，第二终点 fail-closed
+  （`buffer=True` 显式固化例外）；lazy 第一次 terminal collect 缓存 canonical
+  Arrow，绝不重复执行底层 LazyFrame。
+- ✅ **remote meta**：`_remote_meta_cache` 30s TTL（失败 None 不永久缓存）；
+  `_remote_object_meta` 先 `cos_uri_to_s3_uri` 再切 bucket/key（cos:// 长度错位
+  消除）。
+- ✅ **PIT index**：新增统一 `validate_current_source`（authoritative + epoch +
+  source_snapshot + schema_hash），MetadataPlane / prune / 复用三处共用。
+- ✅ **sql() lexical**：`RelationHandle` 的 `?` 计数改 quote/comment-aware 扫描器。
+- ✅ **stats sidecar**：legacy 无 source identity 在 production/strict 视为 stale。
+- ✅ **asof 列冲突**：`allocate_unique_column_name` 统一（`x_event_2` 递增），
+  空 decisions 分支同策略。
+- ✅ **strict sequence parser**：DataRequest / SemanticField 拒绝裸 str/bytes 与
+  非法元素。
+- ✅ **顺带**：publish 首次发布误归档修复（`_target_has_published_content`）；
+  test_phase6_hardening 泄漏恢复。
+- ✅ 回归：`tests/unit/test_final_closure_round5.py` 21 条；全量 `tests/` 通过
+  （除并发会话 WIP 的 3 个失败，非本批）。
+
+**Core Freeze 生效**：本批完成后不再由 AI「大范围审计新增功能」，正式进入
+维护态——differential tests → concurrency/crash tests → 真实 A股/美股 golden
+tests → benchmark → FactorEngine integration。
+
 ### 第四轮最终 P0 收口（0.9.2，HEAD=`6c1453f` 之上）
 
 14 个最终 P0 全部落地（10 项为已修复项补回归锁住，4 项为真实代码改动）：

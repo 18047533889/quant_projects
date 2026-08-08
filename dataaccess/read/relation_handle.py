@@ -32,6 +32,64 @@ from data_access.core.exceptions import ValidationError
 from data_access.read.query_budget import QueryBudget, enforce_arrow_budget, resolve_query_budget
 
 
+def _count_sql_placeholders(text: str, upto: int | None = None) -> int:
+    """统计 ``text[:upto]`` 中作为 DuckDB 参数占位符的 ``?`` 数量（lexical-safe）。
+
+    #P0-C9 旧实现 ``text[:from_match.start()].count("?")`` 会把字符串字面量、
+    注释、标识符里的 ``?`` 都算进去（例如 ``SELECT '?' AS x, ? FROM _sub``），
+    导致外层参数与占位符错位。本扫描器跳过：
+        - 字符串字面量 ``'...'``（``''`` 转义）
+        - 双引号/反引号标识符 ``"..."`` / ``\`...\```（``""``/``\`\`` 转义）
+        - 行注释 ``-- ...``
+        - 块注释 ``/* ... */``
+    """
+    segment = text if upto is None else text[:upto]
+    count = 0
+    i = 0
+    n = len(segment)
+    while i < n:
+        ch = segment[i]
+        if ch == "'":
+            i += 1
+            while i < n:
+                if segment[i] == "'":
+                    if i + 1 < n and segment[i + 1] == "'":
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch in ('"', "`"):
+            quote = ch
+            i += 1
+            while i < n:
+                if segment[i] == quote:
+                    if i + 1 < n and segment[i + 1] == quote:
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == "-" and i + 1 < n and segment[i + 1] == "-":
+            while i < n and segment[i] != "\n":
+                i += 1
+            continue
+        if ch == "/" and i + 1 < n and segment[i + 1] == "*":
+            i += 2
+            while i < n:
+                if segment[i] == "*" and i + 1 < n and segment[i + 1] == "/":
+                    i += 2
+                    break
+                i += 1
+            continue
+        if ch == "?":
+            count += 1
+        i += 1
+    return count
+
+
 class RelationHandle:
     """一次受控 SQL 读的句柄。可嵌套 ``.sql()`` 追加表达式，collect 时受治理。"""
 
@@ -91,7 +149,9 @@ class RelationHandle:
             # #P0-10 参数顺序：外层 `?` 若出现在 `FROM _sub` 之前，替换后它的位置
             # 在子查询之前——不能简单地把 inner params 全放前面。按原文本里
             # `FROM _sub` 之前的 `?` 数切分外层参数。
-            n_before = text[: from_match.start()].count("?")
+            # #P0-C9 用 lexical 扫描器计数（跳过字符串/注释/标识符里的 `?`），
+            # 不能裸 count("?")——`SELECT '?' AS x, ? FROM _sub` 会错位。
+            n_before = _count_sql_placeholders(text, from_match.start())
             outer = list(params or [])
             if n_before > len(outer):
                 raise ValueError(
@@ -179,7 +239,8 @@ class RelationHandle:
         # #P0-10 与 .sql() 同源问题：外层 `?` 若出现在 {sub} 之前，替换后它在
         # 子查询之前，不能把 inner params 无条件放前面。
         pos = text.index("{sub}")
-        n_before = text[:pos].count("?")
+        # #P0-C9 与 .sql() 同源修复：lexical 扫描，跳过字面量/注释里的 `?`。
+        n_before = _count_sql_placeholders(text, pos)
         outer = list(params or [])
         if n_before > len(outer):
             raise ValueError(

@@ -47,7 +47,26 @@ def _period_key(value):
         return value
 
 
-def _period_insert(order: list[object], key: object) -> None:
+def _default_require_parseable() -> bool:
+    """Auto-detect the production/research split for unparseable period ids.
+
+    Round-7 P1: production fundamental must fail closed — an unparseable report
+    period has no fiscal-ordinal contract, so first-seen ordering (a research
+    compatibility fallback) would silently corrupt lag/TTM/growth math.  When the
+    production-policy module is unavailable we default to production (fail
+    closed) so an unclassified run never silently falls back to first-seen order.
+    """
+    try:
+        from runtime.production_policy import is_production_mode
+
+        return bool(is_production_mode())
+    except Exception:
+        return True
+
+
+def _period_insert(
+    order: list[object], key: object, *, require_parseable: bool | None = None
+) -> None:
     """Insert ``key`` into ``order`` keeping fiscal-ordinal sorted order.
 
     Report periods must advance by fiscal-quarter ordinal (``year*4 + quarter``),
@@ -55,10 +74,23 @@ def _period_insert(order: list[object], key: object) -> None:
     older period (e.g. a restated 2025Q2 arriving after 2025Q3) must not reorder
     the sequence that lag / TTM / growth operators walk — that reordering corrupts
     every lag, trend and growth factor (audit §4.1).
+
+    ``require_parseable`` (round-7 P1): when ``True`` an unparseable period id
+    (``period_ordinal(key) is None``) is NOT placed — the row stays NaN (fail
+    closed).  First-seen order is research-compat only; production passes
+    ``require_parseable=True``.
     """
+    if require_parseable is None:
+        require_parseable = _default_require_parseable()
     target = period_ordinal(key)
     if target is None:
-        # Unparseable period ids keep first-seen order at the end.
+        if require_parseable:
+            # Production fail-closed: refuse to place the period.  The row's
+            # output remains NaN because every consumer resolves the current key
+            # through ``order.index(current)`` / ordinal lookups, which cannot
+            # find an unplaced key.
+            return
+        # Research compatibility: unparseable period ids keep first-seen order.
         order.append(key)
         return
     for position, existing in enumerate(order):
@@ -73,8 +105,12 @@ def _walk_periods(
     x: pd.DataFrame,
     period_id: pd.DataFrame,
     fn: Callable[[list[object], OrderedDict, object], float],
+    *,
+    require_parseable: bool | None = None,
 ) -> pd.DataFrame:
     period_id = period_id.reindex(index=x.index, columns=x.columns)
+    if require_parseable is None:
+        require_parseable = _default_require_parseable()
     out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
     for col in x.columns:
         order: list[object] = []
@@ -86,7 +122,7 @@ def _walk_periods(
             key = _period_key(raw_period)
             if key is not None and np.isfinite(value):
                 if key not in visible:
-                    _period_insert(order, key)
+                    _period_insert(order, key, require_parseable=require_parseable)
                 visible[key] = float(value)
             if key is None or key not in visible:
                 continue

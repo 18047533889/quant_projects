@@ -50,8 +50,10 @@ class ReadHandle:
         self._govern_lazy = bool(govern_lazy)
         self._polars_df: Any = None
         self._pandas_df: Any = None
-        # #P1-9 stream 消费状态：one-shot 流被部分消费后，to_arrow() 不能静默
-        # 返回「剩余 batch」的截断结果。
+        # #P1-9 / #P0-C4 stream 消费状态：one-shot 流一旦开始消费，任何第二终点
+        # 都 fail-closed（除非 stream(buffer=True) 显式把结果固化进句柄）。这覆盖
+        # 部分消费（break 后 to_arrow 得到截断 batch）**和**完整消费（迭代器耗尽后
+        # to_arrow/list() 静默变空表 / 第二次 stream() 静默无数据）两种情形。
         self._stream_started = False
         self._stream_completed = False
         if table is not None:
@@ -86,6 +88,50 @@ class ReadHandle:
             )
         return table
 
+    def _ensure_not_consumed(self, action: str) -> None:
+        """#P0-C4 one-shot 流一旦开始消费，任何后续物化/迭代都 fail-closed。
+
+        已用 ``stream(buffer=True)`` 或 ``to_arrow()`` 物化进 ``table`` 形态的
+        句柄不受限（可任意复用）。其余形态被消费过（无论完整/部分）都拒绝——
+        完整消费后 ``list(iterator)`` 只会得到空表，部分消费后得到截断结果，
+        都不允许静默发生。
+        """
+        if not self._stream_started or self._kind == "table":
+            return
+        state = "完整消费" if self._stream_completed else "部分消费（中途 break）"
+        raise RuntimeError(
+            f"ReadHandle 的 one-shot 流已被{state}，无法{action}——迭代器已耗尽，"
+            "继续会得到空表/截断/交叉数据。请重新 read()；若想消费后再复用结果，"
+            "请首次调用 stream(buffer=True) 显式缓存。"
+        )
+
+    def _materialize_arrow(self) -> pa.Table:
+        """#P0-C5 canonical materialization：第一次 terminal collect 后把 Arrow
+        Table 缓存为该句柄的 ``_source``，后续 pandas/polars/stream 全部从这一份
+        派生——同一 ReadHandle 绝不重复执行底层 LazyFrame / 流（中间数据变化时
+        两个终点也会因此保持一致）。
+        """
+        if self._kind == "table":
+            return self._source
+        if self._kind == "lazy":
+            if self._govern_lazy:
+                table = self._collect_lazy_arrow()
+            else:
+                table = self._source.collect().to_arrow()
+            self._source = table
+            self._kind = "table"
+            return table
+        if self._kind == "stream":
+            # 调用方已过 _ensure_not_consumed → 这里必是未消费的流，一次性物化。
+            batches = list(self._source)
+            self._source = (
+                pa.Table.from_batches(batches) if batches else pa.table({})
+            )
+            self._kind = "table"
+            self._stream_completed = True
+            return self._source
+        raise RuntimeError("ReadHandle 没有可读数据")
+
     # ---- 基本信息 ----
 
     @property
@@ -111,31 +157,10 @@ class ReadHandle:
     # ---- 转换 ----
 
     def to_arrow(self) -> pa.Table:
-        if self._kind == "table":
-            return self._source
-        if self._kind == "stream":
-            # #P1-9 部分消费的 stream 不能静默物化「剩余 batch」——那是截断结果。
-            if self._stream_started and not self._stream_completed:
-                raise RuntimeError(
-                    "ReadHandle 的 stream 已被部分消费（前一个循环 break 过）；"
-                    "继续 to_arrow() 只会物化剩余 batch，得到截断结果。"
-                    "请重新 read() 再消费，或先 to_arrow() 再切 batch。"
-                )
-            batches = list(self._source)
-            self._source = pa.Table.from_batches(batches) if batches else pa.table({})
-            self._kind = "table"
-            return self._source
-        if self._kind == "lazy":
-            # #P0-1 governed lazy 的 _collect_lazy_arrow 已返回 pa.Table（预算强制
-            # 在 Arrow 物化后），不再调用不存在的 ``.to_arrow()``。
-            if self._govern_lazy:
-                table = self._collect_lazy_arrow()
-            else:
-                table = self._source.collect().to_arrow()
-            self._source = table
-            self._kind = "table"
-            return table
-        raise RuntimeError("ReadHandle 没有可读数据")
+        # #P0-C4/#P0-C5 统一走 canonical materialization；one-shot 流已消费过则
+        # fail-closed（不能静默返回空表/截断 batch）。
+        self._ensure_not_consumed("to_arrow()")
+        return self._materialize_arrow()
 
     def to_pandas(self):
         import pandas as pd  # noqa: F401
@@ -150,20 +175,17 @@ class ReadHandle:
         import polars as pl
 
         if self._polars_df is None:
-            if self._kind == "lazy":
-                # #P0-1 governed lazy 先物化 Arrow（带预算），再 ``pl.from_arrow``
-                # 转 polars——之前直接把 pa.Table 存成 _polars_df 是类型 bug。
-                if self._govern_lazy:
-                    self._polars_df = pl.from_arrow(self._collect_lazy_arrow())
-                else:
-                    self._polars_df = self._source.collect()
-            else:
-                self._polars_df = pl.from_arrow(self.to_arrow())
+            # #P0-C5 统一从 canonical Arrow 派生：第一次 terminal collect 后
+            # 缓存 Arrow Table，后续 to_arrow/to_pandas/stream 复用同一份，绝不
+            # 重复执行 LazyFrame（旧实现 to_polars 后 to_arrow 会再次 collect）。
+            self._polars_df = pl.from_arrow(self.to_arrow())
         return self._polars_df
 
     def to_lazy(self):
         import polars as pl
 
+        # #P0-C4 已消费过的流不允许再取 lazy（重新 collect 会重复扫描底层数据）。
+        self._ensure_not_consumed("to_lazy()")
         if self._govern_lazy:
             # #P0-21 production 不暴露 raw LazyFrame：collect 会绕过 budget/
             # deadline 治理。要裸 LazyFrame 请显式 unsafe_scan_polars()。
@@ -175,34 +197,62 @@ class ReadHandle:
             return self._source
         return self.to_polars().lazy()
 
-    def stream(self, batch_size: int | None = None) -> Iterator[pa.RecordBatch]:
+    def stream(
+        self,
+        batch_size: int | None = None,
+        *,
+        buffer: bool = False,
+    ) -> Iterator[pa.RecordBatch]:
         """RecordBatch 流。有底层流时直接透传；否则把已物化表切 batch。
 
-        #P1-9 标记消费状态：生成器被 break（GeneratorExit）→ ``_stream_completed``
-        保持 False，之后 ``to_arrow()`` 会拒绝截断物化。
+        #P1-9/#P0-C4 one-shot 语义：流形态（stream / 未物化 lazy）一旦开始消费，
+        任何第二终点（再次 stream() / to_arrow() / to_polars() / to_lazy()）都
+        fail-closed——迭代器耗尽后继续 list() 只会得到空表，部分消费后得到截断
+        结果。**唯一例外**：首次 ``stream(buffer=True)`` 把结果固化进句柄（转成
+        table 形态），之后可任意复用。
+
+        #P0-C5 canonical：``to_arrow()`` 先跑的句柄，``stream()`` 直接从此缓存
+        slice，不重复执行底层 LazyFrame；governed lazy 没有真正流式（collect 全量
+        物化），stream() 也从统一 Arrow 源派生。
         """
+        self._ensure_not_consumed("再次 stream()")
+        bs = batch_size or self._batch_size
+        if bs is None or bs <= 0:
+            bs = 100_000
         if self._kind == "stream":
             self._stream_started = True
+            if buffer:
+                batches = list(self._source)
+                self._source = (
+                    pa.Table.from_batches(batches) if batches else pa.table({})
+                )
+                self._kind = "table"
+                self._stream_completed = True
+                for batch in self._source.to_batches(max_chunksize=bs):
+                    yield batch
+                return
             for batch in self._source:
                 yield batch
             self._stream_completed = True
             return
         if self._kind == "lazy":
-            if self._govern_lazy:
-                # #P0-1 从统一 Arrow 源切 batch（pa.Table.to_batches）。
-                for batch in self._collect_lazy_arrow().to_batches(
-                    max_chunksize=batch_size or self._batch_size
-                ):
+            self._stream_started = True
+            if buffer or self._govern_lazy:
+                # governed lazy 本就没有流式（_collect_lazy_arrow 全量物化）；
+                # buffer=True 也主动固化 → 都走 canonical Arrow。
+                table = self._materialize_arrow()
+                self._stream_completed = True
+                for batch in table.to_batches(max_chunksize=bs):
                     yield batch
                 return
+            # 非 governed lazy 且未 buffer：真正的 collect_stream（低内存），
+            # one-shot——完成后迭代器耗尽，后续终点 fail-closed。
             for batch in self._source.collect_stream():
                 yield batch
+            self._stream_completed = True
             return
-        table = self.to_arrow()
-        bs = batch_size or self._batch_size
-        if bs is None or bs <= 0:
-            bs = 100_000
-        for batch in table.to_batches(max_chunksize=bs):
+        # table 形态：从 canonical Arrow 切片（可任意次复用）。
+        for batch in self._source.to_batches(max_chunksize=bs):
             yield batch
 
     def __repr__(self) -> str:

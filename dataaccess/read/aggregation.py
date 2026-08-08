@@ -520,12 +520,16 @@ def _audit_and_handle(
     budget: Any,
     kind: str,
     spec_info: dict[str, Any] | None = None,
+    time_range: tuple[Any, Any] | None = None,
+    instrument_filter: Sequence[str] | None = None,
 ) -> Any:
     """budget 强制 + 审计 + 构建带 snapshot 的 ReadHandle（#7）。
 
     #P1-43 ``spec_info`` 把真实聚合请求（field/spec/output_name/market/timezone/
     transform hash）并入审计——仅靠 snapshot 无法复现「这列日频数字怎么从分钟
     数据聚出来的」。
+    #P1-final closure 9：ReadLineage 不再 ``columns=(), time_range=None``——
+    field / time_range / instruments 全部写入，复现信息完整。
     """
     from data_access.core import audit as _audit
     from data_access.read.query_budget import enforce_arrow_budget
@@ -547,8 +551,9 @@ def _audit_and_handle(
     )
     lineage = ReadLineage(
         dataset=dataset,
-        columns=tuple(),
-        time_range=None,
+        columns=tuple(spec_info.get("fields") or ()) if spec_info else (),
+        time_range=time_range,
+        instrument_filter=tuple(instrument_filter or ()),
         params=params or None,
     )
     stats = ReadStats(rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms)
@@ -614,12 +619,17 @@ def aggregate_minute_to_daily(
         params=dict(params or {}),
         instrument_filter=instrument_filter,
     )
+    # #P1-final closure 9 max_scan_files：聚合不能绕过 dataset/query 的扫描文件
+    # 预算——与普通 read 一致，路径解析后对匹配文件数做硬限制。
+    store._enforce_scan_files(budget, paths)
     if not paths:
         return _audit_and_handle(
             store, dataset, pa.table({"ts": [], "inst": [], "value": []}),
             paths=[], params=dict(params or {}), elapsed_ms=0.0, budget=budget,
             kind="aggregate",
-            spec_info={"field": field, "spec": agg.to_dict()},
+            spec_info={"field": field, "fields": [field], "spec": agg.to_dict()},
+            time_range=time_range,
+            instrument_filter=instrument_filter,
         )
 
     adapter = format_adapter_for_dataset(ds)
@@ -659,7 +669,9 @@ def aggregate_minute_to_daily(
     return _audit_and_handle(
         store, dataset, table, paths=paths, params=dict(params or {}),
         elapsed_ms=elapsed_ms, budget=budget, kind="aggregate",
-        spec_info={"field": field, "spec": agg.to_dict()},
+        spec_info={"field": field, "fields": [field], "spec": agg.to_dict()},
+        time_range=time_range,
+        instrument_filter=instrument_filter,
     )
 
 
@@ -739,12 +751,21 @@ def aggregate_minute_bundle(
 
     import time as _time
 
+    # #P0-8 已校验所有 item 的 market 一致；effective = 全局 market 或 item 声明值。
+    # （提前计算：空路径分支的 spec_info 也要用，不能等 SQL 分支再算。）
+    effective_market = market or next(
+        (spec.market for _, spec in parsed_items if spec.market is not None),
+        None,
+    )
+
     paths = store._prepare_dataset_read(
         ds,
         time_range=time_range,
         params=dict(params or {}),
         instrument_filter=instrument_filter,
     )
+    # #P1-final closure 9 max_scan_files：bundle 聚合同样强制扫描文件预算。
+    store._enforce_scan_files(budget, paths)
     if not paths:
         cols = ["ts", "inst"]
         for item, spec in parsed_items:
@@ -755,6 +776,7 @@ def aggregate_minute_bundle(
             kind="aggregate",
             spec_info={
                 "bundle": True,
+                "fields": [item.field for item, _ in parsed_items],
                 "items": [
                     {
                         "field": item.field,
@@ -766,6 +788,8 @@ def aggregate_minute_bundle(
                 "market": effective_market,
                 "timezone": timezone,
             },
+            time_range=time_range,
+            instrument_filter=instrument_filter,
         )
 
     adapter = format_adapter_for_dataset(ds)
@@ -786,11 +810,6 @@ def aggregate_minute_bundle(
         pred, time_column=ds.time_column, instrument_column=ds.instrument_column
     )
 
-    # #P0-8 已校验所有 item 的 market 一致；effective = 全局 market 或 item 声明值
-    effective_market = market or next(
-        (spec.market for _, spec in parsed_items if spec.market is not None),
-        None,
-    )
     sql, agg_params = _build_bundle_sql(
         from_clause=from_clause,
         predicate_where=compiled.where_sql,
@@ -812,6 +831,7 @@ def aggregate_minute_bundle(
         elapsed_ms=elapsed_ms, budget=budget, kind="aggregate",
         spec_info={
             "bundle": True,
+            "fields": [item.field for item, _ in parsed_items],
             "items": [
                 {
                     "field": item.field,
@@ -823,4 +843,6 @@ def aggregate_minute_bundle(
             "market": effective_market,
             "timezone": timezone,
         },
+        time_range=time_range,
+        instrument_filter=instrument_filter,
     )

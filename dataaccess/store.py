@@ -175,7 +175,9 @@ class DataAccessStore:
     def _dataset_mutation(self, dataset: str, **params: Any):
         """#P0-27/#10 DatasetTransaction：显式 PREPARED/COMMITTED/ABORTED。
 
-        顺序（#9）：
+        **统一事务（本轮 closure）**：``bump source_epoch → body mutate →
+        rebuild manifest`` 全程在**同一把 dataset-root 级 ``mutation_lock``**内
+        执行，顺序（#9）：
             1. **PREPARED**（进入 body 前）：先 bump source_epoch——**mark
                generation dirty 在 mutate 之前**。读者立刻判旧，不给「数据已改、
                旧 epoch 仍短暂有效、缓存继续命中旧结果」的窗口。
@@ -185,6 +187,19 @@ class DataAccessStore:
                失败后的部分状态不能当成新版本；manifest 保持 dirty，读路径安全
                回退 glob。
 
+        为什么 bump/rebuild 必须与正文同锁：
+            旧实现里 bump 与 rebuild 都在 ``mutation_lock`` 之外，正文的锁只包住
+            mutate。两个 writer 并发时会出现「A 释放正文锁、B 开始写、A 同时
+            rebuild manifest」——manifest 可能从 B 写了一半的目录构建，甚至把
+            B 已 bump 的 epoch 标成 fresh。整事务持同一把 root 锁后，B 的
+            ``_dataset_mutation`` 会阻塞到 A 的 rebuild 完成才 bump 自己的 epoch，
+            竞态消除。正文里的 ``mutation_lock(target_dir)`` 因 root 相同是
+            可重入的（见 ``write.mutation_lock``），不会自锁。
+
+        rebuild 失败不再被吞：``rebuild_manifest_for_dataset`` 对真正的构建错误
+        直接抛（只有「未启用 manifest」这种合法 no-op 返回 None），这里在
+        COMMITTED 时自然向外传播——write caller 必须看到 manifest 没重建成。
+
         业务代码不再自己 ``touch_manifest_epoch``。
         """
         from data_access.read.manifest import (
@@ -192,44 +207,55 @@ class DataAccessStore:
             manifest_root_for_paths,
             rebuild_manifest_for_dataset,
         )
+        from data_access.write.mutation_lock import mutation_lock
 
-        state = "PREPARED"
         # 关键：finally 里**绝不能 `return`**——body 抛出的异常正在传播时，
         # finally 里的 return 会把它静默吞掉。这里只做 guard，让异常自然传播。
         active_exc = sys.exc_info()[1]
 
-        # #9 mutate 前置失效：先 mark dirty，正文还没写、旧 generation 已不可信
         try:
             ds = self._registry.get(dataset)
         except Exception:
             if active_exc is None:
                 raise
             ds = None
-        if ds is not None:
-            try:
-                raw_paths = self._resolve_raw_paths(
-                    ds, time_range=None, params=dict(params)
-                )
-                root = manifest_root_for_paths(raw_paths)
-                if root is not None:
-                    bump_source_epoch(root)
-            except Exception:
-                if active_exc is None:
-                    raise
-        try:
+        if ds is None:
             yield
-            state = "COMMITTED"
+            return
+
+        try:
+            raw_paths = self._resolve_raw_paths(
+                ds, time_range=None, params=dict(params)
+            )
         except Exception:
-            state = "ABORTED"
-            raise
-        finally:
-            # 只有 COMMITTED 才允许 metadata 追平 source generation（#10）
-            if state == "COMMITTED" and ds is not None:
-                try:
+            if active_exc is None:
+                raise
+            raw_paths = []
+        root = manifest_root_for_paths(raw_paths)
+        if root is None:
+            # 无 manifest 的数据集：没有可失效/重建的 sidecar，正文自己负责锁。
+            yield
+            return
+
+        # 统一事务：root 锁持有整个 bump → mutate → rebuild（正文的可重入锁共用）。
+        # timeout 放宽到 300s：锁里现在含 manifest rebuild（glob + footer），
+        # 30s 默认值对大目录重建可能不够。
+        with mutation_lock(root, timeout=300.0):
+            # #9 mutate 前置失效：先 mark dirty，正文还没写、旧 generation 已不可信
+            bump_source_epoch(root)
+            state = "PREPARED"
+            try:
+                yield
+                state = "COMMITTED"
+            except Exception:
+                state = "ABORTED"
+                raise
+            finally:
+                # 只有 COMMITTED 才允许 metadata 追平 source generation（#10）。
+                # rebuild 失败在 COMMITTED 下自然抛出（body 无活动异常时）——
+                # 不再静默吞掉，write caller 必须知道 manifest 没重建成。
+                if state == "COMMITTED":
                     rebuild_manifest_for_dataset(self, dataset, **params)
-                except Exception:
-                    if sys.exc_info()[1] is None:
-                        raise
 
     def set_calendar(self, market: str, calendar: Any) -> None:
         """注入一个市场的交易日历（MarketCalendar），供 session availability 使用。
@@ -2420,6 +2446,21 @@ class DataAccessStore:
                 )
             else:
                 fields.extend(self.resolve_fields([raw], dataset=request.anchor))
+        # #P1-final closure 7：derived 字段（derived_expression）没有实现执行链
+        # （DerivedFieldCompiler 未落地），Planner 遇到直接给清晰 ValidationError，
+        # 绝不走到 registry.get(None) / 缺 dataset 的迷惑错误——catalog 已拒绝
+        # mining_allowed=true，这里再兜一道运行时防线。
+        derived_hit = [
+            f.logical_name
+            for f in fields
+            if getattr(f, "derived_expression", None)
+        ]
+        if derived_hit:
+            raise ValidationError(
+                f"字段 {derived_hit} 是 derived 语义字段（derived_expression），"
+                "DerivedFieldCompiler 尚未实现执行链，暂不可在 DataRequest 中"
+                "直接读取/挖掘。请改用其物理字段，或先实现 derived 执行链。"
+            )
 
         anchor = request.anchor
         if anchor is None:
@@ -2461,6 +2502,10 @@ class DataAccessStore:
         storage: dict[str, str] = {}
         snapshot_info: dict[str, dict[str, Any]] = {}
         plan_snapshot_tokens: dict[str, dict[str, Any]] = {}
+        # #P1-final closure 3：snapshot_policy=pin 时冻结每数据集的物理文件清单
+        # （path + size + mtime_ns / etag / version_id），execute 前逐文件核对。
+        pin_policy = str(getattr(request, "snapshot_policy", "latest") or "latest")
+        plan_pinned_files: dict[str, Any] = {}
         for ds in datasets:
             dsobj = self._registry.get(ds)
             # #27 plan() 按每 dataset 传 source_params：factor lake / model output
@@ -2486,6 +2531,22 @@ class DataAccessStore:
             except Exception:
                 snapshot_info[ds] = {"has_manifest": False}
                 plan_snapshot_tokens[ds] = {"has_manifest": False}
+            if pin_policy == "pin" and plan_snapshot_tokens.get(ds, {}).get("has_manifest"):
+                # pin 需要精确物理快照：resolve 数据集路径 → 逐文件 stat 当前真实
+                # size/mtime（不能复用 manifest——pin 要防的正是「外部系统直接替换
+                # parquet 但 manifest 没重建」的场景）。
+                try:
+                    paths = self._prepare_dataset_read(
+                        dsobj,
+                        time_range=None,
+                        params=ds_params,
+                        instrument_filter=None,
+                    )
+                    from data_access.read.read_contract import build_file_manifest
+
+                    plan_pinned_files[ds] = build_file_manifest(paths)
+                except Exception:
+                    plan_pinned_files[ds] = ()
 
         engine, result = request.engine, request.result
         if len(datasets) > 1:
@@ -2503,21 +2564,24 @@ class DataAccessStore:
                 if result == "auto":
                     result = "arrow"
 
-        # #4 编译物理计划 DAG（Scan→Filter→TemporalJoin→Aggregation→Normalize→Project）
+        # #4 编译期冻结请求语义（不可变）：execute 只消费 compiled，不读活的 req。
+        from data_access.read.data_request import compile_data_request
+
+        compiled = compile_data_request(request)
+
+        # #4 物理计划 DAG（Scan→Filter→TemporalJoin→Aggregation→Normalize→Project）。
+        # #P1-final closure 2：用 **compiled** 编译物理计划（而非活的 request）——
+        # plan() 之后调用方改 req 的嵌套 filters/joins/aggregations，DAG 也保持不变，
+        # explain 与 execute 语义统一。
         from data_access.read.physical_plan import build_physical_plan
 
         physical = build_physical_plan(
-            request=request,
+            request=compiled,
             fields=fields,
             datasets=datasets,
             join_policies=joins,
             scan_costs=scan_costs,
         )
-
-        # #4 编译期冻结请求语义（不可变）：execute 只消费 compiled，不读活的 req。
-        from data_access.read.data_request import compile_data_request
-
-        compiled = compile_data_request(request)
         snapshot_policy = compiled.snapshot_policy
         if snapshot_policy not in {
             "latest",
@@ -2547,6 +2611,7 @@ class DataAccessStore:
             compiled=compiled,
             snapshot_policy=snapshot_policy,
             plan_snapshot_tokens=plan_snapshot_tokens,
+            plan_pinned_files=plan_pinned_files,
             _store=self,
         )
 
@@ -2696,6 +2761,31 @@ class DataAccessStore:
                 normalize_units=normalize_units,
                 **params,
             )
+        ds = self._registry.get(dataset)
+        # #P0-C2 gates 前置：缓存命中也必须经过与真实 read 完全相同的语义/budget
+        # gate（temporal contract / required_filters / allowed values / query
+        # budget / instrument 支持性）——最终是
+        #   `PreparedReadRequest/gates → cache key → cache hit/miss`
+        # 而不是 `cache → gates`。同一进程先 research 缓存宽查询、后切
+        # strict/production 时，旧 cache 不会绕过 require_columns / budget /
+        # semantic gate 直接返回。
+        self._prepare_read_request(
+            dataset,
+            columns=columns,
+            time_range=time_range,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+            filters=filters,
+            params=params,
+        )
+        _assert_instrument_filter_supported(ds, instrument_filter)
+        budget = self._resolve_read_budget(ds, None)
+        validate_query_request(
+            budget,
+            columns=list(columns) if columns else None,
+            time_range=time_range,
+        )
         cache = get_query_cache()
         try:
             token = self.manifest_version(dataset, **params)
@@ -2842,6 +2932,9 @@ class DataAccessStore:
             "source_epoch": src,
             "manifest_built_epoch": built,
             "manifest_epoch": src if src is not None else legacy,
+            # #P1-final closure 3：manifest 身份 generation（parquet+JSON 双写），
+            # snapshot_policy=pin/fail_if_changed 用它做跨 plan/execute 对比。
+            "manifest_generation_id": token.get("manifest_generation_id"),
             "created_at": token.get("created_at"),
         }
 
@@ -4730,6 +4823,34 @@ class DataAccessStore:
             "mode": mode,
         }
 
+    @staticmethod
+    def _preserve_manifest_sidecars(old_dir: Path, candidate: Path) -> None:
+        """overwrite 晋升前，把旧目录里的 manifest sidecar 拷进候选目录。
+
+        #P1-final closure：sidecar（``_manifest.json`` / ``_manifest.parquet`` /
+        ``_manifest_rowgroups.parquet``）是数据集元数据，overwrite 替换数据文件时
+        不能跟着被删——否则 manifest opt-in 丢失、pin/fail_if_changed 失效、读路径
+        永远回退 glob。新 generation 由 COMMITTED 阶段的 rebuild 重建并换代。
+        """
+        from data_access.read.manifest import (
+            _MANIFEST_META_FILENAME,
+            _ROW_GROUPS_FILENAME,
+            MANIFEST_FILENAME,
+        )
+
+        names = {MANIFEST_FILENAME, _MANIFEST_META_FILENAME, _ROW_GROUPS_FILENAME}
+        try:
+            for p in Path(old_dir).iterdir():
+                if p.name not in names:
+                    continue
+                dst = Path(candidate) / p.name
+                try:
+                    shutil.copy2(str(p), str(dst))
+                except OSError:
+                    pass
+        except OSError:
+            pass
+
     def _crash_safe_overwrite(
         self,
         target_dir: Path,
@@ -4772,6 +4893,11 @@ class DataAccessStore:
             if target_dir.exists():
                 old_dir = parent / f".{target_dir.name}.old.{uuid.uuid4().hex[:8]}"
                 os.rename(str(target_dir), str(old_dir))
+                # #P1-final closure：overwrite 会把整个目录替换掉，**manifest sidecar
+                # 必须从旧目录带过来**——否则每次 overwrite 都清掉 `_manifest.*`，
+                # 数据集的 manifest opt-in 丢失（重建找不到 token → 永远回退 glob，
+                # pin/fail_if_changed 也失效）。sidecar 是数据集元数据，不是数据。
+                self._preserve_manifest_sidecars(old_dir, candidate)
             try:
                 os.rename(str(candidate), str(target_dir))
             except OSError:

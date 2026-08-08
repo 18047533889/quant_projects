@@ -322,6 +322,13 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
             _record_polars_op(ctx, op)
 
         kw = dict(node.attrs)
+        # Plan-inference metadata must never become operator kwargs (R5-06).
+        # ``dtype`` is stamped by the analyzer from ``OPERATOR_SIGNATURES`` output
+        # typing (e.g. Series[Bool] -> 'bool') and is not a declared parameter of
+        # any operator — forwarding it makes an undeclared hidden kwarg that the
+        # validator rejects.  ``semantic_attrs`` already carries field metadata
+        # separately; ``dtype`` is the one inference key that leaked into attrs.
+        kw.pop("dtype", None)
         call_args, template, template_panel = _prepare_call_args(
             evaluated, ctx, backend=backend,
             broadcast_scalars=canonical in {"maximum", "minimum"},

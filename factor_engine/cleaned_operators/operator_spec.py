@@ -223,6 +223,12 @@ class OperatorSpec:
     backends: tuple[str, ...]
     policy: OperatorPolicy
     param_names: tuple[str, ...] = ()
+    # round-7: the PANEL-input names (vs scalar parameters).  The manifest must
+    # NOT list ``window`` / ``lag`` as ``input_fields`` — they are scalar knobs,
+    # not data fields.  Derived from ``OperatorMetadata.panel_params`` /
+    # ``input_fields``, else inferred from the kernel signature (params without a
+    # default are panel inputs).
+    panel_params: tuple[str, ...] = ()
     supports_panel: bool = True
     supports_polars: bool = False
     polars_long_tier: str = "unsupported"
@@ -251,6 +257,7 @@ class OperatorSpec:
             "backends": list(self.backends),
             "policy": self.policy.to_dict(),
             "param_names": list(self.param_names),
+            "panel_params": list(self.panel_params),
             "supports_panel": self.supports_panel,
             "supports_polars": self.supports_polars,
             "polars_long_tier": self.polars_long_tier,
@@ -380,6 +387,44 @@ def _infer_shape_contract(resolved: str, policy: OperatorPolicy) -> tuple[bool, 
     return bool(sp), bool(ip), bool(cp)
 
 
+def _infer_panel_params(op: Any, meta: Any, catalog: dict[str, Any]) -> tuple[str, ...]:
+    """Panel-input names for an operator (round-7, audit item 10).
+
+    Resolution order: ``OperatorMetadata.panel_params`` (authoritative when
+    declared) -> ``input_fields`` -> kernel-signature inference (positional
+    parameters WITHOUT a default are panel inputs; ``window`` / ``lag`` /
+    ``alpha`` have defaults, so they are scalar parameters).  A panel must never
+    be mislabelled a scalar field and vice versa.
+    """
+    declared = tuple(getattr(meta, "panel_params", None) or ())
+    if declared:
+        return declared
+    names = tuple(getattr(meta, "param_names", None) or ())
+    if not names:
+        return ()
+    ifields = tuple(getattr(meta, "input_fields", None) or ())
+    if ifields:
+        matched = tuple(n for n in names if n in ifields)
+        return matched or ifields
+    import inspect
+
+    fn = getattr(op, "_calculate_series", None) or getattr(op, "calculate", None)
+    if fn is None:
+        return ()
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return ()
+    panels: list[str] = []
+    for n in names:
+        param = sig.parameters.get(n)
+        if param is None:
+            continue
+        if param.default is inspect.Parameter.empty:
+            panels.append(n)
+    return tuple(panels)
+
+
 def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSpec | None:
     """从 Registry 构建单个算子的生产契约视图。
 
@@ -434,6 +479,7 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
     execution_kind = infer_execution_kind(resolved)
     production_policy = infer_production_policy(resolved)
     lowering_available = has_composite_lowering(resolved)
+    panel_params = _infer_panel_params(op, meta, catalog)
 
     return OperatorSpec(
         canonical=resolved,
@@ -444,6 +490,7 @@ def build_operator_spec(canon: str, *, backend: str | None = None) -> OperatorSp
         backends=all_backends,
         policy=policy,
         param_names=tuple(getattr(meta, "param_names", None) or ()),
+        panel_params=panel_params,
         supports_panel=True,
         supports_polars="polars" in all_backends,
         polars_long_tier=polars_long_tier,
@@ -493,11 +540,18 @@ def spec_to_manifest_entry(spec: OperatorSpec) -> dict[str, Any]:
         "hypothesis": "hypothesis",
         "unknown": "unknown",
     }
+    panel_inputs = list(spec.panel_params)
+    scalar_params = [p for p in spec.param_names if p not in panel_inputs]
     return {
         "name": spec.canonical,
         "scope": scope_map.get(pol.scope, pol.scope),
         "frequency": "any",
-        "input_fields": list(spec.param_names),
+        # round-7: input_fields is now ONLY the panel data inputs.  Scalar knobs
+        # (window / lag / alpha …) live under scalar_parameters — the machine
+        # contract must not advertise ``window`` as a data field (audit item 10).
+        "input_fields": panel_inputs,
+        "scalar_parameters": scalar_params,
+        "param_names": list(spec.param_names),
         "output_type": "series",
         "pit_safe": spec.pit_safe,
         "domain_policy": pol.domain_policy,

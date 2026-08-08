@@ -40,6 +40,19 @@ from .paths import canonicalize, expand_env
 _VALID_ACCESS_MODES = {"published", "namespaced", "staging"}
 _VALID_LAYOUTS = {"plain", "hive"}
 
+# #P0-final closure 2：顶层 Dataset 完整 allowed-key schema（strict）。
+# static 与 parametric 各自允许自己的路径字段；其余 key 两侧通用。
+_COMMON_DATASET_KEYS = frozenset({
+    "kind", "access_mode", "layout", "roles", "time_column", "instrument_column",
+    "hive_partitioning", "union_by_name", "format", "storage", "partitioning",
+    "semantic", "engine", "schema", "query_policy", "partition_columns",
+    "storage_format", "layout_policy", "schema_version", "authorized_root",
+})
+_STATIC_DATASET_KEYS = _COMMON_DATASET_KEYS | frozenset({"root", "glob"})
+_PARAMETRIC_DATASET_KEYS = _COMMON_DATASET_KEYS | frozenset({
+    "root_template", "glob_template", "params_schema",
+})
+
 
 @dataclass(frozen=True)
 class DatasetBase:
@@ -275,6 +288,15 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     kind = raw.get("kind", "static")
     if kind not in {"static", "parametric"}:
         raise ValidationError(f"{context}: kind 必须是 static/parametric，收到 {kind!r}")
+
+    # #P0-final closure 2：顶层 Dataset schema 是 strict schema——任何未知 key
+    # 启动即失败。``time_colum:`` / ``query_polcy:`` / ``formatt:`` 这类 typo
+    # 之前会被静默忽略然后走默认值；registry 是单一事实源，配置写错必须暴露。
+    # 嵌套 storage/partitioning/engine 已有各自 strict key 检查（见下）。
+    if kind == "static":
+        _validate_known_keys(raw, allowed=_STATIC_DATASET_KEYS, context=context)
+    else:
+        _validate_known_keys(raw, allowed=_PARAMETRIC_DATASET_KEYS, context=context)
 
     access_mode = _require_str(raw, "access_mode", context=context)
     if access_mode not in _VALID_ACCESS_MODES:

@@ -23,6 +23,7 @@ class NormalizedFieldPlan:
         physical_dataset: registry/dataset name that owns the field (if known).
         physical_fields: physical column(s) to read for this concept.
         transform: optional derived-field expression (when not a plain column).
+        derived_from: physical (dataset.column) dependencies of a derived field.
         canonical_unit: canonical unit the field is normalized into.
         scale: multiplier applied at the scan boundary to reach the canonical unit.
         frequency: daily / minute / tick / quarterly ... declared by the field.
@@ -31,7 +32,11 @@ class NormalizedFieldPlan:
         effective_time: effective-time column, if any.
         revision_order: version/revision columns to dedupe by before joining.
         universe: market / universe scope (ashare / us / any ...).
-        coverage: coverage semantics if declared (e.g. snapshot vs cumulative).
+        coverage: semantic field coverage — historical_panel / current_snapshot /
+            sparse_event / partial_history (round-7 P0, mirrored from the
+            SemanticFieldCatalog temporal model when not declared).
+        mining_allowed: whether the field may be used as a mined factor input
+            (mirrored from the catalog / FE FieldSpec; round-7 P0).
         price_basis: RAW / CONTINUOUS / RAW_OFFICIAL_LIMIT / RETURN.
         flow_semantics: stock / single_period_flow / cumulative_ytd_flow / ttm_flow.
         source: provenance discriminator used by normalization:
@@ -43,6 +48,7 @@ class NormalizedFieldPlan:
     physical_dataset: str | None = None
     physical_fields: tuple[str, ...] = field(default_factory=tuple)
     transform: str | None = None
+    derived_from: tuple[str, ...] = field(default_factory=tuple)
     canonical_unit: str | None = None
     scale: float | None = None
     frequency: str | None = None
@@ -52,6 +58,7 @@ class NormalizedFieldPlan:
     revision_order: tuple[str, ...] = field(default_factory=tuple)
     universe: str | None = None
     coverage: str | None = None
+    mining_allowed: bool = True
     price_basis: str | None = None
     flow_semantics: str | None = None
     source: str = "raw"
@@ -65,6 +72,46 @@ class NormalizedFieldPlan:
     def primary_physical(self) -> str | None:
         """First physical column, or None when the plan has no physical read."""
         return self.physical_fields[0] if self.physical_fields else None
+
+    @property
+    def is_derived(self) -> bool:
+        """True when this plan is a derived field, not a plain physical column.
+
+        A derived field carries a ``transform`` (derived expression); its
+        ``primary_physical`` (if any) is the base read, never the derived value
+        itself (round-7 P0).
+        """
+        return bool(self.transform)
+
+
+#: Coverage semantics derived from a field's temporal model when the field does
+#: not declare ``coverage`` explicitly.  The vocabulary matches the DataAccess
+#: SemanticFieldCatalog temporal_model values (round-7 P0).
+_COVERAGE_FROM_TEMPORAL_MODEL = {
+    "panel": "historical_panel",
+    "exact": "historical_panel",
+    "exact_daily": "historical_panel",
+    "financial_event": "partial_history",
+    "financial_pit": "partial_history",
+    "sparse_event": "sparse_event",
+    "sparse_snapshot": "current_snapshot",
+    "effective_only": "sparse_event",
+    "current_snapshot": "current_snapshot",
+}
+
+
+def _coverage_from_temporal_model(value) -> str | None:
+    if not value:
+        return None
+    return _COVERAGE_FROM_TEMPORAL_MODEL.get(str(value).strip().lower())
+
+
+def _catalog_coverage(field) -> str | None:
+    """Coverage for a DataAccess ``SemanticField``: declared or derived."""
+    declared = getattr(field, "coverage", None)
+    if declared:
+        return str(declared)
+    return _coverage_from_temporal_model(getattr(field, "temporal_model", None))
 
 
 def plan_from_field_spec(name: str, spec: Any) -> NormalizedFieldPlan:
@@ -83,7 +130,8 @@ def plan_from_field_spec(name: str, spec: Any) -> NormalizedFieldPlan:
         effective_time=getattr(spec, "effective_time_column", None),
         revision_order=tuple(getattr(spec, "revision_columns", ()) or ()),
         universe=getattr(spec, "domain", None),
-        coverage=None,
+        coverage=_coverage_from_temporal_model(getattr(spec, "temporal_model", None)),
+        mining_allowed=bool(getattr(spec, "mining_allowed", True)),
         price_basis=getattr(spec, "price_basis", None),
         flow_semantics=getattr(spec, "flow_semantics", None),
         source="registry",
@@ -91,7 +139,13 @@ def plan_from_field_spec(name: str, spec: Any) -> NormalizedFieldPlan:
 
 
 def plan_from_catalog_field(name: str, field: Any) -> NormalizedFieldPlan:
-    """Build a plan from a DataAccess ``SemanticField`` (catalog)."""
+    """Build a plan from a DataAccess ``SemanticField`` (catalog).
+
+    ``mining_allowed`` and ``coverage`` are copied from the catalog semantic
+    field instead of being dropped (round-7 P0); a field that carries a
+    ``derived_expression`` is marked derived (``transform`` + ``derived_from``)
+    so the resolve path never reads its raw physical column as the value.
+    """
     return NormalizedFieldPlan(
         logical_concept=name,
         physical_dataset=getattr(field, "dataset", None),
@@ -99,6 +153,7 @@ def plan_from_catalog_field(name: str, field: Any) -> NormalizedFieldPlan:
             (field.physical_name,) if getattr(field, "physical_name", None) else ()
         ),
         transform=getattr(field, "derived_expression", None),
+        derived_from=tuple(getattr(field, "derived_from", ()) or ()),
         canonical_unit=getattr(field, "canonical_unit", None),
         scale=getattr(field, "scale", None),
         frequency=getattr(field, "frequency", None),
@@ -107,7 +162,8 @@ def plan_from_catalog_field(name: str, field: Any) -> NormalizedFieldPlan:
         effective_time=getattr(field, "effective_time", None),
         revision_order=tuple(getattr(field, "revision_order", ()) or ()),
         universe=getattr(field, "market", None),
-        coverage=None,
+        coverage=_catalog_coverage(field),
+        mining_allowed=bool(getattr(field, "mining_allowed", True)),
         price_basis=getattr(field, "price_basis", None),
         flow_semantics=getattr(field, "flow_semantics", None),
         source="catalog",
