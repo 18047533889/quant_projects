@@ -157,7 +157,12 @@ def _betti_series(vals_2d: np.ndarray, window: int, tau: int, dim: int) -> np.nd
             if pts is None:
                 continue
             pd_pairwise = np.sqrt(((pts[:, None, :] - pts[None, :, :]) ** 2).sum(-1))
-            finite = pd_pairwise[np.isfinite(pd_pairwise)]
+            # R6-121: the distance scale must come from the OFF-DIAGONAL
+            # distances (i<j) only — the full matrix median mechanically includes
+            # the zero diagonal and biases the scale low.  Use the strictly
+            # upper-triangular pairwise distances.
+            triu = pd_pairwise[np.triu_indices(pd_pairwise.shape[0], k=1)]
+            finite = triu[np.isfinite(triu)]
             if finite.size == 0 or float(np.median(finite)) <= _EPS:
                 continue
             pairs = _rips_h1_pairs(pts)
@@ -253,7 +258,12 @@ def _diagram_w1(pairs_a: list[tuple[float, float]], pairs_b: list[tuple[float, f
         cost[m1:, j] = _diag_dist(pairs_b[j])
     cost[m1:, m2:] = 0.0
     rows, cols = linear_sum_assignment(cost)
-    return float(cost[rows, cols].sum()) / max(m1, m2)
+    # R6-120: the previous code divided the total assignment cost by
+    # max(m1, m2), turning it into a MEAN matching cost — not the standard
+    # persistence-diagram W1.  True W1 keeps the TOTAL assignment cost (the
+    # diagonal copies give it the metric interpretation).  Removed the division;
+    # the output is now the genuine W1 the operator name and description claim.
+    return float(cost[rows, cols].sum())
 
 
 def _persistence_shift_series(vals_2d: np.ndarray, window: int, tau: int, dim: int) -> np.ndarray:
@@ -389,12 +399,20 @@ def _fisher_shift_series(vals_2d: np.ndarray, recent: int, prior: int) -> np.nda
                 continue
             cur = vals_2d[row - r + 1 : row + 1, col]            # exactly r observations.
             pri = vals_2d[row - r - p + 1 : row - r + 1, col]    # exactly p observations.
-            fit_r = _t_fit(cur)
-            fit_p = _t_fit(pri)
+            # R6-119: fit and empirical-Fisher MUST run on the SAME exact
+            # finite cohort.  ``_t_fit`` filters NaN internally; passing the raw
+            # block to ``_empirical_fisher`` after a NaN-filtered fit mixed
+            # sample sizes and let a NaN leak into the Fisher matrix (which then
+            # went NaN / eigh failed instead of failing closed).  Filter once,
+            # use the same arrays for both.
+            cur_f = cur[np.isfinite(cur)]
+            pri_f = pri[np.isfinite(pri)]
+            fit_r = _t_fit(cur_f)
+            fit_p = _t_fit(pri_f)
             if fit_r is None or fit_p is None:
                 continue
-            i_r = _empirical_fisher(cur, *fit_r)
-            i_p = _empirical_fisher(pri, *fit_p)
+            i_r = _empirical_fisher(cur_f, *fit_r)
+            i_p = _empirical_fisher(pri_f, *fit_p)
             lr = _matrix_log(i_r)
             lp = _matrix_log(i_p)
             out[row, col] = float(np.linalg.norm(lr - lp, ord="fro"))

@@ -1,6 +1,6 @@
 # Operator × Market 能力矩阵
 
-覆盖 canonical：**1360** ｜ UNKNOWN：**0** ｜ NOT_REVIEWED：**0**
+覆盖 canonical：**1362** ｜ UNKNOWN：**0** ｜ NOT_REVIEWED：**0**
 
 | canonical | A | US | 说明 |
 | --- | --- | --- | --- |
@@ -259,6 +259,8 @@
 | event_refractory | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | event_response_decay_rate | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | event_response_dispersion | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
+| event_response_effective_events | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
+| event_response_overlap_ratio | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | event_response_peak_lag | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | event_response_reversal_strength | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
 | event_return_since_last | UNSUPPORTED_MARKET_MECHANISM | UNSUPPORTED_MARKET_MECHANISM |  |
@@ -422,11 +424,13 @@
 | group_ex_self_quantile | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_ex_self_std | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_ex_self_weighted_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| group_feature_coverage_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_feature_effective_rank | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_feature_mode_localization | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_feature_mode_share | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_feature_second_mode_localization | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_feature_spectral_gap | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| group_feature_valid_member_count | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_impute_median | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_kurtosis | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_leader_laggard_exposure | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -970,7 +974,6 @@
 | ts_garch_next_vol_forecast | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_garch_persistence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_garch_standardized_shock | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_garch_vol_forecast | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_garch_vol_surprise | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_generalized_hurst_exponent | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_gjr_garch_vol_forecast | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1013,7 +1016,7 @@
 | ts_interval_nesting_depth | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_interval_occupancy_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_interval_occupancy_mode_distance | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_interval_overlap_component_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_interval_overlap_connected_component_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_interval_union_coverage | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_joint_energy_shift | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_jump_bipower_proxy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1063,9 +1066,9 @@
 | ts_mass_concentration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_matrix_profile_discord_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_matrix_profile_motif_age | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_matrix_profile_motif_distance | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_matrix_profile_motif_frequency | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_matrix_profile_neighbor_dispersion | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_matrix_profile_novelty | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_max | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_max_buildup | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_max_chord_excursion | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1103,7 +1106,6 @@
 | ts_multiscale_trend_consensus | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_multiscale_trend_curvature | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_multiscale_trend_dispersion | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_multivariate_matrix_profile_novelty | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_mutual_information | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_nearest_structural_level_distance | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_negative_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1203,6 +1205,7 @@
 | ts_ridge_regression_resid_z | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_robust_zscore | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_roll_effective_spread | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_rolling_sr_gaussian_mean_shift_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_roughness | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_run_concentration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_run_efficiency | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1223,7 +1226,6 @@
 | ts_spectral_low_frequency_ratio | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_spectral_peak_concentration | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_spectral_quality_factor | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_sr_gaussian_mean_shift_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_ssa_reconstruction_residual | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_staleness | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_state_age_percentile | INPUT_DEPENDENT | INPUT_DEPENDENT |  |

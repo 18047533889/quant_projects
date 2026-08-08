@@ -39,6 +39,17 @@ def _operator_semantic_contract(op: str) -> dict[str, Any]:
                 "default_status": signature.default_status,
                 "params": [(p.name, p.constraint, p.status) for p in signature.params],
             }
+        # R6-154: bind the SELECTED backend's implementation source hash directly,
+        # not just the manually-bumped semantic_version.  A code change that
+        # forgets to bump ``semantic_version`` now still invalidates every plan
+        # and persistent-cache key that depends on the operator.
+        impl_hash: dict[str, str] = {}
+        from backend.evidence_provenance import implementation_hashes_for
+
+        try:
+            impl_hash = implementation_hashes_for(canonical)
+        except (ImportError, AttributeError, KeyError, RuntimeError, ValueError, TypeError):
+            impl_hash = {}
         return {
             "canonical": canonical,
             "semantic_version": str(catalog.get("semantic_version") or "1.0"),
@@ -46,11 +57,46 @@ def _operator_semantic_contract(op: str) -> dict[str, Any]:
                 infer_operator_policy(canonical, canonical=canonical).to_dict()
             ),
             "signature_hash": compute_payload_hash(signature_payload),
+            "implementation_hash": compute_payload_hash(impl_hash),
         }
     except (ImportError, AttributeError, KeyError, RuntimeError, ValueError, TypeError):
         # Bootstrap/compiler tooling can construct plans before registry load;
         # such plans remain deterministic but are intentionally version 0.
+        # R6-153: this "unregistered" fallback must NOT be treated as a real
+        # semantic namespace by the production persistent cache (see
+        # ``contract_is_resolved`` — the cache write path refuses unresolved
+        # contracts).
         return {"canonical": op, "semantic_version": "unregistered"}
+
+
+def contract_is_resolved(node: PlanNode, memo: dict[int, bool] | None = None) -> bool:
+    """Whether every operator in a plan has a resolved semantic contract.
+
+    R6-153: the ``unregistered`` fallback of :func:`_operator_semantic_contract`
+    exists for bootstrap/compiler tooling (deterministic but not a real semantic
+    namespace).  A production persistent cache must refuse to persist keys that
+    embed an unresolved contract — an operator added before the registry loads
+    would otherwise share a stable cache namespace with a different operator-set
+    once the registry does load.  Returns ``False`` for any node whose contract
+    is ``unregistered`` (or whose lookup raises).
+    """
+    if memo is None:
+        memo = {}
+    nid = id(node)
+    if nid in memo:
+        return memo[nid]
+    ok = True
+    if node.op not in {"column", "literal", "plan_ref"}:
+        contract = _operator_semantic_contract(node.op)
+        if str(contract.get("semantic_version", "")) == "unregistered":
+            ok = False
+    if ok:
+        for child in node.inputs or ():
+            if not contract_is_resolved(child, memo):
+                ok = False
+                break
+    memo[nid] = ok
+    return ok
 
 
 def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:

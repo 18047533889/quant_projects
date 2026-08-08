@@ -54,6 +54,13 @@ _HVG_PARAM_SPECS = {
     "window": ParamSpec(dtype=int, min=4, searchable=True),
     "min_periods": ParamSpec(dtype=int, min=4, searchable=True),
 }
+# R6-159: motif entropy enumerates C(n,3) triples per window (O(n³)) — at
+# window=252 that is ~2.6M triples per row per stock.  Cap the window for the
+# motif operator so search cannot generate an exploding-cost parameter.
+_HVG_MOTIF_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=4, max=80, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=4, searchable=True),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +205,12 @@ def _hvg_stats(v: np.ndarray) -> dict[str, float]:
     for i in range(n):
         nb = adj[i]
         k_i = len(nb)
+        # R6-158: standard local-clustering convention is C_i = 0 for nodes
+        # with k_i < 2 (a node with <2 neighbours cannot close a triangle).
+        # The old ``if k_i < 2: continue`` dropped them from the average,
+        # reporting the conditional mean over degree>=2 nodes — biased high.
         if k_i < 2:
+            clus_vals.append(0.0)
             continue
         e_i = 0
         nb_list = sorted(nb)
@@ -346,6 +358,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "unit": "entropy",
         "cost": 4,
         "tags_extra": ["hvg"],
+        "param_specs": _HVG_PARAM_SPECS,
     },
     "ts_hvg_clustering_coefficient": {
         "fn": _ts_hvg_clustering_coefficient,
@@ -355,6 +368,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "unit": "ratio",
         "cost": 5,
         "tags_extra": ["hvg"],
+        "param_specs": _HVG_PARAM_SPECS,
     },
     "ts_hvg_assortativity": {
         "fn": _ts_hvg_assortativity,
@@ -364,6 +378,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "unit": "ratio",
         "cost": 4,
         "tags_extra": ["hvg"],
+        "param_specs": _HVG_PARAM_SPECS,
     },
     "ts_hvg_motif_entropy": {
         "fn": _ts_hvg_motif_entropy,
@@ -373,6 +388,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "unit": "entropy",
         "cost": 5,
         "tags_extra": ["hvg"],
+        "param_specs": _HVG_MOTIF_PARAM_SPECS,
     },
 }
 

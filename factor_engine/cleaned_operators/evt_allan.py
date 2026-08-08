@@ -35,7 +35,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec
+from cleaned_operators.base import ParamSpec, RelationalParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -54,16 +54,52 @@ _PICKANDS_SPEC = {
     "k": ParamSpec(dtype=int, min=1),
     "side": _SIDE_SPEC,
 }
+# R6-167: Pickands requires window >= 4k + 1 (the kernel uses order stats
+# X_(n-4k), X_(n-2k), X_(n-k)), otherwise it is guaranteed-NaN.  Declared as a
+# relational constraint so search prunes the infeasible region before runtime.
+_PICKANDS_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "window >= 4 * k + 1",
+        "Pickands requires window >= 4*k + 1 (window={window}, k={k})",
+    )
+]
 _EVT_SPEC = {
     "window": ParamSpec(dtype=int, min=10),
     "k_min": ParamSpec(dtype=int, min=2),
     "k_max": ParamSpec(dtype=int, min=2),
     "side": _SIDE_SPEC,
 }
+# R6-168: threshold stability needs a window of Hill estimates across
+# k_min..k_max, each requiring window >= k + 2 order statistics.  k_max must
+# stay below window (Hill uses X_(n-1-k)), and k_max > k_min for >1 threshold.
+_EVT_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "k_max <= window - 2",
+        "EVT threshold stability requires k_max <= window - 2 "
+        "(k_max={k_max}, window={window})",
+    ),
+    RelationalParamSpec(
+        "k_min < k_max",
+        "EVT threshold stability requires k_min < k_max "
+        "(k_min={k_min}, k_max={k_max})",
+    ),
+]
 _ALLAN_SPEC = {
     "window": ParamSpec(dtype=int, min=8),
     "scale": ParamSpec(dtype=int, min=1),
     "max_scale": ParamSpec(dtype=int, min=2),
+}
+# R6-157: the registry invariant requires keys(param_specs) ⊆ param_names.
+# The three Allan operators share the concept but each uses only a subset of
+# the parameters — a single shared dict would declare a spec for a parameter
+# the canonical does not have, so per-canonical subsets are declared here.
+_ALLAN_FACTOR_SPEC = {
+    "window": _ALLAN_SPEC["window"],
+    "scale": _ALLAN_SPEC["scale"],
+}
+_ALLAN_SCALING_SPEC = {
+    "window": _ALLAN_SPEC["window"],
+    "max_scale": _ALLAN_SPEC["max_scale"],
 }
 
 
@@ -311,6 +347,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "tags_extra": ["state"],
         "output_unit": "level",
         "param_specs": _PICKANDS_SPEC,
+        "relational_specs": _PICKANDS_RELATIONAL_SPECS,
     },
     "ts_evt_threshold_stability": {
         "fn": _ts_evt_threshold_stability,
@@ -322,6 +359,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "tags_extra": ["state"],
         "output_unit": "level",
         "param_specs": _EVT_SPEC,
+        "relational_specs": _EVT_RELATIONAL_SPECS,
     },
     "event_allan_factor": {
         "fn": _ts_event_allan_factor,
@@ -332,7 +370,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 3,
         "tags_extra": ["state"],
         "output_unit": "level",
-        "param_specs": _ALLAN_SPEC,
+        "param_specs": _ALLAN_FACTOR_SPEC,
     },
     "event_allan_scaling_slope": {
         "fn": _ts_event_allan_scaling_slope,
@@ -343,7 +381,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 4,
         "tags_extra": ["state"],
         "output_unit": "level",
-        "param_specs": _ALLAN_SPEC,
+        "param_specs": _ALLAN_SCALING_SPEC,
     },
     "event_allan_log_mean": {
         "fn": _ts_event_allan_log_mean,
@@ -354,7 +392,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 3,
         "tags_extra": ["state"],
         "output_unit": "level",
-        "param_specs": _ALLAN_SPEC,
+        "param_specs": _ALLAN_SCALING_SPEC,
     },
 }
 

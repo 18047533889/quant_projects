@@ -197,16 +197,20 @@ def compile_predicate(
             params.append(start)
         if end is not None:
             end_value = end
+            hi_op = "<" if predicate.time_upper_exclusive else "<="
             if predicate.time_column_is_timestamp:
-                # 对 timestamp 时间列，日期型 end 应包含整天；展开为当日末。
-                # 只对"午夜/纯日期"值展开，带时间的值原样保留。
+                # 对 timestamp 时间列，日期型 end 应包含整天。
+                # #P1-final closure 16：date-only end → **`< next_day`**（严格小于
+                # 次日零点），而不是旧 `<= next_day - 1µs`。nanosecond timestamp
+                # 会漏掉当天最后 999ns 范围的数据；`< next_day` 对任意时间精度
+                # 都包含完整一天。只对"午夜/纯日期"值展开，带时间的值原样保留。
                 try:
                     ts = pd.Timestamp(end)
                     if ts == ts.normalize():
-                        end_value = ts + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
+                        end_value = ts + pd.Timedelta(days=1)
+                        hi_op = "<"
                 except (ValueError, TypeError):
                     end_value = end
-            hi_op = "<" if predicate.time_upper_exclusive else "<="
             clauses.append(f"{t_col} {hi_op} ?")
             params.append(end_value)
 

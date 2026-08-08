@@ -69,6 +69,17 @@ def upsert_table(
 
     返回：
         {"rows": int, "path": str, "partitions": list[str], "elapsed_ms": float}
+
+    **原子性契约（#P1-final closure 22）**：
+    upsert 承诺 **partition-level atomicity**，**不**承诺 dataset-level 原子性——
+      1. Phase 1（stage）：所有分区先完成 read-merge-write 到 tmp；
+      2. Phase 2（promote）：逐个 ``os.replace``——每个分区各自原子；
+      3. 多分区 promote 中途失败 ⇒ 可能留下**部分已更新的分区**（前面 replace 的
+         已生效）。此时记录 ``.transactions.jsonl`` status=failed（含 staged
+         partitions 清单）+ manifest 保持 dirty，读路径 fail-closed 回退 glob。
+    audit/lineage 记录 ``atomicity="partition-level"`` + ``transaction_id``。
+    需要 dataset-level 原子性的调用方应改用 generation-directory + root
+    pointer/swap（publish 模型），不要在 partition 级上做全量原子假设。
     """
     start = time.perf_counter()
 
@@ -181,6 +192,12 @@ def upsert_table(
                 "partition_by": list(partition_by) if partition_by else None,
                 "namespace_explicit": is_namespace_explicit(),
                 "namespace": resolve_namespace(),
+                # #P1-final closure 22：upsert 承诺 **partition-level atomicity**——
+                # 不承诺 dataset-level 原子。transaction_id 供恢复/审计定位；
+                # atomicity 字段显式写死契约，调用方据此决定能否把 upsert 当
+                # 全数据集原子操作。
+                "transaction_id": transaction_id,
+                "atomicity": "partition-level",
             },
         )
 

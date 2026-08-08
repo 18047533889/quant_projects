@@ -102,6 +102,14 @@ def _register() -> None:
         # contiguous run below the ``min_periods`` floor.
         window_semantics="max_rows",
     )
+    # R6-218 (A-share coverage audit): negative q-moments of the generalised
+    # Hurst exponent are undefined at any exact-zero increment (A-share 停牌 /
+    # 一字板 / 零收益 are common), and the kernel fails closed -> the whole
+    # window is NaN.  This operator stays EXTENDED-only with a documented
+    # caveat: before promotion to daily, run a real A-share coverage audit; if
+    # daily valid coverage < 70-80%, demote to research-only.  Do NOT add an
+    # arbitrary EPS floor — that would make the negative-moment estimate
+    # entirely determined by the EPS.
     union_extended("ts_multifractal_asymmetry")
 
 

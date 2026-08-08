@@ -51,6 +51,37 @@ FE 侧 `test_catalog_us.py` + `test_data_access_catalog_errors.py` 15 passed、
 `operator_market_capabilities.json` 未随新 operator 重新生成，与本批无关）。未碰
 GitHub。
 
+### 本会话 54 项 Closure Ledger 收口（0.9.4 补充，含 0.9.5 未覆盖项）
+
+在并发会话 0.9.5 批次之上，本会话完成用户最终 54 项 ledger 的剩余项（全量回归
+**710 passed / 0 failed**，ContractIR 71 数据集一致）：
+- ✅ **写侧 fencing**：mutation_lock heartbeat 续租 + owner-only release + PID
+  reuse 检测（item 2）。
+- ✅ **namespace 请求级**：load 不再烘焙 `${RUN_NAMESPACE}`，read/write 时按
+  当前 context 解析；static_prefix 屏蔽占位符修 `$` 截断；session namespace 原样
+  返回不汇聚（items 3 / 46）。
+- ✅ **snapshot pin 执行消费 pinned file set**（physical_scope 注入，item 6）。
+- ✅ **availability 冲突 fail-closed**（item 13）+ **日历右边界 strict 报错**
+  （item 14）。
+- ✅ **PIT generation-directory + 原子指针**（item 18，crash 保留旧 gen）。
+- ✅ **SQL parser 级 allowlist**（item 31）：单语句证明 + `duckdb_functions()`
+  注册表按 function_type 分类，只允许 scalar/aggregate/window，table/file/network
+  自动拒绝，未知函数 strict fail-closed。
+- ✅ **strict 判定统一**（item 47）：paths/key_policy/telemetry/s3_duckdb/remote。
+- ✅ **P1**：Filter AST 完整 canonical 排序（44）、date-only end `< next_day`（45）。
+- ✅ **fsync durable-write**（52）：`core/atomic.py` 统一 tmp→fsync(fd)→replace→fsync(dir)。
+- ✅ **coverage**（53）：empty_ok=complete、5t 真实交易日历、remote-only 标注。
+- ✅ **COS mirror 三态**（54）：verified/legacy-unverified/corrupt，strict 不把
+  非空当完整。
+- ✅ **设计决策**：upsert 契约写死 partition-level atomicity；audit durable
+  acknowledgement（publish 写失败抛 `AuditWriteError`）。
+- ✅ 回归：`tests/unit/test_final_closure_round7.py` 22 条。
+
+**Core Freeze 生效**：本批即最终 Closure Ledger 收官。不再由 AI 大范围审计新增
+功能，按路线进入 differential → concurrency/crash → 真实 A股/美股 golden →
+benchmark → FactorEngine integration；新发现按正常 bug maintenance 处理。
+未提交 GitHub（用户要求只留服务器本地）。
+
 ### 最终收官轮（0.9.4，Core Freeze 前最后一轮 closure，HEAD=`a6e21d6`）
 
 用户给出的「最终收官轮」清单 1–11 全部落地（1–9 是 Freeze blocker，10–11 顺手

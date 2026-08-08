@@ -28,13 +28,13 @@ _GEOMETRY_MATH_CANONICALS: tuple[str, ...] = (
     # interval geometry
     "ts_interval_union_coverage", "ts_interval_occupancy_entropy",
     "ts_interval_occupancy_mode_distance", "ts_interval_nesting_depth",
-    "ts_interval_exploration_efficiency", "ts_interval_overlap_component_ratio",
+    "ts_interval_exploration_efficiency", "ts_interval_overlap_connected_component_ratio",
     # structural levels
     "ts_structural_level_density", "ts_nearest_structural_level_distance",
     "ts_structural_level_strength",
     # candle state space
     "ts_vector_state_mahalanobis", "ts_vector_state_local_density",
-    "ts_multivariate_matrix_profile_novelty", "ts_matrix_profile_motif_age",
+    "ts_matrix_profile_novelty", "ts_matrix_profile_motif_age",
     # multiscale trend
     "ts_multiscale_trend_consensus", "ts_multiscale_trend_dispersion",
     "ts_multiscale_trend_curvature",

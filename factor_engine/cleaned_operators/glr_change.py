@@ -32,7 +32,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec
+from cleaned_operators.base import ParamSpec, RelationalParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -47,6 +47,16 @@ _GLR_PARAM_SPECS = {
     "window": ParamSpec(dtype=int, min=4),
     "min_segment": ParamSpec(dtype=int, min=2),
 }
+# R6-24: window >= 2*min_segment + 2 is required for any breakpoint to exist —
+# declared as a relational constraint so search never emits a guaranteed-NaN
+# combination (the runtime also raises, but search should prune first).
+_GLR_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "window >= 2 * min_segment + 2",
+        "window must be >= 2*min_segment + 2 for a breakpoint to exist "
+        "(window={window}, min_segment={min_segment})",
+    )
+]
 
 
 def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
@@ -68,8 +78,14 @@ def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
         ss1 = pss[tau] - ps[tau] * ps[tau] / n1
         ss2 = (pss[n] - pss[tau]) - (ps[n] - ps[tau]) ** 2 / n2
         pooled = ss1 + ss2
-        if pooled <= _EPS:
-            continue
+        # R6-161: a PERFECT change point (constant A then constant B) has
+        # pooled == 0 — the strongest change in the sample.  The old
+        # ``if pooled <= _EPS: continue`` skipped exactly the best evidence.
+        # Floor the pooled SS at a tiny RELATIVE fraction of the total SS (not
+        # an absolute epsilon, which would be meaningless across price scales)
+        # so the LLR is computed in the degenerate limit and capped, never
+        # skipped.
+        pooled = max(pooled, _EPS * full_ss)
         llr = (n / 2.0) * np.log(full_ss / pooled)
         if llr > best:
             best = llr
@@ -95,11 +111,22 @@ def _variance_shift_score(v: np.ndarray, min_segment: int) -> float:
         n2 = n - tau
         ss1 = pss[tau] - ps[tau] * ps[tau] / n1
         ss2 = (pss[n] - pss[tau]) - (ps[n] - ps[tau]) ** 2 / n2
-        if ss1 <= _EPS or ss2 <= _EPS:
-            continue
+        # R6-161: a segment with zero variance (perfectly constant) is the
+        # strongest variance evidence, not a skip — floor the within-segment SS
+        # at a relative fraction of the total SS.
+        ss1 = max(ss1, _EPS * full_ss)
+        ss2 = max(ss2, _EPS * full_ss)
         var1 = ss1 / n1
         var2 = ss2 / n2
-        llr = (n / 2.0) * np.log(full_ss / n) - (n1 / 2.0) * np.log(var1) - (n2 / 2.0) * np.log(var2)
+        # R6-160: the null model for a VARIANCE shift must use a CONSISTENT
+        # location model — the pooled WITHIN-SEGMENT variance, not the global
+        # variance around the grand mean.  The old ``full_ss / n`` mixed a pure
+        # mean shift (which inflates the grand-mean variance) into the H0 term,
+        # so an equal-variance mean shift still fired the "variance shift"
+        # detector.  Using the pooled within-segment variance keeps the LLR
+        # measuring variance change only, with the location terms cancelling.
+        pooled_var = (ss1 + ss2) / n
+        llr = (n / 2.0) * np.log(pooled_var) - (n1 / 2.0) * np.log(var1) - (n2 / 2.0) * np.log(var2)
         if llr > best:
             best = llr
             best_sign = 1.0 if np.log(var2 / var1) > 0.0 else -1.0
@@ -205,7 +232,8 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["x", "window", "min_segment"],
         "category": "time_series_change",
         "domain": "change_point",
-        "unit": "level",
+        # R6-162: sqrt(max_LLR) is a dimensionless score, NOT a level.
+        "unit": "dimensionless_score",
         "cost": 3,
         "tags_extra": ["condition"],
         "param_specs": _GLR_PARAM_SPECS,
@@ -215,7 +243,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["x", "window", "min_segment"],
         "category": "time_series_change",
         "domain": "change_point",
-        "unit": "level",
+        "unit": "dimensionless_score",
         "cost": 3,
         "tags_extra": ["condition"],
         "param_specs": _GLR_PARAM_SPECS,
@@ -247,6 +275,7 @@ def _register() -> None:
             tags_extra=spec["tags_extra"],
             output_unit=spec["unit"],
             param_specs=spec.get("param_specs"),
+            relational_specs=_GLR_RELATIONAL_SPECS,
         )
     union_extended(*_SPECS.keys())
 

@@ -33,7 +33,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.base import ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -120,12 +120,17 @@ def _metadata_proxy() -> Any:
         description="累积前景理论价值(固定 bmw2016 参数集)。",
         # P1-86: ``preset`` has exactly one legal value (bmw2016) and is NOT a
         # search parameter — it stays as an internal kernel default only.
-        param_names=["returns", "window"],
+        # R5-06: the kernel method accepts ``preset``, so it must be a declared
+        # parameter name, otherwise the central validator rejects the call as an
+        # undeclared keyword.  It is declared as a fixed-choice spec that is not
+        # searchable.
+        param_names=["returns", "window", "preset"],
         return_type="series",
         tags=[
             "time_series_behavioral", "daily", "pit_safe", "causal", "typed_v2",
             "signature:returns,window->series", "unit:level", "cost:1",
         ],
+        param_specs={"preset": ParamSpec(dtype=str, choices=("bmw2016",), searchable=False)},
     )
 
 

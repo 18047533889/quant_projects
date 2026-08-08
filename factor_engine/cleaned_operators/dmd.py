@@ -31,7 +31,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec
+from cleaned_operators.base import ParamSpec, RelationalParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -50,6 +50,32 @@ _DMD_PARAM_SPECS = {
     "delay": ParamSpec(dtype=int, min=1),
     "top_k": ParamSpec(dtype=int, min=1),
 }
+# R6-157: ``keys(param_specs) ⊆ param_names`` is a registry invariant.  The
+# dominant-growth/frequency canonicals take ``window/rank/dim/delay`` only —
+# ``top_k`` belongs solely to ``ts_dmd_mode_concentration``.  A shared spec
+# dict would declare a contract for a parameter the canonical does not have.
+_DMD_BASE_SPEC = {k: _DMD_PARAM_SPECS[k] for k in ("window", "rank", "dim", "delay")}
+_DMD_CONCENTRATION_SPEC = dict(_DMD_PARAM_SPECS)
+# R6-200/201: feasibility relations for the DMD family — K = window-(dim-1)*delay
+# is the embedding column count, and rank <= min(dim, K-1), K >= rank+2 are
+# required for a valid SVD / propagator.  top_k <= rank stops silent clipping.
+_DMD_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "window - (dim - 1) * delay >= rank + 2",
+        "DMD requires K = window-(dim-1)*delay >= rank+2 "
+        "(window={window}, dim={dim}, delay={delay}, rank={rank})",
+    ),
+    RelationalParamSpec(
+        "rank <= dim",
+        "DMD requires rank <= dim (rank={rank}, dim={dim})",
+    ),
+]
+_DMD_CONCENTRATION_RELATIONAL_SPECS = list(_DMD_RELATIONAL_SPECS) + [
+    RelationalParamSpec(
+        "top_k <= rank",
+        "ts_dmd_mode_concentration requires top_k <= rank (top_k={top_k}, rank={rank})",
+    )
+]
 
 
 def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any] | None:
@@ -133,13 +159,52 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
             elif which == "frequency":
                 if abs(lam0.imag) < 1e-9:
                     continue
-                val = float(np.angle(lam0) / (2.0 * np.pi))
+                # R6-202: for a real-valued time series the eigenvalues come in
+                # conjugate pairs (λ, conj(λ)) with near-identical energies.  The
+                # raw sign of arg(λ) can flip day-to-day from tie ordering even
+                # though both signs describe the SAME oscillation.  Canonical
+                # frequency uses |arg λ|/(2π) so the dominant frequency is stable
+                # and unambiguous for a real series.
+                val = float(abs(np.angle(lam0)) / (2.0 * np.pi))
             else:
-                n_modes = min(int(top_k), res["energy"].shape[0])
-                total = float(res["energy"].sum())
+                # R6-200: top_k > rank is rejected, never silently clipped —
+                # rank=3 with top_k=3,4,10 must not compile to the same factor.
+                tk = int(top_k)
+                if tk > int(rank):
+                    continue
+                # R6-203: mode concentration must count a conjugate pair ONCE —
+                # a real oscillation splits its energy between the +f and -f
+                # modes, so top_k=1 on the split spectrum understates the mode's
+                # concentration.  Merge conjugate pairs (equal |λ| and equal
+                # |arg λ|, distinct values) and sum the pair energies before
+                # ranking.
+                eig = np.asarray(res["eig"])
+                energy = np.asarray(res["energy"], dtype=float)
+                merged_e: list[float] = []
+                used = np.zeros(eig.shape[0], dtype=bool)
+                for i in range(eig.shape[0]):
+                    if used[i]:
+                        continue
+                    pair_e = float(energy[i])
+                    for j in range(i + 1, eig.shape[0]):
+                        if used[j]:
+                            continue
+                        is_conj = (
+                            eig[i] != eig[j]
+                            and abs(abs(eig[i]) - abs(eig[j])) < 1e-6
+                            and abs(abs(np.angle(eig[i])) - abs(np.angle(eig[j]))) < 1e-6
+                        )
+                        if is_conj:
+                            pair_e += float(energy[j])
+                            used[j] = True
+                            break
+                    merged_e.append(pair_e)
+                merged_e.sort(reverse=True)
+                tk = min(tk, len(merged_e))
+                total = float(sum(merged_e))
                 if total <= _EPS:
                     continue
-                val = float(res["energy"][:n_modes].sum() / total)
+                val = float(sum(merged_e[:tk]) / total)
             if np.isfinite(val):
                 out[r, c] = val
     return out
@@ -176,7 +241,8 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 8,
         "tags_extra": [],
         "output_unit": "level",
-        "param_specs": _DMD_PARAM_SPECS,
+        "param_specs": _DMD_BASE_SPEC,
+        "relational_specs": _DMD_RELATIONAL_SPECS,
     },
     "ts_dmd_dominant_frequency": {
         "fn": _ts_dmd_dominant_frequency,
@@ -187,7 +253,8 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 8,
         "tags_extra": [],
         "output_unit": "cycles",
-        "param_specs": _DMD_PARAM_SPECS,
+        "param_specs": _DMD_BASE_SPEC,
+        "relational_specs": _DMD_RELATIONAL_SPECS,
     },
     "ts_dmd_mode_concentration": {
         "fn": _ts_dmd_mode_concentration,
@@ -198,7 +265,8 @@ _SPECS: dict[str, dict[str, Any]] = {
         "cost": 8,
         "tags_extra": [],
         "output_unit": "ratio",
-        "param_specs": _DMD_PARAM_SPECS,
+        "param_specs": _DMD_CONCENTRATION_SPEC,
+        "relational_specs": _DMD_CONCENTRATION_RELATIONAL_SPECS,
     },
 }
 

@@ -73,19 +73,33 @@ def _mahalanobis_series(
     for c in range(cols):
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            win = np.stack([feat[j][i0 : r + 1, c] for j in range(p)], axis=1)  # (n, p)
-            if not np.all(np.isfinite(win[r - i0])):
+            # R6-145: the mean/covariance are estimated on the HISTORY
+            # [i0, r) only; the current row is the query, never part of its own
+            # reference.  Including the current vector pulled the anomaly back
+            # toward its own value.
+            hist = np.stack([feat[j][i0:r, c] for j in range(p)], axis=1)  # (n, p)
+            cur = np.stack([feat[j][r, c] for j in range(p)])  # (p,)
+            if not np.all(np.isfinite(cur)):
                 continue  # current state vector must be complete
-            finite = np.all(np.isfinite(win), axis=1)
-            valid = win[finite].astype(float)
-            if valid.shape[0] < 2:
-                continue  # need at least two aligned rows for a covariance
-            z = win[r - i0].astype(float)
+            finite = np.all(np.isfinite(hist), axis=1)
+            valid = hist[finite].astype(float)
+            if valid.shape[0] < 3:
+                continue  # need at least three history rows for a covariance
+            z = cur.astype(float)
+            # R6-147: a feature constant over the history has zero variance and
+            # a meaningless covariance column — standardising it with sd=1 makes
+            # the distance depend on the feature's raw unit.  Drop constant
+            # dimensions from both the history and the query before estimating.
+            keep_cols = np.where(np.std(valid, axis=0) > _EPS)[0]
+            if keep_cols.size == 0:
+                continue
+            valid = valid[:, keep_cols]
+            z = z[keep_cols]
             mu = np.median(valid, axis=0)
             cov = np.atleast_2d(np.cov(valid, rowvar=False, ddof=1))
             cov = np.nan_to_num(cov, nan=0.0, posinf=0.0, neginf=0.0)
             shrunk = (1.0 - lam) * cov + lam * np.diag(np.diag(cov))
-            prec = np.linalg.pinv(shrunk + _EPS * np.eye(p))
+            prec = np.linalg.pinv(shrunk + _EPS * np.eye(keep_cols.size))
             d = z - mu
             D = float(np.sqrt(max(0.0, float(d @ prec @ d))))
             out[r, c] = D
@@ -109,25 +123,38 @@ def _local_density_series(
     for c in range(cols):
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            win = np.stack([feat[j][i0 : r + 1, c] for j in range(p)], axis=1)  # (n, p)
-            if not np.all(np.isfinite(win[r - i0])):
+            # R6-145: scale (mean/std) is estimated on the HISTORY [i0, r) only;
+            # the current row is the query and must not pull the density back
+            # toward its own value.
+            hist = np.stack([feat[j][i0:r, c] for j in range(p)], axis=1)  # (n, p)
+            cur = np.stack([feat[j][r, c] for j in range(p)])  # (p,)
+            if not np.all(np.isfinite(cur)):
                 continue
-            finite = np.all(np.isfinite(win), axis=1)
-            valid = win[finite].astype(float)
-            if valid.shape[0] < kk + 1:
-                continue  # need current + k prior valid rows
-            # standardise each feature by the trailing window mean / std
+            finite = np.all(np.isfinite(hist), axis=1)
+            valid = hist[finite].astype(float)
+            if valid.shape[0] < kk:
+                continue  # need k prior valid rows
+            # R6-147: a feature constant over the history would otherwise be
+            # standardised with sd=1 and its distance would depend on the raw
+            # unit.  Drop constant dimensions from history and query.
+            keep_cols = np.where(np.std(valid, axis=0) > _EPS)[0]
+            if keep_cols.size == 0:
+                continue
+            valid = valid[:, keep_cols]
+            curv = cur[keep_cols]
             mu = valid.mean(axis=0)
             sd = valid.std(axis=0)
             sd = np.where(sd > _EPS, sd, 1.0)
             z = (valid - mu) / sd
-            zc = z[-1]  # current row is the last valid row of the trailing window
-            prior = z[:-1]  # exclude the current point
-            if prior.shape[0] < kk:
-                continue
-            dists = np.linalg.norm(prior - zc, axis=1)
+            zc = (curv - mu) / sd
+            dists = np.linalg.norm(z - zc, axis=1)
             rk = float(np.partition(dists, kk - 1)[kk - 1])  # k-th nearest distance
-            out[r, c] = 1.0 / (rk + _EPS)
+            # R6-146: an exact duplicate state (r_k == 0, common in A-share
+            # 一字板 / repeated discrete states) would give density = 1/EPS —
+            # an unbounded spike.  Output log-density (bounded for any r_k >= 0)
+            # so a repeated state is a large-but-finite value, not an overflow
+            # outlier.
+            out[r, c] = -float(np.log(max(rk, 1e-3)))
     return out
 
 
@@ -190,12 +217,17 @@ def _matrix_profile_series(
             best_d = np.inf
             best_s = -1
             dists: list[float] = []
+            # R6-149: use the RMS z-normalised Euclidean distance d/√L so
+            # subsequence_length=20 and =80 patterns of the same strength are
+            # comparable — the raw Euclidean distance grows ~√L with the window
+            # length, making cross-parameter novelty values incomparable.
+            inv_sqrt_L = 1.0 / float(np.sqrt(L))
             for s in range(s0, s1 + 1):
                 cand = x[s : s + L]
                 if not np.all(np.isfinite(cand)):
                     continue
                 cz = _z_normalize(cand)
-                d = float(np.linalg.norm(zz - cz))
+                d = float(np.linalg.norm(zz - cz) * inv_sqrt_L)
                 dists.append(d)
                 if d < best_d:
                     best_d = d
@@ -261,14 +293,16 @@ class TsVectorStateLocalDensity(SeriesOperator):
     """状态向量局部密度：今天的状态在自身先验近邻中的疏密程度。
 
     各特征按窗口标准差标准化后，取当前点距窗口内前序点第 k 近的距离 r_k，
-    密度 = 1/(r_k+eps)。高 → 常见状态；低 → 稀有/孤立状态。P1。
+    输出 **log-density = -log(max(r_k, 1e-3))**（R6-146：原 1/(r_k+eps) 在
+    一字板/重复状态 r_k=0 时爆到 1/EPS；log-density 对重复状态给出大而有限的值）。
+    高 → 常见状态；低 → 稀有/孤立状态。P1。
     """
 
     metadata = _metadata(
         "ts_vector_state_local_density",
-        "当前状态到前序窗口第 k 近邻距离的倒数（局部密度）。",
+        "当前状态到前序窗口第 k 近邻距离的负对数（log-density，见 R6-146）。",
         ["f1", "f2", "f3", "f4", "window", "k"],
-        unit="ratio",
+        unit="log",
         cost=6,
     )
 
@@ -285,10 +319,14 @@ class TsVectorStateLocalDensity(SeriesOperator):
 
 
 @register_operator(
-    name="ts_multivariate_matrix_profile_novelty",
+    # R6-148: the input is a SINGLE scalar series ``x``, so the old
+    # ``ts_multivariate_matrix_profile_novelty`` name over-declared (it is not
+    # a multichannel/multivariate matrix profile).  Renamed to the honest name;
+    # the old name stays as an alias.
+    name="ts_matrix_profile_novelty",
     category="candle_state_space",
     business_category="candle_state_space",
-    canonical="ts_multivariate_matrix_profile_novelty",
+    canonical="ts_matrix_profile_novelty",
     source="candle_state_space",
 )
 class TsMultivariateMatrixProfileNovelty(SeriesOperator):
@@ -299,8 +337,8 @@ class TsMultivariateMatrixProfileNovelty(SeriesOperator):
     """
 
     metadata = _metadata(
-        "ts_multivariate_matrix_profile_novelty",
-        "当前子序列到最近历史子序列的 z 归一化距离（新颖度）。",
+        "ts_matrix_profile_novelty",
+        "当前子序列到最近历史子序列的 z 归一化 RMS 距离（新颖度）。",
         ["x", "window", "subsequence_length", "history"],
         unit="ratio",
         cost=8,
@@ -416,19 +454,27 @@ class TsMatrixProfileNeighborDispersion(SeriesOperator):
 _NEW_CANONICALS = (
     "ts_vector_state_mahalanobis",
     "ts_vector_state_local_density",
-    "ts_multivariate_matrix_profile_novelty",
+    "ts_matrix_profile_novelty",
     "ts_matrix_profile_motif_age",
     "ts_matrix_profile_motif_frequency",
     "ts_matrix_profile_neighbor_dispersion",
 )
 
+_OLD_MULTIVARIATE_NAME = "ts_multivariate_matrix_profile_novelty"
+
 
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | set(_NEW_CANONICALS)
-    )
+    _surface.extend_extended_only(set(_NEW_CANONICALS))
+    from cleaned_operators.registry import OperatorRegistry
+
+    try:
+        OperatorRegistry.register_alias(
+            _OLD_MULTIVARIATE_NAME, "ts_matrix_profile_novelty"
+        )
+    except (KeyError, ValueError):
+        pass  # already registered
     for _canon in _NEW_CANONICALS:
         register_polars_bridge(_canon)
 

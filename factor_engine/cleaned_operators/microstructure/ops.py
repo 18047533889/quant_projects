@@ -364,7 +364,7 @@ class MicroVpinOp(SeriesOperator):
         name="micro_vpin",
         category="intraday_microstructure",
         description="LEGACY proxy: volume-weighted absolute-return toxicity proxy; not true VPIN (see micro_bvc_vpin)",
-        param_names=["close", "volume"],
+        param_names=["close", "volume", "window", "min_periods"],
         return_type="series",
         tags=["microstructure", "legacy_proxy"],
     )
@@ -410,7 +410,7 @@ class MicroKyleLambdaOp(SeriesOperator):
         name="micro_kyle_lambda",
         category="intraday_microstructure",
         description="LEGACY proxy: Cov(|ret|,vol)/Var(vol); not signed-flow Kyle lambda (see intraday_impact_beta)",
-        param_names=["close", "volume"],
+        param_names=["close", "volume", "window", "min_periods"],
         return_type="series",
         tags=["microstructure", "legacy_proxy"],
     )

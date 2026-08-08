@@ -741,8 +741,8 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("embedding_dim", _INT),
         ArgSpec("distance_multiplier", _FLT),
     )
-    signatures["ts_sr_gaussian_mean_shift_score"] = _sig(
-        "ts_sr_gaussian_mean_shift_score",
+    signatures["ts_rolling_sr_gaussian_mean_shift_score"] = _sig(
+        "ts_rolling_sr_gaussian_mean_shift_score",
         ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("shift_sigma", _FLT),
         ArgSpec("baseline_window", _W),
     )

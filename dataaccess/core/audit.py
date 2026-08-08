@@ -120,8 +120,15 @@ def record(
     elapsed_ms: float | None = None,
     error: str | None = None,
     extra: dict[str, Any] | None = None,
+    durable: bool = False,
 ) -> None:
-    """记一条审计日志。失败时**吞掉异常不影响主路径**（审计不应该把业务查询搞挂）。
+    """记一条审计日志。
+
+    - ``durable=False``（默认，observability）：失败**吞掉异常不影响主路径**
+      （审计不应该把业务查询搞挂）。
+    - ``durable=True``（#P1-final closure 22，published write / publish）：
+      业务成功但审计写失败 ⇒ 抛 ``AuditWriteError``——权威发布必须有可证明的
+      审计落盘（flush + fsync），不允许「发布了、审计悄悄没记」。
 
     参数：
         op: "read" | "write" | "publish"（read 默认不记录，需 QUANT_AUDIT_READS=true）
@@ -134,6 +141,7 @@ def record(
         elapsed_ms: 耗时
         error: 失败时的错误消息
         extra: 任意额外字段（比如 upsert_on 列）
+        durable: 是否要求 durable acknowledgement（权威写入/发布用）
     """
     if op == "read" and not _should_audit_reads():
         return
@@ -175,8 +183,21 @@ def record(
         with _write_lock:
             with path.open("a", encoding="utf-8") as f:
                 f.write(line + "\n")
-    except Exception:
-        # 审计失败不能影响业务。PR5 会加告警路径。
+                if durable:
+                    f.flush()
+                    os.fsync(f.fileno())
+    except Exception as exc:
+        if durable:
+            # #P1-final closure 22：权威写入/发布的审计必须 durable——业务成功但
+            # 审计静默失败 = 合规证据缺失，向上抛而不是吞。
+            from .exceptions import AuditWriteError
+
+            raise AuditWriteError(
+                f"审计日志写失败（op={op} dataset={dataset!r} ok={ok}），"
+                "权威写入/发布需要 durable audit acknowledgement。"
+                f"请检查 QUANT_AUDIT_LOG 路径可写。原因: {type(exc).__name__}: {exc}"
+            ) from exc
+        # 审计失败不能影响业务（observability）。PR5 会加告警路径。
         pass
 
 

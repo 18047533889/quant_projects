@@ -35,7 +35,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec
+from cleaned_operators.base import ParamSpec, RelationalParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -53,6 +53,16 @@ _PS_SPECS = {
     "window": ParamSpec(dtype=int, min=4),
     "min_periods": ParamSpec(dtype=int, min=3),
 }
+# R6-164: the regression has N-1 completed pairs (response e_{s+1} for
+# s = 0..N-2), so min_periods == window can never be satisfied.  Declared as a
+# relational constraint: min_periods <= window - 1.
+_PS_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "min_periods <= window - 1",
+        "min_periods must be <= window - 1 (the regression uses N-1 completed "
+        "pairs: min_periods={min_periods}, window={window})",
+    )
+]
 
 
 # ---------------------------------------------------------------------------
@@ -333,13 +343,17 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["ret", "benchmark_ret", "amount", "window", "min_periods"],
         "category": "market_microstructure",
         "domain": "liquidity",
-        "unit": "ratio",
+        # R6-163: flow = sign(e)·amount/1e6, so [gamma] = return / million-currency,
+        # NOT a dimensionless ratio.  Declared honestly; the per-market scaling
+        # (CNY vs USD) is an explicit convention the consumer must handle.
+        "unit": "return_per_million_currency",
         "cost": 4,
         "tags_extra": [],
         "input_units": {"ret": "return_decimal", "benchmark_ret": "return_decimal",
                         "amount": "money_local"},
-        "output_unit": "ratio",
+        "output_unit": "return_per_million_currency",
         "param_specs": _PS_SPECS,
+        "relational_specs": _PS_RELATIONAL_SPECS,
     },
 }
 

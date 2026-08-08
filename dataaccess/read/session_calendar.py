@@ -468,6 +468,20 @@ def _apply_latency(base: Any, latency: int | None, bar_interval_minutes: int) ->
     return base
 
 
+def _raise_right_boundary(availability: str, kdate: _dt.date) -> None:
+    """#14 右边界 fail-closed：日历覆盖不到 knowledge 时禁止「无法证明 ⇒ 现在可用」。
+
+    对 PIT 恰好是反方向：无法证明「数据什么时候可用」就把它当「现在就可用了」，
+    会让最新一期数据在真正可见前就被查出来（false-negative 边界）。strict 直接
+    抛错，调用方决定补日历数据或显式放宽。
+    """
+    raise ValidationError(
+        f"availability={availability!r}：{kdate.isoformat()} 超出交易日历覆盖"
+        "（next_trading_day 返回 None），无法证明可见时点（strict fail-closed）。"
+        "请补充日历数据到更晚的日期，或对非 strict 语义使用 same_day/effective_date_only。"
+    )
+
+
 def compile_available_from(
     knowledge: Any,
     availability: str,
@@ -475,6 +489,7 @@ def compile_available_from(
     calendar: "MarketCalendar | None" = None,
     latency: int | None = None,
     bar_interval_minutes: int = 1,
+    strict: bool | None = None,
 ) -> Any:
     """**统一 AvailabilityCompiler**：把 knowledge 编译成「数据真正可用」的
     ``available_from``。Python helper（``read_cos_events_asof``）、SQL join
@@ -502,24 +517,40 @@ def compile_available_from(
         return _apply_latency(knowledge, latency, bar_interval_minutes)
     if calendar is None or not getattr(calendar, "has_data", False):
         return knowledge
+    if strict is None:
+        strict = _strict_calendar_mode()
     session = getattr(calendar, "session", None)
     kdate, ktime = _to_local_date_time(knowledge, calendar.timezone)
     if kdate is None:
+        if strict:
+            raise ValidationError(
+                f"compile_available_from({availability!r}): knowledge 无法解析成"
+                f"交易所本地日期（{knowledge!r}），无法证明可见时点（strict fail-closed）"
+            )
         return knowledge
     if av == "next_bar":
-        base = _compile_next_bar(knowledge, kdate, ktime, calendar, session)
+        base = _compile_next_bar(knowledge, kdate, ktime, calendar, session, strict=strict)
     elif av in {"session", "next_session_open"}:
-        base = _compile_next_session_open(knowledge, kdate, ktime, calendar, session)
+        base = _compile_next_session_open(
+            knowledge, kdate, ktime, calendar, session, strict=strict
+        )
     elif av == "after_close_next_open":
         # 盘后披露：knowledge 在任一时刻，可用 = 下一交易日的 session 开盘
         td = calendar.next_trading_day(kdate)
         if td is not None and session is not None and session.segments:
             base = _combine(td, _session_first_start(session))
         else:
+            # #14 右边界 fail-open：日历覆盖不到（kdate 在最后交易日之后）→
+            # 不能把「无法证明何时可用」当作「现在就可用了」。strict 直接报错。
+            if td is None and strict:
+                _raise_right_boundary(av, kdate)
             base = knowledge
     else:  # next_trading_day（默认）
         td = calendar.next_trading_day(kdate)
         if td is None:
+            # #14 右边界 fail-open 同上述：strict 下无法证明可用时点必须失败。
+            if strict:
+                _raise_right_boundary(av, kdate)
             base = knowledge
         elif ktime is not None and session is not None and session.segments:
             base = _combine(td, _session_first_start(session))
@@ -534,23 +565,35 @@ def _compile_next_bar(
     ktime: _dt.time | None,
     calendar: "MarketCalendar",
     session: "MarketSession | None",
+    *,
+    strict: bool = False,
 ) -> Any:
     """next_bar：当前 session 的下一根 bar（含午休跨段 / 收盘跨日）。"""
     if session is None or not session.segments:
         td = calendar.next_trading_day(kdate)
         if td is not None:
             return _combine(td, _dt.time(0, 0))
+        if strict:
+            _raise_right_boundary("next_bar", kdate)
         return knowledge
     if ktime is None:
         # 只有日期：默认当天开盘后第一根（当天是交易日）→ 当日第一根
         if calendar.is_trading_day(kdate):
             return _combine(kdate, _session_first_start(session))
         td = calendar.next_trading_day(kdate)
-        return _combine(td, _session_first_start(session)) if td is not None else knowledge
+        if td is None:
+            if strict:
+                _raise_right_boundary("next_bar", kdate)
+            return knowledge
+        return _combine(td, _session_first_start(session))
     if not calendar.is_trading_day(kdate):
         # 非交易日（周末/节假日）：绝无「当天开盘」，直接下一交易日第一根
         td = calendar.next_trading_day(kdate)
-        return _combine(td, _session_first_start(session)) if td is not None else knowledge
+        if td is None:
+            if strict:
+                _raise_right_boundary("next_bar", kdate)
+            return knowledge
+        return _combine(td, _session_first_start(session))
     for seg in session.segments:
         if seg.contains(ktime):
             nxt = _add_minutes(ktime, 1)  # 分钟级 session 默认 1 根 = 1 分钟
@@ -561,7 +604,11 @@ def _compile_next_bar(
             if nxt_seg is not None:
                 return _combine(kdate, nxt_seg)
             td = calendar.next_trading_day(kdate)
-            return _combine(td, _session_first_start(session)) if td is not None else knowledge
+            if td is None:
+                if strict:
+                    _raise_right_boundary("next_bar", kdate)
+                return knowledge
+            return _combine(td, _session_first_start(session))
     # 不在任何 segment 内：盘前 → 当日第一根；午休/盘后 → 下一段/下一交易日
     if ktime < session.segments[0].start:
         return _combine(kdate, _session_first_start(session))
@@ -569,7 +616,11 @@ def _compile_next_bar(
         if seg.start > ktime:
             return _combine(kdate, seg.start)
     td = calendar.next_trading_day(kdate)
-    return _combine(td, _session_first_start(session)) if td is not None else knowledge
+    if td is None:
+        if strict:
+            _raise_right_boundary("next_bar", kdate)
+        return knowledge
+    return _combine(td, _session_first_start(session))
 
 
 def _compile_next_session_open(
@@ -578,17 +629,25 @@ def _compile_next_session_open(
     ktime: _dt.time | None,
     calendar: "MarketCalendar",
     session: "MarketSession | None",
+    *,
+    strict: bool = False,
 ) -> Any:
     """next_session_open / session：按 session 边界映射。"""
     if session is None or not session.segments:
         td = calendar.next_trading_day(kdate)
         if td is not None:
             return _combine(td, _dt.time(0, 0))
+        if strict:
+            _raise_right_boundary("next_session_open", kdate)
         return knowledge
     if ktime is not None:
         if not calendar.is_trading_day(kdate):
             td = calendar.next_trading_day(kdate)
-            return _combine(td, _session_first_start(session)) if td is not None else knowledge
+            if td is None:
+                if strict:
+                    _raise_right_boundary("next_session_open", kdate)
+                return knowledge
+            return _combine(td, _session_first_start(session))
         for seg in session.segments:
             if ktime < seg.start:
                 # 该 session 已开盘但 knowledge 在其前 → 当日该段起点
@@ -598,9 +657,17 @@ def _compile_next_session_open(
                 if nxt is not None:
                     return _combine(kdate, nxt)
                 td = calendar.next_trading_day(kdate)
-                return _combine(td, _session_first_start(session)) if td is not None else knowledge
+                if td is None:
+                    if strict:
+                        _raise_right_boundary("next_session_open", kdate)
+                    return knowledge
+                return _combine(td, _session_first_start(session))
     td = calendar.next_trading_day(kdate)
-    return _combine(td, _session_first_start(session)) if td is not None else knowledge
+    if td is None:
+        if strict:
+            _raise_right_boundary("next_session_open", kdate)
+        return knowledge
+    return _combine(td, _session_first_start(session))
 
 
 def _as_date(value: Any) -> _dt.date | None:

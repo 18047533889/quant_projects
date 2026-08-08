@@ -99,6 +99,15 @@ class MatrixCoverageMiss(DataAccessError):
 
 
 class SnapshotBuildError(DataAccessError):
+    pass
+
+
+class AuditWriteError(DataAccessError):
+    """#P1-final closure 22：权威写入/发布的审计写失败。
+
+    业务已成功但审计静默失败 = 合规证据缺失。``audit.record(durable=True)``
+    在写审计日志失败时抛本错误，调用方据此知道「发布了但审计没落盘」。
+    """
     """read_joined / sql 的多数据集 snapshot 构建不完整（#14 fail-closed）。
 
     任意参与数据集没有成功构建 snapshot → 抛此错，禁止「查询成功但 lineage /

@@ -710,7 +710,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -766,7 +767,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -779,7 +781,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -792,7 +795,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -805,7 +809,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -833,7 +838,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -860,7 +866,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -873,7 +880,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -914,7 +922,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -941,7 +950,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -954,7 +964,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -967,7 +978,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -994,7 +1006,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -1007,7 +1020,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -1034,7 +1048,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -1078,6 +1093,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -1211,7 +1227,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -1608,7 +1625,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -1621,7 +1639,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -2260,7 +2279,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -2273,7 +2293,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2286,7 +2307,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2314,7 +2336,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2327,7 +2350,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2358,6 +2382,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -2434,6 +2459,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -2448,6 +2474,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -2461,7 +2488,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -2488,7 +2516,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2501,7 +2530,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -2556,7 +2586,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -2569,7 +2600,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -2596,7 +2628,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -2609,7 +2642,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -2622,7 +2656,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2665,7 +2700,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2696,6 +2732,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2723,7 +2760,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -2736,7 +2774,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -2770,6 +2809,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -2783,7 +2823,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2796,7 +2837,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -2866,7 +2908,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2895,6 +2938,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -2908,7 +2952,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2921,7 +2966,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2948,7 +2994,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -2961,7 +3008,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -2974,7 +3022,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "cs",
@@ -3021,7 +3070,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -3035,6 +3085,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -3109,6 +3160,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -3152,7 +3204,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -3179,7 +3232,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3192,7 +3246,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3370,7 +3425,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3383,7 +3439,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -3438,7 +3495,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -3451,7 +3509,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3464,7 +3523,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3477,7 +3537,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3521,6 +3582,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -3536,7 +3598,8 @@
         "event_hawkes_branching_ratio"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -3633,7 +3696,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -3660,7 +3724,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -3701,7 +3766,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -3714,7 +3780,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -3757,7 +3824,8 @@
         "event_compounded_return"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -3887,7 +3955,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "elementwise",
@@ -3970,7 +4039,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4039,7 +4109,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4052,7 +4123,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4107,7 +4179,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4148,7 +4221,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4175,7 +4249,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4272,7 +4347,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4327,7 +4403,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4340,7 +4417,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4353,7 +4431,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4366,7 +4445,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4463,7 +4543,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4504,7 +4585,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4531,7 +4613,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4656,7 +4739,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4755,7 +4839,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4768,7 +4853,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4781,7 +4867,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4864,7 +4951,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4877,7 +4965,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -4948,7 +5037,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -5062,7 +5152,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -5319,7 +5410,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -5444,7 +5536,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -5499,7 +5592,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -5512,7 +5606,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -5525,7 +5620,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -5538,7 +5634,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -5579,7 +5676,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -5592,7 +5690,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -5605,7 +5704,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -5618,7 +5718,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -5939,7 +6040,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -5966,7 +6068,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -5979,7 +6082,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6006,7 +6110,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "group",
@@ -6021,7 +6126,8 @@
         "group_corr_effective_rank"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6036,7 +6142,8 @@
         "group_corr_mode_localization"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6051,7 +6158,8 @@
         "group_corr_mode_share"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6066,7 +6174,8 @@
         "group_corr_second_mode_localization"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6081,7 +6190,8 @@
         "group_corr_spectral_gap"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6094,7 +6204,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "group",
@@ -6107,7 +6218,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "group",
@@ -6120,7 +6232,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6133,7 +6246,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "group",
@@ -6191,7 +6305,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "group",
@@ -6274,7 +6389,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "group",
@@ -6302,7 +6418,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6330,7 +6447,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "group",
@@ -6359,7 +6477,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6372,7 +6491,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6457,7 +6577,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -6485,7 +6606,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "group",
@@ -6498,7 +6620,9 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars",
+        "sql"
       ],
       "pit_safe": false,
       "scope": "group",
@@ -6526,7 +6650,8 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "pit_safe": false,
       "scope": "group",
@@ -6627,7 +6752,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6640,7 +6766,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -6682,7 +6809,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6695,7 +6823,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6722,7 +6851,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6735,7 +6865,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6748,7 +6879,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6803,7 +6935,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6816,7 +6949,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6829,7 +6963,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6842,7 +6977,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6869,7 +7005,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6882,7 +7019,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6923,7 +7061,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6978,7 +7117,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -6991,7 +7131,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -7032,7 +7173,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -7191,7 +7333,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -7218,7 +7361,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "elementwise",
@@ -7231,7 +7375,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -7259,6 +7404,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -7272,7 +7418,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -7299,7 +7446,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -7329,7 +7477,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -7384,7 +7533,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -7397,7 +7547,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -7438,7 +7589,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -7577,7 +7729,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -7618,7 +7771,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -7645,7 +7799,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -7672,7 +7827,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -7685,7 +7841,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -7992,7 +8149,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -8019,7 +8177,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -8074,7 +8233,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -8115,7 +8275,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -8184,7 +8345,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -8211,7 +8373,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -8420,7 +8583,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -8463,7 +8627,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -8476,7 +8641,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -8489,7 +8655,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -8502,7 +8669,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -8515,7 +8683,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -8528,7 +8697,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -8541,7 +8711,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -8610,7 +8781,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -8623,7 +8795,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -8636,7 +8809,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -8719,7 +8893,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -8746,7 +8921,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -8787,7 +8963,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -8940,7 +9117,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "session_intraday",
@@ -8953,7 +9131,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "session_intraday",
@@ -9023,7 +9202,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -9137,7 +9317,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -9150,7 +9331,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -9163,7 +9345,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -9176,7 +9359,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -9355,7 +9539,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -9719,7 +9904,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -9732,7 +9918,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -9745,7 +9932,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -9758,7 +9946,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -9771,7 +9960,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -9784,7 +9974,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -9797,7 +9988,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -9810,7 +10002,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -9823,7 +10016,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -9836,7 +10030,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -10316,7 +10511,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",
@@ -10407,6 +10603,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -10504,7 +10701,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -10517,7 +10715,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10544,7 +10743,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -10557,7 +10757,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10570,7 +10771,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10583,7 +10785,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10596,7 +10799,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10609,7 +10813,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -10622,7 +10827,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -10635,7 +10841,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10648,7 +10855,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10661,7 +10869,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -10674,7 +10883,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -10687,7 +10897,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10700,7 +10911,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10713,7 +10925,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10726,7 +10939,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10739,7 +10953,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "cs",
@@ -10752,7 +10967,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -10765,7 +10981,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "group",
@@ -10793,7 +11010,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -10806,7 +11024,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -10819,7 +11038,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -10846,7 +11066,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -10859,7 +11080,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -10872,7 +11094,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "fundamental_period",
@@ -11164,7 +11387,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "session_intraday",
@@ -11399,7 +11623,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -11482,7 +11707,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -11495,7 +11721,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -11508,7 +11735,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -11521,7 +11749,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -11534,7 +11763,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -11547,7 +11777,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -11589,7 +11820,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -11763,7 +11995,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11804,7 +12037,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11817,7 +12051,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11830,7 +12065,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11843,7 +12079,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11856,7 +12093,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11869,7 +12107,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11882,7 +12121,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11895,7 +12135,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11908,7 +12149,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11921,7 +12163,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11934,7 +12177,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -11966,6 +12210,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -11980,6 +12225,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -12012,6 +12258,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -12026,6 +12273,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -12054,7 +12302,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -12173,7 +12422,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -12304,7 +12554,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -12317,7 +12568,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -12415,7 +12667,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -12526,7 +12779,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -12742,7 +12996,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -12769,7 +13024,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -12782,7 +13038,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -12795,7 +13052,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13004,7 +13262,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13017,7 +13276,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -13030,7 +13290,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -13186,7 +13447,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13219,7 +13481,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -13337,6 +13600,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -13353,6 +13617,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -13400,7 +13665,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -13413,7 +13679,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -13454,7 +13721,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13467,7 +13735,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13480,7 +13749,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13493,7 +13763,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13506,7 +13777,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13575,7 +13847,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -13630,7 +13903,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13713,7 +13987,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13754,7 +14029,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13767,7 +14043,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13780,7 +14057,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13795,7 +14073,8 @@
         "ts_garch_vol_forecast"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13808,7 +14087,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13821,7 +14101,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13834,7 +14115,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13861,7 +14143,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13874,7 +14157,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13957,7 +14241,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13970,7 +14255,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13983,7 +14269,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -13996,7 +14283,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14009,7 +14297,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14022,7 +14311,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14049,7 +14339,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14104,7 +14395,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14117,7 +14409,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14130,7 +14423,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14143,7 +14437,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14156,7 +14451,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14169,7 +14465,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14182,7 +14479,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14265,7 +14563,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14278,7 +14577,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14402,9 +14702,11 @@
       "lag": 0
     },
     {
-      "canonical": "ts_interval_overlap_component_ratio",
+      "canonical": "ts_interval_overlap_connected_component_ratio",
       "surface": "daily",
-      "aliases": [],
+      "aliases": [
+        "ts_interval_overlap_component_ratio"
+      ],
       "backends": [
         "pandas_numpy",
         "polars"
@@ -14448,7 +14750,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14461,7 +14764,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14474,7 +14778,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14487,7 +14792,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14500,7 +14806,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14513,7 +14820,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14526,7 +14834,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14595,7 +14904,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14608,7 +14918,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14635,7 +14946,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14696,7 +15008,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14709,7 +15022,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14779,7 +15093,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14792,7 +15107,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14833,7 +15149,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14846,7 +15163,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14876,7 +15194,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14889,7 +15208,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -14902,7 +15222,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -14962,7 +15283,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15059,7 +15381,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -15074,7 +15397,8 @@
         "ts_matrix_profile_motif_distance"
       ],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15101,7 +15425,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15114,7 +15439,24 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": false,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
+      "canonical": "ts_matrix_profile_novelty",
+      "surface": "daily",
+      "aliases": [
+        "ts_multivariate_matrix_profile_novelty"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15161,7 +15503,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -15175,6 +15518,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -15284,7 +15628,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15350,7 +15695,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -15378,7 +15724,8 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -15391,7 +15738,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -15404,7 +15752,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15417,7 +15766,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15430,7 +15780,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15443,7 +15794,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15456,7 +15808,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15469,7 +15822,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15482,7 +15836,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15495,7 +15850,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15508,7 +15864,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15521,7 +15878,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15534,7 +15892,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15589,7 +15948,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15602,7 +15962,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15653,25 +16014,12 @@
       "lag": 0
     },
     {
-      "canonical": "ts_multivariate_matrix_profile_novelty",
+      "canonical": "ts_mutual_information",
       "surface": "daily",
       "aliases": [],
       "backends": [
         "pandas_numpy",
         "polars"
-      ],
-      "pit_safe": false,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "ts_mutual_information",
-      "surface": "daily",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -15699,7 +16047,8 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15799,6 +16148,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -15812,7 +16162,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15839,7 +16190,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15852,7 +16204,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15865,7 +16218,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15879,6 +16233,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -15920,7 +16275,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -15933,7 +16289,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15946,7 +16303,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -15959,7 +16317,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16007,7 +16366,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16020,7 +16380,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16049,7 +16410,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16231,7 +16593,8 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16337,7 +16700,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16378,7 +16742,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16405,7 +16770,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16418,7 +16784,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16431,7 +16798,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16444,7 +16812,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16457,7 +16826,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16470,7 +16840,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16483,7 +16854,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16542,7 +16914,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16572,6 +16945,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -16585,7 +16959,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16612,7 +16987,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16625,7 +17001,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16680,7 +17057,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16693,7 +17071,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -16706,7 +17085,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16719,7 +17099,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16732,7 +17113,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16745,7 +17127,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16818,7 +17201,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16835,6 +17219,7 @@
       ],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -16849,6 +17234,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -16946,7 +17332,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16959,7 +17346,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16972,7 +17360,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16985,7 +17374,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -16998,7 +17388,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -17011,7 +17402,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -17048,11 +17440,28 @@
       "lag": 0
     },
     {
+      "canonical": "ts_rolling_sr_gaussian_mean_shift_score",
+      "surface": "research",
+      "aliases": [
+        "ts_sr_gaussian_mean_shift_score"
+      ],
+      "backends": [
+        "pandas_numpy",
+        "polars"
+      ],
+      "pit_safe": true,
+      "scope": "ts",
+      "lookback": null,
+      "min_periods": 1,
+      "lag": 0
+    },
+    {
       "canonical": "ts_roughness",
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17065,7 +17474,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17078,7 +17488,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17091,7 +17502,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17104,7 +17516,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17117,7 +17530,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17130,7 +17544,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17144,6 +17559,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -17172,7 +17588,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17185,7 +17602,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17289,7 +17707,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -17326,20 +17745,6 @@
       "lag": 0
     },
     {
-      "canonical": "ts_sr_gaussian_mean_shift_score",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy",
-        "polars"
-      ],
-      "pit_safe": true,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": 1,
-      "lag": 0
-    },
-    {
       "canonical": "ts_ssa_reconstruction_residual",
       "surface": "daily",
       "aliases": [],
@@ -17359,6 +17764,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": false,
@@ -17372,7 +17778,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17399,7 +17806,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17412,7 +17820,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17425,7 +17834,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17438,7 +17848,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17711,7 +18122,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17738,7 +18150,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17877,7 +18290,8 @@
       "surface": "extended",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17932,7 +18346,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17945,7 +18360,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -17959,6 +18375,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -18001,7 +18418,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -18014,7 +18432,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -18027,7 +18446,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -18180,7 +18600,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -18193,7 +18614,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -18206,7 +18628,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -18283,7 +18706,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -18310,7 +18734,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -18408,6 +18833,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -18421,7 +18847,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -18435,6 +18862,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -18478,7 +18906,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -18492,6 +18921,7 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
+        "polars",
         "sql"
       ],
       "pit_safe": true,
@@ -18505,7 +18935,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -18518,7 +18949,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -18531,7 +18963,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -18544,7 +18977,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -18557,7 +18991,8 @@
       "surface": "research",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -18612,7 +19047,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -18654,7 +19090,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": true,
       "scope": "ts",
@@ -18668,7 +19105,8 @@
       "aliases": [],
       "backends": [
         "pandas_numpy",
-        "polars"
+        "polars",
+        "sql"
       ],
       "pit_safe": false,
       "scope": "ts",
@@ -19060,7 +19498,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "elementwise",
@@ -19336,7 +19775,8 @@
       "surface": "daily",
       "aliases": [],
       "backends": [
-        "pandas_numpy"
+        "pandas_numpy",
+        "polars"
       ],
       "pit_safe": false,
       "scope": "fundamental_period",

@@ -42,20 +42,27 @@ def cse_consumer_counts(roots: list[PlanNode]) -> dict[str, int]:
 
     运行时按引用计数回收：某 root 执行完即对其消费的 sid 减一，归零立即 evict，
     避免共享大 panel 常驻到整个 batch 结束。
+
+    R6-150: 每个 sid 在**同一 root 内只计一次**。释放侧
+    (``runtime.batch_service._release_root_cse``) 用 :func:`collect_consumed_sids`
+    在单 root 内去重后一次性减一；若这里按出现次数计数（``factor=add(X,X)`` 时
+    X 的 refcount=2），则 root 完成后只减 1，剩余 1 永不 evict。按 root 消费者去重
+    后两侧语义一致：refcount == 消费该 sid 的 root 数。
     """
     counts: dict[str, int] = {}
 
-    def walk(n: PlanNode) -> None:
+    def walk(n: PlanNode, seen: set[str]) -> None:
         if getattr(n, "op", None) == "plan_ref":
             sid = str((n.attrs or {}).get("sid") or "")
-            if sid:
+            if sid and sid not in seen:
+                seen.add(sid)
                 counts[sid] = counts.get(sid, 0) + 1
             return
         for child in getattr(n, "inputs", ()) or ():
-            walk(child)
+            walk(child, seen)
 
     for root in roots:
-        walk(root)
+        walk(root, set())
     return counts
 
 

@@ -21,9 +21,15 @@ def _load():
     from cleaned_operators.operator_policy import infer_operator_policy
     from cleaned_operators.operator_surface import classify_canonical, surface_summary
     from cleaned_operators.registry import OperatorRegistry
-    from backend.sql_pushdown.sql_registry import register_sql_backends
 
     load_all()  # includes apply_operator_deduplication()
+    # Import sql_registry AFTER load_all: its module-level side effects must not
+    # run against a partially-loaded registry (they seal promoted operators'
+    # explicit policies differently than a post-load import).  The manifest
+    # generator imports it after load_all for the same reason, so both manifests
+    # observe the identical ``infer_operator_policy`` state.
+    from backend.sql_pushdown.sql_registry import register_sql_backends
+
     register_sql_backends()
     return OperatorRegistry, infer_operator_policy, classify_canonical, surface_summary
 

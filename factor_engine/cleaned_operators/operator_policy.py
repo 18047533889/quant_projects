@@ -1599,7 +1599,7 @@ _GEMINI_V2_PACK_POLICIES: dict[str, dict[str, Any]] = {
     "ts_kernel_granger_score": {"scope": "ts", "pit_safe": True, "min_periods": 30},
     "ts_residualized_hsic": {"scope": "ts", "pit_safe": True, "min_periods": 24},
     "ts_bds_statistic": {"scope": "ts", "pit_safe": True, "min_periods": 30},
-    "ts_sr_gaussian_mean_shift_score": {"scope": "ts", "pit_safe": True, "min_periods": 12},
+    "ts_rolling_sr_gaussian_mean_shift_score": {"scope": "ts", "pit_safe": True, "min_periods": 12},
 }
 _EXPLICIT_POLICIES.update(_GEMINI_V2_PACK_POLICIES)
 

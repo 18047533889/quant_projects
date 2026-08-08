@@ -28,6 +28,7 @@ import datetime as _dt
 import logging
 import os
 import re
+import threading
 import time
 import uuid
 import inspect
@@ -286,6 +287,16 @@ def run_sql(
 
     _reject_forbidden_tokens(query)
     _reject_denied_table_functions(query)
+    # #P1-final closure 23：parser 级 allowlist——恰好一个 SELECT/WITH + 函数
+    # allowlist（table/file/network function 一律拒绝，未知函数 strict fail-closed）。
+    _assert_single_select_statement(query)
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        strict = is_strict_semantics()
+    except Exception:
+        strict = True
+    _check_sql_function_allowlist(query, strict=strict)
 
     read_params = dict(read_params) if read_params else {}
     budget = resolve_query_budget(query_budget)
@@ -381,6 +392,16 @@ def run_sql_stream(
 
     _reject_forbidden_tokens(query)
     _reject_denied_table_functions(query)
+    # #P1-final closure 23：parser 级 allowlist
+    _assert_single_select_statement(query)
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        strict = is_strict_semantics()
+    except Exception:
+        strict = True
+    _check_sql_function_allowlist(query, strict=strict)
+
     read_params = dict(read_params) if read_params else {}
     budget = resolve_query_budget(query_budget)
     validate_sql_view_columns(budget, read_datasets, view_columns)
@@ -541,7 +562,10 @@ def _reject_forbidden_tokens(query: str) -> None:
             )
 
 
-# #P0-13 deny-by-default 的 table function 名单：未来 DuckDB 加新函数不被自动放行。
+# #P0-13 deny-by-default 的 table function 名单：保留作快速预检与降级兜底。
+# 主机制是 #P1-final closure 23 的 **parser 级 allowlist**（见下）——从 DuckDB
+# 自身 ``duckdb_functions()`` 注册表按 function_type 分类，任何 table 型函数
+# （含未来新增的 read_*/scan/glob/httpfs 等）自动拒绝，不再靠补字符串名单。
 _DENIED_TABLE_FUNCTIONS = (
     "read_parquet",
     "read_parquet_auto",
@@ -564,11 +588,136 @@ _DENIED_TABLE_FUNCTIONS = (
 )
 
 
-def _reject_denied_table_functions(query: str) -> None:
-    """#P0-13 对 code 段做 table-function deny-by-default 检查。
+# #P1-final closure 23：SQL **语法关键字**（grammar forms），虽然形如 ``name(``
+# 但不是函数调用——``IN (``、``FILTER (``、``OVER (``、``EXTRACT (`` 等。
+# 不在 DuckDB ``duckdb_functions()`` 注册表里、但作为 SQL 语法的一部分是安全的。
+_SQL_GRAMMAR_KEYWORDS = frozenset({
+    # 子句关键字（后跟括号但不是函数）
+    "IN", "ON", "OVER", "PARTITION", "FILTER", "GROUP", "ORDER", "HAVING",
+    "WHERE", "LIMIT", "FROM", "JOIN", "VALUES", "UNION", "INTERSECT",
+    "EXCEPT", "DISTINCT", "AND", "OR", "NOT", "BETWEEN", "LIKE", "ILIKE",
+    "WHEN", "THEN", "ELSE", "END", "CASE", "AS", "USING", "WITH", "SELECT",
+    "LEFT", "RIGHT", "FULL", "INNER", "OUTER", "CROSS", "NATURAL",
+    "RECURSIVE", "WINDOW", "ROWS", "RANGE", "GROUPS", "PRECEDING",
+    "FOLLOWING", "CURRENT", "LATERAL", "OFFSET", "FETCH", "FIRST", "LAST",
+    "TIES", "ONLY", "UNBOUNDED", "COLLATE", "IS", "NULL", "TRUE", "FALSE",
+    "NULLS", "ASC", "DESC", "BOTH", "LEADING", "TRAILING",
+    # 特殊语法形式（有括号、DuckDB 当作 grammar 而非注册函数）
+    "CAST", "EXTRACT", "COALESCE", "IFNULL", "NULLIF", "REPLACE",
+    "TRANSLATE", "SUBSTRING", "TRIM", "LTRIM", "RTRIM", "POSITION",
+    "DATE_PART", "EXTRACT_EPOCH", "GROUPING",
+})
 
-    识别 ``name(`` 形态（后跟括号即函数调用）；任何名单内函数直接拒绝。名单外的
-    DuckDB 内建聚合/窗口函数（sum/avg/row_number 等）不在名单，天然放行。
+
+# #P1-final closure 23：函数 allowlist 的运行时数据源——DuckDB 自身注册表
+# （``duckdb_functions()``），懒加载并进程内缓存。key = 函数名小写，
+# value = 该函数名出现过的 function_type 集合（scalar/aggregate/window/table/...）。
+_function_registry: dict[str, set[str]] | None = None
+_function_registry_lock = threading.Lock()
+
+
+def _load_function_registry() -> dict[str, set[str]]:
+    """从 DuckDB ``duckdb_functions()`` 加载函数类型注册表（进程内缓存）。
+
+    失败（无 duckdb / 版本无该函数）回退空 dict——allowlist 检查退化为
+    deny-list 兜底（见 ``_check_sql_function_allowlist`` 的降级分支）。
+    """
+    global _function_registry
+    if _function_registry is not None:
+        return _function_registry
+    with _function_registry_lock:
+        if _function_registry is not None:
+            return _function_registry
+        out: dict[str, set[str]] = {}
+        try:
+            import duckdb
+
+            con = duckdb.connect()
+            try:
+                rows = con.execute(
+                    "SELECT function_name, function_type FROM duckdb_functions()"
+                ).fetchall()
+            finally:
+                con.close()
+            for name, ftype in rows:
+                out.setdefault(str(name).lower(), set()).add(str(ftype).lower())
+        except Exception:
+            out = {}
+        _function_registry = out
+        return out
+
+
+def _find_function_calls(query: str) -> list[str]:
+    """在 code 段里找出形如 ``name(`` 的函数调用名（跳过字符串/注释/标识符引号）。
+
+    只认「非语法关键字 + 后跟左括号」的标识符。限定名 ``schema.func(...)`` 取
+    最后一段。``FILTER (`` / ``IN (`` / ``OVER (`` 等语法关键字被排除。
+    """
+    import re as _re
+
+    out: list[str] = []
+    for chunk in _iter_code_chunks(query):
+        for m in _re.finditer(
+            r"(?P<fn>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+            chunk,
+        ):
+            name = m.group("fn").upper()
+            if name in _SQL_GRAMMAR_KEYWORDS:
+                continue
+            out.append(name.lower())
+    return out
+
+
+def _check_sql_function_allowlist(query: str, *, strict: bool) -> None:
+    """#P1-final closure 23：**parser 级函数 allowlist**。
+
+    对每个函数调用名分类：
+      - 在 deny 名单（read_*/scan/glob/httpfs 等）→ 拒绝；
+      - 在 DuckDB 注册表且**只含 table 型** overload → 拒绝（table function =
+        文件/网络/外部源入口，含未来新增的 parquet_metadata/sniff_csv/
+        read_json_objects 等，注册表自动分类，不再补字符串名单）；
+      - 在 DuckDB 注册表且含 scalar/aggregate/window overload → 放行；
+      - **不在注册表**且不是 grammar 关键字 → 未知函数：strict 拒绝（可能是
+        未来版本的文件函数 / 自定义 UDF，fail-closed），research 放行（deny
+        名单仍挡已知危险项）。
+    """
+    calls = _find_function_calls(query)
+    if not calls:
+        return
+    registry = _load_function_registry()
+    for fn in calls:
+        if any(fn.startswith(d) or fn == d for d in _DENIED_TABLE_FUNCTIONS):
+            raise ValidationError(
+                f"sql() 拒绝执行：file/network/table function {fn!r} 默认禁用。"
+                "读外部文件请先在 datasets.yaml 登记数据集。"
+            )
+        types = registry.get(fn)
+        if types is None:
+            # 不在 DuckDB 注册表：可能是语法关键字或 UDF
+            if fn.upper() in _SQL_GRAMMAR_KEYWORDS:
+                continue
+            if strict:
+                raise ValidationError(
+                    f"sql() 拒绝执行：函数 {fn!r} 不在 DuckDB 允许的 "
+                    "scalar/aggregate/window 集合内（未知函数，strict fail-closed）。"
+                    "若确为内建函数，请升级 DuckDB 或改用 registered dataset。"
+                )
+            continue
+        # 注册表里只有 table 型 overload → 文件/网络/外部源入口
+        if types and not (types & {"scalar", "aggregate", "window"}):
+            raise ValidationError(
+                f"sql() 拒绝执行：{fn!r} 是 table function（{sorted(types)}）——"
+                "文件/网络/外部源入口默认禁用。读外部文件请先在 datasets.yaml 登记数据集。"
+            )
+
+
+def _reject_denied_table_functions(query: str) -> None:
+    """#P0-13 对 code 段做 table-function deny-by-default 检查（快速预检）。
+
+    识别 ``name(`` 形态（后跟括号即函数调用）；任何名单内函数直接拒绝。真正的
+    防线是 #P1-final closure 23 的 ``_check_sql_function_allowlist``——注册表
+    分类覆盖未来新增的 file/network/table function；本函数保留作快速失败 + 无
+    DuckDB 注册表时的降级兜底。
     """
     import re as _re
 
@@ -578,6 +727,42 @@ def _reject_denied_table_functions(query: str) -> None:
             raise ValidationError(
                 f"sql() 拒绝执行：table function {fn!r} 默认禁用（deny-by-default）。"
                 "读外部文件请先在 datasets.yaml 登记数据集。"
+            )
+
+
+def _assert_single_select_statement(query: str) -> None:
+    """#P1-final closure 23：从**语法层**证明恰好一个 SELECT/WITH 语句。
+
+    在 code 段（跳过字符串/注释/引号标识符）按顶层 ``;`` 切分（含括号深度——
+    CTE/子查询里的 ``;`` 会因深度 >0 被忽略）。多个语句 / 尾随 SQL → 拒绝；
+    单个语句尾随一个 ``;`` 允许。
+    """
+    depth = 0
+    stmts: list[str] = []
+    buf: list[str] = []
+    for chunk in _iter_code_chunks(query):
+        for ch in chunk:
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth = max(0, depth - 1)
+            if ch == ";" and depth == 0:
+                stmts.append("".join(buf))
+                buf = []
+            else:
+                buf.append(ch)
+    stmts.append("".join(buf))
+    live = [s.strip() for s in stmts if s.strip()]
+    if len(live) > 1:
+        raise ValidationError(
+            f"sql() 拒绝执行：检测到 {len(live)} 条语句，只允许单个 SELECT/WITH。"
+            "写操作/多语句请拆开执行。"
+        )
+    if live:
+        first = live[0].split(None, 1)[0].upper() if live[0] else ""
+        if first not in {"SELECT", "WITH"}:
+            raise ValidationError(
+                f"sql() 只允许单个 SELECT/WITH，收到 {first!r} 开头的语句"
             )
 
 
@@ -593,13 +778,19 @@ def validate_sql_sandbox(query: str) -> None:
     """
     if not query or not query.strip():
         raise ValidationError("sql_relation 拒绝执行空查询")
-    first = query.lstrip().split(None, 1)[0].upper() if query.lstrip() else ""
-    if first not in {"SELECT", "WITH"}:
-        raise ValidationError(
-            f"sql_relation 只允许单个 SELECT/WITH，收到 {first!r} 开头的语句"
-        )
+    # #P1-final closure 23：语法层证明**恰好一个** SELECT/WITH（而非只看首 token）
+    _assert_single_select_statement(query)
     _reject_forbidden_tokens(query)
     _reject_denied_table_functions(query)
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        strict = is_strict_semantics()
+    except Exception:
+        strict = True
+    # parser 级函数 allowlist：table/file/network function 一律拒绝；未知函数
+    # strict fail-closed。
+    _check_sql_function_allowlist(query, strict=strict)
 
 
 def _query_from_tables(query: str) -> list[str]:

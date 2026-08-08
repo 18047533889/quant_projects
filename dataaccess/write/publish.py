@@ -237,6 +237,10 @@ def publish_from_staging(
             params=params or None,
             elapsed_ms=elapsed_ms,
             error=err_msg,
+            # #P1-final closure 22：发布是权威动作——审计必须 durable 落盘（flush
+            # + fsync）。业务成功但审计写失败 ⇒ AuditWriteError 向上抛，不允许
+            # 「发布了、审计悄悄没记」。
+            durable=True,
             extra={
                 "source": staging_name,
                 "archive_path": str(archive_path) if archive_path else None,

@@ -270,6 +270,24 @@ def _minimal_plan_raw(op: str) -> PlanNode:
             inputs=[close, volume, high],
             attrs={"window": 5, "min_periods": 3},
         )
+    # Multi-input SQL-pushdown ops that need more than the generic fallback's
+    # single frame (the emitter branches require 2-3 compiled child layers).
+    if op in {"ts_crossing_speed", "ts_crossing_acceleration"}:
+        return PlanNode(op=op, inputs=[close, volume], attrs={"window": 20})
+    if op == "ts_cov_if":
+        return PlanNode(op=op, inputs=[close, volume, high], attrs={"window": 20, "min_periods": 2})
+    if op == "ts_value_at_argextreme":
+        return PlanNode(op=op, inputs=[close, volume], attrs={"window": 20, "mode": "max", "include_current": False})
+    if op == "ts_weighted_standardized_moment":
+        return PlanNode(op=op, inputs=[close, volume], attrs={"window": 20, "order": 3})
+    if op == "ts_abdi_ranaldo_spread":
+        return PlanNode(op=op, inputs=[close, high, low], attrs={"window": 20})
+    if op == "cs_weighted_percentile_rank":
+        return PlanNode(op=op, inputs=[close, volume], attrs={})
+    if op == "group_topk_mean":
+        return PlanNode(op=op, inputs=[close, volume, industry], attrs={"k": 3, "exclude_self": True})
+    if op == "group_weighted_mean":
+        return PlanNode(op=op, inputs=[close, industry, volume], attrs={})
     if op.startswith("group_"):
         return PlanNode(op=op, inputs=[close, industry], attrs={"d": 3, "window": 3, "p": 0.5})
     if op in {"where", "if_else", "coalesce"}:

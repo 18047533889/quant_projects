@@ -2030,12 +2030,12 @@
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.05308331456870498,
-      "abs_mean_rank_ic": 0.05308331456870498,
-      "rank_icir": -0.5052350679986775,
+      "mean_rank_ic": 0.053083314568704985,
+      "abs_mean_rank_ic": 0.053083314568704985,
+      "rank_icir": 0.5052350679986775,
       "mean_daily_coverage": 0.9997245778400372,
-      "ls_mean_one_way_turnover": 0.22465273986695714,
-      "long_short_sharpe": -2.410878227989382,
+      "ls_mean_one_way_turnover": 0.22465517405354743,
+      "long_short_sharpe": 2.255242133958303,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -2048,7 +2048,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 57.24,
+      "elapsed_sec": 7.5,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.6214108928577247e-11,
         "neu_cs_abs_scale_median": 0.01140394839173941,
@@ -2063,7 +2063,7 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.05308331456870498,
+      "display_rank_ic": 0.053083314568704985,
       "sign_flipped": true,
       "display_rank_icir": 0.5052350679986775,
       "panel_qc": {
@@ -2076,19 +2076,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.3858472247561338,
+      "report_href": "/reports_weekly_dug/alpha_20260701_5d58bc15.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": null,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_5d58bc15/values.parquet"
+      },
+      "mem_available_gb": 24.49
     },
     {
       "factor_id": "alpha_20260701_e885c4b1",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.05216684796816133,
-      "abs_mean_rank_ic": 0.05216684796816133,
-      "rank_icir": -0.59036519548034,
+      "mean_rank_ic": 0.05216684796816129,
+      "abs_mean_rank_ic": 0.05216684796816129,
+      "rank_icir": 0.5903651954803398,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.1853137902432075,
-      "long_short_sharpe": -3.138539085752914,
+      "ls_mean_one_way_turnover": 0.18543739912785911,
+      "long_short_sharpe": 2.989722057389355,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -2101,7 +2119,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 60.66,
+      "elapsed_sec": 37.62,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.3111533520303595e-11,
         "neu_cs_abs_scale_median": 0.007049026363474554,
@@ -2116,9 +2134,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.05216684796816133,
+      "display_rank_ic": 0.05216684796816129,
       "sign_flipped": true,
-      "display_rank_icir": 0.59036519548034,
+      "display_rank_icir": 0.5903651954803398,
       "panel_qc": {
         "year": 2026,
         "std": 0.010573764860477688,
@@ -2129,19 +2147,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.6788053317037166,
+      "report_href": "/reports_weekly_dug/alpha_20260701_e885c4b1.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_e885c4b1/values.parquet"
+      },
+      "mem_available_gb": 24.41
     },
     {
       "factor_id": "alpha_20260701_bb4a002c",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.0483930774261555,
-      "abs_mean_rank_ic": 0.0483930774261555,
-      "rank_icir": -0.5518209576326681,
+      "mean_rank_ic": 0.048393077426155486,
+      "abs_mean_rank_ic": 0.048393077426155486,
+      "rank_icir": 0.5518209576326678,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.3420231343693666,
-      "long_short_sharpe": -2.892542277897675,
+      "ls_mean_one_way_turnover": 0.34204066298811636,
+      "long_short_sharpe": 2.6123629845327936,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -2154,7 +2190,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 61.67,
+      "elapsed_sec": 38.96,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.8360778538859743e-15,
         "neu_cs_abs_scale_median": 1.0735440146414927e-06,
@@ -2169,9 +2205,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.0483930774261555,
+      "display_rank_ic": 0.048393077426155486,
       "sign_flipped": true,
-      "display_rank_icir": 0.5518209576326681,
+      "display_rank_icir": 0.5518209576326678,
       "panel_qc": {
         "year": 2026,
         "std": 4.966441945062568e-06,
@@ -2182,19 +2218,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.3173784080755473,
+      "report_href": "/reports_weekly_dug/alpha_20260701_bb4a002c.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_bb4a002c/values.parquet"
+      },
+      "mem_available_gb": 24.1
     },
     {
       "factor_id": "alpha_20260702_1281ccaa",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.048046883505590984,
-      "abs_mean_rank_ic": 0.048046883505590984,
-      "rank_icir": -0.6001622484215551,
+      "mean_rank_ic": 0.04804688350559102,
+      "abs_mean_rank_ic": 0.04804688350559102,
+      "rank_icir": 0.6001622484215556,
       "mean_daily_coverage": 0.9997245778400372,
-      "ls_mean_one_way_turnover": 1.2531349205075244,
-      "long_short_sharpe": -3.8316101446822937,
+      "ls_mean_one_way_turnover": 1.2530249083546081,
+      "long_short_sharpe": 2.7836956834911275,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -2207,7 +2261,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 58.77,
+      "elapsed_sec": 38.5,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.622306704060719e-11,
         "neu_cs_abs_scale_median": 0.01566989160415109,
@@ -2222,9 +2276,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.048046883505590984,
+      "display_rank_ic": 0.04804688350559102,
       "sign_flipped": true,
-      "display_rank_icir": 0.6001622484215551,
+      "display_rank_icir": 0.6001622484215556,
       "panel_qc": {
         "year": 2026,
         "std": 0.025542877842529392,
@@ -2235,19 +2289,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.407322066737371,
+      "report_href": "/reports_weekly_dug/alpha_20260702_1281ccaa.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_1281ccaa/values.parquet"
+      },
+      "mem_available_gb": 24.39
     },
     {
       "factor_id": "alpha_20260702_55152d82",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.04789837881386281,
-      "abs_mean_rank_ic": 0.04789837881386281,
-      "rank_icir": -0.5904389653880437,
+      "mean_rank_ic": 0.047898378813862795,
+      "abs_mean_rank_ic": 0.047898378813862795,
+      "rank_icir": 0.5904389653880436,
       "mean_daily_coverage": 0.9997245778400372,
-      "ls_mean_one_way_turnover": 1.2468595694396183,
-      "long_short_sharpe": -3.666097746506322,
+      "ls_mean_one_way_turnover": 1.2468014156122404,
+      "long_short_sharpe": 2.6284749872021753,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -2260,7 +2332,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 66.91,
+      "elapsed_sec": 36.42,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.6214108928577247e-11,
         "neu_cs_abs_scale_median": 0.015232684594051086,
@@ -2275,9 +2347,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.04789837881386281,
+      "display_rank_ic": 0.047898378813862795,
       "sign_flipped": true,
-      "display_rank_icir": 0.5904389653880437,
+      "display_rank_icir": 0.5904389653880436,
       "panel_qc": {
         "year": 2026,
         "std": 0.026026238239732314,
@@ -2288,19 +2360,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.3034987852849396,
+      "report_href": "/reports_weekly_dug/alpha_20260702_55152d82.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_55152d82/values.parquet"
+      },
+      "mem_available_gb": 24.54
     },
     {
       "factor_id": "alpha_20260702_86a7e37a",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.04772897272447954,
-      "abs_mean_rank_ic": 0.04772897272447954,
-      "rank_icir": -0.7120577055889417,
+      "mean_rank_ic": 0.0477289727244795,
+      "abs_mean_rank_ic": 0.0477289727244795,
+      "rank_icir": 0.7120577055889417,
       "mean_daily_coverage": 0.9976314852656958,
-      "ls_mean_one_way_turnover": 0.4534375029980486,
-      "long_short_sharpe": -4.842347195907685,
+      "ls_mean_one_way_turnover": 0.45354552003172155,
+      "long_short_sharpe": 4.3684725438091006,
       "n_rows": 8480159,
       "n_days": 1842,
       "years": [
@@ -2313,7 +2403,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 49.94,
+      "elapsed_sec": 36.96,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.835525164887891e-15,
         "neu_cs_abs_scale_median": 9.347116940116858e-07,
@@ -2328,7 +2418,7 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.04772897272447954,
+      "display_rank_ic": 0.0477289727244795,
       "sign_flipped": true,
       "display_rank_icir": 0.7120577055889417,
       "panel_qc": {
@@ -2341,19 +2431,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 3.086023094972378,
+      "report_href": "/reports_weekly_dug/alpha_20260702_86a7e37a.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8480159,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_86a7e37a/values.parquet"
+      },
+      "mem_available_gb": 24.3
     },
     {
-      "factor_id": "alpha_20260702_caa184c6",
+      "factor_id": "alpha_20260702_afd40784",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.04657378851014425,
+      "mean_rank_ic": 0.04657378851014425,
       "abs_mean_rank_ic": 0.04657378851014425,
-      "rank_icir": -0.6739466101306012,
+      "rank_icir": 0.6739466101306009,
       "mean_daily_coverage": 0.9975740911366364,
-      "ls_mean_one_way_turnover": 0.4933816047892202,
-      "long_short_sharpe": -4.752852554529708,
+      "ls_mean_one_way_turnover": 0.493494270703591,
+      "long_short_sharpe": 4.246103525474492,
       "n_rows": 8479683,
       "n_days": 1842,
       "years": [
@@ -2366,7 +2474,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 54.27,
+      "elapsed_sec": 47.29,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.830561128300507e-15,
         "neu_cs_abs_scale_median": 1.0254222680820566e-06,
@@ -2377,13 +2485,13 @@
         "raw_neu_median_daily_corr": 0.9515558370025119,
         "identical_cell_frac": 8.108119641706461e-05,
         "differs_from_raw": true,
-        "factor_id": "alpha_20260702_caa184c6",
+        "factor_id": "alpha_20260702_afd40784",
         "source": "evoalpha",
         "year": 2025
       },
       "display_rank_ic": 0.04657378851014425,
-      "sign_flipped": true,
-      "display_rank_icir": 0.6739466101306012,
+      "sign_flipped": false,
+      "display_rank_icir": 0.6739466101306009,
       "panel_qc": {
         "year": 2026,
         "std": 4.242843930493249e-06,
@@ -2394,15 +2502,33 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 3.028458898567357,
+      "report_href": "/reports_weekly_dug/alpha_20260702_afd40784.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8479683,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_afd40784/values.parquet"
+      },
+      "mem_available_gb": 24.0
     },
     {
-      "factor_id": "alpha_20260702_afd40784",
+      "factor_id": "alpha_20260702_caa184c6",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.04657378851014423,
-      "abs_mean_rank_ic": 0.04657378851014423,
+      "mean_rank_ic": 0.04657378851014424,
+      "abs_mean_rank_ic": 0.04657378851014424,
       "rank_icir": 0.6739466101306008,
       "mean_daily_coverage": 0.9975740911366364,
       "ls_mean_one_way_turnover": 0.493494270703591,
@@ -2419,7 +2545,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 67.01,
+      "elapsed_sec": 39.44,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.830561128300507e-15,
         "neu_cs_abs_scale_median": 1.0254222680820566e-06,
@@ -2430,12 +2556,12 @@
         "raw_neu_median_daily_corr": 0.9515558370025119,
         "identical_cell_frac": 8.108119641706461e-05,
         "differs_from_raw": true,
-        "factor_id": "alpha_20260702_afd40784",
+        "factor_id": "alpha_20260702_caa184c6",
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.04657378851014423,
-      "sign_flipped": false,
+      "display_rank_ic": 0.04657378851014424,
+      "sign_flipped": true,
       "display_rank_icir": 0.6739466101306008,
       "panel_qc": {
         "year": 2026,
@@ -2447,19 +2573,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 3.028458898567357,
+      "report_href": "/reports_weekly_dug/alpha_20260702_caa184c6.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8479683,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_caa184c6/values.parquet"
+      },
+      "mem_available_gb": 24.33
     },
     {
       "factor_id": "alpha_20260702_16104691",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.044930952676850225,
-      "abs_mean_rank_ic": 0.044930952676850225,
-      "rank_icir": 0.4662039243464828,
+      "mean_rank_ic": 0.04493095267685021,
+      "abs_mean_rank_ic": 0.04493095267685021,
+      "rank_icir": 0.46620392434648283,
       "mean_daily_coverage": 0.9857427394020235,
       "ls_mean_one_way_turnover": 0.2656830139050638,
-      "long_short_sharpe": 1.5434751108839595,
+      "long_short_sharpe": 1.5434751108839597,
       "n_rows": 8383997,
       "n_days": 1842,
       "years": [
@@ -2472,7 +2616,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 57.8,
+      "elapsed_sec": 52.43,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.7296610244652584e-10,
         "neu_cs_abs_scale_median": 0.18831378453202607,
@@ -2487,9 +2631,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.044930952676850225,
+      "display_rank_ic": 0.04493095267685021,
       "sign_flipped": false,
-      "display_rank_icir": 0.4662039243464828,
+      "display_rank_icir": 0.46620392434648283,
       "panel_qc": {
         "year": 2026,
         "std": 0.21467743957029925,
@@ -2500,19 +2644,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.0740643870548767,
+      "report_href": "/reports_weekly_dug/alpha_20260702_16104691.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8383997,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_16104691/values.parquet"
+      },
+      "mem_available_gb": 24.08
     },
     {
       "factor_id": "alpha_20260701_66ea5325",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.04258294008986659,
-      "abs_mean_rank_ic": 0.04258294008986659,
-      "rank_icir": -0.6350873052173373,
+      "mean_rank_ic": 0.04258294008986661,
+      "abs_mean_rank_ic": 0.04258294008986661,
+      "rank_icir": 0.6350873052173376,
       "mean_daily_coverage": 0.9985534725586732,
-      "ls_mean_one_way_turnover": 0.6570202522857918,
-      "long_short_sharpe": -4.521847024048476,
+      "ls_mean_one_way_turnover": 0.6570457030614856,
+      "long_short_sharpe": 3.8856588889582087,
       "n_rows": 8487106,
       "n_days": 1842,
       "years": [
@@ -2525,7 +2687,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 59.06,
+      "elapsed_sec": 56.26,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.7079095349668023e-10,
         "neu_cs_abs_scale_median": 0.1774047341396639,
@@ -2540,9 +2702,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.04258294008986659,
+      "display_rank_ic": 0.04258294008986661,
       "sign_flipped": true,
-      "display_rank_icir": 0.6350873052173373,
+      "display_rank_icir": 0.6350873052173376,
       "panel_qc": {
         "year": 2026,
         "std": 0.22139050024828574,
@@ -2553,16 +2715,34 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.9087123748425885,
+      "report_href": "/reports_weekly_dug/alpha_20260701_66ea5325.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8487106,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_66ea5325/values.parquet"
+      },
+      "mem_available_gb": 24.14
     },
     {
       "factor_id": "alpha_20260703_f609ea4d",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.04185291872809574,
-      "abs_mean_rank_ic": 0.04185291872809574,
-      "rank_icir": 0.5596762005091175,
+      "mean_rank_ic": 0.041852918728095705,
+      "abs_mean_rank_ic": 0.041852918728095705,
+      "rank_icir": 0.5596762005091174,
       "mean_daily_coverage": 0.9997245778400372,
       "ls_mean_one_way_turnover": 0.6470329786292652,
       "long_short_sharpe": 2.5696006015463047,
@@ -2578,7 +2758,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 51.92,
+      "elapsed_sec": 53.99,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 9.232084541288543e-11,
         "neu_cs_abs_scale_median": 0.03460789793805869,
@@ -2593,9 +2773,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.04185291872809574,
+      "display_rank_ic": 0.041852918728095705,
       "sign_flipped": false,
-      "display_rank_icir": 0.5596762005091175,
+      "display_rank_icir": 0.5596762005091174,
       "panel_qc": {
         "year": 2026,
         "std": 0.056726933704564636,
@@ -2606,19 +2786,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.240283336347792,
+      "report_href": "/reports_weekly_dug/alpha_20260703_f609ea4d.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_f609ea4d/values.parquet"
+      },
+      "mem_available_gb": 24.02
     },
     {
       "factor_id": "alpha_20260701_549b43e6",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.04172905582793448,
-      "abs_mean_rank_ic": 0.04172905582793448,
-      "rank_icir": -0.5759750918387615,
+      "mean_rank_ic": 0.04172905582793453,
+      "abs_mean_rank_ic": 0.04172905582793453,
+      "rank_icir": 0.575975091838762,
       "mean_daily_coverage": 0.9985534725586732,
-      "ls_mean_one_way_turnover": 0.7720887809133918,
-      "long_short_sharpe": -3.9128655521806506,
+      "ls_mean_one_way_turnover": 0.7722418370618206,
+      "long_short_sharpe": 3.2131581276342445,
       "n_rows": 8487106,
       "n_days": 1842,
       "years": [
@@ -2631,7 +2829,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 59.22,
+      "elapsed_sec": 42.12,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.8201385996427797e-15,
         "neu_cs_abs_scale_median": 7.435631370673465e-07,
@@ -2646,9 +2844,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.04172905582793448,
+      "display_rank_ic": 0.04172905582793453,
       "sign_flipped": true,
-      "display_rank_icir": 0.5759750918387615,
+      "display_rank_icir": 0.575975091838762,
       "panel_qc": {
         "year": 2026,
         "std": 3.1320952560028484e-06,
@@ -2659,16 +2857,34 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.5928740473608523,
+      "report_href": "/reports_weekly_dug/alpha_20260701_549b43e6.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8487106,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_549b43e6/values.parquet"
+      },
+      "mem_available_gb": 24.3
     },
     {
       "factor_id": "alpha_20260702_4e49a3f5",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.04134343086219593,
-      "abs_mean_rank_ic": 0.04134343086219593,
-      "rank_icir": 0.521186409285781,
+      "mean_rank_ic": 0.041343430862195954,
+      "abs_mean_rank_ic": 0.041343430862195954,
+      "rank_icir": 0.5211864092857812,
       "mean_daily_coverage": 0.9997245778400372,
       "ls_mean_one_way_turnover": 0.4755582128298825,
       "long_short_sharpe": 2.4574565106953243,
@@ -2684,7 +2900,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 65.26,
+      "elapsed_sec": 45.88,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 9.29325991161356e-11,
         "neu_cs_abs_scale_median": 0.0477243925612579,
@@ -2699,9 +2915,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.04134343086219593,
+      "display_rank_ic": 0.041343430862195954,
       "sign_flipped": false,
-      "display_rank_icir": 0.521186409285781,
+      "display_rank_icir": 0.5211864092857812,
       "panel_qc": {
         "year": 2026,
         "std": 0.07491471759168525,
@@ -2712,19 +2928,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.2342224538890063,
+      "report_href": "/reports_weekly_dug/alpha_20260702_4e49a3f5.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_4e49a3f5/values.parquet"
+      },
+      "mem_available_gb": 24.26
     },
     {
       "factor_id": "alpha_20260701_30e468c0",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.041244928498381954,
-      "abs_mean_rank_ic": 0.041244928498381954,
-      "rank_icir": 0.5704409385546427,
+      "mean_rank_ic": 0.041244928498381975,
+      "abs_mean_rank_ic": 0.041244928498381975,
+      "rank_icir": 0.5704409385546434,
       "mean_daily_coverage": 0.9997245778400372,
       "ls_mean_one_way_turnover": 0.8731274655063384,
-      "long_short_sharpe": 2.624780727628211,
+      "long_short_sharpe": 2.6247807276282096,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -2737,7 +2971,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 55.07,
+      "elapsed_sec": 38.78,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.6321852603670166e-11,
         "neu_cs_abs_scale_median": 0.025019451396901163,
@@ -2752,9 +2986,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.041244928498381954,
+      "display_rank_ic": 0.041244928498381975,
       "sign_flipped": false,
-      "display_rank_icir": 0.5704409385546427,
+      "display_rank_icir": 0.5704409385546434,
       "panel_qc": {
         "year": 2026,
         "std": 0.0423627673478585,
@@ -2765,16 +2999,34 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.2178671639610177,
+      "report_href": "/reports_weekly_dug/alpha_20260701_30e468c0.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_30e468c0/values.parquet"
+      },
+      "mem_available_gb": 24.26
     },
     {
       "factor_id": "alpha_20260702_873469e0",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.040449687606727916,
-      "abs_mean_rank_ic": 0.040449687606727916,
-      "rank_icir": 0.4864294287393515,
+      "mean_rank_ic": 0.04044968760672788,
+      "abs_mean_rank_ic": 0.04044968760672788,
+      "rank_icir": 0.4864294287393511,
       "mean_daily_coverage": 0.9997245778400372,
       "ls_mean_one_way_turnover": 0.39464455952152083,
       "long_short_sharpe": 2.0756233965326265,
@@ -2790,7 +3042,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 47.42,
+      "elapsed_sec": 42.58,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 1.1524486920322374e-10,
         "neu_cs_abs_scale_median": 0.056929125927797065,
@@ -2805,9 +3057,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.040449687606727916,
+      "display_rank_ic": 0.04044968760672788,
       "sign_flipped": false,
-      "display_rank_icir": 0.4864294287393515,
+      "display_rank_icir": 0.4864294287393511,
       "panel_qc": {
         "year": 2026,
         "std": 0.087321098198923,
@@ -2818,19 +3070,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.942350271243795,
+      "report_href": "/reports_weekly_dug/alpha_20260702_873469e0.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_873469e0/values.parquet"
+      },
+      "mem_available_gb": 24.5
     },
     {
       "factor_id": "alpha_20260703_d485a3b3",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.0402497062013202,
-      "abs_mean_rank_ic": 0.0402497062013202,
-      "rank_icir": -0.40216381592169637,
+      "mean_rank_ic": 0.040249706201320186,
+      "abs_mean_rank_ic": 0.040249706201320186,
+      "rank_icir": 0.4021638159216961,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.11609356035628346,
-      "long_short_sharpe": -2.0869632084717824,
+      "ls_mean_one_way_turnover": 0.11615749061206293,
+      "long_short_sharpe": 1.9969344611546096,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -2843,7 +3113,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 50.39,
+      "elapsed_sec": 34.94,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 5.631545983665262e-15,
         "neu_cs_abs_scale_median": 1.0293706095408892e-06,
@@ -2858,9 +3128,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.0402497062013202,
+      "display_rank_ic": 0.040249706201320186,
       "sign_flipped": true,
-      "display_rank_icir": 0.40216381592169637,
+      "display_rank_icir": 0.4021638159216961,
       "panel_qc": {
         "year": 2026,
         "std": 6.500222171041926e-06,
@@ -2871,7 +3141,96 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.8660169391178727,
+      "report_href": "/reports_weekly_dug/alpha_20260703_d485a3b3.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_d485a3b3/values.parquet"
+      },
+      "mem_available_gb": 24.75
+    },
+    {
+      "factor_id": "alpha_20260703_9e3b2920",
+      "source": "evoalpha",
+      "label": "外部中性化候选 A",
+      "ok": true,
+      "mean_rank_ic": 0.04010747442006768,
+      "abs_mean_rank_ic": 0.04010747442006768,
+      "rank_icir": 0.630529600955135,
+      "mean_daily_coverage": 0.9976542224667961,
+      "ls_mean_one_way_turnover": 0.4924895472444688,
+      "long_short_sharpe": 4.694918995187398,
+      "n_rows": 8480339,
+      "n_days": 1842,
+      "years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "elapsed_sec": 36.08,
+      "neutral_probe": {
+        "neu_cs_mean_abs_median": 7.364280296684456e-10,
+        "neu_cs_abs_scale_median": 0.20725395255088785,
+        "neu_cs_mean_rel": 3.5532641023462633e-09,
+        "looks_cs_neutral": true,
+        "raw_compared": true,
+        "raw_cs_mean_abs_median": 0.27210816283195777,
+        "raw_neu_median_daily_corr": 0.945500408423929,
+        "identical_cell_frac": 0.0,
+        "differs_from_raw": true,
+        "factor_id": "alpha_20260703_9e3b2920",
+        "source": "evoalpha",
+        "year": 2025
+      },
+      "display_rank_ic": 0.04010747442006768,
+      "sign_flipped": false,
+      "display_rank_icir": 0.630529600955135,
+      "panel_qc": {
+        "year": 2026,
+        "std": 0.25559256640888006,
+        "absmean": 0.20221059321202348,
+        "finite_frac": 0.9521811155474522,
+        "median_unique_ratio": 1.0,
+        "degenerate": false,
+        "reason": "ok"
+      },
+      "ok_for_select": true,
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.675967009439775,
+      "report_href": "/reports_weekly_dug/alpha_20260703_9e3b2920.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8480339,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_9e3b2920/values.parquet"
+      },
+      "mem_available_gb": 24.44
     },
     {
       "factor_id": "alpha_20260703_99eb3d11",
@@ -2896,7 +3255,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 57.63,
+      "elapsed_sec": 45.76,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 7.364280296684456e-10,
         "neu_cs_abs_scale_median": 0.20725395255088785,
@@ -2924,60 +3283,25 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
-    },
-    {
-      "factor_id": "alpha_20260703_9e3b2920",
-      "source": "evoalpha",
-      "label": "外部中性化候选 A",
-      "ok": true,
-      "mean_rank_ic": 0.04010747442006764,
-      "abs_mean_rank_ic": 0.04010747442006764,
-      "rank_icir": 0.6305296009551344,
-      "mean_daily_coverage": 0.9976542224667961,
-      "ls_mean_one_way_turnover": 0.4924895472444688,
-      "long_short_sharpe": 4.694918995187398,
-      "n_rows": 8480339,
-      "n_days": 1842,
-      "years": [
-        2019,
-        2020,
-        2021,
-        2022,
-        2023,
-        2024,
-        2025,
-        2026
-      ],
-      "elapsed_sec": 58.94,
-      "neutral_probe": {
-        "neu_cs_mean_abs_median": 7.364280296684456e-10,
-        "neu_cs_abs_scale_median": 0.20725395255088785,
-        "neu_cs_mean_rel": 3.5532641023462633e-09,
-        "looks_cs_neutral": true,
-        "raw_compared": true,
-        "raw_cs_mean_abs_median": 0.27210816283195777,
-        "raw_neu_median_daily_corr": 0.945500408423929,
-        "identical_cell_frac": 0.0,
-        "differs_from_raw": true,
-        "factor_id": "alpha_20260703_9e3b2920",
-        "source": "evoalpha",
-        "year": 2025
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.6759670094397747,
+      "report_href": "/reports_weekly_dug/alpha_20260703_99eb3d11.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8480339,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_99eb3d11/values.parquet"
       },
-      "display_rank_ic": 0.04010747442006764,
-      "sign_flipped": false,
-      "display_rank_icir": 0.6305296009551344,
-      "panel_qc": {
-        "year": 2026,
-        "std": 0.25559256640888006,
-        "absmean": 0.20221059321202348,
-        "finite_frac": 0.9521811155474522,
-        "median_unique_ratio": 1.0,
-        "degenerate": false,
-        "reason": "ok"
-      },
-      "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "mem_available_gb": 24.27
     },
     {
       "factor_id": "alpha_20260702_68529a49",
@@ -2986,7 +3310,7 @@
       "ok": true,
       "mean_rank_ic": 0.03903759416010873,
       "abs_mean_rank_ic": 0.03903759416010873,
-      "rank_icir": 0.5096284097561757,
+      "rank_icir": 0.5096284097561755,
       "mean_daily_coverage": 0.9950443123963603,
       "ls_mean_one_way_turnover": 0.3337122429750615,
       "long_short_sharpe": 3.3265401070879013,
@@ -3002,7 +3326,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 60.17,
+      "elapsed_sec": 37.14,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.816318057534189e-15,
         "neu_cs_abs_scale_median": 9.243608141058487e-07,
@@ -3019,7 +3343,7 @@
       },
       "display_rank_ic": 0.03903759416010873,
       "sign_flipped": false,
-      "display_rank_icir": 0.5096284097561757,
+      "display_rank_icir": 0.5096284097561755,
       "panel_qc": {
         "year": 2026,
         "std": 1.3637803741667439e-06,
@@ -3030,19 +3354,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.73347269832895,
+      "report_href": "/reports_weekly_dug/alpha_20260702_68529a49.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8459042,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_68529a49/values.parquet"
+      },
+      "mem_available_gb": 24.55
     },
     {
       "factor_id": "alpha_20260701_f487f8ba",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.03880112812829066,
-      "abs_mean_rank_ic": 0.03880112812829066,
-      "rank_icir": 0.43096265856479743,
+      "mean_rank_ic": 0.03880112812829064,
+      "abs_mean_rank_ic": 0.03880112812829064,
+      "rank_icir": 0.4309626585647973,
       "mean_daily_coverage": 0.9997245778400372,
       "ls_mean_one_way_turnover": 0.2851959026129842,
-      "long_short_sharpe": 1.6580433120033924,
+      "long_short_sharpe": 1.658043312003392,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -3055,7 +3397,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 58.74,
+      "elapsed_sec": 35.54,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 1.8507166632542038e-10,
         "neu_cs_abs_scale_median": 0.07598968123251992,
@@ -3070,9 +3412,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03880112812829066,
+      "display_rank_ic": 0.03880112812829064,
       "sign_flipped": false,
-      "display_rank_icir": 0.43096265856479743,
+      "display_rank_icir": 0.4309626585647973,
       "panel_qc": {
         "year": 2026,
         "std": 0.11232292244918413,
@@ -3083,19 +3425,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.597262754405277,
+      "report_href": "/reports_weekly_dug/alpha_20260701_f487f8ba.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_f487f8ba/values.parquet"
+      },
+      "mem_available_gb": 24.49
     },
     {
       "factor_id": "alpha_20260702_57dd1981",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.038711753125358926,
-      "abs_mean_rank_ic": 0.038711753125358926,
-      "rank_icir": -0.6931100253911253,
+      "mean_rank_ic": 0.0387117531253589,
+      "abs_mean_rank_ic": 0.0387117531253589,
+      "rank_icir": 0.6931100253911248,
       "mean_daily_coverage": 0.9975740911366364,
-      "ls_mean_one_way_turnover": 0.50459711610264,
-      "long_short_sharpe": -5.380518982424921,
+      "ls_mean_one_way_turnover": 0.5047472044084174,
+      "long_short_sharpe": 4.72599888495653,
       "n_rows": 8479683,
       "n_days": 1842,
       "years": [
@@ -3108,7 +3468,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 67.34,
+      "elapsed_sec": 36.57,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.702870510213785e-10,
         "neu_cs_abs_scale_median": 0.1758492089717793,
@@ -3123,9 +3483,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.038711753125358926,
+      "display_rank_ic": 0.0387117531253589,
       "sign_flipped": true,
-      "display_rank_icir": 0.6931100253911253,
+      "display_rank_icir": 0.6931100253911248,
       "panel_qc": {
         "year": 2026,
         "std": 0.2162512599465173,
@@ -3136,19 +3496,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.606069533064534,
+      "report_href": "/reports_weekly_dug/alpha_20260702_57dd1981.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8479683,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_57dd1981/values.parquet"
+      },
+      "mem_available_gb": 24.71
     },
     {
       "factor_id": "alpha_20260703_ef5302fe",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.0383067590455659,
-      "abs_mean_rank_ic": 0.0383067590455659,
-      "rank_icir": -0.4639405928590047,
+      "mean_rank_ic": 0.038306759045565894,
+      "abs_mean_rank_ic": 0.038306759045565894,
+      "rank_icir": 0.46394059285900463,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.7061880516463803,
-      "long_short_sharpe": -3.0623961910470756,
+      "ls_mean_one_way_turnover": 0.706266989229173,
+      "long_short_sharpe": 2.450675884294243,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -3161,7 +3539,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 52.09,
+      "elapsed_sec": 38.19,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.3160926301835083e-11,
         "neu_cs_abs_scale_median": 0.01093933088080656,
@@ -3176,9 +3554,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.0383067590455659,
+      "display_rank_ic": 0.038306759045565894,
       "sign_flipped": true,
-      "display_rank_icir": 0.4639405928590047,
+      "display_rank_icir": 0.46394059285900463,
       "panel_qc": {
         "year": 2026,
         "std": 0.05001921604044852,
@@ -3189,19 +3567,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.06535283193661,
+      "report_href": "/reports_weekly_dug/alpha_20260703_ef5302fe.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_ef5302fe/values.parquet"
+      },
+      "mem_available_gb": 24.48
     },
     {
       "factor_id": "alpha_20260703_42cca713",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.03776700251806647,
-      "abs_mean_rank_ic": 0.03776700251806647,
-      "rank_icir": -0.4174247498120734,
+      "mean_rank_ic": 0.037767002518066486,
+      "abs_mean_rank_ic": 0.037767002518066486,
+      "rank_icir": 0.41742474981207356,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.3824332336713549,
-      "long_short_sharpe": -2.623862756108776,
+      "ls_mean_one_way_turnover": 0.38252763855904753,
+      "long_short_sharpe": 2.3044362956747015,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -3214,7 +3610,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 58.37,
+      "elapsed_sec": 39.52,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.608903536595932e-11,
         "neu_cs_abs_scale_median": 0.014236886054674892,
@@ -3229,9 +3625,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03776700251806647,
+      "display_rank_ic": 0.037767002518066486,
       "sign_flipped": true,
-      "display_rank_icir": 0.4174247498120734,
+      "display_rank_icir": 0.41742474981207356,
       "panel_qc": {
         "year": 2026,
         "std": 0.06801322447991702,
@@ -3242,16 +3638,34 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.005054283591591,
+      "report_href": "/reports_weekly_dug/alpha_20260703_42cca713.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_42cca713/values.parquet"
+      },
+      "mem_available_gb": 24.42
     },
     {
       "factor_id": "alpha_20260701_61d3d4de",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.03690641617644154,
-      "abs_mean_rank_ic": 0.03690641617644154,
-      "rank_icir": 0.5990844965841133,
+      "mean_rank_ic": 0.03690641617644155,
+      "abs_mean_rank_ic": 0.03690641617644155,
+      "rank_icir": 0.5990844965841134,
       "mean_daily_coverage": 0.9997245778400372,
       "ls_mean_one_way_turnover": 1.5705584794974718,
       "long_short_sharpe": 4.054095381367827,
@@ -3267,7 +3681,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 59.11,
+      "elapsed_sec": 42.31,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.3160926301835083e-11,
         "neu_cs_abs_scale_median": 0.010700658079308728,
@@ -3282,9 +3696,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03690641617644154,
+      "display_rank_ic": 0.03690641617644155,
       "sign_flipped": false,
-      "display_rank_icir": 0.5990844965841133,
+      "display_rank_icir": 0.5990844965841134,
       "panel_qc": {
         "year": 2026,
         "std": 0.01932311491683547,
@@ -3295,19 +3709,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.880007134636916,
+      "report_href": "/reports_weekly_dug/alpha_20260701_61d3d4de.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_61d3d4de/values.parquet"
+      },
+      "mem_available_gb": 24.28
     },
     {
       "factor_id": "alpha_20260703_c6169b2e",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.036613205654544574,
-      "abs_mean_rank_ic": 0.036613205654544574,
-      "rank_icir": -0.5986067544177216,
+      "mean_rank_ic": 0.03661320565454456,
+      "abs_mean_rank_ic": 0.03661320565454456,
+      "rank_icir": 0.5986067544177213,
       "mean_daily_coverage": 0.9997245778400372,
-      "ls_mean_one_way_turnover": 1.5674750220386504,
-      "long_short_sharpe": -5.669701923308215,
+      "ls_mean_one_way_turnover": 1.5674845015058818,
+      "long_short_sharpe": 4.053506046974139,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -3320,7 +3752,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 59.75,
+      "elapsed_sec": 46.3,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.321053071963064e-11,
         "neu_cs_abs_scale_median": 0.01144109805527799,
@@ -3335,9 +3767,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.036613205654544574,
+      "display_rank_ic": 0.03661320565454456,
       "sign_flipped": true,
-      "display_rank_icir": 0.5986067544177216,
+      "display_rank_icir": 0.5986067544177213,
       "panel_qc": {
         "year": 2026,
         "std": 0.021895774797833466,
@@ -3348,19 +3780,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.862872144810135,
+      "report_href": "/reports_weekly_dug/alpha_20260703_c6169b2e.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_c6169b2e/values.parquet"
+      },
+      "mem_available_gb": 24.32
     },
     {
       "factor_id": "alpha_20260703_6c174054",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.03608381369193558,
-      "abs_mean_rank_ic": 0.03608381369193558,
-      "rank_icir": -0.6108148184121955,
+      "mean_rank_ic": 0.03608381369193557,
+      "abs_mean_rank_ic": 0.03608381369193557,
+      "rank_icir": 0.6108148184121952,
       "mean_daily_coverage": 0.9997245778400372,
-      "ls_mean_one_way_turnover": 1.555862197185096,
-      "long_short_sharpe": -5.160685193091922,
+      "ls_mean_one_way_turnover": 1.555815683969852,
+      "long_short_sharpe": 3.502768948354704,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -3373,7 +3823,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 58.44,
+      "elapsed_sec": 40.57,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.6056042740085772e-11,
         "neu_cs_abs_scale_median": 0.014055331987443648,
@@ -3388,9 +3838,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03608381369193558,
+      "display_rank_ic": 0.03608381369193557,
       "sign_flipped": true,
-      "display_rank_icir": 0.6108148184121955,
+      "display_rank_icir": 0.6108148184121952,
       "panel_qc": {
         "year": 2026,
         "std": 0.023906068955306718,
@@ -3401,16 +3851,34 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.389233954330673,
+      "report_href": "/reports_weekly_dug/alpha_20260703_6c174054.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_6c174054/values.parquet"
+      },
+      "mem_available_gb": 24.45
     },
     {
       "factor_id": "alpha_20260701_149b529b",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.03530713554928964,
-      "abs_mean_rank_ic": 0.03530713554928964,
-      "rank_icir": 0.48748149222012094,
+      "mean_rank_ic": 0.03530713554928965,
+      "abs_mean_rank_ic": 0.03530713554928965,
+      "rank_icir": 0.4874814922201212,
       "mean_daily_coverage": 0.99831923602318,
       "ls_mean_one_way_turnover": 1.166187703299761,
       "long_short_sharpe": 3.2367017196459162,
@@ -3426,7 +3894,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 61.45,
+      "elapsed_sec": 40.49,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.7144082254414457e-10,
         "neu_cs_abs_scale_median": 0.1728348634564791,
@@ -3441,9 +3909,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03530713554928964,
+      "display_rank_ic": 0.03530713554928965,
       "sign_flipped": false,
-      "display_rank_icir": 0.48748149222012094,
+      "display_rank_icir": 0.4874814922201212,
       "panel_qc": {
         "year": 2026,
         "std": 0.21099428384030705,
@@ -3454,19 +3922,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.200644727938248,
+      "report_href": "/reports_weekly_dug/alpha_20260701_149b529b.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8485234,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_149b529b/values.parquet"
+      },
+      "mem_available_gb": 24.32
     },
     {
       "factor_id": "alpha_20260702_393d28b7",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.03414955885212842,
-      "abs_mean_rank_ic": 0.03414955885212842,
-      "rank_icir": -0.3662913204576798,
+      "mean_rank_ic": 0.03414955885212843,
+      "abs_mean_rank_ic": 0.03414955885212843,
+      "rank_icir": 0.36629132045768,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.20172823190238248,
-      "long_short_sharpe": -2.144681012088093,
+      "ls_mean_one_way_turnover": 0.20178094215184483,
+      "long_short_sharpe": 1.9787436541635197,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -3479,7 +3965,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 64.12,
+      "elapsed_sec": 39.89,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 9.253583316271019e-11,
         "neu_cs_abs_scale_median": 0.0383452105417269,
@@ -3494,9 +3980,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03414955885212842,
+      "display_rank_ic": 0.03414955885212843,
       "sign_flipped": true,
-      "display_rank_icir": 0.3662913204576798,
+      "display_rank_icir": 0.36629132045768,
       "panel_qc": {
         "year": 2026,
         "std": 0.07276536747406832,
@@ -3507,16 +3993,34 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.7127760656615787,
+      "report_href": "/reports_weekly_dug/alpha_20260702_393d28b7.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_393d28b7/values.parquet"
+      },
+      "mem_available_gb": 24.22
     },
     {
       "factor_id": "alpha_20260701_741a044f",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.03383017232358803,
-      "abs_mean_rank_ic": 0.03383017232358803,
-      "rank_icir": 0.341987103285311,
+      "mean_rank_ic": 0.033830172323588065,
+      "abs_mean_rank_ic": 0.033830172323588065,
+      "rank_icir": 0.3419871032853113,
       "mean_daily_coverage": 0.9997245778400372,
       "ls_mean_one_way_turnover": 0.3912542275590604,
       "long_short_sharpe": 2.596963865652812,
@@ -3532,7 +4036,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 57.86,
+      "elapsed_sec": 46.16,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 9.258974142944965e-11,
         "neu_cs_abs_scale_median": 0.04531703477901835,
@@ -3547,9 +4051,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03383017232358803,
+      "display_rank_ic": 0.033830172323588065,
       "sign_flipped": false,
-      "display_rank_icir": 0.341987103285311,
+      "display_rank_icir": 0.3419871032853113,
       "panel_qc": {
         "year": 2026,
         "std": 0.16482296780680675,
@@ -3560,19 +4064,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.637394307460352,
+      "report_href": "/reports_weekly_dug/alpha_20260701_741a044f.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_741a044f/values.parquet"
+      },
+      "mem_available_gb": 24.2
     },
     {
       "factor_id": "alpha_20260702_b37f3fb9",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.0335460791390943,
-      "abs_mean_rank_ic": 0.0335460791390943,
-      "rank_icir": -0.5739455454061384,
+      "mean_rank_ic": 0.03354607913909432,
+      "abs_mean_rank_ic": 0.03354607913909432,
+      "rank_icir": 0.5739455454061381,
       "mean_daily_coverage": 0.9969749695396082,
-      "ls_mean_one_way_turnover": 0.29130012954428103,
-      "long_short_sharpe": -4.50427155097244,
+      "ls_mean_one_way_turnover": 0.2912758288682731,
+      "long_short_sharpe": 4.0672794800740855,
       "n_rows": 8475219,
       "n_days": 1842,
       "years": [
@@ -3585,7 +4107,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 61.81,
+      "elapsed_sec": 44.49,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 7.388528677765294e-10,
         "neu_cs_abs_scale_median": 0.25252823895060394,
@@ -3600,9 +4122,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.0335460791390943,
+      "display_rank_ic": 0.03354607913909432,
       "sign_flipped": true,
-      "display_rank_icir": 0.5739455454061384,
+      "display_rank_icir": 0.5739455454061381,
       "panel_qc": {
         "year": 2026,
         "std": 0.36603125092559685,
@@ -3613,19 +4135,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.9774774631894916,
+      "report_href": "/reports_weekly_dug/alpha_20260702_b37f3fb9.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8475219,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_b37f3fb9/values.parquet"
+      },
+      "mem_available_gb": 24.23
     },
     {
       "factor_id": "alpha_20260702_576e0a0b",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.03299228649940179,
-      "abs_mean_rank_ic": 0.03299228649940179,
-      "rank_icir": -0.3427445513307136,
+      "mean_rank_ic": 0.03299228649940185,
+      "abs_mean_rank_ic": 0.03299228649940185,
+      "rank_icir": 0.3427445513307142,
       "mean_daily_coverage": 0.9997245778400372,
-      "ls_mean_one_way_turnover": 0.4373578758653843,
-      "long_short_sharpe": -2.960948599420218,
+      "ls_mean_one_way_turnover": 0.43731296455066004,
+      "long_short_sharpe": 2.634182506999248,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -3638,7 +4178,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 68.93,
+      "elapsed_sec": 37.68,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 9.258974142944965e-11,
         "neu_cs_abs_scale_median": 0.04338314930416628,
@@ -3653,9 +4193,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03299228649940179,
+      "display_rank_ic": 0.03299228649940185,
       "sign_flipped": true,
-      "display_rank_icir": 0.3427445513307136,
+      "display_rank_icir": 0.3427445513307142,
       "panel_qc": {
         "year": 2026,
         "std": 0.08441546785502935,
@@ -3666,19 +4206,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.588064600051662,
+      "report_href": "/reports_weekly_dug/alpha_20260702_576e0a0b.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_576e0a0b/values.parquet"
+      },
+      "mem_available_gb": 24.5
     },
     {
       "factor_id": "alpha_20260702_a1c128d5",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.03266357065152103,
-      "abs_mean_rank_ic": 0.03266357065152103,
-      "rank_icir": 0.5501594997955648,
+      "mean_rank_ic": 0.03266357065152101,
+      "abs_mean_rank_ic": 0.03266357065152101,
+      "rank_icir": 0.5501594997955643,
       "mean_daily_coverage": 0.998040975424206,
       "ls_mean_one_way_turnover": 0.3485358994622082,
-      "long_short_sharpe": 4.690828255205516,
+      "long_short_sharpe": 4.690828255205517,
       "n_rows": 8483649,
       "n_days": 1842,
       "years": [
@@ -3691,7 +4249,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 67.22,
+      "elapsed_sec": 38.35,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 5.577042716531366e-10,
         "neu_cs_abs_scale_median": 0.2398197167491659,
@@ -3706,9 +4264,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03266357065152103,
+      "display_rank_ic": 0.03266357065152101,
       "sign_flipped": false,
-      "display_rank_icir": 0.5501594997955648,
+      "display_rank_icir": 0.5501594997955643,
       "panel_qc": {
         "year": 2026,
         "std": 0.2752144521186944,
@@ -3719,19 +4277,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.412104572975959,
+      "report_href": "/reports_weekly_dug/alpha_20260702_a1c128d5.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8483649,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_a1c128d5/values.parquet"
+      },
+      "mem_available_gb": 24.24
     },
     {
       "factor_id": "alpha_20260701_cf427acf",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.03217327196992793,
-      "abs_mean_rank_ic": 0.03217327196992793,
-      "rank_icir": -0.56345818557122,
+      "mean_rank_ic": 0.03217327196992791,
+      "abs_mean_rank_ic": 0.03217327196992791,
+      "rank_icir": 0.5634581855712196,
       "mean_daily_coverage": 0.9980311521264262,
-      "ls_mean_one_way_turnover": 0.34496819791766214,
-      "long_short_sharpe": -4.940698720202294,
+      "ls_mean_one_way_turnover": 0.3449615260815676,
+      "long_short_sharpe": 4.469832174841832,
       "n_rows": 8483562,
       "n_days": 1842,
       "years": [
@@ -3744,7 +4320,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 60.8,
+      "elapsed_sec": 45.75,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 7.372820132189872e-10,
         "neu_cs_abs_scale_median": 0.2524459442838989,
@@ -3759,9 +4335,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03217327196992793,
+      "display_rank_ic": 0.03217327196992791,
       "sign_flipped": true,
-      "display_rank_icir": 0.56345818557122,
+      "display_rank_icir": 0.5634581855712196,
       "panel_qc": {
         "year": 2026,
         "std": 0.35407254013856093,
@@ -3772,19 +4348,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.370171071984133,
+      "report_href": "/reports_weekly_dug/alpha_20260701_cf427acf.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8483562,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_cf427acf/values.parquet"
+      },
+      "mem_available_gb": 24.48
     },
     {
       "factor_id": "alpha_20260702_40002fd7",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.03217305199331802,
-      "abs_mean_rank_ic": 0.03217305199331802,
-      "rank_icir": -0.5634552070774383,
+      "mean_rank_ic": 0.03217305199331801,
+      "abs_mean_rank_ic": 0.03217305199331801,
+      "rank_icir": 0.5634552070774381,
       "mean_daily_coverage": 0.9980311521264262,
-      "ls_mean_one_way_turnover": 0.34497077216564415,
-      "long_short_sharpe": -4.94057200559489,
+      "ls_mean_one_way_turnover": 0.34496449897307035,
+      "long_short_sharpe": 4.469984466832838,
       "n_rows": 8483562,
       "n_days": 1842,
       "years": [
@@ -3797,7 +4391,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 55.28,
+      "elapsed_sec": 46.84,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.70863034726554e-10,
         "neu_cs_abs_scale_median": 0.2524456139742492,
@@ -3812,9 +4406,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03217305199331802,
+      "display_rank_ic": 0.03217305199331801,
       "sign_flipped": true,
-      "display_rank_icir": 0.5634552070774383,
+      "display_rank_icir": 0.5634552070774381,
       "panel_qc": {
         "year": 2026,
         "std": 0.35407236088290134,
@@ -3825,19 +4419,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.3702743757316433,
+      "report_href": "/reports_weekly_dug/alpha_20260702_40002fd7.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8483562,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_40002fd7/values.parquet"
+      },
+      "mem_available_gb": 24.14
     },
     {
       "factor_id": "alpha_20260702_efd125a8",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.031156884292078673,
-      "abs_mean_rank_ic": 0.031156884292078673,
-      "rank_icir": -0.5872351179438575,
+      "mean_rank_ic": 0.031156884292078676,
+      "abs_mean_rank_ic": 0.031156884292078676,
+      "rank_icir": 0.5872351179438577,
       "mean_daily_coverage": 0.9978230380778117,
-      "ls_mean_one_way_turnover": 0.3394905158361131,
-      "long_short_sharpe": -3.632736653312988,
+      "ls_mean_one_way_turnover": 0.33951554606897144,
+      "long_short_sharpe": 3.1098611046545193,
       "n_rows": 8481922,
       "n_days": 1842,
       "years": [
@@ -3850,7 +4462,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 58.7,
+      "elapsed_sec": 51.63,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 7.402866653016815e-10,
         "neu_cs_abs_scale_median": 0.2513826888016757,
@@ -3865,9 +4477,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.031156884292078673,
+      "display_rank_ic": 0.031156884292078676,
       "sign_flipped": true,
-      "display_rank_icir": 0.5872351179438575,
+      "display_rank_icir": 0.5872351179438577,
       "panel_qc": {
         "year": 2026,
         "std": 0.32369941901903754,
@@ -3878,19 +4490,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.4361163102782706,
+      "report_href": "/reports_weekly_dug/alpha_20260702_efd125a8.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8481922,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_efd125a8/values.parquet"
+      },
+      "mem_available_gb": 24.07
     },
     {
       "factor_id": "alpha_20260701_1958c186",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.031147887046761056,
+      "mean_rank_ic": 0.031147887046761056,
       "abs_mean_rank_ic": 0.031147887046761056,
-      "rank_icir": -0.6082997993708134,
+      "rank_icir": 0.6082997993708132,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.41598690871138316,
-      "long_short_sharpe": -4.489516965550239,
+      "ls_mean_one_way_turnover": 0.41603052092111,
+      "long_short_sharpe": 3.868480507633638,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -3903,7 +4533,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 61.32,
+      "elapsed_sec": 43.7,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.7760749254923667e-10,
         "neu_cs_abs_scale_median": 0.17704103060489962,
@@ -3920,7 +4550,7 @@
       },
       "display_rank_ic": 0.031147887046761056,
       "sign_flipped": true,
-      "display_rank_icir": 0.6082997993708134,
+      "display_rank_icir": 0.6082997993708132,
       "panel_qc": {
         "year": 2026,
         "std": 0.22042731788636238,
@@ -3931,18 +4561,36 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.8846174822212414,
+      "report_href": "/reports_weekly_dug/alpha_20260701_1958c186.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_1958c186/values.parquet"
+      },
+      "mem_available_gb": 24.1
     },
     {
       "factor_id": "alpha_20260701_673406ba",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.031089228579894358,
-      "abs_mean_rank_ic": 0.031089228579894358,
-      "rank_icir": 0.4483970528429036,
+      "mean_rank_ic": 0.031089228579894376,
+      "abs_mean_rank_ic": 0.031089228579894376,
+      "rank_icir": 0.4483970528429035,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 1.5372846196552854,
+      "ls_mean_one_way_turnover": 1.5372846196552856,
       "long_short_sharpe": 3.6212761193687255,
       "n_rows": 8494590,
       "n_days": 1842,
@@ -3956,7 +4604,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 54.5,
+      "elapsed_sec": 43.81,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.717303964645424e-10,
         "neu_cs_abs_scale_median": 0.22543293423496086,
@@ -3971,9 +4619,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.031089228579894358,
+      "display_rank_ic": 0.031089228579894376,
       "sign_flipped": false,
-      "display_rank_icir": 0.4483970528429036,
+      "display_rank_icir": 0.4483970528429035,
       "panel_qc": {
         "year": 2026,
         "std": 0.26323793468972534,
@@ -3984,18 +4632,36 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.998446052192599,
+      "report_href": "/reports_weekly_dug/alpha_20260701_673406ba.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_673406ba/values.parquet"
+      },
+      "mem_available_gb": 24.36
     },
     {
       "factor_id": "alpha_20260701_75f1066f",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.03097235213204808,
-      "abs_mean_rank_ic": 0.03097235213204808,
-      "rank_icir": 0.5497791840693642,
+      "mean_rank_ic": 0.03097235213204809,
+      "abs_mean_rank_ic": 0.03097235213204809,
+      "rank_icir": 0.5497791840693648,
       "mean_daily_coverage": 0.9985534725586732,
-      "ls_mean_one_way_turnover": 0.93811944720558,
+      "ls_mean_one_way_turnover": 0.9381194472055799,
       "long_short_sharpe": 3.2381776326934384,
       "n_rows": 8487106,
       "n_days": 1842,
@@ -4009,7 +4675,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 61.3,
+      "elapsed_sec": 50.7,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 1.4139055120395046e-15,
         "neu_cs_abs_scale_median": 7.627557521505173e-07,
@@ -4024,9 +4690,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.03097235213204808,
+      "display_rank_ic": 0.03097235213204809,
       "sign_flipped": false,
-      "display_rank_icir": 0.5497791840693642,
+      "display_rank_icir": 0.5497791840693648,
       "panel_qc": {
         "year": 2026,
         "std": 1.491745576485038e-06,
@@ -4037,19 +4703,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.9295347868505222,
+      "report_href": "/reports_weekly_dug/alpha_20260701_75f1066f.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8487106,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_75f1066f/values.parquet"
+      },
+      "mem_available_gb": 24.18
     },
     {
       "factor_id": "alpha_20260702_844ceabc",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.0308686515026595,
-      "abs_mean_rank_ic": 0.0308686515026595,
-      "rank_icir": 0.30077499912865613,
+      "mean_rank_ic": 0.030868651502659567,
+      "abs_mean_rank_ic": 0.030868651502659567,
+      "rank_icir": 0.3007749991286567,
       "mean_daily_coverage": 0.9997245778400372,
       "ls_mean_one_way_turnover": 0.09894076150105181,
-      "long_short_sharpe": 1.7279359179507847,
+      "long_short_sharpe": 1.7279359179507856,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -4062,7 +4746,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 47.01,
+      "elapsed_sec": 40.19,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 1.8507166632542038e-10,
         "neu_cs_abs_scale_median": 0.06885378268185685,
@@ -4077,9 +4761,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.0308686515026595,
+      "display_rank_ic": 0.030868651502659567,
       "sign_flipped": false,
-      "display_rank_icir": 0.30077499912865613,
+      "display_rank_icir": 0.3007749991286567,
       "panel_qc": {
         "year": 2026,
         "std": 0.1276507137228527,
@@ -4090,19 +4774,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.5281760741497608,
+      "report_href": "/reports_weekly_dug/alpha_20260702_844ceabc.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_844ceabc/values.parquet"
+      },
+      "mem_available_gb": 24.32
     },
     {
       "factor_id": "alpha_20260701_57e30cff",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.030777295498247533,
-      "abs_mean_rank_ic": 0.030777295498247533,
-      "rank_icir": -0.6379213106994382,
+      "mean_rank_ic": 0.030777295498247505,
+      "abs_mean_rank_ic": 0.030777295498247505,
+      "rank_icir": 0.637921310699438,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.2749167329368799,
-      "long_short_sharpe": -4.789825171349293,
+      "ls_mean_one_way_turnover": 0.2749667675110162,
+      "long_short_sharpe": 4.347824856714462,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -4115,7 +4817,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 63.3,
+      "elapsed_sec": 42.13,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 1.8528741041468066e-10,
         "neu_cs_abs_scale_median": 0.13845960212101102,
@@ -4130,9 +4832,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.030777295498247533,
+      "display_rank_ic": 0.030777295498247505,
       "sign_flipped": true,
-      "display_rank_icir": 0.6379213106994382,
+      "display_rank_icir": 0.637921310699438,
       "panel_qc": {
         "year": 2026,
         "std": 0.17550202056149553,
@@ -4143,15 +4845,33 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.052460684697426,
+      "report_href": "/reports_weekly_dug/alpha_20260701_57e30cff.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_57e30cff/values.parquet"
+      },
+      "mem_available_gb": 24.21
     },
     {
       "factor_id": "alpha_20260702_581774bc",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.030496677080527584,
-      "abs_mean_rank_ic": 0.030496677080527584,
+      "mean_rank_ic": 0.030496677080527577,
+      "abs_mean_rank_ic": 0.030496677080527577,
       "rank_icir": 0.40151388538235916,
       "mean_daily_coverage": 0.9994908356073484,
       "ls_mean_one_way_turnover": 1.3355253488723937,
@@ -4168,7 +4888,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 64.19,
+      "elapsed_sec": 39.7,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.611577786306498e-11,
         "neu_cs_abs_scale_median": 0.01815059080600271,
@@ -4183,7 +4903,7 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.030496677080527584,
+      "display_rank_ic": 0.030496677080527577,
       "sign_flipped": false,
       "display_rank_icir": 0.40151388538235916,
       "panel_qc": {
@@ -4196,19 +4916,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.414037262188236,
+      "report_href": "/reports_weekly_dug/alpha_20260702_581774bc.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_581774bc/values.parquet"
+      },
+      "mem_available_gb": 24.45
     },
     {
       "factor_id": "alpha_20260702_6d5f848e",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.030401890457948243,
-      "abs_mean_rank_ic": 0.030401890457948243,
-      "rank_icir": -0.43828891577627854,
+      "mean_rank_ic": 0.03040189045794825,
+      "abs_mean_rank_ic": 0.03040189045794825,
+      "rank_icir": 0.43828891577627854,
       "mean_daily_coverage": 0.9960311500137882,
-      "ls_mean_one_way_turnover": 0.9501237369927374,
-      "long_short_sharpe": -4.752379583637324,
+      "ls_mean_one_way_turnover": 0.9501422379697555,
+      "long_short_sharpe": 3.6190615761399703,
       "n_rows": 8467201,
       "n_days": 1842,
       "years": [
@@ -4221,7 +4959,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 57.26,
+      "elapsed_sec": 47.64,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.7050285062179e-10,
         "neu_cs_abs_scale_median": 0.19286857965040657,
@@ -4236,7 +4974,7 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.030401890457948243,
+      "display_rank_ic": 0.03040189045794825,
       "sign_flipped": true,
       "display_rank_icir": 0.43828891577627854,
       "panel_qc": {
@@ -4249,19 +4987,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.2013911634251286,
+      "report_href": "/reports_weekly_dug/alpha_20260702_6d5f848e.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8467201,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_6d5f848e/values.parquet"
+      },
+      "mem_available_gb": 24.09
     },
     {
       "factor_id": "alpha_20260701_726efa4d",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.029622792258442658,
-      "abs_mean_rank_ic": 0.029622792258442658,
-      "rank_icir": -0.32925306992793846,
+      "mean_rank_ic": 0.029622792258442603,
+      "abs_mean_rank_ic": 0.029622792258442603,
+      "rank_icir": 0.3292530699279378,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.7089469372552526,
-      "long_short_sharpe": -3.295415341230512,
+      "ls_mean_one_way_turnover": 0.7088192049741541,
+      "long_short_sharpe": 2.63416567230739,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -4274,7 +5030,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 52.63,
+      "elapsed_sec": 44.21,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 1.4802861159068925e-09,
         "neu_cs_abs_scale_median": 0.822826123906053,
@@ -4289,9 +5045,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.029622792258442658,
+      "display_rank_ic": 0.029622792258442603,
       "sign_flipped": true,
-      "display_rank_icir": 0.32925306992793846,
+      "display_rank_icir": 0.3292530699279378,
       "panel_qc": {
         "year": 2026,
         "std": 1.0542809928741088,
@@ -4302,7 +5058,25 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.0447576026458094,
+      "report_href": "/reports_weekly_dug/alpha_20260701_726efa4d.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_726efa4d/values.parquet"
+      },
+      "mem_available_gb": 24.04
     },
     {
       "factor_id": "alpha_20260703_3962e26e",
@@ -4311,7 +5085,7 @@
       "ok": true,
       "mean_rank_ic": 0.029567552187327453,
       "abs_mean_rank_ic": 0.029567552187327453,
-      "rank_icir": 0.33256768318943036,
+      "rank_icir": 0.3325676831894304,
       "mean_daily_coverage": 0.9973824142222805,
       "ls_mean_one_way_turnover": 0.5565895672890148,
       "long_short_sharpe": 2.7477811898902798,
@@ -4327,7 +5101,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 61.11,
+      "elapsed_sec": 42.72,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 9.266171163702097e-11,
         "neu_cs_abs_scale_median": 0.04843709102022572,
@@ -4344,7 +5118,7 @@
       },
       "display_rank_ic": 0.029567552187327453,
       "sign_flipped": false,
-      "display_rank_icir": 0.33256768318943036,
+      "display_rank_icir": 0.3325676831894304,
       "panel_qc": {
         "year": 2026,
         "std": 0.17548338096861335,
@@ -4355,69 +5129,34 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
-    },
-    {
-      "factor_id": "alpha_20260702_f50c69da",
-      "source": "evoalpha",
-      "label": "外部中性化候选 A",
-      "ok": true,
-      "mean_rank_ic": 0.029359440246233524,
-      "abs_mean_rank_ic": 0.029359440246233524,
-      "rank_icir": 0.43919341755490665,
-      "mean_daily_coverage": 0.997619394595899,
-      "ls_mean_one_way_turnover": 1.4902397215309413,
-      "long_short_sharpe": 3.6881248828270907,
-      "n_rows": 8480052,
-      "n_days": 1842,
-      "years": [
-        2019,
-        2020,
-        2021,
-        2022,
-        2023,
-        2024,
-        2025,
-        2026
-      ],
-      "elapsed_sec": 52.07,
-      "neutral_probe": {
-        "neu_cs_mean_abs_median": 3.7050285062179e-10,
-        "neu_cs_abs_scale_median": 0.22690801037508138,
-        "neu_cs_mean_rel": 1.632832838335433e-09,
-        "looks_cs_neutral": true,
-        "raw_compared": true,
-        "raw_cs_mean_abs_median": 0.500000000620818,
-        "raw_neu_median_daily_corr": 0.9329636468817274,
-        "identical_cell_frac": 0.0,
-        "differs_from_raw": true,
-        "factor_id": "alpha_20260702_f50c69da",
-        "source": "evoalpha",
-        "year": 2025
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.5301141713572854,
+      "report_href": "/reports_weekly_dug/alpha_20260703_3962e26e.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8477751,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_3962e26e/values.parquet"
       },
-      "display_rank_ic": 0.029359440246233524,
-      "sign_flipped": false,
-      "display_rank_icir": 0.43919341755490665,
-      "panel_qc": {
-        "year": 2026,
-        "std": 0.2638677271735004,
-        "absmean": 0.22044570986782178,
-        "finite_frac": 0.9521439323419522,
-        "median_unique_ratio": 1.0,
-        "degenerate": false,
-        "reason": "ok"
-      },
-      "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "mem_available_gb": 24.25
     },
     {
       "factor_id": "alpha_20260702_1f8103b7",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.02935944024623352,
-      "abs_mean_rank_ic": 0.02935944024623352,
-      "rank_icir": 0.43919341755490676,
+      "mean_rank_ic": 0.029359440246233496,
+      "abs_mean_rank_ic": 0.029359440246233496,
+      "rank_icir": 0.43919341755490604,
       "mean_daily_coverage": 0.997619394595899,
       "ls_mean_one_way_turnover": 1.4902397215309413,
       "long_short_sharpe": 3.6881248828270907,
@@ -4433,7 +5172,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 57.8,
+      "elapsed_sec": 38.82,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.7050285062179e-10,
         "neu_cs_abs_scale_median": 0.22690801037508138,
@@ -4448,9 +5187,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.02935944024623352,
+      "display_rank_ic": 0.029359440246233496,
       "sign_flipped": false,
-      "display_rank_icir": 0.43919341755490676,
+      "display_rank_icir": 0.43919341755490604,
       "panel_qc": {
         "year": 2026,
         "std": 0.2638677271735004,
@@ -4461,19 +5200,108 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.013011260662121,
+      "report_href": "/reports_weekly_dug/alpha_20260702_1f8103b7.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8480052,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_1f8103b7/values.parquet"
+      },
+      "mem_available_gb": 24.48
+    },
+    {
+      "factor_id": "alpha_20260702_f50c69da",
+      "source": "evoalpha",
+      "label": "外部中性化候选 A",
+      "ok": true,
+      "mean_rank_ic": 0.02935944024623349,
+      "abs_mean_rank_ic": 0.02935944024623349,
+      "rank_icir": 0.43919341755490604,
+      "mean_daily_coverage": 0.997619394595899,
+      "ls_mean_one_way_turnover": 1.490239721530941,
+      "long_short_sharpe": 3.6881248828270907,
+      "n_rows": 8480052,
+      "n_days": 1842,
+      "years": [
+        2019,
+        2020,
+        2021,
+        2022,
+        2023,
+        2024,
+        2025,
+        2026
+      ],
+      "elapsed_sec": 41.32,
+      "neutral_probe": {
+        "neu_cs_mean_abs_median": 3.7050285062179e-10,
+        "neu_cs_abs_scale_median": 0.22690801037508138,
+        "neu_cs_mean_rel": 1.632832838335433e-09,
+        "looks_cs_neutral": true,
+        "raw_compared": true,
+        "raw_cs_mean_abs_median": 0.500000000620818,
+        "raw_neu_median_daily_corr": 0.9329636468817274,
+        "identical_cell_frac": 0.0,
+        "differs_from_raw": true,
+        "factor_id": "alpha_20260702_f50c69da",
+        "source": "evoalpha",
+        "year": 2025
+      },
+      "display_rank_ic": 0.02935944024623349,
+      "sign_flipped": false,
+      "display_rank_icir": 0.43919341755490604,
+      "panel_qc": {
+        "year": 2026,
+        "std": 0.2638677271735004,
+        "absmean": 0.22044570986782178,
+        "finite_frac": 0.9521439323419522,
+        "median_unique_ratio": 1.0,
+        "degenerate": false,
+        "reason": "ok"
+      },
+      "ok_for_select": true,
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.013011260662121,
+      "report_href": "/reports_weekly_dug/alpha_20260702_f50c69da.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8480052,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f50c69da/values.parquet"
+      },
+      "mem_available_gb": 24.56
     },
     {
       "factor_id": "alpha_20260701_5685f3e9",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.029144261533396745,
-      "abs_mean_rank_ic": 0.029144261533396745,
-      "rank_icir": 0.2943387007648626,
+      "mean_rank_ic": 0.02914426153339675,
+      "abs_mean_rank_ic": 0.02914426153339675,
+      "rank_icir": 0.29433870076486274,
       "mean_daily_coverage": 0.9994908356073484,
       "ls_mean_one_way_turnover": 0.648068669796437,
-      "long_short_sharpe": 1.5586826741438207,
+      "long_short_sharpe": 1.5586826741438204,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -4486,7 +5314,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 56.01,
+      "elapsed_sec": 41.98,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.6921188328875587e-10,
         "neu_cs_abs_scale_median": 0.13999971205985173,
@@ -4501,9 +5329,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.029144261533396745,
+      "display_rank_ic": 0.02914426153339675,
       "sign_flipped": false,
-      "display_rank_icir": 0.2943387007648626,
+      "display_rank_icir": 0.29433870076486274,
       "panel_qc": {
         "year": 2026,
         "std": 0.17058311029118298,
@@ -4514,19 +5342,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.014596661608483,
+      "report_href": "/reports_weekly_dug/alpha_20260701_5685f3e9.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_5685f3e9/values.parquet"
+      },
+      "mem_available_gb": 24.44
     },
     {
       "factor_id": "alpha_20260701_5f690b22",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.028980571521416042,
-      "abs_mean_rank_ic": 0.028980571521416042,
-      "rank_icir": -0.32947207281953184,
+      "mean_rank_ic": 0.02898057152141599,
+      "abs_mean_rank_ic": 0.02898057152141599,
+      "rank_icir": 0.3294720728195312,
       "mean_daily_coverage": 0.9973824142222805,
-      "ls_mean_one_way_turnover": 0.5558341354675626,
-      "long_short_sharpe": -3.2764844811205434,
+      "ls_mean_one_way_turnover": 0.5558606424215699,
+      "long_short_sharpe": 2.828464120103733,
       "n_rows": 8477751,
       "n_days": 1842,
       "years": [
@@ -4539,7 +5385,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 45.64,
+      "elapsed_sec": 39.42,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 9.29325991161356e-11,
         "neu_cs_abs_scale_median": 0.051677167367669606,
@@ -4554,9 +5400,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.028980571521416042,
+      "display_rank_ic": 0.02898057152141599,
       "sign_flipped": true,
-      "display_rank_icir": 0.32947207281953184,
+      "display_rank_icir": 0.3294720728195312,
       "panel_qc": {
         "year": 2026,
         "std": 0.09945957290423992,
@@ -4567,16 +5413,34 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.539777948011369,
+      "report_href": "/reports_weekly_dug/alpha_20260701_5f690b22.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8477751,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_5f690b22/values.parquet"
+      },
+      "mem_available_gb": 24.25
     },
     {
       "factor_id": "alpha_20260702_9443699f",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.028583374197691774,
-      "abs_mean_rank_ic": 0.028583374197691774,
-      "rank_icir": 0.4153157941084048,
+      "mean_rank_ic": 0.02858337419769181,
+      "abs_mean_rank_ic": 0.02858337419769181,
+      "rank_icir": 0.4153157941084053,
       "mean_daily_coverage": 0.9985534725586732,
       "ls_mean_one_way_turnover": 0.8555151355779707,
       "long_short_sharpe": 3.4996048949447145,
@@ -4592,7 +5456,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 49.26,
+      "elapsed_sec": 48.52,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 1.7424861900594557e-11,
         "neu_cs_abs_scale_median": 0.007150993961119133,
@@ -4607,9 +5471,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.028583374197691774,
+      "display_rank_ic": 0.02858337419769181,
       "sign_flipped": false,
-      "display_rank_icir": 0.4153157941084048,
+      "display_rank_icir": 0.4153157941084053,
       "panel_qc": {
         "year": 2026,
         "std": 0.014785090572906535,
@@ -4620,16 +5484,34 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.908018045311575,
+      "report_href": "/reports_weekly_dug/alpha_20260702_9443699f.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8487106,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_9443699f/values.parquet"
+      },
+      "mem_available_gb": 24.34
     },
     {
       "factor_id": "alpha_20260702_89d0956b",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.027559067691231967,
-      "abs_mean_rank_ic": 0.027559067691231967,
-      "rank_icir": 0.2744048032930858,
+      "mean_rank_ic": 0.02755906769123201,
+      "abs_mean_rank_ic": 0.02755906769123201,
+      "rank_icir": 0.27440480329308614,
       "mean_daily_coverage": 0.9994908356073484,
       "ls_mean_one_way_turnover": 0.296670416839701,
       "long_short_sharpe": 2.109671552530775,
@@ -4645,7 +5527,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 47.5,
+      "elapsed_sec": 38.91,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 1.8507166632542038e-10,
         "neu_cs_abs_scale_median": 0.06280012077768993,
@@ -4660,9 +5542,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.027559067691231967,
+      "display_rank_ic": 0.02755906769123201,
       "sign_flipped": false,
-      "display_rank_icir": 0.2744048032930858,
+      "display_rank_icir": 0.27440480329308614,
       "panel_qc": {
         "year": 2026,
         "std": 0.22209327784204436,
@@ -4673,19 +5555,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.1424925784423126,
+      "report_href": "/reports_weekly_dug/alpha_20260702_89d0956b.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_89d0956b/values.parquet"
+      },
+      "mem_available_gb": 24.27
     },
     {
       "factor_id": "alpha_20260702_f0fd9be3",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.02728909742521044,
-      "abs_mean_rank_ic": 0.02728909742521044,
-      "rank_icir": -0.2683170288803523,
+      "mean_rank_ic": 0.02728909742521043,
+      "abs_mean_rank_ic": 0.02728909742521043,
+      "rank_icir": 0.26831702888035214,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.15434999590944834,
-      "long_short_sharpe": -1.2870053484901633,
+      "ls_mean_one_way_turnover": 0.15442196510073017,
+      "long_short_sharpe": 1.1547871044590383,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -4698,7 +5598,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 55.75,
+      "elapsed_sec": 40.23,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.6303860051777335e-11,
         "neu_cs_abs_scale_median": 0.021928079105737405,
@@ -4713,9 +5613,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.02728909742521044,
+      "display_rank_ic": 0.02728909742521043,
       "sign_flipped": true,
-      "display_rank_icir": 0.2683170288803523,
+      "display_rank_icir": 0.26831702888035214,
       "panel_qc": {
         "year": 2026,
         "std": 0.09316592010438522,
@@ -4726,19 +5626,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.0133464952731093,
+      "report_href": "/reports_weekly_dug/alpha_20260702_f0fd9be3.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f0fd9be3/values.parquet"
+      },
+      "mem_available_gb": 24.23
     },
     {
       "factor_id": "alpha_20260701_2f5c25fe",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.02721395469092137,
-      "abs_mean_rank_ic": 0.02721395469092137,
-      "rank_icir": 0.29940169520214177,
+      "mean_rank_ic": 0.027213954690921364,
+      "abs_mean_rank_ic": 0.027213954690921364,
+      "rank_icir": 0.2994016952021418,
       "mean_daily_coverage": 0.9985534725586732,
       "ls_mean_one_way_turnover": 0.7065041463568779,
-      "long_short_sharpe": 0.768355123467697,
+      "long_short_sharpe": 0.7683551234676966,
       "n_rows": 8487106,
       "n_days": 1842,
       "years": [
@@ -4751,7 +5669,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 55.15,
+      "elapsed_sec": 43.31,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.703589657177986e-10,
         "neu_cs_abs_scale_median": 0.17009813401698437,
@@ -4766,9 +5684,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.02721395469092137,
+      "display_rank_ic": 0.027213954690921364,
       "sign_flipped": false,
-      "display_rank_icir": 0.29940169520214177,
+      "display_rank_icir": 0.2994016952021418,
       "panel_qc": {
         "year": 2026,
         "std": 0.20358760408058096,
@@ -4779,18 +5697,36 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 0.49523826575739344,
+      "report_href": "/reports_weekly_dug/alpha_20260701_2f5c25fe.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8487106,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_2f5c25fe/values.parquet"
+      },
+      "mem_available_gb": 24.14
     },
     {
       "factor_id": "alpha_20260701_463d42d0",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.02710457492154188,
-      "abs_mean_rank_ic": 0.02710457492154188,
-      "rank_icir": 0.3065162663213147,
+      "mean_rank_ic": 0.027104574921541842,
+      "abs_mean_rank_ic": 0.027104574921541842,
+      "rank_icir": 0.30651626632131435,
       "mean_daily_coverage": 0.999022176440134,
-      "ls_mean_one_way_turnover": 0.8806309805451158,
+      "ls_mean_one_way_turnover": 0.8806309805451155,
       "long_short_sharpe": 2.232856059646698,
       "n_rows": 8490848,
       "n_days": 1842,
@@ -4804,7 +5740,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 57.66,
+      "elapsed_sec": 43.49,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.6520697016827484e-11,
         "neu_cs_abs_scale_median": 0.030003842102631482,
@@ -4819,9 +5755,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.02710457492154188,
+      "display_rank_ic": 0.027104574921541842,
       "sign_flipped": false,
-      "display_rank_icir": 0.3065162663213147,
+      "display_rank_icir": 0.30651626632131435,
       "panel_qc": {
         "year": 2026,
         "std": 0.09812625994405058,
@@ -4832,19 +5768,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.063517742172979,
+      "report_href": "/reports_weekly_dug/alpha_20260701_463d42d0.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8490848,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_463d42d0/values.parquet"
+      },
+      "mem_available_gb": 24.24
     },
     {
       "factor_id": "alpha_20260701_abf0beb7",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.026965116530962712,
-      "abs_mean_rank_ic": 0.026965116530962712,
-      "rank_icir": -0.30329614709601405,
+      "mean_rank_ic": 0.02696511653096264,
+      "abs_mean_rank_ic": 0.02696511653096264,
+      "rank_icir": 0.3032961470960132,
       "mean_daily_coverage": 0.9985534725586732,
-      "ls_mean_one_way_turnover": 0.7622850942890709,
-      "long_short_sharpe": -3.2220015430348745,
+      "ls_mean_one_way_turnover": 0.7623635379630775,
+      "long_short_sharpe": 2.6179897066007727,
       "n_rows": 8487106,
       "n_days": 1842,
       "years": [
@@ -4857,7 +5811,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 58.43,
+      "elapsed_sec": 42.78,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 6.932115992341892e-11,
         "neu_cs_abs_scale_median": 0.035811052906627,
@@ -4872,9 +5826,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.026965116530962712,
+      "display_rank_ic": 0.02696511653096264,
       "sign_flipped": true,
-      "display_rank_icir": 0.30329614709601405,
+      "display_rank_icir": 0.3032961470960132,
       "panel_qc": {
         "year": 2026,
         "std": 0.06891539541106981,
@@ -4885,19 +5839,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.413450736262328,
+      "report_href": "/reports_weekly_dug/alpha_20260701_abf0beb7.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8487106,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_abf0beb7/values.parquet"
+      },
+      "mem_available_gb": 24.36
     },
     {
       "factor_id": "alpha_20260701_d332134b",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.025876864268361752,
-      "abs_mean_rank_ic": 0.025876864268361752,
-      "rank_icir": -0.2926403668321514,
+      "mean_rank_ic": 0.02587686426836177,
+      "abs_mean_rank_ic": 0.02587686426836177,
+      "rank_icir": 0.2926403668321517,
       "mean_daily_coverage": 0.9992567532305295,
-      "ls_mean_one_way_turnover": 0.48076243211682046,
-      "long_short_sharpe": -2.108583198383735,
+      "ls_mean_one_way_turnover": 0.4807691951670065,
+      "long_short_sharpe": 1.68654777051676,
       "n_rows": 8492720,
       "n_days": 1842,
       "years": [
@@ -4910,7 +5882,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 60.09,
+      "elapsed_sec": 37.86,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 1.8615543828648384e-10,
         "neu_cs_abs_scale_median": 0.1303296070273231,
@@ -4925,9 +5897,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.025876864268361752,
+      "display_rank_ic": 0.02587686426836177,
       "sign_flipped": true,
-      "display_rank_icir": 0.2926403668321514,
+      "display_rank_icir": 0.2926403668321517,
       "panel_qc": {
         "year": 2026,
         "std": 0.18908766706814273,
@@ -4938,19 +5910,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.396198745052759,
+      "report_href": "/reports_weekly_dug/alpha_20260701_d332134b.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8492720,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_d332134b/values.parquet"
+      },
+      "mem_available_gb": 24.32
     },
     {
       "factor_id": "alpha_20260702_21fb502a",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.024158827627327926,
-      "abs_mean_rank_ic": 0.024158827627327926,
-      "rank_icir": -0.26391869225096193,
+      "mean_rank_ic": 0.024158827627327923,
+      "abs_mean_rank_ic": 0.024158827627327923,
+      "rank_icir": 0.26391869225096176,
       "mean_daily_coverage": 0.9997245778400372,
-      "ls_mean_one_way_turnover": 0.8711625139375376,
-      "long_short_sharpe": -2.4992557202303343,
+      "ls_mean_one_way_turnover": 0.8711043956023993,
+      "long_short_sharpe": 1.8295646240203323,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -4963,7 +5953,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 66.12,
+      "elapsed_sec": 37.84,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.629487071472482e-11,
         "neu_cs_abs_scale_median": 0.018963066735605463,
@@ -4978,9 +5968,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.024158827627327926,
+      "display_rank_ic": 0.024158827627327923,
       "sign_flipped": true,
-      "display_rank_icir": 0.26391869225096193,
+      "display_rank_icir": 0.26391869225096176,
       "panel_qc": {
         "year": 2026,
         "std": 0.037404807276245844,
@@ -4991,19 +5981,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.7391523099855295,
+      "report_href": "/reports_weekly_dug/alpha_20260702_21fb502a.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_21fb502a/values.parquet"
+      },
+      "mem_available_gb": 24.38
     },
     {
       "factor_id": "alpha_20260702_66b498d6",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.02408539334715098,
-      "abs_mean_rank_ic": 0.02408539334715098,
-      "rank_icir": -0.4758177011458295,
+      "mean_rank_ic": 0.02408539334715095,
+      "abs_mean_rank_ic": 0.02408539334715095,
+      "rank_icir": 0.47581770114582883,
       "mean_daily_coverage": 0.9978258842344819,
-      "ls_mean_one_way_turnover": 0.3972163228309457,
-      "long_short_sharpe": -3.3226506090879693,
+      "ls_mean_one_way_turnover": 0.3972821812200068,
+      "long_short_sharpe": 2.8889436249676548,
       "n_rows": 8481772,
       "n_days": 1842,
       "years": [
@@ -5016,7 +6024,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 60.96,
+      "elapsed_sec": 38.05,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.781472829838094e-10,
         "neu_cs_abs_scale_median": 0.13053383663361864,
@@ -5031,9 +6039,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.02408539334715098,
+      "display_rank_ic": 0.02408539334715095,
       "sign_flipped": true,
-      "display_rank_icir": 0.4758177011458295,
+      "display_rank_icir": 0.47581770114582883,
       "panel_qc": {
         "year": 2026,
         "std": 0.6469515191162603,
@@ -5044,19 +6052,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.897487583800633,
+      "report_href": "/reports_weekly_dug/alpha_20260702_66b498d6.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8481772,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_66b498d6/values.parquet"
+      },
+      "mem_available_gb": 24.47
     },
     {
       "factor_id": "alpha_20260702_f5562d5a",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.022791841482083346,
-      "abs_mean_rank_ic": 0.022791841482083346,
-      "rank_icir": -0.21068223313027235,
+      "mean_rank_ic": 0.02279184148208332,
+      "abs_mean_rank_ic": 0.02279184148208332,
+      "rank_icir": 0.210682233130272,
       "mean_daily_coverage": 0.9994908356073484,
-      "ls_mean_one_way_turnover": 0.1037116552591882,
-      "long_short_sharpe": -0.612309362779827,
+      "ls_mean_one_way_turnover": 0.10371634719850283,
+      "long_short_sharpe": 0.5287605066221923,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -5069,7 +6095,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 54.29,
+      "elapsed_sec": 37.91,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 9.251788224418078e-11,
         "neu_cs_abs_scale_median": 0.028598985461117905,
@@ -5084,9 +6110,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.022791841482083346,
+      "display_rank_ic": 0.02279184148208332,
       "sign_flipped": true,
-      "display_rank_icir": 0.21068223313027235,
+      "display_rank_icir": 0.210682233130272,
       "panel_qc": {
         "year": 2026,
         "std": 0.10914624340695969,
@@ -5097,16 +6123,34 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 0.47330272138240986,
+      "report_href": "/reports_weekly_dug/alpha_20260702_f5562d5a.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f5562d5a/values.parquet"
+      },
+      "mem_available_gb": 24.35
     },
     {
       "factor_id": "alpha_20260701_77eb1727",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.022778010110808194,
-      "abs_mean_rank_ic": 0.022778010110808194,
-      "rank_icir": 0.2564805882761269,
+      "mean_rank_ic": 0.02277801011080815,
+      "abs_mean_rank_ic": 0.02277801011080815,
+      "rank_icir": 0.25648058827612624,
       "mean_daily_coverage": 0.999022176440134,
       "ls_mean_one_way_turnover": 0.9000285676171428,
       "long_short_sharpe": 1.8093889315658036,
@@ -5122,7 +6166,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 64.54,
+      "elapsed_sec": 38.27,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.6330855818510486e-11,
         "neu_cs_abs_scale_median": 0.026616768912983507,
@@ -5137,9 +6181,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.022778010110808194,
+      "display_rank_ic": 0.02277801011080815,
       "sign_flipped": false,
-      "display_rank_icir": 0.2564805882761269,
+      "display_rank_icir": 0.25648058827612624,
       "panel_qc": {
         "year": 2026,
         "std": 0.09461434069403524,
@@ -5150,19 +6194,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.6889322156697522,
+      "report_href": "/reports_weekly_dug/alpha_20260701_77eb1727.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8490848,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_77eb1727/values.parquet"
+      },
+      "mem_available_gb": 24.43
     },
     {
       "factor_id": "alpha_20260702_98ed259d",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.021326508780514345,
-      "abs_mean_rank_ic": 0.021326508780514345,
-      "rank_icir": -0.41417386121768307,
+      "mean_rank_ic": 0.021326508780514383,
+      "abs_mean_rank_ic": 0.021326508780514383,
+      "rank_icir": 0.4141738612176838,
       "mean_daily_coverage": 0.9967427989166586,
-      "ls_mean_one_way_turnover": 0.896961545660723,
-      "long_short_sharpe": -5.745457864162316,
+      "ls_mean_one_way_turnover": 0.8969209306833659,
+      "long_short_sharpe": 4.449456022898952,
       "n_rows": 8473070,
       "n_days": 1842,
       "years": [
@@ -5175,7 +6237,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 55.14,
+      "elapsed_sec": 36.5,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.6928338165154173e-10,
         "neu_cs_abs_scale_median": 0.19303302756240276,
@@ -5190,9 +6252,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.021326508780514345,
+      "display_rank_ic": 0.021326508780514383,
       "sign_flipped": true,
-      "display_rank_icir": 0.41417386121768307,
+      "display_rank_icir": 0.4141738612176838,
       "panel_qc": {
         "year": 2026,
         "std": 0.2313613543977879,
@@ -5203,7 +6265,25 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.2258764229711403,
+      "report_href": "/reports_weekly_dug/alpha_20260702_98ed259d.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8473070,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_98ed259d/values.parquet"
+      },
+      "mem_available_gb": 24.52
     },
     {
       "factor_id": "alpha_20260701_75057f17",
@@ -5212,10 +6292,10 @@
       "ok": true,
       "mean_rank_ic": 0.021292954130173746,
       "abs_mean_rank_ic": 0.021292954130173746,
-      "rank_icir": 0.2527556758565254,
+      "rank_icir": 0.25275567585652536,
       "mean_daily_coverage": 0.9985534725586732,
-      "ls_mean_one_way_turnover": 0.873944104974142,
-      "long_short_sharpe": 2.695673690852533,
+      "ls_mean_one_way_turnover": 0.8739441049741419,
+      "long_short_sharpe": 2.6956736908525327,
       "n_rows": 8487106,
       "n_days": 1842,
       "years": [
@@ -5228,7 +6308,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 60.21,
+      "elapsed_sec": 40.86,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 5.631545983665262e-15,
         "neu_cs_abs_scale_median": 2.264319145731157e-06,
@@ -5245,7 +6325,7 @@
       },
       "display_rank_ic": 0.021292954130173746,
       "sign_flipped": false,
-      "display_rank_icir": 0.2527556758565254,
+      "display_rank_icir": 0.25275567585652536,
       "panel_qc": {
         "year": 2026,
         "std": 5.9147052576947815e-06,
@@ -5256,19 +6336,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.7750363821186441,
+      "report_href": "/reports_weekly_dug/alpha_20260701_75057f17.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8487106,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_75057f17/values.parquet"
+      },
+      "mem_available_gb": 24.24
     },
     {
       "factor_id": "alpha_20260703_454725cc",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.021057351408780654,
-      "abs_mean_rank_ic": 0.021057351408780654,
-      "rank_icir": 0.25581433722691693,
+      "mean_rank_ic": 0.02105735140878071,
+      "abs_mean_rank_ic": 0.02105735140878071,
+      "rank_icir": 0.25581433722691765,
       "mean_daily_coverage": 0.9994908356073484,
       "ls_mean_one_way_turnover": 1.240876092215051,
-      "long_short_sharpe": 1.2188437988897856,
+      "long_short_sharpe": 1.2188437988897851,
       "n_rows": 8494590,
       "n_days": 1842,
       "years": [
@@ -5281,7 +6379,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 54.84,
+      "elapsed_sec": 45.72,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 4.628588137767231e-11,
         "neu_cs_abs_scale_median": 0.02042279286357347,
@@ -5296,9 +6394,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.021057351408780654,
+      "display_rank_ic": 0.02105735140878071,
       "sign_flipped": false,
-      "display_rank_icir": 0.25581433722691693,
+      "display_rank_icir": 0.25581433722691765,
       "panel_qc": {
         "year": 2026,
         "std": 0.05859380731493406,
@@ -5309,19 +6407,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.0719978792243208,
+      "report_href": "/reports_weekly_dug/alpha_20260703_454725cc.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8494590,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_454725cc/values.parquet"
+      },
+      "mem_available_gb": 24.06
     },
     {
       "factor_id": "alpha_20260702_6ce5f556",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": 0.020766892789518033,
-      "abs_mean_rank_ic": 0.020766892789518033,
-      "rank_icir": 0.35843244114418826,
+      "mean_rank_ic": 0.02076689278951803,
+      "abs_mean_rank_ic": 0.02076689278951803,
+      "rank_icir": 0.35843244114418804,
       "mean_daily_coverage": 0.9985980174530066,
       "ls_mean_one_way_turnover": 1.3153971413084353,
-      "long_short_sharpe": 3.5493926707696026,
+      "long_short_sharpe": 3.5493926707696017,
       "n_rows": 8487997,
       "n_days": 1842,
       "years": [
@@ -5334,7 +6450,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 58.15,
+      "elapsed_sec": 50.21,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 7.401430579534463e-10,
         "neu_cs_abs_scale_median": 0.3136502037280062,
@@ -5349,9 +6465,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.020766892789518033,
+      "display_rank_ic": 0.02076689278951803,
       "sign_flipped": false,
-      "display_rank_icir": 0.35843244114418826,
+      "display_rank_icir": 0.35843244114418804,
       "panel_qc": {
         "year": 2026,
         "std": 0.3877479711842686,
@@ -5362,7 +6478,25 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.119851279447357,
+      "report_href": "/reports_weekly_dug/alpha_20260702_6ce5f556.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8487997,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_6ce5f556/values.parquet"
+      },
+      "mem_available_gb": 24.37
     },
     {
       "factor_id": "alpha_20260702_153d5b20",
@@ -5371,10 +6505,10 @@
       "ok": true,
       "mean_rank_ic": 0.020765373137788323,
       "abs_mean_rank_ic": 0.020765373137788323,
-      "rank_icir": 0.2514097785765609,
+      "rank_icir": 0.2514097785765608,
       "mean_daily_coverage": 0.9997245778400372,
       "ls_mean_one_way_turnover": 1.6905251780455959,
-      "long_short_sharpe": 2.9389883843355307,
+      "long_short_sharpe": 2.9389883843355302,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -5387,7 +6521,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 54.24,
+      "elapsed_sec": 37.58,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.702151918361096e-10,
         "neu_cs_abs_scale_median": 0.22235830124289174,
@@ -5404,7 +6538,7 @@
       },
       "display_rank_ic": 0.020765373137788323,
       "sign_flipped": false,
-      "display_rank_icir": 0.2514097785765609,
+      "display_rank_icir": 0.2514097785765608,
       "panel_qc": {
         "year": 2026,
         "std": 0.26284686511296185,
@@ -5415,19 +6549,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.8605538060505715,
+      "report_href": "/reports_weekly_dug/alpha_20260702_153d5b20.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_153d5b20/values.parquet"
+      },
+      "mem_available_gb": 24.47
     },
     {
       "factor_id": "alpha_20260702_f204de74",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.02062019882934936,
-      "abs_mean_rank_ic": 0.02062019882934936,
-      "rank_icir": -0.21762944519760197,
+      "mean_rank_ic": 0.02062019882934937,
+      "abs_mean_rank_ic": 0.02062019882934937,
+      "rank_icir": 0.21762944519760205,
       "mean_daily_coverage": 0.9997245778400372,
-      "ls_mean_one_way_turnover": 0.4460094252980944,
-      "long_short_sharpe": -0.9198556748290637,
+      "ls_mean_one_way_turnover": 0.4459209756101432,
+      "long_short_sharpe": 0.4976731327621967,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -5440,7 +6592,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 60.85,
+      "elapsed_sec": 44.89,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.6978453632485753e-10,
         "neu_cs_abs_scale_median": 0.1761004446947891,
@@ -5455,9 +6607,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.02062019882934936,
+      "display_rank_ic": 0.02062019882934937,
       "sign_flipped": true,
-      "display_rank_icir": 0.21762944519760197,
+      "display_rank_icir": 0.21762944519760205,
       "panel_qc": {
         "year": 2026,
         "std": 0.2352962931036837,
@@ -5468,19 +6620,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 0.37913162719736604,
+      "report_href": "/reports_weekly_dug/alpha_20260702_f204de74.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f204de74/values.parquet"
+      },
+      "mem_available_gb": 24.08
     },
     {
       "factor_id": "alpha_20260702_2e48ae98",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.020227308737052484,
-      "abs_mean_rank_ic": 0.020227308737052484,
-      "rank_icir": -0.2670171579013541,
+      "mean_rank_ic": 0.020227308737052415,
+      "abs_mean_rank_ic": 0.020227308737052415,
+      "rank_icir": 0.2670171579013531,
       "mean_daily_coverage": 0.9997245778400372,
-      "ls_mean_one_way_turnover": 1.6625891014063607,
-      "long_short_sharpe": -4.145801350041173,
+      "ls_mean_one_way_turnover": 1.6626281053405805,
+      "long_short_sharpe": 2.6322503161397752,
       "n_rows": 8496455,
       "n_days": 1842,
       "years": [
@@ -5493,7 +6663,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 56.0,
+      "elapsed_sec": 42.59,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 2.32331497790339e-11,
         "neu_cs_abs_scale_median": 0.014139420561954285,
@@ -5508,9 +6678,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.020227308737052484,
+      "display_rank_ic": 0.020227308737052415,
       "sign_flipped": true,
-      "display_rank_icir": 0.2670171579013541,
+      "display_rank_icir": 0.2670171579013531,
       "panel_qc": {
         "year": 2026,
         "std": 0.02707532353912027,
@@ -5521,19 +6691,37 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 2.1060321764661265,
+      "report_href": "/reports_weekly_dug/alpha_20260702_2e48ae98.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8496455,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_2e48ae98/values.parquet"
+      },
+      "mem_available_gb": 24.34
     },
     {
       "factor_id": "alpha_20260702_80bca4fc",
       "source": "evoalpha",
       "label": "外部中性化候选 A",
       "ok": true,
-      "mean_rank_ic": -0.02020574716787668,
-      "abs_mean_rank_ic": 0.02020574716787668,
-      "rank_icir": -0.4585109033963672,
+      "mean_rank_ic": 0.020205747167876712,
+      "abs_mean_rank_ic": 0.020205747167876712,
+      "rank_icir": 0.4585109033963682,
       "mean_daily_coverage": 0.9964557191221648,
-      "ls_mean_one_way_turnover": 0.6998023530080526,
-      "long_short_sharpe": -5.064919773083427,
+      "ls_mean_one_way_turnover": 0.6999307525451518,
+      "long_short_sharpe": 3.829630741090944,
       "n_rows": 8470759,
       "n_days": 1842,
       "years": [
@@ -5546,7 +6734,7 @@
         2025,
         2026
       ],
-      "elapsed_sec": 47.25,
+      "elapsed_sec": 46.58,
       "neutral_probe": {
         "neu_cs_mean_abs_median": 3.6928338165154173e-10,
         "neu_cs_abs_scale_median": 0.19411708846782666,
@@ -5561,9 +6749,9 @@
         "source": "evoalpha",
         "year": 2025
       },
-      "display_rank_ic": 0.02020574716787668,
+      "display_rank_ic": 0.020205747167876712,
       "sign_flipped": true,
-      "display_rank_icir": 0.4585109033963672,
+      "display_rank_icir": 0.4585109033963682,
       "panel_qc": {
         "year": 2026,
         "std": 0.2464696403609177,
@@ -5574,7 +6762,25 @@
         "reason": "ok"
       },
       "ok_for_select": true,
-      "source_label": "外部中性化候选 A"
+      "source_label": "外部中性化候选 A",
+      "long_short_return_sum": 1.5714165305467045,
+      "report_href": "/reports_weekly_dug/alpha_20260702_80bca4fc.html",
+      "platform_submit": "skipped_no_formula",
+      "materialize": {
+        "n_rows": 8470759,
+        "years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023,
+          2024,
+          2025,
+          2026
+        ],
+        "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_80bca4fc/values.parquet"
+      },
+      "mem_available_gb": 24.28
     }
   ],
   "all_results": [
@@ -12746,5 +13952,6 @@
   ],
   "n_degenerate_filtered": 11,
   "selection_note": "Excluded near-constant / all-zero panels that can fabricate RankIC via ties.",
-  "platform_note": "当前交付仅为因子数值面板、无公式，无法提交平台；以下为本地 VWAP→VWAP 面板回测。"
+  "platform_note": "无公式交付，无法提交平台；已全部走本地面板回测。",
+  "backtested_at": "2026-08-09T00:40:45.637524"
 }

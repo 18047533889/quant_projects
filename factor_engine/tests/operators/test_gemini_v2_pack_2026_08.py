@@ -76,7 +76,7 @@ _RESEARCH_OPS = [
     "ts_kernel_granger_score",
     "ts_residualized_hsic",
     "ts_bds_statistic",
-    "ts_sr_gaussian_mean_shift_score",
+    "ts_rolling_sr_gaussian_mean_shift_score",
 ]
 _ALL_OPS = _DAILY_OPS + _EXTENDED_OPS + _RESEARCH_OPS
 
@@ -178,7 +178,7 @@ _TS_SPECS: dict[str, tuple[list[str], dict]] = {
     "ts_kernel_granger_score": (["ret", "vol"], {"window": 48, "lag": 2}),
     "ts_residualized_hsic": (["ret", "vol", "amt"], {"window": 48}),
     "ts_bds_statistic": (["ret"], {"window": 60, "embedding_dim": 2, "distance_multiplier": 1.5}),
-    "ts_sr_gaussian_mean_shift_score": (["ret"], {"window": 48, "shift_sigma": 1.0, "baseline_window": 12}),
+    "ts_rolling_sr_gaussian_mean_shift_score": (["ret"], {"window": 48, "shift_sigma": 1.0, "baseline_window": 12}),
     "composition_clr_component": (["ret", "vol", "amt"], {}),
     "composition_entropy": (["vol", "amt", "close"], {}),
     "composition_aitchison_distance": (["vol", "amt", "close", "vol", "amt", "close"], {}),

@@ -272,11 +272,10 @@ class DatasetManifest:
             {b"manifest_generation_id": gen.encode("utf-8")}
         )
         out = root / MANIFEST_FILENAME
-        tmp = root / f".{MANIFEST_FILENAME}.tmp"
-        pq.write_table(table.cast(schema), tmp)
-        _fsync_parent(tmp)
-        os.replace(str(tmp), str(out))
-        _fsync_parent(out)
+        # #P1-final closure 19：统一 atomic durable-write（tmp→fsync(fd)→replace→fsync(dir)）
+        from data_access.core.atomic import atomic_write_file
+
+        atomic_write_file(out, lambda tmp: pq.write_table(table.cast(schema), tmp))
         if self.row_groups:
             _save_row_groups(root, self.row_groups, generation=gen)
         else:
@@ -287,33 +286,28 @@ class DatasetManifest:
         src = self.source_epoch or self.manifest_epoch or _next_epoch(old_epoch)
         built = self.manifest_built_epoch or src
         meta_path = root / _MANIFEST_META_FILENAME
-        tmp_meta = root / f".{_MANIFEST_META_FILENAME}.tmp"
-        tmp_meta.write_text(
-            json.dumps(
-                {
-                    "dataset": self.dataset,
-                    "time_column": self.time_column,
-                    "instrument_column": self.instrument_column,
-                    "format": self.format,
-                    "time_dtype": self.time_dtype,
-                    # 双 epoch：source 是数据版本，built 是 manifest 同步到的版本。
-                    "source_epoch": src,
-                    "manifest_built_epoch": built,
-                    "manifest_epoch": src,  # 兼容老读取方（等价 source_epoch）
-                    "manifest_generation_id": gen,
-                    "created_at": self.created_at,
-                    "file_count": self.file_count,
-                    "dataset_version": self.dataset_version,
-                    "partition_version": self.partition_version,
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-            ),
-            encoding="utf-8",
+        # #P1-final closure 19：统一 atomic durable-write
+        from data_access.core.atomic import atomic_write_json
+
+        atomic_write_json(
+            meta_path,
+            {
+                "dataset": self.dataset,
+                "time_column": self.time_column,
+                "instrument_column": self.instrument_column,
+                "format": self.format,
+                "time_dtype": self.time_dtype,
+                # 双 epoch：source 是数据版本，built 是 manifest 同步到的版本。
+                "source_epoch": src,
+                "manifest_built_epoch": built,
+                "manifest_epoch": src,  # 兼容老读取方（等价 source_epoch）
+                "manifest_generation_id": gen,
+                "created_at": self.created_at,
+                "file_count": self.file_count,
+                "dataset_version": self.dataset_version,
+                "partition_version": self.partition_version,
+            },
         )
-        _fsync_parent(tmp_meta)
-        os.replace(str(tmp_meta), str(meta_path))
-        _fsync_parent(meta_path)
         return out
 
     @classmethod
@@ -663,12 +657,10 @@ def bump_source_epoch(root: Path) -> str | None:
     # manifest_built_epoch 保持原值 → source != built，manifest 变 dirty。
     # #P0-30 保留 generation，避免 bump 后与 parquet 侧不一致被判 mixed。
     payload.setdefault("manifest_generation_id", _parquet_generation_id(meta_path.parent / MANIFEST_FILENAME))
-    tmp_meta = meta_path.with_name(f".{_MANIFEST_META_FILENAME}.tmp")
-    tmp_meta.write_text(
-        json.dumps(payload, ensure_ascii=False, sort_keys=True),
-        encoding="utf-8",
-    )
-    os.replace(str(tmp_meta), str(meta_path))
+    # #P1-final closure 19：统一 atomic durable-write
+    from data_access.core.atomic import atomic_write_json
+
+    atomic_write_json(meta_path, payload)
     return src
 
 
@@ -765,10 +757,10 @@ def _save_row_groups(
             )
         )
     out = root / _ROW_GROUPS_FILENAME
-    tmp = root / f".{_ROW_GROUPS_FILENAME}.tmp"
-    pq.write_table(table, tmp)
-    _fsync_parent(tmp)
-    os.replace(str(tmp), str(out))
+    # #P1-final closure 19：统一 atomic durable-write（tmp→fsync(fd)→replace→fsync(dir)）
+    from data_access.core.atomic import atomic_write_file
+
+    atomic_write_file(out, lambda tmp: pq.write_table(table, tmp))
     return out
 
 

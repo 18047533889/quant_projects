@@ -33,6 +33,10 @@ class CacheManager:
             无
         """
         self.data_scope = data_scope
+        # R6-151: insertion-ordered dict so eviction is true LRU — a ``get()``
+        # moves the entry to the most-recent end, and eviction drops the oldest
+        # (least-recently-used) entry.  The previous plain dict evicted by
+        # creation order, so a hot entry created early was evicted first.
         self._cache: dict[str, object] = {}
         self._budget_bytes = budget_bytes
         self._bytes = 0
@@ -70,7 +74,15 @@ class CacheManager:
         返回:
             无
         """
-        return self._cache.get(self._scoped_key(key))
+        scoped = self._scoped_key(key)
+        value = self._cache.get(scoped)
+        if value is not None:
+            # R6-151: record a hit as "most recently used" so LRU eviction
+            # (drop the least-recently-used entry) reflects access, not just
+            # insertion.  Plain-dict insertion order made eviction FIFO.
+            self._cache.pop(scoped, None)
+            self._cache[scoped] = value
+        return value
 
     def set(self, key: str, value) -> None:
         """set；受字节预算约束（LRU 逐出）。
@@ -322,6 +334,9 @@ class PersistentPlanCache(CacheManager):
         scoped = self._scoped_key(key)
         hit = self._cache.get(scoped)
         if hit is not None:
+            # R6-151: record the hit as most-recently-used (LRU).
+            self._cache.pop(scoped, None)
+            self._cache[scoped] = hit
             return hit
 
         path = self._disk_path(scoped)
@@ -330,7 +345,18 @@ class PersistentPlanCache(CacheManager):
         value = _load_value(path)
         if value is None:
             return None
+        # R6-152: a disk (L2) hit must still count toward the memory budget and
+        # be subject to eviction, or repeated L3 hits bypass the entire in-memory
+        # limit (resource P0).  Same accounting as ``set``: size the value, drop
+        # it if it cannot fit alone, else account + evict to budget.
+        from runtime.resource_governor import estimate_object_bytes
+
+        size = estimate_object_bytes(value)
+        if size > self.budget_bytes:
+            return None
+        self._bytes += size
         self._cache[scoped] = value
+        self._evict_to(self.budget_bytes)
         return value
 
     def set(self, key: str, value) -> None:

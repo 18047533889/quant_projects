@@ -50,10 +50,16 @@ class KeyPolicy:
 def resolve_key_policy(policy: KeyPolicy | None = None) -> KeyPolicy:
     if policy is not None:
         return policy
-    prod = os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
-    strict = os.environ.get("DATA_ACCESS_STRICT_READ", "").lower() in {"1", "true", "yes"}
+    # #P1-final closure 17：唯一严格模式判定（production OR strict_read），不再
+    # 各自拼环境变量（旧实现与 query_budget.is_strict_semantics 重复且易漂移）。
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        strict_sem = is_strict_semantics()
+    except Exception:  # 导入期兜底
+        strict_sem = True
     revision_col = os.environ.get("DATA_ACCESS_REVISION_COLUMN", "").strip() or None
-    if prod or strict:
+    if strict_sem:
         if revision_col:
             return KeyPolicy(
                 invalid_key="error",

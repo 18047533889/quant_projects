@@ -39,6 +39,17 @@ from data_access.core.exceptions import ValidationError
 
 _INDEX_FILENAME = "_pit_event_index.parquet"
 _INDEX_META_FILENAME = "_pit_event_index.json"
+# #P1-final closure 18：generation-directory + 原子指针提交。旧实现双文件直接
+# ``os.replace`` 两次，crash 在两次 replace 之间会留下 mixed generation——下一
+# 次 load 能检测但**上一份好索引已被毁掉**。新布局：
+#     <root>/.pit_index/current            ← 原子指针（唯一 commit 点）
+#     <root>/.pit_index/<gen>/index.parquet
+#     <root>/.pit_index/<gen>/metadata.json
+# 先写完整的新 generation 目录，最后才原子替换指针——crash 任意时刻旧 generation
+# 目录与指针都完整，「保留旧 generation 直到新 generation 完全提交」。legacy
+# ``<root>/_pit_event_index.*`` 布局继续可读（回退）。
+_PIT_INDEX_DIR = ".pit_index"
+_PIT_INDEX_POINTER = "current"
 
 
 def _is_nan(value: Any) -> bool:
@@ -326,6 +337,99 @@ def _meta_path(root: Path) -> Path:
     return root / _INDEX_META_FILENAME
 
 
+def _pit_index_dir(root: Path) -> Path:
+    return root / _PIT_INDEX_DIR
+
+
+def _current_generation(root: Path) -> str | None:
+    """读当前 generation id（原子指针）；无指针 → None（legacy 布局）。"""
+    try:
+        text = (_pit_index_dir(root) / _PIT_INDEX_POINTER).read_text(
+            encoding="utf-8"
+        ).strip()
+    except (OSError, IOError):
+        return None
+    return text or None
+
+
+def _current_index_parquet(root: Path) -> Path | None:
+    """解析当前生效的 index.parquet 路径。
+
+    优先 generation-directory 布局（指针指向的 gen 目录）；无指针/目录缺失回退
+    legacy ``<root>/_pit_event_index.parquet``。
+    """
+    gen = _current_generation(root)
+    if gen:
+        cand = _pit_index_dir(root) / gen / _INDEX_FILENAME
+        if cand.exists():
+            return cand
+    legacy = root / _INDEX_FILENAME
+    return legacy if legacy.exists() else None
+
+
+def _prune_old_generations(index_dir: Path, keep: str) -> None:
+    """提交后清理旧 generation 目录（保留刚提交的）。crash 前的旧目录仍完整。"""
+    import shutil
+
+    try:
+        for child in index_dir.iterdir():
+            if child.name == _PIT_INDEX_POINTER or not child.is_dir():
+                continue
+            if child.name != keep:
+                shutil.rmtree(child, ignore_errors=True)
+    except OSError:
+        pass
+
+
+def _commit_index_generation(
+    root: Path,
+    idx: "PITEventIndex",
+    metadata: "PITIndexMetadata",
+    generation: str,
+) -> None:
+    """#P1-final closure 18：staged 提交新 generation。
+
+    1. 写 ``.pit_index/<gen>/index.parquet`` + ``metadata.json``（各自 tmp +
+       fsync + atomic replace，但都是**新目录内**——不影响旧 generation）；
+    2. 原子替换 ``current`` 指针 —— 这是唯一 commit 点；
+    3. crash 在任意时刻：指针要么还在旧 gen（旧索引完整可用），要么已指向新
+       gen（新目录完整）。绝不出现「旧索引被毁 + 新索引未完成」。
+    """
+    import json
+
+    import pyarrow.parquet as pq
+
+    index_dir = _pit_index_dir(root)
+    index_dir.mkdir(parents=True, exist_ok=True)
+    gen_dir = index_dir / generation
+    gen_dir.mkdir(parents=True, exist_ok=True)
+
+    arrow = idx.to_arrow().cast(
+        idx.to_arrow().schema.with_metadata(
+            {b"manifest_generation_id": generation.encode("utf-8")}
+        )
+    )
+    # #P1-final closure 19：统一 atomic durable-write（内容 fsync，不只 fsync 目录）
+    from data_access.core.atomic import atomic_write_file, atomic_write_json
+
+    atomic_write_file(
+        gen_dir / _INDEX_FILENAME, lambda tmp: pq.write_table(arrow, tmp)
+    )
+    atomic_write_json(gen_dir / _INDEX_META_FILENAME, metadata.to_dict())
+
+    # 唯一 commit 点：原子替换指针（先 fsync tmp 文件 fd 再 rename）。
+    pointer = index_dir / _PIT_INDEX_POINTER
+    tmp_ptr = index_dir / f".{_PIT_INDEX_POINTER}.tmp"
+    with open(tmp_ptr, "w", encoding="utf-8") as fh:
+        fh.write(generation)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(str(tmp_ptr), str(pointer))
+    _fsync_parent(pointer)
+
+    _prune_old_generations(index_dir, generation)
+
+
 def _schema_hash_of(ds: Any) -> str:
     """#P0-16 真 schema hash：源数据集的列名 + 类型 + 语义角色。
 
@@ -411,8 +515,8 @@ def build_pit_event_index(
     root = _index_root(store, dataset)
     if root is None:
         raise ValidationError(f"无法解析数据集 {dataset!r} 的根目录")
-    index_path = root / _INDEX_FILENAME
-    if index_path.exists() and not force:
+    index_path = _current_index_parquet(root)
+    if index_path is not None and index_path.exists() and not force:
         try:
             existing = load_pit_event_index(index_path)
         except Exception:
@@ -540,26 +644,9 @@ def build_pit_event_index(
     )
     idx = PITEventIndex(records, metadata=metadata)
     try:
-        # #P0-17 generation 双写：index.parquet schema metadata + metadata.json。
-        # #P1-final closure 6：sidecar 用 tmp + fsync + atomic replace，不直接覆盖
-        # 上一份好 index（进程死在 replace 前旧索引仍完整）。
-        arrow = idx.to_arrow().cast(
-            idx.to_arrow().schema.with_metadata(
-                {b"manifest_generation_id": generation.encode("utf-8")}
-            )
-        )
-        tmp_pq = index_path.with_name(f".{_INDEX_FILENAME}.tmp")
-        pq.write_table(arrow, str(tmp_pq))
-        _fsync_parent(tmp_pq)
-        os.replace(str(tmp_pq), str(index_path))
-        meta_path = _meta_path(root)
-        tmp_json = meta_path.with_name(f".{_INDEX_META_FILENAME}.tmp")
-        tmp_json.write_text(
-            json.dumps(metadata.to_dict(), ensure_ascii=False, sort_keys=True),
-            encoding="utf-8",
-        )
-        _fsync_parent(tmp_json)
-        os.replace(str(tmp_json), str(meta_path))
+        # #P1-final closure 18：staged generation-directory 提交——先写完整新 gen
+        # 目录，最后原子切换指针。crash 任意时刻旧 generation 完整可用。
+        _commit_index_generation(root, idx, metadata, generation)
     except Exception as exc:
         # 写失败不阻塞正确性，但必须告警（不再静默 pass）
         import logging
@@ -652,8 +739,7 @@ def _index_path_for(store: Any, dataset: str) -> Path | None:
     root = _index_root(store, dataset)
     if root is None:
         return None
-    p = root / _INDEX_FILENAME
-    return p if p.exists() else None
+    return _current_index_parquet(root)
 
 
 def validate_current_source(

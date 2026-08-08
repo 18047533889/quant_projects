@@ -24,7 +24,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import frame_like
 from cleaned_operators.ts_model._rolling_core import trailing_contiguous_finite
 
@@ -49,12 +55,29 @@ def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadat
 # ---------------------------------------------------------------------------
 # ts_wavelet_lowpass_reconstruct(x, window, level)
 # ---------------------------------------------------------------------------
+# R6-101: the Haar cascade only ever uses the largest power-of-two ``m`` that
+# fits inside the trailing contiguous run, so ``window=65/80/100/127`` all
+# reduce to the same 64-point transform — a large block of equivalent search
+# parameters (different AST, identical output).  Fix (review option A): the
+# window itself is restricted to powers of two (32/64/128/256), so every
+# declared parameter value maps to a distinct cascade depth.
+_WAVELET_WINDOW_CHOICES = (32, 64, 128, 256)
+
+
 def _haar_lowpass_current(vals: np.ndarray, window: int, level: int) -> float:
     """Return the trailing-causal Haar low-pass reconstruction at the last row."""
     seg = vals[-int(window):]
     keep = int(level)
     if keep < 0:
         raise ValueError("level must be >= 0")
+    # R6-101: reject a window that is not a power of two — the kernel must never
+    # silently coerce 65/80/100/127 to the same 64-point transform.
+    w = int(window)
+    if w <= 0 or (w & (w - 1)) != 0:
+        raise ValueError(
+            "ts_wavelet_lowpass_reconstruct requires window to be a power of two "
+            f"(32/64/128/256), got {w}"
+        )
     # Nearest TRAILING contiguous finite segment (P1-010): the largest power-of-two
     # must come from the most recent unbroken run, not from the oldest ``finite[:m]``
     # prefix.  Compressing out missing rows would shift the wavelet's time origin
@@ -106,6 +129,21 @@ class TsWaveletLowpassReconstruct(SeriesOperator):
         "Haar 小波低频重建（仅保留 level 个最粗细节层后反变换）。",
         ["x", "window", "level"],
     )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, choices=_WAVELET_WINDOW_CHOICES),
+        # R6-102: level is bounded by the cascade — a contiguous run must have
+        # n >= 2^(level+2) for `level` detail layers + the final approximation.
+        # Declared as a RelationalParamSpec so search never emits a
+        # guaranteed-NaN (window=32, level=5) combination.
+        "level": ParamSpec(dtype=int, min=0, max=6),
+    }
+    metadata.relational_specs = [
+        RelationalParamSpec(
+            "2 ** (level + 2) <= window",
+            "level and window are infeasible: need 2^(level+2) <= window "
+            "(level={level}, window={window})",
+        )
+    ]
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 128, level: int = 2, **_: Any) -> pd.DataFrame:
         w = int(window)
@@ -161,15 +199,29 @@ def _sig_mahalanobis_series(fs: list[np.ndarray], path_window: int, history_wind
     out = np.full((rows,), np.nan, dtype=float)
     pw = int(path_window)
     hw = int(history_window)
+    # R6-104: overlapping path signatures share pw-1 samples, so ``len(hist)``
+    # massively overstates the effective sample size (24 vectors of a 12-dim
+    # signature are far from 24 independent observations).  Sample the history
+    # with a stride proportional to the path length and require the effective
+    # count to reach 2*dim — the covariance is only then stable.
+    stride = max(1, pw // 4)
     for r in range(rows):
         start = max(0, r - pw + 1)
+        if r - start + 1 < pw:
+            # R6-103: no signature at all before the first COMPLETE path_window
+            # — a 4-bar signature in the history is not the same random variable
+            # as a 20-bar one, so it must not pollute the covariance sample.
+            continue
         seg = np.column_stack([f[start : r + 1] for f in fs])
         cur = _sig_vector(seg)
         if cur is None:
             continue
         hist: list[np.ndarray] = []
-        for q in range(max(0, r - hw), r):
-            qseg = np.column_stack([f[max(0, q - pw + 1) : q + 1] for f in fs])
+        # R6-103: a history signature is only admitted if its own path window is
+        # complete (q - pw + 1 >= 0) — same random variable as ``cur``.
+        hist_first = max(pw - 1, r - hw)
+        for q in range(hist_first, r, stride):
+            qseg = np.column_stack([f[q - pw + 1 : q + 1] for f in fs])
             sv = _sig_vector(qseg)
             if sv is not None:
                 hist.append(sv)
@@ -193,12 +245,18 @@ def _sig_mahalanobis_series(fs: list[np.ndarray], path_window: int, history_wind
         n, dim = Hs.shape
         # Covariance needs a robust sample: >= max(20, 2*dim) history vectors
         # (dim=12 -> at least 24) before the 12-dim Mahalanobis distance is stable.
+        # R6-104: ``n`` is now the STRIDED (effective) history count, so this is
+        # an effective-sample-size gate rather than a nominal-count gate.
         if n < max(20, 2 * dim):
             continue
         cov = (centered.T @ centered) / (n - 1.0)
-        shrink = 0.1 * np.trace(cov) / dim * np.eye(dim) + cov
+        # R6-105: this is ridge (diagonal) loading, NOT convex shrinkage — the
+        # Ledoit-Wolf / oracle form is (1-lambda)Sigma + lambda*mu*I with a
+        # convex weight.  Renamed to match what the math actually does: a fixed
+        # 10% ridge on the trace-normalised diagonal.
+        ridge = 0.1 * np.trace(cov) / dim * np.eye(dim) + cov
         try:
-            inv = np.linalg.pinv(shrink)
+            inv = np.linalg.pinv(ridge)
         except np.linalg.LinAlgError:
             continue
         diff = cur_s - mu
@@ -299,8 +357,23 @@ class TsBettiCrockerBifurcationScore(SeriesOperator):
         "持久图特征出生时间散布（bifurcation proxy，cost=10，仅 Research）。",
         ["x", "window", "tau", "dim"],
     )
+    # R6-106: the operator computes Rips H1, which requires a >= 2-dimensional
+    # Takens embedding — dim=1 produces a 1D point cloud with no loops, so the
+    # default must be dim>=2 and the search space must not offer dim=1.
+    # R6-107: with dim=1 the delay-embedding lag tau*(dim-1) is always zero
+    # (tau is a dead parameter); restricting dim>=2 keeps tau meaningful.
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=20),
+        "tau": ParamSpec(dtype=int, min=1),
+        "dim": ParamSpec(dtype=int, min=2, default=2),
+    }
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 60, tau: int = 5, dim: int = 1, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, window: int = 60, tau: int = 5, dim: int = 2, **_: Any) -> pd.DataFrame:
+        if int(dim) < 2:
+            raise ValueError(
+                "ts_persistence_birth_dispersion requires dim >= 2: Rips H1 needs "
+                "a >= 2-dimensional Takens embedding (dim=1 has no loop structure)"
+            )
         w = int(window)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape

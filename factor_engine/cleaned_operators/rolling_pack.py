@@ -88,8 +88,15 @@ def _pl_to_pd(frame: Any) -> pd.DataFrame:
     return frame.select(cols).to_pandas()
 
 
-def _pl_rebuild(base: Any, pdf: pd.DataFrame) -> Any:
+def _pl_rebuild(base: Any, result: Any) -> Any:
     cols = [c for c in base.columns if c not in _SKIP_PANEL]
+    # Some pandas references return a raw numpy array (e.g.
+    # ``cs_local_density_score``) rather than a DataFrame; wrap before indexing
+    # by column name so the bridge/udf backend stays exact-parity.
+    if not isinstance(result, pd.DataFrame):
+        pdf = pd.DataFrame(np.asarray(result, dtype=float), columns=cols)
+    else:
+        pdf = result
     return base.with_columns(
         [pl.Series(name=c, values=np.asarray(pdf[c], dtype=np.float64)) for c in cols]
     )

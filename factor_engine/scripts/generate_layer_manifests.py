@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 FACTOR_ENGINE = ROOT / "factor_engine"
@@ -22,8 +23,55 @@ from research_tools.registry import ResearchToolRegistry  # noqa: E402
 from stateful_contract import StatefulCheckpointRegistry  # noqa: E402
 
 
+def _json_default(o: Any) -> Any:
+    """Serialize ParamSpec (and any dataclass) metadata into a plain dict.
+
+    The registry catalog carries per-parameter ``ParamSpec`` contracts
+    (review R4-01) which are dataclasses, not JSON-native.  The layer manifests
+    must persist them readably rather than fail serialization.
+    """
+    from dataclasses import asdict, is_dataclass
+
+    if is_dataclass(o) and not isinstance(o, type):
+        return _json_clean(asdict(o))
+    if isinstance(o, type):
+        return getattr(o, "__name__", str(o))
+    if isinstance(o, (tuple, set)):
+        return [_json_clean(x) for x in o]
+    if isinstance(o, list):
+        return [_json_clean(x) for x in o]
+    if isinstance(o, dict):
+        return {str(k): _json_clean(v) for k, v in o.items()}
+    if isinstance(o, (str, int, float, bool)) or o is None:
+        return o
+    raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+
+
+def _json_clean(value: Any) -> Any:
+    """Recursively convert non-JSON-native leaves (type objects, dataclasses)."""
+    from dataclasses import asdict, is_dataclass
+
+    if is_dataclass(value) and not isinstance(value, type):
+        return _json_clean(asdict(value))
+    if isinstance(value, type):
+        return getattr(value, "__name__", str(value))
+    if isinstance(value, (tuple, set)):
+        return [_json_clean(x) for x in value]
+    if isinstance(value, list):
+        return [_json_clean(x) for x in value]
+    if isinstance(value, dict):
+        return {str(k): _json_clean(v) for k, v in value.items()}
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def write_json(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(_json_clean(payload), ensure_ascii=False, indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def main() -> None:

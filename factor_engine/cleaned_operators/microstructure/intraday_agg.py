@@ -27,7 +27,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 
 _EPS = 1e-12
 _MORNING = (570, 690)   # 09:30 .. 11:30
@@ -65,8 +65,13 @@ def _minute_of_day(times: np.ndarray) -> np.ndarray:
 def _log_returns(vals: np.ndarray) -> np.ndarray:
     out = np.full(len(vals), np.nan)
     if len(vals) > 1:
+        # R6-192: explicit positive-price contract.  log(negative/zero) leaking
+        # -inf/NaN into the return silently corrupts downstream aggregates; a
+        # non-positive price is invalid data and yields NaN (fail-closed), not
+        # a fabricated log-return.
         with np.errstate(divide="ignore", invalid="ignore"):
             out[1:] = np.log(vals[1:] / vals[:-1])
+            out[1:][(vals[1:] <= 0.0) | (vals[:-1] <= 0.0)] = np.nan
     return out
 
 
@@ -201,7 +206,8 @@ def _seg_return(vals, times, segment):
     status="experimental",
 )
 class IntraSegmentReturn(SeriesOperator):
-    metadata = _metadata("intra_segment_return", "指定时段（morning/afternoon）收盘/开盘收益 - 1。", ["close", "segment"], unit="return")
+    metadata = _metadata("intra_segment_return", "指定时段（morning/afternoon）收盘/开盘收益 - 1。", ["close", "segment", "session_tz"], unit="return")
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R6-190
 
     def _calculate_series(self, close, segment="morning", session_tz=None, **_):
         return _daily_agg(_session_local(close, session_tz), lambda v, t: _seg_return(v, t, segment))
@@ -223,7 +229,8 @@ def _seg_volume_share(vals, times, segment, total):
     status="experimental",
 )
 class IntraSegmentVolumeShare(SeriesOperator):
-    metadata = _metadata("intra_segment_volume_share", "指定时段成交量占全天比例。", ["volume", "segment"], unit="ratio")
+    metadata = _metadata("intra_segment_volume_share", "指定时段成交量占全天比例。", ["volume", "segment", "session_tz"], unit="ratio")
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R6-190
 
     def _calculate_series(self, volume, segment="morning", session_tz=None, **_):
         def fn(v, t):
@@ -242,7 +249,8 @@ class IntraSegmentVolumeShare(SeriesOperator):
     status="experimental",
 )
 class IntraSegmentAmountShare(SeriesOperator):
-    metadata = _metadata("intra_segment_amount_share", "指定时段成交额占全天比例。", ["amount", "segment"], unit="ratio")
+    metadata = _metadata("intra_segment_amount_share", "指定时段成交额占全天比例。", ["amount", "segment", "session_tz"], unit="ratio")
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R6-190
 
     def _calculate_series(self, amount, segment="morning", session_tz=None, **_):
         def fn(v, t):
@@ -272,7 +280,8 @@ def _seg_vwap_deviation(close_v, amt_v, vol_v, times, segment):
     status="experimental",
 )
 class IntraSegmentVwapDeviation(SeriesOperator):
-    metadata = _metadata("intra_segment_vwap_deviation", "指定时段末价相对该时段累计 VWAP 的偏差。", ["close", "amount", "volume", "segment"], unit="ratio")
+    metadata = _metadata("intra_segment_vwap_deviation", "指定时段末价相对该时段累计 VWAP 的偏差。", ["close", "amount", "volume", "segment", "session_tz"], unit="ratio")
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R6-190
 
     def _calculate_series(self, close, amount, volume, segment="morning", session_tz=None, **_):
         frame = _session_local(close, session_tz)
@@ -323,7 +332,8 @@ def _seg_realized_vol(close_v, times, segment):
     status="experimental",
 )
 class IntraSegmentRealizedVol(SeriesOperator):
-    metadata = _metadata("intra_segment_realized_vol", "指定时段已实现波动率 sqrt(sum(r_t^2))。", ["close", "segment"], unit="volatility")
+    metadata = _metadata("intra_segment_realized_vol", "指定时段已实现波动率 sqrt(sum(r_t^2))。", ["close", "segment", "session_tz"], unit="volatility")
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R6-190
 
     def _calculate_series(self, close, segment="morning", session_tz=None, **_):
         return _daily_agg(_session_local(close, session_tz), lambda v, t: _seg_realized_vol(v, t, segment))
@@ -619,7 +629,15 @@ def _vwap_cross_count(close_v, amount_v, volume_v):
 # ---------------------------------------------------------------------------
 
 def _concentration(vals):
-    finite = np.abs(np.where(np.isfinite(vals), vals, 0.0))
+    # R6-191: intra_concentration is a distribution-of-activity primitive —
+    # its input contract is NonnegativeActivity.  A negative value is INVALID,
+    # not "the amount that happened in the opposite direction"; silently
+    # abs()-ing it manufactures an undeclared semantics.  Fail closed on any
+    # negative entry instead of folding it in as positive mass.
+    v = np.asarray(vals, dtype=float)
+    if np.any(v < 0.0):
+        return np.nan
+    finite = v[np.isfinite(v)]
     total = float(finite.sum())
     if total <= _EPS:
         return np.nan
@@ -644,7 +662,12 @@ class IntraConcentration(SeriesOperator):
 
 
 def _entropy(vals, normalize=True):
-    finite = np.abs(np.where(np.isfinite(vals), vals, 0.0))
+    # R6-191: same NonnegativeActivity contract as _concentration — a negative
+    # value is data-invalid, never abs()-folded in as positive mass.
+    v = np.asarray(vals, dtype=float)
+    if np.any(v < 0.0):
+        return np.nan
+    finite = v[np.isfinite(v)]
     total = float(finite.sum())
     n = int(np.count_nonzero(finite))
     if total <= _EPS or n < 2:
@@ -667,7 +690,8 @@ def _entropy(vals, normalize=True):
     status="experimental",
 )
 class IntraEntropy(SeriesOperator):
-    metadata = _metadata("intra_entropy", "日内成交分布熵（归一化）。", ["value"], unit="entropy")
+    metadata = _metadata("intra_entropy", "日内成交分布熵（归一化）。", ["value", "normalize"], unit="entropy")
+    metadata.param_specs = {"normalize": ParamSpec(dtype=bool, searchable=False)}  # R6-190
 
     def _calculate_series(self, value, normalize=True, **_):
         return _daily_agg(value, lambda v, t: _entropy(v, bool(normalize)))
@@ -752,6 +776,10 @@ def _intra_amihud(close_v, amount_v, scale):
 class IntraAmihud(SeriesOperator):
     metadata = _metadata("intra_amihud", "日内 Amihud 非流动性 mean(|r|/max(amount,eps))*scale。", ["close", "amount", "scale"], unit="illiquidity")
 
+    # R6-189: ``scale`` is a pure output-unit rescaling (1e6 vs 1e8 vs 1e10 give
+    # identical ordering / alpha) — it must never be a search parameter.
+    metadata.param_specs = {"scale": ParamSpec(dtype=float, searchable=False)}
+
     def _calculate_series(self, close, amount, scale=1e8, **_):
         return _daily_agg_two(close, amount, lambda a, b: _intra_amihud(a, b, float(scale)))
 
@@ -808,6 +836,10 @@ class IntraExtremeBarReturn(SeriesOperator):
     metadata = _metadata("intra_extreme_bar_return", "日内单分钟最大/最小收益。", ["close", "side"], unit="return")
 
     def _calculate_series(self, close, side="max", **_):
+        # R6-184: the kernel silently treated ANY side != "max" as "min", so
+        # ``side="abc"`` silently produced the min return.  Validate the enum.
+        if side not in ("max", "min"):
+            raise ValueError("side must be 'max' or 'min'")
         return _daily_agg(close, lambda v, t: _extreme_bar_return(v, side))
 
 
@@ -839,14 +871,27 @@ def _minute_hm(text: str) -> int:
     status="experimental",
 )
 class IntraLunchGapReturn(SeriesOperator):
-    metadata = _metadata("intra_lunch_gap_return", "午间跳空：下午首根 Open/上午末根 Close - 1。", ["close", "open"], unit="return")
+    metadata = _metadata("intra_lunch_gap_return", "午间跳空：下午首根 Open/上午末根 Close - 1。",
+               ["close", "open", "morning_cutoff", "afternoon_start", "session_tz"], unit="return")
+    metadata.param_specs = {  # R6-190: config knobs, not search parameters
+        "morning_cutoff": ParamSpec(dtype=str, searchable=False),
+        "afternoon_start": ParamSpec(dtype=str, searchable=False),
+        "session_tz": ParamSpec(dtype=str, searchable=False),
+    }
 
     def _calculate_series(self, close, open_px, morning_cutoff="11:30", afternoon_start="13:00", session_tz=None, **_):
         frame = _session_local(close, session_tz)
         opn = _session_local(open_px, session_tz)
         out = {}
         for inst in frame.columns:
-            joined = pd.concat([frame[inst], opn[inst]], axis=1, keys=["c", "o"]).dropna(subset=["c", "o"])
+            # R6-185: the OLD code ``dropna(subset=["c","o"])`` required BOTH
+            # close and open to be finite on the SAME minute before the join —
+            # the morning last-close and the afternoon first-open both had to
+            # be complete, dropping a valid morning close if its open was
+            # missing and vice versa.  The morning needs only Close, the
+            # afternoon only Open, so concatenate without a joint dropna and let
+            # ``_lunch_gap_return`` select each side independently.
+            joined = pd.concat([frame[inst], opn[inst]], axis=1, keys=["c", "o"])
             joined["day"] = joined.index.normalize()
             per_day = {}
             for day, group in joined.groupby("day"):
@@ -882,18 +927,34 @@ def _broadcast_daily_limits(close_frame, limit_frame):
 
 
 def _limit_mask(close_v, limit_v, side):
-    finite = np.isfinite(close_v) & np.isfinite(limit_v)
-    if not np.any(finite):
-        return np.zeros(len(close_v), dtype=bool)
+    """Limit-touch mask over a per-minute series.
+
+    R6-187: a NaN limit price means the day's limit level is UNKNOWN — it must
+    not be read as "no limit state" (which would silently count every minute as
+    not-at-limit and fabricate duration/reopen statistics).  The mask is
+    tri-state: True = at limit, False = valid bar below/above the known limit,
+    None = limit unknown (the caller must emit NaN, not False).
+    """
+    limit_known = np.isfinite(limit_v)
+    bar_valid = np.isfinite(close_v)
     if side == "up":
-        return finite & (close_v >= limit_v - _EPS)
-    if side == "down":
-        return finite & (close_v <= limit_v + _EPS)
-    raise ValueError(f"unknown limit side: {side!r}")
+        base = limit_known & bar_valid & (close_v >= limit_v - _EPS)
+    elif side == "down":
+        base = limit_known & bar_valid & (close_v <= limit_v + _EPS)
+    else:
+        raise ValueError(f"unknown limit side: {side!r}")
+    out = np.full(len(close_v), np.nan, dtype=object)
+    out[base] = True
+    out[limit_known & ~base] = False
+    return out
 
 
 def _limit_first_hit_time(close_v, times, limit_v, side):
     mask = _limit_mask(close_v, limit_v, side)
+    # R6-187: limit level unknown -> the whole day's limit state is unknown,
+    # emit NaN rather than a fabricated "never hit".
+    if np.any(pd.isna(mask)):
+        return np.nan
     idx = np.flatnonzero(mask)
     n = len(close_v)
     if len(idx) == 0 or n == 0:
@@ -911,11 +972,21 @@ def _limit_first_hit_time(close_v, times, limit_v, side):
     status="experimental",
 )
 class IntraLimitFirstHitTime(SeriesOperator):
-    metadata = _metadata("intra_limit_first_hit_time", "首次触及涨/跌停的分钟位置 / 有效分钟数。", ["close", "high_limit", "low_limit", "side"], unit="position")
+    metadata = _metadata("intra_limit_first_hit_time", "首次触及涨/跌停的分钟位置 / 有效分钟数。", ["close", "high", "low", "high_limit", "low_limit", "side"], unit="position")
     metadata.tags.append("allow_panel_broadcast")
 
-    def _calculate_series(self, close, high_limit=None, low_limit=None, side="up", **_):
-        frame = _as_panel(close)
+    def _calculate_series(self, close, high=None, low=None, high_limit=None, low_limit=None, side="up", **_):
+        # R6-186: "touch" must use the minute HIGH for the up-limit and the
+        # minute LOW for the down-limit — a minute whose high == limit_up but
+        # close < limit_up really touched the board but a close-based mask
+        # missed it.  ``sealed`` states (sustained at limit) can use close, but
+        # the FIRST-HIT is a touch event.  ``high``/``low`` are optional
+        # panels; when not provided the operator falls back to close (legacy
+        # behaviour) so the positional contract stays backward-compatible.
+        if side not in ("up", "down"):
+            raise ValueError("side must be 'up' or 'down'")
+        touch = (high if side == "up" else low) if (high is not None and low is not None) else close
+        frame = _as_panel(touch)
         lim = _broadcast_daily_limits(frame, high_limit if side == "up" else low_limit)
         out = {}
         for inst in frame.columns:
@@ -934,6 +1005,9 @@ class IntraLimitFirstHitTime(SeriesOperator):
 
 def _limit_duration(close_v, limit_v, side):
     mask = _limit_mask(close_v, limit_v, side)
+    # R6-187: unknown limit level -> NaN, not "0 minutes at limit".
+    if np.any(pd.isna(mask)):
+        return np.nan
     n = len(close_v)
     return float(np.count_nonzero(mask)) / float(n) if n > 0 else np.nan
 
@@ -969,12 +1043,28 @@ class IntraLimitDuration(SeriesOperator):
 
 
 def _limit_reopen_count(close_v, limit_v, side, transition):
-    mask = _limit_mask(close_v, limit_v, side).astype(int)
-    if transition == "open":
-        return float(np.sum((mask[:-1] == 1) & (mask[1:] == 0))) if len(mask) > 1 else 0.0
-    if transition == "reseal":
-        return float(np.sum((mask[:-1] == 0) & (mask[1:] == 1))) if len(mask) > 1 else 0.0
-    raise ValueError(f"unknown transition: {transition!r}")
+    mask = _limit_mask(close_v, limit_v, side)
+    # R6-187: unknown limit level -> the day's limit state is unknown; a
+    # reopen/reseal count built on a guessed mask is fabricated.
+    if np.any(pd.isna(mask)):
+        return np.nan
+    # R6-188: run the transition state machine on the OFFICIAL minute grid.
+    # A missing minute (NaN close) is a boundary: the state before and after a
+    # gap cannot be compared as adjacent minutes.  The caller must NOT
+    # ``dropna`` the grid (which would turn "1 -> gap -> 0" into an adjacent
+    # 1->0 transition).  We treat a NaN close as "episode interrupted": no
+    # transition is counted across it.
+    m = np.asarray(mask, dtype=bool)
+    valid = np.isfinite(close_v) & np.isfinite(limit_v)
+    count = 0.0
+    for i in range(1, len(m)):
+        if not (valid[i] and valid[i - 1]):
+            continue  # grid gap: state not comparable across a missing minute
+        if transition == "open" and m[i - 1] and not m[i]:
+            count += 1.0
+        elif transition == "reseal" and (not m[i - 1]) and m[i]:
+            count += 1.0
+    return count
 
 
 @register_operator(
@@ -995,7 +1085,11 @@ class IntraLimitReopenCount(SeriesOperator):
         lim = _broadcast_daily_limits(frame, high_limit if side == "up" else low_limit)
         out = {}
         for inst in frame.columns:
-            joined = pd.concat([frame[inst], lim[inst]], axis=1, keys=["c", "l"]).dropna(subset=["c"])
+            # R6-188: NO dropna — the reopen state machine must run on the
+            # OFFICIAL minute grid so a missing minute is a boundary, not a
+            # silent reconnection (``1 -> [missing] -> 0`` must not count as a
+            # 1->0 adjacent transition).
+            joined = pd.concat([frame[inst], lim[inst]], axis=1, keys=["c", "l"])
             joined["day"] = joined.index.normalize()
             per_day = {}
             for day, group in joined.groupby("day"):

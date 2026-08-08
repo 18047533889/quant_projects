@@ -295,6 +295,27 @@ def _calendar_domain_of(dataset_name: str) -> str:
     return "trade_day"
 
 
+def _strict_mirror_mode() -> bool:
+    """#P1-final closure 21：唯一严格模式判定（production OR strict_read）。"""
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        return is_strict_semantics()
+    except Exception:
+        return True
+
+
+# #P1-final closure 21：trade_day 期望日期在真实日历不可用时的回退标记。
+# 自然日回退会高估期望 partition（把周末/节假日当缺失），strict 下应显式记录
+# degraded，而不是静默当「完整期望」。
+_expected_dates_degraded: bool = False
+
+
+def expected_dates_degraded() -> bool:
+    """最近一次 ``_expected_dates`` 是否发生了 calendar→自然日 回退。"""
+    return _expected_dates_degraded
+
+
 def _market_trading_days(dataset_name: str, start: date, end: date) -> list[date]:
     """#25 用市场交易日历返回 [start, end] 内的交易日；无日历回退自然日。"""
     try:
@@ -321,13 +342,27 @@ def _expected_dates(dataset_name: str, start: date, end: date) -> list[date]:
 
     避免「交易日型数据按自然日枚举」导致周末/节假日被当成缺失 partition，进而
     误判 mirror 不完整 / 误切 remote。
+
+    #P1-final closure 21：trade_day 真实日历不可用 → 自然日回退**显式标记
+    degraded**（``expected_dates_degraded()`` 可查），调用方/审计据此知道期望
+    partition 是被高估的近似，而不是权威交易日。
     """
+    global _expected_dates_degraded
+    _expected_dates_degraded = False
     domain = _calendar_domain_of(dataset_name)
     if domain == "calendar_day":
         return _iter_dates(start, end)
     # trade_day（缺省）：优先交易日历，回退自然日
     tdays = _market_trading_days(dataset_name, start, end)
-    return tdays or _iter_dates(start, end)
+    if not tdays:
+        _expected_dates_degraded = True
+        logger.warning(
+            "cos_mirror: %s 的 trade_day 期望日期回退为自然日（真实交易日历不可用）——"
+            "期望 partition 会被高估（周末/节假日算缺失）。",
+            dataset_name,
+        )
+        return _iter_dates(start, end)
+    return tdays
 
 
 def _run_cos_cli(args: Sequence[str]) -> None:
@@ -394,8 +429,46 @@ def _write_download_manifest(dest: Path, *, remote_key: str | None = None) -> No
     os.replace(str(tmp_manifest), str(manifest))
 
 
-def _verify_mirror_file(dest: Path) -> bool:
-    """#27 校验本地镜像文件是否与 manifest 一致（size/mtime/checksum）。"""
+def _mirror_file_state(dest: Path) -> str:
+    """#P1-final closure 21：本地镜像文件完整性三态。
+
+    - ``verified``       ：有 manifest，size/mtime/verified 一致（checksum 在
+      deep 校验时才重算，见 ``_verify_mirror_file``）；
+    - ``legacy_unverified``：manifest-less 但存在且非空（整目录 ``cos sync``
+      产物）——**权威读取不能把「非空」当「完整」**；
+    - ``corrupt``        ：有 manifest 但 size/mtime/verified 对不上，或文件为空；
+    - ``missing``        ：不存在。
+    """
+    if not dest.exists():
+        return "missing"
+    try:
+        st = dest.stat()
+    except OSError:
+        return "missing"
+    if st.st_size <= 0:
+        return "corrupt"
+    manifest = dest.with_suffix(dest.suffix + ".manifest.json")
+    if not manifest.exists():
+        return "legacy_unverified"
+    try:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "corrupt"
+    if payload.get("size") != st.st_size or payload.get("mtime_ns") != st.st_mtime_ns:
+        return "corrupt"
+    if payload.get("verified") is False:
+        return "corrupt"
+    return "verified"
+
+
+def _verify_mirror_file(dest: Path, *, deep: bool = False) -> bool:
+    """#27 校验本地镜像文件是否与 manifest 一致（size/mtime；deep 再核 checksum）。
+
+    ``deep=True`` 时若 manifest 记录 ``checksum_sha256``，重新读文件算 hash 对比——
+    权威读取 / deep verify 用，杜绝「同 size/mtime 但内容被改」漏网。
+    """
+    import hashlib
+
     if not dest.exists():
         return False
     st = dest.stat()
@@ -412,6 +485,18 @@ def _verify_mirror_file(dest: Path) -> bool:
         return False
     if payload.get("verified") is False:
         return False
+    if deep:
+        expected = payload.get("checksum_sha256")
+        if expected:
+            try:
+                h = hashlib.sha256()
+                with dest.open("rb") as fh:
+                    for _chunk in iter(lambda: fh.read(1 << 20), b""):
+                        h.update(_chunk)
+                if h.hexdigest()[:32] != str(expected):
+                    return False
+            except OSError:
+                return False
     return True
 
 
@@ -469,15 +554,22 @@ def _local_file_usable(dest: Path) -> bool:
     整目录 ``cos sync`` 出来的文件没有 per-file manifest；strict ``_local_file_fresh``
     对它们恒 False，会导致每次 ensure 全量重拉。增量路径用本判定：verified-stale
     或损坏（有 manifest 对不上）→ resync；manifest-less 的完整文件视为可用。
+
+    #P1-final closure 21：**strict/production 下不把「非空」当「完整」**——
+    ``legacy_unverified``（manifest-less）在严格模式必须 resync 成 verified 才
+    可被权威读取使用；research/增量 sync 才允许宽松放行。
     """
-    if _verify_mirror_file(dest):
+    state = _mirror_file_state(dest)
+    if state == "verified":
         return True
-    if not dest.exists():
+    if state == "corrupt":
         return False
-    try:
-        return dest.stat().st_size > 0
-    except OSError:
+    if state == "missing":
         return False
+    # legacy_unverified：manifest-less 非空文件
+    if _strict_mirror_mode():
+        return False  # 权威读取：无法证明完整 ⇒ 必须 resync
+    return True
 
 
 def _sync_cos_file(cos_uri: str, dest: Path) -> None:

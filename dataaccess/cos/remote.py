@@ -620,6 +620,16 @@ _httpfs_ext_available: bool | None = None
 _httpfs_ext_lock = threading.Lock()
 
 
+def _strict_mode() -> bool:
+    """#P1-final closure 17：唯一严格模式判定（production OR strict_read）。"""
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        return is_strict_semantics()
+    except Exception:
+        return True
+
+
 def _httpfs_extension_available() -> bool:
     """进程内缓存 httpfs 扩展探测结果，避免 auto 模式每次 spawn DuckDB。"""
     global _httpfs_ext_available
@@ -633,6 +643,12 @@ def _httpfs_extension_available() -> bool:
             try:
                 con.execute("LOAD httpfs;")
             except Exception:
+                # #P1-final closure 17：strict/production 禁止 query-time 联网
+                # INSTALL（扩展是部署阶段的事，缺扩展是 deployment 错误）——
+                # LOAD 失败即视为不可用，绝不自动联网装。
+                if _strict_mode():
+                    _httpfs_ext_available = False
+                    return False
                 try:
                     con.execute("INSTALL httpfs; LOAD httpfs;")
                 except Exception:

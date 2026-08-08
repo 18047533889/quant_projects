@@ -31,7 +31,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec
+from cleaned_operators.base import ParamSpec, RelationalParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -42,15 +42,31 @@ from cleaned_operators.gemini_v2_common import (
 _EPS = 1e-12
 
 # R5 P1-01: embedding ints are validated (dim=1.9 -> reject), ``theiler >= 0``.
+# R6-116: ``eps_fraction`` is declared strictly inside (0,1) to MATCH the runtime
+# check — the previous spec allowed 0/1 that search could generate but runtime
+# rejected, a dead search region.
+# R6-112: the Theiler window default is the embedding span (dim-1)*delay, since
+# adjacent embedded points share (dim-1) coordinates and are trivially close.
 _RQA_PARAM_SPECS = {
     "window": ParamSpec(dtype=int, min=2),
     "dim": ParamSpec(dtype=int, min=1),
     "delay": ParamSpec(dtype=int, min=1),
-    "eps_fraction": ParamSpec(dtype=float, min=0.0, max=1.0),
+    "eps_fraction": ParamSpec(dtype=float, min=1e-4, max=1.0 - 1e-4),
     "min_line": ParamSpec(dtype=int, min=2),
     "min_periods": ParamSpec(dtype=int, min=4),
     "theiler": ParamSpec(dtype=int, min=0),
 }
+# R6-117: ``min_line`` must be strictly below the phase-space size
+# M = window - (dim-1)*delay, or no diagonal/vertical line of that length can
+# exist and the line statistic is unestimable (runtime returns NaN).  Declared
+# as a relational constraint so search never emits a guaranteed-NaN combo.
+_RQA_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "min_line < window - (dim - 1) * delay",
+        "min_line must be < effective embedding count window-(dim-1)*delay "
+        "(min_line={min_line}, window={window}, dim={dim}, delay={delay})",
+    )
+]
 
 
 def _rqa_stats_window(
@@ -59,9 +75,17 @@ def _rqa_stats_window(
     delay: int,
     eps_fraction: float,
     min_line: int,
-    theiler: int = 0,
+    theiler: int | None = None,
 ) -> dict[str, float]:
-    """Full RQA statistics for one finite window (see module docstring)."""
+    """Full RQA statistics for one finite window (see module docstring).
+
+    R6-113: phase-space distance grows ~√dim in a dim-dimensional embedding, so a
+    fixed epsilon does not describe a fixed neighbourhood density across dim.
+    Normalise epsilon by √dim: ``eps = eps_fraction * scale / sqrt(dim)``.
+    R6-112: the Theiler window (temporal exclusion) defaults to the embedding
+    span ``(dim-1)*delay`` — adjacent embedded points share (dim-1) coordinates
+    and are naturally close, so excluding fewer than that inflates DET/LAM.
+    """
     M = v.shape[0] - (dim - 1) * delay
     if M < 4:
         return {}
@@ -76,7 +100,11 @@ def _rqa_stats_window(
         scale = float(np.std(v))
     if not np.isfinite(scale) or scale <= _EPS:
         return {}
-    eps = float(eps_fraction) * scale
+    # R6-113: √dim-normalised epsilon keeps neighbourhood density comparable
+    # across embedding dimensions.
+    eps = float(eps_fraction) * scale / float(np.sqrt(max(1, int(dim))))
+    if theiler is None:
+        theiler = max(0, (dim - 1) * delay)
     D = np.sqrt(np.sum((P[:, None, :] - P[None, :, :]) ** 2, axis=2))
     # R5 P1-05 (Theiler window): pairs too close in TIME (|i − j| ≤ theiler) are
     # excluded from the recurrence matrix — a smooth price series makes adjacent
@@ -146,7 +174,7 @@ def _rqa_stats_window(
 
 
 def _check_params(
-    window: int, dim: int, delay: int, eps_fraction: float, min_line: int, theiler: int = 0
+    window: int, dim: int, delay: int, eps_fraction: float, min_line: int, theiler: int | None = None
 ) -> tuple[int, int, int, float, int, int]:
     w = max(2, int(window))
     d = max(1, int(dim))
@@ -157,7 +185,7 @@ def _check_params(
     if d * dl > 4:
         raise ValueError("dimension*delay must be <= 4 (embedding support)")
     ml = max(2, int(min_line))
-    th = max(0, int(theiler))
+    th = max(0, (d - 1) * dl if theiler is None else int(theiler))
     return w, d, dl, ef, ml, th
 
 
@@ -188,7 +216,7 @@ def _ts_recurrence_determinism(
     eps_fraction: float = 0.1,
     min_line: int = 4,
     min_periods: int = 10,
-    theiler: int = 0,
+    theiler: int | None = None,
 ) -> pd.DataFrame:
     out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "determinism", theiler)
     return frame_like(x, out)
@@ -202,7 +230,7 @@ def _ts_recurrence_laminarity(
     eps_fraction: float = 0.1,
     min_line: int = 4,
     min_periods: int = 10,
-    theiler: int = 0,
+    theiler: int | None = None,
 ) -> pd.DataFrame:
     out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "laminarity", theiler)
     return frame_like(x, out)
@@ -216,7 +244,7 @@ def _ts_recurrence_mean_diagonal_length(
     eps_fraction: float = 0.1,
     min_line: int = 4,
     min_periods: int = 10,
-    theiler: int = 0,
+    theiler: int | None = None,
 ) -> pd.DataFrame:
     out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "mean_diagonal_length", theiler)
     return frame_like(x, out)
@@ -230,7 +258,7 @@ def _ts_recurrence_longest_vertical_length(
     eps_fraction: float = 0.1,
     min_line: int = 4,
     min_periods: int = 10,
-    theiler: int = 0,
+    theiler: int | None = None,
 ) -> pd.DataFrame:
     out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "longest_vertical_length", theiler)
     return frame_like(x, out)
@@ -294,6 +322,7 @@ def _register() -> None:
             tags_extra=spec["tags_extra"],
             output_unit=spec["unit"],
             param_specs=spec.get("param_specs"),
+            relational_specs=_RQA_RELATIONAL_SPECS,
         )
     union_extended(*_SPECS.keys())
 

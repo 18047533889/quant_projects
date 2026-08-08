@@ -34,8 +34,12 @@ from cleaned_operators.gemini_v2_common import (
 
 _EPS = 1e-12
 
+# R6-165: Qn and Hodges-Lehmann are O(n²) per rolling row (Qn builds all
+# pairwise absolute differences; HL sorts all pair means).  A window cap keeps
+# automatic search from generating an exploding-cost parameter; search should
+# default to the reviewed grid {20, 60, 120} which is well below the cap.
 _ROBUST_SCALE_SPECS = {
-    "window": ParamSpec(dtype=int, min=2),
+    "window": ParamSpec(dtype=int, min=2, max=512),
     "min_periods": ParamSpec(dtype=int, min=2),
 }
 
@@ -153,10 +157,10 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["x", "window", "min_periods"],
         "category": "robust_statistics",
         "domain": "statistics",
-        "unit": "same_as_target",
+        "unit": "same_as:target",
         "cost": 5,
         "tags_extra": [],
-        "output_unit": "same_as_target",
+        "output_unit": "same_as:target",
         "param_specs": _ROBUST_SCALE_SPECS,
     },
     "ts_hodges_lehmann_location": {
@@ -164,10 +168,10 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["x", "window", "min_periods"],
         "category": "robust_statistics",
         "domain": "statistics",
-        "unit": "same_as_target",
+        "unit": "same_as:target",
         "cost": 5,
         "tags_extra": [],
-        "output_unit": "same_as_target",
+        "output_unit": "same_as:target",
         "param_specs": _ROBUST_SCALE_SPECS,
     },
 }

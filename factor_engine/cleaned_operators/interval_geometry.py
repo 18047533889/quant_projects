@@ -60,6 +60,23 @@ def _valid_pairs(lo: np.ndarray, hi: np.ndarray) -> tuple[np.ndarray, np.ndarray
     return lo[m].astype(float), hi[m].astype(float)
 
 
+# R6-110: the interval set-family (union coverage / occupancy entropy /
+# overlap component) must not keep computing from a window that has collapsed
+# to a handful of valid intervals — a W=60 window with 3 surviving intervals
+# is not a meaningful sample of the price structure.  The minimum is expressed
+# as a fraction of the window length so short windows are not over-penalised.
+_MIN_COVERAGE_RATIO = 0.8
+
+
+def _coverage_ok(lo: np.ndarray, hi: np.ndarray) -> bool:
+    """Whether the window has >= 80% valid interval pairs (R6-110)."""
+    if lo.size == 0:
+        return False
+    n = int(lo.size)
+    valid = int(np.sum(np.isfinite(lo) & np.isfinite(hi) & (lo <= hi)))
+    return float(valid) / n >= _MIN_COVERAGE_RATIO
+
+
 def _union_length(l: np.ndarray, h: np.ndarray) -> float:
     """Measure of the union of sorted-by-start intervals ``[l_i, h_i]``."""
     if l.size == 0:
@@ -111,7 +128,7 @@ def _union_coverage_series(lo2d: np.ndarray, hi2d: np.ndarray, window: int) -> n
         for r in range(rows):
             i0 = max(0, r - w + 1)
             l, h = _valid_pairs(lo[i0 : r + 1], hi[i0 : r + 1])
-            if l.size == 0:
+            if l.size == 0 or not _coverage_ok(lo[i0 : r + 1], hi[i0 : r + 1]):
                 continue
             env = float(h.max() - l.min())
             if env <= 0:
@@ -130,6 +147,8 @@ def _occupancy_series(lo2d: np.ndarray, hi2d: np.ndarray, window: int, bins: int
         for r in range(rows):
             i0 = max(0, r - w + 1)
             l, h = _valid_pairs(lo[i0 : r + 1], hi[i0 : r + 1])
+            if not _coverage_ok(lo[i0 : r + 1], hi[i0 : r + 1]):
+                continue
             prof = _occupancy_profile(l, h, b) if l.size else None
             if prof is None:
                 continue
@@ -190,23 +209,34 @@ def _exploration_efficiency_series(hi2d: np.ndarray, lo2d: np.ndarray, cl2d: np.
         tr = np.where(np.isfinite(prev_cl), tr, np.nan)
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            # ``_valid_pairs`` returns (low, high); a swapped assignment made
-            # ``span = max(low) - min(high)`` instead of ``max(high) - min(low)``
-            # (review P0: interval-exploration variable reversal).
-            l, h = _valid_pairs(lo[i0 : r + 1], hi[i0 : r + 1])
-            if l.size == 0:
+            # R6-108: numerator and denominator must describe the SAME cohort.
+            # The old code took the price span from ALL valid low/high pairs in
+            # the window (both sides of a gap) but the travel from only the
+            # post-gap trailing TR run — after a gap the numerator "walked
+            # through" price space the denominator never travelled, biasing the
+            # ratio up.  Define ONE trailing contiguous finite cohort
+            # [start_valid, r] (high/low/close all finite) and use only it for
+            # span, high/low and TR sum.
+            seg_hi = hi[i0 : r + 1]
+            seg_lo = lo[i0 : r + 1]
+            seg_cl = cl[i0 : r + 1]
+            k = len(seg_hi) - 1
+            while k >= 0 and np.isfinite(seg_hi[k]) and np.isfinite(seg_lo[k]) and np.isfinite(seg_cl[k]):
+                k -= 1
+            cohort = slice(k + 1, None)
+            ch, cll, ccl = seg_hi[cohort], seg_lo[cohort], seg_cl[cohort]
+            if ch.size == 0:
                 continue
-            span = float(h.max() - l.min())
-            # Gap handling: a missing previous close makes that row's TR
-            # undefined.  Counting it as zero (``np.nansum``) would pretend an
-            # unobserved price step has no path cost, overstating efficiency;
-            # the gap breaks the path, so travel is only the *trailing
-            # contiguous* run of known TRs (review P0: interval path cost).
-            seg_tr = tr[i0 : r + 1]
-            j = len(seg_tr) - 1
-            while j >= 0 and np.isfinite(seg_tr[j]):
-                j -= 1
-            travel = float(np.sum(seg_tr[j + 1 :]))
+            span = float(ch.max() - cll.min())
+            if span <= 0:
+                continue
+            # TR sum over the SAME cohort; the cohort's first row has no valid
+            # previous close inside the cohort (its own TR used the pre-gap
+            # close or a missing one), so it contributes NaN — travel is the
+            # sum of the fully-inside-cohort TRs.
+            ctr = np.maximum(ch - cll, np.maximum(np.abs(ch - np.concatenate([[np.nan], ccl[:-1]])), np.abs(cll - np.concatenate([[np.nan], ccl[:-1]]))))
+            ctr = np.where(np.isfinite(np.concatenate([[np.nan], ccl[:-1]])), ctr, np.nan)
+            travel = float(np.nansum(ctr))
             if not np.isfinite(travel) or travel <= 0:
                 continue
             out[r, c] = span / (travel + _EPS)
@@ -223,7 +253,7 @@ def _overlap_component_ratio_series(lo2d: np.ndarray, hi2d: np.ndarray, window: 
             i0 = max(0, r - w + 1)
             l, h = _valid_pairs(lo[i0 : r + 1], hi[i0 : r + 1])
             n = l.size
-            if n == 0:
+            if n == 0 or not _coverage_ok(lo[i0 : r + 1], hi[i0 : r + 1]):
                 continue
             # union-find: overlap iff l_i <= h_j and l_j <= h_i
             parent = list(range(n))
@@ -333,7 +363,16 @@ class TsIntervalOccupancyModeDistance(SeriesOperator):
         for c in range(cols):
             for r in range(rows):
                 i0 = max(0, r - w + 1)
-                l, h = _valid_pairs(lo2[i0 : r + 1, c], hi2[i0 : r + 1, c])
+                # R6-111: the occupancy profile must EXCLUDE the current row.
+                # Including ``[low_t, high_t]`` then measuring the distance of
+                # the current price to the mode of that same profile is
+                # self-contamination — the query changes its own reference.
+                # The current row is the query; the profile is the trailing
+                # history [t-W, t-1] (gap-free prefix-causal: bars after a gap
+                # still count, since the profile is not a stateful path).
+                l, h = _valid_pairs(lo2[i0:r, c], hi2[i0:r, c])
+                if not _coverage_ok(lo2[i0:r, c], hi2[i0:r, c]):
+                    continue
                 prof = _occupancy_profile(l, h, b) if l.size else None
                 if prof is None:
                     continue
@@ -405,21 +444,30 @@ class TsIntervalExplorationEfficiency(SeriesOperator):
 
 
 @register_operator(
-    name="ts_interval_overlap_component_ratio",
+    # R6-109: renamed to what the kernel actually computes.  The union-find
+    # below groups bars into OVERLAP-CONNECTED components (A overlaps B, B
+    # overlaps C => A/B/C one component even when A does not overlap C).  That
+    # is *not* a "mutually-overlapping price zone" (which would require
+    # max(low) <= min(high) across the whole group) — the old name implied a
+    # common-overlap cluster the math never produced.  The old name stays as an
+    # alias (see ``_register_surface``).
+    name="ts_interval_overlap_connected_component_ratio",
     category="interval_geometry",
     business_category="interval_geometry",
-    canonical="ts_interval_overlap_component_ratio",
+    canonical="ts_interval_overlap_connected_component_ratio",
     source="interval_geometry",
 )
 class TsIntervalOverlapComponentRatio(SeriesOperator):
-    """最大重叠区间连通分量占比。
+    """最大重叠**连通分量**占比（非共同重叠区）。
 
     高 → 最近行情属于同一个连续价格结构；低 → 分裂成多个互不重叠的价格区域
-    （跳空/regime shift/价格重心迁移敏感）。P2。
+    （跳空/regime shift/价格重心迁移敏感）。注意：这是 overlap-connected
+    component（A-B、B-C 重叠则 A-B-C 同分量），不是 mutually-overlapping 价格带
+    （后者要求组内 max(low)<=min(high)）。P2。
     """
 
     metadata = _metadata(
-        "ts_interval_overlap_component_ratio",
+        "ts_interval_overlap_connected_component_ratio",
         "最大重叠连通分量 / 窗口 K 线数（价格结构连续 vs 分裂）。",
         ["low", "high", "window"],
         unit="ratio",
@@ -438,16 +486,26 @@ _NEW_CANONICALS = (
     "ts_interval_occupancy_mode_distance",
     "ts_interval_nesting_depth",
     "ts_interval_exploration_efficiency",
-    "ts_interval_overlap_component_ratio",
+    "ts_interval_overlap_connected_component_ratio",
 )
+
+# R6-109: the honest name is the canonical; the old (misleading) name stays as
+# a resolving alias so existing recipes/DSL expressions keep working.
+_OLD_OVERLAP_NAME = "ts_interval_overlap_component_ratio"
 
 
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | set(_NEW_CANONICALS)
-    )
+    _surface.extend_extended_only(set(_NEW_CANONICALS))
+    from cleaned_operators.registry import OperatorRegistry
+
+    try:
+        OperatorRegistry.register_alias(
+            _OLD_OVERLAP_NAME, "ts_interval_overlap_connected_component_ratio"
+        )
+    except (KeyError, ValueError):
+        pass  # already registered
     for _canon in _NEW_CANONICALS:
         register_polars_bridge(_canon)
 

@@ -414,6 +414,24 @@ class OperatorRegistry:
         """
         canonical = canonical or operator.metadata.name
         cls._assert_writable()
+        # R6-157: registry invariant — ``keys(param_specs) ⊆ param_names``.
+        # A ParamSpec declared for a parameter the canonical does not have is a
+        # dead search node (DMD ``top_k`` on dominant-growth, Allan ``scale`` on
+        # the log-mean) and a hidden-knob vector.  Failing at registration, not
+        # at search time, keeps load_all the gate.
+        _meta = getattr(operator, "metadata", None)
+        _specs = getattr(_meta, "param_specs", None) or {}
+        _names = set(getattr(_meta, "param_names", None) or [])
+        _aliases = set(getattr(_meta, "param_aliases", None) or {})
+        if _specs:
+            _extra = sorted(set(_specs) - _names - _aliases)
+            if _extra:
+                raise ValueError(
+                    f"operator {canonical!r}: ParamSpec keys {_extra} are not in "
+                    "param_names (R6-157 registry invariant).  Declare the "
+                    "parameter on the canonical or narrow the ParamSpec dict to "
+                    "the parameters this canonical actually takes."
+                )
         if not _calculate_is_framework_or_declared(operator):
             raise TypeError(
                 f"operator {canonical!r} overrides ``calculate`` without routing "
@@ -620,6 +638,14 @@ class OperatorRegistry:
             "output_grain": _first_non_null(
                 prev.get("output_grain"),
                 getattr(_metadata, "output_grain", None),
+            ),
+            "available_at": _first_non_null(
+                prev.get("available_at"),
+                getattr(_metadata, "available_at", None),
+            ),
+            "same_session_usable": _first_non_null(
+                prev.get("same_session_usable"),
+                getattr(_metadata, "same_session_usable", None),
             ),
             "input_fields": _first_non_null(
                 prev.get("input_fields"),

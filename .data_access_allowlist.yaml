@@ -176,6 +176,8 @@
   reason: "dataaccess 自身实现：Contract IR 编译器（#12），只编译不读文件"
 - path: dataaccess/read/coverage.py
   reason: "dataaccess 自身实现：覆盖/完整性报告（#14），glob() 枚举文件"
+- path: dataaccess/read/sql_escape.py
+  reason: "SQL 逃生口实现本体（有限只读沙箱）：#P1-final closure 23 parser 级函数 allowlist 用隔离 :memory: DuckDB 连接读 duckdb_functions() 注册表（只读 introspection，不读数据）"
 - path: dataaccess/cos/serving.py
   reason: "dataaccess 自身实现：serving 层预聚合（#30），read_parquet + groupby 聚合"
 - path: dataaccess/read/query_cache.py

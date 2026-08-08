@@ -94,7 +94,10 @@ def _recurrence_stats_window(
         scale = float(np.std(v))
     if not np.isfinite(scale) or scale <= _EPS:
         return None
-    eps = float(eps_fraction) * scale
+    # R6-113: phase-space distance grows ~√dim in dim dimensions; a fixed
+    # epsilon does not represent a fixed neighbourhood density across dim.
+    # Normalise epsilon by √dim for comparability.
+    eps = float(eps_fraction) * scale / float(np.sqrt(max(1, int(dim))))
     D = np.sqrt(np.sum((P[:, None, :] - P[None, :, :]) ** 2, axis=2))
     R = (D <= eps) & ~np.eye(M, dtype=bool)
 
@@ -126,8 +129,15 @@ def _recurrence_stats_window(
         uniq, counts = np.unique(lens, return_counts=True)
         p = counts / counts.sum()
         ent = -float(np.sum(p * np.log(p)))
-        if uniq.size > 1:
-            ent /= np.log(uniq.size)
+        # R6-115: the previous normalisation divided by log(#unique lengths seen
+        # in THIS window), so two windows with identical probability structure
+        # got different values purely because one happened to contain a rare
+        # extra length.  Normalise by the FIXED theoretical support of the
+        # diagonal-length distribution instead: lengths run from ``min_line`` to
+        # ``M`` (the phase-space size), so the maximum entropy is log(M-min_line+1)
+        # regardless of which lengths actually appeared.
+        support = max(2, M - int(min_line) + 1)
+        ent /= np.log(support)
     else:
         ent = np.nan
 
@@ -327,7 +337,9 @@ class TsRecurrenceDivergence(SeriesOperator):
         "ts_recurrence_divergence",
         "1/最长对角线长度（局部发散代理）。",
         ["x", "window", "dim", "delay", "eps_fraction", "min_periods"],
-        unit="ratio",
+        # R6-114: DIV = 1/L_max has units of 1/bar (inverse of a length in
+        # bars), NOT a dimensionless ratio.  Declared honestly as inverse_bars.
+        unit="inverse_bars",
         cost=6,
     )
 

@@ -148,6 +148,14 @@ def _persistence_entropy(pairs: list[tuple[float, float]]) -> float:
     lifetimes = lifetimes[np.isfinite(lifetimes)]
     if lifetimes.size == 0:
         return np.nan
+    # R6-118: zero-lifetime features (birth == death) contribute zero to the
+    # probability mass but still increase ``count``, silently changing the
+    # entropy normalisation of the features that DO persist.  Drop them BEFORE
+    # computing p / count / entropy so the measure reflects the genuine
+    # persistence structure only.
+    lifetimes = lifetimes[np.isfinite(lifetimes) & (lifetimes > _EPS)]
+    if lifetimes.size == 0:
+        return np.nan
     total = float(lifetimes.sum())
     if not np.isfinite(total) or total <= 0.0:
         return np.nan

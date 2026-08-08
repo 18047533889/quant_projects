@@ -159,7 +159,7 @@ def _seg_return(close: pl.DataFrame, segment: str) -> pl.DataFrame:
     return _pivot(out, "v")
 
 
-_mk("intra_segment_return", "指定时段（morning/afternoon）收盘/开盘收益 - 1（Polars）。", ["close", "segment"],
+_mk("intra_segment_return", "指定时段（morning/afternoon）收盘/开盘收益 - 1（Polars）。", ["close", "segment", "session_tz"],
    lambda close, segment="morning": _seg_return(close, segment))
 
 
@@ -176,9 +176,9 @@ def _seg_share(value: pl.DataFrame, segment: str) -> pl.DataFrame:
     return _pivot(out, "v")
 
 
-_mk("intra_segment_volume_share", "指定时段成交量占全天比例（Polars）。", ["volume", "segment"],
+_mk("intra_segment_volume_share", "指定时段成交量占全天比例（Polars）。", ["volume", "segment", "session_tz"],
    lambda volume, segment="morning": _seg_share(volume, segment))
-_mk("intra_segment_amount_share", "指定时段成交额占全天比例（Polars）。", ["amount", "segment"],
+_mk("intra_segment_amount_share", "指定时段成交额占全天比例（Polars）。", ["amount", "segment", "session_tz"],
    lambda amount, segment="morning": _seg_share(amount, segment))
 
 
@@ -204,8 +204,8 @@ def _seg_vwap_dev(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.DataFram
 
 
 _mk("intra_segment_vwap_deviation", "指定时段末价相对该时段累计 VWAP 的偏差（Polars）。",
-   ["close", "amount", "volume", "segment"],
-   lambda close, amount, volume, segment="morning": _seg_vwap_dev(close, amount, volume, segment))
+   ["close", "amount", "volume", "segment", "session_tz"],
+   lambda close, amount, volume, segment="morning", session_tz=None: _seg_vwap_dev(close, amount, volume, segment))
 
 
 def _seg_realized_vol(close: pl.DataFrame, segment: str) -> pl.DataFrame:
@@ -218,8 +218,8 @@ def _seg_realized_vol(close: pl.DataFrame, segment: str) -> pl.DataFrame:
     return _pivot(out, "v")
 
 
-_mk("intra_segment_realized_vol", "指定时段已实现波动率 sqrt(sum(r_t^2))（Polars）。", ["close", "segment"],
-   lambda close, segment="morning": _seg_realized_vol(close, segment))
+_mk("intra_segment_realized_vol", "指定时段已实现波动率 sqrt(sum(r_t^2))（Polars）。", ["close", "segment", "session_tz"],
+   lambda close, segment="morning", session_tz=None: _seg_realized_vol(close, segment))
 
 
 # ---------------------------------------------------------------------------
@@ -693,8 +693,8 @@ def _lunch_gap_return(close: pl.DataFrame, open_px: pl.DataFrame, morning_cutoff
 
 
 _mk("intra_lunch_gap_return", "午间跳空：下午首根 Open/上午末根 Close - 1（Polars）。",
-   ["close", "open", "morning_cutoff", "afternoon_start"],
-   lambda close, open_px, morning_cutoff="11:30", afternoon_start="13:00":
+   ["close", "open", "morning_cutoff", "afternoon_start", "session_tz"],
+   lambda close, open_px, morning_cutoff="11:30", afternoon_start="13:00", session_tz=None:
        _lunch_gap_return(close, open_px, morning_cutoff, afternoon_start))
 
 
@@ -742,8 +742,8 @@ def _limit_first_hit_time(close: pl.DataFrame, high_limit, low_limit, side: str)
 
 
 _mk("intra_limit_first_hit_time", "首次触及涨/跌停的分钟位置（Polars）。",
-   ["close", "high_limit", "low_limit", "side"],
-   lambda close, high_limit=None, low_limit=None, side="up":
+   ["close", "high", "low", "high_limit", "low_limit", "side"],
+   lambda close, high=None, low=None, high_limit=None, low_limit=None, side="up":
        _limit_first_hit_time(close, high_limit, low_limit, side),
    extra_tags=["allow_panel_broadcast"])
 

@@ -153,13 +153,17 @@ class ParametricDataset(DatasetBase):
             k: ParamSpec(name=k, type=t) for k, t in self.params_schema.items()
         }
         validated = validate_params(self.name, specs, params)
+        # #P1-final closure 12：read/write 时才把 ``${RUN_NAMESPACE}`` 解析成当前
+        # context 的 namespace（在 ``.format(**validated)`` **之前**——否则
+        # ``{RUN_NAMESPACE}`` 会被 format 当成参数占位符而 KeyError）。
+        root_tpl = resolve_namespace_path(self.root_template)
+        glob_tpl = resolve_namespace_path(self.glob_template)
         try:
-            root = self.root_template.format(**validated)
-            glob_part = self.glob_template.format(**validated)
+            root = root_tpl.format(**validated)
+            glob_part = glob_tpl.format(**validated)
         except KeyError as exc:
             raise ValidationError(f"模板变量缺失：{exc}") from exc
-        # #P1-final closure 12：read/write 时才解析当前 context 的 namespace。
-        return [resolve_namespace_path(str(Path(root) / glob_part))]
+        return [str(Path(root) / glob_part)]
 
 
 Dataset = StaticDataset | ParametricDataset
@@ -453,8 +457,14 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     # 「模板里第一个 { 之前的部分」（保守但过宽——如 /data/{market}/{factor_id}
     # 会授权整个 /data）。新数据集请显式声明 authorized_root；本层保留静态前缀
     # 作为向后兼容回退。
-    first_brace = root_template.find("{")
-    static_prefix = root_template[:first_brace] if first_brace >= 0 else root_template
+    # #P1-final closure 12：``${RUN_NAMESPACE}`` 里的 ``{`` 不能当参数占位符——
+    # 先屏蔽成无花括号的哨兵再找第一个 ``{``，否则 ``/staging/${RUN_NAMESPACE}/f/``
+    # 的静态前缀会被切成 ``/staging/$``（namespace 被吞）。
+    _NS_SENTINEL = "__DA_NS_PLACEHOLDER__"
+    _ns_probe = root_template.replace("${RUN_NAMESPACE}", _NS_SENTINEL)
+    _first_brace = _ns_probe.find("{")
+    _static_prefix = _ns_probe[:_first_brace] if _first_brace >= 0 else _ns_probe
+    static_prefix = _static_prefix.replace(_NS_SENTINEL, "${RUN_NAMESPACE}")
     static_root = canonicalize(static_prefix.rstrip("/") or "/")
     authorized_root = _parse_authorized_root(raw, static_prefix=static_prefix, context=context)
 

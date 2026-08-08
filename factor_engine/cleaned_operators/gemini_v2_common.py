@@ -143,6 +143,10 @@ def register_dual(
     # in both directions (int stays validated, float stays float, bounds/choices
     # and ``searchable=False`` are enforced).
     param_specs: Mapping[str, Any] | None = None,
+    # R6-24: declared cross-parameter feasibility constraints (RelationalParamSpec)
+    # forwarded to the pandas metadata so the central validator rejects
+    # guaranteed-NaN parameter combinations before search spends budget.
+    relational_specs: Sequence[Any] | None = None,
 ) -> None:
     """Register ``fn`` under ``canonical`` for both pandas_numpy and polars.
 
@@ -166,6 +170,7 @@ def register_dual(
     ]
     units = dict(input_units) if input_units else None
     specs = dict(param_specs) if param_specs else None
+    rel_specs = list(relational_specs) if relational_specs else None
 
     class _PandasOp(PandasSeriesOperator):
         metadata = PandasMetadata(
@@ -180,6 +185,7 @@ def register_dual(
             output_unit=output_unit,
             window_semantics=window_semantics,
             param_specs=specs,
+            relational_specs=rel_specs,
         )
 
         def _calculate_series(self, *args, _fn=fn, **kwargs):

@@ -172,9 +172,12 @@ class FactorCatalog:
             # build 产出字节级一致的目录文件）。
             "factors": [r.to_dict() for _, r in sorted(self.records.items())],
         }
-        tmp = root / f".{CATALOG_FILENAME}.tmp"
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(out)
+        # #P1-final closure 19：统一 atomic durable-write
+        from data_access.core.atomic import atomic_write_text
+
+        atomic_write_text(
+            out, json.dumps(payload, ensure_ascii=False, indent=2)
+        )
         return out
 
     @classmethod

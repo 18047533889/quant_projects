@@ -459,6 +459,14 @@ def _load_all_impl() -> None:
     from backend.sql_pushdown.sql_registry import register_sql_backends
     register_sql_backends()
 
+    # Close the backend gap: every canonical that still only has a pandas
+    # reference gets a polars fallback (exact-parity delegation to the certified
+    # pandas_numpy implementation), so the auto router and the SQL backends'
+    # non-pushdown fallback run polars instead of pandas.  Runs after all
+    # operator modules and governance layers, so names/references are final.
+    from cleaned_operators.polars_gap_coverage import register_polars_gap_coverage
+    register_polars_gap_coverage()
+
     # Replace the legacy first-seen fiscal SQL lowering with exact ordinal,
     # revision-aware semantics before evidence and final contracts are consumed.
     from backend.sql_pushdown.fiscal_v2 import apply_fiscal_sql_v2

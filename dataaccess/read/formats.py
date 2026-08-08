@@ -299,6 +299,32 @@ def validate_format_extra(fmt_type: str, extra: dict[str, Any], *, context: str)
                 "语义下被拒绝——坏行静默跳过会污染研究输入。仅 ingestion_recovery "
                 "模式才允许（并需 audit rows_rejected/errors）。"
             )
+    # #P1-final closure 24：DuckDB version capability 门——某些 option 需要特定
+    # DuckDB 版本才真正生效；旧版本上配置会被静默忽略 = 配置失效（比报错更糟）。
+    # 用 ``get_duckdb_capabilities()`` 探测的版本做校验，不再假设版本不变。
+    for key, (min_version, label) in _VERSION_GATED_OPTIONS.get(fmt_type, {}).items():
+        if key not in extra:
+            continue
+        from data_access.core.duckdb_capabilities import get_duckdb_capabilities
+
+        caps = get_duckdb_capabilities()
+        if caps.version < min_version:
+            raise ValidationError(
+                f"{context}: format.extra.{key} 需要 DuckDB >= "
+                f"{'.'.join(str(x) for x in min_version)}（{label}）；当前安装 "
+                f"{caps.version_str} 上该 option 会被静默忽略。"
+            )
+
+
+# #P1-final closure 24：per-format 需要特定 DuckDB 版本才生效的 option。
+# （缺省未列出的 option 假定全版本可用；DuckDB 能力探测见 core/duckdb_capabilities.py）
+_VERSION_GATED_OPTIONS: dict[str, dict[str, tuple[tuple[int, int], str]]] = {
+    "parquet": {
+        "file_row_number": ((0, 8), "read_parquet file_row_number 参数"),
+        "union_by_name": ((0, 8), "read_parquet union_by_name 参数"),
+        "binary_as_string": ((0, 9), "read_parquet binary_as_string 参数"),
+    },
+}
 
 
 def _type_names(types: tuple[type, ...]) -> str:

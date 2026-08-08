@@ -96,14 +96,17 @@ def test_timestamp_end_expanded_to_end_of_day():
         time_column="QuoteTime",
         instrument_column="Symbol",
     )
-    assert '"QuoteTime" <= ?' in compiled.where_sql
+    # #P1-final closure 16：date-only end 用 `< next_day`（严格小于次日零点），
+    # 而不是 `<= next_day - 1µs`——nanosecond timestamp 会漏掉当天最后 999ns。
+    assert '"QuoteTime" < ?' in compiled.where_sql
     end_param = compiled.params[1]
-    # end param is a pandas Timestamp at 23:59:59.999999
-    assert end_param.hour == 23 and end_param.minute == 59
-    # the data at 09:31..15:00 (Beijing) must satisfy <= end_param
+    # end param 展开为次日零点（2026-07-01 00:00:00）
+    assert end_param.day == 1 and end_param.month == 7
+    assert end_param.hour == 0 and end_param.minute == 0
+    # the data at 09:31..15:00 (Beijing) must satisfy < next_day
     import datetime
     ts = end_param.to_pydatetime()
-    assert datetime.time(9, 31) < ts.time()
+    assert datetime.time(0, 0) <= ts.time()
 
 
 def test_timestamp_end_with_explicit_time_preserved():

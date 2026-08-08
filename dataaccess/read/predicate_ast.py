@@ -154,6 +154,7 @@ def canonical_filter_ast(filters: Any) -> dict[str, Any]:
     node = parse_filters(filters) if filters is not None else None
     if node is None:
         return {"kind": "all"}
+    import json
 
     def _ser(f: Filter) -> dict[str, Any]:
         cls = type(f).__name__
@@ -172,11 +173,17 @@ def canonical_filter_ast(filters: Any) -> dict[str, Any]:
                 base["upper_inclusive"] = f.upper_inclusive
             return base
         if isinstance(f, (And, Or)):
+            # #P1-final closure 15：And/Or 子节点按**完整 canonical JSON** 排序——
+            # 旧 key 只按 node|column，同列不同值（Eq(col,1) vs Eq(col,2)）的 tie
+            # 保留输入顺序，交换书写顺序仍会 miss cache。用完整序列化排序后，
+            # 语义等价的过滤（列顺序/And 顺序/同列多值顺序不同）得到同一 hash。
             return {
                 "node": cls,
                 "children": sorted(
                     (_ser(c) for c in f.children),
-                    key=lambda d: d.get("node", "") + "|" + str(d.get("column", "")),
+                    key=lambda d: json.dumps(
+                        d, sort_keys=True, separators=(",", ":"), default=str
+                    ),
                 ),
             }
         if isinstance(f, Not):

@@ -28,13 +28,13 @@ NEW_CANONICALS: frozenset[str] = frozenset({
     # interval geometry
     "ts_interval_union_coverage", "ts_interval_occupancy_entropy",
     "ts_interval_occupancy_mode_distance", "ts_interval_nesting_depth",
-    "ts_interval_exploration_efficiency", "ts_interval_overlap_component_ratio",
+    "ts_interval_exploration_efficiency", "ts_interval_overlap_connected_component_ratio",
     # structural levels
     "ts_structural_level_density", "ts_nearest_structural_level_distance",
     "ts_structural_level_strength",
     # candle state space
     "ts_vector_state_mahalanobis", "ts_vector_state_local_density",
-    "ts_multivariate_matrix_profile_novelty", "ts_matrix_profile_motif_age",
+    "ts_matrix_profile_novelty", "ts_matrix_profile_motif_age",
     # multiscale trend
     "ts_multiscale_trend_consensus", "ts_multiscale_trend_dispersion",
     "ts_multiscale_trend_curvature",
@@ -94,21 +94,23 @@ NEW_CANONICALS: frozenset[str] = frozenset({
 def _panels() -> dict[str, pd.DataFrame]:
     rng = np.random.default_rng(0)
     idx = pd.date_range("2024-01-01", periods=80, freq="D")
-    # 6 symbols: groups g (A,B,C) and h (D,E,F) need >=3 members for group ops.
-    cols = ["A", "B", "C", "D", "E", "F"]
-    close = pd.DataFrame(100 + np.cumsum(rng.normal(0, 1, (80, 6)), axis=0), index=idx, columns=cols)
+    # R6-137: 12 symbols so cs_isotonic_residual (which needs >=10 names for a
+    # meaningful cross-sectional fit) produces values.  Groups g (A-F) and h
+    # (G-L) each keep >=3 members for the group ops.
+    cols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
+    close = pd.DataFrame(100 + np.cumsum(rng.normal(0, 1, (80, 12)), axis=0), index=idx, columns=cols)
     prev = close.shift(1)
     opn = pd.DataFrame(
-        prev.where(prev.notna(), close).to_numpy() * (1 + rng.normal(0, 0.002, (80, 6))),
+        prev.where(prev.notna(), close).to_numpy() * (1 + rng.normal(0, 0.002, (80, 12))),
         index=idx, columns=cols,
     )
     high = pd.DataFrame(
-        np.maximum(opn.to_numpy(), close.to_numpy()) + np.abs(rng.normal(0, 1, (80, 6))),
+        np.maximum(opn.to_numpy(), close.to_numpy()) + np.abs(rng.normal(0, 1, (80, 12))),
         index=idx, columns=cols)
     low = pd.DataFrame(
-        np.minimum(opn.to_numpy(), close.to_numpy()) - np.abs(rng.normal(0, 1, (80, 6))),
+        np.minimum(opn.to_numpy(), close.to_numpy()) - np.abs(rng.normal(0, 1, (80, 12))),
         index=idx, columns=cols)
-    volume = pd.DataFrame(rng.lognormal(5, 0.5, (80, 6)), index=idx, columns=cols)
+    volume = pd.DataFrame(rng.lognormal(5, 0.5, (80, 12)), index=idx, columns=cols)
     ret = close.pct_change()
     span = (high - low).replace(0, np.nan)
     f1 = (close - opn) / span
@@ -118,25 +120,25 @@ def _panels() -> dict[str, pd.DataFrame]:
     rng2 = np.random.default_rng(1)
     # ~10% event rate so window=80 rows hold >=4 inter-event intervals (the
     # event_interval_* ops require >=3/4 intervals to emit a value).
-    event = pd.DataFrame((rng2.random((80, 6)) < 0.10).astype(float), index=idx, columns=cols)
+    event = pd.DataFrame((rng2.random((80, 12)) < 0.10).astype(float), index=idx, columns=cols)
     state = pd.DataFrame(
-        np.where(np.floor(np.arange(80) / 5.0) % 2, 1.0, -1.0)[:, None] * np.ones((1, 6)),
+        np.where(np.floor(np.arange(80) / 5.0) % 2, 1.0, -1.0)[:, None] * np.ones((1, 12)),
         index=idx, columns=cols)
-    group_id = pd.DataFrame([["g", "g", "g", "h", "h", "h"]] * 80, index=idx, columns=cols)
+    group_id = pd.DataFrame([["g"] * 6 + ["h"] * 6] * 80, index=idx, columns=cols)
     upper = close.rolling(10, min_periods=3).max()
     lower = close.rolling(10, min_periods=3).min()
     mid = (upper + lower) / 2
     # oscillating series (period 6, amplitude 10 around 100) so L=95/U=105 cycles complete
     osc = pd.DataFrame(
-        100 + 10 * np.sin(2 * np.pi * np.arange(80) / 6.0)[:, None] * np.ones((1, 6)),
+        100 + 10 * np.sin(2 * np.pi * np.arange(80) / 6.0)[:, None] * np.ones((1, 12)),
         index=idx, columns=cols)
     # minute panels (240 rows = 20 sessions x 12 minutes)
     mi = pd.date_range("2024-01-01", periods=240, freq="1min")
     rng3 = np.random.default_rng(2)
-    pmin = pd.DataFrame(100 + np.cumsum(rng3.normal(0, 0.1, (240, 6)), axis=0), index=mi, columns=cols)
+    pmin = pd.DataFrame(100 + np.cumsum(rng3.normal(0, 0.1, (240, 12)), axis=0), index=mi, columns=cols)
     rmin = pmin.pct_change()
     sess = pd.DataFrame(
-        np.repeat(np.arange(20), 12)[:, None] * np.ones((1, 6)).astype(float),
+        np.repeat(np.arange(20), 12)[:, None] * np.ones((1, 12)).astype(float),
         index=mi, columns=cols)
     return {
         "close": close, "open": opn, "high": high, "low": low, "volume": volume,
@@ -154,13 +156,13 @@ CALLS: dict[str, tuple[tuple[str, ...], dict]] = {
     "ts_interval_occupancy_mode_distance": (("close", "low", "high"), {"window": 20, "bins": 8}),
     "ts_interval_nesting_depth": (("low", "high"), {"mode": "inside"}),
     "ts_interval_exploration_efficiency": (("high", "low", "close"), {"window": 20}),
-    "ts_interval_overlap_component_ratio": (("low", "high"), {"window": 20}),
+    "ts_interval_overlap_connected_component_ratio": (("low", "high"), {"window": 20}),
     "ts_structural_level_density": (("close",), {"window": 60, "prominence": 0.02, "confirmation": 3}),
     "ts_nearest_structural_level_distance": (("close",), {"window": 60, "prominence": 0.02, "confirmation": 3}),
     "ts_structural_level_strength": (("close",), {"window": 60, "prominence": 0.02, "confirmation": 3}),
     "ts_vector_state_mahalanobis": (("f1", "f2", "f3", "f4"), {"window": 40}),
     "ts_vector_state_local_density": (("f1", "f2", "f3", "f4"), {"window": 40, "k": 5}),
-    "ts_multivariate_matrix_profile_novelty": (("close",), {"window": 60, "subsequence_length": 6, "history": 40}),
+    "ts_matrix_profile_novelty": (("close",), {"window": 60, "subsequence_length": 6, "history": 40}),
     "ts_matrix_profile_motif_age": (("close",), {"window": 60, "subsequence_length": 6, "history": 40}),
     "ts_multiscale_trend_consensus": (("close",), {"window": 50, "scales": (5, 10, 20, 40)}),
     "ts_multiscale_trend_dispersion": (("close",), {"window": 50, "scales": (5, 10, 20, 40)}),

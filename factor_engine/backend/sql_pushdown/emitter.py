@@ -6573,6 +6573,136 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    # Round-7 gap closure: windowed sign-ratio / moment / group reducers that are
+    # genuinely SQL-expressible.  NaN is cleaned to NULL first (the emitter's
+    # convention), then windowed/group aggregates mirror the pandas kernels
+    # exactly (min_periods gate for ratios, nanmean central moment, group count
+    # over finite members, weighted mean over w>0 & finite members).
+    if op in {"ts_positive_ratio", "ts_negative_ratio", "ts_zero_ratio"}:
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        spec = _window_spec(node, default=20)
+        win = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND CURRENT ROW"
+        try:
+            thr = float(_raw_literal(node, 2, _float_attr(node, "threshold", "tolerance", default=0.0)) or 0.0)
+        except (TypeError, ValueError):
+            return None
+        mp = max(1, int(_raw_literal(node, 3, _int_attr(node, "min_periods", default=1)) or 1))
+        from backend.stat_valid import row_stat_invalid_sql
+
+        invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
+        if op == "ts_positive_ratio":
+            cmp_sql = f"_v > {thr!r}"
+        elif op == "ts_negative_ratio":
+            cmp_sql = f"_v < {thr!r}"
+        else:
+            cmp_sql = f"ABS(_v) <= {thr!r}"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN cnt < {mp} THEN NULL "
+            f"ELSE SUM(CASE WHEN {cmp_sql} THEN 1.0 ELSE 0.0 END) OVER ({win}) / cnt END AS _v "
+            f"FROM (SELECT ts, inst, CASE WHEN {invalid} THEN NULL ELSE _v END AS _v, "
+            f"COUNT(_v) OVER ({win}) AS cnt "
+            f"FROM ({inner.sql}) t) s",
+            has_inst_window=True,
+        )
+
+    if op == "ts_moment":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        d = _window_int(node, default=20)
+        try:
+            k = int(_raw_literal(node, 2, _int_attr(node, "k", default=3)) or 3)
+        except (TypeError, ValueError):
+            return None
+        # ``E[(x-μ)^k]`` with μ = window mean broadcast over the whole window.
+        # A plain ``SUM(POWER(_v - mu, k)) OVER (win)`` is WRONG: each window row
+        # would use its own μ.  Use the binomial expansion in raw power sums
+        # (algebraically identical to ``nanmean((w-μ)^k)``) for the common
+        # orders; other k falls back to the polars/pandas path.
+        if k not in (2, 3, 4):
+            return None
+        win = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {d - 1} PRECEDING AND CURRENT ROW"
+        from backend.stat_valid import row_stat_invalid_sql
+
+        invalid = row_stat_invalid_sql("_v", dialect=dialect, exclude_nan=True)
+        power_terms = ", ".join(
+            f"SUM(POWER(v, {j})) OVER ({win}) AS s{j}" for j in range(1, k + 1)
+        )
+        cnt = f"COUNT(v) OVER ({win})"
+        nrows = f"COUNT(*) OVER ({win})"
+        if k == 2:
+            moment = f"(s2 - (s1 * s1) / cnt) / cnt"
+        elif k == 3:
+            moment = f"(s3 - 3 * s2 * s1 / cnt + 2 * POWER(s1, 3) / POWER(cnt, 2)) / cnt"
+        else:
+            moment = (
+                f"(s4 - 4 * s3 * s1 / cnt + 6 * s2 * POWER(s1, 2) / POWER(cnt, 2) "
+                f"- 3 * POWER(s1, 4) / POWER(cnt, 3)) / cnt"
+            )
+        # Cold start mirrors the pandas ``_rolling_apply`` (NaN for the first
+        # d-1 rows regardless of NaN content): gate on raw row count, not the
+        # cleaned count, so NaN rows still occupy window slots.
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN nrows < {d} OR cnt = 0 THEN NULL ELSE {moment} END AS _v "
+            f"FROM (SELECT ts, inst, {nrows} AS nrows, {cnt} AS cnt, {power_terms} "
+            f"FROM (SELECT ts, inst, CASE WHEN {invalid} THEN NULL ELSE _v END AS v "
+            f"FROM ({inner.sql}) t) c) s",
+            has_inst_window=True,
+        )
+
+    if op == "group_valid_count":
+        if len(node.inputs) < 2:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        grp = _compile_layer(node.inputs[1], dialect=dialect)
+        if inner is None or grp is None:
+            return None
+        from backend.stat_valid import row_stat_invalid_sql
+
+        x_inv = row_stat_invalid_sql("x._v", dialect=dialect, exclude_nan=True)
+        g_inv = row_stat_invalid_sql("g._v", dialect=dialect, exclude_nan=True)
+        part = "PARTITION BY x.ts, g._v"
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"CASE WHEN {g_inv} THEN NULL "
+            f"ELSE COUNT(CASE WHEN NOT ({x_inv}) THEN 1 END) OVER ({part}) END AS _v "
+            f"FROM ({inner.sql}) x LEFT JOIN ({grp.sql}) g USING (ts, inst)",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "group_weighted_mean":
+        if len(node.inputs) < 3:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        grp = _compile_layer(node.inputs[1], dialect=dialect)
+        wgt = _compile_layer(node.inputs[2], dialect=dialect)
+        if inner is None or grp is None or wgt is None:
+            return None
+        from backend.stat_valid import row_stat_invalid_sql
+
+        x_inv = row_stat_invalid_sql("x._v", dialect=dialect, exclude_nan=True)
+        w_inv = row_stat_invalid_sql("w._v", dialect=dialect, exclude_nan=True)
+        g_inv = row_stat_invalid_sql("g._v", dialect=dialect, exclude_nan=True)
+        part = "PARTITION BY x.ts, g._v"
+        valid = f"(NOT ({x_inv}) AND NOT ({w_inv}) AND w._v > 0 AND NOT ({g_inv}))"
+        return _Layer(
+            f"SELECT x.ts, x.inst, "
+            f"CASE WHEN {valid} THEN "
+            f"CASE WHEN SUM(CASE WHEN {valid} THEN w._v ELSE 0 END) OVER ({part}) <= 1e-12 THEN NULL "
+            f"ELSE SUM(CASE WHEN {valid} THEN x._v * w._v ELSE 0 END) OVER ({part}) "
+            f"/ SUM(CASE WHEN {valid} THEN w._v ELSE 0 END) OVER ({part}) END "
+            f"ELSE NULL END AS _v "
+            f"FROM ({inner.sql}) x JOIN ({wgt.sql}) w USING (ts, inst) "
+            f"JOIN ({grp.sql}) g USING (ts, inst)",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
     return None
 
 

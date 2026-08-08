@@ -39,9 +39,8 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
     _CANONICALS.append(name)
     import cleaned_operators.operator_surface as _surface
 
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | {name}
-    )
+    # R5-50: live extend mutator, never a frozenset reassignment.
+    _surface.extend_research_only({name})
     return _AnomalyOp
 
 
@@ -71,7 +70,7 @@ def _mp_stats(vals: np.ndarray, m: int, stat: str, history_window: int = 252) ->
     (contiguous-finite patterns only), enforces an exclusion zone and takes an
     explicit history window — there is no invisible tail.  ``discord`` and
     ``motif`` are the same min-distance quantity and are both superseded by the
-    novelty canonical (``ts_multivariate_matrix_profile_novelty``).
+    novelty canonical (``ts_matrix_profile_novelty``).
 
     ``history_window`` caps the lookback (round-7 audit): the kernel was called
     with ``history = window = n``, an implicit expanding-history operator where

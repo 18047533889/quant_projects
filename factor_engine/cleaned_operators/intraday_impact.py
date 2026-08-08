@@ -31,7 +31,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -66,6 +66,12 @@ def _impact_decay_day(
         return np.nan
     if np.any(amounts < 0.0):
         return np.nan
+    # R6-193: ``ret <= -1`` is not an extreme loss, it is INVALID decimal-return
+    # data (a -100% move is a data error for a minute bar).  The old
+    # ``log(max(cumprod(1+r), 1e-12))`` silently floored it to 1e-12 and then
+    # fitted an impact on garbage.  Fail the whole day closed.
+    if np.any(rets <= -1.0):
+        return np.nan
 
     # contiguous session blocks on the OFFICIAL 1-minute grid: any deviation from
     # exactly one minute (a missing bar, the lunch break, a close) is a boundary —
@@ -91,15 +97,20 @@ def _impact_decay_day(
         a = amounts[idx]
         absr = np.abs(r)
         logp = np.log(np.maximum(np.cumprod(1.0 + r), 1e-12))
+        # R6-195: adjacent shock minutes share almost the same impact path — three
+        # consecutive shocks would fit three near-identical decay curves and the
+        # median would treat them as three independent events.  Apply a refractory
+        # window: once a shock fires at ``e``, the next `horizon` minutes cannot
+        # start a new shock event (their impact paths are already inside this one).
+        next_event = -1
         for e in range(idx.size - horizon):
-            # R5 P0-08 (causal shock gate): a minute's shock label at time ``e``
-            # must not use the whole session's |ret| quantile (which sees future
-            # minutes).  The threshold is the quantile of the causal prefix
-            # ``absr[:e+1]`` only.  The impact path after ``e`` is inherently a
-            # post-shock feature — this operator is an EOD-realised daily scalar
-            # available at ``session_close`` and must be consumed T+1, never
-            # intra-day (documented in the module docstring).
-            prefix = absr[: e + 1]
+            if e < next_event:
+                continue
+            # R6-194: the shock threshold must be the quantile of the STRICT
+            # prior prefix ``absr[:e]`` (exclusive of the current shock), so a
+            # large ``r_e`` cannot raise its own threshold.  prefix-causal is
+            # still maintained — only strictly-earlier minutes set the bar.
+            prefix = absr[:e]
             if prefix.size < 4:
                 continue
             thr = float(np.quantile(prefix, float(shock_quantile)))
@@ -116,6 +127,7 @@ def _impact_decay_day(
             kappa = float(-slope)
             if np.isfinite(kappa):
                 kappas.append(kappa)
+                next_event = e + horizon  # refractory window
     if not kappas:
         return np.nan
     return float(np.median(kappas))
@@ -138,6 +150,17 @@ class IntradayImpactDecayRate(SeriesOperator):
         " available_at=session_close（EOD 实现特征，仅 T+1 使用，禁止当日盘中决策）。",
         ["ret", "amount", "horizon", "shock_quantile"],
     )
+    # R6-196: machine availability contract (not just docstring).  The impact
+    # path h=1..H after a shock is future-looking within the day, so the value
+    # is only usable after session close and never for same-session decisions.
+    metadata.available_at = "session_close"
+    metadata.same_session_usable = False
+    # R6-197: authoritative parameter contracts — ``horizon`` is a bounded int,
+    # ``shock_quantile`` a reviewed float range.
+    metadata.param_specs = {
+        "horizon": ParamSpec(dtype=int, min=2, max=60),
+        "shock_quantile": ParamSpec(dtype=float, min=0.5, max=0.99),
+    }
 
     def _calculate_series(
         self,

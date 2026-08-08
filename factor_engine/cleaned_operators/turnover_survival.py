@@ -56,6 +56,17 @@ def _default_min_periods(window: int) -> int:
     return max(5, window // 10)
 
 
+# R6-138: a finite window discards every chip acquired BEFORE [t-W, t-1].  The
+# fraction of the current float that predates the window is the survival
+# product over the window ``M_old = prod_j exp(-u_j)`` (the Poisson-hazard
+# survival of any pre-window holding through the window).  When that residual
+# old mass is large, the window estimate is a CONDITIONAL distribution of
+# recently-traded chips, not the full holding distribution — renormalising to 1
+# silently erases a large part of the float.  Above this threshold the estimate
+# is reported as NaN (fail-closed) instead of a mislabelled conditional value.
+_MAX_OLD_MASS = 0.3
+
+
 def _column_stats(
     price: np.ndarray,
     turnover: np.ndarray,
@@ -124,6 +135,12 @@ def _column_stats(
         total = float(w.sum())
         if not np.isfinite(total) or total <= _EPS:
             continue
+        # R6-138: residual old mass = survival of ANY pre-window holding through
+        # the window = suf[0].  If a large fraction of the float predates the
+        # window, the normalised weights below describe only the recent
+        # conditional distribution — fail closed instead of mislabelling it.
+        if float(suf[0]) > _MAX_OLD_MASS:
+            continue
         wn = w / total
 
         # Zero-weight rows carry NaN prices; ``0 * NaN == NaN`` would poison
@@ -146,10 +163,16 @@ def _column_stats(
         age[t] = float(np.sum(wn * lags))
 
         # --- deepening cost-shape statistics (P1) ---
-        # cost entropy + modal-cost distance use fixed log-price bins relative
-        # to the *current* price; only finite-price chips carry weight.
+        # R6-140: cost entropy must describe the SHAPE of the chip-cost
+        # distribution, independent of today's price position.  The old bins
+        # were relative to the *current* price, so the entropy mixed "how the
+        # costs are spread" with "where the current price sits inside the
+        # distribution" (a recipe-level concept, tracked separately by
+        # ``ts_turnover_cost_mode_distance``).  Binning around the reference
+        # price RP (a pure function of the chip history) makes the entropy a
+        # standalone shape primitive.
         with np.errstate(divide="ignore", invalid="ignore"):
-            z_cur = np.log(np.where(price_ok, prices, current) / current)
+            z_cur = np.log(np.where(price_ok, prices, rp) / rp)
         bins_idx = np.digitize(z_cur, _COST_LOG_EDGES)
         nb = _COST_LOG_EDGES.shape[0] + 1
         mass = np.zeros(nb)
@@ -398,11 +421,22 @@ class TsTurnoverHoldingAge(SeriesOperator):
     ``Age_t = sum_n w_n * n`` where ``n`` is the lag of each chip cohort.  A
     low age means the current float is dominated by recently-traded chips (fast
     rotation); a high age means a long-held, stale base.
+
+    R6-139 (window-conditioned, documented honestly): a finite ``window``
+    discards every acquisition before ``[t-W, t-1]``, so the age is the
+    conditional mean over the *windowed* chip cohorts.  When the residual
+    pre-window mass ``M_old`` is small the windowed estimate equals the true
+    age; when ``M_old`` is large (e.g. an average holding age far beyond
+    ``window``), the estimate is reported as NaN (R6-138 fail-closed) rather
+    than a truncated number that understates the real holding period.  The
+    semantic is therefore ``window-conditioned turnover holding age``; a fully
+    recursive holder-age state machine would lift the truncation and is tracked
+    as a future stateful operator.
     """
 
     metadata = _metadata(
         "ts_turnover_holding_age",
-        "存活筹码加权平均持仓天数。",
+        "存活筹码加权平均持仓天数（window 条件化，见 R6-139）。",
         ["price", "turnover", "window"],
         unit="days",
     )

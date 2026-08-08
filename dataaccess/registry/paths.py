@@ -79,10 +79,16 @@ def path_is_under(child: Path, parent: Path) -> bool:
 
 
 def _production_mode() -> bool:
-    fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
-    if fe == "production":
+    # #P1-final closure 17：全项目唯一严格模式判定。旧代码只认 QUANT_PRODUCTION_MODE
+    # + FACTOR_ENGINE_RUN_MODE，漏了 DATA_ACCESS_STRICT_READ=1（strict 读模式同样
+    # 应该收紧 PathAuthorizer / extra roots 的沙箱）。
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        return is_strict_semantics()
+    except Exception:
+        # 导入期循环依赖兜底：保守按严格处理（不能因 import 顺序放宽松）
         return True
-    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
 
 
 def extra_allowed_roots_from_env() -> list[Path]:

@@ -106,6 +106,53 @@ class ParamSpec:
     default: Any = None
 
 
+# R6-24 (RelationalParamSpec): cross-parameter feasibility constraints that
+# would otherwise be discovered only at runtime (``window >= 4*k+1``,
+# ``min_periods <= window-1``, ``min_line < embedding_count``, …).  Declaring
+# them lets the compiler/search grammar filter infeasible combinations BEFORE
+# spending expression budget, instead of each kernel hand-rolling a
+# ``return NaN`` guard.  ``expression`` is evaluated in the namespace of the
+# bound parameters via :func:`eval_relational_expression`.
+@dataclass
+class RelationalParamSpec:
+    """A declared cross-parameter feasibility constraint.
+
+    ``expression`` is a plain-Python expression over parameter names, e.g.
+    ``"window >= 4*k + 1"`` or ``"min_periods <= window - 1"``.  Parameters are
+    bound positionally+by-name exactly like ``_normalise_call`` does, so every
+    relation is checked on the SAME values the kernel will receive.
+
+    ``message`` (optional) replaces the default "parameter relation violated"
+    text; it may interpolate the bound values with ``{window}`` etc.
+    """
+
+    expression: str
+    message: str | None = None
+
+    def check(self, bound: dict[str, Any]) -> bool:
+        """Evaluate the relation against a bound-parameter dict."""
+        ns = {k: v for k, v in bound.items()}
+        try:
+            return bool(eval(self.expression, {"__builtins__": {}}, ns))
+        except (TypeError, ValueError, ZeroDivisionError):
+            # NaN/None/absent parameters: relation undecidable -> treat as
+            # unmet so search/replanning is forced to a feasible combination.
+            return False
+
+    def describe(self, bound: dict[str, Any]) -> str:
+        if self.message:
+            try:
+                return self.message.format(**bound)
+            except (KeyError, IndexError, ValueError):
+                return self.message
+        return f"parameter relation violated: {self.expression}"
+
+
+def eval_relational_expression(expression: str, bound: dict[str, Any]) -> bool:
+    """Evaluate one relational expression against bound parameters (helper)."""
+    return RelationalParamSpec(expression=expression).check(bound)
+
+
 # Typed broadcast tags (review #4 R4-99): a bare ``allow_panel_broadcast`` is a
 # blanket waiver of multi-panel axis parity.  Operators that legitimately
 # broadcast must declare the SPECIFIC shape they need so a daily scalar cannot
@@ -137,6 +184,12 @@ class OperatorMetadata:
     input_units: Dict[str, str] = field(default_factory=dict)
     output_unit: str | None = None
     compatible_units: Dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # R6-24: declared cross-parameter feasibility constraints.  Evaluated in
+    # validate_operator_call on the SAME bound values the kernel receives, so a
+    # guaranteed-NaN combination is rejected at the call boundary, not after an
+    # expensive rolling loop.  Search grammar consumers read this list to prune
+    # infeasible regions before generation.
+    relational_specs: List[RelationalParamSpec] = field(default_factory=list)
     # review #4 R4-01: per-parameter authoritative contracts (dtype/min/max/
     # choices/searchable/active_when/history_semantics).  When a name has a spec
     # here, it OVERRIDES the legacy name whitelist in both directions — a
@@ -158,6 +211,15 @@ class OperatorMetadata:
     # means same-grain / undeclared.
     input_grain: str | None = None
     output_grain: str | None = None
+    # R6-196: machine-readable availability contract for EOD-realised / session-
+    # realised operators.  ``available_at`` is when the value becomes usable
+    # (``session_close`` / ``report_date`` / ``next_open`` …); ``same_session_usable``
+    # is False for operators whose output at minute ``t`` depends on the rest of
+    # the session (impact paths, daily aggregates) and must never feed an
+    # intra-session decision.  These are fields, not just docstring text, so the
+    # execution layer can refuse same-session misuse mechanically.
+    available_at: str | None = None
+    same_session_usable: bool | None = None
     # round-7: explicit positional PANEL-input arity for zero-parameter operators
     # whose panel contract is not expressible in ``param_names`` (``log``=1,
     # ``add``=2).  ``None`` = kernel-implied (legacy).  When set, the
@@ -641,6 +703,7 @@ def validate_operator_call(
     )
     _validate_panel_axes(metadata, processed_args, processed_kwargs)
     _validate_common_integer_relations(metadata, processed_args, processed_kwargs)
+    _validate_relational_specs(metadata, operator, processed_args, processed_kwargs)
     valid = operator.validate_params(*processed_args, **processed_kwargs)
     if valid is False:
         raise ValueError(f"{metadata.name}: parameter validation failed")
@@ -658,6 +721,42 @@ def _validate_common_integer_relations(metadata: OperatorMetadata, args: tuple[A
     k = bound.get("k")
     if isinstance(window, int) and isinstance(k, int) and k > window:
         raise ValueError(f"{metadata.name}: k must not exceed window")
+
+
+def _validate_relational_specs(
+    metadata: OperatorMetadata,
+    operator: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> None:
+    """Evaluate every declared RelationalParamSpec on the bound parameter values.
+
+    R6-24: rejects guaranteed-NaN parameter combinations at the call boundary
+    (e.g. ``window < 4*k+1`` for Pickands, ``min_periods == window`` for a
+    regression with N-1 pairs) so search/AlphaProbe never spends expression
+    budget on a combination the kernel can only fail.
+    """
+    specs = getattr(metadata, "relational_specs", None) or []
+    if not specs:
+        return
+    names = list(metadata.param_names or [])
+    bound: dict[str, Any] = {
+        name: args[index] for index, name in enumerate(names[: len(args)])
+    }
+    bound.update(kwargs)
+    # R6-24: a relation like ``min_line < window - (dim-1)*delay`` must be
+    # evaluated on the SAME values the kernel receives — i.e. with the canonical
+    # defaults merged in for any parameter the caller did not bind explicitly.
+    # ``_kernel_param_defaults`` resolves the real kernel's default arguments
+    # (the operator's ``_calculate_series`` is often a ``*args, **kwargs``
+    # bridge, so signature introspection alone would not find them).
+    defaults = _kernel_param_defaults(operator) or {}
+    for name in names:
+        if name not in bound and name in defaults:
+            bound[name] = defaults[name]
+    for spec in specs:
+        if not spec.check(bound):
+            raise ValueError(f"{metadata.name}: {spec.describe(bound)}")
 
 
 class Operator(ABC):

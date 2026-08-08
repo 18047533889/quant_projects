@@ -278,10 +278,10 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["x", "group", "window", "min_group_size"],
         "category": "cross_sectional_state",
         "domain": "transport",
-        "unit": "same_as_target",
+        "unit": "same_as:target",
         "cost": 5,
         "tags_extra": [],
-        "output_unit": "same_as_target",
+        "output_unit": "same_as:target",
         "param_specs": _WASSERSTEIN_SPEC,
     },
 }

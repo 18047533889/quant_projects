@@ -418,6 +418,14 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "cdl_three_black_crows",
         "cdl_tweezer_top",
         "cdl_tweezer_bottom",
+        # Round-7 gap closure: simple windowed sign-ratio / central moment and
+        # group reducers are genuinely SQL-expressible (see emitter branches).
+        "ts_positive_ratio",
+        "ts_negative_ratio",
+        "ts_zero_ratio",
+        "ts_moment",
+        "group_valid_count",
+        "group_weighted_mean",
     }
 )
 

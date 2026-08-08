@@ -87,10 +87,13 @@ def write_publish_manifest(
         ),
         "manifest_version": 3,
     }
-    tmp = target_dir / f"{MANIFEST_NAME}.tmp"
-    text = json.dumps(payload, sort_keys=True, indent=2, default=str)
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, target_dir / MANIFEST_NAME)
+    # #P1-final closure 19：统一 atomic durable-write（tmp→fsync(fd)→replace→fsync(dir)）
+    from data_access.core.atomic import atomic_write_text
+
+    atomic_write_text(
+        target_dir / MANIFEST_NAME,
+        json.dumps(payload, sort_keys=True, indent=2, default=str),
+    )
     return target_dir / MANIFEST_NAME
 
 

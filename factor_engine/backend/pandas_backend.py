@@ -26,7 +26,7 @@ from dataclasses import replace
 from typing import Any
 
 from planner.logical_plan import PlanNode
-from planner.plan_hash import plan_cache_key
+from planner.plan_hash import contract_is_resolved, plan_cache_key
 
 from runtime.perf_config import PerfConfig
 
@@ -150,7 +150,18 @@ class PandasBackend(Backend):
 
         out = kernel(node, ctx)
         if cache is not None and cache_key is not None:
-            cache.set(cache_key, out)
+            # R6-153: an unresolved operator contract (registry not loaded /
+            # ``semantic_version: unregistered``) must not enter the PRODUCTION
+            # persistent cache — it is a bootstrap-only deterministic namespace,
+            # not a real semantic version.  Memory caches are fine (same-process,
+            # rebuilt with the registry); disk survives across processes where a
+            # stale "unregistered" entry could collide with a later resolved
+            # operator set.
+            from storage.cache import PersistentPlanCache
+
+            _is_persistent = isinstance(cache, PersistentPlanCache)
+            if not _is_persistent or contract_is_resolved(node):
+                cache.set(cache_key, out)
         return out
 
     def _register_kernels(self) -> None:

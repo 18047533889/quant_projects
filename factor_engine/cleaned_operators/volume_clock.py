@@ -23,7 +23,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg_two
 
 _EPS = 1e-12
@@ -46,12 +46,27 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 
 def _volume_clock_log_path(price: np.ndarray, activity: np.ndarray, buckets: int) -> tuple[np.ndarray, np.ndarray] | None:
-    """Resampled log-price path on the equal-activity grid -> (q_grid, log_p)."""
-    finite = np.isfinite(price) & np.isfinite(activity) & (activity > 0.0)
-    if int(finite.sum()) < 3:
+    """Resampled log-price path on the equal-activity grid -> (q_grid, log_p).
+
+    R6-141: price must be strictly positive (``log`` domain) — a non-positive
+    price is data-invalid, not a valid log-price.  R6-142: negative activity is
+    a data error, not "no activity" — it fails the whole path closed rather
+    than being filtered out and silently reconnecting the grid around it.
+    """
+    # R6-142: negative activity invalidates the entire path (a negative
+    # contribution to cumulative activity is not a valid clock).  Zero activity
+    # is a valid "no trade" minute.  NaN in either series fails the path.
+    if np.any(~np.isfinite(price)) or np.any(~np.isfinite(activity)) or np.any(activity < 0.0):
         return None
-    act = activity[finite].astype(float)
-    logp = np.log(price[finite].astype(float))
+    # R6-141: non-positive price is invalid for log-price (fail closed, never
+    # a silently-produced -inf that then gets filtered by the finite mask).
+    if np.any(price <= 0.0):
+        return None
+    valid = activity > 0.0
+    if int(valid.sum()) < 3:
+        return None
+    act = activity[valid].astype(float)
+    logp = np.log(price[valid].astype(float))
     Q = np.cumsum(act)
     Q = Q / Q[-1]
     # Deduplicate ties (zero-activity bars) so np.interp's xp is strictly rising.
@@ -61,6 +76,12 @@ def _volume_clock_log_path(price: np.ndarray, activity: np.ndarray, buckets: int
     if Q.shape[0] < 2 or Q[0] != Q[0]:
         return None
     B = max(4, int(buckets))
+    # R6-144: a smooth B-point path cannot be built from fewer distinct activity
+    # points than B+1 — the interpolation would fabricate a path between
+    # missing observations (roughness/curvature becomes an interpolation
+    # artifact).  Fail closed instead of manufacturing smoothness.
+    if Q.shape[0] < B + 1:
+        return None
     grid = np.linspace(0.0, 1.0, B + 1)
     path = np.interp(grid, Q, logp)
     return grid, path
@@ -112,6 +133,13 @@ class IntradayVolumeClockPathEfficiency(SeriesOperator):
         unit="ratio",
         cost=4,
     )
+    # R6-141/142: price must be > 0 (log domain), activity must be >= 0
+    # (negative activity is a data error, not "no trade").  R6-144: buckets
+    # must not exceed the distinct positive-activity points - 1, else the path
+    # is interpolated smoothness, not observation.
+    metadata.param_specs = {
+        "buckets": ParamSpec(dtype=int, min=4),
+    }
 
     def _calculate_series(
         self, price: pd.DataFrame, activity: pd.DataFrame, buckets: int = 16, **_: Any
@@ -141,6 +169,9 @@ class IntradayVolumeClockRoughness(SeriesOperator):
         unit="ratio",
         cost=4,
     )
+    metadata.param_specs = {
+        "buckets": ParamSpec(dtype=int, min=4),
+    }
 
     def _calculate_series(
         self, price: pd.DataFrame, activity: pd.DataFrame, buckets: int = 16, **_: Any

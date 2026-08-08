@@ -135,9 +135,14 @@ def compute_coverage(
     files: list[str] = []
     glob_failed = False
     glob_truncated = False
+    remote_only = True
     for g in paths:
         if str(g).startswith(("s3://", "cos://")):
+            # #P1-final closure 20：remote-only 数据集本地无法 glob——覆盖区间只能
+            # 由 manifest（或 COS 枚举）提供。这里不跳过就误判，显式记录 remote，
+            # 避免「本地无文件 ⇒ unavailable」掩盖 remote 数据存在。
             continue
+        remote_only = False
         try:
             tbl = store._engine.execute_arrow(
                 "SELECT file FROM glob(?) LIMIT ?", [str(g), max_glob], deadline_ms=None
@@ -157,6 +162,13 @@ def compute_coverage(
             )
     files = sorted(set(files))
     report.observed_files = len(files)
+    if remote_only and paths:
+        # 全部路径都是 s3/cos：本地枚举不到，覆盖由 manifest 决定；无 manifest 时
+        # 下方会判 unavailable（fail-closed），但问题描述要说明是 remote-only。
+        report.problems.append(
+            "remote-only 数据集（s3:// 或 cos:// 路径），本地无法 glob 枚举；"
+            "覆盖区间依赖 manifest 或 COS 枚举"
+        )
 
     if files:
         dates = _file_dates(files)
@@ -168,11 +180,17 @@ def compute_coverage(
     report.observed_end = obs_end
 
     if not files and not (obs_start or obs_end):
+        # #P1-final closure 20：``empty_ok`` 声明下「无分区」是**合法空数据集**——
+        # 判 complete（没缺东西），不是 unavailable；否则远程/新数据集刚上线时
+        # 会被误报「数据缺失」。
+        if report.missing_semantics == "empty_ok":
+            report.status = "complete"
+            report.problems.append(
+                "empty_ok：无分区是合法空数据集（声明允许空）"
+            )
+            return report
         report.status = "unavailable"
-        report.problems.append(
-            "无任何数据文件"
-            + ("" if report.missing_semantics == "empty_ok" else "（missing_partition_semantics=error）")
-        )
+        report.problems.append("无任何数据文件（missing_partition_semantics=error）")
         return report
 
     # 判定
@@ -195,7 +213,7 @@ def compute_coverage(
                 else:
                     report.status = "complete"
                 # #24 max_staleness 判定：末个 partition 落后超过阈值 → stale
-                _maybe_mark_stale(report)
+                _maybe_mark_stale(report, store=store, dataset=dataset)
                 return report
             if o_lo and o_hi:
                 report.status = "partial"
@@ -207,7 +225,7 @@ def compute_coverage(
                     report.problems.append(
                         f"观测终止 {o_hi.isoformat()} 早于声明终止 {d_hi.isoformat()}"
                     )
-                _maybe_mark_stale(report)
+                _maybe_mark_stale(report, store=store, dataset=dataset)
                 return report
     if glob_failed or glob_truncated:
         report.status = "partial"
@@ -216,11 +234,44 @@ def compute_coverage(
         )
     else:
         report.status = "complete" if files else "unavailable"
-    _maybe_mark_stale(report)
+    _maybe_mark_stale(report, store=store, dataset=dataset)
     return report
 
 
-def _maybe_mark_stale(report: CoverageReport) -> None:
+def _infer_market(dataset: str) -> str:
+    """从数据集名推断市场（coverage 交易日 staleness 用）。"""
+    name = str(dataset or "").strip().lower()
+    if name.startswith("ashare") or name.startswith("a_"):
+        return "ashare"
+    if name.startswith("us") or name.startswith("am"):
+        return "us"
+    return ""
+
+
+def _trading_day_lag(
+    o_hi: _dt.date, today: _dt.date, *, store: Any, dataset: str
+) -> int:
+    """observed_end 到今天之间的**交易日**数。
+
+    #P1-final closure 20：不再用「自然日 × 5/7」近似——消费真实 MarketCalendar
+    （春节/国庆/美股 holiday 全部反映）。日历不可用时才回退近似。
+    """
+    market = _infer_market(dataset)
+    if market and store is not None:
+        try:
+            from data_access.read.session_calendar import get_market_calendar
+
+            cal = get_market_calendar(market, store=store)
+            if cal is not None and cal.has_data:
+                return sum(1 for d in cal.trading_days if o_hi < d <= today)
+        except Exception:
+            pass
+    return max(0, int(round((today - o_hi).days * 5 / 7)))
+
+
+def _maybe_mark_stale(
+    report: CoverageReport, *, store: Any = None, dataset: str = ""
+) -> None:
     """#24 max_staleness 真正执行：末个 partition 落后超过阈值 → status=stale。
 
     ``max_staleness`` 格式：``"5d"``（自然日）或 ``"5t"``（交易日）。无该声明或
@@ -242,8 +293,7 @@ def _maybe_mark_stale(report: CoverageReport) -> None:
     if unit == "d":
         lag = (today - o_hi).days
     elif unit == "t":
-        # 交易日滞后：自然日 / 7 * 5 近似（无日历时）；有日历可精确算
-        lag = max(0, int(round((today - o_hi).days * 5 / 7)))
+        lag = _trading_day_lag(o_hi, today, store=store, dataset=dataset)
     else:
         return
     if lag > num:

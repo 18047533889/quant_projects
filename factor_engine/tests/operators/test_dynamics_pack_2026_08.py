@@ -241,12 +241,15 @@ def test_quantile_regression_beta_recovers_slope():
 
 def test_group_mode_share_common_factor_high():
     rng = np.random.default_rng(10)
-    rows, cols = 200, 6
+    # Round-7 P0: the 3-feature spectrum requires N >= max(6, 2*d+2) = 8 valid
+    # members per group (a 2-member x 3-feature matrix is mechanically low-rank).
+    # Use one 9-member group so the dominant-common-factor scenario is valid.
+    rows, cols = 200, 9
     f = rng.normal(0.0, 1.0, (rows, cols))
     common = 0.9 * f + 0.1 * rng.normal(0.0, 1.0, (rows, cols))
     dates = pd.date_range("2024-01-01", periods=rows, freq="B")
     assets = [f"A{i}" for i in range(cols)]
-    g = pd.DataFrame(np.tile(np.array(["G0", "G1", "G2"] * 2)[None, :], (rows, 1)), index=dates, columns=assets)
+    g = pd.DataFrame(np.full((rows, cols), "G0", dtype=object), index=dates, columns=assets)
     ms = OperatorRegistry.get("group_corr_mode_share", "pandas_numpy").calculate(
         pd.DataFrame(common, index=dates, columns=assets),
         pd.DataFrame(common + 0.1 * rng.normal(0.0, 1.0, (rows, cols)), index=dates, columns=assets),

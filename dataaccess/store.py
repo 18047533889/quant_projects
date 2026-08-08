@@ -3103,6 +3103,20 @@ class DataAccessStore:
             cur = specs.get(ds)
             if cur is None or getattr(cur, "policy", "exact") != "pit_asof":
                 specs[ds] = spec
+                continue
+            # #P1-final closure 14：同 dataset 的**第二个及以后**非 exact 字段——
+            # 若声明了与已有 spec 冲突的 availability / period_selection，说明同一份
+            # 数据被 catalog 声明成两套可见性语义。旧代码静默保留第一个（YAML 字段
+            # 顺序决定取哪个，可能把更严格的下压成 same_day）。production/strict
+            # 直接报 contract conflict，不选更宽松语义；research 告警后保留第一个。
+            if getattr(cur, "availability", None) != getattr(
+                spec, "availability", None
+            ) or getattr(cur, "period_selection", None) != getattr(
+                spec, "period_selection", None
+            ):
+                _raise_availability_conflict(
+                    ds, cur, spec, is_strict=is_strict_semantics()
+                )
         # 数据集级 COS 契约默认：即使字段没给语义，契约声明了 PIT 语义也走 pit_asof。
         for ds in per_ds:
             if ds in specs:
@@ -6023,6 +6037,38 @@ class DataAccessStore:
 
 _store: DataAccessStore | None = None
 _store_lock = threading.Lock()
+
+
+def _raise_availability_conflict(
+    dataset: str,
+    cur: Any,
+    incoming: Any,
+    *,
+    is_strict: bool,
+) -> None:
+    """#P1-final closure 14：同 dataset 冲突 availability/period_selection 声明。
+
+    ``cur``（已合成的 spec）与 ``incoming``（同 dataset 另一个字段的 spec）在
+    可见性语义上不一致——同一份数据被声明成两套可见时点。production/strict 抛
+    ``ValidationError``（不能由 YAML 字段顺序决定选更宽松的 same_day）；research
+    告警后保留第一个（确定性）。
+    """
+    msg = (
+        f"数据集 {dataset!r} 的字段声明了冲突的 join 可见性语义："
+        f"availability={getattr(cur, 'availability', None)!r} / "
+        f"period_selection={getattr(cur, 'period_selection', None)!r} vs "
+        f"availability={getattr(incoming, 'availability', None)!r} / "
+        f"period_selection={getattr(incoming, 'period_selection', None)!r}。"
+        "同一数据集只能有一种 availability/period_selection 语义——请在 catalog "
+        "里统一字段声明，或用 request.joins 显式覆盖。"
+    )
+    if is_strict:
+        raise ValidationError(msg)
+    import logging
+
+    logging.getLogger("data_access.effective_join").warning(
+        "%s（research 保留第一个）", msg
+    )
 
 
 def _compute_registry_hash(registry: DatasetRegistry) -> str:

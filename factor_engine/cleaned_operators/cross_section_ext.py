@@ -37,11 +37,25 @@ import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
+# R6-133: one canonical k-NN implementation.  This module previously duplicated
+# the competition-rank (nested argsort) kNN with a stable ``order[:k_eff]`` cut
+# — ties were broken by column arrival order, so a feature tie made the factor
+# depend on the stock-column ordering even after dynamic_knn was fixed.  Import
+# the canonical helpers (average tie ranks + kth-distance-radius tie-inclusive
+# selection) and drop the local copies.
+from cleaned_operators.dynamic_knn import _avg_tie_ranks, _neighbors
 
 _EPS = 1e-12
 _RHO_EPS = 0.05  # |Spearman| below this → try both monotone fits, keep the better.
 _MIN_Q_ROWS = 3  # trailing rows needed to compute a stock's own quantile threshold.
 _MIN_ALIGNED = 3  # aligned trailing rows needed for a valid pairwise joint stat.
+# R6-136: a pairwise Pearson on ~3 aligned samples lands near ±1 trivially and
+# then flows straight into the MST.  Require a real sample: max(20, window/2)
+# aligned rows, or the edge is unknown and excluded.
+_MIN_PAIR_ROWS = 20
+# R6-137: isotonic fit over 2-3 stocks is near-perfect by construction.  The
+# cross-sectional fit needs minimum breadth (>=10 names) to be meaningful.
+_MIN_ISOTONIC_BREADTH = 10
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
@@ -64,7 +78,12 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 # shared k-NN kernels (rank-standardised feature graph, self excluded)
 # ---------------------------------------------------------------------------
 def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
-    """Date t feature matrix (n,d) -> rank-standardised U + per-stock validity."""
+    """Date t feature matrix (n,d) -> rank-standardised U + per-stock validity.
+
+    R6-133: rank transform delegates to the canonical ``_avg_tie_ranks``
+    (average tie ranks), never the nested-argsort competition ranks that made
+    tied feature values depend on stock-column ordering.
+    """
     n, d = feats[t].shape
     U = np.full((n, d), np.nan, dtype=float)
     for j in range(d):
@@ -73,22 +92,10 @@ def _rank_features(feats: np.ndarray, t: int) -> tuple[np.ndarray, np.ndarray]:
         m = int(fin.sum())
         if m < 2:
             continue
-        ranks = np.argsort(np.argsort(col[fin], kind="stable"), kind="stable").astype(float)
+        ranks = _avg_tie_ranks(col[fin])
         U[fin, j] = (ranks + 0.5) / m
     valid = np.all(np.isfinite(U), axis=1)
     return U, valid
-
-
-def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int) -> np.ndarray:
-    dist = np.sqrt(np.sum((U - U[i]) ** 2, axis=1))
-    dist = np.where(valid, dist, np.inf)
-    dist[i] = np.inf
-    order = np.argsort(dist, kind="stable")
-    count = int(valid.sum())
-    k_eff = min(max(1, int(k)), count - 1 if count > 0 else 0)
-    if k_eff < 1:
-        return np.array([], dtype=int)
-    return order[:k_eff]
 
 
 def _zscore_cross(vals: np.ndarray) -> np.ndarray:
@@ -113,16 +120,20 @@ def _local_moran_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.nda
     for t in range(rows):
         U, valid = _rank_features(feats, t)
         z = _zscore_cross(target[t])
+        # R6-134: neighbour candidates must be feature-valid AND target-valid
+        # from the start.  Selecting k feature-neighbours and then dropping
+        # target-NaN members would silently leave k-3 neighbours while a
+        # farther target-valid name was never considered.  ``feat_valid`` is
+        # the feature mask ANDed with the target mask before the kth-distance
+        # selection.
+        feat_valid = valid & np.isfinite(z)
         for i in range(n):
             if not valid[i] or not np.isfinite(z[i]):
                 continue
-            nbrs = _neighbors(U, valid, kk, i)
+            nbrs = _neighbors(U, feat_valid, kk, i)
             if nbrs.size == 0:
                 continue
             nz = z[nbrs]
-            nz = nz[np.isfinite(nz)]
-            if nz.size == 0:
-                continue
             out[t, i] = float(z[i] * np.mean(nz))
     return out
 
@@ -200,7 +211,9 @@ def _isotonic_residual_series(y2d: np.ndarray, x2d: np.ndarray) -> np.ndarray:
         m = np.isfinite(xr) & np.isfinite(yr)
         xs = xr[m].astype(float)
         ys = yr[m].astype(float)
-        if xs.size < 2:
+        # R6-137: 2-3 stocks fit an isotonic regression almost perfectly.  The
+        # cross-sectional fit needs minimum breadth to be a meaningful residual.
+        if xs.size < _MIN_ISOTONIC_BREADTH:
             continue
         rho = _spearman(xs, ys)
         if rho > _RHO_EPS:
@@ -299,7 +312,9 @@ def _pearson(a: np.ndarray, b: np.ndarray) -> float:
     m = np.isfinite(a) & np.isfinite(b)
     a = a[m].astype(float)
     b = b[m].astype(float)
-    if a.size < _MIN_ALIGNED:
+    # R6-136: 3 aligned samples trivially give |rho| ~ 1 and then corrupt the
+    # MST.  Require at least 20 aligned rows for a pairwise correlation edge.
+    if a.size < _MIN_PAIR_ROWS:
         return np.nan
     da = a - a.mean()
     db = b - b.mean()
@@ -454,6 +469,14 @@ class GroupTailCoexceedanceDensity(SeriesOperator):
         unit="ratio",
         cost=7,
     )
+    # R6-135 (membership vintage — current_members_retrospective): the group is
+    # defined by TODAY's group labels, and each *current* member's trailing
+    # aligned window is used as its "group sample".  This is the
+    # ``current_members_retrospective`` canonical — a stock reclassified into
+    # industry A yesterday contributes its pre-reclassification history to A's
+    # sample.  That is an explicit, documented choice (not a silent mixing with
+    # ``historical_contemporaneous_membership``, which would need PIT group_id
+    # per day); operators mixing both without a flag are NOT accepted.
 
     def _calculate_series(
         self, x: pd.DataFrame, group_id: pd.DataFrame, window: int = 120, quantile: float = 0.9, side: str = "upper", **_: Any
@@ -492,6 +515,9 @@ class GroupCorrMstLength(SeriesOperator):
         unit="ratio",
         cost=8,
     )
+    # R6-135: same ``current_members_retrospective`` contract as
+    # group_tail_coexceedance_density — today's group membership + each current
+    # member's trailing aligned window.  Documented, not silent.
 
     def _calculate_series(self, x: pd.DataFrame, group_id: pd.DataFrame, window: int = 120, **_: Any) -> pd.DataFrame:
         w = int(window)

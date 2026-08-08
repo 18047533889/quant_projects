@@ -18,7 +18,7 @@ stay out of the default production grammar:
 * ``ts_bds_statistic`` — the Brock–Dechert–Scheinkman statistic
   ``√n·(c_m − c_1^m)/σ_m`` for serial dependence (correlation integrals on a
   sup-norm embedding, triple correlation ``K`` via a two-pointer count).
-* ``ts_sr_gaussian_mean_shift_score`` — the Gaussian Shiryaev-Roberts
+* ``ts_rolling_sr_gaussian_mean_shift_score`` — the Gaussian Shiryaev-Roberts
   mean-shift statistic: the likelihood-ratio recursion
   ``R_t = (1 + R_{t-1})·Λ_t`` with ``Λ_t = exp(shift·z_t − shift²/2)`` on
   baseline-standardised residuals, started after the baseline window;
@@ -34,7 +34,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec
+from cleaned_operators.base import ParamSpec, RelationalParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -56,16 +56,56 @@ _GRANGER_SPEC = {
     "lag": ParamSpec(dtype=int, min=1),
 }
 _HSIC_SPEC = {"window": ParamSpec(dtype=int, min=24)}
+# R6-211: BDS with embedding_dim == 1 is degenerate (C_m == C_1 makes the
+# asymptotic variance collapse to 0) — the search space must start at dim >= 2.
+# R6-212: distance_multiplier == 0 gives eps == 0, which the kernel rejects at
+# runtime; reviewed grid only (0.5/1.0/1.5/2.0).
 _BDS_SPEC = {
     "window": ParamSpec(dtype=int, min=30),
-    "embedding_dim": ParamSpec(dtype=int, min=1),
-    "distance_multiplier": ParamSpec(dtype=float, min=0.0),
+    "embedding_dim": ParamSpec(dtype=int, min=2),
+    "distance_multiplier": ParamSpec(dtype=float, choices=(0.5, 1.0, 1.5, 2.0)),
 }
+# R6-217: shift_sigma == 0 makes log_lambda = 0 for every t (no evidence), and
+# the kernel explicitly rejects shift <= 0 at runtime.  Search must not offer 0.
 _SR_SPEC = {
     "window": ParamSpec(dtype=int, min=20),
-    "shift_sigma": ParamSpec(dtype=float, min=0.0),
+    "shift_sigma": ParamSpec(dtype=float, min=0.01),
     "baseline_window": ParamSpec(dtype=int, min=4),
 }
+# R6-24 cross-parameter feasibility relations (declared so search prunes the
+# guaranteed-NaN region before runtime):
+#   bicoherence : floor(window / n_segments) >= 8
+#   kernel-granger : lag must leave >= 24 available samples
+#   BDS : N_m = window - embedding_dim + 1 must be large enough
+#   SR : baseline_window + 8 <= window
+_BICOH_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "(window // n_segments) >= 8",
+        "bicoherence requires floor(window/n_segments) >= 8 "
+        "(window={window}, n_segments={n_segments})",
+    )
+]
+_GRANGER_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "window - lag >= 24",
+        "kernel Granger requires window - lag >= 24 available samples "
+        "(window={window}, lag={lag})",
+    )
+]
+_BDS_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "window - embedding_dim + 1 >= 12",
+        "BDS requires N_m = window - embedding_dim + 1 >= 12 "
+        "(window={window}, embedding_dim={embedding_dim})",
+    )
+]
+_SR_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "baseline_window + 8 <= window",
+        "SR requires baseline_window + 8 <= window "
+        "(baseline_window={baseline_window}, window={window})",
+    )
+]
 
 
 def _rbf(a: np.ndarray, b: np.ndarray, sigma: float) -> np.ndarray:
@@ -82,6 +122,10 @@ def _bicoherence_max(v: np.ndarray, n_segments: int) -> float:
     seg = n // ns
     if seg < 8:
         return np.nan
+    # R6-204: RIGHT-ALIGN the segments.  ``v[s*seg:(s+1)*seg]`` drops the
+    # trailing ``n % ns`` samples — the NEWEST data.  Use the last ns*seg
+    # samples so the window's latest information is never discarded.
+    v = v[-seg * ns:]
     max_freq = min(32, seg // 2)
     B_sum = np.zeros((max_freq, max_freq), dtype=complex)
     # P_sum[f1,f2] = Σ_s |X_s(f1)·X_s(f2)|²  — the standard bicoherence
@@ -108,16 +152,24 @@ def _bicoherence_max(v: np.ndarray, n_segments: int) -> float:
                 B_sum[f1 - 1, f2 - 1] += x1 * Xf[f2 - 1] * np.conj(Xf[f1 + f2 - 1])
                 P_sum[f1 - 1, f2 - 1] += p1 * pwr[f2 - 1]
         S_sum += pwr
-    best = 0.0
+    vals: list[float] = []
     for f1 in range(1, max_freq + 1):
         for f2 in range(1, max_freq - f1 + 1):
             denom = P_sum[f1 - 1, f2 - 1] * S_sum[f1 + f2 - 1]
             if denom <= _EPS:
                 continue
             b2 = abs(B_sum[f1 - 1, f2 - 1]) ** 2 / denom
-            if b2 > best:
-                best = float(b2)
-    return best if best > 0.0 else np.nan
+            if np.isfinite(b2):
+                vals.append(float(b2))
+    if not vals:
+        return np.nan
+    # R6-205: ``max bicoherence`` over all (f1,f2) is extreme-selection biased —
+    # more frequency pairs (larger window / segments) raise the pure-noise
+    # maximum mechanically.  Report the mean of the top-decile values instead
+    # of the raw maximum, which is far more stable across parameter changes.
+    vals_sorted = np.sort(np.asarray(vals))
+    k = max(1, int(np.ceil(vals_sorted.size * 0.1)))
+    return float(vals_sorted[-k:].mean())
 
 
 def _ts_bicoherence_max(x: pd.DataFrame, window: int = 120, n_segments: int = 4) -> pd.DataFrame:
@@ -178,22 +230,28 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
         alpha = np.linalg.solve(K_tr + lam * np.eye(ntr), target)
         return K_te @ alpha
 
-    sigma_full = float(np.median(np.sqrt(np.sum((Yl_tr[:, None, :] - Yl_tr[None, :, :]) ** 2, axis=2))))
-    if not np.isfinite(sigma_full) or sigma_full <= _EPS:
-        sigma_full = 1.0
+    # R6-207 (model fairness): the restricted and full models MUST share the
+    # same Y-lag RBF bandwidth and the same regularisation, so log(MSE_R/MSE_F)
+    # measures "how much predictive information X adds" and nothing else.  The
+    # old code re-estimated sigma in the FULL [Y-lag, X-lag] space, so the ratio
+    # also absorbed a kernel-hyperparameter change.  Nested kernel:
+    #   K_F = K_Y + eta·K_X   (restricted = K_Y), with the SAME sigma_Y, same
+    # ridge, and eta a fixed small weight — "adding X" is the only change.
+    sigma_y = float(np.median(np.sqrt(np.sum((Yl_tr[:, None, :] - Yl_tr[None, :, :]) ** 2, axis=2))))
+    if not np.isfinite(sigma_y) or sigma_y <= _EPS:
+        sigma_y = 1.0
 
-    Kr = _rbf(Yl_tr, Yl_tr, sigma_full)
-    Kte_r = _rbf(Yl_te, Yl_tr, sigma_full)
+    Kr = _rbf(Yl_tr, Yl_tr, sigma_y)
+    Kte_r = _rbf(Yl_te, Yl_tr, sigma_y)
     pred_r = _kridge(Kr, Ytr, Kte_r)
     mse_r = float(np.mean((Yte - pred_r) ** 2))
 
-    P_tr = np.hstack([Yl_tr, Xl_tr])
-    P_te = np.hstack([Yl_te, Xl_te])
-    sigma_full = float(np.median(np.sqrt(np.sum((P_tr[:, None, :] - P_tr[None, :, :]) ** 2, axis=2))))
-    if not np.isfinite(sigma_full) or sigma_full <= _EPS:
-        sigma_full = 1.0
-    Kf = _rbf(P_tr, P_tr, sigma_full)
-    Kte_f = _rbf(P_te, P_tr, sigma_full)
+    # Full model: K_F = K_Y + eta·K_X evaluated with the SAME Y bandwidth.
+    Kx_tr = _rbf(Xl_tr, Xl_tr, sigma_y)
+    Kte_x = _rbf(Xl_te, Xl_tr, sigma_y)
+    eta = 0.5
+    Kf = Kr + eta * Kx_tr
+    Kte_f = Kte_r + eta * Kte_x
     pred_f = _kridge(Kf, Ytr, Kte_f)
     mse_f = float(np.mean((Yte - pred_f) ** 2))
 
@@ -229,17 +287,37 @@ def _ts_kernel_granger_score(y: pd.DataFrame, x: pd.DataFrame, window: int = 120
 # ---------------------------------------------------------------------------
 def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float:
     n = x.shape[0]
-    if n < 20:
+    if n < 24:
         return np.nan
-    zz = z.reshape(-1, 1)
-    sigma = float(np.median(np.abs(z[:, None] - z[None, :])))
-    if not np.isfinite(sigma) or sigma <= _EPS:
-        sigma = 1.0
-    Kzz = _rbf(zz, zz, sigma)
-    lam = 1e-3 * np.trace(Kzz) / n
-    proj = Kzz @ np.linalg.solve(Kzz + lam * np.eye(n), np.eye(n))
-    rx = x - proj @ x
-    ry = y - proj @ y
+    # R6-209 (blocked cross-fitting): the old code fit the kernel smoother
+    # x~z and y~z on the FULL window and measured HSIC on the SAME residuals —
+    # a flexible kernel regression has in-sample bias that inflates the
+    # "residual independence".  Split the window into two interleaved halves;
+    # the smoother is fit on one half and the residuals of the OTHER half are
+    # used for HSIC, so the dependence measure never sees its own fit.
+    halves = np.arange(n) % 2
+    rx_all = np.full(n, np.nan)
+    ry_all = np.full(n, np.nan)
+    for half in (0, 1):
+        tr_idx = np.flatnonzero(halves == half)
+        te_idx = np.flatnonzero(halves != half)
+        ztr = z[tr_idx].reshape(-1, 1)
+        zte = z[te_idx].reshape(-1, 1)
+        sigma = float(np.median(np.abs(z[tr_idx][:, None] - z[tr_idx][None, :])))
+        if not np.isfinite(sigma) or sigma <= _EPS:
+            sigma = 1.0
+        Kzz = _rbf(ztr, ztr, sigma)
+        Kzte = _rbf(zte, ztr, sigma)
+        lam = 1e-3 * np.trace(Kzz) / tr_idx.size
+        smooth = Kzte @ np.linalg.solve(Kzz + lam * np.eye(tr_idx.size), np.eye(tr_idx.size))
+        rx_all[te_idx] = x[te_idx] - smooth @ x[tr_idx]
+        ry_all[te_idx] = y[te_idx] - smooth @ y[tr_idx]
+    fin = np.isfinite(rx_all) & np.isfinite(ry_all)
+    rx = rx_all[fin]
+    ry = ry_all[fin]
+    m = rx.shape[0]
+    if m < 12:
+        return np.nan
 
     sigma_x = float(np.median(np.abs(rx[:, None] - rx[None, :])))
     sigma_y = float(np.median(np.abs(ry[:, None] - ry[None, :])))
@@ -249,8 +327,19 @@ def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float:
         sigma_y = 1.0
     Kx = _rbf(rx.reshape(-1, 1), rx.reshape(-1, 1), sigma_x)
     Ky = _rbf(ry.reshape(-1, 1), ry.reshape(-1, 1), sigma_y)
-    H = np.eye(n) - np.ones((n, n)) / n
-    hsic = float(np.trace(Kx @ H @ Ky @ H) / (n * n))
+    # R6-210: the trace form trace(Kx H Ky H)/n² is a BIASED V-statistic whose
+    # baseline grows with m — two windows with different effective N (24 vs 60
+    # after gaps) would have incomparable raw values.  Use the UNBIASED HSIC
+    # estimator: average only the off-diagonal (i != j) kernel products, so the
+    # null baseline does not grow with the sample size.
+    if m < 3:
+        return np.nan
+    # Unbiased estimator of E[k_x k_y] under independence: average the
+    # OFF-DIAGONAL elementwise kernel products over ordered pairs i != j.  This
+    # is the unbiased HSIC first-moment (the diagonal i==j terms are the biased
+    # V-statistic self-products that inflate the baseline with the sample size).
+    off = ~np.eye(m, dtype=bool)
+    hsic = float((Kx[off] * Ky[off]).sum() / (m * (m - 1)))
     return hsic if np.isfinite(hsic) else np.nan
 
 
@@ -363,7 +452,7 @@ def _ts_bds_statistic(x: pd.DataFrame, window: int = 250, embedding_dim: int = 2
 # ---------------------------------------------------------------------------
 # Gaussian Shiryaev-Roberts
 # ---------------------------------------------------------------------------
-def _sr_gaussian(v: np.ndarray, shift_sigma: float, baseline_window: int) -> float:
+def _sr_gaussian(v: np.ndarray, shift_sigma: float, baseline_window: int, side: str = "up") -> float:
     n = v.shape[0]
     bw = max(4, int(baseline_window))
     if n < bw + 8:
@@ -376,8 +465,16 @@ def _sr_gaussian(v: np.ndarray, shift_sigma: float, baseline_window: int) -> flo
     shift = float(shift_sigma)
     if not np.isfinite(shift) or shift <= 0.0:
         return np.nan
+    if side not in ("up", "down"):
+        raise ValueError("side must be 'up' or 'down'")
+    # R6-215: the likelihood ratio is signed — Λ = exp(δ·z − δ²/2) detects an
+    # UPWARD shift (positive δ·z).  For a DOWNWARD shift the evidence is
+    # Λ = exp(−δ·z − δ²/2), i.e. we flip the sign of the standardised residual.
+    # The kernel previously only detected upward shifts; ``side`` selects the
+    # direction explicitly (default stays "up" for backward compatibility).
+    sign = 1.0 if side == "up" else -1.0
     # P0-09: true Shiryaev-Roberts likelihood-ratio recursion
-    #   R_t = (1 + R_{t-1}) · Λ_t,   Λ_t = exp(shift·z_t − shift²/2)
+    #   R_t = (1 + R_{t-1}) · Λ_t,   Λ_t = exp(δ·sign·z_t − δ²/2)
     # started only AFTER the baseline window — the baseline observations define
     # the null and must not be re-scored as candidate shifts (the old code ran a
     # CUSUM-style max(0, W + μz − μ²/2) over rows 0..n using the baseline itself).
@@ -389,14 +486,16 @@ def _sr_gaussian(v: np.ndarray, shift_sigma: float, baseline_window: int) -> flo
     logR = float("-inf")  # R_0 = 0
     for t in range(bw, n):
         z = (v[t] - mu) / sd
-        log_lambda = shift * z - shift * shift / 2.0
+        log_lambda = shift * sign * z - shift * shift / 2.0
         logR = np.logaddexp(0.0, logR) + log_lambda
     return float(np.logaddexp(0.0, logR))
 
 
-def _ts_sr_gaussian_mean_shift_score(x: pd.DataFrame, window: int = 120, shift_sigma: float = 1.0, baseline_window: int = 40) -> pd.DataFrame:
+def _ts_rolling_sr_gaussian_mean_shift_score(x: pd.DataFrame, window: int = 120, shift_sigma: float = 1.0, baseline_window: int = 40, side: str = "up") -> pd.DataFrame:
     if int(window) < 20:
-        raise ValueError("ts_sr_gaussian_mean_shift_score requires window >= 20")
+        raise ValueError("ts_rolling_sr_gaussian_mean_shift_score requires window >= 20")
+    if side not in ("up", "down"):
+        raise ValueError("side must be 'up' or 'down'")
     rows, cols = x.shape
     w = int(window)
     arr = x.to_numpy(dtype=float)
@@ -408,7 +507,7 @@ def _ts_sr_gaussian_mean_shift_score(x: pd.DataFrame, window: int = 120, shift_s
             v = trailing_contiguous_finite(col[lo : r + 1])
             if v.size < int(baseline_window) + 8:
                 continue
-            val = _sr_gaussian(v, float(shift_sigma), int(baseline_window))
+            val = _sr_gaussian(v, float(shift_sigma), int(baseline_window), side)
             if np.isfinite(val):
                 out[r, c] = val
     return frame_like(x, out)
@@ -425,6 +524,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "tags_extra": [],
         "output_unit": "ratio",
         "param_specs": _BICOH_SPEC,
+        "relational_specs": _BICOH_RELATIONAL_SPECS,
     },
     "ts_kernel_granger_score": {
         "fn": _ts_kernel_granger_score,
@@ -436,6 +536,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "tags_extra": [],
         "output_unit": "level",
         "param_specs": _GRANGER_SPEC,
+        "relational_specs": _GRANGER_RELATIONAL_SPECS,
     },
     "ts_residualized_hsic": {
         "fn": _ts_residualized_hsic,
@@ -458,17 +559,21 @@ _SPECS: dict[str, dict[str, Any]] = {
         "tags_extra": [],
         "output_unit": "level",
         "param_specs": _BDS_SPEC,
+        "relational_specs": _BDS_RELATIONAL_SPECS,
     },
-    "ts_sr_gaussian_mean_shift_score": {
-        "fn": _ts_sr_gaussian_mean_shift_score,
-        "params": ["x", "window", "shift_sigma", "baseline_window"],
+    "ts_rolling_sr_gaussian_mean_shift_score": {
+        "fn": _ts_rolling_sr_gaussian_mean_shift_score,
+        "params": ["x", "window", "shift_sigma", "baseline_window", "side"],
         "category": "research_sequential",
         "domain": "change_point",
         "unit": "level",
         "cost": 4,
         "tags_extra": [],
         "output_unit": "level",
-        "param_specs": _SR_SPEC,
+        "param_specs": dict(
+            _SR_SPEC, side=ParamSpec(dtype=str, choices=("up", "down"), searchable=True)
+        ),
+        "relational_specs": _SR_RELATIONAL_SPECS,
     },
 }
 
@@ -489,6 +594,19 @@ def _register() -> None:
             param_specs=spec.get("param_specs"),
         )
     union_research(*_SPECS.keys())
+    # R6-214: honest rename — each rolling t re-fits the baseline and restarts
+    # R_t from 0, so this is a ROLLING windowed SR, not a true sequential
+    # Shiryaev-Roberts that carries R_t forward across days.  The old name stays
+    # as a resolving alias for existing recipes.
+    from cleaned_operators.registry import OperatorRegistry
+
+    try:
+        OperatorRegistry.register_alias(
+            "ts_sr_gaussian_mean_shift_score",
+            "ts_rolling_sr_gaussian_mean_shift_score",
+        )
+    except (KeyError, ValueError):
+        pass  # already registered
 
 
 _register()

@@ -1,5 +1,109 @@
 # Changelog
 
+## 0.9.4 — 第六轮最终 Closure Ledger 收口（54 项 root issues）
+
+按用户最终 Closure Ledger（31 个 Core Freeze blocker + 23 个 P1 + 2 设计决策）落地。
+并发会话已同步实现其中 ~15 项（`#P0-final closure`/`#P1-final closure` 系列 + round6
+回归），本会话完成剩余项 + 全量回归：
+
+**写侧 / 并发安全（item 1-2）**
+- `mutation_lock` **fencing token**：heartbeat 后台续租（正常 writer 永不因 lease
+  过期被 hard-break 破锁）；**owner-only release**（release 前读回 payload，
+  transaction_id 匹配才 unlink——旧 writer 绝不删新 writer 重建的锁）；**PID reuse
+  检测**（payload 记录 /proc/PID/stat starttime，同 PID 不同 starttime ⇒ owner 已死）。
+  `_dataset_mutation` 整事务临界区（lock→bump→mutate→rebuild→unlock）由并发会话
+  完成，本会话复核无误。
+
+**namespace 请求级（item 3 / 46）**
+- Registry load **不再烘焙 `${RUN_NAMESPACE}`**：`root`/`root_template`/
+  `static_root`/`authorized_root` 保留占位符，read/write 时由
+  `resolve_namespace_path()` 按当前 context 解析（长期 worker 换
+  `DataAccessSession` 不再串目录）。static_prefix 计算先屏蔽 namespace 占位符
+  （修掉 `/staging/${RUN_NAMESPACE}/…` 被切成 `/staging/$` 的 bug）。
+- session namespace **原样返回 validated 值**（不再 `_sanitize` 把 `-abc-` 与
+  `abc` 汇聚，且与 env 路径行为一致）。
+
+**snapshot pin 执行（item 6/7）**
+- `ReadPlan.execute()` 在 `snapshot_policy="pin"` 下把 plan 冻结的精确文件清单
+  注入 `store.read(physical_scope=…)`——scan 不再重新 glob 解析，杜绝
+  verify 与 scan 之间底层文件被替换的 TOCTOU。
+
+**availability / 日历（item 13 / 14）**
+- 冲突 availability 声明 **fail-closed**：同 dataset 多字段声明不同
+  availability/period_selection ⇒ strict 抛 ValidationError，不再由 YAML 字段顺序
+  静默选更宽松的 same_day。
+- MarketCalendar **右边界 fail-open**：`compile_available_from` 在 strict 下
+  knowledge 超出日历覆盖（next_trading_day 返回 None）直接报错，不再
+  「无法证明何时可用 ⇒ 现在就可用了」。
+
+**PIT index（item 18）**
+- **generation-directory + 原子指针提交**：`<root>/.pit_index/current`（唯一 commit
+  点）+ `<gen>/index.parquet` + `<gen>/metadata.json`。先写完整新 gen 目录、最后
+  原子替换指针——crash 任意时刻旧 generation 完整可用，不再「新 parquet + 旧
+  JSON」mixed 后上一份好索引被毁。legacy 布局可读回退。
+
+**PIT / derived / 语义（items 16/17/19/20/21/22 由并发会话完成，本会话复核）**
+
+**SQL sandbox（item 31）**
+- 从 denylist 升级为 **parser 级 allowlist**：
+  - `_assert_single_select_statement`：语法层证明**恰好一个** SELECT/WITH
+    （顶层 `;` 切分 + 括号深度，字符串/注释/引号标识符跳过）；
+  - `_check_sql_function_allowlist`：从 **DuckDB 自身 `duckdb_functions()`**
+    注册表按 function_type 分类——**只允许 scalar/aggregate/window**；任何
+    **table 型**函数（read_parquet/parquet_metadata/sniff_csv/glob 及**未来新增**
+    的文件/网络/外部源入口）自动拒绝；未知函数 strict fail-closed；SQL grammar
+    关键字（IN/OVER/FILTER/CAST/EXTRACT…）不误伤。
+
+**strict 判定统一（item 47）**
+- `registry/paths.py` / `read/key_policy.py` / `read/telemetry.py` /
+  `cos/s3_duckdb.py` / `cos/remote.py` 全部收敛到 `is_strict_semantics()`
+  （production OR `DATA_ACCESS_STRICT_READ`）——不再各自查环境变量漏 strict 模式。
+  另修复 strict 下 httpfs 禁止 query-time 联网 INSTALL。
+
+**P1 收口（items 44/45 + 复核 32-43）**
+- Filter AST hash：And/Or 子节点按**完整 canonical JSON** 排序（同列不同值的 tie
+  不再保留输入顺序 → 语义等价过滤同 hash，缓存不 miss）。
+- date-only end：`timestamp` 列的上界从 `<= next_day - 1µs` 改为 **`< next_day`**
+  （nanosecond 精度不漏掉当天最后 999ns）。
+- FormatSpec **DuckDB version capability 门**（item 33 补全）：parquet
+  `file_row_number`/`union_by_name`/`binary_as_string` 等 option 需要特定 DuckDB
+  版本才真正生效——旧版本上配置会被静默忽略 = 配置失效，registry load 时按
+  `get_duckdb_capabilities()` 探测结果拒绝。
+- FormatSpec/partitioning/storage/TemporalJoinSpec/QueryPolicy/factor pivot/
+  FactorCatalog/early-close/calendar-flag/dataset-strict-schema 等由并发会话
+  round6 完成，全量回归复核通过。
+
+**fsync durable-write（item 52）**
+- 新增 `core/atomic.py`：`atomic_write_bytes/text/json/file`（
+  **tmp → flush/fsync(tmp fd) → os.replace → fsync(parent)**）。manifest
+  parquet/json/rowgroups、PIT index、publish manifest、factor catalog 全部切到
+  统一 helper——不再「只 fsync 目录不 fsync 文件内容」。
+
+**coverage（item 53）**
+- `empty_ok` 声明下「无分区」判 **complete**（合法空数据集）而非 unavailable；
+- `5t` 交易日 staleness 用**真实 MarketCalendar**（春节/国庆/美股 holiday 反映），
+  日历不可用才回退自然日近似；
+- remote-only（s3/cos）数据集显式标注「本地无法 glob，覆盖依赖 manifest」。
+
+**COS mirror（item 54）**
+- `_mirror_file_state` 三态：**verified / legacy_unverified / corrupt**；
+  strict/production 下 `_local_file_usable` **不把「非空」当「完整」**（manifest-less
+  文件必须 resync 成 verified）；`_verify_mirror_file(deep=True)` 重核 checksum；
+  trade_day 期望日期真实日历不可用 ⇒ `expected_dates_degraded()` 显式 degraded 标记。
+
+**设计决策（upsert / audit）**
+- **upsert 承诺 partition-level atomicity**（写死进 API 契约 docstring + lineage
+  `atomicity="partition-level"` + `transaction_id`）；不承诺 dataset-level——
+  需全量原子性的调用方走 generation-directory + pointer（publish 模型）。
+- **audit durable acknowledgement**：`audit.record(durable=True)`（publish 用）
+  在审计写失败时抛 `AuditWriteError`——业务成功但审计静默失败 = 合规证据缺失，
+  不允许「发布了、审计悄悄没记」；默认 observability 模式保持吞错。
+
+**回归**
+- `tests/unit/test_final_closure_round7.py` 22 条（覆盖上述全部项）。
+- 全量 `tests/` **710 passed**；ContractIR audit 71 数据集一致。
+- 未提交（按用户要求只改服务器本地）。
+
 ## 0.9.3 — 第五轮二阶边界收口（Core Freeze blockers 1-7 + P1 收尾 8-12）
 
 按第二轮深扫发现的 12 个「二阶边界 bug」收口。这轮没有新增架构/subsystem——全部

@@ -28,10 +28,15 @@ def _creds_fingerprint(creds: S3Credentials) -> str:
 
 
 def _production_mode() -> bool:
-    fe = os.environ.get("FACTOR_ENGINE_RUN_MODE", "").strip().lower()
-    if fe == "production":
+    # #P1-final closure 17：唯一严格模式判定（production OR strict_read）。
+    # 旧实现漏 DATA_ACCESS_STRICT_READ=1——strict 读模式同样禁止 query-time
+    # 联网 INSTALL httpfs（那是部署阶段的事）。
+    try:
+        from data_access.read.query_budget import is_strict_semantics
+
+        return is_strict_semantics()
+    except Exception:
         return True
-    return os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
 
 
 def _load_httpfs(conn) -> None:
