@@ -79,6 +79,7 @@ def _episode_map(x: np.ndarray, state: np.ndarray):
     run_max = 0.0
     run_max_neg = 0.0
     cum_path = 0.0
+    last_fin = np.nan  # last finite price inside the current episode
     broken = False
     for t in range(n):
         if sign[t] == 0:
@@ -87,6 +88,7 @@ def _episode_map(x: np.ndarray, state: np.ndarray):
             run_max = 0.0
             run_max_neg = 0.0
             cum_path = 0.0
+            last_fin = np.nan
             broken = False
             continue
         if sign[t] != cur_dir:
@@ -95,13 +97,18 @@ def _episode_map(x: np.ndarray, state: np.ndarray):
             run_max = 0.0
             run_max_neg = 0.0
             cum_path = 0.0
+            last_fin = np.nan
             broken = not np.isfinite(x[t])
         e = cur_entry
         entry[t] = e
         if broken or not np.isfinite(x[t]):
             continue
-        if t > e and np.isfinite(x[t - 1]):
-            cum_path += abs(x[t] - x[t - 1])
+        # Value-contiguous arc length: bridge interior gaps with the segment to
+        # the last finite price so ``path >= |x_t - x_e|`` always (triangle
+        # inequality) and efficiency can never exceed 1 — P0-16.
+        if t > e and np.isfinite(last_fin):
+            cum_path += abs(x[t] - last_fin)
+        last_fin = x[t]
         Pt = cur_dir * (x[t] - x[e])
         P[t] = Pt
         run_max = run_max if run_max >= Pt else Pt
@@ -112,12 +119,17 @@ def _episode_map(x: np.ndarray, state: np.ndarray):
     return sign, P, MFE, MAE, path, entry
 
 
-def _episode_scale_entry(scale: np.ndarray, e: int, t: int) -> float:
-    """Entry scale with fallback to the current-row scale when entry is NaN."""
+def _episode_scale_entry(scale: np.ndarray, e: int) -> float:
+    """Entry-row scale only.
+
+    An episode whose entry scale is missing/invalid has an undefined
+    entry-normalised excursion — there is no later fallback (P0-15).  The
+    callers test ``np.isfinite`` on the result and emit NaN.
+    """
+    if e < 0:
+        return np.nan
     se = scale[e]
-    if not np.isfinite(se):
-        se = scale[t]
-    return float(se)
+    return float(se) if np.isfinite(se) else np.nan
 
 
 # ---------------------------------------------------------------------------

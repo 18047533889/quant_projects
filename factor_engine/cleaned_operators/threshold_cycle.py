@@ -52,36 +52,66 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 # shared kernels
 # ---------------------------------------------------------------------------
 def _state_series(x: np.ndarray, lower: float, upper: float) -> np.ndarray:
-    """Two-state hysteresis panel column: ``1`` = U, ``0`` = L."""
+    """Two-state hysteresis panel column: ``1`` = U, ``0`` = L, ``-1`` = UNKNOWN.
+
+    Until the series first crosses a threshold the state is UNKNOWN — a value
+    sitting inside the deadband at the window start must not be coerced to L
+    (P0-13); that artificial initialisation made the first "leg" depend on
+    where the window happened to start.
+    """
     n = len(x)
-    s = np.zeros(n, dtype=np.int8)
+    s = np.full(n, -1, dtype=np.int8)
     for t in range(n):
         xt = x[t]
         if not np.isfinite(xt):
-            s[t] = s[t - 1] if t > 0 else 0
+            s[t] = s[t - 1] if t > 0 else -1
         elif xt <= lower:
             s[t] = 0
         elif xt >= upper:
             s[t] = 1
         else:
-            s[t] = s[t - 1] if t > 0 else 0
+            s[t] = s[t - 1] if t > 0 else -1
     return s
 
 
 def _legs(s: np.ndarray) -> list[tuple[int, int, int]]:
-    """Consecutive transition pairs ``(a, b, is_up)``.
+    """Consecutive transition pairs ``(a, b, is_up)`` between *defined* states.
 
     A leg runs from transition row ``a`` to the next transition row ``b``;
     ``is_up == 1`` when the entered state is ``U`` (an ``L→U`` up-leg, i.e. the
     U-run), ``is_up == 0`` when it is ``L`` (a ``U→L`` down-leg, the L-run).
-    Duration of the leg is ``b - a`` bars.
+    Duration of the leg is ``b - a`` bars.  Transitions involving the UNKNOWN
+    state are ignored: a run whose start is censored by the window is not
+    measured as a phantom leg.
     """
     n = len(s)
-    tr = [t for t in range(1, n) if s[t] != s[t - 1]]
+    tr = [
+        t for t in range(1, n)
+        if s[t] != s[t - 1] and s[t] in (0, 1) and s[t - 1] in (0, 1)
+    ]
     out: list[tuple[int, int, int]] = []
     for i in range(len(tr) - 1):
         a, b = tr[i], tr[i + 1]
         out.append((a, b, int(s[a])))
+    return out
+
+
+def _full_cycles(s: np.ndarray) -> list[tuple[int, int, int]]:
+    """Completed round trips ``(a, c, dur)``.
+
+    States alternate after every transition, so any two consecutive defined
+    transitions ``tr[i]``/``tr[i+2]`` delimit a full ``L→U→L`` or ``U→L→U``
+    cycle; its duration is ``tr[i+2] - tr[i]`` bars (P0-12 — the previous
+    "period" actually measured a single leg/half-cycle).
+    """
+    n = len(s)
+    tr = [
+        t for t in range(1, n)
+        if s[t] != s[t - 1] and s[t] in (0, 1) and s[t - 1] in (0, 1)
+    ]
+    out: list[tuple[int, int, int]] = []
+    for i in range(len(tr) - 2):
+        out.append((tr[i], tr[i + 2], tr[i + 2] - tr[i]))
     return out
 
 
@@ -90,10 +120,10 @@ def _cycle_period_series(x2d: np.ndarray, lower: float, upper: float, window: in
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
     for c in range(cols):
-        legs = _legs(_state_series(x2d[:, c], lower, upper))
+        cycles = _full_cycles(_state_series(x2d[:, c], lower, upper))
         for r in range(rows):
             lo = max(0, r - w + 1)
-            dur = [b - a for (a, b, _up) in legs if a >= lo and b <= r]
+            dur = [d for (a, cc, d) in cycles if a >= lo and cc <= r]
             if dur:
                 out[r, c] = float(np.median(dur))
     return out
@@ -131,15 +161,15 @@ def _cycle_asymmetry_series(x2d: np.ndarray, lower: float, upper: float, window:
     source="threshold_cycle",
 )
 class TsThresholdCyclePeriod(SeriesOperator):
-    """滞回区间状态机下, 窗口内完整周期腿长的中位数(单位: 根K线)。
+    """滞回区间状态机下, 窗口内完整周期 (L→U→L 或 U→L→U) 时长的中位数。
 
     大 → 状态切换缓慢(慢周期); 小 → 频繁穿越阈值(快周期)。 没有完整周期时
-    输出 NaN。 P2。
+    输出 NaN。 完整周期时长 = 相邻两次同向穿越之间的 bar 数。 P2。
     """
 
     metadata = _metadata(
         "ts_threshold_cycle_period",
-        "滞回状态机中已完成周期腿长(bar)的中位数。",
+        "滞回状态机中完整周期时长(bar)的中位数。",
         ["x", "lower", "upper", "window"],
         unit="bars",
         cost=3,

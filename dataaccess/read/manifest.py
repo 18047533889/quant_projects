@@ -137,7 +137,22 @@ class DatasetManifest:
     row_groups: tuple[ManifestRowGroup, ...] | None = None
     created_at: str | None = None
     time_dtype: str | None = None       # date / timestamp / int64 / float64 / string（typed 比较用）
-    manifest_epoch: str | None = None   # 写路径 mutation 后递增；读路径信任它（O(1) freshness）
+    # 双 epoch（#1）：source_epoch 由写路径每次 mutation 递增；manifest_built_epoch
+    # 只在 manifest 真正重建/增量更新后追上 source_epoch。仅当
+    # ``source_epoch == manifest_built_epoch`` 时允许用本 manifest 做 prune——
+    # 否则 ``_manifest.parquet`` 里的 min/max/rows 可能是旧数据，prune 会返回错。
+    source_epoch: str | None = None
+    manifest_built_epoch: str | None = None
+    # 兼容：老 sidecar 只有 manifest_epoch；load 时映射成 source==built（trust）。
+    manifest_epoch: str | None = None
+
+    @property
+    def is_fresh_epoch(self) -> bool:
+        """双 epoch 新鲜判定：source == built 才新鲜。"""
+        if self.source_epoch is None or self.manifest_built_epoch is None:
+            # 只有单 epoch 的内存对象：等价老语义（存在即 trust）。
+            return self.manifest_epoch is not None
+        return self.source_epoch == self.manifest_built_epoch
 
     def _typed(self, value: str | None, *, ints: bool = False) -> Any:
         """把 manifest 里存的 min/max 按 time_dtype 还原成可比较类型。"""
@@ -219,7 +234,9 @@ class DatasetManifest:
         if self.row_groups:
             _save_row_groups(root, self.row_groups)
         # meta 放独立 JSON sidecar（footer key-value metadata 各版本 pyarrow 行为不稳）
-        epoch = self.manifest_epoch or _next_epoch(_read_epoch(root))
+        old_epoch = _read_epoch(root)
+        src = self.source_epoch or self.manifest_epoch or _next_epoch(old_epoch)
+        built = self.manifest_built_epoch or src
         meta_path = root / _MANIFEST_META_FILENAME
         tmp_meta = root / f".{_MANIFEST_META_FILENAME}.tmp"
         tmp_meta.write_text(
@@ -230,7 +247,10 @@ class DatasetManifest:
                     "instrument_column": self.instrument_column,
                     "format": self.format,
                     "time_dtype": self.time_dtype,
-                    "manifest_epoch": epoch,
+                    # 双 epoch：source 是数据版本，built 是 manifest 同步到的版本。
+                    "source_epoch": src,
+                    "manifest_built_epoch": built,
+                    "manifest_epoch": src,  # 兼容老读取方（等价 source_epoch）
                     "created_at": self.created_at,
                     "file_count": self.file_count,
                     "dataset_version": self.dataset_version,
@@ -272,6 +292,12 @@ class DatasetManifest:
                 )
             )
         meta = _read_manifest_meta_json(root)
+        src = meta.get("source_epoch")
+        built = meta.get("manifest_built_epoch")
+        legacy = meta.get("manifest_epoch")
+        if src is None and built is None and legacy is not None:
+            # 老格式：manifest 建好后未 mutation 即 trust（source==built）。
+            src = built = legacy
         return cls(
             dataset=meta.get("dataset", ""),
             time_column=meta.get("time_column"),
@@ -281,7 +307,9 @@ class DatasetManifest:
             row_groups=_load_row_groups(root),
             created_at=meta.get("created_at"),
             time_dtype=meta.get("time_dtype"),
-            manifest_epoch=meta.get("manifest_epoch"),
+            source_epoch=src,
+            manifest_built_epoch=built,
+            manifest_epoch=legacy,
         )
 
     def prune_by_time(
@@ -395,6 +423,8 @@ def _read_manifest_meta_json(root: Path) -> dict[str, str]:
         "format": str(payload.get("format", "parquet")),
         "created_at": payload.get("created_at"),
         "time_dtype": payload.get("time_dtype"),
+        "source_epoch": payload.get("source_epoch"),
+        "manifest_built_epoch": payload.get("manifest_built_epoch"),
         "manifest_epoch": payload.get("manifest_epoch"),
     }
 
