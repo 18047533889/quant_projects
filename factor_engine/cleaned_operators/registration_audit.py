@@ -64,13 +64,14 @@ def _logical_signature(operator: Any) -> list[dict[str, Any]] | None:
     Role resolution order:
     1. ``metadata.panel_params`` / ``metadata.scalar_params`` (R7-224 declared);
     2. ``metadata.panel_arity`` (leading N are panel);
-    3. fallback: params without a default are panel inputs (legacy kernel
-       inference); params with a default are scalars.
-    Returns ``None`` when the operator has no declared positional contract
-    (zero-param ops with kernel-implied arity are not comparable).
+    The audit NEVER infers a panel/scalar role from the kernel signature or
+    param defaults: a required positional scalar (``tick_tolerance``, ``q``,
+    ``threshold``) has no default and would be mis-guessed as a panel input,
+    exactly the drift R7-232 exists to catch.  An operator that does NOT declare
+    its panel/scalar layout is not comparable at the logical level and returns
+    ``None`` — the existing R4-100 arity gate still applies, but no role
+    judgement is fabricated.
     """
-    import inspect
-
     metadata = getattr(operator, "metadata", None)
     if metadata is None:
         return None
@@ -80,6 +81,9 @@ def _logical_signature(operator: Any) -> list[dict[str, Any]] | None:
     declared_panel = list(getattr(metadata, "panel_params", None) or ())
     declared_scalar = list(getattr(metadata, "scalar_params", None) or ())
     panel_arity = getattr(metadata, "panel_arity", None)
+    if not declared_panel and not declared_scalar and panel_arity is None:
+        # No declared panel/scalar layout: NOT comparable (arity gate only).
+        return None
     out: list[dict[str, Any]] = []
     for index, name in enumerate(names):
         role: str | None = None
@@ -92,17 +96,10 @@ def _logical_signature(operator: Any) -> list[dict[str, Any]] | None:
         elif panel_arity is not None:
             role = "scalar"
         if role is None:
-            # Legacy inference: params without a kernel default are panel inputs.
-            fn = getattr(operator, "_calculate_series", None) or getattr(operator, "calculate", None)
-            has_default = True
-            if callable(fn):
-                try:
-                    sig = inspect.signature(fn)
-                    param = sig.parameters.get(name)
-                    has_default = param is not None and param.default is not inspect.Parameter.empty
-                except (TypeError, ValueError):
-                    has_default = True
-            role = "scalar" if has_default else "panel"
+            # Declared layout does not cover every param (partial declaration):
+            # treat uncovered trailing params as scalar controls — a panel slot
+            # must always be explicitly declared.
+            role = "scalar"
         out.append({"name": name, "role": role, "position": index})
     return out
 

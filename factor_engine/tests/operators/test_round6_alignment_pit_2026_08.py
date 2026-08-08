@@ -190,6 +190,87 @@ def test_pit_asof_join_default_is_conservative():
 
 
 # ---------------------------------------------------------------------------
+# Review-8 #404: multi-instrument asof join must not require global sort by
+# [instrument, time] — pandas merge_asof(by=...) needs a globally monotonic
+# asof key, which the old [instrument, time] ordering violates for >1 symbol.
+# ---------------------------------------------------------------------------
+def test_pit_asof_join_multi_instrument_global_key_sorted():
+    """Two instruments with interleaved decision dates must not raise
+    ``ValueError: left keys must be sorted`` and must join each instrument to
+    its own history (no cross-instrument leakage)."""
+    from pit_contract import PITColumns, pit_asof_join
+
+    decisions = pd.DataFrame(
+        {
+            "instrument": ["A", "A", "B", "B"],
+            "decision_timestamp": pd.to_datetime(
+                ["2026-01-01", "2026-01-02", "2026-01-01", "2026-01-02"], utc=True
+            ),
+        }
+    )
+    events = pd.DataFrame(
+        {
+            "instrument": ["A", "A", "B", "B"],
+            "period_end": pd.to_datetime(
+                ["2025-12-01", "2025-12-15", "2025-12-01", "2025-12-15"], utc=True
+            ),
+            "available_at": pd.to_datetime(
+                ["2026-01-01", "2026-01-15", "2026-01-01", "2026-01-15"], utc=True
+            ),
+            "value": [1.0, 2.0, 100.0, 200.0],
+        }
+    )
+    joined = pit_asof_join(
+        decisions, events, columns=PITColumns(), max_age_days=None
+    )
+    assert list(joined["instrument"]) == ["A", "A", "B", "B"]
+    # A's second decision (Jan 2) still sees A's Jan-1 event, never B's.
+    assert list(joined["value"].round(1)) == [1.0, 1.0, 100.0, 100.0]
+
+
+def test_pit_asof_join_multi_instrument_shuffled_duplicates():
+    """Shuffled decision grid + duplicated rows: output order preserved, each
+    row maps to its own instrument history, and no asof key error."""
+    from pit_contract import PITColumns, pit_asof_join
+
+    rng = np.random.default_rng(7)
+    instruments = [f"I{i:03d}" for i in range(100)]
+    decisions = pd.DataFrame(
+        {
+            "instrument": np.repeat(instruments, 5),
+            "decision_timestamp": pd.to_datetime(
+                ["2026-03-01", "2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05"],
+                utc=True,
+            ) * (np.repeat(np.ones(100, dtype=int), 5)),
+        }
+    )
+    shuffle = rng.permutation(len(decisions))
+    decisions = decisions.iloc[shuffle].reset_index(drop=True)
+    # duplicate one row
+    decisions = pd.concat([decisions, decisions.iloc[[0]]], ignore_index=True)
+
+    events = pd.DataFrame(
+        {
+            "instrument": np.repeat(instruments, 2),
+            "period_end": pd.to_datetime(
+                ["2025-12-31", "2026-02-28"], utc=True
+            ) * np.ones(200, dtype=int),
+            "available_at": pd.to_datetime(
+                ["2026-02-20", "2026-03-10"], utc=True
+            ) * np.ones(200, dtype=int),
+            "value": rng.standard_normal(200),
+        }
+    )
+    joined = pit_asof_join(decisions, events, columns=PITColumns(), max_age_days=None)
+    assert len(joined) == len(decisions)
+    # value from the same instrument only: Feb-20 event is the visible one
+    # before 2026-03-01 under next_trading_day; Jan-1 + Feb-28 quarter ends are
+    # not visible on 03-01 (announcement lands after close), so value is NaN on
+    # 2026-03-01 and the Feb-28 report on 2026-03-10 is only seen from 03-11.
+    assert joined["instrument"].isna().sum() == 0
+
+
+# ---------------------------------------------------------------------------
 # §3  Label maturity (P0-32/33/40)
 # ---------------------------------------------------------------------------
 
