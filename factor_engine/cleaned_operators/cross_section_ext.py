@@ -18,7 +18,8 @@ per-date cross-sectional or per-group operators:
 
 Shared kernels (private to this module, deterministic):
 ``_rank_features`` / ``_neighbors`` (rank-standardised k-NN, from dynamic_knn),
-``_zscore_cross``, ``_spearman`` / ``_pava_non_decreasing`` (monotone fit),
+``_zscore_cross``, ``_spearman`` / ``_pava_weighted`` (monotone fit, ties
+share one fitted level),
 ``_pearson``, and ``_prim_mean`` (Prim MST).
 
 PIT / causal / deterministic contract: every value at row ``t`` uses only rows
@@ -170,37 +171,56 @@ def _spearman(xs: np.ndarray, ys: np.ndarray) -> float:
     return float((dx * dy).sum() / denom)
 
 
-def _pava_non_decreasing(vals: np.ndarray) -> np.ndarray:
-    """Pool-adjacent-violators fit of the non-decreasing isotonic regression."""
-    sums: list[float] = []
-    counts: list[int] = []
-    for v in vals:
-        sums.append(float(v))
-        counts.append(1)
-        while len(sums) >= 2 and (sums[-1] / counts[-1]) < (sums[-2] / counts[-2]) - _EPS:
-            s = sums[-2] + sums[-1]
-            c = counts[-2] + counts[-1]
-            sums[-2] = s
-            counts[-2] = c
-            sums.pop()
+def _pava_weighted(vals: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    """Weighted pool-adjacent-violators fit (non-decreasing) over *levels*.
+
+    Each ``(vals[i], weights[i])`` is one x-level with weight = number of
+    observations sharing that level.  A violator block ``m2 > m1`` is pooled
+    into its weighted mean; the returned array has one fitted value per input
+    level (``weights`` can be used to map back to observations).
+    """
+    means: list[float] = []
+    counts: list[float] = []
+    for v, w in zip(vals, weights):
+        means.append(float(v))
+        counts.append(float(w))
+        while len(means) >= 2 and means[-1] < means[-2] - _EPS:
+            total = counts[-1] + counts[-2]
+            means[-2] = (means[-2] * counts[-2] + means[-1] * counts[-1]) / total
+            counts[-2] = total
+            means.pop()
             counts.pop()
-    out: list[float] = []
-    for s, c in zip(sums, counts):
-        val = s / c
-        out.extend([val] * c)
-    return np.array(out, dtype=float)
+    return np.array(means, dtype=float)
 
 
 def _iso_fit(y_vals: np.ndarray, x_vals: np.ndarray, *, decreasing: bool) -> np.ndarray:
-    """Isotonic regression fit of y on x (order-2 target alignment preserved)."""
+    """Isotonic regression fit of y on x — ties share ONE fitted level.
+
+    R9-OP-017 (tied-x correctness): the old code stable-sorted x and ran PAVA
+    over the raw per-stock sequence, so two stocks with the SAME x could get
+    different fitted values and the result depended on stock-column order via
+    the stable sort.  Standard isotonic regression assigns every observation at
+    a given x-level the same fitted value.  We aggregate to unique x levels
+    (weighted mean of y, count), run WEIGHTED PAVA on the levels, then map each
+    observation back to its level's fitted value — deterministic and invariant
+    to column permutation.  ``inv`` is the position->level map, so the output is
+    in the caller's original (unsorted) order.
+    """
     order = np.argsort(x_vals, kind="stable")
+    xs = x_vals[order]
     ys = y_vals[order]
-    fit_sorted = _pava_non_decreasing(-ys if decreasing else ys)
+    unique_x, inv, counts = np.unique(xs, return_inverse=True, return_counts=True)
+    wsum = np.zeros(unique_x.size, dtype=float)
+    np.add.at(wsum, inv, ys)
+    y_level = wsum / counts.astype(float)
+    sign = -1.0 if decreasing else 1.0
+    fit_level = _pava_weighted(sign * y_level, counts.astype(float))
     if decreasing:
-        fit_sorted = -fit_sorted
-    inv = np.empty_like(order)
-    inv[order] = np.arange(order.size)
-    return fit_sorted[inv]
+        fit_level = -fit_level
+    fitted_sorted = fit_level[inv]
+    inv_idx = np.empty_like(order)
+    inv_idx[order] = np.arange(order.size)
+    return fitted_sorted[inv_idx]
 
 
 def _isotonic_residual_series(y2d: np.ndarray, x2d: np.ndarray) -> np.ndarray:

@@ -5858,7 +5858,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         spec = _window_spec(node)
         w = spec.size
-        mp = spec.min_periods if node.attrs.get("min_periods") is not None else w
+        # pandas 参考 ``np.exp(log.rolling(w, min_periods=1).sum())`` 用
+        # min_periods=1：窗口内部分 NaN 时仍输出有效值的乘积，而非整窗全有效。
+        mp = spec.min_periods if node.attrs.get("min_periods") is not None else 1
         over = (
             f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
         )
