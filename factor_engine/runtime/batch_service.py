@@ -174,6 +174,9 @@ def _cluster_factors_by_cost(
 
     避免一个 full-history 因子把整批 union 窗口拉成全历史（拖累 999 个短因子）。
     """
+    from runtime.run_window import extract_source_date_bounds
+    from runtime.warmup_service import prepare_run_warmup
+
     clusters: list[list[Factor]] = []
     buckets: dict[str, list[Factor]] = {"full_history": [], "long": [], "medium": [], "short": []}
     total = 252
@@ -421,6 +424,7 @@ def execute_run_many(
     pit_forbid_forward_fill: bool = False,
     result_policy: str = "return",
     sink: Any = None,
+    warmup_clusters: bool = False,
 ) -> dict[str, Any]:
     """``FactorEngine.run_many`` 实现体：多因子 DAG 串行求值。
 

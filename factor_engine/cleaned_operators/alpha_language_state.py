@@ -199,45 +199,43 @@ class TsRunEfficiency(SeriesOperator):
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            run_sum = 0.0
-            run_abs = 0.0
+            # Capped to the latest ``max_run`` rows of the run (P0-28): both the
+            # signed and absolute sums are computed from the same deque.
+            buf: deque[float] = deque(maxlen=w)
             run_len = 0
             prev_state = None
             for row in range(rows):
                 if not s_valid[row, col]:
-                    run_sum = 0.0
-                    run_abs = 0.0
+                    buf.clear()
                     run_len = 0
                     prev_state = None
                     continue
                 if not np.isfinite(xv[row, col]):
                     # P0-003: an invalid driver breaks the episode (never a
                     # carry); the NaN row emits NaN and the run restarts.
-                    run_sum = 0.0
-                    run_abs = 0.0
+                    buf.clear()
                     run_len = 0
                     prev_state = None
                     continue
                 cur = s_val[row, col]
                 if cur == 0.0:
-                    run_sum = 0.0
-                    run_abs = 0.0
+                    buf.clear()
                     run_len = 0
                     prev_state = None
                     out[row, col] = 0.0
                     continue
                 if prev_state is not None and cur == prev_state:
-                    run_sum = run_sum + xv[row, col]
-                    run_abs = run_abs + abs(xv[row, col])
+                    buf.append(xv[row, col])
                     run_len = run_len + 1
                 else:
-                    run_sum = xv[row, col]
-                    run_abs = abs(xv[row, col])
+                    buf = deque([xv[row, col]], maxlen=w)
                     run_len = 1
                 prev_state = cur
                 if run_len < mp:
                     out[row, col] = np.nan
                     continue
+                run_sum = float(sum(buf))
+                run_abs = float(sum(abs(v) for v in buf))
                 out[row, col] = abs(run_sum) / (run_abs + _EPS)
         return frame_like(x, out)
 
@@ -279,44 +277,41 @@ class TsRunConcentration(SeriesOperator):
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            run_abs = 0.0
-            run_max = 0.0
+            # Capped to the latest ``max_run`` rows of the run (P0-28).
+            buf: deque[float] = deque(maxlen=w)
             run_len = 0
             prev_state = None
             for row in range(rows):
                 if not s_valid[row, col]:
-                    run_abs = 0.0
-                    run_max = 0.0
+                    buf.clear()
                     run_len = 0
                     prev_state = None
                     continue
                 if not np.isfinite(xv[row, col]):
                     # P0-004: an invalid driver breaks the episode.
-                    run_abs = 0.0
-                    run_max = 0.0
+                    buf.clear()
                     run_len = 0
                     prev_state = None
                     continue
                 cur = s_val[row, col]
                 if cur == 0.0:
-                    run_abs = 0.0
-                    run_max = 0.0
+                    buf.clear()
                     run_len = 0
                     prev_state = None
                     out[row, col] = 0.0
                     continue
                 if prev_state is not None and cur == prev_state:
-                    run_abs = run_abs + abs(xv[row, col])
-                    run_max = max(run_max, abs(xv[row, col]))
+                    buf.append(xv[row, col])
                     run_len = run_len + 1
                 else:
-                    run_abs = abs(xv[row, col])
-                    run_max = abs(xv[row, col])
+                    buf = deque([xv[row, col]], maxlen=w)
                     run_len = 1
                 prev_state = cur
                 if run_len < mp:
                     out[row, col] = np.nan
                     continue
+                run_abs = float(sum(abs(v) for v in buf))
+                run_max = float(max(abs(v) for v in buf))
                 out[row, col] = run_max / (run_abs + _EPS)
         return frame_like(x, out)
 
@@ -492,29 +487,35 @@ class TsStateIntegral(SeriesOperator):
         rows, cols = zv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            run_sum = 0.0
-            run_start = 0
+            # ``buf`` keeps only the latest ``max_run`` contributions of the
+            # current state segment, so ``max_run`` genuinely caps the integral
+            # (P0-29).  With ``half_life`` each retained contribution is decayed
+            # by its own age from the current row.
+            buf: deque[float] = deque(maxlen=w_run)
             cur_state = 0.0
             for row in range(rows):
                 st = states[row, col]
                 if not np.isfinite(st):
-                    run_sum = 0.0
+                    buf.clear()
                     cur_state = 0.0
                     continue
                 if st == 0.0:
-                    run_sum = 0.0
+                    buf.clear()
                     cur_state = 0.0
                     out[row, col] = 0.0
                     continue
                 if row > 0 and states[row - 1, col] == st:
-                    if lamb is not None:
-                        run_sum = run_sum * float(np.exp(-1.0 / lamb))
-                    run_sum = run_sum + max(abs(zv[row, col]) - lo, 0.0)
+                    buf.append(max(abs(zv[row, col]) - lo, 0.0))
                 else:
                     cur_state = st
-                    run_start = row
-                    run_sum = max(abs(zv[row, col]) - lo, 0.0)
-                out[row, col] = st * run_sum
+                    buf = deque([max(abs(zv[row, col]) - lo, 0.0)], maxlen=w_run)
+                if lamb is not None:
+                    s = 0.0
+                    for age, val in enumerate(reversed(buf)):
+                        s += float(val) * float(np.exp(-(age + 1) / lamb))
+                else:
+                    s = float(sum(buf))
+                out[row, col] = st * s
         return frame_like(z, out)
 
 
