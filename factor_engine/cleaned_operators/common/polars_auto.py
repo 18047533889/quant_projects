@@ -302,6 +302,16 @@ if not _has_polars("coalesce"):
 
 _register_unary("sigmoid", name="sigmoid", description="Sigmoid", expr_fn=lambda c: 1.0 / (1.0 + (-c).exp()))
 
+
+def _truthy_series(s: pl.Series) -> pl.Series:
+    """与 pandas ``_truthy_series`` 一致：非空、非 NaN、非零为真。
+
+    不能直接 ``cast(Boolean)``——polars 把 NaN cast 成 True，而 pandas
+    ``_truthy_series`` 把 NaN 当 False（缺失/NaN/0 → 假）。
+    """
+    return s.is_not_null() & (s != 0) & s.cast(pl.Float64, strict=False).is_not_nan()
+
+
 if not _has_polars("and_"):
 
     class AndPolarsAuto(SeriesOperator):
@@ -313,10 +323,12 @@ if not _has_polars("and_"):
 
         def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
             cols = [c for c in _numeric_cols(x) if c in y.columns]
-            return x.with_columns([
-                (pl.col(c).cast(pl.Boolean) & y[c].cast(pl.Boolean)).cast(pl.Float64).alias(c)
-                for c in cols
-            ])
+            replacements = {}
+            for c in cols:
+                xb = _truthy_series(x[c])
+                yb = _truthy_series(y[c])
+                replacements[c] = (xb & yb).cast(pl.Float64)
+            return x.with_columns(replacements)
 
     register_operator(
         name="and_", category="elementwise_math", business_category="elementwise_math",
@@ -334,17 +346,25 @@ if not _has_polars("or_"):
 
         def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
             cols = [c for c in _numeric_cols(x) if c in y.columns]
-            return x.with_columns([
-                (pl.col(c).cast(pl.Boolean) | y[c].cast(pl.Boolean)).cast(pl.Float64).alias(c)
-                for c in cols
-            ])
+            replacements = {}
+            for c in cols:
+                xb = _truthy_series(x[c])
+                yb = _truthy_series(y[c])
+                replacements[c] = (xb | yb).cast(pl.Float64)
+            return x.with_columns(replacements)
 
     register_operator(
         name="or_", category="elementwise_math", business_category="elementwise_math",
         canonical="or_", source="factor_dsl_polars_auto",
     )(OrPolarsAuto)
 
-_register_unary("not_", name="not_", description="逻辑非", expr_fn=lambda c: (~c.cast(pl.Boolean)).cast(pl.Float64))
+def _not_expr(c: pl.Expr) -> pl.Expr:
+    """逻辑非：非真即真（缺失/NaN/0 → True），与 pandas ``~_truthy_series`` 一致。"""
+    truthy = c.is_not_null() & (c != 0) & c.cast(pl.Float64, strict=False).is_not_nan()
+    return (~truthy).cast(pl.Float64)
+
+
+_register_unary("not_", name="not_", description="逻辑非", expr_fn=_not_expr)
 
 if not _has_polars("fillna"):
 

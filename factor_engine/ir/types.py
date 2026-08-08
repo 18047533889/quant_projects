@@ -630,12 +630,19 @@ class SourceVintageSpec:
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ArgumentTypeContract:
-    """Declared allowed semantic-kind set for one input parameter."""
+    """Declared allowed semantic-kind set for one input parameter.
 
-    parameter: str
-    allowed_semantic_kinds: frozenset[str]
+    ``allowed_semantic_kinds=None`` means the position is *unconstrained* (any
+    numeric/untyped series passes) — used to keep a positional contract aligned
+    with every panel input while only constraining the typed slots.
+    """
+
+    parameter: str | None
+    allowed_semantic_kinds: frozenset[str] | None = None
 
     def accepts(self, semantic_kind: str | None) -> bool:
+        if self.allowed_semantic_kinds is None:
+            return True
         if semantic_kind is None:
             # No declared semantic kind — cannot prove a mismatch; the gate
             # stays permissive for untyped/research columns.
@@ -673,9 +680,11 @@ OPERATOR_INPUT_TYPE_CONTRACTS: dict[str, tuple[ArgumentTypeContract, ...]] = {
         ArgumentTypeContract("event", frozenset({"EventBool", "MaskBool"})),
     ),
     "group_mean": (
+        ArgumentTypeContract("x"),
         ArgumentTypeContract("group", frozenset({"GroupKey"})),
     ),
     "group_rank": (
+        ArgumentTypeContract("x"),
         ArgumentTypeContract("group", frozenset({"GroupKey"})),
     ),
 }

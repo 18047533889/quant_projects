@@ -27,7 +27,21 @@ class SourceRefSpec:
     def params_dict(self) -> dict[str, Any]: return dict(self.params)
     def transform_params_dict(self) -> dict[str, Any]: return dict(self.transform_params)
     def with_transform(self, transform: str, **params: Any) -> "SourceRefSpec":
-        return replace(self, transform=str(transform), transform_params=tuple(sorted(params.items())))
+        spec = _TRANSFORM_PARAM_SPECS.get(str(transform).strip())
+        if spec is not None:
+            unknown = sorted(set(params) - spec)
+            if unknown:
+                raise ValueError(
+                    f"source transform {transform!r} does not consume parameter(s): "
+                    f"{', '.join(unknown)} (allowed: {', '.join(sorted(spec))})"
+                )
+        return replace(
+            self,
+            transform=str(transform),
+            transform_params=tuple(
+                sorted((str(k), _scalar(v)) for k, v in params.items())
+            ),
+        )
     def to_payload(self) -> dict[str, Any]:
         return {"table":self.table,"field":self.field,"params":dict(self.params),
                 "transform":self.transform,"transform_params":dict(self.transform_params),
@@ -48,15 +62,60 @@ def _scalar(value: Any) -> Any:
         return value
     raise TypeError(f"source parameters must be scalar literals, got {type(value).__name__}")
 
+
+def _strict_int(value: Any, *, name: str = "parameter") -> int:
+    """Strict integer validation for SourceRef integer params (Review-8 #469).
+
+    The resolver must NOT ``int()`` its way out of an ambiguous literal:
+    ``True``, ``1.9``, ``"2"``, ``NaN`` and ``Inf`` are all rejected rather than
+    silently coerced to ``1`` / ``2``.  Integral floats (``2.0``) are accepted —
+    they are mathematically the same integer.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"source {name} must be a real integer, got bool {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            raise ValueError(f"source {name} must be a finite integer, got {value!r}")
+        if not value.is_integer():
+            raise ValueError(f"source {name} must be an integer, got {value!r}")
+        return int(value)
+    raise ValueError(
+        f"source {name} must be an integer literal, got {type(value).__name__} {value!r}"
+    )
+
+
+# Review-8 #470: typed parameter allow-lists for known transforms.  A transform
+# with a spec here rejects unused/unconsumed parameters instead of silently
+# ignoring them.  Unknown transforms are not validated (opt-in strictness).
+_TRANSFORM_PARAM_SPECS: dict[str, frozenset[str]] = {
+    "financial_lag": frozenset({"quarters"}),
+    "minute_bar": frozenset({"period", "index"}),
+    "minute_resample": frozenset({"period"}),
+    "minute_at": frozenset({"period", "index"}),
+    "minute_range": frozenset({"start", "end"}),
+}
+
 def make_source_ref(table: str, field: str, *, params: Mapping[str, Any] | None = None,
                     transform: str | None = None, transform_params: Mapping[str, Any] | None = None,
                     dialect: str = "lqtp", dialect_version: str = "2026-07-19") -> SourceRefSpec:
     table, field = str(table).strip(), str(field).strip()
     if not table or not field: raise ValueError("source table and field must be non-empty")
+    tparams = dict(transform_params or {})
+    if transform:
+        spec = _TRANSFORM_PARAM_SPECS.get(str(transform).strip())
+        if spec is not None:
+            unknown = sorted(set(tparams) - spec)
+            if unknown:
+                raise ValueError(
+                    f"source transform {transform!r} does not consume parameter(s): "
+                    f"{', '.join(unknown)} (allowed: {', '.join(sorted(spec))})"
+                )
     return SourceRefSpec(table=table, field=field,
         params=tuple(sorted((str(k),_scalar(v)) for k,v in dict(params or {}).items())),
         transform=transform,
-        transform_params=tuple(sorted((str(k),_scalar(v)) for k,v in dict(transform_params or {}).items())),
+        transform_params=tuple(sorted((str(k),_scalar(v)) for k,v in tparams.items())),
         dialect=str(dialect), dialect_version=str(dialect_version))
 
 def encode_source_ref(spec: SourceRefSpec) -> str:
@@ -115,7 +174,20 @@ def is_source_ref(name: str) -> bool: return decode_source_ref(name) is not None
 def source_col(table: str, field: str, *param_items: Any, dialect: str = "lqtp",
                dialect_version: str = "2026-07-19", **params: Any):
     if len(param_items)%2: raise ValueError("source_col parameters must be key/value pairs")
-    for i in range(0,len(param_items),2): params[str(param_items[i])] = param_items[i+1]
+    # Review-8 #470: a parameter given twice (positional + keyword, or twice
+    # positionally) must be rejected — "the last one wins" silently corrupts the
+    # SourceRef identity.
+    seen: set[str] = set()
+    for i in range(0, len(param_items), 2):
+        key = str(param_items[i])
+        if key in seen:
+            raise ValueError(f"source parameter {key!r} provided more than once")
+        seen.add(key)
+        if key in params:
+            raise ValueError(
+                f"source parameter {key!r} provided both positionally and as a keyword"
+            )
+        params[key] = param_items[i + 1]
     return col(encode_source_ref(make_source_ref(table,field,params=params,dialect=dialect,dialect_version=dialect_version)))
 
 def transform_source_col(value: Any, transform: str, **params: Any):
@@ -133,6 +205,7 @@ def transform_source_col(value: Any, transform: str, **params: Any):
     return col(encode_source_ref(spec.with_transform(transform,**params)))
 
 def intermediate_col(name: str, version: int):
-    version=int(version)
-    if version<=0: raise ValueError("intermediate version must be positive")
-    return source_col("Intermediate","value",name=str(name),version=version)
+    version = _strict_int(version, name="Intermediate.version")
+    if version <= 0:
+        raise ValueError("intermediate version must be positive")
+    return source_col("Intermediate", "value", name=str(name), version=version)

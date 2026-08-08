@@ -363,7 +363,19 @@ def long_path_telemetry_flags(op_stats: dict[str, list[str]]) -> dict[str, bool]
 
 
 def strict_polars_long_fallback(ctx=None) -> bool:
-    """production 或 ``FACTOR_ENGINE_STRICT_POLARS_LONG=1`` 时禁止 silent fallback。"""
+    """production 或 ``FACTOR_ENGINE_STRICT_POLARS_LONG=1`` 时禁止 silent fallback。
+
+    R7-246: the ExecutionContext's own ``run_mode`` is authoritative FIRST — a
+    caller running with ``ctx.run_mode="production"`` must be strict even when a
+    global environment flag says otherwise (and vice versa).  Resolution order:
+    1. ``ctx.run_mode`` (the caller's own mode, most specific);
+    2. ``FACTOR_ENGINE_STRICT_POLARS_LONG`` env override (explicit user intent);
+    3. ``ctx.runtime_stats["run_mode"]`` (legacy embedded stats);
+    4. global ``is_production_mode()``.
+    """
+    ctx_mode = getattr(ctx, "run_mode", None) if ctx is not None else None
+    if ctx_mode is not None:
+        return str(ctx_mode).lower() == "production"
     raw = os.environ.get("FACTOR_ENGINE_STRICT_POLARS_LONG", "").strip().lower()
     if raw in {"1", "true", "yes", "on"}:
         return True

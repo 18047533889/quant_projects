@@ -43,6 +43,9 @@ def _cs_long_transform(
         x.select(cols)
         .with_row_index("_r")
         .unpivot(index="_r", on=cols, variable_name="_c", value_name="_v")
+        # pandas 截面统计（median/quantile/mad）跳过 NaN；polars 会把 NaN 当
+        # 数值参与排序/中位数。unpivot 后统一 NaN→null，对齐 pandas 缺失语义。
+        .with_columns(pl.col("_v").fill_nan(None))
     )
     long = transform(long)
     wide = (
@@ -195,10 +198,13 @@ class TSRankNative(SeriesOperator):
         return x.with_columns(
             [
                 (
-                    pl.col(c).rolling_rank(
+                    pl.col(c)
+                    .fill_nan(None)
+                    .rolling_rank(
                         window_size=w, method="average", min_samples=min_periods
                     )
                     / pl.col(c)
+                    .fill_nan(None)
                     .is_not_null()
                     .cast(pl.Float64)
                     .rolling_sum(window_size=w, min_samples=min_periods)

@@ -97,8 +97,10 @@ def pd_ts_staleness(x, window, **_):
 def _pl_ts_valid_count(x, window, min_periods=1, **_):
     w = positive_int(window, "window")
     cols = pl_cols(x)
+    # pandas rolling().count() 排除 NaN；``is_not_null`` 会把 NaN 当有效。
+    # 先 fill_nan(None) 使 NaN→null，再计数才与 pandas 一致。
     return x.with_columns([
-        pl.col(c).is_not_null().cast(pl.Int32).rolling_sum(window_size=w, min_samples=int(min_periods)).alias(c)
+        pl.col(c).fill_nan(None).is_not_null().cast(pl.Int32).rolling_sum(window_size=w, min_samples=int(min_periods)).alias(c)
         for c in cols
     ])
 
@@ -107,7 +109,7 @@ def _pl_ts_coverage_ratio(x, window, min_periods=1, **_):
     w = positive_int(window, "window")
     cols = pl_cols(x)
     return x.with_columns([
-        (pl.col(c).is_not_null().cast(pl.Int32).rolling_sum(window_size=w, min_samples=int(min_periods)) / w).alias(c)
+        (pl.col(c).fill_nan(None).is_not_null().cast(pl.Int32).rolling_sum(window_size=w, min_samples=int(min_periods)) / w).alias(c)
         for c in cols
     ])
 

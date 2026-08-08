@@ -370,7 +370,9 @@ class LQTPLogicalDataSource(_Base):
         events["available_at"] = pd.to_datetime(events["available_at"])
 
         if transform == "financial_lag":
-            quarters = int(params.get("quarters", 1))
+            from api.source_ref import _strict_int
+
+            quarters = _strict_int(params.get("quarters", 1), name="financial_lag.quarters")
             if quarters <= 0:
                 raise ValueError("financial_lag quarters must be positive")
             emitted: list[dict[str, Any]] = []
@@ -437,8 +439,11 @@ class LQTPLogicalDataSource(_Base):
             intermediate_dependency_lineage,
         )
 
+        from api.source_ref import _strict_int
+
         params = spec.params_dict()
-        name, version = str(params.get("name", "")), int(params.get("version", 0))
+        name = str(params.get("name", ""))
+        version = _strict_int(params.get("version", 0), name="Intermediate.version")
         ensure_intermediate_materialized(
             name,
             version,
@@ -902,8 +907,10 @@ class LQTPLogicalDataSource(_Base):
                 rows.append((date, inst, self._minute_semantic_aggregate_frame(grp.sort_values("timestamp"), field)))
             agg = pd.DataFrame(rows, columns=["date", "instrument", "value"])
         elif transform in {"minute_bar", "minute_resample"}:
-            period = int(params.get("period", 1))
-            offset = int(params.get("index", 0))
+            from api.source_ref import _strict_int
+
+            period = _strict_int(params.get("period", 1), name="minute period")
+            offset = _strict_int(params.get("index", 0), name="minute index")
             if period <= 0 or offset < 0:
                 raise ValueError("minute period must be positive and index non-negative")
             slotted = self._session_slots(frame)

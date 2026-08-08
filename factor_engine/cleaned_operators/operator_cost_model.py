@@ -88,7 +88,7 @@ _COMPLEXITY_KERNELS: list[tuple[str, Callable[[float, dict[str, Any]], float], s
     ("ts_hodges_lehmann_location", _pairwise, "O(W^2) pairwise midpoints"),
     ("ts_bds_statistic", _pairwise, "O(W^2) correlation integrals"),
     ("ts_recurrence_", _rqa, "O(M^2) recurrence matrix"),
-    ("ts_bicoherence_max", _bicoherence, "O(W*F^2)"),
+    ("ts_bicoherence_", _bicoherence, "O(W*F^2)"),
     ("ts_dmd_", _dmd, "O(W*d^2 + d^3)"),
     ("ts_kernel_granger_score", _poly_cubic, "O(W^3) kernel solve"),
     ("ts_residualized_hsic", _poly_cubic, "O(W^3) kernel smoother"),
@@ -141,7 +141,7 @@ def memory_cost(canonical: str, params: dict[str, Any] | None = None) -> float:
             # an O(W²) working set; linear/cubic kernels are O(W).
             if prefix in ("ts_hvg_", "ts_qn_scale", "ts_hodges_lehmann_location",
                           "ts_bds_statistic", "ts_recurrence_", "ts_dmd_",
-                          "ts_bicoherence_max", "ts_signature_mahalanobis_anomaly"):
+                          "ts_bicoherence_", "ts_signature_mahalanobis_anomaly"):
                 return max(1.0, (w * w) / (_REF_WINDOW * _REF_WINDOW))
             return max(1.0, w / _REF_WINDOW)
     return max(1.0, w / _REF_WINDOW)

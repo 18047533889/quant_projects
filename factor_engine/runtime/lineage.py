@@ -8,7 +8,10 @@ import json
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
+
+import numpy as np
 
 
 @dataclass
@@ -67,7 +70,14 @@ def build_run_lineage(
 ) -> RunLineage:
     """从分析结果与执行输出组装 :class:`RunLineage`。"""
     row_count = len(result) if result is not None else None
-    non_null = int(result.notna().sum()) if result is not None and hasattr(result, "notna") else None
+    # Review-8 #483: ``result.notna().sum()`` on a DataFrame returns a Series
+    # and ``int(Series)`` raises.  Flatten via ``np.asarray`` so panel-native
+    # DataFrame results, Series results, and empty results all count cells.
+    non_null = (
+        int(np.asarray(result.notna()).sum())
+        if result is not None and hasattr(result, "notna")
+        else None
+    )
     dq_passed = dq_report.passed if dq_report is not None else None
     if field_catalog_hash is None:
         try:
@@ -96,9 +106,85 @@ def build_run_lineage(
     )
 
 
+_SECRET_KEY_FRAGMENTS = (
+    "password",
+    "token",
+    "secret",
+    "access_key",
+    "secret_key",
+    "session_token",
+    "dsn",
+    "credential",
+    "authorization",
+    "apikey",
+    "api_key",
+    "private_key",
+)
+
+
+def _redact_config_value(key: str, value: Any) -> Any:
+    """Review-8 #452: redact secrets before hashing so credentials never enter
+    the factor-lake catalog identity."""
+    lowered = str(key).lower()
+    if any(frag in lowered for frag in _SECRET_KEY_FRAGMENTS) and value is not None:
+        return "<redacted>"
+    return value
+
+
+def _canonicalize_config_value(value: Any, key: str = "") -> Any:
+    """Recursive canonical serialization of a data-source config.
+
+    * dict / list / tuple recurse (secrets redacted);
+    * str / int / bool / None pass through;
+    * float must be finite — NaN/Inf are rejected (they would form a
+      non-standard, un-round-trippable identity, Review-8 #484);
+    * datetime / date / pydantic dump to ISO/JSON;
+    * anything else raises instead of leaking an address-bearing ``str()``.
+    """
+    if isinstance(value, dict):
+        return {
+            k: _canonicalize_config_value(_redact_config_value(str(k), v), str(k))
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_canonicalize_config_value(v, key) for v in value]
+    if value is None or isinstance(value, (bool, str, int)):
+        return value
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating, float)):
+        num = float(value)
+        if not np.isfinite(num):
+            raise ValueError(
+                f"data source config contains non-finite value at key {key!r}"
+            )
+        return num
+    if hasattr(value, "model_dump"):  # pydantic
+        try:
+            return _canonicalize_config_value(value.model_dump(mode="json"), key)
+        except Exception:
+            pass
+    if hasattr(value, "isoformat"):  # datetime / date
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(
+        f"data source config contains unsupported object {type(value).__name__} "
+        f"at key {key!r}"
+    )
+
+
 def hash_data_source_config(config: dict[str, Any]) -> str:
-    """对数据源配置做稳定 SHA256，用作 ``data_snapshot_id``。"""
-    payload = json.dumps(config, sort_keys=True, default=str, ensure_ascii=False)
+    """对数据源配置做稳定 SHA256，用作 ``data_snapshot_id``。
+
+    Review-8 #484: canonicalizes first (finite floats, ISO datetimes, secret
+    redaction, ``allow_nan=False``); unsupported objects raise rather than
+    leaking an address-bearing ``str()`` into the identity.
+    """
+    canonical = _canonicalize_config_value(config)
+    payload = json.dumps(
+        canonical, sort_keys=True, ensure_ascii=False, allow_nan=False
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 

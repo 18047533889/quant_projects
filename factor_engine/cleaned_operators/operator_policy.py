@@ -1595,6 +1595,8 @@ _GEMINI_V2_PACK_POLICIES: dict[str, dict[str, Any]] = {
     "ts_dmd_dominant_growth_rate": {"scope": "ts", "pit_safe": True, "min_periods": 12},
     "ts_dmd_dominant_frequency": {"scope": "ts", "pit_safe": True, "min_periods": 12},
     "ts_dmd_mode_concentration": {"scope": "ts", "pit_safe": True, "min_periods": 12},
+    "ts_bicoherence_top_decile_mean": {"scope": "ts", "pit_safe": True, "min_periods": 16},
+    # R9-OP-028: deprecated alias kept for policy lookups on legacy recipes.
     "ts_bicoherence_max": {"scope": "ts", "pit_safe": True, "min_periods": 16},
     "ts_kernel_granger_score": {"scope": "ts", "pit_safe": True, "min_periods": 30},
     "ts_residualized_hsic": {"scope": "ts", "pit_safe": True, "min_periods": 24},

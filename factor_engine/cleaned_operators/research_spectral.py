@@ -5,9 +5,11 @@ These operators are statistically meaningful but either estimator-heavy or
 assumption-laden, so they are registered on the *research* surface only and
 stay out of the default production grammar:
 
-* ``ts_bicoherence_max`` — maximum squared bicoherence over the frequency
-  triangle (quadratic phase coupling).  Segment-averaged for variance control;
-  fixed frequency grid and normalisation.
+* ``ts_bicoherence_top_decile_mean`` — mean squared bicoherence of the TOP
+  DECILE of the frequency triangle (quadratic phase coupling), the
+  extreme-selection-stable replacement for a raw ``max``.  Segment-averaged for
+  variance control; fixed frequency grid and normalisation.  The legacy name
+  ``ts_bicoherence_max`` resolves as a deprecated alias.
 * ``ts_kernel_granger_score`` — kernel-ridge predictive improvement of ``x``
   for ``y`` under *blocked* out-of-sample evaluation: ``ln(MSE_restricted /
   MSE_full)``.  Fixed RBF kernel / ridge; no training-residual cheating.
@@ -116,7 +118,7 @@ def _rbf(a: np.ndarray, b: np.ndarray, sigma: float) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # bicoherence
 # ---------------------------------------------------------------------------
-def _bicoherence_max(v: np.ndarray, n_segments: int) -> float:
+def _bicoherence_top_decile_mean(v: np.ndarray, n_segments: int) -> float:
     n = v.shape[0]
     ns = max(2, int(n_segments))
     seg = n // ns
@@ -167,14 +169,17 @@ def _bicoherence_max(v: np.ndarray, n_segments: int) -> float:
     # more frequency pairs (larger window / segments) raise the pure-noise
     # maximum mechanically.  Report the mean of the top-decile values instead
     # of the raw maximum, which is far more stable across parameter changes.
+    # R9-OP-028: the canonical NAME now says what the statistic is
+    # (``ts_bicoherence_top_decile_mean``); the old ``*_max`` name is only a
+    # deprecated alias so a research note cannot misread it as a maximum.
     vals_sorted = np.sort(np.asarray(vals))
     k = max(1, int(np.ceil(vals_sorted.size * 0.1)))
     return float(vals_sorted[-k:].mean())
 
 
-def _ts_bicoherence_max(x: pd.DataFrame, window: int = 120, n_segments: int = 4) -> pd.DataFrame:
+def _ts_bicoherence_top_decile_mean(x: pd.DataFrame, window: int = 120, n_segments: int = 4) -> pd.DataFrame:
     if int(window) < 16:
-        raise ValueError("ts_bicoherence_max requires window >= 16")
+        raise ValueError("ts_bicoherence_top_decile_mean requires window >= 16")
     rows, cols = x.shape
     w = int(window)
     arr = x.to_numpy(dtype=float)
@@ -186,7 +191,7 @@ def _ts_bicoherence_max(x: pd.DataFrame, window: int = 120, n_segments: int = 4)
             v = trailing_contiguous_finite(col[lo : r + 1])
             if v.size < 16:
                 continue
-            val = _bicoherence_max(v, int(n_segments))
+            val = _bicoherence_top_decile_mean(v, int(n_segments))
             if np.isfinite(val):
                 out[r, c] = val
     return frame_like(x, out)
@@ -224,17 +229,14 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
     Yl_tr, Yl_te = _standardize(Ylags[:train_n], Ylags[train_n:])
     Xl_tr, Xl_te = _standardize(Xlags[:train_n], Xlags[train_n:])
 
-    def _kridge(K_tr, target, K_te):
-        ntr = K_tr.shape[0]
-        lam = 1e-3 * np.trace(K_tr) / ntr
-        alpha = np.linalg.solve(K_tr + lam * np.eye(ntr), target)
-        return K_te @ alpha
-
-    # R6-207 (model fairness): the restricted and full models MUST share the
-    # same Y-lag RBF bandwidth and the same regularisation, so log(MSE_R/MSE_F)
-    # measures "how much predictive information X adds" and nothing else.  The
-    # old code re-estimated sigma in the FULL [Y-lag, X-lag] space, so the ratio
-    # also absorbed a kernel-hyperparameter change.  Nested kernel:
+    # R9-OP-029 (regularisation fairness): ``lam`` MUST be defined from the
+    # RESTRICTED training kernel only and shared verbatim by both models.  The
+    # old ``_kridge`` recomputed ``lam = 1e-3·trace(K)/n`` *inside* each call —
+    # restricted used K=Kr but full used K=Kr+0.5·Kx, so lambda_r != lambda_f
+    # and ``MSE_R/MSE_F`` absorbed a regularisation change on top of "adding X".
+    # R6-207 (model fairness): the restricted and full models MUST also share the
+    # same Y-lag RBF bandwidth, so log(MSE_R/MSE_F) measures "how much
+    # predictive information X adds" and nothing else.  Nested kernel:
     #   K_F = K_Y + eta·K_X   (restricted = K_Y), with the SAME sigma_Y, same
     # ridge, and eta a fixed small weight — "adding X" is the only change.
     sigma_y = float(np.median(np.sqrt(np.sum((Yl_tr[:, None, :] - Yl_tr[None, :, :]) ** 2, axis=2))))
@@ -242,17 +244,25 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
         sigma_y = 1.0
 
     Kr = _rbf(Yl_tr, Yl_tr, sigma_y)
+    ntr = Kr.shape[0]
+    lambda_shared = 1e-3 * float(np.trace(Kr)) / ntr
+
+    def _kridge(K_tr, target, K_te, lam):
+        alpha = np.linalg.solve(K_tr + lam * np.eye(ntr), target)
+        return K_te @ alpha
+
     Kte_r = _rbf(Yl_te, Yl_tr, sigma_y)
-    pred_r = _kridge(Kr, Ytr, Kte_r)
+    pred_r = _kridge(Kr, Ytr, Kte_r, lambda_shared)
     mse_r = float(np.mean((Yte - pred_r) ** 2))
 
-    # Full model: K_F = K_Y + eta·K_X evaluated with the SAME Y bandwidth.
+    # Full model: K_F = K_Y + eta·K_X evaluated with the SAME Y bandwidth and
+    # the SAME shared ridge ``lambda_shared``.
     Kx_tr = _rbf(Xl_tr, Xl_tr, sigma_y)
     Kte_x = _rbf(Xl_te, Xl_tr, sigma_y)
     eta = 0.5
     Kf = Kr + eta * Kx_tr
     Kte_f = Kte_r + eta * Kte_x
-    pred_f = _kridge(Kf, Ytr, Kte_f)
+    pred_f = _kridge(Kf, Ytr, Kte_f, lambda_shared)
     mse_f = float(np.mean((Yte - pred_f) ** 2))
 
     if mse_r <= _EPS or mse_f <= _EPS:
@@ -327,19 +337,24 @@ def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float:
         sigma_y = 1.0
     Kx = _rbf(rx.reshape(-1, 1), rx.reshape(-1, 1), sigma_x)
     Ky = _rbf(ry.reshape(-1, 1), ry.reshape(-1, 1), sigma_y)
-    # R6-210: the trace form trace(Kx H Ky H)/n² is a BIASED V-statistic whose
-    # baseline grows with m — two windows with different effective N (24 vs 60
-    # after gaps) would have incomparable raw values.  Use the UNBIASED HSIC
-    # estimator: average only the off-diagonal (i != j) kernel products, so the
-    # null baseline does not grow with the sample size.
     if m < 3:
         return np.nan
-    # Unbiased estimator of E[k_x k_y] under independence: average the
-    # OFF-DIAGONAL elementwise kernel products over ordered pairs i != j.  This
-    # is the unbiased HSIC first-moment (the diagonal i==j terms are the biased
-    # V-statistic self-products that inflate the baseline with the sample size).
-    off = ~np.eye(m, dtype=bool)
-    hsic = float((Kx[off] * Ky[off]).sum() / (m * (m - 1)))
+    # R9-OP-030 (mathematical correctness): the previous "unbiased HSIC" was
+    # only ``mean_{i!=j} Kx[i,j]·Ky[i,j]`` — a raw cross-moment with NO kernel
+    # centering, so under independence its expectation is ``E[Kx]·E[Ky]`` ≠ 0
+    # and it could not be read as "residual dependence ≈ 0 under
+    # independence".  Use the textbook **biased centred HSIC** V-statistic
+    # (Gretton et al. 2005):
+    #     H = I - 11'/m,   HSIC = tr(Kx·H·Ky·H) / (m-1)²
+    # which is exactly the empirical distance covariance-style measure: it is
+    # non-negative, ≈ 0 iff the (residualised) variables are independent, and
+    # > 0 under any (non-linear) dependence.  (A true unbiased U-statistic
+    # estimator is tracked separately; this canonical now measures what its
+    # name claims.)
+    H = np.eye(m) - np.ones((m, m)) / m
+    KxH = Kx @ H
+    HKyH = H @ Ky @ H
+    hsic = float(np.trace(KxH @ HKyH)) / float((m - 1) * (m - 1))
     return hsic if np.isfinite(hsic) else np.nan
 
 
@@ -514,8 +529,8 @@ def _ts_rolling_sr_gaussian_mean_shift_score(x: pd.DataFrame, window: int = 120,
 
 
 _SPECS: dict[str, dict[str, Any]] = {
-    "ts_bicoherence_max": {
-        "fn": _ts_bicoherence_max,
+    "ts_bicoherence_top_decile_mean": {
+        "fn": _ts_bicoherence_top_decile_mean,
         "params": ["x", "window", "n_segments"],
         "category": "research_spectral",
         "domain": "cross_spectral",
@@ -605,6 +620,18 @@ def _register() -> None:
         OperatorRegistry.register_alias(
             "ts_sr_gaussian_mean_shift_score",
             "ts_rolling_sr_gaussian_mean_shift_score",
+        )
+    except (KeyError, ValueError):
+        pass  # already registered
+
+    # R9-OP-028: honest rename — the statistic is the mean of the top-decile
+    # bicoherence values, NOT a maximum.  ``ts_bicoherence_max`` stays as a
+    # deprecated resolving alias so existing recipes keep loading, but the
+    # canonical name no longer overstates the statistic.
+    try:
+        OperatorRegistry.register_alias(
+            "ts_bicoherence_max",
+            "ts_bicoherence_top_decile_mean",
         )
     except (KeyError, ValueError):
         pass  # already registered

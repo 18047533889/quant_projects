@@ -1339,8 +1339,26 @@ class Analyzer:
                 child_views: list[dict[str, Any]] = []
                 for child in inputs:
                     view = dict(child.semantic_attrs or {})
+                    # Leaf columns keep catalog scalars (domain / frequency /
+                    # cardinality / temporal_model / unit / price_basis /
+                    # flow_semantics / pit_safe) on ``attrs``; fold those in so
+                    # the lattice join sees every child's full type slot.
+                    for key in (
+                        "domain",
+                        "frequency",
+                        "cardinality",
+                        "temporal_model",
+                        "unit",
+                        "price_basis",
+                        "flow_semantics",
+                        "pit_safe",
+                    ):
+                        if view.get(key) is None:
+                            attr_val = (child.attrs or {}).get(key)
+                            if attr_val is not None:
+                                view[key] = attr_val
                     if "pit_safe" not in view:
-                        view["pit_safe"] = (child.attrs or {}).get("pit_safe", True)
+                        view["pit_safe"] = True
                     child_views.append(view)
                 semantic = lattice_join_semantic_attrs(child_views)
                 # knowledge_model / fiscal_grain / universe_id are PIT

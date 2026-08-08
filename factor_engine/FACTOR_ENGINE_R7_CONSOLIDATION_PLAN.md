@@ -4,6 +4,17 @@
 本轮按 AI 审查 #219–#317 + 8 个统一重构包 A–H + 17 个 Release Gates 收口。
 **原则：不做"每算子一个 patch / hardcoded whitelist"，只修共享契约与执行链根因。**
 
+## 执行状态（更新于收口后段）
+
+- **WS-A LogicalOperatorContract（我直改）**：全部完成。base.py（#219/220/222/223/224 + MISSING sentinel + 统一 `_validate_param_spec` + alias→canonical 验证 + arity 拆分）、registry.py（#226/227 impl hash 优先级 + deterministic closure 序列化禁 id()、#228 (canonical,backend) manifest、#229 declared-source 也强制 pin、#231 rename 迁移全部治理数据、#233 替换历史记 contract hash、#234 first_registered 永久快照）、contract_hardening.py（#240 删 late polars validator、#230/249/255/258 完整 unified contract + min_periods split-brain 检查）、production_hardening.py（#248 删 blanket min_periods=1，改从声明契约推导）、pandas_first_signature.py（#312/313/314 删启发式名单，改读声明 panel_params/ParamSpec）。
+- **WS-B PanelSchema/PanelIdentity（agent）**：完成。PanelSchema/PanelIdentity/_polars_bridge 统一；#242 禁列交集、#243-244 identity 进 validator、#245 panel_to_polars 保留时间轴（__fe_time__）、#247 ImportError 只吞 polars、#246 由我补修（ctx.run_mode 优先）。
+- **WS-C Typed IR 2.0（agent）**：完成。SemanticLattice 五维 + per-argument `input_types` 契约 + FieldSpec.semantic_kind + AvailabilityExpr（删除字符串全序，unknown fail-closed）+ SourceVintageSpec。
+- **WS-D History/Stateful（agent）**：完成。ExecutionContract + HistoryRequirement（删 1e9 sentinel）；composite contract 全量接线（param_branches 全分支认证、expected old hash 拒绝）。
+- **WS-E Field/Source（agent）**：完成。mining_allowed/current_snapshot_only/four-layer PIT 执行；minute→daily 禁 asof carry；join_policy=exact；MissingSemantic；source_dependency_hash。
+- **WS-F Evidence TCB（agent）**：完成。edge undeclared=FAIL（删 vacuous pass）；EdgeContract 取代手工名单；edge evidence 按 backend；ExecutionTCB 10 件套进 factor evidence；invalidate_all_evidence_caches。
+- **WS-G Search audit / Dedup（agent）**：运行中（rank axis=1、choices 枚举采样、全量扫描 sharding、NaN mask hash、sign invariance、typed fixture）。
+- **WS-H Surface/Production Tier（agent）**：完成。pandas_first_production_canonicals() 动态派生；AuthoringTier/ProductionCertification/BackendCapability 三正交；DAILY_FACTOR_MIGRATED 由 reviewed manifest 驱动。
+
 ## 基线（实测确认）
 
 - `ensure_cleaned_loaded()` 后 **1362 canonicals / 0 unclassified**（`list_canonical()` 直接调只有 417——必须先走 cleaned_bridge）。

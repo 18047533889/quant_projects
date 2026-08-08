@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.9.7 — 收官轮：真实数据 + 运行时 + 破坏性修复（Core Freeze 定版）
+
+0.9.6 之后的**最后一轮**（真实 A股/美股 数据 + 并发/crash/破坏性测试驱动）修复：
+
+**正确性 / PIT / 数据完整性**
+- **read_joined 空 universe**（并发会话曾引入编译断点 `continue` 越级 → 全包无法
+  import）：重构为 `else:` 结构，空 universe → 0 行 typed result（非 IndexError /
+  非全量扫描）。
+- **Polars date-only end 丢最后一天白天行**（item 27B）：timestamp 列上
+  `time_range=("…","2026-07-10")` 旧代码 `<= 07-10 00:00` 漏掉当天白天；
+  抽共享 `expand_end_bound`，DuckDB/Polars/Arrow 三后端统一 `< next_day`。
+- **`_check_factor_versions` 三 gate 正交**（item 28）：显式 version 检查后不再
+  `continue`——data_snapshot/universe gate 独立生效，不再豁免。
+- **require_same_universe/data_snapshot 缺元数据列 fail-closed**（item 29）：
+  factor_lake schema 无 universe/data_snapshot_id 列时直接拒绝，不静默放行。
+
+**并发 / crash consistency**
+- **publish 双 rename 崩溃 → journal 确定性 recovery**（item 25）：第一个 rename
+  前 durable journal；进程在 old→archive 与 candidate→target 之间死亡时，下次
+  publish / 读路径自动收敛（晋升 candidate 或回退 archive），target 绝不永久缺失。
+- **audit JSONL 跨进程行原子性**（item 26）：`flock(fd)` 兜底（线程锁挡不住多进程
+  append；不依赖 PIPE_BUF/单次 syscall 假设）。
+- **mirror 期望 partition degraded 标记随结果返回**（item 33）：删除 module-global
+  `_expected_dates_degraded`（两个线程查不同 dataset 会互相覆盖）；`_market_trading_days`
+  返回 `(days, used_calendar)` 元组——旧实现自然日回退是非空列表，degraded 检测从未真正生效。
+
+**治理 / fail-closed**
+- **read_auto 未知 mode 拒绝**（item 32）：只接受 auto/arrow/stream/polars，不再
+  静默落到 read_arrow。
+- **factor_matrix 列探测失败 → MatrixCoverageMiss**（item 31）：无法证明覆盖时
+  不再 columns=None 读全矩阵，调用方 fallback factor-major。
+- **RelationHandle SQL 只能 FROM _sub**（item 34）：parser 级 scope 校验——
+  information_schema / 裸表 / 嵌套子查询隐藏表全部拒绝（数据源边界，不依赖
+  「FROM _sub 出现在 SQL 里」的弱检查）。
+- **remote-only coverage 不再永久 unavailable**（item 35）：有合同声明区间 →
+  `partial + authority=declared_remote`，无本地观测不再误报「数据缺失」。
+- **refresh_factor_catalog partial = merge**（item 30）：`factor_ids=[...]` 只更新
+  请求因子，不再把未刷新的其他记录覆盖删掉。
+- **空 plain-layout 本地 glob → 0 行**（item 22 扩展）：无 manifest 且 glob 无匹配
+  文件时返回空读取，不再让 DuckDB 报 "No files found" 进 3 次 IO 重试。
+
+**新增回归测试**：`tests/unit/test_final_closure_round9.py`（13/14/15/16/17/19/22/
+23/24）、`test_final_closure_round10.py`（25/26/27/28/29/30/31/33/34/35）。
+
+**真实数据验收**：A股 StockDailyBar 1815 文件全健康、schema 一致、无 null ticker；
+DuckDB/Polars/Arrow 三后端差分一致；PIT no-lookahead property（pre-revision 不泄漏
+未来修正）；deadline 活取消（0.26s 中断）；FD 零泄漏（300 循环）；atomic writer +
+并发 reader 零错误。
+
 ## 0.9.6 — 第七轮二阶回归收口（12 项，Core Freeze 前最后一批）
 
 用户对最新 main（`608f602`）排除前 54 项后再审，确认 12 个新增问题/二阶回归。

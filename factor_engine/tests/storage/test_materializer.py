@@ -14,7 +14,12 @@ import pandas as pd
 import pytest
 
 from storage.catalog import FactorCatalog, compute_ir_hash
-from storage.exceptions import FactorHashMismatchError, FactorNotFoundError
+from storage.partition_policy import PartitionPolicy
+from storage.exceptions import (
+    FactorHashMismatchError,
+    FactorNotFoundError,
+    MaterializePartitionError,
+)
 from storage.materializer import ParquetMaterializer
 
 
@@ -46,6 +51,17 @@ def _make_series(
 
     df = pd.DataFrame(rows, columns=["timestamp", "instrument", "value"])
     return df.set_index(["timestamp", "instrument"])["value"]
+
+
+def _make_long(dates: list[str], assets: list[str], values: list[float]) -> pd.DataFrame:
+    """构建 ``_upsert_partition`` 期望的 long 表 DataFrame。"""
+    rows = []
+    val_idx = 0
+    for d in dates:
+        for a in assets:
+            rows.append({"datetime": pd.Timestamp(d), "asset": a, "value": values[val_idx]})
+            val_idx += 1
+    return pd.DataFrame(rows)
 
 
 # ===========================================================================
@@ -451,6 +467,63 @@ class TestParquetMaterializer:
         assert result["rows_written"] == 0
         assert result["watermark"] is None
 
+    def test_partial_partition_failure_never_advances_watermark(self, tmp_path, monkeypatch):
+        """Review-8 #440: 部分分区失败时 committed watermark 不得推进，且必须抛错。
+
+        旧实现先 update_watermark 再抛 MaterializePartitionError —— 失败 run 仍
+        推进了水位线，resume 逻辑会误以为该分区已落盘。新实现：先判定失败、再
+        决定是否推进水位线。
+        """
+        from storage.partition_policy import partition_key
+
+        mat = ParquetMaterializer(lake_root=tmp_path)
+        mat.materialize(
+            factor_id="wm_fail", result=_make_series(
+                dates=["2024-01-15"], assets=["A"], values=[1.0]
+            ), ast_hash="h1",
+        )
+        wm_before = mat.catalog.get_watermark("wm_fail")
+        assert wm_before["end_date"].startswith("2024-01-15")
+
+        real = ParquetMaterializer._upsert_partition
+
+        def _selective_fail(self, factor_dir, part_values, new_df, *, policy):
+            if partition_key(part_values).startswith("year=2025"):
+                raise OSError("simulated partition write failure")
+            return real(self, factor_dir, part_values, new_df, policy=policy)
+
+        monkeypatch.setattr(ParquetMaterializer, "_upsert_partition", _selective_fail)
+        with pytest.raises(MaterializePartitionError):
+            mat.materialize(
+                factor_id="wm_fail",
+                result=_make_series(
+                    dates=["2024-01-16", "2025-06-30"],
+                    assets=["A"],
+                    values=[2.0, 3.0],
+                ),
+                ast_hash="h1",
+            )
+        wm_after = mat.catalog.get_watermark("wm_fail")
+        # watermark 必须仍停留在第一次成功的状态（2024-01-15），不吸收新行。
+        assert wm_after == wm_before
+
+    def test_all_partitions_failed_raises(self, tmp_path, monkeypatch):
+        """Review-8 #441: 全部分区失败必须抛 MaterializePartitionError，不能
+        在空短路上正常返回 ``rows_written=0`` 的成功 summary。"""
+        mat = ParquetMaterializer(lake_root=tmp_path)
+
+        def _boom(*args, **kwargs):
+            raise OSError("simulated partition write failure")
+
+        monkeypatch.setattr(ParquetMaterializer, "_upsert_partition", _boom)
+        series = _make_series(
+            dates=["2024-01-15", "2024-02-15"], assets=["A"], values=[1.0, 2.0]
+        )
+        with pytest.raises(MaterializePartitionError):
+            mat.materialize(factor_id="all_fail", result=series, ast_hash="h1")
+        # 失败 run 不得留下 success checkpoint 或推进水位线
+        assert mat.catalog.get_watermark("all_fail") is None
+
     def test_sorted_output(self, tmp_path):
         """写入的 Parquet 数据按 [asset, datetime] 排序。"""
         mat = ParquetMaterializer(lake_root=tmp_path)
@@ -503,6 +576,154 @@ class TestParquetMaterializer:
         assert result["rows_written"] == 1
         info = mat.catalog.get_factor_info("ir_hash_test")
         assert len(info["ast_hash"]) == 64  # SHA-256 hex
+
+    def test_checkpoint_pk_migration_from_legacy(self, tmp_path):
+        """Review-8 #438: 旧 PK (factor_id, partition_year) 迁移为
+        (factor_id, partition_key)，旧数据保留。"""
+        import sqlite3
+
+        db_path = tmp_path / "legacy.sqlite"
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(
+            """
+            CREATE TABLE factor_materialize_checkpoint (
+                factor_id       TEXT NOT NULL,
+                partition_year  INTEGER NOT NULL,
+                run_id          TEXT NOT NULL,
+                status          TEXT NOT NULL,
+                error_message   TEXT,
+                updated_at      TEXT NOT NULL,
+                partition_key   TEXT,
+                PRIMARY KEY (factor_id, partition_year)
+            );
+            INSERT INTO factor_materialize_checkpoint
+                (factor_id, partition_year, run_id, status, error_message, updated_at, partition_key)
+            VALUES ('f1', 202601, 'r1', 'success', NULL, '2026-01-01T00:00:00', 'month=1|year=2026');
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        cat = FactorCatalog(db_path)
+        pk = cat._conn.execute(
+            "SELECT group_concat(name) FROM pragma_table_info('factor_materialize_checkpoint') "
+            "WHERE pk > 0"
+        ).fetchone()[0]
+        assert pk == "factor_id,partition_key"
+        assert cat.get_partition_checkpoint_by_key("f1", "month=1|year=2026")["status"] == "success"
+
+    def test_checkpoint_day_partitions_no_pk_collision(self, tmp_path):
+        """Review-8 #438: 同月两个 day 分区（20260801/20260802 共享
+        partition_year=202608）在新 PK 下可共存，不再撞旧 PK。"""
+        import sqlite3
+
+        db_path = tmp_path / "legacy.sqlite"
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(
+            """
+            CREATE TABLE factor_materialize_checkpoint (
+                factor_id       TEXT NOT NULL,
+                partition_year  INTEGER NOT NULL,
+                run_id          TEXT NOT NULL,
+                status          TEXT NOT NULL,
+                error_message   TEXT,
+                updated_at      TEXT NOT NULL,
+                partition_key   TEXT,
+                PRIMARY KEY (factor_id, partition_year)
+            );
+            """
+        )
+        conn.commit()
+        conn.close()
+
+        cat = FactorCatalog(db_path)
+        cat.record_partition_checkpoint(
+            factor_id="f1", partition_year=202608, partition_key="day=1|month=8|year=2026",
+            run_id="r2", status="success",
+        )
+        cat.record_partition_checkpoint(
+            factor_id="f1", partition_year=202608, partition_key="day=2|month=8|year=2026",
+            run_id="r3", status="success",
+        )
+        assert cat.get_partition_checkpoint_by_key("f1", "day=1|month=8|year=2026")["run_id"] == "r2"
+        assert cat.get_partition_checkpoint_by_key("f1", "day=2|month=8|year=2026")["run_id"] == "r3"
+
+    def test_fresh_catalog_checkpoint_pk_is_new(self, tmp_path):
+        """Review-8 #438: 全新 catalog 直接使用 (factor_id, partition_key) PK。"""
+        cat = FactorCatalog(tmp_path / "fresh.sqlite")
+        pk = cat._conn.execute(
+            "SELECT group_concat(name) FROM pragma_table_info('factor_materialize_checkpoint') "
+            "WHERE pk > 0"
+        ).fetchone()[0]
+        assert pk == "factor_id,partition_key"
+
+    def test_orphan_tmp_cleanup_removes_stale_tmp(self, tmp_path):
+        """Review-8 #442: materialize 前 reconcile 目标 factor 的孤儿 .tmp 文件。"""
+        mat = ParquetMaterializer(lake_root=tmp_path)
+        factor_dir = tmp_path / "factors" / "orphan_test"
+        (factor_dir / "year=2024").mkdir(parents=True, exist_ok=True)
+        stale = factor_dir / "year=2024" / ".data.parquet.deadbeef.tmp"
+        stale.write_bytes(b"partial")
+        series = _make_series(dates=["2024-01-15"], assets=["A"], values=[1.0])
+        mat.materialize(factor_id="orphan_test", result=series, ast_hash="h1")
+        assert not stale.exists()
+        assert list((factor_dir / "year=2024").glob("data.parquet")) != []
+
+    def test_unique_temp_filenames_no_collision(self, tmp_path):
+        """Review-8 #443: 连续写同分区不残留 temp，且不互相覆盖。"""
+        mat = ParquetMaterializer(lake_root=tmp_path)
+        factor_dir = tmp_path / "factors" / "tmp_collide"
+        part_values = {"year": 2024}
+        policy = PartitionPolicy.from_config(partition_columns=["year"])
+        mat._upsert_partition(
+            factor_dir, part_values,
+            _make_long(["2024-01-15"], ["A"], [1.0]), policy=policy,
+        )
+        mat._upsert_partition(
+            factor_dir, part_values,
+            _make_long(["2024-01-16"], ["A"], [2.0]), policy=policy,
+        )
+        assert list((factor_dir / "year=2024").glob(".*.tmp")) == []
+        pq = pd.read_parquet(factor_dir / "year=2024" / "data.parquet")
+        dates = set(pd.to_datetime(pq["datetime"]).dt.strftime("%Y-%m-%d"))
+        assert dates == {"2024-01-15", "2024-01-16"}
+
+    def test_concurrent_multiprocess_partition_writes(self, tmp_path):
+        """Review-8 #443: 多进程并发写同一分区无 lost update。
+
+        每个进程写不同日期；若 read→merge→replace 无锁交错，后写者会覆盖先写者
+        的数据。partition flock 保证最终两行都在。
+        """
+        import multiprocessing as mp
+
+        def _worker(lake, factor_id, date, val):
+            from storage.materializer import ParquetMaterializer
+
+            mat = ParquetMaterializer(lake_root=lake)
+            mat.materialize(
+                factor_id=factor_id,
+                result=_make_series(dates=[date], assets=["A"], values=[val]),
+                ast_hash="h1",
+            )
+
+        procs = [
+            mp.Process(target=_worker, args=(str(tmp_path), "mp_race", d, v))
+            for d, v in [
+                ("2024-01-15", 1.0),
+                ("2024-01-16", 2.0),
+                ("2024-01-17", 3.0),
+                ("2024-01-18", 4.0),
+            ]
+        ]
+        for p in procs:
+            p.start()
+        for p in procs:
+            p.join()
+        assert all(p.exitcode == 0 for p in procs)
+
+        df = pd.read_parquet(tmp_path / "factors" / "mp_race" / "year=2024" / "data.parquet")
+        dates = set(pd.to_datetime(df["datetime"]).dt.strftime("%Y-%m-%d"))
+        assert dates == {"2024-01-15", "2024-01-16", "2024-01-17", "2024-01-18"}
 
 
 # ===========================================================================

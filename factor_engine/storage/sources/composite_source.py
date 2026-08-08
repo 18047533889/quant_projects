@@ -29,24 +29,35 @@ class CompositeJoinSpec:
 @dataclass
 class CompositeJoinReport:
     """组合 join 对齐统计报告。
-    
-    参数:
-        无
+
+    Review-8 #474: ``matched_rows``（key 匹配数）与 ``value_valid_rows``（值有效
+    数）是两回事 —— ``key 命中但 source 值本身是 null`` 的行不得混入
+    ``key_unmatched``。 报告区分四类：
+
+    * ``key_matched_rows`` — asof/exact 找到了该 instrument 在锚定时刻的源行；
+    * ``key_unmatched_rows`` — 没有可用的源行（anchor_rows - key_matched）；
+    * ``value_valid_rows`` — 对齐后值非 null；
+    * ``value_null_rows`` — 对齐后值为 null（key 命中但源值 null，或 key 未命中）。
+
+    ``matched_rows`` / ``unmatched_rows`` 保留为 value 语义的向后兼容别名
+    （== value_valid_rows / value_null_rows）。
     """
     source: str
     column: str
     canonical_name: str
     method: str
     anchor_rows: int
-    matched_rows: int
-    unmatched_rows: int
+    key_matched_rows: int
+    key_unmatched_rows: int
+    value_valid_rows: int
+    value_null_rows: int
 
     def to_dict(self) -> dict[str, Any]:
         """to_dict。
-        
+
         参数:
             无
-        
+
         返回:
             dict[str, Any]
         """
@@ -56,8 +67,13 @@ class CompositeJoinReport:
             "canonical_name": self.canonical_name,
             "method": self.method,
             "anchor_rows": self.anchor_rows,
-            "matched_rows": self.matched_rows,
-            "unmatched_rows": self.unmatched_rows,
+            "key_matched_rows": self.key_matched_rows,
+            "key_unmatched_rows": self.key_unmatched_rows,
+            "value_valid_rows": self.value_valid_rows,
+            "value_null_rows": self.value_null_rows,
+            # Backward-compatible aliases: matched == value-valid.
+            "matched_rows": self.value_valid_rows,
+            "unmatched_rows": self.value_null_rows,
         }
 
 
@@ -344,10 +360,13 @@ class CompositeDataSource(DataSource):
     @staticmethod
     def _parse_tolerance(value: str | None):
         """_parse_tolerance。
-        
+
+        Review-8 #475: 拒绝负 tolerance —— ``pd.to_timedelta`` 能解析负时长，
+        负 tolerance 会反转 asof 语义（丢弃匹配）。
+
         参数:
             value: 缓存值
-        
+
         返回:
             无
         """
@@ -359,6 +378,10 @@ class CompositeDataSource(DataSource):
         tolerance = pd.to_timedelta(value, errors="coerce")
         if pd.isna(tolerance):
             raise ValueError(f"Invalid composite join tolerance: {value}")
+        if tolerance < pd.Timedelta(0):
+            raise ValueError(
+                f"Composite join tolerance must be >= 0, got {value!r}"
+            )
         return tolerance
 
     @staticmethod
@@ -376,21 +399,27 @@ class CompositeDataSource(DataSource):
 
     def _align_asof_backward(self, anchor_index, series, *, tolerance: str | None = None):
         """_align_asof_backward。
-        
+
+        Review-8 #476: 源中 ``(timestamp, instrument)`` 重复行没有 revision
+        ordering 时必须 fail-closed（不能依赖原始行序静默选一行）。
+
+        返回 ``(aligned_series, key_matched_rows)``：key 命中数由 sentinel 列
+        判定，与源值是否为 null 解耦（#474）。
+
         参数:
             anchor_index: 见函数签名
             series: MultiIndex Series
             tolerance: 见函数签名（可选）
-        
+
         返回:
             无
         """
         import pandas as pd
 
         if len(anchor_index) == 0:
-            return pd.Series(dtype=series.dtype, index=anchor_index, name=series.name)
+            return pd.Series(dtype=series.dtype, index=anchor_index, name=series.name), 0
         if len(series) == 0:
-            return pd.Series(dtype=series.dtype, index=anchor_index, name=series.name)
+            return pd.Series(dtype=series.dtype, index=anchor_index, name=series.name), 0
 
         anchor_frame = anchor_index.to_frame(index=False)
         anchor_frame.columns = ["timestamp", "instrument"]
@@ -398,6 +427,16 @@ class CompositeDataSource(DataSource):
 
         source_frame = series.rename("value").reset_index()
         source_frame.columns = ["timestamp", "instrument", "value"]
+        source_frame["__fe_src_present__"] = 1.0
+
+        # Fail-closed on ambiguous duplicate source keys (#476).
+        dups = source_frame.duplicated(subset=["timestamp", "instrument"])
+        if dups.any():
+            raise ValueError(
+                f"Composite asof source has {int(dups.sum())} duplicate "
+                f"(timestamp, instrument) rows without a revision ordering; "
+                f"refusing to silently pick one."
+            )
 
         merged = pd.merge_asof(
             anchor_frame.sort_values(["timestamp", "instrument"]),
@@ -409,9 +448,10 @@ class CompositeDataSource(DataSource):
             tolerance=self._parse_tolerance(tolerance),
         ).sort_values("_row_id")
 
+        key_matched_rows = int(merged["__fe_src_present__"].notna().sum())
         out = pd.Series(merged["value"].to_numpy(), index=anchor_index, name=series.name)
         out.index = out.index.set_names(["timestamp", "instrument"])
-        return out
+        return out, key_matched_rows
 
     def _record_join_report(
         self,
@@ -421,23 +461,29 @@ class CompositeDataSource(DataSource):
         canonical_name: str,
         join_spec: CompositeJoinSpec,
         aligned,
+        key_matched_rows: int,
     ) -> None:
         """_record_join_report。
-        
+
+        Review-8 #474: ``key_matched`` 由 join 判定（asof sentinel / exact 全部
+        命中），``value_valid`` 由对齐后值的非 null 判定 —— 两者不再混淆。
+
         参数:
             source_name: 见函数签名（可选）
             column_name: 数据列名（可选）
             canonical_name: 见函数签名（可选）
             join_spec: 见函数签名（可选）
             aligned: 见函数签名（可选）
-        
+            key_matched_rows: 见函数签名（可选）
+
         返回:
             无
         """
         import pandas as pd
 
         anchor_rows = len(aligned)
-        matched_rows = int(pd.notna(aligned).sum()) if anchor_rows else 0
+        key_matched_rows = int(key_matched_rows or 0)
+        value_valid_rows = int(pd.notna(aligned).sum()) if anchor_rows else 0
         self._join_reports.append(
             CompositeJoinReport(
                 source=source_name,
@@ -445,8 +491,10 @@ class CompositeDataSource(DataSource):
                 canonical_name=canonical_name,
                 method=join_spec.method,
                 anchor_rows=anchor_rows,
-                matched_rows=matched_rows,
-                unmatched_rows=max(0, anchor_rows - matched_rows),
+                key_matched_rows=key_matched_rows,
+                key_unmatched_rows=max(0, anchor_rows - key_matched_rows),
+                value_valid_rows=value_valid_rows,
+                value_null_rows=max(0, anchor_rows - value_valid_rows),
             )
         )
 
@@ -472,10 +520,13 @@ class CompositeDataSource(DataSource):
             无
         """
         anchor_index = self._get_anchor_index()
+        key_matched_rows: int
         if join_spec.method == "exact":
+            # reindex 恒命中每个 anchor key；是否有效由值 null 判定。
             aligned = self._align_exact(anchor_index, series)
+            key_matched_rows = len(anchor_index)
         elif join_spec.method in {"asof_backward", "forward_fill"}:
-            aligned = self._align_asof_backward(
+            aligned, key_matched_rows = self._align_asof_backward(
                 anchor_index, series, tolerance=join_spec.tolerance
             )
         else:
@@ -486,6 +537,7 @@ class CompositeDataSource(DataSource):
             canonical_name=canonical_name,
             join_spec=join_spec,
             aligned=aligned,
+            key_matched_rows=key_matched_rows,
         )
         return aligned
 

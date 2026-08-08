@@ -80,8 +80,20 @@ def _dmi(high, low, close, window):
         frame = _ohlc(high[column], low[column], close[column])
         up = pl.col("high").diff()
         down = -pl.col("low").diff()
-        plus = pl.when((up > down) & (up > 0)).then(up).otherwise(0.0)
-        minus = pl.when((down > up) & (down > 0)).then(down).otherwise(0.0)
+        # 缺口后的首根 bar（up/down 缺失）必须掩为 NaN（"cannot judge"），
+        # 不能落成 0.0 混进 Wilder 平滑——与 pandas 参考的
+        # ``up.where(cond, 0.0).where(valid)`` 语义一致。
+        valid = up.is_not_null() & up.is_not_nan() & down.is_not_null() & down.is_not_nan()
+        plus = (
+            pl.when(valid)
+            .then(pl.when((up > down) & (up > 0)).then(up).otherwise(0.0))
+            .otherwise(None)
+        )
+        minus = (
+            pl.when(valid)
+            .then(pl.when((down > up) & (down > 0)).then(down).otherwise(0.0))
+            .otherwise(None)
+        )
         atr = _wilder(_tr_expr(), window)
         p = pl.when(atr != 0).then(100.0 * _wilder(plus, window) / atr).otherwise(None)
         m = pl.when(atr != 0).then(100.0 * _wilder(minus, window) / atr).otherwise(None)

@@ -80,7 +80,9 @@ def _financial_lag_dispatch(x:Any,quarters:Any):
     return transform_source_col(x,"financial_lag",quarters=quarters)
 def _intermediate_dispatch(name:Any,version:Any):
     from api.source_ref import intermediate_col
-    return intermediate_col(str(name),int(version))
+    # Review-8 #469: no int() coercion here — intermediate_col/_strict_int owns
+    # the strict integer verdict (True/1.9/"2"/NaN are all rejected).
+    return intermediate_col(str(name), version)
 def _minute_at_dispatch(field:Any,hhmm:Any):
     from api.source_ref import transform_source_col
     return transform_source_col(field,"minute_at",hhmm=str(hhmm))
@@ -89,10 +91,10 @@ def _minute_range_dispatch(field:Any,start:Any,end:Any):
     return transform_source_col(field,"minute_range",start=str(start),end=str(end))
 def _minute_resample_dispatch(field:Any,period:Any):
     from api.source_ref import transform_source_col
-    return transform_source_col(field,"minute_resample",period=int(period))
+    return transform_source_col(field,"minute_resample",period=period)
 def _minute_bar_dispatch(field:Any,period:Any,index:Any):
     from api.source_ref import transform_source_col
-    return transform_source_col(field,"minute_bar",period=int(period),index=int(index))
+    return transform_source_col(field,"minute_bar",period=period,index=index)
 
 _EXACT_COMPAT={"decay_linear":"ts_decay_linear","ts_rank_pct":"ts_rank","ts_ewm_mean":"ts_ema","ts_expanding_rank":"expanding_rank","ts_hump_decay":"hump_decay"}
 _AMBIGUOUS_EXTERNAL_NAMES=frozenset({"ts_regression_slope_sequence","ts_sumac"})

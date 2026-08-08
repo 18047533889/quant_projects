@@ -33,7 +33,7 @@ backward compatibility with the legacy flat ``duckdb_nan_edge_verified`` /
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path

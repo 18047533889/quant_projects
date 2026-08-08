@@ -25,6 +25,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import getpass
 import os
 from datetime import datetime, timezone
@@ -307,6 +308,10 @@ class ParquetMaterializer:
         factor_dir = self._lake_root / "factors" / factor_id
         work_df = attach_partition_columns(df, policy)
 
+        # Review-8 #442: 启动/重写前 reconcile 该 factor 的孤儿 .tmp 文件
+        # （崩溃发生在 os.replace 之前留下的唯一后缀 temp）。
+        self._cleanup_orphan_tmp_files(factor_dir)
+
         if write_local:
             # Phase 5 R17：直接迭代 generator，禁止 ``list(iter_partition_groups(...))``
             # ——那会把所有分区组同时引用在内存里，10 年因子等于多一份全量 DataFrame。
@@ -371,6 +376,23 @@ class ParquetMaterializer:
                     if not isolate_partition_failures:
                         raise
 
+            # Review-8 #440/#441: failure adjudication comes FIRST.  Any
+            # required partition failure must never advance the committed
+            # watermark, and an all-partitions-failed run must raise instead of
+            # returning a ``rows_written=0`` success summary.
+            if partitions_failed:
+                if run_lineage is not None and not watermark_deferred:
+                    lineage_payload = dict(run_lineage)
+                    if dq_report is not None:
+                        lineage_payload["dq_passed"] = dq_report.passed
+                    lineage_payload.setdefault("extra", {})
+                    if isinstance(lineage_payload["extra"], dict):
+                        lineage_payload["extra"]["partitions_failed"] = partitions_failed
+                    self._catalog.record_run(lineage_payload)
+                raise MaterializePartitionError(
+                    f"因子 '{factor_id}' 分区落盘部分失败: {partitions_failed}"
+                )
+
             if not partitions_written and not partitions_skipped:
                 return {
                     "factor_id": factor_id,
@@ -385,17 +407,17 @@ class ParquetMaterializer:
                     "storage_format": policy.storage_format,
                 }
 
-        # --- 5. 更新水位线 ---
+        # --- 5. 更新水位线（仅在所有 required 分区成功后才推进）---
         value_columns = [c for c in work_df.columns if c not in policy.columns]
         if write_local and (partitions_written or partitions_skipped):
             active_keys = set(partition_keys_written) | set(partition_keys_skipped)
 
             def _row_partition_key(row: pd.Series) -> str:
                 """_row_partition_key。
-                
+
                 参数:
                     row: 见函数签名
-                
+
                 返回:
                     str
                 """
@@ -444,19 +466,6 @@ class ParquetMaterializer:
                 row_count=total_rows,
             )
             watermark = self._catalog.get_watermark(factor_id)
-
-        if partitions_failed:
-            if run_lineage is not None and not watermark_deferred:
-                lineage_payload = dict(run_lineage)
-                if dq_report is not None:
-                    lineage_payload["dq_passed"] = dq_report.passed
-                lineage_payload.setdefault("extra", {})
-                if isinstance(lineage_payload["extra"], dict):
-                    lineage_payload["extra"]["partitions_failed"] = partitions_failed
-                self._catalog.record_run(lineage_payload)
-            raise MaterializePartitionError(
-                f"因子 '{factor_id}' 分区落盘部分失败: {partitions_failed}"
-            )
 
         if run_lineage is not None and not watermark_deferred:
             lineage_payload = dict(run_lineage)
@@ -704,6 +713,95 @@ class ParquetMaterializer:
     # 内部：分区 Upsert + 原子写入
     # ------------------------------------------------------------------
 
+    @staticmethod
+    @contextlib.contextmanager
+    def _partition_lock(partition_dir: Path):
+        """按分区目录加进程级 advisory ``flock``（Review-8 #443）。
+
+        两个 worker 同时 upsert 同一分区时，先到者持锁完成 read→merge→replace，
+        后到者阻塞在锁上，保证不会 ``A 读旧、B 读旧、A 写、B 写`` 丢失更新。
+        Linux/macOS 可用 ``fcntl``；其他平台退化为 no-op。
+        """
+        lock_path = Path(partition_dir) / ".lock"
+        fh = open(str(lock_path), "a+")  # noqa: SIM115 - lifecycle tied to context
+        try:
+            try:
+                import fcntl
+
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            except (ImportError, OSError):
+                pass
+            yield
+        finally:
+            try:
+                import fcntl
+
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            except (ImportError, OSError):
+                pass
+            fh.close()
+
+    def _write_partition_atomic(
+        self,
+        partition_dir: Path,
+        *,
+        filename: str,
+        combined_df: pd.DataFrame | None = None,
+        panel: pd.DataFrame | None = None,
+    ) -> Path:
+        """原子写入分区 parquet（Review-8 #442/#443）。
+
+        * temp 文件名带唯一 run 后缀，多进程并发写同分区也不会互相覆盖 tmp；
+        * 文件 fsync 后再 ``os.replace``，再 fsync 目录 —— 崩溃后文件要么是
+          旧的完整版本、要么是新的完整版本，绝不半写；
+        * 返回正式 parquet 路径。
+        """
+        import uuid
+
+        if (combined_df is None) == (panel is None):
+            raise ValueError("exactly one of combined_df/panel must be provided")
+        parquet_path = partition_dir / filename
+        tmp_path = partition_dir / f".{filename}.{uuid.uuid4().hex}.tmp"
+        if panel is not None:
+            panel.to_parquet(tmp_path, index=True, engine="pyarrow")
+        else:
+            combined_df.to_parquet(tmp_path, index=False, engine="pyarrow")
+        # fsync 数据文件，确保 os.replace 后内容已落盘
+        fd = os.open(str(tmp_path), os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(str(tmp_path), str(parquet_path))
+        # fsync 目录，持久化 rename 本身
+        try:
+            dir_fd = os.open(str(partition_dir), os.O_RDONLY)
+        except OSError:
+            dir_fd = None
+        if dir_fd is not None:
+            try:
+                os.fsync(dir_fd)
+            except OSError:
+                pass
+            finally:
+                os.close(dir_fd)
+        return parquet_path
+
+    @staticmethod
+    def _cleanup_orphan_tmp_files(factor_dir: Path) -> None:
+        """删除目标因子目录下遗留的孤儿 ``.tmp`` 文件（Review-8 #442）。
+
+        崩溃发生在 ``os.replace`` 之前时，唯一的 ``.uuid.tmp`` 文件会残留；
+        reconcile 时清理，避免磁盘膨胀。只在目标 factor_dir 内扫描（便宜）。
+        """
+        if not factor_dir.exists():
+            return
+        for tmp in factor_dir.rglob(".*.tmp"):
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
+
     def _upsert_partition(
         self,
         factor_dir: Path,
@@ -713,13 +811,13 @@ class ParquetMaterializer:
         policy: PartitionPolicy,
     ) -> None:
         """对指定 hive 分区做幂等 Upsert（long 或 wide）。
-        
+
         参数:
             factor_dir: 见函数签名
             part_values: 见函数签名
             new_df: 见函数签名
             policy: 分区策略（可选）
-        
+
         返回:
             无
         """
@@ -734,38 +832,42 @@ class ParquetMaterializer:
         parquet_path = partition_dir / policy.data_filename
         existing_rows = 0
 
-        # 读取已有数据
-        if parquet_path.exists():
-            existing_df = pd.read_parquet(parquet_path)
-            existing_df["asset"] = existing_df["asset"].astype("string")
-            existing_df["value"] = existing_df["value"].astype("float32")
-            for col in METADATA_COLUMNS:
-                if col not in existing_df.columns:
-                    if col == "is_valid":
-                        existing_df[col] = 1
-                    elif col == "invalid_reason":
-                        existing_df[col] = ""
-                    else:
-                        existing_df[col] = None
-            existing_rows = len(existing_df)
-            combined = pd.concat([existing_df, new_df], ignore_index=True)
-        else:
-            combined = new_df
+        with self._partition_lock(partition_dir):
+            # 读取已有数据
+            if parquet_path.exists():
+                existing_df = pd.read_parquet(parquet_path)
+                existing_df["asset"] = existing_df["asset"].astype("string")
+                existing_df["value"] = existing_df["value"].astype("float32")
+                for col in METADATA_COLUMNS:
+                    if col not in existing_df.columns:
+                        if col == "is_valid":
+                            existing_df[col] = 1
+                        elif col == "invalid_reason":
+                            existing_df[col] = ""
+                        else:
+                            existing_df[col] = None
+                existing_rows = len(existing_df)
+                combined = pd.concat([existing_df, new_df], ignore_index=True)
+            else:
+                combined = new_df
 
-        # 去重：按 [datetime, asset] 保留最后出现的（即最新值）
-        combined = combined.drop_duplicates(
-            subset=["datetime", "asset"], keep="last"
-        )
+            # 去重：按 [datetime, asset] 保留最后出现的（即最新值）
+            combined = combined.drop_duplicates(
+                subset=["datetime", "asset"], keep="last"
+            )
 
-        # 排序：保证 Polars join_asof 的物理预排序要求
-        combined = combined.sort_values(
-            ["asset", "datetime"]
-        ).reset_index(drop=True)
+            # 排序：保证 Polars join_asof 的物理预排序要求
+            combined = combined.sort_values(
+                ["asset", "datetime"]
+            ).reset_index(drop=True)
 
-        # 原子写入：先写 tmp，再 rename
-        tmp_path = partition_dir / f".{policy.data_filename}.tmp"
-        combined.to_parquet(tmp_path, index=False, engine="pyarrow")
-        os.replace(str(tmp_path), str(parquet_path))
+            # 原子写入：唯一 temp + fsync + rename + 目录 fsync
+            self._write_partition_atomic(
+                partition_dir,
+                filename=policy.data_filename,
+                combined_df=combined,
+            )
+
         logger.info(
             "分区写入完成: factor_dir=%s, partition=%s, existing_rows=%d, "
             "incoming_rows=%d, final_rows=%d",
@@ -785,13 +887,13 @@ class ParquetMaterializer:
         policy: PartitionPolicy,
     ) -> None:
         """宽表 panel 分区 upsert（经 long 去重后再 pivot）。
-        
+
         参数:
             factor_dir: 见函数签名
             part_values: 见函数签名
             new_df: 见函数签名
             policy: 分区策略（可选）
-        
+
         返回:
             无
         """
@@ -802,26 +904,30 @@ class ParquetMaterializer:
         )
         partition_dir.mkdir(parents=True, exist_ok=True)
         parquet_path = partition_dir / policy.data_filename
-        tmp_path = partition_dir / f".{policy.data_filename}.tmp"
 
         value_cols = ["datetime", "asset", "value"]
         new_long = new_df[value_cols].copy()
 
-        if parquet_path.exists():
-            existing_panel = pd.read_parquet(parquet_path)
-            if "datetime" in existing_panel.columns:
-                existing_panel = existing_panel.set_index("datetime")
-            existing_long = unpivot_wide_to_long(existing_panel)
-            combined_long = pd.concat([existing_long, new_long], ignore_index=True)
-        else:
-            combined_long = new_long
+        with self._partition_lock(partition_dir):
+            if parquet_path.exists():
+                existing_panel = pd.read_parquet(parquet_path)
+                if "datetime" in existing_panel.columns:
+                    existing_panel = existing_panel.set_index("datetime")
+                existing_long = unpivot_wide_to_long(existing_panel)
+                combined_long = pd.concat([existing_long, new_long], ignore_index=True)
+            else:
+                combined_long = new_long
 
-        combined_long = combined_long.drop_duplicates(
-            subset=["datetime", "asset"], keep="last"
-        )
-        panel = pivot_long_to_wide(combined_long)
-        panel.to_parquet(tmp_path, index=True, engine="pyarrow")
-        os.replace(str(tmp_path), str(parquet_path))
+            combined_long = combined_long.drop_duplicates(
+                subset=["datetime", "asset"], keep="last"
+            )
+            panel = pivot_long_to_wide(combined_long)
+            self._write_partition_atomic(
+                partition_dir,
+                filename=policy.data_filename,
+                panel=panel,
+            )
+
         logger.info(
             "宽表分区写入完成: factor_dir=%s, partition=%s, shape=%s",
             factor_dir,

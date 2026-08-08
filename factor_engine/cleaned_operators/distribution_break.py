@@ -7,7 +7,8 @@ volatility) shifts.  Energy distance is a parameter-light omnibus distance
 between empirical multivariate samples.
 
 * ``ts_joint_energy_shift``        — energy distance between a recent and a prior
-  window of 2..4 features, robust-standardised on the prior window (P1).
+  window of **3 features** (fixed 3-feature canonical, ``f1,f2,f3``),
+  robust-standardised on the prior window (P1).
 * ``ts_energy_break_score``        — robust z of the current joint-energy shift
   against its own trailing history (regime-break score) (P1).
 * ``ts_copula_central_asymmetry``  — squared deviation of the empirical copula
@@ -107,8 +108,14 @@ def _joint_shift_series(feats: np.ndarray, recent: int, prior: int) -> np.ndarra
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         for t in range(rows):
-            lo = max(0, t - (recent + prior) + 1)
-            if t - lo + 1 < recent + prior:
+            # R9-OP-001 (off-by-one): ``_joint_shift_cell`` needs ``p + r + 1``
+            # rows (prior p + recent r + current-row query).  The old bound
+            # sliced ``[t-r-p, t]`` with only ``p + r`` rows, so the cell's
+            # ``n < r + p + 1`` guard was ALWAYS true and the whole series was
+            # NaN.  The inclusive ``t`` row is the query only: it never enters
+            # either reference block (see ``_joint_shift_cell`` slicing).
+            lo = max(0, t - (recent + prior))
+            if t - lo + 1 < recent + prior + 1:
                 continue
             out[t, c] = _joint_shift_cell(feats[lo : t + 1, c, :], recent, prior)
     return out
@@ -147,15 +154,16 @@ def _robust_z(series: np.ndarray, window: int, min_periods: int) -> np.ndarray:
 class TsJointEnergyShift(SeriesOperator):
     """多变量联合分布 Energy distance 漂移（recent vs prior 窗口）。
 
-    2..4 个特征堆成 d 维样本；只用品 prior 窗口的 median/MAD 做稳健标准化，
-    然后计算 recent 与 prior 之间的 energy distance（omnibus 全分布距离，
-    clip≥0）。可发现单变量都变化不大、corr 也不明显但联合分布改变的情形。
-    PIT 安全（两个窗口都止于 t-1）。
+    **3-feature canonical**（``f1,f2,f3``，固定 d=3；R9-P1-003 明确
+    machine contract，不再宣称 "2..4 features"）。特征堆成 3 维样本；只用
+    prior 窗口的 median/MAD 做稳健标准化，然后计算 recent 与 prior 之间的
+    energy distance（omnibus 全分布距离，clip≥0）。可发现单变量都变化不大、
+    corr 也不明显但联合分布改变的情形。PIT 安全（两个窗口都止于 t-1）。
     """
 
     metadata = _metadata(
         "ts_joint_energy_shift",
-        "多变量 Energy distance 联合分布漂移（recent vs prior）。",
+        "多变量 Energy distance 联合分布漂移（recent vs prior，固定 3-feature）。",
         ["f1", "f2", "f3", "recent_window", "prior_window"],
         unit="distance",
         cost=6,

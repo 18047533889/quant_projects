@@ -153,6 +153,11 @@ CREATE TABLE IF NOT EXISTS factor_run (
     FOREIGN KEY (factor_id) REFERENCES factor_registry(factor_id)
 );
 
+-- Review-8 #438: the primary key is (factor_id, partition_key), NOT
+-- (factor_id, partition_year).  ``checkpoint_year`` collapses day partitions
+-- (20260801 and 20260802 both encode to 202608), so a legacy PK on
+-- partition_year collides as soon as a day-partitioned factor records a second
+-- day.  partition_year/month/day are retrieval columns only.
 CREATE TABLE IF NOT EXISTS factor_materialize_checkpoint (
     factor_id       TEXT NOT NULL,
     partition_year  INTEGER NOT NULL,
@@ -160,7 +165,8 @@ CREATE TABLE IF NOT EXISTS factor_materialize_checkpoint (
     status          TEXT NOT NULL,
     error_message   TEXT,
     updated_at      TEXT NOT NULL,
-    PRIMARY KEY (factor_id, partition_year)
+    partition_key   TEXT,
+    PRIMARY KEY (factor_id, partition_key)
 );
 
 CREATE TABLE IF NOT EXISTS factor_dependency (
@@ -249,6 +255,50 @@ class FactorCatalog:
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_factor_mat_ck_partition_key "
                 "ON factor_materialize_checkpoint(factor_id, partition_key)"
             )
+        self._migrate_checkpoint_primary_key()
+
+    def _migrate_checkpoint_primary_key(self) -> None:
+        """Review-8 #438: rebuild ``factor_materialize_checkpoint`` so the
+        primary key is ``(factor_id, partition_key)`` instead of the legacy
+        ``(factor_id, partition_year)``.
+
+        ``checkpoint_year`` encodes day partitions to ``year*100+month``
+        (20260801 and 20260802 both -> 202608), so the legacy PK collides as
+        soon as a day-partitioned factor records a second day.  SQLite cannot
+        ``ALTER TABLE`` a primary key, so the table is rebuilt in place; any
+        rows that would violate the new key are ignored (they are unreachable
+        duplicates of the same logical partition).
+        """
+        pk = self._conn.execute(
+            "SELECT group_concat(name) FROM pragma_table_info('factor_materialize_checkpoint') "
+            "WHERE pk > 0"
+        ).fetchone()
+        if pk is not None and pk[0] == "factor_id,partition_year":
+            self._conn.execute("DROP INDEX IF EXISTS idx_factor_mat_ck_partition_key")
+            self._conn.execute(
+                "CREATE TABLE factor_materialize_checkpoint__new ("
+                " factor_id       TEXT NOT NULL,"
+                " partition_year  INTEGER NOT NULL,"
+                " run_id          TEXT NOT NULL,"
+                " status          TEXT NOT NULL,"
+                " error_message   TEXT,"
+                " updated_at      TEXT NOT NULL,"
+                " partition_key   TEXT,"
+                " PRIMARY KEY (factor_id, partition_key)"
+                ")"
+            )
+            self._conn.execute(
+                "INSERT OR IGNORE INTO factor_materialize_checkpoint__new "
+                "(factor_id, partition_year, run_id, status, error_message, updated_at, partition_key) "
+                "SELECT factor_id, partition_year, run_id, status, error_message, updated_at, "
+                "       COALESCE(partition_key, 'year=' || CAST(partition_year AS TEXT)) "
+                "FROM factor_materialize_checkpoint"
+            )
+            self._conn.execute("DROP TABLE factor_materialize_checkpoint")
+            self._conn.execute(
+                "ALTER TABLE factor_materialize_checkpoint__new "
+                "RENAME TO factor_materialize_checkpoint"
+            )
 
     # ------------------------------------------------------------------
     # 上下文管理器
@@ -325,36 +375,41 @@ class FactorCatalog:
                 FactorHashMismatchError
                     ``factor_id`` 已注册但 ``ast_hash`` 与既存记录不同。
         """
-        existing = self.get_factor_info(factor_id)
         ds_json = (
             json.dumps(data_source_config, sort_keys=True, default=str, ensure_ascii=False)
             if data_source_config
             else None
         )
-        if existing is not None:
-            if existing["ast_hash"] != ast_hash:
-                raise FactorHashMismatchError(
-                    f"因子 '{factor_id}' 已注册（Hash={existing['ast_hash'][:12]}…），"
-                    f"但当前公式 Hash 为 {ast_hash[:12]}…。"
-                    f"请升级版本号（如改为 '{factor_id}_v2'）后重新落盘。"
-                )
-            if ds_json is not None:
-                self._conn.execute(
-                    "UPDATE factor_registry SET data_source_json = ? WHERE factor_id = ?",
-                    (ds_json, factor_id),
-                )
-                self._conn.commit()
-            return  # Hash 一致 → 幂等，不做任何变更
-
+        # Atomic register (Review-8 #443): ``INSERT OR IGNORE`` makes the
+        # existence check + insert one statement, so concurrent materializers
+        # writing the same factor_id cannot both pass a read-then-insert check
+        # and crash on ``UNIQUE constraint failed``.  The hash-conflict verdict
+        # is taken against the row that actually won the insert.
         now = datetime.now(timezone.utc).isoformat()
         self._conn.execute(
-            "INSERT INTO factor_registry "
+            "INSERT OR IGNORE INTO factor_registry "
             "(factor_id, author, frequency, description, ast_hash, expression, "
             "data_source_json, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (factor_id, author, frequency, description, ast_hash, expression, ds_json, now),
         )
         self._conn.commit()
+
+        existing = self.get_factor_info(factor_id)
+        if existing is None:  # pragma: no cover - insert above must have created it
+            raise RuntimeError(f"factor '{factor_id}' register did not materialize a row")
+        if existing["ast_hash"] != ast_hash:
+            raise FactorHashMismatchError(
+                f"因子 '{factor_id}' 已注册（Hash={existing['ast_hash'][:12]}…），"
+                f"但当前公式 Hash 为 {ast_hash[:12]}…。"
+                f"请升级版本号（如改为 '{factor_id}_v2'）后重新落盘。"
+            )
+        if ds_json is not None and existing.get("data_source_json") != ds_json:
+            self._conn.execute(
+                "UPDATE factor_registry SET data_source_json = ? WHERE factor_id = ?",
+                (ds_json, factor_id),
+            )
+            self._conn.commit()
 
     def verify_hash(self, factor_id: str, ast_hash: str) -> bool:
         """校验因子 Hash 是否与注册一致。未注册返回 True（尚无冲突）。

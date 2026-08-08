@@ -184,7 +184,10 @@ def split_scalar_panel_params(
         inferred_panel = set()
     panel = declared_panel | declared_inputs | inferred_panel
     if panel:
-        panel = {p for p in panel if p in all_params}
+        # A numeric-control knob (window/lag/...) can never be a PANEL data
+        # field, even if a legacy metadata block (mis)lists it in
+        # ``input_fields`` — see ts_average_volume / ts_regression_slope.
+        panel = {p for p in panel if p in all_params and p not in NUMERIC_CONTROL_PARAMS}
         return [p for p in all_params if p not in panel], [p for p in all_params if p in panel]
     scalar = [p for p in all_params if p in NUMERIC_CONTROL_PARAMS]
     return scalar, [p for p in all_params if p not in scalar]

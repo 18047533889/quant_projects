@@ -187,4 +187,134 @@ def test_composite_collect_join_reports():
     assert len(reports) == 1
     assert reports[0]["source"] == "fundamental"
     assert reports[0]["matched_rows"] == 2
+    assert reports[0]["value_valid_rows"] == 2
+    assert reports[0]["key_matched_rows"] == 2
+    assert reports[0]["key_unmatched_rows"] == 0
+    assert reports[0]["value_null_rows"] == 0
     assert reports[0]["method"] == "asof_backward"
+
+
+# ---------------------------------------------------------------------------
+# Review-8 #474: join report must distinguish key-miss from value-null.
+# ---------------------------------------------------------------------------
+def test_composite_join_report_distinguishes_key_miss_from_value_null():
+    price = CountingSeriesSource(
+        {
+            "close": _build_series(
+                [
+                    ("2024-01-02", "AAA", 10.0),
+                    ("2024-01-03", "AAA", 12.0),
+                ]
+            )
+        }
+    )
+    # Jan-1 无该 key 事件；Jan-2 有 key 但值为 null。
+    fundamental = CountingSeriesSource(
+        {
+            "pe": _build_series(
+                [
+                    ("2024-01-02", "AAA", float("nan")),
+                    ("2024-01-03", "AAA", 3.0),
+                ]
+            )
+        }
+    )
+    source = CompositeDataSource(
+        anchor_source="price",
+        anchor_column="close",
+        sources={"price": price, "fundamental": fundamental},
+        joins={"fundamental": "asof_backward"},
+    )
+    source.load_column("fundamental.pe")
+    report = source.collect_join_reports()[0]
+    # key 全部命中（anchor 2 行，asof 都找到了源行）
+    assert report["key_matched_rows"] == 2
+    assert report["key_unmatched_rows"] == 0
+    # 但 Jan-2 的源值本身是 null → value_valid 只有 1
+    assert report["value_valid_rows"] == 1
+    assert report["value_null_rows"] == 1
+    # 兼容别名：matched == value_valid
+    assert report["matched_rows"] == 1
+
+
+def test_composite_join_report_counts_key_unmatched():
+    price = CountingSeriesSource(
+        {
+            "close": _build_series(
+                [
+                    ("2024-01-02", "AAA", 10.0),
+                    ("2024-01-03", "AAA", 12.0),
+                ]
+            )
+        }
+    )
+    # 源数据晚于锚点 → asof backward 无法命中任何 key。
+    fundamental = CountingSeriesSource(
+        {"pe": _build_series([("2024-01-05", "AAA", 9.0)])}
+    )
+    source = CompositeDataSource(
+        anchor_source="price",
+        anchor_column="close",
+        sources={"price": price, "fundamental": fundamental},
+        joins={"fundamental": "asof_backward"},
+    )
+    source.load_column("fundamental.pe")
+    report = source.collect_join_reports()[0]
+    assert report["key_matched_rows"] == 0
+    assert report["key_unmatched_rows"] == 2
+    assert report["value_null_rows"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Review-8 #475: asof tolerance must reject negative durations.
+# ---------------------------------------------------------------------------
+def test_composite_join_rejects_negative_tolerance():
+    price = CountingSeriesSource(
+        {"close": _build_series([("2024-01-02", "AAA", 10.0)])}
+    )
+    fundamental = CountingSeriesSource(
+        {"pe": _build_series([("2024-01-01", "AAA", 2.0)])}
+    )
+    source = CompositeDataSource(
+        anchor_source="price",
+        anchor_column="close",
+        sources={"price": price, "fundamental": fundamental},
+        joins={"fundamental": {"method": "asof_backward", "tolerance": "-1d"}},
+    )
+    with pytest.raises(ValueError, match=">= 0"):
+        source.load_column("fundamental.pe")
+
+
+# ---------------------------------------------------------------------------
+# Review-8 #476: asof source duplicate (timestamp, instrument) must fail closed.
+# ---------------------------------------------------------------------------
+def test_composite_asof_duplicate_source_key_fails_closed():
+    price = CountingSeriesSource(
+        {
+            "close": _build_series(
+                [
+                    ("2024-01-02", "AAA", 10.0),
+                    ("2024-01-03", "AAA", 12.0),
+                ]
+            )
+        }
+    )
+    dup = pd.DataFrame(
+        [
+            ("2024-01-01", "AAA", 2.0),
+            ("2024-01-01", "AAA", 3.0),
+        ],
+        columns=["timestamp", "instrument", "value"],
+    )
+    dup["timestamp"] = pd.to_datetime(dup["timestamp"])
+    dup_series = dup.set_index(["timestamp", "instrument"])["value"].sort_index()
+    dup_series.index = dup_series.index.set_names(["timestamp", "instrument"])
+    fundamental = CountingSeriesSource({"pe": dup_series})
+    source = CompositeDataSource(
+        anchor_source="price",
+        anchor_column="close",
+        sources={"price": price, "fundamental": fundamental},
+        joins={"fundamental": "asof_backward"},
+    )
+    with pytest.raises(ValueError, match="duplicate"):
+        source.load_column("fundamental.pe")

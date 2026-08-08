@@ -65,7 +65,18 @@ def _rolling_slope(x, window, min_periods):
 
 def _variance_ratio_slope(vals, max_q):
     arr = np.asarray(vals, dtype=float)
-    finite = arr[np.isfinite(arr)]
+    # 与 pandas 参考一致：只用窗口内**尾部连续有限块**（P0-008，禁止把缺口
+    # 两侧的观测桥接成相邻），而非全部有限值。
+    finite_mask = np.isfinite(arr)
+    if not finite_mask.any():
+        return float("nan")
+    last = int(len(arr) - 1)
+    while last >= 0 and not finite_mask[last]:
+        last -= 1
+    j = last
+    while j >= 0 and finite_mask[j]:
+        j -= 1
+    finite = arr[j + 1 : last + 1]
     if len(finite) < max(12, int(max_q) + 3):
         return float("nan")
     rets = np.diff(finite)

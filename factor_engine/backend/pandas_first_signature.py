@@ -21,13 +21,85 @@ _CANDLE_PATTERNS=frozenset({
 "2_crows","3_inside","3_outside","3_line_strike","3_stars_south","abandoned_baby","advance_block","belt_hold","breakaway","closing_marubozu","counterattack","doji_star","evening_doji_star","high_wave","homing_pigeon","identical_3_crows","in_neck","on_neck","thrusting","ladder_bottom","long_legged_doji","long_line","short_line","matching_low","mat_hold","rickshaw_man","rise_fall_3_methods","separating_lines","stalled_pattern","stick_sandwich","takuri","tasuki_gap","tristar","unique_3_river","upside_gap_2_crows","xside_gap_3_methods",
 })
 
+def _declared_panel_params(canonical: str) -> frozenset[str]:
+    """R7-312: read the operator's DECLARED panel contract instead of guessing
+    from a hardcoded name list.  ``OperatorMetadata.panel_params`` /
+    ``scalar_params`` (R7-224) are authoritative when present."""
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        op = OperatorRegistry.get(canonical, backend="pandas_numpy")
+        meta = getattr(op, "metadata", None)
+        declared = getattr(meta, "panel_params", None)
+        if declared:
+            return frozenset(str(x) for x in declared)
+        panel_arity = getattr(meta, "panel_arity", None)
+        if panel_arity is not None:
+            names = [str(x) for x in (getattr(meta, "param_names", None) or [])]
+            return frozenset(names[: int(panel_arity)])
+        declared_scalar = getattr(meta, "scalar_params", None)
+        if declared_scalar:
+            names = [str(x) for x in (getattr(meta, "param_names", None) or [])]
+            scalar = frozenset(str(x) for x in declared_scalar)
+            return frozenset(n for n in names if n not in scalar)
+    except Exception:
+        pass
+    return frozenset()
+
+
+def _declared_int_params(canonical: str) -> frozenset[str]:
+    """R7-314: parameters declared ``ParamSpec(dtype=int)`` on the operator —
+    the authoritative source for the positive-integer gate.  Empty = the
+    operator declares no ParamSpec, so the legacy name heuristic applies."""
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        op = OperatorRegistry.get(canonical, backend="pandas_numpy")
+        meta = getattr(op, "metadata", None)
+        specs = getattr(meta, "param_specs", None) or {}
+        return frozenset(
+            name for name, spec in specs.items()
+            if spec is not None and getattr(spec, "dtype", None) is int
+        )
+    except Exception:
+        return frozenset()
+
+
+def _int_spec_min(canonical: str, name: str) -> int:
+    """R7-314: the declared ``ParamSpec.min`` for an int param (default 1 when
+    unset — the static gate keeps its historical conservative default)."""
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        op = OperatorRegistry.get(canonical, backend="pandas_numpy")
+        meta = getattr(op, "metadata", None)
+        spec = (getattr(meta, "param_specs", None) or {}).get(name)
+        if spec is not None and getattr(spec, "min", None) is not None:
+            return int(spec.min)
+    except Exception:
+        pass
+    return 1
+
+
 def _is_panel(canonical:str,name:str)->bool:
+    # R7-312: a DECLARED panel contract wins over the legacy name heuristic —
+    # a new optional panel input must not be silently treated as a tuning
+    # scalar because its name is absent from the hardcoded list.
+    declared = _declared_panel_params(canonical)
+    if declared:
+        return name in declared
     if name in _PANEL_NAMES:return True
     if name=="signal":return canonical not in _MACD
     if name in {"value","values","fallback"}:return canonical!="fillna_const"
     return False
 def _finite(v):
+    # R7-313: the static validator must not accept a numeric STRING that the
+    # runtime ParamSpec binder rejects.  ``float("20")`` succeeds here but a
+    # declared-int parameter receiving the string ``"20"`` is a contract
+    # violation at runtime ("must be an integer, not str").  Strings are
+    # non-finite for static purposes, so static and runtime agree.
     if isinstance(v,bool):return False
+    if isinstance(v,str):return False
     try:return math.isfinite(float(v))
     except (TypeError,ValueError):return False
 def _integer(v):
@@ -74,12 +146,22 @@ def validate_pandas_first_call(canonical:str,node:PlanNode)->tuple[bool,str]:
     if canonical not in PANDAS_FIRST_PRODUCTION_CANONICALS:return True,""
     values,dynamic=_call_values(node,canonical)
     if dynamic:return False,f"{canonical}: production tuning parameter(s) must be literal: {', '.join(dynamic)}"
-    for name in _WINDOW_NAMES:
-        err=_posint(canonical,values,name)
-        if err:return False,err
-    for name in ("min_periods","min_obs","run","buckets","top","k","points"):
-        err=_posint(canonical,values,name)
-        if err:return False,err
+    # R7-314: a declared ParamSpec(dtype=int) drives the window/positive-int
+    # gate.  The legacy ``_WINDOW_NAMES`` heuristic applies only to operators
+    # that declare NO ParamSpec (undeclared legacy ops).
+    declared_int = _declared_int_params(canonical)
+    if declared_int:
+        for name in declared_int:
+            if name in values:
+                err=_posint(canonical,values,name, _int_spec_min(canonical, name))
+                if err:return False,err
+    else:
+        for name in _WINDOW_NAMES:
+            err=_posint(canonical,values,name)
+            if err:return False,err
+        for name in ("min_periods","min_obs","run","buckets","top","k","points"):
+            err=_posint(canonical,values,name)
+            if err:return False,err
     for names in (("fast_window","slow_window"),("fast_period","slow_period"),("fast","slow"),("short_periods","long_periods")):
         err=_ordered(canonical,values,names)
         if err:return False,err

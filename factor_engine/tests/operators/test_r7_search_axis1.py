@@ -353,3 +353,18 @@ def test_split_fallback_uses_numeric_control_names():
     )
     assert "window" in scalar
     assert {"high", "low", "close", "volume"} <= set(panel)
+
+
+def test_split_never_treats_control_knob_as_panel_even_if_metadata_mislabels():
+    """window/lag/... are scalar knobs even when a legacy metadata block lists
+    them in input_fields (see ts_average_volume / ts_regression_slope)."""
+    from cleaned_operators.search.factor_dedup import split_scalar_panel_params
+
+    class Meta:
+        param_names = ["x", "window"]
+        panel_params = None
+        input_fields = ["x", "window"]  # mislabel: window is a scalar knob
+
+    scalar, panel = split_scalar_panel_params(["x", "window"], Meta(), "ts_average_volume")
+    assert scalar == ["window"]
+    assert panel == ["x"]

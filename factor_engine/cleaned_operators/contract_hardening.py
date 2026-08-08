@@ -233,6 +233,30 @@ def _derive_contracts() -> None:
             "backends": sorted(implementations),
             "lookback": lookback,
             "parameter_constraints": catalog["parameter_constraints"],
+            # R7-230/255/258: the unified logical contract is COMPLETE — it
+            # carries every contract field the registry persists so a serialised
+            # contract fully describes the canonical's logical semantics without
+            # consulting any separate catalog/manifest/backend source.  This is
+            # the single source both hardening layers and late sync consume.
+            "param_specs": dict(catalog.get("param_specs") or {}),
+            "panel_params": tuple(catalog.get("panel_params") or ()),
+            "scalar_params": tuple(catalog.get("scalar_params") or ()),
+            "param_aliases": dict(catalog.get("param_aliases") or {}),
+            "input_units": dict(catalog.get("input_units") or {}),
+            "output_unit": catalog.get("output_unit"),
+            "input_grain": catalog.get("input_grain"),
+            "output_grain": catalog.get("output_grain"),
+            "available_at": catalog.get("available_at"),
+            "same_session_usable": catalog.get("same_session_usable"),
+            "input_fields": list(catalog.get("input_fields") or ()),
+            "window_semantics": catalog.get("window_semantics"),
+            "relational_specs": [
+                {
+                    "expression": getattr(spec, "expression", ""),
+                    "message": getattr(spec, "message", None),
+                }
+                for spec in (catalog.get("relational_specs") or [])
+            ],
         }
         catalog["contract"] = contract
         catalog["production_policy"] = production_policy
@@ -253,6 +277,28 @@ def _validate_final_contracts() -> None:
             errors.append(f"{canonical}: missing parameter contract")
         if not contract.get("lookback"):
             errors.append(f"{canonical}: missing lookback contract")
+        # R7-258: catalog/policy min_periods split-brain.  The operator_policy
+        # ``_EXPLICIT_POLICIES`` and the registry catalog's ``min_periods`` (the
+        # value derived from ``_MIN_PERIODS_FLOORS`` / ``_policy_patch``) must
+        # agree on the warmup floor — a "catalog says 4, policy says 1" split
+        # makes kernel warmup != analyzer history.  Only check operators where
+        # BOTH declare a value; an undeclared policy is not a conflict.
+        try:
+            from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+
+            policy_floor = (_EXPLICIT_POLICIES.get(canonical) or {}).get("min_periods")
+            catalog_floor = catalog.get("min_periods")
+        except ImportError:  # pragma: no cover - operator_policy always importable
+            policy_floor = catalog_floor = None
+        if (
+            policy_floor is not None
+            and catalog_floor is not None
+            and int(policy_floor) != int(catalog_floor)
+        ):
+            errors.append(
+                f"{canonical}: min_periods split-brain — policy says "
+                f"{policy_floor} but catalog contract says {catalog_floor}"
+            )
     if errors:
         raise RuntimeError("operator contract convergence failed: " + "; ".join(errors[:20]))
 

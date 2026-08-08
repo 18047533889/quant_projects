@@ -220,8 +220,11 @@ def test_pit_asof_join_multi_instrument_global_key_sorted():
             "value": [1.0, 2.0, 100.0, 200.0],
         }
     )
+    # ``same_day`` isolates the sort fix from the availability-shift policy:
+    # each instrument's decision must join its own history exactly.
     joined = pit_asof_join(
-        decisions, events, columns=PITColumns(), max_age_days=None
+        decisions, events, columns=PITColumns(), max_age_days=None,
+        available_policy="same_day",
     )
     assert list(joined["instrument"]) == ["A", "A", "B", "B"]
     # A's second decision (Jan 2) still sees A's Jan-1 event, never B's.
@@ -235,13 +238,14 @@ def test_pit_asof_join_multi_instrument_shuffled_duplicates():
 
     rng = np.random.default_rng(7)
     instruments = [f"I{i:03d}" for i in range(100)]
+    decision_dates = pd.to_datetime(
+        ["2026-03-01", "2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05"],
+        utc=True,
+    )
     decisions = pd.DataFrame(
         {
             "instrument": np.repeat(instruments, 5),
-            "decision_timestamp": pd.to_datetime(
-                ["2026-03-01", "2026-03-02", "2026-03-03", "2026-03-04", "2026-03-05"],
-                utc=True,
-            ) * (np.repeat(np.ones(100, dtype=int), 5)),
+            "decision_timestamp": np.tile(decision_dates.to_numpy(), 100),
         }
     )
     shuffle = rng.permutation(len(decisions))
@@ -249,15 +253,13 @@ def test_pit_asof_join_multi_instrument_shuffled_duplicates():
     # duplicate one row
     decisions = pd.concat([decisions, decisions.iloc[[0]]], ignore_index=True)
 
+    event_dates = pd.to_datetime(["2025-12-31", "2026-02-28"], utc=True)
+    event_available = pd.to_datetime(["2026-02-20", "2026-03-10"], utc=True)
     events = pd.DataFrame(
         {
             "instrument": np.repeat(instruments, 2),
-            "period_end": pd.to_datetime(
-                ["2025-12-31", "2026-02-28"], utc=True
-            ) * np.ones(200, dtype=int),
-            "available_at": pd.to_datetime(
-                ["2026-02-20", "2026-03-10"], utc=True
-            ) * np.ones(200, dtype=int),
+            "period_end": np.tile(event_dates.to_numpy(), 100),
+            "available_at": np.tile(event_available.to_numpy(), 100),
             "value": rng.standard_normal(200),
         }
     )

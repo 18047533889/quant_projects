@@ -724,6 +724,11 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("rank", _INT),
         ArgSpec("dim", _INT), ArgSpec("delay", _INT), ArgSpec("top_k", _INT),
     )
+    signatures["ts_bicoherence_top_decile_mean"] = _sig(
+        "ts_bicoherence_top_decile_mean",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("n_segments", _INT),
+    )
+    # R9-OP-028: deprecated alias signature retained so legacy recipes load.
     signatures["ts_bicoherence_max"] = _sig(
         "ts_bicoherence_max",
         ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("n_segments", _INT),

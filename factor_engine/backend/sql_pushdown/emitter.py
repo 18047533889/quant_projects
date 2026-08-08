@@ -3250,11 +3250,13 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
         plus = (
             f"SELECT ts, inst, "
-            f"CASE WHEN up > dn AND up > 0 THEN up ELSE 0.0 END AS _v FROM ({base}) t"
+            f"CASE WHEN up IS NULL OR dn IS NULL THEN NULL "
+            f"WHEN up > dn AND up > 0 THEN up ELSE 0.0 END AS _v FROM ({base}) t"
         )
         minus = (
             f"SELECT ts, inst, "
-            f"CASE WHEN dn > up AND dn > 0 THEN dn ELSE 0.0 END AS _v FROM ({base}) t"
+            f"CASE WHEN up IS NULL OR dn IS NULL THEN NULL "
+            f"WHEN dn > up AND dn > 0 THEN dn ELSE 0.0 END AS _v FROM ({base}) t"
         )
         plus_di = _wilder_ewm_over_inst(plus, w, dialect=dialect, min_periods=w)
         minus_di = _wilder_ewm_over_inst(minus, w, dialect=dialect, min_periods=w)

@@ -183,7 +183,27 @@ def _impl_source_hash(operator: Any) -> str:
     cls = operator.__class__
 
     def _is_class_defined(attr: str) -> bool:
+        # R7-226: "class-defined" means the SUBCLASS overrides it — the abstract
+        # framework bases (Operator/SeriesOperator) define ``_calculate_series``
+        # and ``calculate`` too, and hashing those would conflate every operator
+        # that relies on the base routing.  Only methods defined on a class below
+        # the framework bases count as the operator's own kernel.
+        try:
+            from cleaned_operators import base as _base
+            from cleaned_operators import base_polars as _base_polars
+
+            framework_bases = {
+                _base.Operator, _base.SeriesOperator, _base.ScalarOperator,
+                _base.TransformOperator, _base.TwoVarOperator,
+                _base_polars.Operator, _base_polars.SeriesOperator,
+                _base_polars.ScalarOperator, _base_polars.TransformOperator,
+                _base_polars.TwoVarOperator,
+            }
+        except ImportError:  # pragma: no cover - base always importable
+            framework_bases = set()
         for klass in cls.__mro__:
+            if klass in framework_bases:
+                return False  # only the framework defines this from here up
             if attr in klass.__dict__:
                 return True
         return False
@@ -291,7 +311,15 @@ def _contract_hash(operator: Any) -> str:
 
 
 def _fn_payload(fn: Any, cls: type) -> str | None:
-    """Deterministic payload of one callable: code + qualname + closure."""
+    """Deterministic payload of one callable: code + closure (R7-227).
+
+    The class qualname is deliberately NOT part of the semantic payload: two
+    operators whose kernels are byte-identical ARE the same implementation and
+    must hash identically (determinism across classes/processes).  Class
+    identity is already captured by the caller's resolution order — a
+    class-defined kernel reaching this point has already been distinguished from
+    the framework base by ``_is_class_defined``.
+    """
     import inspect as _inspect
 
     try:
@@ -308,8 +336,7 @@ def _fn_payload(fn: Any, cls: type) -> str | None:
             parts.append("cells=" + ",".join(sorted(cells)))
             return "|".join(parts)
         if code is not None:
-            qualname = f"{cls.__module__}.{cls.__qualname__}"
-            return _code_payload(code, include_names=True) + "|" + qualname
+            return _code_payload(code, include_names=True)
         return _inspect.getsource(fn)
     except (OSError, TypeError):  # pragma: no cover - interactive/no-source
         return None

@@ -55,7 +55,9 @@ class TSMedianPolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         w = int(kwargs.get("d", window))
-        return _rolling_window(x, w, lambda c, n: c.rolling_median(window_size=n, min_samples=1))
+        # pandas rolling().median() 跳过 NaN；polars rolling_median 会把 NaN
+        # 当作最大参与排序。先 fill_nan(None) 对齐 pandas 缺失语义。
+        return _rolling_window(x, w, lambda c, n: c.fill_nan(None).rolling_median(window_size=n, min_samples=1))
 
 
 @register_operator(name="m_mad", category="time_series", business_category="time_series", canonical="ts_mad", source="factor_dsl_polars")

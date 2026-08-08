@@ -287,13 +287,27 @@ def test_should_skip_optional_import_error_only_swallows_missing_polars():
 
 # ---------------------------------------------------------------------------
 # #246 — strict_polars_long_fallback must read ctx.run_mode first.
-# Function lives in backend/polars_long_policy.py (owned by WS-A); the finding
-# is reported out-of-boundary.  This test documents the required priority.
+# R7-246 fixed in backend/polars_long_policy.py (WS-A): ctx.run_mode is
+# authoritative, then env, then runtime_stats, then global.
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(reason="#246 out of WS-B boundary: backend/polars_long_policy.py owned by WS-A", strict=False)
 def test_strict_polars_long_fallback_reads_ctx_run_mode():
     from types import SimpleNamespace
     from backend.polars_long_policy import strict_polars_long_fallback
+    import os
 
-    ctx = SimpleNamespace(run_mode="production", runtime_stats={})
-    assert strict_polars_long_fallback(ctx) is True
+    saved = os.environ.get("FACTOR_ENGINE_STRICT_POLARS_LONG")
+    try:
+        os.environ.pop("FACTOR_ENGINE_STRICT_POLARS_LONG", None)
+        ctx = SimpleNamespace(run_mode="production", runtime_stats={})
+        assert strict_polars_long_fallback(ctx) is True
+        ctx2 = SimpleNamespace(run_mode="research", runtime_stats={})
+        assert strict_polars_long_fallback(ctx2) is False
+        # ctx.run_mode is authoritative over env override.
+        os.environ["FACTOR_ENGINE_STRICT_POLARS_LONG"] = "1"
+        assert strict_polars_long_fallback(ctx2) is False  # research ctx wins
+        assert strict_polars_long_fallback(None) is True  # env wins w/o ctx
+    finally:
+        if saved is None:
+            os.environ.pop("FACTOR_ENGINE_STRICT_POLARS_LONG", None)
+        else:
+            os.environ["FACTOR_ENGINE_STRICT_POLARS_LONG"] = saved

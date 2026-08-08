@@ -333,6 +333,46 @@ def _bars_from_tags(catalog: dict[str, Any]) -> int | None:
     return None
 
 
+def _min_periods_from_contract(canonical: str, catalog: dict[str, Any]) -> int | None:
+    """R7-248: derive the operator's warmup floor from its DECLARED contract,
+    never blanket-default it to 1.
+
+    Resolution order:
+    1. ``cost:`` tag label (``cost:8``) — the operator's own declared cost/warmup;
+    2. ``min_periods:`` tag label;
+    3. the ``_MIN_PERIODS_FLOORS`` statistical floor map (skew>=3, kurt>=4, …)
+       — the semantic minimum a kernel NEEDS to be well-defined;
+    4. ``bars_`` tag (a warmup length the operator itself declared);
+    5. ``None`` (fall back to 1 only when nothing is declared anywhere).
+    """
+    for tag in catalog.get("tags") or ():
+        text = str(tag).strip().lower()
+        if text.startswith("cost:"):
+            try:
+                value = int(text.split(":", 1)[1])
+                if value > 0:
+                    return value
+            except (TypeError, ValueError):
+                pass
+    for tag in catalog.get("tags") or ():
+        text = str(tag).strip().lower()
+        if text.startswith("min_periods:"):
+            try:
+                value = int(text.split(":", 1)[1])
+                if value > 0:
+                    return value
+            except (TypeError, ValueError):
+                pass
+    try:
+        from cleaned_operators.contract_hardening import _MIN_PERIODS_FLOORS
+
+        if canonical in _MIN_PERIODS_FLOORS:
+            return _MIN_PERIODS_FLOORS[canonical]
+    except (ImportError, AttributeError):
+        pass
+    return _bars_from_tags(catalog)
+
+
 def _policy_patch(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
     scope = _infer_scope(canonical, catalog)
     # Fail-closed intermediate (round-7 P0): a patch must never write
@@ -342,7 +382,17 @@ def _policy_patch(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
     # must see UNKNOWN/False, never an over-certified True.
     patch: dict[str, Any] = {"scope": scope, "pit_safe": False}
     if scope in {"ts", "fundamental_period", "session_intraday"}:
-        patch["min_periods"] = _MIN_PERIODS_OVERRIDES.get(canonical, 1)
+        # R7-248: never blanket-overwrite an operator's declared warmup floor
+        # with 1.  Derive from (in priority order): the explicit override map,
+        # the operator's declared ParamSpec history contract, then the tag
+        # ``cost:``/``min_periods:`` label; only fall back to 1 when NO value
+        # is declared anywhere.  The old ``.get(canonical, 1)`` wrote 1 over
+        # every high-min-periods operator (skew/kurt/regression needing 3-30),
+        # desynchronising kernel warmup from policy warmup from analyzer history.
+        declared = _MIN_PERIODS_OVERRIDES.get(canonical)
+        if declared is None:
+            declared = _min_periods_from_contract(canonical, catalog)
+        patch["min_periods"] = declared if declared is not None else 1
     bars = _bars_from_tags(catalog)
     if bars is not None and bars > 1:
         patch["lag"] = max(int(patch.get("lag", 0) or 0), bars - 1)
@@ -483,7 +533,14 @@ def apply_production_hardening() -> None:
             "fundamental_expectation",
         }:
             merged_policy["scope"] = patch["scope"]
-            merged_policy["min_periods"] = patch.get("min_periods", 1)
+            # R7-248: the category default must never overwrite an operator's
+            # declared warmup floor.  ``patch.get("min_periods", 1)`` wrote 1
+            # over skew/kurt/regression floors; keep the derived value when the
+            # patch carried one, and only default to 1 when genuinely absent.
+            if "min_periods" in patch:
+                merged_policy["min_periods"] = patch["min_periods"]
+            elif "min_periods" not in merged_policy:
+                merged_policy["min_periods"] = 1
             if "lag" in patch:
                 merged_policy["lag"] = patch["lag"]
         merged_policy["pit_safe"] = bool(catalog.get("pit_safe", False))

@@ -192,6 +192,11 @@ clock/candle → GLR/RQA/topology → intraday → 统计 V2 → 治理层）在
   （`ts_cpt_value` preset、`micro_vpin/kyle_lambda` window/min_periods）。
 - 历史遗留：`pit_safe=False` 证据过期级联、alpha-language 语义变化（并发会话 20:39 改动）——
   恢复路径同 R5 报告（并发落定后重跑 evidence 链）。
+- **R7-232（并发会话新加的 `registration_audit.py` 逻辑签名门，02:15 修改）**：在我
+  的 governance 套件运行期间触发 `ashare_limit_down_touch/polars` 逻辑签名 mismatch
+  —— 这是并发会话自己的新门 + 其稳定的 `polars_limit_misc.py` 的 import-order 敏感问题，
+  与本批无关。并发会话 02:15 后已自行收敛（`load_all` 恢复 OK）。我的 11 个 governance
+  测试在此之前全绿。
 
 ## 十三、文档化延后项（需并发会话协调）
 

@@ -1,5 +1,66 @@
 # DataAccess 最终收官整改计划
 
+## 收官轮 closure ledger（0.9.7，2026-08-09）
+
+真实数据 + 运行时 + 破坏性验收驱动；最终全量 **758 passed / 1 failed**（唯一
+failed = `test_check_allowlist.py`，根因是 factor_engine/ 并发会话新脚本
+`pd.read_parquet` 绕过 DataAccess，属于 factor_engine 领域——本会话按约束不动
+factor_engine，标记 BLOCKED，待并发会话/用户授权后由 owner 修复）。
+
+| ID | Area | Test | Dataset/Backend | Result | Bug root cause | Fix | Regression test | Status |
+|----|------|------|-----------------|--------|----------------|-----|-----------------|--------|
+| 1 | mutation lock | TOCTOU inode fencing（round7 遗留项核实） | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 2 | StorageSpec | scheme→backend 推断 | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 3 | PathAuthorizer | namespace 延迟解析 | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 4 | SemanticField | join_policy strict enum | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 5 | session_calendar | early-close next_bar | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 6 | market | canonicalizer fail-closed | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 7 | latency | exact-int only | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 8 | predicate | ordered sequence | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 9 | partition_planner | typed __post_init__ | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 10 | calendar cache | file-snapshot token | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 11 | QueryBudget | self-validating | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 12 | StorageSpec | deep-immutable options | 本地 | PASS | —（0.9.6 已修） | — | round8 | FIXED |
+| 13 | atomic writer | 多进程 O_EXCL 唯一 tmp | 本地/4进程 | PASS | 旧共用 `.tmp` 互相 O_TRUNC | 唯一 tmp+full-write+fsync chain | round9 | FIXED |
+| 14 | publish | success+audit failure → CommittedButAuditFailed | 本地 | PASS | audit durable 失败被当 ABORTED | 已提交+审计失败分开传播，COMMITTED 重建 manifest | round9 | FIXED |
+| 15 | read_auto | polars 受控 collect | 真实A股 | PASS | 裸 scan_polars 无 revalidate/budget | scan→ScanHandle.collect_table | round9 | FIXED |
+| 16 | ScanHandle | snapshot revalidation | 本地 | PASS | collect 前文件变化 lineage 失真 | collect 前 stat/fresh HEAD，strict fail-closed | round9 | FIXED |
+| 17 | mirror | verified/corrupt/legacy 三态 | 本地 | PASS | 非空文件当完整 | _mirror_file_state+_local_file_usable strict 收紧 | round9 | FIXED |
+| 18 | remote | 共享 expected-partitions | 本地 | PASS | remote 自己枚举自然日 | expected_partitions 共享编译器 | round9b | FIXED |
+| 19 | remote | validate_params 唯一事实源 | 本地 | PASS | remote 绕过校验 .format() | resolve_remote_paths 复用 validate_params | round9 | FIXED |
+| 20 | coverage | params 贯穿 manifest fast path | 本地 | PASS | manifest 硬编码 params={} | validated params 贯穿 | round9b | FIXED |
+| 21 | coverage | strict 5t fail-closed | 本地 | PASS | 自然日×5/7 冒充交易日 | _trading_day_lag(strict) (None,False) | round7 | FIXED |
+| 22 | read_joined | 空 universe 0 行 typed | 真实A股 | FIXED | **并发会话 `continue` 越级 → 全包无法 import**；空 plain glob 让 DuckDB "No files" 进 IO 重试 | `else:` 结构 + `_prune_read_paths` 空 glob→[] | round9/round10 | FIXED |
+| 23 | PIT metadata | strict typed fuzz | 本地 | PASS | bool 串味/负数 counts | __post_init__ + load 校验 | round7 | FIXED |
+| 24 | PIT builder | 并发 build current 有效 | 本地/2进程 | FIXED | unprotected 竞态（A prune 删 B gen） | build 走 mutation_lock + {new,previous} 保留 | round9（重写走真实入口） | FIXED |
+| 25 | publish crash | 双 rename 崩溃 target 不缺失 | 本地/SIGKILL | FIXED | old→archive 与 candidate→target 间死亡 → target 缺失 | durable journal + 确定性 recovery（晋升 candidate/回退 archive） | round10 | FIXED |
+| 26 | audit | 多进程行原子性 | 本地/12进程 | FIXED | 线程锁挡不住多进程 append | flock(fd) 兜底（不依赖单次 syscall） | round10 | FIXED |
+| 27 | backend parity | date-only end / instruments=[] | 本地/3后端 | FIXED | **Polars `<= 00:00` 丢最后一天白天行** | 共享 expand_end_bound `< next_day` | round10 | FIXED |
+| 28 | factor gates | 三 gate 正交 | 本地 | FIXED | version branch `continue` 豁免 snapshot/universe | 版本检查后不 continue，正交组合 | round10 | FIXED |
+| 29 | factor gates | require_same_* fail-closed | 本地 | FIXED | 无 universe 列 → `continue` 静默放行 | schema 缺列直接拒绝 | round10 | FIXED |
+| 30 | factor catalog | partial refresh merge | 本地 | FIXED | discover 子集后 save 删 B/C | merge with existing | round10 | FIXED |
+| 31 | factor_matrix | 列探测失败 fail-closed | 本地 | FIXED | matrix_cols=None → columns=None 读全矩阵 | MatrixCoverageMiss → fallback factor-major | round10 | FIXED |
+| 32 | read_auto | mode enum | 本地 | FIXED | 未知 mode 静默落到 arrow | 严格枚举校验 | round9 | FIXED |
+| 33 | mirror | degraded 随结果返回 | 本地 | FIXED | module-global 线程互相覆盖；自然日回退非空列表致 degraded 检测失效 | (dates, used_calendar) 元组 + with_degraded 变体 | round10 | FIXED |
+| 34 | RelationHandle | SQL 只能 FROM _sub | 本地 | FIXED | 仅查「SQL 含 FROM _sub」挡不住 JOIN 其它表 | assert_sql_from_scope parser 级 | round10 | FIXED |
+| 35 | coverage | remote-only 不永久 unavailable | 本地/s3:// | FIXED | 无 manifest 直接 unavailable | partial + authority=declared_remote | round10 | FIXED |
+
+**真实数据验收**（A股 `ashare_stock_daily` 1815 文件 / 美股）：
+- 三后端（DuckDB/Arrow/Polars）差分一致（88 行全等）。
+- PIT no-lookahead property：04-20 见修订前 val=100、06-01 见修订后 95、Q2 不泄漏。
+- determinism：值级一致；未排序 raw read 行序按设计不定。
+- QueryBudget：deadline 活取消（0.26s 中断）；max_rows/bytes 物化后 guardrail；max_scan_files 预扫描。
+- 资源：300 循环 FD 4→4 零泄漏；atomic writer + 4 reader 并发零错误。
+- pruning：hive/目录-manifest 路径生效；plain `**/*.parquet` 无目录 manifest 依赖 DuckDB 谓词下推（POST-FREEZE BACKLOG 性能项，文件名修剪有正确性风险不做）。
+- 真实数据 anomaly：A股 1815 文件全健康、schema 一致、无 null ticker、每日文件 1 个交易日。
+
+**BLOCKED（非 DataAccess 代码）**：
+- `test_check_allowlist.py::test_real_repo_passes`：factor_engine/scripts 并发会话
+  新改两个 certify 脚本 `pd.read_parquet` 绕过 DataAccess。owner=factor_engine 并发
+  会话（本会话按约束不动 factor_engine）。建议：这两个脚本是「按文件逐个读」的
+  certification 语义，可走 `.data_access_allowlist.yaml` 豁免（有先例）或迁到
+  DataAccess 正式 API——由 owner 决定。
+
 ## 执行状态（2026-08-09 完成）
 
 ### 第七轮二阶回归收口（0.9.6，main=`608f602` 排除前 54 项后再审的 12 项）

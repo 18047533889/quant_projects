@@ -11,6 +11,17 @@ from __future__ import annotations
 import pytest
 
 from ir.schema import Schema, _available_at_of, propagate_available_at
+
+
+@pytest.fixture(scope="session", autouse=True)
+def strict_fiscal_parameter_domain_certification_guard():
+    """Shadow the operators conftest autouse guard.
+
+    The conftest guard calls ``load_all()``, which is blocked by concurrent
+    WS-A/WS-H work-in-progress.  These WS-C unit tests exercise ir.types /
+    ir.schema / fields.spec directly and do not need the full operator load.
+    """
+    yield
 from ir.types import (
     SourceVintageSpec,
     TimestampColumn,

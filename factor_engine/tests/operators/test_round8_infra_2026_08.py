@@ -233,6 +233,72 @@ def test_decode_source_ref_strict_raises_on_bad_base64():
         decode_source_ref_strict(bad)
 
 
+# ---------------------------------------------------------------------------
+# Review-8 #468/#469/#470 — SourceRef scalar / integer / duplicate-param gates
+# ---------------------------------------------------------------------------
+
+def test_source_ref_scalar_rejects_nan_inf():
+    """#468: NaN / Inf must never enter an encoded SourceRef identity."""
+    from api.source_ref import make_source_ref
+
+    for bad in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="finite"):
+            make_source_ref("DailyBar", "Close", params={"threshold": bad})
+    with pytest.raises(ValueError, match="finite"):
+        make_source_ref("DailyBar", "Close",
+                        transform="financial_lag", transform_params={"quarters": float("nan")})
+
+
+def test_source_ref_strict_int_rejects_ambiguous_literals():
+    """#469: True / 1.9 / '2' / NaN / Inf must not silently coerce to 1/2."""
+    from api.source_ref import _strict_int, intermediate_col
+
+    for bad in (True, 1.9, "2", float("nan"), float("inf"), None):
+        with pytest.raises(ValueError):
+            _strict_int(bad, name="test")
+    # integral floats are the same integer -> accepted
+    assert _strict_int(2.0, name="test") == 2
+    assert _strict_int(3, name="test") == 3
+
+    with pytest.raises(ValueError):
+        intermediate_col("alpha_x", True)
+    with pytest.raises(ValueError):
+        intermediate_col("alpha_x", 1.9)
+    with pytest.raises(ValueError):
+        intermediate_col("alpha_x", "2")
+
+
+def test_source_col_rejects_duplicate_parameters():
+    """#470: a parameter given both positionally and as a keyword must raise."""
+    from api.source_ref import source_col
+
+    with pytest.raises(ValueError, match="both positionally and as a keyword"):
+        source_col("Intermediate", "value", "name", "alpha_x", name="alpha_y")
+    with pytest.raises(ValueError, match="more than once"):
+        source_col("Intermediate", "value", "name", "alpha_x", "name", "alpha_y")
+
+
+def test_source_ref_transform_rejects_unconsumed_parameters():
+    """#470: known transforms must reject parameters they never consume."""
+    from api.columns import col
+    from api.source_ref import (
+        encode_source_ref,
+        make_source_ref,
+        transform_source_col,
+    )
+
+    with pytest.raises(ValueError, match="does not consume"):
+        make_source_ref(
+            "DailyBar", "Close",
+            transform="financial_lag", transform_params={"quarters": 1, "bogus": 2},
+        )
+    # transform_source_col path goes through with_transform — same gate.
+    base = make_source_ref("StockMinuteBar", "Close")
+    ref = col(encode_source_ref(base))
+    with pytest.raises(ValueError, match="does not consume"):
+        transform_source_col(ref, "minute_bar", period=5, index=0, bogus=1)
+
+
 def test_decode_source_ref_strict_raises_on_missing_field():
     from api.source_ref import decode_source_ref_strict
 

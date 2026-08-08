@@ -1317,12 +1317,16 @@ class TSDecayLinearPolars(SeriesOperator):
 
         def linear_decay(s):
             arr = np.asarray(s, dtype=float)
+            # 权重按完整窗口（含 NaN 位置）切片，再按有效掩码——与 pandas
+            # ``_linear_weighted_1d_numpy`` 一致（NaN 位置权重丢弃，其余保持
+            # 原位权重）。不能按有效数量重切片（会错配权重）。
+            ww = weights[-len(arr):]
             valid = np.isfinite(arr)
             if not np.any(valid):
                 return None
             seg = arr[valid]
-            ww = weights[-len(seg):]
-            return float(np.dot(seg, ww) / ww.sum())
+            w = ww[valid]
+            return float(np.dot(seg, w) / w.sum())
 
         return x.with_columns([
             pl.col(c).rolling_map(linear_decay, window_size=wlen, min_samples=1).alias(c)

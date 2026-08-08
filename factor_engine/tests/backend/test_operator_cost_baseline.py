@@ -7,8 +7,11 @@ def test_benchmark_cost_ignores_seed_defaults():
     import backend.operator_cost as oc
 
     oc._BENCHMARK_CACHE = None
-    bench = oc._load_benchmark_costs()
-    assert bench == {}
+    # Round-8 #354: the loader now returns (table, status) and treats a
+    # seed_defaults / non-measured baseline as stale instead of returning {}.
+    bench, status = oc._load_benchmark_costs()
+    assert bench is None
+    assert status == "stale"
     bc = oc.get_backend_cost("ts_mean", "duckdb_sql")
     table = oc._BACKEND_COST_TABLE["ts_mean"]["duckdb_sql"]
     assert bc.per_million_rows_ms == table.per_million_rows_ms

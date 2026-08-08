@@ -64,9 +64,17 @@ class TSSumDecayNativePolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         window = _positive(window, "window")
         weights = [2.0 ** (i / window) for i in range(window)]
+
+        def decay_sum(s):
+            # 与 pandas 参考一致：加权平均（除以权重和），非原始加权和。
+            if len(s) == 0:
+                return None
+            w = weights[:len(s)]
+            return float((np.asarray(s, dtype=float) * w).sum() / sum(w))
+
         return x.with_columns([
             pl.col(c).rolling_map(
-                lambda s: float((s * pl.Series(weights[:len(s)])).sum()),
+                decay_sum,
                 window_size=window,
                 min_samples=1,
             ).alias(c)

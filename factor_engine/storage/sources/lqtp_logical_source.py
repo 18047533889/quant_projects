@@ -121,9 +121,11 @@ class LQTPLogicalDataSource(DataSource):
         # #11 走 DataAccess 因子湖（factor_lake 参数化数据集），不再 pd.read_parquet。
         from .data_access_source import _get_store
 
+        from api.source_ref import _strict_int
+
         store = _get_store()
         factor_id = str(spec.params_dict().get("name", ""))
-        version = int(spec.params_dict().get("version", 0))
+        version = _strict_int(spec.params_dict().get("version", 0), name="Intermediate.version")
         if not factor_id or version <= 0:
             raise MissingDataDependencyError("invalid intermediate(name, version) reference")
         ds = store.get_dataset("factor_lake")
@@ -162,7 +164,9 @@ class LQTPLogicalDataSource(DataSource):
                                     "PubDate":"available_at", field:"value"})
         events = events[["instrument","period_end","available_at","value"]].dropna(subset=["available_at","period_end"])
         if transform == "financial_lag":
-            quarters = int(params.get("quarters", 1))
+            from api.source_ref import _strict_int
+
+            quarters = _strict_int(params.get("quarters", 1), name="financial_lag.quarters")
             if quarters <= 0:
                 raise ValueError("financial_lag quarters must be positive")
             emitted: list[dict[str, Any]] = []
@@ -221,7 +225,10 @@ class LQTPLogicalDataSource(DataSource):
                 rows.append((date,inst,self._minute_semantic_aggregate(grp, field)))
             agg = pd.DataFrame(rows, columns=["date","instrument","value"])
         elif transform in {"minute_bar","minute_resample"}:
-            period = int(params.get("period", 1)); offset = int(params.get("index", 0))
+            from api.source_ref import _strict_int
+
+            period = _strict_int(params.get("period", 1), name="minute period")
+            offset = _strict_int(params.get("index", 0), name="minute index")
             if period <= 0 or offset < 0: raise ValueError("minute period must be positive and index non-negative")
             minute = frame["timestamp"].dt.hour * 60 + frame["timestamp"].dt.minute
             morning = (minute >= 570) & (minute <= 690); afternoon = (minute >= 780) & (minute <= 900)
