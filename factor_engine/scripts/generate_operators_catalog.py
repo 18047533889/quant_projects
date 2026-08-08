@@ -17,17 +17,20 @@ def _load():
         sys.path.insert(0, root)
     if str(FE_ROOT) not in sys.path:
         sys.path.insert(0, str(FE_ROOT))
+    # Import order matters for deterministic policy inference: importing
+    # ``operator_surface`` / ``registry`` BEFORE ``load_all()`` triggers operator
+    # module registration side-effects that run against a partially-loaded
+    # registry, sealing some promoted operators' explicit policies to False
+    # (observed for ts_quantile_beta_spread / ts_variance_ratio_slope).  The
+    # manifest generator imports load_all first, so both manifests must observe
+    # the identical post-load ``infer_operator_policy`` state.
     from cleaned_operators import load_all
+
+    load_all()  # includes apply_operator_deduplication()
+
     from cleaned_operators.operator_policy import infer_operator_policy
     from cleaned_operators.operator_surface import classify_canonical, surface_summary
     from cleaned_operators.registry import OperatorRegistry
-
-    load_all()  # includes apply_operator_deduplication()
-    # Import sql_registry AFTER load_all: its module-level side effects must not
-    # run against a partially-loaded registry (they seal promoted operators'
-    # explicit policies differently than a post-load import).  The manifest
-    # generator imports it after load_all for the same reason, so both manifests
-    # observe the identical ``infer_operator_policy`` state.
     from backend.sql_pushdown.sql_registry import register_sql_backends
 
     register_sql_backends()
