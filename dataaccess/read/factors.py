@@ -78,7 +78,13 @@ class FactorMeta:
         }
 
     @classmethod
-    def from_dict(cls, payload: Mapping[str, Any]) -> "FactorMeta":
+    def from_dict(cls, payload: Mapping[str, Any], *, strict: bool = False) -> "FactorMeta":
+        """从 JSON dict 构建 FactorMeta。
+
+        #P0-final closure 9：``strict``（production）下非法值（``instruments``
+        不是整数、缺 ``factor_id`` 等）fail-closed 抛错——损坏的元数据不能
+        静默变成 ``None`` 进权威 catalog；research/recovery 才允许宽容。
+        """
         fid = str(payload.get("factor_id", "")).strip()
         if not fid:
             raise ValidationError("FactorMeta 缺少 factor_id")
@@ -90,7 +96,7 @@ class FactorMeta:
             dtype=_opt_str(payload.get("dtype")),
             start_time=_opt_str(payload.get("start_time")),
             end_time=_opt_str(payload.get("end_time")),
-            instruments=_opt_int(payload.get("instruments")),
+            instruments=_opt_int(payload.get("instruments"), strict=strict, field="instruments"),
             storage_uri=_opt_str(payload.get("storage_uri")),
             storage_layout=_opt_str(payload.get("storage_layout")),
             schema_hash=_opt_str(payload.get("schema_hash")),
@@ -109,13 +115,31 @@ def _opt_str(value: Any) -> str | None:
     return text or None
 
 
-def _opt_int(value: Any) -> int | None:
+def _opt_int(value: Any, *, strict: bool = False, field: str = "int") -> int | None:
     if value is None:
+        return None
+    if isinstance(value, bool):
+        if strict:
+            raise ValidationError(f"FactorMeta.{field} 必须是整数，收到 bool {value!r}")
+        return None
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        if strict:
+            raise ValidationError(f"FactorMeta.{field} 必须是整数，收到 {value!r}")
         return None
     try:
         return int(value)
     except (TypeError, ValueError):
+        if strict:
+            raise ValidationError(f"FactorMeta.{field} 必须是整数，收到 {value!r}")
         return None
+
+
+def _strict() -> bool:
+    from data_access.read.query_budget import is_strict_semantics
+
+    return is_strict_semantics()
 
 
 @dataclass
@@ -144,7 +168,9 @@ class FactorCatalog:
         payload = {
             "version": 1,
             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "factors": [r.to_dict() for r in self.records.values()],
+            # #P0-final closure 9：按 factor_id 排序输出，落盘确定性（repeated
+            # build 产出字节级一致的目录文件）。
+            "factors": [r.to_dict() for _, r in sorted(self.records.items())],
         }
         tmp = root / f".{CATALOG_FILENAME}.tmp"
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -152,20 +178,40 @@ class FactorCatalog:
         return out
 
     @classmethod
-    def load(cls, root: Path) -> "FactorCatalog":
+    def load(cls, root: Path, *, strict: bool | None = None) -> "FactorCatalog":
+        """加载 ``_factor_catalog.json``。
+
+        #P0-final closure 9：strict（production）下损坏 JSON / 非法 FactorMeta
+        ⇒ ``DataError`` fail-closed——损坏的权威目录不能被静默跳过成空目录。
+        research/recovery 才允许宽容跳过。
+        """
+        if strict is None:
+            strict = _strict()
         path = Path(root) / CATALOG_FILENAME
         if not path.exists():
             return cls(root=Path(root), records={})
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError) as exc:
+            if strict:
+                raise DataError(
+                    f"因子目录 {path} 损坏/不可读（production fail-closed）：{exc}"
+                ) from exc
+            return cls(root=Path(root), records={})
+        if not isinstance(payload, dict):
+            if strict:
+                raise DataError(
+                    f"因子目录 {path} 顶层不是 mapping（production fail-closed）"
+                )
             return cls(root=Path(root), records={})
         records: dict[str, FactorMeta] = {}
         for item in (payload or {}).get("factors", []):
             try:
-                meta = FactorMeta.from_dict(item)
+                meta = FactorMeta.from_dict(item, strict=strict)
                 records[meta.factor_id] = meta
             except ValidationError:
+                if strict:
+                    raise
                 continue
         return cls(root=Path(root), records=records)
 
@@ -175,8 +221,15 @@ class FactorCatalog:
         lake_root: Path,
         *,
         factor_ids: Sequence[str] | None = None,
+        strict: bool | None = None,
     ) -> "FactorCatalog":
-        """扫描因子湖各因子目录下的 ``_factor_meta.json`` 聚合目录。"""
+        """扫描因子湖各因子目录下的 ``_factor_meta.json`` 聚合目录。
+
+        #P0-final closure 9：strict 下单个 ``_factor_meta.json`` 损坏 ⇒ 整个
+        discover 失败（production 权威 catalog 不许静默缺因子）；research 跳过。
+        """
+        if strict is None:
+            strict = _strict()
         records: dict[str, FactorMeta] = {}
         root = Path(lake_root)
         factors_dir = root / "factors" if (root / "factors").exists() else root
@@ -191,12 +244,21 @@ class FactorCatalog:
                     continue
                 try:
                     payload = json.loads(meta_path.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError):
+                except (OSError, json.JSONDecodeError) as exc:
+                    if strict:
+                        raise DataError(
+                            f"因子元数据 {meta_path} 损坏/不可读"
+                            f"（production fail-closed）：{exc}"
+                        ) from exc
                     continue
                 try:
-                    meta = FactorMeta.from_dict({**payload, "factor_id": child.name})
+                    meta = FactorMeta.from_dict(
+                        {**payload, "factor_id": child.name}, strict=strict
+                    )
                     records[meta.factor_id] = meta
                 except ValidationError:
+                    if strict:
+                        raise
                     continue
         return cls(root=root, records=records)
 
@@ -280,8 +342,15 @@ def build_factor_pivot_sql(
     value_column: str = "value",
     factor_id_column: str = "factor_id",
     limit: int | None = None,
+    duplicate_check_sql: str | None = None,
 ) -> tuple[str, list[Any]]:
-    """长表 union → 宽表 PIVOT：(datetime, asset, factor_id, value) → (datetime, asset, f1, f2...)。"""
+    """长表 union → 宽表 PIVOT：(datetime, asset, factor_id, value) → (datetime, asset, f1, f2...)。
+
+    #P0-final closure 9：``USING first(value)`` 在 ``(datetime, asset, factor_id)``
+    重复时静默取第一条——调用方（store.read_factors）在 strict 下必须先跑
+    ``build_factor_duplicate_check_sql`` 的唯一性门，命中重复即 fail-closed。
+    此处 ``duplicate_check_sql`` 保留为显式契约钩子（如需要可拼接进子查询）。
+    """
     quoted_ids = ", ".join(_quote_ident(str(f)) for f in factor_ids)
     pivot = (
         f"PIVOT (\n"
@@ -296,6 +365,29 @@ def build_factor_pivot_sql(
     return sql, list(union_params)
 
 
+def build_factor_duplicate_check_sql(
+    union_sql: str,
+    union_params: list[Any],
+    *,
+    time_column: str = "datetime",
+    asset_column: str = "asset",
+    factor_id_column: str = "factor_id",
+) -> tuple[str, list[Any]]:
+    """宽表 pivot 前唯一性门：#P0-final closure 9。
+
+    返回「找任意一个 ``(datetime, asset, factor_id)`` 重复」的探测 SQL
+    （``HAVING COUNT(*)>1 LIMIT 1``）。命中 → 调用方 fail-closed，绝不静默
+    ``USING first`` 挑一条掩盖数据完整性问题。
+    """
+    sql = (
+        f"SELECT {_quote_ident(factor_id_column)} AS _fid, "
+        f"{_quote_ident(time_column)} AS _dt, {_quote_ident(asset_column)} AS _a, "
+        f"COUNT(*) AS _n FROM ({union_sql}) AS __d "
+        f"GROUP BY 1, 2, 3 HAVING COUNT(*) > 1 LIMIT 1"
+    )
+    return sql, list(union_params)
+
+
 def factor_catalog_root(store: Any, dataset: str = "factor_lake") -> Path | None:
     """从 registry 的 factor_lake 解析因子湖根目录。"""
     try:
@@ -304,12 +396,12 @@ def factor_catalog_root(store: Any, dataset: str = "factor_lake") -> Path | None
 
         if isinstance(ds, ParametricDataset):
             # static_root 是 factors/ 前缀；再上一层是 lake 根
-            from data_access.registry.paths import canonicalize
+            from data_access.registry.paths import canonicalize, resolve_namespace_path
 
-            static = ds.static_root
+            static = Path(resolve_namespace_path(str(ds.static_root)))
             if static and static.name == "factors":
                 return static.parent
             return static
-        return ds.root
+        return Path(resolve_namespace_path(str(ds.root)))
     except Exception:
         return None

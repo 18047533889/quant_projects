@@ -479,17 +479,22 @@ def test_manifest_rowgroup_generation_binding(tmp_path):
         files=(), manifest_generation_id="gen-A",
     )
     m.save(root)
+    # #P0-final closure 1：save 每次 mint **全新** generation——构造时给的
+    # 旧 generation 绝不复用（防「新 parquet + 旧 JSON」同代误判）。落盘的
+    # 实际 generation 必须与构造值不同。
+    actual_gen = DatasetManifest.load(root).manifest_generation_id
+    assert actual_gen is not None and actual_gen != "gen-A"
     rg = ManifestRowGroup(
         path="f.parquet", row_group=0, column="ts",
         min="2024-01-01", max="2024-01-02", null_count=0, rows=10,
     )
-    # 异代 sidecar（gen-B）配 manifest（gen-A）→ load 必须忽略
+    # 异代 sidecar（gen-B）配 manifest（actual_gen）→ load 必须忽略
     _save_row_groups(root, [rg], generation="gen-B")
     loaded = DatasetManifest.load(root)
     assert loaded is not None
     assert loaded.row_groups is None, "异代 rowgroup sidecar 不得被新 generation 使用"
     # 同代 sidecar → 正常加载
-    _save_row_groups(root, [rg], generation="gen-A")
+    _save_row_groups(root, [rg], generation=actual_gen)
     loaded2 = DatasetManifest.load(root)
     assert loaded2 is not None and loaded2.row_groups is not None
     assert loaded2.row_groups[0].rows == 10

@@ -5,9 +5,9 @@
 
 ## 摘要
 
-- canonical 总数：1360
+- canonical 总数：1362
 - daily：1185
-- research：94
+- research：92
 - unsafe：7
 - legacy：1
 
@@ -268,6 +268,8 @@
 | event_refractory | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
 | event_response_decay_rate | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
 | event_response_dispersion | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
+| event_response_effective_events | extended | pandas_numpy |  | False | elementwise | None | None | 0 |
+| event_response_overlap_ratio | extended | pandas_numpy |  | False | elementwise | None | None | 0 |
 | event_response_peak_lag | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
 | event_response_reversal_strength | daily | pandas_numpy, polars |  | True | ts | None | 5 | 0 |
 | event_return_since_last | daily | pandas_numpy | event_compounded_return | False | elementwise | None | None | 0 |
@@ -431,11 +433,13 @@
 | group_ex_self_quantile | daily | pandas_numpy |  | True | group | None | 1 | 0 |
 | group_ex_self_std | daily | pandas_numpy |  | True | group | None | 1 | 0 |
 | group_ex_self_weighted_mean | daily | pandas_numpy, polars |  | False | group | None | None | 0 |
+| group_feature_coverage_ratio | extended | pandas_numpy |  | False | group | None | None | 0 |
 | group_feature_effective_rank | daily | pandas_numpy | group_corr_effective_rank | True | group | None | None | 0 |
 | group_feature_mode_localization | daily | pandas_numpy | group_corr_mode_localization | True | group | None | None | 0 |
 | group_feature_mode_share | daily | pandas_numpy | group_corr_mode_share | True | group | None | None | 0 |
 | group_feature_second_mode_localization | daily | pandas_numpy | group_corr_second_mode_localization | True | group | None | None | 0 |
 | group_feature_spectral_gap | daily | pandas_numpy | group_corr_spectral_gap | True | group | None | None | 0 |
+| group_feature_valid_member_count | extended | pandas_numpy |  | False | group | None | None | 0 |
 | group_impute_median | daily | pandas_numpy |  | False | group | None | None | 0 |
 | group_kurtosis | daily | pandas_numpy |  | True | group | None | None | 0 |
 | group_leader_laggard_exposure | daily | pandas_numpy |  | False | group | None | None | 0 |
@@ -976,10 +980,9 @@
 | ts_gap_fill_ratio | daily | pandas_numpy |  | False | ts | None | 1 | 0 |
 | ts_gap_reversion_ratio | daily | pandas_numpy |  | False | ts | None | 1 | 0 |
 | ts_gap_survival_duration | daily | pandas_numpy |  | False | ts | None | 1 | 0 |
-| ts_garch_next_vol_forecast | research | pandas_numpy |  | False | ts | None | None | 0 |
+| ts_garch_next_vol_forecast | research | pandas_numpy | ts_garch_vol_forecast | False | ts | None | None | 0 |
 | ts_garch_persistence | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_garch_standardized_shock | research | pandas_numpy |  | False | ts | None | None | 0 |
-| ts_garch_vol_forecast | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_garch_vol_surprise | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_generalized_hurst_exponent | daily | pandas_numpy, polars |  | False | ts | None | 1 | 0 |
 | ts_gjr_garch_vol_forecast | research | pandas_numpy |  | False | ts | None | None | 0 |
@@ -1070,9 +1073,8 @@
 | ts_markov_stationary_surprisal | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_markov_transition_surprisal | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | ts_mass_concentration | daily | pandas_numpy |  | True | ts | None | 1 | 0 |
-| ts_matrix_profile_discord_score | research | pandas_numpy |  | False | ts | None | None | 0 |
+| ts_matrix_profile_discord_score | research | pandas_numpy | ts_matrix_profile_motif_distance | False | ts | None | None | 0 |
 | ts_matrix_profile_motif_age | daily | pandas_numpy, polars |  | False | ts | None | 1 | 0 |
-| ts_matrix_profile_motif_distance | research | pandas_numpy |  | False | ts | None | None | 0 |
 | ts_matrix_profile_motif_frequency | extended | pandas_numpy |  | False | ts | None | 1 | 0 |
 | ts_matrix_profile_neighbor_dispersion | extended | pandas_numpy |  | False | ts | None | 1 | 0 |
 | ts_max | daily | pandas_numpy, polars, sql | Max, TS_MAX, m_max, window_max | True | ts | None | 1 | 0 |

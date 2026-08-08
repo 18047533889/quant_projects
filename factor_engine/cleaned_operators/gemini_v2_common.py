@@ -40,9 +40,15 @@ from cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
 from cleaned_operators.registry import OperatorRegistry
 from cleaned_operators.rolling_pack import frame_like
 
-_SKIP = frozenset({"date", "stock_code"})
-# Date-ish column names a polars wide frame may use to carry its time axis.
+# R6-155: the metadata/axis columns a polars wide frame may carry must be
+# excluded from *both* the instrument feature set and the date-axis detection,
+# or a frame using ``timestamp`` / ``trade_date`` / ``datetime`` as its time
+# axis would feed the time column into the kernel as a numeric feature (and
+# then rewrite it as an output column).  ``stock_code`` / ``instrument`` /
+# ``symbol`` / ``session`` are identity / session columns and never features.
 _AXIS_COLUMNS = ("date", "timestamp", "trade_date", "datetime")
+_IDENTITY_COLUMNS = ("stock_code", "instrument", "symbol", "session")
+_SKIP = frozenset((*_AXIS_COLUMNS, *_IDENTITY_COLUMNS))
 
 _EPS = 1e-12
 
@@ -245,18 +251,23 @@ def register_dual(
 
 
 def union_extended(*canonicals: str) -> None:
-    """Partition contract: register each name in EXTENDED_ONLY_CANONICALS."""
+    """Partition contract: register each name in EXTENDED_ONLY_CANONICALS.
+
+    Uses the live ``extend_extended_only`` mutator (R5-50) — never a
+    ``frozenset(set(old)|new)`` reassignment that would strand import-time
+    snapshots.
+    """
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | set(canonicals)
-    )
+    _surface.extend_extended_only(set(canonicals))
 
 
 def union_research(*canonicals: str) -> None:
-    """Partition contract: register each name in RESEARCH_ONLY_CANONICALS."""
+    """Partition contract: register each name in RESEARCH_ONLY_CANONICALS.
+
+    Uses the live ``extend_research_only`` mutator (R5-50) — never a
+    ``frozenset(set(old)|new)`` reassignment.
+    """
     import cleaned_operators.operator_surface as _surface
 
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | set(canonicals)
-    )
+    _surface.extend_research_only(set(canonicals))

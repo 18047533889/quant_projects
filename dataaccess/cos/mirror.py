@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 from data_access.core.exceptions import ValidationError
+from data_access.registry.paths import resolve_namespace_path
 
 if TYPE_CHECKING:
     from data_access.registry import Dataset, StaticDataset
@@ -221,7 +222,8 @@ def known_cos_mirror_local_roots() -> tuple[Path, ...]:
 
 def dataset_root_requires_cos_mirror(ds: "StaticDataset") -> bool:
     """静态数据集 root 落在已知 COS 镜像根下时需登记 mirror spec。"""
-    root = Path(ds.root).resolve()
+    # #P1-final closure 12：root 可能含 ${RUN_NAMESPACE}，按当前 context 解析
+    root = Path(resolve_namespace_path(str(ds.root))).resolve()
     for mirror_root in known_cos_mirror_local_roots():
         try:
             root.relative_to(mirror_root)

@@ -201,23 +201,49 @@ def build_us_session(
 def load_us_early_close_dates(store: Any) -> frozenset[_dt.date]:
     """#P0-8 从 ``us_is_early_close`` 数据集加载提前收市日期（half day）。
 
-    数据集不存在/读不到时返回空集（session 回退常规 16:00 收市）。
     用 ``mode="dimension"`` 读 STATIC 维表。
+
+    #P0-final closure 6：production/strict 下「读不到」**不是**「没有 early
+    close」——数据集未注册 / 缺时间列 / 读取失败 / 空结果一律 fail-closed
+    （提权成 ValidationError）。否则 July 3 / Thanksgiving 后一天等 half-day
+    上 ``after_close_next_open / session availability`` 会按 16:00 正常收盘，
+    产生错误的可见时点。research 保持宽容返回空集。
     """
+    strict = _strict_calendar_mode()
     try:
         ds = store.registry.get("us_is_early_close")
     except Exception:
+        if strict:
+            raise ValidationError(
+                "us_is_early_close 未注册，无法加载美股 early-close 合约"
+                "（production fail-closed：禁止把'没读到'当'没有 early close'）"
+            )
         return frozenset()
     time_col = getattr(ds, "time_column", None) or getattr(ds, "instrument_column", None)
     if not time_col:
+        if strict:
+            raise ValidationError(
+                "us_is_early_close 缺时间列，无法加载 early-close 合约"
+                "（production fail-closed）"
+            )
         return frozenset()
     try:
         tbl = store.read_arrow(
             "us_is_early_close", columns=[time_col], limit=50_000, mode="dimension"
         )
     except Exception:
+        if strict:
+            raise ValidationError(
+                "读取 us_is_early_close 失败（production fail-closed："
+                "禁止把'读不到'当'没有 early close'）"
+            )
         return frozenset()
     if tbl is None or tbl.num_rows == 0:
+        if strict:
+            raise ValidationError(
+                "us_is_early_close 为空，无法证明美股无 early-close 日"
+                "（production fail-closed）"
+            )
         return frozenset()
     out: set[_dt.date] = set()
     for v in tbl.column(0).to_pylist():
@@ -659,6 +685,10 @@ def _load_calendar_from_registry(store: Any, market: str) -> tuple[_dt.date, ...
     A股 ``IsTradeDay=True``，美股 ``is_trading_day=True``。用 ``mode="dimension"``
     读 STATIC 维表，避免 production/strict 下被面板契约拒绝。
     失败（未注册 / 读不到 / 无数据）返回 None，调用方决定回退或 fail-closed。
+
+    #P0-final closure 7：strict 下 calendar 契约**必须**能证明是
+    trading-days-only——schema 或物理列里有 ``IsTradeDay / is_trading_day`` 标志。
+    缺标志 → fail-closed（不能再把自然日当交易日、然后当成权威日历用）。
     """
     dataset = _calendar_dataset_for(market)
     try:
@@ -674,6 +704,24 @@ def _load_calendar_from_registry(store: Any, market: str) -> tuple[_dt.date, ...
         if cand in schema:
             flag_col = cand
             break
+    # schema 未声明 flag 时，probe 物理列（mode="dimension" 读首行看列名）。
+    if flag_col is None:
+        for cand in ("IsTradeDay", "is_trading_day"):
+            try:
+                probe = store.read_arrow(
+                    dataset, columns=[time_col, cand], limit=1, mode="dimension"
+                )
+                if probe is not None and cand in (probe.column_names or ()):
+                    flag_col = cand
+                    break
+            except Exception:
+                continue
+        if flag_col is None and _strict_calendar_mode():
+            raise ValidationError(
+                f"calendar 数据集 {dataset!r} 缺少交易日标志列 "
+                "(IsTradeDay/is_trading_day)，strict fail-closed："
+                "不能把自然日/节假日当交易日。请在 schema 或物理数据声明标志列。"
+            )
     cols = [time_col] + ([flag_col] if flag_col else [])
     try:
         tbl = store.read_arrow(dataset, columns=cols, limit=100_000, mode="dimension")

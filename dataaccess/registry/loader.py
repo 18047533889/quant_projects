@@ -28,10 +28,9 @@ from .layout_policy import LayoutPolicy, parse_layout_policy
 from .params_validation import ParamSpec, parse_params_schema, validate_params
 from data_access.read.query_budget import DatasetQueryPolicy, parse_dataset_query_policy
 from data_access.read.formats import FormatSpec, default_glob_for_format, normalize_format_name
-from data_access.core.namespace import resolve_namespace
 from data_access.core.storage import StorageSpec
 from data_access.read.partition_planner import parse_partitioning
-from .paths import canonicalize, expand_env
+from .paths import canonicalize, expand_env, resolve_namespace_path
 
 
 # access_mode 三态：
@@ -111,7 +110,8 @@ class StaticDataset(DatasetBase):
             )
         # 返回带通配符的 glob 表达式，交给 DuckDB 展开；相比 Python 侧 glob
         # 再传 list，DuckDB 直接吃 glob 能让它做自己的元数据优化。
-        return [str(self.root / self.glob)]
+        # #P1-final closure 12：read/write 时才解析当前 context 的 namespace。
+        return [resolve_namespace_path(str(self.root / self.glob))]
 
 
 @dataclass(frozen=True)
@@ -158,7 +158,8 @@ class ParametricDataset(DatasetBase):
             glob_part = self.glob_template.format(**validated)
         except KeyError as exc:
             raise ValidationError(f"模板变量缺失：{exc}") from exc
-        return [str(Path(root) / glob_part)]
+        # #P1-final closure 12：read/write 时才解析当前 context 的 namespace。
+        return [resolve_namespace_path(str(Path(root) / glob_part))]
 
 
 Dataset = StaticDataset | ParametricDataset
@@ -244,10 +245,10 @@ def _parse_authorized_root(
     if ar is None:
         if static_prefix is None:
             return None
-        # 向后兼容：静态前缀（模板里第一个 { 之前部分）
+        # 向后兼容：静态前缀（模板里第一个 { 之前部分）。#P1-final closure 12
+        # 保留 ``${RUN_NAMESPACE}`` 占位符，authorized_root 白名单在消费时解析。
         expanded = expand_env(str(static_prefix))
-        cleaned = expanded.replace("${RUN_NAMESPACE}", resolve_namespace())
-        return canonicalize(cleaned.rstrip("/") or "/")
+        return canonicalize(expanded.rstrip("/") or "/")
     if not isinstance(ar, str) or not ar.strip():
         raise ValidationError(f"{context}: authorized_root 必须是非空字符串")
     return canonicalize(expand_env(ar.strip()))
@@ -396,10 +397,10 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         # 也允许，但要手动把 ${RUN_NAMESPACE} 展开
         root_raw = _require_str(raw, "root", context=context)
         root_expanded = expand_env(root_raw)
-        # namespaced 数据集的 root 里可能含 ${RUN_NAMESPACE}，展开一次
-        if "${RUN_NAMESPACE}" in root_expanded or "{run_namespace}" in root_expanded.lower():
-            ns = resolve_namespace()
-            root_expanded = root_expanded.replace("${RUN_NAMESPACE}", ns)
+        # #P1-final closure 12：namespaced 数据集的 root 里可能含
+        # ``${RUN_NAMESPACE}``——**保留占位符**，read/write 时由
+        # ``resolve_namespace_path`` 按当前 context 解析（load 不再烘焙，
+        # 长期 worker 换 DataAccessSession 后目录不再串）。
         root = canonicalize(root_expanded)
         glob = raw.get("glob", default_glob_for_format(format_spec.type))
         # #P0-47 env 展开后仍有残留 → 启动失败
@@ -434,8 +435,8 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         )
     root_template_raw = _require_str(raw, "root_template", context=context)
     root_template = expand_env(root_template_raw)
-    if "${RUN_NAMESPACE}" in root_template:
-        root_template = root_template.replace("${RUN_NAMESPACE}", resolve_namespace())
+    # #P1-final closure 12：``${RUN_NAMESPACE}`` **保留占位符**，read/write 时
+    # 由 ``resolve_namespace_path`` 按当前 context 解析（load 不再烘焙）。
     glob_template = raw.get("glob_template", default_glob_for_format(format_spec.type))
     # #P0-47 env 展开后仍有残留 → 启动失败（含 authorized_root 模板）
     _assert_no_unresolved_env(
@@ -516,13 +517,18 @@ class DatasetRegistry:
 
         #P0-49 ParametricDataset 优先用显式 ``authorized_root``（比静态前缀更窄、
         更安全），缺省回退 static_root。
+        #P1-final closure 12：authorized_root 可能仍含 ``${RUN_NAMESPACE}``
+        占位符（load 不再烘焙）——白名单按**当前 context** namespace 解析后
+        交给 PathAuthorizer（PathAuthorizer 是 store 级对象，绑定在 store 构造时
+        的 namespace context 上，与请求一致）。
         """
         roots: list[Path] = []
         for ds in self._datasets.values():
             if isinstance(ds, StaticDataset):
-                roots.append(ds.root)
+                roots.append(Path(resolve_namespace_path(str(ds.root))))
             elif isinstance(ds, ParametricDataset):
-                roots.append(ds.authorized_root or ds.static_root)
+                raw = ds.authorized_root or ds.static_root
+                roots.append(Path(resolve_namespace_path(str(raw))))
         return roots
 
 

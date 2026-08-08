@@ -117,6 +117,21 @@ def extra_allowed_roots_from_env() -> list[Path]:
     return roots
 
 
+def resolve_namespace_path(value: str) -> str:
+    """把模板里的 ``${RUN_NAMESPACE}`` 替换为**当前 context** 的 namespace。
+
+    #P1-final closure 12：registry load 时**不再**把 ``${RUN_NAMESPACE}`` 烘焙进
+    ``root`` / ``root_template`` / ``static_root`` / ``authorized_root``——长期 worker
+    里换 ``DataAccessSession`` / ``namespace_scope`` 后，真正 read/write 时才在此处
+    解析当前 ``resolve_namespace()``，保证「请求级 namespace」真正生效。
+    """
+    if not isinstance(value, str) or "${RUN_NAMESPACE}" not in value:
+        return value
+    from data_access.core.namespace import resolve_namespace
+
+    return value.replace("${RUN_NAMESPACE}", resolve_namespace())
+
+
 def dataset_env_root(dataset_name: str, kind: str) -> str | None:
     """按数据集名读环境变量覆盖根。
 

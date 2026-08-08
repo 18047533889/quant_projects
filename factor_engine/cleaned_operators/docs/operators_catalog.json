@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
-  "canonical_count": 1360,
+  "canonical_count": 1362,
   "surface_counts": {
     "daily": 1185,
-    "extended": 70,
-    "research": 94,
+    "extended": 74,
+    "research": 92,
     "unsafe": 7,
     "legacy": 1,
     "internal": 3,
@@ -3697,6 +3697,32 @@
       "lag": 0
     },
     {
+      "canonical": "event_response_effective_events",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "event_response_overlap_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "elementwise",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
       "canonical": "event_response_peak_lag",
       "surface": "daily",
       "aliases": [],
@@ -5976,6 +6002,19 @@
       "lag": 0
     },
     {
+      "canonical": "group_feature_coverage_ratio",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
+      "scope": "group",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
       "canonical": "group_feature_effective_rank",
       "surface": "daily",
       "aliases": [
@@ -6045,6 +6084,19 @@
         "pandas_numpy"
       ],
       "pit_safe": true,
+      "scope": "group",
+      "lookback": null,
+      "min_periods": null,
+      "lag": 0
+    },
+    {
+      "canonical": "group_feature_valid_member_count",
+      "surface": "extended",
+      "aliases": [],
+      "backends": [
+        "pandas_numpy"
+      ],
+      "pit_safe": false,
       "scope": "group",
       "lookback": null,
       "min_periods": null,
@@ -13739,7 +13791,9 @@
     {
       "canonical": "ts_garch_next_vol_forecast",
       "surface": "research",
-      "aliases": [],
+      "aliases": [
+        "ts_garch_vol_forecast"
+      ],
       "backends": [
         "pandas_numpy"
       ],
@@ -13764,19 +13818,6 @@
     },
     {
       "canonical": "ts_garch_standardized_shock",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
-      "lag": 0
-    },
-    {
-      "canonical": "ts_garch_vol_forecast",
       "surface": "research",
       "aliases": [],
       "backends": [
@@ -15029,7 +15070,9 @@
     {
       "canonical": "ts_matrix_profile_discord_score",
       "surface": "research",
-      "aliases": [],
+      "aliases": [
+        "ts_matrix_profile_motif_distance"
+      ],
       "backends": [
         "pandas_numpy"
       ],
@@ -15051,19 +15094,6 @@
       "scope": "ts",
       "lookback": null,
       "min_periods": 1,
-      "lag": 0
-    },
-    {
-      "canonical": "ts_matrix_profile_motif_distance",
-      "surface": "research",
-      "aliases": [],
-      "backends": [
-        "pandas_numpy"
-      ],
-      "pit_safe": false,
-      "scope": "ts",
-      "lookback": null,
-      "min_periods": null,
       "lag": 0
     },
     {

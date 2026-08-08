@@ -69,6 +69,10 @@ def _positive_int(value: object, *, context: str) -> int:
 
 
 def _positive_finite_float(value: object, *, context: str) -> float:
+    if isinstance(value, bool):
+        # #P0-final closure 8：``True`` 是 bool 不是数值预算——之前 float(True)==1.0
+        # 静默通过，把安全预算悄悄变成 1ms。
+        raise ValidationError(f"{context} 必须是有限正数")
     try:
         out = float(value)
     except (TypeError, ValueError) as exc:
@@ -78,6 +82,15 @@ def _positive_finite_float(value: object, *, context: str) -> float:
     return out
 
 
+# #P0-final closure 8：QueryPolicy 是 strict typed config——unknown key 拒绝
+# （``max_scan_file:`` 这种 typo 之前被静默忽略，真实 ``max_scan_files=None``，
+# 安全预算直接消失）。
+_QUERY_POLICY_KEYS = frozenset({
+    "require_explicit_columns", "require_time_range", "max_rows",
+    "max_result_bytes", "max_elapsed_ms", "max_scan_files",
+})
+
+
 def parse_dataset_query_policy(raw: object, *, context: str) -> DatasetQueryPolicy:
     """解析 YAML ``query_policy`` 块。"""
     if raw is None:
@@ -85,6 +98,12 @@ def parse_dataset_query_policy(raw: object, *, context: str) -> DatasetQueryPoli
     if not isinstance(raw, dict):
         raise ValidationError(
             f"{context}: query_policy 必须是 mapping，收到 {type(raw).__name__}"
+        )
+    unknown = sorted(set(raw) - _QUERY_POLICY_KEYS)
+    if unknown:
+        raise ValidationError(
+            f"{context}: query_policy 含未知 key {unknown}；"
+            f"应为 {sorted(_QUERY_POLICY_KEYS)} 之一"
         )
 
     def _opt_int(key: str) -> int | None:

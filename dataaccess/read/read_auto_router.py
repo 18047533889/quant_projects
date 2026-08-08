@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from .query_budget import QueryBudget
 from data_access.registry import StaticDataset
+from data_access.registry.paths import resolve_namespace_path
 from .stats import DatasetReadStats, dataset_read_stats, load_stats_sidecar
 
 if TYPE_CHECKING:
@@ -40,7 +42,10 @@ def resolve_read_auto_mode(
     if resolved_mode == "auto":
         sidecar = None
         if isinstance(ds, StaticDataset):
-            sidecar = load_stats_sidecar(ds.root)
+            # #P1-final closure 12：root 可能含 ${RUN_NAMESPACE}，按当前 context 解析
+            sidecar = load_stats_sidecar(
+                Path(resolve_namespace_path(str(ds.root)))
+            )
             if sidecar is not None and not _stats_sidecar_fresh(store, dataset, sidecar):
                 sidecar = None  # #P1-71 数据已变 → 旧 sidecar 不参与路由
         stats = dataset_read_stats(

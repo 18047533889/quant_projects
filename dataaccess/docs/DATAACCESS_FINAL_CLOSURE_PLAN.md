@@ -1,6 +1,55 @@
 # DataAccess 最终收官整改计划
 
-## 执行状态（2026-08-08 完成）
+## 执行状态（2026-08-09 完成）
+
+### 第三批审计收口（0.9.5，main=`3550257f0` 补扫的 9 项）
+
+用户按最新 main（仅改 FactorEngine，DataAccess 无变化，前两轮结论成立）又补扫出
+9 项残留，全部落地（1–6 并入 Freeze blocker，7–9 P1 顺手清干净）：
+- ✅ **1. Manifest generation 每 commit 全新**：`DatasetManifest.save()` 不再复用
+  `self.manifest_generation_id`（从旧 manifest load 后重建会复用旧 gen）——每次
+  logical manifest commit 都 `uuid4_hex()` mint 全新 generation，内存对象同步更新；
+  row-group sidecar 绑定这次新 gen。彻底关掉「进程死在 parquet/JSON 两次 replace
+  之间、新旧两代恰好同 gen → 双 generation 检查误通过」的 crash 窗口。
+- ✅ **2. datasets.yaml 顶层 strict schema**：StaticDataset / ParametricDataset 各自
+  完整 allowed-key 集合，**任何未知字段启动即失败**（`time_colum:` / `query_polcy:` /
+  `formatt:` 等 typo 不再静默忽略走默认值）；static 用 `root_template` 等错位 key
+  同样拒绝。
+- ✅ **3. partitioning 唯一 schema**：`parse_partitioning` 成为唯一入口（顶层
+  `time` + `hive`/`partition_columns`），**unknown key fail-closed**；loader 直接
+  编译成 typed `PartitionSpec` 保存（不再存 raw dict）；旧 loader 允许但 planner
+  不认的 `columns/partition_by/bucket/granularity/time_column` 全部拒绝——时间分区
+  裁剪不再悄悄失效全量扫文件。
+- ✅ **4. storage 唯一 schema**：新增 `StorageSpec.from_yaml()`（顶层 + 嵌套
+  `source` 合并、顶层优先、unknown key 拒绝、`{source:{type:cos}}` 不再被默认成
+  local）；registry 直接保存 typed `StorageSpec`；`core.storage` 提供
+  `declared_storage_{type,uri,layout}` 读取 helper；`contract_ir` / `cos/remote`
+  消费统一 helper，不再各自解析 raw dict。
+- ✅ **5. TemporalJoinSpec 自身 invariant**：新增 `__post_init__`——直接
+  `TemporalJoinSpec(policy="xxx", availability="whatever")` 也 fail-closed；
+  `availability_latency` 拒绝负数和 bool；`_as_bool` 不再接受任意 int/float
+  （`2`/`0.5` → 报错）；dict 入口 unknown-key reject。
+- ✅ **6. early-close 加载 fail-closed**：`load_us_early_close_dates` 在
+  production/strict 下「数据集未注册 / 缺时间列 / 读取失败 / 空结果」一律抛
+  ValidationError——**不再把「没读到」当「没有 early close」**；research 保持宽容。
+- ✅ **7. calendar 必须 trading-day flag**：`_load_calendar_from_registry` strict 下
+  要求 `IsTradeDay/is_trading_day`（schema 或物理列 probe），缺标志 fail-closed——
+  自然日/节假日不再被当权威交易日。
+- ✅ **8. QueryPolicy strict typed config**：unknown key reject（`max_scan_file:`
+  typo 不再让安全预算消失）；`_positive_finite_float` 拒绝 bool（`True` 不再变成
+  `1.0ms` 预算）。
+- ✅ **9. factor PIVOT + catalog fail-closed**：宽表 PIVOT 前新增唯一性门
+  （`build_factor_duplicate_check_sql`，strict 下命中 `(datetime, asset, factor_id)`
+  重复即抛，不再静默 `USING first(value)`）；`FactorCatalog.load/discover` strict 下
+  损坏 JSON / 非法 `_opt_int` ⇒ `DataError`/`ValidationError`（production 权威目录
+  不许静默缺因子）；`save()` 按 `factor_id` 排序（确定性落盘）。
+
+**回归**：全量 `tests/` **688 passed / 0 failed**（前轮 669 + 本轮新增
+`test_final_closure_round6.py` 19 条）；真实 `datasets.yaml` 71 个数据集照常加载；
+FE 侧 `test_catalog_us.py` + `test_data_access_catalog_errors.py` 15 passed、
+`tests/market + tests/storage` 230 passed / 1 failed（唯一失败是 FE 并发会话 WIP：
+`operator_market_capabilities.json` 未随新 operator 重新生成，与本批无关）。未碰
+GitHub。
 
 ### 最终收官轮（0.9.4，Core Freeze 前最后一轮 closure，HEAD=`a6e21d6`）
 

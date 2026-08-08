@@ -227,7 +227,7 @@ def test_feature_subspace_rotation_identical_is_zero():
     rng = np.random.default_rng(9)
     f = _frame(np.abs(rng.standard_normal((120, 3))) + 0.1)
     out = OperatorRegistry.get("ts_feature_subspace_rotation", "pandas_numpy").calculate(
-        f, f, f, window=120, recent_window=30, prior_window=90
+        f, f, f, recent_window=30, prior_window=90
     )
     assert out.iloc[-1, 0] == pytest.approx(0.0, abs=1e-6)
 
@@ -236,7 +236,7 @@ def test_beta_break_stable_line_is_zero():
     x = _col([float(i) for i in range(1, 121)])
     y = _col([2.0 * i + 1.0 for i in range(1, 121)])
     out = OperatorRegistry.get("ts_beta_break_score", "pandas_numpy").calculate(
-        y, x, window=120, recent_window=30, prior_window=90
+        y, x, recent_window=30, prior_window=90
     )
     assert out.iloc[-1, 0] == pytest.approx(0.0, abs=1e-6)
 

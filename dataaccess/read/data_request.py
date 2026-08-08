@@ -541,6 +541,17 @@ class ReadPlan:
                 if k and k not in cols:
                     cols.append(k)
             ds_params = params_by_dataset.get(ds, {})
+            # #P1-final closure 13：pin 执行直接消费 plan 冻结的精确文件集——
+            # ``_verify_snapshot_pin`` 已证明当前文件与冻结身份逐字节一致，这里把
+            # 同一份清单注入 ``physical_scope``，scan 不再重新 glob 解析，杜绝
+            # verify 与 scan 之间底层文件被替换的 TOCTOU。
+            pinned_scope: list[str] | None = None
+            if self.snapshot_policy == "pin":
+                pinned = self.plan_pinned_files.get(ds)
+                if pinned:
+                    paths = [str(getattr(fv, "path", "")) for fv in pinned]
+                    if paths:
+                        pinned_scope = paths
             return store.read(
                 ds,
                 columns=cols or None,
@@ -551,6 +562,7 @@ class ReadPlan:
                 engine=self.engine,
                 result=self.result,
                 normalize_units=req.normalize_units,
+                physical_scope=pinned_scope,
                 **ds_params,
             )
 

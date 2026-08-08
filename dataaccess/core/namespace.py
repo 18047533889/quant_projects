@@ -113,10 +113,16 @@ def resolve_namespace() -> str:
         让每个成员在自己 shell / tmux 里 export 环境变量。
 
     # #37：session-scoped 覆盖（thread-local）优先于全局环境变量。
+    # #P1-final closure 11：显式 namespace（session / env）**原样返回** validated
+    # 值——只有自动 fallback 才 sanitize。旧代码对 session namespace 也走
+    # ``_sanitize``，``-abc-`` 与 ``abc`` 会被清洗成同一个 ``abc`` 汇聚（且与
+    # env 路径的原样返回值不一致）。``validate_namespace_chars`` 已在
+    # ``set_session_namespace``/``DataAccessSession.__enter__`` 校验过，这里再兜底
+    # 一次（防御直接 ``_session.set(...)`` 的调用），返回即为原值。
     """
     session_ns = _session.get()
     if session_ns:
-        return _sanitize(session_ns)
+        return validate_namespace_chars(session_ns)
     explicit = os.environ.get(_NAMESPACE_ENV, "").strip()
     if explicit:
         # #P1-63 显式坏 namespace（.. / /// / 空格）直接拒绝，不能清洗成 anon

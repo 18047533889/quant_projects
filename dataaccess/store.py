@@ -85,6 +85,7 @@ from data_access.registry.paths import (
     canonicalize,
     dataset_env_root,
     extra_allowed_roots_from_env,
+    resolve_namespace_path,
 )
 from data_access.read.predicate import (
     Predicate,
@@ -1795,6 +1796,7 @@ class DataAccessStore:
         mode: str = "auto",
         allow_sparse: bool = False,
         allow_effective_time: bool = False,
+        physical_scope: str | Sequence[str] | None = None,
         **params: Any,
     ) -> ReadHandle:
         """统一读入口：引擎/结果形态自动路由，返回 ``ReadHandle``。
@@ -1808,6 +1810,10 @@ class DataAccessStore:
         路由，而不是只看行数。
         - ``normalize_units``: 按 SemanticFieldCatalog 的 scale 做输出层单位归一化
           （percent→ratio 等），默认 False 保持旧行为逐字节不变。
+        - ``physical_scope``（#P1-final closure 13）：**精确物理文件范围**。给定
+          时跳过 glob 重解析，直接扫描这份已核对过的路径清单——``snapshot_policy=
+          "pin"`` 的 ReadPlan.execute 用它消费 plan 时刻冻结的精确文件集，杜绝
+          verify 与 scan 之间底层文件被替换的 TOCTOU。
 
         返回 ``ReadHandle``，支持 ``.to_arrow() / .to_pandas() / .to_polars() /
         .to_lazy() / .stream()``。
@@ -1832,6 +1838,7 @@ class DataAccessStore:
             mode=mode,
             allow_sparse=allow_sparse,
             allow_effective_time=allow_effective_time,
+            physical_scope=physical_scope,
         )
 
     def read_uri(
@@ -4274,6 +4281,7 @@ class DataAccessStore:
         返回 ``ReadHandle``，可 ``.to_arrow() / .to_polars() / .to_lazy()``。
         """
         from data_access.read.factors import (
+            build_factor_duplicate_check_sql,
             build_factor_pivot_sql,
             build_factor_union_sql,
         )
@@ -4363,7 +4371,27 @@ class DataAccessStore:
             union_by_name=ds.union_by_name,
             limit=None,
         )
+        budget = self._resolve_read_budget(ds, query_budget)
         if layout == "wide":
+            # #P0-final closure 9：production/strict 下 PIVOT 前先跑唯一性门——
+            # ``(datetime, asset, factor_id)`` 重复 ⇒ fail-closed，绝不静默
+            # ``USING first(value)`` 挑第一条掩盖数据完整性问题。探测失败同样
+            # fail-closed（无法证明唯一 ⇒ 不允许 pivot）。
+            dup_sql, dup_params = build_factor_duplicate_check_sql(
+                union_sql,
+                union_params,
+                time_column=ds.time_column or "datetime",
+            )
+            dup = self._engine.execute_arrow(
+                dup_sql, dup_params, deadline_ms=budget.max_elapsed_ms
+            )
+            if dup is not None and dup.num_rows:
+                bad_fid = dup.column(0).to_pylist()[0]
+                raise ValidationError(
+                    f"read_factors layout='wide'：因子数据存在 (datetime, asset, "
+                    f"factor_id) 重复（首个命中 factor_id={bad_fid!r}）。"
+                    "PIVOT USING first() 会静默挑一条；请先修复重复/声明 revision 策略。"
+                )
             sql, sql_params = build_factor_pivot_sql(
                 union_sql, union_params, factor_ids=fids
             )
@@ -4371,8 +4399,6 @@ class DataAccessStore:
             sql, sql_params = union_sql, union_params
         if limit is not None:
             sql = f"SELECT * FROM ({sql}) AS __b LIMIT {int(limit)}"
-
-        budget = self._resolve_read_budget(ds, query_budget)
         start = time.perf_counter()
         table = self._engine.execute_arrow(
             sql, sql_params, deadline_ms=budget.max_elapsed_ms
@@ -5766,14 +5792,18 @@ class DataAccessStore:
             self._assert_path_override_allowed(ds, kind="read", value=read_root)
 
         if isinstance(ds, StaticDataset):
-            root = Path(read_root) if read_root else ds.root
+            root = (
+                Path(read_root)
+                if read_root
+                else Path(resolve_namespace_path(str(ds.root)))
+            )
             glob_paths = [str(root / ds.glob)]
         else:
             glob_paths = ds.resolve_paths(**read_params)
             if read_root is not None:
                 glob_paths = self._rewrite_root_prefix(
                     glob_paths,
-                    old_static_root=ds.static_root,
+                    old_static_root=Path(resolve_namespace_path(str(ds.static_root))),
                     new_root=Path(read_root),
                 )
 
@@ -5827,7 +5857,7 @@ class DataAccessStore:
             if write_root is not None:
                 glob_paths = self._rewrite_root_prefix(
                     glob_paths,
-                    old_static_root=ds.static_root,
+                    old_static_root=Path(resolve_namespace_path(str(ds.static_root))),
                     new_root=Path(write_root),
                 )
 

@@ -88,6 +88,17 @@ def extended_only_canonicals() -> frozenset[str]:
     """Live read of the extended-only surface — always current, never a stale
     import-time snapshot."""
     return EXTENDED_ONLY_CANONICALS
+
+
+def extend_research_only(names: frozenset[str] | set[str] | list[str]) -> None:
+    """Register a batch of canonical names onto the research-only surface.
+
+    Same live-mutator contract as :func:`extend_extended_only` (R5-50): mutates
+    the module global in place instead of letting a registering module reassign
+    a private copy, so every consumer sees the union regardless of import order.
+    """
+    global RESEARCH_ONLY_CANONICALS
+    RESEARCH_ONLY_CANONICALS = RESEARCH_ONLY_CANONICALS | frozenset(names)
 # Factor-shaped extended operators that have passed semantic/PIT review and are
 # NOT fail-closed migrate to the daily surface.  Recursive/stateful, source-blocked,
 # non-factor, promoted-research (still under certification) and experimental model

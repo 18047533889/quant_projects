@@ -117,6 +117,46 @@ class TemporalJoinSpec:
     # ---- #P0-7 availability_latency：额外可见性延迟（如分钟/bar 数）----
     availability_latency: int | None = None
 
+    def __post_init__(self) -> None:
+        """#P0-final closure 5：**对象自身即合法**，不依赖「从哪个入口创建」。
+
+        之前程序化直接 ``TemporalJoinSpec(policy="xxx", availability="whatever")``
+        能绕过 ``parse_join_spec`` 的所有校验——dataclass 自身没有 invariant。
+        PIT 核心语义：非法 policy/availability/duplicate_policy/period_selection、
+        负 latency、bool 当 latency 一律 fail-closed。
+        """
+        if self.policy not in _VALID_POLICIES:
+            raise ValidationError(
+                f"TemporalJoinSpec.policy 必须是 {sorted(_VALID_POLICIES)}，"
+                f"收到 {self.policy!r}"
+            )
+        if self.availability not in _VALID_AVAILABILITY:
+            raise ValidationError(
+                f"TemporalJoinSpec.availability 必须是 "
+                f"{sorted(_VALID_AVAILABILITY)}，收到 {self.availability!r}"
+            )
+        if self.duplicate_policy not in _VALID_DUPLICATE_POLICIES:
+            raise ValidationError(
+                f"TemporalJoinSpec.duplicate_policy 必须是 "
+                f"{sorted(_VALID_DUPLICATE_POLICIES)}，收到 {self.duplicate_policy!r}"
+            )
+        if self.period_selection not in _VALID_PERIOD_SELECTIONS:
+            raise ValidationError(
+                f"TemporalJoinSpec.period_selection 必须是 "
+                f"{sorted(_VALID_PERIOD_SELECTIONS)}，收到 {self.period_selection!r}"
+            )
+        lat = self.availability_latency
+        if lat is not None:
+            if isinstance(lat, bool) or not isinstance(lat, int):
+                raise ValidationError(
+                    f"TemporalJoinSpec.availability_latency 必须是整数，"
+                    f"收到 {lat!r}（bool 不是合法 latency）"
+                )
+            if lat < 0:
+                raise ValidationError(
+                    f"TemporalJoinSpec.availability_latency 不能为负数，收到 {lat}"
+                )
+
     @property
     def is_asof(self) -> bool:
         return self.policy in {"asof", "pit_asof"}
@@ -195,13 +235,23 @@ def _as_bool(value: Any, default: bool) -> bool:
 
     旧代码 ``bool(raw.get("deduplicate", True))`` 会把配置字符串 ``"false"``
     当成 True——TemporalJoinSpec 的语义和配置脱节。
+
+    #P0-final closure 5：任意 int/float 不再静默接受——``2`` / ``0.5`` 这类
+    歧义值 fail-closed（``True`` 这类 bool 也只允许是真正的布尔字段，不参与
+    数值语义）。只认 bool、0/1、以及明确的 true/false 字符串。
     """
     if value is None:
         return default
     if isinstance(value, bool):
         return value
-    if isinstance(value, (int, float)):
-        return bool(value)
+    if isinstance(value, int):
+        if value in (0, 1):
+            return bool(value)
+        raise ValidationError(f"bool 值无法识别: {value!r}（0/1 或 true/false）")
+    if isinstance(value, float):
+        if value in (0.0, 1.0):
+            return bool(value)
+        raise ValidationError(f"bool 值无法识别: {value!r}（0.0/1.0 或 true/false）")
     text = str(value).strip().lower()
     if text in {"false", "0", "no", "off", "n", "f"}:
         return False
@@ -293,6 +343,18 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
         raise ValidationError(
             f"join 规格必须是字符串/dict/TemporalJoinSpec，收到 {type(raw).__name__}"
         )
+    # #P0-final closure 5：dict 入口 unknown-key reject（``availability_latncy:``
+    # 这类 typo 之前静默忽略——TemporalJoinSpec 字段从此与配置一一对应）。
+    _JOIN_SPEC_KEYS = frozenset({
+        "policy", "decision_time", "knowledge_time", "period_time", "revision_order",
+        "availability", "deduplicate", "primary_key", "duplicate_policy",
+        "period_selection", "period_values", "future_cutoff", "availability_latency",
+    })
+    unknown = sorted(set(raw) - _JOIN_SPEC_KEYS)
+    if unknown:
+        raise ValidationError(
+            f"join 规格含未知 key {unknown}；应为 {sorted(_JOIN_SPEC_KEYS)} 之一"
+        )
     # dict 没显式 policy 但表达了语义时间（knowledge_time/availability/revision）
     # → 默认 pit_asof（asof 语义）；否则默认 exact。
     has_semantic = any(
@@ -319,11 +381,19 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
         )
     latency = raw.get("availability_latency")
     if latency is not None:
+        if isinstance(latency, bool):
+            raise ValidationError(
+                f"availability_latency 必须是整数，收到 {latency!r}（bool 不是合法 latency）"
+            )
         try:
             latency = int(latency)
         except (ValueError, TypeError):
             raise ValidationError(
                 f"availability_latency 必须是整数，收到 {latency!r}"
+            )
+        if latency < 0:
+            raise ValidationError(
+                f"availability_latency 不能为负数，收到 {latency}"
             )
     return TemporalJoinSpec(
         policy=policy,
