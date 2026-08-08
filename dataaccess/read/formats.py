@@ -149,6 +149,7 @@ class FormatSpec:
             if header is not None and not isinstance(header, bool):
                 raise ValidationError(f"{context}: format.header 必须是布尔")
             extra: dict[str, Any] = {str(k): v for k, v in extra_raw.items()}
+            validate_format_extra(fmt_type, extra, context=context)
             return cls(
                 type=fmt_type,
                 delimiter=str(delimiter) if delimiter is not None else None,
@@ -164,6 +165,38 @@ class FormatSpec:
 
 def default_glob_for_format(fmt: str) -> str:
     return _DEFAULT_GLOBS.get(normalize_format_name(fmt), "**/*.parquet")
+
+
+# #P0-54 format.extra 的 option whitelist：每种格式只允许登记过的 DuckDB option 名，
+# 未知 key → ValidationError（禁止 raw option name 直接进 SQL——未来 DuckDB 加新
+# option 不被自动放行）。
+_ALLOWED_EXTRA_OPTIONS: dict[str, frozenset[str]] = {
+    "csv": frozenset({
+        "sample_size", "nullstr", "dateformat", "timestampformat",
+        "all_varchar", "auto_detect", "ignore_errors", "normalize_names",
+        "escapechar", "quotechar", "skip", "columns", "compression",
+    }),
+    "tsv": frozenset({
+        "sample_size", "nullstr", "dateformat", "timestampformat",
+        "all_varchar", "auto_detect", "ignore_errors", "normalize_names",
+        "escapechar", "quotechar", "skip", "columns", "compression",
+    }),
+    "jsonl": frozenset({"sample_size", "maximum_sample_files", "ignore_errors",
+                        "compression", "records", "format"}),
+    "parquet": frozenset({"compression", "binary_as_string", "file_row_number",
+                          "hive_partitioning", "union_by_name"}),
+}
+
+
+def validate_format_extra(fmt_type: str, extra: dict[str, Any], *, context: str) -> None:
+    """#P0-54 校验 format.extra 的 option 名在白名单内；未知 key fail-closed。"""
+    allowed = _ALLOWED_EXTRA_OPTIONS.get(fmt_type, frozenset())
+    unknown = sorted(set(extra) - allowed)
+    if unknown:
+        raise ValidationError(
+            f"{context}: format.extra 含未知 option {unknown}（{fmt_type} 只允许 "
+            f"{sorted(allowed)}）。禁止 raw option 名进 SQL。"
+        )
 
 
 def _sql_string(value: str) -> str:
