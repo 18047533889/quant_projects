@@ -112,6 +112,9 @@ def publish_from_staging(
                 f"staging 数据集 '{staging_name}' 在 {staging_dir} 没有可发布内容；"
                 f"是不是没写 / 参数 {params} 不对？"
             )
+        # #40 冻结 source snapshot：copy 前后比对文件清单，防止 copy 期间另一
+        # writer 并发 upsert staging 形成 mixed generation。
+        source_inv = _file_inventory(staging_dir)
 
         target_parent = target_dir.parent
         target_parent.mkdir(parents=True, exist_ok=True)
@@ -122,12 +125,21 @@ def publish_from_staging(
                 # 第 1 步：copy staging → candidate（跨 FS 兼容的慢路径）
                 _copy_tree(staging_dir, candidate_dir)
 
-                # 第 2 步：校验 candidate 确实有数据
-                candidate_rows = _count_parquet_rows(candidate_dir)
-                if candidate_rows != source_rows:
+                # #40 校验 source 在 copy 期间未被并发修改（文件清单不变）
+                if _file_inventory(staging_dir) != source_inv:
+                    shutil.rmtree(candidate_dir, ignore_errors=True)
                     raise DataError(
-                        f"candidate 拷贝后行数 {candidate_rows} != staging {source_rows}，"
-                        f"拷贝可能中断；拒绝发布"
+                        f"staging 数据集 '{staging_name}' 在发布 copy 期间被并发写入，"
+                        f"拒绝发布（避免 mixed generation）。请重试。"
+                    )
+
+                # 第 2 步：校验 candidate 与 staging 完全一致（#41 不止 row count：
+                # 文件清单 + 行数 + schema hash + 分区清单）
+                candidate_inv = _file_inventory(candidate_dir)
+                if source_inv is None or candidate_inv != source_inv:
+                    raise DataError(
+                        f"candidate 与 staging 文件清单/行数/schema 不一致；"
+                        f"拷贝可能中断或 staging 被并发修改，拒绝发布"
                     )
 
                 # 第 3 步：同 FS 原子 rename —— old_published → archive，candidate → final
@@ -145,16 +157,16 @@ def publish_from_staging(
                     raise
 
                 try:
-                    post_rows = _count_parquet_rows(target_dir)
+                    post_inv = _file_inventory(target_dir)
                 except Exception as exc:
                     _rollback_final(target_dir, archive_path)
                     raise DataError(
                         f"publish 后读 {target_dir} 失败：{exc}；已回滚到归档版本"
                     ) from exc
-                if post_rows != source_rows:
+                if post_inv is None or post_inv != source_inv:
                     _rollback_final(target_dir, archive_path)
                     raise DataError(
-                        f"publish 后读出行数 {post_rows} != source {source_rows}；已回滚"
+                        f"publish 后文件清单与 staging 不一致（行数/文件/schema）；已回滚"
                     )
 
                 ok = True
@@ -325,6 +337,53 @@ def _count_parquet_rows(root: Path) -> int:
                 f"读 {p} 的 parquet footer 失败：{exc}；staging 目录可能损坏"
             ) from exc
     return total
+
+
+def _file_inventory(root: Path) -> dict[str, tuple[int, int, str]] | None:
+    """#41 发布内容强校验指纹：{相对路径: (rows, bytes, schema_hash)}。
+
+    只比较 .parquet 数据文件（跳过 manifest/临时/symlink）。读 footer 失败
+    返回 None（发布中止）。用于 candidate/源/最终 三方一致性比较——比 row count
+    更能发现「两表同行数但内容不同」。
+    """
+    if not root.exists() or not root.is_dir():
+        return None
+    inv: dict[str, tuple[int, int, str]] = {}
+    for p in root.rglob("*.parquet"):
+        if p.name.startswith(".") or p.is_symlink():
+            continue
+        rel = str(p.relative_to(root))
+        try:
+            meta = pq.read_metadata(str(p))
+        except Exception as exc:
+            raise DataError(
+                f"读 {p} 的 parquet footer 失败：{exc}；目录可能损坏"
+            ) from exc
+        inv[rel] = (
+            meta.num_rows,
+            p.stat().st_size,
+            _schema_hash_str(meta),
+        )
+    return inv
+
+
+def _schema_hash_str(meta: Any) -> str:
+    import hashlib
+    import json
+
+    arrow_schema = getattr(meta, "schema_arrow", None)
+    if arrow_schema is not None:
+        pairs = [
+            (arrow_schema.field(i).name, str(arrow_schema.field(i).type))
+            for i in range(len(arrow_schema))
+        ]
+    else:
+        pairs = [
+            (meta.schema.names[i], str(meta.schema.column(i).physical_type))
+            for i in range(len(meta.schema.names))
+        ]
+    text = json.dumps(pairs, sort_keys=True)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
 
 
 def _archive_path(parent: Path, target_name: str) -> Path:

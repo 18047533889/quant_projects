@@ -1,6 +1,6 @@
 # Operator × Market 能力矩阵
 
-覆盖 canonical：**1311** ｜ UNKNOWN：**0** ｜ NOT_REVIEWED：**0**
+覆盖 canonical：**1315** ｜ UNKNOWN：**0** ｜ NOT_REVIEWED：**0**
 
 | canonical | A | US | 说明 |
 | --- | --- | --- | --- |
@@ -400,12 +400,7 @@
 | fundamental_staleness | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | garman_klass_vol | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ge | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| group_corr_effective_rank | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| group_corr_mode_localization | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| group_corr_mode_share | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_corr_mst_length | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| group_corr_second_mode_localization | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| group_corr_spectral_gap | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_count | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_decay_linear | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_distribution_js_divergence | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -414,6 +409,11 @@
 | group_ex_self_quantile | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_ex_self_std | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_ex_self_weighted_mean | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| group_feature_effective_rank | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| group_feature_mode_localization | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| group_feature_mode_share | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| group_feature_second_mode_localization | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| group_feature_spectral_gap | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_impute_median | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_kurtosis | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | group_leader_laggard_exposure | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1030,6 +1030,8 @@
 | ts_matrix_profile_discord_score | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_matrix_profile_motif_age | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_matrix_profile_motif_distance | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_matrix_profile_motif_frequency | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_matrix_profile_neighbor_dispersion | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_max | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_max_buildup | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_max_chord_excursion | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1040,6 +1042,7 @@
 | ts_mean_excess_slope | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_mean_if | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_mean_reversion_half_life | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_mean_reversion_ou_approx_half_life | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_median | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_min | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_min_if | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
@@ -1093,7 +1096,8 @@
 | ts_permutation_transition_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_persistence_birth_dispersion | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_persistence_diagram_shift | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
-| ts_persistence_entropy | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_persistence_entropy_h0 | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
+| ts_persistence_entropy_h1 | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_pivot_high_age | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_pivot_high_count | INPUT_DEPENDENT | INPUT_DEPENDENT |  |
 | ts_pivot_high_spacing | INPUT_DEPENDENT | INPUT_DEPENDENT |  |

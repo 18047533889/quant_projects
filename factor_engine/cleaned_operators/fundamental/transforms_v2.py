@@ -98,7 +98,24 @@ def _walk_periods(
     return out
 
 
-def _values(order: list[object], visible: OrderedDict, current: object, count: int | None = None):
+def _values(
+    order: list[object],
+    visible: OrderedDict,
+    current: object,
+    count: int | None = None,
+    require_consecutive: bool = False,
+):
+    """Values of the most recent ``count`` visible report periods ending at
+    ``current`` (or the full visible history when ``count`` is None).
+
+    ``require_consecutive=True`` fails closed on a skipped fiscal period: the
+    selected window's ordinals must be contiguous (each adjacent pair differs by
+    exactly one fiscal period) and ordinal-parseable.  Otherwise a missing
+    report (e.g. a vendor gap at 2025Q2) would silently substitute a
+    non-adjacent quarter — acceptable for "historical distribution" summaries
+    but wrong for sums/averages whose math requires adjacent periods (review
+    P0-03).
+    """
     try:
         pos = order.index(current)
     except ValueError:
@@ -106,6 +123,13 @@ def _values(order: list[object], visible: OrderedDict, current: object, count: i
     keys = order[: pos + 1]
     if count is not None:
         keys = keys[-int(count):]
+    if require_consecutive and len(keys) > 1:
+        ords = [period_ordinal(k) for k in keys]
+        if any(o is None for o in ords):
+            return []
+        for prev_o, o in zip(ords, ords[1:]):
+            if o != prev_o + 1:
+                return []
     vals = [float(visible[k]) for k in keys if k in visible and np.isfinite(visible[k])]
     return vals
 
@@ -190,7 +214,9 @@ def fin_yoy(x, period_id, periods_per_year=4):
 def fin_ttm(x, period_id, periods_per_year=4):
     n = _pos_int(periods_per_year, "periods_per_year")
     def calc(o, v, c):
-        vals = _values(o, v, c, n)
+        # TTM is a sum of *adjacent* fiscal periods: a skipped report must not
+        # pull in a non-adjacent quarter (review P0-03).
+        vals = _values(o, v, c, n, require_consecutive=True)
         return float(np.sum(vals)) if len(vals) == n else np.nan
     return _walk_periods(x, period_id, calc)
 
@@ -198,7 +224,10 @@ def fin_ttm(x, period_id, periods_per_year=4):
 def fin_average_balance(x, period_id, periods=2):
     n = _pos_int(periods, "periods")
     def calc(o, v, c):
-        vals = _values(o, v, c, n)
+        # Average balance over a contiguous window of fiscal periods (review
+        # P0-03): a skipped report period fails closed instead of substituting
+        # a non-adjacent report.
+        vals = _values(o, v, c, n, require_consecutive=True)
         return float(np.mean(vals)) if len(vals) == n else np.nan
     return _walk_periods(x, period_id, calc)
 

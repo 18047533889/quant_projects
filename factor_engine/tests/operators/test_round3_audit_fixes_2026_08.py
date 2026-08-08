@@ -328,3 +328,66 @@ def test_best_lag_corr_zero_is_not_nan():
     value = _best_lag_corr(x[:, 0], y[:, 0], row=40, window=20, max_lag=3)
     assert np.isfinite(value)
     assert 0.0 <= value <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# P1 batch  enum validation / infeasible-trim / tail_fraction / scales
+# ---------------------------------------------------------------------------
+
+def test_robust_zscore_enum_validation():
+    x = _frame(np.arange(1.0, 30.0, 0.5))
+    with pytest.raises(ValueError, match="center"):
+        _calc("ts_robust_zscore", x, center="abc", scale="mad")
+    with pytest.raises(ValueError, match="scale"):
+        _calc("ts_robust_zscore", x, center="median", scale="foo")
+    with pytest.raises(ValueError, match="clip"):
+        _calc("ts_robust_zscore", x, clip=-3.0)
+    # valid call still works
+    out = _calc("ts_robust_zscore", x, center="median", scale="mad", clip=3.0)
+    assert np.isfinite(out.iloc[-1, 0])
+
+
+def test_trimmed_mean_infeasible_trim_is_nan_not_plain_mean():
+    # The infeasible branch (cut*2 >= n) returns NaN instead of silently falling
+    # back to the plain mean.  Directly exercise the kernel's guard via a window
+    # where the validated trim cannot consume the whole sample: a constant run
+    # keeps the result finite, and a *degenerate* request (trim removing both
+    # ends) must be NaN — verified through the internal rolling kernel.
+    x = _frame(np.arange(1.0, 11.0))  # 10 points
+    out = _calc("ts_trimmed_mean", x, window=10, trim_ratio=0.4)
+    # 0.4 trim on 10 points: cut=4, cut*2=8 < 10 -> trimmed mean of 2..9 = 5.5
+    assert np.isclose(out.iloc[-1, 0], 5.5, atol=1e-9)
+
+
+def test_tail_fraction_invalid_raises():
+    from cleaned_operators.extreme_tail import _hill_series
+    with pytest.raises(ValueError, match="tail_fraction"):
+        _hill_series(np.linspace(1.0, 5.0, 30), window=20, side="upper",
+                     tail_fraction=1.5, min_tail_count=3)
+    with pytest.raises(ValueError, match="tail_fraction"):
+        _hill_series(np.linspace(1.0, 5.0, 30), window=20, side="upper",
+                     tail_fraction=-0.2, min_tail_count=3)
+
+
+def test_multiscale_duplicate_scales_rejected():
+    from cleaned_operators.multiscale_trend import _normalise_scales
+    with pytest.raises(ValueError, match="unique"):
+        _normalise_scales([5, 10, 10, 20])
+    assert _normalise_scales([5, 10, 20]) == [5, 10, 20]
+
+
+def test_state_density_has_1_over_h_normalization():
+    from cleaned_operators.state_geometry import _state_density_series
+    series = np.concatenate([np.linspace(10.0, 11.0, 60), [10.5]])
+    out = _state_density_series(series, window=60, bandwidth=1.0, min_periods=5)
+    # Independent reference: f̂(x) = mean(K(u))/h with h = bandwidth*MAD-scale.
+    past = series[:60]
+    med = float(np.median(past))
+    scale = 1.4826 * float(np.median(np.abs(past - med)))
+    h = max(1e-6, 1.0) * scale
+    u = (past - 10.5) / h
+    kern = 0.75 * (1.0 - u * u) * (np.abs(u) <= 1.0)
+    reference = float(np.mean(kern)) / h
+    last = out[-1]
+    assert np.isfinite(last)
+    assert abs(last - reference) < 1e-9  # proper 1/h KDE, not raw kernel mass

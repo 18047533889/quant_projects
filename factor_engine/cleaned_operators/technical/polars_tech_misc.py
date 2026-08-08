@@ -409,7 +409,9 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
 
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
     tags = ["pit_safe", "causal", "polars", "native"]
-    if name in {"Supertrend", "SupertrendDirection", "PSAR"}:
+    # Keltner family recurses through ``_ema``/``_wilder`` (ewm adjust=False),
+    # same full-replay contract as the pandas reference (review P0-05).
+    if name in {"Supertrend", "SupertrendDirection", "PSAR", "KeltnerMid", "KeltnerUpper", "KeltnerLower", "KeltnerPosition"}:
         tags += ["stateful", "full_replay"]
     metadata = OperatorMetadata(
         name=name,

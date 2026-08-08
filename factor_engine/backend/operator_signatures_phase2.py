@@ -593,5 +593,160 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         "ts_betti_crocker_bifurcation_score",
         ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("tau", _INT), ArgSpec("dim", _INT),
     )
+    # ---- P. 2026-08-08 Gemini V2 round primitives -------------------------
+    # HVG network.
+    for _hvg in (
+        "ts_hvg_degree_entropy",
+        "ts_hvg_forward_backward_asymmetry",
+        "ts_hvg_clustering_coefficient",
+        "ts_hvg_assortativity",
+        "ts_hvg_motif_entropy",
+    ):
+        signatures[_hvg] = _sig(
+            _hvg, ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_periods", _INT)
+        )
+    # RQA line structure.
+    for _rqa in (
+        "ts_recurrence_determinism",
+        "ts_recurrence_laminarity",
+        "ts_recurrence_mean_diagonal_length",
+        "ts_recurrence_longest_vertical_length",
+    ):
+        signatures[_rqa] = _sig(
+            _rqa,
+            ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("dim", _INT),
+            ArgSpec("delay", _INT), ArgSpec("eps_fraction", _FLT),
+            ArgSpec("min_line", _INT), ArgSpec("min_periods", _INT),
+        )
+    # change-point scores.
+    for _cp in (
+        "ts_glr_mean_shift_score",
+        "ts_glr_variance_shift_score",
+        "ts_pettitt_change_score",
+    ):
+        signatures[_cp] = _sig(
+            _cp, ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_segment", _INT)
+        )
+    # OHLC microstructure spreads.
+    signatures["ts_edge_effective_spread"] = _sig(
+        "ts_edge_effective_spread",
+        ArgSpec("open", _F), ArgSpec("high", _F), ArgSpec("low", _F),
+        ArgSpec("close", _F), ArgSpec("window", _W),
+    )
+    signatures["ts_abdi_ranaldo_spread"] = _sig(
+        "ts_abdi_ranaldo_spread",
+        ArgSpec("close", _F), ArgSpec("high", _F), ArgSpec("low", _F),
+        ArgSpec("window", _W), ArgSpec("correction", _ANY),
+    )
+    signatures["ts_pastor_stambaugh_liquidity_gamma"] = _sig(
+        "ts_pastor_stambaugh_liquidity_gamma",
+        ArgSpec("ret", _F), ArgSpec("benchmark_ret", _F), ArgSpec("amount", _F),
+        ArgSpec("window", _W), ArgSpec("min_periods", _INT),
+    )
+    # robust scale / location.
+    signatures["ts_qn_scale"] = _sig(
+        "ts_qn_scale", ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_periods", _INT)
+    )
+    signatures["ts_hodges_lehmann_location"] = _sig(
+        "ts_hodges_lehmann_location", ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_periods", _INT)
+    )
+    # extreme value / event counting.
+    signatures["ts_pickands_tail_index"] = _sig(
+        "ts_pickands_tail_index",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("k", _INT), ArgSpec("side", _ANY),
+    )
+    signatures["ts_evt_threshold_stability"] = _sig(
+        "ts_evt_threshold_stability",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("k_min", _INT),
+        ArgSpec("k_max", _INT), ArgSpec("side", _ANY),
+    )
+    signatures["event_allan_factor"] = _sig(
+        "event_allan_factor",
+        ArgSpec("event", _B), ArgSpec("window", _W), ArgSpec("max_scale", _INT),
+    )
+    # compositional data.
+    signatures["composition_clr_component"] = _sig(
+        "composition_clr_component",
+        ArgSpec("target", _F), ArgSpec("x1", _F, required=False),
+        ArgSpec("x2", _F, required=False), ArgSpec("x3", _F, required=False),
+        ArgSpec("x4", _F, required=False), ArgSpec("x5", _F, required=False),
+        ArgSpec("x6", _F, required=False), ArgSpec("x7", _F, required=False),
+        ArgSpec("zero_policy", _ANY),
+    )
+    signatures["composition_entropy"] = _sig(
+        "composition_entropy",
+        ArgSpec("x1", _F), ArgSpec("x2", _F), ArgSpec("x3", _F),
+        ArgSpec("x4", _F, required=False), ArgSpec("x5", _F, required=False),
+        ArgSpec("x6", _F, required=False), ArgSpec("x7", _F, required=False),
+        ArgSpec("x8", _F, required=False), ArgSpec("zero_policy", _ANY),
+    )
+    for _cod in ("composition_aitchison_distance", "composition_ilr_balance", "composition_js_divergence"):
+        signatures[_cod] = _sig(
+            _cod,
+            ArgSpec("x1", _F), ArgSpec("x2", _F), ArgSpec("x3", _F),
+            ArgSpec("y1", _F), ArgSpec("y2", _F), ArgSpec("y3", _F),
+            ArgSpec("x4", _F, required=False), ArgSpec("x5", _F, required=False),
+            ArgSpec("x6", _F, required=False), ArgSpec("y4", _F, required=False),
+            ArgSpec("y5", _F, required=False), ArgSpec("y6", _F, required=False),
+            ArgSpec("zero_policy", _ANY),
+        )
+    # global-state / transport.
+    signatures["cs_hartigan_dip"] = _sig(
+        "cs_hartigan_dip", ArgSpec("x", _F), ArgSpec("min_cross", _INT)
+    )
+    signatures["group_wasserstein_barycenter_distance"] = _sig(
+        "group_wasserstein_barycenter_distance",
+        ArgSpec("x", _F), ArgSpec("group", _G), ArgSpec("window", _W),
+        ArgSpec("min_group_size", _INT),
+    )
+    # cross-spectral.
+    for _xs in ("ts_cross_spectral_coherence", "ts_cross_spectral_phase"):
+        signatures[_xs] = _sig(
+            _xs, ArgSpec("x", _F), ArgSpec("y", _F), ArgSpec("window", _W)
+        )
+    # intraday impact decay (minute-source).
+    signatures["intraday_impact_decay_rate"] = _sig(
+        "intraday_impact_decay_rate",
+        ArgSpec("ret", _F), ArgSpec("amount", _F), ArgSpec("volume", _F),
+        ArgSpec("horizon", _INT), ArgSpec("shock_quantile", _FLT),
+    )
+    # multifractal asymmetry.
+    signatures["ts_multifractal_asymmetry"] = _sig(
+        "ts_multifractal_asymmetry", ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("min_periods", _INT)
+    )
+    # research-surface (DMD / bicoherence / kernel / BDS / SR).
+    for _dmd in ("ts_dmd_dominant_growth_rate", "ts_dmd_dominant_frequency"):
+        signatures[_dmd] = _sig(
+            _dmd,
+            ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("rank", _INT),
+            ArgSpec("dim", _INT), ArgSpec("delay", _INT),
+        )
+    signatures["ts_dmd_mode_concentration"] = _sig(
+        "ts_dmd_mode_concentration",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("rank", _INT),
+        ArgSpec("dim", _INT), ArgSpec("delay", _INT), ArgSpec("top_k", _INT),
+    )
+    signatures["ts_bicoherence_max"] = _sig(
+        "ts_bicoherence_max",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("n_segments", _INT),
+    )
+    signatures["ts_kernel_granger_score"] = _sig(
+        "ts_kernel_granger_score",
+        ArgSpec("y", _F), ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("lag", _INT),
+    )
+    signatures["ts_residualized_hsic"] = _sig(
+        "ts_residualized_hsic",
+        ArgSpec("x", _F), ArgSpec("y", _F), ArgSpec("z", _F), ArgSpec("window", _W),
+    )
+    signatures["ts_bds_statistic"] = _sig(
+        "ts_bds_statistic",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("embedding_dim", _INT),
+        ArgSpec("distance_multiplier", _FLT),
+    )
+    signatures["ts_sr_gaussian_mean_shift_score"] = _sig(
+        "ts_sr_gaussian_mean_shift_score",
+        ArgSpec("x", _F), ArgSpec("window", _W), ArgSpec("shift_sigma", _FLT),
+        ArgSpec("baseline_window", _W),
+    )
 
     return signatures

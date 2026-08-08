@@ -6541,6 +6541,38 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    # ts_abdi_ranaldo_spread: PIT-safe Abdi-Ranaldo effective spread.  The
+    # estimator needs (c_s, eta_s, eta_{s+1}); output[T] uses only completed
+    # pairs s <= T-1, so eta is lead()ed one row and the rolling mean frame
+    # EXCLUDES the current row (ROWS ... AND 1 PRECEDING).  eta_{T} (the
+    # current day's mid-range) is known at day-T close, matching the kernel.
+    if op == "ts_abdi_ranaldo_spread":
+        if len(node.inputs) < 3:
+            return None
+        cl = _compile_layer(node.inputs[0], dialect=dialect)
+        hl = _compile_layer(node.inputs[1], dialect=dialect)
+        ll = _compile_layer(node.inputs[2], dialect=dialect)
+        if cl is None or hl is None or ll is None:
+            return None
+        spec = _window_spec(node, default=20)
+        win = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {spec.size - 1} PRECEDING AND 1 PRECEDING"
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN cnt < 2 THEN NULL "
+            f"ELSE SQRT(GREATEST(4.0 * SUM(term) OVER ({win}) / cnt, 0.0)) END AS _v "
+            f"FROM (SELECT ts, inst, term, COUNT(*) OVER ({win}) AS cnt "
+            f"FROM (SELECT ts, inst, (c - eta) * (c - eta_next) AS term "
+            f"FROM (SELECT ts, inst, c, eta, "
+            f"LEAD(eta) OVER (PARTITION BY inst ORDER BY ts) AS eta_next "
+            f"FROM (SELECT c.ts, c.inst, LN(c._v) AS c, "
+            f"(LN(h._v) + LN(l._v)) / 2.0 AS eta "
+            f"FROM ({cl.sql}) c JOIN ({hl.sql}) h USING (ts, inst) "
+            f"JOIN ({ll.sql}) l USING (ts, inst) "
+            f"WHERE c._v > 0 AND h._v > 0 AND l._v > 0) m) "
+            f"WHERE eta_next IS NOT NULL) t) w",
+            has_inst_window=True,
+        )
+
     return None
 
 

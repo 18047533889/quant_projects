@@ -44,7 +44,12 @@ def _register(name,params,fn,desc,*,tags=()):
 
 def _dmi(high,low,close,window):
     w=_pi(window,"window",2); up=high.diff(); down=-low.diff()
-    plus=up.where((up>down)&(up>0),0.0); minus=down.where((down>up)&(down>0),0.0)
+    # A missing bar previously collapsed to ``0.0`` ("valid zero directional
+    # movement") and leaked into the Wilder smoothing; it must stay NaN
+    # ("cannot judge") — review batch-2 missing semantics.
+    valid=up.notna() & down.notna()
+    plus=up.where((up>down)&(up>0),0.0).where(valid)
+    minus=down.where((down>up)&(down>0),0.0).where(valid)
     atr=_wilder(_tr(high,low,close),w)
     p=100.0*_wilder(plus,w)/atr.replace(0,np.nan); m=100.0*_wilder(minus,w)/atr.replace(0,np.nan)
     return p,m
@@ -202,6 +207,18 @@ _SPECS=[
 ("SupertrendDirection",["high","low","close","atr_window","multiplier"],SupertrendDirection,"Recursive Supertrend direction (+1/-1)."),
 ("PSAR",["high","low","acceleration","maximum"],PSAR,"Parabolic SAR; recursive/stateful."),
 ]
+# Recursive EMA / Wilder families: every output depends on the full history
+# through ``ewm(adjust=False)`` (``_ema``/``_wilder``), so a
+# ``start_date + finite warmup`` run is NOT bit-exact with a full-history run.
+# They must be governed ``stateful`` + ``full_replay`` exactly like
+# KAMA/Supertrend/PSAR (review P0-05).  Bounded rolling-sum indicators (CMO,
+# Vortex, UltimateOscillator, ichimoku) stay unbounded-state-free.
+_RECURSIVE_EWM = {
+    "DMI_plus", "DMI_minus", "DX", "NATR",
+    "PPO", "PPO_signal", "PPO_hist", "PVO", "PVO_signal", "PVO_hist",
+    "KeltnerMid", "KeltnerUpper", "KeltnerLower", "KeltnerPosition",
+    "TSI", "TSI_signal", "DEMA", "TEMA",
+}
 for _name,_params,_fn,_desc in _SPECS:
-    _tags=("stateful","full_replay") if _name in {"KAMA","Supertrend","SupertrendDirection","PSAR"} else ()
+    _tags=("stateful","full_replay") if _name in _RECURSIVE_EWM or _name in {"KAMA","Supertrend","SupertrendDirection","PSAR"} else ()
     _register(_name,_params,_fn,_desc,tags=_tags)

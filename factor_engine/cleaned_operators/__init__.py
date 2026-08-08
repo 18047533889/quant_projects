@@ -248,6 +248,26 @@ _LOAD_MODULES = (
     "cleaned_operators.relation.ops_ext",
     "cleaned_operators.intraday_activity_duration",
     "cleaned_operators.research_transform",
+    # 2026-08-08 Gemini V2 round: HVG, RQA line structure, GLR/Pettitt change
+    # points, EDGE / Abdi-Ranaldo / Pastor-Stambaugh spreads, Qn / Hodges-
+    # Lehmann robust scale, Pickands / EVT stability / Allan factor,
+    # composition (CoDa), cross-spectral coherence/phase, global-state dip /
+    # Wasserstein barycenter, intraday impact decay, multifractal asymmetry,
+    # and the research-surface DMD / bicoherence / kernel-Granger / HSIC / BDS /
+    # Gaussian-SR primitives.
+    "cleaned_operators.hvg_ext",
+    "cleaned_operators.rqa_ext",
+    "cleaned_operators.glr_change",
+    "cleaned_operators.ohlc_spread",
+    "cleaned_operators.robust_scale",
+    "cleaned_operators.evt_allan",
+    "cleaned_operators.composition",
+    "cleaned_operators.cross_spectrum",
+    "cleaned_operators.cs_state_ops",
+    "cleaned_operators.intraday_impact",
+    "cleaned_operators.multifractal_asym",
+    "cleaned_operators.dmd",
+    "cleaned_operators.research_spectral",
 )
 
 _REVIEWED_EXTENSIONS = (

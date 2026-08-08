@@ -464,6 +464,9 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "ts_cov_if",
     "ts_value_at_argextreme",
     "ts_weighted_standardized_moment",
+    # 2026-08-08 Gemini V2 round: PIT-safe Abdi-Ranaldo spread (lead()ed
+    # eta_{s+1} with an exclusive-end rolling frame, see emitter branch).
+    "ts_abdi_ranaldo_spread",
 })
 
 # DuckDB 分层

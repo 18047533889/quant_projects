@@ -75,6 +75,29 @@ FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
     "Supertrend",
     "SupertrendDirection",
     "PSAR",
+    # 2026-08 review P0-05: EMA/Wilder-recursive indicators (``ewm(adjust=False)``
+    # via _ema/_wilder) have no checkpoint-restore, so a segmented run would not
+    # be bit-exact with a full-history run.  They stay fail-closed to full replay.
+    "DMI_plus",
+    "DMI_minus",
+    "DX",
+    "NATR",
+    "PPO",
+    "PPO_signal",
+    "PPO_hist",
+    "PVO",
+    "PVO_signal",
+    "PVO_hist",
+    "KeltnerMid",
+    "KeltnerUpper",
+    "KeltnerLower",
+    "KeltnerPosition",
+    "TSI",
+    "TSI_signal",
+    "DEMA",
+    "TEMA",
+    "ChaikinOscillator",
+    "ForceIndex",
     "ts_sma_cn",
     # 2026-08 stateful rule / episode pack (audit P0-B03): these recursive
     # operators have internal state but no serialize_state/restore_state

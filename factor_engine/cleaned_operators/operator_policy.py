@@ -1493,6 +1493,68 @@ _GEMINI_PACK_POLICIES: dict[str, dict[str, Any]] = {
 }
 _EXPLICIT_POLICIES.update(_GEMINI_PACK_POLICIES)
 
+# 2026-08-08 Gemini V2 round policies (see operator_surface._DAILY_GEMINI_V2_PACK).
+# HVG / RQA / GLR / spreads / robust-scale / cross-spectral / multifractal are
+# trailing-window ts; composition is elementwise across panels; the dip is a
+# cross-sectional global state; the barycenter distance is group-scoped; the
+# intraday impact decay is a session-aware minute op.
+_GEMINI_V2_PACK_POLICIES: dict[str, dict[str, Any]] = {
+    # HVG network.
+    "ts_hvg_degree_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    "ts_hvg_forward_backward_asymmetry": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    "ts_hvg_clustering_coefficient": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    "ts_hvg_assortativity": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    "ts_hvg_motif_entropy": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    # RQA line structure.
+    "ts_recurrence_determinism": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    "ts_recurrence_laminarity": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    "ts_recurrence_mean_diagonal_length": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    "ts_recurrence_longest_vertical_length": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    # change-point scores.
+    "ts_glr_mean_shift_score": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    "ts_glr_variance_shift_score": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    "ts_pettitt_change_score": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    # OHLC microstructure spreads.
+    "ts_edge_effective_spread": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_abdi_ranaldo_spread": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_pastor_stambaugh_liquidity_gamma": {"scope": "ts", "pit_safe": True, "min_periods": 20},
+    # robust scale / location.
+    "ts_qn_scale": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    "ts_hodges_lehmann_location": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    # extreme-value.
+    "ts_pickands_tail_index": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    "ts_evt_threshold_stability": {"scope": "ts", "pit_safe": True, "min_periods": 10},
+    "event_allan_factor": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    # compositional data (elementwise across aligned panels).
+    "composition_clr_component": {"scope": "elementwise", "pit_safe": True, "min_periods": 1},
+    "composition_entropy": {"scope": "elementwise", "pit_safe": True, "min_periods": 1},
+    "composition_aitchison_distance": {"scope": "elementwise", "pit_safe": True, "min_periods": 1},
+    "composition_ilr_balance": {"scope": "elementwise", "pit_safe": True, "min_periods": 1},
+    "composition_js_divergence": {"scope": "elementwise", "pit_safe": True, "min_periods": 1},
+    # cross-sectional global state / transport.
+    "cs_hartigan_dip": {"scope": "cs", "pit_safe": True, "min_periods": 100},
+    "group_wasserstein_barycenter_distance": {"scope": "group", "pit_safe": True, "min_periods": 4},
+    # cross-spectral.
+    "ts_cross_spectral_coherence": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    "ts_cross_spectral_phase": {"scope": "ts", "pit_safe": True, "min_periods": 8},
+    # intraday minute-source.
+    "intraday_impact_decay_rate": {
+        "scope": "ts", "pit_safe": True, "min_periods": 3, "session_aware": True,
+    },
+    # multifractal asymmetry.
+    "ts_multifractal_asymmetry": {"scope": "ts", "pit_safe": True, "min_periods": 20},
+    # research-surface (DMD / bicoherence / kernel / BDS / SR).
+    "ts_dmd_dominant_growth_rate": {"scope": "ts", "pit_safe": True, "min_periods": 12},
+    "ts_dmd_dominant_frequency": {"scope": "ts", "pit_safe": True, "min_periods": 12},
+    "ts_dmd_mode_concentration": {"scope": "ts", "pit_safe": True, "min_periods": 12},
+    "ts_bicoherence_max": {"scope": "ts", "pit_safe": True, "min_periods": 16},
+    "ts_kernel_granger_score": {"scope": "ts", "pit_safe": True, "min_periods": 30},
+    "ts_residualized_hsic": {"scope": "ts", "pit_safe": True, "min_periods": 24},
+    "ts_bds_statistic": {"scope": "ts", "pit_safe": True, "min_periods": 30},
+    "ts_sr_gaussian_mean_shift_score": {"scope": "ts", "pit_safe": True, "min_periods": 12},
+}
+_EXPLICIT_POLICIES.update(_GEMINI_V2_PACK_POLICIES)
+
 # Compatibility export now reflects the reviewed research surface exactly.
 RESEARCH_CORE_CANONICALS = RESEARCH_ONLY_CANONICALS
 

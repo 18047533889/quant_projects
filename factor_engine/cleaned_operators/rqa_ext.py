@@ -1,0 +1,264 @@
+# -*- coding: utf-8 -*-
+"""Recurrence Quantification Analysis extension (2026-08-08 Gemini V2 round).
+
+The existing ``recurrence_analysis`` module already covers RR / diagonal
+entropy / trapping time / divergence.  This round adds the two classic RQA
+line-structure statistics plus two line-length summaries, all derived from the
+same recurrence matrix (one build per window):
+
+* ``ts_recurrence_determinism``      — DET: fraction of recurrent points that
+  belong to diagonal lines of length ≥ ``min_line`` (P0, daily / STATE).
+* ``ts_recurrence_laminarity``       — LAM: fraction of recurrent points that
+  belong to vertical lines of length ≥ ``min_line`` (P0, daily / STATE).
+* ``ts_recurrence_mean_diagonal_length`` — mean diagonal line length (P1).
+* ``ts_recurrence_longest_vertical_length`` — longest vertical line (P1).
+
+Semantics mirror the sibling module exactly: phase-space embedding with
+``ε = eps_fraction · 1.4826·MAD`` (scale-relative, deterministic), upper-
+triangle diagonal scans and full-column vertical scans, and the trailing
+contiguous finite run (a gap never compresses the time axis).
+
+DET = sum(diag_lengths) / (recurrences/2) — because R is symmetric, the upper
+triangle holds exactly half the recurrent points and each off-diagonal point
+lies in exactly one upper-triangular diagonal run.
+LAM = sum(vert_lengths) / recurrences — vertical runs partition all recurrent
+points (each point lies in exactly one maximal run of its column).
+"""
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from cleaned_operators.gemini_v2_common import (
+    frame_like,
+    register_dual,
+    trailing_contiguous_finite,
+    union_extended,
+)
+
+_EPS = 1e-12
+
+
+def _rqa_stats_window(
+    v: np.ndarray,
+    dim: int,
+    delay: int,
+    eps_fraction: float,
+    min_line: int,
+) -> dict[str, float]:
+    """Full RQA statistics for one finite window (see module docstring)."""
+    M = v.shape[0] - (dim - 1) * delay
+    if M < 4:
+        return {}
+    if dim == 1:
+        P = v[:M].reshape(-1, 1)
+    else:
+        P = np.stack([v[i : i + M] for i in range(0, dim * delay, delay)], axis=1)
+    med = float(np.median(v))
+    mad = float(np.median(np.abs(v - med)))
+    scale = 1.4826 * mad
+    if not np.isfinite(scale) or scale <= _EPS:
+        scale = float(np.std(v))
+    if not np.isfinite(scale) or scale <= _EPS:
+        return {}
+    eps = float(eps_fraction) * scale
+    D = np.sqrt(np.sum((P[:, None, :] - P[None, :, :]) ** 2, axis=2))
+    R = (D <= eps) & ~np.eye(M, dtype=bool)
+
+    total_pairs = M * (M - 1)
+    if total_pairs <= 0:
+        return {}
+    rate = float(R.sum()) / total_pairs
+    n_rec = float(R.sum())
+    if n_rec <= 0:
+        return {}
+
+    diag_lengths: list[int] = []
+    for off in range(1, M):
+        length = 0
+        i, j = 0, off
+        while j < M:
+            if R[i, j]:
+                length += 1
+            else:
+                if length >= min_line:
+                    diag_lengths.append(length)
+                length = 0
+            i += 1
+            j += 1
+        if length >= min_line:
+            diag_lengths.append(length)
+
+    vert_lengths: list[int] = []
+    for j in range(M):
+        length = 0
+        for i in range(M):
+            if R[i, j]:
+                length += 1
+            else:
+                if length >= min_line:
+                    vert_lengths.append(length)
+                length = 0
+        if length >= min_line:
+            vert_lengths.append(length)
+
+    determinism = (2.0 * sum(diag_lengths)) / n_rec if diag_lengths else 0.0
+    laminarity = (1.0 * sum(vert_lengths)) / n_rec if vert_lengths else 0.0
+    mean_diag = float(np.mean(diag_lengths)) if diag_lengths else np.nan
+    longest_vert = float(np.max(vert_lengths)) if vert_lengths else np.nan
+
+    return {
+        "rate": rate,
+        "determinism": determinism,
+        "laminarity": laminarity,
+        "mean_diagonal_length": mean_diag,
+        "longest_vertical_length": longest_vert,
+    }
+
+
+def _check_params(
+    window: int, dim: int, delay: int, eps_fraction: float, min_line: int
+) -> tuple[int, int, int, float, int]:
+    w = max(2, int(window))
+    d = max(1, int(dim))
+    dl = max(1, int(delay))
+    ef = float(eps_fraction)
+    if not 0.0 < ef < 1.0:
+        raise ValueError("eps_fraction must be in (0, 1)")
+    if d * dl > 4:
+        raise ValueError("dimension*delay must be <= 4 (embedding support)")
+    ml = max(2, int(min_line))
+    return w, d, dl, ef, ml
+
+
+def _rqa_series(x2d: np.ndarray, window: int, dim: int, delay: int, eps_fraction: float, min_line: int, min_periods: int, key: str) -> np.ndarray:
+    rows, cols = x2d.shape
+    w, d, dl, ef, ml = _check_params(window, dim, delay, eps_fraction, min_line)
+    mp = max(4, int(min_periods))
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        col = x2d[:, c]
+        for r in range(rows):
+            lo = max(0, r - w + 1)
+            v = trailing_contiguous_finite(col[lo : r + 1])
+            if v.size < mp:
+                continue
+            stats = _rqa_stats_window(v, d, dl, ef, ml)
+            val = stats.get(key, np.nan)
+            if np.isfinite(val):
+                out[r, c] = float(val)
+    return out
+
+
+def _ts_recurrence_determinism(
+    x: pd.DataFrame,
+    window: int = 60,
+    dim: int = 1,
+    delay: int = 1,
+    eps_fraction: float = 0.1,
+    min_line: int = 4,
+    min_periods: int = 10,
+) -> pd.DataFrame:
+    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "determinism")
+    return frame_like(x, out)
+
+
+def _ts_recurrence_laminarity(
+    x: pd.DataFrame,
+    window: int = 60,
+    dim: int = 1,
+    delay: int = 1,
+    eps_fraction: float = 0.1,
+    min_line: int = 4,
+    min_periods: int = 10,
+) -> pd.DataFrame:
+    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "laminarity")
+    return frame_like(x, out)
+
+
+def _ts_recurrence_mean_diagonal_length(
+    x: pd.DataFrame,
+    window: int = 60,
+    dim: int = 1,
+    delay: int = 1,
+    eps_fraction: float = 0.1,
+    min_line: int = 4,
+    min_periods: int = 10,
+) -> pd.DataFrame:
+    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "mean_diagonal_length")
+    return frame_like(x, out)
+
+
+def _ts_recurrence_longest_vertical_length(
+    x: pd.DataFrame,
+    window: int = 60,
+    dim: int = 1,
+    delay: int = 1,
+    eps_fraction: float = 0.1,
+    min_line: int = 4,
+    min_periods: int = 10,
+) -> pd.DataFrame:
+    out = _rqa_series(x.to_numpy(dtype=float), window, dim, delay, eps_fraction, min_line, min_periods, "longest_vertical_length")
+    return frame_like(x, out)
+
+
+_SPECS: dict[str, dict[str, Any]] = {
+    "ts_recurrence_determinism": {
+        "fn": _ts_recurrence_determinism,
+        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods"],
+        "category": "time_series_recurrence",
+        "domain": "path_geometry",
+        "unit": "ratio",
+        "cost": 6,
+        "tags_extra": ["state"],
+    },
+    "ts_recurrence_laminarity": {
+        "fn": _ts_recurrence_laminarity,
+        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods"],
+        "category": "time_series_recurrence",
+        "domain": "path_geometry",
+        "unit": "ratio",
+        "cost": 6,
+        "tags_extra": ["state"],
+    },
+    "ts_recurrence_mean_diagonal_length": {
+        "fn": _ts_recurrence_mean_diagonal_length,
+        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods"],
+        "category": "time_series_recurrence",
+        "domain": "path_geometry",
+        "unit": "bars",
+        "cost": 6,
+        "tags_extra": [],
+    },
+    "ts_recurrence_longest_vertical_length": {
+        "fn": _ts_recurrence_longest_vertical_length,
+        "params": ["x", "window", "dim", "delay", "eps_fraction", "min_line", "min_periods"],
+        "category": "time_series_recurrence",
+        "domain": "path_geometry",
+        "unit": "bars",
+        "cost": 6,
+        "tags_extra": [],
+    },
+}
+
+
+def _register() -> None:
+    for canonical, spec in _SPECS.items():
+        register_dual(
+            canonical,
+            spec["fn"],
+            spec["params"],
+            category=spec["category"],
+            domain=spec["domain"],
+            unit=spec["unit"],
+            cost=spec["cost"],
+            source="rqa_ext",
+            tags_extra=spec["tags_extra"],
+            output_unit=spec["unit"],
+        )
+    union_extended(*_SPECS.keys())
+
+
+_register()

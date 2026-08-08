@@ -148,7 +148,7 @@ _VALID_PERIOD_SELECTIONS = {
     "ttm",
     "all",
 }
-_VALID_MARKETS = {"any", "ashare", "us", "a", "u"}
+_VALID_MARKETS = {"any", "ashare", "us"}
 
 
 def _strict_bool(value: Any, *, context: str, default: bool) -> bool:

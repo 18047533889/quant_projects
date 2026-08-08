@@ -672,6 +672,17 @@ def build_manifest_for_dataset(
         return None
 
     files = expand_parquet_paths(paths)
+    # 排除 manifest 自身与 row-group sidecar——它们匹配数据 glob（*.parquet）但
+    # 不是数据文件；重建时若不排除会把 _manifest.parquet 自己写进自己的文件清单。
+    files = [
+        fp
+        for fp in files
+        if fp.name not in {
+            MANIFEST_FILENAME,
+            _MANIFEST_META_FILENAME,
+            _ROW_GROUPS_FILENAME,
+        }
+    ]
     if not files:
         return None
 

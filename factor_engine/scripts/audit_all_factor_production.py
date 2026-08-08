@@ -86,6 +86,7 @@ _PANEL_PARAMETERS = frozenset({
     "circulating_cap", "top10_concentration", "top10_float_concentration",
     "total", "total_holders", "total_profit", "...", "d1", "d2", "d3", "d4", "d5",
     "group1", "group2", "group3", "x3", "x4", "f1", "f2", "f3", "f4",
+    "x5", "x6", "x7", "x8", "y1", "y2", "y3", "y4", "y5", "y6",
     "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10",
     "s4", "s5", "s6", "s7", "s8", "s9", "s10",
     # shareholder churn/network (2026-08): current/prev holder-id slots are
@@ -448,6 +449,19 @@ _SCALAR_VALUES: dict[str, Any] = {
     "history": 20,
     "fd": 0.5,
     "cutoff": 0.1,
+    # 2026-08-08 Gemini V2 round scalars.
+    "min_segment": 10,
+    "correction": "monthly",
+    "min_cross": 100,
+    "zero_policy": "reject",
+    "max_scale": 16,
+    "n_segments": 4,
+    "shift_sigma": 1.0,
+    "distance_multiplier": 1.5,
+    "rank": 4,
+    "top_k": 2,
+    "shock_quantile": 0.9,
+    "k_min": 5,
 }
 
 _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
@@ -493,6 +507,8 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("panel_rolling_pca_loading", "component"): 0,
     ("industry_rolling_pca_loading", "component"): 0,
     ("ts_mad", "scale"): 1.0,
+    ("ts_robust_zscore", "scale"): "mad",  # scalar enum, not the scale panel
+    ("ts_robust_zscore", "center"): "median",
     ("ts_product", "skipna"): True,
     ("MACD_line", "signal"): 9,
     ("MACD_signal", "signal"): 9,
@@ -700,7 +716,9 @@ _MINUTE_PREFIX_DAYS = 20
 # so they are NOT minute-source and resolve against the daily panels.
 # intraday_activity_duration_curvature IS minute-source (consumes minute
 # activity, returns one scalar per day) despite the ``intraday_`` prefix.
-_MINUTE_SOURCE_EXTRA: frozenset[str] = frozenset({"intraday_activity_duration_curvature"})
+_MINUTE_SOURCE_EXTRA: frozenset[str] = frozenset(
+    {"intraday_activity_duration_curvature", "intraday_impact_decay_rate"}
+)
 
 # Operator parameter name -> minute panel key.  These names also exist as daily
 # panels, so the minute-source dispatch in ``_value`` must win for minute ops.

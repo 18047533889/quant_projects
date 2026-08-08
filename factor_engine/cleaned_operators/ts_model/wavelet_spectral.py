@@ -60,7 +60,12 @@ def _haar_energy(vals: np.ndarray, window: int) -> list[float]:
     if n < 8:
         return []
     m = 2 ** int(np.floor(np.log2(n)))
-    x = finite[:m].copy()
+    # Keep the NEWEST m observations, not the oldest: a trailing window that
+    # truncates to a power of two must retain the data closest to ``t`` — the
+    # oldest prefix carries stale information for a trailing factor (review
+    # P0-12).  Missing values are compacted only within the trailing window,
+    # never across a gap (the wavelet already requires a contiguous block).
+    x = finite[-m:].copy()
     levels: list[float] = []
     while len(x) >= 2:
         approx = (x[::2] + x[1::2]) / np.sqrt(2.0)
@@ -84,13 +89,25 @@ def _wavelet_stats(vals: np.ndarray, window: int, stat: str) -> float:
         return float(levels[-1] / total)
     if stat == "entropy":
         w = np.array([e / total for e in levels])
-        h = -float(np.sum(w * np.log(w)))
-        return float(h / np.log(len(w)))
-    if stat == "slope":
-        scales = np.log(np.arange(1, len(levels) + 1, dtype=float))
-        if np.var(scales) <= 0:
+        # A zero-energy level contributes 0*log(0) = NaN; drop it before the
+        # sum (highly regular series frequently have one empty band — review
+        # P0-13).  The normalization uses the number of *present* bands.
+        w = w[w > 0.0]
+        if w.size < 2:
             return np.nan
-        return float(np.cov(scales, np.log(np.maximum(levels, 1e-15)))[0, 1] / np.var(scales))
+        h = -float(np.sum(w * np.log(w)))
+        return float(h / np.log(w.size))
+    if stat == "slope":
+        # Haar level j has dyadic scale 2^j, so the regressor is log(2^j) =
+        # j*log(2), not log(j) — review P1-16.  Population cov/var (same ddof)
+        # avoid the n/(n-1) inflation of np.cov/np.var — review P1-17.
+        scales = np.log(2.0) * np.arange(1, len(levels) + 1, dtype=float)
+        log_e = np.log(np.maximum(levels, 1e-15))
+        sb = float(np.mean(scales))
+        lb = float(np.mean(log_e))
+        cov = float(np.mean((scales - sb) * (log_e - lb)))
+        var = float(np.mean((scales - sb) ** 2))
+        return cov / var if var > 0.0 else np.nan
     return np.nan
 
 

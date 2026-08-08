@@ -201,7 +201,10 @@ class CsTailRetention(SeriesOperator):
         q = float(quantile)
         if not (0.0 < q < 1.0):
             raise ValueError("quantile must be in (0, 1)")
-        top = str(side).lower() != "bottom"
+        side_s = str(side).lower()
+        if side_s not in ("top", "bottom"):
+            raise ValueError("side must be 'top' or 'bottom'")
+        top = side_s == "top"
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         rank_panel = np.full_like(xv, np.nan, dtype=float)
@@ -245,17 +248,17 @@ class CsTailRetention(SeriesOperator):
                 valid_prev = np.isfinite(prev_r)
                 if not np.any(valid_prev):
                     continue
-                if top:
-                    in_prev = valid_prev & (prev_r >= 1.0 - q)
-                else:
-                    in_prev = valid_prev & (prev_r <= q)
-                if not np.any(in_prev):
+                in_prev = valid_prev & ((prev_r >= 1.0 - q) if top else (prev_r <= q))
+                # P1-22: a stock whose rank is missing *today* is "cannot judge",
+                # not "exited the tail".  The retention denominator must be
+                # previous-tail AND currently observable; otherwise a data gap
+                # read as market rotation.
+                observable_now = np.isfinite(cur)
+                if not np.any(in_prev & observable_now):
                     continue
-                in_cur = np.isfinite(cur) & (
-                    (cur >= 1.0 - q) if top else (cur <= q)
-                )
+                in_cur = observable_now & ((cur >= 1.0 - q) if top else (cur <= q))
                 overlap = float(np.sum(in_prev & in_cur))
-                out[r] = overlap / float(np.sum(in_prev))
+                out[r] = overlap / float(np.sum(in_prev & observable_now))
             else:
                 labels = {v for v in g_row if _valid_label(v)}
                 for lab in labels:
@@ -268,17 +271,13 @@ class CsTailRetention(SeriesOperator):
                     valid_prev = np.isfinite(prev_r)
                     if not np.any(valid_prev):
                         continue
-                    if top:
-                        in_prev = valid_prev & (prev_r >= 1.0 - q)
-                    else:
-                        in_prev = valid_prev & (prev_r <= q)
-                    if not np.any(in_prev):
+                    in_prev = valid_prev & ((prev_r >= 1.0 - q) if top else (prev_r <= q))
+                    observable_now = np.isfinite(cur)
+                    if not np.any(in_prev & observable_now):
                         continue
-                    in_cur = np.isfinite(cur) & (
-                        (cur >= 1.0 - q) if top else (cur <= q)
-                    )
+                    in_cur = observable_now & ((cur >= 1.0 - q) if top else (cur <= q))
                     overlap = float(np.sum(in_prev & in_cur))
-                    out[r][mask] = overlap / float(np.sum(in_prev))
+                    out[r][mask] = overlap / float(np.sum(in_prev & observable_now))
         return frame_like(x, out)
 
 

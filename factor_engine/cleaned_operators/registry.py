@@ -114,6 +114,7 @@ class OperatorRegistry:
         "candle_pattern_engine_repairs_v2",
         "composite_fastpath_native_polars",
         "composite_fastpath_primitives",
+        "daily_panel",
         "factor_dsl_polars",
         "factor_dsl_polars_bridge",
         "factor_dsl_polars_native",

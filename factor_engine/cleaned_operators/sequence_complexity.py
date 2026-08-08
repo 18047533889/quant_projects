@@ -259,8 +259,13 @@ class TsPermutationTransitionEntropy(SeriesOperator):
             for (prev, start), (cur, start_next) in zip(coded, coded[1:]):
                 # Only genuinely adjacent embeddings form a transition (audit
                 # R02): a dropped NaN embedding must not turn two non-adjacent
-                # patterns into a fake next-pattern link.
-                if start_next != start + dl:
+                # patterns into a fake next-pattern link.  Embeddings are the
+                # sliding windows starting at i, i+1, ... — adjacency is start
+                # index + 1 regardless of the *intra-embedding* delay.  Requiring
+                # ``start_next == start + dl`` rejected every transition for
+                # delay > 1 (a delay-spaced walk skips embeddings), so those
+                # parameter combinations returned all-NaN (review P0-11).
+                if start_next != start + 1:
                     continue
                 transitions[state_index[prev]][state_index[cur]] += 1.0
                 n_trans += 1

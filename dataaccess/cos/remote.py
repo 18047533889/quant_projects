@@ -257,11 +257,22 @@ def build_remote_paths(
     dataset_name: str,
     *,
     time_range: tuple[Any, Any] | None = None,
+    ds: "Dataset | None" = None,
+    params: Mapping[str, Any] | None = None,
 ) -> list[str]:
-    """按 mirror 布局生成 DuckDB 可读的 ``s3://`` 路径列表。"""
+    """按 mirror 布局生成 DuckDB 可读的 ``s3://`` 路径列表。
+
+    #29：没有手工 mirror spec、但数据集声明了 ``storage.source.type=cos`` 时，
+    从 storage 声明构建（factor lake / model outputs / features 等通用化）。
+    """
     spec = mirror_spec_for_dataset(dataset_name)
     if spec is None:
-        raise ValidationError(f"数据集 '{dataset_name}' 未配置 COS mirror，无法 remote 读取")
+        if ds is not None and declares_cos_storage(ds):
+            return _remote_paths_from_storage(ds, time_range=time_range, params=params)
+        raise ValidationError(
+            f"数据集 '{dataset_name}' 未配置 COS mirror 也未声明 storage.source=cos，"
+            f"无法 remote 读取"
+        )
 
     if spec.layout == "single_full":
         return _remote_single_full(spec)
@@ -274,6 +285,58 @@ def build_remote_paths(
     if spec.layout == "hive_year":
         return _remote_hive_year_paths(spec, time_range)
     raise ValidationError(f"未知 mirror layout: {spec.layout}")
+
+
+def _remote_paths_from_storage(
+    ds: "Dataset",
+    *,
+    time_range: tuple[Any, Any] | None,
+    params: Mapping[str, Any] | None = None,
+) -> list[str]:
+    """#29 从 ``storage.source`` 声明构建 COS 远程路径（无手工 mirror spec）。
+
+    ``storage.source.uri`` 是 COS 前缀；``layout`` 决定路径形态（daily_parquet /
+    hive_date / hive_year / plain）。ParametricDataset 用 params 填 glob 占位符。
+    """
+    from data_access.registry import ParametricDataset
+
+    storage = getattr(ds, "storage", None) or {}
+    src = storage.get("source", {})
+    uri: str = ""
+    layout: str = "plain"
+    if isinstance(src, dict):
+        uri = str(src.get("uri") or "")
+        layout = str(src.get("layout") or getattr(ds, "layout", "plain"))
+    elif isinstance(src, str):
+        uri = str(src)
+    uri = uri.rstrip("/")
+    if not uri:
+        raise ValidationError(f"数据集 '{ds.name}' 声明 storage.source=cos 但缺 uri")
+
+    glob = getattr(ds, "glob", None)
+    if isinstance(ds, ParametricDataset):
+        try:
+            validated = dict(params or {})
+            glob = (ds.glob_template or "**/*.parquet").format(**validated)
+        except Exception:
+            glob = glob or "**/*.parquet"
+    glob = glob or "**/*.parquet"
+
+    if layout == "daily_parquet" and time_range and time_range[0]:
+        start, end = time_range
+        lo = _parse_date(start)
+        hi = _parse_date(end)
+        if lo is not None and hi is not None:
+            return [f"{uri}/{day.isoformat()}.parquet" for day in _iter_dates(lo, hi)]
+    if layout in {"hive_date", "hive_year"} and time_range and time_range[0]:
+        start, end = time_range
+        lo = _parse_date(start)
+        hi = _parse_date(end)
+        if lo is not None and hi is not None:
+            if layout == "hive_date":
+                return [f"{uri}/date={day.isoformat()}/data.parquet" for day in _iter_dates(lo, hi)]
+            return [f"{uri}/year={y}/data.parquet" for y in _iter_years(lo, hi)]
+    return [f"{uri}/{glob}"]
 
 
 def _local_daily_complete(spec: MirrorSpec, time_range: tuple[Any, Any]) -> bool:
@@ -335,17 +398,36 @@ def local_mirror_complete_for_range(
     return False
 
 
+def declares_cos_storage(ds: "Dataset") -> bool:
+    """#29 数据集是否声明 COS 作为 storage backend（``storage.source.type == cos``）。
+
+    让 remote 成为 Dataset storage 的通用能力，不再绑定 StaticDataset + 手工
+    mirror registry——factor lake / model outputs / features 等 ParametricDataset
+    也能走 COS remote。
+    """
+    storage = getattr(ds, "storage", None)
+    if isinstance(storage, dict):
+        src = storage.get("source")
+        if isinstance(src, dict) and str(src.get("type") or "").lower() in {
+            "cos",
+            "s3",
+            "oss",
+        }:
+            return True
+        if isinstance(src, str) and src.lower().startswith(("cos://", "s3://")):
+            return True
+    return False
+
+
 def should_read_cos_remote(
     ds: "Dataset",
     *,
     time_range: tuple[Any, Any] | None,
 ) -> bool:
     """是否对本次读走 COS remote（不拉本地镜像）。"""
-    from data_access.registry import StaticDataset
-
-    if not isinstance(ds, StaticDataset):
-        return False
-    if mirror_spec_for_dataset(ds.name) is None:
+    has_mirror = mirror_spec_for_dataset(ds.name) is not None
+    has_cos_storage = declares_cos_storage(ds)
+    if not has_mirror and not has_cos_storage:
         return False
 
     mode = cos_read_mode()
@@ -361,6 +443,78 @@ def should_read_cos_remote(
 
 def paths_are_remote(paths: Sequence[str]) -> bool:
     return any(str(p).startswith("s3://") for p in paths)
+
+
+def hybrid_cos_read_paths(
+    ds: "Dataset",
+    *,
+    time_range: tuple[Any, Any] | None,
+    params: Mapping[str, Any] | None = None,
+) -> list[str] | None:
+    """#26 local+remote 混合计划（MultiLocationScan 的最小实现）。
+
+    ``auto`` 模式下，本地已有 partition 用本地路径、缺失的 partition 用远程
+    ``s3://`` 路径——不再「本地不齐就整个区间 remote」。需要 httpfs backend
+    （DuckDB 一条查询可同时读本地与 s3）。
+
+    返回 None 表示不混合（本地齐全 / 非 auto / 非 httpfs / 无可枚举日期），
+    调用方走原 all-or-nothing 逻辑。
+    """
+    from data_access.registry import StaticDataset
+
+    if not isinstance(ds, StaticDataset):
+        return None
+    spec = mirror_spec_for_dataset(ds.name)
+    if spec is None:
+        return None
+    if cos_read_mode() != "auto":
+        return None
+    if cos_remote_backend() != "httpfs":
+        return None
+    if time_range is None or time_range[0] is None:
+        return None
+    if local_mirror_complete_for_range(ds.name, time_range=time_range):
+        return None  # 本地齐全 → 纯本地，不混合
+
+    from .mirror import _cos_table_uri, _expected_dates, _local_table_dir
+
+    start = _parse_date(time_range[0])
+    end = _parse_date(time_range[1])
+    if start is None or end is None:
+        return None
+    local: list[str] = []
+    remote: list[str] = []
+    if spec.layout == "daily_parquet":
+        local_dir = _local_table_dir(spec)
+        for day in _expected_dates(ds.name, start, end):
+            lp = local_dir / f"{day.isoformat()}.parquet"
+            if lp.exists():
+                local.append(str(lp))
+            else:
+                remote.append(f"{_cos_table_uri(spec)}/{day.isoformat()}.parquet")
+    elif spec.layout == "hive_date":
+        for day in _expected_dates(ds.name, start, end):
+            lp = spec.local_root / f"date={day.isoformat()}" / spec.file_name
+            if lp.exists():
+                local.append(str(lp))
+            else:
+                remote.append(
+                    f"{_cos_table_uri(spec)}/date={day.isoformat()}/{spec.file_name}"
+                )
+    elif spec.layout == "hive_year":
+        for year in _iter_years(start, end):
+            lp = spec.local_root / f"year={year}" / spec.file_name
+            if lp.exists():
+                local.append(str(lp))
+            else:
+                remote.append(f"{_cos_table_uri(spec)}/year={year}/{spec.file_name}")
+    else:
+        return None
+    if not remote:
+        return None  # 全部本地都有了（防御；上面 complete 检查应已拦截）
+    merged = [*local, *remote]
+    logger.info("cos_multi_location: dataset=%s local=%d remote=%d", ds.name, len(local), len(remote))
+    return merged
 
 
 def cos_remote_backend() -> str:
@@ -505,6 +659,8 @@ def materialize_remote_via_cli(
     dataset_name: str,
     *,
     time_range: tuple[Any, Any] | None = None,
+    ds: "Dataset | None" = None,
+    params: Mapping[str, Any] | None = None,
 ) -> list[str]:
     """用 clean-cos-ro 按需把 COS 对象拉到 cache，返回本地可读路径。
 
@@ -521,6 +677,14 @@ def materialize_remote_via_cli(
 
     spec = mirror_spec_for_dataset(dataset_name)
     if spec is None:
+        # #29 storage 声明型数据集：CLI 不支持逐对象下载远程裸读 → 提示换 httpfs
+        if ds is not None and declares_cos_storage(ds):
+            raise ValidationError(
+                f"数据集 '{dataset_name}' 走 storage.source=cos remote 需要 httpfs "
+                f"backend（DATA_ACCESS_COS_REMOTE_BACKEND=httpfs），CLI 仅支持已登记 "
+                f"mirror spec 的数据集"
+            )
+        raise ValidationError(f"数据集 '{dataset_name}' 未配置 COS mirror")
         raise ValidationError(f"数据集 '{dataset_name}' 未配置 COS mirror，无法 remote/cli 读取")
     cache_spec = _cache_mirror_spec(spec)
 
@@ -588,10 +752,20 @@ def prepare_cos_remote_paths(
     dataset_name: str,
     *,
     time_range: tuple[Any, Any] | None = None,
+    ds: "Dataset | None" = None,
+    params: Mapping[str, Any] | None = None,
 ) -> tuple[list[str], str]:
     """返回 (paths, backend)，backend 为 ``httpfs`` 或 ``cli``。"""
     load_cos_cli_credentials_into_env()
     backend = cos_remote_backend()
     if backend == "httpfs":
-        return build_remote_paths(dataset_name, time_range=time_range), "httpfs"
-    return materialize_remote_via_cli(dataset_name, time_range=time_range), "cli"
+        return (
+            build_remote_paths(dataset_name, time_range=time_range, ds=ds, params=params),
+            "httpfs",
+        )
+    return (
+        materialize_remote_via_cli(
+            dataset_name, time_range=time_range, ds=ds, params=params
+        ),
+        "cli",
+    )

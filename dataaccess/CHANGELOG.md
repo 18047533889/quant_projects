@@ -1,5 +1,86 @@
 # Changelog
 
+## 0.8.1 — DataAccess 正确性收口（DataAccess-only）
+
+按 `docs/DATAACCESS_CORRECTNESS_FIX_PLAN.md` 落地：Manifest 双 epoch、mutation
+统一事务、缓存 key 完整性、统一读前语义门禁、read_uri/sql_relation 治理、财务
+latest_period 默认语义、PIT 强语义、节点式物理计划执行、read_factors 版本门禁
+fail-closed、PIT 索引权威化、镜像/覆盖度/陈旧度、strict YAML、写入/发布加固。
+
+**P0 正确性**
+- **Manifest 双 epoch**（#1/#2）：`_manifest.json` 区分 `source_epoch`（mutation
+  递增）与 `manifest_built_epoch`（重建后追上）；`is_manifest_fresh` 仅当
+  source==built 才信任，杜绝「旧 manifest 的 min/max prune 出错误数据」。
+  `store._dataset_mutation` 统一 write/append/overwrite/upsert/delete/publish/
+  compaction 的失效+重建；`delete_rows` 不再漏失效。
+- **缓存 key 完整**（#3/#4）：`query_cache_key` 覆盖 filters（canonical Filter
+  AST hash）/limit/mode/allow_sparse/allow_effective_time/normalize_units/语义
+  catalog 指纹/Contract IR 指纹；`QueryResultCache` 改 max_bytes+max_entries+TTL
+  联合约束。
+- **统一读前语义门禁**（#5）：`store._prepare_read_request` 统一 temporal
+  contract + event cutoff + required_filters + allowed_filter_values，
+  read_arrow_stream/scan_polars/pyarrow 与 read_result 一致。
+- **read_uri 契约回填**（#6）：production/strict 下 URI 必须唯一反查到已登记
+  数据集并复用其 Contract，否则拒绝。
+- **sql_relation 沙箱**（#7）：production/strict 要求声明 snapshot_datasets +
+  `validate_sql_sandbox`（禁 read_parquet/COPY/ATTACH/LOAD/INSTALL）。
+- **exact join 跨表时间列**（#8）：一律 `a.{decision_time}=b.{right_time}`，
+  不再引用 anchor 没有的右表列名。
+- **financial 默认 latest_period**（#9）：`temporal_model=financial_event` 字段
+  未显式 period_selection 时默认 latest_period。
+- **DataRequest(pit=True) 强语义**（#10）：`plan()` 对每个非 anchor 字段校验
+  PIT 可证明性（asof/pit_asof + temporal contract），production fail-closed。
+- **read_factors 版本门禁**（#12/#13）：`_check_factor_versions` fail-closed
+  （无法证明相同==不相同）；matrix fallback 只捕 `MatrixUnavailable/
+  MatrixCoverageMiss`。
+- **snapshot 完整性**（#14）：read_joined/sql_relation/sql_result 参与数据集
+  snapshot 缺失时 `SnapshotBuildError`（production fail-closed）。
+- **PIT 索引权威化**（#15）：`PITIndexMetadata`（source_snapshot/manifest_epoch/
+  complete/failed_files）；仅 complete 且源匹配才 authoritative prune，否则
+  fail-open；读失败记录并置 incomplete。
+- **resolve_fields fail ambiguous**（#33）：registry 全局回退命中多数据集 →
+  `AmbiguousFieldError`（production 拒绝取第一个）。
+
+**语义 / Registry / 契约**
+- **Semantic YAML strict**（#31）：未知 key 拒绝、bool/enum/scale 严格校验
+  （`mining_allowed: "false"` 不再变成 True）。
+- **Dataset Registry strict bool**（#32）：hive_partitioning/union_by_name 用
+  `_strict_bool` 解析。
+- **ContractIR 扩展**（#34）：knowledge/effective/period_time、revision_order、
+  required_filters、allowed_filter_values、unique_key、duplicate_policy、
+  partitioning、storage_backend、query_policy、coverage_policy。
+- **Schema 校验**（#35）：分区列豁免（hive 目录列不判 missing）。
+- **schema_version**（#36）：数据集声明 schema 版本。
+- **Session namespace**（#37）：`DataAccessSession(namespace=...)` /
+  `namespace_scope` thread-local 覆盖。
+- **Metadata Plane**（#38）：`store.metadata_plane()` 统一 manifest/coverage/
+  PIT index/schema/contract/source epoch/mirror inventory。
+- **语义覆盖审计**（#30）：`semantic_coverage_audit`（FULL_SEMANTIC/PHYSICAL_ONLY/
+  AMBIGUOUS/BLOCKED）。
+
+**写入 / 发布**
+- **crash-safe overwrite**（#39）：write_arrow(overwrite) 写候选目录→校验→原子
+  rename 替换，不再 `_clear_dir` 直写。
+- **publish 冻结 source**（#40）：copy 前后比对 staging 文件清单，防 mixed
+  generation。
+- **publish 强校验**（#41）：文件清单+行数+schema hash 三方一致，不止 row count。
+- **upsert TransactionManifest**（#42）：`.transactions.jsonl` 记录 committed/
+  failed 与受影响分区。
+- **upsert DuckDB COW**（#43）：不再全量 pandas merge，UNION ALL + row_number
+  去重（new 覆盖 old）。
+- **锁 lease**（#44）：mutation_lock 写 pid/host/process_start_time/
+  transaction_id/acquired_at/lease_until；owner 死或 lease 超 hard_break 自动打破。
+
+**COS / 覆盖**
+- **max_staleness 执行**（#24）：coverage 判定 stale。
+- **calendar 感知完整性**（#25）：mirror `_expected_dates` 按 calendar_domain
+  用交易日历枚举期望 partition。
+- **local+remote 混合**（#26）：auto+httpfs 下缺失 partition 走 s3://，已有走本地。
+- **mirror inventory**（#27）：下载 manifest 含 remote_key/checksum/
+  downloaded_at/verified；`load_mirror_inventory` 校验镜像正确性。
+- **remote 通用化**（#29）：storage.source.type=cos 声明数据集（含
+  ParametricDataset）可走 remote，不再绑定 StaticDataset+手工 mirror registry。
+
 ## 0.8.0 — 市场语义 + 物理布局 + 查询优化器统一（Phase 4）
 
 按 `docs/PHASE4_ROADMAP_PLAN.md` 落地：Store 级 temporal model 强制、

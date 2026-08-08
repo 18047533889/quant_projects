@@ -86,8 +86,14 @@ def _huber_fit(design: np.ndarray, ys: np.ndarray, *, delta: float = 1.345, iter
         abs_z = np.abs(z)
         with np.errstate(divide="ignore", invalid="ignore"):
             weight = np.where(abs_z <= delta, 1.0, delta / abs_z)
-        wdesign = design * weight[:, None]
-        beta, *_ = np.linalg.lstsq(wdesign, ys * weight, rcond=None)
+        # Huber IRLS minimizes sum(w_i e_i^2).  Weighted least squares solves
+        # the normal equations with sqrt(w_i) applied to both design and
+        # response (same convention as ``daily_panel._ols_residual``).
+        # Weighting design/y by w (not sqrt(w)) minimized sum(w_i^2 e_i^2),
+        # which over-shrinks outlier rows (review P0-01).
+        root_w = np.sqrt(weight)
+        wdesign = design * root_w[:, None]
+        beta, *_ = np.linalg.lstsq(wdesign, ys * root_w, rcond=None)
     return beta
 
 

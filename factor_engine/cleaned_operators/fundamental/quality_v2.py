@@ -116,7 +116,17 @@ def _walk_two(
 def _ar1_slope(vals: np.ndarray) -> float:
     if len(vals) < 4 or np.std(vals[:-1]) <= _EPS:
         return np.nan
-    return float(np.cov(vals[1:], vals[:-1])[0, 1] / np.var(vals[:-1]))
+    # Population covariance/variance (same ddof).  ``np.cov`` defaults to
+    # ddof=1 while ``np.var`` defaults to ddof=0 — dividing the two inflated
+    # the AR(1) slope by n/(n-1), a material error at 4-12 report periods
+    # (review P0-04).
+    x = vals[:-1]
+    y = vals[1:]
+    xb = float(np.mean(x))
+    yb = float(np.mean(y))
+    cov = float(np.mean((x - xb) * (y - yb)))
+    var = float(np.mean((x - xb) ** 2))
+    return cov / var if var > _EPS else np.nan
 
 
 # ---------------------------------------------------------------------------

@@ -93,6 +93,7 @@ def upsert_table(
     partitions_written: list[str] = []
     rows_written = 0
     elapsed_ms = 0.0
+    transaction_id = uuid.uuid4().hex[:12]
 
     try:
         with mutation_lock(target_dir):
@@ -127,6 +128,15 @@ def upsert_table(
         err_msg = f"{type(exc).__name__}: {exc}"
         raise
     finally:
+        # #42 TransactionManifest：全部分区成功才记 committed；任一失败记 failed。
+        # 供 audit / lineage / 后续 dataset-level watermark 前进判定。
+        _record_transaction(
+            target_dir,
+            transaction_id=transaction_id,
+            partitions=partitions_written,
+            rows=rows_written,
+            ok=ok,
+        )
         elapsed_ms = (time.perf_counter() - start) * 1000
         audit.record(
             op="upsert",
@@ -173,38 +183,75 @@ def _upsert_single_dir(
 
     锁：在 partition_dir 的**父目录**下开 O_EXCL 锁文件，防止同 partition_dir
     被并发 upsert（lost update）。选父目录是因为 partition_dir 可能还不存在。
+
+    **#43**：不再全量 pandas merge——DuckDB COW（UNION ALL + row_number 去重，
+    new 优先覆盖 old），只把最终结果落盘。schema 不一致仍报错（schema 演进请走
+    overwrite）。
     """
     partition_dir.mkdir(parents=True, exist_ok=True)
     final_path = partition_dir / data_filename
 
     with _upsert_lock(partition_dir):
-        # 1. 读已有数据 + concat；全程走 pandas，省得处理 pyarrow 版本间
-        #    concat_tables(promote=...) / (promote_options=...) 的 API 漂移
-        #
-        # partitioning=None 很关键：pq.read_table 默认会从 hive 风格路径
-        # （.../year=2024/data.parquet）反推分区列，把 year 注入回 Table，
-        # 导致 existing vs new 的列数对不上。我们写 parquet 时已经把分区列
-        # drop 掉了（靠目录名体现），读回来也要同样"无 year"，所以显式关掉。
-        new_df = new_table.to_pandas()
+        # 1. 读已有数据（partitioning=None：hive 分区列在目录名里，不注入回表）
+        existing = None
         if final_path.exists():
-            existing_df = pq.read_table(
-                str(final_path), partitioning=None,
-            ).to_pandas()
-            combined_df = _safe_concat(existing_df, new_df)
-        else:
-            combined_df = new_df
+            existing = pq.read_table(str(final_path), partitioning=None)
 
-        # 2. 按 upsert_on 去重；keep="last" 等价于新覆盖旧（new 在 concat 后面）
-        merged_df = combined_df.drop_duplicates(
-            subset=list(upsert_on), keep="last",
-        ).reset_index(drop=True)
-        merged = pa.Table.from_pandas(merged_df, preserve_index=False)
+        # 2. DuckDB COW：new 先、existing 后 → 每 key 保留第一条（= new 覆盖 old）
+        if existing is not None:
+            merged = _duckdb_merge(existing, new_table, upsert_on)
+        else:
+            merged = new_table
 
         # 3. tmp + rename 原子落盘
         tmp_path = partition_dir / f".{data_filename}.tmp.{uuid.uuid4().hex[:8]}"
         pq.write_table(merged, str(tmp_path))
         os.replace(str(tmp_path), str(final_path))
     return merged.num_rows
+
+
+def _duckdb_merge(
+    existing: pa.Table,
+    new_table: pa.Table,
+    upsert_on: Sequence[str],
+) -> pa.Table:
+    """#43 用 DuckDB 做 read-merge-write：new 覆盖 old，不经过 pandas。
+
+    列不一致直接报错（upsert 语义前提是 schema 一致；schema 演进走 overwrite）。
+    返回合并后的 Arrow Table。
+    """
+    import duckdb
+
+    missing_in_new = set(existing.column_names) - set(new_table.column_names)
+    missing_in_existing = set(new_table.column_names) - set(existing.column_names)
+    if missing_in_new or missing_in_existing:
+        raise ValidationError(
+            f"upsert 的 new 和已有数据 schema 不一致；"
+            f"new 缺列 {sorted(missing_in_new)}，existing 缺列 {sorted(missing_in_existing)}。"
+            f"schema 演进请走 overwrite 而非 upsert。"
+        )
+    key_list = ", ".join(f'"{c}"' for c in upsert_on)
+    con = duckdb.connect()
+    try:
+        con.register("__existing", existing)
+        con.register("__new", new_table)
+        sql = (
+            f"SELECT * EXCLUDE (__src, __rn) FROM ("
+            f"  SELECT *, row_number() OVER (PARTITION BY {key_list} "
+            f"    ORDER BY __src) AS __rn "
+            f"  FROM (SELECT 0 AS __src, * FROM __new "
+            f"        UNION ALL "
+            f"        SELECT 1 AS __src, * FROM __existing)"
+            f") WHERE __rn = 1"
+        )
+        result = con.execute(sql)
+        if hasattr(result, "to_arrow_table"):
+            table = result.to_arrow_table()
+        else:  # 老版本 DuckDB
+            table = result.fetch_arrow_table()
+        return table if isinstance(table, pa.Table) else pa.Table.from_batches(table)
+    finally:
+        con.close()
 
 
 def _authorize_write_path(
@@ -258,6 +305,38 @@ def _validate_partition_component(column: Any, value: Any) -> None:
         raise ValidationError(f"upsert 分区值包含非法路径字符：{value!r}")
     if text in {"", ".", ".."} or Path(text).is_absolute():
         raise ValidationError(f"upsert 分区值非法：{value!r}")
+
+def _record_transaction(
+    target_dir: Path,
+    *,
+    transaction_id: str,
+    partitions: list[str],
+    rows: int,
+    ok: bool,
+) -> None:
+    """#42 追加一条 TransactionManifest 记录（``{root}/.transactions.jsonl``）。
+
+    ``committed`` 表示全部分区写入成功；``failed`` 表示部分/全部失败（此时
+    dataset 级 watermark / snapshot 不应前进）。用于 audit / lineage / 多分区
+    一致性观测。
+    """
+    import json as _json
+
+    try:
+        log_path = target_dir / ".transactions.jsonl"
+        record = {
+            "transaction_id": transaction_id,
+            "status": "committed" if ok else "failed",
+            "partitions": partitions,
+            "rows": rows,
+            "affected_partition_count": len(partitions),
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(_json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError as exc:
+        logger.warning("upsert 写 TransactionManifest 失败：%s", exc)
+
 
 def _safe_concat(existing_df, new_df):
     """pandas concat，防止列序/缺列时的诡异行为。

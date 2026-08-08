@@ -2,11 +2,11 @@
   "schema_version": "factor_engine.operator_market_capabilities.v2",
   "generated_by": "market/capability_resolver.build_market_operator_manifest",
   "counts": {
-    "total": 1311,
+    "total": 1315,
     "unknown": 0,
     "not_reviewed": 0,
     "explicit_contract": 63,
-    "fallback_default": 1086
+    "fallback_default": 1090
   },
   "operators": {
     "ADL": {
@@ -14477,114 +14477,6 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "group_corr_effective_rank": {
-      "canonical": "group_corr_effective_rank",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "group_corr_effective_rank",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "group_corr_effective_rank",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
-    "group_corr_mode_localization": {
-      "canonical": "group_corr_mode_localization",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "group_corr_mode_localization",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "group_corr_mode_localization",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
-    "group_corr_mode_share": {
-      "canonical": "group_corr_mode_share",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "group_corr_mode_share",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "group_corr_mode_share",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
     "group_corr_mst_length": {
       "canonical": "group_corr_mst_length",
       "contract_origin": "fallback_default",
@@ -14609,78 +14501,6 @@
       },
       "us": {
         "canonical": "group_corr_mst_length",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
-    "group_corr_second_mode_localization": {
-      "canonical": "group_corr_second_mode_localization",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "group_corr_second_mode_localization",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "group_corr_second_mode_localization",
-        "market": "us",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      }
-    },
-    "group_corr_spectral_gap": {
-      "canonical": "group_corr_spectral_gap",
-      "contract_origin": "fallback_default",
-      "intrinsic_markets": [
-        "ashare",
-        "us"
-      ],
-      "required_capabilities": [],
-      "price_basis": "EITHER",
-      "ashare": {
-        "canonical": "group_corr_spectral_gap",
-        "market": "ashare",
-        "status": "INPUT_DEPENDENT",
-        "required_capabilities": [],
-        "missing_capabilities": [],
-        "reason_codes": [],
-        "providers": [],
-        "provider_quality": "UNAVAILABLE",
-        "coverage": "UNKNOWN",
-        "depends_on_inputs": true,
-        "notes": "generic operator; actual support determined by input field providers"
-      },
-      "us": {
-        "canonical": "group_corr_spectral_gap",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -14969,6 +14789,186 @@
       },
       "us": {
         "canonical": "group_ex_self_weighted_mean",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "group_feature_effective_rank": {
+      "canonical": "group_feature_effective_rank",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "group_feature_effective_rank",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "group_feature_effective_rank",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "group_feature_mode_localization": {
+      "canonical": "group_feature_mode_localization",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "group_feature_mode_localization",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "group_feature_mode_localization",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "group_feature_mode_share": {
+      "canonical": "group_feature_mode_share",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "group_feature_mode_share",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "group_feature_mode_share",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "group_feature_second_mode_localization": {
+      "canonical": "group_feature_second_mode_localization",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "group_feature_second_mode_localization",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "group_feature_second_mode_localization",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "group_feature_spectral_gap": {
+      "canonical": "group_feature_spectral_gap",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "group_feature_spectral_gap",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "group_feature_spectral_gap",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -38975,6 +38975,78 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
+    "ts_matrix_profile_motif_frequency": {
+      "canonical": "ts_matrix_profile_motif_frequency",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_matrix_profile_motif_frequency",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_matrix_profile_motif_frequency",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_matrix_profile_neighbor_dispersion": {
+      "canonical": "ts_matrix_profile_neighbor_dispersion",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_matrix_profile_neighbor_dispersion",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_matrix_profile_neighbor_dispersion",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
     "ts_max": {
       "canonical": "ts_max",
       "contract_origin": "fallback_default",
@@ -39323,6 +39395,42 @@
       },
       "us": {
         "canonical": "ts_mean_reversion_half_life",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_mean_reversion_ou_approx_half_life": {
+      "canonical": "ts_mean_reversion_ou_approx_half_life",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_mean_reversion_ou_approx_half_life",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_mean_reversion_ou_approx_half_life",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -41243,8 +41351,8 @@
         "notes": "generic operator; actual support determined by input field providers"
       }
     },
-    "ts_persistence_entropy": {
-      "canonical": "ts_persistence_entropy",
+    "ts_persistence_entropy_h0": {
+      "canonical": "ts_persistence_entropy_h0",
       "contract_origin": "fallback_default",
       "intrinsic_markets": [
         "ashare",
@@ -41253,7 +41361,7 @@
       "required_capabilities": [],
       "price_basis": "EITHER",
       "ashare": {
-        "canonical": "ts_persistence_entropy",
+        "canonical": "ts_persistence_entropy_h0",
         "market": "ashare",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],
@@ -41266,7 +41374,43 @@
         "notes": "generic operator; actual support determined by input field providers"
       },
       "us": {
-        "canonical": "ts_persistence_entropy",
+        "canonical": "ts_persistence_entropy_h0",
+        "market": "us",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      }
+    },
+    "ts_persistence_entropy_h1": {
+      "canonical": "ts_persistence_entropy_h1",
+      "contract_origin": "fallback_default",
+      "intrinsic_markets": [
+        "ashare",
+        "us"
+      ],
+      "required_capabilities": [],
+      "price_basis": "EITHER",
+      "ashare": {
+        "canonical": "ts_persistence_entropy_h1",
+        "market": "ashare",
+        "status": "INPUT_DEPENDENT",
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "reason_codes": [],
+        "providers": [],
+        "provider_quality": "UNAVAILABLE",
+        "coverage": "UNKNOWN",
+        "depends_on_inputs": true,
+        "notes": "generic operator; actual support determined by input field providers"
+      },
+      "us": {
+        "canonical": "ts_persistence_entropy_h1",
         "market": "us",
         "status": "INPUT_DEPENDENT",
         "required_capabilities": [],

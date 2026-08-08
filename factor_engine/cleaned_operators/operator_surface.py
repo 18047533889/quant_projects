@@ -382,6 +382,34 @@ _DAILY_GEMINI_PACK_2026_08 = frozenset({
     "intraday_activity_duration_curvature",
 })
 DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_GEMINI_PACK_2026_08)
+# 2026-08-08 Gemini V2 round: HVG degree entropy / forward-backward asymmetry,
+# RQA determinism / laminarity, GLR mean & variance shift, EDGE / Abdi-Ranaldo
+# spreads, Qn scale, composition (CoDa) family, global-state cross-sectional
+# Hartigan dip, cross-spectral coherence / phase, event Allan factor.  Each
+# module unions its names into EXTENDED_ONLY_CANONICALS at import (partition
+# contract); this frozenset migrates the daily-grade subset to the daily
+# surface.  Batch-2 extended ops and batch-3 research ops stay in their own
+# surfaces (extended / research).
+_DAILY_GEMINI_V2_PACK_2026_08 = frozenset({
+    # HVG (P0)
+    "ts_hvg_degree_entropy", "ts_hvg_forward_backward_asymmetry",
+    # RQA line structure (P0, STATE)
+    "ts_recurrence_determinism", "ts_recurrence_laminarity",
+    # change-point scores (P0, CONDITION)
+    "ts_glr_mean_shift_score", "ts_glr_variance_shift_score",
+    # microstructure spreads / robust scale (P0, ALPHA)
+    "ts_edge_effective_spread", "ts_abdi_ranaldo_spread", "ts_qn_scale",
+    # compositional data (P0, typed)
+    "composition_clr_component", "composition_aitchison_distance",
+    "composition_ilr_balance",
+    # global-state cross-sectional shape (P0, CONDITION)
+    "cs_hartigan_dip",
+    # cross-spectral (P0, ALPHA)
+    "ts_cross_spectral_coherence", "ts_cross_spectral_phase",
+    # batch-2 daily-grade (state / fundamental)
+    "event_allan_factor", "composition_entropy", "composition_js_divergence",
+})
+DAILY_FACTOR_MIGRATED = frozenset(set(DAILY_FACTOR_MIGRATED) | _DAILY_GEMINI_V2_PACK_2026_08)
 RESEARCH_ONLY_CANONICALS=frozenset({"holder_concentration_change","holder_count_change_rate"});LEGACY_ONLY_CANONICALS=frozenset({"cube"});INTERNAL_ONLY_CANONICALS=frozenset({"constant","identity","protected_div"})
 HIDDEN_DAILY_NAMES=frozenset({"cube","cumulative_max","cumulative_mean","cumulative_min","fmax","fmin","inv","reciprocal","sqr"})
 def classify_canonical(canonical:str)->str:

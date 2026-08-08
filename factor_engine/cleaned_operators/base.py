@@ -22,13 +22,43 @@ from backend.operator_errors import OperatorParameterError
 
 _INTEGER_PARAM_NAMES = frozenset(
     {
+        # legacy core names
         "window", "period", "periods", "d", "lag", "n", "m", "k",
         "min_periods", "max_periods", "max_lookback", "periods_per_year",
         "fast_period", "slow_period", "signal_period", "bins", "buckets",
         "order", "degree", "ddof",
+        # window-ish names (review P0-06): without central validation these were
+        # silently ``int(value)``-truncated inside operator kernels, so
+        # fast_window=5.1 / 5.2 / 5.9 all compiled to the same formula — a false
+        # search space.  `param_types` in OperatorMetadata is authoritative when
+        # set; this name whitelist is the fallback for operators that do not
+        # declare it.
+        "fast_window", "slow_window", "signal_window", "short_window",
+        "long_window", "medium_window", "tenkan_window", "kijun_window",
+        "senkou_b_window", "er_window", "atr_window", "ema_window", "adl_window",
+        "left_window", "right_window", "outer_window", "inner_window",
+        "recent_window", "prior_window", "reference_window", "history_window",
+        "old_window", "lookback_window", "baseline_window", "smooth_window",
+        "scale_window", "path_window", "window_periods", "average_periods",
+        # periods-ish
+        "short_periods", "long_periods", "growth_periods", "compare_periods",
+        # lag / count / history
+        "max_lag", "event_lag", "match_lag", "fit_lag", "lookback_days",
+        "history_days", "max_gap", "max_shift", "max_interval", "n_updates",
+        "min_updates", "min_transitions", "min_events", "min_peers", "min_pairs",
+        "min_patterns", "min_obs", "min_scale", "max_scale", "n_scales", "k_max",
+        "min_valid_lags", "min_reference_days", "max_run",
+        # structure / search
+        "n_components", "embedding_dim", "bucket_count", "n_bins", "n_slots",
+        "n_segments", "n_patterns", "steps", "cooldown", "max_spacing",
+        "min_spacing", "body_window", "shadow_window", "points", "min_count",
+        "top_k", "delay", "grid", "sampling",
     }
 )
-_NONNEGATIVE_INTEGER_PARAMS = frozenset({"lag", "periods", "d", "ddof"})
+_NONNEGATIVE_INTEGER_PARAMS = frozenset(
+    {"lag", "periods", "d", "ddof", "max_lag", "event_lag", "match_lag",
+     "fit_lag", "delay", "max_shift", "max_gap", "lookback_days"}
+)
 
 
 @dataclass
@@ -50,7 +80,22 @@ class OperatorMetadata:
     compatible_units: Dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
-def _normalise_integer(value: Any, name: str) -> Any:
+def _normalise_integer(value: Any, name: str, declared_type: type | None = None) -> Any:
+    if declared_type is int:
+        # OperatorMetadata.param_types is the authoritative source: a param
+        # declared int is validated regardless of its name (review P0-06).
+        if isinstance(value, (bool, np.bool_)):
+            raise OperatorParameterError(f"{name} must be an integer, not bool")
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            if not np.isfinite(float(value)) or float(value) != float(int(value)):
+                raise OperatorParameterError(f"{name} must be an integer")
+            result = int(value)
+            lower = 0 if name in _NONNEGATIVE_INTEGER_PARAMS else 1
+            if result < lower:
+                comparator = ">= 0" if lower == 0 else ">= 1"
+                raise OperatorParameterError(f"{name} must be {comparator}")
+            return result
+        return value
     if name not in _INTEGER_PARAM_NAMES:
         return value
     if isinstance(value, (bool, np.bool_)):
@@ -69,12 +114,17 @@ def _normalise_integer(value: Any, name: str) -> Any:
 
 def _normalise_call(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]):
     names = list(metadata.param_names or [])
+    types = metadata.param_types or {}
     processed_args = [
-        _normalise_integer(value, names[index] if index < len(names) else "")
+        _normalise_integer(
+            value,
+            names[index] if index < len(names) else "",
+            types.get(names[index]) if index < len(names) else None,
+        )
         for index, value in enumerate(args)
     ]
     processed_kwargs = {
-        key: _normalise_integer(value, key)
+        key: _normalise_integer(value, key, types.get(key))
         for key, value in kwargs.items()
     }
     return tuple(processed_args), processed_kwargs

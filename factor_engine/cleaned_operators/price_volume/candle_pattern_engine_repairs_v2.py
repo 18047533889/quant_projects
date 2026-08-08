@@ -13,9 +13,18 @@ def _engine(o,h,l,c,pattern,body_window,shadow_window,penetration):
         return _base_engine(o,h,l,c,pattern,body_window,shadow_window,penetration)
     bw=_pi(body_window,"body_window",2);body=(c-o).abs();bavg=body.shift(1).rolling(bw,min_periods=bw).mean();tol=0.1*(h-l).shift(1).rolling(_pi(shadow_window,"shadow_window",2),min_periods=_pi(shadow_window,"shadow_window",2)).mean()
     po,pc,ph,pl=o.shift(1),c.shift(1),h.shift(1),l.shift(1);o2,c2,h2,l2=o.shift(2),c.shift(2),h.shift(2),l.shift(2);bull2=c2>o2;pbear=pc<po;bear=c<o;doji1=(pc-po).abs()<=0.1*bavg.shift(1)
+    # P0-08: warmup/suspension must emit NaN ("cannot judge"), never 0
+    # ("confirmed no pattern").
+    cur=o.notna()&h.notna()&l.notna()&c.notna()
+    prev1=po.notna()&pc.notna()&ph.notna()&pl.notna()
+    prev2=prev1&o2.notna()&c2.notna()&h2.notna()&l2.notna()
     if p=="2_crows":
-        mask=bull2&pbear&bear&(pl>h2)&(o>po)&(c<c2)&(c>o2);return pd.DataFrame(np.where(mask,-1.0,0.0),index=o.index,columns=o.columns)
-    pen=float(penetration);mid=o2+(c2-o2)*(1.0-pen);mask=bull2&doji1&(pl>h2)&bear&(c<mid);return pd.DataFrame(np.where(mask,-1.0,0.0),index=o.index,columns=o.columns)
+        mask=bull2&pbear&bear&(pl>h2)&(o>po)&(c<c2)&(c>o2)
+        valid=cur&prev1&prev2
+        return pd.DataFrame(np.where(mask,-1.0,np.nan),index=o.index,columns=o.columns).where(valid)
+    pen=float(penetration);mid=o2+(c2-o2)*(1.0-pen);mask=bull2&doji1&(pl>h2)&bear&(c<mid)
+    valid=cur&prev1&prev2&bavg.shift(1).notna()
+    return pd.DataFrame(np.where(mask,-1.0,np.nan),index=o.index,columns=o.columns).where(valid)
 
 class CandlestickPatternEngineV2(SeriesOperator):
     metadata=OperatorMetadata(name="candlestick_pattern",category="candle_pattern",description="Adaptive bounded Japanese-candlestick pattern engine.",param_names=["open","high","low","close","pattern","body_window","shadow_window","penetration"],return_type="series",tags=["pit_safe","causal","bounded_history","production_repair"])

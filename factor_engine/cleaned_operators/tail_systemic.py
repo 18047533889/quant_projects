@@ -52,14 +52,22 @@ def _metadata(
     )
 
 
-def _extreme_indicator_panel(xv: np.ndarray, w: int, q: float, side: str) -> np.ndarray:
-    """Per-stock trailing-quantile extreme indicator (0/1, NaN for missing)."""
+def _extreme_indicator_panel(xv: np.ndarray, w: int, q: float, side: str, min_periods: int) -> np.ndarray:
+    """Per-stock trailing-quantile extreme indicator (0/1, NaN for missing).
+
+    ``min_periods`` guards the cold start: with a one-row history the trailing
+    quantile equals the row itself, so the first observation is *mechanically*
+    its own extreme (``Q_0.1(x) == x``).  Until enough history is visible the
+    indicator is NaN, never a spurious extreme=1 (review P0-14).
+    """
     rows, cols = xv.shape
     E = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         for r in range(rows):
             lo = max(0, r - w + 1)
             chunk = xv[lo : r + 1, c]
+            if int(np.isfinite(chunk).sum()) < min_periods:
+                continue
             thr = float(np.nanquantile(chunk, q if side == "lower" else 1.0 - q))
             if not np.isfinite(thr) or not np.isfinite(xv[r, c]):
                 continue
@@ -85,9 +93,9 @@ def _group_index_by_day(gv: np.ndarray) -> list[dict[Any, np.ndarray]]:
     return days
 
 
-def _tail_centrality_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: str) -> np.ndarray:
+def _tail_centrality_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: str, min_periods: int) -> np.ndarray:
     rows, cols = xv.shape
-    E = _extreme_indicator_panel(xv, w, q, side)
+    E = _extreme_indicator_panel(xv, w, q, side, min_periods)
     by_day = _group_index_by_day(gv)
     out = np.full((rows, cols), np.nan, dtype=float)
     # Rolling-window centrality: per-day contributions live in a ring buffer and
@@ -149,7 +157,7 @@ class GroupTailCentrality(SeriesOperator):
     metadata = _metadata(
         "group_tail_centrality",
         "尾部系统性中心度（个股极值与同组极值共振程度）。",
-        ["x", "group_id", "window", "quantile", "side"],
+        ["x", "group_id", "window", "quantile", "side", "min_periods"],
         unit="probability",
         cost=6,
     )
@@ -161,25 +169,29 @@ class GroupTailCentrality(SeriesOperator):
         window: int = 120,
         quantile: float = 0.1,
         side: str = "lower",
+        min_periods: int = 10,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
         q = float(quantile)
+        mp = int(min_periods)
         if not (0.0 < q < 1.0):
             raise ValueError("group_tail_centrality requires 0 < quantile < 1")
         if side not in ("lower", "upper"):
             raise ValueError("side must be 'lower' or 'upper'")
         if w < 5:
             raise ValueError("group_tail_centrality requires window >= 5")
+        if not 1 <= mp <= w:
+            raise ValueError("group_tail_centrality requires 1 <= min_periods <= window")
         return frame_like(
             x,
-            _tail_centrality_series(x.to_numpy(dtype=float), group_id.to_numpy(dtype=object), w, q, side),
+            _tail_centrality_series(x.to_numpy(dtype=float), group_id.to_numpy(dtype=object), w, q, side, mp),
         )
 
 
-def _tail_lead_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: str, lag: int) -> np.ndarray:
+def _tail_lead_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: str, lag: int, min_periods: int) -> np.ndarray:
     rows, cols = xv.shape
-    E = _extreme_indicator_panel(xv, w, q, side)
+    E = _extreme_indicator_panel(xv, w, q, side, min_periods)
     by_day = _group_index_by_day(gv)
     out = np.full((rows, cols), np.nan, dtype=float)
     for r in range(rows):
@@ -238,15 +250,16 @@ def _tail_lead_series(xv: np.ndarray, gv: np.ndarray, w: int, q: float, side: st
 class GroupTailLeadScore(SeriesOperator):
     """尾部领先分（个股极值领先同组极值 lag 天的超额概率）。
 
-    ``lead_i = P(E_peer,d+lag=1 | E_i,d=1) - P(E_i)``，只用 ``d+lag <= 当前行``
-    的 completed 观测（PIT 安全）。高 = 该股是 stress leader：它一进入极值，
-    板块随后常跟着进入。P2 / Research。
+    ``lead_i = P(E_peer,d+lag=1 | E_i,d=1) - P(E_peer,d+lag=1)``（基线为 peer
+    无条件尾部概率，不是 P(E_i)——文档与实现已对齐，review P1-25），只用
+    ``d+lag <= 当前行`` 的 completed 观测（PIT 安全）。高 = 该股是 stress
+    leader：它一进入极值，板块随后常跟着进入。P2 / Research。
     """
 
     metadata = _metadata(
         "group_tail_lead_score",
-        "尾部领先分 P(E_peer,d+lag | E_i,d) - P(E_i)（completed-only）。",
-        ["x", "group_id", "window", "quantile", "side", "lag"],
+        "尾部领先分 P(E_peer,d+lag | E_i,d) - P(E_peer,d+lag)（completed-only）。",
+        ["x", "group_id", "window", "quantile", "side", "lag", "min_periods"],
         unit="probability",
         cost=7,
     )
@@ -259,11 +272,13 @@ class GroupTailLeadScore(SeriesOperator):
         quantile: float = 0.1,
         side: str = "lower",
         lag: int = 1,
+        min_periods: int = 10,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
         q = float(quantile)
         lg = int(lag)
+        mp = int(min_periods)
         if not (0.0 < q < 1.0):
             raise ValueError("group_tail_lead_score requires 0 < quantile < 1")
         if side not in ("lower", "upper"):
@@ -272,9 +287,11 @@ class GroupTailLeadScore(SeriesOperator):
             raise ValueError("group_tail_lead_score requires lag >= 1")
         if w < lg + 2:
             raise ValueError("group_tail_lead_score requires window >= lag + 2")
+        if not 1 <= mp <= w:
+            raise ValueError("group_tail_lead_score requires 1 <= min_periods <= window")
         return frame_like(
             x,
-            _tail_lead_series(x.to_numpy(dtype=float), group_id.to_numpy(dtype=object), w, q, side, lg),
+            _tail_lead_series(x.to_numpy(dtype=float), group_id.to_numpy(dtype=object), w, q, side, lg, mp),
         )
 
 

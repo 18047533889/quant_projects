@@ -128,11 +128,18 @@ def _ts_breakdown_low(x, window):
 
 
 def _ts_new_high(x, window):
-    return x.gt(_prev_max(x, window)).astype(float)
+    prev = _prev_max(x, window)
+    # ``NaN`` comparison -> False -> 0.0 masqueraded as "confirmed not a new
+    # high" during warmup / suspension / missing rows.  Emit NaN when either
+    # the current value or the prior-window baseline is missing (review P0-07).
+    valid = x.notna() & prev.notna()
+    return x.gt(prev).astype(float).where(valid)
 
 
 def _ts_new_low(x, window):
-    return x.lt(_prev_min(x, window)).astype(float)
+    prev = _prev_min(x, window)
+    valid = x.notna() & prev.notna()
+    return x.lt(prev).astype(float).where(valid)
 
 
 def _ts_channel_position(x, window):
@@ -330,8 +337,12 @@ _register("ts_support_break", ["close", "low", "left_window", "right_window", "p
 
 def _rolling_vwap(price, volume, window):
     w = _w(window)
-    num = (price * volume).rolling(w, min_periods=w).sum()
-    den = volume.rolling(w, min_periods=w).sum()
+    # Cohort-consistent numerator/denominator: a bar with one input missing must
+    # not contribute to one side only (missing price with valid volume biased
+    # VWAP toward 0) — review batch-2 semantics.
+    valid = price.notna() & volume.notna()
+    num = (price * volume).where(valid).rolling(w, min_periods=w).sum()
+    den = volume.where(valid).rolling(w, min_periods=w).sum()
     return _safe_div(num, den)
 
 
@@ -402,15 +413,25 @@ def _cmf(high, low, close, volume, window):
     mfm = ((close - low) - (high - close)) / spread
     mfv = mfm * volume
     w = _w(window)
-    return _safe_div(mfv.rolling(w, min_periods=w).sum(), volume.rolling(w, min_periods=w).sum())
+    # A zero-range (一字板) or missing bar has no money-flow multiplier; dropping
+    # it from the numerator while keeping its volume in the denominator diluted
+    # CMF toward 0.  Keep numerator/denominator cohort-consistent (review §4).
+    valid = mfm.notna() & volume.notna()
+    mfv = mfv.where(valid)
+    vol_w = volume.where(valid)
+    return _safe_div(mfv.rolling(w, min_periods=w).sum(), vol_w.rolling(w, min_periods=w).sum())
 
 
 def _mfi(high, low, close, volume, window):
     tp = (high + low + close) / 3.0
     raw = tp * volume
     delta = tp.diff()
-    pos = raw.where(delta > 0, 0.0)
-    neg = raw.where(delta < 0, 0.0)
+    # A missing bar (NaN delta/raw) previously collapsed to ``0.0`` and was
+    # counted as a zero money-flow day, deflating MFI toward 50.  Missing bars
+    # are NaN and dropped from both sums (review batch-2 semantics).
+    valid = raw.notna() & delta.notna()
+    pos = raw.where((delta > 0) & valid, 0.0).where(valid)
+    neg = raw.where((delta < 0) & valid, 0.0).where(valid)
     w = _w(window)
     pos_sum = pos.rolling(w, min_periods=w).sum()
     neg_sum = neg.rolling(w, min_periods=w).sum()

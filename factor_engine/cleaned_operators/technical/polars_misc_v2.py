@@ -298,8 +298,16 @@ def ts_new_high(x, window):
     values = {}
     for c in _cols(x):
         base = pl.col(c).shift(1).rolling_max(w, min_samples=w)
-        # pandas: NaN comparisons -> False -> 0.0; polars needs null-normalized x
-        values[c] = _one(x, c, pl.when(base.is_not_null() & (pl.col(c).fill_nan(None) > base)).then(1.0).otherwise(0.0))
+        cur = pl.col(c).fill_nan(None)
+        # Missing current value OR missing baseline -> null ("cannot judge"),
+        # not 0 ("confirmed not a new high") — matches the pandas reference
+        # (review P0-07).
+        values[c] = _one(
+            x, c,
+            pl.when(base.is_not_null() & cur.is_not_null())
+            .then(pl.when(cur > base).then(1.0).otherwise(0.0))
+            .otherwise(None),
+        )
     return _result(x, values)
 
 
@@ -308,7 +316,13 @@ def ts_new_low(x, window):
     values = {}
     for c in _cols(x):
         base = pl.col(c).shift(1).rolling_min(w, min_samples=w)
-        values[c] = _one(x, c, pl.when(base.is_not_null() & (pl.col(c).fill_nan(None) < base)).then(1.0).otherwise(0.0))
+        cur = pl.col(c).fill_nan(None)
+        values[c] = _one(
+            x, c,
+            pl.when(base.is_not_null() & cur.is_not_null())
+            .then(pl.when(cur < base).then(1.0).otherwise(0.0))
+            .otherwise(None),
+        )
     return _result(x, values)
 
 

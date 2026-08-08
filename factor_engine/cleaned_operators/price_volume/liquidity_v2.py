@@ -16,7 +16,10 @@ def _pi(v,name,minimum=1):
     return v
 
 def _register(name,params,fn,desc):
-    meta=OperatorMetadata(name=name,category="price_volume_extension",description=desc,param_names=list(params),return_type="series",tags=["pit_safe","causal","bounded_history","production_extension"])
+    # ChaikinOscillator / ForceIndex smooth via ``ewm(adjust=False)`` (infinite
+    # recursion) and therefore require full-history replay — review P0-05.
+    _tags=("stateful","full_replay") if name in {"ChaikinOscillator","ForceIndex"} else ()
+    meta=OperatorMetadata(name=name,category="price_volume_extension",description=desc,param_names=list(params),return_type="series",tags=["pit_safe","causal","bounded_history","production_extension",*_tags])
     def _calculate_series(self,*args,**kwargs): return fn(*args,**kwargs)
     cls=type(f"LiquidityV2_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})
     register_operator(name=name,category="price_volume_extension",business_category="price_volume",canonical=name,source="liquidity_v2",backend="pandas_numpy",status="production")(cls)
@@ -56,7 +59,13 @@ def down_volume_ratio(ret,volume,window):
 def signed_volume_imbalance(ret,volume,window): return up_volume_ratio(ret,volume,window)-down_volume_ratio(ret,volume,window)
 def up_down_volume_ratio(ret,volume,window): return up_volume_ratio(ret,volume,window)/down_volume_ratio(ret,volume,window).replace(0,np.nan)
 def volume_weighted_return(ret,volume,window):
-    w=_pi(window,"window"); return (ret*volume).rolling(w,min_periods=w).sum()/volume.abs().rolling(w,min_periods=w).sum().replace(0,np.nan)
+    w=_pi(window,"window")
+    # Cohort-consistent numerator/denominator: a bar missing either input must
+    # not enter one side and not the other (a missing ``ret`` with a valid
+    # ``volume`` previously diluted the mean toward 0) — review §4 / P1.
+    valid=ret.notna()&volume.notna(); rv=ret.where(valid); vv=volume.where(valid)
+    num=(rv*vv).rolling(w,min_periods=w).sum(); den=vv.abs().rolling(w,min_periods=w).sum()
+    return num/den.replace(0,np.nan)
 def volume_weighted_momentum(close,volume,window): return volume_weighted_return(close.pct_change(fill_method=None),volume,window)
 def price_volume_divergence(close,volume,price_window,volume_window):
     pw,vw=_pi(price_window,"price_window"),_pi(volume_window,"volume_window"); pr=close/close.shift(pw)-1.0; vr=volume/volume.shift(vw).replace(0,np.nan)-1.0; return pr-vr
@@ -76,11 +85,26 @@ def ForceIndex(close,volume,window):
 def EaseOfMovement(high,low,volume,window,volume_scale=1.0):
     w=_pi(window,"window",2); midpoint=(high+low)/2.0; distance=midpoint.diff(); box=(high-low)/(volume.replace(0,np.nan)/float(volume_scale)); raw=distance*box; return raw.rolling(w,min_periods=w).mean()
 def bounded_nvi(close,volume,window):
-    w=_pi(window,"window",2); r=close.pct_change(fill_method=None).where(volume<volume.shift(1),0.0); return np.exp(np.log1p(r.clip(lower=-0.999999)).rolling(w,min_periods=w).sum())-1.0
+    w=_pi(window,"window",2)
+    # A missing volume / missing volume-growth bar must not become a silent
+    # "no-volume day" (the old ``where(cond, 0.0)`` mapped NaN comparisons to
+    # False -> 0.0) — that injected fabricated zero-return bars into the index.
+    r=close.pct_change(fill_method=None)
+    cond=(volume<volume.shift(1)); valid=cond.notna()&r.notna()
+    r=r.where(cond,0.0).where(valid)
+    return np.exp(np.log1p(r.clip(lower=-0.999999)).rolling(w,min_periods=w).sum())-1.0
 def bounded_pvi(close,volume,window):
-    w=_pi(window,"window",2); r=close.pct_change(fill_method=None).where(volume>volume.shift(1),0.0); return np.exp(np.log1p(r.clip(lower=-0.999999)).rolling(w,min_periods=w).sum())-1.0
+    w=_pi(window,"window",2)
+    r=close.pct_change(fill_method=None)
+    cond=(volume>volume.shift(1)); valid=cond.notna()&r.notna()
+    r=r.where(cond,0.0).where(valid)
+    return np.exp(np.log1p(r.clip(lower=-0.999999)).rolling(w,min_periods=w).sum())-1.0
 def zero_return_ratio(ret,window,epsilon=1e-12):
-    w=_pi(window,"window"); return ret.abs().le(float(epsilon)).astype(float).rolling(w,min_periods=w).mean()
+    w=_pi(window,"window")
+    # Missing returns must be NaN (cannot judge), not counted as "non-zero":
+    # ``NaN <= eps`` is False and previously inflated the ratio with a 0.
+    valid=ret.notna(); ratio=ret.abs().le(float(epsilon)).astype(float).where(valid)
+    return ratio.rolling(w,min_periods=w).mean()
 def roll_spread_proxy(ret,window):
     w=_pi(window,"window",3); cov=ret.rolling(w,min_periods=w).cov(ret.shift(1)); return 2.0*np.sqrt((-cov).clip(lower=0.0))
 def corwin_schultz_spread(high,low,window):

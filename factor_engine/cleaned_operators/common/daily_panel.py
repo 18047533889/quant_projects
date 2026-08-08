@@ -303,6 +303,37 @@ def cs_wls_resid(
     return _frame_like(y, out)
 
 
+def _period_ordinal(value: Any):
+    # Imported lazily: ``fiscal_strict`` transitively imports
+    # ``cleaned_operators.overhaul.base`` (which registers ``period_lag`` under
+    # its own source).  A top-level import here would make daily_panel load
+    # after the overhaul layer and collide with this module's own registration.
+    from cleaned_operators.fiscal_strict import period_ordinal
+
+    return period_ordinal(value)
+
+
+def _fiscal_ordered_insert(order: list[Any], key: Any) -> None:
+    """Insert ``key`` into ``order`` keeping fiscal-ordinal sorted order.
+
+    Mirrors ``transforms_v2._period_insert``: report periods advance by fiscal
+    ordinal (``year*4 + quarter``), not first-appearance order.  A late-disclosed
+    or back-filled older period (e.g. restated 2025Q2 arriving after 2025Q3)
+    must not reorder the sequence that ``period_lag`` walks (review P0-02).
+    Unparseable period ids keep first-seen order at the end.
+    """
+    target = _period_ordinal(key)
+    if target is None:
+        order.append(key)
+        return
+    for position, existing in enumerate(order):
+        existing_ord = _period_ordinal(existing)
+        if existing_ord is not None and existing_ord > target:
+            order.insert(position, key)
+            return
+    order.append(key)
+
+
 def period_lag(
     x: pd.DataFrame,
     period_id: pd.DataFrame,
@@ -317,7 +348,6 @@ def period_lag(
     out = np.full((rows, cols), np.nan, dtype=float)
     for col in range(cols):
         order: list[Any] = []
-        positions: dict[Any, int] = {}
         values: dict[Any, float] = {}
         for row in range(rows):
             period = pv[row, col]
@@ -327,15 +357,32 @@ def period_lag(
                 key = period.item()
             except AttributeError:
                 key = period
-            if key not in positions:
-                positions[key] = len(order)
-                order.append(key)
+            if key not in order:
+                _fiscal_ordered_insert(order, key)
             value = xv[row, col]
             if pd.notna(value):
                 values[key] = float(value)
-            target_pos = positions[key] - lag
-            if target_pos >= 0:
-                out[row, col] = values.get(order[target_pos], np.nan)
+            cur_ord = _period_ordinal(key)
+            if lag == 0:
+                out[row, col] = float(value) if pd.notna(value) else np.nan
+            elif cur_ord is not None:
+                # Exact fiscal-ordinal lag: a skipped/missing fiscal period
+                # yields NaN, never the value of a non-adjacent report
+                # (same contract as transforms_v2._lag_value).
+                target = cur_ord - lag
+                hit: Any = None
+                for k in reversed(order):
+                    if _period_ordinal(k) == target:
+                        hit = k
+                        break
+                out[row, col] = values.get(hit, np.nan) if hit is not None else np.nan
+            else:
+                # Unparseable period id: position-based lag in fiscal/appearance
+                # sorted order (legacy behaviour preserved for these keys).
+                if key in order:
+                    target_pos = order.index(key) - lag
+                    if target_pos >= 0:
+                        out[row, col] = values.get(order[target_pos], np.nan)
     return _frame_like(x, out)
 
 

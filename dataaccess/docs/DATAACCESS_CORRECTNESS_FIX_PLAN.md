@@ -7,6 +7,26 @@
 > 与本计划文件交集仅 `data_access`（`read/scan_handle.py` 已被并发会话改动，
 > 编辑前必须重读）。
 
+## 执行状态（2026-08-08 完成度）
+- ✅ #1/#2 Manifest 双 epoch + mutation 统一事务（`read/manifest.py` + `store.py`）
+- ✅ #3/#4 缓存 key 完整 + byte-based LRU（`read/query_cache.py` + `read/predicate_ast.py`）
+- ✅ #5 统一读前语义门禁（`store._prepare_read_request`）
+- ✅ #6/#7 read_uri 契约回填 + sql_relation 沙箱（`store.py` + `read/sql_escape.py` + `read/relation_handle.py`）
+- ✅ #8 exact join 跨表时间列（`store._read_joined_sql`）
+- ✅ #9/#10 latest_period 默认 + pit=True 强语义（`read/semantic_catalog.py` + `store.plan`）
+- ✅ #11 PhysicalPlanExecutor 聚合+join 组合（`read/physical_plan.py`）
+- ✅ #12/#13 read_factors 版本门禁 fail-closed + matrix fallback 精确捕获（`store.py`）
+- ✅ #14 snapshot 完整性 fail-closed（`store.py`）
+- ✅ #15 PITEventIndex 权威元数据（`read/pit_event_index.py`）
+- ✅ #23/#24 CoverageMatrix + max_staleness（`read/coverage.py`）
+- ✅ #25/#26/#27/#29 日历感知完整性 + 混合读 + mirror inventory + remote 通用化（`cos/mirror.py` + `cos/remote.py`）
+- ✅ #30/#31/#32/#33/#34/#35/#36/#37/#38 语义审计 + strict YAML + ContractIR 扩展 + schema_version + session namespace + metadata plane
+- ✅ #39/#40/#41/#42/#43/#44 crash-safe overwrite + publish 冻结/强校验 + TransactionManifest + DuckDB COW + 锁 lease
+- ✅ 回归：`tests/` 507 passed
+
+> 注：`read/scan_handle.py` 已被并发会话修改；本次改动未触碰该文件，若后续需要
+> 编辑请先 `git status` + 重读。`factor_engine/` 全部改动归并发会话，本计划未触碰。
+
 ## 执行原则
 - mutation 一律走 `DatasetMutationTransaction`，禁止业务代码自己 `touch_manifest_epoch`。
 - 无法证明相同 == 不相同（fail-closed）。

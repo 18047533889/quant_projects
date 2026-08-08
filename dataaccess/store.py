@@ -117,6 +117,14 @@ _WRITE_PATH_META_KEYS = ("write_root", "_write_root", "write_dir", "_write_dir")
 _VALID_READ_MODES = {"auto", "panel", "event", "pit", "dimension", "sparse"}
 
 
+def _cos_mode_is_auto() -> bool:
+    """COS 读模式是否为 auto（混合 local+remote 的前提）。"""
+    return (
+        os.environ.get("DATA_ACCESS_COS_READ_MODE", "mirror").strip().lower()
+        == "auto"
+    )
+
+
 def _assert_instrument_filter_supported(
     ds: Dataset,
     instrument_filter: Sequence[str] | None,
@@ -4158,11 +4166,17 @@ class DataAccessStore:
                 try:
                     with mutation_lock(target_dir):
                         if mode == "overwrite":
-                            self._clear_dir(target_dir)
-                        target_dir.mkdir(parents=True, exist_ok=True)
-                        files_written = self._write_table_to_dir(
-                            table, target_dir, partition_by=partition_by,
-                        )
+                            # #39 crash-safe overwrite：写候选目录 → 校验 → 原子
+                            # rename 替换。旧逻辑 _clear_dir + 直写目标，写一半崩溃
+                            # 会留下损坏数据集。候选目录失败时目标目录完好。
+                            files_written = self._crash_safe_overwrite(
+                                target_dir, table, partition_by=partition_by
+                            )
+                        else:
+                            target_dir.mkdir(parents=True, exist_ok=True)
+                            files_written = self._write_table_to_dir(
+                                table, target_dir, partition_by=partition_by,
+                            )
                     ok = True
                     err_msg = None
                 except Exception as exc:
@@ -4195,6 +4209,62 @@ class DataAccessStore:
             "files": [str(p) for p in files_written],
             "mode": mode,
         }
+
+    def _crash_safe_overwrite(
+        self,
+        target_dir: Path,
+        table: pa.Table,
+        *,
+        partition_by: Sequence[str] | None,
+    ) -> list[Path]:
+        """#39 原子 overwrite：候选目录写入 → 校验 → rename 替换。
+
+        流程：写 ``.write_candidate.*`` → 校验候选行数/文件 → 旧目录 rename 到
+        ``.old.*`` → 候选 rename 到 target → 删旧。任何阶段失败都不动旧目标。
+        """
+        parent = target_dir.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        candidate = parent / f".{target_dir.name}.write_candidate.{uuid.uuid4().hex[:8]}"
+        old_dir: Path | None = None
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            written = self._write_table_to_dir(
+                table, candidate, partition_by=partition_by,
+            )
+            if not written:
+                raise ValidationError("write_arrow overwrite: 没有写入任何文件")
+            # 校验候选（非分区时核对行数；分区时至少确认有非空 parquet）
+            import pyarrow.parquet as pq
+
+            total_rows = 0
+            for fp in written:
+                try:
+                    total_rows += pq.read_metadata(str(fp)).num_rows
+                except Exception as exc:
+                    raise ValidationError(
+                        f"overwrite 候选文件 {fp} 读取 footer 失败：{exc}"
+                    ) from exc
+            if not partition_by and total_rows != table.num_rows:
+                raise ValidationError(
+                    f"overwrite 候选行数 {total_rows} != 输入 {table.num_rows}"
+                )
+            # 原子替换：旧目录（存在则）移走 → 候选晋升 → 清理旧目录
+            if target_dir.exists():
+                old_dir = parent / f".{target_dir.name}.old.{uuid.uuid4().hex[:8]}"
+                os.rename(str(target_dir), str(old_dir))
+            try:
+                os.rename(str(candidate), str(target_dir))
+            except OSError:
+                if old_dir is not None and old_dir.exists():
+                    os.rename(str(old_dir), str(target_dir))
+                raise
+            if old_dir is not None and old_dir.exists():
+                shutil.rmtree(old_dir, ignore_errors=True)
+            # 返回最终 target_dir 下的路径
+            return [target_dir / p.relative_to(candidate) for p in written]
+        finally:
+            if candidate.exists():
+                shutil.rmtree(candidate, ignore_errors=True)
 
     def upsert(
         self,
@@ -4688,10 +4758,28 @@ class DataAccessStore:
         if explicit_read_root:
             return self._resolve_paths(ds, params, instrument_filter=instrument_filter)
 
+        # #26 local+remote 混合计划：auto 模式下本地已有 partition 用本地、缺失的
+        # 用远程，不再「本地不齐就整区间 remote」。
+        if _cos_mode_is_auto():
+            from data_access.cos.remote import hybrid_cos_read_paths
+
+            hybrid = hybrid_cos_read_paths(ds, time_range=time_range, params=params)
+            if hybrid is not None:
+                paths = self._authorize_read_paths(hybrid)
+                self._engine.ensure_s3_configured()
+                logger.info(
+                    "cos_multi_location: dataset=%s paths=%d (hybrid)",
+                    ds.name,
+                    len(paths),
+                )
+                return paths
+
         if should_read_cos_remote(ds, time_range=time_range):
             from data_access.cos.remote import prepare_cos_remote_paths
 
-            paths, backend = prepare_cos_remote_paths(ds.name, time_range=time_range)
+            paths, backend = prepare_cos_remote_paths(
+                ds.name, time_range=time_range, ds=ds, params=dict(params)
+            )
             read_params = dict(params)
             explicit_buckets = read_params.pop("bucket_values", None)
             for k in _READ_PATH_META_KEYS + _WRITE_PATH_META_KEYS:
