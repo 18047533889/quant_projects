@@ -15,14 +15,23 @@ class PlanNode:
         op: 算子 canonical 名（与 ``cleaned_operators`` 一致）
         inputs: 子节点列表（自左向右 / positional 顺序）
         attrs: 算子参数与元数据（窗口、列名、CSE sid 等）
+        semantic_attrs: 字段目录元数据（unit/domain/frequency/available_at/
+            source_vintage/flow_semantics/price_basis/universe/semantic_kind 与
+            mixed_* 冲突标记），供 backend type / optimizer rewrite / SQL / PIT /
+            grain / unit 校验使用。由 Lowerer 从 ``IRNode.semantic_attrs`` 拷贝，
+            独立于 ``attrs`` 且不参与相等/哈希（避免改变 plan 缓存键语义）。
         node_id: 可选调试/溯源 id，不参与结构哈希
     """
 
     op: str
     inputs: tuple["PlanNode", ...] = field(default_factory=tuple)
     attrs: Mapping[str, Any] = field(default_factory=dict)
+    semantic_attrs: Mapping[str, Any] = field(default_factory=dict, compare=False)
     node_id: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "inputs", tuple(self.inputs))
         object.__setattr__(self, "attrs", MappingProxyType(dict(self.attrs)))
+        object.__setattr__(
+            self, "semantic_attrs", MappingProxyType(dict(self.semantic_attrs))
+        )

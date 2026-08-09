@@ -281,6 +281,26 @@ class TsSignatureMahalanobisAnomaly(SeriesOperator):
         "三字段路径签名 Mahalanobis 异常（depth=2，收缩协方差，通道先稳健标准化）。",
         ["f1", "f2", "f3", "path_window", "history_window"],
     )
+    # R9-OP-010 (default infeasibility): history is sampled with stride
+    # ``path_window//4``, so the effective history count is ~
+    # ``history_window / (path_window//4)``; the covariance gate needs >= 24
+    # effective vectors.  The old default ``history_window=60`` with
+    # ``path_window=20`` gave only ~12 effective vectors — the canonical was
+    # guaranteed NaN for every row at its own default.  The default is now
+    # feasible AND the declared contract prunes the guaranteed-NaN region
+    # (path_window >= 4 so ``path_window//4 >= 1`` and the relation is sound).
+    metadata.param_specs = {
+        "path_window": ParamSpec(dtype=int, min=4),
+        "history_window": ParamSpec(dtype=int, min=24),
+    }
+    metadata.relational_specs = [
+        RelationalParamSpec(
+            "history_window >= 24 * (path_window // 4)",
+            "ts_signature_mahalanobis_anomaly needs >= 24 strided history "
+            "signatures: history_window >= 24*(path_window//4) "
+            "(path_window={path_window}, history_window={history_window})",
+        )
+    ]
 
     def _calculate_series(
         self,
@@ -288,7 +308,7 @@ class TsSignatureMahalanobisAnomaly(SeriesOperator):
         f2: pd.DataFrame,
         f3: pd.DataFrame,
         path_window: int = 20,
-        history_window: int = 60,
+        history_window: int = 120,
         depth: int = 2,  # P0-26: fixed at 2 — not a search parameter (removed from the signature)
         **_: Any,
     ) -> pd.DataFrame:

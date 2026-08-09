@@ -174,14 +174,22 @@ def _parse_junit_records(
 ) -> tuple[bool, list[str], list[dict]]:
     """Parse one stage's JUnit XML.
 
-    Returns ``(ok, skipped_files, records)``.  ``ok`` is False when ANY testcase
-    was skipped — a skip means the dependency/fixture needed to prove the case
-    was absent, so that file's evidence must NOT certify.  ``records`` contains
-    one entry per executed+passed per-canonical test case.
+    Returns ``(ok, no_evidence_files, records)``.  ``ok`` is False when a file
+    supplied NO evidence — every testcase it emitted was skipped (e.g. a
+    whole-file ``pytest.importorskip``), meaning the dependency needed to prove
+    its cases was absent (audit #382 evidence-execution gate).
+
+    A per-case skip is different: it is a legitimate surface exclusion (e.g. an
+    operator not on the production daily surface, guarded by ``pytest.skip``
+    inside the test).  Such a case certifies nothing (skip != pass — it is not
+    added to ``records``) but must not void the file's other executed+passed
+    evidence.  ``records`` contains one entry per executed+passed per-canonical
+    test case.
     """
     if not junit_path.is_file():
         return False, ["<missing-junit-xml>"], []
-    skipped_files: list[str] = []
+    no_evidence_files: list[str] = []
+    per_file: dict[str, dict] = {}
     records: list[dict] = []
     try:
         tree = ET.parse(junit_path)
@@ -194,11 +202,14 @@ def _parse_junit_records(
             file_rel = _classname_to_file(classname)
             if file_rel not in files:
                 continue
+            entry = per_file.setdefault(classname, {"executed": 0, "skipped": 0})
             if tc.find("skipped") is not None:
-                if classname not in skipped_files:
-                    skipped_files.append(classname)
+                entry["skipped"] += 1
                 continue
+            entry["executed"] += 1
             if tc.find("failure") is not None or tc.find("error") is not None:
+                # A failed/errored case also ran; the stage already failed on the
+                # pytest exit code before we get here.
                 continue
             tc_name = str(tc.get("name") or "")
             canon = _extract_canonical(tc_name, candidates)
@@ -218,7 +229,10 @@ def _parse_junit_records(
                     "stage": stage_name,
                 }
             )
-    return (not skipped_files), skipped_files, records
+    for classname, entry in per_file.items():
+        if entry["executed"] == 0:
+            no_evidence_files.append(classname)
+    return (not no_evidence_files), no_evidence_files, records
 
 
 def _executed_passed_sets(executed_records: list[dict]) -> dict[str, set[str]]:
@@ -482,7 +496,7 @@ def main() -> int:
             )
             if not stage_ok:
                 print(
-                    f"stage failed: {stage_name}: skipped test cases in "
+                    f"stage failed: {stage_name}: no executed test cases in "
                     f"{', '.join(sorted(skipped_files))}",
                     file=sys.stderr,
                 )

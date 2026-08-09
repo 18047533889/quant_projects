@@ -3,43 +3,16 @@
 > Generated from active runtime canonicals. SQL means DuckDB emitter support unless a dialect-specific certification says otherwise.
 > ClickHouse production certification remains separate and is not inferred from DuckDB.
 
-- active SQL emitter implementations: **375**
+- active SQL emitter implementations: **340**
 - DuckDB parity verified: **0**
 - DuckDB production safe: **0**
 
 | canonical | implemented | parity verified | production safe |
 |---|---:|---:|---:|
-| ADL | yes | no | no |
-| ADX | yes | no | no |
-| ATR_WILDER | yes | no | no |
-| CMF | yes | no | no |
 | CMO | yes | no | no |
-| ChaikinOscillator | yes | no | no |
-| DEMA | yes | no | no |
-| DMI_minus | yes | no | no |
-| DMI_plus | yes | no | no |
-| DX | yes | no | no |
 | EaseOfMovement | yes | no | no |
-| ForceIndex | yes | no | no |
-| KeltnerLower | yes | no | no |
-| KeltnerMid | yes | no | no |
-| KeltnerPosition | yes | no | no |
-| KeltnerUpper | yes | no | no |
-| MACD_hist | yes | no | no |
-| MACD_line | yes | no | no |
-| MACD_signal | yes | no | no |
 | MFI | yes | no | no |
 | NATR | yes | no | no |
-| PPO | yes | no | no |
-| PPO_hist | yes | no | no |
-| PPO_signal | yes | no | no |
-| PVO | yes | no | no |
-| PVO_hist | yes | no | no |
-| PVO_signal | yes | no | no |
-| RSI_WILDER | yes | no | no |
-| TEMA | yes | no | no |
-| TSI | yes | no | no |
-| TSI_signal | yes | no | no |
 | UltimateOscillator | yes | no | no |
 | VortexMinus | yes | no | no |
 | VortexPlus | yes | no | no |
@@ -90,8 +63,6 @@
 | cdl_engulfing | yes | no | no |
 | cdl_evening_star | yes | no | no |
 | cdl_gravestone_doji | yes | no | no |
-| cdl_hammer | yes | no | no |
-| cdl_hanging_man | yes | no | no |
 | cdl_harami | yes | no | no |
 | cdl_harami_cross | yes | no | no |
 | cdl_inside_bar | yes | no | no |
@@ -190,7 +161,6 @@
 | ichimoku_senkou_b | yes | no | no |
 | ichimoku_tenkan | yes | no | no |
 | index_weight | yes | no | no |
-| industry_size_neutralize | yes | no | no |
 | intraday_realized_semivariance_balance | yes | no | no |
 | intraday_volatility | yes | no | no |
 | intraday_volatility_concentration | yes | no | no |
@@ -270,7 +240,6 @@
 | tanh | yes | no | no |
 | true_range | yes | no | no |
 | truncate | yes | no | no |
-| ts_abdi_ranaldo_spread | yes | no | no |
 | ts_abs_concentration | yes | no | no |
 | ts_abs_entropy | yes | no | no |
 | ts_argmax | yes | no | no |
@@ -342,17 +311,13 @@
 | ts_std_if | yes | no | no |
 | ts_sum | yes | no | no |
 | ts_sum_if | yes | no | no |
-| ts_time_slope | yes | no | no |
 | ts_trend_tstat | yes | no | no |
 | ts_true_streak | yes | no | no |
-| ts_upside_deviation | yes | no | no |
 | ts_valid_count | yes | no | no |
-| ts_value_at_argextreme | yes | no | no |
 | ts_var | yes | no | no |
 | ts_vol_acceleration | yes | no | no |
 | ts_vol_of_vol | yes | no | no |
 | ts_vol_term_structure | yes | no | no |
-| ts_weighted_standardized_moment | yes | no | no |
 | ts_zero_ratio | yes | no | no |
 | ts_zscore | yes | no | no |
 | ttm_from_cumulative | yes | no | no |

@@ -21,6 +21,11 @@ class Lowerer:
         def visit(node: IRNode) -> PlanNode:
             """递归访问 IR 子树并构造对应 PlanNode。"""
             children = [visit(child) for child in node.inputs]
-            return PlanNode(op=node.op, inputs=children, attrs=node.attrs.copy())
+            return PlanNode(
+                op=node.op,
+                inputs=children,
+                attrs=node.attrs.copy(),
+                semantic_attrs=dict(node.semantic_attrs or {}),
+            )
 
         return visit(ir)

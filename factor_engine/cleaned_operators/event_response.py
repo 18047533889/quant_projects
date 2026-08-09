@@ -703,9 +703,7 @@ def _register_surface() -> None:
             "event_response_effective_events",
             "event_response_overlap_ratio",
         })
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | {"event_hawkes_branching_ratio_proxy"}
-    )
+    _surface.extend_research_only({"event_hawkes_branching_ratio_proxy"})
     # P1-006: the pre-rename name stays as an alias to the honest _proxy canonical
     # (registered here, AFTER the class decorator registered the target).
     from cleaned_operators.registry import OperatorRegistry

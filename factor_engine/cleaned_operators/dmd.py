@@ -17,10 +17,12 @@ numerically delicate, so they are excluded from the default mining grammar
 and fail closed whenever the embedding, the singular-value rank, or the
 condition number is degenerate.
 
-* ``ts_dmd_dominant_growth_rate``
-* ``ts_dmd_dominant_frequency``  (NaN when the dominant mode has no
-  imaginary component)
-* ``ts_dmd_mode_concentration``  (top-``top_k`` mode energy share)
+* ``ts_dmd_dominant_growth_rate``  (``log|λ|`` per bar — unit
+  ``log_growth_per_bar``)
+* ``ts_dmd_dominant_frequency``   (``|arg λ|/(2π)`` cycles per bar — unit
+  ``cycles_per_bar``; NaN when the dominant mode has no imaginary component)
+* ``ts_dmd_mode_concentration``   (top-``top_k`` mode energy share; ``top_k``
+  exceeding the number of *physical* (conjugate-merged) modes fails closed)
 
 Deterministic (no randomized SVD / subsampling), strict-PIT, NaN fail-closed.
 """
@@ -56,9 +58,13 @@ _DMD_PARAM_SPECS = {
 # dict would declare a contract for a parameter the canonical does not have.
 _DMD_BASE_SPEC = {k: _DMD_PARAM_SPECS[k] for k in ("window", "rank", "dim", "delay")}
 _DMD_CONCENTRATION_SPEC = dict(_DMD_PARAM_SPECS)
-# R6-200/201: feasibility relations for the DMD family — K = window-(dim-1)*delay
-# is the embedding column count, and rank <= min(dim, K-1), K >= rank+2 are
-# required for a valid SVD / propagator.  top_k <= rank stops silent clipping.
+# R9-OP-005: ONE feasibility formula for the DMD family, shared by the
+# ParamSpec/RelationalParamSpec (declared mirror) AND the runtime kernel guard.
+# The declared relational specs below are the search-facing spelling of the SAME
+# conditions ``dmd_feasibility`` enforces at runtime — never a fourth copy of the
+# math.  ``window`` at runtime is the CONTIGUOUS finite run length, so a
+# gap-shrunken window fails here exactly as an equally small declared window
+# fails at compile time.
 _DMD_RELATIONAL_SPECS = [
     RelationalParamSpec(
         "window - (dim - 1) * delay >= rank + 2",
@@ -78,13 +84,34 @@ _DMD_CONCENTRATION_RELATIONAL_SPECS = list(_DMD_RELATIONAL_SPECS) + [
 ]
 
 
+def dmd_feasibility(*, window: int, rank: int, dim: int, delay: int, top_k: int | None = None) -> bool:
+    """Single DMD feasibility contract (R9-OP-005).
+
+    ``K = window - (dim-1)*delay`` is the embedding column count; a valid SVD
+    propagator needs ``K >= rank+2`` and ``K >= 4``, ``rank <= dim`` (R6-200/201).
+    ``top_k`` (concentration only) must satisfy ``1 <= top_k <= rank``.  Every
+    layer — ParamSpec, RelationalParamSpec, history planning and the runtime
+    kernel guard — expresses this one function so compile-valid params can never
+    be runtime-guaranteed-NaN.
+    """
+    K = int(window) - (int(dim) - 1) * int(delay)
+    if K < int(rank) + 2 or K < 4:
+        return False
+    if int(rank) < 1 or int(rank) > int(dim):
+        return False
+    if top_k is not None and (int(top_k) < 1 or int(top_k) > int(rank)):
+        return False
+    return True
+
+
 def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any] | None:
     n = v.shape[0]
     L = max(2, int(dim))
     dl = max(1, int(delay))
-    K = n - (L - 1) * dl
-    if K < rank + 2 or K < 4:
+    # R9-OP-005: runtime guard == declared feasibility contract (single source).
+    if not dmd_feasibility(window=n, rank=int(rank), dim=L, delay=dl):
         return None
+    K = n - (L - 1) * dl
     H = np.stack([v[i : i + K] for i in range(0, (L - 1) * dl + 1, dl)], axis=0)
     X = H[:, :-1]
     Y = H[:, 1:]
@@ -148,7 +175,11 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
         for r in range(rows):
             lo = max(0, r - w + 1)
             v = trailing_contiguous_finite(col[lo : r + 1])
-            if v.size < int(dim) * int(delay) + int(rank) + 3:
+            # R9-OP-005: the runtime gate is the SAME feasibility contract as the
+            # declared ParamSpec/RelationalParamSpec — the run length substitutes
+            # for ``window``, so a gap-shrunken sample is rejected exactly as the
+            # equivalent small declared window would be at compile time.
+            if not dmd_feasibility(window=v.size, rank=int(rank), dim=int(dim), delay=int(delay)):
                 continue
             res = _hankel_dmd(v, int(rank), int(dim), int(delay))
             if res is None:
@@ -200,7 +231,16 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                             break
                     merged_e.append(pair_e)
                 merged_e.sort(reverse=True)
-                tk = min(tk, len(merged_e))
+                # R9-OP-004 (dead-parameter region): ``top_k > rank`` is already
+                # rejected by the declared relational spec, but the *physical*
+                # mode count can still be smaller than rank after conjugate-pair
+                # merging — with rank=4, top_k=2,3,4 then all compile to the
+                # SAME output when only 2 physical modes exist, a fake search
+                # space.  Never ``min``-clip: exceeding the physical mode count
+                # is a data-dependent infeasibility, so the canonical fails
+                # closed (NaN) instead of silently collapsing to fewer modes.
+                if tk > len(merged_e):
+                    continue
                 total = float(sum(merged_e))
                 if total <= _EPS:
                     continue
@@ -232,15 +272,19 @@ def _ts_dmd_mode_concentration(x: pd.DataFrame, window: int = 120, rank: int = 4
 
 
 _SPECS: dict[str, dict[str, Any]] = {
+    # R9-OP-006 (honest units): ``log|λ|`` is a per-sample (per-bar) log-growth
+    # rate, NOT a plain ``level``; ``|arg λ|/(2π)`` is cycles PER BAR, not bare
+    # ``cycles``.  Minute vs daily bars differ by 240x on both, so the unit must
+    # carry the bar reference to keep the semantics comparable across markets.
     "ts_dmd_dominant_growth_rate": {
         "fn": _ts_dmd_dominant_growth_rate,
         "params": ["x", "window", "rank", "dim", "delay"],
         "category": "dynamic_mode",
         "domain": "dynamical_systems",
-        "unit": "level",
+        "unit": "log_growth_per_bar",
         "cost": 8,
         "tags_extra": [],
-        "output_unit": "level",
+        "output_unit": "log_growth_per_bar",
         "param_specs": _DMD_BASE_SPEC,
         "relational_specs": _DMD_RELATIONAL_SPECS,
     },
@@ -249,10 +293,10 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["x", "window", "rank", "dim", "delay"],
         "category": "dynamic_mode",
         "domain": "dynamical_systems",
-        "unit": "cycles",
+        "unit": "cycles_per_bar",
         "cost": 8,
         "tags_extra": [],
-        "output_unit": "cycles",
+        "output_unit": "cycles_per_bar",
         "param_specs": _DMD_BASE_SPEC,
         "relational_specs": _DMD_RELATIONAL_SPECS,
     },

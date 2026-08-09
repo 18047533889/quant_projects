@@ -652,10 +652,7 @@ def _register_surface() -> None:
             "ts_transfer_entropy_peak_strength",
             "ts_transfer_entropy_peak_lag",
         })
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {"ts_effective_transfer_entropy", "report_benford_js_divergence"}
-    )
+    _surface.extend_research_only({"ts_effective_transfer_entropy", "report_benford_js_divergence"})
 
 
 _register_surface()

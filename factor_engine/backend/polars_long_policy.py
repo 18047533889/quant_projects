@@ -376,6 +376,15 @@ def strict_polars_long_fallback(ctx=None) -> bool:
     ctx_mode = getattr(ctx, "run_mode", None) if ctx is not None else None
     if ctx_mode is not None:
         return str(ctx_mode).lower() == "production"
+    # R9-P0-012 (production is ALWAYS strict): the env "off" branch below must
+    # only ever apply to a NON-production context.  The old order let
+    # ``FACTOR_ENGINE_STRICT_POLARS_LONG=0`` (or an env-var typo) make a
+    # production process non-strict when the caller passed no ctx.  An env var
+    # may make RESEARCH stricter (``=1``) but can never loosen production.
+    from runtime.production_policy import is_production_mode
+
+    if is_production_mode():
+        return True
     raw = os.environ.get("FACTOR_ENGINE_STRICT_POLARS_LONG", "").strip().lower()
     if raw in {"1", "true", "yes", "on"}:
         return True
@@ -386,7 +395,6 @@ def strict_polars_long_fallback(ctx=None) -> bool:
         mode = runtime.get("run_mode")
         if mode is not None:
             return str(mode).lower() == "production"
-    from runtime.production_policy import is_production_mode
 
     return is_production_mode()
 

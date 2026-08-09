@@ -84,23 +84,45 @@ _EVT_RELATIONAL_SPECS = [
         "(k_min={k_min}, k_max={k_max})",
     ),
 ]
-_ALLAN_SPEC = {
+# R9-OP-007/008 (feasibility unification): the RUNTIME kernels of the Allan
+# family fail closed on guarantees the declared ParamSpec did not express —
+# ``event_allan_factor(window=8, scale=3)`` needs ``3*scale=9`` rows but the
+# spec only said window>=8, and ``event_allan_scaling_slope(max_scale=2)`` can
+# never produce the 3 dyadic scales the slope needs, so it was NaN for every
+# input.  Each family has ONE feasibility function, used by both the declared
+# contract and the runtime guard.
+_ALLAN_FACTOR_SPEC = {
     "window": ParamSpec(dtype=int, min=8),
     "scale": ParamSpec(dtype=int, min=1),
-    "max_scale": ParamSpec(dtype=int, min=2),
-}
-# R6-157: the registry invariant requires keys(param_specs) ⊆ param_names.
-# The three Allan operators share the concept but each uses only a subset of
-# the parameters — a single shared dict would declare a spec for a parameter
-# the canonical does not have, so per-canonical subsets are declared here.
-_ALLAN_FACTOR_SPEC = {
-    "window": _ALLAN_SPEC["window"],
-    "scale": _ALLAN_SPEC["scale"],
 }
 _ALLAN_SCALING_SPEC = {
-    "window": _ALLAN_SPEC["window"],
-    "max_scale": _ALLAN_SPEC["max_scale"],
+    "window": ParamSpec(dtype=int, min=12),
+    "max_scale": ParamSpec(dtype=int, min=4),
 }
+_ALLAN_FACTOR_RELATIONAL_SPECS = [
+    RelationalParamSpec(
+        "window >= 3 * scale",
+        "event_allan_factor requires window >= 3*scale for 3 adjacent blocks "
+        "(window={window}, scale={scale})",
+    )
+]
+# R6-157: the registry invariant requires keys(param_specs) ⊆ param_names.
+# The scaling canonicals take ``event/window/max_scale`` only — per-canonical
+# subsets are declared here.
+
+
+def allan_factor_feasibility(*, window: int, scale: int) -> bool:
+    """Single ``event_allan_factor`` feasibility contract (R9-OP-007)."""
+    return int(window) >= 8 and int(scale) >= 1 and int(window) >= 3 * int(scale)
+
+
+def allan_scaling_feasibility(*, window: int, max_scale: int) -> bool:
+    """Single scaling-family feasibility contract (R9-OP-008).
+
+    The slope / log-mean need >= 3 dyadic scales; the dyadic scales
+    1,2,4 must all fit (``3*4 = 12 <= window``) AND ``max_scale`` must reach 4.
+    """
+    return int(window) >= 12 and int(max_scale) >= 4
 
 
 # ---------------------------------------------------------------------------
@@ -282,7 +304,9 @@ def _ts_event_allan_factor(x: pd.DataFrame, window: int = 120, scale: int = 8) -
         for r in range(rows):
             lo = max(0, r - w + 1)
             v = trailing_contiguous_finite(col[lo : r + 1])
-            if v.size < 3 * int(scale):
+            # R9-OP-007: runtime gate == declared feasibility contract; the run
+            # length substitutes for ``window``.
+            if not allan_factor_feasibility(window=v.size, scale=int(scale)):
                 continue
             if not _check_event_binary(v):
                 continue
@@ -304,7 +328,8 @@ def _ts_event_allan_scaling_slope(x: pd.DataFrame, window: int = 120, max_scale:
         for r in range(rows):
             lo = max(0, r - w + 1)
             v = trailing_contiguous_finite(col[lo : r + 1])
-            if v.size < 12:
+            # R9-OP-008: runtime gate == declared feasibility contract.
+            if not allan_scaling_feasibility(window=v.size, max_scale=int(max_scale)):
                 continue
             if not _check_event_binary(v):
                 continue
@@ -326,7 +351,8 @@ def _ts_event_allan_log_mean(x: pd.DataFrame, window: int = 120, max_scale: int 
         for r in range(rows):
             lo = max(0, r - w + 1)
             v = trailing_contiguous_finite(col[lo : r + 1])
-            if v.size < 12:
+            # R9-OP-008: runtime gate == declared feasibility contract.
+            if not allan_scaling_feasibility(window=v.size, max_scale=int(max_scale)):
                 continue
             if not _check_event_binary(v):
                 continue
@@ -371,6 +397,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "tags_extra": ["state"],
         "output_unit": "level",
         "param_specs": _ALLAN_FACTOR_SPEC,
+        "relational_specs": _ALLAN_FACTOR_RELATIONAL_SPECS,
     },
     "event_allan_scaling_slope": {
         "fn": _ts_event_allan_scaling_slope,

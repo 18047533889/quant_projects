@@ -23,6 +23,7 @@ Round-7 WS-C (review #265-#278):
 
 from __future__ import annotations
 
+import datetime
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -250,6 +251,15 @@ def _dedup_tuple(*tuples: tuple[Any, ...]) -> tuple[Any, ...]:
     return tuple(out)
 
 
+#: Scalar-lattice MIXED marker (review R9-P0-003).  When an operator's inputs
+#: disagree on a semantic dimension (>=2 distinct values), the scalar slot holds
+#: this marker — NEVER the first input's value — so the merged semantic is
+#: operand-order independent: ``semantic(A,B) == semantic(B,A)`` on every
+#: dimension.  The ``mixed_<dim>`` diagnostic tuple keeps the actual distinct
+#: values for auditing.
+MIXED = "MIXED"
+
+
 def lattice_join_semantic_attrs(
     children: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -257,9 +267,10 @@ def lattice_join_semantic_attrs(
 
     Replaces the round-6 first-input inheritance loop.  For each scalar
     dimension that is unambiguous across the children the scalar is propagated;
-    when the children disagree the first child's value is kept for
-    backward-compatible scalar consumers *and* a ``mixed_<dim>`` marker is
-    recorded so the mix is visible instead of silently inherited.
+    when the children disagree (>=2 distinct values) the scalar slot holds the
+    :data:`MIXED` marker — never ``distinct[0]`` (review R9-P0-003) — and a
+    ``mixed_<dim>`` tuple records the actual distinct values so the mix is
+    visible instead of silently inherited.
     """
     result: dict[str, Any] = {}
     scalar_dims = (
@@ -281,9 +292,9 @@ def lattice_join_semantic_attrs(
         if len(distinct) == 1:
             result[dim] = distinct[0]
         elif len(distinct) > 1:
-            result[dim] = distinct[0]
+            result[dim] = MIXED
             result[f"mixed_{dim}"] = tuple(distinct)
-    # semantic-kind lattice join: unambiguous -> propagate; ambiguous -> record.
+    # semantic-kind lattice join: unambiguous -> propagate; ambiguous -> MIXED.
     kinds = [
         child["semantic_kind"]
         for child in children
@@ -293,7 +304,7 @@ def lattice_join_semantic_attrs(
     if len(distinct_kinds) == 1:
         result["semantic_kind"] = distinct_kinds[0]
     elif len(distinct_kinds) > 1:
-        result["semantic_kind"] = distinct_kinds[0]
+        result["semantic_kind"] = MIXED
         result["mixed_semantic_kind"] = tuple(distinct_kinds)
     # pit_safe: AND across children (any non-pit-safe input makes the root unsafe).
     if children:
@@ -308,11 +319,209 @@ def lattice_join_semantic_attrs(
 #
 # An expression is a *knowledge-time descriptor*: the coordinate at which the
 # value becomes decision-usable.  Concrete timestamps are resolved at the data
-# layer via ``resolve()`` (a calendar/clock provider is injected there).  At
-# compile time the schema records the expression and propagates the LATEST one
-# bottom-up.  UNKNOWN sorts fail-closed (treat as +infinity / propagate): any
-# unknown input makes the root unknown rather than being silently dropped.
+# layer via ``resolve(row, calendar, timezone, decision_context)`` (review
+# R9-P0-008).  At compile time the schema records the expression and propagates
+# the LATEST one bottom-up.  UNKNOWN sorts fail-closed (treat as +infinity /
+# propagate): any unknown input makes the root unknown rather than being
+# silently dropped.
 # ---------------------------------------------------------------------------
+def _coerce_timestamp(value: Any) -> datetime.datetime | None:
+    """Best-effort coercion of a row/calendar/context value to a datetime.
+
+    Returns ``None`` when the value cannot be interpreted as a timestamp —
+    callers then raise a clear resolution error instead of guessing.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value
+    if isinstance(value, datetime.date):
+        return datetime.datetime(value.year, value.month, value.day)
+    if isinstance(value, datetime.time):
+        return None
+    try:
+        import pandas as pd  # type: ignore[import-not-found]
+
+        if isinstance(value, pd.Timestamp):
+            return value.to_pydatetime()
+        ts = pd.Timestamp(value)
+        return ts.to_pydatetime()
+    except Exception:
+        pass
+    try:
+        text = str(value).strip()
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%Y%m%d"):
+            try:
+                return datetime.datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+    except Exception:
+        pass
+    return None
+
+
+def _extract_row_value(row: Any, column: str) -> Any:
+    """Extract ``column`` from a row (mapping or attribute object).
+
+    Lookup is case-insensitive for mapping keys (``"PubDate"`` matches a
+    ``"pub_date"`` key).  Raises a clear error when the row cannot supply it.
+    """
+    if row is None:
+        raise ValueError(f"resolve() needs a row carrying column {column!r}")
+    if isinstance(row, dict):
+        if column in row:
+            return row[column]
+        for key in row:
+            if str(key).lower() == column.lower():
+                return row[key]
+        raise KeyError(
+            f"row has no column {column!r} (available: {sorted(map(str, row))})"
+        )
+    value = getattr(row, column, None)
+    if value is None:
+        try:
+            value = row[column]
+        except Exception:
+            value = None
+    if value is None:
+        raise ValueError(f"row has no column {column!r}")
+    return value
+
+
+def _resolve_column(row: Any, primary: str, aliases: tuple[str, ...] = ()) -> Any:
+    """Extract a column value trying ``primary`` then ``aliases`` (or ``None``)."""
+    if row is None:
+        return None
+    for name in (primary, *aliases):
+        try:
+            return _extract_row_value(row, name)
+        except Exception:
+            continue
+    return None
+
+
+def _localize(dt: datetime.datetime, timezone: Any) -> datetime.datetime:
+    """Attach a timezone to a naive best-effort timestamp (defensive)."""
+    if timezone is None:
+        return dt
+    try:
+        if isinstance(timezone, str):
+            from zoneinfo import ZoneInfo
+
+            return dt.replace(tzinfo=ZoneInfo(timezone))
+        return dt.replace(tzinfo=timezone)
+    except Exception:
+        return dt
+
+
+def _session_date(
+    row: Any,
+    calendar: Any,
+    decision_context: Any,
+) -> datetime.datetime | None:
+    """Best-effort trading date for wall-clock expressions.
+
+    Resolution order: ``decision_context`` (asof / trading date), then a date
+    column on ``row``, then a ``calendar`` object's date.  ``None`` means no
+    date is available anywhere.
+    """
+    if decision_context is not None:
+        for attr in ("date", "trading_date", "asof", "asof_date", "trade_date"):
+            d = _coerce_timestamp(getattr(decision_context, attr, None))
+            if d is not None:
+                return d
+    if row is not None:
+        for name in (
+            "date",
+            "trade_date",
+            "trading_date",
+            "timestamp",
+            "asof",
+            "day",
+            "datetime",
+        ):
+            try:
+                d = _coerce_timestamp(_extract_row_value(row, name))
+            except Exception:
+                continue
+            if d is not None:
+                return d
+    if calendar is not None and not isinstance(calendar, str):
+        for attr in ("date", "trading_date", "asof", "asof_date"):
+            d = _coerce_timestamp(getattr(calendar, attr, None))
+            if d is not None:
+                return d
+    return None
+
+
+def _calendar_time(calendar: Any, kind: str) -> tuple[int, int] | None:
+    """Best-effort wall-clock ``(hour, minute)`` from a calendar object."""
+    if calendar is None or isinstance(calendar, str):
+        return None
+    for attr in (f"session_{kind}", f"{kind}_time", f"market_{kind}", kind):
+        value = getattr(calendar, attr, None)
+        if value is None:
+            continue
+        if isinstance(value, (datetime.datetime, datetime.time)):
+            return (value.hour, value.minute)
+        if isinstance(value, (tuple, list)) and len(value) >= 2:
+            try:
+                return (int(value[0]), int(value[1]))
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _wallclock_date(
+    row: Any,
+    calendar: Any,
+    timezone: Any,
+    decision_context: Any,
+    default_time: tuple[int, int],
+    what: str,
+) -> datetime.datetime:
+    """Combine a trading date with a best-effort wall-clock time."""
+    date = _session_date(row, calendar, decision_context)
+    if date is None:
+        raise NotImplementedError(
+            f"{what} needs a trading date (row.date / decision_context.date / "
+            "calendar.date) to build the wall-clock coordinate"
+        )
+    return _localize(
+        datetime.datetime(date.year, date.month, date.day, *default_time),
+        timezone,
+    )
+
+
+def _resolve_timestamp_column(
+    expr: "AvailabilityExpr",
+    value: Any,
+    row: Any,
+    what: str,
+    timezone: Any,
+) -> datetime.datetime:
+    """Resolve a column-based expression to a timestamp.
+
+    ``value`` is the already-extracted column value (``None`` when the row did
+    not carry it).  Raises a clear error rather than guessing when the column is
+    missing or unparseable.
+    """
+    if value is None:
+        if row is None:
+            raise NotImplementedError(
+                f"{what} needs a row carrying the column; got no row"
+            )
+        raise NotImplementedError(
+            f"{what} needs the column on the row; row has no such column"
+        )
+    ts = _coerce_timestamp(value)
+    if ts is None:
+        raise ValueError(
+            f"{what} could not interpret column value {value!r} as a timestamp"
+        )
+    return _localize(ts, timezone)
+
+
 class AvailabilityExpr:
     """Base class for a knowledge-time availability expression."""
 
@@ -327,13 +536,28 @@ class AvailabilityExpr:
         """Legacy string descriptor (backward-compatible schema surface)."""
         raise NotImplementedError
 
-    def resolve(self, provider: Any = None) -> Any:
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
         """Resolve to a concrete timestamp at the data layer.
 
-        ``provider`` is a calendar / knowledge-time clock; subclasses that only
-        carry a column reference (``TimestampColumn``) resolve against it.
+        ``row`` carries the observable columns (a mapping / pandas Series /
+        record object); ``calendar`` is a trading-calendar provider (may be a
+        bare string label when only a *hint* is known); ``timezone`` is a
+        ``zoneinfo`` key / ``tzinfo``; ``decision_context`` carries the decision
+        / asof instant.  Subclasses return a timestamp-like value
+        (``datetime`` / ``pd.Timestamp``) or raise a clear error when the
+        provider they need is unavailable — they never fall back to a
+        compile-time total-order number (review R9-P0-008).
         """
-        raise NotImplementedError
+        raise NotImplementedError(
+            f"{type(self).__name__}.resolve() has no concrete timestamp without "
+            "the provider it needs (row / calendar / timezone / decision_context)"
+        )
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.label
@@ -358,7 +582,13 @@ class UnknownAvailability(AvailabilityExpr):
     def label(self) -> str:
         return "unknown"
 
-    def resolve(self, provider: Any = None) -> Any:
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
         raise ValueError("UnknownAvailability has no concrete timestamp; fail-closed")
 
 
@@ -368,6 +598,17 @@ class Midnight(AvailabilityExpr):
     __slots__ = ()
     lateness = 0.0
     label = "midnight"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        return _wallclock_date(
+            row, calendar, timezone, decision_context, (0, 0), "Midnight.resolve()"
+        )
 
 
 @dataclass(frozen=True)
@@ -381,6 +622,19 @@ class SessionOpen(AvailabilityExpr):
     def label(self) -> str:
         return "session_open"
 
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        open_time = _calendar_time(calendar, "open") or (9, 30)
+        return _wallclock_date(
+            row, calendar, timezone, decision_context, open_time,
+            "SessionOpen.resolve()",
+        )
+
 
 @dataclass(frozen=True)
 class PreClose(AvailabilityExpr):
@@ -391,6 +645,19 @@ class PreClose(AvailabilityExpr):
     def label(self) -> str:
         return "pre_close"
 
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        preclose_time = _calendar_time(calendar, "pre_close") or (14, 57)
+        return _wallclock_date(
+            row, calendar, timezone, decision_context, preclose_time,
+            "PreClose.resolve()",
+        )
+
 
 @dataclass(frozen=True)
 class LocalClose(AvailabilityExpr):
@@ -400,6 +667,19 @@ class LocalClose(AvailabilityExpr):
     @property
     def label(self) -> str:
         return "local_close"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        close_time = _calendar_time(calendar, "close") or (15, 0)
+        return _wallclock_date(
+            row, calendar, timezone, decision_context, close_time,
+            "LocalClose.resolve()",
+        )
 
 
 @dataclass(frozen=True)
@@ -413,6 +693,19 @@ class SessionClose(AvailabilityExpr):
     def label(self) -> str:
         return "session_close"
 
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        close_time = _calendar_time(calendar, "close") or (15, 0)
+        return _wallclock_date(
+            row, calendar, timezone, decision_context, close_time,
+            "SessionClose.resolve()",
+        )
+
 
 @dataclass(frozen=True)
 class AfterClose(AvailabilityExpr):
@@ -422,6 +715,20 @@ class AfterClose(AvailabilityExpr):
     @property
     def label(self) -> str:
         return "after_close"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        close_time = _calendar_time(calendar, "close") or (15, 0)
+        base = _wallclock_date(
+            row, calendar, timezone, decision_context, close_time,
+            "AfterClose.resolve()",
+        )
+        return base + datetime.timedelta(hours=1)
 
 
 @dataclass(frozen=True)
@@ -435,6 +742,46 @@ class NextTradingOpen(AvailabilityExpr):
     def label(self) -> str:
         return "next_session_open"
 
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        ref = _resolve_column(row, self.reference, ("pub_date", "publication_date"))
+        if ref is None and decision_context is not None:
+            ref = getattr(decision_context, "asof", None) or getattr(
+                decision_context, "date", None
+            )
+        ref_ts = _coerce_timestamp(ref)
+        if ref_ts is None:
+            raise NotImplementedError(
+                "NextTradingOpen.resolve() needs the reference date "
+                f"(row[{self.reference!r}]) and a trading calendar to compute "
+                "the next session open"
+            )
+        if calendar is None or isinstance(calendar, str):
+            raise NotImplementedError(
+                "NextTradingOpen.resolve() needs a real trading calendar object "
+                f"with next_open(); got {calendar!r}"
+            )
+        for attr in ("next_open", "next_trading_open", "next_session_open", "session_open_after"):
+            fn = getattr(calendar, attr, None)
+            if not callable(fn):
+                continue
+            try:
+                result = fn(ref_ts)
+            except TypeError:
+                result = fn(ref_ts.date())
+            ts = _coerce_timestamp(result)
+            if ts is not None:
+                return _localize(ts, timezone)
+        raise NotImplementedError(
+            f"calendar {type(calendar).__name__} provides no next_open() for "
+            "NextTradingOpen.resolve()"
+        )
+
 
 @dataclass(frozen=True)
 class NextTradingDay(AvailabilityExpr):
@@ -444,6 +791,46 @@ class NextTradingDay(AvailabilityExpr):
     @property
     def label(self) -> str:
         return "next_trading_day"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        ref = _resolve_column(row, self.reference, ("pub_date", "publication_date"))
+        if ref is None and decision_context is not None:
+            ref = getattr(decision_context, "asof", None) or getattr(
+                decision_context, "date", None
+            )
+        ref_ts = _coerce_timestamp(ref)
+        if ref_ts is None:
+            raise NotImplementedError(
+                "NextTradingDay.resolve() needs the reference date "
+                f"(row[{self.reference!r}]) and a trading calendar to compute "
+                "the next trading day"
+            )
+        if calendar is None or isinstance(calendar, str):
+            raise NotImplementedError(
+                "NextTradingDay.resolve() needs a real trading calendar object "
+                f"with next_day(); got {calendar!r}"
+            )
+        for attr in ("next_day", "next_trading_day", "next_session", "next_session_day"):
+            fn = getattr(calendar, attr, None)
+            if not callable(fn):
+                continue
+            try:
+                result = fn(ref_ts)
+            except TypeError:
+                result = fn(ref_ts.date())
+            ts = _coerce_timestamp(result)
+            if ts is not None:
+                return _localize(ts, timezone)
+        raise NotImplementedError(
+            f"calendar {type(calendar).__name__} provides no next_day() for "
+            "NextTradingDay.resolve()"
+        )
 
 
 @dataclass(frozen=True)
@@ -457,6 +844,22 @@ class FilingDate(AvailabilityExpr):
     def label(self) -> str:
         return "filing_date"
 
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        value = _resolve_column(
+            row,
+            "filing_date",
+            ("announcement_date", "filingdate", "report_date", self.reference),
+        )
+        return _resolve_timestamp_column(
+            self, value, row, "FilingDate.resolve()", timezone
+        )
+
 
 @dataclass(frozen=True)
 class PubDate(AvailabilityExpr):
@@ -469,6 +872,22 @@ class PubDate(AvailabilityExpr):
     def label(self) -> str:
         return "PubDate"
 
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        value = _resolve_column(
+            row,
+            self.reference,
+            ("pub_date", "publication_date", "publish_date"),
+        )
+        return _resolve_timestamp_column(
+            self, value, row, "PubDate.resolve()", timezone
+        )
+
 
 @dataclass(frozen=True)
 class DeclarationDate(AvailabilityExpr):
@@ -478,6 +897,128 @@ class DeclarationDate(AvailabilityExpr):
     @property
     def label(self) -> str:
         return "declaration_date"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        value = _resolve_column(
+            row,
+            self.reference,
+            ("declaration_date", "declarationdate", "decl_date"),
+        )
+        return _resolve_timestamp_column(
+            self, value, row, "DeclarationDate.resolve()", timezone
+        )
+
+
+@dataclass(frozen=True)
+class ExDate(AvailabilityExpr):
+    """Ex-dividend date — DISTINCT from :class:`DeclarationDate` (R9-P0-009)."""
+
+    reference: str = "ExDate"
+    lateness: float = 100.0
+
+    @property
+    def label(self) -> str:
+        return "ex_date"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        value = _resolve_column(
+            row,
+            self.reference,
+            ("ex_date", "exdate", "ex_dividend_date"),
+        )
+        return _resolve_timestamp_column(self, value, row, "ExDate.resolve()", timezone)
+
+
+@dataclass(frozen=True)
+class RecordDate(AvailabilityExpr):
+    """Record date for a corporate action (distinct from declaration/ex dates)."""
+
+    reference: str = "RecordDate"
+    lateness: float = 100.0
+
+    @property
+    def label(self) -> str:
+        return "record_date"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        value = _resolve_column(row, self.reference, ("record_date", "recorddate"))
+        return _resolve_timestamp_column(
+            self, value, row, "RecordDate.resolve()", timezone
+        )
+
+
+@dataclass(frozen=True)
+class PaymentDate(AvailabilityExpr):
+    """Payment date for a corporate action (distinct from declaration/ex dates)."""
+
+    reference: str = "PaymentDate"
+    lateness: float = 100.0
+
+    @property
+    def label(self) -> str:
+        return "payment_date"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        value = _resolve_column(
+            row,
+            self.reference,
+            ("payment_date", "paymentdate", "pay_date"),
+        )
+        return _resolve_timestamp_column(
+            self, value, row, "PaymentDate.resolve()", timezone
+        )
+
+
+@dataclass(frozen=True)
+class EffectiveDate(AvailabilityExpr):
+    """Effective date (value usable from the effective/生效 instant)."""
+
+    reference: str = "EffectiveDate"
+    lateness: float = 100.0
+
+    @property
+    def label(self) -> str:
+        return "effective_date"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        value = _resolve_column(
+            row,
+            self.reference,
+            ("effective_date", "effectivedate", "effective_time"),
+        )
+        return _resolve_timestamp_column(
+            self, value, row, "EffectiveDate.resolve()", timezone
+        )
 
 
 @dataclass(frozen=True)
@@ -491,6 +1032,18 @@ class TimestampColumn(AvailabilityExpr):
     def label(self) -> str:
         return str(self.column)
 
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        value = _resolve_column(row, self.column)
+        return _resolve_timestamp_column(
+            self, value, row, f"TimestampColumn({self.column!r}).resolve()", timezone
+        )
+
 
 @dataclass(frozen=True)
 class KnowledgeTime(AvailabilityExpr):
@@ -501,6 +1054,18 @@ class KnowledgeTime(AvailabilityExpr):
     @property
     def label(self) -> str:
         return "knowledge_time"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        raise NotImplementedError(
+            "KnowledgeTime.resolve() has no single concrete coordinate (generic "
+            "knowledge-time descriptor); resolve the underlying column instead"
+        )
 
 
 # Sentinel for "availability unknown" — fail-closed +infinity.
@@ -539,7 +1104,13 @@ _LABEL_TO_EXPR: dict[str, AvailabilityExpr] = {
         ("PubDate", PubDate()),
         ("declaration_date", DeclarationDate()),
         ("declaration", DeclarationDate()),
-        ("ex_date", DeclarationDate()),
+        # R9-P0-009: ex-date is a DISTINCT corporate-action date from the
+        # declaration date — never collapse them in the semantic mapping.
+        ("ex_date", ExDate()),
+        ("ex_dividend_date", ExDate()),
+        ("record_date", RecordDate()),
+        ("payment_date", PaymentDate()),
+        ("effective_date", EffectiveDate()),
         ("knowledge_time", KnowledgeTime()),
     )
 }
@@ -695,15 +1266,20 @@ __all__ = [
     "ArgumentTypeContract",
     "AvailabilityExpr",
     "DeclarationDate",
+    "EffectiveDate",
+    "ExDate",
     "FilingDate",
     "KnowledgeTime",
     "LocalClose",
+    "MIXED",
     "Midnight",
     "NextTradingDay",
     "NextTradingOpen",
     "OPERATOR_INPUT_TYPE_CONTRACTS",
+    "PaymentDate",
     "PreClose",
     "PubDate",
+    "RecordDate",
     "SEMANTIC_TYPE",
     "SessionClose",
     "SessionOpen",

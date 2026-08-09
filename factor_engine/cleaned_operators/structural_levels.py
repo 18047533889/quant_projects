@@ -398,9 +398,7 @@ _NEW_CANONICALS = (
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | set(_NEW_CANONICALS)
-    )
+    _surface.extend_extended_only(set(_NEW_CANONICALS))
     for _canon in _NEW_CANONICALS:
         register_polars_bridge(_canon)
 

@@ -993,7 +993,7 @@ class IndexWeight(SeriesOperator):
 
 
 import cleaned_operators.operator_surface as _surface  # noqa: E402
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(set(_surface.EXTENDED_ONLY_CANONICALS) | set(['relation_hhi', 'relation_entropy', 'relation_topk_sum', 'relation_rank_weighted_sum', 'relation_category_share', 'relation_peer_weighted_mean_ex_self', 'relation_entry_count', 'relation_exit_count', 'relation_weighted_change', 'index_member', 'index_weight_change', 'index_entry_exit_event', 'index_membership_age', 'event_cumulative_return_past', 'event_abnormal_return_past', 'fin_applicability_mask', 'fin_announcement_lag', 'relation_distinct_count', 'relation_overlap_ratio', 'index_weight']))
+_surface.extend_extended_only(set(['relation_hhi', 'relation_entropy', 'relation_topk_sum', 'relation_rank_weighted_sum', 'relation_category_share', 'relation_peer_weighted_mean_ex_self', 'relation_entry_count', 'relation_exit_count', 'relation_weighted_change', 'index_member', 'index_weight_change', 'index_entry_exit_event', 'index_membership_age', 'event_cumulative_return_past', 'event_abnormal_return_past', 'fin_applicability_mask', 'fin_announcement_lag', 'relation_distinct_count', 'relation_overlap_ratio', 'index_weight']))
 
 
 from cleaned_operators import operator_surface as _surface  # noqa: E402

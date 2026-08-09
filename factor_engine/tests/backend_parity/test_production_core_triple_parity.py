@@ -52,7 +52,7 @@ def _memory_source():
     )
     grp = pd.Series([1, 1, 1, 1, 1, 2, 2, 2, 2, 2], index=idx, dtype=float)
     return InMemorySeriesSource(
-        data={"close": close, "open": open_, "volume": volume, "ret": ret, "grp": grp}
+        data={"close": close, "open": open_, "volume": volume, "ret": ret, "group_id": grp}
     )
 
 
@@ -75,7 +75,7 @@ test_daily:
     Open: double
     Volume: double
     Ret: double
-    Grp: int64
+    group_id: int64
 """
     path = tmp_path / "datasets.yaml"
     path.write_text(content.strip() + "\n", encoding="utf-8")
@@ -94,7 +94,7 @@ def _seed_duckdb_panel(root: Path, mem: InMemorySeriesSource) -> None:
                 "Open": float(mem.data["open"].loc[(ts, sym)]),
                 "Volume": float(mem.data["volume"].loc[(ts, sym)]),
                 "Ret": float(mem.data["ret"].loc[(ts, sym)]),
-                "Grp": int(mem.data["grp"].loc[(ts, sym)]),
+                "group_id": int(mem.data["group_id"].loc[(ts, sym)]),
             }
         )
     pd.DataFrame(rows).to_parquet(root / "panel.parquet")
@@ -125,7 +125,6 @@ def _col(name: str):
         "open": "Open",
         "volume": "Volume",
         "ret": "Ret",
-        "grp": "Grp",
     }
     return col(mapping.get(name, name))
 
@@ -153,14 +152,14 @@ MEMORY_CASES = [
     ("protected_div", lambda: make_cleaned_call_factory("protected_div")(col("close"), col("volume"))),
     ("protected_log", lambda: make_cleaned_call_factory("protected_log")(col("close"))),
     ("log_returns", lambda: make_cleaned_call_factory("log_returns")(col("close"))),
-    ("group_mean", lambda: make_cleaned_call_factory("group_mean")(col("close"), col("grp"))),
-    ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(col("close"), col("grp"))),
-    ("group_rank", lambda: make_cleaned_call_factory("group_rank")(col("close"), col("grp"))),
-    ("group_percentile", lambda: make_cleaned_call_factory("group_percentile")(col("close"), col("grp"), 0.5)),
+    ("group_mean", lambda: make_cleaned_call_factory("group_mean")(col("close"), col("group_id"))),
+    ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(col("close"), col("group_id"))),
+    ("group_rank", lambda: make_cleaned_call_factory("group_rank")(col("close"), col("group_id"))),
+    ("group_percentile", lambda: make_cleaned_call_factory("group_percentile")(col("close"), col("group_id"), 0.5)),
     ("ts_corr", lambda: make_cleaned_call_factory("ts_corr")(col("close"), col("open"), 3)),
     ("ts_cov", lambda: make_cleaned_call_factory("ts_cov")(col("ret"), col("close"), 3)),
     ("ts_beta", lambda: make_cleaned_call_factory("ts_beta")(col("ret"), col("close"), 3)),
-    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(col("close"), col("grp"))),
+    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(col("close"), col("group_id"))),
     ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(col("close"))),
     ("cs_mad_zscore", lambda: make_cleaned_call_factory("cs_mad_zscore")(col("close"))),
     ("vwap", lambda: make_cleaned_call_factory("vwap")(col("close"), col("volume"), 3)),
@@ -176,7 +175,7 @@ MEMORY_CASES = [
     ("ts_autocorr", lambda: make_cleaned_call_factory("ts_autocorr")(col("close"), 4, 1)),
     ("cum_delta", lambda: make_cleaned_call_factory("cum_delta")(col("close"))),
     ("expanding_mean", lambda: make_cleaned_call_factory("expanding_mean")(col("close"))),
-    ("where", lambda: make_cleaned_call_factory("where")(col("grp"), col("close"), col("open"))),
+    ("where", lambda: make_cleaned_call_factory("where")(col("group_id"), col("close"), col("open"))),
 ]
 
 
@@ -199,12 +198,12 @@ DUCKDB_CASES = [
     ("zscore", lambda: make_cleaned_call_factory("zscore")(_col("close"))),
     ("protected_div", lambda: make_cleaned_call_factory("protected_div")(_col("close"), _col("volume"))),
     ("protected_log", lambda: make_cleaned_call_factory("protected_log")(_col("close"))),
-    ("group_mean", lambda: make_cleaned_call_factory("group_mean")(_col("close"), _col("grp"))),
-    ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(_col("close"), _col("grp"))),
+    ("group_mean", lambda: make_cleaned_call_factory("group_mean")(_col("close"), _col("group_id"))),
+    ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(_col("close"), _col("group_id"))),
     ("ts_corr", lambda: make_cleaned_call_factory("ts_corr")(_col("close"), _col("open"), 3)),
     ("ts_cov", lambda: make_cleaned_call_factory("ts_cov")(_col("ret"), _col("close"), 3)),
     ("ts_beta", lambda: make_cleaned_call_factory("ts_beta")(_col("ret"), _col("close"), 3)),
-    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(_col("close"), _col("grp"))),
+    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(_col("close"), _col("group_id"))),
     ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(_col("close"))),
     ("cs_mad_zscore", lambda: make_cleaned_call_factory("cs_mad_zscore")(_col("close"))),
 ]

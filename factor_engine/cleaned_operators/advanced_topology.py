@@ -462,9 +462,8 @@ class TsFisherInformationShift(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {
+    _surface.extend_research_only(
+        {
             "ts_betti_1_max_persistence",
             "ts_persistence_diagram_shift",
             "ts_fisher_information_shift",

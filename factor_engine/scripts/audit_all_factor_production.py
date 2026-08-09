@@ -1029,6 +1029,16 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
         "prev_x": close.shift(1).fillna(close),
     }
     panels.update(_minute_panels(dates, assets, rows))
+    # update-clock (review P1-48a): ``update_event`` must be a strict boolean
+    # indicator {0,1} or NaN — the generic continuous fallback below
+    # (close-derived ~60.2) would violate the operator contract, so give it an
+    # explicit sparse true-update marker (a day is a true update day every 13
+    # rows, deterministically).
+    panels["update_event"] = pd.DataFrame(
+        np.repeat((np.arange(rows)[:, None] % 13 == 0).astype(float), columns, axis=1),
+        index=dates,
+        columns=assets,
+    )
     for name in sorted(_PANEL_PARAMETERS):
         if name in panels:
             continue

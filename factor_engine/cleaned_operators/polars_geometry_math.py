@@ -85,7 +85,7 @@ _GEOMETRY_MATH_CANONICALS: tuple[str, ...] = (
     "ts_persistence_entropy_h0", "ts_persistence_entropy_h1",
     # cs / group locality
     "cs_knn_local_moran", "cs_isotonic_residual",
-    "group_tail_coexceedance_density", "group_corr_mst_length",
+    "group_current_members_tail_coexceedance", "group_corr_mst_length",
     # intraday session shape
     "intraday_session_shape_novelty", "intraday_profile_pca_residual",
 )

@@ -104,21 +104,103 @@ _RESEARCH_ONLY_PREFIXES = ("ts_hvg_motif_entropy", "ts_dmd_", "ts_persistence_",
 
 
 def _bind_window(params: dict[str, Any]) -> float:
-    w = params.get("window") or params.get("recent_window") or _REF_WINDOW
+    w = (
+        params.get("window")
+        or params.get("recent_window")
+        or params.get("history_window")
+        or params.get("path_window")
+        or _REF_WINDOW
+    )
     try:
         return max(1.0, float(w))
     except (TypeError, ValueError):
         return _REF_WINDOW
 
 
-def runtime_cost(canonical: str, params: dict[str, Any] | None = None) -> float:
+# R9-P1-047: explicit cost contracts for the heavy families.  An operator may
+# declare ``metadata.cost_model`` (preferred) OR be listed here — both are the
+# operator's OWN ``cost_model(params, shape) -> (runtime, memory)`` contract, so
+# the cost of these families is no longer guessed from a name prefix.  The
+# prefix table below remains only as the fallback for undeclared operators.
+def _dmd_cost_contract(params: dict[str, Any], _shape: tuple[int, int] | None) -> tuple[float, float]:
+    w = _bind_window(params)
+    d = float(params.get("dim", 4))
+    rt = w * d * d + d ** 3
+    mem = w * w
+    return max(1.0, rt / _REF_COST), max(1.0, mem / (_REF_WINDOW * _REF_WINDOW))
+
+
+def _pairwise_cost_contract(params: dict[str, Any], _shape: tuple[int, int] | None) -> tuple[float, float]:
+    w = _bind_window(params)
+    rt = w * w
+    return max(1.0, rt / _REF_COST), max(1.0, rt / (_REF_WINDOW * _REF_WINDOW))
+
+
+def _cubic_cost_contract(params: dict[str, Any], _shape: tuple[int, int] | None) -> tuple[float, float]:
+    w = _bind_window(params)
+    rt = w ** 3
+    return max(1.0, rt / _REF_COST), max(1.0, w / _REF_WINDOW)
+
+
+def _bicoherence_cost_contract(params: dict[str, Any], _shape: tuple[int, int] | None) -> tuple[float, float]:
+    w = _bind_window(params)
+    ns = max(2, int(params.get("n_segments", 4)))
+    f = min(32.0, (w / ns) / 2.0)
+    rt = w * f * f
+    return max(1.0, rt / _REF_COST), max(1.0, rt / (_REF_WINDOW * _REF_WINDOW))
+
+
+_EXPLICIT_COST_CONTRACTS: dict[str, Callable[[dict[str, Any], tuple[int, int] | None], tuple[float, float]]] = {
+    "ts_dmd_dominant_growth_rate": _dmd_cost_contract,
+    "ts_dmd_dominant_frequency": _dmd_cost_contract,
+    "ts_dmd_mode_concentration": _dmd_cost_contract,
+    "ts_hvg_motif_entropy": _cubic_cost_contract,
+    "ts_qn_scale": _pairwise_cost_contract,
+    "ts_hodges_lehmann_location": _pairwise_cost_contract,
+    "ts_bds_statistic": _pairwise_cost_contract,
+    "ts_kernel_granger_score": _cubic_cost_contract,
+    "ts_residualized_hsic": _cubic_cost_contract,
+    "ts_bicoherence_top_decile_mean": _bicoherence_cost_contract,
+    "ts_bicoherence_max": _bicoherence_cost_contract,
+    "ts_recurrence_quantification_analysis": _pairwise_cost_contract,
+    "ts_persistence_entropy_h0": _cubic_cost_contract,
+    "ts_persistence_entropy_h1": _cubic_cost_contract,
+}
+
+
+def _declared_cost_model(canonical: str) -> Callable[[dict[str, Any], tuple[int, int] | None], tuple[float, float]] | None:
+    """The operator's declared ``metadata.cost_model`` if it has one.
+
+    R9-P1-047: an operator that declares its own ``cost_model(params, shape) ->
+    (runtime, memory)`` is trusted verbatim over the prefix-name complexity
+    table.  Registry lookups before ``load_all`` return ``None`` and fall back
+    to the prefix model — the declared contract simply wins when present.
+    """
+    if canonical in _EXPLICIT_COST_CONTRACTS:
+        return _EXPLICIT_COST_CONTRACTS[canonical]
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        op = OperatorRegistry.get(canonical)
+        cm = getattr(getattr(op, "metadata", None), "cost_model", None)
+        return cm if callable(cm) else None
+    except Exception:  # pragma: no cover - registry not loaded / import order
+        return None
+
+
+def runtime_cost(canonical: str, params: dict[str, Any] | None = None, shape: tuple[int, int] | None = None) -> float:
     """Estimated per-column runtime cost in units of one 120-row rolling op.
 
     ``params`` are the bound parameter values (``window`` / ``dim`` / ``lag`` /
     …).  Returns a dimensionless multiple of the reference cost so a search
-    budget can compare ``window=20`` and ``window=500`` fairly.
+    budget can compare ``window=20`` and ``window=500`` fairly.  A declared
+    ``metadata.cost_model`` (R9-P1-047) takes precedence over the prefix table.
     """
     params = params or {}
+    declared = _declared_cost_model(canonical)
+    if declared is not None:
+        rt, _mem = declared(params, shape)
+        return max(1.0, float(rt))
     w = _bind_window(params)
     for prefix, kernel, _label in _COMPLEXITY_KERNELS:
         if canonical.startswith(prefix):
@@ -127,13 +209,18 @@ def runtime_cost(canonical: str, params: dict[str, Any] | None = None) -> float:
     return max(1.0, w / _REF_WINDOW)
 
 
-def memory_cost(canonical: str, params: dict[str, Any] | None = None) -> float:
+def memory_cost(canonical: str, params: dict[str, Any] | None = None, shape: tuple[int, int] | None = None) -> float:
     """Estimated peak per-column working set in rows²-equivalents.
 
     Operators that materialise an n×n matrix (recurrence, RQA, covariance,
-    pairwise diffs) have O(window²) memory; everything else is O(window).
+    pairwise diffs) have O(window²) memory; everything else is O(window).  A
+    declared ``metadata.cost_model`` (R9-P1-047) takes precedence.
     """
     params = params or {}
+    declared = _declared_cost_model(canonical)
+    if declared is not None:
+        _rt, mem = declared(params, shape)
+        return max(1.0, float(mem))
     w = _bind_window(params)
     for prefix, kernel, _label in _COMPLEXITY_KERNELS:
         if canonical.startswith(prefix):
@@ -145,6 +232,66 @@ def memory_cost(canonical: str, params: dict[str, Any] | None = None) -> float:
                 return max(1.0, (w * w) / (_REF_WINDOW * _REF_WINDOW))
             return max(1.0, w / _REF_WINDOW)
     return max(1.0, w / _REF_WINDOW)
+
+
+def has_declared_cost_contract(canonical: str) -> bool:
+    """Whether the canonical declares its own ``cost_model`` (R9-P1-047)."""
+    return _declared_cost_model(canonical) is not None
+
+
+def search_budget_gate(
+    canonical: str,
+    params: dict[str, Any] | None = None,
+    *,
+    runtime_budget: float | None = None,
+    memory_budget: float | None = None,
+    shape: tuple[int, int] | None = None,
+) -> bool:
+    """R9-P1-046: the single gate an AlphaProbe / AlphaMiner-style generator
+    calls BEFORE allocating search budget to ``(canonical, params)``.
+
+    Returns ``True`` iff the parameterised operator fits the given budgets
+    (``None`` budget = unbounded on that axis).  A generator that calls this for
+    every candidate gets parameter-aware accounting (window=20 vs window=500,
+    dim/rank/k/bins, panel/cross-sectional shape) instead of the static
+    ``cost:N`` tag.
+    """
+    params = params or {}
+    rt = runtime_cost(canonical, params, shape=shape)
+    if runtime_budget is not None and rt > float(runtime_budget):
+        return False
+    mem = memory_cost(canonical, params, shape=shape)
+    if memory_budget is not None and mem > float(memory_budget):
+        return False
+    return True
+
+
+#: Default mining treats an operator as "heavy" above this multiple of one
+#: reference rolling op.
+_DEFAULT_HEAVY_RUNTIME = 8.0
+
+
+def default_mining_allowed(
+    canonical: str,
+    params: dict[str, Any] | None = None,
+    *,
+    heavy_runtime: float = _DEFAULT_HEAVY_RUNTIME,
+) -> bool:
+    """R9-P1-046: whether ``(canonical, params)`` may enter DEFAULT mining.
+
+    An operator whose parameterised runtime exceeds ``heavy_runtime`` is
+    excluded UNLESS it declares its own cost contract (``metadata.cost_model``)
+    — a heavy operator with no declared contract must not silently consume the
+    default search budget.  Research-only families are already excluded by
+    construction (see :func:`is_research_only`).
+    """
+    params = params or {}
+    if is_research_only(canonical):
+        return False
+    rt = runtime_cost(canonical, params)
+    if rt <= float(heavy_runtime):
+        return True
+    return has_declared_cost_contract(canonical)
 
 
 def is_research_only(canonical: str) -> bool:
@@ -163,6 +310,9 @@ def complexity_label(canonical: str) -> str:
 __all__ = [
     "runtime_cost",
     "memory_cost",
+    "search_budget_gate",
+    "default_mining_allowed",
+    "has_declared_cost_contract",
     "is_research_only",
     "complexity_label",
     "_COMPLEXITY_KERNELS",

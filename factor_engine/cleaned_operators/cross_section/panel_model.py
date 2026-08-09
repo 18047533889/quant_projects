@@ -71,9 +71,7 @@ def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "leve
     _CANONICALS.append(name)
     import cleaned_operators.operator_surface as _surface
 
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | {name}
-    )
+    _surface.extend_research_only({name})
     return cls
 
 

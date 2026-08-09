@@ -40,7 +40,7 @@ def _build_source():
             "open": open_,
             "volume": volume,
             "ret": ret,
-            "grp": grp,
+            "group_id": grp,
             "flag": flag,
         }
     )
@@ -70,7 +70,7 @@ test_daily:
     Open: double
     Volume: double
     Ret: double
-    Grp: int64
+    group_id: int64
     Flag: double
 """
     path = tmp_path / "datasets.yaml"
@@ -85,7 +85,7 @@ def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
         "open": "Open",
         "volume": "Volume",
         "ret": "Ret",
-        "grp": "Grp",
+        "group_id": "group_id",
         "flag": "Flag",
     }
     rows = []
@@ -134,7 +134,6 @@ def _col(name: str):
             "open": "Open",
             "volume": "Volume",
             "ret": "Ret",
-            "grp": "Grp",
             "flag": "Flag",
         }.get(name, name)
     )
@@ -196,9 +195,9 @@ POLARS_BULK_CASES = [
     ("cs_demean", lambda: F("cs_demean")(col("close"))),
     ("scale", lambda: F("scale")(col("close"))),
     ("normalize", lambda: F("normalize")(col("close"))),
-    ("group_neutralize", lambda: F("group_neutralize")(col("close"), col("grp"))),
-    ("group_normalize", lambda: F("group_normalize")(col("close"), col("grp"))),
-    ("group_std", lambda: F("group_std")(col("close"), col("grp"))),
+    ("group_neutralize", lambda: F("group_neutralize")(col("close"), col("group_id"))),
+    ("group_normalize", lambda: F("group_normalize")(col("close"), col("group_id"))),
+    ("group_std", lambda: F("group_std")(col("close"), col("group_id"))),
     ("cs_std", lambda: F("cs_std")(col("close"))),
     ("cs_sum", lambda: F("cs_sum")(col("close"))),
     ("cs_count", lambda: F("cs_count")(col("close"))),
@@ -228,10 +227,10 @@ POLARS_BULK_CASES = [
     ("log_abs", lambda: F("log_abs")(col("close"))),
     ("signed_log", lambda: F("signed_log")(col("close"))),
     ("signed_sqrt", lambda: F("signed_sqrt")(col("close"))),
-    ("group_sum", lambda: F("group_sum")(col("close"), col("grp"))),
-    ("group_min", lambda: F("group_min")(col("close"), col("grp"))),
-    ("group_max", lambda: F("group_max")(col("close"), col("grp"))),
-    ("group_count", lambda: F("group_count")(col("close"), col("grp"))),
+    ("group_sum", lambda: F("group_sum")(col("close"), col("group_id"))),
+    ("group_min", lambda: F("group_min")(col("close"), col("group_id"))),
+    ("group_max", lambda: F("group_max")(col("close"), col("group_id"))),
+    ("group_count", lambda: F("group_count")(col("close"), col("group_id"))),
     ("ts_sharpe", lambda: F("ts_sharpe")(col("close"), 3)),
     ("tanh", lambda: F("tanh")(col("close"))),
 ]
@@ -283,9 +282,9 @@ DUCKDB_BULK_CASES = [
     ("ts_rank", lambda: F("ts_rank")(_col("close"), 3)),
     ("ts_sharpe", lambda: F("ts_sharpe")(_col("close"), 3)),
     ("ts_autocorr", lambda: F("ts_autocorr")(_col("close"), 4, 1)),
-    ("group_normalize", lambda: F("group_normalize")(_col("close"), _col("grp"))),
-    ("group_percentile", lambda: F("group_percentile")(_col("close"), _col("grp"), 0.5)),
-    ("group_std", lambda: F("group_std")(_col("close"), _col("grp"))),
+    ("group_normalize", lambda: F("group_normalize")(_col("close"), _col("group_id"))),
+    ("group_percentile", lambda: F("group_percentile")(_col("close"), _col("group_id"), 0.5)),
+    ("group_std", lambda: F("group_std")(_col("close"), _col("group_id"))),
     ("is_nan", lambda: F("is_nan")(_col("close"))),
     ("is_not_null", lambda: F("is_not_null")(_col("close"))),
     ("is_infinite", lambda: F("is_infinite")(_col("close"))),
@@ -294,11 +293,11 @@ DUCKDB_BULK_CASES = [
     ("normalize", lambda: F("normalize")(_col("close"))),
     ("cs_pct_rank", lambda: F("cs_pct_rank")(_col("close"))),
     ("rank_pct", lambda: F("rank_pct")(_col("close"))),
-    ("group_neutralize", lambda: F("group_neutralize")(_col("close"), _col("grp"))),
-    ("group_normalize", lambda: F("group_normalize")(_col("close"), _col("grp"))),
-    ("group_std", lambda: F("group_std")(_col("close"), _col("grp"))),
-    ("group_rank", lambda: F("group_rank")(_col("close"), _col("grp"))),
-    ("group_percentile", lambda: F("group_percentile")(_col("close"), _col("grp"), 0.5)),
+    ("group_neutralize", lambda: F("group_neutralize")(_col("close"), _col("group_id"))),
+    ("group_normalize", lambda: F("group_normalize")(_col("close"), _col("group_id"))),
+    ("group_std", lambda: F("group_std")(_col("close"), _col("group_id"))),
+    ("group_rank", lambda: F("group_rank")(_col("close"), _col("group_id"))),
+    ("group_percentile", lambda: F("group_percentile")(_col("close"), _col("group_id"), 0.5)),
     ("cs_mean", lambda: F("cs_mean")(_col("close"))),
     ("cs_std", lambda: F("cs_std")(_col("close"))),
     ("cs_sum", lambda: F("cs_sum")(_col("close"))),
@@ -319,18 +318,18 @@ DUCKDB_BULK_CASES = [
     ("log_abs", lambda: F("log_abs")(_col("close"))),
     ("signed_log", lambda: F("signed_log")(_col("close"))),
     ("signed_sqrt", lambda: F("signed_sqrt")(_col("close"))),
-    ("group_sum", lambda: F("group_sum")(_col("close"), _col("grp"))),
-    ("group_min", lambda: F("group_min")(_col("close"), _col("grp"))),
-    ("group_max", lambda: F("group_max")(_col("close"), _col("grp"))),
-    ("group_count", lambda: F("group_count")(_col("close"), _col("grp"))),
+    ("group_sum", lambda: F("group_sum")(_col("close"), _col("group_id"))),
+    ("group_min", lambda: F("group_min")(_col("close"), _col("group_id"))),
+    ("group_max", lambda: F("group_max")(_col("close"), _col("group_id"))),
+    ("group_count", lambda: F("group_count")(_col("close"), _col("group_id"))),
     ("where", lambda: F("where")(_col("flag"), _col("close"), _col("open"))),
     ("rolling_beta", lambda: F("rolling_beta")(_col("ret"), _col("close"), 3)),
     ("ts_corr", lambda: F("ts_corr")(_col("close"), _col("open"), 3)),
     ("ts_cov", lambda: F("ts_cov")(_col("ret"), _col("close"), 3)),
     ("ts_beta", lambda: F("ts_beta")(_col("ret"), _col("close"), 3)),
-    ("group_mean", lambda: F("group_mean")(_col("close"), _col("grp"))),
-    ("group_zscore", lambda: F("group_zscore")(_col("close"), _col("grp"))),
-    ("group_winsorize", lambda: F("group_winsorize")(_col("close"), _col("grp"))),
+    ("group_mean", lambda: F("group_mean")(_col("close"), _col("group_id"))),
+    ("group_zscore", lambda: F("group_zscore")(_col("close"), _col("group_id"))),
+    ("group_winsorize", lambda: F("group_winsorize")(_col("close"), _col("group_id"))),
     ("winsorize", lambda: F("winsorize")(_col("close"))),
     ("vwap", lambda: F("vwap")(_col("close"), _col("volume"), 3)),
     ("cs_mad", lambda: F("cs_mad")(_col("close"))),

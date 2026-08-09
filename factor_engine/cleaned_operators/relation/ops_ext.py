@@ -149,10 +149,7 @@ def _register_surface() -> None:
     # closer to a signal-weighted share than to a true network PageRank.  It
     # must not sit on the extended/daily mining surface until a real relation
     # graph layer (node/edge/weight/direction/validity) exists.
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {"group_signal_attraction_share"}
-    )
+    _surface.extend_research_only({"group_signal_attraction_share"})
     from cleaned_operators.rolling_pack import register_polars_udf
 
     # Only the NEW canonical gets a real polars backend.  ``relation_pagerank_

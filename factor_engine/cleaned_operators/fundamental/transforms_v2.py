@@ -753,6 +753,4 @@ _NEW_V2_CANONICALS = frozenset({
 _surface._FUNDAMENTAL_V2_CANONICALS = frozenset(
     set(_surface._FUNDAMENTAL_V2_CANONICALS) | _NEW_V2_CANONICALS
 )
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    set(_surface.EXTENDED_ONLY_CANONICALS) | _NEW_V2_CANONICALS
-)
+_surface.extend_extended_only(set(_NEW_V2_CANONICALS))

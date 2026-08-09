@@ -11,7 +11,7 @@
 - Polars non-bridge implementation: **933**
 - Polars parity verified: **0**
 - Polars production safe: **0**
-- DuckDB SQL emitter implemented: **375**
+- DuckDB SQL emitter implemented: **340**
 - DuckDB parity verified: **0**
 - DuckDB production safe: **0**
 - Polars and DuckDB both production safe: **0**
@@ -20,41 +20,41 @@
 
 | canonical | surface | pandas | polars | execution kind | polars verified | polars safe | lazy | streaming | full-panel | duckdb implemented | duckdb verified | duckdb safe |
 |---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| ADL | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| ADX | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| ATR_WILDER | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| CMF | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| ADL | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| ADX | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| ATR_WILDER | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| CMF | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | CMO | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| ChaikinOscillator | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| DEMA | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| DMI_minus | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| DMI_plus | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| DX | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| ChaikinOscillator | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| DEMA | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| DMI_minus | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| DMI_plus | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| DX | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | EaseOfMovement | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| ForceIndex | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| ForceIndex | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | KAMA | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
-| KeltnerLower | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| KeltnerMid | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| KeltnerPosition | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| KeltnerUpper | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| MACD_hist | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| MACD_line | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| MACD_signal | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| KeltnerLower | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| KeltnerMid | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| KeltnerPosition | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| KeltnerUpper | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| MACD_hist | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| MACD_line | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| MACD_signal | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | MFI | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | NATR | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| PPO | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| PPO_hist | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| PPO_signal | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| PPO | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| PPO_hist | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| PPO_signal | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | PSAR | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
-| PVO | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| PVO_hist | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| PVO_signal | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| RSI_WILDER | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| PVO | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| PVO_hist | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| PVO_signal | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| RSI_WILDER | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | Supertrend | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | SupertrendDirection | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
-| TEMA | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| TSI | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| TSI_signal | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| TEMA | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| TSI | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| TSI_signal | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | UltimateOscillator | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | VortexMinus | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | VortexPlus | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
@@ -140,8 +140,8 @@
 | cdl_engulfing | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | cdl_evening_star | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | cdl_gravestone_doji | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| cdl_hammer | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| cdl_hanging_man | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| cdl_hammer | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| cdl_hanging_man | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | cdl_harami | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | cdl_harami_cross | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | cdl_inside_bar | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
@@ -433,6 +433,7 @@
 | ge | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | group_corr_mst_length | daily | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
 | group_count | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
+| group_current_members_tail_coexceedance | daily | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
 | group_decay_linear | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
 | group_distribution_js_divergence | daily | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
 | group_ex_self_mad | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
@@ -469,7 +470,6 @@
 | group_std | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
 | group_sum | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
 | group_tail_centrality | extended | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
-| group_tail_coexceedance_density | daily | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
 | group_tail_lead_score | research | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
 | group_tail_ratio | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | group_topk_mean | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
@@ -533,7 +533,7 @@
 | index_weight_change | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | index_weight_gap_to_free_float | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | industry_rolling_pca_loading | research | yes | yes | unsupported | no | no | no | no | no | no | no | no |
-| industry_size_neutralize | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
+| industry_size_neutralize | daily | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
 | intra_abs_return_profile_cosine | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | intra_amihud | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | intra_amount_profile_cosine | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
@@ -843,7 +843,7 @@
 | true_range | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | true_turnover_rate | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | truncate | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| ts_abdi_ranaldo_spread | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| ts_abdi_ranaldo_spread | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_abs_concentration | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | ts_abs_entropy | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | ts_active_information_storage | research | yes | yes | unsupported | no | no | no | no | no | no | no | no |
@@ -876,7 +876,7 @@
 | ts_beta_break_score | extended | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_beta_if | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_betti_1_max_persistence | research | yes | yes | unsupported | no | no | no | no | no | no | no | no |
-| ts_bicoherence_max | research | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| ts_bicoherence_top_decile_mean | research | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_binned_response_curvature | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_binned_response_monotonicity | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_bottomk_mean | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
@@ -1273,7 +1273,7 @@
 | ts_threshold_cycle_asymmetry | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_threshold_cycle_period | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_time_since_change | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
-| ts_time_slope | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| ts_time_slope | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_time_under_water | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_topk_mean | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_topk_std | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
@@ -1303,9 +1303,9 @@
 | ts_two_state_regime_probability | research | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | ts_upper_partial_moment | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | ts_upper_tail_dependence | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
-| ts_upside_deviation | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| ts_upside_deviation | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_valid_count | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| ts_value_at_argextreme | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| ts_value_at_argextreme | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_var | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | ts_variance_ratio | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | ts_variance_ratio_slope | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
@@ -1333,7 +1333,7 @@
 | ts_weighted_expected_shortfall | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_weighted_permutation_entropy | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | ts_weighted_semivariance | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
-| ts_weighted_standardized_moment | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| ts_weighted_standardized_moment | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | ts_weighted_time_centroid | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | ts_zero_ratio | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | ts_zscore | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |

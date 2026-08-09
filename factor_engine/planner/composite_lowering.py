@@ -454,6 +454,7 @@ def lower_composite_operators(
         op=node.op,
         inputs=children,
         attrs=dict(node.attrs),
+        semantic_attrs=dict(node.semantic_attrs),
         node_id=node.node_id,
     )
     canon = OperatorRegistry._aliases.get(current.op, current.op)

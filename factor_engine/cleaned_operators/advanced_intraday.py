@@ -714,9 +714,8 @@ def _register_surface() -> None:
             "intraday_volatility_signature_slope",
             "intraday_profile_surprise_energy",
         })
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {
+    _surface.extend_research_only(
+        {
             "intraday_quantile_curve_pca_score",
             "intraday_quantile_curve_pca_residual",
             "intraday_realized_power_variation",

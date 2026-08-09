@@ -82,4 +82,4 @@ for _name,_params,_fn,_desc in [
     _register(_name,_params,_fn,_desc);_NAMES.append(_name)
 
 import cleaned_operators.operator_surface as _surface
-_surface.EXTENDED_ONLY_CANONICALS=frozenset(set(_surface.EXTENDED_ONLY_CANONICALS)|set(_NAMES))
+_surface.extend_extended_only(set(_NAMES))

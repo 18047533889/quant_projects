@@ -101,6 +101,27 @@ def extend_research_only(names: frozenset[str] | set[str] | list[str]) -> None:
     """
     global RESEARCH_ONLY_CANONICALS
     RESEARCH_ONLY_CANONICALS = RESEARCH_ONLY_CANONICALS | frozenset(names)
+
+
+def retract_research_only(names: frozenset[str] | set[str] | list[str]) -> None:
+    """Remove canonical names from the research-only surface (R9-P1-045).
+
+    The add-only :func:`extend_research_only` cannot express a removal, which
+    ``sequence_complexity`` needs to demote two canonicals off the research
+    surface.  Same live-mutator contract: mutates the module global in place so
+    every consumer sees the change regardless of import order.
+    """
+    global RESEARCH_ONLY_CANONICALS
+    RESEARCH_ONLY_CANONICALS = RESEARCH_ONLY_CANONICALS - frozenset(names)
+
+
+def retract_extended_only(names: frozenset[str] | set[str] | list[str]) -> None:
+    """Remove canonical names from the extended-only surface (R9-P1-045).
+
+    Symmetric live-mutator for the extended surface.
+    """
+    global EXTENDED_ONLY_CANONICALS
+    EXTENDED_ONLY_CANONICALS = EXTENDED_ONLY_CANONICALS - frozenset(names)
 # Factor-shaped extended operators that have passed semantic/PIT review and are
 # NOT fail-closed migrate to the daily surface.  Recursive/stateful, source-blocked,
 # non-factor, promoted-research (still under certification) and experimental model
@@ -385,7 +406,7 @@ _DAILY_GEOMETRY_MATH_2026_08 = frozenset({
     "ts_persistence_entropy_h0", "ts_persistence_entropy_h1",
     # cs / group locality
     "cs_knn_local_moran", "cs_isotonic_residual",
-    "group_tail_coexceedance_density", "group_corr_mst_length",
+    "group_current_members_tail_coexceedance", "group_corr_mst_length",
     # intraday session shape
     "intraday_session_shape_novelty", "intraday_profile_pca_residual",
 })

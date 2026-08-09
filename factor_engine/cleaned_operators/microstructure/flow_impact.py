@@ -529,9 +529,7 @@ def _register_surface() -> None:
             "intraday_impact_asymmetry",
             "intraday_return_wasserstein_shift",
         })
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | {"micro_bvc_vpin"}
-    )
+    _surface.extend_research_only({"micro_bvc_vpin"})
 
 
 _register_surface()

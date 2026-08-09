@@ -152,9 +152,7 @@ class TsLocalLyapunovExponent(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | {"ts_local_lyapunov_exponent"}
-    )
+    _surface.extend_research_only({"ts_local_lyapunov_exponent"})
 
 
 _register_surface()

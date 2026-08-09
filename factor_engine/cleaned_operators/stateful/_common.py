@@ -81,6 +81,4 @@ def register_stateful_surface(canonicals: list[str]) -> None:
     """Append stateful-pack canonicals to the reviewed extended surface."""
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | set(canonicals)
-    )
+    _surface.extend_extended_only(set(canonicals))

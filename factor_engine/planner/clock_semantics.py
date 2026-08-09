@@ -16,6 +16,18 @@ SAME ``ClockSemantics`` for a given canonical (that is a documented contract,
 enforced by future cross-backend tests), and the declaration surface
 (``declare_clock``) lets a backend or a recipe override a family default.
 
+``ClockSemantics`` alone is insufficient for operators that *change* cadence
+between their inputs and their output (review item R9-P0-010): e.g.
+``event_historical_response_mean`` consumes event markers but produces a value
+that is naturally evaluated once per trading bar.  Production resolution is
+therefore done through :class:`ClockContract` — a per-operator
+``(input_clocks, output_clock, grain_transform, update_trigger)`` contract —
+resolved by :func:`clock_contract_for`, which reads ONLY the explicit registry
+keyed by canonical name and NEVER guesses a clock from a ``fin_``/``event_``/
+``ts_`` name prefix.  For canonicals without an explicit entry it returns a
+conservative same-clock default (``UNKNOWN`` input == output) instead of
+prefix-guessing.
+
 Semantics of the enum values:
 
 * ``TRADING_BAR``   — one output per trading bar; inputs are OHLCV/bar panels.
@@ -32,6 +44,7 @@ Semantics of the enum values:
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field, replace
 from enum import Enum
 
 
@@ -167,3 +180,164 @@ def declare_clock(canonical: str, clock: ClockSemantics) -> None:
     if not isinstance(clock, ClockSemantics):
         raise TypeError(f"clock must be a ClockSemantics, got {type(clock).__name__}")
     _CLOCK_BY_CANONICAL[str(canonical)] = clock
+
+
+# ---------------------------------------------------------------------------
+# ClockContract — per-operator input/output clock contract (R9-P0-010)
+# ---------------------------------------------------------------------------
+# A single ClockSemantics only answers "what cadence is this operator on?".  It
+# is not enough once an operator *changes* cadence between its inputs and its
+# output:
+#
+#   * ``event_historical_response_mean`` — inputs are event markers on the
+#     EVENT clock; the output is a response mean naturally evaluated once per
+#     trading bar (``event -> daily``).
+#   * ``fin_announcement_lag`` — inputs (period-end / publication dates) update
+#     only when a report is published (filing clock); the output is a natural-day
+#     lag evaluated on the daily trading-bar clock (``filing -> daily``).
+#
+# The registry below is the single production source of truth.  It is keyed by
+# canonical name and is intentionally NOT prefix-rule-based: adding a clock
+# split for every ``fin_*``/``event_*``/``ts_*`` operator is exactly the kind of
+# name-prefix guessing the review forbids.  Explicit entries are added per
+# operator (usually alongside its operator metadata), and unlisted canonicals
+# get a conservative same-clock default.
+
+# Sentinel key used in ``ClockContract.input_clocks`` for canonicals whose exact
+# input names are not known.  ``"*"`` records the conservative assumption that
+# EVERY input shares the clock stored under this key (see
+# ``_conservative_default_contract``).
+ANY_INPUT = "*"
+
+
+@dataclass(frozen=True)
+class ClockContract:
+    """Structured input/output clock contract for one canonical operator.
+
+    Fields:
+        input_clocks: per-input clock mapping (input name -> ClockSemantics).
+            For unlisted canonicals a ``"*"`` wildcard key means "every input is
+            conservatively assumed to share this clock".
+        output_clock: cadence of the produced output.
+        grain_transform: human-readable cadence transform, e.g. ``"event->daily"``,
+            ``"filing->daily"``, or ``"same"`` when input and output share a clock.
+        update_trigger: what event advances this operator's inputs, e.g.
+            ``"bar_close"``, ``"event_detect"``, ``"filing"``.
+    """
+
+    input_clocks: dict[str, ClockSemantics] = field(default_factory=dict)
+    output_clock: ClockSemantics = ClockSemantics.UNKNOWN
+    grain_transform: str = "same"
+    update_trigger: str = "unknown"
+
+    def input_clock(self, name: str) -> ClockSemantics:
+        """Resolve the clock for one named input.
+
+        Unknown input names fall back to the output clock (conservative
+        same-clock assumption); for unlisted canonicals the ``"*"`` wildcard
+        entry answers for any name.  Callers therefore never need to know the
+        full input list to ask "what clock is input X on?".
+        """
+        if name in self.input_clocks:
+            return self.input_clocks[name]
+        wildcard = self.input_clocks.get(ANY_INPUT)
+        if wildcard is not None:
+            return wildcard
+        return self.output_clock
+
+
+# Explicit per-canonical contracts.  This is the production surface: it is the
+# ONLY place input/output clock differences may be declared.  Canonicals are
+# added here (or via ``declare_contract``) as they are wired into backends; the
+# resolver never falls back to prefix-guessing.
+_CONTRACT_BY_CANONICAL: dict[str, ClockContract] = {
+    # Event inputs -> daily trading-bar output.
+    "event_historical_response_mean": ClockContract(
+        input_clocks={
+            "response": ClockSemantics.EVENT,
+            "event": ClockSemantics.EVENT,
+        },
+        output_clock=ClockSemantics.TRADING_BAR,
+        grain_transform="event->daily",
+        update_trigger="event_detect",
+    ),
+    # Financial as-of: inputs update only on publication (filing clock), the
+    # output lag is evaluated on the daily trading-bar clock.
+    "fin_announcement_lag": ClockContract(
+        input_clocks={
+            "period_end_date": ClockSemantics.FISCAL_PERIOD,
+            "pub_date": ClockSemantics.FISCAL_PERIOD,
+        },
+        output_clock=ClockSemantics.TRADING_BAR,
+        grain_transform="filing->daily",
+        update_trigger="filing",
+    ),
+}
+
+
+def _conservative_default_contract() -> ClockContract:
+    """Same-clock conservative default for canonicals without an explicit entry.
+
+    Deliberately does NOT inspect the canonical name — no ``fin_``/``event_``/
+    ``ts_`` prefix guessing.  The safe assumption for an unclassified operator
+    is that it neither changes cadence nor exposes a known input list, so every
+    input is conservatively marked ``UNKNOWN`` and the output shares that clock.
+    """
+    return ClockContract(
+        input_clocks={ANY_INPUT: ClockSemantics.UNKNOWN},
+        output_clock=ClockSemantics.UNKNOWN,
+        grain_transform="same",
+        update_trigger="unknown",
+    )
+
+
+def clock_contract_for(canonical: str) -> ClockContract:
+    """Resolve the ClockContract for a canonical operator name.
+
+    Resolution order:
+      1. explicit ``_CONTRACT_BY_CANONICAL`` registry entry (declared via
+         ``declare_contract`` or the built-in table);
+      2. a conservative same-clock default (``UNKNOWN`` inputs == output) —
+         never a name-prefix guess.
+
+    Unlike :func:`clock_for` (the legacy single-clock API, which keeps prefix
+    rules for backward compatibility), this production resolver derives the
+    input/output clock split ONLY from the explicit registry — never from
+    ``name.startswith(...)``.
+    """
+    key = str(canonical)
+    contract = _CONTRACT_BY_CANONICAL.get(key)
+    if contract is None:
+        return _conservative_default_contract()
+    # Defensive copy so callers cannot mutate a frozen registry entry's dict.
+    return replace(contract, input_clocks=dict(contract.input_clocks))
+
+
+def declare_contract(canonical: str, contract: ClockContract) -> None:
+    """Declare (or override) the ClockContract for one canonical.
+
+    This is the production extension point for recipes and backend bindings
+    that know an operator's true input/output clocks.  Callers are responsible
+    for keeping Pandas / Polars / DuckDB implementations in agreement, exactly
+    as with :func:`declare_clock`.
+    """
+    if not isinstance(contract, ClockContract):
+        raise TypeError(
+            f"contract must be a ClockContract, got {type(contract).__name__}"
+        )
+    _CONTRACT_BY_CANONICAL[str(canonical)] = contract
+
+
+def contract_registry() -> dict[str, dict]:
+    """Return a stable, JSON-able view of every explicit clock contract."""
+    return {
+        name: {
+            "input_clocks": {
+                inp: clock.value for inp, clock in contract.input_clocks.items()
+            },
+            "output_clock": contract.output_clock.value,
+            "grain_transform": contract.grain_transform,
+            "update_trigger": contract.update_trigger,
+        }
+        for name, contract in sorted(_CONTRACT_BY_CANONICAL.items())
+    }

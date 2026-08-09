@@ -342,10 +342,7 @@ class TsModwtBandCorr(SeriesOperator):
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {"ts_conditional_transfer_entropy", "ts_modwt_band_corr"}
-    )
+    _surface.extend_research_only({"ts_conditional_transfer_entropy", "ts_modwt_band_corr"})
     for _canon in ("ts_conditional_transfer_entropy", "ts_modwt_band_corr"):
         register_polars_udf(_canon)
 

@@ -399,6 +399,71 @@ class TestParquetMaterializer:
         assert len(df) == 1
         assert df["value"].iloc[0] == pytest.approx(99.0, abs=1e-5)
 
+    def test_null_overwrite_replaces_old_value_with_nan(self, tmp_path):
+        """Review-8 #444: valid -> NaN 修订必须覆盖旧有限值（默认 dropna 会留下
+        旧值 1.2；null_overwrite=True 时 NaN 行保留并被 upsert 覆盖旧值）。"""
+        mat = ParquetMaterializer(lake_root=tmp_path)
+        series_old = _make_series(dates=["2024-01-15"], assets=["A"], values=[1.2])
+        mat.materialize(factor_id="null_ow", result=series_old, ast_hash="h1")
+
+        # 旧逻辑：NaN 被 dropna，旧值 1.2 仍在。
+        series_nan = _make_series(dates=["2024-01-15"], assets=["A"], values=[float("nan")])
+        mat.materialize(
+            factor_id="null_ow", result=series_nan, ast_hash="h1",
+            null_overwrite=True,
+        )
+        pq_path = tmp_path / "factors" / "null_ow" / "year=2024" / "data.parquet"
+        df = pd.read_parquet(pq_path)
+        assert len(df) == 1
+        assert pd.isna(df["value"].iloc[0])  # 旧值 1.2 已被 NaN 覆盖
+        assert df["is_valid"].iloc[0] == 0
+
+    def test_tombstone_deletes_historical_key(self, tmp_path):
+        """Review-8 #446: deleted_keys 把历史 key 标记为删除（NaN 覆盖），读取时
+        不再返回旧有限值。"""
+        mat = ParquetMaterializer(lake_root=tmp_path)
+        series = _make_series(
+            dates=["2024-01-15", "2024-01-16"], assets=["A"], values=[1.0, 2.0]
+        )
+        mat.materialize(factor_id="tomb", result=series, ast_hash="h1")
+        # 删除 2024-01-15 的 A
+        mat.materialize(
+            factor_id="tomb",
+            result=_make_series(dates=["2024-01-16"], assets=["A"], values=[2.0]),
+            ast_hash="h1",
+            deleted_keys=[("2024-01-15", "A")],
+        )
+        df = pd.read_parquet(tmp_path / "factors" / "tomb" / "year=2024" / "data.parquet")
+        vals = df.set_index(pd.to_datetime(df["datetime"]))["value"]
+        assert pd.isna(vals.loc[pd.Timestamp("2024-01-15")])  # tombstoned
+        assert vals.loc[pd.Timestamp("2024-01-16")] == pytest.approx(2.0)
+
+    def test_null_overwrite_roundtrip_preserves_nan_pattern(self, tmp_path):
+        """Review-8 #445: 重算 panel 经 materialize 后读回，NaN 图案与原始
+        result 逐格一致（不因 dropna 丢失）。"""
+        mat = ParquetMaterializer(lake_root=tmp_path)
+        idx = pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2024-01-15"), "A"),
+                (pd.Timestamp("2024-01-15"), "B"),
+                (pd.Timestamp("2024-01-16"), "A"),
+                (pd.Timestamp("2024-01-16"), "B"),
+            ],
+            names=["timestamp", "instrument"],
+        )
+        series = pd.Series([1.0, float("nan"), float("nan"), 4.0], index=idx)
+        mat.materialize(
+            factor_id="rt_nan", result=series, ast_hash="h1", null_overwrite=True,
+        )
+        df = pd.read_parquet(tmp_path / "factors" / "rt_nan" / "year=2024" / "data.parquet")
+        read = df.set_index([pd.to_datetime(df["datetime"]), df["asset"]])["value"]
+        for (dt, asset), expected in zip(idx, [1.0, np.nan, np.nan, 4.0]):
+            got = read.loc[(dt, asset)]
+            if pd.isna(expected):
+                assert pd.isna(got), f"expected NaN at {(dt, asset)}, got {got}"
+            else:
+                assert got == pytest.approx(expected), f"mismatch at {(dt, asset)}"
+
     def test_year_partitioning(self, tmp_path):
         """跨年数据正确分到不同分区。"""
         mat = ParquetMaterializer(lake_root=tmp_path)

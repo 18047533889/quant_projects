@@ -9,9 +9,11 @@ per-date cross-sectional or per-group operators:
 * ``cs_isotonic_residual``        — cross-sectional residual of ``y`` on ``x``
   after an isotonic (monotone, pool-adjacent-violators) regression whose
   direction is chosen from the sign of the daily Spearman rank correlation.
-* ``group_tail_coexceedance_density`` — within-group pairwise probability that
-  both members are in their own extreme tail (exceedance density), net of the
-  independence baseline.
+* ``group_current_members_tail_coexceedance`` — within-group pairwise probability
+  that both members are in their own extreme tail (exceedance density), net of a
+  per-pair empirical independence baseline.  The group is defined by TODAY's
+  membership (``current_members_retrospective``); the legacy name
+  ``group_tail_coexceedance_density`` resolves as a deprecated alias.
 * ``group_corr_mst_length``       — mean edge length of the Minimum Spanning
   Tree of the within-group pairwise correlation graph (a "how tightly is the
   group wired together" gauge).
@@ -180,22 +182,34 @@ def _pava_weighted(vals: np.ndarray, weights: np.ndarray) -> np.ndarray:
     """Weighted pool-adjacent-violators fit (non-decreasing) over *levels*.
 
     Each ``(vals[i], weights[i])`` is one x-level with weight = number of
-    observations sharing that level.  A violator block ``m2 > m1`` is pooled
-    into its weighted mean; the returned array has one fitted value per input
-    level (``weights`` can be used to map back to observations).
+    observations sharing that level.  A violator pair ``m_i > m_{i+1}`` is
+    pooled into its weighted mean (with backtracking).  The returned array has
+    ONE fitted value per INPUT level, so a caller can index it by
+    ``return_inverse``; every level absorbed into a pooled block receives the
+    block's common fitted value (the whole point of isotonic regression on ties).
     """
-    means: list[float] = []
-    counts: list[float] = []
-    for v, w in zip(vals, weights):
-        means.append(float(v))
-        counts.append(float(w))
-        while len(means) >= 2 and means[-1] < means[-2] - _EPS:
-            total = counts[-1] + counts[-2]
-            means[-2] = (means[-2] * counts[-2] + means[-1] * counts[-1]) / total
-            counts[-2] = total
-            means.pop()
-            counts.pop()
-    return np.array(means, dtype=float)
+    means: list[float] = [float(v) for v in vals]
+    counts: list[float] = [float(w) for w in weights]
+    members: list[list[int]] = [[i] for i in range(int(vals.size))]
+    i = 0
+    while i < len(means) - 1:
+        if means[i] > means[i + 1] + _EPS:  # violation → pool i and i+1
+            total = counts[i] + counts[i + 1]
+            means[i] = (means[i] * counts[i] + means[i + 1] * counts[i + 1]) / total
+            counts[i] = total
+            members[i] = members[i] + members[i + 1]
+            del means[i + 1]
+            del counts[i + 1]
+            del members[i + 1]
+            if i > 0:
+                i -= 1
+        else:
+            i += 1
+    out = np.empty(int(vals.size), dtype=float)
+    for b, block in enumerate(members):
+        for lv in block:
+            out[lv] = means[b]
+    return out
 
 
 def _iso_fit(y_vals: np.ndarray, x_vals: np.ndarray, *, decreasing: bool) -> np.ndarray:
@@ -490,21 +504,26 @@ class CsIsotonicResidual(SeriesOperator):
     name="group_tail_coexceedance_density",
     category="group_structure",
     business_category="group_structure",
-    canonical="group_tail_coexceedance_density",
+    canonical="group_current_members_tail_coexceedance",
     source="cross_section_ext",
 )
 class GroupTailCoexceedanceDensity(SeriesOperator):
     """组内尾部共同超越密度：两只股票同时处于各自极值尾部的概率。
 
-    每个成员用自己的 trailing-window 分位数定义极值事件 E_i
-    （upper: x_i > Q_i(q)；lower: x_i < Q_i(1-q)），对组内每对股票取对齐窗口内
-    同时为 1 的频率，均值再减去独立基线 q²。衡量组内尾部联动（抱团/共振）。
-    组内成员 <3 或窗口过短 → NaN。P1。
+    **current-members-retrospective canonical**（R9-OP-020）：组由今日
+    membership 定义，每个当前成员的 trailing 对齐窗口参与组样本；成员的
+    pre-reclassification 历史计入新组。这不是 historical-contemporaneous
+    membership（那需要 PIT group 面板），canonical 名显式带
+    ``current_members``。每个成员用自己的 trailing-window 分位数定义极值事件
+    E_i（upper: x_i > Q_i(q)；lower: x_i < Q_i(1-q)），对组内每对股票取对齐
+    窗口内同时为 1 的频率，净独立基线为逐 pair 的 ``p_ij - p_i·p_j``（而非固定
+    (1-q)²），仅对有效 pair 平均并受 pair-coverage 门控。组内成员 <3、
+    pair-coverage 不足或窗口过短 → NaN。P1。
     """
 
     metadata = _metadata(
-        "group_tail_coexceedance_density",
-        "组内两只股票同时处于各自极值尾部的概率密度（减独立基线）。",
+        "group_current_members_tail_coexceedance",
+        "组内两只股票同时处于各自极值尾部的概率密度（current-members-retrospective，净逐 pair 独立基线）。",
         ["x", "group_id", "window", "quantile", "side"],
         unit="ratio",
         cost=7,
@@ -576,25 +595,39 @@ class GroupCorrMstLength(SeriesOperator):
 
     def _calculate_series(self, x: pd.DataFrame, group_id: pd.DataFrame, window: int = 120, **_: Any) -> pd.DataFrame:
         w = int(window)
-        if w < 2:
-            raise ValueError("window must be >= 2")
+        if w < _MIN_PAIR_ROWS:
+            raise ValueError(f"window must be >= {_MIN_PAIR_ROWS} (a Pearson edge needs {_MIN_PAIR_ROWS} aligned rows)")
         return frame_like(x, _mst_length_series(x.to_numpy(dtype=float), group_id.to_numpy(), w))
 
 
 _NEW_CANONICALS = (
     "cs_knn_local_moran",
     "cs_isotonic_residual",
-    "group_tail_coexceedance_density",
+    "group_current_members_tail_coexceedance",
     "group_corr_mst_length",
 )
+# R9-OP-020: honest rename — the legacy name did not say whether membership was
+# current- or historical-contemporaneous.  ``group_tail_coexceedance_density``
+# is kept as a deprecated resolving alias so existing recipes keep loading.
+_DEPRECATED_ALIASES = {
+    "group_tail_coexceedance_density": "group_current_members_tail_coexceedance",
+}
 
 
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
+    from cleaned_operators.registry import OperatorRegistry
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | set(_NEW_CANONICALS)
-    )
+    # R9-P1-045: live-extend mutator — NEVER rebind the frozenset.  A rebind
+    # snapshots a module-local copy that other modules do not see, so different
+    # modules diverge on what is "extended-only".  ``extend_extended_only``
+    # mutates the canonical surface object in place.
+    _surface.extend_extended_only(set(_NEW_CANONICALS))
+    for _old, _new in _DEPRECATED_ALIASES.items():
+        try:
+            OperatorRegistry.register_alias(_old, _new)
+        except (KeyError, ValueError):
+            pass  # already registered
     for _canon in _NEW_CANONICALS:
         register_polars_bridge(_canon)
 

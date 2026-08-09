@@ -30,6 +30,10 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
+import datetime
+import functools
+from collections.abc import Mapping
 from enum import Enum
 from types import MappingProxyType
 from typing import Any, Dict, List, Optional, Tuple
@@ -53,8 +57,11 @@ def _freeze_const(value: Any) -> Any:
     """Deterministic representation of a code-object constant (P0-23).
 
     Nested code objects recurse through :func:`_code_payload` so their digest
-    never embeds a memory address; other non-primitive constants fall back to
-    ``repr`` (e.g. frozensets), which is stable for the same source.
+    never embeds a memory address.  R9-P1-041: non-primitive constants MUST NOT
+    fall back to ``repr`` — ``repr(frozenset(...))`` and ``repr({...})`` iterate
+    the container in hash-seed-dependent order, so the digest would drift across
+    processes.  They go through the canonical :func:`_freeze_value` (sorted,
+    recursive) instead.
     """
     if isinstance(value, tuple):
         return tuple(_freeze_const(v) for v in value)
@@ -62,7 +69,9 @@ def _freeze_const(value: Any) -> Any:
         return value
     if getattr(value, "co_code", None) is not None:  # nested function code
         return _code_payload(value, include_names=True)
-    return repr(value)
+    # frozenset / dict / any other constant: canonical semantic payload (never
+    # a hash-seed-dependent repr).
+    return _freeze_value(value)
 
 
 def _code_payload(code: Any, *, include_names: bool) -> str:
@@ -90,17 +99,31 @@ def _freeze_value(value: Any) -> str:
     processes and do not reflect semantic change.  This canonicalizes:
 
     * primitives -> canonical JSON;
-    * dict -> sorted keys;
+    * Enum member -> module.Class.MEMBER + frozen value;
+    * dict / any ``Mapping`` -> sorted keys, recursive;
     * list/tuple -> ordered recursive hash;
     * set/frozenset -> sorted recursive hashes;
+    * numpy scalar -> canonical Python value (dtype-aware);
     * ndarray -> dtype + shape + raw bytes;
-    * DataFrame -> schema + deterministic payload hash;
+    * DataFrame -> columns + dtypes + index (values/name/tz) + NaN mask +
+      deterministic payload hash (R9-P1-043);
+    * datetime/date/time/timedelta -> ISO / seconds (timezone-aware);
+    * frozen dataclass (and any dataclass) -> fields recursively (R9-P1-042);
+    * object with an explicit ``semantic_identity()`` -> that identity;
     * function/code -> bytecode + defaults + closure (recursive);
-    * everything else -> ``type(value).__name__`` (identity of the TYPE, never
-      the instance address).
+    * anything else -> a clear error (R9-P1-042): hashing by type name alone
+      would conflate ``SameClass(config=A)`` and ``SameClass(config=B)``.
     """
     import hashlib
 
+    if isinstance(value, Enum):
+        # IntEnum members are ints too — catch them BEFORE the primitives branch
+        # so ``Color.RED`` never collapses into plain ``1``.
+        return (
+            f"enum({type(value).__module__}.{type(value).__name__}.{value.name}="
+            + _freeze_value(value.value)
+            + ")"
+        )
     if value is None or isinstance(value, (bool, int, str, bytes, complex)):
         return repr(value)
     if isinstance(value, float):
@@ -119,7 +142,9 @@ def _freeze_value(value: Any) -> str:
         return "list[" + ",".join(_freeze_value(v) for v in value) + "]"
     if isinstance(value, (set, frozenset)):
         return "set{" + ",".join(sorted(_freeze_value(v) for v in value)) + "}"
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
+        # R9-P1-042: any mapping (dict, MappingProxyType, defaultdict, ...),
+        # canonical sorted-items recursive hash — never repr().
         return "dict{" + ",".join(
             f"{_freeze_value(k)}:{_freeze_value(value[k])}"
             for k in sorted(value.keys(), key=repr)
@@ -131,15 +156,161 @@ def _freeze_value(value: Any) -> str:
         except (TypeError, ValueError):  # non-contiguous / object dtype
             blob = repr(value.tolist()).encode("utf-8")
         return f"ndarray({value.dtype},{value.shape}," + hashlib.sha256(blob).hexdigest()[:16] + ")"
+    if isinstance(value, np.datetime64):
+        try:
+            return f"npdt({np.datetime_as_string(value)})"
+        except (ValueError, TypeError):
+            return f"npdt({value!s})"
+    if isinstance(value, np.generic):
+        # numpy scalars: canonicalize through the exact Python value when the
+        # scalar is exactly representable, otherwise dtype+str (so int64(1) !=
+        # int32(1) and float32(0.1) != float64(0.1)).
+        if isinstance(value, np.bool_):
+            return _freeze_value(bool(value))
+        if isinstance(value, np.integer):
+            return _freeze_value(int(value))
+        if isinstance(value, np.floating):
+            return _freeze_value(float(value))
+        if isinstance(value, np.complexfloating):
+            return _freeze_value(complex(value))
+        return f"npscalar({value.dtype}:{value!s})"
     if isinstance(value, pd.DataFrame):
-        # Schema + deterministic payload hash (columns order + index kind + data).
+        # R9-P1-043: schema + index + NaN mask + payload.  Two frames with
+        # identical VALUES but a 2024-vs-2025 index, a different index name, a
+        # different timezone, different dtypes, a different NaN mask, or a
+        # different column order MUST hash apart.
         import hashlib as _h
 
         cols = ",".join(str(c) for c in value.columns)
-        payload = _h.sha256(
-            np.nan_to_num(value.to_numpy(dtype=float), nan=float("nan")).tobytes()
-        ).hexdigest()[:16]
-        return f"DataFrame({cols}|{payload})"
+        dtypes = ",".join(str(d) for d in value.dtypes)
+        idx = value.index
+        if isinstance(idx, pd.DatetimeIndex):
+            _vals: list[str] = []
+            for _v in idx:
+                if _v is pd.NaT or (isinstance(_v, float) and _v != _v):
+                    _vals.append("NaT")
+                else:
+                    _vals.append(_v.isoformat() if hasattr(_v, "isoformat") else repr(_v))
+            idx_vals = _h.sha256(",".join(_vals).encode("utf-8")).hexdigest()[:16]
+            tz = str(idx.tz)
+        elif isinstance(idx, pd.MultiIndex):
+            idx_vals = _h.sha256(repr(list(idx)).encode("utf-8")).hexdigest()[:16]
+            tz = ""
+        else:
+            idx_vals = _h.sha256(
+                ",".join("NaT" if v is pd.NaT else repr(v) for v in idx).encode("utf-8")
+            ).hexdigest()[:16]
+            tz = ""
+        idx_name = (
+            "|".join(repr(n) for n in idx.names)
+            if isinstance(idx, pd.MultiIndex)
+            else repr(idx.name)
+        )
+        # NaN mask: canonicalizes the many NaN bit patterns AND distinguishes a
+        # real NaN from a numerically-equal placeholder (e.g. 0.0).
+        try:
+            mask = pd.isna(value).to_numpy()
+            mask_hex = _h.sha256(np.ascontiguousarray(mask).tobytes()).hexdigest()[:16]
+        except Exception:
+            mask_hex = ""
+        try:
+            arr = value.to_numpy(dtype=float)
+        except (TypeError, ValueError):
+            # non-numeric / object columns: hash the canonicalised repr list.
+            payload = _h.sha256(
+                repr(value.to_numpy(dtype=object).tolist()).encode("utf-8")
+            ).hexdigest()[:16]
+        else:
+            try:
+                arr = np.ascontiguousarray(arr, dtype=float)
+                if mask.size and bool(mask.any()):
+                    arr = arr.copy()
+                    arr[mask] = 0.0  # NaN -> fixed byte pattern; mask records it
+                payload = _h.sha256(arr.tobytes()).hexdigest()[:16]
+            except Exception:
+                payload = _h.sha256(repr(arr.tolist()).encode("utf-8")).hexdigest()[:16]
+        return (
+            f"DataFrame(cols={cols}|dtypes={dtypes}|idx=({idx_vals})|"
+            f"idxname={idx_name}|tz={tz}|mask={mask_hex}|payload={payload})"
+        )
+    if isinstance(value, pd.Series):
+        # 1-D labelled container: hash by dtype + name + index (values/tz) +
+        # NaN mask + payload, mirroring the DataFrame contract (R9-P1-043).
+        import hashlib as _h
+
+        _dt = str(value.dtype)
+        _name = repr(value.name)
+        _idx = value.index
+        if isinstance(_idx, pd.DatetimeIndex):
+            _vlist: list[str] = []
+            for _v in _idx:
+                if _v is pd.NaT or (isinstance(_v, float) and _v != _v):
+                    _vlist.append("NaT")
+                else:
+                    _vlist.append(_v.isoformat() if hasattr(_v, "isoformat") else repr(_v))
+            _idx_hex = _h.sha256(",".join(_vlist).encode("utf-8")).hexdigest()[:16]
+            _tz = str(_idx.tz)
+        else:
+            _idx_hex = _h.sha256(
+                ",".join("NaT" if v is pd.NaT else repr(v) for v in _idx).encode("utf-8")
+            ).hexdigest()[:16]
+            _tz = ""
+        try:
+            _mask = pd.isna(value).to_numpy()
+            _mask_hex = _h.sha256(np.ascontiguousarray(_mask).tobytes()).hexdigest()[:16]
+        except Exception:
+            _mask_hex = ""
+        try:
+            _arr = np.ascontiguousarray(value.to_numpy(dtype=float), dtype=float)
+            if _mask.size and bool(_mask.any()):
+                _arr = _arr.copy()
+                _arr[_mask] = 0.0
+            _payload = _h.sha256(_arr.tobytes()).hexdigest()[:16]
+        except (TypeError, ValueError):
+            _payload = _h.sha256(
+                repr(value.to_numpy(dtype=object).tolist()).encode("utf-8")
+            ).hexdigest()[:16]
+        return (
+            f"Series(dtype={_dt}|name={_name}|idx=({_idx_hex})|tz={_tz}|"
+            f"mask={_mask_hex}|payload={_payload})"
+        )
+    if value is pd.NaT:
+        return "NaT"
+    if isinstance(value, datetime.datetime):
+        return f"datetime({value.isoformat()})"
+    if isinstance(value, datetime.date):
+        return f"date({value.isoformat()})"
+    if isinstance(value, datetime.time):
+        return f"time({value.isoformat()})"
+    if isinstance(value, datetime.timedelta):
+        return f"timedelta({value.total_seconds()})"
+    if isinstance(value, (pd.Period, pd.Interval)):
+        return f"pandas({type(value).__name__}:{value!s})"
+    if isinstance(value, functools.partial):
+        _kw = ",".join(
+            f"{k}={_freeze_value(v)}" for k, v in sorted(value.keywords.items())
+        )
+        _args = ",".join(_freeze_value(a) for a in value.args)
+        return f"partial(fn={_freeze_value(value.func)}|args=[{_args}]|kw={{{_kw}}})"
+    # R9-P1-042: a dataclass instance hashes by its FIELDS (recursively), never
+    # by ``type(value).__name__`` — two dataclasses of the same class with
+    # different field values are different semantic payloads.
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        field_parts = [
+            f"{_f.name}=" + _freeze_value(getattr(value, _f.name))
+            for _f in dataclasses.fields(value)
+        ]
+        return f"{type(value).__name__}[" + ",".join(field_parts) + "]"
+    # An explicit semantic_identity() is the escape hatch for objects that
+    # cannot be introspected generically but know how to identify themselves.
+    _semantic = getattr(value, "semantic_identity", None)
+    if callable(_semantic):
+        try:
+            _ident = _semantic()
+        except Exception:
+            _ident = None
+        if _ident is not None:
+            return f"{type(value).__name__}[" + _freeze_value(_ident) + "]"
     code = getattr(value, "co_code", None)
     if code is not None:  # code object -> bytecode + constants
         return _code_payload(value, include_names=True)
@@ -156,7 +327,27 @@ def _freeze_value(value: Any) -> str:
                     cells.append("<empty>")
             parts.append("cells=" + ",".join(sorted(cells)))
             return "fn(" + "|".join(parts) + ")"
-    return f"{type(value).__name__}"  # type identity only — never id()/repr
+        # Callable without Python bytecode (numpy ufunc, C builtin): hash by its
+        # stable module.qualname identity — deterministic, never id()/repr.
+        _mod = getattr(value, "__module__", None) or type(value).__module__
+        _qual = (
+            getattr(value, "__qualname__", None)
+            or getattr(value, "__name__", None)
+            or type(value).__qualname__
+        )
+        return f"callable({_mod}.{_qual})"
+    # R9-P1-042: hashing by type name alone conflates distinct payloads.  Fail
+    # loudly (certification failure) instead of producing a collision-prone
+    # identity that silently equates ``SameClass(config=A)`` and
+    # ``SameClass(config=B)``.
+    raise TypeError(
+        "cannot compute a semantic hash for an object of type "
+        f"{type(value).__module__}.{type(value).__qualname__}: it is not a "
+        "primitive, Enum member, mapping, sequence, set, numpy scalar/ndarray, "
+        "DataFrame, datetime, pandas scalar, dataclass, callable, or an object "
+        "with a semantic_identity() method.  Hashing by type name alone would "
+        "conflate distinct payloads (R9-P1-042)."
+    )
 
 
 def _impl_source_hash(operator: Any) -> str:
@@ -268,7 +459,18 @@ def _contract_hash(operator: Any) -> str:
     whether an override replaced the contract or only the kernel.  Covers
     param_names + param_specs (incl. default/dtype/min/max/choices/active_when)
     + panel_params/scalar_params + param_aliases + input/output units + grains +
-    available_at + input_fields.
+    available_at + input_fields + relational_specs + the runtime execution
+    contract (statefulness/chunking/checkpoint) + the declared edge contract +
+    the parameter-aware cost band (R9-P1-044).
+
+    R9-P1-044 coverage note: ``determinism`` is derived from the declared
+    ``tags`` (``"deterministic"`` is the conventional tag).  The following
+    logical-contract dimensions are NOT yet carried on ``OperatorMetadata`` and
+    are therefore skipped defensively — they do not crash the hash, they simply
+    do not contribute yet: input semantic types, output semantic type,
+    ``ClockContract``, ``HistoryTransform``, a declared ``missing_policy`` and a
+    declared ``universe_requirement``.  When those fields are added to the
+    metadata, feed them through :func:`_freeze_value` here.
     """
     import hashlib
 
@@ -307,6 +509,60 @@ def _contract_hash(operator: Any) -> str:
     parts.append(f"out_grain={getattr(meta, 'output_grain', None)!r}")
     parts.append(f"avail={getattr(meta, 'available_at', None)!r}")
     parts.append("in_fields=" + ",".join(list(getattr(meta, "input_fields", None) or [])))
+    # R9-P1-044: cross-parameter feasibility constraints (relational_specs).
+    rel = list(getattr(meta, "relational_specs", None) or [])
+    rel_parts = []
+    for _spec in rel:
+        _expr = getattr(_spec, "expression", None)
+        _msg = getattr(_spec, "message", None)
+        _names = sorted(getattr(_spec, "param_names", None) or ())
+        rel_parts.append(f"{_expr!r}:{_msg!r}:({','.join(_names)})")
+    parts.append("relational_specs={" + ",".join(sorted(rel_parts)) + "}")
+    canonical = getattr(meta, "name", None) or ""
+    if canonical:
+        # ExecutionContract / statefulness / chunking / checkpoint schema — the
+        # single authority in runtime.execution_contract, keyed by canonical.
+        try:
+            from runtime.execution_contract import execution_contract as _ec
+
+            _ec_res = _ec(canonical)
+            parts.append(
+                "execution=" + ",".join([
+                    str(getattr(_ec_res, "state_model", "")),
+                    str(getattr(_ec_res, "chunking", "")),
+                    str(getattr(_ec_res, "checkpoint_schema", "")),
+                ])
+            )
+        except Exception:  # pragma: no cover - runtime contract importable
+            pass
+        # Edge contract (nan/pos_inf/neg_inf/zero/domain_invalid behaviors).
+        try:
+            from cleaned_operators.edge_requirements import edge_contract as _edge
+
+            _edge_res = _edge(canonical)
+            if _edge_res is not None:
+                parts.append("edge=" + ",".join(
+                    f"{_dim}:{getattr(_edge_res, _dim, 'invalid')}"
+                    for _dim in ("nan", "pos_inf", "neg_inf", "zero", "domain_invalid")
+                ))
+        except Exception:  # pragma: no cover - edge_requirements importable
+            pass
+        # Cost contract: deterministic complexity band + reference runtime cost
+        # (operator_cost_model is a pure prefix-match model).
+        try:
+            from cleaned_operators.operator_cost_model import (
+                complexity_label as _cost_label,
+                runtime_cost as _cost_rt,
+            )
+
+            parts.append(f"cost_label={_cost_label(canonical)}")
+            parts.append(f"cost_runtime={_cost_rt(canonical)}")
+        except Exception:  # pragma: no cover - cost model importable
+            pass
+        # Determinism: no dedicated field; derive from the declared tags
+        # ("deterministic" is the conventional tag across operator modules).
+        _tags = getattr(meta, "tags", None) or ()
+        parts.append(f"deterministic={'deterministic' in _tags}")
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 

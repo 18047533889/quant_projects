@@ -1491,11 +1491,40 @@ def _duckdb_rolling_tstat_sql(
     )
 
 
+# 无法在 SQL 中精确复刻 pandas 语义、由混合后端回退到 polars（与 pandas 完全
+# 一致）的算子——"不建议的不用强行加"原则。
+#
+# - EWMA/Wilder 平滑族：pandas ``ewm(adjust=False)`` 的 ignore_na=False 在
+#   NaN 缺口时按绝对位置衰减 + 每次有效观测重新归一化，无法用有限窗口加权和/
+#   运行积精确复刻（长序列 runprod 下溢，递归 CTE 无法并行）。
+# - cdl_hammer / cdl_hanging_man：pandas 参考嵌入 prior-trend 上下文（audit
+#   item 5），需要 AVG(LAG(close)) 嵌套窗口，DuckDB 禁止嵌套窗口函数。
+# - ts_time_slope / ts_upside_deviation / ts_weighted_standardized_moment /
+#   ts_abdi_ranaldo_spread / ts_value_at_argextreme：这些算子的 SQL 分支在
+#   暖启动/NaN 缺口/窗口位置重索引上与 pandas 内核不一致（pandas 用窗口内
+#   位置 OLS 与有限值重归一化），精确复刻成本高；polars 后端已与 pandas 完全
+#   一致，回退到 polars。
+_SQL_FALLBACK_CANONICALS: frozenset[str] = frozenset({
+    "RSI_WILDER", "ATR_WILDER", "DMI_plus", "DMI_minus", "DX", "ADX",
+    "MACD_line", "MACD_signal", "MACD_hist",
+    "DEMA", "TEMA", "PPO", "PPO_signal", "PPO_hist",
+    "PVO", "PVO_signal", "PVO_hist", "TSI", "TSI_signal",
+    "KeltnerMid", "KeltnerUpper", "KeltnerLower", "KeltnerPosition",
+    "ADL", "ChaikinOscillator", "CMF", "ForceIndex",
+    "cdl_hammer", "cdl_hanging_man",
+    "ts_time_slope", "ts_upside_deviation", "ts_weighted_standardized_moment",
+    "ts_abdi_ranaldo_spread", "ts_value_at_argextreme",
+    "industry_size_neutralize",
+})
+
+
 def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None:
     """递归将 PlanNode 编译为 ``_Layer`` 子查询；不支持的算子返回 ``None``。"""
     op = _resolve_canonical(node.op)
     if op == "rolling_beta":
         op = "ts_beta"
+    if op in _SQL_FALLBACK_CANONICALS:
+        return None
     std = _dialect_fn(dialect, "stddev")
     ln = _dialect_fn(dialect, "ln")
     g = _dialect_fn(dialect, "greatest")
@@ -3687,10 +3716,15 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         cur_rng = "(h._v - l._v)"
         ratio = f"CASE WHEN {prev_rng} = 0 THEN NULL ELSE {cur_rng} / {prev_rng} END"
         inside = f"(h._v <= {prev_h} AND l._v >= {prev_l})"
+        outside = f"(h._v >= {prev_h} AND l._v <= {prev_l})"
+        # pandas：inside→current/prev；outside&~inside→1+prev/current；既非 inside
+        # 也非 outside 的 shifted/gap bar → NaN（P1-12），不能落入 >1 的 else。
         expr = (
             f"CASE WHEN {prev_h} IS NULL THEN NULL "
+            f"WHEN {prev_rng} = 0 THEN NULL "
             f"WHEN {inside} THEN {ratio} "
-            f"ELSE 1.0 + GREATEST({ratio}, 0.0) END"
+            f"WHEN {outside} THEN 1.0 + {prev_rng} / NULLIF({cur_rng}, 0) "
+            f"ELSE NULL END"
         )
         return _Layer(
             f"SELECT h.ts, h.inst, {expr} AS _v "
@@ -3879,13 +3913,21 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 f"AND ({o1} <= {o2}) AND ({o1} >= {c2})"
             )
         elif op == "cdl_tweezer_top":
-            scale = f"{_g}({_abs_fn}({h}), {_abs_fn}({h1}))"
-            same_high = f"{_abs_fn}({h} - {h1}) <= 1e-4 * {_g}({scale}, 1.0)"
+            # audit item 6: A-share tick 容差（|p|<10→0.01, <100→0.05, else 0.1）×2，
+            # 非旧的 1e-4*price 相对带。
+            tick_h = (
+                f"CASE WHEN {_abs_fn}({h}) < 10.0 THEN 0.01 "
+                f"WHEN {_abs_fn}({h}) < 100.0 THEN 0.05 ELSE 0.1 END"
+            )
+            same_high = f"{_abs_fn}({h} - {h1}) <= {tick_h} * 2.0"
             reversal = f"({c1} > {o1}) AND ({c} < {o})"
             expr = _sflag(f"{same_high} AND {reversal}")
         else:  # cdl_tweezer_bottom
-            scale = f"{_g}({_abs_fn}({l}), {_abs_fn}({l1}))"
-            same_low = f"{_abs_fn}({l} - {l1}) <= 1e-4 * {_g}({scale}, 1.0)"
+            tick_l = (
+                f"CASE WHEN {_abs_fn}({l}) < 10.0 THEN 0.01 "
+                f"WHEN {_abs_fn}({l}) < 100.0 THEN 0.05 ELSE 0.1 END"
+            )
+            same_low = f"{_abs_fn}({l} - {l1}) <= {tick_l} * 2.0"
             reversal = f"({c1} < {o1}) AND ({c} > {o})"
             expr = _flag(f"{same_low} AND {reversal}")
 
@@ -5477,9 +5519,10 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        a = _float_attr(node, "a", "p", default=0.05)
-        lo = a
-        hi = 1.0 - a
+        # pandas 参考用 lower/upper（非对称），group_winsorize 才用 a。SQL 分支
+        # 原来读 ``a``（对称 5%/95%），与 pandas lower/upper 语义不一致。
+        lo = _float_attr(node, "lower", "lo", default=0.05)
+        hi = _float_attr(node, "upper", "hi", default=0.95)
         g = _dialect_fn(dialect, "greatest")
         l = _dialect_fn(dialect, "least")
         q_lo = _quantile_over(dialect, "_v", lo, "PARTITION BY ts")
@@ -6499,12 +6542,17 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         xv = f"SELECT x.ts, x.inst, x._v AS xv FROM ({xl.sql}) x"
         xw = f"SELECT x.ts, x.inst, x._v AS xv, w._v AS wv FROM ({xl.sql}) x JOIN ({wl.sql}) w USING (ts, inst)"
+        # pandas：total 只计 x、weight 均有限的行；任一有限负权重 → 整行失败
+        # （P1-02）；total<=EPS → NaN。
+        valid_w = "wv IS NOT NULL AND xv IS NOT NULL"
         return _Layer(
             f"SELECT a.ts AS ts, a.inst AS inst, "
-            f"CASE WHEN wt.total_w <= 0 THEN NULL "
+            f"CASE WHEN wt.neg > 0 OR wt.total_w <= 1e-12 THEN NULL "
             f"ELSE (pl.less_w + 0.5 * pl.eq_w) / wt.total_w END AS _v "
             f"FROM ({xv}) a "
-            f"JOIN (SELECT ts, SUM(wv) AS total_w FROM ({xw}) w2 GROUP BY ts) wt USING (ts) "
+            f"JOIN (SELECT ts, SUM(CASE WHEN {valid_w} THEN wv ELSE 0 END) AS total_w, "
+            f"MAX(CASE WHEN wv IS NOT NULL AND wv < 0 THEN 1 ELSE 0 END) AS neg "
+            f"FROM ({xw}) w2 GROUP BY ts) wt USING (ts) "
             f"JOIN (SELECT a2.ts, a2.inst, "
             f"SUM(CASE WHEN b2.xv < a2.xv THEN b2.wv ELSE 0 END) AS less_w, "
             f"SUM(CASE WHEN b2.xv = a2.xv THEN b2.wv ELSE 0 END) AS eq_w "
@@ -6529,16 +6577,21 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         except (TypeError, ValueError):
             mp = 2
         mp = max(mp, 2)
+        # pandas：窗口覆盖所有原始行（回看 w 个位置），窗口**内部**掩码
+        # cond≠0 / x,y finite。不能先过滤再开窗——那会把窗口回看得更远。
+        valid = "cond <> 0 AND x IS NOT NULL AND y IS NOT NULL"
         return _Layer(
             f"SELECT ts, inst, "
             f"CASE WHEN cnt < {mp} THEN NULL "
-            f"ELSE (SUM(xy) OVER ({win}) - SUM(x) OVER ({win}) * SUM(y) OVER ({win}) / cnt) "
+            f"ELSE (SUM(CASE WHEN {valid} THEN x * y END) OVER ({win}) "
+            f"- SUM(CASE WHEN {valid} THEN x END) OVER ({win}) "
+            f"* SUM(CASE WHEN {valid} THEN y END) OVER ({win}) / cnt) "
             f"/ (cnt - 1.0) END AS _v "
-            f"FROM (SELECT ts, inst, x, y, x * y AS xy, COUNT(*) OVER ({win}) AS cnt "
+            f"FROM (SELECT ts, inst, x, y, "
+            f"SUM(CASE WHEN {valid} THEN 1 ELSE 0 END) OVER ({win}) AS cnt "
             f"FROM (SELECT x.ts, x.inst, x._v AS x, y._v AS y, c._v AS cond "
             f"FROM ({xl.sql}) x JOIN ({yl.sql}) y USING (ts, inst) "
-            f"JOIN ({cl.sql}) c USING (ts, inst)) j "
-            f"WHERE cond <> 0 AND x IS NOT NULL AND y IS NOT NULL) s",
+            f"JOIN ({cl.sql}) c USING (ts, inst)) j) s",
             has_inst_window=True,
         )
 

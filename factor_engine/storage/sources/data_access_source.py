@@ -100,7 +100,15 @@ class HistoricalCoverageContract:
             history.
         coverage_by_year: per-year coverage ratio, keyed by int year.
         coverage_by_stock: per-stock coverage ratio, keyed by instrument.
+        coverage_by_date: per-date coverage ratio, keyed by ISO date.
         threshold: default minimum coverage ratio for ``covers_window``.
+        min_stock_coverage_threshold: a stock counts as covered when its
+            per-stock coverage is at least this value (R9-P0-024).
+        min_stock_coverage_quantile: at least this fraction of stocks must be
+            covered, otherwise the per-stock gate flags the contract
+            (R9-P0-024, default 90%).
+        coverage_date_threshold: minimum per-date coverage for dates inside the
+            requested window (R9-P0-024, default equals ``threshold``).
     """
 
     field: str
@@ -108,7 +116,11 @@ class HistoricalCoverageContract:
     coverage_ratio: float = 1.0
     coverage_by_year: dict[int, float] = _dc_field(default_factory=dict)
     coverage_by_stock: dict[str, float] = _dc_field(default_factory=dict)
+    coverage_by_date: dict[str, float] = _dc_field(default_factory=dict)
     threshold: float = 0.7
+    min_stock_coverage_threshold: float = 0.5
+    min_stock_coverage_quantile: float = 0.9
+    coverage_date_threshold: float = 0.7
 
     def covers_window(
         self,
@@ -118,39 +130,7 @@ class HistoricalCoverageContract:
         threshold: float | None = None,
     ) -> bool:
         """True when the field's coverage meets ``threshold`` over [start, end]."""
-        threshold = float(threshold if threshold is not None else self.threshold)
-        if not 0.0 <= threshold <= 1.0:
-            raise ValueError("coverage threshold must be in [0, 1]")
-        ratio = float(self.coverage_ratio)
-        if ratio < threshold:
-            return False
-        if start is not None and self.first_valid_date:
-            try:
-                if pd.Timestamp(start).normalize() < pd.Timestamp(self.first_valid_date).normalize():
-                    return False
-            except (ValueError, TypeError):
-                return False
-        if self.coverage_by_year and (start is not None or end is not None):
-            year_start = None
-            year_end = None
-            if start is not None:
-                try:
-                    year_start = int(pd.Timestamp(start).year)
-                except (ValueError, TypeError):
-                    year_start = None
-            if end is not None:
-                try:
-                    year_end = int(pd.Timestamp(end).year)
-                except (ValueError, TypeError):
-                    year_end = None
-            for year, year_ratio in self.coverage_by_year.items():
-                if year_start is not None and int(year) < year_start:
-                    continue
-                if year_end is not None and int(year) > year_end:
-                    continue
-                if float(year_ratio) < threshold:
-                    return False
-        return True
+        return not self._evaluate(start=start, end=end, threshold=threshold)
 
     def violations(
         self,
@@ -160,11 +140,49 @@ class HistoricalCoverageContract:
         threshold: float | None = None,
     ) -> list[str]:
         """Return a human-readable list of coverage violations (empty = OK)."""
+        return self._evaluate(start=start, end=end, threshold=threshold)
+
+    def _evaluate(
+        self,
+        *,
+        start: str | None = None,
+        end: str | None = None,
+        threshold: float | None = None,
+    ) -> list[str]:
+        """Single shared coverage evaluator (R9-P0-023/024).
+
+        Both :meth:`covers_window` and :meth:`violations` delegate here so the
+        requested window is applied identically: per-year and per-date coverage
+        are evaluated only for dates/years inside [start, end] (all years/dates
+        when no window is given), and per-stock coverage is gated by a quantile
+        rule so a high aggregate cannot mask a tail of poorly covered stocks.
+        """
         threshold = float(threshold if threshold is not None else self.threshold)
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("coverage threshold must be in [0, 1]")
         problems: list[str] = []
+
         ratio = float(self.coverage_ratio)
         if ratio < threshold:
             problems.append(f"overall coverage {ratio:.3f} < threshold {threshold:.3f}")
+
+        year_start: int | None = None
+        year_end: int | None = None
+        ts_start = None
+        ts_end = None
+        if start is not None:
+            try:
+                ts_start = pd.Timestamp(start).normalize()
+                year_start = int(ts_start.year)
+            except (ValueError, TypeError):
+                problems.append(f"unparseable window start {start!r}")
+        if end is not None:
+            try:
+                ts_end = pd.Timestamp(end).normalize()
+                year_end = int(ts_end.year)
+            except (ValueError, TypeError):
+                problems.append(f"unparseable window end {end!r}")
+
         if start is not None and self.first_valid_date:
             try:
                 if pd.Timestamp(start).normalize() < pd.Timestamp(self.first_valid_date).normalize():
@@ -173,9 +191,57 @@ class HistoricalCoverageContract:
                     )
             except (ValueError, TypeError):
                 problems.append(f"unparseable window start {start!r}")
+
+        # Per-year coverage restricted to the requested window (R9-P0-023):
+        # a year outside [start, end] must not veto a window that is covered.
         for year, year_ratio in (self.coverage_by_year or {}).items():
+            if year_start is not None and int(year) < year_start:
+                continue
+            if year_end is not None and int(year) > year_end:
+                continue
             if float(year_ratio) < threshold:
                 problems.append(f"year {year} coverage {float(year_ratio):.3f} < {threshold:.3f}")
+
+        # Per-date coverage restricted to the requested window (R9-P0-024).
+        date_threshold = float(self.coverage_date_threshold)
+        if not 0.0 <= date_threshold <= 1.0:
+            raise ValueError("coverage_date_threshold must be in [0, 1]")
+        for date, date_ratio in (self.coverage_by_date or {}).items():
+            if ts_start is not None:
+                try:
+                    if pd.Timestamp(date).normalize() < ts_start:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+            if ts_end is not None:
+                try:
+                    if pd.Timestamp(date).normalize() > ts_end:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+            if float(date_ratio) < date_threshold:
+                problems.append(f"date {date} coverage {float(date_ratio):.3f} < {date_threshold:.3f}")
+
+        # Per-stock quantile gate (R9-P0-024): at least ``min_stock_coverage_quantile``
+        # of stocks must have per-stock coverage >= ``min_stock_coverage_threshold``.
+        by_stock = self.coverage_by_stock or {}
+        if by_stock:
+            stock_threshold = float(self.min_stock_coverage_threshold)
+            quantile = float(self.min_stock_coverage_quantile)
+            if not 0.0 <= stock_threshold <= 1.0:
+                raise ValueError("min_stock_coverage_threshold must be in [0, 1]")
+            if not 0.0 <= quantile <= 1.0:
+                raise ValueError("min_stock_coverage_quantile must be in [0, 1]")
+            covered = sum(
+                1 for _ratio in by_stock.values() if float(_ratio) >= stock_threshold
+            )
+            total = len(by_stock)
+            frac = covered / total if total else 1.0
+            if frac < quantile:
+                problems.append(
+                    f"only {covered}/{total} stocks ({frac:.1%}) have per-stock "
+                    f"coverage >= {stock_threshold:.3f}; required >= {quantile:.1%}"
+                )
         return problems
 
 
@@ -315,32 +381,31 @@ class DataAccessSource(DataSource):
         semantic_filters: dict[str, Any] | None = None,
         read_mode: str = "panel",
         strict_unknown_fields: bool | None = None,
+        run_mode: str | None = None,
+        production: bool | None = None,
         enforce_mining_gate: bool = False,
         snapshot_now_only: bool = False,
         mining_coverage_threshold: float | None = None,
     ) -> None:
         self.dataset = dataset
         self.fields = dict(fields or {})
-        # Fail-closed field contracts in production (unknown fields and
-        # normalization errors raise).  Default None → auto-detect the engine run
-        # mode so research stays lenient (raw physical-column fallback allowed).
-        if strict_unknown_fields is None:
-            try:
-                from runtime.production_policy import is_production_mode
+        # R9-P0-022: strictness must come from an explicit run_mode / production
+        # policy, never self-inferred from the global environment.  ``None``
+        # defaults to research (fail-open); callers that require production
+        # admission must pass run_mode="production" / production=True explicitly.
+        # ``strict_unknown_fields`` remains the most direct gate and wins when
+        # explicitly provided (backward compatible).  The resolved policy is
+        # stored on ``self.run_mode`` / ``self.production`` so wrapper sources
+        # that build child ``DataAccessSource`` instances can propagate it.
+        self.run_mode = str(run_mode).lower() if run_mode else None
+        if strict_unknown_fields is not None:
+            production = bool(strict_unknown_fields)
+        elif production is None and self.run_mode is not None:
+            from runtime.production_policy import is_production_mode
 
-                strict_unknown_fields = bool(is_production_mode())
-            except Exception:
-                # P0-12: do NOT silently default to research (lenient) when the
-                # production-policy module is unavailable.  Fail closed to strict
-                # so unknown fields never pass through as raw physical columns in
-                # an unclassified run mode.  Genuine research mode still resolves
-                # via is_production_mode() == False above.
-                logger.warning(
-                    "is_production_mode() unavailable; defaulting "
-                    "strict_unknown_fields=True (fail-closed)"
-                )
-                strict_unknown_fields = True
-        self.strict_unknown_fields = bool(strict_unknown_fields)
+            production = bool(is_production_mode(self.run_mode))
+        self.production = bool(production)
+        self.strict_unknown_fields = self.production
         # Round-7 WS-E #279/#280: opt-in production hard gates for mining/backfill
         # field contracts.  Default OFF so legitimate reads of structural columns
         # (e.g. a one_to_many weight that a factor aggregates before mining) keep

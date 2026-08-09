@@ -13,6 +13,7 @@ from expr.literal import Literal
 from ir.nodes import IRNode
 from ir.schema import DEFAULT_COLUMN_SCHEMA, Schema
 from ir.types import (
+    MIXED,
     OPERATOR_INPUT_TYPE_CONTRACTS,
     SemanticLattice,
     lattice_join_semantic_attrs,
@@ -1363,7 +1364,9 @@ class Analyzer:
                 semantic = lattice_join_semantic_attrs(child_views)
                 # knowledge_model / fiscal_grain / universe_id are PIT
                 # descriptors: unambiguous across children -> propagate; else
-                # first non-None + mixed_ marker (no blind input[0] copy).
+                # the MIXED marker + mixed_ tuple (review R9-P0-003 — never
+                # ``distinct[0]``, which made the root semantic operand-order
+                # dependent: add(fundamental, price) != add(price, fundamental)).
                 for key in ("knowledge_model", "fiscal_grain", "universe_id"):
                     values = [
                         (child.semantic_attrs or {}).get(key)
@@ -1374,7 +1377,7 @@ class Analyzer:
                     if len(distinct) == 1:
                         semantic[key] = distinct[0]
                     elif len(distinct) > 1:
-                        semantic[key] = distinct[0]
+                        semantic[key] = MIXED
                         semantic[f"mixed_{key}"] = tuple(distinct)
                 # Round-6 P0-50 / WS-C #274-#275: ``available_at`` propagates
                 # bottom-up as the LATEST input's knowledge-time descriptor — the
@@ -1391,8 +1394,10 @@ class Analyzer:
                 available_at = propagate_available_at(child_availabilities)
                 if available_at is not None:
                     semantic["available_at"] = available_at
-                # source_vintage: first non-None structured spec (the Schema's
-                # semantic lattice carries the full join for multi-input trees).
+                # source_vintage: unambiguous -> the single structured spec;
+                # conflicting vintages -> the MIXED marker (the review's
+                # "dependency set") + mixed_ tuple, NEVER ``distinct[0]``
+                # (review R9-P0-003 — operand-order independence).
                 vintage_values = [
                     (child.semantic_attrs or {}).get("source_vintage")
                     for child in inputs
@@ -1402,7 +1407,7 @@ class Analyzer:
                 if len(vintage_distinct) == 1:
                     semantic["source_vintage"] = vintage_distinct[0]
                 elif len(vintage_distinct) > 1:
-                    semantic["source_vintage"] = vintage_distinct[0]
+                    semantic["source_vintage"] = MIXED
                     semantic["mixed_source_vintage"] = tuple(vintage_distinct)
                 # Join the children's semantic lattices into the root.
                 joined_lattice: SemanticLattice | None = None

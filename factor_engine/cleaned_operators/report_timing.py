@@ -213,9 +213,7 @@ def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.extend_extended_only({"report_filing_delay_surprise"})
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | {"report_revision_magnitude"}
-    )
+    _surface.extend_research_only({"report_revision_magnitude"})
 
 
 _register_surface()

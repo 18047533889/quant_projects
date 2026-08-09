@@ -373,6 +373,4 @@ _mk(
 
 import cleaned_operators.operator_surface as _surface  # noqa: E402
 
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    set(_surface.EXTENDED_ONLY_CANONICALS) | set(_CANONICALS)
-)
+_surface.extend_extended_only(set(_CANONICALS))

@@ -106,13 +106,160 @@ def _namespace_plan_refs(node: PlanNode, namespace: str) -> PlanNode:
                 op="plan_ref",
                 attrs={**node.attrs, "sid": f"{namespace}{sid}"},
                 inputs=[],
+                semantic_attrs=dict(node.semantic_attrs),
             )
         return node
     return PlanNode(
         op=node.op,
         attrs=dict(node.attrs),
+        semantic_attrs=dict(node.semantic_attrs),
         inputs=[_namespace_plan_refs(c, namespace) for c in node.inputs],
         node_id=node.node_id,
+    )
+
+
+#: R9-P0-011: 截面（cross-sectional）算子 —— 这些算子在同一时点的全部股票上
+#: 求值；若数据源喂入全市场而因子声明了 scoped universe，结果会静默在错误的
+#: 股票池上计算（``Factor.universe=CSI300`` 却对全 A rank 的严重截面 bug）。
+#: ``cs_`` / ``group_`` 前缀按命名空间覆盖其余算子（含 cs_knn_*）。
+_CROSS_SECTIONAL_OPS = frozenset(
+    {
+        "rank",
+        "rank_pct",
+        "zscore",
+        "scale",
+        "normalize",
+        "winsorize",
+        "quantile",
+        "neutralize",
+        "size_neutralize",
+        "industry_size_neutralize",
+        "industry_neutralize",
+        "industry_rank",
+    }
+)
+
+
+def _plan_has_cross_sectional_ops(plan: Any) -> bool:
+    """递归检测逻辑计划是否含截面算子（rank/zscore/neutralize/group/CS/kNN）。
+
+    优先级：前缀（``cs_`` / ``group_``）→ 静态集合 → OperatorRegistry 分类
+    （``category`` ∈ {``cross_sectional``, ``group_neutralization``}）。
+    Registry 未加载 / 未知算子时静默跳过分类（保守不误报）。
+    """
+    if plan is None:
+        return False
+    op = str(getattr(plan, "op", "") or "")
+    if op.startswith("cs_") or op.startswith("group_"):
+        return True
+    if op in _CROSS_SECTIONAL_OPS:
+        return True
+    if op:
+        try:
+            from cleaned_operators.registry import OperatorRegistry
+
+            canonical = OperatorRegistry.resolve_canonical(op)
+            if (
+                canonical in _CROSS_SECTIONAL_OPS
+                or canonical.startswith("cs_")
+                or canonical.startswith("group_")
+            ):
+                return True
+            impl = OperatorRegistry.get(canonical)
+            category = str(getattr(getattr(impl, "metadata", None), "category", "") or "")
+            if category in {"cross_sectional", "group_neutralization"}:
+                return True
+        except Exception:
+            pass
+    for child in getattr(plan, "inputs", ()) or ():
+        if _plan_has_cross_sectional_ops(child):
+            return True
+    return False
+
+
+def _data_source_scoped(data_source: Any) -> bool:
+    """数据源是否已把截面限定到某个股票子集（而非全市场）。
+
+    数据层支持 universe 过滤时（``instrument_filter`` 非空 / ``universe`` 属性
+    非 ALL），数据源即为 universe 权威：截面在这些已过滤的股票上计算是正确的，
+    execution-contract gate 直接放行。
+    """
+    if data_source is None:
+        return False
+    inst = getattr(data_source, "instrument_filter", None)
+    if inst:
+        return True
+    univ = getattr(data_source, "universe", None)
+    if univ and str(univ).strip().upper() not in {"", "ALL"}:
+        return True
+    inner = getattr(data_source, "inner", None)
+    if inner is not None and inner is not data_source:
+        return _data_source_scoped(inner)
+    return False
+
+
+def _is_whole_market_universe(scope: FactorExecutionScope) -> bool:
+    """universe 标签是否表示「整个市场」（而非 scoped 子集股票池）。
+
+    - ``ALL`` / 空 → 全市场；
+    - 与 ``market`` 相同（如 ``universe="A"`` + ``market="A"``）→ 全市场；
+    - 以 ``_ALL`` 结尾（``ASHARE_ALL`` / ``US_MASSIVE_ALL``）→ 全市场；
+    - 可被 ``infer_market`` 识别为市场（``ASHARE*`` / ``US_*`` 等）→ 全市场。
+    """
+    univ = str(scope.universe_id or "").strip().upper()
+    if univ in {"", "ALL"}:
+        return True
+    if univ == str(scope.market or "").strip().upper():
+        return True
+    if univ.endswith("_ALL"):
+        return True
+    try:
+        from storage.trading_calendar import infer_market
+
+        if infer_market(universe=scope.universe_id):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def assert_execution_scope_contract(
+    scope: FactorExecutionScope,
+    plan: Any,
+    *,
+    factor_name: str,
+    data_source: Any = None,
+) -> None:
+    """R9-P0-011 execution-contract gate：scoped-universe 因子不得在全源上算截面。
+
+    只有同时满足以下条件才 fail-closed：
+
+      * ``universe_id`` 不是全市场标签（``ALL`` / 与 ``market`` 相同 / ``*_ALL`` /
+        可被 ``infer_market`` 识别为市场）；
+      * 计划含截面算子（rank/zscore/neutralize/group/CS-regression/kNN）；
+      * 数据源未显式限定股票子集（无 ``instrument_filter`` 等）。
+
+    数据层已支持 universe 过滤时（``instrument_filter``），数据源即为 universe
+    权威，直接放行（选项 a）；否则抛 ``ProductionPolicyViolation``（选项 b），
+    绝不静默在全源上计算截面。后续接线 DataAccess universe-filter 以应用
+    命名 universe mask（documented follow-up）。
+    """
+    if _is_whole_market_universe(scope):
+        return
+    if not _plan_has_cross_sectional_ops(plan):
+        return
+    if _data_source_scoped(data_source):
+        return
+    from runtime.production_policy import ProductionPolicyViolation
+
+    raise ProductionPolicyViolation(
+        f"execution-scope contract violation: factor '{factor_name}' declares "
+        f"scoped universe universe_id={scope.universe_id!r} "
+        f"(market={scope.market!r}) but the plan computes cross-sectional "
+        f"operator(s) over the FULL source. Cross-sectional execution on the full "
+        f"source is disallowed for a scoped universe. Configure the data source to "
+        f"serve the scoped pool (e.g. instrument_filter) or set universe='ALL'. "
+        f"(follow-up: wire the DataAccess universe-filter to apply the named-universe mask)"
     )
 
 
@@ -151,7 +298,15 @@ class FactorEngine:
         self.run_mode = resolve_run_mode(run_mode)
         # #6：严格 run_mode 校验——非法值（含 typo）启动即失败，不静默回落。
         _validate_run_mode(self.run_mode)
-        self.analyzer = Analyzer()  # Expr → IR + 依赖列分析
+        # R9-P0-001: the Analyzer must be constructed WITH the production policy
+        # from THIS engine's run_mode.  Previously ``Analyzer()`` defaulted to
+        # production=False, so the production typed-field gate (unknown raw column
+        # rejection, WS-C #273) was silently OFF in every real production
+        # ``FactorEngine`` compile.  A run_mode != production still gets a
+        # research-policy analyzer.
+        from runtime.production_policy import is_production_mode
+
+        self.analyzer = Analyzer(production=is_production_mode(self.run_mode))
         self.lowerer = Lowerer()  # IR → 逻辑计划树
         self.optimizer = Optimizer()  # 计划级优化（常折叠等）
 
@@ -260,13 +415,23 @@ class FactorEngine:
             )
             plans.append(plan)
             analyses[factor.name] = analysis
-            scopes.append(_scope_from_factor(factor))
+            scope = _scope_from_factor(factor)
+            scopes.append(scope)
+            # R9-P0-011: execution-contract gate —— scoped-universe 因子不得在
+            # 全源上算截面；fail-closed 而非静默在错误股票池上计算。
+            assert_execution_scope_contract(
+                scope,
+                plan,
+                factor_name=factor.name,
+                data_source=self.data_source,
+            )
         if enable_cse and len(plans) > 0:
             new_plans, shared = self._cse_by_scope(plans, scopes)
         else:
             new_plans, shared = plans, {}
         roots = [
-            FactorPlan(factor_name=n, root=r) for n, r in zip(names, new_plans, strict=True)
+            FactorPlan(factor_name=n, root=r, execution_scope=s)
+            for n, r, s in zip(names, new_plans, scopes, strict=True)
         ]
         return DAGPlan(roots=roots, shared_nodes=shared), analyses
 
@@ -1498,6 +1663,14 @@ class FactorEngine:
                 pit_enforce=pit_enforce,
                 pit_forbid_forward_fill=pit_forbid_forward_fill,
             )
+        # R9-P0-011: execution-contract gate —— 单因子执行路径与批跑同门，
+        # scoped-universe 因子不得在全源上算截面。
+        assert_execution_scope_contract(
+            _scope_from_factor(factor),
+            plan,
+            factor_name=factor.name,
+            data_source=self.data_source,
+        )
         assert_production_run_flags(
             mode=self.run_mode,
             input_dq_check=input_dq_check,

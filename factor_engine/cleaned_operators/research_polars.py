@@ -8,6 +8,8 @@ semantics: every value at t depends only on rows <= t.
 from __future__ import annotations
 
 import math
+
+import numpy as np
 import polars as pl
 
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator

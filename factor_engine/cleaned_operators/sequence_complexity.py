@@ -647,10 +647,9 @@ def _register_surface() -> None:
     # the ts_model.complexity research family (loaded earlier).  This module is
     # the reviewed production implementation, so pull those names off the
     # research surface to keep the extended/research partitions disjoint.
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        - {"ts_permutation_entropy", "ts_sample_entropy"}
-    )
+    # R9-P1-045: a live REMOVAL mutator — never a frozenset reassignment (the
+    # subtraction is unrepresentable by the add-only extend mutator).
+    _surface.retract_research_only({"ts_permutation_entropy", "ts_sample_entropy"})
     for _canon in (
         "ts_permutation_entropy", "ts_weighted_permutation_entropy",
         "ts_permutation_transition_entropy", "ts_sample_entropy",

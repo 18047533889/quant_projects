@@ -85,7 +85,7 @@ NEW_CANONICALS: frozenset[str] = frozenset({
     "ts_persistence_entropy_h0", "ts_persistence_entropy_h1",
     # cs / group locality
     "cs_knn_local_moran", "cs_isotonic_residual",
-    "group_tail_coexceedance_density", "group_corr_mst_length",
+    "group_current_members_tail_coexceedance", "group_corr_mst_length",
     # intraday session shape
     "intraday_session_shape_novelty", "intraday_profile_pca_residual",
 })
@@ -224,7 +224,7 @@ CALLS: dict[str, tuple[tuple[str, ...], dict]] = {
     "ts_hartigan_dip": (("close",), {"window": 40}),
     "cs_knn_local_moran": (("ret", "close", "volume", "ret"), {"k": 3}),
     "cs_isotonic_residual": (("volume", "close"), {}),
-    "group_tail_coexceedance_density": (("ret", "group_id"), {"window": 60, "quantile": 0.9, "side": "upper"}),
+    "group_current_members_tail_coexceedance": (("ret", "group_id"), {"window": 60, "quantile": 0.9, "side": "upper"}),
     "group_corr_mst_length": (("ret", "group_id"), {"window": 60}),
     "ts_persistence_entropy_h0": (("close",), {"window": 40, "tau": 1, "dim": 3}),
     "ts_persistence_entropy_h1": (("close",), {"window": 40, "tau": 1, "dim": 3}),

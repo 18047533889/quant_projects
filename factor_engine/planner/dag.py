@@ -89,10 +89,13 @@ class FactorPlan:
     字段：
         factor_name: 因子名称（与 ``Factor.name`` 一致）
         root: 该因子的逻辑计划根 ``PlanNode``
+        execution_scope: 该因子的执行作用域（R9-P0-011）；缺省
+            ``FactorExecutionScope()``（``universe_id="ALL"``）以保持向后兼容。
     """
 
     factor_name: str
     root: PlanNode
+    execution_scope: FactorExecutionScope = field(default_factory=FactorExecutionScope)
 
 
 @dataclass

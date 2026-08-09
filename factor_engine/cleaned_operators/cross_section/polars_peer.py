@@ -45,17 +45,21 @@ def _register(name: str, description: str, params: list[str], fn):
 
 def _peer_deviation_row(xs):
     arr = np.asarray([np.asarray(v, dtype=float) for v in xs])
-    valid = np.all(np.isfinite(arr), axis=0)
-    out = np.zeros(arr.shape[1], dtype=float)
+    # 与 pandas 参考一致：初始为 NaN（全缺失格子保留 NaN，绝不伪造 0），
+    # 且每个标准化成分只用自身帧的 finite 掩码（而非跨帧 all-finite）。
+    out = np.full(arr.shape[1], np.nan, dtype=float)
     for k in range(arr.shape[0]):
         a = arr[k]
+        valid = np.isfinite(a)
         if valid.sum() < 2:
             continue
         sd = float(np.std(a[valid]))
         if sd <= 1e-12:
             continue
         z = np.where(valid, (a - np.mean(a[valid])) / sd, np.nan)
-        out = np.where(np.isfinite(z), out + z, out)
+        nz = np.isfinite(z)
+        if np.any(nz):
+            out[nz] = np.where(np.isnan(out[nz]), z[nz], out[nz] + z[nz])
     return out
 
 

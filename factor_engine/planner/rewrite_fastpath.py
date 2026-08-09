@@ -5,13 +5,43 @@ from __future__ import annotations
 from planner.logical_plan import PlanNode
 
 
+_COLUMN_SOURCE_KEYS = ("source_table", "field_id", "source_field", "field_registry_hash")
+
+
+def _column_identity_key(node: PlanNode) -> tuple | None:
+    """Full identity of a column node (Review-8 #G).
+
+    A display ``name`` is NOT an identity: ``sourceA.Close`` and
+    ``sourceB.Close`` both display "Close" yet carry different data.  When the
+    node carries explicit source identity (field_id / source_table /
+    source_field from the typed analyzer), that identity is authoritative.
+    """
+    if node.op != "column":
+        return None
+    name = node.attrs.get("name")
+    if name is None:
+        return None
+    source_id = tuple(node.attrs.get(k) for k in _COLUMN_SOURCE_KEYS)
+    if any(v is not None for v in source_id):
+        return (name, source_id)
+    return None
+
+
 def _same_column(a: PlanNode, b: PlanNode) -> bool:
-    """判断两节点是否引用同一数据列。"""
-    return (
-        a.op == "column"
-        and b.op == "column"
-        and a.attrs.get("name") == b.attrs.get("name")
-    )
+    """判断两节点是否引用同一数据列。
+
+    Review-8 #G: 两列可能共享 display name（sourceA.Close 与 sourceB.Close），
+    却完全是不同的数据。当两侧都携带显式 source identity（typed analyzer 写出
+    的 field_id / source_table / source_field）时，identity 优先于 name；
+    否则退回 name 比较（synthetic/未解析列）。
+    """
+    if a.op != "column" or b.op != "column":
+        return False
+    ka = _column_identity_key(a)
+    kb = _column_identity_key(b)
+    if ka is not None and kb is not None:
+        return ka == kb
+    return a.attrs.get("name") == b.attrs.get("name")
 
 
 def _column_node(name: str) -> PlanNode | None:

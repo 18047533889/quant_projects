@@ -6,7 +6,10 @@ reference implementation:
 
 * MedRV constant is the standard pi/(6-4√3+pi) (Andersen–Dobrev–Schaumburg).
 * intraday_jump_test_stat is a standard BNS (2006) linear z-statistic.
-* group_tail_coexceedance_density uses the correct (1-q)² independence baseline.
+* group_current_members_tail_coexceedance (was group_tail_coexceedance_density)
+  nets a per-pair empirical independence baseline (R9-OP-019): excess = p_ij -
+  p_i·p_j on each aligned cohort, so independent names give excess ≈ 0 without
+  assuming every name's tail rate equals (1-q).
 * group_corr_mst_length counts zero-length edges (perfectly correlated names).
 * piotroski_f_score compares fiscal periods, not trading days.
 * fundamental applicability mask never turns NaN into truthy.
@@ -95,8 +98,9 @@ def test_coexceedance_baseline_is_tail_probability_squared():
     x = rng.normal(size=(60, 4))
     g = np.tile(np.array([1, 1, 1, 1]), (60, 1))
     out = _tail_coexceedance_series(x, g, window=40, quantile=0.9, side="upper")
-    # Reference baseline under independence: (1-q)^2 = 0.01, so the mean
-    # "excess" over baseline across pairs is ~0.
+    # Reference baseline under independence: per-pair excess p_ij - p_i·p_j
+    # (R9-OP-019) averages to ~0; the old fixed (1-q)^2 = 0.01 baseline is no
+    # longer assumed — each name's empirical tail rate is used instead.
     last = out[-1]
     assert np.all(np.isfinite(last))
     assert abs(float(np.mean(last))) < 0.05, f"independent excess should be ~0, got {last}"

@@ -58,10 +58,28 @@ class RollingCacheEntry:
         }
 
 
+_COLUMN_SOURCE_ATTRS = ("source_table", "field_id", "source_field", "field_registry_hash")
+
+
+def _column_full_ref(node: PlanNode) -> str:
+    """完整列引用：name + source identity（Review-8 #G）。
+
+    两列可能共享 display name（sourceA.Close 与 sourceB.Close）却是完全不同的
+    数据。列节点携带 analyzer 写出的 field_id / source_table / source_field 时，
+    identity 必须参与 CSE / 摘要键 —— 否则 sourceA 的 rolling 结果会被复用给
+    sourceB（错误缓存命中）。synthetic 列无 source identity 时退回 name。
+    """
+    name = str(node.attrs.get("name") or node.attrs.get("column") or "")
+    parts = [str(node.attrs.get(k) or "") for k in _COLUMN_SOURCE_ATTRS]
+    if any(parts):
+        return f"{name}@{'|'.join(parts)}"
+    return name
+
+
 def _first_col_ref(node: PlanNode) -> str | None:
-    """深度优先查找子树中首个列引用名。"""
+    """深度优先查找子树中首个列引用（含 source identity）。"""
     if node.op in {"col", "column"}:
-        return str(node.attrs.get("name") or node.attrs.get("column") or "")
+        return _column_full_ref(node)
     for child in node.inputs:
         found = _first_col_ref(child)
         if found:

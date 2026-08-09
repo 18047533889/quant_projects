@@ -391,9 +391,7 @@ for _name, _params, _function, _description in _SPECS:
 from cleaned_operators import operator_surface as _surface
 from cleaned_operators.registry import OperatorRegistry as _registry
 
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    set(_surface.EXTENDED_ONLY_CANONICALS) | set(_NAMES)
-)
+_surface.extend_extended_only(set(_NAMES))
 _surface._FUNDAMENTAL_V2_CANONICALS = frozenset(
     set(_surface._FUNDAMENTAL_V2_CANONICALS) | set(_NAMES)
 )

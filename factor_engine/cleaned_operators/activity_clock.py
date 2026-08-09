@@ -360,9 +360,7 @@ def _register() -> None:
 
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | set(_DAILY_CANONICALS)
-    )
+    _surface.extend_extended_only(set(_DAILY_CANONICALS))
 
 
 _register()

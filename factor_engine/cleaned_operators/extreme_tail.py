@@ -548,9 +548,7 @@ def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.extend_extended_only({"ts_hill_tail_index", "ts_extremal_index", "ts_mean_excess_slope", "ts_gpd_shape_pwm"})
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | {"ts_quantile_regression_beta"}
-    )
+    _surface.extend_research_only({"ts_quantile_regression_beta"})
 
 
 _register_surface()

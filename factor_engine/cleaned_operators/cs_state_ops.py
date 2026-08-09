@@ -27,11 +27,13 @@ from cleaned_operators.base import ParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
-    trailing_contiguous_finite,
     union_extended,
 )
 
 _EPS = 1e-12
+# R9-OP-023: the common-contiguous-cohort window needs at least this many
+# simultaneous finite rows before a group barycenter is meaningful.
+_MIN_OBS = 4
 
 # R5 P1-01: ``min_cross`` / ``min_group_size`` are validated ints.
 _HARTIGAN_SPEC = {"min_cross": ParamSpec(dtype=int, min=2)}
@@ -223,6 +225,17 @@ def _group_wasserstein_barycenter_distance(
     # history to A's sample.  This is the explicit, documented canonical (NOT a
     # silent mix with historical_contemporaneous_membership, which would need a
     # PIT group panel).
+    #
+    # R9-OP-023 (missingness policy = A, ``common_contiguous_window``): the old
+    # kernel called ``trailing_contiguous_finite`` PER MEMBER, so within one
+    # group A used its last 60 contiguous rows, B (one mid-window gap) used its
+    # last 15, C its last 40 — three quantile curves from DIFFERENT lengths and
+    # START POINTS were then compared as if they were the same trailing
+    # distribution.  The barycenter of a 1-Wasserstein objective is only
+    # meaningful on a shared sample.  We now use the LONGEST TRAILING window in
+    # which EVERY group member is simultaneously finite (common contiguous
+    # cohort); a group whose common cohort is shorter than ``min_obs`` emits NaN
+    # (fail-closed) instead of silently comparing mismatched samples.
     if int(window) < 4:
         raise ValueError("group_wasserstein_barycenter_distance requires window >= 4")
     w = int(window)
@@ -244,12 +257,24 @@ def _group_wasserstein_barycenter_distance(
         for lab, members in groups.items():
             if len(members) < mgs:
                 continue
-            # per-member trailing-window quantile curves on the shared p-grid
+            # Common contiguous cohort: trailing suffix of [lo, r] where ALL
+            # members are finite simultaneously.
+            mat = arr[lo : r + 1][:, members]
+            common_fin = np.all(np.isfinite(mat), axis=1)
+            k = 0
+            for row in reversed(common_fin):
+                if row:
+                    k += 1
+                else:
+                    break
+            if k < _MIN_OBS:
+                continue
+            win = mat[-k:]
+            # per-member quantile curves on the SAME common cohort (same length,
+            # same start point — a genuine shared trailing distribution).
             mem_q: dict[int, np.ndarray] = {}
-            for c in members:
-                v = trailing_contiguous_finite(arr[lo : r + 1, c])
-                if v.size >= 4:
-                    mem_q[c] = _quantiles(v)
+            for mi, c in enumerate(members):
+                mem_q[c] = _quantiles(win[:, mi])
             if len(mem_q) < mgs:
                 continue
             for c in members:
@@ -277,6 +302,12 @@ _SPECS: dict[str, dict[str, Any]] = {
         "unit": "level",
         "cost": 4,
         "tags_extra": ["global_state"],
+        # R9-OP-024: every instrument receives the SAME value on a date, so this
+        # is a GLOBAL state (regime/condition input only).  The machine role is
+        # declared here, not just in the docstring: the search grammar must not
+        # emit it as a terminal cross-sectional alpha (CS IC is undefined on a
+        # constant cross-section); it is only usable as a ``where(condition)``.
+        "role": "global_state",
         "output_unit": "level",
         "param_specs": _HARTIGAN_SPEC,
     },
@@ -308,6 +339,7 @@ def _register() -> None:
             tags_extra=spec["tags_extra"],
             output_unit=spec.get("output_unit"),
             param_specs=spec.get("param_specs"),
+            role=spec.get("role"),
         )
     union_extended(*_SPECS.keys())
 

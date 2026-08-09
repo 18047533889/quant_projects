@@ -402,18 +402,14 @@ def register_surface(canonicals: list[str]) -> None:
     """
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | set(canonicals)
-    )
+    _surface.extend_extended_only(set(canonicals))
 
 
 def register_research_surface(canonicals: list[str]) -> None:
     """Append new canonicals to the research surface (experimental operators)."""
     import cleaned_operators.operator_surface as _surface
 
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | set(canonicals)
-    )
+    _surface.extend_research_only(set(canonicals))
 
 
 # Silent-numpy context for statistic kernels that may overflow intermediate

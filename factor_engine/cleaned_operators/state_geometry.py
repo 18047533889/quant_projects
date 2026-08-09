@@ -368,10 +368,7 @@ def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.extend_extended_only({"ts_state_density", "ts_ordinal_irreversibility"})
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {"ts_multiscale_permutation_entropy_slope"}
-    )
+    _surface.extend_research_only({"ts_multiscale_permutation_entropy_slope"})
 
 
 _register_surface()

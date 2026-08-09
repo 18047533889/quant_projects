@@ -405,10 +405,7 @@ def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.extend_extended_only({"group_tail_centrality"})
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {"group_tail_lead_score", "relation_diffusion_score"}
-    )
+    _surface.extend_research_only({"group_tail_lead_score", "relation_diffusion_score"})
     for _canon in ("group_tail_centrality", "group_tail_lead_score", "relation_diffusion_score"):
         register_polars_udf(_canon)
 

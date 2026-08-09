@@ -62,13 +62,14 @@ def _signed_flag(sign: pl.Expr, cond: pl.Expr) -> pl.Expr:
 
 
 def _max_pair(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    # pandas np.maximum 传播 NaN；max_horizontal 忽略 null。显式传播 null，
-    # 且用原生 max 避免算术法引入的 1e-15 浮点误差（会使 0 值 std 变非零）。
-    return pl.when(a.is_null() | b.is_null()).then(None).otherwise(pl.max_horizontal(a, b))
+    # pandas np.maximum 传播 NaN；polars max_horizontal 可能忽略 NaN 或按值比较。
+    # 显式把 NaN 一并传播为 null，保证 ``upper <= 0.35*max(body, EPS)`` 的 NaN
+    # 语义与 pandas 一致（NaN 比较为 False → flag 0）。
+    return pl.when(a.is_null() | b.is_null() | a.is_nan() | b.is_nan()).then(None).otherwise(pl.max_horizontal(a, b))
 
 
 def _min_pair(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    return pl.when(a.is_null() | b.is_null()).then(None).otherwise(pl.min_horizontal(a, b))
+    return pl.when(a.is_null() | b.is_null() | a.is_nan() | b.is_nan()).then(None).otherwise(pl.min_horizontal(a, b))
 
 
 def _frame(
@@ -288,8 +289,39 @@ def _cdl_hammer_like(open_, high, low, close, *, inverted: bool) -> pl.DataFrame
     return _result(close, values)
 
 
+def _prior_trend_expr(close: pl.Expr, *, up: bool, window: int = 5) -> pl.Expr:
+    """因果 prior-trend 上下文（audit item 5）：当前 bar 之前的 close 是否高于/
+    低于前 window 根 close 的均值；基线不可得时为 null（"cannot judge"）。
+    与 pandas ``_prior_trend`` 一致。"""
+    prev = close.shift(1)
+    base = close.shift(1).rolling_mean(window_size=window, min_samples=window)
+    cmp = (prev > base) if up else (prev < base)
+    return pl.when(base.is_not_null() & base.is_not_nan()).then(cmp).otherwise(None)
+
+
+def _hammer_flag(body: pl.Expr, rng: pl.Expr, upper: pl.Expr, lower: pl.Expr, close: pl.Expr) -> pl.Expr:
+    """hammer 几何 + min_tick 门（rng > 1e-6*|close|，audit item 4/5）。"""
+    return (
+        (body <= 0.35 * rng)
+        & (lower >= 2.0 * body)
+        & (upper <= 0.35 * body.clip(lower_bound=_EPS))
+        & (rng > 1e-6 * close.abs())
+    )
+
+
 def cdl_hammer(open_, high, low, close):
-    return _cdl_hammer_like(open_, high, low, close, inverted=False)
+    values = {}
+    for c in _cols(open_, high, low, close):
+        frame = _frame(open_, high, low, close, c)
+        o, h, l, cl = pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close")
+        _, body, rng, upper, lower = _parts(o, h, l, cl)
+        flag = _hammer_flag(body, rng, upper, lower, cl)
+        downtrend = _prior_trend_expr(cl, up=False)
+        pattern = flag & downtrend.fill_null(False)
+        out = _flag(pattern)
+        # 与 pandas ``out.where(downtrend.notna())``：基线不可得 → NaN。
+        values[c] = _one(frame, c, pl.when(downtrend.is_not_null()).then(out).otherwise(None))
+    return _result(close, values)
 
 
 def cdl_inverted_hammer(open_, high, low, close):
@@ -523,9 +555,13 @@ def cdl_hanging_man(open_, high, low, close):
     values = {}
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
-        _, body, rng, upper, lower = _parts(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
-        flag = (body <= 0.35 * rng) & (lower >= 2.0 * body) & (upper <= 0.35 * body.clip(lower_bound=_EPS))
-        values[c] = _one(frame, c, -_flag(flag))
+        o, h, l, cl = pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close")
+        _, body, rng, upper, lower = _parts(o, h, l, cl)
+        flag = _hammer_flag(body, rng, upper, lower, cl)
+        uptrend = _prior_trend_expr(cl, up=True)
+        pattern = flag & uptrend.fill_null(False)
+        out = -_flag(pattern)
+        values[c] = _one(frame, c, pl.when(uptrend.is_not_null()).then(out).otherwise(None))
     return _result(close, values)
 
 
@@ -614,6 +650,18 @@ def cdl_evening_star(open_, high, low, close):
     return _result(close, values)
 
 
+def _long_bodies_expr(o: pl.Expr, h: pl.Expr, l: pl.Expr, c: pl.Expr, min_body_frac: float = 0.5) -> pl.Expr:
+    """pandas ``_long_bodies``：abs_body>=frac*rng 且 rng>1e-6*|close|。"""
+    _, abs_body, rng, _, _ = _parts(o, h, l, c)
+    return (abs_body >= min_body_frac * rng) & (rng > 1e-6 * c.abs())
+
+
+def _short_shadows_expr(o: pl.Expr, h: pl.Expr, l: pl.Expr, c: pl.Expr, max_body_frac: float = 0.4) -> pl.Expr:
+    """pandas ``_short_shadows``：upper/lower <= max_body_frac*abs_body。"""
+    _, abs_body, _, upper, lower = _parts(o, h, l, c)
+    return (upper <= max_body_frac * abs_body) & (lower <= max_body_frac * abs_body)
+
+
 def cdl_three_white_soldiers(open_, high, low, close):
     values = {}
     for c in _cols(open_, high, low, close):
@@ -625,7 +673,18 @@ def cdl_three_white_soldiers(open_, high, low, close):
             (o >= o.shift(1)) & (o <= cl.shift(1))
             & (o.shift(1) >= o.shift(2)) & (o.shift(1) <= cl.shift(2))
         )
-        values[c] = _one(frame, c, _flag(bull0 & bull1 & bull2 & rising & opens_inside))
+        # audit item 7：长实体 + 短影线门（与 pandas 一致）。
+        long_b = (
+            _long_bodies_expr(o, pl.col("high"), pl.col("low"), cl)
+            & _long_bodies_expr(o.shift(1), pl.col("high").shift(1), pl.col("low").shift(1), cl.shift(1))
+            & _long_bodies_expr(o.shift(2), pl.col("high").shift(2), pl.col("low").shift(2), cl.shift(2))
+        )
+        short_sh = (
+            _short_shadows_expr(o, pl.col("high"), pl.col("low"), cl)
+            & _short_shadows_expr(o.shift(1), pl.col("high").shift(1), pl.col("low").shift(1), cl.shift(1))
+            & _short_shadows_expr(o.shift(2), pl.col("high").shift(2), pl.col("low").shift(2), cl.shift(2))
+        )
+        values[c] = _one(frame, c, _flag(bull0 & bull1 & bull2 & rising & opens_inside & long_b & short_sh))
     return _result(close, values)
 
 
@@ -640,8 +699,30 @@ def cdl_three_black_crows(open_, high, low, close):
             (o <= o.shift(1)) & (o >= cl.shift(1))
             & (o.shift(1) <= o.shift(2)) & (o.shift(1) >= cl.shift(2))
         )
-        values[c] = _one(frame, c, -_flag(bear0 & bear1 & bear2 & falling & opens_inside))
+        # audit item 7：长实体 + 短影线门（与 pandas 一致）。
+        long_b = (
+            _long_bodies_expr(o, pl.col("high"), pl.col("low"), cl)
+            & _long_bodies_expr(o.shift(1), pl.col("high").shift(1), pl.col("low").shift(1), cl.shift(1))
+            & _long_bodies_expr(o.shift(2), pl.col("high").shift(2), pl.col("low").shift(2), cl.shift(2))
+        )
+        short_sh = (
+            _short_shadows_expr(o, pl.col("high"), pl.col("low"), cl)
+            & _short_shadows_expr(o.shift(1), pl.col("high").shift(1), pl.col("low").shift(1), cl.shift(1))
+            & _short_shadows_expr(o.shift(2), pl.col("high").shift(2), pl.col("low").shift(2), cl.shift(2))
+        )
+        values[c] = _one(frame, c, -_flag(bear0 & bear1 & bear2 & falling & opens_inside & long_b & short_sh))
     return _result(close, values)
+
+
+def _tick_size_expr(price: pl.Expr) -> pl.Expr:
+    """A-share tick：|p|<10 → 0.01，<100 → 0.05，否则 0.1（与 pandas 一致）。"""
+    return (
+        pl.when(price.abs() < 10.0)
+        .then(0.01)
+        .when(price.abs() < 100.0)
+        .then(0.05)
+        .otherwise(0.1)
+    )
 
 
 def _cdl_tweezer(open_, high, low, close, *, top: bool) -> pl.DataFrame:
@@ -649,14 +730,13 @@ def _cdl_tweezer(open_, high, low, close, *, top: bool) -> pl.DataFrame:
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         o, h, l, cl = pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close")
+        # audit item 6: tick-aware 容差（_TICK_K=2），非旧的 1e-4*price 相对带。
         if top:
-            scale = _max_pair(h.abs(), h.shift(1).abs())
-            same = (h - h.shift(1)).abs() <= 1e-4 * scale.clip(lower_bound=1.0)
+            same = (h - h.shift(1)).abs() <= _tick_size_expr(h) * 2.0
             reversal = (cl.shift(1) > o.shift(1)) & (cl < o)
             values[c] = _one(frame, c, -_flag(same & reversal))
         else:
-            scale = _max_pair(l.abs(), l.shift(1).abs())
-            same = (l - l.shift(1)).abs() <= 1e-4 * scale.clip(lower_bound=1.0)
+            same = (l - l.shift(1)).abs() <= _tick_size_expr(l) * 2.0
             reversal = (cl.shift(1) < o.shift(1)) & (cl > o)
             values[c] = _one(frame, c, _flag(same & reversal))
     return _result(close, values)

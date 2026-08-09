@@ -84,4 +84,6 @@ def is_null_sql(value_col: str = "_v", *, dialect_is_clickhouse: bool = False) -
 
 def is_nan_sql(value_col: str = "_v", *, dialect_is_clickhouse: bool = False) -> str:
     isnan_fn = "isNaN" if dialect_is_clickhouse else "isnan"
-    return f"CASE WHEN {value_col} IS NULL THEN 0.0 WHEN {isnan_fn}({value_col}) THEN 1.0 ELSE 0.0 END"
+    # SQL data 层把 NaN 清洗成 NULL，因此 pandas 的 is_nan(NaN)=1 对应 SQL 的
+    # NULL（缺失在 pandas 面板里就是 NaN）——NULL 必须判 1，而非 0。
+    return f"CASE WHEN {value_col} IS NULL THEN 1.0 WHEN {isnan_fn}({value_col}) THEN 1.0 ELSE 0.0 END"

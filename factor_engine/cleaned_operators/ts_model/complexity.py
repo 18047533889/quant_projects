@@ -41,9 +41,7 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
     _CANONICALS.append(name)
     import cleaned_operators.operator_surface as _surface
 
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS) | {name}
-    )
+    _surface.extend_research_only({name})
     return _ComplexityOp
 
 

@@ -74,6 +74,7 @@ class Optimizer:
             op=node.op,
             inputs=inputs,
             attrs=dict(node.attrs),
+            semantic_attrs=dict(node.semantic_attrs),
             node_id=node.node_id,
         )
         if n.op in ("add", "subtract", "sub", "multiply", "mul", "divide", "div") and len(inputs) == 2:

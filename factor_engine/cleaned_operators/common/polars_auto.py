@@ -323,11 +323,11 @@ if not _has_polars("and_"):
 
         def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
             cols = [c for c in _numeric_cols(x) if c in y.columns]
-            replacements = {}
+            replacements = []
             for c in cols:
                 xb = _truthy_series(x[c])
                 yb = _truthy_series(y[c])
-                replacements[c] = (xb & yb).cast(pl.Float64)
+                replacements.append((xb & yb).cast(pl.Float64).alias(c))
             return x.with_columns(replacements)
 
     register_operator(
@@ -346,11 +346,11 @@ if not _has_polars("or_"):
 
         def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
             cols = [c for c in _numeric_cols(x) if c in y.columns]
-            replacements = {}
+            replacements = []
             for c in cols:
                 xb = _truthy_series(x[c])
                 yb = _truthy_series(y[c])
-                replacements[c] = (xb | yb).cast(pl.Float64)
+                replacements.append((xb | yb).cast(pl.Float64).alias(c))
             return x.with_columns(replacements)
 
     register_operator(

@@ -449,9 +449,8 @@ def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.extend_extended_only({"cs_knn_local_linear_residual"})
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {
+    _surface.extend_research_only(
+        {
             "cs_knn_tangent_residual",
             "cs_knn_local_gradient_norm",
             "cs_rank_copula_mi",

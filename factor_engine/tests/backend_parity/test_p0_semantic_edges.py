@@ -59,7 +59,7 @@ def edge_source():
         data={
             "close": close,
             "exp": exp,
-            "grp": grp,
+            "group_id": grp,
             "flag": flag,
             "inf_val": inf_val,
             "close_zero": close_zero,
@@ -86,7 +86,7 @@ test_daily:
     Symbol: string
     Close: double
     Exp: double
-    Grp: int64
+    group_id: int64
     Flag: double
     InfVal: double
     CloseZero: double
@@ -103,7 +103,7 @@ def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
     mapping = {
         "close": "Close",
         "exp": "Exp",
-        "grp": "Grp",
+        "group_id": "group_id",
         "flag": "Flag",
         "inf_val": "InfVal",
         "close_zero": "CloseZero",
@@ -153,7 +153,6 @@ def _col(name: str):
         {
             "close": "Close",
             "exp": "Exp",
-            "grp": "Grp",
             "flag": "Flag",
             "inf_val": "InfVal",
             "close_zero": "CloseZero",
@@ -222,8 +221,8 @@ def test_group_rank_tie_average(edge_source, duckdb_edge_source):
     _assert_triple_backends(
         edge_source,
         duckdb_edge_source,
-        lambda: F("group_rank")(col("close"), col("grp")),
-        lambda: F("group_rank")(_col("close"), _col("grp")),
+        lambda: F("group_rank")(col("close"), col("group_id")),
+        lambda: F("group_rank")(_col("close"), _col("group_id")),
     )
 
 
@@ -310,8 +309,8 @@ def test_normalize_constant_and_single_valid(edge_source, duckdb_edge_source, mo
     _assert_triple_backends(
         edge_source,
         duckdb_edge_source,
-        lambda: F("normalize")(col("grp")),
-        lambda: F("normalize")(_col("grp")),
+        lambda: F("normalize")(col("group_id")),
+        lambda: F("normalize")(_col("group_id")),
     )
     idx = edge_source.data["close"].index
     single_ts = idx[0][0]
@@ -418,7 +417,7 @@ _NA_SENTINEL = 999.0
 
 
 def _edge_expr(name: str, cf):
-    C = {k: cf(k) for k in ("close", "exp", "grp", "flag")}
+    C = {k: cf(k) for k in ("close", "exp", "group_id", "flag")}
     if name == "cs_mean":
         return F("cs_mean")(C["close"])
     if name == "cs_std":
@@ -432,15 +431,15 @@ def _edge_expr(name: str, cf):
     if name == "winsorize":
         return F("winsorize")(C["close"])
     if name == "group_mean":
-        return F("group_mean")(C["close"], C["grp"])
+        return F("group_mean")(C["close"], C["group_id"])
     if name == "group_std":
-        return F("group_std")(C["close"], C["grp"])
+        return F("group_std")(C["close"], C["group_id"])
     if name == "group_zscore":
-        return F("group_zscore")(C["close"], C["grp"])
+        return F("group_zscore")(C["close"], C["group_id"])
     if name == "group_normalize":
-        return F("group_normalize")(C["close"], C["grp"])
+        return F("group_normalize")(C["close"], C["group_id"])
     if name == "group_rank":
-        return F("group_rank")(C["close"], C["grp"])
+        return F("group_rank")(C["close"], C["group_id"])
     if name == "ts_mean":
         return F("ts_mean")(C["close"], 2)
     if name == "ts_std":

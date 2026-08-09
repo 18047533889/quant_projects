@@ -3,7 +3,11 @@
 设计要点
 --------
 1. **Schema 强转**：因子值默认 ``float32``（可配置 ``value_dtype``），资产列强转为 ``string``。
-2. **数据清洗**：``±inf → NaN``；默认 ``dropna``；``preserve_invalid_rows=True`` 时保留行并写 ``is_valid=0``、``invalid_reason``。
+2. **数据清洗 + 显式 tombstone**：``±inf → NaN``；NaN/Inf 行不再 ``dropna``，而是
+   作为显式 tombstone 保留 —— tombstone 标记为 ``value=NaN`` + ``is_valid=0`` +
+   ``invalid_reason="inf_or_nan"``。下游 Upsert 的 ``[datetime, asset]`` dedup
+   keep="last" 会用 NaN 覆盖旧有限值，读取端把该格映射为 NaN/invalid，从而支持
+   valid→null / valid→deleted / 退出 universe / 源修订删行。
 3. **幂等 Upsert**：按年分区，旧数据与新数据 Concat 后按 ``[datetime, asset]``
    去重（保留最新），排序后整体覆盖。
 4. **原子写入**：先写 ``.data.parquet.tmp``，``os.replace()`` 覆盖正式文件。
@@ -185,6 +189,8 @@ class ParquetMaterializer:
         defer_watermark: bool = False,
         partition_columns: list[str] | None = None,
         storage_format: str = "long",
+        null_overwrite: bool = False,
+        deleted_keys: list[tuple] | None = None,
     ) -> dict:
         """将因子计算结果落盘为分区 Parquet。
         
@@ -248,10 +254,31 @@ class ParquetMaterializer:
             )
         df = self._normalize_to_long_table(result, metadata=meta, value_dtype=value_dtype)
 
-        # --- 2. 数据清洗 ---
-        df = self._clean(df, preserve_invalid_rows=preserve_invalid_rows)
+        # Review-8 #444/#446: 声明 tombstones 的调用方把历史 key 标记为已删除
+        # （value=NaN 覆盖旧值）。deleted_keys 行必须在 _clean 前注入，与普通 NaN
+        # 一起走同一 upsert 路径，才能覆盖该 key 的旧有限值。
+        tombstoned_rows = 0
+        if deleted_keys:
+            null_overwrite = True
+            df = self._append_tombstones(df, deleted_keys)
+            tombstoned_rows = len(deleted_keys)
 
-        if df.empty:
+        # --- 2. 数据清洗 ---
+        df = self._clean(
+            df,
+            preserve_invalid_rows=preserve_invalid_rows,
+            null_overwrite=null_overwrite,
+        )
+
+        # R9-P0-027: NaN rows are kept as explicit tombstones (is_valid=0), so a
+        # clean result is no longer empty just because every value is NaN.  Only
+        # short-circuit when there is genuinely nothing to write: an empty frame,
+        # or a run whose values are ALL invalid with no explicit tombstone intent
+        # (null_overwrite / deleted_keys).  This preserves the historical
+        # "all-NaN -> skip" behavior while still allowing valid->NaN revisions to
+        # overwrite stale finite values.
+        has_valid_value = bool(df["value"].notna().any())
+        if df.empty or (not has_valid_value and not null_overwrite):
             logger.warning("因子 '%s' 清洗后无有效数据，跳过落盘。", factor_id)
             return {
                 "factor_id": factor_id,
@@ -267,6 +294,11 @@ class ParquetMaterializer:
         # clickhouse / staging_clickhouse：写 catalog + watermark，不落本地分区
         if target in ("clickhouse", "staging_clickhouse"):
             write_local = False
+
+        # R9-P0-025/026: watermark_deferred must be defined before the partition
+        # loop — the failure-adjudication block below reads it, and it must never
+        # advance the watermark on a failed run.
+        watermark_deferred = bool(defer_watermark)
 
         # --- 3. 注册 / Hash 校验（可能抛 FactorHashMismatchError）---
         self._catalog.register(
@@ -307,10 +339,6 @@ class ParquetMaterializer:
 
         factor_dir = self._lake_root / "factors" / factor_id
         work_df = attach_partition_columns(df, policy)
-
-        # Review-8 #442: 启动/重写前 reconcile 该 factor 的孤儿 .tmp 文件
-        # （崩溃发生在 os.replace 之前留下的唯一后缀 temp）。
-        self._cleanup_orphan_tmp_files(factor_dir)
 
         if write_local:
             # Phase 5 R17：直接迭代 generator，禁止 ``list(iter_partition_groups(...))``
@@ -407,7 +435,13 @@ class ParquetMaterializer:
                     "storage_format": policy.storage_format,
                 }
 
-        # --- 5. 更新水位线（仅在所有 required 分区成功后才推进）---
+        # --- 5. 更新水位线（R9-P0-026: commit watermark LAST）---
+        # Success-path ordering: (1) all required partitions succeeded (checked
+        # above), (2) dependency writes (staging) succeeded (before the loop),
+        # (3) lineage recorded + checkpoints cleared, (4) then and only then
+        # advance the committed watermark.  If any earlier step fails, the
+        # watermark must remain untouched so the next incremental run cannot
+        # skip data.
         value_columns = [c for c in work_df.columns if c not in policy.columns]
         if write_local and (partitions_written or partitions_skipped):
             active_keys = set(partition_keys_written) | set(partition_keys_skipped)
@@ -449,16 +483,26 @@ class ParquetMaterializer:
             "end_date": end_date,
             "row_count": total_rows,
         }
-        watermark_deferred = bool(defer_watermark)
         pending_lineage = None
 
         if watermark_deferred:
+            # 双写模式：本地分区已落盘，水位线留到 commit_deferred_materialization
+            # 确认 staging/clickhouse 依赖成功后再统一提交。
             watermark = self._catalog.get_watermark(factor_id)
             if run_lineage is not None:
                 pending_lineage = dict(run_lineage)
                 if dq_report is not None:
                     pending_lineage["dq_passed"] = dq_report.passed
         else:
+            # (3) lineage + checkpoint cleanup first ...
+            if run_lineage is not None:
+                lineage_payload = dict(run_lineage)
+                if dq_report is not None:
+                    lineage_payload["dq_passed"] = dq_report.passed
+                self._catalog.record_run(lineage_payload)
+                if write_local:
+                    self._catalog.clear_partition_checkpoints(factor_id)
+            # (4) commit watermark LAST — only after every required step succeeded.
             self._catalog.update_watermark(
                 factor_id=factor_id,
                 start_date=start_date,
@@ -467,18 +511,21 @@ class ParquetMaterializer:
             )
             watermark = self._catalog.get_watermark(factor_id)
 
-        if run_lineage is not None and not watermark_deferred:
-            lineage_payload = dict(run_lineage)
-            if dq_report is not None:
-                lineage_payload["dq_passed"] = dq_report.passed
-            self._catalog.record_run(lineage_payload)
-            if write_local:
-                self._catalog.clear_partition_checkpoints(factor_id)
+        # R9-P0-027: NaN rows are now retained as tombstones, so the physical
+        # rows in each partition include is_valid=0 tombstones.  `rows_written`
+        # keeps the historical meaning: valid rows for the default path (matching
+        # the old dropna behavior), total rows when the caller asked to keep
+        # invalid rows explicitly.
+        rows_written = (
+            len(df)
+            if (preserve_invalid_rows or null_overwrite)
+            else int(df["value"].notna().sum())
+        )
 
         logger.info(
             "因子 '%s' 落盘完成：%d 行，target=%s，分区 %s，跳过 %s，水位线 [%s → %s]",
             factor_id,
-            len(df),
+            rows_written,
             target,
             partitions_written,
             partitions_skipped,
@@ -488,7 +535,7 @@ class ParquetMaterializer:
 
         summary = {
             "factor_id": factor_id,
-            "rows_written": len(df),
+            "rows_written": rows_written,
             "partitions": partitions_written,
             "partition_keys": partition_keys_written,
             "partitions_failed": partitions_failed,
@@ -501,6 +548,8 @@ class ParquetMaterializer:
             "checkpoint_run_id": checkpoint_run_id,
             "write_target": write_target,
             "preserve_invalid_rows": preserve_invalid_rows,
+            "null_overwrite": null_overwrite,
+            "tombstoned_rows": tombstoned_rows,
             "watermark_deferred": watermark_deferred,
             "storage_format": policy.storage_format,
             "partition_columns": list(policy.columns),
@@ -526,18 +575,21 @@ class ParquetMaterializer:
             return summary
         factor_id = summary["factor_id"]
         pending = summary.get("pending_watermark") or {}
-        self._catalog.update_watermark(
-            factor_id=factor_id,
-            start_date=pending["start_date"],
-            end_date=pending["end_date"],
-            row_count=pending.get("row_count"),
-        )
+        # R9-P0-026: record lineage + clear checkpoints first, commit watermark
+        # LAST — the watermark must only advance after every required step
+        # (including the deferred dependency write) has succeeded.
         pending_lineage = summary.get("pending_lineage")
         if pending_lineage is not None:
             self._catalog.record_run(pending_lineage)
         partitions = summary.get("partitions") or []
         if partitions:
             self._catalog.clear_partition_checkpoints(factor_id)
+        self._catalog.update_watermark(
+            factor_id=factor_id,
+            start_date=pending["start_date"],
+            end_date=pending["end_date"],
+            row_count=pending.get("row_count"),
+        )
         merged = dict(summary)
         merged["watermark"] = self._catalog.get_watermark(factor_id)
         merged["watermark_deferred"] = False
@@ -649,29 +701,71 @@ class ParquetMaterializer:
         return df
 
     @staticmethod
-    def _clean(df: pd.DataFrame, *, preserve_invalid_rows: bool = False) -> pd.DataFrame:
-        """清洗：inf → NaN；生产模式可保留无效行并标注 invalid_reason。
-        
+    def _clean(
+        df: pd.DataFrame,
+        *,
+        preserve_invalid_rows: bool = False,
+        null_overwrite: bool = False,
+    ) -> pd.DataFrame:
+        """清洗：inf → NaN；NaN/Inf 行作为显式 tombstone 保留（is_valid=0）。
+
+        R9-P0-027: 默认不再 ``dropna``。Tombstone 标记 = ``value=NaN`` +
+        ``is_valid=0`` + ``invalid_reason="inf_or_nan"``：该行保留在分区 Parquet
+        里，下游 ``_upsert_partition`` 的 ``[datetime, asset]`` dedup keep="last"
+        会用 NaN 覆盖旧有限值，读取端把该格映射为 NaN/invalid，从而支持
+        valid→null / valid→deleted / 退出 universe / 源修订删行。Parquet 与
+        staging 均能保存 NaN，因此直接以 NaN 为标记（若某存储层无法保存 NaN，
+        可改用一个固定浮点 sentinel 并在读取端映射回 NaN）。
+
+        ``preserve_invalid_rows`` / ``null_overwrite`` 保留仅为 API 兼容：
+        无论取值如何，NaN/Inf 行都会被保留并标注（历史默认 dropna 的
+        valid→NaN 修订会让旧有限值永久残留）。
+
         参数:
             df: 输入 DataFrame
             preserve_invalid_rows: 见函数签名（可选）
-        
+            null_overwrite: 见函数签名（可选）
+
         返回:
             pd.DataFrame
         """
         df = df.copy()
         df["value"] = df["value"].replace([np.inf, -np.inf], np.nan)
-        if preserve_invalid_rows:
-            if "is_valid" not in df.columns:
-                df["is_valid"] = 1
-            if "invalid_reason" not in df.columns:
-                df["invalid_reason"] = ""
-            invalid = df["value"].isna()
-            df.loc[invalid, "is_valid"] = 0
-            df.loc[invalid, "invalid_reason"] = "inf_or_nan"
-            return df.reset_index(drop=True)
-        df = df.dropna(subset=["value"]).reset_index(drop=True)
-        return df
+        if "is_valid" not in df.columns:
+            df["is_valid"] = 1
+        if "invalid_reason" not in df.columns:
+            df["invalid_reason"] = ""
+        invalid = df["value"].isna()
+        df.loc[invalid, "is_valid"] = 0
+        df.loc[invalid, "invalid_reason"] = "inf_or_nan"
+        return df.reset_index(drop=True)
+
+    @staticmethod
+    def _append_tombstones(
+        df: pd.DataFrame,
+        deleted_keys: list[tuple],
+    ) -> pd.DataFrame:
+        """把显式删除的 (datetime, asset) 键转成 value=NaN 行（Review-8 #446）。
+
+        这些行随后走同一 upsert 路径：dedup keep="last" 用 NaN 覆盖该键的旧
+        有限值，读取时返回 NaN（= 该历史值已被删除/退出 universe）。
+        """
+        rows = []
+        for key in deleted_keys:
+            if not isinstance(key, (tuple, list)) or len(key) < 2:
+                raise ValueError(
+                    f"deleted_keys entries must be (datetime, asset) pairs, got {key!r}"
+                )
+            dt = pd.Timestamp(key[0])
+            asset = str(key[1])
+            rows.append({"datetime": dt, "asset": asset, "value": np.nan})
+        tomb = pd.DataFrame(rows)
+        for col in df.columns:
+            if col not in tomb.columns:
+                tomb[col] = df[col].iloc[0] if len(df) else None
+        # match the numeric dtype so the concat keeps df's column dtype
+        tomb["value"] = tomb["value"].astype(df["value"].dtype)
+        return pd.concat([df, tomb], ignore_index=True)
 
     def _upsert_to_data_access_staging(
         self,
@@ -833,6 +927,10 @@ class ParquetMaterializer:
         existing_rows = 0
 
         with self._partition_lock(partition_dir):
+            # Review-8 #442: reconcile 本分区的孤儿 .tmp 文件。必须在锁内执行 —
+            # 若在锁外扫整个 factor_dir，会误删其他进程正持有的 partition temp。
+            self._cleanup_orphan_tmp_files(partition_dir)
+
             # 读取已有数据
             if parquet_path.exists():
                 existing_df = pd.read_parquet(parquet_path)
@@ -909,6 +1007,7 @@ class ParquetMaterializer:
         new_long = new_df[value_cols].copy()
 
         with self._partition_lock(partition_dir):
+            self._cleanup_orphan_tmp_files(partition_dir)
             if parquet_path.exists():
                 existing_panel = pd.read_parquet(parquet_path)
                 if "datetime" in existing_panel.columns:

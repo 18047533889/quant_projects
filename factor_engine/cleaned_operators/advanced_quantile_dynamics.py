@@ -650,9 +650,8 @@ def _register_surface() -> None:
             "ts_extremogram",
             "ts_cross_extremogram",
         })
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {
+    _surface.extend_research_only(
+        {
             "ts_quantile_crossing_spectral_concentration",
             "ts_extremal_dependence_decay",
         }

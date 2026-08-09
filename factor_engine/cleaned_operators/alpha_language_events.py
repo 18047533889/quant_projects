@@ -348,9 +348,7 @@ _NEW_CANONICALS = (
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
-    _surface.EXTENDED_ONLY_CANONICALS = frozenset(
-        set(_surface.EXTENDED_ONLY_CANONICALS) | set(_NEW_CANONICALS)
-    )
+    _surface.extend_extended_only(set(_NEW_CANONICALS))
     # Event ops get the exact-parity polars bridge; report ops are
     # fundamental_period pandas kernels (matching the fin_* pattern).
     for _canon in ("event_frequency", "event_cluster_count", "event_cluster_mean_size"):

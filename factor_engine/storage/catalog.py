@@ -209,9 +209,34 @@ class FactorCatalog:
         self._conn.row_factory = sqlite3.Row
         # WAL 模式：大幅提升多进程并发读写能力
         self._conn.execute("PRAGMA journal_mode=WAL;")
+        self._conn.execute("PRAGMA busy_timeout=30000;")
         self._conn.executescript(_SCHEMA_SQL)
         self._migrate_schema()
         self._conn.commit()
+
+    def _exec_commit(self, sql: str, params: tuple = ()) -> None:
+        """Execute a write statement with bounded SQLITE_BUSY retry.
+
+        Multiple materializer processes contend on the single SQLite write
+        lock; even with ``busy_timeout`` a writer can surface
+        ``database is locked`` under burst contention.  Bounded sleep-retry
+        (``#443`` multiprocess race) makes the write path resilient without
+        masking real errors.
+        """
+        import time
+
+        last_error: Exception | None = None
+        for attempt in range(6):
+            try:
+                self._conn.execute(sql, params)
+                self._conn.commit()
+                return
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower():
+                    raise
+                last_error = exc
+                time.sleep(0.05 * (attempt + 1))
+        raise last_error  # type: ignore[misc]
 
     def _migrate_schema(self) -> None:
         """向后兼容：为旧 catalog 补列。
@@ -386,14 +411,13 @@ class FactorCatalog:
         # and crash on ``UNIQUE constraint failed``.  The hash-conflict verdict
         # is taken against the row that actually won the insert.
         now = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
+        self._exec_commit(
             "INSERT OR IGNORE INTO factor_registry "
             "(factor_id, author, frequency, description, ast_hash, expression, "
             "data_source_json, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (factor_id, author, frequency, description, ast_hash, expression, ds_json, now),
         )
-        self._conn.commit()
 
         existing = self.get_factor_info(factor_id)
         if existing is None:  # pragma: no cover - insert above must have created it
@@ -405,11 +429,10 @@ class FactorCatalog:
                 f"请升级版本号（如改为 '{factor_id}_v2'）后重新落盘。"
             )
         if ds_json is not None and existing.get("data_source_json") != ds_json:
-            self._conn.execute(
+            self._exec_commit(
                 "UPDATE factor_registry SET data_source_json = ? WHERE factor_id = ?",
                 (ds_json, factor_id),
             )
-            self._conn.commit()
 
     def verify_hash(self, factor_id: str, ast_hash: str) -> bool:
         """校验因子 Hash 是否与注册一致。未注册返回 True（尚无冲突）。
@@ -467,7 +490,7 @@ class FactorCatalog:
             无
         """
         now = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
+        self._exec_commit(
             "INSERT INTO factor_watermark (factor_id, start_date, end_date, last_updated, row_count) "
             "VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(factor_id) DO UPDATE SET "
@@ -475,7 +498,6 @@ class FactorCatalog:
             "last_updated=excluded.last_updated, row_count=excluded.row_count",
             (factor_id, start_date, end_date, now, row_count),
         )
-        self._conn.commit()
 
     # ------------------------------------------------------------------
     # 查询
@@ -555,7 +577,7 @@ class FactorCatalog:
             无
         """
         now = lineage.get("created_at") or datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
+        self._exec_commit(
             "INSERT INTO factor_run "
             "(run_id, factor_id, factor_name, ast_hash, operator_catalog_hash, field_catalog_hash, expression, "
             "lookback, referenced_columns_json, dq_passed, row_count, non_null_count, "
@@ -578,7 +600,6 @@ class FactorCatalog:
                 json.dumps(lineage.get("extra", {}), ensure_ascii=False, default=str),
             ),
         )
-        self._conn.commit()
 
     def list_runs(self, factor_id: str, *, limit: int = 20) -> list[dict]:
         """list_runs。
@@ -669,7 +690,7 @@ class FactorCatalog:
         """
         now = datetime.now(timezone.utc).isoformat()
         pkey = partition_key or f"year={int(partition_year)}"
-        self._conn.execute(
+        self._exec_commit(
             "INSERT INTO factor_materialize_checkpoint "
             "(factor_id, partition_year, partition_key, run_id, status, error_message, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?) "
@@ -679,7 +700,6 @@ class FactorCatalog:
             "updated_at=excluded.updated_at",
             (factor_id, int(partition_year), pkey, run_id, status, error_message, now),
         )
-        self._conn.commit()
 
     def get_partition_checkpoint(
         self,
@@ -761,11 +781,10 @@ class FactorCatalog:
         返回:
             无
         """
-        self._conn.execute(
+        self._exec_commit(
             "DELETE FROM factor_materialize_checkpoint WHERE factor_id = ?",
             (factor_id,),
         )
-        self._conn.commit()
 
     # ------------------------------------------------------------------
     # 因子依赖 catalog（增量 by data event）

@@ -19,6 +19,7 @@ def deep_copy_plan(node: PlanNode) -> PlanNode:
         op=node.op,
         inputs=[deep_copy_plan(c) for c in node.inputs],
         attrs=dict(node.attrs),
+        semantic_attrs=dict(node.semantic_attrs),
         node_id=node.node_id,
     )
 
@@ -126,6 +127,7 @@ def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode
         return PlanNode(
             op=n.op,
             attrs=dict(n.attrs),
+            semantic_attrs=dict(n.semantic_attrs),
             inputs=[rewrite(c, memo) for c in n.inputs],
             node_id=n.node_id,
         )

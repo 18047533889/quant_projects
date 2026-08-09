@@ -477,6 +477,23 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "ts_abdi_ranaldo_spread",
 })
 
+# EWMA/Wilder 平滑族（RSI/ATR/DMI/DX/ADX/MACD/DEMA/TEMA/PPO/PVO/TSI/Keltner/
+# ADL/CMF/ChaikinOscillator/ForceIndex）：pandas ewm(adjust=False) 的 NaN 缺口
+# 语义（绝对位置衰减 + 有效观测重新归一化）无法在 SQL 中精确复刻，emitter 返回
+# None 走 polars 回退（与 pandas 完全一致）。从白名单移除以保持 sync 一致。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS - frozenset({
+    "RSI_WILDER", "ATR_WILDER", "DMI_plus", "DMI_minus", "DX", "ADX",
+    "MACD_line", "MACD_signal", "MACD_hist",
+    "DEMA", "TEMA", "PPO", "PPO_signal", "PPO_hist",
+    "PVO", "PVO_signal", "PVO_hist", "TSI", "TSI_signal",
+    "KeltnerMid", "KeltnerUpper", "KeltnerLower", "KeltnerPosition",
+    "ADL", "ChaikinOscillator", "CMF", "ForceIndex",
+    "cdl_hammer", "cdl_hanging_man",
+    "ts_time_slope", "ts_upside_deviation", "ts_weighted_standardized_moment",
+    "ts_abdi_ranaldo_spread", "ts_value_at_argextreme",
+    "industry_size_neutralize",
+})
+
 # DuckDB 分层
 DUCKDB_SQL_PARITY_VERIFIED: frozenset[str] = frozenset()
 DUCKDB_SQL_PRODUCTION_SAFE: frozenset[str] = frozenset()

@@ -152,9 +152,7 @@ _NEW = frozenset({
 _surface._FUNDAMENTAL_V2_CANONICALS = frozenset(
     set(_surface._FUNDAMENTAL_V2_CANONICALS) | set(_NEW)
 )
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(
-    set(_surface.EXTENDED_ONLY_CANONICALS) | set(_NEW)
-)
+_surface.extend_extended_only(set(_NEW))
 _legacy = _registry._catalog.get("fin_ttm")
 if _legacy is not None:
     _legacy["compatibility_only"] = True

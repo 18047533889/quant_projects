@@ -298,4 +298,4 @@ class EventDecayAsOf(SeriesOperator):
 
 # Classify new event/state operators on the extended surface.
 import cleaned_operators.operator_surface as _surface  # noqa: E402
-_surface.EXTENDED_ONLY_CANONICALS = frozenset(set(_surface.EXTENDED_ONLY_CANONICALS) | set(['ts_transition_count', 'ts_time_since_change', 'ts_event_spacing_mean', 'ts_event_spacing_cv', 'event_decay_asof']))
+_surface.extend_extended_only(set(['ts_transition_count', 'ts_time_since_change', 'ts_event_spacing_mean', 'ts_event_spacing_cv', 'event_decay_asof']))

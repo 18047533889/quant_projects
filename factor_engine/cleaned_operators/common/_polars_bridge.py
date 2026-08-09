@@ -105,15 +105,42 @@ class PanelIdentity:
     # a shifted date or a permuted column set must fail loudly).  ``grain`` and
     # ``frequency`` are descriptive metadata (exposed for #235-#238 schema
     # introspection); a pandas frame can infer a frequency while the same
-    # timeline converted through ``panel_to_polars`` cannot, so they must not
-    # make an otherwise-identical timeline "different".
+    # timeline converted through ``panel_to_polars`` cannot, so an UNKNOWN side
+    # must not make an otherwise-identical timeline "different".
+    #
+    # R9-P0-014: but when BOTH sides declare a KNOWN grain/frequency and they
+    # disagree, the two panels are NOT the same execution identity — a daily
+    # panel and a minute panel sharing an index-by-accident must loud-fail.
+    # Unknown metadata enters explicit compatibility resolution (ignored); known
+    # mismatch is a hard reject.  The hash covers only the two axes so that
+    # ``eq`` never conflicts with ``hash`` (unequal objects may share a hash,
+    # but equal objects must not).
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, PanelIdentity):
             return NotImplemented
-        return (
-            self.time_index_hash == other.time_index_hash
-            and self.instrument_axis_hash == other.instrument_axis_hash
-        )
+        if (
+            self.time_index_hash != other.time_index_hash
+            or self.instrument_axis_hash != other.instrument_axis_hash
+        ):
+            return False
+        if (
+            self.grain != "unknown"
+            and other.grain != "unknown"
+            and self.grain != other.grain
+        ):
+            return False
+        if (
+            self.frequency != "unknown"
+            and other.frequency != "unknown"
+            and self.frequency != other.frequency
+        ):
+            return False
+        return True
+
+    def __hash__(self) -> int:
+        # R9-P0-014: deterministic hash over the execution-identity axes only —
+        # consistent with __eq__ regardless of known/unknown metadata state.
+        return hash((self.time_index_hash, self.instrument_axis_hash))
 
     def __hash__(self) -> int:
         return hash((self.time_index_hash, self.instrument_axis_hash))

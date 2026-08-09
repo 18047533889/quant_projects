@@ -55,7 +55,7 @@ def edge_source():
             "denom": denom,
             "neg": neg,
             "flag": flag,
-            "grp": grp,
+            "group_id": grp,
             "volume": volume,
         }
     )
@@ -83,7 +83,7 @@ test_daily:
     Denom: double
     Neg: double
     Flag: double
-    Grp: int64
+    group_id: int64
     Volume: double
 """
     path = tmp_path / "datasets.yaml"
@@ -101,7 +101,7 @@ def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
         "denom": "Denom",
         "neg": "Neg",
         "flag": "Flag",
-        "grp": "Grp",
+        "group_id": "group_id",
         "volume": "Volume",
     }
     rows = []
@@ -148,7 +148,6 @@ def _col(name: str):
             "denom": "Denom",
             "neg": "Neg",
             "flag": "Flag",
-            "grp": "Grp",
             "volume": "Volume",
         }.get(name, name)
     )
@@ -170,12 +169,12 @@ EDGE_CASES = [
     ("ts_std", lambda: make_cleaned_call_factory("ts_std")(col("close"), 3)),
     ("ts_mean", lambda: make_cleaned_call_factory("ts_mean")(col("close"), 3)),
     ("ts_delay", lambda: make_cleaned_call_factory("ts_delay")(col("close"), 1)),
-    ("group_mean", lambda: make_cleaned_call_factory("group_mean")(col("close"), col("grp"))),
-    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(col("close"), col("grp"))),
+    ("group_mean", lambda: make_cleaned_call_factory("group_mean")(col("close"), col("group_id"))),
+    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(col("close"), col("group_id"))),
     ("ts_corr", lambda: make_cleaned_call_factory("ts_corr")(col("close"), col("open"), 3)),
     ("ts_cov", lambda: make_cleaned_call_factory("ts_cov")(col("ret"), col("close"), 3)),
     ("ts_beta", lambda: make_cleaned_call_factory("ts_beta")(col("ret"), col("close"), 3)),
-    ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(col("close"), col("grp"))),
+    ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(col("close"), col("group_id"))),
     ("winsorize", lambda: make_cleaned_call_factory("winsorize")(col("close"))),
     ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(col("close"))),
     ("cs_mad_zscore", lambda: make_cleaned_call_factory("cs_mad_zscore")(col("close"))),
@@ -232,13 +231,13 @@ EDGE_CASES = [
     ("is_infinite", lambda: make_cleaned_call_factory("is_infinite")(col("close"))),
     ("ts_autocorr", lambda: make_cleaned_call_factory("ts_autocorr")(col("close"), 4, 1)),
     ("ts_rank", lambda: make_cleaned_call_factory("ts_rank")(col("close"), 3)),
-    ("group_rank", lambda: make_cleaned_call_factory("group_rank")(col("close"), col("grp"))),
-    ("group_neutralize", lambda: make_cleaned_call_factory("group_neutralize")(col("close"), col("grp"))),
+    ("group_rank", lambda: make_cleaned_call_factory("group_rank")(col("close"), col("group_id"))),
+    ("group_neutralize", lambda: make_cleaned_call_factory("group_neutralize")(col("close"), col("group_id"))),
     ("clip", lambda: make_cleaned_call_factory("clip")(col("close"), 0.0, 100.0)),
     ("ffill", lambda: make_cleaned_call_factory("ffill")(col("close"))),
-    ("group_normalize", lambda: make_cleaned_call_factory("group_normalize")(col("close"), col("grp"))),
-    ("group_percentile", lambda: make_cleaned_call_factory("group_percentile")(col("close"), col("grp"), 0.5)),
-    ("group_std", lambda: make_cleaned_call_factory("group_std")(col("close"), col("grp"))),
+    ("group_normalize", lambda: make_cleaned_call_factory("group_normalize")(col("close"), col("group_id"))),
+    ("group_percentile", lambda: make_cleaned_call_factory("group_percentile")(col("close"), col("group_id"), 0.5)),
+    ("group_std", lambda: make_cleaned_call_factory("group_std")(col("close"), col("group_id"))),
     ("inverse", lambda: make_cleaned_call_factory("inverse")(col("close"))),
     ("is_finite", lambda: make_cleaned_call_factory("is_finite")(col("close"))),
     ("nan_to_num", lambda: make_cleaned_call_factory("nan_to_num")(col("close"))),
@@ -251,10 +250,10 @@ EDGE_CASES = [
     ("log_abs", lambda: make_cleaned_call_factory("log_abs")(col("neg"))),
     ("signed_log", lambda: make_cleaned_call_factory("signed_log")(col("neg"))),
     ("signed_sqrt", lambda: make_cleaned_call_factory("signed_sqrt")(col("neg"))),
-    ("group_sum", lambda: make_cleaned_call_factory("group_sum")(col("close"), col("grp"))),
-    ("group_min", lambda: make_cleaned_call_factory("group_min")(col("close"), col("grp"))),
-    ("group_max", lambda: make_cleaned_call_factory("group_max")(col("close"), col("grp"))),
-    ("group_count", lambda: make_cleaned_call_factory("group_count")(col("close"), col("grp"))),
+    ("group_sum", lambda: make_cleaned_call_factory("group_sum")(col("close"), col("group_id"))),
+    ("group_min", lambda: make_cleaned_call_factory("group_min")(col("close"), col("group_id"))),
+    ("group_max", lambda: make_cleaned_call_factory("group_max")(col("close"), col("group_id"))),
+    ("group_count", lambda: make_cleaned_call_factory("group_count")(col("close"), col("group_id"))),
     ("tanh", lambda: make_cleaned_call_factory("tanh")(col("neg"))),
 ]
 
@@ -288,12 +287,12 @@ DUCKDB_EDGE_CASES = [
     ("ts_mean", lambda: make_cleaned_call_factory("ts_mean")(_col("close"), 3)),
     ("ts_delay", lambda: make_cleaned_call_factory("ts_delay")(_col("close"), 1)),
     ("ts_pct", lambda: make_cleaned_call_factory("ts_pct")(_col("close"), 1)),
-    ("group_mean", lambda: make_cleaned_call_factory("group_mean")(_col("close"), _col("grp"))),
-    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(_col("close"), _col("grp"))),
+    ("group_mean", lambda: make_cleaned_call_factory("group_mean")(_col("close"), _col("group_id"))),
+    ("group_winsorize", lambda: make_cleaned_call_factory("group_winsorize")(_col("close"), _col("group_id"))),
     ("ts_corr", lambda: make_cleaned_call_factory("ts_corr")(_col("close"), _col("open"), 3)),
     ("ts_cov", lambda: make_cleaned_call_factory("ts_cov")(_col("ret"), _col("close"), 3)),
     ("ts_beta", lambda: make_cleaned_call_factory("ts_beta")(_col("ret"), _col("close"), 3)),
-    ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(_col("close"), _col("grp"))),
+    ("group_zscore", lambda: make_cleaned_call_factory("group_zscore")(_col("close"), _col("group_id"))),
     ("winsorize", lambda: make_cleaned_call_factory("winsorize")(_col("close"))),
     ("cs_mad", lambda: make_cleaned_call_factory("cs_mad")(_col("close"))),
     ("cs_mad_zscore", lambda: make_cleaned_call_factory("cs_mad_zscore")(_col("close"))),
@@ -352,13 +351,13 @@ DUCKDB_EDGE_CASES = [
     ("cs_sum", lambda: make_cleaned_call_factory("cs_sum")(_col("close"))),
     ("cs_count", lambda: make_cleaned_call_factory("cs_count")(_col("close"))),
     ("log_returns", lambda: make_cleaned_call_factory("log_returns")(_col("close"))),
-    ("group_rank", lambda: make_cleaned_call_factory("group_rank")(_col("close"), _col("grp"))),
-    ("group_neutralize", lambda: make_cleaned_call_factory("group_neutralize")(_col("close"), _col("grp"))),
+    ("group_rank", lambda: make_cleaned_call_factory("group_rank")(_col("close"), _col("group_id"))),
+    ("group_neutralize", lambda: make_cleaned_call_factory("group_neutralize")(_col("close"), _col("group_id"))),
     ("clip", lambda: make_cleaned_call_factory("clip")(_col("close"), 0.0, 100.0)),
     ("ffill", lambda: make_cleaned_call_factory("ffill")(_col("close"))),
-    ("group_normalize", lambda: make_cleaned_call_factory("group_normalize")(_col("close"), _col("grp"))),
-    ("group_percentile", lambda: make_cleaned_call_factory("group_percentile")(_col("close"), _col("grp"), 0.5)),
-    ("group_std", lambda: make_cleaned_call_factory("group_std")(_col("close"), _col("grp"))),
+    ("group_normalize", lambda: make_cleaned_call_factory("group_normalize")(_col("close"), _col("group_id"))),
+    ("group_percentile", lambda: make_cleaned_call_factory("group_percentile")(_col("close"), _col("group_id"), 0.5)),
+    ("group_std", lambda: make_cleaned_call_factory("group_std")(_col("close"), _col("group_id"))),
     ("inverse", lambda: make_cleaned_call_factory("inverse")(_col("close"))),
     ("is_finite", lambda: make_cleaned_call_factory("is_finite")(_col("close"))),
     ("nan_to_num", lambda: make_cleaned_call_factory("nan_to_num")(_col("close"))),
@@ -368,10 +367,10 @@ DUCKDB_EDGE_CASES = [
     ("log_abs", lambda: make_cleaned_call_factory("log_abs")(_col("neg"))),
     ("signed_log", lambda: make_cleaned_call_factory("signed_log")(_col("neg"))),
     ("signed_sqrt", lambda: make_cleaned_call_factory("signed_sqrt")(_col("neg"))),
-    ("group_sum", lambda: make_cleaned_call_factory("group_sum")(_col("close"), _col("grp"))),
-    ("group_min", lambda: make_cleaned_call_factory("group_min")(_col("close"), _col("grp"))),
-    ("group_max", lambda: make_cleaned_call_factory("group_max")(_col("close"), _col("grp"))),
-    ("group_count", lambda: make_cleaned_call_factory("group_count")(_col("close"), _col("grp"))),
+    ("group_sum", lambda: make_cleaned_call_factory("group_sum")(_col("close"), _col("group_id"))),
+    ("group_min", lambda: make_cleaned_call_factory("group_min")(_col("close"), _col("group_id"))),
+    ("group_max", lambda: make_cleaned_call_factory("group_max")(_col("close"), _col("group_id"))),
+    ("group_count", lambda: make_cleaned_call_factory("group_count")(_col("close"), _col("group_id"))),
     ("tanh", lambda: make_cleaned_call_factory("tanh")(_col("neg"))),
 ]
 

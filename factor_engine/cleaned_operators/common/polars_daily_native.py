@@ -69,6 +69,9 @@ def _group_long_transform(
         x.select(cols)
         .with_row_index("_r")
         .unpivot(index="_r", on=cols, variable_name="_c", value_name="_v")
+        # 与 _cs_long_transform 一致：pandas 分组统计跳过 NaN，polars 会把 NaN
+        # 当数值参与 quantile/median；unpivot 后统一 NaN→null。
+        .with_columns(pl.col("_v").fill_nan(None))
     )
     if group is None:
         raise ValueError("group is required; use an explicit cs_* operator for full cross-sections")

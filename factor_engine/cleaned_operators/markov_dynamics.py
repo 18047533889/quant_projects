@@ -1325,9 +1325,8 @@ def _register_surface() -> None:
             "ts_km_diffusion_gradient",
             "ts_km_quasipotential_depth",
         })
-    _surface.RESEARCH_ONLY_CANONICALS = frozenset(
-        set(_surface.RESEARCH_ONLY_CANONICALS)
-        | {
+    _surface.extend_research_only(
+        {
             "ts_markov_entropy_production",
             "ts_active_information_storage",
         }

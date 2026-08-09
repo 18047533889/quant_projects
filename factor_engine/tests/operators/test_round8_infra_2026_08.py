@@ -99,8 +99,12 @@ def test_valid_numeric_sequence_is_accepted():
     pc = ParameterCanonicalizer("op", [])
     key = pc.canonical_key({"weights": [1.0, 2.0, 3.0], "window": 5})
     assert ("weights", "[1.0, 2.0, 3.0]") in key
-    # Mixed int/float/bool is numeric per the #387 contract.
-    pc.canonical_key({"weights": [1, 2.0, True]})
+    # Mixed int/float is numeric per the #387 contract.  bool is NOT a number
+    # (R9-P1-038: a bool element is rejected unless the ParamSpec declares
+    # dtype=bool) — assert the fail-closed verdict.
+    pc.canonical_key({"weights": [1, 2.0, 3.5]})
+    with pytest.raises(ValueError, match="bool"):
+        pc.canonical_key({"weights": [1, 2.0, True]})
 
 
 # ---------------------------------------------------------------------------
@@ -299,6 +303,85 @@ def test_source_ref_transform_rejects_unconsumed_parameters():
         transform_source_col(ref, "minute_bar", period=5, index=0, bogus=1)
 
 
+# ---------------------------------------------------------------------------
+# Review-8 #461/#462 — ParamSpec MISSING sentinel + restricted predicate AST
+# ---------------------------------------------------------------------------
+
+def test_param_spec_missing_sentinel_distinguishes_none():
+    """#461: ``default=None`` is a declared default; ``default=MISSING`` means
+    "no default declared" — the two must be distinguishable."""
+    from cleaned_operators.base import MISSING, ParamSpec
+
+    assert ParamSpec().default is MISSING
+    assert ParamSpec(dtype=int).default is MISSING
+    assert ParamSpec(dtype=int, default=None).default is None
+    assert ParamSpec(dtype=str, default="x").default == "x"
+
+
+def test_relational_predicate_allowed_grammar():
+    """#462: arithmetic + comparison relations evaluate correctly."""
+    from cleaned_operators.base import RelationalParamSpec
+
+    r = RelationalParamSpec("window >= 4 * k + 1")
+    assert sorted(r.param_names) == ["k", "window"]
+    assert r.check({"window": 21, "k": 5}) is True
+    assert r.check({"window": 20, "k": 5}) is False
+
+    r2 = RelationalParamSpec("window - (dim - 1) * delay >= rank + 2")
+    assert r2.check({"window": 30, "dim": 4, "delay": 2, "rank": 3}) is True
+    assert r2.check({"window": 10, "dim": 4, "delay": 2, "rank": 3}) is False
+
+    r3 = RelationalParamSpec("(window // n_segments) >= 8")
+    assert r3.check({"window": 32, "n_segments": 4}) is True
+    assert r3.check({"window": 31, "n_segments": 4}) is False
+
+    r4 = RelationalParamSpec("2 ** (level + 2) <= window")
+    assert r4.check({"level": 2, "window": 20}) is True
+    assert r4.check({"level": 3, "window": 20}) is False
+
+
+def test_relational_predicate_undecidable_is_unmet():
+    """#462: NaN / missing params -> False (search forced to a feasible combo)."""
+    from cleaned_operators.base import RelationalParamSpec
+
+    r = RelationalParamSpec("window >= 4 * k + 1")
+    assert r.check({"window": float("nan"), "k": 5}) is False
+    assert r.check({"window": 21}) is False  # k absent
+    assert r.check({"window": 21, "k": None}) is False
+
+
+def test_relational_predicate_rejects_dynamic_python():
+    """#462: eval-free — function calls, attributes, subscripts, string
+    literals, lambdas and membership tests all fail at construction."""
+    from cleaned_operators.base import RelationalParamSpec
+
+    bad = [
+        "len(window) >= 2",
+        "window.__class__",
+        "x[0] > 1",
+        "window >= '3'",
+        "k and True",
+        "window in [1, 2]",
+        "window > lambda: 1",
+        "max(window, k) > 1",
+        "window > __import__('os').sep",
+    ]
+    for expr in bad:
+        with pytest.raises(ValueError):
+            RelationalParamSpec(expr)
+
+
+def test_relational_predicate_canonical_hash_of_ast():
+    """#462: search grammar and runtime share the same predicate object; the
+    referenced-param set is derived from the AST, not the string."""
+    from cleaned_operators.base import RelationalParamSpec
+
+    a = RelationalParamSpec("window >= 4 * k + 1")
+    b = RelationalParamSpec("  window >= 4 * k + 1  ")  # whitespace-insensitive
+    assert a.param_names == b.param_names
+    assert a.check({"window": 21, "k": 5}) == b.check({"window": 21, "k": 5})
+
+
 def test_decode_source_ref_strict_raises_on_missing_field():
     from api.source_ref import decode_source_ref_strict
 
@@ -379,7 +462,7 @@ def test_primitive_certifier_parameter_domain_default():
     assert mod._certified_parameter_domain("ts_mean") == {"bounds": ["default"]}
 
 
-def test_primitive_certifier_junit_parse_skip_fails(tmp_path):
+def test_primitive_certifier_junit_parse_skip_excluded(tmp_path):
     mod = _load_script("scripts/certify_primitive_evidence.py")
     junit = tmp_path / "stage.xml"
     junit.write_text(
@@ -392,15 +475,35 @@ def test_primitive_certifier_junit_parse_skip_fails(tmp_path):
     ok, skipped, records = mod._parse_junit_records(
         junit, ["pkg/test.py"], frozenset({"ts_mean"}), "polars_reference_parity"
     )
-    # skip != pass: any skip fails the file.
-    assert not ok
-    assert skipped == ["pkg.test"]
-    # the executed+passed case is still recorded per-test-case.
+    # skip != pass: a per-case skip (e.g. not-on-daily-surface exclusion)
+    # certifies nothing but does NOT void the file's executed evidence.
+    assert ok
+    assert skipped == []
+    # the executed+passed case is recorded per-test-case; the skip is excluded.
     assert len(records) == 1
     assert records[0]["canonical"] == "ts_mean"
     assert records[0]["backend"] == "polars"
     assert records[0]["status"] == "passed"
     assert records[0]["case_id"] == "pkg.test::test_x[ts_mean-1]"
+
+
+def test_primitive_certifier_junit_parse_whole_file_skip_fails(tmp_path):
+    mod = _load_script("scripts/certify_primitive_evidence.py")
+    junit = tmp_path / "stage.xml"
+    junit.write_text(
+        "<testsuites><testsuite name='pytest'>"
+        "<testcase classname='pkg.test' name='test_y'><skipped message='dep'/></testcase>"
+        "</testsuite></testsuites>",
+        encoding="utf-8",
+    )
+    ok, skipped, records = mod._parse_junit_records(
+        junit, ["pkg/test.py"], frozenset({"ts_mean"}), "polars_reference_parity"
+    )
+    # A file that executed ZERO cases (whole-file importorskip / all skipped)
+    # supplied no evidence -> the stage fails (audit #382 execution gate).
+    assert not ok
+    assert skipped == ["pkg.test"]
+    assert records == []
 
 
 def test_primitive_certifier_junit_parse_all_pass_ok(tmp_path):

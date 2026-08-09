@@ -14,7 +14,7 @@ from __future__ import annotations
 import ast
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 import numpy as np
 import pandas as pd
@@ -143,7 +143,7 @@ class ParamSpec:
 # (``< <= > >= == !=``), boolean (``and/or/not``) and unary sign.  Function
 # calls, attributes, subscripting, comprehensions and container literals are
 # rejected at parse time.  ``search`` grammar and runtime share this object.
-_ALLOWED_REL_BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow)
+_ALLOWED_REL_BINOPS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Pow)
 _ALLOWED_REL_CMPOPS = (ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.Eq, ast.NotEq)
 _ALLOWED_REL_BOOLOPS = (ast.And, ast.Or)
 _ALLOWED_REL_UNARYOPS = (ast.USub, ast.UAdd, ast.Not)
@@ -156,8 +156,9 @@ def parse_relational_expression(expression: str) -> tuple[ast.AST, frozenset[str
     the allowlist — a malformed relation must fail loudly at registration time
     instead of being ``eval``-ed at runtime.
     """
+    text = str(expression).strip()
     try:
-        tree = ast.parse(str(expression), mode="eval")
+        tree = ast.parse(text, mode="eval")
     except SyntaxError as exc:
         raise ValueError(
             f"invalid relational expression {expression!r}: {exc.msg}"
@@ -166,6 +167,11 @@ def parse_relational_expression(expression: str) -> tuple[ast.AST, frozenset[str
     referenced: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.Expression, ast.Load)):
+            continue
+        # Operator node classes (Add/GtE/And/USub/...) are validated by their
+        # PARENT (BinOp/BoolOp/Compare/UnaryOp) below; walk visits them as bare
+        # ``_operator`` instances, so pass them through untouched.
+        if isinstance(node, (ast.operator, ast.cmpop, ast.boolop, ast.unaryop)):
             continue
         if isinstance(node, ast.Name):
             if isinstance(node.ctx, ast.Load):
@@ -234,6 +240,8 @@ def _eval_rel_ast(node: ast.AST, ns: dict[str, Any]) -> Any:
             return left * right
         if op is ast.Div:
             return left / right
+        if op is ast.FloorDiv:
+            return left // right
         if op is ast.Pow:
             return left ** right
         raise ValueError(f"unsupported binop {op.__name__}")
@@ -411,6 +419,21 @@ class OperatorMetadata:
     # execution layer can refuse same-session misuse mechanically.
     available_at: str | None = None
     same_session_usable: bool | None = None
+    # R9-OP-024: machine-readable operator ROLE.  ``global_state`` marks an
+    # operator whose output is a single value per date spread identically over
+    # every instrument (e.g. ``cs_hartigan_dip``): it can never be a terminal
+    # cross-sectional alpha (CS IC is meaningless on a constant cross-section)
+    # and is only valid as a regime/condition input.  This is a FIELD, not a
+    # tag/comment, so the search grammar can gate terminal generation
+    # mechanically instead of guessing from docstrings.
+    role: str | None = None
+    # R9-P1-047: declared cost contract ``cost_model(params, shape) ->
+    # (runtime_cost, memory_cost)`` in units of one 120-row rolling op.  When
+    # set, ``operator_cost_model.runtime_cost/memory_cost`` use it instead of
+    # the prefix-name complexity table — the operator declares its true
+    # parameter/panel complexity rather than being guessed from its name.
+    # ``None`` = no explicit contract (prefix fallback applies).
+    cost_model: Callable[[dict[str, Any], tuple[int, int] | None], tuple[float, float]] | None = None
     # round-7: explicit positional PANEL-input arity for zero-parameter operators
     # whose panel contract is not expressible in ``param_names`` (``log``=1,
     # ``add``=2).  ``None`` = kernel-implied (legacy).  When set, the

@@ -70,6 +70,13 @@ def _shift_available_to_next_decision(
     decision strictly after its announcement date.  The shift is computed from
     the actual decision grid, so sparse factors (e.g. monthly) naturally see the
     value at their next decision bar.
+
+    .. note:: R9-P0-019 — this is the *decision-grid* approximation of market
+       visibility.  ``market_visible_at`` and ``decision_at`` are DIFFERENT
+       concepts: a Jan-2 announcement is market-visible on Jan-3 (next exchange
+       session) but only reaches a monthly factor's next decision on Jan-31.
+       This helper is retained as the fallback for callers that do not supply a
+       market calendar; prefer :func:`_market_visible_shift` for production PIT.
     """
     # Work in int64 ns-since-epoch: tz-aware datetime arrays cannot be compared
     # as raw numpy datetime64 (pandas returns an object array of Timestamps), but
@@ -102,6 +109,50 @@ def _shift_available_to_next_decision(
     return out.dt.tz_localize("UTC")
 
 
+def _market_visible_shift(
+    knowledge: pd.Series,
+    market_calendar: pd.DatetimeIndex | None,
+    *,
+    market_timezone: str = "UTC",
+) -> pd.Series:
+    """First MARKET-session day strictly AFTER the knowledge timestamp.
+
+    R9-P0-019/021 (visibility is a market concept, not a decision-grid or UTC
+    concept): ``market_visible_at`` is defined by the exchange calendar in the
+    MARKET timezone — a US announcement dated ``2026-03-01 00:00 UTC`` lands on
+    ``2026-02-28 19:00 ET`` (a different market date), which a UTC-normalised
+    decision-grid shift would get wrong.  Returns the first market session date
+    strictly after ``knowledge``, tz-aware UTC, or ``NaT`` when the calendar
+    runs out / the input is null.  When ``market_calendar`` is ``None`` it
+    returns the input unchanged so the caller falls back to the decision grid.
+    """
+    k = pd.to_datetime(knowledge, errors="coerce", utc=True)
+    if market_calendar is None:
+        return k
+    cal = pd.DatetimeIndex(market_calendar)
+    if getattr(cal.tz, "zone", None):
+        cal_local = cal.tz_convert(market_timezone).tz_localize(None)
+    else:
+        cal_local = cal.tz_localize("UTC").tz_convert(market_timezone).tz_localize(None)
+    cal_dates = np.unique(cal_local.normalize().astype("int64").to_numpy())
+    km = (
+        k.dt.tz_convert(market_timezone)
+        .dt.normalize()
+        .dt.tz_localize(None)
+        .astype("int64")
+        .to_numpy()
+    )
+    idx = np.searchsorted(cal_dates, km, side="right")
+    out = pd.Series(pd.NaT, index=knowledge.index, dtype="datetime64[ns]")
+    # NaT entries survive the int64 conversion as the NaT epoch sentinel, so the
+    # validity mask must come from the ORIGINAL series, not from the converted
+    # ints (which are never NaN).
+    ok = (idx < cal_dates.size) & ~pd.isna(k).to_numpy()
+    if ok.any():
+        out.iloc[ok] = pd.Index([pd.Timestamp(cal_dates[i]) for i in idx[ok]])
+    return out.dt.tz_localize("UTC")
+
+
 def validate_fundamental_events(events: pd.DataFrame, columns: PITColumns = PITColumns()) -> None:
     required = {columns.instrument, columns.period_end, columns.available_at}
     missing = sorted(required - set(events.columns))
@@ -131,25 +182,49 @@ def pit_asof_join(
     columns: PITColumns = PITColumns(),
     max_age_days: int | None = 180,
     available_policy: AvailablePolicy = "next_trading_day",
+    market_calendar: pd.DatetimeIndex | None = None,
+    market_timezone: str = "UTC",
+    staleness_basis: Literal["knowledge_at", "market_visible_at"] = "knowledge_at",
 ) -> pd.DataFrame:
-    """Backward as-of join enforcing ``available_at <= decision_timestamp``.
+    """Backward as-of join enforcing ``market_visible_at <= decision_timestamp``.
 
     Historical revision vintages must be retained in ``events``.  This function
     never deduplicates a report period to its final revised value before joining.
 
+    **Three timestamps are kept distinct (R9-P0-019/020/021):**
+
+    * ``knowledge_at`` — the original announcement time (unchanged from the
+      events panel).
+    * ``market_visible_at`` — when the market actually sees the event: the
+      first exchange session day strictly after ``knowledge_at``, computed in
+      ``market_timezone`` from ``market_calendar`` when provided.  **This is
+      NOT the factor's next decision** — a monthly factor's Jan-31 decision
+      does not change the fact the market saw a Jan-2 announcement on Jan-3.
+      When ``market_calendar`` is ``None`` the join falls back to the
+      decision-grid approximation (legacy behaviour) — documented, not silent.
+    * ``decision_at`` — the factor's decision timestamp (the join key).
+
+    PIT eligibility is ``market_visible_at <= decision_at``; the output carries
+    both ``available_at`` (the join-visible time, backward compatible) and
+    ``knowledge_at`` (original), and staleness is measured from
+    ``staleness_basis`` (default ``knowledge_at`` — the OLD code measured age
+    from the shifted time and systematically understated information age).
+
     ``available_policy`` controls when an event becomes visible:
 
-    * ``next_trading_day`` (default, round-6 P0-03) — an announcement on
-      ``PubDate`` is only visible to the first decision strictly after it.
+    * ``next_trading_day`` (default, round-6 P0-03) — an announcement is only
+      visible to the first exchange session / decision strictly after it.
       A-share earnings/top-ten filings land after close and carry a date, not a
       time-of-day; assuming ``00:00:00`` same-day availability would let an
       after-close announcement drive that day's close.  Conservative by default.
-    * ``same_day`` — ``available_at <= decision`` (legacy behaviour, only when
+    * ``same_day`` — ``knowledge_at <= decision`` (legacy behaviour, only when
       the caller asserts the events carry real timestamps such that the
       comparison is sound).
     """
     if available_policy not in {"same_day", "next_trading_day"}:
         raise ValueError(f"unknown available policy {available_policy!r}")
+    if staleness_basis not in {"knowledge_at", "market_visible_at"}:
+        raise ValueError(f"unknown staleness basis {staleness_basis!r}")
     validate_fundamental_events(events, columns)
     if decision_time not in decisions.columns:
         raise ValueError(f"decisions missing {decision_time!r}")
@@ -160,14 +235,31 @@ def pit_asof_join(
     right = events.copy()
     left[decision_time] = pd.to_datetime(left[decision_time], errors="raise", utc=True)
     right[columns.available_at] = pd.to_datetime(right[columns.available_at], errors="raise", utc=True)
+    # R9-P0-020: preserve the ORIGINAL announcement time under a distinct name —
+    # the join key below is the market-visible time, so ``available_at`` in the
+    # output stays the shifted join key (backward compatible) while the true
+    # information age is measured from ``knowledge_at``.
+    right["knowledge_at"] = right[columns.available_at]
     if available_policy == "next_trading_day":
-        shifted = _shift_available_to_next_decision(
-            right[columns.available_at], left, decision_time=decision_time
-        )
-        right[columns.available_at] = shifted
-        # Events announced after the last decision can never be visible; a NaT
-        # as-of key is invalid for merge_asof, so drop them explicitly.
-        right = right.loc[shifted.notna()].copy()
+        if market_calendar is not None:
+            market_visible = _market_visible_shift(
+                right[columns.available_at], market_calendar, market_timezone=market_timezone
+            )
+        else:
+            # Fallback (legacy): shift to the next DECISION grid timestamp.  This
+            # conflates market visibility with the factor's own decision cadence
+            # and understates age; documented for backward compatibility — pass
+            # ``market_calendar`` for production PIT.
+            market_visible = _shift_available_to_next_decision(
+                right[columns.available_at], left, decision_time=decision_time
+            )
+        right["market_visible_at"] = market_visible
+        right[columns.available_at] = market_visible
+        # Events that can never become visible have a NaT as-of key, which is
+        # invalid for merge_asof — drop them explicitly.
+        right = right.loc[market_visible.notna()].copy()
+    else:
+        right["market_visible_at"] = right[columns.available_at]
     # #404 (review-8): ``pd.merge_asof(by=...)`` requires the asof key to be
     # *globally* monotonic across all ``by`` groups — sorting by
     # ``[instrument, decision_time]`` interleaves instruments (A: Jan1 Jan2,
@@ -194,7 +286,15 @@ def pit_asof_join(
     if max_age_days is not None:
         if int(max_age_days) < 0:
             raise ValueError("max_age_days must be non-negative or None")
-        age = joined[decision_time] - joined[columns.available_at]
+        # R9-P0-020: information age must be measured from the ORIGINAL
+        # announcement (knowledge_at), NOT from the shifted market-visible time
+        # — the old code measured ``decision - available_at`` AFTER the shift,
+        # so a Jan-2 PubDate reaching a Jan-31 monthly decision looked 0 days
+        # old instead of ~29.
+        age_basis = joined.get("knowledge_at", joined[columns.available_at])
+        if staleness_basis == "market_visible_at":
+            age_basis = joined["market_visible_at"]
+        age = joined[decision_time] - age_basis
         stale = age > pd.Timedelta(days=int(max_age_days))
         event_columns = [c for c in events.columns if c != columns.instrument]
         joined.loc[stale, event_columns] = pd.NA
@@ -222,6 +322,8 @@ def select_visible_row_bundles(
     decision_time: str = "decision_timestamp",
     columns: PITColumns = PITColumns(),
     available_policy: AvailablePolicy = "next_trading_day",
+    market_calendar: pd.DatetimeIndex | None = None,
+    market_timezone: str = "UTC",
 ) -> pd.DataFrame:
     """Select one whole visible report row for every decision.
 
@@ -230,7 +332,8 @@ def select_visible_row_bundles(
 
     ``available_policy`` mirrors :func:`pit_asof_join`: the default is
     ``next_trading_day`` (round-6 P0-03) so a date-level announcement is only
-    visible to the first decision strictly after ``PubDate``; ``same_day`` is
+    visible to the first exchange session (``market_calendar`` / market
+    timezone, when provided) strictly after ``PubDate``; ``same_day`` is
     the legacy exact-match behaviour for callers with real timestamps.
     """
     if available_policy not in {"same_day", "next_trading_day"}:
@@ -248,19 +351,30 @@ def select_visible_row_bundles(
     filtered[columns.period_end] = pd.to_datetime(
         filtered[columns.period_end], errors="raise", utc=True
     )
+    # R9-P0-019/021: preserve the original knowledge time; visibility is the
+    # market-session time, distinct from the factor's decision cadence.
+    filtered["knowledge_at"] = filtered[columns.available_at]
     if available_policy == "next_trading_day":
-        shifted = _shift_available_to_next_decision(
-            filtered[columns.available_at], left, decision_time=decision_time
-        )
-        filtered[columns.available_at] = shifted
-        filtered = filtered.loc[shifted.notna()].copy()
+        if market_calendar is not None:
+            market_visible = _market_visible_shift(
+                filtered[columns.available_at], market_calendar, market_timezone=market_timezone
+            )
+        else:
+            market_visible = _shift_available_to_next_decision(
+                filtered[columns.available_at], left, decision_time=decision_time
+            )
+        filtered["market_visible_at"] = market_visible
+        filtered[columns.available_at] = market_visible
+        filtered = filtered.loc[market_visible.notna()].copy()
+    else:
+        filtered["market_visible_at"] = filtered[columns.available_at]
 
     selected_rows: list[dict[str, object]] = []
     event_columns = [c for c in filtered.columns if c != columns.instrument]
     for decision in left.to_dict("records"):
         visible = filtered.loc[
             (filtered[columns.instrument] == decision[columns.instrument])
-            & (filtered[columns.available_at] <= decision[decision_time])
+            & (filtered["market_visible_at"] <= decision[decision_time])
         ]
         if visible.empty:
             selected_rows.append({**decision, **{column: pd.NA for column in event_columns}})

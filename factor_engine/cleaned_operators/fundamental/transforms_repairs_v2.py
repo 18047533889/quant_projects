@@ -245,4 +245,4 @@ for _name,_params,_fn,_desc in [
 # allowlists are consumed.
 import cleaned_operators.operator_surface as _surface
 _surface._FUNDAMENTAL_V2_CANONICALS=frozenset(set(_surface._FUNDAMENTAL_V2_CANONICALS)|_EXTRA)
-_surface.EXTENDED_ONLY_CANONICALS=frozenset(set(_surface.EXTENDED_ONLY_CANONICALS)|_EXTRA)
+_surface.extend_extended_only(set(_EXTRA))

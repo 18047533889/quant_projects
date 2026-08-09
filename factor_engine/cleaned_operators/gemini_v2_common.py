@@ -147,6 +147,10 @@ def register_dual(
     # forwarded to the pandas metadata so the central validator rejects
     # guaranteed-NaN parameter combinations before search spends budget.
     relational_specs: Sequence[Any] | None = None,
+    # R9-OP-024: machine-readable operator role (``global_state`` etc.).  A
+    # forward-compatible field; when set it is carried on the pandas metadata so
+    # the search grammar can gate terminal generation mechanically.
+    role: str | None = None,
 ) -> None:
     """Register ``fn`` under ``canonical`` for both pandas_numpy and polars.
 
@@ -186,6 +190,7 @@ def register_dual(
             window_semantics=window_semantics,
             param_specs=specs,
             relational_specs=rel_specs,
+            role=role,
         )
 
         def _calculate_series(self, *args, _fn=fn, **kwargs):
