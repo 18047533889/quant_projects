@@ -29,6 +29,94 @@ from cleaned_operators.overhaul.base import (
 _REVISION_POLICIES = frozenset({"latest_available", "first_available"})
 
 
+# ---------------------------------------------------------------------------
+# FinancialFlowSemantics (round-11 findings #51/#52/#53)
+#
+# Income / cash-flow fields arrive at PIT panels in one of these grains:
+# ``SinglePeriodFlow`` (one fiscal period), ``CumulativeYTDFlow`` (fiscal-YTD
+# cumulative), ``TTMFlow`` (trailing twelve months), ``AnnualFlow`` (annual
+# report) or ``Stock`` (balance-sheet point-in-time).  Growth / persistence /
+# volatility math is only defined on the matching grain, and subtracting two
+# flows of different grain silently mixes non-adjacent periods.  These helpers
+# live in this leaf module so both ``fundamental/transforms_v2`` and
+# ``fundamental/quality_v2`` can gate on them without a circular import.
+# ---------------------------------------------------------------------------
+
+class FinancialFlowSemantics:
+    """Reporting-flow grain contract for income / cash-flow operators."""
+
+    SINGLE_PERIOD = "SinglePeriodFlow"
+    CUMULATIVE_YTD = "CumulativeYTDFlow"
+    TTM = "TTMFlow"
+    ANNUAL = "AnnualFlow"
+    STOCK = "Stock"
+
+
+FLOW_TYPE_SET = frozenset({
+    FinancialFlowSemantics.SINGLE_PERIOD,
+    FinancialFlowSemantics.CUMULATIVE_YTD,
+    FinancialFlowSemantics.TTM,
+    FinancialFlowSemantics.ANNUAL,
+    FinancialFlowSemantics.STOCK,
+})
+
+GROWTH_FORBIDDEN_FLOW_TYPES = frozenset({FinancialFlowSemantics.CUMULATIVE_YTD})
+
+
+def flow_types(flow_type: Any, n: int) -> tuple[str | None, ...]:
+    """Normalise a ``flow_type`` declaration to one grain per flow input.
+
+    ``None`` (undeclared) keeps legacy behaviour (no gate).  A string applies to
+    every flow input; a tuple applies element-wise and must match the count.
+    """
+    if flow_type is None:
+        return (None,) * n
+    if isinstance(flow_type, str):
+        types = (flow_type,) * n
+    else:
+        types = tuple(flow_type)
+        if len(types) != n:
+            raise ValueError(
+                f"flow_type must be a string or a {n}-tuple matching the {n} "
+                f"flow inputs; got {flow_type!r}"
+            )
+    for t in types:
+        if t not in FLOW_TYPE_SET:
+            raise ValueError(
+                f"unknown flow_type {t!r}; expected one of {sorted(FLOW_TYPE_SET)}"
+            )
+    return types
+
+
+def reject_ytd_growth(operator: str, flow_type: Any) -> None:
+    """Reject growth/persistence on a ``CumulativeYTDFlow`` input (finding #52)."""
+    if flow_type is None:
+        return
+    types = flow_types(flow_type, 1)
+    if types[0] in GROWTH_FORBIDDEN_FLOW_TYPES:
+        raise ValueError(
+            f"{operator}: growth/period-change over a CumulativeYTDFlow input is "
+            "NOT a period growth rate (Q2 YTD / Q1 YTD != quarterly growth). "
+            "Convert with fin_quarter_from_cumulative (or fin_ttm_cumulative) "
+            "before applying growth."
+        )
+
+
+def require_same_flow_grain(operator: str, flow_type: Any, n: int) -> None:
+    """Reject combining flow inputs of different grain in one expression (#53)."""
+    if flow_type is None:
+        return
+    types = flow_types(flow_type, n)
+    base = types[0]
+    for t in types[1:]:
+        if t != base:
+            raise ValueError(
+                f"{operator}: mixing incompatible flow grains {types!r} — "
+                "accrual/cash-gap subtraction requires the same period grain "
+                "(e.g. a quarter accrual minus YTD depreciation is invalid)."
+            )
+
+
 def _positive_int(value: Any, name: str) -> int:
     if isinstance(value, (bool, np.bool_)):
         raise TypeError(f"{name} must be an integer, not bool")
@@ -139,6 +227,81 @@ class FiscalPeriod:
             fiscal_quarter=fiscal_quarter,
             fiscal_year_end=m,
         )
+
+
+@dataclass(frozen=True)
+class FiscalPeriodKey:
+    """Fiscal identity ``(fiscal_year, fiscal_slot)`` for same-slot matching.
+
+    ``fiscal_slot`` is the 1-based position of the report within its fiscal
+    year (quarter 1-4, half-year 1-2, annual 1, ISO week 1-53 for a 53-week
+    fiscal year).  Round-11 #180: a year-over-year lag is the SAME slot of the
+    PRIOR fiscal year, not a fixed ``periods_per_year`` ordinal lag — a 53-week
+    or non-calendar fiscal year has a different number of periods between the
+    same slots.
+    """
+
+    fiscal_year: int
+    fiscal_slot: int
+
+    @classmethod
+    def from_ordinal(cls, ordinal: int) -> "FiscalPeriodKey":
+        # The engine's ordinal encoding is quarterly-scaled (year*4+quarter-1),
+        # so the quarter-slot is ``ordinal % 4 + 1``.  Used only as a fallback
+        # for period ids that expose an ordinal but no explicit slot label.
+        return cls(int(ordinal) // 4, int(ordinal) % 4 + 1)
+
+
+_FISCAL_PERIOD_KEY_RE = re.compile(
+    r"^(?P<year>\d{4})\s*(?:Q(?P<q>[1-4])|H(?P<h>[1-2])|S(?P<s>[1-2])"
+    r"|W(?P<w>[0-5]?\d)|(?:FY|A|ANNUAL|YTD))$"
+)
+
+
+def fiscal_period_key(value: Any) -> FiscalPeriodKey | None:
+    """Parse a report-period identifier into ``FiscalPeriodKey`` or ``None``.
+
+    Supports quarterly (``2024Q1`` / ``2024Q 1`` / compact ``20241``),
+    semiannual (``2024H1`` / ``2024S1``), annual (``2024FY`` / ``2024A`` /
+    ``2024``), 53-week fiscal years (``2024W53``) and ``FiscalPeriod`` objects.
+    A bare timestamp is resolved with the *calendar* quarter; a non-calendar
+    fiscal year cannot be inferred from a bare date and fails closed (``None``)
+    unless the caller supplies a ``FiscalPeriod``.
+    """
+    if value is None or (isinstance(value, (float, np.floating)) and np.isnan(value)):
+        return None
+    if isinstance(value, FiscalPeriod):
+        return FiscalPeriodKey(value.fiscal_year, value.fiscal_quarter)
+    if isinstance(value, (pd.Timestamp, np.datetime64)):
+        ts = pd.Timestamp(value)
+        if pd.isna(ts):
+            return None
+        return FiscalPeriodKey(ts.year, (ts.month - 1) // 3 + 1)
+    if isinstance(value, (bool, np.bool_)):
+        return None
+    if isinstance(value, (int, np.integer)):
+        number = int(value)
+        if 10_000 <= number <= 99_999:
+            year, quarter = divmod(number, 10)
+            if year >= 1000 and 1 <= quarter <= 4:
+                return FiscalPeriodKey(year, quarter)
+        return None
+    text = str(value).strip().upper()
+    match = re.fullmatch(r"(\d{4})\D*Q?([1-4])", text)
+    if match:
+        return FiscalPeriodKey(int(match.group(1)), int(match.group(2)))
+    match = re.fullmatch(r"(\d{4})\D*[HS]([1-2])", text)
+    if match:
+        return FiscalPeriodKey(int(match.group(1)), int(match.group(2)))
+    match = re.fullmatch(r"(\d{4})\D*W(\d{1,2})", text)
+    if match:
+        week = int(match.group(2))
+        if 1 <= week <= 53:
+            return FiscalPeriodKey(int(match.group(1)), week)
+    match = re.fullmatch(r"(\d{4})(?:FY|A|ANNUAL|YTD)?", text)
+    if match:
+        return FiscalPeriodKey(int(match.group(1)), 1)
+    return None
 
 
 def period_ordinal(value: Any) -> int | None:

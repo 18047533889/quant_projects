@@ -18,11 +18,22 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 
 
-def _metadata(name: str, description: str, params: list[str], *, category: str, domain: str, unit: str) -> OperatorMetadata:
-    return OperatorMetadata(
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    category: str,
+    domain: str,
+    unit: str,
+    output_unit: str | None = None,
+    param_specs: dict[str, ParamSpec] | None = None,
+    extra_tags: tuple[str, ...] = (),
+) -> OperatorMetadata:
+    metadata = OperatorMetadata(
         name=name,
         category=category,
         description=description,
@@ -31,9 +42,12 @@ def _metadata(name: str, description: str, params: list[str], *, category: str, 
         tags=[
             category, "daily", "pit_safe", "causal", "typed_v2",
             f"signature:{','.join(params)}->series", f"domain:{domain}",
-            f"unit:{unit}", "cost:1",
+            f"unit:{unit}", "cost:1", *extra_tags,
         ],
+        output_unit=output_unit,
+        param_specs=dict(param_specs or {}),
     )
+    return metadata
 
 
 def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
@@ -41,9 +55,22 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
 
 
 def _stack_panels(*panels: pd.DataFrame) -> np.ndarray:
-    """Align positional panels to the first panel and stack to (N, rows, cols)."""
+    """Align positional panels to the first panel and stack to (N, rows, cols).
+
+    Panels are financial panels (``timestamp x instrument``) that must share the
+    exact same date axis and instrument columns.  A silent ``reindex`` could
+    re-pair a row to a different date (or an instrument column to a different
+    name) after an upstream misalignment, manufacturing a spurious concentration /
+    mobility value.  Fail closed instead (R11 #122).
+    """
     base = panels[0]
-    arrays = [np.asarray(p.reindex(index=base.index, columns=base.columns).to_numpy(dtype=float)) for p in panels]
+    for position, panel in enumerate(panels[1:], start=1):
+        if not panel.index.equals(base.index) or not panel.columns.equals(base.columns):
+            raise ValueError(
+                f"relation panel {position} has a different index/columns than "
+                "panel 0 (fail-closed; no silent reindex)"
+            )
+    arrays = [np.asarray(p.to_numpy(dtype=float)) for p in panels]
     return np.stack(arrays, axis=0)
 
 
@@ -145,7 +172,10 @@ class RelationTopkSum(SeriesOperator):
         ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
         category="relation",
         domain="relation",
-        unit="ratio",
+        # R11 #118: a plain sum carries the unit of its addends (the rank-panel
+        # share values), NOT a uniform ratio.
+        unit="same_as:value",
+        output_unit="same_as:value",
     )
 
     def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
@@ -175,7 +205,10 @@ class RelationRankWeightedSum(SeriesOperator):
         ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
         category="relation",
         domain="relation",
-        unit="ratio",
+        # R11 #118: a weighted MEAN carries the unit of the weighted values
+        # (same_as:value), not a uniform ratio.
+        unit="same_as:value",
+        output_unit="same_as:value",
     )
 
     def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
@@ -248,7 +281,10 @@ class RelationPeerWeightedMeanExSelf(SeriesOperator):
         ["value", "weight", "group"],
         category="relation",
         domain="relation",
-        unit="ratio",
+        # R11 #118: a weighted MEAN carries the unit of the weighted values
+        # (same_as:value), not a uniform ratio.
+        unit="same_as:value",
+        output_unit="same_as:value",
     )
 
     def _calculate_series(self, value: pd.DataFrame, weight: pd.DataFrame, group: pd.DataFrame, **_: Any) -> pd.DataFrame:
@@ -303,10 +339,19 @@ class RelationEntryCount(SeriesOperator):
     metadata = _metadata(
         "relation_entry_count",
         "窗口内 0→1 进入次数。",
-        ["member", "window"],
+        ["member", "window", "missing_policy"],
         category="relation",
         domain="relation",
         unit="count",
+        # R11 #120: ``missing_policy="false"`` turns unknown membership into
+        # "not member", manufacturing false exits/entries.  It is NOT a
+        # production membership interpretation: the call contract allows only
+        # ``break`` (NaN breaks the transition sequence) and hides the legacy
+        # ``false`` option from the search surface.
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1),
+            "missing_policy": ParamSpec(choices=("break",), searchable=False),
+        },
     )
 
     def _calculate_series(self, member: pd.DataFrame, window: int = 60, missing_policy: str = "break", **_: Any) -> pd.DataFrame:
@@ -327,10 +372,17 @@ class RelationExitCount(SeriesOperator):
     metadata = _metadata(
         "relation_exit_count",
         "窗口内 1→0 退出次数。",
-        ["member", "window"],
+        ["member", "window", "missing_policy"],
         category="relation",
         domain="relation",
         unit="count",
+        # R11 #120: see RelationEntryCount — ``missing_policy`` is restricted to
+        # ``break`` (the legacy ``false`` / NaN-as-nonmember interpretation is
+        # explicitly non-production).
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1),
+            "missing_policy": ParamSpec(choices=("break",), searchable=False),
+        },
     )
 
     def _calculate_series(self, member: pd.DataFrame, window: int = 60, missing_policy: str = "break", **_: Any) -> pd.DataFrame:
@@ -387,7 +439,10 @@ class RelationWeightedChange(SeriesOperator):
         ["value", "weight"],
         category="relation",
         domain="relation",
-        unit="ratio",
+        # R11 #118: (Δvalue) * weight carries unit(value)*unit(weight) — the
+        # product of the two input units, NOT a uniform ratio.
+        unit="unit(value)*unit(weight)",
+        output_unit="unit(value)*unit(weight)",
     )
 
     def _calculate_series(self, value: pd.DataFrame, weight: pd.DataFrame, **_: Any) -> pd.DataFrame:
@@ -460,15 +515,20 @@ class IndexWeightChange(SeriesOperator):
     status="experimental",
 )
 class IndexEntryExitEvent(SeriesOperator):
-    """指数纳入/剔除事件：0→1 记 +1，1→0 记 -1。"""
+    """指数纳入/剔除事件：0→1 记 +1，1→0 记 -1（有符号状态，非布尔掩码）。"""
 
     metadata = _metadata(
         "index_entry_exit_event",
-        "纳入 +1 / 剔除 -1。",
+        "纳入 +1 / 剔除 -1（有符号状态事件；0=无事件）。",
         ["member"],
         category="index",
         domain="index",
-        unit="boolean",
+        # R11 #119: the output is a SIGNED STATE event (-1 exit / 0 none /
+        # +1 entry), not a boolean mask.  A boolean unit would let the searcher
+        # treat -1 as truthy; the signed-state domain keeps the semantics.
+        unit="state_signed",
+        output_unit="state_signed",
+        extra_tags=("signed_state",),
     )
 
     def _calculate_series(self, member: pd.DataFrame, **_: Any) -> pd.DataFrame:

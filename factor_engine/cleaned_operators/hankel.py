@@ -130,6 +130,11 @@ def _hankel_effective_rank_series(
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
+            # R11 #92: the window W is the formal semantic.  A short warmup
+            # prefix would give the SAME factor name a different effective
+            # horizon, so rows before a full window (r+1 < w) fail closed (NaN).
+            if r + 1 < w:
+                continue
             i0 = max(0, r - w + 1)
             filled = _fill_window(col[i0 : r + 1], missing_mode, min_contiguous_fraction)
             if filled is None:
@@ -166,6 +171,9 @@ def _hankel_singular_gap_series(
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
+            # R11 #92: full window required before a value is emitted.
+            if r + 1 < w:
+                continue
             i0 = max(0, r - w + 1)
             filled = _fill_window(col[i0 : r + 1], missing_mode, min_contiguous_fraction)
             if filled is None:
@@ -173,8 +181,12 @@ def _hankel_singular_gap_series(
             s = _hankel_singular_values(filled, e)
             if s is None:
                 continue
+            # R11 #93: the spectrum must be well-defined on the ACTUAL
+            # contiguous run — at least 2 singular values for a "gap" to exist.
+            if s.size < 2 or s[0] <= _EPS:
+                continue
             s1 = float(s[0])
-            s2 = float(s[1]) if s.size > 1 else 0.0
+            s2 = float(s[1])
             total = float(s.sum())
             out[r, c] = (s1 - s2) / (total + _EPS)
     return out
@@ -194,6 +206,9 @@ def _ssa_reconstruction_residual_series(
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
+            # R11 #92: full window required before a value is emitted.
+            if r + 1 < w:
+                continue
             i0 = max(0, r - w + 1)
             filled = _fill_window(col[i0 : r + 1], missing_mode, min_contiguous_fraction)
             if filled is None:
@@ -202,13 +217,26 @@ def _ssa_reconstruction_residual_series(
             rows_h = n - e + 1
             if rows_h < 1:
                 continue
-            # data-dependent degeneracy: fewer singular values than requested
+            # R11 #93: the numerical-rank gate is on the ACTUAL contiguous run
+            # (filled.size), never the nominal window — a gap-shrunken run that
+            # still passes the coverage gate must not silently drop to fewer
+            # reconstructed modes.
             if k >= min(rows_h, e):
                 continue
             h = np.empty((rows_h, e), dtype=float)
             for j in range(e):
                 h[:, j] = filled[j : j + rows_h]
             u, s, vt = np.linalg.svd(h, full_matrices=False)
+            if s[0] <= _EPS or k > s.size:
+                continue
+            # R11 #93: the numerical rank is read from the ACTUAL contiguous
+            # run's singular spectrum — if the k-th singular value is
+            # numerically zero relative to the largest, the requested
+            # ``n_components`` exceeds the numerical rank of the run and the
+            # reconstruction is degenerate (fail closed, never silently drop to
+            # fewer modes).
+            if s[k - 1] <= _EPS * s[0]:
+                continue
             hk = (u[:, :k] * s[:k]) @ vt[:k, :]
             recon = np.zeros(n, dtype=float)
             counts = np.zeros(n, dtype=float)
@@ -219,7 +247,11 @@ def _ssa_reconstruction_residual_series(
             recon /= counts
             resid = float(np.mean((filled - recon) ** 2))
             var_x = float(np.var(filled))
-            out[r, c] = resid / (var_x + _EPS)
+            # R11 #94: on a constant series Var(x) <= eps the normalised residual
+            # ratio is undefined (0/0) — fail closed to NaN, never 0/EPS.
+            if var_x <= _EPS:
+                continue
+            out[r, c] = resid / var_x
     return out
 
 

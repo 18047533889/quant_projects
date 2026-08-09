@@ -25,15 +25,22 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
 _MIN_FINITE = 16
 
+# Audit #80: the shared periodogram kernel requires >= 16 fully-finite rows; a
+# window of 4..15 would only ever emit NaN, so it must not enter the search
+# surface.  Declared here so binder/search reject those windows up front.
+_SPECTRAL_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=_MIN_FINITE),
+}
+
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
-    return OperatorMetadata(
+    meta = OperatorMetadata(
         name=name,
         category="spectral",
         description=description,
@@ -46,6 +53,8 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"unit:{unit}", f"cost:{cost}",
         ],
     )
+    meta.param_specs = dict(_SPECTRAL_PARAM_SPECS)
+    return meta
 
 
 def _periodogram(chunk: np.ndarray) -> tuple[np.ndarray, int] | None:
@@ -174,14 +183,20 @@ def _spectral_quality_factor_series(x2d: np.ndarray, window: int) -> np.ndarray:
             i_hi = k_hi + 1
             f_star = i_star / float(n)
             df = (i_hi - i_lo) / float(n)
-            out[r, c] = f_star / (df + _EPS)
+            # Audit #81: a single-bin peak has half-power width df = 0 — the
+            # old ``f_star / (df + EPS)`` emitted Q ~ f_star/EPS (huge,
+            # meaningless).  Use AT LEAST one-bin resolution: the FFT cannot
+            # resolve a width narrower than 1/N, so Q is bounded by the peak
+            # bin index (<= n/2) and never explodes.
+            df = max(df, 1.0 / float(n))
+            out[r, c] = f_star / df
     return out
 
 
 def _check_spectral_params(window: int) -> int:
     w = int(window)
-    if w < 2:
-        raise ValueError("window must be >= 2")
+    if w < _MIN_FINITE:
+        raise ValueError(f"window must be >= {_MIN_FINITE}")
     return w
 
 

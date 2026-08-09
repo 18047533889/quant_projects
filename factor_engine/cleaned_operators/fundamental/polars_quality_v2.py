@@ -62,8 +62,8 @@ def _binary(a, b, expr_fn):
 
 
 _register(
-    "fin_roe_cash_gap", "会计ROE与现金ROE之差（Polars）。", ["net_profit", "ocf", "avg_equity", "period_id"],
-    lambda np_, ocf, ae, period_id=None: _roe_cash_gap(np_, ocf, ae),
+    "fin_roe_cash_gap", "会计ROE与现金ROE之差（Polars）。", ["net_profit", "ocf", "avg_equity", "period_id", "flow_type"],
+    lambda np_, ocf, ae, period_id=None, flow_type=None: _roe_cash_gap(np_, ocf, ae),
 )
 _register(
     "fin_fair_value_income_dependence", "公允价值变动依赖度（Polars）。", ["fair_value_income", "total_profit"],
@@ -134,8 +134,8 @@ _register(
     lambda c, aa, period_id=None: _binary(c, aa, lambda x, y: _safe_div_expr(x, y)),
 )
 _register(
-    "fin_net_borrowing_cashflow", "(借款+发债-偿债)/平均资产（Polars）。", ["cash_from_borrowing", "cash_from_bonds_issue", "borrowing_repayment", "avg_assets"],
-    lambda cb, bo, rp, aa, period_id=None: _four(cb, bo, rp, aa, lambda a, b, c, d: _safe_div_expr(a + b - c, d)),
+    "fin_net_borrowing_cashflow", "(借款+发债-偿债)/平均资产（Polars）。", ["cash_from_borrowing", "cash_from_bonds_issue", "borrowing_repayment", "avg_assets", "period_id", "flow_type"],
+    lambda cb, bo, rp, aa, period_id=None, flow_type=None: _four(cb, bo, rp, aa, lambda a, b, c, d: _safe_div_expr(a + b - c, d)),
 )
 _register(
     "fin_interest_coverage_proxy", "营业利润/|利息|（Polars）。", ["operating_profit", "interest_cost"],
@@ -166,8 +166,8 @@ _register(
     lambda c, o, period_id=None: _binary(c, o, lambda x, y: _safe_div_expr(x, pl.min_horizontal(y, pl.lit(0.0)).abs())),
 )
 _register(
-    "fin_financing_gap", "(资本开支+偿债+分派-OCF)/平均资产（Polars）。", ["capex", "debt_repayment", "dividend_interest_payment", "ocf", "avg_assets"],
-    lambda cx, dr, di, o, aa, period_id=None: _financing_gap(cx, dr, di, o, aa),
+    "fin_financing_gap", "(资本开支+偿债+分派-OCF)/平均资产（Polars）。", ["capex", "debt_repayment", "dividend_interest_payment", "ocf", "avg_assets", "period_id", "flow_type"],
+    lambda cx, dr, di, o, aa, period_id=None, flow_type=None: _financing_gap(cx, dr, di, o, aa),
 )
 
 

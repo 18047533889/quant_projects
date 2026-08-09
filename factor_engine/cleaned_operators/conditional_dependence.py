@@ -19,11 +19,55 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, map_pair_rolling, register_polars_udf
 
 _ALPHA = 0.5  # Jeffreys smoothing, matching the plain-TE kernel.
 _EPS = 1e-12
+# Audit #21: the magnitude of the deterministic tie-breaking perturbation,
+# expressed as a fraction of the window's value range.
+_TIE_JITTER = 1e-9
+
+
+def _break_ties_deterministic(v: np.ndarray) -> np.ndarray:
+    """Deterministically break exact ties for quantile binning (audit #21).
+
+    The conditional TE quantile bins silently collapse when a series carries
+    exact ties (0-return days / limit bars / discrete financials).  Each exact
+    tie group is perturbed by an index-scaled epsilon keyed to its stable-sort
+    position — never randomness — so digitization lands the tied states in
+    distinct cells while genuinely distinct values are left untouched.  NaNs
+    are preserved (they sort last and are never grouped into a tie run).
+    """
+    v = np.asarray(v, dtype=float)
+    n = v.size
+    if n < 2:
+        return v
+    finite = v[np.isfinite(v)]
+    if finite.size == 0:
+        return v
+    # A fully-degenerate (constant) series carries no structure to recover:
+    # leave it untouched so the kernel's ``< 2 distinct states`` check still
+    # fails closed.  Perturbing a constant series would *invent* information.
+    if np.unique(finite).size < 2:
+        return v
+    rng = float(np.nanmax(finite) - np.nanmin(finite))
+    if not np.isfinite(rng) or rng <= _EPS:
+        rng = 1.0
+    out = v.copy()
+    order = np.argsort(v, kind="mergesort")
+    s = v[order]
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and s[j + 1] == s[i]:
+            j += 1
+        if j > i:
+            for k in range(i, j + 1):
+                frac = (k - i) / float(j - i)
+                out[order[k]] += _TIE_JITTER * rng * frac
+        i = j + 1
+    return out
 
 
 def _metadata(
@@ -71,11 +115,25 @@ def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
 
 
 def _conditional_te_window(
-    tw: np.ndarray, sw: np.ndarray, cw: np.ndarray, bins: int, lag: int, min_transitions: int
+    tw: np.ndarray,
+    sw: np.ndarray,
+    cw: np.ndarray,
+    bins: int,
+    lag: int,
+    min_transitions: int,
+    min_cells_ratio: float = 1.0,
 ) -> float:
     """Conditional transfer entropy I(T_{s+lag}; S_s | T_s, C_s) for one window."""
+    # Audit #21: break exact ties in ALL three series BEFORE lagging so a tied
+    # state cannot silently collapse a quantile bin and the perturbation is
+    # consistent between the ``t_s`` and ``t_{s+lag}`` views of the same value.
+    tw = _break_ties_deterministic(tw)
+    sw = _break_ties_deterministic(sw)
+    cw = _break_ties_deterministic(cw)
     # Lag is applied on the original time axis, then NaN rows are masked: a NaN
-    # gap must not silently redefine the lag (see the plain-TE kernel).
+    # gap must not silently redefine the lag (see the plain-TE kernel).  The
+    # "future" window ``tw[lag:]`` only ever reaches the trailing window's last
+    # row (causal, no lookahead — audit #24).
     n = tw.shape[0]
     if n < lag + 2:
         return np.nan
@@ -104,9 +162,28 @@ def _conditional_te_window(
     xnb = np.clip(np.digitize(xn, x_edges) - 1, 0, bins - 1).astype(np.int64)
     yb = np.clip(np.digitize(ys, y_edges) - 1, 0, bins - 1).astype(np.int64)
     cb = np.clip(np.digitize(cs, c_edges) - 1, 0, bins - 1).astype(np.int64)
+    # Audit #20: effective-state-space sample gate.  The joint (t', t, s, c)
+    # has ``nxb * nxb * nyb * ncb`` possible cells; below ``k * cells`` usable
+    # transitions the plug-in histogram is dominated by smoothing mass.
+    nxb = int(x_edges.size - 1)
+    nyb = int(y_edges.size - 1)
+    ncb = int(c_edges.size - 1)
+    if nxb < 2 or nyb < 2 or ncb < 2:
+        return np.nan
+    ratio = float(min_cells_ratio)
+    if np.isfinite(ratio) and ratio > 0.0:
+        required = max(required, int(np.ceil(ratio * nxb * nxb * nyb * ncb)))
+    if n < required:
+        return np.nan
     joint = np.zeros((bins, bins, bins, bins), dtype=np.float64)  # [t', t, s, c]
     for k in range(n):
         joint[xnb[k], xb[k], yb[k], cb[k]] += 1.0
+    # Audit #22: a conditioning bin that collapsed to zero empirical samples
+    # makes the conditional term undefined — the Jeffreys smoothing mass alone
+    # would fabricate a nonzero conditional TE.  Fail closed to NaN.
+    c_emp = joint.sum(axis=(0, 1, 2))  # over t', t, s -> [c]
+    if np.any(c_emp <= 0.0):
+        return np.nan
     joint += _ALPHA
     joint /= joint.sum()
     # Marginals (axes: 0=t', 1=t, 2=s, 3=c).
@@ -161,11 +238,17 @@ class TsConditionalTransferEntropy(SeriesOperator):
     metadata = _metadata(
         "ts_conditional_transfer_entropy",
         "条件传递熵 I(T_{s+lag}; S_s | T_s, C_s) nats。",
-        ["target", "source", "condition", "window", "bins", "lag", "min_transitions"],
+        ["target", "source", "condition", "window", "bins", "lag", "min_transitions", "min_cells_ratio"],
         domain="price_volume",
         unit="nats",
         cost=7,
     )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2),
+        "bins": ParamSpec(dtype=int, choices=(2, 3)),
+        "lag": ParamSpec(dtype=int, min=1),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
+    }
 
     def _calculate_series(
         self,
@@ -176,11 +259,13 @@ class TsConditionalTransferEntropy(SeriesOperator):
         bins: int = 3,
         lag: int = 1,
         min_transitions: Any = None,
+        min_cells_ratio: float = 1.0,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
         nb = int(bins)
         lg = int(lag)
+        ratio = float(min_cells_ratio)
         # R5 P1-43(a): production restricts the search to bins in {2, 3}.  The
         # 4-D joint (t', t, s, c) has ``bins^4`` cells; 4/5 bins need more daily
         # transitions than a panel can supply and only manufacture noise.
@@ -200,13 +285,15 @@ class TsConditionalTransferEntropy(SeriesOperator):
         # (59 >= 54) while the kernel silently returned all-NaN (3*3^4 = 243
         # required), i.e. a dead operator.  Reject infeasible (window, bins,
         # lag) combinations loudly at execution time instead of failing inside
-        # the kernel.
+        # the kernel.  Audit #20: the effective-state-space floor
+        # ``k * bins^4`` is folded into the same feasibility gate.
         if min_transitions is None:
             mt = max(30, 2 * nb * nb * nb)
         else:
             mt = max(lg + 2, int(min_transitions))
         required = 3 * (nb ** 4)
         mt = max(mt, required)
+        mt = max(mt, int(np.ceil(ratio * nb * nb * nb * nb)))
         if w - lg < mt:
             raise ValueError(
                 "ts_conditional_transfer_entropy window-lag "
@@ -221,7 +308,7 @@ class TsConditionalTransferEntropy(SeriesOperator):
                 source.to_numpy(dtype=float),
                 condition.to_numpy(dtype=float),
                 w,
-                lambda a, b, c: _conditional_te_window(a, b, c, nb, lg, mt),
+                lambda a, b, c: _conditional_te_window(a, b, c, nb, lg, mt, ratio),
             ),
         )
 
@@ -289,17 +376,38 @@ class TsModwtBandCorr(SeriesOperator):
     系数做窗口相关。回答"两序列是否只在某个频带（如周线/月线）协同"。PIT 安全
     （因果边界不引入未来）。R5 P1-43(b)：因果零填充污染 cone-of-influence
     （前 ``2^band - 1`` 个系数），相关计算前先 censor 掉；``level > band`` 不改变
-    输出（死参数区间），故 level 上限按 band 约束。P2 / Research。
+    输出（死参数区间），故 level 上限按 band 约束。窗口下限（audit #25/#7）：
+    Haar MODWT 第 ``band`` 层需要 ``2^band`` 个样本，加上被 censor 的锥内系数，
+    ``window`` 必须 >= ``2^band + level + 6``，否则拒绝（RelationalParamSpec，
+    binder/search 在消耗预算前即判定不可行）。输出为无量纲相关系数（audit #8）。
+    P2 / Research。
     """
 
     metadata = _metadata(
         "ts_modwt_band_corr",
-        "Haar MODWT 频带细节系数窗口相关 Corr(D_band x, D_band y)。",
+        "Haar MODWT 频带细节系数窗口相关 Corr(D_band x, D_band y)，无量纲相关系数。",
         ["x", "y", "window", "level", "band"],
         domain="price_volume",
         unit="corr",
         cost=6,
     )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=8),
+        "level": ParamSpec(dtype=int, min=1),
+        "band": ParamSpec(dtype=int, min=1),
+    }
+    # Audit #25/#7: declare the transform's minimum-window feasibility so the
+    # binder/search grammar rejects guaranteed-NaN combinations before spending
+    # budget.  ``2 ** band`` is the Haar dilation at the requested band; the +6
+    # leaves interior samples after the cone-of-influence censor.
+    metadata.relational_specs = [
+        RelationalParamSpec(
+            "window >= 2 ** band + level + 6",
+            "ts_modwt_band_corr requires window >= 2**band + level + 6 "
+            "(Haar MODWT minimum + cone-of-influence censor; "
+            "window={window}, band={band}, level={level})",
+        )
+    ]
 
     def _calculate_series(
         self,
@@ -325,7 +433,7 @@ class TsModwtBandCorr(SeriesOperator):
         # enough to leave interior samples after dropping ``2^band - 1`` of them.
         if w < (1 << bd) + lv + 6:
             raise ValueError(
-                "ts_modwt_band_corr requires window >= band + level + 6 "
+                "ts_modwt_band_corr requires window >= 2**band + level + 6 "
                 "(boundary/cone-of-influence coefficients are censored)"
             )
         return frame_like(

@@ -30,7 +30,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _LAGS = (1, 2, 4, 8)
@@ -70,6 +70,25 @@ _MIN_LAGS_FOR_FIT = 3
 _MIN_SCALING_R2 = 0.9
 
 
+def _common_cohort(vals: np.ndarray) -> np.ndarray:
+    """Trailing contiguous finite run — the COMMON observation cohort (audit #91).
+
+    Every dyadic lag must estimate its structure function on the SAME data
+    slice.  A missing pattern inside the window must not let lag=1 use rows a
+    lag=4 fit cannot see (different cohorts -> different scaling laws).  Using
+    the trailing contiguous finite suffix gives every lag one shared cohort.
+    """
+    v = np.asarray(vals, dtype=float)
+    n = v.size
+    j = n
+    while j > 0 and not np.isfinite(v[j - 1]):
+        j -= 1
+    i = j
+    while i > 0 and np.isfinite(v[i - 1]):
+        i -= 1
+    return v[i:j]
+
+
 def _structure_function(vals: np.ndarray, lag: int, q: float) -> float:
     """``mean |X_{t+tau} - X_t|^q`` over aligned finite pairs in the window."""
     n = int(vals.shape[0])
@@ -80,7 +99,10 @@ def _structure_function(vals: np.ndarray, lag: int, q: float) -> float:
     m = np.isfinite(x) & np.isfinite(y)
     # Audit P1-D: every lag needs a minimum number of valid aligned pairs —
     # two points would let a single outlier dominate the moment.
-    if int(m.sum()) < _MIN_PAIRS_PER_LAG:
+    # Audit #89: raise the sample floor as |q| grows — higher moments are
+    # dominated by extreme increments and need more observations to be stable.
+    required = max(_MIN_PAIRS_PER_LAG, int(np.ceil(_MIN_PAIRS_PER_LAG * abs(float(q)))))
+    if int(m.sum()) < required:
         return np.nan
     d = np.abs(x[m] - y[m])
     s = float(np.mean(d ** q))
@@ -94,11 +116,17 @@ def _hurst_generalized(vals: np.ndarray, q: float) -> float:
 
     Audit P1-D: the log-log scaling fit needs at least three valid lags and a
     minimum R² — a two-point line would produce a spuriously precise Hurst.
+    Audit #91: the trailing contiguous finite run is the COMMON cohort for all
+    lags, so a missing pattern cannot make different lags estimate scaling on
+    different data slices.
     """
+    run = _common_cohort(vals)
+    if run.shape[0] < _LAGS[-1] + 2:
+        return np.nan
     log_t: list[float] = []
     log_s: list[float] = []
     for lag in _LAGS:
-        s = _structure_function(vals, lag, q)
+        s = _structure_function(run, lag, q)
         if not np.isfinite(s):
             continue
         log_t.append(np.log(float(lag)))
@@ -160,7 +188,9 @@ def _curvature_series(x2d: np.ndarray, window: int) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
-    qs = np.array([1.0, 2.0, 3.0, 4.0])
+    # Audit #89: reviewed q grid for the spectrum (large positive q is
+    # dominated by single extreme increments and is not robust).
+    qs = np.array([0.5, 1.0, 2.0, 3.0, 4.0])
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
@@ -170,7 +200,10 @@ def _curvature_series(x2d: np.ndarray, window: int) -> np.ndarray:
             chunk = col[i0 : r + 1]
             hs = np.asarray([_hurst_generalized(chunk, q_) for q_ in qs], dtype=float)
             ok = np.isfinite(hs)
-            if int(ok.sum()) < 3:
+            # Audit #90: a quadratic fit has 3 parameters; fitting to only 3
+            # q-points leaves zero residual DOF (the fit is exactly
+            # interpolated, not estimated).  Require >= 4 valid q points.
+            if int(ok.sum()) < 4:
                 continue
             coeffs = np.polyfit(qs[ok], hs[ok], 2)
             if np.isfinite(coeffs[0]):
@@ -190,21 +223,32 @@ class TsGeneralizedHurstExponent(SeriesOperator):
 
     q=2 接近经典 Hurst 指数；q 大时强调大增量（间歇性/尾部），q 小时强调
     典型尺度。常数窗口 / 最大 lag 有效配对不足 -> NaN。P1。
+
+    q 取值受审计网格约束（audit #89）：``q ∈ {0.5, 1, 2, 3, 4}``——任意大的正
+    q 只被少数极端增量主导，不稳健；且随 |q| 增长样本下限同步提高。所有 lag
+    共用同一个尾部连续有限队列（audit #91），缺失模式不会让不同 lag 在不同数据
+    切片上估标度指数。
     """
 
     metadata = _metadata(
         "ts_generalized_hurst_exponent",
-        "广义 Hurst 指数 H(q)（dyadic-lag 结构函数 OLS 斜率 / q）。",
+        "广义 Hurst 指数 H(q)（dyadic-lag 结构函数 OLS 斜率 / q），无量纲。",
         ["x", "window", "q"],
         unit="ratio",
         cost=6,
     )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2),
+        "q": ParamSpec(dtype=float, choices=(0.5, 1.0, 2.0, 3.0, 4.0)),
+    }
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 120, q: float = 2.0, **_: Any) -> pd.DataFrame:
         w = _check_window(window)
         qv = float(q)
-        if not (np.isfinite(qv) and qv > 0.0):
-            raise ValueError("q must be a finite float > 0")
+        # Audit #89: only the reviewed grid is admissible; arbitrary large q is
+        # dominated by a few extreme increments.
+        if qv not in (0.5, 1.0, 2.0, 3.0, 4.0):
+            raise ValueError("q must be one of {0.5, 1, 2, 3, 4} (reviewed grid)")
         return frame_like(x, _hurst_series(x.to_numpy(dtype=float), w, qv))
 
 

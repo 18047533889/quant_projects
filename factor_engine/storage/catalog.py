@@ -22,7 +22,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from .exceptions import FactorHashMismatchError, FactorNotFoundError
+from .exceptions import (
+    FactorHashMismatchError,
+    FactorNotFoundError,
+    FactorSemanticIdentityMismatchError,
+)
 
 
 def _parse_json_field(raw: Any) -> dict[str, Any]:
@@ -123,6 +127,7 @@ CREATE TABLE IF NOT EXISTS factor_registry (
     ast_hash    TEXT NOT NULL,
     expression  TEXT,
     data_source_json TEXT,
+    factor_version TEXT,
     created_at  TEXT NOT NULL
 );
 
@@ -254,6 +259,12 @@ class FactorCatalog:
             self._conn.execute(
                 "ALTER TABLE factor_registry ADD COLUMN data_source_json TEXT"
             )
+        # R11 #6: factor_version（语义身份 digest 前缀）用于检测「公式没变但执行
+        # 语义变了」——production 下禁止沿用同一 factor_id 静默覆盖。
+        if "factor_version" not in cols:
+            self._conn.execute(
+                "ALTER TABLE factor_registry ADD COLUMN factor_version TEXT"
+            )
         run_cols = {
             row[1] for row in self._conn.execute("PRAGMA table_info(factor_run)")
         }
@@ -379,9 +390,11 @@ class FactorCatalog:
         description: str | None = None,
         expression: str | None = None,
         data_source_config: dict | None = None,
+        semantic_identity_digest: str | None = None,
+        production: bool | None = None,
     ) -> None:
         """注册因子。如 factor_id 已存在且 Hash 一致则静默跳过；不一致则报错。
-        
+
         参数:
             factor_id: 因子唯一标识
             author: 见函数签名
@@ -390,21 +403,31 @@ class FactorCatalog:
             description: 见函数签名（可选）
             expression: 见函数签名（可选）
             data_source_config: 见函数签名（可选）
-        
+            semantic_identity_digest: ``FactorSemanticIdentity.identity_digest()``
+                （R11 #6，可选；缺省用 ``ast_hash`` 前缀）。
+            production: 显式 production 标志；缺省从运行模式推断（可选）。
+
         返回:
             无
-        
-        
+
+
         Raises
                 ------
                 FactorHashMismatchError
                     ``factor_id`` 已注册但 ``ast_hash`` 与既存记录不同。
+                FactorSemanticIdentityMismatchError
+                    production 下 ``factor_id`` 已注册且 ``factor_version``
+                    （语义身份 digest 前缀）与当前不一致——AST 没变但执行语义
+                    变了（data_source/universe/market/pit/backend/dialect…），
+                    必须新版本或显式全量重建。
         """
         ds_json = (
             json.dumps(data_source_config, sort_keys=True, default=str, ensure_ascii=False)
             if data_source_config
             else None
         )
+        # R11 #6: factor_version = semantic identity digest 前缀（缺省 ast_hash 前缀）。
+        new_version = str((semantic_identity_digest or ast_hash))[:16]
         # Atomic register (Review-8 #443): ``INSERT OR IGNORE`` makes the
         # existence check + insert one statement, so concurrent materializers
         # writing the same factor_id cannot both pass a read-then-insert check
@@ -414,9 +437,12 @@ class FactorCatalog:
         self._exec_commit(
             "INSERT OR IGNORE INTO factor_registry "
             "(factor_id, author, frequency, description, ast_hash, expression, "
-            "data_source_json, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (factor_id, author, frequency, description, ast_hash, expression, ds_json, now),
+            "data_source_json, factor_version, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                factor_id, author, frequency, description, ast_hash, expression,
+                ds_json, new_version, now,
+            ),
         )
 
         existing = self.get_factor_info(factor_id)
@@ -428,10 +454,35 @@ class FactorCatalog:
                 f"但当前公式 Hash 为 {ast_hash[:12]}…。"
                 f"请升级版本号（如改为 '{factor_id}_v2'）后重新落盘。"
             )
+        existing_version = existing.get("factor_version")
+        # 语义身份版本门：production 下公式没变但执行语义变了 → 拒绝沿用同 ID。
+        if existing_version and existing_version != new_version:
+            effective_production = production
+            if effective_production is None:
+                try:
+                    from runtime.production_policy import is_production_mode
+
+                    effective_production = is_production_mode()
+                except Exception:  # pragma: no cover - 解析失败按 research 处理
+                    effective_production = False
+            if effective_production:
+                raise FactorSemanticIdentityMismatchError(
+                    f"因子 '{factor_id}' 已注册（factor_version={existing_version}），"
+                    f"但当前语义身份版本为 {new_version}。公式 AST 未变但执行语义"
+                    f"（data_source/universe/market/pit/backend/dialect/算子或字段"
+                    f"catalog）已变化：production 禁止沿用同一 factor_id 静默覆盖，"
+                    f"请升级版本号或显式全量重建。"
+                )
         if ds_json is not None and existing.get("data_source_json") != ds_json:
             self._exec_commit(
-                "UPDATE factor_registry SET data_source_json = ? WHERE factor_id = ?",
-                (ds_json, factor_id),
+                "UPDATE factor_registry SET data_source_json = ?, factor_version = ? "
+                "WHERE factor_id = ?",
+                (ds_json, new_version, factor_id),
+            )
+        elif existing_version != new_version:
+            self._exec_commit(
+                "UPDATE factor_registry SET factor_version = ? WHERE factor_id = ?",
+                (new_version, factor_id),
             )
 
     def verify_hash(self, factor_id: str, ast_hash: str) -> bool:
@@ -536,10 +587,10 @@ class FactorCatalog:
 
     def delete_factor(self, factor_id: str) -> None:
         """从 Catalog 中删除因子注册信息和水位线（不删除物理文件）。
-        
+
         参数:
             factor_id: 因子唯一标识
-        
+
         返回:
             无
         """
@@ -558,6 +609,17 @@ class FactorCatalog:
         self._conn.execute(
             "DELETE FROM factor_watermark WHERE factor_id = ?", (factor_id,)
         )
+        # R11 #8: 新增的依赖 edge / full definition 表也要同步删除，否则 factor_id
+        # 删除再复用时会残留旧 edge / full-spec（DependencyCatalog 查询按 factor_id
+        # 命中，导致「新因子」被旧依赖误触发重算）。
+        for table in ("factor_dependency_edge", "factor_full_definition"):
+            try:
+                self._conn.execute(
+                    f"DELETE FROM {table} WHERE factor_id = ?", (factor_id,)
+                )
+            except sqlite3.OperationalError:
+                # 表可能尚未创建（首次运行从未触发过 _ensure_tables）。
+                pass
         self._conn.execute(
             "DELETE FROM factor_registry WHERE factor_id = ?", (factor_id,)
         )

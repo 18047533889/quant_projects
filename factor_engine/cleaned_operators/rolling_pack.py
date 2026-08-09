@@ -86,8 +86,39 @@ _SKIP_PANEL = frozenset(
 
 
 def _pl_to_pd(frame: Any) -> pd.DataFrame:
+    """polars wide frame -> pandas panel, preserving the true time axis.
+
+    R11 P0-03: the time column (``__fe_time__`` / ``date`` / ``timestamp`` /
+    ``trade_date`` / ``datetime``) is not a feature to discard — it IS the row
+    axis.  Restore it as a verified unique + monotonic ``DatetimeIndex`` so a
+    pandas reference kernel doing index-aware work (session/day grouping,
+    ``index.normalize()``, calendar transforms) sees the real dates instead of a
+    positional ``RangeIndex``.  Positional kernels are unaffected: ``.to_numpy()``
+    rows are unchanged.
+    """
     cols = [c for c in frame.columns if c not in _SKIP_PANEL]
-    return frame.select(cols).to_pandas()
+    out = frame.select(cols).to_pandas()
+    time_col = next(
+        (c for c in ("__fe_time__", "date", "timestamp", "trade_date", "datetime")
+         if c in frame.columns),
+        None,
+    )
+    if time_col is not None:
+        values = frame[time_col].to_list()
+        if values:
+            idx = pd.DatetimeIndex(values)
+            if not idx.is_unique:
+                raise ValueError(
+                    f"polars panel time axis {time_col!r} has duplicate values "
+                    "(R11 P0-03 fail-closed)"
+                )
+            if not idx.is_monotonic_increasing:
+                raise ValueError(
+                    f"polars panel time axis {time_col!r} is not monotonically "
+                    "increasing (R11 P0-03 fail-closed)"
+                )
+            out.index = idx
+    return out
 
 
 def _pl_rebuild(base: Any, result: Any) -> Any:

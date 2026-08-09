@@ -378,6 +378,51 @@ _TYPED_BROADCAST_TAGS = frozenset(
 )
 
 
+# R11 P0-09: structured broadcast declaration replacing the bare blanket waiver.
+# A ``BroadcastSpec`` names the exact mapping (``mode`` + ``date_mapping`` +
+# ``instrument_policy`` + ``timezone``) the operator needs, so a broadcast
+# satisfies a PROVABLE contract instead of an unverifiable tag.  The bare
+# ``allow_panel_broadcast`` tag remains accepted as the legacy research waiver,
+# but production admission is gated on a declared spec (see
+# ``verify_broadcast`` / the registration audit).
+@dataclass(frozen=True)
+class BroadcastSpec:
+    """Structured multi-panel broadcast declaration (R11 P0-09).
+
+    ``mode`` is one of the supported mapping shapes; ``date_mapping`` describes
+    how the broadcast input's dates align to the base panel's (``exact`` for
+    same-row, ``trading_date`` for same-trading-day, ``session`` for the owning
+    session); ``instrument_policy`` is ``exact`` / ``subset`` /
+    ``independent``; ``timezone`` anchors date normalisation.  Any axis the spec
+    does not cover (unknown index type, unknown grain, unknown mapping) must
+    fail closed at runtime rather than silently pass.
+    """
+
+    mode: str  # one of the _TYPED_BROADCAST_TAGS (sans _broadcast suffix) or a registered alias
+    date_mapping: str = "trading_date"
+    instrument_policy: str = "subset"
+    timezone: str | None = None
+
+    def __post_init__(self) -> None:
+        allowed_modes = {"daily_to_minute", "scalar_to_cross_section",
+                         "same_trading_date", "session_boundary"}
+        if self.mode not in allowed_modes:
+            raise ValueError(
+                f"BroadcastSpec.mode={self.mode!r} is not a supported broadcast "
+                f"mode {sorted(allowed_modes)} (R11 P0-09 fail-closed)"
+            )
+        if self.date_mapping not in {"exact", "trading_date", "session"}:
+            raise ValueError(
+                f"BroadcastSpec.date_mapping={self.date_mapping!r} is unknown "
+                "(R11 P0-09 fail-closed)"
+            )
+        if self.instrument_policy not in {"exact", "subset", "independent"}:
+            raise ValueError(
+                f"BroadcastSpec.instrument_policy={self.instrument_policy!r} is "
+                "unknown (R11 P0-09 fail-closed)"
+            )
+
+
 @dataclass
 class OperatorMetadata:
     name: str
@@ -446,6 +491,11 @@ class OperatorMetadata:
     # parameter/panel complexity rather than being guessed from its name.
     # ``None`` = no explicit contract (prefix fallback applies).
     cost_model: Callable[[dict[str, Any], tuple[int, int] | None], tuple[float, float]] | None = None
+    # R11 P0-09: structured broadcast declarations.  When non-empty, the typed
+    # broadcast verification runs against these specs (each input index must
+    # satisfy the declared mapping or fail closed); a bare ``allow_panel_broadcast``
+    # tag without a spec remains the legacy research waiver.
+    broadcast_specs: tuple["BroadcastSpec", ...] = ()
     # round-7: explicit positional PANEL-input arity for zero-parameter operators
     # whose panel contract is not expressible in ``param_names`` (``log``=1,
     # ``add``=2).  ``None`` = kernel-implied (legacy).  When set, the
@@ -1043,11 +1093,23 @@ def _verify_typed_broadcast_axes(
     Checks are best-effort — they run only when both axes are ``DatetimeIndex``
     and skip otherwise (exotic MultiIndex / polars long axes keep the structural
     guards already applied).
+
+    R11 P0-09 fail-closed: when a TYPED broadcast tag is declared but the base
+    axis is not a ``DatetimeIndex``, the date mapping CANNOT be verified — the
+    old ``return`` silently let an unverifiable broadcast through.  An unknown
+    axis must be rejected, not passed.
     """
     if len(frames) < 2:
         return
+    typed = bool(tags & _TYPED_BROADCAST_TAGS)
     base_idx = getattr(frames[0], "index", None)
     if not isinstance(base_idx, pd.DatetimeIndex):
+        if typed:
+            raise ValueError(
+                f"{metadata.name}: declares a typed broadcast but the base panel "
+                f"index {type(base_idx).__name__} is not a DatetimeIndex — the "
+                f"date mapping cannot be verified (R11 P0-09 fail-closed)"
+            )
         return
 
     def _dates(idx: Any):
@@ -1092,6 +1154,54 @@ def _verify_typed_broadcast_axes(
                 )
 
 
+def _verify_broadcast_specs(
+    metadata: OperatorMetadata, specs: tuple[BroadcastSpec, ...], frames: list[Any]
+) -> None:
+    """Verify non-base panels against a declared :class:`BroadcastSpec`.
+
+    R11 P0-09 fail-closed: the spec names the mapping the operator needs.  For
+    each non-base panel we require its axis to be *interpretable* — a
+    ``DatetimeIndex`` so the date mapping can actually be checked — otherwise
+    the broadcast is unverifiable and must be rejected, not passed.  This closes
+    the old fail-open where an unknown index type silently bypassed the date
+    alignment gate.
+    """
+    base = frames[0]
+    base_idx = getattr(base, "index", None)
+    if not isinstance(base_idx, pd.DatetimeIndex):
+        raise ValueError(
+            f"{metadata.name}: declares BroadcastSpec {[s.mode for s in specs]} but "
+            f"the base panel index {type(base_idx).__name__} is not a DatetimeIndex "
+            "— the broadcast date mapping cannot be verified (R11 P0-09 fail-closed)"
+        )
+    base_dates = base_idx.normalize()
+    for position, frame in enumerate(frames[1:], start=1):
+        other_idx = getattr(frame, "index", None)
+        if not isinstance(other_idx, pd.DatetimeIndex):
+            raise ValueError(
+                f"{metadata.name}: broadcast input panel {position} index "
+                f"{type(other_idx).__name__} is not a DatetimeIndex — cannot verify "
+                "the declared BroadcastSpec mapping (R11 P0-09 fail-closed)"
+            )
+        other_dates = other_idx.normalize()
+        for spec in specs:
+            if spec.date_mapping == "exact":
+                if not other_dates.equals(base_dates):
+                    raise ValueError(
+                        f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}, "
+                        f"date_mapping='exact') input panel {position} dates are "
+                        "not row-aligned with the base (R11 P0-09)"
+                    )
+            elif spec.date_mapping == "trading_date":
+                if not set(other_dates).issubset(set(base_dates)):
+                    raise ValueError(
+                        f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}, "
+                        f"date_mapping='trading_date') input panel {position} "
+                        "carries trading dates absent from the base panel "
+                        "(R11 P0-09 fail-closed)"
+                    )
+
+
 def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
     frames = [value for value in (*args, *kwargs.values()) if _is_panel(value)]
     if not frames:
@@ -1106,6 +1216,14 @@ def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwar
     if len(frames) < 2:
         return
     tags = set(metadata.tags or [])
+    # R11 P0-09: a declared BroadcastSpec is the structured, provable contract.
+    # When present it drives verification (each non-base panel must satisfy the
+    # declared date mapping or fail closed); a bare ``allow_panel_broadcast``
+    # tag without any spec remains the legacy research waiver below.
+    specs = tuple(getattr(metadata, "broadcast_specs", None) or ())
+    if specs:
+        _verify_broadcast_specs(metadata, specs, frames)
+        return
     if tags & _TYPED_BROADCAST_TAGS or "allow_panel_broadcast" in tags:
         # Review #4 R4-99 / review #5 R5-05: a bare ``allow_panel_broadcast`` is
         # the legacy blanket waiver; typed tags declare the SPECIFIC shape.

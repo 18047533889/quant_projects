@@ -28,6 +28,19 @@ from cleaned_operators.registry import OperatorRegistry
 
 _EPS = 1e-12
 
+# R11 #140: the ridge penalty is a fixed, VERSIONED implementation constant —
+# deliberately NOT a searchable parameter.  It is excluded from param_names /
+# param_specs so the search grammar cannot sweep it; the value is part of the
+# operator's versioned implementation contract (documented in the metadata
+# description).  Changing it is a semantic change, not a knob to tune.
+_RIDGE = 1e-3
+# R11 #141: residual regression DOF margin.  ``N == K+1`` leaves zero residual
+# DOF (the fit is an interpolation).  Require at least _MIN_DOF_MARGIN_N
+# observations AND at least _DOF_MARGIN_RATIO observations per estimated
+# parameter; below the gate the operator fails closed (NaN).
+_MIN_DOF_MARGIN_N = 20
+_DOF_MARGIN_RATIO = 5.0
+
 
 def _align(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
     if not frames:
@@ -36,7 +49,15 @@ def _align(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
     out = [base]
     for frame in frames[1:]:
         if not frame.index.equals(base.index) or not frame.columns.equals(base.columns):
-            frame = frame.reindex(index=base.index, columns=base.columns)
+            # R11 #138: silent reindex is inconsistent with sibling modules.  A
+            # genuinely misaligned panel (shifted index / different instrument
+            # columns) pairs x_t with score_{t'} or target with a shifted peer —
+            # a silent cross-sectional/PIT corruption.  Fail loudly instead of
+            # reindexing.
+            raise ValueError(
+                "multi-panel inputs must share identical index/columns; "
+                "reindexing misaligned panels is not allowed"
+            )
         out.append(frame)
     return tuple(out)
 
@@ -119,6 +140,9 @@ def _ts_cov_if(
     min_periods: int = 2,
 ) -> pd.DataFrame:
     x, y, condition = _align(x, y, condition)
+    # R11 #144: condition must be a ConditionBool ({0, 1} / NaN missing), never
+    # an arbitrary non-zero numeric.
+    _assert_condition_bool(condition, name="condition")
     w = int(window)
     if w < 2:
         raise ValueError("ts_cov_if requires window >= 2")
@@ -138,7 +162,7 @@ def _ts_cov_if(
                 np.isfinite(xs)
                 & np.isfinite(ys)
                 & np.isfinite(cs)
-                & (cs != 0.0)
+                & (cs == 1.0)
             )
             xa = xs[mask].astype(float)
             ya = ys[mask].astype(float)
@@ -156,6 +180,25 @@ def _ts_cov_if(
 # ---------------------------------------------------------------------------
 # cs_multi_robust_resid(y, x1, x2, x3, add_intercept)
 # ---------------------------------------------------------------------------
+def _assert_condition_bool(condition: pd.DataFrame, name: str = "condition") -> None:
+    """R11 #144: the condition input must be a ConditionBool.
+
+    Accepted values: {0, 1} (or boolean True/False); NaN = missing and is
+    excluded from the selection.  Any other finite numeric value (e.g. 5.0,
+    -3.0) is neither a probability nor a boolean — silently treating it as
+    "truthy" is a hidden semantic the operator contract forbids.  Fail the
+    call (raise) instead of guessing.
+    """
+    cv = condition.to_numpy()
+    finite = np.isfinite(cv)
+    bad = finite & (cv != 0.0) & (cv != 1.0)
+    if np.any(bad):
+        raise ValueError(
+            f"{name} must be a ConditionBool (values in {{0, 1}} with NaN as "
+            f"missing); found {int(bad.sum())} finite value(s) outside {{0, 1}}"
+        )
+
+
 def _cs_multi_robust_resid(
     y: pd.DataFrame,
     x1: pd.DataFrame,
@@ -175,7 +218,7 @@ def _cs_multi_robust_resid(
     fvs = [f.to_numpy(dtype=float) for f in features]
     rows, cols = yv.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    ridge = 1e-3
+    ridge = _RIDGE  # versioned implementation constant (R11 #140)
     for r in range(rows):
         mask = np.isfinite(yv[r])
         for fv in fvs:
@@ -195,6 +238,11 @@ def _cs_multi_robust_resid(
             std_cols.append((col - float(np.mean(col))) / sd)
         k = len(std_cols) + (1 if add_intercept else 0)
         if n <= k:
+            continue
+        # R11 #141: residual regression DOF margin.  N == K+1 leaves zero
+        # residual DOF (interpolation); require a real margin so the residuals
+        # describe noise, not in-sample fit.  Fail closed below the gate.
+        if n < max(_MIN_DOF_MARGIN_N, int(_DOF_MARGIN_RATIO * k)):
             continue
         design = np.column_stack(std_cols) if std_cols else np.empty((n, 0))
         if add_intercept:
@@ -245,6 +293,21 @@ _CATEGORIES: dict[str, str] = {
     "cs_multi_robust_resid": "cross_sectional_regression",
 }
 
+# R11 #139/#140: honest descriptions.  ``cs_multi_robust_resid`` is a
+# STANDARDIZED RIDGE regression (not robust regression); the name is historical
+# and the fixed ridge=1e-3 is a versioned implementation constant, NOT a
+# searchable parameter.
+_DESCRIPTIONS: dict[str, str] = {
+    "ts_weighted_standardized_moment": "weighted standardized central moment (order 3=skew / 4=kurtosis)",
+    "ts_cov_if": "conditional rolling covariance (condition is a ConditionBool)",
+    "cs_multi_robust_resid": (
+        "cross-sectional multi-regressor residual via standardized ridge least "
+        "squares (fixed ridge=1e-3, versioned implementation constant, not a "
+        "searchable parameter); name is historical — the true name is "
+        "cs_multi_ridge_resid"
+    ),
+}
+
 # Output unit per operator (P1-27): only ``same_as:target`` for a plain mean.
 # A standardized moment is dimensionless, a covariance carries unit(x)*unit(y),
 # and a regression residual keeps unit(y) — never ``same_as:target``.
@@ -291,10 +354,14 @@ def _register() -> None:
         category = _CATEGORIES[canonical]
 
         class _PandasOp(PandasOperator):
+            # R11 #139/#142: propagate algebraic output units to the metadata
+            # so the catalog / typed search see the real dimension.
+            _ou = _UNITS[canonical]
+            output_unit = _ou if (_ou.startswith("same_as:") or _ou.startswith("unit(") or _ou == "dimensionless") else None
             metadata = PandasMetadata(
                 name=canonical,
                 category=category,
-                description=canonical,
+                description=_DESCRIPTIONS[canonical],
                 examples=[],
                 param_names=params,
                 return_type="series",
@@ -303,6 +370,7 @@ def _register() -> None:
                       "domain:statistics", f"unit:{_UNITS[canonical]}", "cost:4"],
                 param_specs=_PARAM_SPECS[canonical],
                 window_semantics=_WINDOW_SEMANTICS[canonical],
+                output_unit=output_unit,
             )
 
             _HANDLES_CALL_CONTRACT = True  # R5-02: routes through validate_operator_call

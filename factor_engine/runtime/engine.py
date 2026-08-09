@@ -73,6 +73,21 @@ def _validate_run_mode(mode: str) -> None:
         )
 
 
+def _empty_factor_series() -> pd.Series:
+    """tombstone-only 物化用的空 MultiIndex Series（R11 #3）。
+
+    源删除事件窗口重算无输出时，仍需走 ``execute_materialize`` 把
+    ``deleted_keys`` 转成 (datetime, asset, NaN) tombstone；给 materializer 一个
+    满足 ``_normalize_to_long_table`` 前置条件的空 Series 即可。
+    """
+    return pd.Series(
+        dtype="float64",
+        index=pd.MultiIndex.from_arrays(
+            [[], []], names=["datetime", "instrument"]
+        ),
+    )
+
+
 def _scope_from_factor(factor: Any) -> FactorExecutionScope:
     """从 ``Factor`` 对象推断执行作用域；属性取不到时使用默认值（#321）。"""
     return FactorExecutionScope(
@@ -2103,6 +2118,7 @@ class FactorEngine:
             lineage_mode="full",
             storage_format=storage_format,
             partition_columns=partition_columns,
+            pit_enforce=pit_enforce,
         )
 
     def materialize_clickhouse(
@@ -2743,6 +2759,7 @@ class FactorEngine:
         ch_secure: bool | None = None,
         ch_ensure_table: bool = True,
         staging_dataset: str = "factor_lake_staging",
+        deleted_keys: list[tuple] | tuple[tuple, ...] | None = None,
     ):
         """增量执行单因子并物化（watermark + lookback + upsert）。
 
@@ -2791,7 +2808,10 @@ class FactorEngine:
             trim_warmup=trim_warmup,
         )
 
-        if output["result"] is None or len(output["result"]) == 0:
+        # R11 #3: 纯删除事件（源行被删 → 因子窗口重算不出该 key）结果可能为空，
+        # 但仍必须把 deleted_keys 转成 tombstone 清掉 factor lake 里的旧有限值。
+        # 无输出且无删除键才真跳过。
+        if (output["result"] is None or len(output["result"]) == 0) and not deleted_keys:
             logger.warning("增量因子 '%s' 无新输出，跳过落盘", factor.name)
             output["materialization"] = {
                 "factor_id": factor_id or factor.name,
@@ -2800,6 +2820,8 @@ class FactorEngine:
                 "incremental": output.get("incremental"),
             }
             return output
+        if output["result"] is None or len(output["result"]) == 0:
+            output["result"] = _empty_factor_series()
 
         from runtime.materialize_service import execute_materialize
 
@@ -2833,6 +2855,8 @@ class FactorEngine:
             ch_password=ch_password,
             ch_secure=ch_secure,
             lineage_mode="incremental",
+            deleted_keys=list(deleted_keys) if deleted_keys else None,
+            pit_enforce=pit_enforce,
         )
         output["materialization"]["incremental"] = output.get("incremental")
         return output

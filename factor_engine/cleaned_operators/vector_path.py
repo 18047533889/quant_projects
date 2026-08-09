@@ -153,27 +153,36 @@ def _self_intersection_rate(f1: np.ndarray, f2: np.ndarray) -> float:
     if n < 3:
         return np.nan
     pts = np.column_stack([f1, f2])
-    m = n - 1  # number of segments
+    # R11 #96: a zero-length segment (consecutive duplicate point) has no defined
+    # direction — its intersection classification is UNKNOWN, not a clean 0.
+    # Exclude degenerate segments from BOTH the numerator and the denominator;
+    # a path left with fewer than 2 non-degenerate segments has no self-
+    # intersection structure at all -> NaN (unknown != zero ownership).
+    segs = []
+    for i in range(n - 1):
+        if not np.allclose(pts[i], pts[i + 1]):
+            segs.append((pts[i], pts[i + 1]))
+    m = len(segs)
     if m < 2:
         return np.nan
     # Review R4-53: the denominator counts only *non-adjacent* segment pairs.
     # Adjacent segments share an endpoint and can never properly intersect;
     # counting them biases the rate downward, worst for short windows.
     total = m * (m - 1) // 2 - (m - 1)
-    closed = bool(np.allclose(pts[0], pts[-1]))
+    closed = bool(np.allclose(segs[0][0], segs[-1][1]))
     if closed:
         total -= 1  # first & last segments share an endpoint on a closed path
     if total < 1:
         return np.nan
     inter = 0
     for i in range(m):
-        p1, p2 = pts[i], pts[i + 1]
+        p1, p2 = segs[i]
         for j in range(i + 1, m):
             if j == i + 1:
                 continue  # adjacent segments: share endpoint, never proper
             if closed and i == 0 and j == m - 1:
                 continue  # closed path: first & last segments share endpoint
-            p3, p4 = pts[j], pts[j + 1]
+            p3, p4 = segs[j]
             if _segments_properly_intersect(p1, p2, p3, p4):
                 inter += 1
     return float(inter) / float(total)
@@ -185,6 +194,11 @@ def _pair_series(a2d: np.ndarray, b2d: np.ndarray, window: int, kernel: Callable
     w = int(window)
     for c in range(cols):
         for r in range(rows):
+            # R11 #95: the window W is the formal semantic — a 2-3 point warmup
+            # prefix must NOT count as a factor under the same name as a W=60
+            # one.  Fail closed until a full window of rows is available.
+            if r + 1 < w:
+                continue
             i0 = max(0, r - w + 1)
             fa = a2d[i0 : r + 1, c]
             fb = b2d[i0 : r + 1, c]

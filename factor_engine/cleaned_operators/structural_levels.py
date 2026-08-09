@@ -12,14 +12,20 @@ current price's relationship to the recent structural skeleton:
 * ``ts_structural_level_strength``          — recency-weighted reaction to nearby
   levels (sum of nearby log-distance weighted by exp(-decay*age)).
 
-Shared kernel — *confirmed pivots*.  Bar ``k`` is a confirmed peak when ``x_k`` is
-a strict max over ``[k-confirmation, k+confirmation]`` **and** the rally from the
-most recent confirmed trough exceeds ``prominence*x_k`` (troughs symmetric).  The
-first pivot of the chain is accepted directly (it establishes the reference;
-without it the alternating chain can never start).  A pivot becomes usable only
-once its confirmation window has passed: pivot at bar ``k`` is used from row
-``k+confirmation`` onward, with ``age = row - (k+confirmation)``.  So although
-pivot *detection* looks ``confirmation`` bars ahead, the *output* at row ``t``
+Shared kernel — *confirmed pivots*, mined by the streaming
+``StreamingConfirmedPivotLedger`` in ``cleaned_operators/common/_pivot_ledger.py``
+(R11 P0: no retrospective history rewrite).  Bar ``k`` is a confirmed peak when
+``x_k`` is a strict max over the full ``[k-confirmation, k+confirmation]``
+neighbourhood (every element finite — a NaN inside the window blocks
+confirmation) **and** the rally from the most recent confirmed trough exceeds
+``prominence*x_k`` (troughs symmetric).  The first pivot of the chain is accepted
+directly (it establishes the reference; without it the alternating chain can
+never start).  A pivot becomes usable only once its confirmation window has
+passed: pivot at bar ``k`` is used from row ``k+confirmation`` onward, with
+``age = row - (k+confirmation)``.  A future more-extreme same-side candidate
+*supplements* the ledger with a ``PivotSuperseded`` record — the already
+published pivot is never deleted from history, and the supersession only affects
+rows from the new pivot's confirmation row onward.  The *output* at row ``t``
 only ever consumes data up to row ``t`` — prefix-causal and PIT-safe.
 
 All operators are trailing-window per-column, deterministic, NaN-safe
@@ -34,6 +40,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.common._pivot_ledger import confirmed_pivot_events
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
@@ -74,81 +81,6 @@ def _check_positive_float(value: Any, name: str) -> float:
     return fv
 
 
-def _scan_confirmed_pivots(x: np.ndarray, confirmation: int, prominence: float) -> list[tuple[int, float, bool]]:
-    """Return ``(bar_idx, price, is_peak)`` for all confirmed pivots of a column.
-
-    ``x`` is the 1D per-column price series.  NaN bars are skipped (they neither
-    form pivots nor break the chain).  A strict peak/trough alternation state
-    machine (review R4-18): after a peak the next accepted pivot is a trough
-    (prominence-filtered against the peak), and vice-versa; a same-side more
-    extreme candidate *replaces* the previous pivot instead of appending, so the
-    chain can never contain two consecutive peaks or two consecutive troughs.
-    The first non-flat pivot seeds the chain.
-    """
-    n = len(x)
-    conf = int(confirmation)
-    prom = float(prominence)
-    pivots: list[tuple[int, float, bool]] = []
-    last_type: bool | None = None  # True=peak, False=trough
-    last_val: float | None = None
-    for k in range(n):
-        xk = x[k]
-        if not np.isfinite(xk) or xk <= 0.0:
-            continue
-        lo = max(0, k - conf)
-        hi = min(n - 1, k + conf)
-        is_peak_cand = True
-        is_trough_cand = True
-        for j in range(lo, hi + 1):
-            if j == k:
-                continue
-            xj = x[j]
-            if not np.isfinite(xj):
-                continue
-            if xk <= xj:
-                is_peak_cand = False
-            if xk >= xj:
-                is_trough_cand = False
-            if not is_peak_cand and not is_trough_cand:
-                break
-        if is_peak_cand and is_trough_cand:
-            continue  # flat neighbourhood (all equal): not a pivot
-        pxk = float(xk)
-        if last_type is None:  # seed the chain
-            is_peak = is_peak_cand
-            pivots.append((k, pxk, is_peak))
-            last_type = is_peak
-            last_val = pxk
-        elif last_type:  # last was a peak -> next legal pivot is a trough
-            if is_trough_cand and last_val - pxk > prom * abs(pxk):
-                pivots.append((k, pxk, False))
-                last_type = False
-                last_val = pxk
-            elif is_peak_cand and pxk > last_val:
-                # same-side more extreme peak: replace, do not append (R4-18)
-                pivots[-1] = (k, pxk, True)
-                last_val = pxk
-        else:  # last was a trough -> next legal pivot is a peak
-            if is_peak_cand and pxk - last_val > prom * abs(pxk):
-                pivots.append((k, pxk, True))
-                last_type = True
-                last_val = pxk
-            elif is_trough_cand and pxk < last_val:
-                # same-side more extreme trough: replace, do not append (R4-18)
-                pivots[-1] = (k, pxk, False)
-                last_val = pxk
-    return pivots
-
-
-def _usable_pivots(
-    pivots: list[tuple[int, float, bool]], t: int, window: int, confirmation: int
-) -> list[tuple[int, float, bool]]:
-    """Pivots whose confirmation has passed and whose bar lies in the trailing window."""
-    conf = int(confirmation)
-    i0 = max(0, t - int(window) + 1)
-    return [(k, p, is_peak) for (k, p, is_peak) in pivots if k + conf <= t and k >= i0]
-
-
 def _density_series(price2d: np.ndarray, window: int, prominence: float, confirmation: int, bandwidth: float) -> np.ndarray:
     rows, cols = price2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -157,13 +89,14 @@ def _density_series(price2d: np.ndarray, window: int, prominence: float, confirm
     w = int(window)
     for c in range(cols):
         x = price2d[:, c]
-        pivots = _scan_confirmed_pivots(x, conf, float(prominence))
+        ledger = confirmed_pivot_events(x, conf, float(prominence), positive_only=True)
         for t in range(rows):
             xt = x[t]
             if not np.isfinite(xt) or xt <= 0.0:
                 continue
             pt = float(xt)
-            ds = [math.log(pt / p) for (k, p, _is_peak) in _usable_pivots(pivots, t, w, conf) if p > 0.0]
+            active = ledger.active_at(t, window=w)
+            ds = [math.log(pt / ev.value) for ev in active if ev.value > 0.0]
             if not ds:
                 continue
             d = np.asarray(ds, dtype=float)
@@ -183,7 +116,7 @@ def _nearest_distance_series(
     w = int(window)
     for c in range(cols):
         x = price2d[:, c]
-        pivots = _scan_confirmed_pivots(x, conf, float(prominence))
+        ledger = confirmed_pivot_events(x, conf, float(prominence), positive_only=True)
         # rolling std of log-returns over the trailing window
         lr = np.full(rows, np.nan, dtype=float)
         for t in range(1, rows):
@@ -202,7 +135,8 @@ def _nearest_distance_series(
                 continue
             pt = float(xt)
             best = np.inf
-            for (k, p, _is_peak) in _usable_pivots(pivots, t, w, conf):
+            for ev in ledger.active_at(t, window=w):
+                p = ev.value
                 if p <= 0.0:
                     continue
                 if direction == "any":
@@ -232,25 +166,26 @@ def _strength_series(
     dec = float(decay)
     for c in range(cols):
         x = price2d[:, c]
-        pivots = _scan_confirmed_pivots(x, conf, float(prominence))
+        ledger = confirmed_pivot_events(x, conf, float(prominence), positive_only=True)
         for t in range(rows):
             xt = x[t]
             if not np.isfinite(xt) or xt <= 0.0:
                 continue
             pt = float(xt)
-            usable = _usable_pivots(pivots, t, w, conf)
-            if not usable:
+            active = ledger.active_at(t, window=w)
+            if not active:
                 continue
             total = 0.0
             cutoff = 0.05
-            for (k, p, _is_peak) in usable:
+            for ev in active:
+                p = ev.value
                 if p <= 0.0:
                     continue
                 di = math.log(pt / p)
                 adi = abs(di)
                 if adi > cutoff:
                     continue
-                age = float(t - k - conf)
+                age = float(t - ev.pivot_at - conf)
                 # R4-19: proximity weight must PEAK on the level (distance 0)
                 # and decay with distance, not the reverse.  Old code used
                 # |log(P/L)| so being exactly on a level contributed 0.

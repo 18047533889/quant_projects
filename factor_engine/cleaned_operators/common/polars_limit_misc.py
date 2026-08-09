@@ -271,10 +271,13 @@ def fin_announcement_lag(period_end_date, pub_date):
 # ---------------------------------------------------------------------------
 
 
-def event_decay_asof(event, half_life=20.0, missing_policy="carry"):
+def event_decay_asof(event, half_life=20.0, missing_policy="carry", event_kind="marked"):
     hl = _pf(half_life, "half_life", 1.0)
     if missing_policy not in {"carry", "break"}:
         raise ValueError("missing_policy must be 'carry' or 'break'")
+    kind = str(event_kind).lower()
+    if kind not in {"bool", "marked"}:
+        raise ValueError("event_kind must be 'bool' or 'marked'")
     weight = 0.5 ** (1.0 / hl)
     cols = _cols(event)
     rows = event.height
@@ -287,7 +290,14 @@ def event_decay_asof(event, half_life=20.0, missing_policy="carry"):
             finite = bool(np.isfinite(ev[t]))
             if finite:
                 seen = True
-                acc = acc * weight + float(ev[t])
+                # #148: EventBool counts a finite non-zero occurrence as exactly
+                # 1 and a confirmed ``0`` as 0 (no event); MarkedEvent ("marked",
+                # default) keeps the magnitude.
+                if kind == "bool":
+                    contribution = 1.0 if float(ev[t]) != 0.0 else 0.0
+                else:
+                    contribution = float(ev[t])
+                acc = acc * weight + contribution
             elif not seen:
                 out[t, i] = np.nan
                 continue
@@ -318,7 +328,7 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("benchmark_relative_price", ("numerator", "denominator"), benchmark_relative_price, "Numerator over denominator."),
     ("fin_applicability_mask", ("value", "threshold"), fin_applicability_mask, "1 where value exceeds threshold."),
     ("cash_flow_lifecycle_stage", ("operating", "investing", "financing"), cash_flow_lifecycle_stage, "Cash-flow lifecycle stage 1-5."),
-    ("event_decay_asof", ("event", "half_life", "missing_policy"), event_decay_asof, "Exponential decay of past events (preserving sign/magnitude)."),
+    ("event_decay_asof", ("event", "half_life", "missing_policy", "event_kind"), event_decay_asof, "Exponential decay of past events (EventBool counts 1; MarkedEvent keeps magnitude)."),
 )
 
 

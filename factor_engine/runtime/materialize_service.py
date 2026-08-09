@@ -21,6 +21,78 @@ from storage.materializer import ParquetMaterializer
 logger = get_logger("runtime.materialize_service")
 
 
+def _backend_kind(backend: Any) -> str | None:
+    """从 backend 实例反推规范后端名（full definition 用，best-effort）。"""
+    name = type(backend).__name__.lower()
+    if "hybrid_long" in name:
+        return "hybrid_long"
+    if "polars_long" in name:
+        return "polars_long"
+    if "hybrid" in name:
+        return "hybrid"
+    if "polars" in name:
+        return "polars"
+    if "duckdb" in name or "pushdown" in name:
+        return "sql"
+    if "debug" in name:
+        return "debug"
+    return "pandas"
+
+
+def _build_full_factor_definition(
+    *,
+    engine: Any,
+    factor: Factor,
+    factor_id: str,
+    author: str | None,
+    frequency: str | None,
+    description: str | None,
+    expression: str | None,
+    data_source_config: dict | None,
+    analysis: Any,
+    pit_enforce: bool | None = None,
+) -> dict[str, Any]:
+    """从 materialize 现场收集因子完整重建规格（R11 #5）。
+
+    事件增量重建引擎时，缺 full definition 的因子会退化成 surface=None /
+    dialect=None / market=None / universe=None / run_mode=None / backend=pandas /
+    pit_enforce=None —— 即「公式一样，但执行语义已经不是原来的 factor」。
+    正常成功 materialize 必须原子持久化完整规格。
+    """
+    ds = getattr(engine, "data_source", None)
+    market = (
+        getattr(factor, "market", None)
+        or getattr(ds, "market", None)
+        or getattr(ds, "market_code", None)
+    )
+    calendar = (
+        getattr(ds, "calendar_id", None)
+        or getattr(ds, "calendar", None)
+        or getattr(factor, "calendar_id", None)
+    )
+    if pit_enforce is None:
+        pit_enforce = getattr(ds, "pit_enforce", None)
+    return {
+        "factor_id": factor_id,
+        "expression": expression or getattr(factor, "source_expr", None),
+        "surface": getattr(factor, "surface", None),
+        "dialect": getattr(factor, "dialect", None),
+        "dialect_version": getattr(factor, "dialect_version", None),
+        "market": market,
+        "universe": getattr(factor, "universe", None),
+        "frequency": frequency or getattr(factor, "freq", None),
+        "data_source_config": data_source_config or {},
+        "decision_policy": None,
+        "run_mode": getattr(engine, "run_mode", None),
+        "calendar": calendar,
+        "backend": _backend_kind(getattr(engine, "backend", None)),
+        "pit_enforce": pit_enforce,
+        "author": author,
+        "description": description or getattr(factor, "description", None),
+        "ast_hash": compute_ir_hash(analysis.ir),
+    }
+
+
 def resolve_parquet_write_target(write_target: str) -> str:
     """将用户 write_target 映射为 Parquet 物化器可识别的目标。
 
@@ -72,6 +144,8 @@ def execute_materialize(
     lineage_mode: str = "full",
     storage_format: str = "long",
     partition_columns: list[str] | None = None,
+    deleted_keys: list[tuple] | None = None,
+    pit_enforce: bool | None = None,
 ) -> dict[str, Any]:
     """将 ``run`` 输出物化到因子湖（及可选 ClickHouse）。
 
@@ -145,6 +219,7 @@ def execute_materialize(
         defer_watermark=needs_clickhouse_write(target),
         storage_format=storage_format,
         partition_columns=partition_columns,
+        deleted_keys=deleted_keys,
     )
 
     from runtime.incremental_scheduler import record_factor_dependency_from_analysis
@@ -156,6 +231,18 @@ def execute_materialize(
             analysis=analysis,
             data_source=engine.data_source,
             frequency=frequency or factor.freq,
+            full_definition=_build_full_factor_definition(
+                engine=engine,
+                factor=factor,
+                factor_id=factor_id or factor.name,
+                author=author,
+                frequency=frequency,
+                description=description,
+                expression=expression,
+                data_source_config=data_source_config,
+                analysis=analysis,
+                pit_enforce=pit_enforce,
+            ),
         )
     except Exception as exc:
         logger.warning("因子依赖 catalog 写入失败 factor=%s: %s", factor.name, exc)
@@ -244,6 +331,8 @@ def execute_materialize_from_resolved(
         lineage_mode=lineage_mode,
         storage_format=opts.storage_format,
         partition_columns=list(opts.partition_columns) if opts.partition_columns else None,
+        deleted_keys=getattr(opts, "deleted_keys", None),
+        pit_enforce=getattr(opts, "pit_enforce", None),
     )
 
 

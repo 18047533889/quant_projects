@@ -157,10 +157,12 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["x", "window", "min_periods"],
         "category": "robust_statistics",
         "domain": "statistics",
-        "unit": "same_as:target",
+        # Round-11 §37-D: same_as:x — 'target' is not a declared param; a
+        # scale/location statistic of the input carries the input's unit.
+        "unit": "same_as:x",
         "cost": 5,
         "tags_extra": [],
-        "output_unit": "same_as:target",
+        "output_unit": "same_as:x",
         "param_specs": _ROBUST_SCALE_SPECS,
     },
     "ts_hodges_lehmann_location": {
@@ -168,10 +170,11 @@ _SPECS: dict[str, dict[str, Any]] = {
         "params": ["x", "window", "min_periods"],
         "category": "robust_statistics",
         "domain": "statistics",
-        "unit": "same_as:target",
+        # Round-11 §37-D: same_as:x (see ts_qn_scale).
+        "unit": "same_as:x",
         "cost": 5,
         "tags_extra": [],
-        "output_unit": "same_as:target",
+        "output_unit": "same_as:x",
         "param_specs": _ROBUST_SCALE_SPECS,
     },
 }

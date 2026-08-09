@@ -409,8 +409,12 @@ def _register_copula_op(canonical: str, description: str, entropy: bool) -> Seri
             _copula_cross_series(a.to_numpy(dtype=float), b.to_numpy(dtype=float), g, entropy),
         )
 
+    # R11 #28: ``cs_rank_copula_entropy`` is normalised by log(grid^2) to [0,1]
+    # — the unit is DIMENSIONLESS, not nats.  ``cs_rank_copula_mi`` stays nats
+    # (raw plug-in MI, no normalisation).
+    unit = "dimensionless" if entropy else "nats"
     metadata = _metadata(
-        canonical, description, ["a", "b", "grid"], unit="nats", cost=6,
+        canonical, description, ["a", "b", "grid"], unit=unit, cost=6,
         # P1-44: the copula MI/entropy is a per-day *market-wide scalar* broadcast
         # to every stock — it is a GLOBAL_STATE / regime feature for ``where`` /
         # ``trade_when`` / state conditioning, NOT a per-stock Numeric Alpha.  The

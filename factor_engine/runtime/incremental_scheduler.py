@@ -38,7 +38,9 @@ class DataEvent:
     snapshot_before: Any = None
     snapshot_after: Any = None
     revision_kind: str | None = None
-    deleted_keys: tuple[str, ...] | None = None
+    #: 被删除的源数据 key。允许 ``(datetime, asset)`` 键对或裸 key（裸 key 在
+    #: planner 里以受影响日期为删除日期）；planner 会归一成 tombstone 键对。
+    deleted_keys: tuple[Any, ...] | None = None
 
     @property
     def field(self) -> str:
@@ -93,6 +95,8 @@ class FactorUpdatePlan:
     source_dataset: str | None
     is_full_run: bool
     field_id: str | None = None
+    #: 源删除 key 归一成的 ``(datetime, asset)`` tombstone 键对（R11）。
+    deleted_keys: tuple[tuple[str, str], ...] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """序列化为可 JSON 化的字典。"""
@@ -107,6 +111,9 @@ class FactorUpdatePlan:
             "load_end": self.load_end,
             "source_dataset": self.source_dataset,
             "is_full_run": self.is_full_run,
+            "deleted_keys": (
+                [list(k) for k in self.deleted_keys] if self.deleted_keys else None
+            ),
         }
 
 
@@ -137,6 +144,26 @@ def _dependency_rows_for_event(
     return catalog.list_factors_for_column(event.field_id or event.column)
 
 
+def _coerce_deleted_keys(event: DataEvent) -> tuple[tuple[str, str], ...] | None:
+    """把 ``DataEvent.deleted_keys`` 归一成 ``(datetime, asset)`` tombstone 键对。
+
+    ``ParquetMaterializer._append_tombstones`` 需要 ``(datetime, asset)`` 键对；
+    裸 key（单字符串）以事件受影响日期（``affected_start`` 或 ``updated_date``）
+    作为删除日期，避免把删除日错记为事件抵达日。
+    """
+    raw = event.deleted_keys
+    if not raw:
+        return None
+    default_date = event.affected_start or event.updated_date
+    out: list[tuple[str, str]] = []
+    for key in raw:
+        if isinstance(key, (tuple, list)) and len(key) >= 2:
+            out.append((str(key[0]), str(key[1])))
+        else:
+            out.append((str(default_date), str(key)))
+    return tuple(out)
+
+
 def plan_updates_from_data_event(
     catalog: Any,
     event: DataEvent,
@@ -145,8 +172,18 @@ def plan_updates_from_data_event(
     lookback_extra: int = 5,
     market: str | None = None,
 ) -> list[FactorUpdatePlan]:
-    """``column``/``field_id`` 更新后，查询 catalog 中受影响因子并计算 lookback 窗口。"""
+    """``column``/``field_id`` 更新后，查询 catalog 中受影响因子并计算 lookback 窗口。
+
+    修订窗口以**事件受影响的数据日期**（``affected_start``/``affected_end``）为
+    基准，而不是事件抵达日期（``updated_date``）。历史修订示例：2026-08-09 收到
+    修订、实际受影响的是 2024-06-01 财务数据——若从 ``updated_date`` 起重算，
+    2024→2026 的下游因子会全部漏算。``since`` 传 ``affected_start``，由
+    ``build_incremental_plan`` 再往前推 dependency lookback。
+    """
     deps = _dependency_rows_for_event(catalog, event)
+    recompute_start = event.affected_start or event.updated_date
+    recompute_end = event.affected_end or end_date
+    deleted_keys = _coerce_deleted_keys(event)
     plans: list[FactorUpdatePlan] = []
     for dep in deps:
         source_dataset = dep.get("source_dataset")
@@ -157,9 +194,9 @@ def plan_updates_from_data_event(
         inc = build_incremental_plan(
             factor_id=factor_id,
             analysis_lookback=lookback,
-            watermark={"end_date": event.updated_date},
-            since=event.updated_date,
-            end_date=end_date,
+            watermark={"end_date": recompute_start},
+            since=recompute_start,
+            end_date=recompute_end,
             lookback_extra=lookback_extra,
             market=market,
             factor_freq=dep.get("frequency"),
@@ -170,12 +207,13 @@ def plan_updates_from_data_event(
                 column=event.column,
                 field_id=event.field_id or event.column,
                 lookback_bars=int(inc.lookback_bars),
-                since=event.updated_date,
-                end_date=end_date,
+                since=recompute_start,
+                end_date=recompute_end,
                 load_start=None if inc.load_start is None else inc.load_start.isoformat(),
                 load_end=None if inc.load_end is None else inc.load_end.isoformat(),
                 source_dataset=source_dataset,
                 is_full_run=bool(inc.is_full_run),
+                deleted_keys=deleted_keys,
             )
         )
     return plans
@@ -186,27 +224,42 @@ def _edges_from_analysis(
     analysis: Any,
     data_source: Any,
 ) -> list[Any]:
-    """Build rich dependency edges from ``analysis.referenced_fields`` (R10 #50)."""
+    """Build rich dependency edges from the resolved physical source manifest.
+
+    R11: each ``FieldSpec`` in ``analysis.referenced_fields`` carries its
+    physical DataAccess dataset (``spec.dataset``), its FactorEngine logical
+    table (``spec.table``), canonical ``field_id`` and physical column
+    (``spec.source_name``).  The edge ``source_dataset`` MUST be the physical
+    dataset the field lives in — NOT the anchor ``data_source.dataset``: a
+    composite factor reading ``StockDailyBar.close`` + ``StockValuationDaily.pe_ratio``
+    must record the second edge on ``ashare_stock_valuation_daily``, or
+    ``DependencyCatalog.factors_for_event()`` (which queries
+    ``source_dataset == event.dataset``) can never find it.
+    """
     from runtime.dependency_catalog import FactorDependencyEdge
 
-    source_dataset = _resolve_source_dataset(data_source)
+    anchor_dataset = _resolve_source_dataset(data_source)
     ref_fields = getattr(analysis, "referenced_fields", {}) or {}
     edges: list[FactorDependencyEdge] = []
     for name, spec in ref_fields.items():
-        table = getattr(spec, "table", None) or source_dataset
-        ds = source_dataset or table
-        if ds is None:
+        physical_ds = (
+            getattr(spec, "dataset", None)
+            or getattr(spec, "table", None)
+            or anchor_dataset
+        )
+        if physical_ds is None:
             continue
         field_id = str(getattr(spec, "field_id", None) or name)
         edges.append(
             FactorDependencyEdge(
                 factor_id=factor_id,
-                source_dataset=str(ds),
+                source_dataset=str(physical_ds),
+                logical_table=getattr(spec, "table", None),
                 field_id=field_id,
                 physical_field=str(
                     getattr(spec, "source_name", None) or field_id
                 ),
-                transform=None,
+                transform=getattr(spec, "transform", None),
                 snapshot_semantics="point",
                 lookback=0,
             )
@@ -221,32 +274,33 @@ def record_factor_dependency_from_analysis(
     analysis: Any,
     data_source: Any,
     frequency: str | None = None,
+    full_definition: dict[str, Any] | None = None,
 ) -> None:
-    """从 ``AnalysisResult`` 写入依赖 catalog（legacy 行 + R10 edges）。"""
+    """从 ``AnalysisResult`` 写入依赖 catalog（legacy 行 + R10 edges [+ full spec]）。
+
+    R11: the whole factor dependency definition is written atomically through
+    ``DependencyCatalog.record_factor_manifest`` (single BEGIN IMMEDIATE
+    transaction), so a concurrent ``factors_for_event`` reader or a crash can
+    never observe a partially-replaced edge set (0/1/5 edges).
+    """
     from runtime.dependency_catalog import DependencyCatalog
 
     referenced_columns = getattr(analysis, "referenced_columns", set()) or set()
     lookback = int(getattr(analysis, "lookback", 0))
     source_dataset = _resolve_source_dataset(data_source)
-    catalog.record_factor_dependency(
+    edges = _edges_from_analysis(factor_id, analysis, data_source)
+    dep_catalog = (
+        catalog if isinstance(catalog, DependencyCatalog) else DependencyCatalog(catalog)
+    )
+    dep_catalog.record_factor_manifest(
         factor_id,
+        edges=edges,
         referenced_columns=referenced_columns,
         lookback=lookback,
         frequency=frequency,
         source_dataset=source_dataset,
+        full_definition=full_definition,
     )
-    edges = _edges_from_analysis(factor_id, analysis, data_source)
-    if edges:
-        dep_catalog = (
-            catalog if isinstance(catalog, DependencyCatalog) else DependencyCatalog(catalog)
-        )
-        dep_catalog.record_factor_edges(
-            factor_id,
-            edges=edges,
-            lookback=lookback,
-            frequency=frequency,
-            source_dataset=source_dataset,
-        )
 
 
 def factor_from_catalog_info(info: dict) -> Any:
@@ -439,6 +493,7 @@ def execute_incremental_updates_from_event(
                 expression=info.get("expression"),
                 frequency=info.get("frequency"),
                 description=info.get("description"),
+                deleted_keys=plan.deleted_keys,
                 **mat_kwargs,
             )
             out["materializations"][plan.factor_id] = result.get(

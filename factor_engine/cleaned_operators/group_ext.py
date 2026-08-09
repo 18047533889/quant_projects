@@ -15,8 +15,21 @@ import pandas as pd
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.common.daily_panel import _aligned
 
+# R11 #137: cross-section minimum breadth.  An industry/group regression on
+# ~3 names is not a meaningful fit — require at least ``_MIN_BREADTH`` valid
+# observations AND at least ``_BREADTH_PARAM_RATIO`` observations per estimated
+# parameter (slope + optional intercept).  Below the gate the operator emits
+# NaN (fail closed) instead of letting a handful of stocks drive the fit.
+_MIN_BREADTH = 10
+_BREADTH_PARAM_RATIO = 5.0
+
 
 def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str) -> OperatorMetadata:
+    # R11 #135/#136: unit-algebra honesty.  Algebraic units (``same_as:`` /
+    # ``unit(...)`` / ``dimensionless``) are propagated to ``output_unit`` so
+    # the catalog / typed search see the real output dimension instead of an
+    # opaque ``ratio`` tag.
+    output_unit = unit if (unit.startswith("same_as:") or unit.startswith("unit(") or unit == "dimensionless") else None
     return OperatorMetadata(
         name=name,
         category="group_neutralization",
@@ -28,6 +41,7 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", "cost:1",
         ],
+        output_unit=output_unit,
     )
 
 
@@ -67,7 +81,8 @@ class GroupExSelfMean(SeriesOperator):
         "组内除自身外其余成员的均值。",
         ["x", "group"],
         domain="price_volume",
-        unit="ratio",
+        # R11 #135: a leave-one-out mean of x carries x's unit — NOT ratio.
+        unit="same_as:x",
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame, **_: Any) -> pd.DataFrame:
@@ -98,7 +113,8 @@ class GroupExSelfWeightedMean(SeriesOperator):
         "组内除自身外其余成员的权重加权均值。",
         ["x", "weight", "group"],
         domain="price_volume",
-        unit="ratio",
+        # R11 #135: a weighted mean of x carries x's unit — NOT ratio.
+        unit="same_as:x",
     )
 
     def _calculate_series(self, x: pd.DataFrame, weight: pd.DataFrame, group: pd.DataFrame, **_: Any) -> pd.DataFrame:
@@ -144,30 +160,52 @@ class GroupExSelfWeightedMean(SeriesOperator):
     status="experimental",
 )
 class HierarchicalGroupNeutralize(SeriesOperator):
-    """分级中性化：先在 subgroup 内减均值，再在 group 内减均值。
+    """分级中性化：按 ``(group, subgroup)`` 组合键去均值（真 nested 中性化）。
 
-    LIMITATION (R5 P1-37(b))：连续对子组/父组逐次 demean 只是近似，不是一次
-    真正的 nested-exposure 中性化 —— 先减 subgroup 均值、再减 group 均值，无法
-    严格消除「subgroup 效应」与「group 效应」的全部联合暴露（第二步会把第一步
-    已部分抵消的 group 均值重新带回）。若需要严格 nested exposure 中性化，应改用
-    (1) 以 ``group + subgroup`` 组合键（composite group key）做单次 demean，
-    或 (2) 对 group/subgroup 哑变量做横截面回归后取残差（dummy regression）。
-    本算子保留逐次 demean 语义，仅在此明确标注局限。
+    语义 (R11 #134)：一次 demean 使用复合键 ``(group, subgroup)``，保证
+    subgroup 均值只在「同一父组内」计算 —— 若 subgroup 编码跨父组重复，裸
+    subgroup demeaning 会把不同父组的成员混进同一个均值。复合键 demean 后，
+    每个 (group, subgroup) 格的有限残差均值为 0，故每个父组内的残差均值亦为 0
+    —— 先前的「第二步 group demean」因此冗余（除非 subgroup 码不严格嵌套）。
     """
 
     metadata = _metadata(
         "hierarchical_group_neutralize",
-        "先去除 subgroup 均值，再去除 group 均值（近似 nested 中性化，见局限说明）。",
+        "按 (group, subgroup) 组合键去均值（真 nested 中性化；子组码跨父组重复时不再串组）。",
         ["x", "group", "subgroup"],
         domain="price_volume",
-        unit="ratio",
+        # demeaning subtracts within-group means -> output carries x's unit.
+        unit="same_as:x",
     )
 
     @staticmethod
-    def _demean_row(values: np.ndarray, labels: np.ndarray) -> np.ndarray:
+    def _demean_composite_row(
+        values: np.ndarray,
+        group_labels: np.ndarray,
+        subgroup_labels: np.ndarray,
+    ) -> np.ndarray:
+        """Demean by the composite ``(group, subgroup)`` key — truly nested.
+
+        A bare subgroup label that repeats across parent groups must NOT be
+        merged (that would mix members of different parents); the composite key
+        keeps subgroup means within their own parent group.  If subgroup codes
+        are globally unique the composite key collapses to the subgroup key and
+        the parent group mean is already zeroed (a further group demean would be
+        a no-op).  NaN labels never match (``nan != nan``) and stay NaN.
+        """
         out = values.copy()
-        for label in pd.unique(labels):
-            idx = np.flatnonzero(labels == label)
+        n = len(values)
+        keys = [None] * n
+        for i in range(n):
+            keys[i] = (group_labels[i], subgroup_labels[i])
+        # Deduplicate with Python tuple equality (a numpy object-array ``==``
+        # would broadcast a 2-tuple against the whole column and raise).
+        seen: list[tuple[Any, Any]] = []
+        for key in keys:
+            if key not in seen:
+                seen.append(key)
+        for key in seen:
+            idx = np.flatnonzero(np.fromiter((k == key for k in keys), dtype=bool, count=n))
             group_values = values[idx]
             finite = group_values[np.isfinite(group_values)]
             if finite.size == 0:
@@ -184,11 +222,10 @@ class HierarchicalGroupNeutralize(SeriesOperator):
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for row in range(rows):
-            # Sequential demeaning is an *approximation* of nested neutralization
-            # (R5 P1-37(b)) — see the class LIMITATION note.  Strict nested
-            # exposure requires a composite group key or a dummy regression.
-            stage1 = self._demean_row(xv[row].copy(), sv[row])
-            out[row] = self._demean_row(stage1, gv[row])
+            # R11 #134: single composite-key demean replaces the old sequential
+            # subgroup-then-group approximation.  The composite key is the exact
+            # nested exposure neutralizer; the second group demean is redundant.
+            out[row] = self._demean_composite_row(xv[row].copy(), gv[row], sv[row])
         return _frame_like(x, out)
 
 
@@ -212,15 +249,19 @@ class CsRobustResid(SeriesOperator):
     metadata = OperatorMetadata(
         name="cs_robust_resid",
         category="cross_sectional",
-        description="横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。",
+        description=(
+            "横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。"
+            "R11 #136：名称为历史兼容，真实语义名称应为 cs_trimmed_ols_resid；"
+            "输出残差单位为 unit(y)（§37-D unit-algebra）。"
+        ),
         param_names=["y", "x", "trim_ratio", "add_intercept"],
         return_type="series",
         tags=[
             "cross_sectional", "daily", "pit_safe", "causal", "typed_v2",
             "signature:y,x,trim_ratio,add_intercept->series", "domain:price_volume",
-            "unit:ratio", "cost:2",
+            "unit:same_as:y", "cost:2",
         ],
-        output_unit="same_as:target",
+        output_unit="same_as:y",
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, trim_ratio: float = 0.1, add_intercept: bool = True, **_: Any) -> pd.DataFrame:
@@ -232,9 +273,14 @@ class CsRobustResid(SeriesOperator):
         xv = x.to_numpy(dtype=float)
         rows, cols = yv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
+        # R11 #137: cross-section minimum breadth — 3 stocks must not drive an
+        # industry/group regression.  The gate is on the RAW aligned breadth;
+        # after trimming we still require the parameter-count DOF margin.
+        param_count = 2 if add_intercept else 1
+        min_breadth = max(_MIN_BREADTH, int(_BREADTH_PARAM_RATIO * param_count))
         for row in range(rows):
             valid = np.isfinite(xv[row]) & np.isfinite(yv[row])
-            if valid.sum() < 3:
+            if valid.sum() < min_breadth:
                 continue
             xs = xv[row][valid]
             ys = yv[row][valid]
@@ -245,7 +291,7 @@ class CsRobustResid(SeriesOperator):
                 keep[np.argsort(xs)[-cut:]] = False
                 xs = xs[keep]
                 ys = ys[keep]
-            if xs.size < 2 or np.std(xs) == 0:
+            if xs.size < (param_count + 1) or np.std(xs) == 0:
                 continue
             if add_intercept:
                 coeffs = np.polyfit(xs, ys, 1)

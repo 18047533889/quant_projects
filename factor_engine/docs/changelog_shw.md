@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-08-09 FactorEngine R11 orchestration 收官（第 33 版）
+
+**内容**：外部 AI 复查确认 DataAccess Core 不再扩架构后，把焦点转到 FactorEngine
+orchestration 层，8 项收官（7 必修 + 1 补测试）：
+
+- **#2 修订窗口**：scheduler 以 `affected_start/end` 为重算基准（历史修订不再从事件
+  抵达日期漏算）；`plan_updates_from_data_event` 的 since=affected_start、end=affected_end。
+- **#3 删除打通**：`DataEvent.deleted_keys → FactorUpdatePlan → materialize_incremental →
+  execute_materialize → ParquetMaterializer.materialize(deleted_keys=…)`；纯删除事件也写
+  tombstone（`is_valid=0`），旧有限值不再残留。
+- **#4 物理源 edge**：`_edges_from_analysis` 以 `spec.dataset`（DataAccess 物理 dataset）
+  为 edge `source_dataset`，不再从 anchor 猜；edge 表加 `logical_table`。
+- **#5 full definition 原子持久化**：`execute_materialize` 成功落盘后经
+  `DependencyCatalog.record_factor_manifest` 原子写完整重建规格；`Factor` 增
+  surface/dialect/dialect_version。
+- **#6 语义身份版本**：`factor_registry` 增 `factor_version`（= `FactorSemanticIdentity`
+  digest 前缀）；production 同 factor_id + 语义身份变化 → `FactorSemanticIdentityMismatchError`。
+- **#7 factor_matrix 安全 merge**：分区写改 flock 互斥 read-merge-write，partial
+  因子/日期不再覆盖整月；tmp 名带 pid+uuid。
+- **#8 原子替换**：`record_factor_manifest` 单 `BEGIN IMMEDIATE` 事务写 legacy+edges+
+  full spec；`delete_factor` 补删 edge/full_definition 表。
+- **#1** 事件服务 normalize 别名确认已修复。
+
+见 [`R11_ORCHESTRATION_CLOSURE_REPORT.md`](R11_ORCHESTRATION_CLOSURE_REPORT.md)。
+
+---
+
 ## 2026-07 文档清理
 
 **内容**：删除已完成/过期的规划类文档（`enterprise_factor_engine_roadmap.md`、`performance_platform_plan.md`、`STRUCTURE.md`、`lqtp_vs_factor_engine_operators.md`）；总览并入 [`FactorEngine完全指南.md`](FactorEngine完全指南.md)；根 `README.md` 移除冗长分版脚注。

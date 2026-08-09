@@ -20,7 +20,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import (
     aligned_pairs,
     check_window,
@@ -146,8 +146,24 @@ def _value_bins(values: np.ndarray, bins: int) -> np.ndarray:
     return np.clip(bucket.astype(np.int64), 0, bins - 1)
 
 
-def _quantile_hist_mi(a: np.ndarray, b: np.ndarray, bins: int, normalized: bool) -> float:
-    """Rank-quantile histogram mutual information with Miller–Madow correction."""
+def _quantile_hist_mi(
+    a: np.ndarray,
+    b: np.ndarray,
+    bins: int,
+    normalized: bool,
+    bias_correction: bool = True,
+) -> float:
+    """Rank-quantile histogram mutual information (plug-in, base-e / nats).
+
+    ``bias_correction`` controls the Miller–Madow finite-sample bias
+    correction — it is an OPTION, not always on (audit #19).  When enabled the
+    correction term is ``(r_occ - 1)·(c_occ - 1) / (2n)`` where ``r_occ`` /
+    ``c_occ`` are the numbers of *occupied* row / column marginal cells (R5
+    P1-39(a)): with ties / empty bins the effective support is smaller than
+    ``bins``, so the textbook ``(bins-1)^2/(2n)`` term over-corrects.  The
+    corrected value is floored at 0 (the plug-in estimate is always
+    non-negative; a negative correction is a finite-sample artefact).
+    """
     n = a.size
     if n < 2:
         return np.nan
@@ -164,14 +180,10 @@ def _quantile_hist_mi(a: np.ndarray, b: np.ndarray, bins: int, normalized: bool)
         for j in range(bins):
             if p[i, j] > 0 and p_row[i, 0] > 0 and p_col[0, j] > 0:
                 mi += p[i, j] * np.log(p[i, j] / (p_row[i, 0] * p_col[0, j]))
-    # R5 P1-39(a): Miller–Madow finite-sample bias correction must use the number
-    # of *occupied* marginal cells, not the full bin grid.  With ties / empty bins
-    # the effective support is smaller than `bins`, so the previous
-    # `(bins-1)^2/(2n)` term over-corrected (and could even dominate for sparse
-    # cells).
-    r_occ = int((p_row[:, 0] > 0).sum())
-    c_occ = int((p_col[0, :] > 0).sum())
-    mi = max(0.0, mi - float((r_occ - 1) * (c_occ - 1)) / (2.0 * n))
+    if bias_correction:
+        r_occ = int((p_row[:, 0] > 0).sum())
+        c_occ = int((p_col[0, :] > 0).sum())
+        mi = max(0.0, mi - float((r_occ - 1) * (c_occ - 1)) / (2.0 * n))
     hx = -float(np.sum(p_row * np.log(np.where(p_row > 0, p_row, 1.0))))
     hy = -float(np.sum(p_col * np.log(np.where(p_col > 0, p_col, 1.0))))
     # A (near-)constant marginal carries no information: fail closed to NaN.
@@ -193,16 +205,22 @@ def _quantile_hist_mi(a: np.ndarray, b: np.ndarray, bins: int, normalized: bool)
     source="nonlinear_dependence",
 )
 class TsMutualInformation(SeriesOperator):
-    """互信息（分位数直方图估计）：normalized=True 输出 [0,1]。"""
+    """互信息（分位数直方图估计）：normalized=True 输出 [0,1] 无量纲；否则为 nats。"""
 
     metadata = _metadata(
         "ts_mutual_information",
-        "互信息（rank 分位数直方图 + 有限样本偏差校正）。",
-        ["x", "y", "window", "estimator", "bins", "min_periods", "normalized"],
+        "互信息（rank 分位数直方图 + 可选 Miller–Madow 有限样本校正）。"
+        " 原始输出单位为 nats；normalized=True 时按 min(Hx,Hy) 归一为 [0,1] 无量纲比值。",
+        ["x", "y", "window", "estimator", "bins", "min_periods", "normalized", "bias_correction"],
         unit="nats",
     )
+    metadata.param_specs = {
+        "bias_correction": ParamSpec(dtype=bool, choices=(True, False)),
+        "window": ParamSpec(dtype=int, min=2),
+        "bins": ParamSpec(dtype=int, min=2, max=10),
+    }
 
-    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 40, estimator: str = "quantile_hist", bins: int = 5, min_periods: int = 10, normalized: bool = True, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 40, estimator: str = "quantile_hist", bins: int = 5, min_periods: int = 10, normalized: bool = True, bias_correction: bool = True, **_: Any) -> pd.DataFrame:
         w = check_window(window)
         if str(estimator).lower() != "quantile_hist":
             raise ValueError("estimator must be 'quantile_hist' (deterministic)")
@@ -211,6 +229,7 @@ class TsMutualInformation(SeriesOperator):
             raise ValueError("bins must be in [2, 10]")
         mp = max(10, int(min_periods))
         norm = bool(normalized)
+        bc = bool(bias_correction)
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
 
@@ -218,7 +237,7 @@ class TsMutualInformation(SeriesOperator):
             pa, pb = aligned_pairs(a, b)
             if pa.size < mp:
                 return np.nan
-            return _quantile_hist_mi(pa, pb, nb, norm)
+            return _quantile_hist_mi(pa, pb, nb, norm, bias_correction=bc)
 
         return frame_like(x, map_pair_rolling(xv, yv, w, _fn))
 
@@ -231,16 +250,21 @@ class TsMutualInformation(SeriesOperator):
     source="nonlinear_dependence",
 )
 class TsLaggedMutualInformation(SeriesOperator):
-    """滞后互信息：MI(x[t-lag], y[t])，lag 必须为非负整数。"""
+    """滞后互信息：MI(x[t-lag], y[t])，lag 必须为非负整数，输出单位为 nats。"""
 
     metadata = _metadata(
         "ts_lagged_mutual_information",
-        "滞后互信息 MI(x[t-lag], y[t])（rank 分位数直方图）。",
-        ["x", "y", "window", "lag", "bins", "min_periods"],
+        "滞后互信息 MI(x[t-lag], y[t])（rank 分位数直方图，nats）。",
+        ["x", "y", "window", "lag", "bins", "min_periods", "bias_correction"],
         unit="nats",
     )
+    metadata.param_specs = {
+        "bias_correction": ParamSpec(dtype=bool, choices=(True, False)),
+        "window": ParamSpec(dtype=int, min=2),
+        "bins": ParamSpec(dtype=int, min=2, max=10),
+    }
 
-    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 40, lag: int = 1, bins: int = 5, min_periods: int = 10, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 40, lag: int = 1, bins: int = 5, min_periods: int = 10, bias_correction: bool = True, **_: Any) -> pd.DataFrame:
         w = check_window(window)
         lag_v = int(lag)
         if lag_v < 0:
@@ -249,6 +273,7 @@ class TsLaggedMutualInformation(SeriesOperator):
         if not 2 <= nb <= 10:
             raise ValueError("bins must be in [2, 10]")
         mp = max(10, int(min_periods))
+        bc = bool(bias_correction)
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
 
@@ -261,7 +286,7 @@ class TsLaggedMutualInformation(SeriesOperator):
             pa, pb = aligned_pairs(x_lead, y_lag)
             if pa.size < mp:
                 return np.nan
-            return _quantile_hist_mi(pa, pb, nb, False)
+            return _quantile_hist_mi(pa, pb, nb, False, bias_correction=bc)
 
         return frame_like(x, map_pair_rolling(xv, yv, w, _fn))
 

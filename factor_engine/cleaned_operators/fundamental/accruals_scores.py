@@ -14,14 +14,21 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
-from cleaned_operators.fundamental.quality_v2 import _mk
+from cleaned_operators.fundamental.quality_v2 import (
+    _mk,
+    _reject_ytd_growth,
+    _require_same_flow_grain,
+)
 from cleaned_operators.fundamental.transforms_v2 import _lag_value, _walk_periods
 
 _EPS = 1e-12
 _CANONICALS: list[str] = []
 
 
-def _growth(x: pd.DataFrame, period_id: pd.DataFrame, periods: int = 1) -> pd.DataFrame:
+def _growth(x: pd.DataFrame, period_id: pd.DataFrame, periods: int = 1, flow_type=None) -> pd.DataFrame:
+    # Finding #52: growth over a cumulative-YTD input is not a period growth
+    # rate; a caller that declares the YTD grain is rejected at the boundary.
+    _reject_ytd_growth("fin_growth", flow_type)
     p = max(1, int(periods))
     return _walk_periods(x, period_id, lambda o, v, c: _pct_change(float(v[c]), _lag_value(o, v, c, p)))
 
@@ -41,37 +48,54 @@ def _safe_ratio(num: pd.DataFrame, den: pd.DataFrame) -> pd.DataFrame:
     return num / den.replace(0, np.nan)
 
 
+def _net_borrowing_cashflow(cb, bo, rp, aa, flow_type=None):
+    # #51: the three financing cash-flow inputs must share one reporting grain.
+    _require_same_flow_grain("fin_net_borrowing_cashflow", flow_type, 3)
+    return _safe_ratio(cb + bo - rp, aa)
+
+
+def _financing_gap(c, d, di, o, aa, flow_type=None):
+    # #51: capex / debt repayment / distributions / OCF must share one grain.
+    _require_same_flow_grain("fin_financing_gap", flow_type, 4)
+    return _safe_ratio(c + d + di - o, aa)
+
+
 # ---------------------------------------------------------------------------
 # § Revenue / asset quality divergence
 # ---------------------------------------------------------------------------
 
-def _divergence(a: pd.DataFrame, b: pd.DataFrame, period_id: pd.DataFrame) -> pd.DataFrame:
-    return _growth(a, period_id) - _growth(b, period_id)
+def _divergence(a: pd.DataFrame, b: pd.DataFrame, period_id: pd.DataFrame, flow_type=None) -> pd.DataFrame:
+    _require_same_flow_grain("fin_divergence", flow_type, 2)
+    return _growth(a, period_id, flow_type=flow_type) - _growth(b, period_id, flow_type=flow_type)
 
 
 _mk(
     "fin_receivable_sales_divergence",
     "应收增长 - 营收增长。",
-    ["account_receivable", "operating_revenue", "period_id"],
-    lambda a, b, period_id: _divergence(a, b, period_id),
+    ["account_receivable", "operating_revenue", "period_id", "flow_type"],
+    lambda a, b, period_id, flow_type=None: _divergence(a, b, period_id, flow_type),
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 _mk(
     "fin_inventory_sales_divergence",
     "存货增长 - 营收增长。",
-    ["inventories", "operating_revenue", "period_id"],
-    lambda a, b, period_id: _divergence(a, b, period_id),
+    ["inventories", "operating_revenue", "period_id", "flow_type"],
+    lambda a, b, period_id, flow_type=None: _divergence(a, b, period_id, flow_type),
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 _mk(
     "fin_cash_sales_divergence",
     "销售收现增长 - 营收增长。",
-    ["goods_sale_cash", "operating_revenue", "period_id"],
-    lambda a, b, period_id: _divergence(a, b, period_id),
+    ["goods_sale_cash", "operating_revenue", "period_id", "flow_type"],
+    lambda a, b, period_id, flow_type=None: _divergence(a, b, period_id, flow_type),
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 _mk(
     "fin_expense_sales_divergence",
     "期间费用增长 - 营收增长。",
-    ["period_expense", "operating_revenue", "period_id"],
-    lambda a, b, period_id: _divergence(a, b, period_id),
+    ["period_expense", "operating_revenue", "period_id", "flow_type"],
+    lambda a, b, period_id, flow_type=None: _divergence(a, b, period_id, flow_type),
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 
 
@@ -88,8 +112,9 @@ _mk(
 _mk(
     "fin_contract_asset_growth",
     "合同资产增长。",
-    ["contract_assets", "period_id"],
-    lambda a, period_id: _growth(a, period_id),
+    ["contract_assets", "period_id", "flow_type"],
+    lambda a, period_id, flow_type=None: _growth(a, period_id, flow_type=flow_type),
+    extra_tags=["flow_type:Stock"],
 )
 _mk(
     "fin_contract_liability_intensity",
@@ -100,8 +125,9 @@ _mk(
 _mk(
     "fin_contract_liability_growth",
     "合同负债增长。",
-    ["contract_liability", "period_id"],
-    lambda l, period_id: _growth(l, period_id),
+    ["contract_liability", "period_id", "flow_type"],
+    lambda l, period_id, flow_type=None: _growth(l, period_id, flow_type=flow_type),
+    extra_tags=["flow_type:Stock"],
 )
 _mk(
     "fin_contract_asset_liability_gap",
@@ -147,13 +173,13 @@ _mk(
 )
 
 
-def _fin_goodwill_risk_score(goodwill, asset_impairment, credit_impairment, total_assets, period_id):
+def _fin_goodwill_risk_score(goodwill, asset_impairment, credit_impairment, total_assets, period_id, flow_type=None):
     # P1-134: the caller-supplied ``goodwill_prev`` was a second "prior period"
     # source that could disagree with the fiscal-ordinal prior computed from
     # ``period_id``.  Only the fiscal-ordinal prior is retained — growth is
     # ``_growth`` (current - prior)/|prior| walked over visible report periods.
     intensity = _safe_ratio(goodwill, total_assets)
-    gw_growth = _growth(goodwill, period_id)
+    gw_growth = _growth(goodwill, period_id, flow_type=flow_type)
     imp = _safe_ratio(asset_impairment + credit_impairment, total_assets)
     return intensity + gw_growth + imp
 
@@ -161,8 +187,9 @@ def _fin_goodwill_risk_score(goodwill, asset_impairment, credit_impairment, tota
 _mk(
     "fin_goodwill_risk_score",
     "商誉风险：GoodWill/Assets + GoodWill增长(fiscal-ordinal) + 减值/Assets。",
-    ["goodwill", "asset_impairment_loss", "credit_impairment_loss", "total_assets", "period_id"],
+    ["goodwill", "asset_impairment_loss", "credit_impairment_loss", "total_assets", "period_id", "flow_type"],
     _fin_goodwill_risk_score,
+    extra_tags=["flow_type:Stock"],
 )
 
 
@@ -173,8 +200,9 @@ _mk(
 _mk(
     "fin_net_debt_issuance",
     "Δ(短贷+长贷+应付债券)/平均资产。",
-    ["short_term_loan", "long_term_loan", "bonds_payable", "avg_assets", "period_id"],
-    lambda s, l, b, aa, period_id: _safe_ratio(_delta(s + l + b, period_id), aa),
+    ["short_term_loan", "long_term_loan", "bonds_payable", "avg_assets", "period_id", "flow_type"],
+    lambda s, l, b, aa, period_id, flow_type=None: _safe_ratio(_delta(s + l + b, period_id), aa),
+    extra_tags=["flow_type:Stock", "flow_grain:period_delta"],
 )
 _mk(
     "fin_borrowing_intensity",
@@ -191,20 +219,23 @@ _mk(
 _mk(
     "fin_net_borrowing_cashflow",
     "(借款 + 发债 - 偿债) / 平均资产。period_id 仅对齐契约，不参与计算。",
-    ["cash_from_borrowing", "cash_from_bonds_issue", "borrowing_repayment", "avg_assets"],
-    lambda cb, bo, rp, aa, period_id=None: _safe_ratio(cb + bo - rp, aa),
+    ["cash_from_borrowing", "cash_from_bonds_issue", "borrowing_repayment", "avg_assets", "period_id", "flow_type"],
+    lambda cb, bo, rp, aa, period_id=None, flow_type=None: _net_borrowing_cashflow(cb, bo, rp, aa, flow_type),
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 _mk(
     "fin_equity_capital_growth",
     "实收资本+资本公积增长率（股权融资代理）。",
-    ["paidin_capital", "capital_reserve", "period_id"],
-    lambda p, c, period_id: _growth(p + c, period_id),
+    ["paidin_capital", "capital_reserve", "period_id", "flow_type"],
+    lambda p, c, period_id, flow_type=None: _growth(p + c, period_id, flow_type=flow_type),
+    extra_tags=["flow_type:Stock"],
 )
 _mk(
     "fin_financing_gap",
     "(资本开支 + 偿债 + 分派股利利息 - OCF) / 平均资产。period_id 仅对齐契约，不参与计算。",
-    ["capex", "debt_repayment", "dividend_interest_payment", "ocf", "avg_assets"],
-    lambda c, d, di, o, aa, period_id=None: _safe_ratio(c + d + di - o, aa),
+    ["capex", "debt_repayment", "dividend_interest_payment", "ocf", "avg_assets", "period_id", "flow_type"],
+    lambda c, d, di, o, aa, period_id=None, flow_type=None: _financing_gap(c, d, di, o, aa, flow_type),
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 _mk(
     "fin_interest_coverage_proxy",
@@ -244,8 +275,9 @@ _mk(
 _mk(
     "fin_capex_growth",
     "资本开支增长率。",
-    ["capex_cash", "period_id"],
-    lambda c, period_id: _growth(c, period_id),
+    ["capex_cash", "period_id", "flow_type"],
+    lambda c, period_id, flow_type=None: _growth(c, period_id, flow_type=flow_type),
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 _mk(
     "fin_acquisition_cash_intensity",
@@ -281,35 +313,96 @@ def _masked(score: pd.DataFrame, mask: pd.DataFrame | None) -> pd.DataFrame:
     return score.where(valid_mask, np.nan)
 
 
-def _fin_piotroski_f_score(roa, ocf, net_profit, leverage, current_ratio, total_capital,
-                           gross_margin, asset_turnover, period_id, mask=None):
+def _piotroski_components(roa, ocf, net_profit, leverage, current_ratio, total_capital,
+                          gross_margin, asset_turnover, period_id):
+    """Return ``(passed, observed, normalized_partial)`` for the 9 F-score signals.
+
+    Finding #50: a NaN comparison must never be silently converted to a "failed
+    signal" (``NaN > 0 -> False -> 0``).  Each of the 9 signals is scored ONLY
+    where its inputs are finite; the primary output is the count of PASSED
+    signals among the OBSERVED components, the observed count is exposed for
+    callers that need completeness, and ``normalized_partial`` maps the partial
+    score to [0, 1] (NaN when nothing is observed).
+    """
     # Period-over-period comparisons must use fiscal ordinals, never trading-day
     # shifts: with daily PubDate as-of ffill, ``roa.shift(1)`` is almost always
     # the SAME report period (both Q1), so every improvement test was pinned
     # False.  ``_delta``/``_growth`` walk the visible report-period sequence —
     # 3rd-round audit P0-08.
-    roa_up = _delta(roa, period_id) > 0
-    lev_down = _delta(leverage, period_id) < 0
-    cr_up = _delta(current_ratio, period_id) > 0
-    gm_up = _delta(gross_margin, period_id) > 0
-    at_up = _delta(asset_turnover, period_id) > 0
-    # Equity issuance: paid-in+reserves grew >5% from the prior fiscal period.
-    cap_flat = _growth(total_capital.abs(), period_id) <= 0.05
-    score = (
-        (roa > 0).astype(float) + (ocf > 0).astype(float) + roa_up.astype(float)
-        + (ocf > net_profit).astype(float) + lev_down.astype(float) + cr_up.astype(float)
-        + cap_flat.astype(float) + gm_up.astype(float) + at_up.astype(float)
+    roa_d = _delta(roa, period_id)
+    lev_d = _delta(leverage, period_id)
+    cr_d = _delta(current_ratio, period_id)
+    gm_d = _delta(gross_margin, period_id)
+    at_d = _delta(asset_turnover, period_id)
+    cap_g = _growth(total_capital.abs(), period_id)
+
+    passed = (
+        ((roa > 0) & roa.notna()).astype(float)
+        + ((ocf > 0) & ocf.notna()).astype(float)
+        + ((roa_d > 0) & roa_d.notna()).astype(float)
+        + ((ocf > net_profit) & ocf.notna() & net_profit.notna()).astype(float)
+        + ((lev_d < 0) & lev_d.notna()).astype(float)
+        + ((cr_d > 0) & cr_d.notna()).astype(float)
+        + ((cap_g <= 0.05) & cap_g.notna()).astype(float)
+        + ((gm_d > 0) & gm_d.notna()).astype(float)
+        + ((at_d > 0) & at_d.notna()).astype(float)
     )
-    return _masked(score, mask)
+    observed = (
+        roa.notna().astype(float)
+        + ocf.notna().astype(float)
+        + roa_d.notna().astype(float)
+        + (ocf.notna() & net_profit.notna()).astype(float)
+        + lev_d.notna().astype(float)
+        + cr_d.notna().astype(float)
+        + cap_g.notna().astype(float)
+        + gm_d.notna().astype(float)
+        + at_d.notna().astype(float)
+    )
+    normalized = passed / observed.where(observed > 0, np.nan)
+    return passed, observed, normalized
+
+
+def _piotroski_observed_count(roa, ocf, net_profit, leverage, current_ratio, total_capital,
+                              gross_margin, asset_turnover, period_id) -> pd.DataFrame:
+    """Number of F-score signals with all inputs observed (finding #50)."""
+    _, observed, _ = _piotroski_components(roa, ocf, net_profit, leverage, current_ratio,
+                                           total_capital, gross_margin, asset_turnover, period_id)
+    return observed
+
+
+def _piotroski_normalized_partial_score(roa, ocf, net_profit, leverage, current_ratio,
+                                        total_capital, gross_margin, asset_turnover,
+                                        period_id) -> pd.DataFrame:
+    """Partial F-score normalised to [0, 1] by the observed-component count."""
+    _, _, normalized = _piotroski_components(roa, ocf, net_profit, leverage, current_ratio,
+                                             total_capital, gross_margin, asset_turnover, period_id)
+    return normalized
+
+
+def _fin_piotroski_f_score(roa, ocf, net_profit, leverage, current_ratio, total_capital,
+                           gross_margin, asset_turnover, period_id, mask=None):
+    passed, _, _ = _piotroski_components(roa, ocf, net_profit, leverage, current_ratio,
+                                         total_capital, gross_margin, asset_turnover, period_id)
+    return _masked(passed, mask)
 
 
 _mk(
     "piotroski_f_score",
-    "Piotroski F-score（9 项布尔加总，需外部适用性掩码）。",
+    "Piotroski F-score：9 项信号中「观测到」且「通过」的数量加总（缺失分量不计失败，#50）。",
     ["roa", "ocf", "net_profit", "leverage", "current_ratio", "total_capital",
      "gross_margin", "asset_turnover", "period_id", "mask"],
     _fin_piotroski_f_score,
+    extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial"],
 )
+
+
+# Finding #55: Altman Z and Zmijewski X are calibrated on non-financial
+# industrial firms.  A direct interpretation on financial/insurance names (and
+# other capital-structure-distorted industries) is not valid.  The operators
+# DECLARE this applicability contract and fail closed (NaN) wherever the caller
+# supplies an applicability ``mask`` that marks the universe inapplicable.
+ApplicableUniverse = "non_financial"
+_APPLICABLE_TAG = f"applicable_universe:{ApplicableUniverse}"
 
 
 def _fin_altman_z_score(working_capital, retained_earnings, operating_profit, total_assets,
@@ -321,15 +414,18 @@ def _fin_altman_z_score(working_capital, retained_earnings, operating_profit, to
         + 0.6 * _safe_ratio(market_cap, total_liabilities)
         + 1.0 * _safe_ratio(revenue, total_assets)
     )
+    # #55: financials are outside the calibration universe — ``mask`` is the
+    # fail-closed gate; an all-inapplicable universe yields an all-NaN panel.
     return _masked(z, mask)
 
 
 _mk(
     "altman_z_score",
-    "Altman Z-score（非金融企业版）。",
+    "Altman Z-score（非金融企业版；适用域=非金融，需外部适用性掩码，#55）。",
     ["working_capital", "retained_earnings", "operating_profit", "total_assets",
      "market_cap", "total_liabilities", "revenue", "period_id", "mask"],
     _fin_altman_z_score,
+    extra_tags=[_APPLICABLE_TAG],
 )
 
 
@@ -346,29 +442,62 @@ def _fin_zmijewski_score(net_profit, total_assets, total_liabilities, current_as
 
 _mk(
     "zmijewski_score",
-    "Zmijewski 破产概率得分。",
+    "Zmijewski 破产概率得分（适用域=非金融，需外部适用性掩码，#55）。",
     ["net_profit", "total_assets", "total_liabilities", "current_assets", "current_liabilities", "period_id", "mask"],
     _fin_zmijewski_score,
+    extra_tags=[_APPLICABLE_TAG],
 )
+
+
+def _cs_rank_normalize(x: pd.DataFrame, direction: float) -> pd.DataFrame:
+    """Cross-sectional percentile rank mapped to [-1, 1] per date.
+
+    Each date row ranks the instrument columns; ``direction`` = +1 means
+    higher-is-better, -1 higher-is-worse.  A component with no finite values on
+    a row stays NaN.
+    """
+    ranks = x.rank(axis=1, pct=True)
+    return direction * (2.0 * ranks - 1.0)
 
 
 def _fin_fundamental_strength_score(roa, ocf, gross_margin, asset_turnover, leverage,
                                     receivable_turnover, inventory_turnover, revenue_growth,
                                     period_id, mask=None):
-    """基本面强度：方向数组求和（正=越强越好，负=越高越差）。"""
-    score = (
-        roa + _safe_ratio(ocf, roa.abs().replace(0, np.nan)) + gross_margin
-        + asset_turnover - leverage + receivable_turnover + inventory_turnover + revenue_growth
-    )
+    """基本面强度：各分量先做截面 rank 标准化（[-1,1] 同向）再加总。
+
+    Finding #54: adding heterogeneous RAW metrics lets the component with the
+    largest units/scale decide the weight (ROA ~0.05 vs asset_turnover ~1.0 vs
+    revenue_growth ~0.1).  Each component is cross-sectionally rank-normalised
+    per date with its direction applied BEFORE summation; a row with no observed
+    component stays NaN.
+    """
+    cash_yield = _safe_ratio(ocf, roa.abs().replace(0, np.nan))
+    normalized = [
+        _cs_rank_normalize(roa, +1.0),
+        _cs_rank_normalize(cash_yield, +1.0),
+        _cs_rank_normalize(gross_margin, +1.0),
+        _cs_rank_normalize(asset_turnover, +1.0),
+        _cs_rank_normalize(leverage, -1.0),
+        _cs_rank_normalize(receivable_turnover, +1.0),
+        _cs_rank_normalize(inventory_turnover, +1.0),
+        _cs_rank_normalize(revenue_growth, +1.0),
+    ]
+    stacked = np.stack([df.to_numpy(dtype=float) for df in normalized])
+    valid = np.isfinite(stacked)
+    counts = valid.sum(axis=0)
+    total = np.where(valid, stacked, 0.0).sum(axis=0)
+    total[counts == 0] = np.nan
+    score = pd.DataFrame(total, index=roa.index, columns=roa.columns)
     return _masked(score, mask)
 
 
 _mk(
     "fin_fundamental_strength_score",
-    "基本面强度：多组件方向求和。",
+    "基本面强度：多分量截面 rank 标准化后再按方向加总（#54）。",
     ["roa", "ocf", "gross_margin", "asset_turnover", "leverage",
      "receivable_turnover", "inventory_turnover", "revenue_growth", "period_id", "mask"],
     _fin_fundamental_strength_score,
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 
 import cleaned_operators.operator_surface as _surface  # noqa: E402

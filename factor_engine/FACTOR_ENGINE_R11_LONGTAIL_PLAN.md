@@ -4,13 +4,19 @@ Baseline: `ecffd565089e0979c73f039245f2bab9139f3951` (audit's stated SHA; HEAD v
 Tree loads: **1362 canonicals / 0 unclassified**. Concurrent session holds 40 dirty files in
 `runtime/`, `storage/`, `tests/runtime|storage/` (R10 work) — file-disjoint from this audit's targets.
 
-The audit lists ~185 findings across 40 sections. Per the audit's own execution rules: fix
-mathematical definitions, PIT, statefulness, history, typed contracts, missing semantics, unit
-algebra, session clocks, parameter validity, statistical DOF — **not** per-operator whitelist
-patches. No new operators this round. No xfail/skip, no `except Exception: pass`, no
-research-tier escape, no duplicate "fixed" canonicals.
+## Status
 
-## Workstream map (file-disjoint)
+- **WS-A committed `432f0c7`** (shared layer: declare_stateful, history_formula/semantics, DSL
+  binder #16/#17/#18, cross_event stateless #11). 17 new tests pass.
+- **WS-L §35 done**: `current_only` join method + SnapshotOnlySourcePolicy implemented in
+  `composite_source.py` / `storage/factory.py` / `data_access_source.py`; default US valuation
+  helper now constructs (3 integration tests pass).
+- **WS-L §37 auditors done** (module + pytest wrapper): A prefix-invariance, B stateful-contract
+  discovery, C default-parameter history, D unit-algebra (found 4 real `same_as:target` bugs;
+  2 fixed in robust_scale.py, 2 flagged to WS-I/WS-K).
+- **Agents B–K in flight** (10 parallel agents, file-disjoint). WS-B pivot ledger test landed.
+
+## WS-A shared-layer contract (consumed by B/C/D)
 
 | WS | Owner | Files | Findings |
 |---|---|---|---|

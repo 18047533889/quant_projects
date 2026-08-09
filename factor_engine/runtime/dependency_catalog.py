@@ -17,6 +17,7 @@ still consulted).
 from __future__ import annotations
 
 import json
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,8 @@ CREATE TABLE IF NOT EXISTS factor_dependency_edge (
     transform          TEXT,
     snapshot_semantics TEXT,
     lookback           INTEGER NOT NULL DEFAULT 0,
+    logical_table      TEXT,
+    join_policy        TEXT,
     PRIMARY KEY (factor_id, source_dataset, field_id)
 )
 """
@@ -86,6 +89,11 @@ class FactorDependencyEdge:
     transform: str | None = None
     snapshot_semantics: str = "point"
     lookback: int = 0
+    # R11 #4: the FactorEngine logical table a field comes from (e.g.
+    # ``StockValuationDaily``) — distinct from ``source_dataset`` (the physical
+    # DataAccess dataset, e.g. ``ashare_stock_valuation_daily``).
+    logical_table: str | None = None
+    join_policy: str | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "FactorDependencyEdge":
@@ -97,6 +105,8 @@ class FactorDependencyEdge:
             transform=raw.get("transform"),
             snapshot_semantics=str(raw.get("snapshot_semantics") or "point"),
             lookback=int(raw.get("lookback") or 0),
+            logical_table=raw.get("logical_table"),
+            join_policy=raw.get("join_policy"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -108,6 +118,8 @@ class FactorDependencyEdge:
             "transform": self.transform,
             "snapshot_semantics": self.snapshot_semantics,
             "lookback": self.lookback,
+            "logical_table": self.logical_table,
+            "join_policy": self.join_policy,
         }
 
 
@@ -150,9 +162,24 @@ class DependencyCatalog:
     # ------------------------------------------------------------------
 
     def _ensure_tables(self) -> None:
-        """Lazily create the supplementary edge / full-definition tables."""
+        """Lazily create the supplementary edge / full-definition tables.
+
+        R11 #4: columns added after the initial table definition are migrated
+        via ``ALTER TABLE ADD COLUMN`` for existing catalogs.
+        """
         self._catalog._exec_commit(_EDGE_TABLE_SQL)
         self._catalog._exec_commit(_FULL_DEF_TABLE_SQL)
+        edge_cols = {
+            row[1]
+            for row in self._catalog._conn.execute(
+                "PRAGMA table_info(factor_dependency_edge)"
+            )
+        }
+        for col, col_type in (("logical_table", "TEXT"), ("join_policy", "TEXT")):
+            if col not in edge_cols:
+                self._catalog._exec_commit(
+                    f"ALTER TABLE factor_dependency_edge ADD COLUMN {col} {col_type}"
+                )
 
     def record_factor_edges(
         self,
@@ -166,17 +193,86 @@ class DependencyCatalog:
     ) -> None:
         """Record rich dependency edges for a factor (replacing previous edges).
 
+        R11 #8: the whole replace (legacy row + delete-old-edges + insert-all-
+        new-edges) is a single ``BEGIN IMMEDIATE`` transaction — a concurrent
+        ``factors_for_event`` reader or a crash can never observe a partial
+        edge set (0 edges / 1-of-5 edges).
+
         The flat legacy row is mirrored through
         ``FactorCatalog.record_factor_dependency`` so pre-R10 consumers
         (``list_factors_for_column`` / ``plan_updates_from_data_event`` on a raw
         ``FactorCatalog``) keep working.
         """
+        self.record_factor_manifest(
+            factor_id,
+            edges=edges,
+            referenced_columns=referenced_columns,
+            lookback=lookback,
+            frequency=frequency,
+            source_dataset=source_dataset,
+        )
+
+    # ------------------------------------------------------------------
+    # R11 #5/#8: atomic whole-definition mutation
+    # ------------------------------------------------------------------
+
+    def _begin_atomic(self) -> None:
+        """``BEGIN IMMEDIATE`` with bounded SQLITE_BUSY retry (mirrors _exec_commit)."""
+        import time
+
+        conn = self._catalog._conn
+        last_error: Exception | None = None
+        for attempt in range(6):
+            try:
+                conn.execute("BEGIN IMMEDIATE")
+                return
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower():
+                    raise
+                last_error = exc
+                time.sleep(0.05 * (attempt + 1))
+        raise last_error  # type: ignore[misc]
+
+    def _atomic_apply(self, fn) -> None:
+        """Run ``fn(conn)`` inside one atomic transaction (COMMIT/ROLLBACK)."""
+        conn = self._catalog._conn
+        self._begin_atomic()
+        try:
+            fn(conn)
+            conn.execute("COMMIT")
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:  # pragma: no cover - transaction may already be dead
+                pass
+            raise
+
+    def record_factor_manifest(
+        self,
+        factor_id: str,
+        *,
+        edges: Iterable[FactorDependencyEdge],
+        referenced_columns: Iterable[str] | None = None,
+        lookback: int = 0,
+        frequency: str | None = None,
+        source_dataset: str | None = None,
+        full_definition: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """原子写整个 factor dependency definition（legacy + edges [+ full spec]).
+
+        R11 #8: legacy upsert / old-edge delete / new-edge insert / full-spec
+        write 全部在一个 ``BEGIN IMMEDIATE`` 事务内提交，任何中间态（部分 edges、
+        edges 与 full spec 不一致）都不会被并发 reader 或 crash 观察到。
+
+        ``full_definition`` 非 None 时额外写 ``factor_full_definition`` 并同步
+        ``factor_registry.data_source_json``。
+        """
         self._ensure_tables()
-        edge_list = [FactorDependencyEdge.from_dict(e.to_dict()) for e in edges]
         fid = str(factor_id)
+        edge_list = [FactorDependencyEdge.from_dict(e.to_dict()) for e in edges]
         if source_dataset is None and edge_list:
             source_dataset = edge_list[0].source_dataset
-        cols = set()
+        cols: set[str] = set()
         for edge in edge_list:
             if edge.field_id:
                 cols.add(edge.field_id)
@@ -184,32 +280,97 @@ class DependencyCatalog:
                 cols.add(edge.physical_field)
         if referenced_columns:
             cols.update(str(c) for c in referenced_columns if c)
-        self._catalog.record_factor_dependency(
-            fid,
-            referenced_columns=sorted(cols),
-            lookback=lookback or max((e.lookback for e in edge_list), default=0),
-            frequency=frequency,
-            source_dataset=source_dataset,
-        )
-        self._catalog._exec_commit(
-            "DELETE FROM factor_dependency_edge WHERE factor_id = ?", (fid,)
-        )
-        for edge in edge_list:
-            self._catalog._exec_commit(
-                "INSERT OR REPLACE INTO factor_dependency_edge "
-                "(factor_id, source_dataset, field_id, physical_field, transform, "
-                " snapshot_semantics, lookback) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        lookback = lookback or max((e.lookback for e in edge_list), default=0)
+        now = datetime.now(timezone.utc).isoformat()
+
+        def _write(conn) -> None:
+            conn.execute(
+                "INSERT INTO factor_dependency "
+                "(factor_id, referenced_columns_json, lookback, frequency, source_dataset, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(factor_id) DO UPDATE SET "
+                "referenced_columns_json=excluded.referenced_columns_json, "
+                "lookback=excluded.lookback, frequency=excluded.frequency, "
+                "source_dataset=excluded.source_dataset, updated_at=excluded.updated_at",
                 (
                     fid,
-                    str(edge.source_dataset),
-                    str(edge.field_id),
-                    edge.physical_field or edge.field_id,
-                    edge.transform,
-                    edge.snapshot_semantics,
-                    int(edge.lookback),
+                    json.dumps(sorted(cols), ensure_ascii=False),
+                    int(lookback),
+                    frequency,
+                    source_dataset,
+                    now,
                 ),
             )
+            conn.execute(
+                "DELETE FROM factor_column_dep WHERE factor_id = ?", (fid,)
+            )
+            for col in sorted(cols):
+                conn.execute(
+                    "INSERT OR IGNORE INTO factor_column_dep (column_name, factor_id) "
+                    "VALUES (?, ?)",
+                    (col, fid),
+                )
+            conn.execute(
+                "DELETE FROM factor_dependency_edge WHERE factor_id = ?", (fid,)
+            )
+            for edge in edge_list:
+                conn.execute(
+                    "INSERT OR REPLACE INTO factor_dependency_edge "
+                    "(factor_id, source_dataset, field_id, physical_field, transform, "
+                    " snapshot_semantics, lookback, logical_table, join_policy) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        fid,
+                        str(edge.source_dataset),
+                        str(edge.field_id),
+                        edge.physical_field or edge.field_id,
+                        edge.transform,
+                        edge.snapshot_semantics,
+                        int(edge.lookback),
+                        edge.logical_table,
+                        edge.join_policy,
+                    ),
+                )
+            if full_definition is not None:
+                spec = {
+                    k: v
+                    for k, v in dict(full_definition).items()
+                    if v is not None
+                }
+                conn.execute(
+                    "INSERT INTO factor_full_definition (factor_id, spec_json, updated_at) "
+                    "VALUES (?, ?, ?) "
+                    "ON CONFLICT(factor_id) DO UPDATE SET "
+                    "spec_json=excluded.spec_json, updated_at=excluded.updated_at",
+                    (
+                        fid,
+                        json.dumps(spec, sort_keys=True, ensure_ascii=False, default=str),
+                        now,
+                    ),
+                )
+                ds_config = spec.get("data_source_config")
+                if ds_config:
+                    conn.execute(
+                        "UPDATE factor_registry SET data_source_json = ? "
+                        "WHERE factor_id = ?",
+                        (
+                            json.dumps(
+                                ds_config, sort_keys=True, default=str, ensure_ascii=False
+                            ),
+                            fid,
+                        ),
+                    )
+
+        self._atomic_apply(_write)
+        return {
+            "factor_id": fid,
+            "edges": [e.to_dict() for e in edge_list],
+            "referenced_columns": sorted(cols),
+            "lookback": lookback,
+            "frequency": frequency,
+            "source_dataset": source_dataset,
+            "full_definition": bool(full_definition),
+        }
 
     def get_factor_dependency_edges(self, factor_id: str) -> list[FactorDependencyEdge]:
         """Return all rich dependency edges recorded for ``factor_id``."""

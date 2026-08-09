@@ -130,6 +130,7 @@ def _declared_stateful_contract(canonical: str) -> dict[str, Any] | None:
     declared = execution_contract_overrides().get(canonical)
     if declared is None:
         return None
+    catalog = OperatorRegistry._catalog.get(canonical) or {}
     return {
         "kind": "recursive_state",
         "parameters": [

@@ -175,11 +175,14 @@ def ts_transition_count(condition, window=20, missing_policy="break"):
     return _make(condition, cols, out)
 
 
-def ts_time_since_change(condition, max_lookback=None, missing_policy="break"):
+def ts_time_since_change(condition, max_lookback=None, missing_policy="break", initial_semantics="since_transition"):
     limit = None if max_lookback is None else int(max_lookback)
     policy = str(missing_policy).lower()
     if policy not in ("break", "carry"):
         raise ValueError("missing_policy must be 'break' or 'carry'")
+    sem = str(initial_semantics).lower()
+    if sem not in ("since_transition", "state_age"):
+        raise ValueError("initial_semantics must be 'since_transition' or 'state_age'")
     cols = _cols(condition)
     rows = condition.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -188,6 +191,7 @@ def ts_time_since_change(condition, max_lookback=None, missing_policy="break"):
         truth = _truth(cv)
         last_change = -1
         prev = None
+        started = False
         for row in range(rows):
             if not np.isfinite(cv[row]):
                 if policy == "carry":
@@ -200,11 +204,18 @@ def ts_time_since_change(condition, max_lookback=None, missing_policy="break"):
                 # break: missing emits NaN and resets continuity
                 last_change = -1
                 prev = None
+                started = False
                 continue
             current = bool(truth[row])
             if prev is not None and current != prev:
                 last_change = row
             prev = current
+            if not started:
+                started = True
+                # #146: ``state_age`` starts the clock at the first VALID state;
+                # ``since_transition`` waits for the first transition.
+                if sem == "state_age" and last_change < 0:
+                    last_change = row
             if last_change >= 0:
                 distance = row - last_change
                 if limit is None or distance < limit:
@@ -216,6 +227,20 @@ def _event_positions(truth: np.ndarray, start: int, end: int) -> np.ndarray:
     return np.flatnonzero(truth[start:end])
 
 
+def _gaps_censored(valid_col: np.ndarray, positions: np.ndarray, start: int) -> np.ndarray | None:
+    """#145 mirror: inter-event gaps, censored (None) when an interval crosses
+    an UNKNOWN (NaN) row."""
+    if positions.size < 2:
+        return None
+    gaps = np.diff(positions).astype(float)
+    for idx in range(positions.size - 1):
+        a = start + int(positions[idx])
+        b = start + int(positions[idx + 1])
+        if np.any(~valid_col[a + 1 : b]):
+            return None  # interval crosses an unknown row -> censored
+    return gaps
+
+
 def ts_event_spacing_mean(condition, window=60, min_events=2):
     w = _pi(window, "window")
     min_e = max(2, int(min_events))
@@ -225,12 +250,15 @@ def ts_event_spacing_mean(condition, window=60, min_events=2):
     for i, c in enumerate(cols):
         cv = condition[c].to_numpy()
         truth = _truth(cv)
+        valid = np.isfinite(cv)
         for row in range(rows):
             start = max(0, row - w + 1)
             positions = _event_positions(truth, start, row + 1)
             if positions.size < min_e:
                 continue
-            gaps = np.diff(positions)
+            gaps = _gaps_censored(valid, positions, start)
+            if gaps is None:
+                continue  # censored: an interval crossed an unknown row
             out[row, i] = float(np.mean(gaps)) if gaps.size else np.nan
     return _make(condition, cols, out)
 
@@ -244,12 +272,15 @@ def ts_event_spacing_cv(condition, window=60, min_events=3):
     for i, c in enumerate(cols):
         cv = condition[c].to_numpy()
         truth = _truth(cv)
+        valid = np.isfinite(cv)
         for row in range(rows):
             start = max(0, row - w + 1)
             positions = _event_positions(truth, start, row + 1)
             if positions.size < min_e:
                 continue
-            gaps = np.diff(positions)
+            gaps = _gaps_censored(valid, positions, start)
+            if gaps is None:
+                continue  # censored: an interval crossed an unknown row
             if gaps.size and float(np.mean(gaps)) > 0:
                 out[row, i] = float(np.std(gaps) / np.mean(gaps))
     return _make(condition, cols, out)
@@ -266,7 +297,7 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("vwap_to_close_return", ("vwap", "close"), vwap_to_close_return, "close / vwap - 1."),
     ("ts_max_buildup", ("x", "d"), ts_max_buildup, "Rolling count of running-max updates."),
     ("ts_transition_count", ("condition", "window", "missing_policy"), ts_transition_count, "Count of state transitions in a window."),
-    ("ts_time_since_change", ("condition", "max_lookback", "missing_policy"), ts_time_since_change, "Rows since the latest state change."),
+    ("ts_time_since_change", ("condition", "max_lookback", "missing_policy", "initial_semantics"), ts_time_since_change, "Rows since the latest state change (since_transition or state_age)."),
     ("ts_event_spacing_mean", ("condition", "window", "min_events"), ts_event_spacing_mean, "Mean event spacing in a window."),
     ("ts_event_spacing_cv", ("condition", "window", "min_events"), ts_event_spacing_cv, "CV of event spacing in a window."),
 )

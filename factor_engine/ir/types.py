@@ -1142,16 +1142,102 @@ def availability_expr_of(descriptor: Any) -> AvailabilityExpr:
     return _LABEL_TO_EXPR.get(low, UNKNOWN)
 
 
-def latest_availability(expressions: Iterable[Any]) -> AvailabilityExpr:
-    """Return the LATEST availability expression (fail-closed).
+class MaxAvailability(AvailabilityExpr):
+    """The latest of several availability expressions, resolved CONCRETELY.
 
-    Unknown (+inf) wins: if any input is unknown the result is unknown
-    (review #275 — do not drop the unknown input and keep a known one).
+    R11 P0-06: the old ``latest_availability`` returned ``max(exprs,
+    key=lateness)`` — a static TYPE-level total order (``PubDate.lateness=90``
+    always beat ``SessionClose.lateness=40``) that ignores the actual dates.  A
+    factor combining a stale filing (PubDate 2026-01-10) with today's close
+    (2026-08-09) would therefore resolve to the OLD filing descriptor even
+    though the close is genuinely later — an availability PIT hole.
+
+    ``MaxAvailability`` keeps every child and resolves each against the concrete
+    ``row`` / ``calendar`` / ``timezone`` / ``decision_context`` at decision
+    time, returning the maximum of the CONCRETE timestamps.  ``label`` /
+    ``lateness`` remain the legacy max-lateness descriptor for backward-
+    compatible *static* catalog consumers; any concrete decision must use
+    ``resolve``.  An unknown child makes the whole expression unknown
+    (fail-closed — the unknown input is never dropped in favour of a known one).
+    """
+
+    __slots__ = ("children",)
+
+    def __init__(self, children: Iterable[AvailabilityExpr]):
+        kids = tuple(children)
+        if not kids:
+            raise ValueError("MaxAvailability requires at least one child")
+        self.children = kids
+
+    @property
+    def lateness(self) -> float:
+        return max((c.lateness for c in self.children), default=0.0)
+
+    @property
+    def label(self) -> str:
+        for child in self.children:
+            if isinstance(child, UnknownAvailability):
+                return "unknown"
+        return max(self.children, key=lambda c: c.lateness).label
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        resolved: list[Any] = []
+        for child in self.children:
+            if isinstance(child, UnknownAvailability):
+                raise ValueError(
+                    "MaxAvailability has an UnknownAvailability child; no concrete "
+                    "timestamp (fail-closed, R11 P0-06)"
+                )
+            ts = child.resolve(
+                row=row, calendar=calendar, timezone=timezone,
+                decision_context=decision_context,
+            )
+            if ts is None:
+                raise ValueError(
+                    f"MaxAvailability child {child.label!r} resolved to None; "
+                    "no concrete timestamp (fail-closed, R11 P0-06)"
+                )
+            resolved.append(ts)
+        return max(resolved)
+
+    def __eq__(self, other: Any) -> bool:
+        return (
+            type(self) is type(other)
+            and tuple(self.children) == tuple(getattr(other, "children", ()))
+        )
+
+    def __hash__(self) -> int:
+        return hash((type(self), tuple(self.children)))
+
+    def __str__(self) -> str:
+        return self.label
+
+    def __repr__(self) -> str:
+        return f"<MaxAvailability({','.join(c.label for c in self.children)})>"
+
+
+def latest_availability(expressions: Iterable[Any]) -> AvailabilityExpr:
+    """Return the LATEST availability expression (fail-closed, R11 P0-06).
+
+    Returns a :class:`MaxAvailability` carrying every child so the concrete
+    decision time resolves each child against the actual row / calendar /
+    timezone and takes the maximum of the real timestamps — never the static
+    descriptor-type total order.  Unknown (+inf) wins: if any input is unknown
+    the result is unknown (review #275 — do not drop the unknown input and keep
+    a known one).
     """
     exprs = [availability_expr_of(item) for item in expressions]
     if not exprs:
         return UNKNOWN
-    return max(exprs, key=lambda item: item.lateness)
+    if len(exprs) == 1:
+        return exprs[0]
+    return MaxAvailability(exprs)
 
 
 # ---------------------------------------------------------------------------
@@ -1281,6 +1367,7 @@ __all__ = [
     "KnowledgeTime",
     "LocalClose",
     "MIXED",
+    "MaxAvailability",
     "Midnight",
     "NextTradingDay",
     "NextTradingOpen",

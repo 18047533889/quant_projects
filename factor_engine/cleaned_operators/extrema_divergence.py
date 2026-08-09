@@ -1,15 +1,22 @@
 # -*- coding: utf-8 -*-
 """Confirmed-extremum divergence operators (2026-08 geometry/math expansion).
 
-Both operators are built on a single shared *confirmed-extremum* kernel.  A bar
-``k`` is a **confirmed peak** of a series when ``x_k`` is a strict maximum over
-the confirmation window ``[k-confirmation, k+confirmation]`` *and* the drop from
-the most recent confirmed trough exceeds ``prominence * x_k`` (troughs are
-symmetric: strict minimum over the window and drop from the most recent
-confirmed peak exceeds ``prominence * x_k``).  A confirmed extremum only becomes
-*usable* once its confirmation window has fully passed (``age >= confirmation``),
-so the kernel is strictly prefix-causal: output row ``r`` never looks past row
-``r`` and only sees extrema confirmed at or before ``r``.
+Both operators are built on a single shared *confirmed-extremum* kernel — the
+streaming ``StreamingConfirmedPivotLedger`` in
+``cleaned_operators/common/_pivot_ledger.py`` (R11 P0: no retrospective history
+rewrite).  A bar ``k`` is a **confirmed peak** of a series when ``x_k`` is a
+strict maximum over the full confirmation window
+``[k-confirmation, k+confirmation]`` (every element finite — a NaN inside the
+window blocks confirmation) *and* the drop from the most recent confirmed trough
+exceeds ``prominence * x_k`` (troughs are symmetric: strict minimum over the
+window and drop from the most recent confirmed peak exceeds
+``prominence * x_k``).  A confirmed extremum only becomes *usable* once its
+confirmation window has fully passed (``age >= confirmation``), so the kernel is
+strictly prefix-causal: output row ``r`` never looks past row ``r`` and only
+sees extrema confirmed at or before ``r``.  A future more-extreme same-side
+candidate supplements the ledger with a ``PivotSuperseded`` record — it never
+rewrites already-published extrema, and the supersession only affects rows from
+the new extremum's confirmation row onward.
 
 The family answers *whether two price-like series move together or quietly
 diverge at their turning points*:
@@ -30,6 +37,10 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.common._pivot_ledger import (
+    PivotLedgerResult,
+    confirmed_pivot_events,
+)
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
@@ -54,80 +65,17 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 # ---------------------------------------------------------------------------
 # shared kernels
 # ---------------------------------------------------------------------------
-def _confirmed_extrema(x: np.ndarray, prominence: float, confirmation: int) -> np.ndarray:
-    """Per-column confirmed-extremum detector (prefix-causal).
-
-    Returns an int array of the same length: ``+1`` = confirmed peak,
-    ``-1`` = confirmed trough, ``0`` = no confirmed extremum.  Bar ``j`` is
-    decided at time ``t = j + confirmation`` (its confirmation window is
-    complete), so the result at any row only uses rows ``<= t``.
-
-    R4-45: peaks and troughs *strictly alternate*.  After a confirmed peak only a
-    trough may be confirmed next (and vice-versa); a same-side candidate that is
-    more extreme than the last confirmed extremum of that side *replaces* it
-    instead of appending.  Two peaks are therefore never confirmed without an
-    intervening trough and a monotone run is never double-counted as several
-    turning points.  NaN bars are skipped: they neither break nor seed the chain.
-    """
-    n = len(x)
-    ext = np.zeros(n, dtype=np.int8)
-    last_peak = -1
-    last_trough = -1
-    last_side = 0  # 0 = none yet, +1 = last was a peak, -1 = last was a trough
-    conf = int(confirmation)
-    prom = float(prominence)
-    for t in range(2 * conf, n):
-        j = t - conf
-        seg = x[j - conf : j + conf + 1]
-        if not np.all(np.isfinite(seg)):
-            continue
-        xj = x[j]
-        left = seg[:conf]
-        right = seg[conf + 1 :]
-        is_peak = bool(np.all(xj > left) and np.all(xj > right))
-        is_trough = bool(np.all(xj < left) and np.all(xj < right))
-        if is_peak:
-            if last_side == -1:
-                # previous confirmed extremum is a trough: the new peak must
-                # clear a prominence rise from that trough.
-                if last_trough >= 0 and xj - x[last_trough] > prom * xj:
-                    ext[j] = 1
-                    last_peak = j
-                    last_side = 1
-            elif last_side == 0:
-                # seed the chain (first confirmed extremum needs no reference).
-                ext[j] = 1
-                last_peak = j
-                last_side = 1
-            elif last_peak >= 0 and xj > x[last_peak]:
-                # same-side candidate more extreme: replace, never append.
-                ext[last_peak] = 0
-                ext[j] = 1
-                last_peak = j
-        if is_trough:
-            if last_side == 1:
-                if last_peak >= 0 and x[last_peak] - xj > prom * xj:
-                    ext[j] = -1
-                    last_trough = j
-                    last_side = -1
-            elif last_side == 0:
-                ext[j] = -1
-                last_trough = j
-                last_side = -1
-            elif last_trough >= 0 and xj < x[last_trough]:
-                ext[last_trough] = 0
-                ext[j] = -1
-                last_trough = j
-    return ext
-
-
 def _local_confirmed_extrema(x: np.ndarray, prominence: float, confirmation: int) -> np.ndarray:
     """Per-column *candidate* extremum detector for the matching series ``y``.
 
-    Like ``_confirmed_extrema`` each bar is a strict local max/min over
-    ``±confirmation`` and must clear a prominence step from the most recent
-    opposite extremum — but there is **no** strict alternation state machine, so
-    several same-side candidates can coexist.
+    Distinct from the shared strictly-alternating chain in
+    ``cleaned_operators/common/_pivot_ledger.py``: each bar is a strict local
+    max/min over the full ``±confirmation`` window (any NaN inside the window
+    blocks it) and must clear a prominence step from the most recent *opposite*
+    extremum — but there is **no** strict alternation state machine, so several
+    same-side candidates can coexist.  It writes ``ext[j]`` monotonically at the
+    confirmation timestamp and never rewrites an earlier entry, so it is
+    prefix-causal (PIT-correct) by construction.
 
     R4-45: the strict alternating kernel is applied to the primary series ``x``,
     whose confirmed extrema define the turning-point chain.  For ``y`` we want
@@ -162,18 +110,17 @@ def _local_confirmed_extrema(x: np.ndarray, prominence: float, confirmation: int
 
 
 def _side_indices(
-    ext: np.ndarray, side: int, r: int, window: int, confirmation: int
+    ledger: PivotLedgerResult, side: int, r: int, window: int, confirmation: int
 ) -> list[int]:
-    """Indices of confirmed extrema of ``side`` known at row ``r`` and within
-    the trailing window ``[r-window+1, r]`` (extremum must be confirmed, i.e.
-    ``index + confirmation <= r``)."""
-    lo = max(0, r - window + 1)
-    hi = r - confirmation
-    out: list[int] = []
-    for j in range(lo, hi + 1):
-        if ext[j] == side:
-            out.append(j)
-    return out
+    """Indices of *active* confirmed extrema of ``side`` known at row ``r``.
+
+    Queries the shared ledger's per-row snapshot (``active_at``) so superseded
+    extrema are only removed from rows ``>= effective_at`` (PIT-correct; the old
+    implementation re-read a rewritten final array).  The trailing-window and
+    confirmation constraints of the historical ``_side_indices`` are preserved:
+    extremum bar in ``[r-window+1, r-confirmation]``.
+    """
+    return [ev.pivot_at for ev in ledger.active_at(r, window=window) if ev.side == side]
 
 
 def _match_y(
@@ -249,12 +196,14 @@ def _divergence_series(
     sgn = 1 if side == "peak" else -1
     for c in range(cols):
         x, y = x2d[:, c], y2d[:, c]
-        ext_x = _confirmed_extrema(x, prominence, conf)
+        # R11 P0: the x turning-point chain is the shared streaming ledger, so
+        # supersessions only affect rows from their effective_at onward.
+        ledger_x = confirmed_pivot_events(x, conf, float(prominence))
         # R4-45: y uses the candidate detector (local confirmed extrema), so the
         # matching set is not thinned by the x chain's strict alternation.
-        ext_y = _local_confirmed_extrema(y, prominence, conf)
+        ext_y = _local_confirmed_extrema(y, float(prominence), conf)
         for r in range(rows):
-            idx = _side_indices(ext_x, sgn, r, w, conf)
+            idx = _side_indices(ledger_x, sgn, r, w, conf)
             if len(idx) < 2:
                 continue
             p1, p2 = idx[-2], idx[-1]
@@ -290,11 +239,12 @@ def _confirmation_rate_series(
     sgn = 1 if side == "peak" else -1
     for c in range(cols):
         x, y = x2d[:, c], y2d[:, c]
-        ext_x = _confirmed_extrema(x, prominence, conf)
+        # R11 P0: shared streaming ledger for the x turning-point chain.
+        ledger_x = confirmed_pivot_events(x, conf, float(prominence))
         # R4-45: y uses the candidate detector for matching (see above).
-        ext_y = _local_confirmed_extrema(y, prominence, conf)
+        ext_y = _local_confirmed_extrema(y, float(prominence), conf)
         for r in range(rows):
-            idx = _side_indices(ext_x, sgn, r, w, conf)
+            idx = _side_indices(ledger_x, sgn, r, w, conf)
             if not idx:
                 continue
             matched = sum(1 for p in idx if _match_y(ext_y, sgn, p, r, tol, conf) is not None)

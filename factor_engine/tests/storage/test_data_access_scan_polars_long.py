@@ -31,7 +31,21 @@ def test_data_access_scan_polars_long_renames_axes():
             "Volume": [100.0, 200.0],
         }
     )
-    mock_store.scan_polars.return_value = base
+
+    class _FakeScanHandle:
+        """模拟 store.scan() 返回的 ScanHandle：只暴露 composition-only LazyFrame。
+
+        #收官轮 P0（Integration）：native Polars long 走 governed ``store.scan()``
+        （不再是 ``scan_polars`` 裸 LazyFrame 旁路）。
+        """
+
+        def __init__(self, lf):
+            self._lf = lf
+
+        def native_lazyframe(self):
+            return self._lf
+
+    mock_store.scan.return_value = _FakeScanHandle(base)
 
     with patch("storage.sources.data_access_source._get_store", return_value=mock_store):
         lf = src.scan_polars_long(["close", "volume"])
@@ -41,6 +55,6 @@ def test_data_access_scan_polars_long_renames_axes():
     row = lf.collect().row(0)
     assert row[0] == "2024-01-01"
     assert row[1] == "A"
-    mock_store.scan_polars.assert_called_once()
-    call_cols = mock_store.scan_polars.call_args.kwargs.get("columns")
+    mock_store.scan.assert_called_once()
+    call_cols = mock_store.scan.call_args.kwargs.get("columns")
     assert "Close" in call_cols

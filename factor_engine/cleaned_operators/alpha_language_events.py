@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.fiscal_strict import fiscal_period_key, period_ordinal
 from cleaned_operators.fundamental.transforms_v2 import (
     _lag_value,
     _pos_int,
@@ -60,7 +61,9 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
     )
 
 
-def _fundamental_metadata(name: str, description: str, params: list[str]) -> OperatorMetadata:
+def _fundamental_metadata(
+    name: str, description: str, params: list[str], *, unit: str = "level"
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="fundamental_period",
@@ -70,7 +73,7 @@ def _fundamental_metadata(name: str, description: str, params: list[str]) -> Ope
         tags=[
             "fundamental_period", "period_aware", "pit_safe", "causal",
             "production_extension", f"signature:{','.join(params)}->series",
-            "domain:fundamental", "unit:level", "cost:1",
+            "domain:fundamental", f"unit:{unit}", "cost:1",
         ],
     )
 
@@ -189,8 +192,10 @@ class EventClusterMeanSize(SeriesOperator):
         return frame_like(condition, map_rolling(cv, w, _fn))
 
 
-def _register_report_operator(name: str, params: Iterable[str], fn: Any, description: str) -> None:
-    metadata = _fundamental_metadata(name, description, list(params))
+def _register_report_operator(
+    name: str, params: Iterable[str], fn: Any, description: str, *, unit: str = "level"
+) -> None:
+    metadata = _fundamental_metadata(name, description, list(params), unit=unit)
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -225,6 +230,24 @@ def _report_yoy_lag(x, period_id, periods_per_year=4):
     n = _pos_int(periods_per_year, "periods_per_year")
 
     def calc(order, visible, current):
+        # Round-11 #180: a fiscal year is matched by (fiscal_year, fiscal_slot),
+        # NOT by a fixed ``periods_per_year`` ordinal lag.  The same slot of the
+        # prior fiscal year is found directly, so quarterly / semiannual /
+        # annual / 53-week / non-calendar fiscal years all resolve correctly
+        # even when the year had a different number of periods.
+        key = fiscal_period_key(current)
+        if key is not None:
+            target_year = key.fiscal_year - 1
+            for k in reversed(order):
+                if k == current:
+                    continue
+                kkey = fiscal_period_key(k)
+                if kkey is not None and (
+                    kkey.fiscal_year == target_year and kkey.fiscal_slot == key.fiscal_slot
+                ):
+                    return float(visible[k])
+            return np.nan
+        # Unparseable period id: fall back to the ordinal lag (legacy).
         return _lag_value(order, visible, current, n)
 
     return _walk_periods(x, period_id, calc)
@@ -235,12 +258,14 @@ _register_report_operator(
     ("x", "period_id", "periods"),
     _report_rolling_mean,
     "最近 K 个报告观测值的均值(非日频 ffill 的 ts_mean)。",
+    unit="same_as:x",
 )
 _register_report_operator(
     "report_yoy_lag",
     ("x", "period_id", "periods_per_year"),
     _report_yoy_lag,
-    "相同财政期的上一年度报告值(fin_lag periods=4)。",
+    "相同财政槽位的上一年度报告值(FiscalPeriodKey 同 slot 匹配，#180)。",
+    unit="same_as:x",
 )
 
 
@@ -325,12 +350,14 @@ _register_report_operator(
     ("f1", "f2", "f3", "period_id", "periods", "eps"),
     _report_change_breadth,
     "基本面变化广泛度: (上升字段数 - 下降字段数) / K, 每个字段按其自身报告历史 (change - median)/(1.4826·MAD) 居中标准化。",
+    unit="dimensionless",
 )
 _register_report_operator(
     "report_change_coherence",
     ("f1", "f2", "f3", "period_id", "periods"),
     _report_change_coherence,
     "基本面各维度变化方向一致性: 与主导符号一致的字段比例 [0,1]。",
+    unit="dimensionless",
 )
 
 

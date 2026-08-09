@@ -624,6 +624,17 @@ def panel_pandas_bridge(x: "pl.DataFrame", fn, *args, **kwargs) -> "pl.DataFrame
     if not cols:
         return x
     pdf = x.select(cols).to_pandas()
+    # R11 P0-03: restore the time column as a verified DatetimeIndex so an
+    # index-aware reference kernel (session/day grouping, ``index.normalize()``)
+    # sees the real time axis instead of a positional RangeIndex.
+    try:
+        from cleaned_operators.common._polars_bridge import frame_time_index
+    except Exception:  # pragma: no cover - defensive import
+        frame_time_index = None
+    if frame_time_index is not None:
+        _idx = frame_time_index(x)
+        if _idx is not None and len(pdf) == len(_idx):
+            pdf.index = _idx
     out = fn(pdf, *args, **kwargs)
     return x.with_columns([
         pl.Series(name=c, values=np.asarray(out[c], dtype=np.float64)) for c in cols

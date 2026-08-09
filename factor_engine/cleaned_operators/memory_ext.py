@@ -133,13 +133,20 @@ def _fractional_difference_series(x2d: np.ndarray, fd: float, cutoff: int) -> np
     for col in range(cols):
         colv = x2d[:, col]
         for r in range(rows):
-            k = c if c < r else r  # min(cutoff, t)
-            seg = colv[r - k : r + 1]  # x_{t-k}..x_t
+            # R11 #41: the fractional filter has a causal support of ``cutoff+1``
+            # terms (x_t .. x_{t-cutoff}).  The startup region ``r < cutoff``
+            # cannot apply the declared filter — a shortened prefix is a DIFFERENT
+            # transform under the same factor name, so it fails closed (NaN)
+            # until the full filter history is available (min_periods =
+            # cutoff + 1 rows).
+            if r < c:
+                continue
+            seg = colv[r - c : r + 1]  # x_{t-c}..x_t
             if not np.isfinite(seg).all():
                 out[r, col] = np.nan
                 continue
-            rev = seg[::-1]  # x_t, x_{t-1}, ..., x_{t-k}
-            out[r, col] = float(np.dot(rev, w[: k + 1]))
+            rev = seg[::-1]  # x_t, x_{t-1}, ..., x_{t-c}
+            out[r, col] = float(np.dot(rev, w))
     return out
 
 
@@ -192,12 +199,13 @@ class TsFractionalDifference(SeriesOperator):
     """分数差分变换 y_t = sum_k w_k x_{t-k}（二项权重递归，d∈(-1,1)）。
 
     d>0 移除长记忆（平稳化）；d<0 为分数积分。输出长度与输入一致；
-    因果支持内任意 NaN -> NaN。P1。
+    因果支持内任意 NaN -> NaN。R11 #41：启动区 ``r < cutoff``（分数滤波
+    历史未收敛）为 NaN，直到完整 ``cutoff+1`` 个因果项可用。P1。
     """
 
     metadata = _metadata(
         "ts_fractional_difference",
-        "分数差分变换（二项权重，d∈(-1,1) 内），长度保持。",
+        "分数差分变换（二项权重，d∈(-1,1) 内），启动区 NaN。",
         ["x", "fd", "cutoff"],
         unit="series",
         cost=3,
@@ -207,7 +215,12 @@ class TsFractionalDifference(SeriesOperator):
         fdv = float(fd)
         if not (np.isfinite(fdv) and -1.0 < fdv < 1.0):
             raise ValueError("fd must satisfy -1 < fd < 1")
-        c = int(cutoff)
+        if isinstance(cutoff, (bool, np.bool_)):
+            raise ValueError("cutoff must be an integer, not bool")
+        cf = float(cutoff)
+        if not np.isfinite(cf) or cf != float(int(cf)):
+            raise ValueError("cutoff must be an integer")
+        c = int(cf)
         if c < 1:
             raise ValueError("cutoff must be >= 1")
         return frame_like(x, _fractional_difference_series(x.to_numpy(dtype=float), fdv, c))

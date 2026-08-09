@@ -251,3 +251,23 @@ def _register_surface() -> None:
 
 
 _register_surface()
+
+
+# Round-11 #12 (#3): the survival trio are EPISODE-stateful — every active-row
+# output depends on the *historical completed-run distribution* (accumulated
+# since dataset origin) plus the current run's age, so a chunk computed without
+# that state diverges from the full run.  Declare the execution contract as
+# required_full_history (honest fail-closed): no segmented checkpoint-restore
+# exists for these single-pass kernels, so we never claim ``checkpoint``.
+from runtime.execution_contract import declare_stateful  # noqa: E402
+
+for _survival_canonical in (
+    "ts_state_age_percentile",
+    "ts_state_exit_hazard",
+    "ts_state_residual_life",
+):
+    declare_stateful(
+        _survival_canonical,
+        state_model="episode",
+        chunking="required_full_history",
+    )

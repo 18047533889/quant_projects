@@ -17,6 +17,7 @@ WS-B PanelSchema / PanelIdentity
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable
 
@@ -38,13 +39,27 @@ SKIP = frozenset((*_TIME_AXIS_COLUMNS, *_IDENTITY_COLUMNS))
 FE_TIME_COL = "__fe_time__"
 
 
+def _stable_axis_hash(parts: Iterable[Any]) -> int:
+    """Deterministic, process-stable hash over canonical serialisation.
+
+    R11 P0-08: Python's built-in ``hash()`` is process-randomised for ``str``,
+    so two workers (or a checkpoint/evidence layer in another process) could
+    disagree on the same panel identity.  Derive a stable digest from SHA-256
+    and fold it into a non-negative 63-bit int, safe as a dict key.
+    """
+    canonical = "\x1f".join(repr(part) for part in parts)
+    digest = hashlib.sha256(canonical.encode("utf-8", "surrogatepass")).digest()
+    return int.from_bytes(digest[:8], "big") & 0x7FFFFFFFFFFFFFFF
+
+
 def _hash_time_values(values: Iterable[Any]) -> int:
     """Deterministic hash of an ordered time axis.
 
     Normalises ``pd.Timestamp`` / ``datetime.datetime`` / ``datetime.date`` /
     ``numpy.datetime64`` to a canonical ``isoformat`` string so the same
     timeline hashes identically whether it came from a pandas ``DatetimeIndex``
-    or a polars ``Datetime``/``Date`` column.
+    or a polars ``Datetime``/``Date`` column.  R11 P0-08: uses the SHA-256
+    stable hash, not built-in ``hash()``.
     """
     out = []
     for v in values:
@@ -56,7 +71,7 @@ def _hash_time_values(values: Iterable[Any]) -> int:
             out.append(v.isoformat())
         else:
             out.append(str(v))
-    return hash(tuple(out))
+    return _stable_axis_hash(out)
 
 
 def _multiindex_time_hash(index: pd.MultiIndex) -> int | None:
@@ -66,7 +81,8 @@ def _multiindex_time_hash(index: pd.MultiIndex) -> int | None:
     verified, not blanked to ``None``.  Prefer a level whose name is a time-axis
     name (``timestamp`` / ``date`` / ``trade_date`` / ``datetime``); otherwise
     the first ``DatetimeIndex`` level.  ``None`` only when no level is a
-    datetime axis (a genuine unknown, not an accidental blank).
+    datetime axis (a genuine unknown, not an accidental blank).  R11 P0-08:
+    hashes the full ordered time level, not the deduped set.
     """
     levels = index.levels
     names = list(index.names)
@@ -77,6 +93,26 @@ def _multiindex_time_hash(index: pd.MultiIndex) -> int | None:
         if isinstance(level, pd.DatetimeIndex):
             return _hash_time_values(level)
     return None
+
+
+def _multiindex_row_order_hash(index: pd.MultiIndex) -> int:
+    """Stable hash of the FULL ordered ``(level...)`` pairing of a MultiIndex.
+
+    R11 P0-07: hashing ``index.levels`` alone only captures the *sets* of
+    timestamps and instruments — two panels with identical levels but different
+    row ordering/pairing (``(t1,A),(t1,B),...`` vs ``(t1,B),(t1,A),...``) are
+    positionally different executions yet hash the same.  Encode ``names +
+    levels + codes`` (the exact ordered pairing in compact integer form) into a
+    SHA-256 stable digest so a shifted / permuted / re-paired MultiIndex fails
+    loudly instead of silently pairing rows positionally.
+    """
+    names = tuple(str(n) for n in index.names)
+    levels = tuple(tuple(level.tolist()) for level in index.levels)
+    try:
+        codes = tuple(tuple(int(c) for c in code) for code in index.codes)
+    except AttributeError:  # pragma: no cover - pandas < 1.4 fallback
+        codes = tuple(tuple(int(c) for c in index.labels[i]) for i in range(index.nlevels))
+    return _stable_axis_hash(("multiindex_row", names, levels, codes))
 
 
 def _multiindex_instrument_hash(
@@ -100,7 +136,7 @@ def _multiindex_instrument_hash(
         if isinstance(level, pd.DatetimeIndex):
             continue  # datetime level that is not time-named: ambiguous, skip
         parts.append((name, tuple(level)))
-    return hash((value_cols, tuple(parts)))
+    return _stable_axis_hash(("instrument_axis", value_cols, tuple(parts)))
 
 
 @dataclass(frozen=True)
@@ -126,21 +162,27 @@ class PanelIdentity:
 
     ``time_index_hash`` 是时间轴内容哈希（pandas 取 index；polars 取时间列），
     无时间轴时为 ``None``；``instrument_axis_hash`` 是有序标的（值）列的哈希；
-    ``grain``/``frequency`` 来自元数据或推导（``"unknown"`` 表示未声明）。
-    多输入算子必须在调用内核前验证所有输入共享同一 PanelIdentity —— 日期轴
-    移动一天、标的列置换都必须 loud-fail。
+    ``row_order_hash`` 是 ``(timestamp, instrument, ...)`` 完整有序行配对哈希
+    （仅 MultiIndex 长面板非 ``None`` —— R11 P0-07 行级 identity，levels 相同
+    但配对/顺序不同的面板不再是同一身份）；``grain``/``frequency`` 来自元数据
+    或推导（``"unknown"`` 表示未声明）。 多输入算子必须在调用内核前验证所有
+    输入共享同一 PanelIdentity —— 日期轴移动一天、标的列置换、MultiIndex 行
+    重排都必须 loud-fail。 所有哈希均为 SHA-256 stable digest（R11 P0-08），
+    跨进程可复现。
     """
 
     time_index_hash: int | None
     instrument_axis_hash: int
     grain: str
     frequency: str
+    row_order_hash: int | None = None
 
     def describe(self) -> str:
         return (
             "PanelIdentity("
             f"time_hash={self.time_index_hash}, "
             f"instrument_hash={self.instrument_axis_hash}, "
+            f"row_order_hash={self.row_order_hash}, "
             f"grain={self.grain!r}, frequency={self.frequency!r})"
         )
 
@@ -165,6 +207,7 @@ class PanelIdentity:
         if (
             self.time_index_hash != other.time_index_hash
             or self.instrument_axis_hash != other.instrument_axis_hash
+            or self.row_order_hash != other.row_order_hash
         ):
             return False
         if (
@@ -184,10 +227,10 @@ class PanelIdentity:
     def __hash__(self) -> int:
         # R9-P0-014: deterministic hash over the execution-identity axes only —
         # consistent with __eq__ regardless of known/unknown metadata state.
-        return hash((self.time_index_hash, self.instrument_axis_hash))
-
-    def __hash__(self) -> int:
-        return hash((self.time_index_hash, self.instrument_axis_hash))
+        # R11 P0-08: stable SHA-256 digest, never Python's built-in hash().
+        return _stable_axis_hash(
+            ("panel_identity", self.time_index_hash, self.instrument_axis_hash, self.row_order_hash)
+        )
 
     @classmethod
     def from_frame(cls, frame: Any) -> "PanelIdentity":
@@ -200,8 +243,10 @@ class PanelIdentity:
                 # columns were indistinguishable on the time axis.  Detect a
                 # datetime level (by name first, then by type) and hash it.
                 time_hash = _multiindex_time_hash(frame.index)
+                row_order_hash = _multiindex_row_order_hash(frame.index)
             else:
                 time_hash = _hash_time_values(frame.index)
+                row_order_hash = None
             columns = tuple(str(c) for c in frame.columns)
             value_cols = tuple(c for c in columns if c not in SKIP)
             grain, frequency = _pandas_grain_frequency(frame)
@@ -211,9 +256,10 @@ class PanelIdentity:
                     frame.index, value_cols
                 )
                 if isinstance(frame.index, pd.MultiIndex)
-                else hash(value_cols),
+                else _stable_axis_hash(("wide_value_cols", value_cols)),
                 grain=grain,
                 frequency=frequency,
+                row_order_hash=row_order_hash,
             )
         if pl is not None and isinstance(frame, pl.DataFrame):
             columns = tuple(str(c) for c in frame.columns)
@@ -225,7 +271,7 @@ class PanelIdentity:
             value_cols = tuple(c for c in columns if c not in SKIP)
             return cls(
                 time_index_hash=time_hash,
-                instrument_axis_hash=hash(value_cols),
+                instrument_axis_hash=_stable_axis_hash(("wide_value_cols", value_cols)),
                 grain="unknown",
                 frequency="unknown",
             )
@@ -430,8 +476,56 @@ def align_cols(*dfs: pl.DataFrame) -> list[str]:
     return base_cols
 
 
+def frame_time_index(frame: Any) -> pd.DatetimeIndex | None:
+    """The pandas ``DatetimeIndex`` a polars wide frame's time column represents.
+
+    R11 P0-03: a polars frame carries its time axis as a *column*
+    (``__fe_time__`` preferred, then ``date`` / ``timestamp`` / ``trade_date`` /
+    ``datetime``).  Converting to pandas and discarding that column turns the
+    row axis into a positional ``RangeIndex``, which silently breaks any pandas
+    reference kernel that is index-aware — session/day grouping,
+    ``index.normalize()``, calendar differences, intraday aggregation, event
+    clocks, time-of-day features.  Restoring the index keeps those kernels
+    correct.  Returns ``None`` when the frame has no time column (a genuinely
+    positional panel).
+    """
+    if frame is None or getattr(frame, "columns", None) is None:
+        return None
+    time_col = next((c for c in _TIME_AXIS_COLUMNS if c in frame.columns), None)
+    if time_col is None:
+        return None
+    values = frame[time_col].to_list()
+    if not values:
+        return None
+    idx = pd.DatetimeIndex(values)
+    if not idx.is_unique:
+        raise ValueError(
+            f"polars panel time axis {time_col!r} has duplicate values; a factor "
+            "row axis must be unique (R11 P0-03 fail-closed)"
+        )
+    if not idx.is_monotonic_increasing:
+        raise ValueError(
+            f"polars panel time axis {time_col!r} is not monotonically increasing; "
+            "restoring a shuffled time axis would pair rows against the wrong "
+            "dates (R11 P0-03 fail-closed)"
+        )
+    return idx
+
+
 def to_pandas_panel(df: pl.DataFrame) -> pd.DataFrame:
-    return df.select(numeric_cols(df)).to_pandas()
+    """polars wide frame -> pandas panel, preserving the true time axis.
+
+    R11 P0-03: the time column is restored as the pandas ``DatetimeIndex``
+    (verified unique + monotonic) instead of being dropped to a positional
+    ``RangeIndex``.  Index-aware reference kernels (session/day grouping,
+    calendar transforms) then see the real dates; positional kernels are
+    unaffected because ``.to_numpy()`` rows are unchanged.
+    """
+    out = df.select(numeric_cols(df)).to_pandas()
+    idx = frame_time_index(df)
+    if idx is not None and len(out) == len(idx):
+        out.index = idx
+    return out
 
 
 def from_pandas_panel(base: pl.DataFrame, out: pd.DataFrame) -> pl.DataFrame:

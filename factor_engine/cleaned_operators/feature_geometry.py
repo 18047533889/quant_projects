@@ -15,7 +15,10 @@ correlation structure* behaves in time:
   (relation-strength breaks, e.g. valuation-vs-profitability).
 
 All three inputs are robust-standardised per window before the correlation
-matrix is built; complete-case only; fail-closed to NaN on degenerate windows.
+matrix is built; the correlation is the **biweight midcorrelation** (a robust
+correlation that differs from Pearson on outlying pairs — review #29), not the
+Pearson correlation on z-scores (which is affine-invariant and would add no
+expressiveness).  Complete-case only; fail-closed to NaN on degenerate windows.
 Prefix-causal and deterministic.
 """
 from __future__ import annotations
@@ -103,9 +106,65 @@ def _feature_matrix(c1: np.ndarray, c2: np.ndarray, c3: np.ndarray, min_rows: in
     return z
 
 
+def _biweight_midcorr(a: np.ndarray, b: np.ndarray) -> float:
+    """Biweight midcorrelation (Wilcox 2005 / WGCNA) between two vectors.
+
+    Pearson correlation is invariant to independent affine rescaling, so
+    computing it on median/MAD z-scores adds NO expressiveness over the raw
+    correlation (review finding #29).  The biweight midcorrelation weights each
+    observation down *before* the covariance (``(1-u^2)^2`` for ``|u|<1`` with
+    ``u=(x-med)/(9*MAD)``), so outliers are down-weighted and the result is a
+    genuinely different, robust statistic.
+    """
+    if a.size < 3 or b.size < 3:
+        return np.nan
+    ok = np.isfinite(a) & np.isfinite(b)
+    if int(ok.sum()) < 3:
+        return np.nan
+    a = a[ok]
+    b = b[ok]
+    ma = float(np.median(a))
+    mb = float(np.median(b))
+    mada = float(np.median(np.abs(a - ma)))
+    madb = float(np.median(np.abs(b - mb)))
+    if mada <= _EPS:
+        mada = float(np.std(a))
+    if madb <= _EPS:
+        madb = float(np.std(b))
+    if mada <= _EPS or madb <= _EPS:
+        return np.nan  # degenerate column: no scale -> fail closed
+    u = (a - ma) / (9.0 * mada)
+    v = (b - mb) / (9.0 * madb)
+    wu = np.where(np.abs(u) < 1.0, (1.0 - u * u) ** 2, 0.0)
+    wv = np.where(np.abs(v) < 1.0, (1.0 - v * v) ** 2, 0.0)
+    if float(np.sum(wu * wv)) <= _EPS:
+        return np.nan
+    da = (a - ma) * wu
+    db = (b - mb) * wv
+    num = float(np.sum(da * db))
+    den = float(np.sqrt(np.sum(da * da) * np.sum(db * db)))
+    if den <= _EPS:
+        return np.nan
+    return float(np.clip(num / den, -1.0, 1.0))
+
+
+def _bicor_matrix(z: np.ndarray) -> np.ndarray | None:
+    """Pairwise biweight midcorrelation matrix (robust, not Pearson)."""
+    m = z.shape[1]
+    out = np.eye(m, dtype=float)
+    for i in range(m):
+        for j in range(i + 1, m):
+            c = _biweight_midcorr(z[:, i], z[:, j])
+            if not np.isfinite(c):
+                return None
+            out[i, j] = c
+            out[j, i] = c
+    return out
+
+
 def _corr_eigenvalues(z: np.ndarray) -> np.ndarray | None:
-    c = np.corrcoef(z, rowvar=False)
-    if not np.all(np.isfinite(c)):
+    c = _bicor_matrix(z)
+    if c is None:
         return None
     w = np.maximum(np.linalg.eigvalsh(c), 0.0)
     if w.sum() <= _EPS:
@@ -154,7 +213,9 @@ def _dominant_direction(z: np.ndarray) -> np.ndarray | None:
     gap = float(w[-1] - (w[-2] if w.size >= 2 else 0.0))
     if gap / float(w.sum()) < _MIN_EIGENGAP:
         return None
-    c = np.corrcoef(z, rowvar=False)
+    c = _bicor_matrix(z)
+    if c is None:
+        return None
     _, v = np.linalg.eigh(c)
     v1 = v[:, -1]
     # deterministic orientation: make the largest-|loading| element positive.
@@ -185,6 +246,27 @@ def _subspace_rotation_chunk(c1, c2, c3, recent: int, prior: int, min_rows: int)
     return float(ang / (0.5 * np.pi))  # [0, 1]: 0 = same regime, 1 = orthogonal
 
 
+def _true_beta(yy: np.ndarray, xx: np.ndarray, min_pairs: int) -> float | None:
+    """OLS slope ``Cov(y, x)/Var(x)`` — the TRUE beta, not a correlation.
+
+    Review finding #30: standardising BOTH series and taking the slope
+    degenerates beta to the correlation (a correlation break, not a beta
+    break).  The operator is named ``beta_break``, so it must report a change
+    in the genuine regression coefficient ``Cov(y,x)/Var(x)`` (which carries
+    ``unit(y)/unit(x)``).  The break score is then normalised by
+    ``1+|beta_prior|`` so the relative change stays scale-aware.
+    """
+    ok = np.isfinite(yy) & np.isfinite(xx)
+    if int(ok.sum()) < min_pairs:
+        return None
+    yy = yy[ok]
+    xx = xx[ok]
+    vx = float(np.var(xx))
+    if vx <= _EPS:
+        return None
+    return float(np.cov(yy, xx, ddof=0)[0, 1] / vx)
+
+
 def _beta_break_chunk(yc, xc, recent: int, prior: int, min_pairs: int) -> float:
     n = yc.shape[0]
     if n < recent + prior:
@@ -194,32 +276,8 @@ def _beta_break_chunk(yc, xc, recent: int, prior: int, min_pairs: int) -> float:
     yp = yc[n - recent - prior : n - recent]
     xp = xc[n - recent - prior : n - recent]
 
-    def _std_beta(yy, xx) -> float | None:
-        ok = np.isfinite(yy) & np.isfinite(xx)
-        if int(ok.sum()) < min_pairs:
-            return None
-        yy = yy[ok]
-        xx = xx[ok]
-        # R5 P1-42(b): raw beta carries the units of y/x, so a
-        # ``|Δβ|/(1+|β|)`` break is not comparable across arbitrary y/x pairs.
-        # Standardise both series first (robust z-score): the resulting beta IS
-        # the (robust) correlation — unitless — so recent-vs-prior breaks become
-        # scale-free.
-        my = float(np.median(yy))
-        mx = float(np.median(xx))
-        sy = _robust_scale(yy)
-        sx = _robust_scale(xx)
-        if sy is None or sx is None:
-            return None
-        zy = (yy - my) / sy
-        zx = (xx - mx) / sx
-        vx = float(np.var(zx))
-        if vx <= _EPS:
-            return None
-        return float(np.cov(zy, zx, ddof=0)[0, 1] / vx)
-
-    br = _std_beta(yr, xr)
-    bp = _std_beta(yp, xp)
+    br = _true_beta(yr, xr, min_pairs)
+    bp = _true_beta(yp, xp, min_pairs)
     if br is None or bp is None:
         return np.nan
     return float((br - bp) / (1.0 + abs(bp)))
@@ -369,21 +427,21 @@ class TsFeatureSubspaceRotation(SeriesOperator):
     source="feature_geometry",
 )
 class TsBetaBreakScore(SeriesOperator):
-    """字段关系突变（recent vs prior 滚动 beta 的归一化变化）。
+    """字段关系突变（recent vs prior 滚动真实 beta 的归一化变化）。
 
-    ``(beta_recent - beta_prior) / (1 + |beta_prior|)``：y 对 x 的敏感度在
-    recent 与 prior 窗口之间变化多大。y=valuation、x=profitability/growth 等
-    组合可捕捉"估值-基本面关系断裂"。R5 P1-42(b)：beta 有量纲（y/x 单位），
-    直接比较 ``|Δβ|/(1+|β|)`` 在不同 y/x 组合间不可比——这里先把 x、y 各自
-    robust 标准化，beta 即（稳健）相关系数、无量纲，再比较。P1。
+    ``(beta_recent - beta_prior) / (1 + |beta_prior|)``，其中
+    ``beta = Cov(y, x)/Var(x)`` 是真实回归斜率（携带 unit(y)/unit(x)）。
+    Review #30：若把 x、y 各自标准化再取斜率，beta 就退化成相关系数——那是
+    correlation break，不是 beta break。本算子坚持真实 beta；断点分数再用
+    ``1+|β_prior|`` 归一化，使其在不同 y/x 组合间仍是相对变化。P1。
     """
 
     metadata = _metadata(
         "ts_beta_break_score",
-        "recent vs prior 标准化 beta(=相关)变化 (Δcorr)/(1+|corr_prior|)。",
+        "recent vs prior 真实 beta=Cov(y,x)/Var(x) 变化 (Δβ)/(1+|β_prior|)。",
         ["y", "x", "recent_window", "prior_window"],
         domain="price_volume",
-        unit="ratio",
+        unit="unit(y)/unit(x)",
         cost=5,
     )
 

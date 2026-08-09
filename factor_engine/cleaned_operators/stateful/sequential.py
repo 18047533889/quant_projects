@@ -307,3 +307,18 @@ def _register_surface() -> None:
 
 
 _register_surface()
+
+
+# Round-11 #12 (#4): ``ts_cusum_pressure`` is a recursive two-sided CUSUM —
+# ``S⁺_t = max(0, S⁺_{t-1} + z - drift)`` / ``S⁻_t = min(0, S⁻_{t-1} + z + drift)``
+# — the accumulator carries across rows, so an independent chunk (starting from
+# S⁺ = S⁻ = 0) diverges from the full run even though the baseline is re-estimated
+# per row.  Declare recursive / required_full_history (no segmented checkpoint
+# restore exists; honest fail-closed).
+from runtime.execution_contract import declare_stateful  # noqa: E402
+
+declare_stateful(
+    "ts_cusum_pressure",
+    state_model="recursive",
+    chunking="required_full_history",
+)

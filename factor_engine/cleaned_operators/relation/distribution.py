@@ -21,12 +21,21 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import check_window, frame_like, register_polars_bridge
 
 
-def _metadata(name: str, description: str, params: list[str], *, category: str, unit: str) -> OperatorMetadata:
-    return OperatorMetadata(
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    category: str,
+    unit: str,
+    output_unit: str | None = None,
+    param_specs: dict[str, Any] | None = None,
+) -> OperatorMetadata:
+    metadata = OperatorMetadata(
         name=name,
         category=category,
         description=description,
@@ -37,13 +46,31 @@ def _metadata(name: str, description: str, params: list[str], *, category: str, 
             f"signature:{','.join(params)}->series", "domain:relation",
             f"unit:{unit}", "cost:2",
         ],
+        output_unit=output_unit,
+        param_specs=dict(param_specs or {}),
     )
+    return metadata
 
 
 def _stack_panels(*panels: pd.DataFrame) -> np.ndarray:
+    """Stack positional panels to (N, rows, cols) without reindexing.
+
+    R11 #122: panels are ``timestamp x instrument`` relation panels that must
+    share the exact same date axis and instrument columns.  A silent
+    ``reindex`` (union) could re-pair a row to a different date or an instrument
+    column to a different name after an upstream misalignment, silently
+    corrupting the per-cell concentration / mobility statistic.  Different axes
+    raise instead.
+    """
     base = panels[0]
+    for position, panel in enumerate(panels[1:], start=1):
+        if not panel.index.equals(base.index) or not panel.columns.equals(base.columns):
+            raise ValueError(
+                f"relation panel {position} has a different index/columns than "
+                "panel 0 (fail-closed; no silent reindex)"
+            )
     arrays = [
-        np.asarray(p.reindex(index=base.index, columns=base.columns).to_numpy(dtype=float))
+        np.asarray(p.to_numpy(dtype=float))
         for p in panels
     ]
     return np.stack(arrays, axis=0)
@@ -52,6 +79,61 @@ def _stack_panels(*panels: pd.DataFrame) -> np.ndarray:
 def _has_spread(values: np.ndarray) -> bool:
     valid = values[np.isfinite(values)]
     return valid.size >= 2 and float(np.std(valid, ddof=0)) >= 1e-12
+
+
+def _stack_id_panels(*panels: pd.DataFrame) -> np.ndarray:
+    """Stack object-dtype identity panels to (N, rows, cols) without reindexing.
+
+    Same fail-closed axis contract as :func:`_stack_panels` (R11 #122).
+    """
+    base = panels[0]
+    for position, panel in enumerate(panels[1:], start=1):
+        if not panel.index.equals(base.index) or not panel.columns.equals(base.columns):
+            raise ValueError(
+                f"relation identity panel {position} has a different index/columns "
+                "than panel 0 (fail-closed; no silent reindex)"
+            )
+    return np.stack([np.asarray(p.to_numpy(dtype=object)) for p in panels], axis=0)
+
+
+def _id_key(value: Any) -> str | None:
+    """Normalise an identity cell to a string key, or None when missing."""
+    if value is None:
+        return None
+    try:
+        if bool(pd.isna(value)):
+            return None
+    except (TypeError, ValueError):
+        pass
+    s = str(value)
+    if s in ("", "nan", "None", "NaN", "<NA>", "NaT"):
+        return None
+    return s
+
+
+def _id_value_map(
+    ids: np.ndarray, values: np.ndarray
+) -> dict[str, float] | None:
+    """Build ``{id: value}`` for one cell across ranked slots (fail-closed).
+
+    Returns ``None`` when a present identity has a missing value (unknown
+    holding is not a confirmed 0) or the same identity repeats with conflicting
+    values — mirroring the shareholder churn snapshot-validity contract.
+    """
+    out: dict[str, float] = {}
+    for k in range(ids.shape[0]):
+        key = _id_key(ids[k])
+        if key is None:
+            continue
+        v = values[k]
+        if not np.isfinite(v):
+            return None
+        if key in out:
+            if abs(out[key] - float(v)) > 1e-12:
+                return None
+            continue
+        out[key] = float(v)
+    return out
 
 
 @register_operator(
@@ -152,7 +234,10 @@ class RelationDistributionSkew(SeriesOperator):
         "名次面板截面偏度（variadic：接收 3 个及以上关系面板列数组）。",
         ["relations"],
         category="relation",
-        unit="level",
+        # R11 #123: skewness is a standardized third moment — dimensionless,
+        # never a raw "level".
+        unit="dimensionless",
+        output_unit="dimensionless",
     )
     # R5-06: genuinely variadic (3+ ranked panels in one positional slot).
     metadata.tags = list(metadata.tags) + ["variadic"]
@@ -185,7 +270,9 @@ class RelationDistributionKurtosis(SeriesOperator):
         "名次面板截面峰度（variadic：接收 4 个及以上关系面板列数组）。",
         ["relations"],
         category="relation",
-        unit="level",
+        # R11 #123: kurtosis is a standardized fourth moment — dimensionless.
+        unit="dimensionless",
+        output_unit="dimensionless",
     )
     # R5-06: genuinely variadic (4+ ranked panels in one positional slot).
     metadata.tags = list(metadata.tags) + ["variadic"]
@@ -282,6 +369,16 @@ class RelationConcentrationAcceleration(SeriesOperator):
         ["hhi", "window"],
         category="relation",
         unit="ratio",
+        # R11 #125: the second difference (v[t]-v[t-w]) - (v[t-w]-v[t-2w])
+        # needs 2*window prior rows; declared as a compound history formula so
+        # the history planner never under-provisions warm-up.
+        param_specs={
+            "window": ParamSpec(
+                dtype=int,
+                min=1,
+                history_formula="2 * window",
+            ),
+        },
     )
 
     def _calculate_series(self, hhi: pd.DataFrame, window: int = 5, **_: Any) -> pd.DataFrame:
@@ -329,15 +426,28 @@ def _mean_panel_change(stacked: np.ndarray, window: int) -> np.ndarray:
     source="relation.distribution",
 )
 class RelationRankMobility(SeriesOperator):
-    """名次面板移动性：窗口内各名次绝对变化的均值。"""
+    """名次**槽位**（slot）移动性：窗口内各名次槽绝对变化的均值。
+
+    R11 #124: this is SLOT mobility — ``rank1`` today may belong to a different
+    entity than ``rank1`` five days ago, so ``rank1_value_t - rank1_value_{t-w}``
+    is NOT the same entity's mobility.  For the entity-matched analogue (same
+    ShareholderId across periods) use ``relation_rank_entity_mobility``.
+    """
 
     metadata = _metadata(
         "relation_rank_mobility",
-        "名次面板平均绝对变化。",
+        "名次槽位移动性（slot）：窗口内各名次槽绝对变化的均值；实体匹配见 relation_rank_entity_mobility。",
         ["rank1", "rank2", "rank3", "rank4", "rank5", "rank6", "rank7", "rank8", "rank9", "rank10", "window"],
         category="relation",
-        unit="level",
+        # R11 #182: rank mobility is measured in rank steps — the mean absolute
+        # change of rank values across time, so the unit is the rank step, not a
+        # bare level.  slot-identity: values at a fixed rank slot across time
+        # are not the same entity, so this must never be read as entity churn.
+        unit="rank",
+        output_unit="rank",
+        param_specs={"window": ParamSpec(dtype=int, min=1)},
     )
+    metadata.tags = list(metadata.tags) + ["slot_identity"]
 
     def _calculate_series(
         self, rank1: pd.DataFrame | None = None, rank2: pd.DataFrame | None = None,
@@ -361,6 +471,66 @@ class RelationRankMobility(SeriesOperator):
 
 
 @register_operator(
+    name="relation_rank_entity_mobility",
+    category="relation",
+    business_category="relation",
+    canonical="relation_rank_entity_mobility",
+    source="relation.distribution",
+)
+class RelationRankEntityMobility(SeriesOperator):
+    """实体匹配的名次值移动性：跨期同一实体 |value_cur - value_prev| 的均值。
+
+    R11 #124: the slot-based ``relation_rank_mobility`` compares the value at a
+    fixed rank slot across time, which may be two DIFFERENT entities.  This
+    operator pairs holders by ShareholderId across the current and previous
+    snapshots and averages the absolute change over the common entity set, so a
+    pure rank swap with unchanged holdings yields zero mobility here.
+    """
+
+    metadata = _metadata(
+        "relation_rank_entity_mobility",
+        "实体匹配的名次值移动性：对跨期共同实体取 |Δvalue| 均值。",
+        [
+            "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+            "sid1", "sid2", "sid3", "sid4", "sid5", "sid6", "sid7", "sid8", "sid9", "sid10",
+            "p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10",
+            "psid1", "psid2", "psid3", "psid4", "psid5", "psid6", "psid7", "psid8", "psid9", "psid10",
+        ],
+        category="relation",
+        unit="same_as:value",
+        output_unit="same_as:value",
+    )
+    metadata.tags = list(metadata.tags) + ["entity_identity"]
+
+    def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
+        if len(args) != 40:
+            raise ValueError(
+                "relation_rank_entity_mobility requires 40 panels "
+                "(10 current values + 10 current ids + 10 previous values + 10 previous ids)"
+            )
+        base = args[0]
+        cur = _stack_panels(*args[:10])
+        cur_id = _stack_id_panels(*args[10:20])
+        prev = _stack_panels(*args[20:30])
+        prev_id = _stack_id_panels(*args[30:40])
+        _, rows, cols = cur.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for r in range(rows):
+            for c in range(cols):
+                cur_map = _id_value_map(cur_id[:, r, c], cur[:, r, c])
+                prev_map = _id_value_map(prev_id[:, r, c], prev[:, r, c])
+                if cur_map is None or prev_map is None:
+                    continue
+                common = [k for k in cur_map if k in prev_map]
+                if not common:
+                    continue
+                out[r, c] = float(
+                    np.mean([abs(cur_map[k] - prev_map[k]) for k in common])
+                )
+        return frame_like(base, out)
+
+
+@register_operator(
     name="relation_share_mobility",
     category="relation",
     business_category="relation",
@@ -375,7 +545,10 @@ class RelationShareMobility(SeriesOperator):
         "份额面板平均绝对变化。",
         ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "window"],
         category="relation",
-        unit="ratio",
+        # R11 #182: share mobility preserves the share unit — it is a change of
+        # shares, not a ratio between unrelated quantities.
+        unit="same_as:share",
+        output_unit="same_as:share",
     )
 
     def _calculate_series(
@@ -450,7 +623,9 @@ class GroupSkewness(SeriesOperator):
         "组内成员截面偏度。",
         ["x", "group"],
         category="cross_sectional",
-        unit="level",
+        # R11 #123: standardized third moment — dimensionless.
+        unit="dimensionless",
+        output_unit="dimensionless",
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame, **_: Any) -> pd.DataFrame:
@@ -472,7 +647,9 @@ class GroupKurtosis(SeriesOperator):
         "组内成员截面峰度。",
         ["x", "group"],
         category="cross_sectional",
-        unit="level",
+        # R11 #123: standardized fourth moment — dimensionless.
+        unit="dimensionless",
+        output_unit="dimensionless",
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame, **_: Any) -> pd.DataFrame:
@@ -552,7 +729,8 @@ def _register_surface() -> None:
             "relation_topk_concentration", "relation_distribution_skew",
             "relation_distribution_kurtosis", "relation_hhi_change",
             "relation_entropy_change", "relation_concentration_acceleration",
-            "relation_rank_mobility", "relation_share_mobility",
+            "relation_rank_mobility", "relation_rank_entity_mobility",
+            "relation_share_mobility",
             "group_skewness", "group_kurtosis", "group_quantile_spread",
             "group_tail_ratio",
         })
@@ -560,7 +738,8 @@ def _register_surface() -> None:
         "relation_topk_concentration", "relation_distribution_skew",
         "relation_distribution_kurtosis", "relation_hhi_change",
         "relation_entropy_change", "relation_concentration_acceleration",
-        "relation_rank_mobility", "relation_share_mobility",
+        "relation_rank_mobility", "relation_rank_entity_mobility",
+        "relation_share_mobility",
         "group_skewness", "group_kurtosis", "group_quantile_spread",
         "group_tail_ratio",
     ):

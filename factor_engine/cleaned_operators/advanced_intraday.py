@@ -24,12 +24,15 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg, _daily_agg_two
 from cleaned_operators.rolling_pack import register_polars_udf
 
 _EPS = 1e-12
 _EIGEN_GAP_MIN = 1e-2  # below this (lambda_k - lambda_{k+1})/lambda_k the PC is unstable.
+_SESSION_TZ = "Asia/Shanghai"            # A-share wall-clock (COS stores QuoteTime UTC)
+_US_TZ = "America/New_York"              # US regular session (DST-aware)
+_PHASE_MIN_CORR = 0.3                    # best-shift correlation must beat this gate (else NaN)
 
 
 def _eigen_gap_unstable(s: np.ndarray, k: int) -> bool:
@@ -46,8 +49,55 @@ def _eigen_gap_unstable(s: np.ndarray, k: int) -> bool:
     if sk <= _EPS:
         return False
     return (sk - float(s[k])) / sk < _EIGEN_GAP_MIN
+
+
+def _infer_session_tz(index: pd.DatetimeIndex) -> str:
+    """Session timezone for a minute index (R11 #64).
+
+    A known session zone is kept as-is; a bare UTC index defaults to the A-share
+    wall-clock (COS stores QuoteTime UTC).  US minute data stored in UTC must
+    declare ``session_tz="America/New_York"``.
+    """
+    tz = str(getattr(index, "tz", None) or "")
+    if tz in ("America/New_York", "US/Eastern", "Asia/Shanghai", "Asia/Hong_Kong"):
+        return tz
+    return _SESSION_TZ
+
+
+def _session_local_frame(frame: pd.DataFrame, session_tz: str | None = None) -> pd.DataFrame:
+    """Convert a tz-aware minute panel to session wall-clock (naive).
+
+    Day grouping must never run on ``index.normalize()`` of a tz-aware index:
+    for a market whose session crosses the UTC date boundary (US after-close
+    minutes are already the next UTC day) normalising in the stored zone splits
+    one session across two dates.  Convert to the market's session timezone first.
+    """
+    idx = frame.index
+    if isinstance(idx, pd.DatetimeIndex) and getattr(idx, "tz", None) is not None:
+        tz = session_tz or _infer_session_tz(idx)
+        out = frame.tz_convert(tz)
+        out.index = out.index.tz_localize(None)
+        return out
+    return frame
+
+
+def _numerical_rank(s: np.ndarray, tol: float = 1e-9) -> int:
+    """Numerical rank of a singular-value spectrum (R11 #63)."""
+    if s.size == 0:
+        return 0
+    smax = float(s[0])
+    if smax <= _EPS:
+        return 0
+    return int(np.sum(s > tol * smax))
+
+
 _QGRID_PAIR = np.linspace(0.01, 0.99, 99)
 _QGRID_PCA = np.linspace(0.02, 0.98, 49)
+# A 49-point quantile profile needs enough minute samples to be meaningful (R11
+# #60), and a PCA subspace on those profiles needs more history curves than the
+# profile dimension (R11 #61).  Both fail closed below these floors.
+_MIN_SAMPLES_PER_PROFILE = 2 * _QGRID_PCA.size
+_PCA_MIN_HISTORY = _QGRID_PCA.size + 1
 
 
 def _metadata(
@@ -105,12 +155,15 @@ class IntradayWassersteinPairDistance(SeriesOperator):
     metadata = _metadata(
         "intraday_wasserstein_pair_distance",
         "两日内分布 W1 距离（分位网格 + MAD 标准化）。",
-        ["x", "y"],
+        ["x", "y", "session_tz"],
         unit="ratio",
         cost=4,
     )
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
 
-    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
+        x = _session_local_frame(_as_panel(x), session_tz)
+        y = _session_local_frame(_as_panel(y), session_tz)
         return _daily_agg_two(x, y, _pair_w1)
 
 
@@ -192,13 +245,14 @@ class IntradayBarrierApproachAcceleration(SeriesOperator):
     metadata = _metadata(
         "intraday_barrier_approach_acceleration",
         "涨/跌停接近加速度（线性 headroom 二阶差分，带方向，连续逼近时段平均）。",
-        ["close", "high_limit", "low_limit", "lookback"],
+        ["close", "high_limit", "low_limit", "lookback", "session_tz"],
         unit="ratio",
         cost=5,
         # Minute ``close`` mixes with daily limit-price panels: the op aligns
         # them per trading day itself, so panel-broadcast is intentional.
         extra_tags=("allow_panel_broadcast",),
     )
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
 
     def _calculate_series(
         self,
@@ -206,27 +260,30 @@ class IntradayBarrierApproachAcceleration(SeriesOperator):
         high_limit: pd.DataFrame,
         low_limit: pd.DataFrame,
         lookback: int = 10,
+        session_tz: str | None = None,
         **_: Any,
     ) -> pd.DataFrame:
         lb = max(3, int(lookback))
-        close = _as_panel(close)
+        close = _session_local_frame(_as_panel(close), session_tz)
+        hl = _session_local_frame(_as_panel(high_limit), session_tz)
+        ll = _session_local_frame(_as_panel(low_limit), session_tz)
         out: dict[str, pd.Series] = {}
         for inst in close.columns:
             c = close[inst]
-            hl = high_limit[inst] if inst in high_limit.columns else None
-            ll = low_limit[inst] if inst in low_limit.columns else None
+            hl_inst = hl[inst] if inst in hl.columns else None
+            ll_inst = ll[inst] if inst in ll.columns else None
             per_day: dict[pd.Timestamp, float] = {}
             for day, group in c.groupby(c.index.normalize()):
                 vals = np.asarray(group, dtype=float)
                 if not np.any(np.isfinite(vals)):
                     per_day[day] = np.nan
                     continue
-                if hl is None or ll is None:
+                if hl_inst is None or ll_inst is None:
                     per_day[day] = np.nan
                     continue
                 try:
-                    hl_day = float(hl.get(day, np.nan))
-                    ll_day = float(ll.get(day, np.nan))
+                    hl_day = float(hl_inst.get(day, np.nan))
+                    ll_day = float(ll_inst.get(day, np.nan))
                     per_day[day] = _barrier_series(vals, hl_day, ll_day, lb)
                 except (ValueError, ZeroDivisionError, OverflowError):
                     per_day[day] = np.nan
@@ -238,7 +295,10 @@ class IntradayBarrierApproachAcceleration(SeriesOperator):
 
 def _quantile_curve(day_returns: np.ndarray) -> np.ndarray | None:
     r = day_returns[np.isfinite(day_returns)]
-    if r.size < 5:
+    if r.size < _MIN_SAMPLES_PER_PROFILE:
+        # A 49-point quantile profile from a handful of minute samples is
+        # meaningless (each grid point collapses onto a single order statistic)
+        # -> NaN, never a fabricated curve (R11 #60).
         return None
     return np.quantile(r, _QGRID_PCA)
 
@@ -255,21 +315,26 @@ def _pca_score_series(
         if curves[i] is None:
             continue
         past = [curves[j] for j in range(max(0, i - lookback), i) if curves[j] is not None]
-        if len(past) < max(3, k + 1):
+        if len(past) < _PCA_MIN_HISTORY:
+            # A handful of history curves cannot identify a 49-dim PCA subspace
+            # (R11 #61) — fail closed rather than fitting a rank-deficient model.
             continue
         P = np.stack(past)
         center = P.mean(axis=0)
         Pc = P - center
         _, s, vt = np.linalg.svd(Pc, full_matrices=False)
-        if vt.shape[0] < k:
-            continue  # rank < k -> the requested PC does not exist (same rule as residual).
+        if _numerical_rank(s) < k + 1:
+            continue  # numerical rank < k+1 -> the k-th PC is not identifiable (R11 #63).
         vk = vt[k - 1]
         # Eigen-gap guard: with near-degenerate eigenvalues the PCA basis may
         # rotate/swap and the *signed* score would jump although the structure did
         # not change -> fail closed.
         sk = float(s[k - 1])
         if sk <= _EPS:
-            out[i] = 0.0  # zero reference variance -> current curve sits at the center.
+            # Zero historical variance makes the PC direction undefined; the
+            # current curve is NOT at the centre -> NaN, never 0 (R11 #62,
+            # DEGENERATE_PCA_SUBSPACE).
+            out[i] = np.nan
             continue
         if _eigen_gap_unstable(s, k):
             continue
@@ -293,14 +358,16 @@ def _pca_resid_series(
         if curves[i] is None:
             continue
         past = [curves[j] for j in range(max(0, i - lookback), i) if curves[j] is not None]
-        if len(past) < max(3, k + 1):
-            continue
+        if len(past) < _PCA_MIN_HISTORY:
+            continue  # same profile-dim history gate as the score (R11 #61).
         P = np.stack(past)
         center = P.mean(axis=0)
         Pc = P - center
-        _, _, vt = np.linalg.svd(Pc, full_matrices=False)
-        if vt.shape[0] < k:
-            continue  # rank < k -> projection on k components is undefined (same rule as score).
+        _U, s, vt = np.linalg.svd(Pc, full_matrices=False)
+        if _numerical_rank(s) < k + 1:
+            continue  # numerical rank < k+1 -> projection subspace undefined (R11 #63).
+        if float(s[0]) <= _EPS:
+            continue  # degenerate history (all identical) -> subspace undefined (R11 #62).
         loading = vt[:k]
         score = (curves[i] - center) @ loading.T
         proj = score @ loading
@@ -308,7 +375,14 @@ def _pca_resid_series(
     return out
 
 
-def _per_day_returns(panel: pd.DataFrame) -> tuple[list[pd.Timestamp], list[np.ndarray]]:
+def _per_day_returns(panel: pd.DataFrame, session_tz: str | None = None) -> tuple[list[pd.Timestamp], list[np.ndarray]]:
+    """Per-session-trade-date grouping of a minute panel (R11 #64).
+
+    Uses the market session wall-clock (never bare ``index.normalize()`` on a
+    tz-aware index), so a US after-close minute stored in UTC stays on the
+    correct US trade date.
+    """
+    panel = _session_local_frame(_as_panel(panel), session_tz)
     day_list: list[pd.Timestamp] = []
     day_ret: list[np.ndarray] = []
     for day, group in panel.groupby(panel.index.normalize()):
@@ -322,11 +396,12 @@ def _quantile_pca_panel(
     lookback: int,
     k: int,
     residual: bool,
+    session_tz: str | None = None,
 ) -> pd.DataFrame:
     returns = _as_panel(returns)
     out: dict[str, pd.Series] = {}
     for inst in returns.columns:
-        days, rets = _per_day_returns(returns[inst])
+        days, rets = _per_day_returns(returns[inst], session_tz)
         values = _pca_resid_series(rets, lookback, k) if residual else _pca_score_series(rets, lookback, k)
         out[inst] = pd.Series({d: v for d, v in zip(days, values)}, dtype=float)
     if not out:
@@ -356,17 +431,18 @@ class IntradayQuantileCurvePcaScore(SeriesOperator):
     metadata = _metadata(
         "intraday_quantile_curve_pca_score",
         "日内收益分位曲线滚动 PCA 第 k 主成分得分（Euclidean，非 Wasserstein PCA）。",
-        ["returns", "window", "k"],
+        ["returns", "window", "k", "session_tz"],
         unit="ratio",
         cost=8,
     )
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
 
-    def _calculate_series(self, returns: pd.DataFrame, window: int = 60, k: int = 1, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, returns: pd.DataFrame, window: int = 60, k: int = 1, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         w = int(window)
         kk = int(k)
         if w < 2 or kk < 1:
             raise ValueError("intraday_quantile_curve_pca_score requires window >= 2, k >= 1")
-        return _quantile_pca_panel(returns, w, kk, residual=False)
+        return _quantile_pca_panel(returns, w, kk, residual=False, session_tz=session_tz)
 
 
 @register_operator(
@@ -388,40 +464,67 @@ class IntradayQuantileCurvePcaResidual(SeriesOperator):
     metadata = _metadata(
         "intraday_quantile_curve_pca_residual",
         "日内收益分位曲线滚动 PCA 投影残差范数。",
-        ["returns", "window", "k"],
+        ["returns", "window", "k", "session_tz"],
         unit="ratio",
         cost=8,
     )
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
 
-    def _calculate_series(self, returns: pd.DataFrame, window: int = 60, k: int = 1, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, returns: pd.DataFrame, window: int = 60, k: int = 1, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         w = int(window)
         kk = int(k)
         if w < 2 or kk < 1:
             raise ValueError("intraday_quantile_curve_pca_residual requires window >= 2, k >= 1")
-        return _quantile_pca_panel(returns, w, kk, residual=True)
+        return _quantile_pca_panel(returns, w, kk, residual=True, session_tz=session_tz)
 
 
 # ---------------------------------------------------------------------------
 # Sampling-scale / noise diagnostics and historical-profile surprise
 # ---------------------------------------------------------------------------
+def _block_returns(day_vals: np.ndarray, sampling: int, offset: int) -> np.ndarray:
+    """Aggregate minute log-returns into ``sampling``-minute block returns.
+
+    The k-minute return of a block is the SUM of its minute returns (R11 #56:
+    never a blind ``ret[::k]`` sample, which drops the intra-block minutes).  A
+    block touching any non-finite minute is undefined and dropped from that
+    offset's block set (fail closed, never zero-filled).
+    """
+    sm = int(sampling)
+    m = day_vals.shape[0]
+    blocks: list[float] = []
+    start = int(offset)
+    while start + sm <= m:
+        blk = day_vals[start:start + sm]
+        if np.all(np.isfinite(blk)):
+            blocks.append(float(np.sum(blk)))
+        start += sm
+    return np.asarray(blocks, dtype=float)
+
+
 def _subsampled_rv_dispersion(day_vals: np.ndarray, sampling: int) -> float:
     """Coefficient of variation of realised variances over subsampling offsets."""
     sm = int(sampling)
     m = day_vals.shape[0]
     if m < 2 * sm:
         return np.nan
-    rvs = []
+    per_off: list[float] = []
     for off in range(sm):
-        seg = day_vals[off::sm]
-        rv = float(np.sum(seg * seg))
+        blocks = _block_returns(day_vals, sm, off)
+        if blocks.size == 0:
+            continue
+        # Normalise by the effective block count (R11 #58): offsets do not share
+        # the same number of blocks, so comparing raw sums would mix a
+        # sample-size difference into the dispersion.  Per-block mean squared
+        # return equalises the sample size.
+        rv = float(np.mean(blocks * blocks))
         if np.isfinite(rv):
-            rvs.append(rv)
-    if len(rvs) < 2:
+            per_off.append(rv)
+    if len(per_off) < 2:
         return np.nan
-    mu = float(np.mean(rvs))
+    mu = float(np.mean(per_off))
     if mu <= _EPS:
         return np.nan
-    return float(np.std(rvs) / mu)
+    return float(np.std(per_off) / mu)
 
 
 @register_operator(
@@ -442,16 +545,18 @@ class IntradaySubsampledRvDispersion(SeriesOperator):
     metadata = _metadata(
         "intraday_subsampled_rv_dispersion",
         "重采样网格已实现波动率变异系数 Std(RV)/Mean(RV)。",
-        ["returns", "sampling"],
+        ["returns", "sampling", "session_tz"],
         unit="ratio",
         cost=4,
     )
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
 
-    def _calculate_series(self, returns: pd.DataFrame, sampling: int = 5, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, returns: pd.DataFrame, sampling: int = 5, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         sm = int(sampling)
         if sm < 2:
             raise ValueError("intraday_subsampled_rv_dispersion requires sampling >= 2")
-        return _daily_agg(returns, lambda v, t: _subsampled_rv_dispersion(v, sm))
+        frame = _session_local_frame(_as_panel(returns), session_tz)
+        return _daily_agg(frame, lambda v, t: _subsampled_rv_dispersion(v, sm))
 
 
 def _vol_signature_slope(day_vals: np.ndarray, max_interval: int) -> float:
@@ -462,7 +567,11 @@ def _vol_signature_slope(day_vals: np.ndarray, max_interval: int) -> float:
     while iv <= int(max_interval) and iv <= m // 2:
         nblocks = m // iv
         if nblocks >= 2:
-            blocks = day_vals[: nblocks * iv].reshape(nblocks, iv)
+            # Right-align the block partition (R11 #59): an end-of-day factor must
+            # keep the most recent block; the old left-aligned split dropped the
+            # newest remainder and estimated RV on stale minutes.  Blocks aggregate
+            # their minute returns (sum) before squaring — never a blind sample.
+            blocks = day_vals[m - nblocks * iv:].reshape(nblocks, iv)
             agg = blocks.sum(axis=1)
             rv = float(np.sum(agg * agg))
             if np.isfinite(rv) and rv > _EPS:
@@ -496,24 +605,27 @@ class IntradayVolatilitySignatureSlope(SeriesOperator):
     metadata = _metadata(
         "intraday_volatility_signature_slope",
         "波动率签名斜率（log RV ~ log interval 回归斜率）。",
-        ["returns", "max_interval"],
+        ["returns", "max_interval", "session_tz"],
         unit="slope",
         cost=4,
     )
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
 
-    def _calculate_series(self, returns: pd.DataFrame, max_interval: int = 32, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, returns: pd.DataFrame, max_interval: int = 32, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         mi = int(max_interval)
         if mi < 4:
             raise ValueError("intraday_volatility_signature_slope requires max_interval >= 4")
-        return _daily_agg(returns, lambda v, t: _vol_signature_slope(v, mi))
+        frame = _session_local_frame(_as_panel(returns), session_tz)
+        return _daily_agg(frame, lambda v, t: _vol_signature_slope(v, mi))
 
 
 def _realized_power_variation(day_vals: np.ndarray, order: float, sampling: int) -> float:
-    seg = day_vals[:: int(sampling)]
-    fin = seg[np.isfinite(seg)]
-    if fin.size < 1:
+    # Aggregate k-minute returns first, then raise to p (R11 #57) — the same
+    # "never blind-sample" rule as the subsampled RV dispersion.
+    blocks = _block_returns(day_vals, int(sampling), 0)
+    if blocks.size < 1:
         return np.nan
-    return float(np.sum(np.abs(fin) ** float(order)))
+    return float(np.sum(np.abs(blocks) ** float(order)))
 
 
 @register_operator(
@@ -533,24 +645,32 @@ class IntradayRealizedPowerVariation(SeriesOperator):
 
     metadata = _metadata(
         "intraday_realized_power_variation",
-        "已实现幂变差 Σ|r|^p（order=p，子采样）。",
-        ["returns", "order", "sampling"],
+        "已实现幂变差 Σ|R_k|^p（order=p，k=sampling 分钟聚合收益）。",
+        ["returns", "order", "sampling", "session_tz"],
         unit="power",
         cost=3,
     )
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
 
-    def _calculate_series(self, returns: pd.DataFrame, order: float = 4.0, sampling: int = 1, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, returns: pd.DataFrame, order: float = 4.0, sampling: int = 1, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         od = float(order)
         sm = int(sampling)
         if od <= 0.0:
             raise ValueError("intraday_realized_power_variation requires order > 0")
         if sm < 1:
             raise ValueError("intraday_realized_power_variation requires sampling >= 1")
-        return _daily_agg(returns, lambda v, t: _realized_power_variation(v, od, sm))
+        frame = _session_local_frame(_as_panel(returns), session_tz)
+        return _daily_agg(frame, lambda v, t: _realized_power_variation(v, od, sm))
 
 
-def _day_profile(day_vals: np.ndarray, n_slots: int) -> np.ndarray | None:
-    """Fixed ``n_slots``-slot profile of a day (equal-count groups, mean per slot)."""
+def _day_profile_equal_count(day_vals: np.ndarray, n_slots: int) -> np.ndarray | None:
+    """Equal-OBSERVATION-COUNT slot profile of a day (mean per slot).
+
+    This is the *by-count* primitive: ``n_slots`` groups each holding the same
+    number of consecutive bars.  It is deliberately a DISTINCT primitive from a
+    fixed-clock session-slot profile (e.g. 09:30-10:00 official bars) — the two
+    are different and must never be conflated in code or naming (R11 #65).
+    """
     ns = int(n_slots)
     m = day_vals.shape[0]
     if m < ns:
@@ -566,7 +686,7 @@ def _day_profile(day_vals: np.ndarray, n_slots: int) -> np.ndarray | None:
     return prof
 
 
-def _best_phase(cur: np.ndarray, med: np.ndarray, max_shift: int, n_slots: int) -> float:
+def _best_phase(cur: np.ndarray, med: np.ndarray, max_shift: int, n_slots: int, min_corr: float = _PHASE_MIN_CORR) -> float:
     K = min(int(max_shift), int(n_slots) - 1)
     best_k = 0
     best_c = -np.inf
@@ -590,7 +710,9 @@ def _best_phase(cur: np.ndarray, med: np.ndarray, max_shift: int, n_slots: int) 
         if c > best_c:
             best_c = c
             best_k = k
-    if best_c <= -np.inf:
+    if best_c <= -np.inf or best_c < min_corr:
+        # No historical profile is similar to the current one: reporting "best
+        # shift anyway" would output a meaningless phase (R11 #66) -> NaN.
         return np.nan
     return float(best_k / int(n_slots))
 
@@ -605,24 +727,24 @@ def _profile_series(day_vals: list[np.ndarray], history_days: int, n_slots: int,
             med = np.median(mat, axis=0)
             mad = np.median(np.abs(mat - med), axis=0)
             scale = 1.4826 * mad + _EPS
-            cur = _day_profile(day_vals[i], n_slots)
+            cur = _day_profile_equal_count(day_vals[i], n_slots)
             if cur is not None:
                 if phase:
                     out[i] = _best_phase(cur, med, int(max_shift), int(n_slots))
                 else:
                     z = (cur - med) / scale
                     out[i] = float(np.mean(np.minimum(z * z, float(cap))))
-        p = _day_profile(day_vals[i], n_slots)
+        p = _day_profile_equal_count(day_vals[i], n_slots)
         if p is not None:
             profiles.append(p)
     return out
 
 
-def _profile_panel(frame: pd.DataFrame, history_days: int, n_slots: int, cap: float, phase: bool, max_shift: int) -> pd.DataFrame:
+def _profile_panel(frame: pd.DataFrame, history_days: int, n_slots: int, cap: float, phase: bool, max_shift: int, session_tz: str | None = None) -> pd.DataFrame:
     frame = _as_panel(frame)
     out: dict[str, pd.Series] = {}
     for inst in frame.columns:
-        days, day_vals = _per_day_returns(frame[inst])
+        days, day_vals = _per_day_returns(frame[inst], session_tz)
         vals = _profile_series(day_vals, history_days, n_slots, cap, phase, max_shift)
         out[inst] = pd.Series(dict(zip(days, vals)), dtype=float)
     if not out:
@@ -649,12 +771,13 @@ class IntradayProfileSurpriseEnergy(SeriesOperator):
     metadata = _metadata(
         "intraday_profile_surprise_energy",
         "日内 profile 异常能量 mean(min(z², cap))（z 按历史 slot 中位数/MAD）。",
-        ["x", "history_days", "n_slots", "cap"],
+        ["x", "history_days", "n_slots", "cap", "session_tz"],
         unit="energy",
         cost=6,
     )
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
 
-    def _calculate_series(self, x: pd.DataFrame, history_days: int = 20, n_slots: int = 32, cap: float = 25.0, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, history_days: int = 20, n_slots: int = 32, cap: float = 25.0, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         hd = int(history_days)
         ns = int(n_slots)
         cp = float(cap)
@@ -664,7 +787,7 @@ class IntradayProfileSurpriseEnergy(SeriesOperator):
             raise ValueError("intraday_profile_surprise_energy requires n_slots >= 4")
         if cp <= 0.0:
             raise ValueError("intraday_profile_surprise_energy requires cap > 0")
-        return _profile_panel(x, hd, ns, cp, phase=False, max_shift=0)
+        return _profile_panel(x, hd, ns, cp, phase=False, max_shift=0, session_tz=session_tz)
 
 
 @register_operator(
@@ -686,12 +809,13 @@ class IntradayProfilePhaseShift(SeriesOperator):
     metadata = _metadata(
         "intraday_profile_phase_shift",
         "日内 profile 最佳相位偏移 k/n_slots（高峰提前/延后）。",
-        ["x", "history_days", "max_shift", "n_slots"],
+        ["x", "history_days", "max_shift", "n_slots", "session_tz"],
         unit="phase",
         cost=6,
     )
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
 
-    def _calculate_series(self, x: pd.DataFrame, history_days: int = 20, max_shift: int = 4, n_slots: int = 32, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, history_days: int = 20, max_shift: int = 4, n_slots: int = 32, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
         hd = int(history_days)
         ns = int(n_slots)
         ms = int(max_shift)
@@ -701,7 +825,12 @@ class IntradayProfilePhaseShift(SeriesOperator):
             raise ValueError("intraday_profile_phase_shift requires n_slots >= 4")
         if ms < 1:
             raise ValueError("intraday_profile_phase_shift requires max_shift >= 1")
-        return _profile_panel(x, hd, ns, 1.0, phase=True, max_shift=ms)
+        if ms >= ns:
+            # R11 #67: max_shift >= n_slots is an infeasible combination (the
+            # shift grid wraps onto itself); silently capping creates equivalent
+            # parameter values that search can never distinguish.
+            raise ValueError("intraday_profile_phase_shift requires max_shift < n_slots")
+        return _profile_panel(x, hd, ns, 1.0, phase=True, max_shift=ms, session_tz=session_tz)
 
 
 def _register_surface() -> None:

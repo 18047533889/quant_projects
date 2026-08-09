@@ -43,6 +43,26 @@ from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
 
+# R11 #133: a quantile-bin reference distribution needs at least this many
+# observations per REQUESTED bin for the histogram to be a meaningful estimate
+# (e.g. 2 observations against 10 requested bins is invalid -> fail closed).
+_JS_MIN_REF_MULT = 2.0
+
+
+def _ext_hist(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
+    """Histogram over ``edges`` with explicit underflow/overflow bins.
+
+    ``np.histogram(values, bins=edges)`` silently DROPS values outside the
+    outermost edges and the caller re-normalises over the survivors — a group
+    value below the ex-group reference min or above its max would vanish and
+    the tail divergence be under-estimated (R11 #132).  Pinning the outermost
+    edges to ±inf counts every finite value, so out-of-range mass lands in the
+    under/overflow bins and is included in the probability mass instead of
+    being dropped.
+    """
+    full_edges = np.concatenate(([-np.inf], np.asarray(edges, dtype=float), [np.inf]))
+    return np.histogram(values, bins=full_edges)[0].astype(float)
+
 
 def _as_float(frame: pd.DataFrame) -> np.ndarray:
     return frame.to_numpy(dtype=float)
@@ -130,11 +150,19 @@ def _group_topk_mean(
             eq_idx = np.flatnonzero(s == kth)
             n_eq = int(eq_idx.size)
             n_take_eq = min(max(kk - n_above, 0), n_eq)
-            # Strict missing policy: any *chosen* leader (fully-above peers plus
-            # the portion of the cutoff tie that enters) with a missing target
-            # fail-closes the row — never substitute a lower-score peer.
-            chosen = above if n_take_eq == 0 else np.concatenate([above, eq_idx[:n_take_eq]])
-            if not np.all(np.isfinite(t[chosen])):
+            # Strict missing policy: any leader with a missing target fail-closes
+            # the row — never substitute a lower-score peer.  R11 #131: the
+            # cutoff tie enters the mean with FRACTIONAL weight (``frac`` applied
+            # to the WHOLE tie group's target sum), so target-validity must be
+            # checked against the SAME fractional participation — every tied
+            # member's target must be finite.  Validating only the first
+            # ``n_take_eq`` tied indices (``eq_idx[:n_take_eq]``) would be a
+            # column-order-dependent validity test: a NaN target on a later tied
+            # member would slip past the check and then NaN the row through the
+            # arithmetic instead of failing closed with a principled reason.
+            if not np.all(np.isfinite(t[above])):
+                continue
+            if n_eq and not np.all(np.isfinite(t[eq_idx])):
                 continue
             frac = (n_take_eq / n_eq) if n_eq > 0 else 0.0
             mean_val = (
@@ -311,18 +339,26 @@ def _group_distribution_js_divergence(
                 other = np.ones(cols, dtype=bool)
                 other[members] = False
                 ref = xr[other & market_mask]
-                if ref.size < 2:
+                # R11 #133: a quantile-bin reference needs enough observations
+                # per REQUESTED bin to be a meaningful distribution estimate.
+                # 2 observations against 10 bins is invalid -> fail closed.
+                if ref.size < _JS_MIN_REF_MULT * nb:
                     continue
                 ref_edges = np.unique(np.quantile(ref, np.linspace(0.0, 1.0, nb + 1)))
                 if ref_edges.size < 2:
                     continue
-                g_bin = np.histogram(gvals, bins=ref_edges)[0].astype(float)
+                # R11 #132: a group value outside the ex-group [min, max] range
+                # must NOT be silently dropped with the survivors re-normalized
+                # (that under-estimates tail divergence).  The extended under/
+                # overflow bins count every finite group value, so out-of-range
+                # mass shows up in the tails instead of vanishing.
+                g_bin = _ext_hist(gvals, ref_edges)
                 if g_bin.sum() <= 0:
-                    # All group values fall outside the ex-group bin range; the
+                    # All group values are non-finite (defensive); the
                     # distribution on these bins is undefined -> fail closed.
                     continue
                 gp = g_bin / g_bin.sum()
-                r_bin = np.histogram(ref, bins=ref_edges)[0].astype(float)
+                r_bin = _ext_hist(ref, ref_edges)
                 rp = r_bin / r_bin.sum()
                 val = _js(gp, rp)
                 for i in members:
@@ -330,17 +366,21 @@ def _group_distribution_js_divergence(
         else:
             # Legacy / explicit mode: compare against the whole cross-section
             # (includes the group itself) on full-market edges.
+            # R11 #133: the full-market reference needs the same per-bin
+            # breadth gate as the ex-group reference.
+            if market.size < _JS_MIN_REF_MULT * nb:
+                continue
             edges = np.unique(np.quantile(market, np.linspace(0.0, 1.0, nb + 1)))
             if int(edges.size - 1) < 1:
                 continue
-            market_bin = np.histogram(market, bins=edges)[0].astype(float)
+            market_bin = _ext_hist(market, edges)
             market_p = market_bin / market_bin.sum()
             for lab, members in positions.items():
                 gvals = xr[members]
                 gvals = gvals[np.isfinite(gvals)]
                 if gvals.size < mg:
                     continue
-                g_bin = np.histogram(gvals, bins=edges)[0].astype(float)
+                g_bin = _ext_hist(gvals, edges)
                 if g_bin.sum() <= 0:
                     continue
                 gp = g_bin / g_bin.sum()

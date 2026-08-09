@@ -27,10 +27,66 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
 _EPS = 1e-12
+
+
+class UpdateMissingEventPolicy:
+    """How an UNKNOWN update observation (NaN ``update_event``) is handled (#44).
+
+    * ``BREAK`` — an unknown provider day BREAKS the update-node chain (fail
+      closed): the output on that day is NaN and the two real update nodes on
+      either side can never be joined into one trailing window.  Default.
+    * ``SKIP``  — legacy opt-in: a NaN ``update_event`` is treated as a
+      non-event, so unknown days are transparently skipped (this is exactly the
+      join-across-unknown-day behaviour #44 forbids as a silent default).
+    """
+
+    BREAK = "BREAK"
+    SKIP = "SKIP"
+    EXECUTABLE = frozenset({BREAK, SKIP})
+
+
+def _normalise_update_policy(policy: Any) -> str:
+    p = str(policy).upper()
+    if p not in UpdateMissingEventPolicy.EXECUTABLE:
+        raise ValueError(
+            f"invalid update missing-event policy {policy!r}; choose from "
+            f"{sorted(UpdateMissingEventPolicy.EXECUTABLE)}"
+        )
+    return p
+
+
+def _observed_mask(ev: np.ndarray) -> np.ndarray:
+    """Rows where the provider's update status is KNOWN (``update_event`` finite)."""
+    return np.isfinite(ev)
+
+
+def _censored_boundaries(ev: np.ndarray, upd_idx: np.ndarray) -> np.ndarray:
+    """Per-update-node censor flags (#44).
+
+    For each real update node ``j >= 1`` the flag is True when the gap from the
+    previous real update node ``j-1`` to node ``j`` crosses an UNKNOWN
+    observation (a NaN ``update_event`` row).  A censored boundary means the two
+    nodes are NOT adjacent in observation space — a trailing ``n``-update window
+    may never span a censored boundary, so an unknown provider day cannot join
+    two update nodes into one synthetic interval.
+    """
+    m = upd_idx.size
+    censored = np.zeros(m, dtype=bool)
+    for j in range(1, m):
+        lo = upd_idx[j - 1] + 1
+        hi = upd_idx[j]
+        if np.any(~np.isfinite(ev[lo:hi])):
+            censored[j] = True
+    return censored
 
 
 def _metadata(
@@ -41,6 +97,7 @@ def _metadata(
     unit: str,
     cost: int,
     extra_tags: tuple[str, ...] = (),
+    param_specs: dict[str, ParamSpec] | None = None,
 ) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -54,6 +111,7 @@ def _metadata(
             f"signature:{','.join(params)}->series", "domain:fundamental",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        param_specs=param_specs or {},
     )
 
 
@@ -68,17 +126,26 @@ def _validate_update_event(ev: np.ndarray, canonical: str) -> None:
         )
 
 
+_UPDATE_MISSING_POLICY_SPEC = ParamSpec(
+    dtype=str,
+    choices=("BREAK", "SKIP"),
+    default=UpdateMissingEventPolicy.BREAK,
+)
+
+
 def _update_kernel(canonical: str, min_updates: int, fn) -> SeriesOperator:
     def _calculate_series(
         self,
         x: pd.DataFrame,
         update_event: pd.DataFrame,
         n_updates: int = 5,
+        missing_policy: str = UpdateMissingEventPolicy.BREAK,
         **_: Any,
     ) -> pd.DataFrame:
         n = int(n_updates)
         if n < min_updates:
             raise ValueError(f"{canonical} requires n_updates >= {min_updates}")
+        policy = _normalise_update_policy(missing_policy)
 
         xv = x.to_numpy(dtype=float)
         ev = update_event.to_numpy(dtype=float)
@@ -86,19 +153,35 @@ def _update_kernel(canonical: str, min_updates: int, fn) -> SeriesOperator:
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for c in range(cols):
-            # Precompute absolute update-node indices once (O(rows) per column);
-            # each row binary-searches for the last ``n`` *real* updates by
-            # ordinal (PIT: only updates <= r).  There is deliberately NO
-            # hidden max-lookback horizon — sparse events (annual reports, rare
-            # capital events) must still reach the last ``n`` updates however far
-            # back they are (P0-11).  NaN only when the whole history holds
-            # fewer than ``n`` updates.
+            # Audit #44: an unknown provider day (NaN update_event) must not be
+            # transparently skipped — it would join two real update nodes into a
+            # synthetic interval.  With the default BREAK policy the observed
+            # mask leaves unknown days NaN and a trailing ``n``-update window may
+            # never span a censored boundary.
+            observed = _observed_mask(ev[:, c])
             upd_idx = np.flatnonzero(ev[:, c] == 1.0)
             if upd_idx.size < n:
                 continue
+            if policy == UpdateMissingEventPolicy.BREAK:
+                censored = _censored_boundaries(ev[:, c], upd_idx)
+            else:  # SKIP: legacy transparent skip — nothing is censored.
+                censored = np.zeros(upd_idx.size, dtype=bool)
             for r in range(rows):
+                if policy == UpdateMissingEventPolicy.BREAK and not observed[r]:
+                    continue
+                # Each row binary-searches for the last ``n`` *real* updates by
+                # ordinal (PIT: only updates <= r).  There is deliberately NO
+                # hidden max-lookback horizon — sparse events (annual reports,
+                # rare capital events) must still reach the last ``n`` updates
+                # however far back they are (P0-11).  NaN only when the whole
+                # history holds fewer than ``n`` updates or the chain is broken.
                 j1 = int(np.searchsorted(upd_idx, r + 1, side="left"))
                 if j1 < n:
+                    continue
+                # The window's internal boundaries (between consecutive update
+                # nodes) must all be observed-clean — otherwise two updates on
+                # either side of an unknown day would be joined.
+                if np.any(censored[j1 - n + 1 : j1]):
                     continue
                 vals = xv[upd_idx[j1 - n : j1], c]
                 if not np.all(np.isfinite(vals)):
@@ -116,14 +199,25 @@ def _update_kernel(canonical: str, min_updates: int, fn) -> SeriesOperator:
         type(
             canonical.replace("_", " ").title().replace(" ", "") + "Op",
             (SeriesOperator,),
-            {"metadata": _metadata(canonical, _DESCRIPTIONS[canonical], ["x", "update_event", "n_updates"], unit=_UNITS[canonical], cost=4), "_calculate_series": _calculate_series, "__module__": __name__},
+            {
+                "metadata": _metadata(
+                    canonical,
+                    _DESCRIPTIONS[canonical],
+                    ["x", "update_event", "n_updates", "missing_policy"],
+                    unit=_UNITS[canonical],
+                    cost=4,
+                    param_specs={"missing_policy": _UPDATE_MISSING_POLICY_SPEC},
+                ),
+                "_calculate_series": _calculate_series,
+                "__module__": __name__,
+            },
         )
     )
 
 
 _DESCRIPTIONS = {
     "update_path_efficiency": "真实 update 节点上的路径效率 |Δ_K|/Σ|Δ_j|（方向一致性）。",
-    "update_acceleration": "最近两次 update 差的归一化 (d_K - d_{K-1})/MAD(d)（改善加速）。",
+    "update_acceleration": "最近两次 update 差的归一化 (d_K - d_{K-1})/MAD(d_{≤K-1})（改善加速；基线排除当前 delta）。",
     "update_surprise": "本次 update 相对其自身历史的中位数 z 分（innovation）。",
     "update_direction_persistence": "幅度加权方向保持率 Σ|Δ_j|·1[sign(Δ_j)=sign(net)]/Σ|Δ_j|。",
 }
@@ -147,8 +241,13 @@ def _acceleration(vals: np.ndarray) -> float:
     d = np.diff(vals)
     if d.size < 3:
         return np.nan
-    med = float(np.median(d))
-    mad = float(np.median(np.abs(d - med)))
+    # Audit #45: the baseline scale that scores the CURRENT delta must use
+    # t-1 and earlier — a large current delta would otherwise inflate its own
+    # denominator.  ``past`` excludes ``d[-1]``, so the latest jump is scored
+    # against the spread of the deltas that preceded it.
+    past = d[:-1]
+    med = float(np.median(past))
+    mad = float(np.median(np.abs(past - med)))
     if mad <= _EPS:
         return np.nan
     return float((d[-1] - d[-2]) / mad)
@@ -217,3 +316,30 @@ def _register_surface() -> None:
 
 
 _register_surface()
+
+
+# Audit #7: update-clock operators are EVENT-HISTORY state — each output searches
+# back for the most recent ``n_updates`` REAL update events with no fixed bar
+# lookback.  A bar-window warmup must NOT take over, so the declared history is
+# ``event_count`` (observations, not trading bars).  The default ``n_updates`` is
+# 5; the operators have no segmented restore, so chunking is an honest
+# full-history replay.
+def _declare_stateful_contracts() -> None:
+    from runtime.execution_contract import declare_stateful
+
+    for _canon in (
+        "update_path_efficiency",
+        "update_acceleration",
+        "update_surprise",
+        "update_direction_persistence",
+    ):
+        declare_stateful(
+            _canon,
+            state_model="recursive",
+            chunking="required_full_history",
+            history_kind="event_count",
+            history_count=5,
+        )
+
+
+_declare_stateful_contracts()

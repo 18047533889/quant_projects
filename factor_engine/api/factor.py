@@ -38,3 +38,8 @@ class Factor:
     universe: str | None = None  # 股票池/标签，供配置与文档；执行时以数据源为准
     description: str | None = None
     source_expr: str | None = None  # 原始 DSL 字符串（lineage 用，勿与 description 混用）
+    # R11 #5: parser-surface 元数据随 Factor 携带，供 full definition 持久化，
+    # 使事件增量重建引擎时能还原原始 surface/dialect（而不是退化成默认值）。
+    surface: str = "daily"
+    dialect: str = "native"
+    dialect_version: str | None = None

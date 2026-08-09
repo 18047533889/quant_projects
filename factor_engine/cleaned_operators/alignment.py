@@ -181,9 +181,13 @@ def apply_universe_mask(
       columns; a date/stock mismatch raises instead of pairing positionally
       (round-6 P0-23).  This is the mandatory entry for cross-sectional runtime:
       a mask that does not line up with the panel IS an error.
-    * ``broadcast_scalar`` — the mask may be a single row / single column
-      (e.g. a daily index-membership flag) that is broadcast; accepted only when
-      the shared axis is identical.
+    * ``broadcast_scalar`` — the mask may be a per-date row-vector (rows ==
+      panel rows, one column) broadcast across instruments on the SAME date, or
+      a full-shape mask.  A single-ROW mask (one date's membership flag) is
+      REJECTED against a multi-date panel: broadcasting today's constituents
+      over the whole history is survivorship / future-membership leakage
+      (R11 P0-10).  A genuinely time-invariant pool must use an explicit
+      ``StaticUniverseMask``, never a one-row broadcast.
     """
     if mask is None:
         return panel.copy()
@@ -191,15 +195,49 @@ def apply_universe_mask(
     if str(mask_axes) == "strict":
         assert_axes_aligned(panel, mask, names=labels)
     else:
-        if not (mask.shape[0] == panel.shape[0] or mask.shape[1] == panel.shape[1]):
-            raise PanelAxisMismatch(
-                "universe mask is neither panel-shaped nor a broadcast row/column"
-            )
+        _broadcast_scalar_shape_gate(panel.shape, mask.shape, names=labels)
     mask_vals = mask.to_numpy(dtype=float)
     panel_vals = panel.to_numpy(dtype=float)
     inside = np.isfinite(mask_vals) & (mask_vals != 0.0)
     out = np.where(inside, panel_vals, np.nan)
     return pd.DataFrame(out, index=panel.index, columns=panel.columns, dtype=float)
+
+
+def _broadcast_scalar_shape_gate(
+    panel_shape: tuple[int, int],
+    mask_shape: tuple[int, int],
+    *,
+    names: Sequence[str] | None = None,
+) -> None:
+    """Fail-closed shape gate for ``broadcast_scalar`` masks (R11 P0-10).
+
+    Only two broadcast shapes are legal against a multi-date panel:
+
+    * ``mask_shape == panel_shape`` — a fully-aligned per-cell mask;
+    * ``mask_shape == (panel_rows, 1)`` — a per-date membership vector applied
+      to every instrument ON THE SAME DATE (cross-section broadcast, safe).
+
+    A single-row mask ``(1, C)`` or scalar ``(1, 1)`` is the CURRENT date's
+    cross-section (e.g. today's index-membership flag).  Broadcasting it across
+    all ``panel_rows`` would make today's universe silently apply to every past
+    date — the classic survivorship / future-membership leak.  It is rejected
+    unless the panel itself is a single row (a genuine one-day panel).
+    """
+    if panel_shape == mask_shape:
+        return
+    if panel_shape[0] == mask_shape[0] and mask_shape[1] == 1:
+        return  # per-date membership vector -> same-date cross-section broadcast
+    if mask_shape == (1, 1) and panel_shape == (1, 1):
+        return
+    label = (names[0] if names and names[0] else "universe mask") if names else "universe mask"
+    raise PanelAxisMismatch(
+        f"{label} broadcast_scalar: shape {mask_shape} cannot be broadcast onto "
+        f"panel {panel_shape}.  A single-row (or single-cell) mask is the current "
+        "date's membership and must not be stretched across historical dates "
+        "(survivorship / future-membership leakage, R11 P0-10).  Supply a per-date "
+        "mask (rows == panel rows) or an explicit StaticUniverseMask for a "
+        "time-invariant pool."
+    )
 
 
 __all__ = [

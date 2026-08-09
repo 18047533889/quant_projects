@@ -307,9 +307,13 @@ def test_event_level_survival_share_reference(_loaded):
 def test_multi_robust_resid_reference(_loaded):
     rng = np.random.default_rng(5)
     idx = list(range(6))
-    x1 = pd.DataFrame(rng.normal(0, 1, (6, 4)), index=idx, columns=["A", "B", "C", "D"])
-    x2 = pd.DataFrame(rng.normal(0, 1, (6, 4)), index=idx, columns=["A", "B", "C", "D"])
-    y = 0.5 * x1 + (-0.3) * x2 + 2.0 + rng.normal(0, 1e-3, (6, 4))
+    # R11 #141: the residual regression needs a real DOF margin, so the
+    # cross-section (columns) must be >= max(20, 5 * K) names; a 4-stock
+    # section is now correctly rejected as an interpolation fit.
+    cols = [f"C{i}" for i in range(25)]
+    x1 = pd.DataFrame(rng.normal(0, 1, (6, 25)), index=idx, columns=cols)
+    x2 = pd.DataFrame(rng.normal(0, 1, (6, 25)), index=idx, columns=cols)
+    y = 0.5 * x1 + (-0.3) * x2 + 2.0 + rng.normal(0, 1e-3, (6, 25))
     op = OperatorRegistry.get("cs_multi_robust_resid", "pandas_numpy")
     out = op.calculate(y, x1, x2, add_intercept=True)
     # mild ridge keeps residuals small for near-perfect linear structure

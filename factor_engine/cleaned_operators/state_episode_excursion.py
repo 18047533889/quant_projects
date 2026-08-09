@@ -33,6 +33,28 @@ from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 _EPS = 1e-12
 
 
+def _validate_state_signed(state: pd.DataFrame) -> None:
+    """Require the episode state to be a *signed-state* panel (R11 #152).
+
+    Finite values must be drawn from ``{-1, 0, +1}`` (``NaN`` is allowed — a
+    missing state breaks the episode).  Arbitrary numeric state (returns,
+    prices, z-scores) must NOT be silently inferred into an episode direction
+    through a magic ``>1e-9 / <-1e-9`` threshold; the caller has to supply a
+    genuine signed-state indicator, otherwise the direction map is meaningless.
+    """
+    vals = state.to_numpy(dtype=float)
+    finite = vals[np.isfinite(vals)]
+    if finite.size == 0:
+        return
+    allowed = (finite == -1.0) | (finite == 0.0) | (finite == 1.0)
+    if not allowed.all():
+        bad = finite[~allowed][:5].tolist()
+        raise ValueError(
+            "state must be a signed-state panel with values in {-1, 0, +1} "
+            f"(NaN allowed); got {bad!r}"
+        )
+
+
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
@@ -69,9 +91,12 @@ def _episode_map(x: np.ndarray, state: np.ndarray):
     """
     n = len(x)
     sign = np.zeros(n, dtype=np.int8)
+    # R11 #152: the state is validated to be a signed state (values in
+    # {-1, 0, +1}), so the direction is read directly from the sign — no magic
+    # epsilon inference from arbitrary numeric state.
     finite = np.isfinite(state)
-    sign[finite & (state > 1e-9)] = 1
-    sign[finite & (state < -1e-9)] = -1
+    sign[finite & (state > 0.0)] = 1
+    sign[finite & (state < 0.0)] = -1
 
     P = np.full(n, np.nan, dtype=float)
     MFE = np.full(n, np.nan, dtype=float)
@@ -136,13 +161,15 @@ def _episode_scale_entry(scale: np.ndarray, e: int) -> float:
     """Entry-row scale only.
 
     An episode whose entry scale is missing/invalid has an undefined
-    entry-normalised excursion — there is no later fallback (P0-15).  The
-    callers test ``np.isfinite`` on the result and emit NaN.
+    entry-normalised excursion — there is no later fallback (P0-15).  R11 #151:
+    the scale is a *PositiveScale* — it must be strictly ``> 0``, not merely
+    finite; a non-positive scale makes the ratio undefined.  The callers test
+    ``np.isfinite`` on the result and emit NaN.
     """
     if e < 0:
         return np.nan
     se = scale[e]
-    return float(se) if np.isfinite(se) else np.nan
+    return float(se) if np.isfinite(se) and se > 0.0 else np.nan
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +217,12 @@ def _efficiency_series(x2d: np.ndarray, s2d: np.ndarray) -> np.ndarray:
             if sign[t] == 0:
                 continue
             e = entry[t]
-            out[t, c] = abs(x[t] - x[e]) / (path[t] + _EPS)
+            # R11 #149: at the entry bar displacement=0 and path=0 — the ratio
+            # 0/0 is undefined.  Do not emit until at least one valid step has
+            # been walked (path > 0).
+            if not (np.isfinite(path[t]) and path[t] > _EPS):
+                continue
+            out[t, c] = abs(x[t] - x[e]) / path[t]
     return out
 
 
@@ -204,10 +236,14 @@ def _retrace_series(x2d: np.ndarray, s2d: np.ndarray) -> np.ndarray:
                 continue
             if not (np.isfinite(MFE[t]) and np.isfinite(P[t])):
                 continue
-            # (MFE-P)/(MFE+eps) is unbounded when the episode's favourable
-            # excursion is ~0 while the position is already adverse.  Clamp for
-            # numeric hygiene: values > 1 already mean "past best into loss".
-            out[t, c] = min((MFE[t] - P[t]) / (MFE[t] + _EPS), 100.0)
+            # R11 #150: the retrace ratio (MFE-P)/MFE is UNDEFINED when MFE ~ 0
+            # (the episode never moved favourably — dividing by ~0 and clamping
+            # manufactured a mass of 100s).  Fail closed to NaN on an
+            # insufficient MFE; when MFE > 0 the honest (possibly > 1) ratio is
+            # emitted with no arbitrary clamp.
+            if MFE[t] <= _EPS:
+                continue
+            out[t, c] = (MFE[t] - P[t]) / MFE[t]
     return out
 
 
@@ -250,6 +286,7 @@ class StateEpisodeMfe(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, state: pd.DataFrame, scale: pd.DataFrame, **_: Any
     ) -> pd.DataFrame:
+        _validate_state_signed(state)
         return frame_like(
             x,
             _mfe_series(
@@ -280,6 +317,7 @@ class StateEpisodeMae(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, state: pd.DataFrame, scale: pd.DataFrame, **_: Any
     ) -> pd.DataFrame:
+        _validate_state_signed(state)
         return frame_like(
             x,
             _mae_series(
@@ -310,6 +348,7 @@ class StateEpisodeEfficiency(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, state: pd.DataFrame, **_: Any
     ) -> pd.DataFrame:
+        _validate_state_signed(state)
         return frame_like(
             x,
             _efficiency_series(x.to_numpy(dtype=float), state.to_numpy(dtype=float)),
@@ -338,6 +377,7 @@ class StateEpisodeRetraceRatio(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, state: pd.DataFrame, **_: Any
     ) -> pd.DataFrame:
+        _validate_state_signed(state)
         return frame_like(
             x,
             _retrace_series(x.to_numpy(dtype=float), state.to_numpy(dtype=float)),
@@ -369,6 +409,7 @@ class StateEpisodeExcursionBalance(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, state: pd.DataFrame, **_: Any
     ) -> pd.DataFrame:
+        _validate_state_signed(state)
         return frame_like(
             x,
             _balance_series(x.to_numpy(dtype=float), state.to_numpy(dtype=float)),

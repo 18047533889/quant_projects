@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import ParamSpec
+from cleaned_operators.common.group_key import is_missing_group_key
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -251,7 +252,9 @@ def _group_wasserstein_barycenter_distance(
         groups: dict[Any, list[int]] = {}
         for c in range(cols):
             lab = garr[r, c]
-            if lab is None or (isinstance(lab, float) and np.isnan(lab)):
+            # R11 P1-10: unified missing-group-key rule (None / NaN / pd.NA /
+            # NaT / "") so no phantom group can form.
+            if is_missing_group_key(lab):
                 continue
             groups.setdefault(lab, []).append(c)
         for lab, members in groups.items():
@@ -293,6 +296,58 @@ def _group_wasserstein_barycenter_distance(
     return frame_like(x, out)
 
 
+def _cs_physical_panel_coverage(x: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    """Fraction of the PHYSICAL panel's columns that are finite on each date.
+
+    R11 #178: denominator = the number of columns physically present in the
+    panel (including delisted / not-yet-listed names that still occupy a
+    column).  It is NOT a universe-relative coverage — for that, use
+    ``cs_universe_coverage`` which divides by the number of in-universe names.
+    """
+    arr = x.to_numpy(dtype=float)
+    rows, cols = arr.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    if cols == 0:
+        return frame_like(x, out)
+    for r in range(rows):
+        out[r, :] = float(np.isfinite(arr[r]).sum()) / float(cols)
+    return frame_like(x, out)
+
+
+def _cs_universe_coverage(x: pd.DataFrame, universe: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    """Fraction of the DECLARED UNIVERSE's names that are finite on each date.
+
+    R11 #178: the denominator is the number of in-universe names (a cell of
+    ``universe`` is in-universe when it is non-null and nonzero), NOT the raw
+    physical panel width.  Delisted / not-yet-listed / out-of-universe columns
+    are excluded from the denominator, so the two coverage operators measure
+    different things and must not be conflated.
+    """
+    xa = x.to_numpy(dtype=float)
+    ua = universe.to_numpy(dtype=object)
+    rows, cols = xa.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for r in range(rows):
+        u_mask = np.zeros(cols, dtype=bool)
+        for c in range(cols):
+            uv = ua[r, c]
+            if uv is None:
+                continue
+            try:
+                if bool(pd.isna(uv)):
+                    continue
+            except (TypeError, ValueError):
+                pass
+            if isinstance(uv, (int, float, np.integer, np.floating)) and float(uv) == 0.0:
+                continue
+            u_mask[c] = True
+        n_univ = int(u_mask.sum())
+        if n_univ == 0:
+            continue
+        out[r, :] = float(np.isfinite(xa[r])[u_mask].sum()) / float(n_univ)
+    return frame_like(x, out)
+
+
 _SPECS: dict[str, dict[str, Any]] = {
     "cs_hartigan_dip": {
         "fn": _ts_cs_hartigan_dip,
@@ -311,15 +366,42 @@ _SPECS: dict[str, dict[str, Any]] = {
         "output_unit": "level",
         "param_specs": _HARTIGAN_SPEC,
     },
+    "cs_physical_panel_coverage": {
+        "fn": _cs_physical_panel_coverage,
+        "params": ["x"],
+        "category": "cross_sectional_state",
+        "domain": "coverage",
+        "unit": "ratio",
+        "cost": 1,
+        "tags_extra": ["coverage", "global_state"],
+        "output_unit": "ratio",
+        "role": "global_state",
+    },
+    "cs_universe_coverage": {
+        "fn": _cs_universe_coverage,
+        "params": ["x", "universe"],
+        "category": "cross_sectional_state",
+        "domain": "coverage",
+        "unit": "ratio",
+        "cost": 1,
+        "tags_extra": ["coverage", "global_state"],
+        "output_unit": "ratio",
+        "role": "global_state",
+    },
     "group_wasserstein_barycenter_distance": {
         "fn": _group_wasserstein_barycenter_distance,
         "params": ["x", "group", "window", "min_group_size"],
         "category": "cross_sectional_state",
         "domain": "transport",
-        "unit": "same_as:target",
+        # R11 §37-D: a Wasserstein barycenter distance between an instrument's
+        # trailing window distribution and its group's barycenter is a distance
+        # in the unit of the underlying values ``x`` — the declared panel param
+        # is ``x`` (there is no ``target`` parameter), so ``same_as:target``
+        # was unresolvable.  Use ``same_as:x``.
+        "unit": "same_as:x",
         "cost": 5,
         "tags_extra": [],
-        "output_unit": "same_as:target",
+        "output_unit": "same_as:x",
         "param_specs": _WASSERSTEIN_SPEC,
     },
 }

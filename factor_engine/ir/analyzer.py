@@ -895,15 +895,26 @@ class UnknownRawColumnError(ValueError):
     """
 
 
-def validate_input_type_contracts(ir: IRNode) -> list[str]:
+def validate_input_type_contracts(
+    ir: IRNode, *, strict_unknown: bool = False
+) -> list[str]:
     """Reject operator calls whose argument violates the typed-input gate.
 
     Round-7 WS-C (#269-#273): an operator that declares per-parameter
     ``input_types`` (see ``ir.types.OPERATOR_INPUT_TYPE_CONTRACTS``) rejects an
     argument whose ``semantic_kind`` is present but not in the declared set —
     e.g. swapping Volume into a close slot, or Return into a volume slot.
-    Arguments with no declared semantic kind (untyped research columns) pass:
-    the gate cannot prove a mismatch and stays permissive for raw columns.
+    Arguments with no declared semantic kind (untyped research columns) pass in
+    research mode: the gate cannot prove a mismatch and stays permissive for raw
+    columns.
+
+    R11 P1-01: ``strict_unknown=True`` (production / default mining) flips the
+    fail-open — a CONSTRAINED slot (``allowed_semantic_kinds`` declared) that
+    receives an UNKNOWN ``semantic_kind`` is REJECTED, because the operator has
+    stated it can only be fed a specific kind and a caller that cannot prove the
+    argument is that kind must not proceed.  Only the explicit research override
+    (``strict_unknown=False``) keeps the permissive "cannot prove a mismatch"
+    behaviour.
     """
     errors: list[str] = []
 
@@ -917,12 +928,22 @@ def validate_input_type_contracts(ir: IRNode) -> list[str]:
                 if child.op in {"literal", "materialized_series", "plan_ref"}:
                     continue
                 child_kind = (child.semantic_attrs or {}).get("semantic_kind")
+                name = str(
+                    (child.attrs or {}).get("name")
+                    or (child.attrs or {}).get("field")
+                    or f"input[{index}]"
+                )
+                if child_kind is None and strict_unknown:
+                    if arg_contract.allowed_semantic_kinds is not None:
+                        errors.append(
+                            f"operator {node.op!r} parameter {arg_contract.parameter!r} "
+                            f"declares input_types={sorted(arg_contract.allowed_semantic_kinds)} "
+                            f"but got an UNKNOWN semantic_kind on {name!r} — a constrained "
+                            "slot cannot be fed an untyped column in production "
+                            "(R11 P1-01 fail-closed)"
+                        )
+                    continue
                 if child_kind is not None and not arg_contract.accepts(child_kind):
-                    name = str(
-                        (child.attrs or {}).get("name")
-                        or (child.attrs or {}).get("field")
-                        or f"input[{index}]"
-                    )
                     errors.append(
                         f"operator {node.op!r} parameter {arg_contract.parameter!r} "
                         f"declares input_types={sorted(arg_contract.allowed_semantic_kinds)}, "
@@ -1118,6 +1139,11 @@ class Analyzer:
         has_ts = False
         has_cs = False
         requires_full_history = False
+        # R11 P1-01: one mode authority for the whole lower() pass.  The visit
+        # closure recomputes it for the raw-ColumnRef gate; the typed-input gate
+        # below uses the same value so production never accidentally runs with
+        # research permissiveness.
+        effective_production = self._production if production is None else bool(production)
 
         def visit(node: Expr) -> tuple[IRNode, int]:
             nonlocal has_ts, has_cs, requires_full_history
@@ -1475,7 +1501,11 @@ class Analyzer:
         if semantic_kind_errors:
             raise TypedInputContractError("; ".join(semantic_kind_errors))
         # Round-7 WS-C (#269): per-parameter typed-input gate (input_types).
-        input_type_errors = validate_input_type_contracts(ir)
+        # R11 P1-01: production fails closed on an UNKNOWN kind in a constrained
+        # slot; research keeps the permissive "cannot prove a mismatch" path.
+        input_type_errors = validate_input_type_contracts(
+            ir, strict_unknown=effective_production
+        )
         if input_type_errors:
             raise TypedInputContractError("; ".join(input_type_errors))
         return AnalysisResult(

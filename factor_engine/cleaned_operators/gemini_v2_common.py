@@ -219,6 +219,21 @@ def register_dual(
                     if name in f.columns:
                         date_vals = np.asarray(f[name].to_numpy())
                         break
+                # R11 P0-03: restore the time column as a verified DatetimeIndex
+                # so an index-aware reference kernel (session/day grouping,
+                # ``index.normalize()``) sees the real time axis, not a
+                # positional RangeIndex.  Positional kernels are unaffected.
+                if date_vals is not None and len(pdf):
+                    try:
+                        _idx = pd.DatetimeIndex(date_vals)
+                        if not _idx.is_unique or not _idx.is_monotonic_increasing:
+                            raise ValueError(
+                                f"{canonical}: polars input time axis {name!r} is "
+                                "not unique and monotonically increasing (P0-03)"
+                            )
+                        pdf.index = _idx
+                    except (ValueError, TypeError):
+                        raise
                 axes.append((date_vals, tuple(cols), pdf.shape[0]))
                 pdfs.append(pdf)
             base_date, base_cols, base_rows = axes[0]

@@ -5,6 +5,21 @@ Ranked-panel convention follows ``relation/*``: ``s1`` = top holder, ``s2`` =
 second, …, with zero-fill for absent ranks.  Previous-snapshot panels are
 ``p1..p10``.  All operators consume pre-aggregated daily panels (source-side
 snapshots as-of ``PubDate``) and return one scalar per (TradeDate, Symbol).
+
+Entity identity (R11 #127): the node identity is ``ShareholderId`` — the
+disclosed holder, regardless of share nature / account type.  A holder that
+appears in multiple rows of the same snapshot is aggregated under ONE key when
+the ratios agree (duplicate record) and the snapshot fails closed to NaN when
+the same ID carries conflicting ratios (ambiguous between a duplicate record
+and genuinely different share natures).  Rows with a missing ShareholderId are
+never a node.
+
+Honest scope (R11 #128/#129): every *entry/exit/churn* metric in this module is
+a **top-K disclosed holder-set** metric — it compares the set of holders the
+issuer discloses (typically the top ten) across snapshots.  "No longer in the
+disclosed set" is a *disclosure* exit, NOT a total-shareholder exit; an
+investor who fell below the disclosure threshold is absent here even though
+they still hold stock.  Do not read these as whole-universe shareholder churn.
 """
 from __future__ import annotations
 
@@ -35,15 +50,40 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio"
 
 
 def _stack(panels: list[pd.DataFrame]) -> np.ndarray:
+    """Stack numeric ranked panels to (N, rows, cols) without reindexing.
+
+    R11 #122: share-ratio / pledge panels are ``timestamp x instrument`` panels
+    that must share the exact same date axis and instrument columns.  A silent
+    ``reindex`` could re-pair a holder's ratio to a different date or a
+    different instrument after an upstream misalignment, silently corrupting
+    churn / concentration.  Different axes raise instead.
+    """
     base = panels[0]
-    arrays = [np.asarray(p.reindex(index=base.index, columns=base.columns).to_numpy(dtype=float)) for p in panels]
+    for position, panel in enumerate(panels[1:], start=1):
+        if not panel.index.equals(base.index) or not panel.columns.equals(base.columns):
+            raise ValueError(
+                f"shareholder panel {position} has a different index/columns than "
+                "panel 0 (fail-closed; no silent reindex)"
+            )
+    arrays = [np.asarray(p.to_numpy(dtype=float)) for p in panels]
     return np.stack(arrays, axis=0)
 
 
 def _stack_ids(panels: list[pd.DataFrame]) -> np.ndarray:
-    """Stack shareholder-ID panels preserving string / object values."""
+    """Stack shareholder-ID panels preserving string / object values.
+
+    Same fail-closed axis contract as :func:`_stack` (R11 #122): a misaligned
+    ID panel must raise rather than silently re-pair a holder to the wrong date
+    or instrument.
+    """
     base = panels[0]
-    arrays = [np.asarray(p.reindex(index=base.index, columns=base.columns).to_numpy(dtype=object)) for p in panels]
+    for position, panel in enumerate(panels[1:], start=1):
+        if not panel.index.equals(base.index) or not panel.columns.equals(base.columns):
+            raise ValueError(
+                f"shareholder identity panel {position} has a different index/columns "
+                "than panel 0 (fail-closed; no silent reindex)"
+            )
+    arrays = [np.asarray(p.to_numpy(dtype=object)) for p in panels]
     return np.stack(arrays, axis=0)
 
 
@@ -55,11 +95,22 @@ _ID_SLOTS = 10
 
 
 def _id_key(value: Any) -> str | None:
-    """Normalise a shareholder-ID cell to a string key or None if empty."""
+    """Normalise a shareholder-ID cell to a string key or None if empty.
+
+    R11 #126: ``pd.NA`` / ``pd.NaT`` stringify to ``"<NA>"`` / ``"NaT"`` and
+    must NOT become a real shareholder node.  Gate on ``pd.isna`` first so every
+    missing sentinel (``None``, ``np.nan``, ``pd.NA``, ``pd.NaT``, ``float
+    ('nan')``) is rejected before stringification.
+    """
     if value is None:
         return None
+    try:
+        if bool(pd.isna(value)):
+            return None
+    except (TypeError, ValueError):
+        pass
     s = str(value)
-    if s in ("", "nan", "None", "NaN"):
+    if s in ("", "nan", "None", "NaN", "<NA>", "NaT"):
         return None
     return s
 
@@ -224,7 +275,7 @@ def _holder_weighted_churn(*args):
 # union pair (current ratios + current ids + previous ratios + previous ids).
 _mk(
     "holder_weighted_churn",
-    "按股东 ID 匹配的加权持股变动：0.5*Σ|ShareRatio_cur - ShareRatio_prev|（同 ID 跨期配对，缺失侧补0）。",
+    "按股东 ID 匹配的加权持股变动：0.5*Σ|ShareRatio_cur - ShareRatio_prev|（top-K 披露集合口径，同 ID 跨期配对，缺失侧补0）。",
     _ID_PARAMS,
     lambda *args, stat="churn": _id_matched(*args, stat=stat),
 )
@@ -239,7 +290,7 @@ def _entry_share(*args):
 
 _mk(
     "holder_entry_share",
-    "新进入股东（ID 不在上期）本期持股比例合计。",
+    "新进入 top-K 披露集合的股东（ID 不在上期披露集合）本期持股比例合计（披露口径，非全体股东新进）。",
     _ID_PARAMS,
     lambda *args, stat="entry": _id_matched(*args, stat=stat),
 )
@@ -254,7 +305,7 @@ def _exit_share(*args):
 
 _mk(
     "holder_exit_share",
-    "退出股东（ID 不在本期）上期持股比例合计。",
+    "跌出 top-K 披露集合的股东（ID 不在本期披露集合）上期持股比例合计——披露口径退出，非全体股东退出（R11 #128）。",
     _ID_PARAMS,
     lambda *args, stat="exit": _id_matched(*args, stat=stat),
 )
@@ -268,7 +319,7 @@ def _net_entry_share(*args):
 
 _mk(
     "holder_net_entry_share",
-    "新进股东持股比例合计 - 退出股东持股比例合计（按 ID 匹配）。",
+    "新进 top-K 披露集合持股比例合计 - 跌出集合持股比例合计（按 ID 匹配，披露口径）。",
     _ID_PARAMS,
     lambda *args, stat="net_entry": _id_matched(*args, stat=stat),
 )
@@ -294,31 +345,52 @@ def _rank_stability(*args):
 
 _mk(
     "holder_rank_stability",
-    "共同股东以 min(两期持股比例) 加权的排名位移均值（越小越稳定）。",
+    "共同股东以 min(两期持股比例) 加权的排名位移均值（top-K 披露集合口径，越小越稳定）。",
     _ID_PARAMS,
     lambda *args, stat="rank_migration": _id_matched(*args, stat=stat),
 )
 
 
+def _bounded_ratio(numerator, denominator, max_ratio=1.0):
+    """Share-count ratio with domain enforcement (R11 #130).
+
+    numerator >= 0, denominator > 0, ratio <= ``max_ratio``; any violation is
+    a data error, not a real 0% / >100% ratio — fail closed to NaN.
+    """
+    num = numerator.to_numpy(dtype=float) if hasattr(numerator, "to_numpy") else np.asarray(numerator, dtype=float)
+    den = denominator.to_numpy(dtype=float) if hasattr(denominator, "to_numpy") else np.asarray(denominator, dtype=float)
+    out = np.full(np.broadcast_shapes(num.shape, den.shape), np.nan, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.where(den != 0.0, num / np.where(den != 0.0, den, 1.0), np.nan)
+    ok = (
+        np.isfinite(num) & np.isfinite(den)
+        & (num >= 0.0) & (den > 0.0) & (ratio <= max_ratio)
+    )
+    out[ok] = ratio[ok]
+    if hasattr(numerator, "index"):
+        return _frame_like(numerator, out)
+    return out
+
+
 def _pledge_ratio(pledge_shares, total_capital):
-    return _safe_div(pledge_shares, total_capital)
+    return _bounded_ratio(pledge_shares, total_capital, max_ratio=1.0)
 
 
 _mk(
     "holder_pledge_ratio",
-    "股东质押股数合计 / 总股本。",
+    "股东质押股数合计 / 总股本（质押股数>=0、总股本>0、比率<=1，越界→NaN）。",
     ["pledge_shares", "total_capital"],
     _pledge_ratio,
 )
 
 
 def _freeze_ratio(freeze_shares, total_capital):
-    return _safe_div(freeze_shares, total_capital)
+    return _bounded_ratio(freeze_shares, total_capital, max_ratio=1.0)
 
 
 _mk(
     "holder_freeze_ratio",
-    "股东冻结股数合计 / 总股本。",
+    "股东冻结股数合计 / 总股本（冻结股数>=0、总股本>0、比率<=1，越界→NaN）。",
     ["freeze_shares", "total_capital"],
     _freeze_ratio,
 )
@@ -413,12 +485,12 @@ _mk(
 
 
 def _locked_share_ratio(locked_shares, total_capital):
-    return _safe_div(locked_shares, total_capital)
+    return _bounded_ratio(locked_shares, total_capital, max_ratio=1.0)
 
 
 _mk(
     "holder_locked_share_ratio",
-    "限售/受限股份占比。",
+    "限售/受限股份占比（限售股数>=0、总股本>0、比率<=1，越界→NaN）。",
     ["locked_shares", "total_capital"],
     _locked_share_ratio,
 )
@@ -707,26 +779,26 @@ def _mk_id(name: str, description: str, stat: str):
 
 _mk_id(
     "holder_id_matched_churn",
-    "按股东 ID 匹配的持股变动：0.5*Σ|ShareRatio_cur - ShareRatio_prev|（同 ID 跨期配对，缺失侧补0）。",
+    "按股东 ID 匹配的持股变动：0.5*Σ|ShareRatio_cur - ShareRatio_prev|（top-K 披露集合口径，同 ID 跨期配对，缺失侧补0）。",
     "churn",
 )
 _mk_id(
     "holder_id_matched_entry_share",
-    "新进入股东（ID 不在上期）本期持股比例合计。",
+    "新进入 top-K 披露集合的股东（ID 不在上期披露集合）本期持股比例合计（披露口径）。",
     "entry",
 )
 _mk_id(
     "holder_id_matched_exit_share",
-    "退出股东（ID 不在本期）上期持股比例合计。",
+    "跌出 top-K 披露集合的股东（ID 不在本期披露集合）上期持股比例合计——披露口径退出，非全体股东退出（R11 #128）。",
     "exit",
 )
 _mk_id(
     "holder_id_overlap_ratio",
-    "股东 ID 交集 / 并集（跨期股东重合率）。",
+    "股东 ID 交集 / 并集（跨期 top-K 披露集合重合率）。",
     "overlap",
 )
 _mk_id(
     "holder_share_weighted_rank_migration",
-    "以 min(两期持股比例) 加权的股东排名位移均值。",
+    "以 min(两期持股比例) 加权的股东排名位移均值（top-K 披露集合内共同股东）。",
     "rank_migration",
 )

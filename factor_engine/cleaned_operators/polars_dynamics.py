@@ -534,12 +534,21 @@ _mk(
         frame, lambda s: _hill_series(s, window, side, tail_fraction, min_tail_count)
     ),
 )
+def _delay_surprise_pair(delay_frame, event_frame, window, min_periods):
+    cols = _cols(delay_frame)
+    out: dict[str, np.ndarray] = {}
+    for c in cols:
+        ev = None if event_frame is None else _col(event_frame, c)
+        out[c] = _delay_surprise_series(_col(delay_frame, c), window, min_periods, ev)
+    return _rebuild(delay_frame, out)
+
+
 _mk(
     "report_filing_delay_surprise",
     "披露延迟稳健 z（Polars）。",
-    ["delay", "window", "min_periods"],
-    lambda frame, window=60, min_periods=5: _single_kernel(
-        frame, lambda s: _delay_surprise_series(s, window, min_periods)
+    ["delay", "filing_event", "window", "min_periods"],
+    lambda frame, filing_event=None, window=8, min_periods=3: _delay_surprise_pair(
+        frame, filing_event, window, min_periods
     ),
 )
 
@@ -631,7 +640,7 @@ _mk(
 # Transfer-entropy peak (fused).
 # ---------------------------------------------------------------------------
 
-def _te_peak_pair(target_frame, source_frame, window, bins, min_transitions, which):
+def _te_peak_pair(target_frame, source_frame, window, bins, min_transitions, min_cells_ratio, which):
     w = max(2, int(window))
     cols = _cols(target_frame)
     out: dict[str, np.ndarray] = {}
@@ -642,7 +651,9 @@ def _te_peak_pair(target_frame, source_frame, window, bins, min_transitions, whi
         res = np.full(n, np.nan)
         for r in range(n):
             lo = max(0, r - w + 1)
-            peak, lag = _te_peak_window(tv[lo : r + 1], sv[lo : r + 1], bins, min_transitions)
+            peak, lag = _te_peak_window(
+                tv[lo : r + 1], sv[lo : r + 1], bins, min_transitions, min_cells_ratio
+            )
             res[r] = peak if which == 0 else lag
         out[c] = res
     return _rebuild(target_frame, out)
@@ -651,17 +662,17 @@ def _te_peak_pair(target_frame, source_frame, window, bins, min_transitions, whi
 _mk(
     "ts_transfer_entropy_peak_strength",
     "TE 在 lag∈{1,2,3,5,10} 的峰值（Polars）。",
-    ["target", "source", "window", "bins", "min_transitions"],
-    lambda target, source, window=60, bins=3, min_transitions=None: _te_peak_pair(
-        target, source, window, bins, 30 if min_transitions is None else int(min_transitions), 0
+    ["target", "source", "window", "bins", "min_transitions", "min_cells_ratio"],
+    lambda target, source, window=60, bins=3, min_transitions=None, min_cells_ratio=1.0: _te_peak_pair(
+        target, source, window, bins, 30 if min_transitions is None else int(min_transitions), min_cells_ratio, 0
     ),
 )
 _mk(
     "ts_transfer_entropy_peak_lag",
     "TE 峰值时滞（Polars）。",
-    ["target", "source", "window", "bins", "min_transitions"],
-    lambda target, source, window=60, bins=3, min_transitions=None: _te_peak_pair(
-        target, source, window, bins, 30 if min_transitions is None else int(min_transitions), 1
+    ["target", "source", "window", "bins", "min_transitions", "min_cells_ratio"],
+    lambda target, source, window=60, bins=3, min_transitions=None, min_cells_ratio=1.0: _te_peak_pair(
+        target, source, window, bins, 30 if min_transitions is None else int(min_transitions), min_cells_ratio, 1
     ),
 )
 

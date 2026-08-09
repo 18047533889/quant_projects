@@ -27,7 +27,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.common.daily_panel import _aligned
 from cleaned_operators.rolling_pack import (
     check_window,
@@ -39,8 +44,161 @@ from cleaned_operators.rolling_pack import (
 
 _EPS = 1e-12
 
+# Audit #6: ONE missing-value policy for the whole hysteresis family.  The base
+# state machine used to carry state across a NaN driver while age / integral /
+# entry-strength reset, so the four outputs were NOT derived from the same
+# trajectory.  The family now shares a single policy (default:
+# CARRY_STATE_FREEZE_CLOCK — carry the state, freeze the age clock).
+_DEFAULT_HYSTERESIS_MISSING_POLICY = "CARRY_STATE_FREEZE_CLOCK"
 
-def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str) -> OperatorMetadata:
+
+class HysteresisMissingPolicy:
+    """Shared NaN-handling policy for the whole hysteresis family (audit #6).
+
+    ``ts_hysteresis_state`` / ``ts_hysteresis_age`` / ``ts_state_integral`` /
+    ``ts_state_entry_strength`` all consume the SAME ``HysteresisStateKernel``
+    under the SAME policy, so the four outputs always describe one trajectory:
+
+    * ``BREAK``                    — a missing driver resets the state machine;
+      the next valid row starts from neutral (run is broken).
+    * ``CARRY_STATE_AND_CLOCK``    — a missing driver keeps the current state and
+      TICKS the age clock (an unknown day still ages the state).
+    * ``CARRY_STATE_FREEZE_CLOCK`` — a missing driver keeps the current state but
+      FREEZES the age clock (an unknown day neither flips the state nor
+      manufactures age).  Default for the family.
+    * ``UNKNOWN``                  — unresolved marker; NOT directly executable
+      (fail closed: an unresolved policy raises instead of guessing).
+    """
+
+    BREAK = "BREAK"
+    CARRY_STATE_AND_CLOCK = "CARRY_STATE_AND_CLOCK"
+    CARRY_STATE_FREEZE_CLOCK = "CARRY_STATE_FREEZE_CLOCK"
+    UNKNOWN = "UNKNOWN"
+    EXECUTABLE = frozenset({BREAK, CARRY_STATE_AND_CLOCK, CARRY_STATE_FREEZE_CLOCK})
+    ALL = frozenset({BREAK, CARRY_STATE_AND_CLOCK, CARRY_STATE_FREEZE_CLOCK, UNKNOWN})
+
+
+def _normalise_hysteresis_policy(policy: Any) -> str:
+    p = str(policy).upper()
+    if p not in HysteresisMissingPolicy.EXECUTABLE:
+        raise ValueError(
+            f"invalid hysteresis missing policy {policy!r}; choose from "
+            f"{sorted(HysteresisMissingPolicy.EXECUTABLE)}"
+        )
+    return p
+
+
+class HysteresisStateKernel:
+    """ONE shared cross-row state machine for the hysteresis family (audit #5).
+
+    Holds ``{current_state, state_age, state_integral, entry_value,
+    last_valid_time}`` plus the capped per-row integral contributions.  Every
+    hysteresis operator steps this kernel row-by-row and reads the one or two
+    fields it emits, so state / age / integral / entry-strength are guaranteed
+    to describe the same trajectory under the same missing policy.
+
+    ``integral_cap`` is the ``max_run`` cap for ``ts_state_integral`` (the
+    per-row contribution deque); the scalar ``state_integral`` is always the
+    uncapped segment sum.
+    """
+
+    __slots__ = (
+        "hi", "lo", "missing_policy", "integral_cap",
+        "current_state", "state_age", "state_integral", "entry_value",
+        "last_valid_time", "_contributions",
+    )
+
+    def __init__(self, hi: float, lo: float, missing_policy: str, *, integral_cap: int | None = None):
+        self.hi = float(hi)
+        self.lo = float(lo)
+        self.missing_policy = _normalise_hysteresis_policy(missing_policy)
+        self.integral_cap = integral_cap
+        self.reset()
+
+    def reset(self) -> None:
+        self.current_state = 0
+        self.state_age = 0
+        self.state_integral = 0.0
+        self.entry_value = 0.0
+        self.last_valid_time = None
+        self._contributions = deque(maxlen=self.integral_cap)
+
+    @property
+    def contributions(self) -> deque:
+        """Per-row ``max(|z|-lower, 0)`` contributions within the current segment."""
+        return self._contributions
+
+    def step(self, value: float, t: int) -> None:
+        """Advance the state machine one row.  ``value`` may be NaN; ``t`` is the
+        row ordinal (used for ``last_valid_time``)."""
+        if not np.isfinite(value):
+            self._missing(t)
+            return
+        cs = self.current_state
+        if value > self.hi:
+            nxt = 1
+        elif value < -self.hi:
+            nxt = -1
+        elif cs == 1 and value < self.lo:
+            nxt = 0
+        elif cs == -1 and value > -self.lo:
+            nxt = 0
+        else:
+            nxt = cs
+        if nxt == 0:
+            self.current_state = 0
+            self.state_age = 0
+            self.state_integral = 0.0
+            self.entry_value = 0.0
+            self._contributions.clear()
+        else:
+            contribution = max(abs(value) - self.lo, 0.0)
+            if nxt != cs:
+                # Entering a fresh non-zero state: age/entry/integral re-seed.
+                self.current_state = nxt
+                self.state_age = 1
+                self.state_integral = contribution
+                self.entry_value = nxt * max(abs(value) - self.hi, 0.0)
+                self._contributions.clear()
+                self._contributions.append(contribution)
+            else:
+                # Continuing the same non-zero state: clock ticks, integral accrues.
+                self.current_state = nxt
+                self.state_age = self.state_age + 1
+                self.state_integral = self.state_integral + contribution
+                self._contributions.append(contribution)
+        self.last_valid_time = t
+
+    def _missing(self, t: int) -> None:
+        policy = self.missing_policy
+        if policy == HysteresisMissingPolicy.BREAK:
+            self.reset()
+            return
+        if policy == HysteresisMissingPolicy.CARRY_STATE_AND_CLOCK:
+            # State / integral / entry carried; the unknown day still ages the
+            # state so the clock stays honest.
+            self.state_age = self.state_age + 1
+            self.last_valid_time = t
+            return
+        if policy == HysteresisMissingPolicy.CARRY_STATE_FREEZE_CLOCK:
+            # State / integral / entry carried; the clock is frozen because an
+            # unknown day must not manufacture age.
+            return
+        raise ValueError(
+            f"hysteresis missing policy {policy!r} is not executable "
+            f"(UNKNOWN must be resolved by the caller)"
+        )
+
+
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    domain: str,
+    unit: str,
+    param_specs: dict[str, ParamSpec] | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="time_series_state",
@@ -52,7 +210,15 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", "cost:1",
         ],
+        param_specs=param_specs or {},
     )
+
+
+_HYSTERESIS_POLICY_SPEC = ParamSpec(
+    dtype=str,
+    choices=("BREAK", "CARRY_STATE_AND_CLOCK", "CARRY_STATE_FREEZE_CLOCK"),
+    default=_DEFAULT_HYSTERESIS_MISSING_POLICY,
+)
 
 
 def _state_series(state: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -326,19 +492,26 @@ class TsRunConcentration(SeriesOperator):
 class TsHysteresisState(SeriesOperator):
     """双阈值滞后状态机: z > +upper -> +1; z < -upper -> -1; 已 +1 且 z < lower -> 0; 已 -1 且 z > -lower -> 0。
 
-    要求 0 <= lower < upper。输出 {-1,0,+1}。z 缺失时输出 NaN、内部状态保持(carry)。
+    要求 0 <= lower < upper。输出 {-1,0,+1}。z 缺失时按 family 共享的
+    ``missing_policy`` 处理（默认 CARRY_STATE_FREEZE_CLOCK：输出 NaN、内部状态保持）。
     """
 
     metadata = _metadata(
         "ts_hysteresis_state",
         "双阈值滞后状态机输出 {-1,0,+1}。",
-        ["z", "upper", "lower"],
+        ["z", "upper", "lower", "missing_policy"],
         domain="trading_state",
         unit="state",
+        param_specs={"missing_policy": _HYSTERESIS_POLICY_SPEC},
     )
 
     def _calculate_series(
-        self, z: pd.DataFrame, upper: float = 1.0, lower: float = 0.0, **_: Any
+        self,
+        z: pd.DataFrame,
+        upper: float = 1.0,
+        lower: float = 0.0,
+        missing_policy: str = _DEFAULT_HYSTERESIS_MISSING_POLICY,
+        **_: Any,
     ) -> pd.DataFrame:
         hi = float(upper)
         lo = float(lower)
@@ -348,43 +521,13 @@ class TsHysteresisState(SeriesOperator):
         rows, cols = zv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            cur_state = 0
+            kernel = HysteresisStateKernel(hi, lo, missing_policy)
             for row in range(rows):
                 val = zv[row, col]
-                if not np.isfinite(val):
-                    out[row, col] = np.nan
-                    continue
-                if val > hi:
-                    cur_state = 1
-                elif val < -hi:
-                    cur_state = -1
-                elif cur_state == 1 and val < lo:
-                    cur_state = 0
-                elif cur_state == -1 and val > -lo:
-                    cur_state = 0
-                out[row, col] = float(cur_state)
+                kernel.step(val, row)
+                if np.isfinite(val):
+                    out[row, col] = float(kernel.current_state)
         return frame_like(z, out)
-
-
-def _hysteresis_states(zv: np.ndarray, hi: float, lo: float, cols: int) -> np.ndarray:
-    states = np.full(zv.shape, np.nan, dtype=float)
-    for col in range(cols):
-        cur_state = 0
-        for row in range(zv.shape[0]):
-            val = zv[row, col]
-            if not np.isfinite(val):
-                states[row, col] = np.nan
-                continue
-            if val > hi:
-                cur_state = 1
-            elif val < -hi:
-                cur_state = -1
-            elif cur_state == 1 and val < lo:
-                cur_state = 0
-            elif cur_state == -1 and val > -lo:
-                cur_state = 0
-            states[row, col] = float(cur_state)
-    return states
 
 
 @register_operator(
@@ -397,19 +540,27 @@ def _hysteresis_states(zv: np.ndarray, hi: float, lo: float, cols: int) -> np.nd
 class TsHysteresisAge(SeriesOperator):
     """滞后状态机, 按当前状态的持续年龄归一: state_t * min(age_t, cap) / cap, 范围 [-1,1]。
 
-    同时编码方向与持续时间; 中性状态 -> 0。
+    同时编码方向与持续时间; 中性状态 -> 0。年龄时钟与 ``ts_hysteresis_state``
+    共享同一 kernel，NaN 按 family 统一 ``missing_policy`` 处理。
     """
 
     metadata = _metadata(
         "ts_hysteresis_age",
         "状态方向 * 状态持续年龄/cap。",
-        ["z", "upper", "lower", "cap"],
+        ["z", "upper", "lower", "cap", "missing_policy"],
         domain="trading_state",
         unit="ratio",
+        param_specs={"missing_policy": _HYSTERESIS_POLICY_SPEC},
     )
 
     def _calculate_series(
-        self, z: pd.DataFrame, upper: float = 1.0, lower: float = 0.0, cap: int = 60, **_: Any
+        self,
+        z: pd.DataFrame,
+        upper: float = 1.0,
+        lower: float = 0.0,
+        cap: int = 60,
+        missing_policy: str = _DEFAULT_HYSTERESIS_MISSING_POLICY,
+        **_: Any,
     ) -> pd.DataFrame:
         hi = float(upper)
         lo = float(lower)
@@ -419,26 +570,20 @@ class TsHysteresisAge(SeriesOperator):
         if cap_n < 1:
             raise ValueError("cap must be >= 1")
         zv = z.to_numpy(dtype=float)
-        states = _hysteresis_states(zv, hi, lo, zv.shape[1])
         rows, cols = zv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            age = 0
+            kernel = HysteresisStateKernel(hi, lo, missing_policy)
             for row in range(rows):
-                st = states[row, col]
-                if not np.isfinite(st):
-                    age = 0
+                val = zv[row, col]
+                kernel.step(val, row)
+                if not np.isfinite(val):
                     continue
-                if st == 0.0:
-                    age = 0
+                st = kernel.current_state
+                if st == 0:
                     out[row, col] = 0.0
-                    continue
-                prev_st = states[row - 1, col] if row > 0 else np.nan
-                if np.isfinite(prev_st) and prev_st == st:
-                    age = age + 1
                 else:
-                    age = 1
-                out[row, col] = st * min(float(age), float(cap_n)) / float(cap_n)
+                    out[row, col] = st * min(float(kernel.state_age), float(cap_n)) / float(cap_n)
         return frame_like(z, out)
 
 
@@ -453,14 +598,16 @@ class TsStateIntegral(SeriesOperator):
     """当前非零滞后状态段内的强度累计: state_t * sum max(|z|-lower, 0)。
 
     half_life 给定则按 e^{-(t-tau)/lambda} 衰减。表达「状态持续时间 x 状态强度」。
+    段轨迹与 ``ts_hysteresis_state`` 共享同一 kernel，NaN 按统一 policy 处理。
     """
 
     metadata = _metadata(
         "ts_state_integral",
         "当前状态段内 max(|z|-lower,0) 累计(可选指数衰减)。",
-        ["z", "upper", "lower", "max_run", "half_life"],
+        ["z", "upper", "lower", "max_run", "half_life", "missing_policy"],
         domain="trading_state",
         unit="level",
+        param_specs={"missing_policy": _HYSTERESIS_POLICY_SPEC},
     )
 
     def _calculate_series(
@@ -470,6 +617,7 @@ class TsStateIntegral(SeriesOperator):
         lower: float = 0.0,
         max_run: int = 120,
         half_life: Any = None,
+        missing_policy: str = _DEFAULT_HYSTERESIS_MISSING_POLICY,
         **_: Any,
     ) -> pd.DataFrame:
         hi = float(upper)
@@ -483,38 +631,30 @@ class TsStateIntegral(SeriesOperator):
             if lamb <= 0.0:
                 raise ValueError("half_life must be > 0")
         zv = z.to_numpy(dtype=float)
-        states = _hysteresis_states(zv, hi, lo, zv.shape[1])
         rows, cols = zv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            # ``buf`` keeps only the latest ``max_run`` contributions of the
-            # current state segment, so ``max_run`` genuinely caps the integral
-            # (P0-29).  With ``half_life`` each retained contribution is decayed
-            # by its own age from the current row.
-            buf: deque[float] = deque(maxlen=w_run)
-            cur_state = 0.0
+            # The kernel's contribution deque keeps only the latest ``max_run``
+            # contributions of the current state segment, so ``max_run``
+            # genuinely caps the integral (P0-29).  With ``half_life`` each
+            # retained contribution is decayed by its own age from the current
+            # row.
+            kernel = HysteresisStateKernel(hi, lo, missing_policy, integral_cap=w_run)
             for row in range(rows):
-                st = states[row, col]
-                if not np.isfinite(st):
-                    buf.clear()
-                    cur_state = 0.0
+                val = zv[row, col]
+                kernel.step(val, row)
+                if not np.isfinite(val):
                     continue
-                if st == 0.0:
-                    buf.clear()
-                    cur_state = 0.0
+                st = kernel.current_state
+                if st == 0:
                     out[row, col] = 0.0
                     continue
-                if row > 0 and states[row - 1, col] == st:
-                    buf.append(max(abs(zv[row, col]) - lo, 0.0))
-                else:
-                    cur_state = st
-                    buf = deque([max(abs(zv[row, col]) - lo, 0.0)], maxlen=w_run)
                 if lamb is not None:
                     s = 0.0
-                    for age, val in enumerate(reversed(buf)):
-                        s += float(val) * float(np.exp(-(age + 1) / lamb))
+                    for age, contrib in enumerate(reversed(kernel.contributions)):
+                        s += float(contrib) * float(np.exp(-(age + 1) / lamb))
                 else:
-                    s = float(sum(buf))
+                    s = float(sum(kernel.contributions))
                 out[row, col] = st * s
         return frame_like(z, out)
 
@@ -530,47 +670,44 @@ class TsStateEntryStrength(SeriesOperator):
     """进入状态瞬间的强度, 状态持续期间 carry 最近一次 entry strength。
 
     Entry_t = state_t * max(|z_t| - upper, 0) 于状态建立时刻; 中性状态 -> 0。
-    用于区分「勉强突破进入状态」与「强力突破进入状态」。
+    用于区分「勉强突破进入状态」与「强力突破进入状态」。NaN 按统一 policy 处理。
     """
 
     metadata = _metadata(
         "ts_state_entry_strength",
         "状态建立瞬间的突破强度(持续期间 carry)。",
-        ["z", "upper", "lower"],
+        ["z", "upper", "lower", "missing_policy"],
         domain="trading_state",
         unit="level",
+        param_specs={"missing_policy": _HYSTERESIS_POLICY_SPEC},
     )
 
     def _calculate_series(
-        self, z: pd.DataFrame, upper: float = 1.0, lower: float = 0.0, **_: Any
+        self,
+        z: pd.DataFrame,
+        upper: float = 1.0,
+        lower: float = 0.0,
+        missing_policy: str = _DEFAULT_HYSTERESIS_MISSING_POLICY,
+        **_: Any,
     ) -> pd.DataFrame:
         hi = float(upper)
         lo = float(lower)
         if not (0.0 <= lo < hi):
             raise ValueError("require 0 <= lower < upper")
         zv = z.to_numpy(dtype=float)
-        states = _hysteresis_states(zv, hi, lo, zv.shape[1])
         rows, cols = zv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            carried = 0.0
-            cur_state = 0.0
+            kernel = HysteresisStateKernel(hi, lo, missing_policy)
             for row in range(rows):
-                st = states[row, col]
-                if not np.isfinite(st):
-                    carried = 0.0
-                    cur_state = 0.0
+                val = zv[row, col]
+                kernel.step(val, row)
+                if not np.isfinite(val):
                     continue
-                if st == 0.0:
-                    carried = 0.0
-                    cur_state = 0.0
+                if kernel.current_state == 0:
                     out[row, col] = 0.0
-                    continue
-                if row == 0 or not (np.isfinite(states[row - 1, col]) and states[row - 1, col] == st):
-                    # 新状态建立: entry strength = state * max(|z|-upper, 0)
-                    carried = st * max(abs(zv[row, col]) - hi, 0.0)
-                    cur_state = st
-                out[row, col] = carried
+                else:
+                    out[row, col] = float(kernel.entry_value)
         return frame_like(z, out)
 
 
@@ -763,3 +900,28 @@ def _register_surface() -> None:
 
 
 _register_surface()
+
+
+# Audit #5: the hysteresis family is genuinely stateful — every output depends on
+# cross-row hysteresis state carried by the shared HysteresisStateKernel.  The
+# operators have no segmented restore (the kernel is a pure per-column replay), so
+# the honest contract is a recursive full-history replay.  Round-11 #12: operators
+# declare their OWN contract via declare_stateful instead of a legacy name seed.
+def _declare_stateful_contracts() -> None:
+    from runtime.execution_contract import declare_stateful
+
+    for _canon in (
+        "ts_hysteresis_state",
+        "ts_hysteresis_age",
+        "ts_state_integral",
+        "ts_state_entry_strength",
+    ):
+        declare_stateful(
+            _canon,
+            state_model="recursive",
+            chunking="required_full_history",
+            history_kind="full_history",
+        )
+
+
+_declare_stateful_contracts()

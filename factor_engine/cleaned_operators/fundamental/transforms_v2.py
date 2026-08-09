@@ -16,9 +16,34 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
-from cleaned_operators.fiscal_strict import period_ordinal
+from cleaned_operators.fiscal_strict import (
+    period_ordinal,
+    reject_ytd_growth,
+    require_same_flow_grain,
+)
 
 _EPS = 1e-12
+
+# Round-11 #51: expected reporting-flow grain per operator, surfaced as a
+# ``flow_type:*`` metadata tag on the contract.  The runtime ``flow_type``
+# parameter additionally fails closed on a mismatched declaration.
+_FLOW_TYPE_TAGS = {
+    "fin_pct_change": "flow_type:SinglePeriodFlow",
+    "fin_log_change": "flow_type:SinglePeriodFlow",
+    "fin_qoq": "flow_type:SinglePeriodFlow",
+    "fin_yoy": "flow_type:SinglePeriodFlow",
+    "fin_ttm": "flow_type:SinglePeriodFlow",
+    "fin_growth": "flow_type:SinglePeriodFlow",
+    "fin_cagr": "flow_type:SinglePeriodFlow",
+    "fin_growth_acceleration": "flow_type:SinglePeriodFlow",
+    "fin_growth_change": "flow_type:SinglePeriodFlow",
+    "fin_growth_volatility": "flow_type:SinglePeriodFlow",
+    "fin_growth_stability": "flow_type:SinglePeriodFlow",
+    "fin_growth_persistence": "flow_type:SinglePeriodFlow",
+    "fin_accrual_ratio": "flow_type:SinglePeriodFlow",
+    "fin_cash_earnings_gap": "flow_type:SinglePeriodFlow",
+    "fin_cash_conversion": "flow_type:SinglePeriodFlow",
+}
 
 
 def _pos_int(value, name: str, minimum: int = 1) -> int:
@@ -324,6 +349,10 @@ def _register(name: str, params: Iterable[str], fn, description: str, *, tags=()
         return_type="series",
         tags=["fundamental", "period_aware", "pit_safe", "causal", "production_extension", *tags],
     )
+    # Round-11 #51: expose the expected reporting-flow grain on the contract.
+    flow_tag = _FLOW_TYPE_TAGS.get(name)
+    if flow_tag is not None and flow_tag not in metadata.tags:
+        metadata.tags = list(metadata.tags) + [flow_tag]
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -354,12 +383,17 @@ def fin_diff(x, period_id, periods=1):
     return _walk_periods(x, period_id, lambda o, v, c: float(v[c]) - _lag_value(o, v, c, p))
 
 
-def fin_pct_change(x, period_id, periods=1):
+def fin_pct_change(x, period_id, periods=1, flow_type=None):
+    # Finding #52: growth over a cumulative-YTD input is not a period growth
+    # rate; reject a caller-declared YTD grain instead of silently computing
+    # Q2-YTD / Q1-YTD as "quarterly growth".
+    reject_ytd_growth("fin_pct_change", flow_type)
     p = _pos_int(periods, "periods")
     return _walk_periods(x, period_id, lambda o, v, c: _safe_div(float(v[c]), _lag_value(o, v, c, p)) - 1.0)
 
 
-def fin_log_change(x, period_id, periods=1):
+def fin_log_change(x, period_id, periods=1, flow_type=None):
+    reject_ytd_growth("fin_log_change", flow_type)
     p = _pos_int(periods, "periods")
     def calc(o, v, c):
         old = _lag_value(o, v, c, p); cur = float(v[c])
@@ -367,15 +401,16 @@ def fin_log_change(x, period_id, periods=1):
     return _walk_periods(x, period_id, calc)
 
 
-def fin_qoq(x, period_id):
-    return fin_pct_change(x, period_id, 1)
+def fin_qoq(x, period_id, flow_type=None):
+    return fin_pct_change(x, period_id, 1, flow_type)
 
 
-def fin_yoy(x, period_id, periods_per_year=4):
-    return fin_pct_change(x, period_id, _pos_int(periods_per_year, "periods_per_year"))
+def fin_yoy(x, period_id, periods_per_year=4, flow_type=None):
+    return fin_pct_change(x, period_id, _pos_int(periods_per_year, "periods_per_year"), flow_type)
 
 
-def fin_ttm(x, period_id, periods_per_year=4):
+def fin_ttm(x, period_id, periods_per_year=4, flow_type=None):
+    reject_ytd_growth("fin_ttm", flow_type)
     n = _pos_int(periods_per_year, "periods_per_year")
     def calc(o, v, c):
         # TTM is a sum of *adjacent* fiscal periods: a skipped report must not
@@ -396,11 +431,12 @@ def fin_average_balance(x, period_id, periods=2):
     return _walk_periods(x, period_id, calc)
 
 
-def fin_growth(x, period_id, periods=1):
-    return fin_pct_change(x, period_id, periods)
+def fin_growth(x, period_id, periods=1, flow_type=None):
+    return fin_pct_change(x, period_id, periods, flow_type)
 
 
-def fin_cagr(x, period_id, periods=4, periods_per_year=4):
+def fin_cagr(x, period_id, periods=4, periods_per_year=4, flow_type=None):
+    reject_ytd_growth("fin_cagr", flow_type)
     p = _pos_int(periods, "periods")
     ppy = _pos_int(periods_per_year, "periods_per_year")
     def calc(o, v, c):
@@ -411,18 +447,18 @@ def fin_cagr(x, period_id, periods=4, periods_per_year=4):
     return _walk_periods(x, period_id, calc)
 
 
-def fin_growth_acceleration(x, period_id, short_periods=1, long_periods=4):
+def fin_growth_acceleration(x, period_id, short_periods=1, long_periods=4, flow_type=None):
     s = _pos_int(short_periods, "short_periods")
     l = _pos_int(long_periods, "long_periods")
     if s >= l:
         raise ValueError("short_periods must be < long_periods")
-    short = fin_pct_change(x, period_id, s)
-    long = fin_pct_change(x, period_id, l)
+    short = fin_pct_change(x, period_id, s, flow_type)
+    long = fin_pct_change(x, period_id, l, flow_type)
     return short - long
 
 
-def fin_growth_change(x, period_id, growth_periods=4, compare_periods=1):
-    g = fin_pct_change(x, period_id, _pos_int(growth_periods, "growth_periods"))
+def fin_growth_change(x, period_id, growth_periods=4, compare_periods=1, flow_type=None):
+    g = fin_pct_change(x, period_id, _pos_int(growth_periods, "growth_periods"), flow_type)
     return g - fin_lag(g, period_id, _pos_int(compare_periods, "compare_periods"))
 
 
@@ -633,24 +669,27 @@ def fin_sign_change_count(x,period_id,periods=8):
     return _walk_periods(x,period_id,calc)
 
 
-def fin_growth_volatility(x,period_id,growth_periods=1,window_periods=8):
+def fin_growth_volatility(x,period_id,growth_periods=1,window_periods=8,flow_type=None):
     # The growth sequence is measured over *adjacent* fiscal periods: a skipped
     # report fails the window closed instead of mixing multi-period changes
-    # into the volatility (review R4-23).
-    g=fin_pct_change(x,period_id,_pos_int(growth_periods,"growth_periods"))
+    # into the volatility (review R4-23).  A cumulative-YTD input is rejected
+    # (finding #52).
+    reject_ytd_growth("fin_growth_volatility", flow_type)
+    g=fin_pct_change(x,period_id,_pos_int(growth_periods,"growth_periods"),flow_type)
     return _rolling_period_stat(
         g, period_id, _pos_int(window_periods, "window_periods", 2),
         lambda a: np.std(a, ddof=1), require_consecutive=True,
     )
 
 
-def fin_growth_stability(x,period_id,growth_periods=1,window_periods=8):
-    vol=fin_growth_volatility(x,period_id,growth_periods,window_periods)
+def fin_growth_stability(x,period_id,growth_periods=1,window_periods=8,flow_type=None):
+    vol=fin_growth_volatility(x,period_id,growth_periods,window_periods,flow_type)
     return 1.0/(1.0+vol.abs())
 
 
-def fin_growth_persistence(x,period_id,growth_periods=1,window_periods=8):
-    g=fin_pct_change(x,period_id,_pos_int(growth_periods,"growth_periods"))
+def fin_growth_persistence(x,period_id,growth_periods=1,window_periods=8,flow_type=None):
+    reject_ytd_growth("fin_growth_persistence", flow_type)
+    g=fin_pct_change(x,period_id,_pos_int(growth_periods,"growth_periods"),flow_type)
     n=_pos_int(window_periods,"window_periods",2)
     def calc(o,v,c):
         vals=np.asarray(_values(o,v,c,n,require_consecutive=True),dtype=float)
@@ -676,15 +715,20 @@ def fin_divergence(x,y,period_id,periods=4):
     return fin_pct_change(x,period_id,p)-fin_pct_change(y,period_id,p)
 
 
-def fin_cash_earnings_gap(earnings,cashflow,scale):
+def fin_cash_earnings_gap(earnings,cashflow,scale,flow_type=None):
+    # Finding #51/#53: the two flows must be the SAME reporting grain.
+    require_same_flow_grain("fin_cash_earnings_gap", flow_type, 2)
     return fin_ratio(earnings-cashflow,scale.abs())
 
 
-def fin_accrual_ratio(earnings,cashflow,assets):
+def fin_accrual_ratio(earnings,cashflow,assets,flow_type=None):
+    require_same_flow_grain("fin_accrual_ratio", flow_type, 2)
     return fin_ratio(earnings-cashflow,assets.abs())
 
 
-def fin_cash_conversion(cashflow,earnings): return fin_ratio(cashflow,earnings)
+def fin_cash_conversion(cashflow,earnings,flow_type=None):
+    require_same_flow_grain("fin_cash_conversion", flow_type, 2)
+    return fin_ratio(cashflow,earnings)
 
 
 def fin_working_capital_change(working_capital,period_id,periods=1):
@@ -694,19 +738,19 @@ def fin_working_capital_change(working_capital,period_id,periods=1):
 _SPECS = [
     ("fin_lag",["x","period_id","periods"],fin_lag,"Lag by visible reporting periods, never by trading days."),
     ("fin_diff",["x","period_id","periods"],fin_diff,"Difference versus a prior visible report period."),
-    ("fin_pct_change",["x","period_id","periods"],fin_pct_change,"Percent change versus a prior visible report period."),
-    ("fin_log_change",["x","period_id","periods"],fin_log_change,"Log change versus a prior visible report period."),
-    ("fin_qoq",["x","period_id"],fin_qoq,"Quarter-over-quarter/one-report-period growth."),
-    ("fin_yoy",["x","period_id","periods_per_year"],fin_yoy,"Year-over-year growth with configurable periods per year."),
-    ("fin_ttm",["x","period_id","periods_per_year"],fin_ttm,"Rolling sum over *adjacent* fiscal report periods; a skipped report fails closed to NaN (review R4-23)."),
+    ("fin_pct_change",["x","period_id","periods","flow_type"],fin_pct_change,"Percent change versus a prior visible report period. flow_type declares the input reporting grain (CumulativeYTDFlow rejected, #52)."),
+    ("fin_log_change",["x","period_id","periods","flow_type"],fin_log_change,"Log change versus a prior visible report period."),
+    ("fin_qoq",["x","period_id","flow_type"],fin_qoq,"Quarter-over-quarter/one-report-period growth."),
+    ("fin_yoy",["x","period_id","periods_per_year","flow_type"],fin_yoy,"Year-over-year growth with configurable periods per year."),
+    ("fin_ttm",["x","period_id","periods_per_year","flow_type"],fin_ttm,"Rolling sum over *adjacent* fiscal report periods; a skipped report fails closed to NaN (review R4-23)."),
     ("fin_average_balance",["x","period_id","periods"],fin_average_balance,"Average balance over *adjacent* fiscal report periods; a skipped report fails closed to NaN (review R4-23)."),
-    ("fin_growth",["x","period_id","periods"],fin_growth,"Generic reporting-period growth."),
-    ("fin_cagr",["x","period_id","periods","periods_per_year"],fin_cagr,"Reporting-period CAGR with configurable annualization."),
-    ("fin_growth_acceleration",["x","period_id","short_periods","long_periods"],fin_growth_acceleration,"Short-horizon minus long-horizon fundamental growth."),
-    ("fin_growth_change",["x","period_id","growth_periods","compare_periods"],fin_growth_change,"Change in a reporting-period growth rate."),
-    ("fin_growth_volatility",["x","period_id","growth_periods","window_periods"],fin_growth_volatility,"Volatility of period growth across *adjacent* fiscal periods; a skipped report fails closed to NaN (review R4-23)."),
-    ("fin_growth_stability",["x","period_id","growth_periods","window_periods"],fin_growth_stability,"Inverse growth-volatility stability score over adjacent fiscal periods (skips fail closed, review R4-23)."),
-    ("fin_growth_persistence",["x","period_id","growth_periods","window_periods"],fin_growth_persistence,"Fraction of recent *adjacent* fiscal reports with positive growth (review R4-23)."),
+    ("fin_growth",["x","period_id","periods","flow_type"],fin_growth,"Generic reporting-period growth. Cumulative-YTD input rejected (#52); convert via fin_quarter_from_cumulative first."),
+    ("fin_cagr",["x","period_id","periods","periods_per_year","flow_type"],fin_cagr,"Reporting-period CAGR with configurable annualization."),
+    ("fin_growth_acceleration",["x","period_id","short_periods","long_periods","flow_type"],fin_growth_acceleration,"Short-horizon minus long-horizon fundamental growth."),
+    ("fin_growth_change",["x","period_id","growth_periods","compare_periods","flow_type"],fin_growth_change,"Change in a reporting-period growth rate."),
+    ("fin_growth_volatility",["x","period_id","growth_periods","window_periods","flow_type"],fin_growth_volatility,"Volatility of period growth across *adjacent* fiscal periods; a skipped report fails closed to NaN (review R4-23)."),
+    ("fin_growth_stability",["x","period_id","growth_periods","window_periods","flow_type"],fin_growth_stability,"Inverse growth-volatility stability score over adjacent fiscal periods (skips fail closed, review R4-23)."),
+    ("fin_growth_persistence",["x","period_id","growth_periods","window_periods","flow_type"],fin_growth_persistence,"Fraction of recent *adjacent* fiscal reports with positive growth (review R4-23)."),
     ("fin_std",["x","period_id","periods"],fin_std,"Historical reporting-period standard deviation over the last-N-visible reports; missing report periods are skipped (review R4-23)."),
     ("fin_mad",["x","period_id","periods"],fin_mad,"Compatibility alias of fin_mean_abs_deviation: mean(|x-mean|), NOT median-based MAD (review R4-28); last-N-visible, missing reports skipped."),
     ("fin_mean_abs_deviation",["x","period_id","periods"],fin_mean_abs_deviation,"Mean absolute deviation mean(|x-mean|) over the last-N-visible reports; missing report periods are skipped (review R4-28 naming)."),
@@ -730,9 +774,9 @@ _SPECS = [
     ("fin_common_size",["x","base"],fin_common_size,"Common-size accounting transform x/base."),
     ("fin_turnover",["flow","balance","period_id","average_periods"],fin_turnover,"Flow divided by average reporting-period balance."),
     ("fin_divergence",["x","y","period_id","periods"],fin_divergence,"Difference between two reporting-period growth rates."),
-    ("fin_cash_earnings_gap",["earnings","cashflow","scale"],fin_cash_earnings_gap,"Scaled earnings-minus-cash-flow gap."),
-    ("fin_accrual_ratio",["earnings","cashflow","assets"],fin_accrual_ratio,"Accrual proxy (earnings-cash flow)/assets."),
-    ("fin_cash_conversion",["cashflow","earnings"],fin_cash_conversion,"Cash flow divided by earnings."),
+    ("fin_cash_earnings_gap",["earnings","cashflow","scale","flow_type"],fin_cash_earnings_gap,"Scaled earnings-minus-cash-flow gap; the two flows must share one grain (#53)."),
+    ("fin_accrual_ratio",["earnings","cashflow","assets","flow_type"],fin_accrual_ratio,"Accrual proxy (earnings-cash flow)/assets; the two flows must share one grain (#53)."),
+    ("fin_cash_conversion",["cashflow","earnings","flow_type"],fin_cash_conversion,"Cash flow divided by earnings; the two flows must share one grain (#53)."),
     ("fin_working_capital_change",["working_capital","period_id","periods"],fin_working_capital_change,"Reporting-period change in working capital."),
 ]
 

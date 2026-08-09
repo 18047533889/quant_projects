@@ -12,7 +12,12 @@ from .datasource import DataSource
 
 logger = get_logger("storage.composite_source")
 
-_ALLOWED_JOIN_METHODS = frozenset({"exact", "asof_backward", "forward_fill"})
+# Round-11 §35 (plan A): ``current_only`` joins a snapshot source to the anchor
+# on EXACTLY matching rows only — the snapshot is never asof-ffilled into the
+# historical panel.  Semantically identical to ``exact`` at execution, but the
+# distinct name carries the SnapshotOnlySourcePolicy intent (a snapshot source
+# must only ever be consumed current-only).
+_ALLOWED_JOIN_METHODS = frozenset({"exact", "current_only", "asof_backward", "forward_fill"})
 
 
 @dataclass(frozen=True)
@@ -631,7 +636,9 @@ class CompositeDataSource(DataSource):
         production（子源 production=True）fail-closed；research 告警放行。
         """
         source = self.sources[source_name]
-        if join_spec.method == "exact":
+        if join_spec.method in {"exact", "current_only"}:
+            # current_only executes exact-align (no merge_asof), so it never
+            # creates a look-ahead on a PIT-sensitive source.
             return
         if not self._is_pit_sensitive_source(source):
             return
@@ -676,7 +683,10 @@ class CompositeDataSource(DataSource):
         self._enforce_join_authority(source_name=source_name, join_spec=join_spec)
         anchor_index = self._get_anchor_index()
         key_matched_rows: int
-        if join_spec.method == "exact":
+        if join_spec.method in {"exact", "current_only"}:
+            # Round-11 §35: ``current_only`` joins a snapshot source on EXACTLY
+            # matching rows only (no asof, no forward-fill) — the snapshot value
+            # never leaks into the historical panel.
             # R10 #43: reindex 把每个 anchor key 都对齐（未命中者置 NaN），但
             # key 命中数必须按「anchor key 在源索引中真实存在」计数，而不是
             # anchor 全长 —— 源里根本没有的 key 不能算 key-matched。

@@ -22,6 +22,8 @@ from cleaned_operators.fiscal_strict import (
     period_ordinal,
     pl_quarter_from_cumulative,
     pl_ttm_from_quarterly,
+    reject_ytd_growth,
+    require_same_flow_grain,
 )
 from cleaned_operators.fundamental.transforms_v2 import _period_key
 
@@ -236,7 +238,10 @@ def fin_diff(x, period_id, periods=1):
     return _make(x, cols, out)
 
 
-def fin_pct_change(x, period_id, periods=1):
+def fin_pct_change(x, period_id, periods=1, flow_type=None):
+    # Round-11 #52: growth over a cumulative-YTD input is not a period growth
+    # rate; reject a caller-declared YTD grain (mirrors the pandas reference).
+    reject_ytd_growth("fin_pct_change", flow_type)
     cols = _cols(x, period_id)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -245,7 +250,8 @@ def fin_pct_change(x, period_id, periods=1):
     return _make(x, cols, out)
 
 
-def fin_log_change(x, period_id, periods=1):
+def fin_log_change(x, period_id, periods=1, flow_type=None):
+    reject_ytd_growth("fin_log_change", flow_type)
     p = _pi(periods, "periods")
     cols = _cols(x, period_id)
     rows = x.height
@@ -260,7 +266,8 @@ def fin_log_change(x, period_id, periods=1):
     return _make(x, cols, out)
 
 
-def fin_ttm(x, period_id, periods_per_year=4):
+def fin_ttm(x, period_id, periods_per_year=4, flow_type=None):
+    reject_ytd_growth("fin_ttm", flow_type)
     n = _pi(periods_per_year, "periods_per_year")
     cols = _cols(x, period_id)
     rows = x.height
@@ -288,7 +295,8 @@ def fin_average_balance(x, period_id, periods=2):
     return _make(x, cols, out)
 
 
-def fin_cagr(x, period_id, periods=4, periods_per_year=4):
+def fin_cagr(x, period_id, periods=4, periods_per_year=4, flow_type=None):
+    reject_ytd_growth("fin_cagr", flow_type)
     p = _pi(periods, "periods")
     ppy = _pi(periods_per_year, "periods_per_year")
     cols = _cols(x, period_id)
@@ -306,13 +314,13 @@ def fin_cagr(x, period_id, periods=4, periods_per_year=4):
     return _make(x, cols, out)
 
 
-def fin_growth_acceleration(x, period_id, short_periods=1, long_periods=4):
+def fin_growth_acceleration(x, period_id, short_periods=1, long_periods=4, flow_type=None):
     s = _pi(short_periods, "short_periods")
     l = _pi(long_periods, "long_periods")
     if s >= l:
         raise ValueError("short_periods must be < long_periods")
-    short = fin_pct_change(x, period_id, s)
-    long = fin_pct_change(x, period_id, l)
+    short = fin_pct_change(x, period_id, s, flow_type)
+    long = fin_pct_change(x, period_id, l, flow_type)
     cols = _cols(short, long)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -321,8 +329,8 @@ def fin_growth_acceleration(x, period_id, short_periods=1, long_periods=4):
     return _make(x, cols, out)
 
 
-def fin_growth_change(x, period_id, growth_periods=4, compare_periods=1):
-    g = fin_pct_change(x, period_id, _pi(growth_periods, "growth_periods"))
+def fin_growth_change(x, period_id, growth_periods=4, compare_periods=1, flow_type=None):
+    g = fin_pct_change(x, period_id, _pi(growth_periods, "growth_periods"), flow_type)
     cp = _pi(compare_periods, "compare_periods")
     cols = _cols(x, period_id)
     rows = x.height
@@ -581,13 +589,14 @@ def fin_sign_change_count(x, period_id, periods=8):
     return _make(x, cols, out)
 
 
-def fin_growth_volatility(x, period_id, growth_periods=1, window_periods=8):
-    g = fin_pct_change(x, period_id, _pi(growth_periods, "growth_periods"))
+def fin_growth_volatility(x, period_id, growth_periods=1, window_periods=8, flow_type=None):
+    reject_ytd_growth("fin_growth_volatility", flow_type)
+    g = fin_pct_change(x, period_id, _pi(growth_periods, "growth_periods"), flow_type)
     return fin_std(g, period_id, _pi(window_periods, "window_periods", 2))
 
 
-def fin_growth_stability(x, period_id, growth_periods=1, window_periods=8):
-    vol = fin_growth_volatility(x, period_id, growth_periods, window_periods)
+def fin_growth_stability(x, period_id, growth_periods=1, window_periods=8, flow_type=None):
+    vol = fin_growth_volatility(x, period_id, growth_periods, window_periods, flow_type)
     cols = _cols(vol)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -596,8 +605,9 @@ def fin_growth_stability(x, period_id, growth_periods=1, window_periods=8):
     return _make(x, cols, out)
 
 
-def fin_growth_persistence(x, period_id, growth_periods=1, window_periods=8):
-    g = fin_pct_change(x, period_id, _pi(growth_periods, "growth_periods"))
+def fin_growth_persistence(x, period_id, growth_periods=1, window_periods=8, flow_type=None):
+    reject_ytd_growth("fin_growth_persistence", flow_type)
+    g = fin_pct_change(x, period_id, _pi(growth_periods, "growth_periods"), flow_type)
     n = _pi(window_periods, "window_periods", 2)
     cols = _cols(x, period_id)
     rows = x.height
@@ -641,7 +651,8 @@ def fin_divergence(x, y, period_id, periods=4):
     return _make(x, cols, out)
 
 
-def fin_cash_earnings_gap(earnings, cashflow, scale_base):
+def fin_cash_earnings_gap(earnings, cashflow, scale_base, flow_type=None):
+    require_same_flow_grain("fin_cash_earnings_gap", flow_type, 2)
     cols = _cols(earnings, cashflow, scale_base)
     rows = earnings.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -653,7 +664,8 @@ def fin_cash_earnings_gap(earnings, cashflow, scale_base):
     return _make(earnings, cols, out)
 
 
-def fin_accrual_ratio(earnings, cashflow, assets):
+def fin_accrual_ratio(earnings, cashflow, assets, flow_type=None):
+    require_same_flow_grain("fin_accrual_ratio", flow_type, 2)
     cols = _cols(earnings, cashflow, assets)
     rows = earnings.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -1122,16 +1134,16 @@ def fin_seasonal_percentile(x, period_id, fiscal_quarter, years=5, min_history=2
 _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("fin_lag", ("x", "period_id", "periods"), fin_lag, "Lag by visible reporting periods, never by trading days."),
     ("fin_diff", ("x", "period_id", "periods"), fin_diff, "Difference versus a prior visible report period."),
-    ("fin_pct_change", ("x", "period_id", "periods"), fin_pct_change, "Percent change versus a prior visible report period."),
-    ("fin_log_change", ("x", "period_id", "periods"), fin_log_change, "Log change versus a prior visible report period."),
-    ("fin_qoq", ("x", "period_id"), lambda x, period_id: fin_pct_change(x, period_id, 1), "Quarter-over-quarter percent change."),
-    ("fin_yoy", ("x", "period_id", "periods_per_year"), lambda x, period_id, periods_per_year=4: fin_pct_change(x, period_id, _pi(periods_per_year, "periods_per_year")), "Year-over-year percent change."),
-    ("fin_ttm", ("x", "period_id", "periods_per_year"), fin_ttm, "Trailing-twelve-months sum."),
+    ("fin_pct_change", ("x", "period_id", "periods", "flow_type"), fin_pct_change, "Percent change versus a prior visible report period."),
+    ("fin_log_change", ("x", "period_id", "periods", "flow_type"), fin_log_change, "Log change versus a prior visible report period."),
+    ("fin_qoq", ("x", "period_id", "flow_type"), lambda x, period_id, flow_type=None: fin_pct_change(x, period_id, 1, flow_type), "Quarter-over-quarter percent change."),
+    ("fin_yoy", ("x", "period_id", "periods_per_year", "flow_type"), lambda x, period_id, periods_per_year=4, flow_type=None: fin_pct_change(x, period_id, _pi(periods_per_year, "periods_per_year"), flow_type), "Year-over-year percent change."),
+    ("fin_ttm", ("x", "period_id", "periods_per_year", "flow_type"), fin_ttm, "Trailing-twelve-months sum."),
     ("fin_average_balance", ("x", "period_id", "periods"), fin_average_balance, "Average balance over visible periods."),
-    ("fin_growth", ("x", "period_id", "periods"), lambda x, period_id, periods=1: fin_pct_change(x, period_id, periods), "Period-over-period growth."),
-    ("fin_cagr", ("x", "period_id", "periods", "periods_per_year"), fin_cagr, "Compound annual growth rate."),
-    ("fin_growth_acceleration", ("x", "period_id", "short_periods", "long_periods"), fin_growth_acceleration, "Short minus long growth."),
-    ("fin_growth_change", ("x", "period_id", "growth_periods", "compare_periods"), fin_growth_change, "Growth change versus prior report period."),
+    ("fin_growth", ("x", "period_id", "periods", "flow_type"), lambda x, period_id, periods=1, flow_type=None: fin_pct_change(x, period_id, periods, flow_type), "Period-over-period growth."),
+    ("fin_cagr", ("x", "period_id", "periods", "periods_per_year", "flow_type"), fin_cagr, "Compound annual growth rate."),
+    ("fin_growth_acceleration", ("x", "period_id", "short_periods", "long_periods", "flow_type"), fin_growth_acceleration, "Short minus long growth."),
+    ("fin_growth_change", ("x", "period_id", "growth_periods", "compare_periods", "flow_type"), fin_growth_change, "Growth change versus prior report period."),
     ("fin_std", ("x", "period_id", "periods"), fin_std, "Sample std of recent visible report values."),
     ("fin_mad", ("x", "period_id", "periods"), fin_mad, "Mean absolute deviation of recent visible report values."),
     ("fin_cv", ("x", "period_id", "periods"), fin_cv, "Coefficient of variation."),
@@ -1147,16 +1159,16 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("fin_positive_streak", ("x", "period_id", "max_periods"), fin_positive_streak, "Bounded streak of positive report-to-report changes."),
     ("fin_negative_streak", ("x", "period_id", "max_periods"), fin_negative_streak, "Bounded streak of negative report-to-report changes."),
     ("fin_sign_change_count", ("x", "period_id", "periods"), fin_sign_change_count, "Count of sign changes among recent report deltas."),
-    ("fin_growth_volatility", ("x", "period_id", "growth_periods", "window_periods"), fin_growth_volatility, "Std of growth over report-period window."),
-    ("fin_growth_stability", ("x", "period_id", "growth_periods", "window_periods"), fin_growth_stability, "Inverse volatility of growth."),
-    ("fin_growth_persistence", ("x", "period_id", "growth_periods", "window_periods"), fin_growth_persistence, "Fraction of recent periods with positive growth."),
+    ("fin_growth_volatility", ("x", "period_id", "growth_periods", "window_periods", "flow_type"), fin_growth_volatility, "Std of growth over report-period window."),
+    ("fin_growth_stability", ("x", "period_id", "growth_periods", "window_periods", "flow_type"), fin_growth_stability, "Inverse volatility of growth."),
+    ("fin_growth_persistence", ("x", "period_id", "growth_periods", "window_periods", "flow_type"), fin_growth_persistence, "Fraction of recent periods with positive growth."),
     ("fin_ratio", ("numerator", "denominator"), fin_ratio, "Ratio with zero/infinity handled as missing."),
     ("fin_common_size", ("x", "base"), lambda x, base: fin_ratio(x, base), "Common-size ratio."),
     ("fin_turnover", ("flow", "balance", "period_id", "average_periods"), fin_turnover, "Flow divided by average balance."),
     ("fin_divergence", ("x", "y", "period_id", "periods"), fin_divergence, "Difference of same-period percent changes."),
-    ("fin_cash_earnings_gap", ("earnings", "cashflow", "scale_base"), fin_cash_earnings_gap, "Scaled earnings-minus-cashflow gap."),
-    ("fin_accrual_ratio", ("earnings", "cashflow", "assets"), fin_accrual_ratio, "Accrual ratio scaled by absolute assets."),
-    ("fin_cash_conversion", ("cashflow", "earnings"), lambda cashflow, earnings: fin_ratio(cashflow, earnings), "Cash conversion ratio."),
+    ("fin_cash_earnings_gap", ("earnings", "cashflow", "scale_base", "flow_type"), fin_cash_earnings_gap, "Scaled earnings-minus-cashflow gap."),
+    ("fin_accrual_ratio", ("earnings", "cashflow", "assets", "flow_type"), fin_accrual_ratio, "Accrual ratio scaled by absolute assets."),
+    ("fin_cash_conversion", ("cashflow", "earnings", "flow_type"), lambda cashflow, earnings, flow_type=None: (require_same_flow_grain("fin_cash_conversion", flow_type, 2) or fin_ratio(cashflow, earnings)), "Cash conversion ratio."),
     ("fin_working_capital_change", ("working_capital", "period_id", "periods"), fin_working_capital_change, "Working-capital period change."),
     ("fin_surprise", ("actual", "expected", "scale_base"), fin_surprise, "Scaled actual-minus-expectation surprise."),
     ("fin_surprise_zscore", ("actual", "expected", "scale_base", "window_days"), fin_surprise_zscore, "Daily-observation prior-window z-score of realized surprise."),

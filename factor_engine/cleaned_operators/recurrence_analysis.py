@@ -94,10 +94,14 @@ def _recurrence_stats_window(
         scale = float(np.std(v))
     if not np.isfinite(scale) or scale <= _EPS:
         return None
-    # R6-113: phase-space distance grows ~√dim in dim dimensions; a fixed
-    # epsilon does not represent a fixed neighbourhood density across dim.
-    # Normalise epsilon by √dim for comparability.
-    eps = float(eps_fraction) * scale / float(np.sqrt(max(1, int(dim))))
+    # R6-113 / R11 P0-11: phase-space distance D = sqrt(Σ(x_j-y_j)²) grows as
+    # scale·√dim in a dim-dimensional embedding (each coordinate ~scale).  A
+    # fixed epsilon therefore does not describe a fixed neighbourhood density
+    # across dim.  To keep the recurrence RATE comparable across dim the
+    # threshold must scale WITH the distance — multiply by √dim, matching the
+    # distance growth.  The previous ``/√dim`` made eps shrink while D grew,
+    # so the recurrence rate collapsed as dim increased (direction reversed).
+    eps = float(eps_fraction) * scale * float(np.sqrt(max(1, int(dim))))
     D = np.sqrt(np.sum((P[:, None, :] - P[None, :, :]) ** 2, axis=2))
     R = (D <= eps) & ~np.eye(M, dtype=bool)
 
@@ -133,10 +137,14 @@ def _recurrence_stats_window(
         # in THIS window), so two windows with identical probability structure
         # got different values purely because one happened to contain a rare
         # extra length.  Normalise by the FIXED theoretical support of the
-        # diagonal-length distribution instead: lengths run from ``min_line`` to
-        # ``M`` (the phase-space size), so the maximum entropy is log(M-min_line+1)
-        # regardless of which lengths actually appeared.
-        support = max(2, M - int(min_line) + 1)
+        # diagonal-length distribution instead.
+        #
+        # R11 P1-08 (off-by-one): the main diagonal is already excluded, so the
+        # longest off-diagonal diagonal has length M-1 and the achievable
+        # lengths are [min_line, ..., M-1] — exactly M-min_line values, not
+        # M-min_line+1.  The old +1 inflated the normalisation denominator.
+        # (An empty distribution is guarded by the caller's ``if diag_lengths``.)
+        support = max(2, M - int(min_line))
         ent /= np.log(support)
     else:
         ent = np.nan

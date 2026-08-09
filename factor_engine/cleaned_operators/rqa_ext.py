@@ -100,9 +100,11 @@ def _rqa_stats_window(
         scale = float(np.std(v))
     if not np.isfinite(scale) or scale <= _EPS:
         return {}
-    # R6-113: √dim-normalised epsilon keeps neighbourhood density comparable
-    # across embedding dimensions.
-    eps = float(eps_fraction) * scale / float(np.sqrt(max(1, int(dim))))
+    # R6-113 / R11 P0-11: phase-space distance D = sqrt(Σ(x_j-y_j)²) grows as
+    # scale·√dim; the threshold must scale WITH the distance (multiply by √dim)
+    # to keep the recurrence rate comparable across dim.  The previous ``/√dim``
+    # shrank eps while D grew, collapsing the rate as dim increased.
+    eps = float(eps_fraction) * scale * float(np.sqrt(max(1, int(dim))))
     if theiler is None:
         theiler = max(0, (dim - 1) * delay)
     D = np.sqrt(np.sum((P[:, None, :] - P[None, :, :]) ** 2, axis=2))
@@ -113,10 +115,17 @@ def _rqa_stats_window(
     time_mask = np.abs(np.arange(M)[:, None] - np.arange(M)[None, :]) > int(theiler)
     R = (D <= eps) & time_mask
 
-    total_pairs = M * (M - 1)
-    if total_pairs <= 0:
+    # R11 P1-09: after the Theiler exclusion the recurrence RATE must be
+    # normalised by the ADMISSIBLE pairs only (those that survived |i-j|>theiler
+    # AND are off-diagonal), not by the full M(M-1) off-diagonal count.  Using
+    # M(M-1) would mechanically deflate RR as theiler grows (fewer numerator
+    # pairs but the same denominator) — a pure denominator effect, not signal.
+    # Symmetric mask: #{(i,j): i≠j, |i-j|>theiler} = 2·#{i>j, |i-j|>theiler}.
+    off_diag = ~np.eye(M, dtype=bool)
+    admissible_pairs = int(np.count_nonzero(off_diag & time_mask))
+    if admissible_pairs <= 0:
         return {}
-    rate = float(R.sum()) / total_pairs
+    rate = float(R.sum()) / admissible_pairs
     n_rec = float(R.sum())
     if n_rec <= 0:
         return {}

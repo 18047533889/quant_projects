@@ -2,10 +2,14 @@
 """Extreme-value tail shape and quantile relationship operators (2026-08 V3).
 
 * ``ts_hill_tail_index``        — Hill estimator of the tail index ξ (shape, not
-  size): how thick the extreme tail is (P1).  Upper/lower via ``side``.
+  size): how thick the extreme tail is (P1).  Upper/lower via ``side``, both
+  defined as explicit peaks-over-threshold exceedances (exact counterparts,
+  review #38); a raw nonstationary price level is rejected by a domain gate
+  (review #39).
 * ``ts_quantile_regression_beta`` — exact quantile-regression slope β_q via a
   linear program (P2 research): the marginal relationship of ``x`` when the
-  stock is in its own q-th return state.
+  stock is in its own q-th return state.  Carries ``unit(y)/unit(x)`` (review
+  #40), not a uniform ratio.
 
 Deterministic (fixed threshold fraction, LP with HiGHS), prefix-causal.
 """
@@ -55,21 +59,50 @@ def _column_map(xv: np.ndarray, fn) -> np.ndarray:
 # ts_hill_tail_index
 # ---------------------------------------------------------------------------
 
-def _lower_tail_magnitude(valid: np.ndarray) -> np.ndarray:
-    """R4-87 lower-tail magnitudes ``u - x > 0`` below a reference threshold.
+def _reject_price_level(series: np.ndarray) -> None:
+    """Reject a raw nonstationary price level input (review #39).
 
-    ``u`` is the median of the finite window values, so the lower-tail sample is
-    the bottom half of the window — the sample-size mirror image of the upper
-    tail's ``x > 0`` filter for a centred return series (median ≈ 0, so
-    ``u - x ≈ -x``).  Using ``threshold - x`` instead of ``-x`` keeps the lower
-    tail well-defined for *positive* price/valuation series, where ``-x`` is
-    always negative and ``y > 0`` deleted the whole lower tail.
+    ``ts_hill_tail_index`` is a *shape* estimator on exceedance magnitudes;
+    feeding it a raw price level (strictly positive and nonstationary, so the
+    level itself carries no tail-shape meaning) is a caller bug and must fail
+    closed.  The domain gate fires when all finite values are positive AND the
+    level's standard deviation is much larger than its first-difference
+    standard deviation — ``sd(x)/sd(Δx)`` is O(1) for stationary returns /
+    positive magnitudes, but grows like O(sqrt n) for a random-walk price level.
+    """
+    vals = series[np.isfinite(series)]
+    if vals.size < 8:
+        return  # too short to judge; the kernel's min-tail-count fails closed
+    if not np.all(vals > 0.0):
+        return  # signed return / centred residual / signed signal -> allowed
+    sd_level = float(np.std(vals))
+    sd_diff = float(np.std(np.diff(vals)))
+    # sd_diff ~ 0 -> a deterministic smooth trend (pure price level);
+    # sd_level / sd_diff large -> random-walk price level.  Both rejected.
+    if sd_level / max(sd_diff, _EPS) > 5.0:
+        raise ValueError(
+            "ts_hill_tail_index requires a return / residual / positive "
+            "magnitude / tail-loss input, not a raw nonstationary price level "
+            "(domain gate, review #39)"
+        )
+
+
+def _pot_exceedances(valid: np.ndarray, side: str, frac: float) -> np.ndarray:
+    """Explicit peaks-over-threshold exceedance magnitudes (review #38).
+
+    Upper and lower tails are exact counterparts:
+    * upper exceedance ``x - u`` for ``x > u`` with ``u = Q(valid, 1-frac)``;
+    * lower exceedance ``u - x`` for ``x < u`` with ``u = Q(valid, frac)``.
     """
     if valid.size == 0:
         return valid
-    u = float(np.quantile(valid, 0.5))
-    y = u - valid
-    return y[y > 0.0]
+    if side == "upper":
+        u = float(np.quantile(valid, 1.0 - frac))
+        mags = valid[valid > u] - u
+    else:
+        u = float(np.quantile(valid, frac))
+        mags = u - valid[valid < u]
+    return mags[mags > 0.0]
 
 
 def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: float, min_tail_count: int) -> np.ndarray:
@@ -82,6 +115,7 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
     if not (0.0 < frac <= 0.5):
         raise ValueError("tail_fraction must satisfy 0 < tail_fraction <= 0.5")
     mtc = max(3, int(min_tail_count))
+    _reject_price_level(series)
     out = np.full(n, np.nan)
     for t in range(n):
         lo = max(0, t - w + 1)
@@ -89,21 +123,17 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
         valid = chunk[np.isfinite(chunk)]
         if valid.size < mtc:
             continue
-        if side == "upper":
-            y = valid
-        else:
-            y = _lower_tail_magnitude(valid)
-        y = y[y > 0.0]
-        if y.size < mtc:
+        mags = _pot_exceedances(valid, side, frac)
+        if mags.size < mtc:
             continue
-        k = int(np.floor(y.size * frac))
-        if k < mtc:
+        k = int(np.floor(mags.size * frac))
+        if k < mtc or k < 1 or k > mags.size - 1:
             continue
-        ys = np.sort(y)
-        threshold = ys[y.size - k - 1]
+        ys = np.sort(mags)
+        threshold = ys[mags.size - k - 1]
         if threshold <= 0.0 or not np.isfinite(threshold):
             continue
-        top = ys[y.size - k :]
+        top = ys[mags.size - k :]
         xi = float(np.mean(np.log(top / threshold)))
         out[t] = xi
     return out
@@ -117,18 +147,19 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
     source="extreme_tail",
 )
 class TsHillTailIndex(SeriesOperator):
-    """Hill 尾部指数 ξ（上/下尾厚度形状，非大小）。
+    """Hill 尾部指数 ξ（POT 上/下超阈值形状，非大小）。
 
-    上尾对窗口内 X>0 排序;下尾对低阈值超量 ``u - x > 0``(u 为 frac 分位数,
-    R4-87)——正价格/估值序列也有定义良好的下尾,而非被 ``-x`` 全删。取
-    ``k=floor(n*frac)`` 个大值:``ξ = (1/k) Σ log(Y_{n-j+1}/Y_{n-k})``。ξ 越大
-    尾部越厚。``min_tail_count`` 内样本不足则 NaN。与 ES/partial moment(尾部
-    大小)互补。P1。
+    显式 peaks-over-threshold：上尾超阈值 ``x - u``（``u = Q(1-frac)``），
+    下尾镜像超阈值 ``u - x``（``u = Q(frac)``）——上下尾是精确对偶
+    （review #38）。对超阈值取 ``k=floor(n*frac)`` 个大值:
+    ``ξ = (1/k) Σ log(Y_{n-j+1}/Y_{n-k})``。ξ 越大尾部越厚。``min_tail_count``
+    内样本不足则 NaN。输入必须是 return / residual / positive magnitude /
+    tail loss；原始非平稳价格水平被 domain gate 拒绝（review #39）。P1。
     """
 
     metadata = _metadata(
         "ts_hill_tail_index",
-        "Hill 尾部指数 ξ（上/下尾厚度形状）。",
+        "Hill 尾部指数 ξ（POT 上/下超阈值形状，拒收原始价格水平）。",
         ["x", "window", "side", "tail_fraction", "min_tail_count"],
         unit="ratio",
         cost=5,
@@ -232,9 +263,11 @@ class TsQuantileRegressionBeta(SeriesOperator):
 
     metadata = _metadata(
         "ts_quantile_regression_beta",
-        "分位数回归斜率 β_q（精确 LP）。",
+        "分位数回归斜率 β_q（精确 LP，单位 unit(y)/unit(x)）。",
         ["y", "x", "window", "quantile"],
-        unit="ratio",
+        # A regression slope carries unit(y)/unit(x), NOT a uniform ratio
+        # (review #40) — mirroring the ts_expectile_beta convention.
+        unit="unit(y)/unit(x)",
         cost=8,
     )
 

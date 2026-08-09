@@ -9,7 +9,7 @@ results advance only when a new report period becomes visible.
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 import numpy as np
 import pandas as pd
@@ -28,7 +28,35 @@ _EPS = 1e-12
 _CANONICALS: list[str] = []
 
 
-def _meta(name: str, description: str, params: list[str]) -> OperatorMetadata:
+# ---------------------------------------------------------------------------
+# § FinancialFlowSemantics (round-11 findings #51/#52/#53)
+#
+# Income / cash-flow fields arrive at PIT panels in one of these grains:
+# ``SinglePeriodFlow`` (one fiscal period), ``CumulativeYTDFlow`` (fiscal-YTD
+# cumulative), ``TTMFlow`` (trailing twelve months), ``AnnualFlow`` (annual
+# report) or ``Stock`` (balance-sheet point-in-time).  Growth / persistence /
+# volatility math is only defined on the matching grain, and subtracting two
+# flows of different grain silently mixes non-adjacent periods.  Operators
+# therefore (a) DECLARE their expected grain in the metadata contract
+# (``flow_type:*`` tag) and (b) accept an optional runtime ``flow_type``
+# scalar/tuple that fails closed on a mismatched declaration.  The constants
+# and gate helpers live in ``cleaned_operators.fiscal_strict`` (a leaf module)
+# so ``fundamental/transforms_v2`` can import them without a cycle.
+# ---------------------------------------------------------------------------
+from cleaned_operators.fiscal_strict import (  # noqa: E402
+    FinancialFlowSemantics,
+    flow_types as _flow_types,
+    reject_ytd_growth as _reject_ytd_growth,
+    require_same_flow_grain as _require_same_flow_grain,
+)
+
+
+def _meta(
+    name: str, description: str, params: list[str],
+    *,
+    extra_tags: Iterable[str] = (),
+    unit: str = "ratio",
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="fundamental_period",
@@ -38,12 +66,17 @@ def _meta(name: str, description: str, params: list[str]) -> OperatorMetadata:
         tags=[
             "fundamental", "period_aware", "pit_safe", "causal", "typed_v2",
             f"signature:{','.join(params)}->series", "domain:fundamental",
-            "unit:ratio", "cost:3",
+            f"unit:{unit}", "cost:3", *extra_tags,
         ],
     )
 
 
-def _mk(name: str, description: str, params: list[str], fn: Callable[..., Any]):
+def _mk(
+    name: str, description: str, params: list[str], fn: Callable[..., Any],
+    *,
+    extra_tags: Iterable[str] = (),
+    unit: str = "ratio",
+):
     # R6 P0-03: these financial kernels accept ``period_id`` (signature
     # compatibility / quarter-alignment) even when it does not enter the math;
     # declare it so the R5-06 extra-positional gate does not reject a valid
@@ -52,7 +85,7 @@ def _mk(name: str, description: str, params: list[str], fn: Callable[..., Any]):
     declared = list(params)
     if "period_id" not in declared:
         declared = declared + ["period_id"]
-    metadata = _meta(name, description, declared)
+    metadata = _meta(name, description, declared, extra_tags=extra_tags, unit=unit)
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -139,7 +172,10 @@ def _ar1_slope(vals: np.ndarray) -> float:
 # § Accruals
 # ---------------------------------------------------------------------------
 
-def _fin_working_capital_accruals(ca, cash, cl, std, tp, avg_assets, period_id):
+def _fin_working_capital_accruals(ca, cash, cl, std, tp, avg_assets, period_id, flow_type=None):
+    # Balance-sheet inputs are point-in-time stocks; a YTD-cumulative balance
+    # panel has no per-period delta (finding #51/#52).
+    _reject_ytd_growth("fin_working_capital_accruals", flow_type)
     d_ca = _walk_periods(ca, period_id, lambda o, v, c: float(v[c]) - _lag_value(o, v, c, 1))
     d_cash = _walk_periods(cash, period_id, lambda o, v, c: float(v[c]) - _lag_value(o, v, c, 1))
     d_cl = _walk_periods(cl, period_id, lambda o, v, c: float(v[c]) - _lag_value(o, v, c, 1))
@@ -152,12 +188,17 @@ def _fin_working_capital_accruals(ca, cash, cl, std, tp, avg_assets, period_id):
 _mk(
     "fin_working_capital_accruals",
     "Sloan 营运资本应计：[Δ(CA-Cash) - Δ(CL-STD-TP)] / AvgAssets。",
-    ["current_assets", "cash", "current_liabilities", "short_term_debt", "tax_payable", "avg_assets", "period_id"],
+    ["current_assets", "cash", "current_liabilities", "short_term_debt", "tax_payable", "avg_assets", "period_id", "flow_type"],
     _fin_working_capital_accruals,
+    extra_tags=["flow_type:Stock", "flow_grain:period_delta"],
 )
 
 
-def _fin_total_operating_accruals(ta, cash, cl, std, tp, depreciation, avg_assets, period_id):
+def _fin_total_operating_accruals(ta, cash, cl, std, tp, depreciation, avg_assets, period_id, flow_type=None):
+    # ``flow_type`` (a string, or a 2-tuple for (balance-delta, depreciation))
+    # declares the grain of the accrual components; a quarter accrual minus a
+    # YTD depreciation is invalid (finding #53).
+    _require_same_flow_grain("fin_total_operating_accruals", flow_type, 2)
     d_ta = _walk_periods(ta, period_id, lambda o, v, c: float(v[c]) - _lag_value(o, v, c, 1))
     d_cash = _walk_periods(cash, period_id, lambda o, v, c: float(v[c]) - _lag_value(o, v, c, 1))
     d_cl = _walk_periods(cl, period_id, lambda o, v, c: float(v[c]) - _lag_value(o, v, c, 1))
@@ -170,12 +211,14 @@ def _fin_total_operating_accruals(ta, cash, cl, std, tp, depreciation, avg_asset
 _mk(
     "fin_total_operating_accruals",
     "总经营应计：[Δ(TA-Cash)-Δ(CL-STD-TP)-Dep] / AvgAssets。",
-    ["total_assets", "cash", "current_liabilities", "short_term_debt", "tax_payable", "depreciation", "avg_assets", "period_id"],
+    ["total_assets", "cash", "current_liabilities", "short_term_debt", "tax_payable", "depreciation", "avg_assets", "period_id", "flow_type"],
     _fin_total_operating_accruals,
+    extra_tags=["flow_type:Stock", "flow_grain:period_delta"],
 )
 
 
-def _fin_delta_noa(ta, cash, tl, std, ltd, avg_assets, period_id):
+def _fin_delta_noa(ta, cash, tl, std, ltd, avg_assets, period_id, flow_type=None):
+    _reject_ytd_growth("fin_delta_noa", flow_type)
     noa = (
         _walk_periods(ta, period_id, lambda o, v, c: float(v[c]))
         - _walk_periods(cash, period_id, lambda o, v, c: float(v[c]))
@@ -192,8 +235,9 @@ def _fin_delta_noa(ta, cash, tl, std, ltd, avg_assets, period_id):
 _mk(
     "fin_delta_noa",
     "净经营资产变动 ΔNOA/AvgAssets，NOA=(TA-Cash)-(TL-STD-LTD)。",
-    ["total_assets", "cash", "total_liabilities", "short_term_debt", "long_term_debt", "avg_assets", "period_id"],
+    ["total_assets", "cash", "total_liabilities", "short_term_debt", "long_term_debt", "avg_assets", "period_id", "flow_type"],
     _fin_delta_noa,
+    extra_tags=["flow_type:Stock", "flow_grain:period_delta"],
 )
 
 
@@ -201,21 +245,25 @@ _mk(
 # § Earnings vs cash
 # ---------------------------------------------------------------------------
 
-def _fin_roe_cash_gap(net_profit, ocf, avg_equity, period_id=None):
+def _fin_roe_cash_gap(net_profit, ocf, avg_equity, period_id=None, flow_type=None):
     # P1-132: static algebraic ratio — period_id is a structural PIT-alignment
     # input only and does not participate in the computation.
+    # #51/#53: net_profit and OCF must be the SAME reporting grain.
+    _require_same_flow_grain("fin_roe_cash_gap", flow_type, 2)
     return (net_profit - ocf) / avg_equity.replace(0, np.nan)
 
 
 _mk(
     "fin_roe_cash_gap",
     "会计ROE与现金ROE之差：(NetProfit-OCF)/AvgEquity。period_id 仅对齐契约，不参与计算。",
-    ["net_profit", "ocf", "avg_equity", "period_id"],
+    ["net_profit", "ocf", "avg_equity", "period_id", "flow_type"],
     _fin_roe_cash_gap,
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 
 
-def _fin_earnings_cash_gap_volatility(net_profit, ocf, avg_assets, period_id, periods=8):
+def _fin_earnings_cash_gap_volatility(net_profit, ocf, avg_assets, period_id, periods=8, flow_type=None):
+    _require_same_flow_grain("fin_earnings_cash_gap_volatility", flow_type, 2)
     n = max(2, int(periods))
     gap = net_profit - ocf
 
@@ -230,12 +278,14 @@ def _fin_earnings_cash_gap_volatility(net_profit, ocf, avg_assets, period_id, pe
 _mk(
     "fin_earnings_cash_gap_volatility",
     "过去报告期 std(NetProfit-OCF)/AvgAssets。",
-    ["net_profit", "ocf", "avg_assets", "period_id", "periods"],
+    ["net_profit", "ocf", "avg_assets", "period_id", "periods", "flow_type"],
     _fin_earnings_cash_gap_volatility,
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 
 
-def _fin_earnings_smoothness(net_profit, ocf, period_id, periods=8):
+def _fin_earnings_smoothness(net_profit, ocf, period_id, periods=8, flow_type=None):
+    _require_same_flow_grain("fin_earnings_smoothness", flow_type, 2)
     n = max(2, int(periods))
 
     def _calc(o, v1, v2, c):
@@ -263,12 +313,14 @@ def _fin_earnings_smoothness(net_profit, ocf, period_id, periods=8):
 _mk(
     "fin_earnings_smoothness",
     "利润平滑度 std(NetProfit)/std(OCF)，越低越平滑。",
-    ["net_profit", "ocf", "period_id", "periods"],
+    ["net_profit", "ocf", "period_id", "periods", "flow_type"],
     _fin_earnings_smoothness,
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 
 
-def _fin_persistence(x, period_id, periods=8):
+def _fin_persistence(x, period_id, periods=8, flow_type=None):
+    _reject_ytd_growth("fin_earnings_persistence", flow_type)
     n = max(3, int(periods))
 
     def _calc(o, v, c):
@@ -281,20 +333,23 @@ def _fin_persistence(x, period_id, periods=8):
 _mk(
     "fin_earnings_persistence",
     "报告期利润 AR(1) 系数。",
-    ["net_profit", "period_id", "periods"],
-    lambda x, period_id, periods=8: _fin_persistence(x, period_id, periods),
+    ["net_profit", "period_id", "periods", "flow_type"],
+    lambda x, period_id, periods=8, flow_type=None: _fin_persistence(x, period_id, periods, flow_type),
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 _mk(
     "fin_cashflow_persistence",
     "报告期经营现金流 AR(1) 系数。",
-    ["ocf", "period_id", "periods"],
-    lambda x, period_id, periods=8: _fin_persistence(x, period_id, periods),
+    ["ocf", "period_id", "periods", "flow_type"],
+    lambda x, period_id, periods=8, flow_type=None: _fin_persistence(x, period_id, periods, flow_type),
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 _mk(
     "fin_margin_persistence",
     "利润率 AR(1) 系数。",
-    ["margin", "period_id", "periods"],
-    lambda x, period_id, periods=8: _fin_persistence(x, period_id, periods),
+    ["margin", "period_id", "periods", "flow_type"],
+    lambda x, period_id, periods=8, flow_type=None: _fin_persistence(x, period_id, periods, flow_type),
+    extra_tags=["flow_type:SinglePeriodFlow"],
 )
 
 

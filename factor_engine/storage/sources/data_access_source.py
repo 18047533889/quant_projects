@@ -445,6 +445,7 @@ class DataAccessSource(DataSource):
         snapshot_now_only: bool = False,
         mining_coverage_threshold: float | None = None,
         pit_enforce: bool = False,
+        snapshot_only: bool = False,
     ) -> None:
         self.dataset = dataset
         self.fields = dict(fields or {})
@@ -482,6 +483,12 @@ class DataAccessSource(DataSource):
         #: Round-7 WS-E #280 opt-in: only the current snapshot may be used, so a
         #: ``current_snapshot_only`` field is allowed even on a "now" window.
         self.snapshot_now_only = bool(snapshot_now_only)
+        #: Round-11 §35 (plan A) SnapshotOnlySourcePolicy: the WHOLE source is a
+        #: current-only snapshot (X0 sparse valuation/indicator).  Production
+        #: historical mining over it hard-fails (see
+        #: ``_enforce_field_contract_gates``); only current/research snapshot
+        #: reads are permitted.
+        self.snapshot_only = bool(snapshot_only)
         #: Round-7 WS-E #315: when set, partial-history fields whose coverage over
         #: the requested window is below this threshold are rejected.
         if mining_coverage_threshold is not None:
@@ -595,9 +602,15 @@ class DataAccessSource(DataSource):
         elif self.read_mode == "panel":
             if contract is None:
                 return
+            # Round-11 §35 (plan A): a snapshot_only / snapshot_now_only source is
+            # a current-only sparse snapshot (X0 valuation/indicator) — it is NOT
+            # a complete daily panel, so the sparse read is allowed.  Historical
+            # backfill remains blocked by the SnapshotOnlySourcePolicy gate in
+            # ``_enforce_field_contract_gates``.
             validate_panel_request(
                 self.dataset,
                 semantic_filters=self.semantic_filters,
+                allow_sparse=bool(self.snapshot_only or self.snapshot_now_only),
             )
         else:
             raise ValueError("read_mode must be panel, event, or pit")
@@ -874,6 +887,16 @@ class DataAccessSource(DataSource):
         if not (self.enforce_mining_gate or self.mining_coverage_threshold is not None):
             return
         historical = self._window_is_historical()
+        # Round-11 §35 (plan A): SnapshotOnlySourcePolicy — a snapshot_only source
+        # is current-only; production historical mining is a hard fail (the
+        # snapshot value must never backfill the historical panel).
+        if self.snapshot_only and self.enforce_mining_gate and historical and not self.snapshot_now_only:
+            raise HistoricalSnapshotBackfillError(
+                f"dataset {self.dataset!r} is snapshot_only (current snapshot) and "
+                f"cannot backfill a historical window (start_date={self.start_date!r}); "
+                "production historical mining is not permitted over a snapshot-only "
+                "source — use snapshot_now_only=True for current-snapshot research"
+            )
         for name, plan in plans.items():
             if plan is None:
                 continue

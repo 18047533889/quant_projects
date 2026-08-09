@@ -234,6 +234,25 @@ def build_data_source(config: Any, *, build_context: DataSourceBuildContext | No
         if not isinstance(raw_sources, dict) or not raw_sources:
             raise ValueError("Composite data source requires a non-empty 'sources' mapping")
 
+        # Round-11 §35 (plan A): SnapshotOnlySourcePolicy — a source declared
+        # ``snapshot_only`` (a current-only X0/valuation snapshot) may only be
+        # joined ``current_only`` (or ``exact``); an asof/ffill join would invent
+        # history for a snapshot that has none.  Enforced here at build time so
+        # the contradiction in a config is rejected BEFORE any read happens.
+        joins_map = joins if isinstance(joins, dict) else {}
+        for _src_name, _src_cfg in raw_sources.items():
+            if not isinstance(_src_cfg, dict) or not _src_cfg.get("snapshot_only"):
+                continue
+            _method_raw = joins_map.get(_src_name, joins_map.get(_src_name, "asof_backward"))
+            _m = str(_method_raw).strip().lower() if isinstance(_method_raw, str) else "asof_backward"
+            if _m not in {"current_only", "exact"}:
+                raise ValueError(
+                    f"Composite source {_src_name!r} is snapshot_only (current "
+                    f"snapshot) and must be joined current_only/exact, but its "
+                    f"join method is {_method_raw!r} — asof/ffill would invent "
+                    "history for a snapshot that has none"
+                )
+
         built_sources = {
             str(name): build_data_source(
                 _apply_date_range_to_source_config(
@@ -296,6 +315,14 @@ def build_data_source(config: Any, *, build_context: DataSourceBuildContext | No
         mining_coverage_threshold = _pop_option(
             options, "mining_coverage_threshold", default=None
         )
+        # Round-11 §35 (plan A): SnapshotOnlySourcePolicy declaration.  A source
+        # marked ``snapshot_only`` is a current-only snapshot (X0 sparse
+        # valuation / indicator); ``usage``/``notes`` are advisory metadata kept
+        # for lineage.  All three are popped so the factory does not reject the
+        # helper's config (previously the config could not even build).
+        snapshot_only = _pop_option(options, "snapshot_only", default=None)
+        _pop_option(options, "usage", default=None)
+        _pop_option(options, "notes", default=None)
         # #收官轮 P0（Integration）：pit_enforce 从 engine build context 注入——
         # 之前 ``config.pit.enforce`` 只进 DataSourceBuildContext、factory 不取、
         # 构造 DataAccessSource 时不传，四层 PIT gate「有安全门、主通道没经过」。
@@ -334,6 +361,7 @@ def build_data_source(config: Any, *, build_context: DataSourceBuildContext | No
             snapshot_now_only=bool(snapshot_now_only),
             mining_coverage_threshold=mining_coverage_threshold,
             pit_enforce=bool(pit_enforce),
+            snapshot_only=bool(snapshot_only),
         )
         _ensure_no_extra_options(source_type, options)
         return _wrap_long_table(_attach_bar_freq(source, bar_freq), long_table=long_table)

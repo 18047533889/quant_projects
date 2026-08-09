@@ -27,6 +27,23 @@ from cleaned_operators.registry import OperatorRegistry
 from cleaned_operators.spectral import _periodogram
 
 _EPS = 1e-12
+# Audit #80: the shared ``_periodogram`` kernel requires >= 16 fully-finite
+# rows (spectral._MIN_FINITE); windows 4..15 only ever emit NaN, so they must
+# not enter the search surface.
+_MIN_WINDOW = 16
+
+# Audit #82: spectral entropy is a normalized Shannon entropy (dimensionless
+# ratio); the dominant cycle period is measured in bars, not a raw level.
+_OUTPUT_UNITS: dict[str, str] = {
+    "ts_spectral_entropy": "ratio",
+    "ts_dominant_cycle_period": "bars",
+}
+
+
+def _check_window(w: int) -> int:
+    if w < _MIN_WINDOW:
+        raise ValueError(f"window must be >= {_MIN_WINDOW}")
+    return w
 
 
 def _align(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
@@ -105,9 +122,7 @@ def _dominant_cycle_period_series(
 
 
 def _ts_spectral_entropy(x: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
-    w = int(window)
-    if w < 4:
-        raise ValueError("ts_spectral_entropy requires window >= 4")
+    w = _check_window(int(window))
     return _frame_like(x, _spectral_entropy_series(x.to_numpy(dtype=float), w))
 
 
@@ -117,9 +132,7 @@ def _ts_dominant_cycle_period(
     min_peak_share: float = 0.10,
     **_: Any,
 ) -> pd.DataFrame:
-    w = int(window)
-    if w < 4:
-        raise ValueError("ts_dominant_cycle_period requires window >= 4")
+    w = _check_window(int(window))
     return _frame_like(
         x,
         _dominant_cycle_period_series(x.to_numpy(dtype=float), w, float(min_peak_share)),
@@ -171,11 +184,13 @@ _SKIP = frozenset({"date", "stock_code"})
 def _register() -> None:
     from cleaned_operators.base import Operator as PandasOperator
     from cleaned_operators.base import OperatorMetadata as PandasMetadata
+    from cleaned_operators.base import ParamSpec as PandasParamSpec
     from cleaned_operators.base import validate_operator_call
 
     for canonical, fn in _KERNELS.items():
         params = _PARAMS[canonical]
         category = _CATEGORIES[canonical]
+        output_unit = _OUTPUT_UNITS[canonical]
 
         class _PandasOp(PandasOperator):
             metadata = PandasMetadata(
@@ -187,9 +202,11 @@ def _register() -> None:
                 return_type="series",
                 tags=["daily", "panel", "pit_safe", "causal", "deterministic",
                       f"signature:{','.join(params)}->series",
-                      "domain:spectral", "unit:level", "cost:5"],
+                      "domain:spectral", f"unit:{output_unit}", "cost:5"],
                 window_semantics=_WINDOW_SEMANTICS[canonical],
                 input_units=_INPUT_UNITS[canonical],
+                output_unit=output_unit,
+                param_specs={"window": PandasParamSpec(dtype=int, min=_MIN_WINDOW)},
             )
 
             _HANDLES_CALL_CONTRACT = True  # R5-02: routes through validate_operator_call
@@ -206,7 +223,11 @@ def _register() -> None:
         )
 
         class _PolarsOp(PolarsSeriesOperator):
-            metadata = PolarsMetadata(name=canonical, category="spectral_ext", param_names=[])
+            # Audit #83: canonical backend metadata must be consistent — the
+            # polars slot carries the SAME param_names as the pandas/duckdb
+            # metadata (not an empty list), so the binder/search grammar sees a
+            # uniform parameter contract across backends.
+            metadata = PolarsMetadata(name=canonical, category="spectral_ext", param_names=list(params))
 
             def _calculate_series(self, *frames, _fn=fn, **params):
                 import polars as pl  # noqa: F401

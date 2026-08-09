@@ -14,6 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.overhaul.base import (
     PandasFunctionOperator,
     PolarsFunctionOperator,
@@ -30,9 +31,20 @@ EPS = 1e-12
 SOURCE = "safe_ops"
 
 
-def _register(name: str, category: str, params: list[str], description: str, pandas_fn, polars_fn=None) -> None:
+def _register(
+    name: str,
+    category: str,
+    params: list[str],
+    description: str,
+    pandas_fn,
+    polars_fn=None,
+    param_specs: dict | None = None,
+) -> None:
+    pandas_op = PandasFunctionOperator(name, category, params, description, pandas_fn)
+    if param_specs:
+        pandas_op.metadata.param_specs = dict(param_specs)
     OperatorRegistry.register(
-        PandasFunctionOperator(name, category, params, description, pandas_fn),
+        pandas_op,
         canonical=name,
         backend="pandas_numpy",
         source=SOURCE,
@@ -364,27 +376,56 @@ _register(
 # Cross-section imputation (explicit broadcasting)
 # --------------------------------------------------------------------------
 
+def _cs_impute_bounded(x, stat_fn, min_finite, label):
+    """Row-impute missing cells with a cross-sectional statistic, gated by the
+    number of finite values in the row (R11 #175-177).
+
+    ``min_finite`` is the declared minimum finite observations a row must have
+    BEFORE imputation is allowed: a row with fewer than ``min_finite`` finite
+    values is left fully NaN (fail closed) instead of being imputed from a
+    degenerate / empty cross-section.
+    """
+    mf = int(min_finite)
+    if mf < 1:
+        raise ValueError(f"{label}: min_finite must be >= 1")
+    arr = x.to_numpy(dtype=float)
+    finite_count = np.isfinite(arr).sum(axis=1)
+    impute_rows = finite_count >= mf
+    # Mean/median over the finite cells only; a row with 0 finite values has no
+    # statistic at all and its NaN cells stay NaN (no-op) even when mf == 0.
+    with np.errstate(invalid="ignore", divide="ignore"):
+        stat = np.full(arr.shape[0], np.nan, dtype=float)
+        for r in range(arr.shape[0]):
+            vals = arr[r][np.isfinite(arr[r])]
+            if vals.size:
+                stat[r] = stat_fn(vals)
+    out = arr.copy()
+    mask = np.isnan(out) & impute_rows[:, None]
+    out[mask] = np.broadcast_to(stat[:, None], arr.shape)[mask]
+    return pd.DataFrame(out, index=x.index, columns=x.columns)
+
+
 def pd_cs_impute_mean(x, min_finite=1, **_):
-    row_mean = x.mean(axis=1, skipna=True)
-    return x.mask(x.isna(), row_mean, axis=0)
+    return _cs_impute_bounded(x, lambda v: float(np.mean(v)), min_finite, "cs_impute_mean")
 
 
 def pd_cs_impute_median(x, min_finite=1, **_):
-    row_median = x.median(axis=1, skipna=True)
-    return x.mask(x.isna(), row_median, axis=0)
+    return _cs_impute_bounded(x, lambda v: float(np.median(v)), min_finite, "cs_impute_median")
 
 
 _register(
     "cs_impute_mean",
     "cross_sectional",
     ["x", "min_finite"],
-    "横截面均值填补缺失（逐行广播，显式 axis）。",
+    "横截面均值填补缺失（逐行广播；行内有限样本不足 min_finite 时不填）。",
     pd_cs_impute_mean,
+    param_specs={"min_finite": ParamSpec(dtype=int, min=1)},
 )
 _register(
     "cs_impute_median",
     "cross_sectional",
     ["x", "min_finite"],
-    "横截面中位数填补缺失（逐行广播，显式 axis）。",
+    "横截面中位数填补缺失（逐行广播；行内有限样本不足 min_finite 时不填）。",
     pd_cs_impute_median,
+    param_specs={"min_finite": ParamSpec(dtype=int, min=1)},
 )

@@ -198,7 +198,11 @@ def propagate_available_at(descriptors) -> str | None:
     exprs = [availability_expr_of(item) for item in descriptors] if descriptors else []
     if not exprs:
         return None
-    latest = max(exprs, key=lambda item: item.lateness)
+    # R11 P0-06: delegate to latest_availability so the STRING propagation and
+    # the typed expression share one authority — a :class:`MaxAvailability`
+    # whose label is the latest KNOWN descriptor (unknown stays fail-closed) and
+    # whose resolve() picks the max of the CONCRETE timestamps at decision time.
+    latest = latest_availability(exprs)
     return latest.label
 
 

@@ -697,6 +697,71 @@ def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> lis
     return old
 
 
+# R11 P0-01/P1-05: logical-contract fields that must be identical across every
+# backend of a canonical.  Physical execution info (execution_kind / supports_
+# lazy / materializes_full_panel / backend_cost) is NOT here — those are
+# backend-specific and may differ.  The central validator
+# (``validate_operator_call``) reads these off the operator *instance*, so a
+# backend adapter registering with empty specs/aliases/relational_specs/units
+# would silently skip gates the pandas reference enforces.
+_LOGICAL_CONTRACT_FIELDS: tuple[tuple[str, str], ...] = (
+    ("param_specs", "dict"),
+    ("param_aliases", "dict"),
+    ("relational_specs", "list"),
+    ("param_types", "dict"),
+    ("input_units", "dict"),
+    ("compatible_units", "dict"),
+    ("output_unit", "scalar"),
+    ("window_semantics", "scalar"),
+    ("input_grain", "scalar"),
+    ("output_grain", "scalar"),
+    ("available_at", "scalar"),
+    ("same_session_usable", "scalar"),
+    ("role", "scalar"),
+    ("input_arity", "scalar"),
+    ("panel_arity", "scalar"),
+    ("total_positional_arity", "scalar"),
+    ("scalar_params", "tuple"),
+    ("panel_params", "tuple"),
+    ("input_fields", "list"),
+)
+
+
+def _backfill_logical_contract(operator: Any, prev: dict[str, Any]) -> None:
+    """Copy every undeclared logical-contract field from the canonical contract.
+
+    ``prev`` is the existing catalog entry (the pandas backend — registered
+    first — owns the canonical logical contract).  Fields the operator metadata
+    already declares are left untouched; only genuinely empty slots inherit the
+    canonical value, so a native polars implementation that deliberately declares
+    its own contract keeps it.  Containers are shallow-copied (leaf objects like
+    the frozen :class:`ParamSpec` are shared); frozen metadata objects are
+    skipped silently — the catalog dict still carries the contract for consumers
+    that read it there.
+    """
+    meta = getattr(operator, "metadata", None)
+    if meta is None:
+        return
+    for field, kind in _LOGICAL_CONTRACT_FIELDS:
+        canonical = prev.get(field)
+        if canonical in (None, "", (), [], {}):
+            continue
+        try:
+            cur = getattr(meta, field, None)
+        except AttributeError:
+            continue
+        if cur not in (None, "", (), [], {}):
+            continue
+        try:
+            if kind in ("dict", "list", "tuple"):
+                value = type(canonical)(canonical)
+            else:
+                value = canonical
+            setattr(meta, field, value)
+        except (AttributeError, TypeError, ValueError):
+            pass  # frozen metadata: the catalog contract still carries it
+
+
 # R10 #15: canonical-contract fields that a silent merge/rename must never
 # drop or overwrite.  Two canonicals merging under the same name must agree on
 # every one of these that BOTH declare (the "first non-empty wins" rule applies
@@ -1264,6 +1329,18 @@ class OperatorRegistry:
                 operator.metadata.param_names = list(canonical_params)
             except (AttributeError, TypeError):
                 pass  # frozen metadata: the catalog contract still carries it
+        # R11 P0-01 / P1-05: the canonical LOGICAL contract must live on every
+        # backend operator's *instance* metadata, not only on the catalog dict.
+        # The ``param_names`` backfill above fixed only the positional names; a
+        # polars bridge / SQL adapter that registers with empty ``param_specs``,
+        # ``param_aliases``, ``relational_specs`` or ``input_units`` would then
+        # silently skip the central validator's ParamSpec / alias /
+        # active_when / RelationalParamSpec / unit gates that the pandas
+        # reference enforces — two backends would accept different calls for the
+        # same canonical.  Backfill every logical-contract field the operator did
+        # not declare itself (native implementations keep their declared values;
+        # adapters inherit the canonical, pandas-owned contract).
+        _backfill_logical_contract(operator, prev)
         # R4-95/98: surface the field-semantic metadata on the catalog dict so
         # catalog consumers see unit / window-semantics labels.  First
         # non-None wins: the pandas backend (registered first) typically carries

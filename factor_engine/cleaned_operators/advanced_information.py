@@ -23,7 +23,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 
 _ALPHA = 0.5          # Jeffreys smoothing, fixed (not a search parameter).
 _SURROGATE_OFFSETS = (7, 11, 17, 23, 31)
@@ -101,8 +101,41 @@ def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
     return edges
 
 
-def _te_from_transitions(xs: np.ndarray, ys: np.ndarray, x_next: np.ndarray, bins: int) -> float:
-    """Transfer entropy I(X';Y|X) from aligned transition triples, in nats."""
+def _te_state_space_floor(nxb: int, nyb: int, min_cells_ratio: float) -> int:
+    """Effective-state-space sample floor for the TE joint ``(x', x, y)``.
+
+    The joint has ``nxb * nxb * nyb`` possible cells; a noisy estimate needs at
+    least ``k * cells`` usable samples (audit #20) with a configurable ``k``
+    (``min_cells_ratio``).  Returns ``>= 2`` so a degenerate 1-cell state space
+    can never slip past the floor.
+    """
+    cells = int(nxb) * int(nxb) * int(nyb)
+    k = float(min_cells_ratio)
+    if not np.isfinite(k) or k <= 0.0:
+        return max(2, int(cells))
+    return max(2, int(np.ceil(k * cells)))
+
+
+def _te_from_transitions(
+    xs: np.ndarray,
+    ys: np.ndarray,
+    x_next: np.ndarray,
+    bins: int,
+    min_cells_ratio: float = 1.0,
+) -> float:
+    """Transfer entropy I(X';Y|X) from aligned transition triples, in nats.
+
+    Causal contract (audit #24): ``x_next`` is ``xs`` shifted ``lag`` positions
+    on the ORIGINAL time axis, so the "future" window only ever reaches the
+    trailing window's last row — it never overlaps into a future beyond the
+    current output row (no lookahead).
+
+    Effective-state-space gate (audit #20): with ``nxb * nyb`` effective cells
+    the estimate needs ``>= min_cells_ratio * nxb * nxb * nyb`` usable
+    transitions; below that the plug-in histogram is dominated by Jeffreys
+    smoothing mass and the output would be a noisy artefact — fail closed to
+    NaN instead.
+    """
     n = xs.shape[0]
     if n < 2:
         return np.nan
@@ -114,6 +147,8 @@ def _te_from_transitions(xs: np.ndarray, ys: np.ndarray, x_next: np.ndarray, bin
         # Every cell collapsed to one: conditional information on a single-bin
         # marginal is undefined.  Fail closed instead of returning a spurious 0
         # from a degenerate histogram (review P1-49).
+        return np.nan
+    if n < _te_state_space_floor(nxb, nyb, min_cells_ratio):
         return np.nan
     xb = np.clip(np.digitize(xs, x_edges) - 1, 0, nxb - 1).astype(np.int64)
     xnb = np.clip(np.digitize(x_next, x_edges) - 1, 0, nxb - 1).astype(np.int64)
@@ -141,13 +176,23 @@ def _te_from_transitions(xs: np.ndarray, ys: np.ndarray, x_next: np.ndarray, bin
 
 
 def _transfer_entropy_window(
-    tw: np.ndarray, sw: np.ndarray, bins: int, lag: int, min_transitions: int
+    tw: np.ndarray,
+    sw: np.ndarray,
+    bins: int,
+    lag: int,
+    min_transitions: int,
+    min_cells_ratio: float = 1.0,
 ) -> float:
     """Transfer entropy for a *single* causal window (one computation, O(w log w)).
 
     The earlier implementation re-rolled every prefix inside each window (the
     outer row loop called a rolling sub-routine and kept only ``[-1]``), so one
     output row cost O(w^2).  This kernel computes the current window once.
+
+    Causality (audit #24): ``lag`` is applied on the ORIGINAL time axis first
+    (``x_next = tw[lag:]``), so the "future" window is always a subset of the
+    trailing window ending at the current row — the estimate at row ``r`` never
+    reads past row ``r``.
     """
     # Lag is applied on the ORIGINAL time axis first, then NaN rows are masked:
     # compacting NaN before lagging would let ``lag=1`` pair a day-1 value with
@@ -168,7 +213,7 @@ def _transfer_entropy_window(
     # arbitrary and Jeffreys smoothing would *invent* information; fail closed.
     if np.unique(xs).size < 2 or np.unique(ys).size < 2:
         return np.nan
-    return _te_from_transitions(xs, ys, xn, bins)
+    return _te_from_transitions(xs, ys, xn, bins, min_cells_ratio=min_cells_ratio)
 
 
 @register_operator(
@@ -184,16 +229,28 @@ class TsTransferEntropy(SeriesOperator):
     窗口内对 ``(x', x, y)`` 三元组做分位数分箱（``bins``），加 Jeffreys 平滑
     (alpha=0.5)，输出 ``sum p log( p(x',x,y) p(x) / (p(x',x) p(x,y)) )``，负
     数值误差 clip 到 0。确定性强：分箱用分位数，无任何随机扰动。
+
+    因果性（audit #24）：``lag`` 在原始时间轴上先应用，``x_next = tw[lag:]``
+    永远只读到当前输出行为止（PIT-safe，无 lookahead）。有效状态空间门
+    （audit #20）：可用样本数 ``N`` 必须 >= ``min_cells_ratio · nxb²·nyb``
+    （``nxb/nyb`` 为有效分箱数），否则返回 NaN——绝不输出被 Jeffreys 平滑
+    质量主导的噪声估计。
     """
 
     metadata = _metadata(
         "ts_transfer_entropy",
-        "传递熵 I(X_{s+lag}; Y_s | X_s) nats，source→target 方向。",
-        ["target", "source", "window", "bins", "lag", "min_transitions"],
+        "传递熵 I(X_{s+lag}; Y_s | X_s) nats（无量纲信息量），source→target 方向。",
+        ["target", "source", "window", "bins", "lag", "min_transitions", "min_cells_ratio"],
         domain="price_volume",
         unit="nats",
         cost=5,
     )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2),
+        "bins": ParamSpec(dtype=int, min=2, max=8),
+        "lag": ParamSpec(dtype=int, min=1),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
+    }
 
     def _calculate_series(
         self,
@@ -203,11 +260,13 @@ class TsTransferEntropy(SeriesOperator):
         bins: int = 3,
         lag: int = 1,
         min_transitions: Any = None,
+        min_cells_ratio: float = 1.0,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
         nb = int(bins)
         lg = int(lag)
+        ratio = float(min_cells_ratio)
         if not (2 <= nb <= 8):
             raise ValueError("ts_transfer_entropy requires 2 <= bins <= 8")
         if lg < 1:
@@ -223,11 +282,15 @@ class TsTransferEntropy(SeriesOperator):
             mt = max(30, 3 * nb * nb)
         else:
             mt = max(lg + 2, int(min_transitions))
+        # Audit #20: the effective-state-space gate (N >= k * cells) is a hard
+        # feasibility floor — an infeasible (window, bins, lag, k) combination
+        # is rejected at the call boundary rather than emitting a noisy estimate.
+        mt = max(mt, int(np.ceil(ratio * nb * nb * nb)))
         if w - lg < mt:
             raise ValueError(
                 f"ts_transfer_entropy window-lag ({w - lg}) < min_transitions ({mt}) "
-                f"with bins={nb}; raise window or lower bins (default window=60 "
-                "supports bins<=4)"
+                f"with bins={nb}, min_cells_ratio={ratio}; raise window or lower bins "
+                "(default window=60 supports bins<=4)"
             )
         return _frame_like(
             target,
@@ -235,15 +298,25 @@ class TsTransferEntropy(SeriesOperator):
                 target.to_numpy(dtype=float),
                 source.to_numpy(dtype=float),
                 w,
-                lambda a, b: _transfer_entropy_window(a, b, nb, lg, mt),
+                lambda a, b: _transfer_entropy_window(a, b, nb, lg, mt, ratio),
             ),
         )
 
 
 def _effective_transfer_entropy_window(
-    tw: np.ndarray, sw: np.ndarray, bins: int, lag: int, min_transitions: int
+    tw: np.ndarray,
+    sw: np.ndarray,
+    bins: int,
+    lag: int,
+    min_transitions: int,
+    min_cells_ratio: float = 1.0,
 ) -> float:
-    """Effective TE for a *single* window (one computation, like the plain kernel)."""
+    """Effective TE for a *single* window (one computation, like the plain kernel).
+
+    Shares the plain kernel's causality contract (audit #24) and effective-
+    state-space gate (audit #20): the real TE and every surrogate go through
+    ``_te_from_transitions`` with the same ``min_cells_ratio``.
+    """
     n = tw.shape[0]
     if n < lag + 2:
         return np.nan
@@ -258,7 +331,7 @@ def _effective_transfer_entropy_window(
     xn = x_next[mask]
     if np.unique(xs).size < 2 or np.unique(ys).size < 2:
         return np.nan
-    real = _te_from_transitions(xs, ys, xn, bins)
+    real = _te_from_transitions(xs, ys, xn, bins, min_cells_ratio=min_cells_ratio)
     if not np.isfinite(real):
         return np.nan
     # Deterministic circular shift of the *source transition* series; the
@@ -271,7 +344,7 @@ def _effective_transfer_entropy_window(
         ys_shift = np.empty_like(ys)
         ys_shift[: w_eff - off] = ys[off:]
         ys_shift[w_eff - off :] = ys[:off]
-        te_s = _te_from_transitions(xs, ys_shift, x_next, bins)
+        te_s = _te_from_transitions(xs, ys_shift, x_next, bins, min_cells_ratio=min_cells_ratio)
         if np.isfinite(te_s):
             surr.append(te_s)
     if not surr:
@@ -297,12 +370,18 @@ class TsEffectiveTransferEntropy(SeriesOperator):
 
     metadata = _metadata(
         "ts_effective_transfer_entropy",
-        "有效传递熵 TE - E[TE_surrogate]（确定性 circular shift）。",
-        ["target", "source", "window", "bins", "lag", "min_transitions"],
+        "有效传递熵 TE - E[TE_surrogate]（确定性 circular shift），nats。",
+        ["target", "source", "window", "bins", "lag", "min_transitions", "min_cells_ratio"],
         domain="price_volume",
         unit="nats",
         cost=6,
     )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2),
+        "bins": ParamSpec(dtype=int, min=2, max=8),
+        "lag": ParamSpec(dtype=int, min=1),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
+    }
 
     def _calculate_series(
         self,
@@ -312,11 +391,13 @@ class TsEffectiveTransferEntropy(SeriesOperator):
         bins: int = 3,
         lag: int = 1,
         min_transitions: Any = None,
+        min_cells_ratio: float = 1.0,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
         nb = int(bins)
         lg = int(lag)
+        ratio = float(min_cells_ratio)
         if not (2 <= nb <= 8):
             raise ValueError("ts_effective_transfer_entropy requires 2 <= bins <= 8")
         if lg < 1:
@@ -327,10 +408,11 @@ class TsEffectiveTransferEntropy(SeriesOperator):
             mt = max(30, 3 * nb * nb)
         else:
             mt = max(lg + 2, int(min_transitions))
+        mt = max(mt, int(np.ceil(ratio * nb * nb * nb)))
         if w - lg < mt:
             raise ValueError(
                 f"ts_effective_transfer_entropy window-lag ({w - lg}) < min_transitions "
-                f"({mt}) with bins={nb}; raise window or lower bins"
+                f"({mt}) with bins={nb}, min_cells_ratio={ratio}; raise window or lower bins"
             )
         return _frame_like(
             target,
@@ -338,7 +420,7 @@ class TsEffectiveTransferEntropy(SeriesOperator):
                 target.to_numpy(dtype=float),
                 source.to_numpy(dtype=float),
                 w,
-                lambda a, b: _effective_transfer_entropy_window(a, b, nb, lg, mt),
+                lambda a, b: _effective_transfer_entropy_window(a, b, nb, lg, mt, ratio),
             ),
         )
 
@@ -487,12 +569,21 @@ class ReportBenfordJsDivergence(SeriesOperator):
 _TE_LAGS = (1, 2, 3, 5, 10)
 
 
-def _te_peak_window(tw: np.ndarray, sw: np.ndarray, bins: int, min_transitions: int) -> tuple[float, float]:
+def _te_peak_window(
+    tw: np.ndarray,
+    sw: np.ndarray,
+    bins: int,
+    min_transitions: int,
+    min_cells_ratio: float = 1.0,
+) -> tuple[float, float]:
     """TE over the fixed lag grid (1,2,3,5,10) on one causal window.
 
     Returns ``(peak_strength, peak_lag_norm)`` — the max TE value and its lag
     normalized by the largest lag.  Binning is shared per window; this is the
     "fused primitive" that avoids re-discretizing five times in the AST.
+
+    Every lag shares the plain kernel's causality (audit #24) and effective-
+    state-space gate (audit #20).
     """
     n = tw.shape[0]
     best = np.nan
@@ -515,7 +606,7 @@ def _te_peak_window(tw: np.ndarray, sw: np.ndarray, bins: int, min_transitions: 
         # Only the *masked* transitions (xs, ys, xn) are aligned triples; passing
         # the unmasked ``x_next`` here would re-pair values across the NaN gaps
         # (P0-01 review) — a length mismatch / time misalignment.
-        v = _te_from_transitions(xs, ys, xn, bins)
+        v = _te_from_transitions(xs, ys, xn, bins, min_cells_ratio=min_cells_ratio)
         if not np.isfinite(v):
             continue
         if not np.isfinite(best) or v > best:
@@ -544,11 +635,16 @@ class TsTransferEntropyPeakStrength(SeriesOperator):
     metadata = _metadata(
         "ts_transfer_entropy_peak_strength",
         "TE 在 lag∈{1,2,3,5,10} 上的峰值 max TE_l（nats）。",
-        ["target", "source", "window", "bins", "min_transitions"],
+        ["target", "source", "window", "bins", "min_transitions", "min_cells_ratio"],
         domain="price_volume",
         unit="nats",
         cost=7,
     )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2),
+        "bins": ParamSpec(dtype=int, min=2, max=8),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
+    }
 
     def _calculate_series(
         self,
@@ -557,10 +653,12 @@ class TsTransferEntropyPeakStrength(SeriesOperator):
         window: int = 60,
         bins: int = 3,
         min_transitions: Any = None,
+        min_cells_ratio: float = 1.0,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
         nb = int(bins)
+        ratio = float(min_cells_ratio)
         if not (2 <= nb <= 8):
             raise ValueError("ts_transfer_entropy_peak_strength requires 2 <= bins <= 8")
         if w < max(_TE_LAGS) + 2:
@@ -569,10 +667,12 @@ class TsTransferEntropyPeakStrength(SeriesOperator):
             mt = max(30, 3 * nb * nb)
         else:
             mt = max(max(_TE_LAGS) + 2, int(min_transitions))
+        mt = max(mt, int(np.ceil(ratio * nb * nb * nb)))
         if w - max(_TE_LAGS) < mt:
             raise ValueError(
                 f"ts_transfer_entropy_peak_strength window-lag ({w - max(_TE_LAGS)}) "
-                f"< min_transitions ({mt}) with bins={nb}; raise window or lower bins"
+                f"< min_transitions ({mt}) with bins={nb}, min_cells_ratio={ratio}; "
+                "raise window or lower bins"
             )
         return _frame_like(
             target,
@@ -580,7 +680,7 @@ class TsTransferEntropyPeakStrength(SeriesOperator):
                 target.to_numpy(dtype=float),
                 source.to_numpy(dtype=float),
                 w,
-                lambda a, b: _te_peak_window(a, b, nb, mt)[0],
+                lambda a, b: _te_peak_window(a, b, nb, mt, ratio)[0],
             ),
         )
 
@@ -601,12 +701,17 @@ class TsTransferEntropyPeakLag(SeriesOperator):
 
     metadata = _metadata(
         "ts_transfer_entropy_peak_lag",
-        "TE 峰值 lag（归一化 l*/10，[0,1]）。",
-        ["target", "source", "window", "bins", "min_transitions"],
+        "TE 峰值 lag（归一化 l*/10，[0,1] 无量纲）。",
+        ["target", "source", "window", "bins", "min_transitions", "min_cells_ratio"],
         domain="price_volume",
         unit="ratio",
         cost=7,
     )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2),
+        "bins": ParamSpec(dtype=int, min=2, max=8),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
+    }
 
     def _calculate_series(
         self,
@@ -615,10 +720,12 @@ class TsTransferEntropyPeakLag(SeriesOperator):
         window: int = 60,
         bins: int = 3,
         min_transitions: Any = None,
+        min_cells_ratio: float = 1.0,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
         nb = int(bins)
+        ratio = float(min_cells_ratio)
         if not (2 <= nb <= 8):
             raise ValueError("ts_transfer_entropy_peak_lag requires 2 <= bins <= 8")
         if w < max(_TE_LAGS) + 2:
@@ -627,10 +734,12 @@ class TsTransferEntropyPeakLag(SeriesOperator):
             mt = max(30, 3 * nb * nb)
         else:
             mt = max(max(_TE_LAGS) + 2, int(min_transitions))
+        mt = max(mt, int(np.ceil(ratio * nb * nb * nb)))
         if w - max(_TE_LAGS) < mt:
             raise ValueError(
                 f"ts_transfer_entropy_peak_lag window-lag ({w - max(_TE_LAGS)}) "
-                f"< min_transitions ({mt}) with bins={nb}; raise window or lower bins"
+                f"< min_transitions ({mt}) with bins={nb}, min_cells_ratio={ratio}; "
+                "raise window or lower bins"
             )
         return _frame_like(
             target,
@@ -638,7 +747,7 @@ class TsTransferEntropyPeakLag(SeriesOperator):
                 target.to_numpy(dtype=float),
                 source.to_numpy(dtype=float),
                 w,
-                lambda a, b: _te_peak_window(a, b, nb, mt)[1],
+                lambda a, b: _te_peak_window(a, b, nb, mt, ratio)[1],
             ),
         )
 

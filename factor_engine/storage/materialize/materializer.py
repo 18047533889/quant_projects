@@ -325,9 +325,12 @@ class ParquetMaterializer:
         # --- 1. 转长表 + 强制 Schema ---
         meta = None
         if write_metadata:
+            # R11 #6: 落盘行 factor_version = 语义身份 digest 前缀（缺省 ast_hash
+            # 前缀）——不再只用 ast_hash，否则「公式一样但 data_source/执行语义变
+            # 了」的因子仍被 catalog 当作同一版本。
             meta = MaterializeMetadata(
                 calc_time=datetime.now(timezone.utc).isoformat(),
-                factor_version=ast_hash[:16],
+                factor_version=(identity_digest or ast_hash)[:16],
                 data_snapshot_id=data_snapshot_id,
             )
         df = self._normalize_to_long_table(result, metadata=meta, value_dtype=value_dtype)
@@ -413,6 +416,8 @@ class ParquetMaterializer:
             description=description,
             expression=expression,
             data_source_config=data_source_config,
+            semantic_identity_digest=identity_digest,
+            production=production,
         )
 
         staging_result = None

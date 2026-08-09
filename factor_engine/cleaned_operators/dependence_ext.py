@@ -298,9 +298,9 @@ class TsConditionalMutualInformation(SeriesOperator):
 
     metadata = _metadata(
         "ts_conditional_mutual_information",
-        "条件互信息 CMI(X;Y|Z),经验基-e 熵,按 log(bins) 归一。",
+        "条件互信息 CMI(X;Y|Z),经验基-e 熵,按 log(bins) 归一 → [0,1] 无量纲比值。",
         ["x", "y", "z", "window", "bins"],
-        unit="entropy",
+        unit="ratio",
         cost=6,
     )
     metadata.param_specs = {

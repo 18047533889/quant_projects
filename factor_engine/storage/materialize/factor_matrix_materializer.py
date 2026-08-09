@@ -12,7 +12,10 @@
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import os
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -29,6 +32,61 @@ from storage.partition_policy import (
 )
 
 logger = get_logger("storage.factor_matrix_materializer")
+
+
+@contextlib.contextmanager
+def _partition_write_lock(lock_path: Path):
+    """分区级写互斥（flock）：并发 matrix 写同一分区时 serial 化 read-merge-write。"""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(lock_path, "w")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        finally:
+            fh.close()
+
+
+def _merge_matrix_frames(
+    existing: pd.DataFrame | None,
+    new: pd.DataFrame,
+    *,
+    value_dtype: str,
+) -> pd.DataFrame:
+    """外连接合并已有分区宽表与本次增量（R11 #7）。
+
+    之前直接 ``os.replace`` 覆盖整月 ``data.parquet``——增量写子集（部分因子/
+    部分日期）会丢掉原分区里其它因子与其它日期的值。改为 read-merge-write：
+    旧因子列与旧日期保留，同 ``(datetime, asset)`` key 上新值覆盖旧值。
+    """
+    if existing is None or existing.empty:
+        return new
+    if new is None or new.empty:
+        return existing
+    key_cols = [
+        c
+        for c in ("datetime", "asset")
+        if c in existing.columns and c in new.columns
+    ]
+    if not key_cols:
+        return new
+    merged = existing.merge(new, on=key_cols, how="outer", suffixes=("_old", ""))
+    new_cols = set(new.columns) - set(key_cols)
+    drop = [
+        c for c in merged.columns if c.endswith("_old") and c[:-4] in new_cols
+    ]
+    if drop:
+        merged = merged.drop(columns=drop)
+    merged = merged.drop_duplicates(subset=key_cols, keep="last")
+    for c in sorted(new_cols):
+        if c in merged.columns:
+            merged[c] = merged[c].astype(str(value_dtype or "float32"))
+    cols = [c for c in key_cols if c in merged.columns] + sorted(
+        c for c in merged.columns if c not in key_cols
+    )
+    return merged[cols].sort_values(key_cols).reset_index(drop=True)
 
 
 @dataclass(frozen=True)
@@ -124,6 +182,22 @@ class FactorMatrixMaterializer:
             }
 
         factor_ids = sorted(results.keys())
+        # R11 #7: factor_matrix 目前仍是直写本地的独立 IO（未走 DataAccess
+        # staging→publish / manifest / snapshot / factor-version gate）。production
+        # 下至少告警，避免运维无感知绕过 DataAccess 治理。
+        try:
+            from runtime.production_policy import is_production_mode
+
+            if is_production_mode():
+                logger.warning(
+                    "factor_matrix 直写本地 matrix_root=%s；尚未接入 DataAccess "
+                    "staging→publish/manifest/snapshot 治理。生产发布前应改走 "
+                    "DataAccess factor_matrix staging/upsert（partial rows / "
+                    "partial factors / partial dates 安全 merge）。",
+                    self._matrix_root,
+                )
+        except Exception:  # pragma: no cover - 运行模式解析失败不阻塞写
+            pass
         # Phase 5 P1-12：按因子列分块 merge，限制中间 merge 工作集
         # （5000×2500×2000 列的训练矩阵不可能一次成形）。
         try:
@@ -195,17 +269,40 @@ class FactorMatrixMaterializer:
             )
             part_dir.mkdir(parents=True, exist_ok=True)
             parquet_path = part_dir / "data.parquet"
-            tmp_path = part_dir / ".data.parquet.tmp"
-            out_df.to_parquet(tmp_path, index=False, engine="pyarrow")
-            os.replace(str(tmp_path), str(parquet_path))
+            lock_path = part_dir / ".data.parquet.lock"
+            # R11 #7: read-merge-write 在 flock 互斥内完成——并发 matrix 写同一分区
+            # 不再互相覆盖；tmp 文件名带 pid+uuid，崩溃残留不再命中固定 .tmp。
+            with _partition_write_lock(lock_path):
+                if parquet_path.exists():
+                    try:
+                        existing = pd.read_parquet(parquet_path)
+                    except Exception:  # pragma: no cover - 分区文件损坏按空处理
+                        logger.warning(
+                            "factor_matrix 分区读取失败 %s，按空分区合并",
+                            parquet_path,
+                            exc_info=True,
+                        )
+                        existing = None
+                    merged_out = _merge_matrix_frames(
+                        existing, out_df, value_dtype=value_dtype
+                    )
+                else:
+                    merged_out = out_df
+                tmp_path = (
+                    part_dir
+                    / f".data.parquet.{os.getpid()}.{uuid.uuid4().hex}.tmp"
+                )
+                merged_out.to_parquet(tmp_path, index=False, engine="pyarrow")
+                os.replace(str(tmp_path), str(parquet_path))
+                rows_written_this = len(merged_out)
             pkey = "|".join(f"{k}={part_values[k]}" for k in sorted(part_values))
             partitions_written.append(pkey)
             logger.info(
-                "factor_matrix 分区写入 universe=%s partition=%s rows=%d cols=%d",
+                "factor_matrix 分区 upsert universe=%s partition=%s rows=%d cols=%d",
                 universe,
                 pkey,
-                len(out_df),
-                len(out_df.columns),
+                rows_written_this,
+                len(merged_out.columns),
             )
 
         return {

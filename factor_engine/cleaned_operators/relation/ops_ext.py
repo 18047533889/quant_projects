@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.common.group_key import is_missing_group_key
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -51,6 +52,15 @@ def _pagerank_series(
     gv: np.ndarray,
     damping: float,
 ) -> np.ndarray:
+    """Signal-weighted centrality on the group's complete graph (analytic).
+
+    R11 #121: the group panel defines a COMPLETE graph whose edge flow into a
+    node is proportional to the node's signal — every row of the adjacency is
+    the same vector ``sig/S``, so the PageRank iteration collapses to the closed
+    form ``pr[i] = (1-d)/m + d·sig[i]/S``.  There is no need for the iterative
+    dense-matrix solve, and without real edge weights an iterative PageRank
+    would be pure ceremony on a rank-1 matrix.  Resolve analytically instead.
+    """
     rows, cols = xv.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for r in range(rows):
@@ -58,7 +68,9 @@ def _pagerank_series(
         positions: dict[Any, list[int]] = {}
         for i in range(cols):
             lab = g_row[i]
-            if lab is None or (isinstance(lab, float) and np.isnan(lab)):
+            # R11 P1-10: unified missing-group-key rule (None / NaN / pd.NA /
+            # NaT / "") so no phantom group can form.
+            if is_missing_group_key(lab):
                 continue
             positions.setdefault(lab, []).append(i)
         for lab, members in positions.items():
@@ -69,18 +81,12 @@ def _pagerank_series(
             if not np.all(np.isfinite(sig)):
                 continue
             m = idx.size
-            # edge flow i -> j proportional to node j's signal (j attracts links)
-            A = np.maximum(sig, _EPS)[None, :] * np.ones((m, 1))
-            rowsum = A.sum(axis=1, keepdims=True)
-            rowsum[rowsum <= _EPS] = _EPS
-            A = A / rowsum
-            pr = np.full(m, 1.0 / m, dtype=float)
-            for _ in range(_MAX_ITER):
-                new_pr = (1.0 - damping) / m + damping * (A.T @ pr)
-                if np.abs(new_pr - pr).max() < _CONV:
-                    pr = new_pr
-                    break
-                pr = new_pr
+            total = float(np.sum(np.maximum(sig, _EPS)))
+            if total <= _EPS:
+                continue
+            teleport = (1.0 - damping) / m
+            # Analytic complete-graph PageRank: pr[i] = (1-d)/m + d*sig[i]/S.
+            pr = teleport + damping * (np.maximum(sig, _EPS) / total)
             for pos, i in enumerate(idx):
                 out[r, i] = float(pr[pos])
     return out
