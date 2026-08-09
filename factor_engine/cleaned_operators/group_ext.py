@@ -355,10 +355,253 @@ def _register_trimmed_ols_honest_rename() -> None:
     try:
         from cleaned_operators.operator_surface import extend_extended_only, retract_extended_only
 
-        extend_extended_only(["cs_trimmed_ols_resid"])
+        extend_extended_only(
+            ["cs_trimmed_ols_resid", "cs_huber_resid", "cs_lad_resid"]
+        )
         retract_extended_only(["cs_robust_resid"])
     except ImportError:  # pragma: no cover - surface module always present in-tree
         pass
 
 
 _register_trimmed_ols_honest_rename()
+
+
+# ---------------------------------------------------------------------------
+# P1-24: genuinely robust cross-sectional residuals (Huber / LAD).
+# ---------------------------------------------------------------------------
+# ``cs_robust_resid`` is a deprecated alias for trimmed-OLS — honest but NOT a
+# robust regression (hard-trim extreme x, then ordinary least squares).  These
+# two new operators are true M-estimators: ``cs_huber_resid`` (Huber loss with
+# delta ~ 1.345) and ``cs_lad_resid`` (L1 / median regression).  Both are
+# per-column (each row is a cross-section over instruments), shape-preserving,
+# and emit NaN for a statistical failure (degenerate x / non-convergence).
+
+
+def _huber_irls_fit(xs: np.ndarray, ys: np.ndarray, add_intercept: bool, max_iter: int = 60, tol: float = 1e-8) -> tuple[float, float] | None:
+    """Huber M-estimator fit of one cross-section via IRLS.
+
+    Minimises ``sum rho(r)`` with Huber's ``rho`` (``delta = 1.345 * scale``,
+    scale = MAD/0.6745 of the residuals).  Returns ``(intercept, slope)``
+    (``intercept == 0`` when ``add_intercept`` is False) or ``None`` when the
+    fit cannot be established (degenerate design / non-convergence).
+    """
+    n = xs.size
+    if n < 2:
+        return None
+    design = np.column_stack([np.ones(n), xs]) if add_intercept else xs.reshape(-1, 1)
+    try:
+        beta = np.linalg.lstsq(design, ys, rcond=None)[0]
+    except np.linalg.LinAlgError:
+        return None
+    if not np.all(np.isfinite(beta)):
+        return None
+    for _ in range(max_iter):
+        fitted = design @ beta
+        r = ys - fitted
+        med = float(np.median(r))
+        mad = float(np.median(np.abs(r - med)) / 0.6745)
+        std = float(np.std(r))
+        scale = mad if (np.isfinite(mad) and mad > 0.0) else (std if np.isfinite(std) and std > 0.0 else 1.0)
+        delta = 1.345 * scale
+        w = np.where(np.abs(r) <= delta, 1.0, delta / np.maximum(np.abs(r), 1e-12))
+        sqrt_w = np.sqrt(np.maximum(w, 1e-12))
+        try:
+            beta_new = np.linalg.lstsq(design * sqrt_w[:, None], ys * sqrt_w, rcond=None)[0]
+        except np.linalg.LinAlgError:
+            return None
+        if not np.all(np.isfinite(beta_new)):
+            return None
+        if np.max(np.abs(beta_new - beta)) <= tol * max(1.0, float(np.max(np.abs(beta)))):
+            beta = beta_new
+            break
+        beta = beta_new
+    else:  # no convergence in max_iter -> statistical failure -> NaN
+        return None
+    if add_intercept:
+        return float(beta[1]), float(beta[0])
+    return 0.0, float(beta[0])
+
+
+def _lad_coordinate_descent(xs: np.ndarray, ys: np.ndarray, add_intercept: bool, max_iter: int = 300, tol: float = 1e-9) -> tuple[float, float] | None:
+    """L1 (median) fit via coordinate descent / iterated weighted median.
+
+    Alternates ``intercept = median(y - slope*x)`` and
+    ``slope = weighted median of (y - intercept)/x with weights |x|`` — the
+    exact minimiser of ``sum |y - a - b x|`` for a fixed ``a``.  Returns
+    ``(intercept, slope)`` or ``None`` on statistical failure.
+    """
+    n = xs.size
+    if n < 2:
+        return None
+    if np.all(np.abs(xs) < 1e-12):
+        return None
+    try:
+        b_ols = np.polyfit(xs, ys, 1)
+        slope, intercept = float(b_ols[0]), float(b_ols[1])
+    except Exception:
+        return None
+    if not np.all(np.isfinite([slope, intercept])):
+        return None
+    for _ in range(max_iter):
+        intercept_new = np.median(ys - slope * xs) if add_intercept else 0.0
+        ratios = (ys - intercept_new) / xs
+        weights = np.abs(xs)
+        order = np.argsort(ratios)
+        cw = np.cumsum(weights[order])
+        mid = 0.5 * cw[-1]
+        slope_new = float(ratios[order[min(int(np.searchsorted(cw, mid)), n - 1)]])
+        if (
+            abs(slope_new - slope) <= tol * max(1.0, abs(slope))
+            and abs(intercept_new - intercept) <= tol * max(1.0, abs(intercept))
+        ):
+            return float(intercept_new), float(slope_new)
+        slope, intercept = slope_new, intercept_new
+    return None  # non-convergence -> NaN
+
+
+def _lad_fit(xs: np.ndarray, ys: np.ndarray, add_intercept: bool) -> tuple[float, float] | None:
+    """L1 regression fit of one cross-section.
+
+    Uses ``scipy.optimize.minimize`` (Nelder-Mead on ``sum |resid|``) with a
+    median-based init when scipy is available, else the iterated weighted
+    median.  Returns ``(intercept, slope)`` or ``None`` on statistical failure.
+    """
+    n = xs.size
+    if n < 2:
+        return None
+    if not add_intercept:
+        if np.all(np.abs(xs) < 1e-12):
+            return None
+        ratios = ys / xs
+        weights = np.abs(xs)
+        order = np.argsort(ratios)
+        cw = np.cumsum(weights[order])
+        mid = 0.5 * cw[-1]
+        return 0.0, float(ratios[order[min(int(np.searchsorted(cw, mid)), n - 1)]])
+    try:
+        b_ols = np.polyfit(xs, ys, 1)
+        beta0 = np.array([float(b_ols[1]), float(b_ols[0])])  # (intercept, slope)
+    except Exception:
+        return None
+    if not np.all(np.isfinite(beta0)):
+        return None
+    try:
+        from scipy.optimize import minimize
+
+        def _obj(beta: np.ndarray) -> float:
+            return float(np.sum(np.abs(ys - (beta[0] + beta[1] * xs))))
+
+        res = minimize(_obj, beta0, method="Nelder-Mead", options={"maxiter": 2000, "xatol": 1e-8, "fatol": 1e-10})
+        if res.success and np.all(np.isfinite(res.x)):
+            return float(res.x[0]), float(res.x[1])
+        return _lad_coordinate_descent(xs, ys, add_intercept)
+    except ImportError:  # scipy unavailable -> pure-numpy iterated median
+        return _lad_coordinate_descent(xs, ys, add_intercept)
+
+
+def _cs_robust_resid(y: pd.DataFrame, x: pd.DataFrame, fit_fn: Any, add_intercept: bool) -> pd.DataFrame:
+    """Shared per-column cross-sectional residual driver (P1-24).
+
+    ``fit_fn(xs, ys, add_intercept) -> (intercept, slope) | None``.  The same
+    minimum-breadth gate as ``cs_trimmed_ols_resid`` keeps ~3-stock regressions
+    from driving an industry/group fit; a statistical failure keeps the cell
+    NaN (fail closed).
+    """
+    y, x = _aligned(y, x)
+    yv = y.to_numpy(dtype=float)
+    xv = x.to_numpy(dtype=float)
+    rows, cols = yv.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    param_count = 2 if add_intercept else 1
+    min_breadth = max(_MIN_BREADTH, int(_BREADTH_PARAM_RATIO * param_count))
+    for row in range(rows):
+        valid = np.isfinite(xv[row]) & np.isfinite(yv[row])
+        if valid.sum() < min_breadth:
+            continue
+        xs = xv[row][valid]
+        ys = yv[row][valid]
+        if np.std(xs) == 0:
+            continue
+        coefs = fit_fn(xs, ys, add_intercept)
+        if coefs is None:
+            continue  # statistical failure -> NaN for this row
+        intercept, slope = coefs
+        if add_intercept:
+            fitted = intercept + slope * xv[row]
+        else:
+            fitted = slope * xv[row]
+        out[row] = yv[row] - fitted
+    return _frame_like(y, out)
+
+
+@register_operator(
+    name="cs_huber_resid",
+    category="cross_sectional",
+    business_category="cross_sectional_regression",
+    canonical="cs_huber_resid",
+    source="group_ext",
+    status="experimental",
+)
+class CsHuberResid(SeriesOperator):
+    """横截面残差：Huber M-估计量回归（Huber loss, delta≈1.345·MAD）对离群点稳健。
+
+    与 trimmed-OLS 的硬截尾不同，Huber 用平方-线性混合损失给大残差降权，
+    对强影响点不敏感（P1-24 真稳健回归）。逐行（横截面跨 instruments）拟合，
+    形状保持；退化 x / 不收敛 -> NaN。
+    """
+
+    metadata = OperatorMetadata(
+        name="cs_huber_resid",
+        category="cross_sectional",
+        description=(
+            "横截面残差（Huber M-估计量，IRLS，delta≈1.345·MAD；对离群点稳健，"
+            "非 trimmed-OLS）。输出残差单位为 unit(y)（§37-D unit-algebra）。"
+        ),
+        param_names=["y", "x", "add_intercept"],
+        return_type="series",
+        tags=[
+            "cross_sectional", "daily", "pit_safe", "causal", "typed_v2",
+            "signature:y,x,add_intercept->series", "domain:price_volume",
+            "unit:same_as:y", "cost:3",
+        ],
+        output_unit="same_as:y",
+    )
+
+    def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, add_intercept: bool = True, **_: Any) -> pd.DataFrame:
+        return _cs_robust_resid(y, x, _huber_irls_fit, bool(add_intercept))
+
+
+@register_operator(
+    name="cs_lad_resid",
+    category="cross_sectional",
+    business_category="cross_sectional_regression",
+    canonical="cs_lad_resid",
+    source="group_ext",
+    status="experimental",
+)
+class CsLadResid(SeriesOperator):
+    """横截面残差：LAD（L1 / 中位数）回归残差，对离群点稳健。
+
+    LAD 最小化绝对残差和，对 y 端离群点不敏感（P1-24 真稳健回归）。逐行
+    （横截面跨 instruments）拟合，形状保持；退化 x / 不收敛 -> NaN。
+    """
+
+    metadata = OperatorMetadata(
+        name="cs_lad_resid",
+        category="cross_sectional",
+        description=(
+            "横截面残差（LAD / L1 中位数回归，对离群点稳健；非 trimmed-OLS）。"
+            "输出残差单位为 unit(y)（§37-D unit-algebra）。"
+        ),
+        param_names=["y", "x", "add_intercept"],
+        return_type="series",
+        tags=[
+            "cross_sectional", "daily", "pit_safe", "causal", "typed_v2",
+            "signature:y,x,add_intercept->series", "domain:price_volume",
+            "unit:same_as:y", "cost:3",
+        ],
+        output_unit="same_as:y",
+    )
+
+    def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, add_intercept: bool = True, **_: Any) -> pd.DataFrame:
+        return _cs_robust_resid(y, x, _lad_fit, bool(add_intercept))
