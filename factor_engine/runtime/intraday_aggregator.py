@@ -168,6 +168,22 @@ class IntradayAggregatedDataSource(DataSource):
     bar_freq: str = "1d"
     _cache: dict[str, pd.Series] = field(default_factory=dict, init=False, repr=False)
 
+    def execution_spec(self) -> dict[str, Any] | None:
+        """#收官轮 P0：还原 intraday_daily 子源 + features 可重建配置。"""
+        from storage.sources.datasource import clean_execution_spec
+
+        fn = getattr(self.inner, "execution_spec", None)
+        inner_spec = fn() if callable(fn) else None
+        if not isinstance(inner_spec, dict):
+            return None
+        return clean_execution_spec(
+            {
+                "type": "intraday_daily",
+                "source": dict(inner_spec),
+                "features": tuple(self.features),
+            }
+        )
+
     def _build_aggregator(self) -> IntradayAggregator:
         load_columns = getattr(self.inner, "load_columns", None)
         base_cols = ["open", "high", "low", "close", "volume", "amount"]

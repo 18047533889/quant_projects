@@ -634,6 +634,45 @@ class DataAccessSource(DataSource):
     def lazy_scan(self) -> bool:
         return bool(self._lazy_scan)
 
+    def execution_spec(self) -> dict[str, Any]:
+        """返回可重建（``storage.factory.build_data_source``）的 canonical 配置。
+
+        #收官轮 P0：程序化 ``materialize()`` 未显式传 ``data_source_config`` 时，
+        orchestrator 用本 spec 还原正在执行的真实 source contract（含
+        ``instrument_filter`` 的 None/[] 区分），供 lineage / semantic identity /
+        full definition / 事件增量 rebuild 复用。
+        """
+        from .datasource import clean_execution_spec
+
+        return clean_execution_spec(
+            {
+                "type": "data_access",
+                "dataset": str(self.dataset),
+                "fields": dict(self.fields or {}),
+                "start_date": self.start_date,
+                "end_date": self.end_date,
+                "instrument_filter": (
+                    list(self.instrument_filter)
+                    if self.instrument_filter is not None
+                    else None
+                ),
+                "normalize_timestamp": self.normalize_timestamp,
+                "timestamp_unit": self.timestamp_unit,
+                "read_auto": self.read_auto,
+                "params": dict(self.params or {}),
+                "semantic_filters": dict(self.semantic_filters or {}),
+                "read_mode": self.read_mode,
+                "run_mode": self.run_mode,
+                "production": self.production,
+                "strict_unknown_fields": self.strict_unknown_fields,
+                "enforce_mining_gate": self.enforce_mining_gate,
+                "snapshot_now_only": self.snapshot_now_only,
+                "mining_coverage_threshold": self.mining_coverage_threshold,
+                "pit_enforce": self.pit_enforce,
+                "snapshot_only": self.snapshot_only,
+            }
+        )
+
     def _assert_open(self) -> None:
         if self._closed:
             raise RuntimeError("DataAccessSource is closed")

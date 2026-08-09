@@ -32,7 +32,7 @@ _EPS = 1e-12
 _EIGEN_GAP_MIN = 1e-2  # below this (lambda_k - lambda_{k+1})/lambda_k the PC is unstable.
 _SESSION_TZ = "Asia/Shanghai"            # A-share wall-clock (COS stores QuoteTime UTC)
 _US_TZ = "America/New_York"              # US regular session (DST-aware)
-_PHASE_MIN_CORR = 0.3                    # best-shift correlation must beat this gate (else NaN)
+_PHASE_MIN_CORR = 0.5                    # best-shift correlation must beat this gate (else NaN)
 
 
 def _eigen_gap_unstable(s: np.ndarray, k: int) -> bool:
@@ -120,6 +120,15 @@ def _metadata(
             "deterministic", *extra_tags,
             f"signature:{','.join(params)}->series", f"unit:{unit}", f"cost:{cost}",
         ],
+        # R11 P0-04/05: every minute->daily aggregator declares the frequency
+        # change and its EOD-only availability explicitly (machine-readable, not
+        # docstring text).  ``available_at=session_close`` because the output
+        # uses the whole session; ``same_session_usable=False`` so the execution
+        # layer refuses intra-session decisions on it.
+        input_grain="minute",
+        output_grain="daily",
+        available_at="session_close",
+        same_session_usable=False,
     )
 
 

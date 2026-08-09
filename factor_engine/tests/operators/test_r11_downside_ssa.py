@@ -109,7 +109,8 @@ def test_state_episode_rejects_arbitrary_numeric_state():
 
 
 # ---------------------------------------------------------------------------
-# #158  downside/upside deviation unit reference is same_as:x
+# #158  downside/upside deviation unit reference is same_as:x; x is a RETURN /
+#       signed series vs a same-unit MAR target (NOT a price-only input).
 # ---------------------------------------------------------------------------
 def test_downside_upside_deviation_unit_is_same_as_x():
     for cls in (_dr.TsDownsideDeviation, _dr.TsUpsideDeviation):
@@ -117,10 +118,12 @@ def test_downside_upside_deviation_unit_is_same_as_x():
         assert meta.output_unit == "same_as:x", f"{cls.__name__} -> {meta.output_unit}"
         unit_tags = [t for t in meta.tags if t.startswith("unit:")]
         assert "unit:same_as:x" in unit_tags, f"{cls.__name__} tags {unit_tags}"
-        assert meta.input_units.get("x") == "price"
-        assert meta.input_units.get("target") == "price"
-        assert meta.compatible_units.get("x") == ("price",)
-        assert meta.compatible_units.get("target") == ("price",)
+        # x accepts return-or-same-unit numeric — NOT price-only — and target is
+        # a MAR threshold in the same unit as x.
+        assert meta.input_units.get("x") == "return_or_same_unit_numeric"
+        assert meta.input_units.get("target") == "same_unit_as:x"
+        assert meta.compatible_units.get("x") == ("return", "same_unit_as:x")
+        assert meta.compatible_units.get("target") == ("same_unit_as:x",)
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +136,9 @@ def test_window_min_periods_strict_int_and_domain():
         op.calculate(x, window=5.9)
     with pytest.raises(ValueError, match="min_periods must be >= 2"):
         op.calculate(x, window=10, min_periods=1)
-    with pytest.raises(ValueError, match="min_periods must be <= window"):
+    # ``min_periods > window`` is rejected (by the central relation gate or the
+    # kernel domain check — either message is acceptable).
+    with pytest.raises(ValueError, match="min_periods"):
         op.calculate(x, window=10, min_periods=12)
     # valid combination works.
     out = op.calculate(x, window=10, min_periods=7)

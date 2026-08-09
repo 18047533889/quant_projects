@@ -630,6 +630,68 @@ def _normalise_integer(
     return _check_int(int(value))
 
 
+def strict_int_param(value: Any, name: str, *, lower: int | None = None, upper: int | None = None) -> int:
+    """THE single strict integer-parameter gate for kernels (P0-08).
+
+    Kernels must call this instead of ``int(window)`` / ``int(periods)`` /
+    ``max(10, int(mp))`` — silent truncation lets ``window=20.9`` and
+    ``window=20`` manufacture two distinct ASTs with identical output, polluting
+    AlphaProbe/AlphaMiner's search space.
+
+    Requirements:
+      * not a bool (``True``/``False`` are not window sizes);
+      * finite;
+      * exactly integral (``20.0`` ok, ``20.9`` rejected — never truncated);
+      * within the optional declared range.
+
+    Returns the coerced ``int``.  Raises :class:`OperatorParameterError` on any
+    violation — never clips, never silently rounds.
+    """
+    if isinstance(value, (bool, np.bool_)):
+        raise OperatorParameterError(
+            f"{name} must be an integer, not bool ({value!r})"
+        )
+    if isinstance(value, str):
+        try:
+            value = float(value.strip())
+        except (TypeError, ValueError):
+            raise OperatorParameterError(
+                f"{name} must be an integer, not a non-numeric string ({value!r})"
+            )
+    if not isinstance(value, (int, float, np.integer, np.floating)):
+        raise OperatorParameterError(
+            f"{name} must be an integer, not {type(value).__name__} ({value!r})"
+        )
+    numeric = float(value)
+    if not np.isfinite(numeric):
+        raise OperatorParameterError(f"{name} must be finite, got {value!r}")
+    if numeric != float(int(numeric)):
+        raise OperatorParameterError(
+            f"{name} must be an integer, got {value!r} (fractional value is a "
+            "contract violation — never silently truncated)"
+        )
+    result = int(numeric)
+    if lower is not None and result < lower:
+        raise OperatorParameterError(f"{name} must be >= {lower}, got {result}")
+    if upper is not None and result > upper:
+        raise OperatorParameterError(f"{name} must be <= {upper}, got {result}")
+    return result
+
+
+def strict_bool_param(value: Any, name: str) -> bool:
+    """THE single strict boolean-parameter gate for kernels (P1-28).
+
+    Accepts ONLY ``bool`` instances.  ``1``/``0``/``1.0``/``"False"`` are
+    contract violations — ``bool("False") is True``, so string/bool coercion
+    manufactures false search-space duplicates and corrupts the DSL.
+    """
+    if type(value) is not bool:
+        raise OperatorParameterError(
+            f"{name} must be a boolean, not {type(value).__name__} ({value!r})"
+        )
+    return value
+
+
 def _validate_param_spec(
     value: Any,
     name: str,
@@ -1103,6 +1165,13 @@ def _verify_typed_broadcast_axes(
         return
     typed = bool(tags & _TYPED_BROADCAST_TAGS)
     base_idx = getattr(frames[0], "index", None)
+    if base_idx is None:
+        # A polars / exotic frame carries its time axis as a COLUMN, not a
+        # pandas ``.index``; the pandas-side date mapping cannot be checked
+        # here.  The polars bridge's ``verify_frames_share_identity`` handles
+        # those frames separately — do not fail, but do not claim to have
+        # verified either.
+        return
     if not isinstance(base_idx, pd.DatetimeIndex):
         if typed:
             raise ValueError(

@@ -10,6 +10,39 @@ from expr.base import Expr
 
 
 @dataclass(frozen=True)
+class FactorSemanticIdentity:
+    """因子执行语义身份（P1-01）。
+
+    携带跨执行路径完整的 semantic identity（market / universe_id / frequency /
+    calendar_id / decision_time_policy / source_scope_hash），供
+    ``runtime.engine._scope_from_factor`` 推断 ``FactorExecutionScope``。
+    字段缺省 ``None``，保持向后兼容：未显式声明的字段不覆盖因子级属性。
+
+    Attributes
+    ----------
+    market : str | None
+        市场标识（``"A"`` / ``"US"`` …）；``None`` 表示未声明，绝不默认 ``"A"``。
+    universe_id : str | None
+        股票池标识（``"ALL"`` / ``"CSI300"`` / ``"US_NASDAQ100"`` …）。
+    frequency : str | None
+        业务语义频率（如 ``"1d"``）。
+    calendar_id : str | None
+        交易日历标识（如 ``"SSE"`` / ``"NYSE"``）。
+    decision_time_policy : str | None
+        决策时间策略。
+    source_scope_hash : str | None
+        数据源作用域哈希；为空时由引擎按真实数据源配置现算（P1-04）。
+    """
+
+    market: str | None = None
+    universe_id: str | None = None
+    frequency: str | None = None
+    calendar_id: str | None = None
+    decision_time_policy: str | None = None
+    source_scope_hash: str | None = None
+
+
+@dataclass(frozen=True)
 class Factor:
     """可编译、可执行的一条因子；核心负载是 ``expr: Expr``。
 
@@ -43,3 +76,6 @@ class Factor:
     surface: str = "daily"
     dialect: str = "native"
     dialect_version: str | None = None
+    # P1-01: 完整执行语义身份；None 时引擎回退到因子级属性推断。默认 None
+    # 保持向后兼容（parse_factor / 既有构造调用点不受影响）。
+    semantic_identity: FactorSemanticIdentity | None = None

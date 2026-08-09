@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 from logging_utils import get_logger
 
@@ -41,6 +42,25 @@ class KlineParquetSource(DataSource):
     bar_freq: str = "1d"
     _column_cache: dict[str, object] = field(default_factory=dict, init=False, repr=False)
     _file_cache: list[Path] | None = field(default=None, init=False, repr=False)
+
+    def execution_spec(self) -> dict[str, Any]:
+        """返回可重建（``storage.factory.build_data_source``）的 canonical 配置。"""
+        from .datasource import clean_execution_spec
+
+        return clean_execution_spec(
+            {
+                "type": "parquet_kline",
+                "root": str(self.root),
+                "instrument_col": self.instrument_column,
+                "timestamp_col": self.timestamp_column,
+                "fields": dict(self.fields or {}),
+                "max_files": self.max_files,
+                "timestamp_unit": self.timestamp_unit,
+                "start_date": self.start_date,
+                "end_date": self.end_date,
+                "bar_freq": self.bar_freq,
+            }
+        )
 
     def load_column(self, name: str):
         """load_column。

@@ -77,6 +77,34 @@ class ParquetSource(DataSource):
         self._columns_resolved = False
         self._files_cache: list[Path] | None = None
 
+    def execution_spec(self) -> dict[str, Any]:
+        """返回可重建（``storage.factory.build_data_source``）的 canonical 配置。
+
+        #收官轮 P0：``start_date``/``end_date`` 存的是规范化后的 ISO 字符串
+        （``_normalize_bound``），原样回传 factory 可重建。
+        """
+        from .datasource import clean_execution_spec
+
+        source_type = (
+            "cleaned_parquet"
+            if type(self).__name__ == "CleanedParquetSource"
+            else "parquet"
+        )
+        return clean_execution_spec(
+            {
+                "type": source_type,
+                "root": str(self.root),
+                "timestamp_col": self.timestamp_column,
+                "instrument_col": self.instrument_column,
+                "fields": dict(self.fields or {}),
+                "max_files": self.max_files,
+                "timestamp_unit": self.timestamp_unit,
+                "start_date": self.start_date,
+                "end_date": self.end_date,
+                "recursive": self.recursive,
+            }
+        )
+
     _TIMESTAMP_FALLBACKS: dict[str, tuple[str, ...]] = {
         "TradeDate": ("trade_date", "window_start", "timestamp", "date"),
         "window_start": ("TradeDate", "trade_date", "timestamp", "date"),

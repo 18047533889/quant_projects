@@ -1114,6 +1114,19 @@ def _slice(value: Any, rows: int) -> Any:
     return value.iloc[:rows] if isinstance(value, (pd.DataFrame, pd.Series)) else value
 
 
+def _slice_range(value: Any, start: int, end: int | None) -> Any:
+    """Slice DataFrame/Series rows to ``value.iloc[start:end]``.
+
+    Unlike :func:`_slice` (which always takes the leading ``rows``), this lets
+    an audit take an interior / trailing segment (e.g. the true second half of a
+    panel for chunk-boundary tests).  Non-DataFrame/Series values pass through
+    unchanged.
+    """
+    if isinstance(value, (pd.DataFrame, pd.Series)):
+        return value.iloc[start:end]
+    return value
+
+
 def _to_frame(value: Any, template: pd.DataFrame) -> pd.DataFrame:
     if isinstance(value, pd.DataFrame):
         return value

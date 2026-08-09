@@ -95,12 +95,12 @@ def test_intraday_segment_handles_utc_index():
     from cleaned_operators.microstructure.intraday_agg import IntraSegmentReturn, IntraLunchGapReturn
 
     # 01:31 UTC = 09:31 Beijing (morning), 03:00 UTC = 11:00 Beijing (morning),
-    # 05:00 UTC = 13:00 Beijing (afternoon), 06:00 UTC = 14:00 Beijing (afternoon).
+    # 05:01 UTC = 13:01 Beijing (afternoon first bar, 240-bar session), 06:00 UTC = 14:00.
     idx = pd.DatetimeIndex(
         [
             pd.Timestamp("2024-01-02 01:31", tz="UTC"),
             pd.Timestamp("2024-01-02 03:00", tz="UTC"),
-            pd.Timestamp("2024-01-02 05:00", tz="UTC"),
+            pd.Timestamp("2024-01-02 05:01", tz="UTC"),
             pd.Timestamp("2024-01-02 06:00", tz="UTC"),
         ]
     )

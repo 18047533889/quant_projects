@@ -107,6 +107,38 @@ class ClickHouseSource(DataSource):
         }
         self.frequency = frequency
         self.session_column = session_column
+
+    def execution_spec(self) -> dict[str, Any]:
+        """返回可重建（``storage.factory.build_data_source``）的 canonical 配置。
+
+        凭据字段（host/port/database/username/password/secure）进入 lineage 身份
+        前会被 ``runtime.lineage._canonicalize_config_value`` redact，不会把密钥
+        hash 进 factor_version / data_snapshot_id。
+        """
+        from .datasource import clean_execution_spec
+
+        return clean_execution_spec(
+            {
+                "type": "clickhouse",
+                "table": self.table,
+                "timestamp_col": self.timestamp_column,
+                "instrument_col": self.instrument_column,
+                "fields": dict(self.fields or {}),
+                "start_date": self.start_date,
+                "end_date": self.end_date,
+                "instrument_filter": (
+                    list(self.instrument_filter)
+                    if self.instrument_filter is not None
+                    else None
+                ),
+                "host": self._ch_overrides.get("host"),
+                "port": self._ch_overrides.get("port"),
+                "database": self._ch_overrides.get("database"),
+                "username": self._ch_overrides.get("username"),
+                "password": self._ch_overrides.get("password"),
+                "secure": self._ch_overrides.get("secure"),
+            }
+        )
         #: Unified field-resolution plans keyed by logical name (P0-11).
         self._field_plans: dict[str, NormalizedFieldPlan] = {}
         self._column_cache: dict[str, Any] = {}

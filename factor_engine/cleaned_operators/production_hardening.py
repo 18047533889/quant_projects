@@ -338,22 +338,17 @@ def _min_periods_from_contract(canonical: str, catalog: dict[str, Any]) -> int |
     never blanket-default it to 1.
 
     Resolution order:
-    1. ``cost:`` tag label (``cost:8``) — the operator's own declared cost/warmup;
-    2. ``min_periods:`` tag label;
-    3. the ``_MIN_PERIODS_FLOORS`` statistical floor map (skew>=3, kurt>=4, …)
+    1. ``min_periods:`` tag label;
+    2. the ``_MIN_PERIODS_FLOORS`` statistical floor map (skew>=3, kurt>=4, …)
        — the semantic minimum a kernel NEEDS to be well-defined;
-    4. ``bars_`` tag (a warmup length the operator itself declared);
-    5. ``None`` (fall back to 1 only when nothing is declared anywhere).
+    3. ``bars_`` tag (a warmup length the operator itself declared);
+    4. ``None`` (fall back to 1 only when nothing is declared anywhere).
+
+    ``cost:`` tags are deliberately NOT consumed here — ``cost`` is a
+    computational-cost hint for BackendRouter / ExecutionCostModel, never a
+    statistical min-periods floor.  Treating ``cost:8`` as ``min_periods=8``
+    desynchronises kernel warmup from policy warmup.
     """
-    for tag in catalog.get("tags") or ():
-        text = str(tag).strip().lower()
-        if text.startswith("cost:"):
-            try:
-                value = int(text.split(":", 1)[1])
-                if value > 0:
-                    return value
-            except (TypeError, ValueError):
-                pass
     for tag in catalog.get("tags") or ():
         text = str(tag).strip().lower()
         if text.startswith("min_periods:"):

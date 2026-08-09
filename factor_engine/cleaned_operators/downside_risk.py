@@ -85,21 +85,29 @@ def _rolling_apply_2d(values: np.ndarray, window: int, fn: Any, min_periods: int
 class TsDownsideDeviation(SeriesOperator):
     """下行偏离：sqrt(mean(min(x - target, 0)^2))。
 
-    单位继承 x (R5 P1-36(c))：对价格/收益序列输入，输出与 x 同单位，不是无量纲
-    比值。
+    x 是收益/带符号序列，target 是相同单位的最小可接受收益 MAR（minimal
+    acceptable return）。对收益相对目标收益的偏离才有意义；对原始正价格
+    target=0 会输出约 0（死因子）——现在由类型契约在 typed 层拒绝，而不是
+    静默产生无意义信号。单位继承 x (R5 P1-36(c))：输出与 x 同单位，不是
+    无量纲比值。
     """
 
     metadata = _metadata(
         "ts_downside_deviation",
-        "下行偏离 sqrt(mean(min(x-target,0)^2))，单位继承 x。",
+        "下行偏离 sqrt(mean(min(x-target,0)^2))：x 为收益/MAR 目标（同单位），输出继承 x 单位。",
         ["x", "window", "target", "min_periods"],
         domain="price_volume",
         unit="same_as:x",
         output_unit="same_as:x",
         # R11 #158: the deviation is dimensionally unit(x); ``target`` is a
-        # threshold scalar in the SAME unit as x — never the output reference.
-        input_units={"x": "price", "target": "price"},
-        compatible_units={"x": ("price",), "target": ("price",)},
+        # MAR threshold scalar in the SAME unit as x — never the output
+        # reference.  x is a RETURN / signed series measured against a target
+        # return, NOT a raw price: ``price`` with target=0 would be ~0 for
+        # positive prices — a dead factor.  The typed layer reads these
+        # declarations, so a price-only input is a contract violation
+        # (rejected) instead of a silent ~0 factor.
+        input_units={"x": "return_or_same_unit_numeric", "target": "same_unit_as:x"},
+        compatible_units={"x": ("return", "same_unit_as:x"), "target": ("same_unit_as:x",)},
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, target: float = 0.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:
@@ -133,21 +141,29 @@ class TsDownsideDeviation(SeriesOperator):
 class TsUpsideDeviation(SeriesOperator):
     """上行偏离：sqrt(mean(max(x - target, 0)^2))。
 
-    单位继承 x (R5 P1-36(c))：对价格/收益序列输入，输出与 x 同单位，不是无量纲
-    比值。
+    x 是收益/带符号序列，target 是相同单位的最小可接受收益 MAR（minimal
+    acceptable return）。对收益相对目标收益的偏离才有意义；对原始正价格
+    target=0 会输出约 0（死因子）——现在由类型契约在 typed 层拒绝，而不是
+    静默产生无意义信号。单位继承 x (R5 P1-36(c))：输出与 x 同单位，不是
+    无量纲比值。
     """
 
     metadata = _metadata(
         "ts_upside_deviation",
-        "上行偏离 sqrt(mean(max(x-target,0)^2))，单位继承 x。",
+        "上行偏离 sqrt(mean(max(x-target,0)^2))：x 为收益/MAR 目标（同单位），输出继承 x 单位。",
         ["x", "window", "target", "min_periods"],
         domain="price_volume",
         unit="same_as:x",
         output_unit="same_as:x",
         # R11 #158: the deviation is dimensionally unit(x); ``target`` is a
-        # threshold scalar in the SAME unit as x — never the output reference.
-        input_units={"x": "price", "target": "price"},
-        compatible_units={"x": ("price",), "target": ("price",)},
+        # MAR threshold scalar in the SAME unit as x — never the output
+        # reference.  x is a RETURN / signed series measured against a target
+        # return, NOT a raw price: ``price`` with target=0 would be ~0 for
+        # positive prices — a dead factor.  The typed layer reads these
+        # declarations, so a price-only input is a contract violation
+        # (rejected) instead of a silent ~0 factor.
+        input_units={"x": "return_or_same_unit_numeric", "target": "same_unit_as:x"},
+        compatible_units={"x": ("return", "same_unit_as:x"), "target": ("same_unit_as:x",)},
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, target: float = 0.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:

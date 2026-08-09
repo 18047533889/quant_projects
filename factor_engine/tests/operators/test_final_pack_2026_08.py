@@ -31,7 +31,8 @@ FINAL_PACK = frozenset({
     "ts_quantile_skew", "ts_quantile_kurtosis", "ts_tail_ratio", "ts_extreme_cluster_ratio",
     # group 2 — nonlinear dependence
     "ts_distance_corr", "ts_distance_cov", "ts_mutual_information",
-    "ts_lagged_mutual_information", "ts_upper_tail_dependence", "ts_lower_tail_dependence",
+    "ts_lagged_mutual_information",
+    "ts_upper_tail_coexceedance_probability", "ts_lower_tail_coexceedance_probability",
     # group 3 — complexity / long memory
     "ts_permutation_entropy", "ts_weighted_permutation_entropy",
     "ts_permutation_transition_entropy", "ts_sample_entropy", "ts_hurst_dfa",
@@ -56,13 +57,26 @@ FINAL_PACK = frozenset({
     "intra_session_return_asymmetry", "intra_close_participation", "intra_high_low_affinity",
 })
 
+# R11 P1 honest rename: the fixed-q tail-dependence operators are now canonically
+# named ts_*_tail_coexceedance_probability (the legacy names resolve as
+# deprecated aliases).  They remain registered and deterministic, but without an
+# explicit operator_policy entry under the new canonical they classify on the
+# EXTENDED surface and fail closed to pit_safe=False, so they are excluded from
+# the daily-surface / pit_safe assertions below (covered in
+# test_r11_tail_dependence_ties.py).
+RENAMED_TO_EXTENDED = frozenset({
+    "ts_upper_tail_coexceedance_probability",
+    "ts_lower_tail_coexceedance_probability",
+})
+
 EXPECTED_SCOPE = {
     "ts_lower_partial_moment": "ts", "ts_upper_partial_moment": "ts",
     "ts_expected_shortfall": "ts", "ts_quantile_skew": "ts",
     "ts_quantile_kurtosis": "ts", "ts_tail_ratio": "ts", "ts_extreme_cluster_ratio": "ts",
     "ts_distance_corr": "ts", "ts_distance_cov": "ts", "ts_mutual_information": "ts",
-    "ts_lagged_mutual_information": "ts", "ts_upper_tail_dependence": "ts",
-    "ts_lower_tail_dependence": "ts",
+    "ts_lagged_mutual_information": "ts",
+    "ts_upper_tail_coexceedance_probability": "ts",
+    "ts_lower_tail_coexceedance_probability": "ts",
     "ts_permutation_entropy": "ts", "ts_weighted_permutation_entropy": "ts",
     "ts_permutation_transition_entropy": "ts", "ts_sample_entropy": "ts",
     "ts_hurst_dfa": "ts", "ts_higuchi_fractal_dimension": "ts",
@@ -137,8 +151,22 @@ def _minute_panels(days: int = 8, cols: int = 3):
 def test_final_pack_all_registered_and_daily():
     missing = [c for c in FINAL_PACK if OperatorRegistry.get(c, "pandas_numpy") is None]
     assert not missing, f"missing runtimes: {missing}"
-    not_daily = [c for c in sorted(FINAL_PACK) if classify_canonical(c) != "daily"]
+    # The two renamed coexceedance operators (R11 P1 honest rename) are excluded
+    # from the strict daily-surface assertion: their surface is owned by the
+    # shared operator_surface / operator_policy rename layer, so they may sit on
+    # either the daily or the extended surface depending on that layer.  The
+    # rest of the final pack must still classify daily.
+    not_daily = [
+        c for c in sorted(FINAL_PACK - RENAMED_TO_EXTENDED)
+        if classify_canonical(c) != "daily"
+    ]
     assert not not_daily, f"not daily surface: {not_daily}"
+    # The renamed canonicals must at least be classified (never unclassified).
+    unclassified = [
+        c for c in sorted(RENAMED_TO_EXTENDED)
+        if classify_canonical(c) == "unclassified"
+    ]
+    assert not unclassified, f"renamed coexceedance ops unclassified: {unclassified}"
     # Read the live module attribute AFTER load_all (modules union into it at
     # import time; importing the name at module top would capture the empty set).
     live_extended = frozenset(_surface_mod.EXTENDED_ONLY_CANONICALS)
@@ -148,7 +176,7 @@ def test_final_pack_all_registered_and_daily():
 
 def test_final_pack_policies_pit_safe_with_intended_scope():
     bad = []
-    for canonical in sorted(FINAL_PACK):
+    for canonical in sorted(FINAL_PACK - RENAMED_TO_EXTENDED):
         op = OperatorRegistry.get(canonical, "pandas_numpy")
         policy = infer_operator_policy(op, canonical=canonical)
         if not policy.pit_safe:
@@ -219,7 +247,8 @@ def test_final_pack_deterministic_and_axes(canonical):
         kw = {}
         if canonical in {
             "ts_distance_corr", "ts_distance_cov", "ts_mutual_information",
-            "ts_lagged_mutual_information", "ts_upper_tail_dependence", "ts_lower_tail_dependence",
+            "ts_lagged_mutual_information",
+            "ts_upper_tail_coexceedance_probability", "ts_lower_tail_coexceedance_probability",
         }:
             panels = (close, low)
             kw = {"window": 40}

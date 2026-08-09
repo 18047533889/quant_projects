@@ -27,6 +27,7 @@ production 模式下强制 input_dq、auto_warmup、PIT 及算子白名单等约
 
 from __future__ import annotations
 
+import functools
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -88,19 +89,220 @@ def _empty_factor_series() -> pd.Series:
     )
 
 
-def _scope_from_factor(factor: Any) -> FactorExecutionScope:
-    """从 ``Factor`` 对象推断执行作用域；属性取不到时使用默认值（#321）。"""
-    return FactorExecutionScope(
-        frequency=str(getattr(factor, "freq", None) or "1d"),
-        universe_id=str(getattr(factor, "universe", None) or "ALL"),
-        market=str(getattr(factor, "market", None) or "A"),
-        calendar_id=str(
+def _stable_config(value: Any) -> Any:
+    """把任意配置值归一为稳定可 JSON 序列化的结构（dict 递归 / set 排序 list）。"""
+    if value is None or isinstance(value, (bool, str, int, float)):
+        return value
+    if isinstance(value, dict):
+        return {str(k): _stable_config(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_stable_config(v) for v in value]
+    if isinstance(value, (set, frozenset)):
+        return sorted(_stable_config(v) for v in value)
+    if hasattr(value, "isoformat"):  # datetime / date
+        return value.isoformat()
+    return str(value)
+
+
+def _data_source_to_scope_config(data_source: Any) -> dict[str, Any]:
+    """把数据源对象归一为稳定 dict 配置（P1-04，供 ``compute_source_scope_hash``）。
+
+    覆盖常见字段（dataset/root/fields/instrument_filter/params/read_mode/
+    snapshot/PIT 门等），并递归展开 wrapper（inner/long_table）与 composite
+    子源，确保不同 source scope 的配置差异能反映到 CSE 作用域哈希中。
+    """
+    if data_source is None:
+        return {}
+    cfg: dict[str, Any] = {"type": type(data_source).__name__}
+    for attr in (
+        "dataset",
+        "root",
+        "fields",
+        "instrument_filter",
+        "params",
+        "read_mode",
+        "semantic_filters",
+        "start_date",
+        "end_date",
+        "timestamp_column",
+        "instrument_column",
+        "bar_freq",
+        "snapshot_now_only",
+        "snapshot_only",
+        "pit_enforce",
+        "universe",
+        "universe_id",
+    ):
+        try:
+            val = getattr(data_source, attr, None)
+        except Exception:  # pragma: no cover - exotic getattr must not break scope
+            val = None
+        if val is not None:
+            cfg[attr] = val
+    inner = getattr(data_source, "inner", None)
+    if inner is not None and inner is not data_source:
+        cfg["inner"] = _data_source_to_scope_config(inner)
+    sources = getattr(data_source, "sources", None)
+    if isinstance(sources, dict):
+        cfg["sources"] = {
+            str(k): _data_source_to_scope_config(v) for k, v in sources.items()
+        }
+        for attr in ("joins", "anchor_source", "anchor_column", "aliases"):
+            val = getattr(data_source, attr, None)
+            if val is not None:
+                cfg[attr] = val
+    return cfg
+
+
+def compute_source_scope_hash(
+    *,
+    data_source_config: dict[str, Any] | None = None,
+    market: str | None = None,
+    universe: str | None = None,
+    calendar_id: str | None = None,
+    snapshot_policy: str | None = None,
+    field_catalog_version: str | None = None,
+    pit_mode: str | None = None,
+) -> str:
+    """计算数据源作用域哈希（P1-04）：sha256 前 16 hex。
+
+    输入 normalized data_source config（dict 序列化）与执行语义字段
+    （market/universe/calendar_id/snapshot policy/field catalog version/
+    PIT mode）。不同 source scope 得到不同哈希，从而在
+    ``FactorExecutionScope.scope_key`` 中隔离 CSE —— 让不同 source scope 的
+    因子绝不共享 CSE 节点。
+    """
+    import hashlib
+    import json
+
+    payload = {
+        "data_source_config": _stable_config(data_source_config or {}),
+        "market": str(market or ""),
+        "universe": str(universe or ""),
+        "calendar_id": str(calendar_id or ""),
+        "snapshot_policy": str(snapshot_policy or ""),
+        "field_catalog_version": str(field_catalog_version or ""),
+        "pit_mode": str(pit_mode or ""),
+    }
+    raw = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+@functools.lru_cache(maxsize=1)
+def _field_catalog_version() -> str:
+    """惰性计算字段目录版本（模块级缓存，避免每因子重算）。"""
+    from fields import compute_field_catalog_hash
+
+    return compute_field_catalog_hash()
+
+
+def _scope_from_factor(
+    factor: Any,
+    *,
+    data_source: Any = None,
+) -> FactorExecutionScope:
+    """从 ``Factor`` 对象推断执行作用域；属性取不到时使用默认值（#321）。
+
+    P1-01: 优先使用 ``factor.semantic_identity`` 提供的执行语义身份；market
+    取不到时保持空串，**绝不**静默默认 ``"A"``（避免把 US 因子当 A 算，交给
+    下游 gate / ``infer_market(universe)`` 决定）。P1-04: ``source_scope_hash``
+    缺失时由真实数据源配置现算，确保不同 source scope 的因子不共享 CSE 节点。
+    """
+
+    def _pick(*candidates: Any) -> str | None:
+        for c in candidates:
+            if c is not None and str(c) != "":
+                return str(c)
+        return None
+
+    semantic = getattr(factor, "semantic_identity", None)
+    if semantic is not None:
+        market = _pick(
+            getattr(semantic, "market", None), getattr(factor, "market", None)
+        )
+        universe_raw = _pick(
+            getattr(semantic, "universe_id", None),
+            getattr(factor, "universe", None),
+        )
+        frequency = (
+            _pick(
+                getattr(semantic, "frequency", None),
+                getattr(factor, "freq", None),
+            )
+            or "1d"
+        )
+        calendar_id = (
+            _pick(
+                getattr(semantic, "calendar_id", None),
+                getattr(factor, "calendar_id", None),
+                getattr(factor, "calendar", None),
+            )
+            or ""
+        )
+        decision_time_policy = (
+            _pick(
+                getattr(semantic, "decision_time_policy", None),
+                getattr(factor, "decision_time_policy", None),
+            )
+            or ""
+        )
+        source_scope_hash = (
+            _pick(
+                getattr(semantic, "source_scope_hash", None),
+                getattr(factor, "source_scope_hash", None),
+            )
+            or ""
+        )
+    else:
+        market = getattr(factor, "market", None)
+        universe_raw = getattr(factor, "universe", None)
+        frequency = str(getattr(factor, "freq", None) or "1d")
+        calendar_id = str(
             getattr(factor, "calendar_id", None)
             or getattr(factor, "calendar", None)
             or ""
-        ),
-        source_scope_hash=str(getattr(factor, "source_scope_hash", None) or ""),
-        decision_time_policy=str(getattr(factor, "decision_time_policy", None) or ""),
+        )
+        decision_time_policy = str(
+            getattr(factor, "decision_time_policy", None) or ""
+        )
+        source_scope_hash = str(getattr(factor, "source_scope_hash", None) or "")
+
+    universe_id = str(universe_raw or "ALL")
+    if not str(universe_raw or "").strip():
+        universe_id = "ALL"
+
+    # P1-01: market 取不到时保留空串，绝不默认 "A"。
+    market_str = str(market) if market is not None else ""
+
+    # P1-04: factor 未携带 source_scope_hash 且真实存在数据源时，按数据源配置现算。
+    if not source_scope_hash and data_source is not None:
+        source_scope_hash = compute_source_scope_hash(
+            data_source_config=_data_source_to_scope_config(data_source),
+            market=market_str or None,
+            universe=universe_id,
+            calendar_id=calendar_id or None,
+            snapshot_policy=str(
+                getattr(data_source, "snapshot_policy", "") or ""
+            ),
+            field_catalog_version=_field_catalog_version(),
+            pit_mode="enforce" if bool(
+                getattr(data_source, "pit_enforce", False)
+            ) else "",
+        )
+
+    return FactorExecutionScope(
+        frequency=frequency,
+        universe_id=universe_id,
+        market=market_str,
+        calendar_id=calendar_id,
+        source_scope_hash=source_scope_hash,
+        decision_time_policy=decision_time_policy,
     )
 
 
@@ -252,10 +454,14 @@ def _data_source_scoped(data_source: Any) -> bool:
 def _is_whole_market_universe(scope: FactorExecutionScope) -> bool:
     """universe 标签是否表示「整个市场」（而非 scoped 子集股票池）。
 
+    P1-02: **删除** ``infer_market`` 字符串推断分支 —— ``US_NASDAQ100`` /
+    ``ASHARE_CSI300`` 这类命名股票池会被错误当成 whole market。只保留：
+
     - ``ALL`` / 空 → 全市场；
     - 与 ``market`` 相同（如 ``universe="A"`` + ``market="A"``）→ 全市场；
-    - 以 ``_ALL`` 结尾（``ASHARE_ALL`` / ``US_MASSIVE_ALL``）→ 全市场；
-    - 可被 ``infer_market`` 识别为市场（``ASHARE*`` / ``US_*`` 等）→ 全市场。
+    - 以 ``_ALL`` 结尾（``ASHARE_ALL`` / ``US_MASSIVE_ALL``）→ 全市场。
+
+    其余一律视为 scoped subset（保守，宁可 fail-closed 也不在全源上算截面）。
     """
     univ = str(scope.universe_id or "").strip().upper()
     if univ in {"", "ALL"}:
@@ -264,14 +470,39 @@ def _is_whole_market_universe(scope: FactorExecutionScope) -> bool:
         return True
     if univ.endswith("_ALL"):
         return True
-    try:
-        from storage.trading_calendar import infer_market
-
-        if infer_market(universe=scope.universe_id):
-            return True
-    except Exception:
-        pass
     return False
+
+
+def _data_source_universe_conflict(
+    scope: FactorExecutionScope,
+    data_source: Any,
+) -> str | None:
+    """P1-03：数据源声称的 universe 与因子作用域不一致时返回冲突描述，否则 ``None``。
+
+    仅当数据源**显式声明**了非全市场 universe（非空非 ``ALL``）且与
+    ``scope.universe_id`` 大小写不敏感不一致时才拒绝；数据源未声明 universe /
+    声明 ``ALL`` 时返回 ``None``（保持对 ``instrument_filter`` 的放行）。wrapper
+    （``inner``）与 composite 子源递归展开。
+    """
+    if data_source is None:
+        return None
+    univ_attr = getattr(data_source, "universe", None)
+    if univ_attr is None:
+        univ_attr = getattr(data_source, "universe_id", None)
+    if univ_attr is None:
+        inner = getattr(data_source, "inner", None)
+        if inner is not None and inner is not data_source:
+            return _data_source_universe_conflict(scope, inner)
+        return None
+    ds_univ = str(univ_attr).strip()
+    if not ds_univ or str(ds_univ).upper() in {"", "ALL"}:
+        return None
+    if str(ds_univ).upper() != str(scope.universe_id or "").strip().upper():
+        return (
+            f"universe mismatch: factor '{scope.universe_id!r}' but data source "
+            f"declares universe {ds_univ!r}"
+        )
+    return None
 
 
 def assert_execution_scope_contract(
@@ -285,20 +516,34 @@ def assert_execution_scope_contract(
 
     只有同时满足以下条件才 fail-closed：
 
-      * ``universe_id`` 不是全市场标签（``ALL`` / 与 ``market`` 相同 / ``*_ALL`` /
-        可被 ``infer_market`` 识别为市场）；
+      * ``universe_id`` 不是全市场标签（``ALL`` / 与 ``market`` 相同 / ``*_ALL``）；
       * 计划含截面算子（rank/zscore/neutralize/group/CS-regression/kNN）；
       * 数据源未显式限定股票子集（无 ``instrument_filter`` 等）。
 
+    P1-02：全市场标签不再用 ``infer_market`` 字符串推断 —— ``US_NASDAQ100`` /
+    ``ASHARE_CSI300`` 视为 scoped subset，保守 fail-closed。P1-03：数据源显式
+    声称的 universe 与因子声明不一致时（如因子 CSI300、数据源 CSI500），即使有
+    ``instrument_filter`` 也拒绝（数据源声称的 universe 是权威且必须匹配）。
     数据层已支持 universe 过滤时（``instrument_filter``），数据源即为 universe
-    权威，直接放行（选项 a）；否则抛 ``ProductionPolicyViolation``（选项 b），
-    绝不静默在全源上计算截面。后续接线 DataAccess universe-filter 以应用
-    命名 universe mask（documented follow-up）。
+    权威，直接放行；否则抛 ``ProductionPolicyViolation``，绝不静默在全源上计算
+    截面。后续接线 DataAccess universe-filter 以应用命名 universe mask
+    （documented follow-up）。
     """
     if _is_whole_market_universe(scope):
         return
     if not _plan_has_cross_sectional_ops(plan):
         return
+    # P1-03：数据源声称的 universe 明确且与 factor 不一致 → 拒绝（放行前校验）。
+    conflict = _data_source_universe_conflict(scope, data_source)
+    if conflict is not None:
+        from runtime.production_policy import ProductionPolicyViolation
+
+        raise ProductionPolicyViolation(
+            f"execution-scope contract violation: factor '{factor_name}' has "
+            f"{conflict} but the plan computes cross-sectional operator(s). "
+            f"Cross-sectional execution on a mismatched source universe is "
+            f"disallowed. Align data_source.universe with factor.universe."
+        )
     if _data_source_scoped(data_source):
         return
     from runtime.production_policy import ProductionPolicyViolation
@@ -478,7 +723,7 @@ class FactorEngine:
             )
             plans.append(plan)
             analyses[factor.name] = analysis
-            scope = _scope_from_factor(factor)
+            scope = _scope_from_factor(factor, data_source=self.data_source)
             scopes.append(scope)
             # R9-P0-011: execution-contract gate —— scoped-universe 因子不得在
             # 全源上算截面；fail-closed 而非静默在错误股票池上计算。
@@ -1305,6 +1550,9 @@ class FactorEngine:
         matrix_root: str | Path | None = None,
         partition_columns: list[str] | None = None,
         value_dtype: str = "float32",
+        recovery: bool = False,
+        factor_versions: dict[str, str] | None = None,
+        expected_manifest_version: int | None = None,
         **run_kwargs: Any,
     ) -> dict[str, Any]:
         """批量计算多因子并写入 factor_matrix 宽表格式。
@@ -1319,6 +1567,11 @@ class FactorEngine:
             matrix_root: 宽表输出根目录。
             partition_columns: 分区列。
             value_dtype: 值 dtype。
+            recovery: research 下破坏性重建豁免（旧分区读失败时显式放行）；
+                production 下无效（production 永远 fail-closed）。
+            factor_versions: factor_id → semantic_digest/version 绑定（P0-23，
+                可选）。
+            expected_manifest_version: manifest CAS 期望版本（P1-15，可选）。
             **run_kwargs: 传递给 ``run_many`` 的参数。
 
         Returns:
@@ -1335,6 +1588,9 @@ class FactorEngine:
             matrix_root=matrix_root,
             partition_columns=partition_columns,
             value_dtype=value_dtype,
+            recovery=recovery,
+            factor_versions=factor_versions,
+            expected_manifest_version=expected_manifest_version,
             **run_kwargs,
         )
 
@@ -1775,7 +2031,7 @@ class FactorEngine:
         # R9-P0-011: execution-contract gate —— 单因子执行路径与批跑同门，
         # scoped-universe 因子不得在全源上算截面。
         assert_execution_scope_contract(
-            _scope_from_factor(factor),
+            _scope_from_factor(factor, data_source=self.data_source),
             plan,
             factor_name=factor.name,
             data_source=self.data_source,
@@ -1846,7 +2102,9 @@ class FactorEngine:
                     compute_execution_cache_scope,
                 )
 
-                scope = _scope_from_factor(factor)
+                scope = _scope_from_factor(
+                    factor, data_source=engine_to_use.data_source
+                )
                 cache_scope = compute_execution_cache_scope(
                     engine_to_use.data_source,
                     execution=DataExecutionScope(

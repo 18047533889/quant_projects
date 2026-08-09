@@ -264,6 +264,12 @@ def build_data_source(config: Any, *, build_context: DataSourceBuildContext | No
             )
             for name, source_config in raw_sources.items()
         }
+        # P1-08 + #收官轮 P0：composite production authority 默认来自父级 build
+        # context（run_mode 解析）；显式 ``production`` 配置（execution_spec
+        # 重建路径）优先。
+        composite_production = _pop_option(options, "production", default=None)
+        if composite_production is None:
+            composite_production = ctx.production
         source = CompositeDataSource(
             anchor_source=str(anchor_source),
             anchor_column=str(anchor_column),
@@ -271,6 +277,7 @@ def build_data_source(config: Any, *, build_context: DataSourceBuildContext | No
             joins=joins,
             aliases=aliases,
             allow_unqualified_anchor_columns=allow_unqualified_anchor_columns,
+            production=composite_production,
         )
         _ensure_no_extra_options(source_type, options)
         return source

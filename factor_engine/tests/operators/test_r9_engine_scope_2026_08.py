@@ -152,13 +152,14 @@ def test_scoped_universe_allowed_when_long_source_wraps_scoped_inner():
         FactorExecutionScope(universe_id="ASHARE_ALL", market="A"),
         FactorExecutionScope(universe_id="A", market="A"),
         FactorExecutionScope(universe_id="US", market="US"),
-        FactorExecutionScope(universe_id="ASHARE_DAILY", market="A"),
     ],
-    ids=["ASHARE_ALL", "A==market", "US==market", "ASHARE_DAILY-infer-market"],
+    ids=["ASHARE_ALL", "A==market", "US==market"],
 )
 def test_whole_market_universe_labels_allowed(scope):
     # Whole-market universe labels do not represent a scoped subset, so a
     # cross-sectional op over the (whole-market) source is correct.
+    # R13-P1-02: ``ASHARE_DAILY`` is NO LONGER whole-market (infer_market branch
+    # removed) — a named pool is a scoped subset, conservatively fail-closed.
     assert_execution_scope_contract(scope, _rank_plan(), factor_name="f")
 
 
@@ -210,7 +211,8 @@ def test_scope_from_factor_minimal_factor_no_attribute_error():
     scope = _scope_from_factor(factor)
     assert scope.frequency == "1d"
     assert scope.universe_id == "CSI300"
-    assert scope.market == "A"  # no market attribute -> default "A"
+    # R13-P1-01: no market attribute -> keep "" (never silently default "A").
+    assert scope.market == ""
     assert scope.calendar_id == ""
     assert scope.source_scope_hash == ""
     assert scope.decision_time_policy == ""

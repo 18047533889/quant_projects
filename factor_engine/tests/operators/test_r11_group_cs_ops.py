@@ -12,9 +12,10 @@ Covers:
 * #135  group_ex_self_mean / weighted_mean output unit = same_as:x.
 * #137  cs_robust_resid cross-section minimum breadth gate.
 * #138  weighted_moment _align is exact (misaligned axes fail loudly).
-* #139/#140 cs_multi_robust_resid is ridge regression; the ridge is a
-*        versioned non-searchable constant.
-* #141  cs_multi_robust_resid residual-regression DOF margin gate.
+* #139/#140 cs_multi_ridge_resid (canonical) is ridge regression; the ridge is
+*        a versioned non-searchable constant, cs_multi_robust_resid is a
+*        deprecated alias.
+* #141  cs_multi_ridge_resid residual-regression DOF margin gate.
 * #142  conditional_ext output units (same_as:x / unit(y)/unit(x) / same_as:y).
 * #143  ts_regression_resid_if min_periods constrains TRAINING observations.
 * #144  condition inputs must be ConditionBool ({0,1} / NaN missing).
@@ -170,14 +171,16 @@ def test_weighted_moment_align_is_exact() -> None:
 
 
 # ---------------------------------------------------------------------------
-# #139/#140 cs_multi_robust_resid is ridge regression; ridge is versioned &
-#         non-searchable
+# #139/#140 cs_multi_ridge_resid is ridge regression; ridge is versioned &
+#         non-searchable (cs_multi_robust_resid is a deprecated alias)
 # ---------------------------------------------------------------------------
 def test_ridge_knob_versioned_and_non_searchable() -> None:
     from cleaned_operators.weighted_moment_ext import _RIDGE
 
     assert _RIDGE == 1e-3
-    meta = _meta("cs_multi_robust_resid")
+    # the deprecated alias still resolves to the honest canonical
+    assert OperatorRegistry.resolve_canonical("cs_multi_robust_resid") == "cs_multi_ridge_resid"
+    meta = _meta("cs_multi_ridge_resid")
     assert meta is not None
     # the ridge is NOT a declared parameter -> it cannot enter the search grammar
     assert "ridge" not in (meta.param_names or [])
@@ -185,11 +188,15 @@ def test_ridge_knob_versioned_and_non_searchable() -> None:
     # ...but the fixed value IS documented in the versioned contract
     desc = (meta.description or "").lower()
     assert "ridge" in desc and "1e-3" in desc
-    assert "cs_multi_ridge_resid" in (meta.description or "")
+    # canonical honesty: the op's name is the ridge canonical and the old name
+    # is documented as a deprecated alias (R11 #139/#140)
+    assert getattr(meta, "name", None) == "cs_multi_ridge_resid"
+    assert "cs_multi_robust_resid" in (meta.description or "")
+    assert "deprecated alias" in (meta.description or "")
 
 
 # ---------------------------------------------------------------------------
-# #141 residual regression DOF margin gate (cs_multi_robust_resid)
+# #141 residual regression DOF margin gate (cs_multi_ridge_resid)
 # ---------------------------------------------------------------------------
 def test_cs_multi_robust_resid_dof_margin() -> None:
     rng = np.random.default_rng(2)

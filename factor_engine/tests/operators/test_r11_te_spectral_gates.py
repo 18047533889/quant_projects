@@ -135,14 +135,23 @@ def test_te_operator_rejects_infeasible_cells_ratio():
 # #21 — conditional TE ties do not collapse bins
 # ---------------------------------------------------------------------------
 def test_break_ties_deterministic_separates_ties_only():
-    rng = np.random.default_rng(4)
     v = np.where(np.arange(120) % 2 == 0, 1.0, 0.0)
     jt = _break_ties_deterministic(v)
-    assert np.unique(jt).size == np.unique(v).size  # no new distinct levels created
     # deterministic: bit-identical across calls
     assert np.array_equal(jt, _break_ties_deterministic(v))
-    # distinct values keep their order
-    assert np.all(np.diff(jt[np.argsort(v)]) >= 0) or np.all(np.diff(jt[np.argsort(v)]) <= 0)
+    # exact ties are separated (distinct values now), so quantile binning gets
+    # distinct edges instead of silently collapsing a bin
+    assert np.unique(jt).size > np.unique(v).size
+    # the perturbation is tiny relative to the value range (<= _TIE_JITTER, with
+    # a little float slack)
+    assert float(np.max(np.abs(jt - v))) <= 2e-9
+    # sorted-by-value order is preserved: jt is a monotone transform of v
+    order = np.argsort(v, kind="mergesort")
+    assert np.all(np.diff(jt[order]) >= 0.0)
+    # a fully-degenerate (constant) series is left untouched so the kernel's
+    # ``< 2 distinct states`` check still fails closed
+    const = np.ones(50)
+    assert np.array_equal(_break_ties_deterministic(const), const)
 
 
 def test_conditional_te_ties_do_not_collapse_bins():
@@ -393,8 +402,10 @@ def test_multifractal_curvature_needs_four_points():
     from cleaned_operators.multifractal import _curvature_series
 
     rng = np.random.default_rng(16)
-    x2d = rng.normal(size=(120, 1))
-    out = _curvature_series(x2d, 60)
+    # A random walk has genuine scaling structure, so H(q) is well-defined and
+    # the quadratic fit can be exercised.
+    rw = np.cumsum(rng.normal(size=(160, 1)), axis=0)
+    out = _curvature_series(rw, 60)
     vals = out[np.isfinite(out)]
     # On this synthetic series at least one window yields a curvature; every
     # emitted value was fit from >= 4 valid q-points (5-point grid, 4 required).
@@ -411,15 +422,16 @@ def test_multifractal_curvature_needs_four_points():
 # ---------------------------------------------------------------------------
 def test_multifractal_common_cohort():
     rng = np.random.default_rng(17)
-    v = rng.normal(size=100)
+    # A random walk has scaling structure so H(q) is finite and comparable.
+    v = np.cumsum(rng.normal(size=100))
     v[50] = np.nan  # a mid-series gap
     cohort = _common_cohort(v)
     assert len(cohort) == 49  # rows 51..99 (the trailing contiguous finite run)
     assert np.all(np.isfinite(cohort))
-    # All lags estimate on the SAME cohort: _hurst_generalized extracts it once.
+    # All lags estimate on the SAME cohort: _hurst_generalized extracts it once,
+    # so the gapped series and its cohort give bit-identical H(q).
     assert _hurst_generalized(v, 2.0) == _hurst_generalized(cohort, 2.0)
-    # A gap at the current row leaves no cohort -> fail closed NaN.
-    v2 = v.copy()
-    v2[-1] = np.nan
-    assert len(_common_cohort(v2)) == 0
-    assert math.isnan(_hurst_generalized(v2, 2.0))
+    # A fully-NaN window leaves no cohort -> fail closed NaN.
+    w = np.full(100, np.nan)
+    assert len(_common_cohort(w)) == 0
+    assert math.isnan(_hurst_generalized(w, 2.0))

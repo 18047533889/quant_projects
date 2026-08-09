@@ -7,9 +7,9 @@
   the parameter surface stays fixed.
 * ``ts_cov_if`` — conditional rolling covariance, completing the existing
   ``ts_*_if`` conditional family (min/max/quantile/corr/beta/regression_resid).
-* ``cs_multi_robust_resid`` — cross-sectional multi-regressor residual using
-  standardized design + SVD least squares with a fixed mild ridge (stable under
-  collinear exposures; NOT order-dependent recursive Gram-Schmidt).
+* ``cs_multi_ridge_resid`` — cross-sectional multi-regressor residual via
+  standardized ridge least squares (fixed ridge=1e-3, versioned implementation
+  constant); ``cs_multi_robust_resid`` is a deprecated alias.
 
 All operators are strict-PIT, deterministic and NaN fail-closed.  ``weight``
 inputs must be non-negative; non-finite weights fail closed.
@@ -178,7 +178,7 @@ def _ts_cov_if(
 
 
 # ---------------------------------------------------------------------------
-# cs_multi_robust_resid(y, x1, x2, x3, add_intercept)
+# cs_multi_ridge_resid(y, x1, x2, x3, add_intercept)
 # ---------------------------------------------------------------------------
 def _assert_condition_bool(condition: pd.DataFrame, name: str = "condition") -> None:
     """R11 #144: the condition input must be a ConditionBool.
@@ -199,7 +199,7 @@ def _assert_condition_bool(condition: pd.DataFrame, name: str = "condition") -> 
         )
 
 
-def _cs_multi_robust_resid(
+def _cs_multi_ridge_resid(
     y: pd.DataFrame,
     x1: pd.DataFrame,
     x2: pd.DataFrame | None = None,
@@ -272,39 +272,38 @@ def _cs_multi_robust_resid(
 _DAILY_CANONICALS: tuple[str, ...] = (
     "ts_weighted_standardized_moment",
     "ts_cov_if",
-    "cs_multi_robust_resid",
+    "cs_multi_ridge_resid",
 )
 
 _KERNELS: dict[str, Callable[..., pd.DataFrame]] = {
     "ts_weighted_standardized_moment": _ts_weighted_standardized_moment,
     "ts_cov_if": _ts_cov_if,
-    "cs_multi_robust_resid": _cs_multi_robust_resid,
+    "cs_multi_ridge_resid": _cs_multi_ridge_resid,
 }
 
 _PARAMS: dict[str, list[str]] = {
     "ts_weighted_standardized_moment": ["x", "weight", "window", "order"],
     "ts_cov_if": ["x", "y", "condition", "window", "min_periods"],
-    "cs_multi_robust_resid": ["y", "x1", "x2", "x3", "add_intercept"],
+    "cs_multi_ridge_resid": ["y", "x1", "x2", "x3", "add_intercept"],
 }
 
 _CATEGORIES: dict[str, str] = {
     "ts_weighted_standardized_moment": "time_series_risk",
     "ts_cov_if": "time_series_condition",
-    "cs_multi_robust_resid": "cross_sectional_regression",
+    "cs_multi_ridge_resid": "cross_sectional_regression",
 }
 
-# R11 #139/#140: honest descriptions.  ``cs_multi_robust_resid`` is a
-# STANDARDIZED RIDGE regression (not robust regression); the name is historical
-# and the fixed ridge=1e-3 is a versioned implementation constant, NOT a
-# searchable parameter.
+# R11 #139/#140: honest canonical naming.  ``cs_multi_ridge_resid`` is a
+# STANDARDIZED RIDGE regression (not robust regression); the old
+# ``cs_multi_robust_resid`` name is a deprecated alias and the fixed ridge=1e-3
+# is a versioned implementation constant, NOT a searchable parameter.
 _DESCRIPTIONS: dict[str, str] = {
     "ts_weighted_standardized_moment": "weighted standardized central moment (order 3=skew / 4=kurtosis)",
     "ts_cov_if": "conditional rolling covariance (condition is a ConditionBool)",
-    "cs_multi_robust_resid": (
+    "cs_multi_ridge_resid": (
         "cross-sectional multi-regressor residual via standardized ridge least "
-        "squares (fixed ridge=1e-3, versioned implementation constant, not a "
-        "searchable parameter); name is historical — the true name is "
-        "cs_multi_ridge_resid"
+        "squares (fixed ridge=1e-3, versioned implementation constant, NOT a "
+        "searchable parameter); cs_multi_robust_resid is a deprecated alias"
     ),
 }
 
@@ -314,7 +313,7 @@ _DESCRIPTIONS: dict[str, str] = {
 _UNITS: dict[str, str] = {
     "ts_weighted_standardized_moment": "dimensionless",
     "ts_cov_if": "unit(x)*unit(y)",
-    "cs_multi_robust_resid": "unit(y)",
+    "cs_multi_ridge_resid": "unit(y)",
 }
 
 # R4-97: EnumSpec declarations.  ``order`` is a genuine enum (weighted skew=3 /
@@ -327,7 +326,7 @@ _PARAM_SPECS: dict[str, dict[str, ParamSpec]] = {
         "order": ParamSpec(dtype=int, choices=(3, 4)),
     },
     "ts_cov_if": {},
-    "cs_multi_robust_resid": {
+    "cs_multi_ridge_resid": {
         "add_intercept": ParamSpec(dtype=bool, choices=(True, False)),
     },
 }
@@ -338,7 +337,7 @@ _PARAM_SPECS: dict[str, dict[str, ParamSpec]] = {
 _WINDOW_SEMANTICS: dict[str, str] = {
     "ts_weighted_standardized_moment": "finite_observations",
     "ts_cov_if": "finite_observations",
-    "cs_multi_robust_resid": None,
+    "cs_multi_ridge_resid": None,
 }
 
 _SKIP = frozenset({"date", "stock_code"})
@@ -410,3 +409,26 @@ def _register() -> None:
 
 
 _register()
+
+
+def _register_ridge_deprecated_alias() -> None:
+    """R11 #139/#140: canonical-honesty rename.
+
+    The operator is a STANDARDIZED RIDGE regression (fixed ridge=1e-3), not a
+    robust regression, so the canonical is ``cs_multi_ridge_resid``.  The old
+    ``cs_multi_robust_resid`` name stays resolvable as a DEPRECATED alias to the
+    same implementation.  Guarded so a double-load / concurrent re-import cannot
+    raise (if the alias already resolves to the canonical it is a no-op).
+    """
+    if OperatorRegistry.resolve_canonical("cs_multi_robust_resid") == "cs_multi_ridge_resid":
+        return
+    try:
+        OperatorRegistry.register_alias("cs_multi_robust_resid", "cs_multi_ridge_resid")
+    except (KeyError, ValueError):
+        # A concurrent session may have registered the alias already; only an
+        # unexpected target is an error worth propagating.
+        if OperatorRegistry.resolve_canonical("cs_multi_robust_resid") != "cs_multi_ridge_resid":
+            raise
+
+
+_register_ridge_deprecated_alias()

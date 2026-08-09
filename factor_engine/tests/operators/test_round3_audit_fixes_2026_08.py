@@ -134,7 +134,10 @@ def test_mst_identical_series_not_nan():
 # ---------------------------------------------------------------------------
 
 def test_piotroski_fiscal_period_comparison():
-    from cleaned_operators.fundamental.accruals_scores import _fin_piotroski_f_score
+    from cleaned_operators.fundamental.accruals_scores import (
+        _fin_piotroski_f_score,
+        _piotroski_components,
+    )
     n = 8
     idx = pd.date_range("2025-01-01", periods=n, freq="B")
     # Two report periods visible: ROA 0.05 (period 2025Q1) then 0.07 (2025Q2).
@@ -146,11 +149,17 @@ def test_piotroski_fiscal_period_comparison():
     pid = pd.DataFrame(period[:, None], index=idx, columns=["S0"])
     f_roa = pd.DataFrame(roa[:, None], index=idx, columns=["S0"])
     zeros = pd.DataFrame(np.zeros((n, 1)), index=idx, columns=["S0"])
+    passed, observed, _ = _piotroski_components(f_roa, f_roa * 0.5, f_roa * 0.4, zeros,
+                                                zeros + 1, zeros + 1, zeros + 1, zeros + 1, pid)
+    # On the 2025Q2 rows, ROA improvement (0.05 -> 0.07) must register TRUE as a
+    # passed signal; the old trading-day shift would have returned all-False here.
+    assert bool(passed.iloc[-1, 0] > passed.iloc[2, 0])
+    # R11: a genuine full F-score requires all 9 signals observed; the first
+    # visible period (no prior fiscal ordinal -> deltas NaN) is incomplete -> NaN.
     score = _fin_piotroski_f_score(f_roa, f_roa * 0.5, f_roa * 0.4, zeros,
                                    zeros + 1, zeros + 1, zeros + 1, zeros + 1, pid)
-    # On the 2025Q2 rows, ROA improvement (0.05 -> 0.07) must register TRUE.
-    assert bool(score.iloc[-1, 0] > score.iloc[2, 0])  # score rose after the improvement
-    # The old trading-day shift would have returned all-False here.
+    assert np.isnan(score.iloc[2, 0])
+    assert np.isfinite(score.iloc[-1, 0])
 
 
 def test_applicability_mask_never_promotes_nan():

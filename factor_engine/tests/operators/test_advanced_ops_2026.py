@@ -389,20 +389,18 @@ def test_fisher_information_shift_same_vs_different():
     assert float(np.nanmedian(dvals)) > same_med + 0.1
 
 
-def test_quantile_pca_constant_returns_near_zero():
-    const = _minute_frame(6, 2)
+def test_quantile_pca_constant_returns_are_degenerate_nan():
+    # R11 #60/#62: constant minute returns give identical quantile profiles, so
+    # the historical PCA subspace is degenerate (zero variance) — the current
+    # score/residual must be NaN (DEGENERATE_PCA_SUBSPACE), never a fabricated 0.
+    const = _minute_frame(8, 2)
     const.loc[:, :] = 0.05  # constant minute return
     score = OperatorRegistry.get("intraday_quantile_curve_pca_score", "pandas_numpy")
     resid = OperatorRegistry.get("intraday_quantile_curve_pca_residual", "pandas_numpy")
-    s_out = score.calculate(const, window=3, k=1)
-    r_out = resid.calculate(const, window=3, k=1)
-    svals = s_out.to_numpy(dtype=float)
-    rvals = r_out.to_numpy(dtype=float)
-    svals = svals[np.isfinite(svals)]
-    rvals = rvals[np.isfinite(rvals)]
-    assert svals.size > 0 and rvals.size > 0
-    assert np.allclose(svals, 0.0, atol=1e-8)
-    assert np.allclose(rvals, 0.0, atol=1e-8)
+    s_out = score.calculate(const, window=50, k=1)
+    r_out = resid.calculate(const, window=50, k=1)
+    assert np.isnan(s_out.to_numpy(dtype=float)).all()
+    assert np.isnan(r_out.to_numpy(dtype=float)).all()
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +542,8 @@ def test_pair_wasserstein_mad_zero_fails_closed():
 
 def test_quantile_pca_rank_consistency():
     rng = np.random.default_rng(22)
-    days, per = 65, 40
+    days, per = 65, 120  # per=120 clears the min-samples gate (R11 #60), so the
+    # numerical-rank gate (R11 #63) is what fails closed below.
     dates = pd.date_range("2024-01-01", periods=days, freq="B")
     idx = pd.DatetimeIndex([d + pd.Timedelta(minutes=570 + m) for d in dates for m in range(per)])
     data = pd.DataFrame(rng.normal(0.0, 0.002, size=(days * per, 2)), index=idx, columns=["S0", "S1"])

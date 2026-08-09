@@ -26,8 +26,9 @@ FIN_CANONICALS = (
     "fin_debt_repayment_intensity fin_net_borrowing_cashflow fin_equity_capital_growth "
     "fin_financing_gap fin_interest_coverage_proxy fin_debt_service_coverage_proxy "
     "fin_cash_burn_runway fin_capex_intensity fin_capex_growth fin_acquisition_cash_intensity "
-    "fin_rd_total_intensity fin_rd_capitalization_ratio piotroski_f_score altman_z_score "
-    "zmijewski_score fin_fundamental_strength_score"
+    "fin_rd_total_intensity fin_rd_capitalization_ratio piotroski_f_score "
+    "piotroski_partial_score piotroski_observed_count altman_z_score "
+    "zmijewski_score fin_fundamental_strength_score fin_fundamental_strength_coverage"
 ).split()
 
 HOLDER_CANONICALS = (
@@ -74,6 +75,9 @@ def test_registered(name: str) -> None:
 
 def test_accrual_operators_shape() -> None:
     period_id, ta, ca, cl, cash, std, tp, aa, dep, tl, ltd, npf, ocf, equity = _period_frame(seed=1)
+    # Altman / Zmijewski require an applicability mask (applicable_universe=
+    # non_financial) — supply an all-applicable one for the shape smoke test.
+    mask = pd.DataFrame(np.ones((120, 2)), index=period_id.index, columns=["A", "B"])
     calls = {
         "fin_working_capital_accruals": [ca, cash, cl, std, tp, aa, period_id],
         "fin_total_operating_accruals": [ta, cash, cl, std, tp, dep, aa, period_id],
@@ -85,8 +89,10 @@ def test_accrual_operators_shape() -> None:
         "fin_core_earnings_ratio": [ocf, std, tp, cash, cl, ta, period_id],
         "fin_noncore_income_ratio": [std, tp, cash, cl, ca, cl, npf, period_id],
         "piotroski_f_score": [npf, ocf, npf, tl, cl, ta, ca, std, period_id],
-        "altman_z_score": [ca, npf, ocf, ta, equity, tl, cl, period_id],
-        "zmijewski_score": [npf, ta, tl, ca, cl, period_id],
+        "piotroski_partial_score": [npf, ocf, npf, tl, cl, ta, ca, std, period_id],
+        "piotroski_observed_count": [npf, ocf, npf, tl, cl, ta, ca, std, period_id],
+        "altman_z_score": [ca, npf, ocf, ta, equity, tl, cl, period_id, mask],
+        "zmijewski_score": [npf, ta, tl, ca, cl, period_id, mask],
     }
     for name, args in calls.items():
         out = OperatorRegistry.get(name).calculate(*args)

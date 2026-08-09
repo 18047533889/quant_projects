@@ -31,6 +31,7 @@ import importlib.util
 import math
 import os
 import random
+import re
 import sys
 from typing import Any
 
@@ -59,7 +60,14 @@ _HARNESS = _load_harness()
 _build_call = _HARNESS._build_call
 _panels = _HARNESS._panels
 _slice = _HARNESS._slice
+_slice_range = _HARNESS._slice_range
 _to_frame = _HARNESS._to_frame
+
+# P0-08: bound at module scope (after the harness has made ``cleaned_operators``
+# importable) so ``main()``'s production-candidate gate is monkeypatchable by
+# tests (``monkeypatch.setattr(audit, "factor_production_targets", ...)``).
+from cleaned_operators.production_hardening import factor_production_targets
+from cleaned_operators.semantic_certification import should_fail_closed
 
 # --- operator sample ---------------------------------------------------------
 # Always-audited causal kernels (pivot/extrema/structural/directional and the
@@ -98,6 +106,8 @@ def _compare_region(left: pd.DataFrame, right: pd.DataFrame, skip: int) -> bool:
     """Compare the trailing rows beyond ``skip``; True when they agree."""
     if left.shape != right.shape:
         return False
+    if not left.index.equals(right.index) or not left.columns.equals(right.columns):
+        return False
     rows = left.shape[0]
     if rows <= skip:
         return True  # nothing comparable below warmup — not a violation
@@ -116,11 +126,40 @@ def _compare_region(left: pd.DataFrame, right: pd.DataFrame, skip: int) -> bool:
         ))
 
 
+def _mark_unaudited(unaudited: list[str], canonical: str) -> None:
+    """Record ``canonical`` as not-auditable without duplicating it."""
+    if canonical not in unaudited:
+        unaudited.append(canonical)
+
+
+def _first_finite_row(frame: pd.DataFrame) -> int:
+    """0-based row index of the first output row with any finite value.
+
+    Returns ``-1`` when no row carries a finite value (e.g. a fixture that
+    never matures the kernel).  This is the operator's real warmup: the first
+    meaningful output appears at ``m``, so the declared history must cover at
+    least ``m + 1`` rows of input.
+    """
+    try:
+        values = frame.to_numpy(dtype=float)
+    except (TypeError, ValueError):
+        matrix = frame.notna().to_numpy()
+    else:
+        matrix = np.isfinite(values)
+    nonzero = np.flatnonzero(matrix.any(axis=1))
+    if len(nonzero) == 0:
+        return -1
+    return int(nonzero[0])
+
+
 # ---------------------------------------------------------------------------
 # Audit A — Prefix-Extension Invariance
 # ---------------------------------------------------------------------------
 def audit_prefix_invariance(
-    canonicals: list[str], panels: dict[str, pd.DataFrame]
+    canonicals: list[str],
+    panels: dict[str, pd.DataFrame],
+    *,
+    unaudited: list[str] | None = None,
 ) -> list[str]:
     """``op(full)[:T] == op(full[:T])`` beyond warmup for causal operators.
 
@@ -128,12 +167,16 @@ def audit_prefix_invariance(
     prefix-invariant: the value at row ``t`` depends only on rows ``<= t``.
     A violation is a retrospective rewrite (pivot replacement, future-dependent
     normalization, state repaint).
+
+    Operators whose fixture execution raises (the auditor cannot construct valid
+    inputs) are appended to ``unaudited`` (P0-08) instead of passing silently.
     """
     import cleaned_operators as co
 
     co.load_all()
     from cleaned_operators.registry import OperatorRegistry
 
+    _unaudited = unaudited if unaudited is not None else []
     n_rows = panels["x"].shape[0]
     ts = sorted({n_rows // 4, n_rows // 2, n_rows * 3 // 4})
     errors: list[str] = []
@@ -141,12 +184,18 @@ def audit_prefix_invariance(
         try:
             operator = OperatorRegistry.get(canonical)
         except Exception:
+            _mark_unaudited(_unaudited, canonical)
             continue
         skip = _warmup_rows(canonical)
         try:
-            full = operator.calculate(*_build_call(canonical, operator, panels))
+            full_args, full_kwargs = _build_call(canonical, operator, panels)
+            full = operator.calculate(*full_args, **full_kwargs)
         except Exception:
-            continue  # operators that raise on this fixture are not auditable here
+            # operators that raise on this fixture are not auditable here — a
+            # production candidate must fail closed rather than pass silently.
+            _mark_unaudited(_unaudited, canonical)
+            continue
+        checked = False
         for t in ts:
             if t <= skip:
                 continue
@@ -160,6 +209,7 @@ def audit_prefix_invariance(
                 prefix = _to_frame(operator.calculate(*pargs, **pkwargs), panels["x"].iloc[:t])
             except Exception:
                 continue
+            checked = True
             full_prefix = _slice(full, t)
             if not _compare_region(full_prefix, prefix, skip):
                 errors.append(
@@ -168,6 +218,9 @@ def audit_prefix_invariance(
                     "(retrospective rewrite / future-dependent normalization)"
                 )
                 break
+        if not checked:
+            # no prefix slice could be executed — nothing was actually verified.
+            _mark_unaudited(_unaudited, canonical)
     return errors
 
 
@@ -175,11 +228,14 @@ def audit_prefix_invariance(
 # Audit B — Stateful Contract Discovery (chunk-boundary)
 # ---------------------------------------------------------------------------
 def audit_stateful_contract_discovery(
-    canonicals: list[str], panels: dict[str, pd.DataFrame]
+    canonicals: list[str],
+    panels: dict[str, pd.DataFrame],
+    *,
+    unaudited: list[str] | None = None,
 ) -> list[str]:
     """Compare the declared contract against the observed chunk behavior.
 
-    For each operator: run on the FULL panel, then on the second-half slice
+    For each operator: run on the FULL panel, then on the true second-half slice
     alone (no carried state).  A genuinely stateful operator needs the first
     half's state, so the second-half values differ from the full run; a truly
     stateless/causal operator reproduces them beyond warmup.
@@ -188,6 +244,10 @@ def audit_stateful_contract_discovery(
         module says stateless, runtime is stateful).
       * contract says required_full_history but values match -> false-positive
         report (the full-history claim is not observable).
+
+    Operators whose fixture execution raises are appended to ``unaudited``
+    (P0-08).  The second-half slice uses :func:`_slice_range` so it is the real
+    trailing half (``iloc[half:]``), not the leading half (P0-06).
     """
     import cleaned_operators as co
 
@@ -195,18 +255,22 @@ def audit_stateful_contract_discovery(
     from cleaned_operators.registry import OperatorRegistry
     from runtime.execution_contract import execution_contract
 
+    _unaudited = unaudited if unaudited is not None else []
     errors: list[str] = []
     for canonical in canonicals:
         try:
             operator = OperatorRegistry.get(canonical)
         except Exception:
+            _mark_unaudited(_unaudited, canonical)
             continue
         try:
+            full_args, full_kwargs = _build_call(canonical, operator, panels)
             full = _to_frame(
-                operator.calculate(*_build_call(canonical, operator, panels)),
+                operator.calculate(*full_args, **full_kwargs),
                 panels["x"],
             )
         except Exception:
+            _mark_unaudited(_unaudited, canonical)
             continue
         n_rows = full.shape[0]
         half = n_rows // 2
@@ -214,15 +278,16 @@ def audit_stateful_contract_discovery(
             continue
         try:
             args, kwargs = _build_call(canonical, operator, panels)
-            pargs = [_slice(a, half) for a in args]
+            pargs = [_slice_range(a, half, None) for a in args]
             pkwargs = {
-                k: (_slice(v, half) if isinstance(v, (pd.DataFrame, pd.Series)) else v)
+                k: (_slice_range(v, half, None) if isinstance(v, (pd.DataFrame, pd.Series)) else v)
                 for k, v in kwargs.items()
             }
             second_half = _to_frame(
-                operator.calculate(*pargs, **pkwargs), panels["x"].iloc[:half]
+                operator.calculate(*pargs, **pkwargs), panels["x"].iloc[half:]
             )
         except Exception:
+            _mark_unaudited(_unaudited, canonical)
             continue
         full_tail = full.iloc[half:]
         if full_tail.shape != second_half.shape:
@@ -245,14 +310,22 @@ def audit_stateful_contract_discovery(
 # Audit C — Default-Parameter History
 # ---------------------------------------------------------------------------
 def audit_default_parameter_history(
-    canonicals: list[str], panels: dict[str, pd.DataFrame]
+    canonicals: list[str],
+    panels: dict[str, pd.DataFrame],
+    *,
+    unaudited: list[str] | None = None,
 ) -> list[str]:
     """With NO explicit optional params, the inferred history must cover the
     kernel's real warmup.
 
     The kernel's first finite output appears at the row where its declared
-    window (default) has accumulated.  If ``history_requirement`` says 0 but the
-    kernel's default window is large, the history layer under-allocates.
+    window (default) has accumulated.  P0-07: instead of the ``rows >= 2``
+    early-continue (which was vacuous because ``history_requirement`` itself
+    floors at 2), each operator is actually executed on the panel with default
+    parameters and the first mature output row ``m`` is measured.  When
+    ``m > 0`` and ``history_requirement`` declares fewer than ``m + 1`` rows the
+    history layer under-allocates -> FAIL.  Operators that raise on the fixture
+    are appended to ``unaudited`` (P0-08), never FAILed.
     """
     import cleaned_operators as co
 
@@ -260,41 +333,43 @@ def audit_default_parameter_history(
     from cleaned_operators.registry import OperatorRegistry
     from runtime.execution_contract import history_requirement
 
+    _unaudited = unaudited if unaudited is not None else []
     errors: list[str] = []
     for canonical in canonicals:
         try:
             operator = OperatorRegistry.get(canonical)
-            meta = operator.metadata
         except Exception:
+            _mark_unaudited(_unaudited, canonical)
             continue
-        names = list(getattr(meta, "param_names", None) or ())
-        # Only audit operators whose call has NO explicitly-bound window-like
-        # param (pure defaults) — build the call and check nothing was bound.
         try:
             args, kwargs = _build_call(canonical, operator, panels)
+            output = _to_frame(operator.calculate(*args, **kwargs), panels["x"])
         except Exception:
+            # Cannot construct a valid default execution — P0-08, not a FAIL.
+            _mark_unaudited(_unaudited, canonical)
             continue
-        bound_window = [
-            n for n in names[: len(args)] if _window_like(n)
-        ]
-        if bound_window or any(_window_like(k) for k in kwargs):
-            continue  # an explicit window was bound — not the default case
         try:
-            rows = history_requirement(canonical, {}).rows
+            requirement = history_requirement(canonical, {})
+            declared = requirement.rows
         except Exception:
+            _mark_unaudited(_unaudited, canonical)
             continue
-        if rows >= 2:
+        if requirement.is_full_history:
+            # Full-history / event-clock operators are given all available
+            # history by contract; ``rows`` is only a floor, not a truncation.
             continue
-        # history says < 2 rows — a rolling operator with a default window would
-        # be under-allocated.  Only flag operators that LOOK like rolling kernels.
-        if not any(_window_like(n) for n in names):
+        mature = _first_finite_row(output)
+        if mature <= 0:
+            # No non-trivial warmup (output is finite immediately, or the
+            # fixture never matures the kernel) — nothing to under-allocate.
             continue
-        errors.append(
-            f"C default-history: {canonical} declares window-like param(s) "
-            f"{[n for n in names if _window_like(n)]} but history_requirement "
-            f"with defaults is only {rows} rows — a default window kernel would "
-            "not be covered (inner/outer/history_days style miss)"
-        )
+        if declared < mature + 1:
+            errors.append(
+                f"C default-history: {canonical} first mature output at row "
+                f"{mature} but history_requirement with defaults is only "
+                f"{declared} rows — a default window kernel is under-allocated "
+                "(declared < mature + 1)"
+            )
     return errors
 
 
@@ -312,6 +387,27 @@ def _window_like(name: str) -> bool:
 # ---------------------------------------------------------------------------
 # Audit D — Unit Algebra
 # ---------------------------------------------------------------------------
+_VARIADIC_PARAM_RE = re.compile(r"^(?:s|p|psid|sid|v|value|w)\d+$")
+
+
+def _is_variadic(meta: Any) -> bool:
+    """A variadic operator (dynamic inputs) references its conceptual input by
+    ``same_as:value`` / ``same_as:share`` even though no single named param
+    exists — additional scalar knobs (``window``, ``min_periods``, ``k``) do not
+    make a variadic-input operator a single-named-param operator."""
+    tags = {str(t).lower() for t in (getattr(meta, "tags", None) or [])}
+    if "variadic" in tags or "dynamic_inputs" in tags:
+        return True
+    params = [str(p) for p in (getattr(meta, "param_names", None) or ())]
+    if not params:
+        return False
+    variadic_like = sum(1 for p in params if _VARIADIC_PARAM_RE.match(p))
+    scalar_like = sum(1 for p in params if not _VARIADIC_PARAM_RE.match(p))
+    # At least two variadic-input slots (s1..sN / p1..pN) makes the conceptual
+    # input the "value"/"share" column; a lone ``window`` scalar is fine.
+    return variadic_like >= 2 and scalar_like <= 3
+
+
 def audit_unit_algebra() -> list[str]:
     """``same_as:<param>`` references must resolve to real declared params; the
     formula families must carry the dimensional-analysis-correct output unit."""
@@ -327,18 +423,22 @@ def audit_unit_algebra() -> list[str]:
         output_unit = getattr(meta, "output_unit", None) or ""
         if isinstance(output_unit, str) and output_unit.startswith("same_as:"):
             target = output_unit.split(":", 1)[1]
-            if target not in names:
+            # Variadic operators legitimately reference their conceptual input
+            # (``same_as:value`` / ``same_as:share``) with no single named param.
+            if target not in names and not _is_variadic(meta):
                 errors.append(
                     f"D unit-algebra: {canonical} output_unit 'same_as:{target}' "
                     f"references an undeclared parameter (params: {sorted(names)})"
                 )
-        # formula families whose dimensional analysis is fixed
+        # formula families whose dimensional analysis is fixed.  Token matching
+        # uses word boundaries so ``panel_coverage`` is NOT a covariance (the
+        # substring ``_cov`` also appears in ``coverage``).
         family = None
-        if any(token in canonical for token in ("_cov", "_cov_", "covar")):
+        if re.search(r"(?:^|_)cov(?:ariance)?(?:_|$)", canonical):
             family = "covariance -> unit(x)*unit(y)"
-        elif any(token in canonical for token in ("_beta", "_beta_")):
+        elif re.search(r"(?:^|_)beta(?:_|$)", canonical):
             family = "beta -> unit(y)/unit(x)"
-        elif any(token in canonical for token in ("_slope", "regression_slope")):
+        elif re.search(r"(?:^|_)slope(?:_|$)", canonical) or "regression_slope" in canonical:
             family = "slope -> unit(y)/unit(x)"
         if family is not None and output_unit and "same_as:" not in output_unit:
             if output_unit == "ratio":
@@ -366,10 +466,24 @@ def main() -> int:
     sample = _canonical_sample(rng, n_random=args.sample)
     print(f"R11 long-tail audit over {len(sample)} sampled canonicals")
     errors: list[str] = []
-    errors += audit_prefix_invariance(sample, panels)
-    errors += audit_stateful_contract_discovery(sample, panels)
-    errors += audit_default_parameter_history(sample, panels)
+    unaudited: list[str] = []
+    errors += audit_prefix_invariance(sample, panels, unaudited=unaudited)
+    errors += audit_stateful_contract_discovery(sample, panels, unaudited=unaudited)
+    errors += audit_default_parameter_history(sample, panels, unaudited=unaudited)
     errors += audit_unit_algebra()
+    # P0-08: an operator the auditor cannot construct valid inputs for must not
+    # pass silently.  Production candidates fail closed; research/experimental
+    # operators only warn.
+    production_targets = set(factor_production_targets())
+    for canonical in unaudited:
+        if canonical in production_targets and not should_fail_closed(canonical):
+            errors.append(f"UNAUDITED production candidate: {canonical}")
+        else:
+            print(
+                f"warning: un-auditable operator not a production candidate: "
+                f"{canonical}",
+                file=sys.stderr,
+            )
     if errors:
         print(f"R11 audit FAILED ({len(errors)} issues)", file=sys.stderr)
         for error in errors[:40]:

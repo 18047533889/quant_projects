@@ -29,16 +29,25 @@ from storage.catalog import FactorCatalog
 
 _EDGE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS factor_dependency_edge (
-    factor_id          TEXT NOT NULL,
-    source_dataset     TEXT NOT NULL,
-    field_id           TEXT NOT NULL,
-    physical_field     TEXT,
-    transform          TEXT,
-    snapshot_semantics TEXT,
-    lookback           INTEGER NOT NULL DEFAULT 0,
-    logical_table      TEXT,
-    join_policy        TEXT,
-    PRIMARY KEY (factor_id, source_dataset, field_id)
+    factor_id              TEXT NOT NULL,
+    dependency_id          TEXT NOT NULL,
+    source_dataset         TEXT NOT NULL,
+    field_id               TEXT NOT NULL,
+    physical_field         TEXT,
+    transform              TEXT,
+    snapshot_semantics     TEXT,
+    lookback               INTEGER NOT NULL DEFAULT 0,
+    forward_impact         INTEGER,
+    logical_table          TEXT,
+    join_policy            TEXT,
+    source_ref_params      TEXT,
+    semantic_filters       TEXT,
+    operator_canonical     TEXT,
+    operator_semantic_version TEXT,
+    implementation_hash    TEXT,
+    calendar_version       TEXT,
+    field_catalog_hash     TEXT,
+    PRIMARY KEY (factor_id, dependency_id)
 )
 """
 
@@ -63,6 +72,41 @@ def _parse_json_field(raw: Any) -> dict[str, Any]:
         return {}
 
 
+#: Sentinel forward-impact value meaning "unbounded" (a recursive / stateful /
+#: event-clock operator propagates an input change to the end of the series).
+#: ``None`` in storage means "not recorded" (legacy edge) and is treated as 0 —
+#: only this explicit sentinel is unbounded.
+UNBOUNDED_FORWARD_IMPACT = -1
+
+
+def dependency_edge_id(edge: dict[str, Any]) -> str:
+    """Stable identity for ONE semantic reference of a source field (P1-11).
+
+    The same ``(factor_id, source_dataset, field_id)`` may be referenced two
+    different ways (two transforms / two IndexSymbols / two period selections /
+    two semantic filters) — each is a DISTINCT dependency with its own
+    invalidation, so the edge PK is ``(factor_id, dependency_id)``.
+    """
+    import hashlib
+
+    payload = json.dumps(
+        {
+            "source_dataset": str(edge.get("source_dataset") or ""),
+            "field_id": str(edge.get("field_id") or ""),
+            "physical_field": str(edge.get("physical_field") or edge.get("field_id") or ""),
+            "transform": edge.get("transform"),
+            "snapshot_semantics": str(edge.get("snapshot_semantics") or "point"),
+            "join_policy": edge.get("join_policy"),
+            "source_ref_params": edge.get("source_ref_params"),
+            "semantic_filters": edge.get("semantic_filters"),
+        },
+        sort_keys=True,
+        ensure_ascii=False,
+        default=str,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+
 @dataclass(frozen=True)
 class FactorDependencyEdge:
     """One ``(dataset, field)`` dependency of a factor on its source data.
@@ -80,6 +124,8 @@ class FactorDependencyEdge:
     transform: optional transform applied to the raw field (``asof`` / ``ffill`` …).
     snapshot_semantics: ``point`` / ``asof`` / ``snapshot`` / ``window``.
     lookback: extra bars of history this edge requires.
+    forward_impact: future output bars a change to this source field affects
+        (``None`` = unbounded; P0-01).
     """
 
     factor_id: str
@@ -94,6 +140,19 @@ class FactorDependencyEdge:
     # DataAccess dataset, e.g. ``ashare_stock_valuation_daily``).
     logical_table: str | None = None
     join_policy: str | None = None
+    # P0-01 / P1-11: forward propagation + the semantic reference identity.
+    forward_impact: int | None = None
+    source_ref_params: str | None = None
+    semantic_filters: str | None = None
+    operator_canonical: str | None = None
+    operator_semantic_version: str | None = None
+    implementation_hash: str | None = None
+    calendar_version: str | None = None
+    field_catalog_hash: str | None = None
+
+    @property
+    def dependency_id(self) -> str:
+        return dependency_edge_id(self.to_dict())
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "FactorDependencyEdge":
@@ -107,6 +166,14 @@ class FactorDependencyEdge:
             lookback=int(raw.get("lookback") or 0),
             logical_table=raw.get("logical_table"),
             join_policy=raw.get("join_policy"),
+            forward_impact=raw.get("forward_impact"),
+            source_ref_params=raw.get("source_ref_params"),
+            semantic_filters=raw.get("semantic_filters"),
+            operator_canonical=raw.get("operator_canonical"),
+            operator_semantic_version=raw.get("operator_semantic_version"),
+            implementation_hash=raw.get("implementation_hash"),
+            calendar_version=raw.get("calendar_version"),
+            field_catalog_hash=raw.get("field_catalog_hash"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -120,6 +187,14 @@ class FactorDependencyEdge:
             "lookback": self.lookback,
             "logical_table": self.logical_table,
             "join_policy": self.join_policy,
+            "forward_impact": self.forward_impact,
+            "source_ref_params": self.source_ref_params,
+            "semantic_filters": self.semantic_filters,
+            "operator_canonical": self.operator_canonical,
+            "operator_semantic_version": self.operator_semantic_version,
+            "implementation_hash": self.implementation_hash,
+            "calendar_version": self.calendar_version,
+            "field_catalog_hash": self.field_catalog_hash,
         }
 
 
@@ -165,21 +240,104 @@ class DependencyCatalog:
         """Lazily create the supplementary edge / full-definition tables.
 
         R11 #4: columns added after the initial table definition are migrated
-        via ``ALTER TABLE ADD COLUMN`` for existing catalogs.
+        via ``ALTER TABLE ADD COLUMN`` for existing catalogs.  R13 P1-11: the
+        edge PK changed to ``(factor_id, dependency_id)`` — a full table
+        rebuild is needed (SQLite cannot alter a PRIMARY KEY).
         """
-        self._catalog._exec_commit(_EDGE_TABLE_SQL)
         self._catalog._exec_commit(_FULL_DEF_TABLE_SQL)
-        edge_cols = {
-            row[1]
-            for row in self._catalog._conn.execute(
-                "PRAGMA table_info(factor_dependency_edge)"
-            )
-        }
-        for col, col_type in (("logical_table", "TEXT"), ("join_policy", "TEXT")):
-            if col not in edge_cols:
-                self._catalog._exec_commit(
-                    f"ALTER TABLE factor_dependency_edge ADD COLUMN {col} {col_type}"
+        existing = self._catalog._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='factor_dependency_edge'"
+        ).fetchone()
+        if existing is not None:
+            edge_cols = {
+                row[1]
+                for row in self._catalog._conn.execute(
+                    "PRAGMA table_info(factor_dependency_edge)"
                 )
+            }
+            if "dependency_id" not in edge_cols:
+                # R13 P1-11 migration: rebuild under the new (factor_id,
+                # dependency_id) PK so one field referenced two ways stays two
+                # edges.  Existing rows get a deterministic dependency_id
+                # (computed in Python BEFORE insert — a blanket '' would collide
+                # on the new PK for multi-edge factors).
+                self._catalog._exec_commit(
+                    "ALTER TABLE factor_dependency_edge RENAME TO factor_dependency_edge_legacy"
+                )
+                self._catalog._exec_commit(_EDGE_TABLE_SQL)
+                legacy_cols = {
+                    row[1]
+                    for row in self._catalog._conn.execute(
+                        "PRAGMA table_info(factor_dependency_edge_legacy)"
+                    )
+                }
+                select_cols = (
+                    "factor_id, source_dataset, field_id, physical_field, transform, "
+                    "snapshot_semantics, lookback, logical_table, join_policy"
+                )
+                present = [c for c in select_cols.split(", ") if c in legacy_cols]
+                legacy_rows = self._catalog._conn.execute(
+                    f"SELECT {', '.join(present)} FROM factor_dependency_edge_legacy"
+                ).fetchall()
+                for row in legacy_rows:
+                    rec = dict(row)
+                    did = dependency_edge_id(
+                        {
+                            "source_dataset": rec.get("source_dataset"),
+                            "field_id": rec.get("field_id"),
+                            "physical_field": rec.get("physical_field"),
+                            "transform": rec.get("transform"),
+                            "snapshot_semantics": rec.get("snapshot_semantics"),
+                            "join_policy": rec.get("join_policy"),
+                        }
+                    )
+                    self._catalog._exec_commit(
+                        "INSERT OR REPLACE INTO factor_dependency_edge "
+                        "(factor_id, dependency_id, source_dataset, field_id, physical_field, "
+                        " transform, snapshot_semantics, lookback, forward_impact, logical_table, "
+                        " join_policy, source_ref_params, semantic_filters, operator_canonical, "
+                        " operator_semantic_version, implementation_hash, calendar_version, "
+                        " field_catalog_hash) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            str(rec.get("factor_id") or ""),
+                            did,
+                            str(rec.get("source_dataset") or ""),
+                            str(rec.get("field_id") or ""),
+                            rec.get("physical_field") or rec.get("field_id"),
+                            rec.get("transform"),
+                            str(rec.get("snapshot_semantics") or "point"),
+                            int(rec.get("lookback") or 0),
+                            None,
+                            rec.get("logical_table"),
+                            rec.get("join_policy"),
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                        ),
+                    )
+                self._catalog._exec_commit("DROP TABLE factor_dependency_edge_legacy")
+            else:
+                for col, col_type in (
+                    ("forward_impact", "INTEGER"),
+                    ("source_ref_params", "TEXT"),
+                    ("semantic_filters", "TEXT"),
+                    ("operator_canonical", "TEXT"),
+                    ("operator_semantic_version", "TEXT"),
+                    ("implementation_hash", "TEXT"),
+                    ("calendar_version", "TEXT"),
+                    ("field_catalog_hash", "TEXT"),
+                ):
+                    if col not in edge_cols:
+                        self._catalog._exec_commit(
+                            f"ALTER TABLE factor_dependency_edge ADD COLUMN {col} {col_type}"
+                        )
+        else:
+            self._catalog._exec_commit(_EDGE_TABLE_SQL)
 
     def record_factor_edges(
         self,
@@ -316,19 +474,31 @@ class DependencyCatalog:
             for edge in edge_list:
                 conn.execute(
                     "INSERT OR REPLACE INTO factor_dependency_edge "
-                    "(factor_id, source_dataset, field_id, physical_field, transform, "
-                    " snapshot_semantics, lookback, logical_table, join_policy) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "(factor_id, dependency_id, source_dataset, field_id, physical_field, "
+                    " transform, snapshot_semantics, lookback, forward_impact, logical_table, "
+                    " join_policy, source_ref_params, semantic_filters, operator_canonical, "
+                    " operator_semantic_version, implementation_hash, calendar_version, "
+                    " field_catalog_hash) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         fid,
+                        edge.dependency_id,
                         str(edge.source_dataset),
                         str(edge.field_id),
                         edge.physical_field or edge.field_id,
                         edge.transform,
                         edge.snapshot_semantics,
                         int(edge.lookback),
+                        edge.forward_impact,
                         edge.logical_table,
                         edge.join_policy,
+                        edge.source_ref_params,
+                        edge.semantic_filters,
+                        edge.operator_canonical,
+                        edge.operator_semantic_version,
+                        edge.implementation_hash,
+                        edge.calendar_version,
+                        edge.field_catalog_hash,
                     ),
                 )
             if full_definition is not None:
@@ -427,6 +597,26 @@ class DependencyCatalog:
             cur["referenced_columns"] = dep.get("referenced_columns") or []
             cur["field_id"] = edge.field_id
             cur["edges"] = list(cur.get("edges", [])) + [edge]
+            # P0-01: forward impact of THIS semantic reference — the scheduler
+            # extends recompute_end forward by it.  The explicit -1 sentinel is
+            # unbounded (propagate to the end of the series); a legacy
+            # ``None`` (never recorded) is 0 (no forward propagation).
+            fwd = edge.forward_impact
+            if fwd == UNBOUNDED_FORWARD_IMPACT:
+                fwd = None
+            elif fwd is None:
+                fwd = 0
+            if "forward_impact" not in cur:
+                cur["forward_impact"] = fwd
+            elif cur["forward_impact"] is None or fwd is None:
+                # an unbounded reading anywhere makes the whole factor unbounded
+                cur["forward_impact"] = None
+            else:
+                cur["forward_impact"] = max(cur["forward_impact"], fwd)
+            spec = self._get_full_spec(fid)
+            if spec:
+                cur.setdefault("operator_manifest", spec.get("operator_manifest"))
+                cur.setdefault("calendar_version", spec.get("calendar_version"))
         for dep in self._catalog.list_factors_for_column(field):
             fid = str(dep["factor_id"])
             ds = dep.get("source_dataset")

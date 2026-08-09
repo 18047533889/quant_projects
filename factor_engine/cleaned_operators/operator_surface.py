@@ -178,7 +178,7 @@ _DAILY_FINAL_PACK_2026_08 = frozenset({
     "ts_quantile_skew", "ts_quantile_kurtosis", "ts_tail_ratio", "ts_extreme_cluster_ratio",
     # group 2 — nonlinear dependence
     "ts_distance_corr", "ts_distance_cov", "ts_mutual_information",
-    "ts_lagged_mutual_information", "ts_upper_tail_dependence", "ts_lower_tail_dependence",
+    "ts_lagged_mutual_information", "ts_upper_tail_coexceedance_probability", "ts_lower_tail_dependence",
     # group 3 — complexity / long memory
     "ts_permutation_entropy", "ts_weighted_permutation_entropy",
     "ts_permutation_transition_entropy", "ts_sample_entropy", "ts_hurst_dfa",

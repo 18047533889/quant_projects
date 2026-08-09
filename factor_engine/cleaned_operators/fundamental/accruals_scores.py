@@ -24,6 +24,11 @@ from cleaned_operators.fundamental.transforms_v2 import _lag_value, _walk_period
 _EPS = 1e-12
 _CANONICALS: list[str] = []
 
+# R11: the fundamental-strength score is only comparable across stocks with
+# comparable field coverage.  Fewer than this many observed components -> NaN
+# (a stock with 3/8 fields must not be scored against one with 8/8).
+MIN_FUNDAMENTAL_COMPONENTS = 6
+
 
 def _growth(x: pd.DataFrame, period_id: pd.DataFrame, periods: int = 1, flow_type=None) -> pd.DataFrame:
     # Finding #52: growth over a cumulative-YTD input is not a period growth
@@ -381,17 +386,54 @@ def _piotroski_normalized_partial_score(roa, ocf, net_profit, leverage, current_
 
 def _fin_piotroski_f_score(roa, ocf, net_profit, leverage, current_ratio, total_capital,
                            gross_margin, asset_turnover, period_id, mask=None):
-    passed, _, _ = _piotroski_components(roa, ocf, net_profit, leverage, current_ratio,
-                                         total_capital, gross_margin, asset_turnover, period_id)
-    return _masked(passed, mask)
+    """Genuine full F-score: the passed count only when all 9 signals are observed."""
+    passed, observed, _ = _piotroski_components(roa, ocf, net_profit, leverage, current_ratio,
+                                                total_capital, gross_margin, asset_turnover, period_id)
+    # R11 completeness: a partial F-score (observed < 9) is NOT comparable with a
+    # genuine full F-score — fail closed to NaN instead of under-reporting (a
+    # "4 of 4 observed, all passed -> 4" row must not equal "9 of 9, 4 passed").
+    full = passed.where(observed == 9)
+    return _masked(full, mask)
+
+
+def _fin_piotroski_partial_score(roa, ocf, net_profit, leverage, current_ratio, total_capital,
+                                 gross_margin, asset_turnover, period_id, mask=None):
+    """Partial F-score: passed / observed fraction in [0, 1]; NaN when observed == 0."""
+    _, _, normalized = _piotroski_components(roa, ocf, net_profit, leverage, current_ratio,
+                                             total_capital, gross_margin, asset_turnover, period_id)
+    return _masked(normalized, mask)
+
+
+def _fin_piotroski_observed_count(roa, ocf, net_profit, leverage, current_ratio, total_capital,
+                                  gross_margin, asset_turnover, period_id, mask=None):
+    """Number of F-score signals whose inputs are all observed (0..9)."""
+    _, observed, _ = _piotroski_components(roa, ocf, net_profit, leverage, current_ratio,
+                                           total_capital, gross_margin, asset_turnover, period_id)
+    return _masked(observed, mask)
 
 
 _mk(
     "piotroski_f_score",
-    "Piotroski F-score：9 项信号中「观测到」且「通过」的数量加总（缺失分量不计失败，#50）。",
+    "Piotroski F-score：仅当 9 项信号全部观测到时返回通过数（0..9），否则 NaN（#50）。",
     ["roa", "ocf", "net_profit", "leverage", "current_ratio", "total_capital",
      "gross_margin", "asset_turnover", "period_id", "mask"],
     _fin_piotroski_f_score,
+    extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial"],
+)
+_mk(
+    "piotroski_partial_score",
+    "Piotroski 部分得分：passed / observed ∈ [0,1]，observed==0 时为 NaN（#50）。",
+    ["roa", "ocf", "net_profit", "leverage", "current_ratio", "total_capital",
+     "gross_margin", "asset_turnover", "period_id", "mask"],
+    _fin_piotroski_partial_score,
+    extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial"],
+)
+_mk(
+    "piotroski_observed_count",
+    "Piotroski 观测分量数（0..9），用于完整度诊断（#50）。",
+    ["roa", "ocf", "net_profit", "leverage", "current_ratio", "total_capital",
+     "gross_margin", "asset_turnover", "period_id", "mask"],
+    _fin_piotroski_observed_count,
     extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial"],
 )
 
@@ -407,6 +449,11 @@ _APPLICABLE_TAG = f"applicable_universe:{ApplicableUniverse}"
 
 def _fin_altman_z_score(working_capital, retained_earnings, operating_profit, total_assets,
                         market_cap, total_liabilities, revenue, period_id, mask=None):
+    # R11 applicability is a HARD semantic: the calibration universe is
+    # non-financial, so the caller MUST supply an applicability mask.  Omitting
+    # it would silently score financials with a formula that does not apply.
+    if mask is None:
+        raise ValueError("altman_z_score requires an applicability mask (applicable_universe=non_financial)")
     z = (
         1.2 * _safe_ratio(working_capital, total_assets)
         + 1.4 * _safe_ratio(retained_earnings, total_assets)
@@ -421,7 +468,7 @@ def _fin_altman_z_score(working_capital, retained_earnings, operating_profit, to
 
 _mk(
     "altman_z_score",
-    "Altman Z-score（非金融企业版；适用域=非金融，需外部适用性掩码，#55）。",
+    "Altman Z-score（非金融企业版；适用域=非金融，适用性掩码为必填，#55）。",
     ["working_capital", "retained_earnings", "operating_profit", "total_assets",
      "market_cap", "total_liabilities", "revenue", "period_id", "mask"],
     _fin_altman_z_score,
@@ -431,6 +478,11 @@ _mk(
 
 def _fin_zmijewski_score(net_profit, total_assets, total_liabilities, current_assets,
                          current_liabilities, period_id, mask=None):
+    # R11 applicability is a HARD semantic: the calibration universe is
+    # non-financial, so the caller MUST supply an applicability mask.  Omitting
+    # it would silently score financials with a formula that does not apply.
+    if mask is None:
+        raise ValueError("zmijewski_score requires an applicability mask (applicable_universe=non_financial)")
     x = (
         -4.336
         - 4.513 * _safe_ratio(net_profit, total_assets)
@@ -442,7 +494,7 @@ def _fin_zmijewski_score(net_profit, total_assets, total_liabilities, current_as
 
 _mk(
     "zmijewski_score",
-    "Zmijewski 破产概率得分（适用域=非金融，需外部适用性掩码，#55）。",
+    "Zmijewski 破产概率得分（适用域=非金融，适用性掩码为必填，#55）。",
     ["net_profit", "total_assets", "total_liabilities", "current_assets", "current_liabilities", "period_id", "mask"],
     _fin_zmijewski_score,
     extra_tags=[_APPLICABLE_TAG],
@@ -460,18 +512,15 @@ def _cs_rank_normalize(x: pd.DataFrame, direction: float) -> pd.DataFrame:
     return direction * (2.0 * ranks - 1.0)
 
 
-def _fin_fundamental_strength_score(roa, ocf, gross_margin, asset_turnover, leverage,
-                                    receivable_turnover, inventory_turnover, revenue_growth,
-                                    period_id, mask=None):
-    """基本面强度：各分量先做截面 rank 标准化（[-1,1] 同向）再加总。
-
-    Finding #54: adding heterogeneous RAW metrics lets the component with the
-    largest units/scale decide the weight (ROA ~0.05 vs asset_turnover ~1.0 vs
-    revenue_growth ~0.1).  Each component is cross-sectionally rank-normalised
-    per date with its direction applied BEFORE summation; a row with no observed
-    component stays NaN.
-    """
-    cash_yield = _safe_ratio(ocf, roa.abs().replace(0, np.nan))
+def _fundamental_strength_components(roa, ocf, gross_margin, asset_turnover, leverage,
+                                     receivable_turnover, inventory_turnover, avg_assets,
+                                     revenue_growth):
+    """Return ``(normalized, stacked, valid, counts)`` for the 8 strength components."""
+    # R11 semantic change: cash_yield := OCF / AverageAssets.  The old OCF/|ROA|
+    # mixed a flow AMOUNT with a dimensionless RATIO and was therefore still
+    # amount-dimensioned (dominated by company size) rather than a genuine cash
+    # yield per unit of assets.
+    cash_yield = _safe_ratio(ocf, avg_assets)
     normalized = [
         _cs_rank_normalize(roa, +1.0),
         _cs_rank_normalize(cash_yield, +1.0),
@@ -485,18 +534,58 @@ def _fin_fundamental_strength_score(roa, ocf, gross_margin, asset_turnover, leve
     stacked = np.stack([df.to_numpy(dtype=float) for df in normalized])
     valid = np.isfinite(stacked)
     counts = valid.sum(axis=0)
-    total = np.where(valid, stacked, 0.0).sum(axis=0)
-    total[counts == 0] = np.nan
-    score = pd.DataFrame(total, index=roa.index, columns=roa.columns)
+    return normalized, stacked, valid, counts
+
+
+def _fin_fundamental_strength_score(roa, ocf, gross_margin, asset_turnover, leverage,
+                                    receivable_turnover, inventory_turnover, avg_assets,
+                                    revenue_growth, period_id, mask=None):
+    """基本面强度：各分量先做截面 rank 标准化（[-1,1] 同向）再对观测分量取均值。
+
+    Finding #54: adding heterogeneous RAW metrics lets the component with the
+    largest units/scale decide the weight (ROA ~0.05 vs asset_turnover ~1.0 vs
+    revenue_growth ~0.1).  Each component is cross-sectionally rank-normalised
+    per date with its direction applied BEFORE combining.  R11 (#50): the score
+    is the MEAN over the OBSERVED components (not the sum), so a stock with 3/8
+    field coverage is not directly compared against a stock with 8/8; and a cell
+    with fewer than ``MIN_FUNDAMENTAL_COMPONENTS`` observed components is NaN.
+    """
+    _, stacked, valid, counts = _fundamental_strength_components(
+        roa, ocf, gross_margin, asset_turnover, leverage,
+        receivable_turnover, inventory_turnover, avg_assets, revenue_growth,
+    )
+    mean = np.where(valid, stacked, 0.0).sum(axis=0) / np.where(counts > 0, counts, 1)
+    mean[counts < MIN_FUNDAMENTAL_COMPONENTS] = np.nan
+    score = pd.DataFrame(mean, index=roa.index, columns=roa.columns)
     return _masked(score, mask)
+
+
+def _fin_fundamental_strength_coverage(roa, ocf, gross_margin, asset_turnover, leverage,
+                                       receivable_turnover, inventory_turnover, avg_assets,
+                                       revenue_growth, period_id, mask=None):
+    """基本面强度覆盖度：每个 cell 观测到的分量数（0..8）。"""
+    _, _, valid, counts = _fundamental_strength_components(
+        roa, ocf, gross_margin, asset_turnover, leverage,
+        receivable_turnover, inventory_turnover, avg_assets, revenue_growth,
+    )
+    cov = pd.DataFrame(counts.astype(float), index=roa.index, columns=roa.columns)
+    return _masked(cov, mask)
 
 
 _mk(
     "fin_fundamental_strength_score",
-    "基本面强度：多分量截面 rank 标准化后再按方向加总（#54）。",
+    "基本面强度：多分量截面 rank 标准化后对观测分量取均值；<6 个观测分量为 NaN（#54，#50）。",
     ["roa", "ocf", "gross_margin", "asset_turnover", "leverage",
-     "receivable_turnover", "inventory_turnover", "revenue_growth", "period_id", "mask"],
+     "receivable_turnover", "inventory_turnover", "avg_assets", "revenue_growth", "period_id", "mask"],
     _fin_fundamental_strength_score,
+    extra_tags=["flow_type:SinglePeriodFlow"],
+)
+_mk(
+    "fin_fundamental_strength_coverage",
+    "基本面强度覆盖度：观测到的分量数（0..8），用于覆盖度诊断。",
+    ["roa", "ocf", "gross_margin", "asset_turnover", "leverage",
+     "receivable_turnover", "inventory_turnover", "avg_assets", "revenue_growth", "period_id", "mask"],
+    _fin_fundamental_strength_coverage,
     extra_tags=["flow_type:SinglePeriodFlow"],
 )
 

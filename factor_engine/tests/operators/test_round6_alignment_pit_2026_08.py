@@ -24,6 +24,7 @@ import pytest
 
 from cleaned_operators import load_all
 from cleaned_operators.alignment import (
+    AlignmentPlan,
     PanelAxisMismatch,
     align_panel_inputs,
     apply_universe_mask,
@@ -122,8 +123,17 @@ def test_align_panel_inputs_is_strict_by_default():
     b = _mk(cols=_COLS[::-1])
     with pytest.raises(PanelAxisMismatch):
         align_panel_inputs(a, b)
-    # research opt-out must be explicit
-    out = align_panel_inputs(a, b, strict_axes=False)
+    # research opt-out must be explicit — and (R11 P1-11) it now requires an
+    # AlignmentPlan naming WHY the reindex is safe; a bare boolean is refused.
+    with pytest.raises(PanelAxisMismatch, match="AlignmentPlan"):
+        align_panel_inputs(a, b, strict_axes=False)
+    out = align_panel_inputs(
+        a, b, strict_axes=False,
+        alignment_plan=AlignmentPlan(
+            join="left", time_direction="backward", instrument_policy="exact",
+            missing_policy="nan", reason="test research opt-out",
+        ),
+    )
     assert len(out) == 2
     # aligned panels are a no-op (same objects returned)
     assert align_panel_inputs(a, a)[1] is a

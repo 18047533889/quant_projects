@@ -9,12 +9,17 @@ from typing import Any
 import pandas as pd
 
 from cleaned_operators.operator_policy import effective_lookback
+from runtime.execution_contract import (
+    ExecutionContract,
+    FULL_HISTORY_LOOKBACK_SENTINEL,
+    HistoryRequirement,
+    is_full_history_lookback,
+)
 from storage.time_window import (
     resolve_incremental_window_for_bar_freq,
     slice_series_time_window,
 )
 
-FULL_HISTORY_LOOKBACK_SENTINEL = 1_000_000_000
 _PENDING_INCREMENTAL_HISTORY: ContextVar[dict[str, str] | None] = ContextVar(
     "factor_engine_pending_incremental_history", default=None
 )
@@ -97,6 +102,17 @@ class IncrementalPlan:
     source_bar_freq: str | None = None
     window_mode: str = "daily"
     full_history_required: bool = False
+    # P0-01 / P2-01: the two halves of the temporal dependency + state contract.
+    # ``backward_history`` = how many source bars are read before ``output_start``
+    # (warm-up).  ``forward_impact`` = how many future output bars a changed
+    # source bar affects (None = unbounded: recursive/stateful/event-clock
+    # propagation to the end of the series).  ``state_requirement`` /
+    # ``checkpoint_requirement`` mirror ``ExecutionContract``.
+    backward_history: int = 0
+    forward_impact: int | None = 0
+    state_requirement: str = "stateless"
+    checkpoint_requirement: str | None = None
+    history_kind: str = "finite"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -112,6 +128,11 @@ class IncrementalPlan:
             "source_bar_freq": self.source_bar_freq,
             "window_mode": self.window_mode,
             "full_history_required": self.full_history_required,
+            "backward_history": self.backward_history,
+            "forward_impact": self.forward_impact,
+            "state_requirement": self.state_requirement,
+            "checkpoint_requirement": self.checkpoint_requirement,
+            "history_kind": self.history_kind,
         }
 
 
@@ -128,13 +149,50 @@ def build_incremental_plan(
     calendar=None,
     factor_freq: str | None = None,
     source_bar_freq: str | None = None,
+    history: HistoryRequirement | None = None,
+    execution: ExecutionContract | None = None,
+    forward_impact: int | None = None,
 ) -> IncrementalPlan:
-    """Build an incremental plan, forcing full replay for recursive factors."""
+    """Build an incremental plan, forcing full replay for recursive factors.
+
+    P0-01/P0-05/P2-01: the full-history decision comes from a real
+    ``HistoryRequirement`` / ``ExecutionContract`` when provided (never the 1e9
+    integer sentinel).  ``forward_impact`` (future output bars a changed source
+    bar affects, ``None`` = unbounded) is persisted onto the plan so the
+    scheduler/executor know the output window must reach forward past
+    ``affected_end``.
+    """
     from storage.trading_calendar import get_trading_calendar
 
     raw_lookback = int(analysis_lookback)
-    full_history_required = raw_lookback >= FULL_HISTORY_LOOKBACK_SENTINEL
-    finite_lookback = 0 if full_history_required else max(0, raw_lookback)
+    if history is not None:
+        full_history_required = bool(history.is_full_history)
+    elif execution is not None:
+        full_history_required = bool(execution.requires_full_history)
+    else:
+        # Legacy serialized-analysis compatibility: the 1e9 sentinel means
+        # full-history replay (the sentinel is NOT a window size — see
+        # ``execution_contract.FULL_HISTORY_LOOKBACK_SENTINEL``).
+        full_history_required = is_full_history_lookback(raw_lookback)
+    if history is not None and not history.is_full_history:
+        # P0-05: the HistoryRequirement is authoritative for the warm-up rows
+        # too — an overriding finite requirement wins over a raw legacy sentinel
+        # (which is not a real window size and must never reach the calendar).
+        finite_lookback = max(0, int(history.rows))
+    elif is_full_history_lookback(raw_lookback):
+        finite_lookback = 0  # the 1e9 sentinel is a marker, never a window size
+    else:
+        finite_lookback = 0 if full_history_required else max(0, raw_lookback)
+    state_model = (
+        execution.state_model if execution is not None else (
+            "recursive" if full_history_required else "stateless"
+        )
+    )
+    checkpoint_schema = execution.checkpoint_schema if execution is not None else None
+    history_kind = history.kind if history is not None else (
+        "full_history" if full_history_required else "finite"
+    )
+    fwd = None if (full_history_required or forward_impact is None) else max(0, int(forward_impact))
 
     watermark_end: str | None = None
     if since:
@@ -183,6 +241,11 @@ def build_incremental_plan(
         source_bar_freq=source_bar_freq,
         window_mode="full_history" if full_history_required else window_mode,
         full_history_required=full_history_required,
+        backward_history=finite_lookback,
+        forward_impact=fwd,
+        state_requirement=state_model,
+        checkpoint_requirement=checkpoint_schema,
+        history_kind=history_kind,
     )
     _stage_incremental_history_contract(plan)
     return plan

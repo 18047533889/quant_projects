@@ -25,7 +25,16 @@ from cleaned_operators import load_all
 
 load_all()
 
+from runtime.session_calendar import SessionCalendar  # noqa: E402
 from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+
+# P0-10: the official session grid is NEVER inferred from the observed minute
+# data — the operators require an explicit exchange calendar.  The synthetic
+# panels below use the A-share regular session with bar_start minute labels
+# (last bar 14:59 -> minute-of-day 899), matching the calendar's official grid.
+_ASHARE_CAL = SessionCalendar(
+    market="CN", timestamp_convention="bar_start", bar_freq="1min"
+)
 
 
 def _op(name: str):
@@ -193,7 +202,7 @@ def test_truncated_session_never_emits_full_session_factor():
         _ASHARE_FULL_MODS,
     ]
     x, sid = _session_panel(day_mods)
-    out = _calc("intraday_session_shape_novelty", x, sid, history_days=6, min_history_sessions=2)
+    out = _calc("intraday_session_shape_novelty", x, sid, history_days=6, min_history_sessions=2, calendar=_ASHARE_CAL)
     arr = out["S0"].to_numpy(dtype=float)
 
     # The truncated day-3 run must NOT emit a value at its last observed minute.
@@ -221,7 +230,7 @@ def test_truncated_close_minus_one_and_1400():
         _ASHARE_FULL_MODS,
     ]
     x, sid = _session_panel(day_mods)
-    out = _calc("intraday_session_shape_novelty", x, sid, history_days=8, min_history_sessions=3)
+    out = _calc("intraday_session_shape_novelty", x, sid, history_days=8, min_history_sessions=3, calendar=_ASHARE_CAL)
     arr = out["S0"].to_numpy(dtype=float)
     for offset in (4, 5):  # close-1min and 14:00 days
         last = _last_row_of_day(x, day0 + pd.Timedelta(days=offset))
@@ -239,7 +248,7 @@ def test_truncated_session_pca_residual_also_censored():
         _ASHARE_FULL_MODS,
     ]
     x, sid = _session_panel(day_mods)
-    out = _calc("intraday_profile_pca_residual", x, sid, history_days=6, n_components=2, min_history_sessions=3)
+    out = _calc("intraday_profile_pca_residual", x, sid, history_days=6, n_components=2, min_history_sessions=3, calendar=_ASHARE_CAL)
     arr = out["S0"].to_numpy(dtype=float)
     day4_last = _last_row_of_day(x, day0 + pd.Timedelta(days=4))
     assert np.isnan(arr[day4_last])
@@ -276,12 +285,14 @@ def test_pca_score_series_zero_history_variance_nan():
 def test_phase_shift_below_threshold_is_nan():
     from cleaned_operators.advanced_intraday import _best_phase
 
-    cur = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
-    anti = np.array([6.0, 5.0, 4.0, 3.0, 2.0, 1.0])  # opposite trend -> corr <= 0
-    assert np.isnan(_best_phase(cur, anti, max_shift=2, n_slots=6))
+    # A sine profile has a unique best alignment at shift 0 (a linear ramp is
+    # affine-shift invariant, so its phase is ambiguous).
+    phase = np.sin(2.0 * np.pi * np.arange(6) / 6.0)
+    anti = -phase  # opposite -> corr <= 0 everywhere -> below the gate
+    assert np.isnan(_best_phase(phase, anti, max_shift=2, n_slots=6))
 
-    same = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
-    assert _best_phase(cur, same, max_shift=2, n_slots=6) == pytest.approx(0.0)
+    same = phase
+    assert _best_phase(phase, same, max_shift=2, n_slots=6) == pytest.approx(0.0)
 
 
 def test_phase_shift_max_shift_infeasible_rejected():
@@ -386,7 +397,7 @@ def test_activity_duration_partial_session_rejected():
         _ASHARE_FULL_MODS,
     ]
     act = _activity_panel(day_mods, value=1.0)
-    out = _calc("intraday_activity_duration_curvature", act, buckets=5)
+    out = _calc("intraday_activity_duration_curvature", act, buckets=5, calendar=_ASHARE_CAL)
     truncated = pd.Timestamp("2024-01-01") + pd.Timedelta(days=2)
     full = pd.Timestamp("2024-01-01") + pd.Timedelta(days=3)
     assert np.isnan(out.loc[truncated, "S0"])       # partial session -> NaN
@@ -402,6 +413,6 @@ def test_activity_duration_missing_whole_minute_row():
     missing_one.remove(_ASHARE_FULL_MODS[60])  # drop one interior minute
     day_mods = [_ASHARE_FULL_MODS, missing_one, _ASHARE_FULL_MODS]
     act = _activity_panel(day_mods, value=1.0)
-    out = _calc("intraday_activity_duration_curvature", act, buckets=5)
+    out = _calc("intraday_activity_duration_curvature", act, buckets=5, calendar=_ASHARE_CAL)
     assert np.isnan(out.loc[pd.Timestamp("2024-01-02"), "S0"])
     assert np.isfinite(out.loc[pd.Timestamp("2024-01-01"), "S0"])

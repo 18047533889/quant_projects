@@ -45,6 +45,26 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
     )
 
 
+def _valid_membership_label(label: Any) -> bool:
+    """True when ``label`` is a concrete group/subgroup membership label.
+
+    Missing/unknown labels (NaN, +/-inf, ``None``, empty string) are NOT real
+    memberships: a cell carrying one must keep its residual NaN and must never
+    join a composite ``(group, subgroup)`` demeaning key (P0-9).  Mirrors
+    ``cleaned_operators.common.polars_group._valid_membership_label``.
+    """
+    if label is None:
+        return False
+    if isinstance(label, str):
+        return label != ""
+    if isinstance(label, bool):
+        return True
+    try:
+        return bool(np.isfinite(float(label)))
+    except (TypeError, ValueError):
+        return True
+
+
 def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
 
@@ -191,18 +211,27 @@ class HierarchicalGroupNeutralize(SeriesOperator):
         keeps subgroup means within their own parent group.  If subgroup codes
         are globally unique the composite key collapses to the subgroup key and
         the parent group mean is already zeroed (a further group demean would be
-        a no-op).  NaN labels never match (``nan != nan``) and stay NaN.
+        a no-op).
+
+        P0-9: an UNKNOWN / missing group or subgroup label is not a membership.
+        A cell whose group or subgroup label is invalid (NaN / ±inf / None /
+        empty) keeps its residual NaN and never joins a key — an unknown-group
+        cell alone in its own (invalid) key must NOT be demeaned to 0
+        (``mean == self`` manufactures a perfectly-neutralized residual).
         """
-        out = values.copy()
+        out = np.full(len(values), np.nan, dtype=float)
         n = len(values)
-        keys = [None] * n
+        keys: list[tuple[Any, Any] | None] = [None] * n
         for i in range(n):
+            if not _valid_membership_label(group_labels[i]) \
+                    or not _valid_membership_label(subgroup_labels[i]):
+                continue  # unknown group/subgroup -> residual stays NaN
             keys[i] = (group_labels[i], subgroup_labels[i])
         # Deduplicate with Python tuple equality (a numpy object-array ``==``
         # would broadcast a 2-tuple against the whole column and raise).
         seen: list[tuple[Any, Any]] = []
         for key in keys:
-            if key not in seen:
+            if key is not None and key not in seen:
                 seen.append(key)
         for key in seen:
             idx = np.flatnonzero(np.fromiter((k == key for k in keys), dtype=bool, count=n))
@@ -230,10 +259,10 @@ class HierarchicalGroupNeutralize(SeriesOperator):
 
 
 @register_operator(
-    name="cs_robust_resid",
+    name="cs_trimmed_ols_resid",
     category="cross_sectional",
     business_category="cross_sectional_regression",
-    canonical="cs_robust_resid",
+    canonical="cs_trimmed_ols_resid",
     source="group_ext",
     status="experimental",
 )
@@ -242,16 +271,18 @@ class CsRobustResid(SeriesOperator):
 
     注意 (R5 P1-37(c))：本算子是「截尾后 OLS」（trimmed OLS），不是 Huber/LAD
     等真正的稳健回归。它对两端离群点做硬截断，但截尾后仍用最小二乘，对剩余
-    样本内的强影响点不稳健；保留此名仅因历史兼容。如需真稳健回归请使用 Huber
-    或 LAD 估计量。
+    样本内的强影响点不稳健。R11 诚实命名：canonical 名现为 cs_trimmed_ols_resid，
+    cs_robust_resid 仅作 deprecated alias 保留（历史兼容）。如需真稳健回归请使用
+    Huber 或 LAD 估计量。
     """
 
     metadata = OperatorMetadata(
-        name="cs_robust_resid",
+        name="cs_trimmed_ols_resid",
         category="cross_sectional",
         description=(
             "横截面残差（trimmed-OLS：截尾两端后最小二乘，非 Huber/LAD 稳健回归）。"
-            "R11 #136：名称为历史兼容，真实语义名称应为 cs_trimmed_ols_resid；"
+            "R11 #136：canonical 名现为 cs_trimmed_ols_resid（诚实命名），"
+            "cs_robust_resid 为 deprecated alias；"
             "输出残差单位为 unit(y)（§37-D unit-algebra）。"
         ),
         param_names=["y", "x", "trim_ratio", "add_intercept"],
@@ -268,7 +299,7 @@ class CsRobustResid(SeriesOperator):
         y, x = _aligned(y, x)
         trim = float(trim_ratio)
         if not (0.0 <= trim < 0.5):
-            raise ValueError("cs_robust_resid requires 0 <= trim_ratio < 0.5")
+            raise ValueError("cs_trimmed_ols_resid requires 0 <= trim_ratio < 0.5")
         yv = y.to_numpy(dtype=float)
         xv = x.to_numpy(dtype=float)
         rows, cols = yv.shape
@@ -301,3 +332,33 @@ class CsRobustResid(SeriesOperator):
                 fitted = slope * xv[row]
             out[row] = yv[row] - fitted
         return _frame_like(y, out)
+
+
+def _register_trimmed_ols_honest_rename() -> None:
+    """R11: keep the historical ``cs_robust_resid`` resolvable as a deprecated
+    alias of the honest canonical ``cs_trimmed_ols_resid``.
+
+    The implementation is genuinely trimmed-OLS (trim extreme ``x``, then
+    ordinary least squares) — not a robust regression (no Huber/LAD/Theil-Sen) —
+    so the canonical name must be honest.  ``rename_canonical``/``register_alias``
+    preserve the old DSL name.  The static surface partition is updated in sync
+    (new canonical -> extended; retired spelling -> removed) so
+    ``layer_governance``'s exact-classification check still holds at finalize.
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    if "cs_robust_resid" in OperatorRegistry._operators:
+        # A backend registered the historical spelling directly; migrate it.
+        OperatorRegistry.rename_canonical("cs_robust_resid", "cs_trimmed_ols_resid")
+    elif "cs_trimmed_ols_resid" in OperatorRegistry._operators:
+        OperatorRegistry.register_alias("cs_robust_resid", "cs_trimmed_ols_resid")
+    try:
+        from cleaned_operators.operator_surface import extend_extended_only, retract_extended_only
+
+        extend_extended_only(["cs_trimmed_ols_resid"])
+        retract_extended_only(["cs_robust_resid"])
+    except ImportError:  # pragma: no cover - surface module always present in-tree
+        pass
+
+
+_register_trimmed_ols_honest_rename()

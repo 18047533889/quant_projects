@@ -452,9 +452,11 @@ def test_relation_diffusion_two_member_golden():
     out = OperatorRegistry.get("relation_diffusion_score", "pandas_numpy").calculate(
         x, g, alpha=0.5, steps=1
     )
-    # P = [[0,1],[1,0]]; D = 0.5 * P @ x = [1.5, 0.5].
-    assert out.iloc[-1, 0] == pytest.approx(1.5)
-    assert out.iloc[-1, 1] == pytest.approx(0.5)
+    # P = [[0,1],[1,0]].  The cascade keeps the P0-05 truncation remainder
+    # (weights sum to exactly 1, preserving constants): for steps=1 the closed
+    # form is P @ x = [3, 1], not the pre-remainder (1-alpha) P @ x = [1.5, 0.5].
+    assert out.iloc[-1, 0] == pytest.approx(3.0)
+    assert out.iloc[-1, 1] == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------

@@ -57,6 +57,29 @@ def _aligned(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
     return align_panel_inputs(*frames, strict_axes=True)
 
 
+def _assert_condition_bool(condition: pd.DataFrame, name: str = "condition") -> None:
+    """R11 #144: the condition input must be a ConditionBool.
+
+    Accepted values: {0, 1} (or boolean True/False); NaN = missing and is
+    excluded from the selection.  Any other finite numeric value (e.g. 5.0,
+    -3.0) is neither a probability nor a boolean — silently treating it as
+    "truthy" is a hidden semantic the operator contract forbids.  Fail the
+    call (raise) instead of guessing.
+
+    Mirrors ``cleaned_operators.conditional_ext._assert_condition_bool``.  The
+    validator is duplicated here rather than imported because ``conditional_ext``
+    imports ``_aligned`` from this module (importing back would be circular).
+    """
+    cv = condition.to_numpy()
+    finite = np.isfinite(cv)
+    bad = finite & (cv != 0.0) & (cv != 1.0)
+    if np.any(bad):
+        raise ValueError(
+            f"{name} must be a ConditionBool (values in {{0, 1}} with NaN as "
+            f"missing); found {int(bad.sum())} finite value(s) outside {{0, 1}}"
+        )
+
+
 def _rolling_apply_2d(
     values: np.ndarray,
     window: int,
@@ -100,6 +123,8 @@ def ts_count_if(
 ) -> pd.DataFrame:
     w = _positive_int(window, "window")
     mp = _positive_int(min_periods, "min_periods")
+    # R11 #144: condition must be a ConditionBool.
+    _assert_condition_bool(condition)
     valid = condition.notna()
     truth = valid & condition.ne(0)
     count = truth.astype(float).rolling(w, min_periods=1).sum()
@@ -143,6 +168,8 @@ def ts_sum_if(
     min_periods: int = 1,
     **_: Any,
 ) -> pd.DataFrame:
+    # R11 #144: condition must be a ConditionBool.
+    _assert_condition_bool(condition)
     return _conditional_rolling(x, condition, window, min_periods, "sum")
 
 
@@ -153,6 +180,8 @@ def ts_mean_if(
     min_periods: int = 1,
     **_: Any,
 ) -> pd.DataFrame:
+    # R11 #144: condition must be a ConditionBool.
+    _assert_condition_bool(condition)
     return _conditional_rolling(x, condition, window, min_periods, "mean")
 
 
@@ -164,6 +193,8 @@ def ts_std_if(
     ddof: int = 1,
     **_: Any,
 ) -> pd.DataFrame:
+    # R11 #144: condition must be a ConditionBool.
+    _assert_condition_bool(condition)
     return _conditional_rolling(x, condition, window, min_periods, "std", ddof)
 
 
@@ -174,6 +205,8 @@ def ts_last_if(
     **_: Any,
 ) -> pd.DataFrame:
     x, condition = _aligned(x, condition)
+    # R11 #144: condition must be a ConditionBool.
+    _assert_condition_bool(condition)
     w = _positive_int(window, "window")
     xv = x.to_numpy(dtype=float)
     cv = condition.to_numpy()
@@ -200,6 +233,8 @@ def ts_days_since(
     **_: Any,
 ) -> pd.DataFrame:
     limit = None if max_lookback is None else _positive_int(max_lookback, "max_lookback")
+    # R11 #144: condition must be a ConditionBool.
+    _assert_condition_bool(condition)
     cv = condition.to_numpy()
     rows, cols = cv.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -207,7 +242,14 @@ def ts_days_since(
         last_true = -1
         for row in range(rows):
             value = cv[row, col]
-            if pd.notna(value) and bool(value):
+            if pd.isna(value):
+                # R11 #145: an unknown event state at time t censors output[t]
+                # (today's distance is unknowable) AND destroys state certainty —
+                # the previously known "last true" is no longer trustworthy, so it
+                # is reset until an explicit true (1) observation rebuilds it.
+                last_true = -1
+                continue
+            if bool(value):
                 last_true = row
             if last_true >= 0:
                 distance = row - last_true
@@ -217,14 +259,22 @@ def ts_days_since(
 
 
 def ts_true_streak(condition: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    # R11 #144: condition must be a ConditionBool.
+    _assert_condition_bool(condition)
     cv = condition.to_numpy()
     rows, cols = cv.shape
-    out = np.zeros((rows, cols), dtype=float)
+    out = np.full((rows, cols), np.nan, dtype=float)
     for col in range(cols):
         streak = 0
         for row in range(rows):
             value = cv[row, col]
-            streak = streak + 1 if pd.notna(value) and bool(value) else 0
+            if pd.isna(value):
+                # R11 #145: an unknown event state at time t censors the output
+                # AND resets the streak counter (certainty is lost until a true
+                # observation restarts a run).  Only confirmed-false rows emit 0.
+                streak = 0
+                continue
+            streak = streak + 1 if bool(value) else 0
             out[row, col] = float(streak)
     return _frame_like(condition, out)
 
@@ -564,13 +614,13 @@ def ts_nth_value(
 
 
 _OPERATORS: dict[str, tuple[str, list[str], Callable[..., pd.DataFrame], str]] = {
-    "ts_count_if": ("time_series_condition", ["condition", "window", "min_periods"], ts_count_if, "滚动统计条件为真的次数"),
-    "ts_sum_if": ("time_series_condition", ["x", "condition", "window", "min_periods"], ts_sum_if, "滚动条件求和"),
-    "ts_mean_if": ("time_series_condition", ["x", "condition", "window", "min_periods"], ts_mean_if, "滚动条件均值"),
-    "ts_std_if": ("time_series_condition", ["x", "condition", "window", "min_periods", "ddof"], ts_std_if, "滚动条件样本标准差"),
-    "ts_last_if": ("time_series_event", ["x", "condition", "window"], ts_last_if, "窗口内最近一次条件成立时的值"),
-    "ts_days_since": ("time_series_event", ["condition", "max_lookback"], ts_days_since, "距最近一次条件成立的交易行数"),
-    "ts_true_streak": ("time_series_event", ["condition"], ts_true_streak, "截至当前连续条件成立长度"),
+    "ts_count_if": ("time_series_condition", ["condition", "window", "min_periods"], ts_count_if, "滚动统计条件为真的次数（condition 须为 ConditionBool：{0,1}/NaN）"),
+    "ts_sum_if": ("time_series_condition", ["x", "condition", "window", "min_periods"], ts_sum_if, "滚动条件求和（condition 须为 ConditionBool：{0,1}/NaN）"),
+    "ts_mean_if": ("time_series_condition", ["x", "condition", "window", "min_periods"], ts_mean_if, "滚动条件均值（condition 须为 ConditionBool：{0,1}/NaN）"),
+    "ts_std_if": ("time_series_condition", ["x", "condition", "window", "min_periods", "ddof"], ts_std_if, "滚动条件样本标准差（condition 须为 ConditionBool：{0,1}/NaN）"),
+    "ts_last_if": ("time_series_event", ["x", "condition", "window"], ts_last_if, "窗口内最近一次条件成立时的值（condition 须为 ConditionBool：{0,1}/NaN）"),
+    "ts_days_since": ("time_series_event", ["condition", "max_lookback"], ts_days_since, "距最近一次条件成立的交易行数（ConditionBool；未知事件态→NaN 且重置状态）"),
+    "ts_true_streak": ("time_series_event", ["condition"], ts_true_streak, "截至当前连续条件成立长度（ConditionBool；未知事件态→NaN 且重置计数）"),
     "cs_bucket": ("cross_sectional", ["x", "buckets", "ascending"], cs_bucket, "按交易日横截面平均排名分桶"),
     "cs_multi_resid": ("cross_sectional_regression", ["y", "x1", "x2", "...", "add_intercept", "min_obs"], cs_multi_resid, "多变量横截面 OLS 残差"),
     "cs_wls_resid": ("cross_sectional_regression", ["y", "x", "weight", "add_intercept", "min_obs"], cs_wls_resid, "加权横截面回归残差"),

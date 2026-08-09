@@ -49,6 +49,13 @@ def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadat
             f"signature:{','.join(params)}->series", "domain:intraday",
             "unit:level", "cost:6",
         ],
+        # R11 P0-04/05: minute -> daily shape-changing contract + EOD-only
+        # availability (the impact path h=1..H is future-looking within the
+        # session, so the output is only usable after session close).
+        input_grain="minute",
+        output_grain="daily",
+        available_at="session_close",
+        same_session_usable=False,
     )
 
 

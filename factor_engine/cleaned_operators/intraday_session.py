@@ -41,6 +41,7 @@ PCA subspace) emit NaN.
 """
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import numpy as np
@@ -50,6 +51,7 @@ from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, 
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
+_WARNED_NO_CALENDAR = False
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
@@ -112,28 +114,86 @@ def _validate_session_ids(sid_frame: pd.DataFrame) -> np.ndarray:
     return arr
 
 
-def _session_expected_grid(mods: np.ndarray, sid_col: np.ndarray) -> tuple[int, int | None]:
-    """Expected full-session width and official close minute for one column.
+def _hhmm_minute(value: str) -> int:
+    """Wall-clock ``"HH:MM"`` -> minute-of-day (``"15:00" -> 900``)."""
+    hour, minute = (int(part) for part in str(value).split(":"))
+    return hour * 60 + minute
 
-    ``expected_slots`` is the modal distinct-minute count across sessions.
-    ``official_close_mod`` is the common last minute-of-day shared by every full
-    session (``None`` when full sessions disagree, e.g. synthetic blocks).
+
+def _bar_width_minutes(mods: np.ndarray) -> int:
+    """Structural bar width in minutes (modal positive minute delta).
+
+    This is a data-RESOLUTION property (1-min vs 5-min bars), never a
+    completeness signal.  It is used only to convert the calendar's total
+    session minutes into the expected per-session BAR count.
     """
-    sessions: dict[int, set[int]] = {}
-    for i, sid in enumerate(sid_col):
-        if _valid_sid(sid):
-            sessions.setdefault(int(sid), set()).add(int(mods[i]))
-    if not sessions:
+    diffs = np.diff(mods)
+    diffs = diffs[diffs > 0]
+    if diffs.size == 0:
+        return 1
+    vals, counts = np.unique(diffs, return_counts=True)
+    return int(vals[int(np.argmax(counts))])
+
+
+def _official_grid(calendar: Any, mods: np.ndarray) -> tuple[int, int | None]:
+    """Official full-session grid derived from an EXPLICIT exchange calendar.
+
+    P0-10: the official session width and the official session close are NEVER
+    inferred from the observed minute data.  A dataset that systematically drops
+    the final bar of every session (239 bars instead of 240) must not be able to
+    re-define "official" — the modal-grid self-certification is removed.  The
+    calendar is a ``runtime.session_calendar.SessionCalendar`` (duck-typed:
+    ``segments`` of ``("HH:MM","HH:MM")``, ``timestamp_convention`` in
+    {``bar_start``, ``bar_end``}).
+
+    Returns ``(expected_slots, official_close_mod)``:
+    * ``expected_slots`` — the calendar's per-session bar count at the data's
+      structural bar width;
+    * ``official_close_mod`` — the minute-of-day of the final session bar's
+      label (``stop - 1`` under ``bar_start``, ``stop`` under ``bar_end``).
+    """
+    segments = list(getattr(calendar, "segments", None) or ())
+    if not segments:
+        raise ValueError("calendar must define non-empty session segments")
+    total_minutes = 0
+    for start_text, stop_text in segments:
+        total_minutes += _hhmm_minute(stop_text) - _hhmm_minute(start_text)
+    if total_minutes <= 0:
+        raise ValueError("calendar segments must be increasing intervals")
+    convention = str(getattr(calendar, "timestamp_convention", "bar_end")).lower()
+    if convention not in {"bar_start", "bar_end"}:
+        raise ValueError("calendar timestamp_convention must be bar_start or bar_end")
+    width = _bar_width_minutes(mods)
+    expected_slots = int(np.ceil(total_minutes / max(1, width)))
+    stop = _hhmm_minute(segments[-1][1])
+    close_mod = stop - 1 if convention == "bar_start" else stop
+    return expected_slots, close_mod
+
+
+def _resolve_official_grid(calendar: Any, mods: np.ndarray) -> tuple[int, int | None]:
+    """Grid authority with fail-closed semantics (P0-10).
+
+    With an explicit calendar the official grid comes from the calendar and
+    NEVER from the observed data.  Without a calendar the official grid is
+    UNKNOWN — no session can be judged ``completed`` (``expected_slots=0`` makes
+    every candidate partial), so the operator emits NaN everywhere instead of
+    self-certifying completeness from a modal grid.
+    """
+    global _WARNED_NO_CALENDAR
+    if calendar is None:
+        if not _WARNED_NO_CALENDAR:
+            _WARNED_NO_CALENDAR = True
+            warnings.warn(
+                "intraday session operators require an explicit `calendar` "
+                "(runtime.session_calendar.SessionCalendar).  Without one the "
+                "official session grid is UNKNOWN and no session is judged "
+                "completed (all NaN); the grid is never inferred from observed "
+                "data (P0-10).",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         return 0, None
-    counts: dict[int, int] = {}
-    for s in sessions.values():
-        counts[len(s)] = counts.get(len(s), 0) + 1
-    expected = max(counts.items(), key=lambda kv: (kv[1], kv[0]))[0]
-    full_last = [max(s) for s in sessions.values() if len(s) == expected]
-    close_mod: int | None = (
-        full_last[0] if full_last and all(m == full_last[0] for m in full_last) else None
-    )
-    return expected, close_mod
+    return _official_grid(calendar, mods)
 
 
 def _session_runs(
@@ -238,15 +298,16 @@ def _shape_novelty_series(
     mods: np.ndarray,
     history_days: int,
     min_history_sessions: int,
+    expected_slots: int,
+    official_close_mod: int | None,
 ) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     hd = int(history_days)
     mhs = max(1, int(min_history_sessions))
     for c in range(cols):
-        expected, close_mod = _session_expected_grid(mods, sid2d[:, c])
-        n_nodes = max(2, expected)
-        runs = _session_runs(x2d[:, c], sid2d[:, c], mods, expected, close_mod)
+        n_nodes = max(2, expected_slots)
+        runs = _session_runs(x2d[:, c], sid2d[:, c], mods, expected_slots, official_close_mod)
         for i, run in enumerate(runs):
             if not run["completed"]:
                 continue  # partial session never emits a full-session factor (R11 #68)
@@ -279,6 +340,8 @@ def _pca_residual_series(
     history_days: int,
     n_components: int,
     min_history_sessions: int,
+    expected_slots: int,
+    official_close_mod: int | None,
 ) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -286,9 +349,8 @@ def _pca_residual_series(
     nc = int(n_components)
     mhs = max(1, int(min_history_sessions))
     for c in range(cols):
-        expected, close_mod = _session_expected_grid(mods, sid2d[:, c])
-        n_nodes = max(2, expected)
-        runs = _session_runs(x2d[:, c], sid2d[:, c], mods, expected, close_mod)
+        n_nodes = max(2, expected_slots)
+        runs = _session_runs(x2d[:, c], sid2d[:, c], mods, expected_slots, official_close_mod)
         for i, run in enumerate(runs):
             if not run["completed"]:
                 continue
@@ -345,7 +407,7 @@ class IntradaySessionShapeNovelty(SeriesOperator):
     metadata = _metadata(
         "intraday_session_shape_novelty",
         "当前 session 标准化分时形态到最近历史 session 形态的欧氏距离。",
-        ["x", "session_id", "history_days", "min_history_sessions"],
+        ["x", "session_id", "history_days", "min_history_sessions", "calendar"],
         unit="ratio",
         cost=7,
     )
@@ -361,12 +423,16 @@ class IntradaySessionShapeNovelty(SeriesOperator):
         session_id: pd.DataFrame,
         history_days: int = 20,
         min_history_sessions: int = 5,
+        calendar: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
         sid_arr = _validate_session_ids(session_id)
         mods = _minute_of_day(x.index.to_numpy(dtype="datetime64[ns]"))
+        # P0-10: official grid from the explicit exchange calendar, never modal.
+        expected, close_mod = _resolve_official_grid(calendar, mods)
         arr = _shape_novelty_series(
             x.to_numpy(dtype=float), sid_arr, mods, history_days, min_history_sessions,
+            expected, close_mod,
         )
         return frame_like(x, arr)
 
@@ -390,7 +456,7 @@ class IntradayProfilePcaResidual(SeriesOperator):
     metadata = _metadata(
         "intraday_profile_pca_residual",
         "当前 session 形态相对历史 PCA 主成分重建的归一化残差。",
-        ["x", "session_id", "history_days", "n_components", "min_history_sessions"],
+        ["x", "session_id", "history_days", "n_components", "min_history_sessions", "calendar"],
         unit="ratio",
         cost=8,
     )
@@ -407,13 +473,17 @@ class IntradayProfilePcaResidual(SeriesOperator):
         history_days: int = 20,
         n_components: int = 3,
         min_history_sessions: int = 5,
+        calendar: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
         sid_arr = _validate_session_ids(session_id)
         mods = _minute_of_day(x.index.to_numpy(dtype="datetime64[ns]"))
+        # P0-10: official grid from the explicit exchange calendar, never modal.
+        expected, close_mod = _resolve_official_grid(calendar, mods)
         arr = _pca_residual_series(
             x.to_numpy(dtype=float), sid_arr, mods,
             history_days, n_components, min_history_sessions,
+            expected, close_mod,
         )
         return frame_like(x, arr)
 
@@ -432,4 +502,25 @@ def _register_surface() -> None:
         register_polars_bridge(_canon)
 
 
+def _declare_stateful_contracts() -> None:
+    """R11 #71: ``history_days`` is a SESSION-count history, not a bar warmup.
+
+    Declare the session-clock history contract so ``history_requirement()``
+    reports ``HistoryRequirement(kind='session_count')`` instead of guessing a
+    daily/minute-bar warmup from the parameter name.
+    """
+    from runtime.execution_contract import declare_stateful
+
+    for _canon in _NEW_CANONICALS:
+        declare_stateful(
+            _canon,
+            state_model="session_state",
+            chunking="required_full_history",
+            minimum_history=5,
+            history_kind="session_count",
+            history_count=20,
+        )
+
+
 _register_surface()
+_declare_stateful_contracts()

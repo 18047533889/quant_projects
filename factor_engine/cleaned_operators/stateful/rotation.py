@@ -315,18 +315,21 @@ class CsRankCompositionChurn(SeriesOperator):
                 inter = float(np.sum(cur & prev))
                 out[r] = (union - inter) / union
             else:
-                labels = {v for v in g_row if _valid_label(v)}
+                g_prev = gv[r - lk]
+                labels = ({v for v in g_row if _valid_label(v)}
+                          | {v for v in g_prev if _valid_label(v)})
                 for lab in labels:
-                    mask = (g_row == lab) & (gv[r - lk] == lab)
-                    if not np.any(mask):
-                        continue
-                    cur = np.isfinite(xv[r][mask])
-                    prev = np.isfinite(xv[r - lk][mask])
-                    union = float(np.sum(cur | prev))
+                    # R11 #153: native-date membership sets — A_cur / A_prev are
+                    # the finite-observable names of lab on each date over the
+                    # FULL columns (not an intersection), so a genuine A->B move
+                    # registers as an A exit / B entry instead of being dropped.
+                    cur_members = (g_row == lab) & np.isfinite(xv[r])
+                    prev_members = (g_prev == lab) & np.isfinite(xv[r - lk])
+                    union = float(np.sum(cur_members | prev_members))
                     if union <= _EPS:
                         continue
-                    inter = float(np.sum(cur & prev))
-                    out[r][mask] = (union - inter) / union
+                    inter = float(np.sum(cur_members & prev_members))
+                    out[r][g_row == lab] = (union - inter) / union
         return frame_like(x, out)
 
 
@@ -437,22 +440,42 @@ class CsTailRetention(SeriesOperator):
                 if den > _EPS:
                     out[r] = num / den
             else:
-                labels = {v for v in g_row if _valid_label(v)}
+                g_prev = gv[r - lk]
+                labels = ({v for v in g_row if _valid_label(v)}
+                          | {v for v in g_prev if _valid_label(v)})
                 for lab in labels:
-                    # P0-012: cohort-consistent tail sets — a stock in today's
-                    # group B whose lagged tail was computed inside group A must
-                    # not enter B's historical tail retention.
-                    mask = (g_row == lab) & (gv[r - lk] == lab)
-                    if not np.any(mask):
+                    # P0-012: native-date tail cohorts — each date's tail is
+                    # defined over the FULL group cohort on that date (a stock
+                    # in group A's lagged tail that moved A->B must not
+                    # retroactively alter A's lagged tail; it is a retention
+                    # miss for A, not a redefinition).  Weights are aligned to
+                    # the full column vector and NaN for stocks outside the
+                    # label on that date, so they cannot enter the overlap.
+                    cur_members = g_row == lab
+                    prev_members = g_prev == lab
+                    if not (np.any(cur_members) or np.any(prev_members)):
                         continue
-                    cur_vals = xv[r][mask]
-                    prev_vals = xv[r - lk][mask]
-                    w_cur = _exact_tail_weights(cur_vals, q, top)
-                    w_prev = _exact_tail_weights(prev_vals, q, top)
-                    num = float(np.sum(np.minimum(w_prev, w_cur)))
-                    den = _cohort_denominator(w_prev, w_cur, np.isfinite(cur_vals), cohort_s)
+                    w_prev = np.full(cols, np.nan)
+                    w_cur = np.full(cols, np.nan)
+                    if np.any(prev_members):
+                        w_prev[prev_members] = _exact_tail_weights(
+                            xv[r - lk][prev_members], q, top
+                        )
+                    if np.any(cur_members):
+                        w_cur[cur_members] = _exact_tail_weights(
+                            xv[r][cur_members], q, top
+                        )
+                    overlap = np.isfinite(w_prev) & np.isfinite(w_cur)
+                    num = float(np.sum(np.minimum(w_prev[overlap], w_cur[overlap])))
+                    if cohort_s == "intersection":
+                        obs = np.isfinite(xv[r]) & prev_members
+                        den = float(np.sum(np.where(obs, w_prev, 0.0)))
+                    elif cohort_s == "historical":
+                        den = float(np.sum(w_prev[np.isfinite(w_prev)]))
+                    else:
+                        den = float(np.sum(w_cur[np.isfinite(w_cur)]))
                     if den > _EPS:
-                        out[r][mask] = num / den
+                        out[r][cur_members] = num / den
         return frame_like(x, out)
 
 

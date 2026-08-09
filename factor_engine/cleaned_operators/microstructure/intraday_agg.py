@@ -16,8 +16,9 @@ Contract
   they remain ``SOURCE_BLOCKED_CANONICALS`` and are excluded from production
   targets (see ``production_hardening``).
 
-Segment convention (A-share default): morning 09:30--11:30, afternoon
-13:00--15:00, expressed in minute-of-day as [570, 690] and [780, 900].
+Segment convention (A-share default): morning 09:31--11:30, afternoon
+13:01--15:00, expressed in minute-of-day as [571, 690] and [781, 900] —
+240 bars total, matching DataAccess's unified A-share 1-minute session.
 """
 from __future__ import annotations
 
@@ -30,8 +31,8 @@ import pandas as pd
 from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 
 _EPS = 1e-12
-_MORNING = (570, 690)   # 09:30 .. 11:30
-_AFTERNOON = (780, 900) # 13:00 .. 15:00
+_MORNING = (571, 690)   # 09:31 .. 11:30 (A-share 240-bar session, matches DataAccess)
+_AFTERNOON = (781, 900) # 13:01 .. 15:00
 _SEGMENT_RANGES = {"morning": _MORNING, "afternoon": _AFTERNOON}
 
 
@@ -47,6 +48,12 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
             "typed_v2", "source_blocked",
             f"signature:{','.join(params)}->series", f"unit:{unit}", "cost:1",
         ],
+        # R11 P0-04/05: minute -> daily shape-changing contract + EOD-only
+        # availability, machine-readable (not docstring text).
+        input_grain="minute",
+        output_grain="daily",
+        available_at="session_close",
+        same_session_usable=False,
     )
 
 
@@ -166,7 +173,7 @@ def _session_local(frame: pd.DataFrame, tz: str | None = None) -> pd.DataFrame:
     """Convert a tz-aware index to session wall-clock (naive) for minute-of-day math.
 
     A-share COS minute data is stored in UTC; the A-share session segments
-    (09:30--11:30 / 13:00--15:00) are defined in Asia/Shanghai wall-clock time.
+    (09:31--11:30 / 13:01--15:00) are defined in Asia/Shanghai wall-clock time.
     Naive indexes are assumed to already be in session wall-clock time.
     """
     frame = _as_panel(frame)
@@ -879,7 +886,7 @@ class IntraLunchGapReturn(SeriesOperator):
         "session_tz": ParamSpec(dtype=str, searchable=False),
     }
 
-    def _calculate_series(self, close, open_px, morning_cutoff="11:30", afternoon_start="13:00", session_tz=None, **_):
+    def _calculate_series(self, close, open_px, morning_cutoff="11:30", afternoon_start="13:01", session_tz=None, **_):
         frame = _session_local(close, session_tz)
         opn = _session_local(open_px, session_tz)
         out = {}

@@ -24,11 +24,7 @@ import pandas as pd
 import pytest
 
 from cleaned_operators import OperatorRegistry, load_all
-from cleaned_operators.common._pivot_ledger import (
-    PEAK,
-    TROUGH,
-    confirmed_pivot_events,
-)
+from cleaned_operators.common._pivot_ledger import PEAK, confirmed_pivot_events
 
 
 # ---------------------------------------------------------------------------

@@ -290,6 +290,7 @@ class ParquetMaterializer:
                     ast_hash=ast_hash,
                     data_source_config=data_source_config,
                     run_lineage=run_lineage,
+                    frequency=frequency,
                 )
             except Exception:  # pragma: no cover - 身份不可得 → 无指纹 → production 重算
                 logger.debug(

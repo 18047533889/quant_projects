@@ -684,9 +684,9 @@ _mk(
 _mk(
     "ts_extremal_index",
     "极值指数 θ = 簇数/超阈次数（Polars）。",
-    ["x", "window", "side", "q", "min_exceed"],
-    lambda frame, window=120, side="upper", q=0.9, min_exceed=3: _single_kernel(
-        frame, lambda s: _extremal_index_series(s, window, side, q, min_exceed)
+    ["x", "window", "side", "q", "min_exceed", "run_length"],
+    lambda frame, window=120, side="upper", q=0.9, min_exceed=3, run_length=1: _single_kernel(
+        frame, lambda s: _extremal_index_series(s, window, side, q, min_exceed, run_length)
     ),
 )
 _mk(

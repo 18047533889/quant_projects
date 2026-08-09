@@ -180,6 +180,16 @@ class HistoryRequirement:
     #                       # event_count | report_count | session_count
     rows: int = 2
     count: int | None = None  # event/report/session observation count (event-clock kinds)
+    # R11 P1-13: the exact lookback FORMULA as a recoverable expression, e.g.
+    # ``"window - 1 + lag"`` with ``semantics="exact_rows"``.  The catalog's
+    # legacy ``parameters=["window", "lag"]`` only names the involved params; it
+    # cannot independently recover the true warm-up rows the planner/evidence/
+    # incremental runtime must use.  ``expression`` is the authoritative formula,
+    # ``semantics`` describes how it maps to rows (``exact_rows`` /
+    # ``parameterized_rows`` / ``event_count`` / ``full_history``).  ``None``
+    # means the ``rows`` floor is authoritative and no formula is declared.
+    expression: str | None = None
+    semantics: str | None = None  # exact_rows | parameterized_rows | event_count | full_history
 
     @property
     def is_full_history(self) -> bool:
@@ -432,13 +442,40 @@ def _as_row_count(value: Any) -> int | None:
     return None
 
 
+def _kernel_signature_default(canonical: str, name: str) -> int | None:
+    """Default for an unbound parameter from the operator's real kernel signature
+    (P0-04).
+
+    ``def op(x, window=120)``: when ``window`` is omitted the REAL runtime value
+    is 120 — that must be what the history layer assumes, NOT ``ParamSpec.min``
+    (a validity-domain boundary, never a runtime default).  Uses
+    ``cleaned_operators.base._kernel_param_defaults`` so ``register_dual``
+    bridges resolve through their ``_fn`` kernel.  ``None`` when the signature
+    has no default for ``name`` or the operator cannot be inspected.
+    """
+    try:
+        from cleaned_operators.base import _kernel_param_defaults
+        from cleaned_operators.registry import OperatorRegistry
+
+        op = OperatorRegistry.get(canonical)
+        if op is None:
+            return None
+        defaults = _kernel_param_defaults(op)
+        if name not in defaults:
+            return None
+        return _as_row_count(defaults[name])
+    except Exception:
+        return None
+
+
 def _bound_param(
     params: Mapping[str, Any],
     name: str,
     specs: Mapping[str, Any],
+    canonical: str = "",
 ) -> int | object | None:
     """Resolve one parameter to a positive int row count, else its declared
-    ParamSpec default/min, else None.
+    default, else the kernel signature default, else None.
 
     R9-P0-004: the history layer is a CONSUMER of already-validated bound
     params — it must never coerce a value itself.  Returns:
@@ -446,7 +483,8 @@ def _bound_param(
       * ``_UNKNOWN`` — the param is BOUND but not an integral row count (e.g.
         ``window=5.9``).  This is UNKNOWN history; the caller must treat it
         conservatively as full history instead of truncating to 5.
-      * ``None`` — param not bound and no usable declared default/min.
+      * ``None`` — param not bound and no usable default (P0-04: ``ParamSpec.min``
+        is a legal-domain boundary, NEVER a runtime default, so it is not used).
     """
     if name in params and params.get(name) is not None:
         value = params[name]
@@ -457,12 +495,15 @@ def _bound_param(
         return _UNKNOWN
     spec = specs.get(name)
     if spec is not None:
-        for candidate in (getattr(spec, "default", None), getattr(spec, "min", None)):
-            if candidate is None or isinstance(candidate, bool):
-                continue
+        candidate = getattr(spec, "default", None)
+        if candidate is not None and not isinstance(candidate, bool):
             resolved = _as_row_count(candidate)
             if resolved is not None:
                 return resolved
+    if canonical:
+        resolved = _kernel_signature_default(canonical, name)
+        if resolved is not None:
+            return resolved
     return None
 
 
@@ -473,10 +514,10 @@ def _specs(canonical: str) -> Mapping[str, Any]:
     return getattr(meta, "param_specs", None) or {}
 
 
-def _w1(params: Mapping[str, Any], specs: Mapping[str, Any], name: str, default: int = 0) -> int | object:
+def _w1(params: Mapping[str, Any], specs: Mapping[str, Any], name: str, default: int = 0, *, canonical: str = "") -> int | object:
     """Contribution ``max(0, bound - 1)`` for a window param; ``_UNKNOWN``
     propagates (a fractional bound value is unknown history)."""
-    value = _bound_param(params, name, specs)
+    value = _bound_param(params, name, specs, canonical=canonical)
     if value is _UNKNOWN:
         return _UNKNOWN
     if value is None:
@@ -484,9 +525,9 @@ def _w1(params: Mapping[str, Any], specs: Mapping[str, Any], name: str, default:
     return max(0, value - 1)
 
 
-def _w0(params: Mapping[str, Any], specs: Mapping[str, Any], name: str, default: int = 0) -> int | object:
+def _w0(params: Mapping[str, Any], specs: Mapping[str, Any], name: str, default: int = 0, *, canonical: str = "") -> int | object:
     """Contribution of a raw window/lag value; ``_UNKNOWN`` propagates."""
-    value = _bound_param(params, name, specs)
+    value = _bound_param(params, name, specs, canonical=canonical)
     if value is _UNKNOWN:
         return _UNKNOWN
     if value is None:
@@ -497,9 +538,9 @@ def _w0(params: Mapping[str, Any], specs: Mapping[str, Any], name: str, default:
 # --- compound history-extension formulas (mirror ``ir.analyzer``) ------------
 def _macd_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    fast = _bound_param(params, "fast", specs)
-    slow = _bound_param(params, "slow", specs)
-    signal = _bound_param(params, "signal", specs)
+    fast = _bound_param(params, "fast", specs, canonical=canonical)
+    slow = _bound_param(params, "slow", specs, canonical=canonical)
+    signal = _bound_param(params, "signal", specs, canonical=canonical)
     if _UNKNOWN in (fast, slow, signal):
         return _UNKNOWN
     fast = fast or 12
@@ -510,8 +551,8 @@ def _macd_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
 
 def _ppo_pvo_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    slow = _w1(params, specs, "slow_window")
-    signal = _w1(params, specs, "signal_window")
+    slow = _w1(params, specs, "slow_window", canonical=canonical)
+    signal = _w1(params, specs, "signal_window", canonical=canonical)
     if _UNKNOWN in (slow, signal):
         return _UNKNOWN
     return slow + signal
@@ -519,9 +560,9 @@ def _ppo_pvo_extension(canonical: str, params: Mapping[str, Any]) -> int | objec
 
 def _tsi_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    long_w = _w1(params, specs, "long_window")
-    short_w = _w1(params, specs, "short_window")
-    signal_w = _w1(params, specs, "signal_window")
+    long_w = _w1(params, specs, "long_window", canonical=canonical)
+    short_w = _w1(params, specs, "short_window", canonical=canonical)
+    signal_w = _w1(params, specs, "signal_window", canonical=canonical)
     if _UNKNOWN in (long_w, short_w, signal_w):
         return _UNKNOWN
     return long_w + short_w + signal_w
@@ -529,7 +570,7 @@ def _tsi_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
 
 def _dema_tema_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    window = _bound_param(params, "window", specs)
+    window = _bound_param(params, "window", specs, canonical=canonical)
     if window is _UNKNOWN:
         return _UNKNOWN
     multiplier = 3 if canonical == "TEMA" else 2
@@ -540,7 +581,7 @@ def _ichimoku_extension(canonical: str, params: Mapping[str, Any]) -> int | obje
     specs = _specs(canonical)
     parts = []
     for name in ("tenkan_window", "kijun_window", "senkou_b_window"):
-        value = _bound_param(params, name, specs)
+        value = _bound_param(params, name, specs, canonical=canonical)
         if value is _UNKNOWN:
             return _UNKNOWN
         parts.append(max(0, (value or 1) - 1))
@@ -550,8 +591,8 @@ def _ichimoku_extension(canonical: str, params: Mapping[str, Any]) -> int | obje
 def _window_plus_lag_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     """``(window - 1) + lag`` for autocorr / regression / event kernels."""
     specs = _specs(canonical)
-    w = _w1(params, specs, "window")
-    lag = _w0(params, specs, "lag")
+    w = _w1(params, specs, "window", canonical=canonical)
+    lag = _w0(params, specs, "lag", canonical=canonical)
     if _UNKNOWN in (w, lag):
         return _UNKNOWN
     return w + lag
@@ -559,8 +600,8 @@ def _window_plus_lag_extension(canonical: str, params: Mapping[str, Any]) -> int
 
 def _event_response_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    w = _w1(params, specs, "history_window")
-    horizon = _w0(params, specs, "horizon")
+    w = _w1(params, specs, "history_window", canonical=canonical)
+    horizon = _w0(params, specs, "horizon", canonical=canonical)
     if _UNKNOWN in (w, horizon):
         return _UNKNOWN
     return w + horizon
@@ -568,7 +609,7 @@ def _event_response_extension(canonical: str, params: Mapping[str, Any]) -> int 
 
 def _stochastic_d_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    window = _bound_param(params, "window", specs)
+    window = _bound_param(params, "window", specs, canonical=canonical)
     if window is _UNKNOWN:
         return _UNKNOWN
     return (window or 0) + 1
@@ -576,7 +617,7 @@ def _stochastic_d_extension(canonical: str, params: Mapping[str, Any]) -> int | 
 
 def _ulcer_index_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    window = _bound_param(params, "window", specs)
+    window = _bound_param(params, "window", specs, canonical=canonical)
     if window is _UNKNOWN:
         return _UNKNOWN
     return 2 * max(0, (window or 1) - 1)
@@ -584,8 +625,8 @@ def _ulcer_index_extension(canonical: str, params: Mapping[str, Any]) -> int | o
 
 def _candlestick_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    body = _bound_param(params, "body_window", specs)
-    shadow = _bound_param(params, "shadow_window", specs)
+    body = _bound_param(params, "body_window", specs, canonical=canonical)
+    shadow = _bound_param(params, "shadow_window", specs, canonical=canonical)
     if _UNKNOWN in (body, shadow):
         return _UNKNOWN
     return max(body or 1, shadow or 1) + 4
@@ -593,8 +634,8 @@ def _candlestick_extension(canonical: str, params: Mapping[str, Any]) -> int | o
 
 def _sum_two_extension(canonical: str, params: Mapping[str, Any], n1: str, n2: str) -> int | object:
     specs = _specs(canonical)
-    a = _w0(params, specs, n1)
-    b = _w0(params, specs, n2)
+    a = _w0(params, specs, n1, canonical=canonical)
+    b = _w0(params, specs, n2, canonical=canonical)
     if _UNKNOWN in (a, b):
         return _UNKNOWN
     return a + b
@@ -614,8 +655,8 @@ def _cup_handle_extension(canonical: str, params: Mapping[str, Any]) -> int | ob
 
 def _retest_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    w = _w0(params, specs, "window")
-    wait = _w0(params, specs, "max_wait")
+    w = _w0(params, specs, "window", canonical=canonical)
+    wait = _w0(params, specs, "max_wait", canonical=canonical)
     if _UNKNOWN in (w, wait):
         return _UNKNOWN
     return w + wait
@@ -623,8 +664,8 @@ def _retest_extension(canonical: str, params: Mapping[str, Any]) -> int | object
 
 def _impulse_volume_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    w = _w0(params, specs, "window")
-    base = _w0(params, specs, "baseline_window")
+    w = _w0(params, specs, "window", canonical=canonical)
+    base = _w0(params, specs, "baseline_window", canonical=canonical)
     if _UNKNOWN in (w, base):
         return _UNKNOWN
     return w + base
@@ -632,10 +673,10 @@ def _impulse_volume_extension(canonical: str, params: Mapping[str, Any]) -> int 
 
 def _channel_width_slope_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
-    h = _w1(params, specs, "history_window")
-    left = _w0(params, specs, "left_window")
-    right = _w0(params, specs, "right_window")
-    w = _w1(params, specs, "window")
+    h = _w1(params, specs, "history_window", canonical=canonical)
+    left = _w0(params, specs, "left_window", canonical=canonical)
+    right = _w0(params, specs, "right_window", canonical=canonical)
+    w = _w1(params, specs, "window", canonical=canonical)
     if _UNKNOWN in (h, left, right, w):
         return _UNKNOWN
     return h + left + right + w
@@ -731,7 +772,7 @@ def _nested_pca_resid_extension(canonical: str, params: Mapping[str, Any]) -> in
     ``window`` param would underestimate the warm-up by half.
     """
     specs = _specs(canonical)
-    w = _bound_param(params, "window", specs)
+    w = _bound_param(params, "window", specs, canonical=canonical)
     if w is _UNKNOWN:
         return _UNKNOWN
     if w is None:
@@ -741,6 +782,107 @@ def _nested_pca_resid_extension(canonical: str, params: Mapping[str, Any]) -> in
 
 for _canon in ("panel_rolling_pca_resid_vol", "panel_rolling_pca_resid_momentum"):
     _HISTORY_TRANSFORMS[_canon] = _compound_transform(_nested_pca_resid_extension)
+
+# Report-period operators: their warm-up is a DATA-DRIVEN fiscal-event lookback
+# (a report-period calendar), never a bar-window guess.  Ported from the
+# analyzer's ``_financial_lookback`` so the history layer is the single
+# authority (P0-03): production with an unavailable fiscal calendar fails
+# closed (conservative full history) instead of silently under-allocating.
+_FIN_REPORT_PERIOD_CANONICALS = frozenset({
+    "fin_lag", "fin_diff", "fin_pct_change", "fin_log_change", "fin_qoq",
+    "fin_yoy", "fin_ttm", "fin_ttm_quarterly", "fin_quarter_from_cumulative",
+    "fin_ttm_cumulative", "fin_average_balance", "fin_growth", "fin_cagr",
+    "fin_growth_acceleration", "fin_growth_change", "fin_growth_volatility",
+    "fin_growth_stability", "fin_growth_persistence", "fin_std", "fin_mad",
+    "fin_cv", "fin_stability", "fin_range", "fin_zscore_history",
+    "fin_percentile_history", "fin_trend_slope", "fin_trend_r2",
+    "fin_trend_tstat", "fin_trend_acceleration", "fin_monotonicity",
+    "fin_positive_streak", "fin_negative_streak", "fin_sign_change_count",
+    "fin_turnover", "fin_divergence", "fin_working_capital_change",
+    "fin_beat_streak", "fin_miss_streak",
+})
+
+
+def _report_period_count(canonical: str, params: Mapping[str, Any]) -> int:
+    """Number of report periods a fin_* operator traverses (mirrors the
+    analyzer's ``_report_period_count``; the warm-up must span them)."""
+    def value(name: str, default: int = 0) -> int:
+        raw = params.get(name)
+        if isinstance(raw, bool):
+            return default
+        try:
+            parsed = int(raw)
+        except (TypeError, ValueError):
+            return default
+        return parsed if parsed > 0 else default
+
+    if canonical == "fin_growth_change":
+        return value("growth_periods", 4) + value("compare_periods", 1)
+    if canonical in {
+        "fin_growth_volatility", "fin_growth_stability", "fin_growth_persistence",
+    }:
+        return value("growth_periods", 1) + value("window_periods", 8)
+    if canonical == "fin_trend_acceleration":
+        return max(value("short_periods", 4), value("long_periods", 8))
+    if canonical == "fin_turnover":
+        return value("average_periods", 2)
+    if canonical in {"fin_positive_streak", "fin_negative_streak", "fin_beat_streak", "fin_miss_streak"}:
+        return value("max_periods", 8)
+    if canonical in {"fin_yoy", "fin_ttm", "fin_ttm_quarterly", "fin_ttm_cumulative"}:
+        return value("periods_per_year", 4)
+    if canonical == "fin_quarter_from_cumulative":
+        return 2
+    return max(
+        1, value("periods"), value("window_periods"), value("average_periods"),
+        value("long_periods"), value("max_periods"),
+    )
+
+
+def _financial_report_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
+    """Data-driven fiscal-event lookback for report-period operators (P0-03).
+
+    Prefers the active financial source's period calendar; a missing/errored
+    source or period calendar is UNKNOWN history (conservative).  The
+    production fail-closed / research heuristic split happens in
+    ``history_requirement`` / ``own_history_requirement`` — NEVER a silent
+    80-rows/period heuristic inside the single-authority path for production.
+    """
+    n_events = _report_period_count(canonical, params)
+    try:
+        from backend.financial_semantics import (
+            fiscal_event_lookback,
+            get_active_financial_source,
+        )
+
+        data_driven = fiscal_event_lookback(get_active_financial_source(), None, n_events)
+    except Exception:
+        data_driven = None
+    if data_driven is not None:
+        try:
+            return max(0, int(data_driven))
+        except (TypeError, ValueError):
+            return _UNKNOWN
+    return _UNKNOWN
+
+
+def _financial_research_heuristic(
+    canonical: str, params: Mapping[str, Any]
+) -> int:
+    """Research-only fallback: 80 trading rows per report period (explicit,
+    never silent — production must fail closed instead)."""
+    import os
+
+    try:
+        rows_per_period = (
+            int(os.environ.get("FACTOR_ENGINE_REPORT_PERIOD_LOOKBACK_ROWS", "80")) or 80
+        )
+    except ValueError:
+        rows_per_period = 80
+    return max(1, rows_per_period) * max(1, _report_period_count(canonical, params))
+
+
+for _canon in _FIN_REPORT_PERIOD_CANONICALS:
+    _HISTORY_TRANSFORMS[_canon] = _compound_transform(_financial_report_extension)
 
 
 def _apply_transform(
@@ -756,7 +898,7 @@ def _apply_transform(
         specs = _specs(canonical)
         best = 0
         for name in transform.params:
-            value = _bound_param(params, name, specs)
+            value = _bound_param(params, name, specs, canonical=canonical)
             if value is _UNKNOWN:
                 return _UNKNOWN
             if value is not None:
@@ -766,7 +908,7 @@ def _apply_transform(
         specs = _specs(canonical)
         best = 0
         for name in transform.params:
-            value = _bound_param(params, name, specs)
+            value = _bound_param(params, name, specs, canonical=canonical)
             if value is _UNKNOWN:
                 return _UNKNOWN
             if value is not None:
@@ -795,7 +937,7 @@ def _default_window_extension(canonical: str, params: Mapping[str, Any]) -> int 
     for name in param_names:
         if name not in _WINDOW_LIKE_PARAM_NAMES:
             continue
-        value = _bound_param(params, name, specs)
+        value = _bound_param(params, name, specs, canonical=canonical)
         if value is _UNKNOWN:
             return _UNKNOWN
         if value is not None:
@@ -846,7 +988,7 @@ def _declared_history_extension(
             continue
         if sem not in {"exact_rows", "max_rows", "finite_observations", "trailing_contiguous"}:
             continue
-        value = _bound_param(params, name, specs)
+        value = _bound_param(params, name, specs, canonical=canonical)
         if value is _UNKNOWN:
             return _UNKNOWN
         if value is None:
@@ -911,6 +1053,102 @@ def _own_history_extension(canonical: str, params: Mapping[str, Any]) -> int | o
     return _default_window_extension(canonical, params)
 
 
+# ---------------------------------------------------------------------------
+# P0-01 forward impact: how many FUTURE output bars a single changed input bar
+# affects.  This is the second half of the temporal dependency —
+# ``input[t]`` changes -> output in ``[t, t + forward_impact]`` (the scheduler
+# then expands BACKWARD history for that output window).  For most finite
+# operators forward impact equals backward history (``ts_mean(w)`` reads W rows,
+# so a change at ``t`` reaches output ``t..t+W-1``).  Recursive / stateful /
+# event-clock operators are UNBOUNDED: a change propagates to the end of the
+# series.  ``forward_impact()`` returns ``None`` for unbounded.
+# ---------------------------------------------------------------------------
+_UNBOUNDED_FORWARD = object()
+
+
+def _event_response_forward_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
+    """Forward impact of an event-response kernel = the response ``horizon``
+    only (the event at ``t`` is answered over the NEXT ``horizon`` bars; the
+    backward ``history_window`` is warm-up, not forward reach)."""
+    specs = _specs(canonical)
+    horizon = _w0(params, specs, "horizon", canonical=canonical)
+    if horizon is _UNKNOWN:
+        return _UNKNOWN
+    return max(0, int(horizon or 0))
+
+
+_FORWARD_IMPACT_FNS: dict[str, Any] = {
+    "event_historical_response_mean": _event_response_forward_extension,
+    "event_historical_response_sign_balance": _event_response_forward_extension,
+}
+
+
+def _own_forward_impact(canonical: str, params: Mapping[str, Any]) -> int | object:
+    """One node's own forward impact; ``_UNBOUNDED_FORWARD`` when a change
+    propagates to the end of the series (recursive / stateful / event-clock /
+    unresolvable window)."""
+    contract = execution_contract(canonical)
+    if contract.requires_full_history or contract.state_model != "stateless":
+        return _UNBOUNDED_FORWARD
+    fn = _FORWARD_IMPACT_FNS.get(canonical)
+    if fn is not None:
+        result = fn(canonical, params or {})
+        return _UNBOUNDED_FORWARD if result is _UNKNOWN else result
+    ext = _own_history_extension(canonical, params or {})
+    if ext is _UNKNOWN:
+        return _UNBOUNDED_FORWARD
+    return ext
+
+
+def forward_impact(
+    canonical: str,
+    params: Mapping[str, Any] | None = None,
+    *,
+    production: bool = False,
+) -> int | None:
+    """Finite future-bar impact of one changed input bar on this operator's
+    output; ``None`` = unbounded (the change reaches every later output)."""
+    resolved = _resolve(canonical, strict=production)
+    contract = execution_contract(resolved, production=production)
+    if contract.requires_full_history or contract.state_model != "stateless":
+        return None
+    ext = _own_forward_impact(resolved, params or {})
+    if ext is _UNKNOWN or ext is _UNBOUNDED_FORWARD:
+        return None
+    return max(0, int(ext))
+
+
+def factor_forward_impact(ir: Any | None) -> int | None:
+    """Combined forward impact of a whole factor IR (P0-01).
+
+    Composes along DAG paths like ``factor_history_requirement``:
+    ``F(node) = own_forward(node) + max(F(children))`` — ``ts_delay(ts_mean(x,20),5)``
+    reaches ``19 + 5 = 24`` future bars.  A single unbounded node (recursive /
+    stateful / event-clock) makes the whole factor unbounded (``None``).
+    """
+    if ir is None:
+        return 0
+
+    def walk(node: Any) -> int | None:
+        if node is None:
+            return 0
+        children = tuple(getattr(node, "inputs", ()) or ())
+        child_impacts = [walk(child) for child in children]
+        if any(impact is None for impact in child_impacts):
+            return None
+        child_max = max(child_impacts, default=0)
+        op = getattr(node, "op", None)
+        if not op:
+            # Column / literal / opaque node: no forward reach of its own.
+            return child_max
+        own = forward_impact(str(op), _node_params(node))
+        if own is None:
+            return None
+        return child_max + own
+
+    return walk(ir)
+
+
 def _minimum_warmup_rows(
     canonical: str, params: Mapping[str, Any] | None, *, production: bool = False
 ) -> tuple[int, bool]:
@@ -966,6 +1204,19 @@ def history_requirement(
             count=declared.get("history_count"),
         )
     if contract.requires_full_history or unknown:
+        if (
+            resolved in _FIN_REPORT_PERIOD_CANONICALS
+            and unknown
+            and not production
+        ):
+            # P0-03 / R11-P1-12: a report-period operator whose data-driven
+            # fiscal calendar is unavailable FAILS CLOSED in production
+            # (full history).  Research gets the explicit 80-rows/period
+            # heuristic so fin factors do not silently full-replay.
+            return HistoryRequirement(
+                kind="finite",
+                rows=max(2, _financial_research_heuristic(resolved, params or {})),
+            )
         return HistoryRequirement(kind="full_history", rows=rows)
     return HistoryRequirement(kind="finite", rows=rows)
 
@@ -997,6 +1248,29 @@ def _own_history_requirement(canonical: str, params: Mapping[str, Any]) -> Histo
         rows, _ = _minimum_warmup_rows(resolved, params)
         return HistoryRequirement(kind="full_history", rows=rows)
     return HistoryRequirement(kind="finite", rows=extension)
+
+
+def own_history_requirement(
+    canonical: str, params: Mapping[str, Any] | None = None
+) -> HistoryRequirement:
+    """Public per-node history requirement: ONE node's OWN contribution
+    (excluding children) for DAG-path composition (P0-03).
+
+    This is the single per-node history authority the analyzer delegates to —
+    ``H(node) = own(node) composed over max(H(children))`` is done by
+    ``factor_history_requirement`` / the analyzer's DAG walk.  A report-period
+    operator whose data-driven fiscal calendar is unavailable gets the explicit
+    research heuristic here (DAG composition is mode-agnostic); the production
+    fail-closed lives in ``history_requirement``.
+    """
+    resolved = _resolve(canonical)
+    req = _own_history_requirement(resolved, params or {})
+    if req.is_full_history and resolved in _FIN_REPORT_PERIOD_CANONICALS:
+        return HistoryRequirement(
+            kind="finite",
+            rows=max(2, _financial_research_heuristic(resolved, params or {})),
+        )
+    return req
 
 
 def _node_params(node: Any) -> dict[str, Any]:
@@ -1075,7 +1349,10 @@ __all__ = [
     "declare_stateful",
     "execution_contract",
     "execution_contract_overrides",
+    "factor_forward_impact",
     "factor_history_requirement",
+    "forward_impact",
     "history_requirement",
     "is_full_history_lookback",
+    "own_history_requirement",
 ]

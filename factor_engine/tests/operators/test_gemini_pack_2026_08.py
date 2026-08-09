@@ -237,25 +237,30 @@ def test_weighted_percentile_rank_reference(_loaded):
 # group_distribution_js_divergence
 # ---------------------------------------------------------------------------
 def test_js_divergence_reference(_loaded):
+    # R11 #133: the reference distribution needs >= 2 * bins observations, so
+    # the cross-section must be wide enough (a 2-4 column panel would now be
+    # correctly rejected as an under-powered histogram).
     idx = list(range(8))
-    x = pd.DataFrame(
-        {
-            "A": [1.0, 2, 3, 4, 5, 6, 7, 8],
-            "B": [8.0, 7, 6, 5, 4, 3, 2, 1],
-            "C": [1.0, 1, 1, 1, 1, 1, 1, 1],
-            "D": [9.0, 9, 9, 9, 9, 9, 9, 9],
-        },
-        index=idx,
-    )
-    grp = pd.DataFrame(
-        {"A": ["m"] * 8, "B": ["m"] * 8, "C": ["s"] * 8, "D": ["t"] * 8}, index=idx
-    )
+    cols = ["A", "B", "C"] + [f"E{i}" for i in range(10)]
+    data = {
+        "A": [1.0, 2, 3, 4, 5, 6, 7, 8],
+        "B": [8.0, 7, 6, 5, 4, 3, 2, 1],
+        "C": [1.0, 1, 1, 1, 1, 1, 1, 1],  # singleton group -> NaN
+    }
+    for i, c in enumerate(cols[3:]):
+        data[c] = [float((i + 1) % 9 + 1)] * 8
+    x = pd.DataFrame(data, index=idx)
+    grp_data = {"A": ["m"] * 8, "B": ["m"] * 8, "C": ["s"] * 8}
+    for i, c in enumerate(cols[3:]):
+        grp_data[c] = [f"g{i}"] * 8
+    grp = pd.DataFrame(grp_data, index=idx)
     op = OperatorRegistry.get("group_distribution_js_divergence", "pandas_numpy")
     out = op.calculate(x, grp, bins=4, min_group_size=2)
     assert out["A"].iloc[0] == out["B"].iloc[0]  # same group -> same value
     assert out["A"].iloc[0] >= 0.0  # JS divergence is non-negative
     assert np.isnan(out["C"].iloc[0])  # group too small (1 member)
-    # ex-self default: group m is compared against market minus {A,B} (i.e. C,D).
+    # ex-self default: group m is compared against the (>= 8 member) market
+    # minus {A,B}.
     out_ex = op.calculate(x, grp, bins=4, min_group_size=2, exclude_group_from_reference=True)
     assert np.isfinite(out_ex["A"].iloc[0])
 
@@ -264,17 +269,18 @@ def test_js_divergence_exclude_group_reference(_loaded):
     # A group that IS the whole market must diverge maximally from its ex-self
     # reference: excluding it leaves an empty reference -> fail closed.
     idx = list(range(6))
-    x = pd.DataFrame(
-        {"A": [1.0, 2, 3, 4, 5, 6], "B": [6.0, 5, 4, 3, 2, 1]}, index=idx
-    )
-    grp = pd.DataFrame({"A": ["g"] * 6, "B": ["g"] * 6}, index=idx)
+    cols = [f"C{i}" for i in range(10)]
+    rng = np.random.default_rng(7)
+    x = pd.DataFrame(rng.integers(1, 9, (6, 10)).astype(float), index=idx, columns=cols)
+    grp = pd.DataFrame({c: ["g"] * 6 for c in cols}, index=idx)
     op = OperatorRegistry.get("group_distribution_js_divergence", "pandas_numpy")
     out = op.calculate(x, grp, bins=4, min_group_size=2, exclude_group_from_reference=True)
-    assert np.isnan(out["A"].iloc[0])  # ex-self reference empty -> NaN
+    assert np.isnan(out[cols[0]].iloc[0])  # ex-self reference empty -> NaN
     # with exclusion disabled, both members compare against the full market
+    # (R11 #133: wide enough cross-section to satisfy the reference-breadth gate).
     out_full = op.calculate(x, grp, bins=4, min_group_size=2, exclude_group_from_reference=False)
-    assert out_full["A"].iloc[0] == out_full["B"].iloc[0]
-    assert np.isfinite(out_full["A"].iloc[0])
+    assert out_full[cols[0]].iloc[0] == out_full[cols[1]].iloc[0]
+    assert np.isfinite(out_full[cols[0]].iloc[0])
 
 
 # ---------------------------------------------------------------------------

@@ -20,15 +20,54 @@ logger = get_logger("storage.composite_source")
 _ALLOWED_JOIN_METHODS = frozenset({"exact", "current_only", "asof_backward", "forward_fill"})
 
 
+class CompositeJoinPolicyError(ValueError):
+    """P1-05: production composite requires an explicit join policy.
+
+    A non-anchor source must declare its join alignment explicitly (via the
+    ``joins`` spec, or a LogicalTableContract / COS contract carried by the
+    child source); silently defaulting to ``asof_backward`` in production is
+    too aggressive and can invent history / create look-ahead.
+    """
+
+
+class SnapshotVerificationError(RuntimeError):
+    """P1-06: a child snapshot could not be verified (refresh failed).
+
+    Production fail-closed: old composite cache must never stay trusted when
+    the underlying snapshot cannot be confirmed.
+    """
+
+
+class CompositeSnapshotVerificationError(RuntimeError):
+    """P1-07: child snapshot tokens moved during a composite read.
+
+    The cross-source logical read epoch is not coherent (e.g. A@snap10 /
+    B@snap11) — the caller retries once or surfaces the error.
+    """
+
+
+class CompositeContractUnavailableError(RuntimeError):
+    """P1-09: COS contract lookup failed while judging PIT-sensitivity.
+
+    Production fail-closed: a contract that cannot be queried must NOT be
+    treated as "probably safe".
+    """
+
+
 @dataclass(frozen=True)
 class CompositeJoinSpec:
     """组合数据源单源 join 对齐规格。
-    
+
+    ``explicit_join``（P1-05）标记该源是否由配置显式声明了 join 策略——
+    production 下非锚点源必须显式声明，否则 build 时抛 ``CompositeJoinPolicyError``；
+    research 才允许缺省回退 ``asof_backward``。
+
     参数:
         无
     """
     method: str = "asof_backward"
     tolerance: str | None = None
+    explicit_join: bool = False
 
 
 @dataclass
@@ -82,6 +121,45 @@ class CompositeJoinReport:
         }
 
 
+class CompositeSnapshotBarrier:
+    """P1-07: 组合跨源读的原子一致性屏障。
+
+    捕获所有 child 当前 snapshot token → 读全部数据 → revalidate（读前 vs 读后
+    一致）→ 不变 commit / 变则抛 ``CompositeSnapshotVerificationError`` 让调用方
+    整体 retry 一次。杜绝「refresh child A → refresh child B → load A → load B」
+    期间底层快照漂移导致 A@snap10 / B@snap11 的非同一逻辑读 epoch。
+
+    用法::
+
+        barrier = CompositeSnapshotBarrier(source)
+        barrier.begin()
+        data = ... read ...
+        barrier.revalidate()   # 抛 CompositeSnapshotVerificationError 于变化
+    """
+
+    def __init__(self, source: "CompositeDataSource") -> None:
+        self._source = source
+        self._before: tuple[tuple[str, str | None], ...] | None = None
+
+    def begin(self) -> None:
+        """读前捕获所有 child 的当前 snapshot token（不刷新，只读 token）。"""
+        self._before = self._source._child_snapshot_manifest(refresh=False)
+
+    def revalidate(self) -> None:
+        """读后 revalidate：token 变化 → 清缓存并抛验证错误（fail-closed）。"""
+        if self._before is None:
+            return
+        after = self._source._child_snapshot_manifest(refresh=False)
+        if after != self._before:
+            self._source._clear_caches()
+            self._source._snapshot_manifest = after
+            raise CompositeSnapshotVerificationError(
+                "composite child snapshot changed during load "
+                f"(before={self._before!r} after={after!r}); "
+                "refusing to serve a non-atomic cross-source read"
+            )
+
+
 class CompositeDataSource(DataSource):
     """多数据源按锚点对齐的统一列空间。
     
@@ -103,9 +181,10 @@ class CompositeDataSource(DataSource):
         joins: Mapping[str, Any] | None = None,
         aliases: Mapping[str, str] | None = None,
         allow_unqualified_anchor_columns: bool = True,
+        production: bool | None = None,
     ) -> None:
         """初始化实例。
-        
+
         参数:
             anchor_source: 锚点数据源名称（可选）
             anchor_column: 锚点列引用（可选）
@@ -113,7 +192,10 @@ class CompositeDataSource(DataSource):
             joins: 非锚点源的 join 配置（可选）
             aliases: 列名别名映射（可选）
             allow_unqualified_anchor_columns: 见函数签名（可选）
-        
+            production: 父级 production authority（P1-08）。由
+                FactorEngine / DataSourceBuildContext 注入；``None`` 时回退到
+                「任一子源 production=True」的旧推导（直接构造的向后兼容）。
+
         返回:
             无
         """
@@ -132,6 +214,19 @@ class CompositeDataSource(DataSource):
                 f"anchor_source '{self.anchor_source}' not found in composite sources"
             )
 
+        # P1-08: effective production authority comes from the parent build
+        # context; a child ``production=False`` must NOT downgrade a parent
+        # production run.  ``None`` (direct construction) falls back to the old
+        # child-derived rule for backward compatibility.
+        self._production_authority = None if production is None else bool(production)
+        if self._production_authority is None:
+            self._effective_production = any(
+                bool(getattr(src, "production", False))
+                for src in self.sources.values()
+            )
+        else:
+            self._effective_production = self._production_authority
+
         self.allow_unqualified_anchor_columns = bool(allow_unqualified_anchor_columns)
         self.aliases = self._normalize_aliases(aliases or {})
         self.joins = self._normalize_joins(joins or {})
@@ -142,6 +237,44 @@ class CompositeDataSource(DataSource):
         #: load records a baseline; afterwards a change in any child snapshot id
         #: invalidates ``_column_cache`` / ``_anchor_index_cache``.
         self._snapshot_manifest: tuple[tuple[str, str | None], ...] | None = None
+        self._validate_join_policy()
+
+    def execution_spec(self) -> dict[str, Any]:
+        """返回可重建（``storage.factory.build_data_source``）的 canonical 配置。
+
+        #收官轮 P0：递归序列化全部子源（含 join 契约 / aliases / production
+        authority），供 lineage / semantic identity / full definition / 事件增量
+        rebuild 复用——Composite 子源的 temporal join 语义必须原样还原。
+        """
+        from .datasource import DataSource, clean_execution_spec
+
+        child_specs: dict[str, Any] = {}
+        for name, source in self.sources.items():
+            if isinstance(source, DataSource):
+                spec = source.execution_spec()
+            else:
+                spec = None
+            child_specs[str(name)] = spec if isinstance(spec, dict) else {"type": "data_access"}
+        return clean_execution_spec(
+            {
+                "type": "composite",
+                "anchor": self.anchor_source,
+                "anchor_column": self.anchor_column,
+                "sources": child_specs,
+                "joins": {
+                    str(name): clean_execution_spec(
+                        {
+                            "method": spec.method,
+                            "tolerance": spec.tolerance,
+                        }
+                    )
+                    for name, spec in self.joins.items()
+                },
+                "aliases": dict(self.aliases),
+                "allow_unqualified_anchor_columns": self.allow_unqualified_anchor_columns,
+                "production": self._effective_production,
+            }
+        )
 
     @staticmethod
     def _normalize_aliases(aliases: Mapping[str, str]) -> dict[str, str]:
@@ -188,6 +321,30 @@ class CompositeDataSource(DataSource):
             specs[source_name] = self._parse_join_spec(source_name, joins.get(source_name))
         return specs
 
+    def _validate_join_policy(self) -> None:
+        """P1-05: production 下非锚点源必须显式声明 join 策略。
+
+        ``asof_backward`` 是 research 的方便缺省；production 里缺省太激进
+        （可能给 snapshot/事件源发明历史、造成前视）。build/compile 阶段直接
+        fail-closed，而不是等到 load 才暴露。
+        """
+        if not self._effective_production:
+            return
+        missing = [
+            name for name, spec in self.joins.items() if not spec.explicit_join
+        ]
+        if missing:
+            joined = ", ".join(sorted(missing))
+            raise CompositeJoinPolicyError(
+                "production composite 要求每个非锚点源显式声明 join policy；"
+                f"以下源未声明（不能回退默认 asof_backward）: {joined}"
+            )
+
+    def _clear_caches(self) -> None:
+        """清空组合源列/锚点缓存（P1-06/P1-07 共用）。"""
+        self._column_cache.clear()
+        self._anchor_index_cache = None
+
     def _parse_join_spec(
         self,
         source_name: str,
@@ -220,7 +377,13 @@ class CompositeDataSource(DataSource):
             raise ValueError(
                 f"Composite join source '{source_name}' uses exact alignment and cannot set tolerance"
             )
-        return CompositeJoinSpec(method=normalized_method, tolerance=tolerance)
+        # P1-05: a configured join (string or mapping) is an explicit declaration;
+        # only ``joins[name]`` missing entirely leaves ``explicit_join=False``.
+        return CompositeJoinSpec(
+            method=normalized_method,
+            tolerance=tolerance,
+            explicit_join=True,
+        )
 
     @staticmethod
     def _normalize_join_method(method: Any) -> str:
@@ -270,42 +433,50 @@ class CompositeDataSource(DataSource):
             self._join_reports.clear()
         return reports
 
-    def _child_snapshot_manifest(self) -> tuple[tuple[str, str | None], ...]:
-        """组合子源快照清单（R10 #44 + #收官轮 P0 Integration）。
+    def _child_snapshot_manifest(
+        self,
+        *,
+        refresh: bool = True,
+    ) -> tuple[tuple[str, str | None], ...]:
+        """组合子源快照清单（R10 #44 + #收官轮 P0 Integration + P1-06/P1-08）。
 
-        **先调用每个子源的 ``refresh_snapshot()``**（proactive 刷新，TTL 内短路；
-        DataAccessSource 的廉价路径走 manifest token），再读统一 ``snapshot_token``
-        （``_manifest_token or data_snapshot_id``）—— 否则 Composite 永远只看
-        ``data_snapshot_id`` 而看不到 manifest 级变化，底层 dataset A→B 后仍
-        命中自己的旧缓存（cache-of-cache coherence bug）。
+        ``refresh=True``：**先调用每个子源的 ``refresh_snapshot()``**（proactive
+        刷新，TTL 内短路；DataAccessSource 的廉价路径走 manifest token），再读
+        统一 ``snapshot_token``（``_manifest_token or data_snapshot_id``）—— 否则
+        Composite 永远只看 ``data_snapshot_id`` 而看不到 manifest 级变化，底层
+        dataset A→B 后仍命中自己的旧缓存（cache-of-cache coherence bug）。
+        ``refresh=False``：只读当前 token，不推进刷新（P1-07 读前后 revalidate 用）。
 
-        refresh 无法确认时：production 子源 fail-closed（视为变化、清缓存，
-        下次 load 强制重读，不再信旧 cache）；research 告警后按 unknown 处理。
-        没有 ``refresh_snapshot`` 的子源退化为只读 ``data_snapshot_id``（None）。
+        refresh 失败（P1-06）：production 直接抛 ``SnapshotVerificationError``
+        （fail-closed —— 两次失败 manifest 相同会让旧 cache 继续被信任，必须拒绝）；
+        research 清缓存 + warning，旧 cache 不再被信任。没有 ``refresh_snapshot``
+        的子源退化为只读 ``data_snapshot_id``（None）。
         """
+        production = self._effective_production
         manifest: list[tuple[str, str | None]] = []
         for name, source in self.sources.items():
-            refresher = getattr(source, "refresh_snapshot", None)
-            if callable(refresher):
-                try:
-                    refresher()
-                except Exception as exc:  # refresh 失败 → 无法确认 → fail-closed
-                    production = bool(getattr(source, "production", False))
-                    if production:
+            if refresh:
+                refresher = getattr(source, "refresh_snapshot", None)
+                if callable(refresher):
+                    try:
+                        refresher()
+                    except Exception as exc:  # refresh 失败 → 无法确认
+                        if production:
+                            self._clear_caches()
+                            raise SnapshotVerificationError(
+                                f"composite child source {name!r} refresh_snapshot "
+                                f"failed ({type(exc).__name__}: {exc}); production "
+                                "fail-closed — cannot verify snapshot, old cache "
+                                "must not be trusted"
+                            ) from exc
+                        # P1-06: research 下 clear cache + warning。
                         logger.warning(
-                            "组合源子源 %r refresh_snapshot 失败（%s: %s）；production "
-                            "fail-closed：清缓存强制重读，不信任旧 snapshot。",
+                            "组合源子源 %r refresh_snapshot 失败（research 清缓存、"
+                            "不信任旧 snapshot）: %s",
                             name,
-                            type(exc).__name__,
                             exc,
                         )
-                        manifest.append((name, None))
-                        continue
-                    logger.warning(
-                        "组合源子源 %r refresh_snapshot 失败（research 按 unknown）: %s",
-                        name,
-                        exc,
-                    )
+                        self._clear_caches()
             snapshot = getattr(source, "snapshot_token", None)
             if snapshot is None:
                 snapshot = getattr(source, "data_snapshot_id", None)
@@ -333,8 +504,7 @@ class CompositeDataSource(DataSource):
                 self._snapshot_manifest,
                 current,
             )
-            self._column_cache.clear()
-            self._anchor_index_cache = None
+            self._clear_caches()
         self._snapshot_manifest = current
 
     def _record_snapshot_manifest(self) -> None:
@@ -585,7 +755,7 @@ class CompositeDataSource(DataSource):
         )
 
     @staticmethod
-    def _is_pit_sensitive_source(source: Any) -> bool:
+    def _is_pit_sensitive_source(source: Any, *, production: bool) -> bool:
         """源是否 PIT 语义敏感（不能交给 Composite 自行 merge_asof）。
 
         #收官轮 P0（Integration）：以下三类源的 temporal 对齐必须由 DataAccess
@@ -595,6 +765,10 @@ class CompositeDataSource(DataSource):
           * 已知无 knowledge-time 的 cleaned 财务源（``_NO_KNOWLEDGE_TIME_FUNDAMENTALS``，
             period_end 无 filing_date，asof 拼接有真实前视风险）；
           * COS 契约 ``pit_policy=="strict"`` 的 E2 源（availability/filing_date 时钟）。
+
+        P1-09：COS 契约查询失败在 production 下 fail-closed（抛
+        ``CompositeContractUnavailableError``），不能把「无法证明」当成
+        「probably safe」；research 才允许告警后按非敏感回退。
         """
         if not hasattr(source, "dataset"):
             return False
@@ -613,12 +787,25 @@ class CompositeDataSource(DataSource):
             from data_access.cos_contract import get_cos_contract
 
             contract = get_cos_contract(dataset)
-            if contract is not None and (
-                str(getattr(contract, "pit_policy", "") or "") == "strict"
-            ):
-                return True
-        except Exception:
-            pass
+        except Exception as exc:
+            # P1-09: 契约查询失败 → production fail-closed。
+            if production:
+                raise CompositeContractUnavailableError(
+                    f"dataset={dataset!r} COS contract lookup failed "
+                    f"({type(exc).__name__}: {exc}); production fail-closed — "
+                    "cannot prove PIT-sensitivity"
+                ) from exc
+            logger.warning(
+                "dataset=%s COS contract lookup failed; research 放行（无法证明 "
+                "PIT-sensitivity 按非敏感处理）: %s",
+                dataset,
+                exc,
+            )
+            contract = None
+        if contract is not None and (
+            str(getattr(contract, "pit_policy", "") or "") == "strict"
+        ):
+            return True
         return False
 
     def _enforce_join_authority(
@@ -633,16 +820,19 @@ class CompositeDataSource(DataSource):
         RAW_EVENT / revision / period-selection 必须下沉到 DataAccess
         read_joined / SourceRef certified PIT resolver，Composite 不能再把
         period_end 数据当 decision-time 做 backward asof（前视泄漏）。
-        production（子源 production=True）fail-closed；research 告警放行。
+        production（P1-08：取父级 effective production authority，不依赖子源
+        ``.production``）fail-closed；research 告警放行。
         """
         source = self.sources[source_name]
         if join_spec.method in {"exact", "current_only"}:
             # current_only executes exact-align (no merge_asof), so it never
             # creates a look-ahead on a PIT-sensitive source.
             return
-        if not self._is_pit_sensitive_source(source):
+        if not self._is_pit_sensitive_source(
+            source, production=self._effective_production
+        ):
             return
-        production = bool(getattr(source, "production", False))
+        production = self._effective_production
         if production:
             raise ValueError(
                 f"Composite 非 exact 对齐 source={source_name!r}（dataset="
@@ -708,24 +898,52 @@ class CompositeDataSource(DataSource):
         )
         return aligned
 
+    _SNAPSHOT_BARRIER_ATTEMPTS = 2
+
+    def _load_with_snapshot_barrier(self, load_once):
+        """P1-07: 快照一致性 retry 外壳。token 漂移 → 整体重试一次，仍漂移则抛。
+
+        参数:
+            load_once: 一次完整的 load 调用（返回列数据）
+        """
+        for attempt in range(1, self._SNAPSHOT_BARRIER_ATTEMPTS + 1):
+            try:
+                return load_once()
+            except CompositeSnapshotVerificationError:
+                if attempt >= self._SNAPSHOT_BARRIER_ATTEMPTS:
+                    raise
+                logger.warning(
+                    "组合源 child snapshot 在 load 期间变化，整体 retry "
+                    "attempt=%d",
+                    attempt + 1,
+                )
+        raise AssertionError("unreachable")  # pragma: no cover
+
     def load_column(self, name: str):
         """load_column。
-        
+
         参数:
             name: 逻辑列名
-        
+
         返回:
             无
         """
+        return self._load_with_snapshot_barrier(lambda: self._load_column_once(name))
+
+    def _load_column_once(self, name: str):
+        """单列一次读取（P1-07 barrier 包裹的原子读）。"""
         self._invalidate_if_snapshot_changed()
         if name in self._column_cache:
             logger.debug("命中组合列缓存: %s", name)
             return self._column_cache[name]
 
+        barrier = CompositeSnapshotBarrier(self)
+        barrier.begin()
         source_name, column_name, canonical_name = self._resolve_reference(name)
         if canonical_name in self._column_cache:
             series = self._column_cache[canonical_name]
             self._column_cache[name] = series
+            barrier.revalidate()
             return series
 
         if source_name == self.anchor_source:
@@ -746,6 +964,7 @@ class CompositeDataSource(DataSource):
                 canonical_name=canonical_name,
             )
 
+        barrier.revalidate()
         self._column_cache[canonical_name] = series
         self._column_cache[name] = series
         if source_name == self.anchor_source and self.allow_unqualified_anchor_columns:
@@ -756,7 +975,7 @@ class CompositeDataSource(DataSource):
     def load_columns(self, names: list[str]) -> dict[str, Any]:
         """按源批量读取并对齐：同源多列一次 ``load_columns``（DataAccessSource 子源
         会合并成一次 ``store.read``），非锚点列再逐个按 join 方法对齐到锚点索引
-        （锚点索引已缓存，merge_asof 不重复读锚点）。
+        （锚点索引已缓存，merge_asof 不重复读锚点）。P1-07 barrier 包裹。
 
         参数:
             names: 逻辑列名列表
@@ -764,6 +983,12 @@ class CompositeDataSource(DataSource):
         返回:
             dict[str, Any]
         """
+        return self._load_with_snapshot_barrier(
+            lambda: self._load_columns_once(names)
+        )
+
+    def _load_columns_once(self, names: list[str]) -> dict[str, Any]:
+        """批量读取一次（P1-07 barrier 包裹的原子读）。"""
         self._invalidate_if_snapshot_changed()
         out: dict[str, Any] = {}
         missing: list[str] = []
@@ -774,6 +999,9 @@ class CompositeDataSource(DataSource):
                 missing.append(name)
         if not missing:
             return out
+
+        barrier = CompositeSnapshotBarrier(self)
+        barrier.begin()
 
         refs_by_source: dict[str, list[tuple[str, str, str]]] = {}
         for name in missing:
@@ -818,6 +1046,8 @@ class CompositeDataSource(DataSource):
                 if is_anchor and self.allow_unqualified_anchor_columns:
                     self._column_cache.setdefault(column_name, series)
                 out[name] = series
+
+        barrier.revalidate()
         self._record_snapshot_manifest()
         return out
 

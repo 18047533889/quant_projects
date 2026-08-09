@@ -87,6 +87,10 @@ class FactorSemanticIdentity:
     decision_time_policy: str | None = None
     dialect: str | None = None
     dialect_version: str | None = None
+    #: #收官轮 P0：``freq`` 不改变 IR 类型推导，但它是执行语义的一部分——同一
+    #: 公式 ``1d`` 与 ``5m`` 不是同一个因子。必须进入身份 digest，否则
+    #: ``factor_version`` 对两者相同，production 无法识别语义漂移。
+    frequency: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -148,7 +152,8 @@ def compute_factor_identity(plan: Any, ctx: Any = None) -> FactorSemanticIdentit
     - 语义字段：``market`` / ``calendar`` / ``timezone`` / ``universe`` /
       ``price_basis`` / ``pit_policy`` / ``decision_time_policy`` / ``dialect`` /
       ``dialect_version``；
-    - ``factor``：``api.factor.Factor`` 对象（语义字段兜底来源）。
+    - ``factor``：``api.factor.Factor`` 对象（语义字段兜底来源）；
+    - ``frequency``：因子频率（``factor.freq`` 兜底）。
 
     各哈希优先取 ctx 覆盖值，否则用现有的权威哈希工具现算：
     ``storage.catalog.compute_ir_hash``、``cleaned_operators.compute_operator_catalog_hash``、
@@ -227,6 +232,13 @@ def compute_factor_identity(plan: Any, ctx: Any = None) -> FactorSemanticIdentit
         _ctx_override(ctx, "dialect_version"),
         _ctx_override(factor, "dialect_version"),
     )
+    # #收官轮 P0: frequency 进入身份 digest。ctx 显式覆盖 > factor.freq。
+    frequency = _pick(
+        _ctx_override(ctx, "frequency"),
+        _ctx_override(factor, "freq"),
+        _ctx_override(factor, "frequency"),
+        _semantic_value(plan, "frequency"),
+    )
 
     return FactorSemanticIdentity(
         ir_hash=str(ir_hash),
@@ -243,6 +255,7 @@ def compute_factor_identity(plan: Any, ctx: Any = None) -> FactorSemanticIdentit
         decision_time_policy=decision_time_policy,
         dialect=dialect,
         dialect_version=dialect_version,
+        frequency=frequency,
     )
 
 
@@ -251,11 +264,18 @@ def compute_identity_from_materialize_ctx(
     ast_hash: str | None = None,
     data_source_config: dict | None = None,
     run_lineage: dict | None = None,
+    frequency: str | None = None,
 ) -> FactorSemanticIdentity | None:
     """从 ``ParquetMaterializer.materialize`` 可见的输入推导身份。
 
     不可用（既无 IR 也无有效 ast_hash）时返回 ``None`` —— 调用方应把
     checkpoint 指纹当作缺失（production 必须重算）。
+
+    #收官轮 P0：这是**兜底**路径（直接调用 ``ParquetMaterializer.materialize``
+    且未显式传 ``semantic_identity`` 的调用方）。完整编排路径（
+    ``runtime.materialize_service.execute_materialize``）会在 orchestrator 层
+    用 factor/analysis/engine 构建含 frequency/market/universe/pit/dialect 的
+    完整身份后显式传入，避免在这里根据残缺 ctx 重建。
     """
     effective_ast = ast_hash
     if effective_ast == NO_FACTOR_IDENTITY:
@@ -270,6 +290,7 @@ def compute_identity_from_materialize_ctx(
         "source_contract_hash": lineage_extra.get("source_contract_hash"),
         "source_dependency_hash": lineage_extra.get("source_dependency_hash"),
         "data_source_config": data_source_config,
+        "frequency": frequency,
     }
     return compute_factor_identity(ir_node, ctx=ctx)
 

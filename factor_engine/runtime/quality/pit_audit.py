@@ -35,6 +35,28 @@ _FORWARD_FILL_OPS = frozenset({
     "ffill", "fillna_ffill", "forward_fill", "fill_forward",
     "bfill", "fillna_backfill", "backfill",
 })
+# R13 P1-12: ``fillna`` only counts as forward fill when its ``method`` argument
+# is an ffill-class spelling.  The ``method`` literal can appear either in
+# ``node.attrs`` (keyword) or as a literal input at index 1 (positional).
+_FFILL_METHOD_ALIASES = frozenset({"ffill", "pad", "forward_fill"})
+
+
+def _fillna_uses_forward_fill(node: IRNode) -> bool:
+    """Whether a ``fillna`` IR node is an ffill-class forward fill.
+
+    ``fillna(x, "ffill")`` is canonical-rewritten onto the gated ``ffill``
+    implementation at execution time; the audit must treat the two spellings
+    identically so ``forbid_forward_fill=True`` cannot be bypassed by the
+    ``fillna`` spelling.
+    """
+    method = (node.attrs or {}).get("method")
+    if method is None and len(node.inputs) > 1:
+        child = node.inputs[1]
+        if child.op == "literal":
+            method = (child.attrs or {}).get("value")
+    return isinstance(method, str) and method.strip().lower() in _FFILL_METHOD_ALIASES
+
+
 _POSITIVE_LAG_PARAMS = {
     "ts_delay": ("n", 1),
     "ts_delta": ("n", 1),
@@ -60,6 +82,33 @@ _PROFILE_FEATURES = frozenset({
     "abnormal_vol_profile",
 })
 _TIMESTAMP_CONVENTIONS = frozenset({"bar_end", "bar_start"})
+
+# ---------------------------------------------------------------------------
+# R13 P1-13: the DataAccess contract registry (``storage.sources.logical_tables``
+# ``LogicalTableContract``) is the single source of truth for table temporal /
+# PIT classification.  The hardcoded table sets above are retained ONLY as a
+# research fallback when the contract layer cannot be imported.
+# ---------------------------------------------------------------------------
+# join_policy -> transforms the contract allows.  ``None`` is the identity read.
+_JOIN_POLICY_ALLOWED_TRANSFORMS: dict[str, frozenset[str | None]] = {
+    "anchor": frozenset({None}),
+    "exact": frozenset({None}),
+    "exact_date": frozenset({None}),
+    "asof_backward": frozenset({None, "asof_backward"}),
+    "financial_pit": frozenset({None, "financial_asof", "financial_lag"}),
+    "relation_pit": frozenset({None, "relation_asof", "relation_aggregate"}),
+    "effective_only": frozenset({None}),
+    "minute_session": frozenset({
+        "intraday_feature", "minute_at", "minute_range", "minute_bar",
+        "minute_resample",
+    }),
+    "special": frozenset({None}),
+}
+_LEGACY_REQUIRED_PARAM_ALIAS = {
+    "IndexSymbol": "index",
+    "IndustrySource": "industry_source",
+}
+_CONTRACT_LAYER_UNAVAILABLE = object()
 
 
 def _literal_number(node: IRNode, *, attr: str, input_index: int) -> float | None:
@@ -203,25 +252,157 @@ def _audit_intraday_feature(
             violations.append(f"{label}(q_not_in_0_1)")
 
 
-def _audit_source_ref(
-    name,
+def _resolve_table_contract(table: str) -> LogicalTableContract | None | object:
+    """Resolve a SourceRef table's contract from the DataAccess contract registry.
+
+    Returns:
+        * a ``LogicalTableContract`` — the registry is authoritative;
+        * ``None`` — the contract layer loaded but the table is not registered
+          (an unknown availability contract);
+        * ``_CONTRACT_LAYER_UNAVAILABLE`` — the contract module could not be
+          imported; callers fall back to the hardcoded classification.
+    """
+    try:
+        from storage.sources.logical_tables import logical_table_contract
+    except Exception:
+        return _CONTRACT_LAYER_UNAVAILABLE
+    try:
+        return logical_table_contract(table)
+    except Exception:
+        return None
+
+
+def _audit_source_ref_by_contract(
+    specification,
+    contract: "LogicalTableContract",
     *,
-    forbid_forward_fill,
-    fail_on_missing,
-    violations,
-    checked,
-    source_guard,
+    label: str,
+    params: dict[str, Any],
+    transform_params: dict[str, Any],
+    forbid_forward_fill: bool,
+    fail_on_missing: bool,
+    violations: list[str],
+    checked: list[str],
+    source_guard: set[str],
 ) -> bool:
-    from api.source_ref import decode_source_ref
+    """Validate a SourceRef against its ``LogicalTableContract`` (R13 P1-13).
 
-    specification = decode_source_ref(name)
-    if specification is None:
-        return False
-    label = f"SourceRef[{specification.table}.{specification.field}]"
-    checked.append(label)
-    params = specification.params_dict()
-    transform_params = specification.transform_params_dict()
+    The contract is the single source of truth: transform legality, required
+    resolution parameters, relation cardinality and temporal policy all come from
+    the contract's ``join_policy`` / ``required_parameter`` / ``cardinality``
+    instead of a hand-written table classification.
+    """
+    join_policy = contract.join_policy
 
+    if join_policy == "special":
+        if specification.table == "Intermediate":
+            try:
+                from runtime.intermediate_registry import intermediate_dependency_lineage
+
+                intermediate_dependency_lineage(
+                    str(params.get("name", "")), int(params.get("version", 0))
+                )
+            except Exception as exc:
+                violations.append(f"{label}(unversioned:{type(exc).__name__})")
+        elif specification.table == "DerivedField":
+            _audit_derived_field(
+                specification.field,
+                forbid_forward_fill=forbid_forward_fill,
+                fail_on_missing=fail_on_missing,
+                violations=violations,
+                checked=checked,
+                source_guard=source_guard,
+            )
+        else:
+            violations.append(f"{label}(unknown_availability_contract)")
+        return True
+
+    # Required resolution parameter declared by the contract (IndexSymbol /
+    # IndustrySource).  Accept both the canonical and the legacy spelling; a
+    # conflict between the two is rejected (mirrors the executor).
+    required = contract.required_parameter
+    if required:
+        legacy = _LEGACY_REQUIRED_PARAM_ALIAS.get(required)
+        canonical_value = str(params.get(required, "")).strip()
+        legacy_value = str(params.get(legacy, "")).strip() if legacy else ""
+        if not canonical_value and not legacy_value:
+            violations.append(f"{label}(missing_{required})")
+        if canonical_value and legacy_value and canonical_value != legacy_value:
+            violations.append(f"{label}(conflicting_{required})")
+
+    if join_policy == "minute_session":
+        if specification.transform == "intraday_feature":
+            _audit_intraday_feature(label, transform_params, violations)
+        elif specification.transform not in {
+            "minute_at", "minute_range", "minute_bar", "minute_resample"
+        }:
+            violations.append(f"{label}(minute_transform_required)")
+        else:
+            if (
+                specification.transform == "minute_at"
+                and not str(transform_params.get("hhmm", "")).strip()
+            ):
+                violations.append(f"{label}(missing_hhmm)")
+            if specification.transform == "minute_range":
+                start = str(transform_params.get("start", ""))
+                end = str(transform_params.get("end", ""))
+                if not start or not end or start >= end:
+                    violations.append(f"{label}(invalid_minute_range)")
+            if specification.transform in {"minute_bar", "minute_resample"}:
+                try:
+                    period = int(transform_params.get("period", 1))
+                    index = int(transform_params.get("index", 0))
+                except (TypeError, ValueError):
+                    period, index = 0, -1
+                if period <= 0 or index < 0:
+                    violations.append(f"{label}(invalid_minute_period_or_index)")
+        return True
+
+    if join_policy == "effective_only":
+        # An effective-only table is not strict PIT regardless of transform.
+        violations.append(f"{label}(effective_only_not_strict_pit)")
+        return True
+
+    allowed = _JOIN_POLICY_ALLOWED_TRANSFORMS.get(join_policy, frozenset({None}))
+    if specification.transform not in allowed:
+        violations.append(
+            f"{label}(unsupported_transform={specification.transform})"
+        )
+
+    if join_policy == "financial_pit" and specification.transform == "financial_lag":
+        try:
+            quarters = int(transform_params.get("quarters", 1))
+        except (TypeError, ValueError):
+            quarters = 0
+        if quarters <= 0:
+            violations.append(f"{label}(financial_lag_quarters<=0)")
+
+    if join_policy == "relation_pit":
+        if (
+            contract.cardinality == "one_to_many"
+            and specification.transform not in {"relation_asof", "relation_aggregate"}
+        ):
+            violations.append(f"{label}(relation_requires_scalar_selector)")
+
+    return True
+
+
+def _audit_source_ref_hardcoded(
+    specification,
+    *,
+    label: str,
+    params: dict[str, Any],
+    transform_params: dict[str, Any],
+    forbid_forward_fill: bool,
+    fail_on_missing: bool,
+    violations: list[str],
+    checked: list[str],
+    source_guard: set[str],
+) -> bool:
+    """Research fallback classification used only when the contract layer is
+    unavailable (import failure) or the table is not registered.  Production /
+    ``fail_on_missing`` never reaches here for unknown tables — the contract path
+    fails them closed (R13 P1-13)."""
     if specification.table in _EXACT_DAILY_TABLES:
         if specification.table in {"BenchmarkIndexDailyBar", "IndexDailyBar", "IndexConstituent"}:
             canonical_index = str(params.get("IndexSymbol", "")).strip()
@@ -328,6 +509,64 @@ def _audit_source_ref(
     return True
 
 
+def _audit_source_ref(
+    name,
+    *,
+    forbid_forward_fill,
+    fail_on_missing,
+    violations,
+    checked,
+    source_guard,
+) -> bool:
+    from api.source_ref import decode_source_ref
+
+    specification = decode_source_ref(name)
+    if specification is None:
+        return False
+    label = f"SourceRef[{specification.table}.{specification.field}]"
+    checked.append(label)
+    params = specification.params_dict()
+    transform_params = specification.transform_params_dict()
+
+    contract = _resolve_table_contract(specification.table)
+    if contract is not _CONTRACT_LAYER_UNAVAILABLE:
+        if contract is None:
+            # The contract layer loaded but the table is not registered.  In
+            # production this is fail-closed (R13 P1-13): an unknown table must
+            # not silently pass through a hardcoded classification.
+            if fail_on_missing:
+                violations.append(f"{label}(unknown_availability_contract)")
+                return True
+        else:
+            return _audit_source_ref_by_contract(
+                specification,
+                contract,
+                label=label,
+                params=params,
+                transform_params=transform_params,
+                forbid_forward_fill=forbid_forward_fill,
+                fail_on_missing=fail_on_missing,
+                violations=violations,
+                checked=checked,
+                source_guard=source_guard,
+            )
+
+    # Research fallback: contract layer unavailable (import failure) or the
+    # table is not in the registry.  Production never reaches here for unknown
+    # tables — they fail closed above.
+    return _audit_source_ref_hardcoded(
+        specification,
+        label=label,
+        params=params,
+        transform_params=transform_params,
+        forbid_forward_fill=forbid_forward_fill,
+        fail_on_missing=fail_on_missing,
+        violations=violations,
+        checked=checked,
+        source_guard=source_guard,
+    )
+
+
 def audit_ir(
     ir: IRNode,
     *,
@@ -359,14 +598,12 @@ def audit_ir(
             return
         checked.append(node.op)
         canonical = OperatorRegistry.resolve_canonical_optional(node.op)
-        implementation = OperatorRegistry.get(canonical)
-        if implementation is None:
-            if fail_on_missing:
-                violations.append(f"{canonical}(missing_runtime)")
-            return
-        policy = infer_operator_policy(implementation, canonical=canonical)
-        if not policy.pit_safe or policy.lag < 0:
-            violations.append(canonical)
+        # Semantic IR-level checks first: they inspect the IR shape (literal
+        # params, operator semantics) and must fire regardless of whether the
+        # runtime is registered.  Production unregisters ``ffill`` / ``fillna``
+        # via layer_governance, so the forward-fill / future-data / lag-param
+        # violations are semantic ones and must not be masked by a later
+        # ``missing_runtime`` early-return (R13 P1-12).
         rule = _POSITIVE_LAG_PARAMS.get(canonical)
         if rule is not None:
             parameter, index = rule
@@ -378,8 +615,22 @@ def audit_ir(
             "lead", "Lead", "next",
         }:
             violations.append(f"{canonical}(future_data)")
-        if forbid_forward_fill and canonical in _FORWARD_FILL_OPS:
-            violations.append(f"{canonical}(forward_fill)")
+        if forbid_forward_fill:
+            if canonical in _FORWARD_FILL_OPS:
+                violations.append(f"{canonical}(forward_fill)")
+            elif canonical == "fillna" and _fillna_uses_forward_fill(node):
+                # R13 P1-12: fillna(method="ffill"/"pad"/"forward_fill") is a
+                # forward-fill and must be blocked by the same gate as ``ffill``.
+                violations.append("fillna(forward_fill)")
+
+        implementation = OperatorRegistry.get(canonical)
+        if implementation is None:
+            if fail_on_missing:
+                violations.append(f"{canonical}(missing_runtime)")
+            return
+        policy = infer_operator_policy(implementation, canonical=canonical)
+        if not policy.pit_safe or policy.lag < 0:
+            violations.append(canonical)
         for child in node.inputs:
             walk(child)
 

@@ -25,6 +25,13 @@ def normalize_data_event(event: DataEvent | dict[str, Any]) -> DataEvent:
     return _normalize_data_event(event)
 
 
+def _production_for_event(event: DataEvent) -> bool:
+    """P0-19/P0-20: effective production mode for a planning-only call."""
+    from runtime.incremental_scheduler import _is_production_run
+
+    return _is_production_run(event)
+
+
 def _event_summary(event: DataEvent) -> dict[str, Any]:
     return event.to_dict()
 
@@ -43,12 +50,14 @@ def plan_incremental_from_event(
     from runtime.dependency_catalog import DependencyCatalog
 
     dep_catalog = DependencyCatalog(catalog)
+    production = _production_for_event(normalized)
     plans = plan_updates_from_data_event(
         dep_catalog,
         normalized,
         end_date=end_date,
         lookback_extra=lookback_extra,
         market=market,
+        production=production,
     )
     return {
         "event": _event_summary(normalized),

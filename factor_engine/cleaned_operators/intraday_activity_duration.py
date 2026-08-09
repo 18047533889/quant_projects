@@ -23,9 +23,11 @@ Round-11 contract (findings #183-#186)
 --------------------------------------
 * Clock semantics unified on the trading-session clock (module and class docs
   agree with the implementation) — R11 #183.
-* The day is reindexed onto the OFFICIAL SessionGrid (the modal full-session
-  minute-of-day grid); a missing whole-minute row is otherwise invisible to a
-  NaN gate — R11 #184.
+* The day is reindexed onto the OFFICIAL SessionGrid supplied by an explicit
+  exchange ``calendar`` (``runtime.session_calendar.SessionCalendar``); a missing
+  whole-minute row is otherwise invisible to a NaN gate — R11 #184.  The grid is
+  NEVER inferred from a modal of the observed data (P0-10): without a calendar
+  the grid is UNKNOWN and every day fails closed (NaN).
 * A partial session (fewer observed minutes than the official grid, or a
   truncated close) fails closed and never emits — R11 #185.
 * The output is dimensionless: ``mean(Δ²D) / MAD(D)`` (bar-index differences
@@ -33,7 +35,7 @@ Round-11 contract (findings #183-#186)
 """
 from __future__ import annotations
 
-from collections import Counter
+import warnings
 from typing import Any
 
 import numpy as np
@@ -44,6 +46,7 @@ from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
 _SESSION_TZ = "Asia/Shanghai"
+_WARNED_NO_CALENDAR = False
 
 
 def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadata:
@@ -77,24 +80,41 @@ def _session_local_frame(frame: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-def _official_session_grid(index: pd.DatetimeIndex) -> tuple[int, ...]:
-    """Modal full-session minute-of-day grid of a minute panel.
+def _hhmm_minute(value: str) -> int:
+    """Wall-clock ``"HH:MM"`` -> minute-of-day (``"15:00" -> 900``)."""
+    hour, minute = (int(part) for part in str(value).split(":"))
+    return hour * 60 + minute
 
-    R11 #184: completeness must be judged against the official SessionGrid.  The
-    modal (most common) set of minute-of-day slots across sessions is that grid;
-    reindexing each day onto it turns a missing whole-minute row into NaN.
+
+def _official_session_grid(calendar: Any) -> tuple[int, ...]:
+    """Official full-session minute-of-day grid from an EXPLICIT calendar.
+
+    P0-10: the official SessionGrid is NEVER inferred from the observed minute
+    data.  The modal-grid self-certification is removed — a dataset that
+    systematically drops the final bar of every session (239 bars instead of
+    240) must not be able to re-define which grid is "official".  ``calendar``
+    is a ``runtime.session_calendar.SessionCalendar`` (duck-typed: ``segments``
+    of ``("HH:MM","HH:MM")`` and ``timestamp_convention`` in
+    {``bar_start``, ``bar_end``}); the returned tuple is the full ordered set of
+    minute-of-day slots of a complete session (e.g. A-share 1-min bar_start:
+    ``570..689`` + ``780..899``).
     """
-    mods = _minute_of_day(index.to_numpy(dtype="datetime64[ns]"))
-    days = index.normalize()
-    grid_by_day: dict[pd.Timestamp, set[int]] = {}
-    for day, m in zip(days, mods):
-        grid_by_day.setdefault(pd.Timestamp(day), set()).add(int(m))
-    counts: Counter[tuple[int, ...]] = Counter()
-    for s in grid_by_day.values():
-        counts[tuple(sorted(s))] += 1
-    if not counts:
-        return ()
-    return counts.most_common(1)[0][0]
+    segments = list(getattr(calendar, "segments", None) or ())
+    if not segments:
+        raise ValueError("calendar must define non-empty session segments")
+    convention = str(getattr(calendar, "timestamp_convention", "bar_end")).lower()
+    if convention not in {"bar_start", "bar_end"}:
+        raise ValueError("calendar timestamp_convention must be bar_start or bar_end")
+    out: list[int] = []
+    for start_text, stop_text in segments:
+        start, stop = _hhmm_minute(start_text), _hhmm_minute(stop_text)
+        if stop <= start:
+            raise ValueError("calendar segments must be increasing intervals")
+        if convention == "bar_start":
+            out.extend(range(start, stop))
+        else:
+            out.extend(range(start + 1, stop + 1))
+    return tuple(out)
 
 
 def _day_curvature(values: np.ndarray, buckets: int) -> float:
@@ -152,20 +172,39 @@ class IntradayActivityDurationCurvature(SeriesOperator):
     metadata = _metadata(
         "intraday_activity_duration_curvature",
         "分钟 activity 等量分桶时长的二阶曲率（mean Δ²D / MAD(D)，无量纲）。",
-        ["activity", "buckets"],
+        ["activity", "buckets", "calendar"],
     )
 
     def _calculate_series(
         self,
         activity: pd.DataFrame,
         buckets: int = 10,
+        calendar: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
+        global _WARNED_NO_CALENDAR
         act = _session_local_frame(activity.copy())
         b = int(buckets)
         if b < 3:
             raise ValueError("intraday_activity_duration_curvature requires buckets >= 3")
-        official = _official_session_grid(act.index)
+        # P0-10: the official SessionGrid comes from the explicit exchange
+        # calendar, NEVER from a modal of the observed data.  Without a calendar
+        # the grid is UNKNOWN -> every day fails closed (NaN).
+        if calendar is None:
+            if not _WARNED_NO_CALENDAR:
+                _WARNED_NO_CALENDAR = True
+                warnings.warn(
+                    "intraday_activity_duration_curvature requires an explicit "
+                    "`calendar` (runtime.session_calendar.SessionCalendar).  Without "
+                    "one the official SessionGrid is UNKNOWN and every day fails "
+                    "closed (NaN); the grid is never inferred from observed data "
+                    "(P0-10).",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+            official = ()
+        else:
+            official = _official_session_grid(calendar)
         out: dict[str, pd.Series] = {}
         for inst in act.columns:
             col = act[inst]

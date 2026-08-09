@@ -162,11 +162,66 @@ def _bicor_matrix(z: np.ndarray) -> np.ndarray | None:
     return out
 
 
-def _corr_eigenvalues(z: np.ndarray) -> np.ndarray | None:
+def _nearest_psd_correlation(c: np.ndarray, *, max_iter: int = 20, tol: float = 1e-8) -> np.ndarray:
+    """Nearest-PSD correlation projection (Higham-style alternating projections).
+
+    A pairwise robust correlation matrix — each off-diagonal estimated on its own
+    pair — is NOT guaranteed positive-semidefinite, yet the spectral geometry
+    operators treat it as a covariance structure (eigendecomposition, dominant
+    mode, spectral entropy).  This helper projects the matrix onto the
+    intersection of the PSD cone and the unit-diagonal correlation set by
+    alternating:
+
+    1. eigen-decompose, clamp eigenvalues to a small floor ``max(λ, _EPS)`` and
+       reconstruct — this removes negative eigenvalue mass instead of silently
+       dropping it (the pre-R11 ``np.maximum(w, 0.0)`` clipping changed the
+       trace / mode-share / effective-rank);
+    2. rescale rows/cols by ``sqrt(diag)`` so the diagonal returns to 1.
+
+    The rescale is a congruence ``D^{-1/2} C D^{-1/2}`` (with invertible ``D``),
+    which preserves PSD, so the fixed point is a genuine correlation matrix whose
+    eigenvalues are all >= 0 up to floating-point noise.  Iterate until the
+    Frobenius change is small.  Self-contained, numpy only.
+    """
+    x = np.asarray(c, dtype=float).copy()
+    for _ in range(max_iter):
+        prev = x
+        w, v = np.linalg.eigh(x)
+        w = np.maximum(w, _EPS)
+        x = (v * w) @ v.T
+        # rescale to unit diagonal (congruence preserves PSD)
+        dg = np.sqrt(np.diag(x))
+        dg[dg < _EPS] = 1.0
+        x = x / np.outer(dg, dg)
+        np.fill_diagonal(x, 1.0)
+        if np.linalg.norm(x - prev, ord="fro") <= tol * max(1.0, np.linalg.norm(prev, ord="fro")):
+            break
+    return x
+
+
+def _canonical_corr(z: np.ndarray) -> np.ndarray | None:
+    """Canonical feature correlation matrix: pairwise bicor, PSD-projected.
+
+    EVERY spectral consumer (eigenvalues, dominant direction, mode share,
+    effective rank, subspace rotation) must read this ONE matrix so the
+    direction, the mode-share and the entropy all come from the same PSD
+    correlation structure.  Returns None when the pairwise bicor fails closed.
+    """
     c = _bicor_matrix(z)
     if c is None:
         return None
-    w = np.maximum(np.linalg.eigvalsh(c), 0.0)
+    return _nearest_psd_correlation(c)
+
+
+def _corr_eigenvalues(z: np.ndarray) -> np.ndarray | None:
+    c = _canonical_corr(z)
+    if c is None:
+        return None
+    w = np.linalg.eigvalsh(c)
+    # The PSD projection is the primary mechanism (eigenvalues are naturally
+    # >= 0 up to numerical noise); only clamp a tiny floating-point-noise tail
+    # instead of wholesale clipping as a substitute for projection.
+    w = np.maximum(w, 0.0)
     if w.sum() <= _EPS:
         return None
     return w  # ascending
@@ -202,8 +257,16 @@ _MIN_EIGENGAP = 0.02  # normalized ``(λ1-λ2)/sum(λ)`` below which the top dir
 
 
 def _dominant_direction(z: np.ndarray) -> np.ndarray | None:
-    w = _corr_eigenvalues(z)
-    if w is None:
+    # R11 P1: the dominant direction must come from the SAME projected matrix
+    # whose eigenvalues feed mode_share / effective_rank.  A pairwise bicor
+    # matrix is not guaranteed PSD, so the raw matrix's eigenvector could
+    # disagree with the eigenvalue gap computed on a (clipped) version of it.
+    c = _canonical_corr(z)
+    if c is None:
+        return None
+    w = np.linalg.eigvalsh(c)
+    w = np.maximum(w, 0.0)
+    if w.sum() <= _EPS:
         return None
     # Round-7 P0 (review §33): when the top two eigenvalues are nearly tied
     # (``(λ1-λ2)/sum(λ) < _MIN_EIGENGAP``) the dominant eigenvector is not
@@ -212,9 +275,6 @@ def _dominant_direction(z: np.ndarray) -> np.ndarray | None:
     # emitting a spurious regime-rotation angle.
     gap = float(w[-1] - (w[-2] if w.size >= 2 else 0.0))
     if gap / float(w.sum()) < _MIN_EIGENGAP:
-        return None
-    c = _bicor_matrix(z)
-    if c is None:
         return None
     _, v = np.linalg.eigh(c)
     v1 = v[:, -1]
@@ -341,11 +401,13 @@ class TsFeatureEffectiveRank(SeriesOperator):
 
     metadata = _metadata(
         "ts_feature_effective_rank",
-        "特征谱有效秩 exp(-Σ p log p)（多字段有效自由度）。",
+        "特征谱有效秩 exp(-Σ p log p)（多字段有效自由度；effective dimension，"
+        "dimensionless，非序数 rank）。",
         ["f1", "f2", "f3", "window"],
         domain="price_volume",
-        unit="rank",
+        unit="dimensionless",
         cost=5,
+        extra_tags=("semantic_kind:effective_dimension",),
     )
 
     def _calculate_series(

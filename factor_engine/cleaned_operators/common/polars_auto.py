@@ -260,8 +260,22 @@ def _register_cleaning(canonical: str, name: str, calc_fn) -> None:
     )(_CleaningPolars)
 
 
+# R13 P1-12: fillna method spellings that are canonical forward-fill aliases.
+# Both the polars ``_ffill`` and ``FillNaPolarsAuto(method="ffill")`` land on the
+# same gated polars forward-fill path below.
+_FFILL_METHOD_ALIASES = frozenset({"ffill", "pad", "forward_fill"})
+
+
 def _ffill(self, x, **kwargs) -> pl.DataFrame:
+    # Mirror the pandas ``ffill`` gate (data_cleaning.FillForward): a field that
+    # does not allow forward fill stays missing (fail-closed) and ``max_ffill_gap``
+    # bounds the carry, so the polars path cannot bypass the pandas gate.
+    if not bool(kwargs.get("forward_fill_allowed", True)):
+        return x.clone()
+    gap = int(kwargs.get("max_ffill_gap", 0))
     cols = _numeric_cols(x)
+    if gap > 0:
+        return x.with_columns([pl.col(c).forward_fill(limit=gap).alias(c) for c in cols])
     return x.with_columns([pl.col(c).forward_fill().alias(c) for c in cols])
 
 
@@ -376,6 +390,11 @@ if not _has_polars("fillna"):
         )
 
         def _calculate_series(self, x: pl.DataFrame, value: float = 0.0, **kwargs) -> pl.DataFrame:
+            method = kwargs.get("method", value)
+            if isinstance(method, str) and method.strip().lower() in _FFILL_METHOD_ALIASES:
+                # R13 P1-12: canonical rewrite onto the gated polars ffill so
+                # ``fillna(x, method="ffill")`` cannot bypass the gate.
+                return _ffill(self, x, **kwargs)
             fill = float(kwargs.get("v", value))
             cols = _numeric_cols(x)
             return x.with_columns([

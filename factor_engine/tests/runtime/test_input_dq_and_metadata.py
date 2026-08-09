@@ -114,6 +114,17 @@ def test_materializer_writes_metadata_columns(tmp_path):
     df = pd.read_parquet(pq)
     assert "calc_time" in df.columns
     assert "factor_version" in df.columns
-    assert df["factor_version"].iloc[0] == "abc123def456"
+    # R11 #6: factor_version = 语义身份 digest 前缀（不再直接等于 ast_hash）。
+    # 只传 ast_hash（无 ir_node）时仍计算身份（含 frequency），版本是其 digest。
+    from runtime.factor_identity import compute_identity_from_materialize_ctx
+
+    expected = compute_identity_from_materialize_ctx(
+        ir_node=None,
+        ast_hash="abc123def456",
+        data_source_config=None,
+        run_lineage=None,
+        frequency="1d",
+    ).identity_digest()[:16]
+    assert df["factor_version"].iloc[0] == expected
     assert df["data_snapshot_id"].iloc[0] == "snap001"
     assert df["is_valid"].iloc[0] == 1

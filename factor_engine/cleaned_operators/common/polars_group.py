@@ -80,20 +80,48 @@ def group_ex_self_weighted_mean(x, weight, group):
         g_row = gv[t]
         for label in np.unique(g_row):
             idx = g_row == label
-            valid_w = np.isfinite(wv[t]) & idx
-            total_w = float(np.sum(wv[t][valid_w]))
+            # R5 P1-37(a) parity with the pandas twin: numerator and denominator
+            # MUST use the same mask `finite(x) & finite(w) & w >= 0`.  The old
+            # polars mask counted missing-x peers in the denominator but silently
+            # dropped them from the numerator.
+            mask = idx & np.isfinite(wv[t]) & np.isfinite(xv[t]) & (wv[t] >= 0)
+            total_w = float(np.sum(wv[t][mask]))
             if not np.isfinite(total_w) or total_w <= 0.0:
                 continue
-            weighted = float(np.sum(wv[t][valid_w] * xv[t][valid_w]))
+            weighted = float(np.sum(wv[t][mask] * xv[t][mask]))
             for j in np.flatnonzero(idx):
-                own_w = wv[t][j]
-                if not np.isfinite(own_w) or not np.isfinite(xv[t][j]):
+                if not mask[j]:
                     continue
-                denom = total_w - own_w
+                denom = total_w - wv[t][j]
                 if denom <= 0.0:
                     continue
-                out[t, j] = (weighted - own_w * xv[t][j]) / denom
+                out[t, j] = (weighted - wv[t][j] * xv[t][j]) / denom
     return _make(x, cols, out)
+
+
+def _valid_membership_label(label: object) -> bool:
+    """True when ``label`` is a concrete group/subgroup membership label.
+
+    Missing/unknown labels (NaN, +/-inf, ``None``, empty string) are NOT real
+    memberships: a cell carrying one must keep its residual NaN and must never
+    join a composite ``(group, subgroup)`` demeaning key.  This is the same
+    membership notion the group kernels use elsewhere in this file (a NaN group
+    label never matches ``==`` in ``group_ex_self_mean``; here we make the
+    exclusion explicit for every missing sentinel).
+    """
+    if label is None:
+        return False
+    if isinstance(label, str):
+        return label != ""
+    if isinstance(label, bool):
+        return True
+    try:
+        # Numeric labels (incl. numpy scalars): NaN / +/-inf are non-membership.
+        return bool(np.isfinite(float(label)))
+    except (TypeError, ValueError):
+        # Opaque object label (e.g. a non-empty tuple / arbitrary tag): treat as
+        # a concrete membership value.
+        return True
 
 
 def _demean_composite_row(values: np.ndarray, group_labels: np.ndarray, subgroup_labels: np.ndarray) -> np.ndarray:
@@ -102,18 +130,33 @@ def _demean_composite_row(values: np.ndarray, group_labels: np.ndarray, subgroup
     Mirrors ``group_ext.HierarchicalGroupNeutralize._demean_composite_row``: a
     bare subgroup label that repeats across parent groups must NOT be merged;
     the composite key keeps subgroup means within their own parent group.
+
+    R11 (honesty): a cell whose group OR subgroup label is missing/unknown
+    (NaN, +/-inf, ``None``, empty string) must keep its residual NaN.  It must
+    never participate in any composite key — a lone unknown-group cell would
+    otherwise be manufactured into a perfectly-neutralized 0 (mean == self).
+    Only cells with BOTH a valid group label and a valid subgroup label join
+    the ``(group, subgroup)`` key.
     """
-    out = values.copy()
+    out = np.full(values.shape, np.nan, dtype=float)
     n = len(values)
     keys = [None] * n
+    valid = np.zeros(n, dtype=bool)
     for i in range(n):
-        keys[i] = (group_labels[i], subgroup_labels[i])
+        if _valid_membership_label(group_labels[i]) and _valid_membership_label(subgroup_labels[i]):
+            keys[i] = (group_labels[i], subgroup_labels[i])
+            valid[i] = True
     seen: list[tuple] = []
-    for key in keys:
+    for i in range(n):
+        if not valid[i]:
+            continue
+        key = keys[i]
         if key not in seen:
             seen.append(key)
     for key in seen:
-        idx = np.flatnonzero(np.fromiter((k == key for k in keys), dtype=bool, count=n))
+        idx = np.flatnonzero(
+            np.fromiter((valid[i] and keys[i] == key for i in range(n)), dtype=bool, count=n)
+        )
         group_values = values[idx]
         finite = group_values[np.isfinite(group_values)]
         if finite.size == 0:
@@ -135,19 +178,21 @@ def hierarchical_group_neutralize(x, group, subgroup):
     return _make(x, cols, out)
 
 
-def cs_robust_resid(y, x, trim_ratio=0.1, add_intercept=True):
+def cs_trimmed_ols_resid(y, x, trim_ratio=0.1, add_intercept=True):
     """Trimmed cross-sectional OLS residual.
 
     Note (R5 P1-37c): this trims the most extreme ``x`` observations and then
     fits an ordinary least-squares line.  It is *trimmed OLS*, not a true robust
-    regression (no Huber / LAD weighting).  The name and signature are kept for
-    compatibility with the pandas twin (``group_ext.CsRobustResid``).
+    regression (no Huber / LAD / Theil-Sen weighting).  The canonical name is
+    ``cs_trimmed_ols_resid`` (R11 honesty); ``cs_robust_resid`` is kept as a
+    deprecated alias for backward compatibility with the pandas twin
+    (``group_ext.CsRobustResid``).
     R11 #137: a cross-section minimum-breadth gate matches the pandas twin —
     3 stocks must not drive the regression.
     """
     trim = _pf(trim_ratio, "trim_ratio")
     if not (0.0 <= trim < 0.5):
-        raise ValueError("cs_robust_resid requires 0 <= trim_ratio < 0.5")
+        raise ValueError("cs_trimmed_ols_resid requires 0 <= trim_ratio < 0.5")
     cols = _cols(y, x)
     rows = y.height
     yv = np.stack([y[c].to_numpy() for c in cols], axis=1)
@@ -184,8 +229,15 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("group_ex_self_mean", ("x", "group"), group_ex_self_mean, "Group mean excluding self."),
     ("group_ex_self_weighted_mean", ("x", "weight", "group"), group_ex_self_weighted_mean, "Group weighted mean excluding self."),
     ("hierarchical_group_neutralize", ("x", "group", "subgroup"), hierarchical_group_neutralize, "Subgroup then group demean."),
-    ("cs_robust_resid", ("y", "x", "trim_ratio", "add_intercept"), cs_robust_resid, "Trimmed-OLS cross-sectional residual (not a true robust regression)."),
+    # R11 honesty: the implementation is genuinely trimmed-OLS (trim extreme x,
+    # then ordinary least squares), NOT a robust regression.  The canonical name
+    # is cs_trimmed_ols_resid; cs_robust_resid remains a deprecated alias.
+    ("cs_trimmed_ols_resid", ("y", "x", "trim_ratio", "add_intercept"), cs_trimmed_ols_resid, "Trimmed-OLS cross-sectional residual (canonical cs_trimmed_ols_resid; cs_robust_resid is a deprecated alias — not a true robust regression)."),
 )
+
+# Backward-compatible module-level name for code that imported the function by
+# its historical spelling.  The canonical registry name is cs_trimmed_ols_resid.
+cs_robust_resid = cs_trimmed_ols_resid
 
 
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
@@ -219,3 +271,33 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
 
 for _name, _params, _function, _description in _SPECS:
     _register(_name, _params, _function, _description)
+
+
+def _register_trimmed_ols_honest_rename() -> None:
+    """R11: keep the historical ``cs_robust_resid`` resolvable as a deprecated
+    alias of the honest canonical ``cs_trimmed_ols_resid``.
+
+    The implementation is genuinely trimmed-OLS (trim extreme ``x``, then
+    ordinary least squares) — not a robust regression (no Huber/LAD/Theil-Sen) —
+    so the canonical name must be honest.  ``rename_canonical``/``register_alias``
+    preserve the old DSL name.  The static surface partition is updated in sync
+    (new canonical -> extended; retired spelling -> removed) so
+    ``layer_governance``'s exact-classification check still holds at finalize.
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    if "cs_robust_resid" in OperatorRegistry._operators:
+        # A backend registered the historical spelling directly; migrate it.
+        OperatorRegistry.rename_canonical("cs_robust_resid", "cs_trimmed_ols_resid")
+    elif "cs_trimmed_ols_resid" in OperatorRegistry._operators:
+        OperatorRegistry.register_alias("cs_robust_resid", "cs_trimmed_ols_resid")
+    try:
+        from cleaned_operators.operator_surface import extend_extended_only, retract_extended_only
+
+        extend_extended_only(["cs_trimmed_ols_resid"])
+        retract_extended_only(["cs_robust_resid"])
+    except ImportError:  # pragma: no cover - surface module always present in-tree
+        pass
+
+
+_register_trimmed_ols_honest_rename()

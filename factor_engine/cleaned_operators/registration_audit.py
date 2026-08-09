@@ -166,6 +166,51 @@ def install_registration_audit() -> None:
     _INSTALLED = True
 
 
+def _surface_label(canonical: str) -> str | None:
+    """The canonical's AuthoringTier surface (``daily``/``extended``/``research``/...).
+
+    Deliberately imported lazily so this module has no import-time dependency on
+    ``operator_surface`` (which itself imports the registry).
+    """
+    try:
+        from cleaned_operators.operator_surface import classify_canonical
+
+        return classify_canonical(canonical)
+    except Exception:  # pragma: no cover - audit-only best effort
+        return None
+
+
+def _reconcile_surface_tags(operator: Any, canonical: str, surface: str | None) -> None:
+    """Make the operator's metadata surface tags agree with the real surface.
+
+    R11 P1-04: ``daily`` is a stale registration-time stamp when the canonical
+    is actually ``research`` / ``extended`` / ``internal``.  Remove the
+    misleading ``daily`` tag and add the honest surface tag so metadata never
+    contradicts the single AuthoringTier authority.
+    """
+    if surface is None or surface in {"", "unclassified"}:
+        return
+    meta = getattr(operator, "metadata", None)
+    if meta is None:
+        return
+    try:
+        tags = list(getattr(meta, "tags", None) or [])
+    except AttributeError:
+        return
+    changed = False
+    if "daily" in tags and surface != "daily":
+        tags = [t for t in tags if t != "daily"]
+        changed = True
+    if surface not in tags and surface in {"research", "extended", "internal", "legacy", "unsafe"}:
+        tags.append(surface)
+        changed = True
+    if changed:
+        try:
+            meta.tags = tags
+        except (AttributeError, TypeError):  # frozen metadata
+            pass
+
+
 def finalize_registration_audit() -> None:
     """Attach deterministic replacement/signature evidence to the final catalog."""
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -179,6 +224,15 @@ def finalize_registration_audit() -> None:
         catalog = OperatorRegistry._catalog.setdefault(canonical, {})
         backend_meta = dict(catalog.get("backend_meta") or {})
         signatures: dict[str, list[str]] = {}
+        # R11 P1-04: reconcile the metadata ``daily`` tag against the SINGLE
+        # surface authority (AuthoringTier / classify_canonical frozensets).
+        # A helper like ``register_dual`` stamps ``daily`` at registration time,
+        # before the module's union_extended / union_research runs — so a
+        # research/extended operator can briefly carry a ``daily`` tag that
+        # contradicts its real surface.  Metadata must not duplicate surface
+        # authority; remove the stale ``daily`` tag on non-daily canonicals and
+        # add the honest surface tag.
+        _surface_tag = _surface_label(canonical)
         for backend, operator in implementations.items():
             params = list(_params(operator))
             signatures[backend] = params
@@ -186,6 +240,7 @@ def finalize_registration_audit() -> None:
             entry["param_names"] = params
             entry["implementation_type"] = type(operator).__name__
             backend_meta[backend] = entry
+            _reconcile_surface_tags(operator, canonical, _surface_tag)
         catalog["backend_meta"] = backend_meta
         catalog["backend_signatures"] = signatures
         catalog["replacement_history"] = sorted(

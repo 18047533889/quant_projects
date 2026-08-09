@@ -1,7 +1,6 @@
 """Lower expression trees to IR and derive causal history requirements."""
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
@@ -360,232 +359,41 @@ def _report_period_count(canonical: str, params: dict[str, Any]) -> int:
     )
 
 
-def _financial_lookback(canonical: str, params: dict[str, Any]) -> int:
+def _financial_lookback(
+    canonical: str, params: dict[str, Any], *, production: bool = False
+) -> int:
+    """P0-03 compatibility wrapper — the single history authority is
+    ``runtime.execution_contract`` (``history_requirement`` + the ported
+    ``_financial_report_extension``).  Production: an unavailable data-driven
+    fiscal calendar raises ``HistoryRequirementError`` (fail-closed planning).
+    Research: the explicit 80-rows/period heuristic.  Non-report-period
+    canonicals contribute 0.
+    """
     if canonical not in _FIN_REPORT_PERIOD_CANONICALS:
         return 0
-    n_events = _report_period_count(canonical, params)
-    # P1-14: prefer a data-driven fiscal-event lookback from the active financial
-    # source's period calendar when one is registered; fall back to the fixed
-    # ``FACTOR_ENGINE_REPORT_PERIOD_LOOKBACK_ROWS`` env heuristic otherwise.
-    try:
-        from backend.financial_semantics import (
-            fiscal_event_lookback,
-            get_active_financial_source,
-        )
-
-        data_driven = fiscal_event_lookback(get_active_financial_source(), None, n_events)
-    except Exception:
-        data_driven = None
-    if data_driven is not None:
-        return data_driven
-    rows_per_period = (
-        _positive_int(os.environ.get("FACTOR_ENGINE_REPORT_PERIOD_LOOKBACK_ROWS", "80"))
-        or 80
+    from runtime.execution_contract import (
+        _financial_research_heuristic,
+        history_requirement,
     )
-    return rows_per_period * n_events
 
-
-def _operator_lookback_increment(
-    canonical: str,
-    node: CleanedCall,
-    op_impl: Any,
-    policy: Any | None,
-) -> int:
-    params = _operator_param_values(node, op_impl)
-    increment = _financial_lookback(canonical, params)
-
-    # R4-03: a canonical-registered history requirement is authoritative.  Prefer
-    # the registry, then a ``history_requirement`` method on the implementation,
-    # before falling back to the name-based rules below.
-    history_fn = _HISTORY_REQUIREMENT_FUNCS.get(canonical)
-    if history_fn is None and op_impl is not None:
-        history_fn = getattr(op_impl, "history_requirement", None)
-    if history_fn is not None:
-        try:
-            required = int(history_fn(params))
-        except (TypeError, ValueError) as exc:
-            # P1-13: a history-requirement evaluation failure is a PLANNING error,
-            # not a silent downgrade to 0 — 0 would under-allocate causal lookback
-            # and silently corrupt the factor.  Only an explicit "not applicable"
-            # history function returning 0 may do so.
-            raise HistoryRequirementError(
-                f"history_requirement for canonical {canonical!r} failed with "
-                f"params {params!r}: {exc}"
-            ) from exc
-        if required > 0:
-            return max(increment, required)
-
-    if canonical in _FIXED_LAGS:
-        increment = max(increment, _FIXED_LAGS[canonical])
-
-    lag_names = _LAG_PARAM_NAMES.get(canonical)
-    if lag_names is not None:
-        for name in lag_names:
-            lag = _positive_int(params.get(name))
-            if lag is not None:
-                increment = max(increment, lag)
-        if policy is not None:
-            policy_lag = _positive_int(getattr(policy, "lag", None))
-            if policy_lag is not None:
-                increment = max(increment, policy_lag)
-        return increment
-
-    left = _positive_int(params.get("left_window")) or 0
-    right = _positive_int(params.get("right_window")) or 0
-    history = _positive_int(params.get("history_window")) or 0
-    if canonical in _PIVOT_CONFIRM_CANONICALS:
-        increment = max(increment, left + right)
-    if (
-        canonical in _BOUNDED_STRUCTURE_CANONICALS
-        or canonical in _STRUCTURE_PATTERNS
-        or canonical.startswith(_STRUCTURE_PREFIXES)
-    ) and history:
-        increment = max(increment, history - 1 + left + right)
-
-    for name in _WINDOW_PARAM_NAMES:
-        window = _positive_int(params.get(name))
-        if window is None:
-            continue
-        increment = max(increment, window - 1)
-        if canonical in _WINDOW_PLUS_ONE_CANONICALS:
-            increment = max(increment, window)
-
-    # R4-03: an internal lag parameter is additional lookback, NOT a max — a
-    # window+lag kernel (volume_autocorr / turnover_autocorr / lagged MI /
-    # lagged dependence / cross-lag) needs ``window-1 + lag`` rows.  Canonicals
-    # in ``_LAG_PARAM_NAMES`` already returned with their lag handled; these are
-    # single-series kernels that consume ``lag`` as a parameter.
-    if canonical not in _LAG_PARAM_NAMES:
-        for lag_name in ("lag", "max_lag", "event_lag", "match_lag", "fit_lag"):
-            lag = _positive_int(params.get(lag_name))
-            if lag is not None:
-                increment += lag
-                break
-
-    # R4-89: structural-level pivots must be confirmed past the bar, so add the
-    # confirmation window to the history budget (window-1 is already counted).
-    if canonical in _STRUCTURAL_LEVEL_CANONICALS:
-        confirmation = _positive_int(params.get("confirmation")) or 0
-        if confirmation:
-            increment += confirmation
-
-    if canonical == "candlestick_pattern":
-        body = _positive_int(params.get("body_window")) or 1
-        shadow = _positive_int(params.get("shadow_window")) or 1
-        increment = max(increment, max(body, shadow) + 4)
-    if canonical == "StochasticD":
-        window = _positive_int(params.get("window"))
-        if window:
-            increment = max(increment, window + 1)
-    if canonical == "ulcer_index":
-        window = _positive_int(params.get("window"))
-        if window:
-            increment = max(increment, 2 * (window - 1))
-    if canonical in {"MACD", "MACD_line", "MACD_signal", "MACD_hist"}:
-        fast = _positive_int(params.get("fast")) or 0
-        slow = _positive_int(params.get("slow")) or 0
-        signal = _positive_int(params.get("signal")) or 0
-        increment = max(increment, max(fast, slow) - 1 + max(signal - 1, 0))
-    if canonical in {"PPO", "PPO_signal", "PPO_hist", "PVO", "PVO_signal", "PVO_hist"}:
-        slow = _positive_int(params.get("slow_window")) or 0
-        signal = _positive_int(params.get("signal_window")) or 0
-        increment = max(increment, max(0, slow - 1) + max(0, signal - 1))
-    if canonical in {"TSI", "TSI_signal"}:
-        long_window = _positive_int(params.get("long_window")) or 0
-        short_window = _positive_int(params.get("short_window")) or 0
-        signal_window = _positive_int(params.get("signal_window")) or 0
-        increment = max(
-            increment,
-            max(0, long_window - 1)
-            + max(0, short_window - 1)
-            + max(0, signal_window - 1),
+    req = history_requirement(canonical, params, production=production)
+    if production and req.is_full_history:
+        # R11 P1-12: production must NOT silently fall back to the fixed 80-rows
+        # heuristic on ANY failure.  A missing/errored financial source, a bad
+        # period calendar or a broken data-source contract would be masked as a
+        # "conservative heuristic" and under-allocate causal lookback, silently
+        # corrupting the factor.  Fail the planning instead.
+        raise HistoryRequirementError(
+            f"{canonical}: data-driven fiscal history is unavailable for "
+            f"{_report_period_count(canonical, params)} report periods but mode "
+            "is production — no silent fallback to the fixed 80-rows heuristic "
+            "(R11 P1-12 fail-closed)"
         )
-    if canonical in {"DEMA", "TEMA"}:
-        window = _positive_int(params.get("window")) or 0
-        multiplier = 3 if canonical == "TEMA" else 2
-        increment = max(increment, multiplier * max(0, window - 1))
-    if canonical.startswith("ichimoku_"):
-        for name in ("tenkan_window", "kijun_window", "senkou_b_window"):
-            window = _positive_int(params.get(name))
-            increment = max(increment, max(0, (window or 1) - 1))
-    if canonical in _FLAG_PATTERNS:
-        impulse = _positive_int(params.get("impulse_window")) or 0
-        flag = _positive_int(params.get("flag_window")) or 0
-        increment = max(increment, impulse + flag)
-    if canonical in _PENNANT_PATTERNS:
-        impulse = _positive_int(params.get("impulse_window")) or 0
-        pennant = _positive_int(params.get("pennant_window")) or 0
-        increment = max(increment, impulse + pennant)
-    if canonical == "pattern_cup_handle":
-        cup = _positive_int(params.get("cup_window")) or 0
-        handle = _positive_int(params.get("handle_window")) or 0
-        increment = max(increment, cup + handle)
-    if canonical in _RETEST_PATTERNS:
-        window = _positive_int(params.get("window")) or 0
-        wait = _positive_int(params.get("max_wait")) or 0
-        increment = max(increment, window + wait)
-    if canonical == "ts_impulse_volume":
-        window = _positive_int(params.get("window")) or 0
-        baseline = _positive_int(params.get("baseline_window")) or 0
-        increment = max(increment, window + baseline)
-    if canonical == "ts_channel_width_slope" and history:
-        window = _positive_int(params.get("window")) or 1
-        increment = max(increment, history - 1 + left + right + window - 1)
-
-    if policy is not None:
-        policy_lag = _positive_int(getattr(policy, "lag", None))
-        lookback_window = _positive_int(getattr(policy, "lookback_window", None))
-        min_periods = _positive_int(getattr(policy, "min_periods", None))
-        if policy_lag is not None:
-            increment = max(increment, policy_lag)
-        if lookback_window is not None:
-            increment = max(increment, lookback_window - 1)
-        if min_periods is not None:
-            increment = max(increment, min_periods - 1)
-    return increment
+    if req.is_full_history:
+        return _financial_research_heuristic(canonical, params)
+    return max(0, int(req.rows))
 
 
-def _legacy_single_window_lookback(expr: Expr) -> int | None:
-    def visit(node: Expr) -> int | None:
-        if isinstance(node, (ColumnRef, Literal)):
-            return 0
-        if not isinstance(node, CleanedCall):
-            return None
-        from backend.cleaned_bridge import ensure_cleaned_loaded
-        from cleaned_operators.operator_policy import infer_operator_policy
-        from cleaned_operators.registry import OperatorRegistry
-
-        ensure_cleaned_loaded()
-        canonical = OperatorRegistry.resolve_canonical_strict(node.op)
-        implementation = OperatorRegistry.get(canonical)
-        if implementation is None:
-            return None
-        increment = _operator_lookback_increment(
-            canonical,
-            node,
-            implementation,
-            infer_operator_policy(implementation, canonical=canonical),
-        )
-        expression_children = [argument for argument in node.args if isinstance(argument, Expr)]
-        series_children = [
-            argument for argument in expression_children if not isinstance(argument, Literal)
-        ]
-        if increment > 0:
-            if len(series_children) != 1 or not isinstance(series_children[0], ColumnRef):
-                return None
-            params = _operator_param_values(node, implementation)
-            for name in _WINDOW_PARAM_NAMES:
-                window = _positive_int(params.get(name))
-                if window is not None:
-                    return max(window, increment)
-            return None
-        child_windows = [visit(child) for child in series_children]
-        if any(window is None for window in child_windows):
-            return None
-        return max((window or 0 for window in child_windows), default=0)
-
-    result = visit(expr)
-    return result if result and result > 0 else None
 
 
 @dataclass
@@ -599,6 +407,10 @@ class AnalysisResult:
     referenced_fields: dict[str, Any] = field(default_factory=dict)
     referenced_field_ids: set[str] = field(default_factory=set)
     column_schemas: dict[str, Schema] = field(default_factory=dict)
+    # P0-03: the authoritative composed history requirement (single authority
+    # from ``runtime.execution_contract.factor_history_requirement``).  The
+    # legacy integer ``lookback`` is kept only as a derived compatibility value.
+    history_requirement: Any = None
 
 
 # Audit §4.4 flow-grain contracts.  A-share statement flow fields are
@@ -1155,8 +967,11 @@ class Analyzer:
                 spec = resolve_field(node)
                 # Round-7 WS-C (#273): production mode fails closed on an unknown
                 # raw ColumnRef — no generic float-panel fallback.  Research mode
-                # keeps the explicit opt-in.
-                effective_production = self._production if production is None else bool(production)
+                # keeps the explicit opt-in.  ``effective_production`` is computed
+                # once at the top of ``lower()`` (R11 P1-01 mode authority); this
+                # closure reads it — it must NOT reassign it here or Python makes
+                # it a local of ``visit`` and the operator-path lookback gate
+                # (which never hits a ColumnRef) sees an unbound variable.
                 if spec is None and effective_production:
                     raise UnknownRawColumnError(
                         f"unknown raw column {node.name!r} has no registered FieldSpec; "
@@ -1346,14 +1161,22 @@ class Analyzer:
             from backend.parameter_aliases import normalize_parameter_aliases
 
             attrs = normalize_parameter_aliases(canonical, attrs)
-            policy = None
-            if implementation is not None:
-                from cleaned_operators.operator_policy import infer_operator_policy
+            # P0-03: ONE history authority — ``runtime.execution_contract``.
+            # The analyzer no longer guesses lookback from parameter names; the
+            # per-node requirement (its own contribution, excluding children)
+            # comes from ``own_history_requirement``, and the composed factor
+            # requirement is re-derived at the end via ``factor_history_requirement``.
+            from runtime.execution_contract import own_history_requirement
 
-                policy = infer_operator_policy(implementation, canonical=canonical)
-            own_increment = _operator_lookback_increment(
-                canonical, node, implementation, policy
-            )
+            params = _operator_param_values(node, implementation)
+            if effective_production and canonical in _FIN_REPORT_PERIOD_CANONICALS:
+                # Report-period operators fail closed in production when the
+                # data-driven fiscal calendar is unavailable (R11 P1-12).
+                _financial_lookback(canonical, params, production=True)
+            own_req = own_history_requirement(canonical, params)
+            if own_req.is_full_history:
+                requires_full_history = True
+            own_increment = max(0, int(own_req.rows))
             from backend.operator_types import OPERATOR_SIGNATURES
 
             signature = OPERATOR_SIGNATURES.get(canonical)
@@ -1479,9 +1302,17 @@ class Analyzer:
             )
 
         ir, lookback = visit(expr)
-        legacy_window = _legacy_single_window_lookback(expr)
-        if legacy_window is not None:
-            lookback = max(lookback, legacy_window)
+        # P0-03: the composed factor history comes from the SINGLE authority
+        # (``factor_history_requirement``).  The per-node ``visit`` composition
+        # stays for structural reasons but the authoritative rows / full-history
+        # decision is re-derived here.
+        from runtime.execution_contract import factor_history_requirement
+
+        history_req = factor_history_requirement(ir)
+        if history_req.is_full_history:
+            requires_full_history = True
+        if not history_req.is_full_history:
+            lookback = int(history_req.rows)
         period_errors = validate_fundamental_period_contracts(referenced_fields)
         if period_errors:
             raise PeriodSelectionContractError("; ".join(period_errors))
@@ -1518,4 +1349,5 @@ class Analyzer:
             referenced_fields=referenced_fields,
             referenced_field_ids={str(spec.field_id) for spec in referenced_fields.values()},
             column_schemas=column_schemas,
+            history_requirement=history_req,
         )

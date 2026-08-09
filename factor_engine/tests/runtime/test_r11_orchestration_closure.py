@@ -240,8 +240,25 @@ def test_edges_fallback_when_no_dataset():
     analysis = SimpleNamespace(referenced_fields={"close": spec})
     data_source = SimpleNamespace(dataset="ashare_stock_daily")
     edges = _edges_from_analysis("f", analysis, data_source)
-    # spec.dataset 缺失 → 回落 spec.table（逻辑表），anchor 只兜底
-    assert edges[0].source_dataset == "StockDailyBar"
+    # #收官轮 P0：spec.dataset 缺失 → TableSpec(spec.table).dataset 解析成物理
+    # dataset（ashare_stock_daily），**绝不写 logical table name**（否则 DataEvent
+    # 匹配不上、增量重算失效）；anchor 只兜底。
+    assert edges[0].source_dataset == "ashare_stock_daily"
+    assert edges[0].logical_table == "StockDailyBar"
+
+
+def test_edges_fallback_logical_table_unresolved_uses_anchor():
+    spec = SimpleNamespace(
+        dataset=None,
+        table="UnknownLogicalTable999",
+        field_id="close",
+        source_name="Close",
+    )
+    analysis = SimpleNamespace(referenced_fields={"close": spec})
+    data_source = SimpleNamespace(dataset="ashare_stock_daily")
+    edges = _edges_from_analysis("f", analysis, data_source)
+    # 逻辑表名在 registry 里解析不到 → 才回落到 anchor dataset（仍是物理 dataset）
+    assert edges[0].source_dataset == "ashare_stock_daily"
 
 
 # ---------------------------------------------------------------------------

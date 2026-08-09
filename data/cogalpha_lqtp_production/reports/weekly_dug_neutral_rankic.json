@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-09T05:19:09.746104+00:00",
+  "generated_at": "2026-08-09T05:49:16.673991+00:00",
   "threshold": 0.02,
   "years": [
     2019,
@@ -28,7 +28,7 @@
   ],
   "n_crawled": 142,
   "n_ok": 142,
-  "n_selected": 67,
+  "n_selected": 79,
   "neutralization_summary": {
     "n_probed": 142,
     "n_looks_cs_neutral": 142,
@@ -2095,9 +2095,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_5d58bc15/values.parquet"
       },
       "mem_available_gb": 24.49,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_mean((high - low) / (close + 0.001), 10)",
+      "lqtp_formula": "ts_mean((high - low) / (close + 0.001), 10)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_e885c4b1",
@@ -2169,9 +2172,44 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_e885c4b1/values.parquet"
       },
       "mem_available_gb": 24.41,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(close / (low + 0.001), 20)",
+      "lqtp_formula": "ts_std(close / (low + 0.001), 20)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
+    },
+    {
+      "factor_id": "ext_20260630113105_c66aad59",
+      "candidate_id": "evoalpha_20260630113105_c66aad59",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "rank(ts_corr(close, volume, 20)) * (0 - 1) * ts_std(returns, 10)",
+      "lqtp_formula": "rank(ts_corr(close, volume, 20)) * (0 - 1) * ts_std(ret, 10)",
+      "platform_submit": "submitted",
+      "definition_id": "5de07993-045d-48aa-9412-3ca8ae54b714",
+      "platform_mean_ic": 0.05192835957370747,
+      "platform_icir": 0.43039598952753844,
+      "platform_coverage": 0.9958927999362397,
+      "platform_long_short_sharpe": 3.158273710129049,
+      "pack_rank_ic": 0.054479,
+      "mean_rank_ic": 0.05192835957370747,
+      "abs_mean_rank_ic": 0.05192835957370747,
+      "display_rank_ic": 0.05192835957370747,
+      "rank_icir": 0.43039598952753844,
+      "display_rank_icir": 0.43039598952753844,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9958927999362397,
+      "long_short_sharpe": 3.158273710129049,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_bb4a002c",
@@ -2243,9 +2281,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_bb4a002c/values.parquet"
       },
       "mem_available_gb": 24.1,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(returns, 10)",
+      "lqtp_formula": "ts_std(ret, 10)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_1281ccaa",
@@ -2317,9 +2358,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_1281ccaa/values.parquet"
       },
       "mem_available_gb": 24.39,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "(high - low) / (open + 0.001)",
+      "lqtp_formula": "(high - low) / (open + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_55152d82",
@@ -2391,9 +2435,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_55152d82/values.parquet"
       },
       "mem_available_gb": 24.54,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "(high - low) / (close + 0.001)",
+      "lqtp_formula": "(high - low) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_86a7e37a",
@@ -2465,9 +2512,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_86a7e37a/values.parquet"
       },
       "mem_available_gb": 24.3,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "rank(ts_corr(close, volume, 10)) * ts_std(returns, 20)",
+      "lqtp_formula": "rank(ts_corr(close, volume, 10)) * ts_std(ret, 20)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_afd40784",
@@ -2550,7 +2600,9 @@
       "platform_mean_ic": 0.05196458199986722,
       "platform_icir": 0.4715305662027838,
       "platform_coverage": 0.9958138176209784,
-      "platform_long_short_sharpe": 3.5707438871538737
+      "platform_long_short_sharpe": 3.5707438871538737,
+      "csv_formula": "ts_corr(close, volume, 10) * (0 - 1) * ts_std(returns, 20)",
+      "csv_name": "Vol_Price_Reversal_20"
     },
     {
       "factor_id": "alpha_20260702_caa184c6",
@@ -2622,9 +2674,76 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_caa184c6/values.parquet"
       },
       "mem_available_gb": 24.33,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_corr(close, volume, 10) * ts_std(returns, 20)",
+      "lqtp_formula": "ts_corr(close, volume, 10) * ts_std(ret, 20)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
+    },
+    {
+      "factor_id": "ext_20260703011536_b84c1c2c",
+      "candidate_id": "evoalpha_20260703011536_b84c1c2c",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "ts_min(low, 10) / (close + 0.001)",
+      "lqtp_formula": "ts_min(low, 10) / (close + 0.001)",
+      "platform_submit": "submitted",
+      "definition_id": "3a9c5cc2-7d8f-4085-abc5-f25427469071",
+      "platform_mean_ic": 0.04535835180833034,
+      "platform_icir": 0.35446835744436533,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 1.5521583596294248,
+      "pack_rank_ic": 0.060433,
+      "mean_rank_ic": 0.04535835180833034,
+      "abs_mean_rank_ic": 0.04535835180833034,
+      "display_rank_ic": 0.04535835180833034,
+      "rank_icir": 0.35446835744436533,
+      "display_rank_icir": 0.35446835744436533,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9961360894012794,
+      "long_short_sharpe": 1.5521583596294248,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
+    },
+    {
+      "factor_id": "ext_20260629194635_53ed651c",
+      "candidate_id": "evoalpha_20260629194635_53ed651c",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "ts_min(low, 5) / (close + 0.001)",
+      "lqtp_formula": "ts_min(low, 5) / (close + 0.001)",
+      "platform_submit": "submitted",
+      "definition_id": "175cebaa-340f-4521-b565-cf15c3538ea2",
+      "platform_mean_ic": 0.04512608482857488,
+      "platform_icir": 0.3616821863794497,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 1.7495173196104927,
+      "pack_rank_ic": 0.065124,
+      "mean_rank_ic": 0.04512608482857488,
+      "abs_mean_rank_ic": 0.04512608482857488,
+      "display_rank_ic": 0.04512608482857488,
+      "rank_icir": 0.3616821863794497,
+      "display_rank_icir": 0.3616821863794497,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9961360894012794,
+      "long_short_sharpe": 1.7495173196104927,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_16104691",
@@ -2707,7 +2826,41 @@
       "platform_mean_ic": 0.05241773320147485,
       "platform_icir": 0.35051428551586944,
       "platform_coverage": 0.9827312347891729,
-      "platform_long_short_sharpe": 1.6640367217268248
+      "platform_long_short_sharpe": 1.6640367217268248,
+      "csv_formula": "rank((0 - 1) * ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
+      "csv_name": "Reversal_Volatility_ROC60"
+    },
+    {
+      "factor_id": "ext_20260630113105_190822fa",
+      "candidate_id": "evoalpha_20260630113105_190822fa",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "ts_std(returns, 10) * (0 - 1) * rank(ts_delta(close, 5))",
+      "lqtp_formula": "ts_std(ret, 10) * (0 - 1) * rank(ts_delta(close, 5))",
+      "platform_submit": "submitted",
+      "definition_id": "91449448-1d07-46dc-b9ba-4118d2d9ba07",
+      "platform_mean_ic": 0.043333637905831515,
+      "platform_icir": 0.36917784632401474,
+      "platform_coverage": 0.9950188486508564,
+      "platform_long_short_sharpe": 2.4346405791946726,
+      "pack_rank_ic": 0.046336,
+      "mean_rank_ic": 0.043333637905831515,
+      "abs_mean_rank_ic": 0.043333637905831515,
+      "display_rank_ic": 0.043333637905831515,
+      "rank_icir": 0.36917784632401474,
+      "display_rank_icir": 0.36917784632401474,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9950188486508564,
+      "long_short_sharpe": 2.4346405791946726,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_66ea5325",
@@ -2779,9 +2932,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_66ea5325/values.parquet"
       },
       "mem_available_gb": 24.14,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "rank(ts_delta(close, 5)) * rank(ts_std(returns, 20))",
+      "lqtp_formula": "rank(ts_delta(close, 5)) * rank(ts_std(ret, 20))",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260703_f609ea4d",
@@ -2853,9 +3009,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_f609ea4d/values.parquet"
       },
       "mem_available_gb": 24.02,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_min(low, 10) / (close + 0.001)",
+      "lqtp_formula": "ts_min(low, 10) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_549b43e6",
@@ -2938,7 +3097,9 @@
       "platform_mean_ic": -0.045909095449040115,
       "platform_icir": -0.36360423042284273,
       "platform_coverage": 0.9950188486508564,
-      "platform_long_short_sharpe": -2.4917721345820456
+      "platform_long_short_sharpe": -2.4917721345820456,
+      "csv_formula": "ts_rank(ts_delta(close, 5), 20) * ts_std(returns, 20)",
+      "csv_name": "reversal_volatility_hybrid"
     },
     {
       "factor_id": "alpha_20260702_4e49a3f5",
@@ -3010,9 +3171,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_4e49a3f5/values.parquet"
       },
       "mem_available_gb": 24.26,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_min(low, 20) / (close + 0.001)",
+      "lqtp_formula": "ts_min(low, 20) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_30e468c0",
@@ -3084,9 +3248,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_30e468c0/values.parquet"
       },
       "mem_available_gb": 24.26,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_min(low, 5) / (close + 0.001)",
+      "lqtp_formula": "ts_min(low, 5) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_873469e0",
@@ -3158,9 +3325,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_873469e0/values.parquet"
       },
       "mem_available_gb": 24.5,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_min(low, 30) / (close + 0.001)",
+      "lqtp_formula": "ts_min(low, 30) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260703_d485a3b3",
@@ -3232,9 +3402,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_d485a3b3/values.parquet"
       },
       "mem_available_gb": 24.75,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(returns, 60)",
+      "lqtp_formula": "ts_std(ret, 60)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260703_9e3b2920",
@@ -3317,7 +3490,9 @@
       "platform_mean_ic": 0.04597007108809132,
       "platform_icir": 0.44740889957109414,
       "platform_coverage": 0.9958178864069162,
-      "platform_long_short_sharpe": 3.5158800040224754
+      "platform_long_short_sharpe": 3.5158800040224754,
+      "csv_formula": "((0 - 1) * rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
+      "csv_name": "Alpha101_040"
     },
     {
       "factor_id": "alpha_20260703_99eb3d11",
@@ -3400,7 +3575,41 @@
       "platform_mean_ic": 0.04597007108809132,
       "platform_icir": 0.44740889957109414,
       "platform_coverage": 0.9958178864069162,
-      "platform_long_short_sharpe": 3.5158800040224754
+      "platform_long_short_sharpe": 3.5158800040224754,
+      "csv_formula": "(0 - 1) * rank(ts_std(high, 10)) * ts_corr(high, volume, 10)",
+      "csv_name": "Alpha101_040"
+    },
+    {
+      "factor_id": "ext_20260630113105_d17d6ed7",
+      "candidate_id": "evoalpha_20260630113105_d17d6ed7",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "ts_min(low, 5) / (delay(close, 1) + 0.001)",
+      "lqtp_formula": "ts_min(low, 5) / (delay(close, 1) + 0.001)",
+      "platform_submit": "submitted",
+      "definition_id": "d69a3b39-4544-428d-93c4-14ceef68a065",
+      "platform_mean_ic": 0.039085163699351035,
+      "platform_icir": 0.3014959119394721,
+      "platform_coverage": 0.9959127848554044,
+      "platform_long_short_sharpe": 2.003279223548982,
+      "pack_rank_ic": 0.044728,
+      "mean_rank_ic": 0.039085163699351035,
+      "abs_mean_rank_ic": 0.039085163699351035,
+      "display_rank_ic": 0.039085163699351035,
+      "rank_icir": 0.3014959119394721,
+      "display_rank_icir": 0.3014959119394721,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9959127848554044,
+      "long_short_sharpe": 2.003279223548982,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_68529a49",
@@ -3483,7 +3692,9 @@
       "platform_mean_ic": 0.04383303556655349,
       "platform_icir": 0.34759658939587557,
       "platform_coverage": 0.9916686821118579,
-      "platform_long_short_sharpe": 2.0600026729238365
+      "platform_long_short_sharpe": 2.0600026729238365,
+      "csv_formula": "rank(ts_delta(close, 20)) * (0 - 1) * ts_std(returns, 20)",
+      "csv_name": "volatility_reversal_hybrid"
     },
     {
       "factor_id": "alpha_20260701_f487f8ba",
@@ -3555,9 +3766,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_f487f8ba/values.parquet"
       },
       "mem_available_gb": 24.49,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_min(low, 60) / (close + 0.001)",
+      "lqtp_formula": "ts_min(low, 60) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_57dd1981",
@@ -3629,9 +3843,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_57dd1981/values.parquet"
       },
       "mem_available_gb": 24.71,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_corr(close, volume, 10) * (ts_std(volume, 20) / (ts_mean(volume, 20) + 1))",
+      "lqtp_formula": "ts_corr(close, volume, 10) * (ts_std(volume, 20) / (ts_mean(volume, 20) + 1))",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260703_ef5302fe",
@@ -3703,9 +3920,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_ef5302fe/values.parquet"
       },
       "mem_available_gb": 24.48,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(close, 5) / (close + 0.001)",
+      "lqtp_formula": "ts_std(close, 5) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260703_42cca713",
@@ -3777,9 +3997,44 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_42cca713/values.parquet"
       },
       "mem_available_gb": 24.42,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(close, 10) / (close + 0.001)",
+      "lqtp_formula": "ts_std(close, 10) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
+    },
+    {
+      "factor_id": "ext_20260701141641_cff71dce",
+      "candidate_id": "evoalpha_20260701141641_cff71dce",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "ts_mean(close, 30) / (close + 0.001)",
+      "lqtp_formula": "ts_mean(close, 30) / (close + 0.001)",
+      "platform_submit": "submitted",
+      "definition_id": "fb544bb8-3ea9-4941-a3b7-620546388e4a",
+      "platform_mean_ic": 0.03753472480775935,
+      "platform_icir": 0.24159979501088663,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 1.7715817242097314,
+      "pack_rank_ic": 0.040267,
+      "mean_rank_ic": 0.03753472480775935,
+      "abs_mean_rank_ic": 0.03753472480775935,
+      "display_rank_ic": 0.03753472480775935,
+      "rank_icir": 0.24159979501088663,
+      "display_rank_icir": 0.24159979501088663,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9961360894012794,
+      "long_short_sharpe": 1.7715817242097314,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_61d3d4de",
@@ -3851,9 +4106,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_61d3d4de/values.parquet"
       },
       "mem_available_gb": 24.28,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "low / (close + 0.001)",
+      "lqtp_formula": "low / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260703_c6169b2e",
@@ -3936,7 +4194,9 @@
       "platform_mean_ic": -0.04169099723466154,
       "platform_icir": -0.3701978892467635,
       "platform_coverage": 0.9961360894012794,
-      "platform_long_short_sharpe": -3.0276766334995138
+      "platform_long_short_sharpe": -3.0276766334995138,
+      "csv_formula": "close / (low + 0.001)",
+      "csv_name": "Basic_Close_Low_Ratio"
     },
     {
       "factor_id": "alpha_20260703_6c174054",
@@ -4019,7 +4279,9 @@
       "platform_mean_ic": -0.038802915595491504,
       "platform_icir": -0.35839869018580556,
       "platform_coverage": 0.9961360894012794,
-      "platform_long_short_sharpe": 1.0159805803247846
+      "platform_long_short_sharpe": 1.0159805803247846,
+      "csv_formula": "(high - open) / (open + 0.001)",
+      "csv_name": "Alpha158_KUP"
     },
     {
       "factor_id": "alpha_20260701_149b529b",
@@ -4091,9 +4353,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_149b529b/values.parquet"
       },
       "mem_available_gb": 24.32,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "rank(close / (low + 0.001)) * (0 - 1) * rank(ts_std(ts_delta(close, 5), 20))",
+      "lqtp_formula": "rank(close / (low + 0.001)) * (0 - 1) * rank(ts_std(ts_delta(close, 5), 20))",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_393d28b7",
@@ -4165,9 +4430,44 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_393d28b7/values.parquet"
       },
       "mem_available_gb": 24.22,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(close, 20) * 2 / (ts_mean(close, 20) + 0.001)",
+      "lqtp_formula": "ts_std(close, 20) * 2 / (ts_mean(close, 20) + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
+    },
+    {
+      "factor_id": "ext_20260701222951_b6074f02",
+      "candidate_id": "evoalpha_20260701222951_b6074f02",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "delay(low, 1) / (close + 0.001)",
+      "lqtp_formula": "delay(low, 1) / (close + 0.001)",
+      "platform_submit": "submitted",
+      "definition_id": "dc621f81-f311-4916-9f00-64c405c77774",
+      "platform_mean_ic": 0.033917015326688976,
+      "platform_icir": 0.26071015644601964,
+      "platform_coverage": 0.9959127848554044,
+      "platform_long_short_sharpe": 1.395009482574636,
+      "pack_rank_ic": 0.051128,
+      "mean_rank_ic": 0.033917015326688976,
+      "abs_mean_rank_ic": 0.033917015326688976,
+      "display_rank_ic": 0.033917015326688976,
+      "rank_icir": 0.26071015644601964,
+      "display_rank_icir": 0.26071015644601964,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9959127848554044,
+      "long_short_sharpe": 1.395009482574636,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_741a044f",
@@ -4239,9 +4539,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_741a044f/values.parquet"
       },
       "mem_available_gb": 24.2,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_mean(close, 30) / (close + 0.001)",
+      "lqtp_formula": "ts_mean(close, 30) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_b37f3fb9",
@@ -4313,9 +4616,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_b37f3fb9/values.parquet"
       },
       "mem_available_gb": 24.23,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_corr(ts_delta(close, 5), ts_delta(volume, 5), 20)",
+      "lqtp_formula": "ts_corr(ts_delta(close, 5), ts_delta(volume, 5), 20)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_576e0a0b",
@@ -4398,7 +4704,9 @@
       "platform_mean_ic": -0.03660843904921337,
       "platform_icir": -0.23977372463435093,
       "platform_coverage": 0.9961360894012794,
-      "platform_long_short_sharpe": -1.7444274738216503
+      "platform_long_short_sharpe": -1.7444274738216503,
+      "csv_formula": "(close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001)",
+      "csv_name": "GTJA191_M021"
     },
     {
       "factor_id": "alpha_20260702_a1c128d5",
@@ -4481,7 +4789,9 @@
       "platform_mean_ic": 0.03643662350284487,
       "platform_icir": 0.3960281698928579,
       "platform_coverage": 0.9958927999362397,
-      "platform_long_short_sharpe": 3.3732231111878233
+      "platform_long_short_sharpe": 3.3732231111878233,
+      "csv_formula": "rank((0 - 1) * ts_corr(close, volume, 20))",
+      "csv_name": "Rank_Volume_Reversal_20"
     },
     {
       "factor_id": "alpha_20260701_cf427acf",
@@ -4553,9 +4863,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_cf427acf/values.parquet"
       },
       "mem_available_gb": 24.48,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(returns, 60) + ts_corr(close, volume, 20)",
+      "lqtp_formula": "ts_std(ret, 60) + ts_corr(close, volume, 20)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_40002fd7",
@@ -4627,9 +4940,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_40002fd7/values.parquet"
       },
       "mem_available_gb": 24.14,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_corr(close, volume, 20)",
+      "lqtp_formula": "ts_corr(close, volume, 20)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_efd125a8",
@@ -4701,9 +5017,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_efd125a8/values.parquet"
       },
       "mem_available_gb": 24.07,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_corr(ts_delta(close, 1), ts_delta(volume, 1), 20)",
+      "lqtp_formula": "ts_corr(ts_delta(close, 1), ts_delta(volume, 1), 20)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_1958c186",
@@ -4775,9 +5094,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_1958c186/values.parquet"
       },
       "mem_available_gb": 24.1,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(volume, 10) / (ts_mean(volume, 20) + 1)",
+      "lqtp_formula": "ts_std(volume, 10) / (ts_mean(volume, 20) + 1)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_673406ba",
@@ -4849,9 +5171,77 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_673406ba/values.parquet"
       },
       "mem_available_gb": 24.36,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "(0 - 1) * (rank((ts_std(abs((close - open)), 5) + (close - open)) + df))",
+      "lqtp_formula": "",
+      "formula_from": "formulas.csv",
+      "lqtp_native": false,
+      "platform_field_ok": false,
+      "platform_block_reason": "unknown_token:df"
+    },
+    {
+      "factor_id": "ext_20260629194635_4451e8dc",
+      "candidate_id": "evoalpha_20260629194635_4451e8dc",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
+      "lqtp_formula": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
+      "platform_submit": "submitted",
+      "definition_id": "95236783-9f5c-4e9b-a987-5d71d6fcba05",
+      "platform_mean_ic": 0.031051759071435075,
+      "platform_icir": 0.28341666134482674,
+      "platform_coverage": 0.9958856197257614,
+      "platform_long_short_sharpe": 2.716257801344926,
+      "pack_rank_ic": 0.042519,
+      "mean_rank_ic": 0.031051759071435075,
+      "abs_mean_rank_ic": 0.031051759071435075,
+      "display_rank_ic": 0.031051759071435075,
+      "rank_icir": 0.28341666134482674,
+      "display_rank_icir": 0.28341666134482674,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9958856197257614,
+      "long_short_sharpe": 2.716257801344926,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
+    },
+    {
+      "factor_id": "ext_20260701221018_2b6cff9a",
+      "candidate_id": "evoalpha_20260701221018_2b6cff9a",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "(0 - 1) * rank(((ts_std(abs((close - open)), 5) + (close - open)) + ts_corr(close, open, 10)))",
+      "lqtp_formula": "(0 - 1) * rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))",
+      "platform_submit": "submitted",
+      "definition_id": "a1941d4a-1035-4ca2-976c-50dbfb3a5eb3",
+      "platform_mean_ic": 0.031051759071435075,
+      "platform_icir": 0.28341666134482674,
+      "platform_coverage": 0.9958856197257614,
+      "platform_long_short_sharpe": 2.716257801344926,
+      "pack_rank_ic": 0.042519,
+      "mean_rank_ic": 0.031051759071435075,
+      "abs_mean_rank_ic": 0.031051759071435075,
+      "display_rank_ic": 0.031051759071435075,
+      "rank_icir": 0.28341666134482674,
+      "display_rank_icir": 0.28341666134482674,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9958856197257614,
+      "long_short_sharpe": 2.716257801344926,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_75f1066f",
@@ -4934,7 +5324,9 @@
       "platform_mean_ic": 0.033635363009558564,
       "platform_icir": 0.3794742510174855,
       "platform_coverage": 0.9950188486508564,
-      "platform_long_short_sharpe": 2.502838240511448
+      "platform_long_short_sharpe": 2.502838240511448,
+      "csv_formula": "rank(ts_delta(volume, 5)) * (0 - 1) * ts_std(returns, 10)",
+      "csv_name": "reversal_volume_volatility"
     },
     {
       "factor_id": "alpha_20260702_844ceabc",
@@ -5008,7 +5400,7 @@
       "mem_available_gb": 24.32,
       "dsl": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
       "fe_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
-      "lqtp_formula": "ts_sum(where(ts_delta(close, 1) > 0, ts_delta(close, 1), 0), 60) / (ts_sum(where((0 - 1) * ts_delta(close, 1) > 0, (0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "lqtp_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -5017,7 +5409,9 @@
       "platform_mean_ic": -0.02792230467454203,
       "platform_icir": -0.19681626434036065,
       "platform_coverage": 0.9961360894012794,
-      "platform_long_short_sharpe": -1.0068605532287147
+      "platform_long_short_sharpe": -1.0068605532287147,
+      "csv_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "csv_name": "Alpha158_SUMD60_v2"
     },
     {
       "factor_id": "alpha_20260701_57e30cff",
@@ -5089,9 +5483,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_57e30cff/values.parquet"
       },
       "mem_available_gb": 24.21,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(volume, 20) / (ts_mean(volume, 20) + 1)",
+      "lqtp_formula": "ts_std(volume, 20) / (ts_mean(volume, 20) + 1)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_581774bc",
@@ -5163,9 +5560,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_581774bc/values.parquet"
       },
       "mem_available_gb": 24.45,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "delay(low, 1) / (close + 0.001)",
+      "lqtp_formula": "delay(low, 1) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_6d5f848e",
@@ -5248,7 +5648,9 @@
       "platform_mean_ic": -0.03188946807657077,
       "platform_icir": -0.27731772318602166,
       "platform_coverage": 0.9948215125328779,
-      "platform_long_short_sharpe": -1.749155677654132
+      "platform_long_short_sharpe": -1.749155677654132,
+      "csv_formula": "rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5))",
+      "csv_name": "GTJA191_M020"
     },
     {
       "factor_id": "alpha_20260701_726efa4d",
@@ -5331,7 +5733,9 @@
       "platform_mean_ic": -0.03166439795395409,
       "platform_icir": -0.23060666586590822,
       "platform_coverage": 0.9961360894012794,
-      "platform_long_short_sharpe": -1.4835872296229917
+      "platform_long_short_sharpe": -1.4835872296229917,
+      "csv_formula": "(close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001)",
+      "csv_name": "Basic_BB_Position_20"
     },
     {
       "factor_id": "alpha_20260703_3962e26e",
@@ -5403,9 +5807,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_3962e26e/values.parquet"
       },
       "mem_available_gb": 24.25,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "delay(close, 10) / (close + 0.001)",
+      "lqtp_formula": "delay(close, 10) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_1f8103b7",
@@ -5477,9 +5884,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_1f8103b7/values.parquet"
       },
       "mem_available_gb": 24.48,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "(0 - 1) * rank(((ts_std(abs((close - open)), 5) + (close - open)) + ts_corr(close, open, 10)))",
+      "lqtp_formula": "(0 - 1) * rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_f50c69da",
@@ -5551,9 +5961,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f50c69da/values.parquet"
       },
       "mem_available_gb": 24.56,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
+      "lqtp_formula": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_5685f3e9",
@@ -5636,7 +6049,9 @@
       "platform_mean_ic": 0.03101344181889711,
       "platform_icir": 0.19968438289867746,
       "platform_coverage": 0.9961360894012794,
-      "platform_long_short_sharpe": 1.261141884033367
+      "platform_long_short_sharpe": 1.261141884033367,
+      "csv_formula": "rank((0 - 1) * ts_std(returns, 10)) * rank(ts_sum(returns, 6))",
+      "csv_name": "reversal_volatility_rank"
     },
     {
       "factor_id": "alpha_20260701_5f690b22",
@@ -5719,7 +6134,9 @@
       "platform_mean_ic": -0.032135898678759024,
       "platform_icir": -0.22715300928048024,
       "platform_coverage": 0.9939017275706081,
-      "platform_long_short_sharpe": -1.8141557856553425
+      "platform_long_short_sharpe": -1.8141557856553425,
+      "csv_formula": "ts_delta(close, 10) / (delay(close, 10) + 0.001)",
+      "csv_name": "Basic_Momentum_10"
     },
     {
       "factor_id": "alpha_20260702_9443699f",
@@ -5791,9 +6208,13 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_9443699f/values.parquet"
       },
       "mem_available_gb": 24.34,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "(rank(delay(close, 5)) - rank(close)) * rank(volume / (ts_mean(volume, 20) + 1))",
+      "lqtp_formula": "",
+      "formula_from": "formulas.csv",
+      "lqtp_native": false,
+      "platform_field_ok": false,
+      "platform_block_reason": "rankclose"
     },
     {
       "factor_id": "alpha_20260702_89d0956b",
@@ -5876,7 +6297,9 @@
       "platform_mean_ic": 0.03432377670289815,
       "platform_icir": 0.21770823566369518,
       "platform_coverage": 0.9959127848554044,
-      "platform_long_short_sharpe": 1.5730834945183731
+      "platform_long_short_sharpe": 1.5730834945183731,
+      "csv_formula": "ts_mean(close, 60) / (delay(close, 1) + 0.001)",
+      "csv_name": "Alpha158_MA60_turnover"
     },
     {
       "factor_id": "alpha_20260702_f0fd9be3",
@@ -5948,9 +6371,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f0fd9be3/values.parquet"
       },
       "mem_available_gb": 24.23,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(close, 30) / (close + 0.001)",
+      "lqtp_formula": "ts_std(close, 30) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_2f5c25fe",
@@ -6033,7 +6459,9 @@
       "platform_mean_ic": 0.028706333064481056,
       "platform_icir": 0.18613929275752686,
       "platform_coverage": 0.9950188486508564,
-      "platform_long_short_sharpe": 0.8865669415769459
+      "platform_long_short_sharpe": 0.8865669415769459,
+      "csv_formula": "rank((0 - 1) * ts_std(returns, 20)) * ts_rank(ts_delta(close, 5), 20)",
+      "csv_name": "reversal_volatility_hybrid"
     },
     {
       "factor_id": "alpha_20260701_463d42d0",
@@ -6105,9 +6533,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_463d42d0/values.parquet"
       },
       "mem_available_gb": 24.24,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "delay(open, 3) / (close + 0.001)",
+      "lqtp_formula": "delay(open, 3) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_abf0beb7",
@@ -6190,7 +6621,73 @@
       "platform_mean_ic": -0.02908952575903505,
       "platform_icir": -0.19962281517254307,
       "platform_coverage": 0.9950188486508564,
-      "platform_long_short_sharpe": -1.7005236825709713
+      "platform_long_short_sharpe": -1.7005236825709713,
+      "csv_formula": "ts_delta(close, 5) / (delay(close, 5) + 0.001)",
+      "csv_name": "Basic_Momentum_5"
+    },
+    {
+      "factor_id": "ext_20260701175237_59269c2f",
+      "candidate_id": "evoalpha_20260701175237_59269c2f",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "rank((vwap - close)) / rank((vwap + close))",
+      "lqtp_formula": "rank(vwap - close) / rank(vwap + close)",
+      "platform_submit": "submitted",
+      "definition_id": "5193382c-715e-4589-bdfd-17c8ac29ac7d",
+      "platform_mean_ic": 0.026532577114512967,
+      "platform_icir": 0.24811650439240826,
+      "platform_coverage": 0.9959811165251228,
+      "platform_long_short_sharpe": 3.1250311784367564,
+      "pack_rank_ic": 0.055744,
+      "mean_rank_ic": 0.026532577114512967,
+      "abs_mean_rank_ic": 0.026532577114512967,
+      "display_rank_ic": 0.026532577114512967,
+      "rank_icir": 0.24811650439240826,
+      "display_rank_icir": 0.24811650439240826,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9959811165251228,
+      "long_short_sharpe": 3.1250311784367564,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
+    },
+    {
+      "factor_id": "ext_20260701221018_3622e083",
+      "candidate_id": "evoalpha_20260701221018_3622e083",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "rank(vwap - close) / (rank(vwap + close) + 0.001)",
+      "lqtp_formula": "rank(vwap - close) / (rank(vwap + close) + 0.001)",
+      "platform_submit": "submitted",
+      "definition_id": "d043ae7d-8d1f-465e-8d92-c0caf4bad522",
+      "platform_mean_ic": 0.026484838667385237,
+      "platform_icir": 0.2476207349781292,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 3.107839657788696,
+      "pack_rank_ic": 0.055773,
+      "mean_rank_ic": 0.026484838667385237,
+      "abs_mean_rank_ic": 0.026484838667385237,
+      "display_rank_ic": 0.026484838667385237,
+      "rank_icir": 0.2476207349781292,
+      "display_rank_icir": 0.2476207349781292,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9961360894012794,
+      "long_short_sharpe": 3.107839657788696,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_d332134b",
@@ -6273,7 +6770,9 @@
       "platform_mean_ic": -0.02865161563677333,
       "platform_icir": -0.20669234982142426,
       "platform_coverage": 0.9959127848554044,
-      "platform_long_short_sharpe": -1.0241206089428594
+      "platform_long_short_sharpe": -1.0241206089428594,
+      "csv_formula": "ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001)",
+      "csv_name": "Basic_Skew_Proxy_20"
     },
     {
       "factor_id": "alpha_20260702_21fb502a",
@@ -6356,7 +6855,9 @@
       "platform_mean_ic": -0.025636695419488605,
       "platform_icir": -0.17377780998485254,
       "platform_coverage": 0.9961360894012794,
-      "platform_long_short_sharpe": -1.2167000096262945
+      "platform_long_short_sharpe": -1.2167000096262945,
+      "csv_formula": "(close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001)",
+      "csv_name": "GTJA191_M003"
     },
     {
       "factor_id": "alpha_20260702_66b498d6",
@@ -6428,9 +6929,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_66b498d6/values.parquet"
       },
       "mem_available_gb": 24.47,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "rank(ts_corr(volume, ts_mean(volume, 60), 12)) * (ts_mean(volume, 9) - ts_mean(volume, 26)) / (ts_mean(volume, 12) + 1)",
+      "lqtp_formula": "rank(ts_corr(volume, ts_mean(volume, 60), 12)) * (ts_mean(volume, 9) - ts_mean(volume, 26)) / (ts_mean(volume, 12) + 1)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_f5562d5a",
@@ -6502,9 +7006,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f5562d5a/values.parquet"
       },
       "mem_available_gb": 24.35,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "ts_std(close, 60) / (close + 0.001)",
+      "lqtp_formula": "ts_std(close, 60) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_77eb1727",
@@ -6576,9 +7083,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_77eb1727/values.parquet"
       },
       "mem_available_gb": 24.43,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "delay(vwap, 3) / (close + 0.001)",
+      "lqtp_formula": "delay(vwap, 3) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_98ed259d",
@@ -6661,7 +7171,9 @@
       "platform_mean_ic": -0.024188963281758513,
       "platform_icir": -0.2713604560776674,
       "platform_coverage": 0.9949258649251624,
-      "platform_long_short_sharpe": -3.182255363255693
+      "platform_long_short_sharpe": -3.182255363255693,
+      "csv_formula": "rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10)",
+      "csv_name": "GTJA191_M004_Alpha101_hybrid"
     },
     {
       "factor_id": "alpha_20260701_75057f17",
@@ -6744,7 +7256,9 @@
       "platform_mean_ic": 0.024012575312532744,
       "platform_icir": 0.17189977994078537,
       "platform_coverage": 0.9950188486508564,
-      "platform_long_short_sharpe": 1.92659901614966
+      "platform_long_short_sharpe": 1.92659901614966,
+      "csv_formula": "ts_std(returns, 60) * (0 - 1) * sign(ts_delta(close, 5))",
+      "csv_name": "Basic_Volatility_60_mutated"
     },
     {
       "factor_id": "alpha_20260703_454725cc",
@@ -6816,9 +7330,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_454725cc/values.parquet"
       },
       "mem_available_gb": 24.06,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "delay(open, 1) / (close + 0.001)",
+      "lqtp_formula": "delay(open, 1) / (close + 0.001)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_6ce5f556",
@@ -6890,9 +7407,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_6ce5f556/values.parquet"
       },
       "mem_available_gb": 24.37,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "rank(ts_corr(delay(open - close, 1), close, 200)) + rank(open - close)",
+      "lqtp_formula": "rank(ts_corr(delay(open - close, 1), close, 200)) + rank(open - close)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_153d5b20",
@@ -6964,9 +7484,12 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_153d5b20/values.parquet"
       },
       "mem_available_gb": 24.47,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "rank((0 - 1) + open / (close + 0.001))",
+      "lqtp_formula": "rank((0 - 1) + open / (close + 0.001))",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_f204de74",
@@ -7049,7 +7572,9 @@
       "platform_mean_ic": -0.025689153012967064,
       "platform_icir": -0.17977390492538303,
       "platform_coverage": 0.9961360894012794,
-      "platform_long_short_sharpe": -0.08937913936469842
+      "platform_long_short_sharpe": -0.08937913936469842,
+      "csv_formula": "(close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001)",
+      "csv_name": "Basic_Price_Position_60"
     },
     {
       "factor_id": "alpha_20260702_2e48ae98",
@@ -7132,7 +7657,9 @@
       "platform_mean_ic": -0.02145706924054808,
       "platform_icir": -0.16362970497164903,
       "platform_coverage": 0.9961360894012794,
-      "platform_long_short_sharpe": -2.0521046266480183
+      "platform_long_short_sharpe": -2.0521046266480183,
+      "csv_formula": "(close - open) / (open + 0.001)",
+      "csv_name": "Basic_Intraday_Return"
     },
     {
       "factor_id": "alpha_20260702_80bca4fc",
@@ -7204,9 +7731,44 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_80bca4fc/values.parquet"
       },
       "mem_available_gb": 24.28,
-      "has_formula": false,
-      "dsl": "",
-      "lqtp_formula": ""
+      "has_formula": true,
+      "dsl": "rank(ts_corr(close, ts_delta(log(volume + 1), 5), 10)) * ts_corr(open, volume, 10)",
+      "lqtp_formula": "rank(ts_corr(close, ts_delta(log(volume + 1), 5), 10)) * ts_corr(open, volume, 10)",
+      "formula_from": "formulas.csv",
+      "lqtp_native": true,
+      "platform_field_ok": true
+    },
+    {
+      "factor_id": "ext_20260629084658_70f2c10b",
+      "candidate_id": "evoalpha_20260629084658_70f2c10b",
+      "source": "pack_dsl_top_pick",
+      "source_label": "本周新挖·包内DSL",
+      "label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "has_formula": true,
+      "lqtp_native": true,
+      "dsl": "vwap / (close + 0.001)",
+      "lqtp_formula": "vwap / (close + 0.001)",
+      "platform_submit": "submitted",
+      "definition_id": "7656442b-c826-49d9-9aa0-0bc7a75721e6",
+      "platform_mean_ic": 0.01607762410287419,
+      "platform_icir": 0.13025692283565127,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 2.6546918176852228,
+      "pack_rank_ic": 0.059566,
+      "mean_rank_ic": 0.01607762410287419,
+      "abs_mean_rank_ic": 0.01607762410287419,
+      "display_rank_ic": 0.01607762410287419,
+      "rank_icir": 0.13025692283565127,
+      "display_rank_icir": 0.13025692283565127,
+      "sign_flipped": false,
+      "mean_daily_coverage": 0.9961360894012794,
+      "long_short_sharpe": 2.6546918176852228,
+      "report_href": "",
+      "materialize": "platform_only",
+      "from_pack_top_pick": true,
+      "platform_field_ok": true
     }
   ],
   "all_results": [
@@ -14378,7 +14940,7 @@
   ],
   "n_degenerate_filtered": 11,
   "selection_note": "Excluded near-constant / all-zero panels that can fabricate RankIC via ties.",
-  "platform_note": "本周67条：有DSL且可转平台的已提交LQTP（平台成功 25）；无DSL或字段不兼容的保留本地面板回测。returns→ret；ts_max(x,0)→where。",
+  "platform_note": "本周新挖共 79 条（含包内DSL精选 12 条，仅平台回测、不落本地面板）。有 LQTP 公式的已平台重测；无公式的保留本地面板回测。",
   "backtested_at": "2026-08-09T00:40:45.637524",
   "formula_attach": {
     "n_with_dsl": 25,
@@ -14656,5 +15218,7 @@
       "flip_for_display": false,
       "report_href": ""
     }
-  ]
+  ],
+  "n_pack_merged": 12,
+  "pack_top_picks_merged_into_selected": true
 }

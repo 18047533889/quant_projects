@@ -175,12 +175,39 @@ def _lookback_contract(canonical: str, catalog: dict[str, Any]) -> dict[str, Any
                 "inclusive_max_distance": True,
                 "unbounded_when_null": True,
             }
+        expr = _ts_lookback_expression(controlling)
         return {
             "kind": "parameterized_rows" if controlling else "causal_unbounded",
             "parameters": controlling,
             "includes_current_bar": True,
+            # R11 P1-13: a RECOVERABLE formula, not just a param-name list.  The
+            # planner / evidence / incremental runtime can reconstruct the exact
+            # warm-up rows from ``expression`` + ``semantics`` without re-deriving
+            # the operator's per-op formula table.
+            "expression": expr,
+            "semantics": "exact_rows" if expr else "causal_unbounded",
         }
     return {"kind": "zero", "rows": 0}
+
+
+def _ts_lookback_expression(controlling: list[str]) -> str | None:
+    """Best-effort recoverable warm-up formula for a trailing-window operator.
+
+    R11 P1-13: ``window`` consumes ``window-1`` prior rows; an additional ``lag``
+    (or ``min_periods``-style lookback) adds its offset on top.  Only the
+    canonical trailing params map to a closed-form bar count — anything else
+    stays ``None`` (the declared ``rows`` floor / analyzer formula is authoritative).
+    """
+    if not controlling:
+        return None
+    if "window" in controlling:
+        extra = [p for p in ("lag", "delay", "horizon") if p in controlling]
+        if extra:
+            return f"window - 1 + {extra[0]}"
+        return "window - 1"
+    if len(controlling) == 1:
+        return f"{controlling[0]}"
+    return " + ".join(controlling)
 
 
 def _parameter_constraints(canonical: str) -> dict[str, Any]:

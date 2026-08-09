@@ -155,16 +155,23 @@ if not getattr(analyzer.AnalysisResult, "_full_history_init_installed", False):
             if requires_full_history
             else int(lookback)
         )
+        # All fields passed as KEYWORDS: the dataclass field order
+        # (… referenced_field_ids, column_schemas, history_requirement) must
+        # not be re-aligned positionally here — a positional call mis-binds
+        # ``column_schemas`` onto ``referenced_field_ids`` and then collides
+        # with the ``referenced_field_ids=…`` keyword from ``lower()``.
         _analysis_result_init(
             self,
-            ir,
-            encoded,
-            has_ts_op,
-            has_cs_op,
-            referenced_columns,
-            requires_full_history,
-            referenced_fields or {},
-            column_schemas or {},
+            ir=ir,
+            lookback=encoded,
+            has_ts_op=has_ts_op,
+            has_cs_op=has_cs_op,
+            referenced_columns=referenced_columns,
+            requires_full_history=requires_full_history,
+            referenced_fields=referenced_fields or {},
+            referenced_field_ids=kwargs.pop("referenced_field_ids", None) or set(),
+            column_schemas=kwargs.pop("column_schemas", None) or {},
+            **kwargs,
         )
 
     analyzer.AnalysisResult.__init__ = _init_with_full_history_sentinel

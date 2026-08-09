@@ -15,7 +15,9 @@ import pandas as pd
 from api.factor import Factor
 from logging_utils import get_logger
 from runtime import dual_write_service, lineage_service
+from runtime.production_policy import is_production_mode
 from storage.catalog import compute_ir_hash
+from storage.exceptions import MaterializedButCatalogCommitFailed
 from storage.materializer import ParquetMaterializer
 
 logger = get_logger("runtime.materialize_service")
@@ -91,6 +93,90 @@ def _build_full_factor_definition(
         "description": description or getattr(factor, "description", None),
         "ast_hash": compute_ir_hash(analysis.ir),
     }
+
+
+def _effective_data_source_config(
+    data_source_config: dict | None,
+    data_source: Any,
+) -> dict | None:
+    """#收官轮 P0：显式 ``data_source_config`` 优先，否则从 live source 还原。
+
+    程序化 ``materialize()`` 未传 ``data_source_config`` 时，用
+    ``data_source.execution_spec()`` 还原正在执行的真实 source contract——否则
+    catalog / lineage / semantic identity 里只剩 ``{}``，事件增量 rebuild 无法
+    还原完整因子。不可推导时返回 ``None``。
+    """
+    if data_source_config:
+        return data_source_config
+    spec_fn = getattr(data_source, "execution_spec", None)
+    if not callable(spec_fn):
+        return None
+    try:
+        spec = spec_fn()
+    except Exception:  # pragma: no cover - 推导失败按不可用处理
+        return None
+    if isinstance(spec, dict) and spec:
+        return dict(spec)
+    return None
+
+
+def _build_semantic_identity(
+    *,
+    engine: Any,
+    factor: Factor,
+    ir_node: Any,
+    ast_hash: str,
+    frequency: str | None,
+    data_source_config: dict | None,
+    run_lineage: dict | None,
+    pit_enforce: bool | None,
+) -> Any:
+    """从 materialize 现场构建完整 ``FactorSemanticIdentity``（#收官轮 P0）。
+
+    不能让 ``ParquetMaterializer`` 自己根据残缺 ctx 重建身份——那只有哈希、
+    没有执行语义。同一公式不同 freq / universe / market / PIT / dialect 的因子
+    必须得到不同的 ``factor_version``，production 才能识别语义漂移并拒绝沿用
+    同 factor_id（``FactorCatalog.register`` 的
+    ``FactorSemanticIdentityMismatchError``）。
+
+    语义字段优先级：engine / data_source 显式执行语义 > factor 元数据 > 兜底
+    ``None``。无法获取真实语义时宁可显式 ``None`` 也不猜测。
+    """
+    if ir_node is None and not ast_hash:
+        return None
+    from runtime.factor_identity import compute_factor_identity
+
+    ds = getattr(engine, "data_source", None)
+    lineage_extra = (run_lineage or {}).get("extra") or {}
+    pit_effective = bool(
+        pit_enforce if pit_enforce is not None else getattr(ds, "pit_enforce", False)
+    )
+    ctx: dict[str, Any] = {
+        "ir_hash": ast_hash,
+        "operator_contract_hash": (run_lineage or {}).get("operator_catalog_hash"),
+        "field_contract_hash": (run_lineage or {}).get("field_catalog_hash"),
+        "source_contract_hash": lineage_extra.get("source_contract_hash"),
+        "source_dependency_hash": lineage_extra.get("source_dependency_hash"),
+        "data_source_config": data_source_config,
+        "factor": factor,
+        "frequency": frequency,
+        "market": (
+            getattr(engine, "market", None)
+            or getattr(ds, "market", None)
+            or getattr(ds, "market_code", None)
+        ),
+        "calendar": (
+            getattr(ds, "calendar_id", None) or getattr(ds, "calendar", None)
+        ),
+        "timezone": getattr(ds, "timezone", None),
+        "universe": getattr(factor, "universe", None),
+        "price_basis": getattr(ds, "price_basis", None),
+        "pit_policy": "enforce" if pit_effective else None,
+        "decision_time_policy": getattr(ds, "decision_time_policy", None),
+        "dialect": getattr(factor, "dialect", None),
+        "dialect_version": getattr(factor, "dialect_version", None),
+    }
+    return compute_factor_identity(ir_node, ctx=ctx)
 
 
 def resolve_parquet_write_target(write_target: str) -> str:
@@ -177,13 +263,19 @@ def execute_materialize(
         原 ``output`` 字典，附加 ``materialization`` 键含落盘摘要。
     """
     analysis = output["analysis"]
+    # #收官轮 P0：程序化 materialize() 未显式传 data_source_config 时，从 live
+    # source 的 ``execution_spec()`` 还原完整执行规格，供 lineage / semantic
+    # identity / full definition / rebuild 复用（否则 catalog 只存 ``{}``）。
+    effective_data_source_config = _effective_data_source_config(
+        data_source_config, engine.data_source
+    )
     lineage = lineage_service.build_materialize_lineage(
         factor=factor,
         analysis=analysis,
         output=output,
         factor_id=factor_id,
         expression=expression,
-        data_source_config=data_source_config,
+        data_source_config=effective_data_source_config,
         data_source=engine.data_source,
         mode=lineage_mode,
     )
@@ -193,6 +285,25 @@ def execute_materialize(
     )
     ast_hash = compute_ir_hash(analysis.ir)
     parquet_target = resolve_parquet_write_target(target)
+
+    # #收官轮 P0：production 由 orchestrator 从 ``engine.run_mode`` 一锤定音，
+    # 显式传给物化器——下游（``_resolve_production``）禁止再重新猜运行模式
+    # （否则 engine=production + env=research 时 direct-local 写守卫、semantic
+    # identity mismatch 门、incremental tombstone 策略全部失效）。
+    production = is_production_mode(engine.run_mode)
+    # #收官轮 P0：完整语义身份（含 frequency/market/universe/pit/dialect）在
+    # orchestrator 层构建后显式传入——物化器不再根据残缺 ctx 重建（那样 freq
+    # 1d 与 5m 会同 digest / 同 factor_version）。
+    semantic_identity = _build_semantic_identity(
+        engine=engine,
+        factor=factor,
+        ir_node=analysis.ir,
+        ast_hash=ast_hash,
+        frequency=frequency or factor.freq,
+        data_source_config=effective_data_source_config,
+        run_lineage={**lineage.to_dict(), "factor_id": factor_id or factor.name},
+        pit_enforce=pit_enforce,
+    )
 
     summary = materializer.materialize(
         factor_id=factor_id or factor.name,
@@ -208,9 +319,9 @@ def execute_materialize(
         run_lineage={**lineage.to_dict(), "factor_id": factor_id or factor.name},
         write_metadata=write_metadata,
         data_snapshot_id=lineage_service.resolve_data_snapshot_id(
-            engine.data_source, data_source_config
+            engine.data_source, effective_data_source_config
         ),
-        data_source_config=data_source_config,
+        data_source_config=effective_data_source_config,
         resume=resume_materialize,
         isolate_partition_failures=isolate_partition_failures,
         preserve_invalid_rows=preserve_invalid_rows,
@@ -220,6 +331,8 @@ def execute_materialize(
         storage_format=storage_format,
         partition_columns=partition_columns,
         deleted_keys=deleted_keys,
+        production=production,
+        semantic_identity=semantic_identity,
     )
 
     from runtime.incremental_scheduler import record_factor_dependency_from_analysis
@@ -239,12 +352,24 @@ def execute_materialize(
                 frequency=frequency,
                 description=description,
                 expression=expression,
-                data_source_config=data_source_config,
+                data_source_config=effective_data_source_config,
                 analysis=analysis,
                 pit_enforce=pit_enforce,
             ),
         )
     except Exception as exc:
+        # #收官轮 P0：factor 数据已落盘 + 水位线已推进，但依赖边 / full
+        # definition 没写进 catalog —— 调用方拿到的不能再是「完整成功」。否则
+        # DataEvent → dependency lookup → reconstruct 完整因子链路直接断裂，
+        # 增量重算再也找不到这个因子。production fail-closed：抛 IN_DOUBT
+        # 异常并携带已落盘的 summary 供对账；research 保留历史 warning 行为。
+        if production:
+            raise MaterializedButCatalogCommitFailed(
+                f"因子 {factor.name} 数据已落盘但依赖/full-definition catalog "
+                f"写入失败（IN_DOUBT，需对账：重试 catalog 写入或标记 "
+                f"NEED_RECONCILE，不能视为完整 PUBLISHED success）: {exc}",
+                materialization=summary,
+            ) from exc
         logger.warning("因子依赖 catalog 写入失败 factor=%s: %s", factor.name, exc)
 
     if needs_clickhouse_write(target):

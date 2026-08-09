@@ -2,8 +2,11 @@
 """Nonlinear dependence operators (2026-08 final pack, group 1).
 
 Adds distance correlation/covariance, quantile-histogram mutual information
-(and its lagged form) and upper/lower tail dependence.  All are causal
-daily-panel transforms.
+(and its lagged form) and fixed-q upper/lower tail coexceedance probabilities
+(``ts_upper_tail_coexceedance_probability`` /
+``ts_lower_tail_coexceedance_probability``; the legacy
+``ts_upper_tail_dependence`` / ``ts_lower_tail_dependence`` names resolve as
+deprecated aliases).  All are causal daily-panel transforms.
 
 Contract notes
 --------------
@@ -291,6 +294,50 @@ class TsLaggedMutualInformation(SeriesOperator):
         return frame_like(x, map_pair_rolling(xv, yv, w, _fn))
 
 
+def _fractional_tail_membership(vals: np.ndarray, quantile: float, direction: str) -> np.ndarray:
+    """Fractional tail-membership weights in [0, 1] for a fixed quantile ``q``.
+
+    ``quantile`` is the q LEVEL (same convention as the operator's ``q``:
+    ``(0.5, 1)`` for ``upper``, ``(0, 0.5)`` for ``lower``).  The tail is the
+    strict members plus a FRACTION of the boundary-tie group so the effective
+    tail mass equals the target tail size exactly:
+
+    * upper: ``count(v > Q(q)) + f * count(v == Q(q)) = (1 - q) * n``
+    * lower: ``count(v < Q(q)) + f * count(v == Q(q)) = q * n``
+
+    where ``Q(q) = np.quantile(vals, q)`` and ``f`` is the boundary fraction.
+    On tie-free (continuous) data the boundary group is empty and the weights
+    collapse to the strict 0/1 indicator.  The fractional split keeps the
+    effective tail mass symmetric for discrete A-share-style data (0 returns,
+    limit up/down) where the old strict/inclusive pair ``x > Q`` vs ``x <= Q``
+    was asymmetric (R11 P1 tie asymmetry).
+    """
+    v = np.asarray(vals, dtype=float)
+    n = v.size
+    if n == 0:
+        return np.zeros(0, dtype=float)
+    thr = float(np.quantile(v, quantile))
+    if direction == "upper":
+        strict = v > thr
+        target = (1.0 - quantile) * n
+    elif direction == "lower":
+        strict = v < thr
+        target = quantile * n
+    else:
+        raise ValueError("direction must be 'upper' or 'lower'")
+    boundary = v == thr
+    weights = np.zeros(n, dtype=float)
+    weights[strict] = 1.0
+    n_boundary = int(boundary.sum())
+    if n_boundary:
+        n_strict = float(weights.sum())
+        # Clamp to [0, 1]: under a pathological quantile rank the boundary group
+        # may not span the whole gap to the target (treat it fail-closed).
+        fraction = float(np.clip((target - n_strict) / n_boundary, 0.0, 1.0))
+        weights[boundary] = fraction
+    return weights
+
+
 def _tail_dependence(a: np.ndarray, b: np.ndarray, q: float, upper: bool, min_tail_count: int) -> float:
     """P(b in tail | a in tail) — directional, conditioned on ``a`` (source).
 
@@ -298,46 +345,51 @@ def _tail_dependence(a: np.ndarray, b: np.ndarray, q: float, upper: bool, min_ta
     target series (operator param ``y``).  This is NOT a symmetric copula
     dependence: it answers "given the SOURCE is in its tail, how likely is the
     TARGET to be in its own tail".
+
+    Fractional boundary-tie membership (R11 P1): both tails use the SAME
+    ``_fractional_tail_membership`` weights so the effective tail mass on each
+    side equals the target tail size even under heavy ties.  The joint is the
+    weighted product ``x_w * y_w`` and the denominator is the source weight sum.
     """
     n = a.size
     if n < 4:
         return np.nan
     if np.std(a) < 1e-12 or np.std(b) < 1e-12:
         return np.nan
-    if upper:
-        x_thr = float(np.quantile(a, q))
-        y_thr = float(np.quantile(b, q))
-        cond = a > x_thr
-        joint = (a > x_thr) & (b > y_thr)
-    else:
-        x_thr = float(np.quantile(a, q))
-        y_thr = float(np.quantile(b, q))
-        cond = a <= x_thr
-        joint = (a <= x_thr) & (b <= y_thr)
-    count_cond = int(cond.sum())
-    if count_cond < max(2, int(min_tail_count)):
+    direction = "upper" if upper else "lower"
+    x_w = _fractional_tail_membership(a, q, direction)
+    y_w = _fractional_tail_membership(b, q, direction)
+    denom = float(x_w.sum())
+    if denom < max(2, int(min_tail_count)):
         return np.nan
-    return float(joint.sum()) / float(count_cond)
+    joint = float(np.sum(x_w * y_w))
+    return joint / denom
 
 
 @register_operator(
-    name="ts_upper_tail_dependence",
+    name="ts_upper_tail_coexceedance_probability",
     category="time_series_risk",
     business_category="time_series_risk",
-    canonical="ts_upper_tail_dependence",
+    canonical="ts_upper_tail_coexceedance_probability",
     source="nonlinear_dependence",
 )
 class TsUpperTailDependence(SeriesOperator):
-    """上尾条件概率 P(y 在右尾 | x 在右尾)，有方向：以 source x 为条件。
+    """固定 q 的上尾同超概率 P(y > Qy(q) | x > Qx(q))，有方向：以 source x 为条件。
 
+    这是固定 q 的尾部同超概率（tail coexceedance probability），不是渐近
+    尾部依赖系数 λ = lim_{q→1} P(y > Fy⁻¹(q) | x > Fx⁻¹(q))。旧名
+    ``ts_upper_tail_dependence`` 保留为弃用别名。
     方向约定 (R5 P1-39(b))：输出是 P(y > Qy(q) | x > Qx(q))，即以 x（source/
     条件变量）的右尾为条件，衡量 target y 是否跟随。不是对称的 copula
     依赖；交换 x/y 会得到不同的数值。
     """
 
     metadata = _metadata(
-        "ts_upper_tail_dependence",
-        "方向性上尾依赖 P(target y 右尾 | source x 右尾)，条件样本不足返回 NaN。",
+        "ts_upper_tail_coexceedance_probability",
+        "固定 q 的上尾同超概率（tail coexceedance probability）"
+        " P(y > Qy(q) | x > Qx(q))：以 source x 的 q 分位数为条件、target y 跟随"
+        " 的条件概率；是固定 q 的同超概率，而非渐近尾部依赖系数 λ；旧名"
+        " ts_upper_tail_dependence 为弃用别名。条件样本不足返回 NaN。",
         ["x", "y", "window", "q", "min_tail_count"],
         unit="ratio",
     )
@@ -360,23 +412,29 @@ class TsUpperTailDependence(SeriesOperator):
 
 
 @register_operator(
-    name="ts_lower_tail_dependence",
+    name="ts_lower_tail_coexceedance_probability",
     category="time_series_risk",
     business_category="time_series_risk",
-    canonical="ts_lower_tail_dependence",
+    canonical="ts_lower_tail_coexceedance_probability",
     source="nonlinear_dependence",
 )
 class TsLowerTailDependence(SeriesOperator):
-    """下尾条件概率 P(y 在左尾 | x 在左尾)，有方向：以 source x 为条件。
+    """固定 q 的下尾同超概率 P(y ≤ Qy(q) | x ≤ Qx(q))，有方向：以 source x 为条件。
 
+    这是固定 q 的尾部同超概率（tail coexceedance probability），不是渐近
+    尾部依赖系数 λ = lim_{q→0} P(y < Fy⁻¹(q) | x < Fx⁻¹(q))。旧名
+    ``ts_lower_tail_dependence`` 保留为弃用别名。
     方向约定 (R5 P1-39(b))：输出是 P(y ≤ Qy(q) | x ≤ Qx(q))，即以 x（source/
     条件变量）的左尾为条件，衡量 target y 是否跟随。不是对称的 copula
     依赖；交换 x/y 会得到不同的数值。
     """
 
     metadata = _metadata(
-        "ts_lower_tail_dependence",
-        "方向性下尾依赖 P(target y 左尾 | source x 左尾)，条件样本不足返回 NaN。",
+        "ts_lower_tail_coexceedance_probability",
+        "固定 q 的下尾同超概率（tail coexceedance probability）"
+        " P(y ≤ Qy(q) | x ≤ Qx(q))：以 source x 的 q 分位数为条件、target y 跟随"
+        " 的条件概率；是固定 q 的同超概率，而非渐近尾部依赖系数 λ；旧名"
+        " ts_lower_tail_dependence 为弃用别名。条件样本不足返回 NaN。",
         ["x", "y", "window", "q", "min_tail_count"],
         unit="ratio",
     )
@@ -398,19 +456,48 @@ class TsLowerTailDependence(SeriesOperator):
         return frame_like(x, map_pair_rolling(xv, yv, w, _fn))
 
 
+_NEW_CANONICALS = (
+    "ts_upper_tail_coexceedance_probability",
+    "ts_lower_tail_coexceedance_probability",
+)
+# Round-11 integration: every canonical registered by this module (the renamed
+# coexceedance pair plus the pre-existing dependence operators) must stay
+# classified EXTENDED — the static surface partition gate counts every
+# registered operator against the partitions.
+_MODULE_CANONICALS = (
+    "ts_distance_corr",
+    "ts_distance_cov",
+    "ts_mutual_information",
+    "ts_lagged_mutual_information",
+    "ts_upper_tail_coexceedance_probability",
+    "ts_lower_tail_coexceedance_probability",
+)
+# R11 P1 honest naming: these operators compute a FIXED-q tail coexceedance
+# probability, NOT the asymptotic tail-dependence coefficient λ.  The canonical
+# names now say what they compute; the old names remain as deprecated resolving
+# aliases so existing recipes keep loading.
+_DEPRECATED_ALIASES = {
+    "ts_upper_tail_dependence": "ts_upper_tail_coexceedance_probability",
+    "ts_lower_tail_dependence": "ts_lower_tail_coexceedance_probability",
+}
+
+
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
+    from cleaned_operators.registry import OperatorRegistry
 
-    _surface.extend_extended_only({
-            "ts_distance_corr", "ts_distance_cov", "ts_mutual_information",
-            "ts_lagged_mutual_information", "ts_upper_tail_dependence",
-            "ts_lower_tail_dependence",
-        })
-    for _canon in (
-        "ts_distance_corr", "ts_distance_cov", "ts_mutual_information",
-        "ts_lagged_mutual_information", "ts_upper_tail_dependence",
-        "ts_lower_tail_dependence",
-    ):
+    # Round-11 integration: the whole module's canonical set must be classified
+    # EXTENDED — WS-E's rename replaced the old full union with only the new
+    # names, silently de-classifying the pre-existing dependence operators
+    # (ts_distance_corr / ts_mutual_information / …) and breaking the static
+    # surface partition gate.
+    _surface.extend_extended_only(set(_MODULE_CANONICALS))
+    for _old, _new in _DEPRECATED_ALIASES.items():
+        try:
+            OperatorRegistry.register_alias(_old, _new)
+        except (KeyError, ValueError):
+            pass  # already registered
+    for _canon in _NEW_CANONICALS:
         register_polars_bridge(_canon)
 
 

@@ -256,6 +256,42 @@ def _ctx_template(ctx: ExecutionContext) -> Any:
     return getattr(ctx, "template_series", None)
 
 
+def _validate_downsampled_result(
+    result: pd.DataFrame, template_panel: pd.DataFrame
+) -> None:
+    """Validate a shape-changing (downsampled) operator result (R11 P0-04).
+
+    The result is a DIFFERENT frequency than the input (e.g. minute -> daily),
+    so the exact index-match contract does not apply.  It must still be a
+    well-formed panel: same instrument columns as the input, a unique index, and
+    — for a time downsampling — fewer or equal rows (never MORE than the input,
+    which would be an upsampling the operator did not declare).
+    """
+    from backend.operator_errors import OperatorShapeError
+
+    if not isinstance(result.index, (pd.DatetimeIndex,)):
+        raise OperatorShapeError(
+            f"downsampled operator result index {type(result.index).__name__} is "
+            "not a DatetimeIndex (R11 P0-04 fail-closed)"
+        )
+    if not result.index.is_unique:
+        raise OperatorShapeError(
+            "downsampled operator result has duplicate dates (R11 P0-04)"
+        )
+    if list(result.columns) != list(template_panel.columns):
+        raise OperatorShapeError(
+            f"downsampled operator result columns {list(result.columns)} do not "
+            f"match the input panel {list(template_panel.columns)} — a daily "
+            "aggregation must preserve the instrument axis (R11 P0-04)"
+        )
+    if len(result) > len(template_panel):
+        raise OperatorShapeError(
+            f"downsampled operator produced {len(result)} rows from an input of "
+            f"{len(template_panel)} — an undeclared UPSAMPLING is not allowed "
+            "(R11 P0-04 fail-closed)"
+        )
+
+
 def _normalize_operator_result(
     result: Any,
     *,
@@ -263,6 +299,7 @@ def _normalize_operator_result(
     template: "pd.Series | pd.Index",
     template_panel: pd.DataFrame | None,
     ctx: ExecutionContext,
+    operator: Any = None,
 ) -> Any:
     if backend == "polars":
         from .panel_polars import is_polars_frame, polars_to_panel
@@ -272,9 +309,29 @@ def _normalize_operator_result(
             result = polars_to_panel(result, template=template_panel)
 
     from backend.operator_errors import OperatorShapeError
+    # R11 P0-04: a shape-changing operator (declared input_grain != output_grain,
+    # e.g. minute -> daily) legitimately returns a DIFFERENT-frequency panel, so
+    # the exact-index-match check below does not apply.  ``output_grain`` /
+    # ``input_grain`` live on the operator metadata and are also mirrored on the
+    # catalog contract by the registry.
+    grain_changing = False
+    if operator is not None:
+        _meta = getattr(operator, "metadata", None)
+        if _meta is not None:
+            _ig = getattr(_meta, "input_grain", None)
+            _og = getattr(_meta, "output_grain", None)
+            grain_changing = bool(_ig and _og and _ig != _og)
     if isinstance(result, pd.DataFrame):
         if template_panel is None:
             raise OperatorShapeError("DataFrame result requires a panel template")
+        if grain_changing:
+            _validate_downsampled_result(result, template_panel)
+            if panel_native_enabled(ctx):
+                return result
+            # A daily (or other downsampled) result must NOT be reindexed onto
+            # the minute input template — that would blank every daily value
+            # (no matching minute keys).  Stack on the result's OWN axis.
+            return panel_to_series(result, ctx, template=None)
         if not result.index.equals(template_panel.index):
             raise OperatorShapeError("operator DataFrame index does not match input panel")
         if not result.columns.equals(template_panel.columns):
@@ -362,6 +419,7 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
             template=template,
             template_panel=template_panel,
             ctx=ctx,
+            operator=operator,
         )
     return _kernel
 

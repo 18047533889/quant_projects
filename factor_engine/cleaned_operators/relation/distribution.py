@@ -144,11 +144,19 @@ def _id_value_map(
     source="relation.distribution",
 )
 class RelationTopkConcentration(SeriesOperator):
-    """名次面板前 k 名占比：Σ前k / Σ全体（缺失名次不计入分母）。"""
+    """名次面板前 k 名占比（rank-slot 语义）：分子=Σ(s1..sk)，前 k 个名次槽任一缺失 ⇒ NaN。
+
+    Rank-slot semantics: the numerator is the sum of the FIRST k RANK SLOTS
+    (s1..sk) — never the k largest values.  If ANY of the first k slots is
+    non-finite on a cell, that cell is NaN (an unknown top-1 cannot be
+    backfilled by top-6).  The denominator is the sum over ALL provided rank
+    slots; a missing rank slot is excluded from the denominator, never treated
+    as 0.
+    """
 
     metadata = _metadata(
         "relation_topk_concentration",
-        "前 k 名关系值占比。",
+        "前 k 名关系值占比（rank-slot：分子=Σ(s1..sk)；前 k 个名次槽任一缺失 ⇒ NaN；缺失名次不计入分母）。",
         ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "k"],
         category="relation",
         unit="ratio",
@@ -190,13 +198,19 @@ class RelationTopkConcentration(SeriesOperator):
         for r in range(rows):
             for c in range(cols):
                 vals = stacked[:, r, c]
+                # Rank-slot numerator: the first k SLOTS (s1..sk) are the top-k
+                # ranks.  ANY missing slot among them fails the cell closed —
+                # an unknown top-1 must never be backfilled by a lower rank.
+                top_slots = vals[:top_k]
+                if not np.all(np.isfinite(top_slots)):
+                    continue
                 finite = vals[np.isfinite(vals)]
                 if finite.size < 2:
                     continue
                 total = float(np.sum(finite))
                 if total <= 0.0:
                     continue
-                top = float(np.sum(np.sort(finite)[::-1][:top_k]))
+                top = float(np.sum(top_slots))
                 out[r, c] = top / total
         return frame_like(base, out)
 
@@ -485,6 +499,10 @@ class RelationRankEntityMobility(SeriesOperator):
     operator pairs holders by ShareholderId across the current and previous
     snapshots and averages the absolute change over the common entity set, so a
     pure rank swap with unchanged holdings yields zero mobility here.
+
+    Output unit: the operator consumes share/weight VALUE panels (s1..s10 /
+    p1..p10) and emits a change of those values, so the output carries the share
+    unit — ``same_as:share``, matching the sibling ``relation_share_mobility``.
     """
 
     metadata = _metadata(
@@ -497,8 +515,12 @@ class RelationRankEntityMobility(SeriesOperator):
             "psid1", "psid2", "psid3", "psid4", "psid5", "psid6", "psid7", "psid8", "psid9", "psid10",
         ],
         category="relation",
-        unit="same_as:value",
-        output_unit="same_as:value",
+        # R11 #182: entity-matched mobility is a change of the share/weight
+        # VALUE panels (s1..s10 / p1..p10) themselves — the output carries the
+        # share unit (matching relation_share_mobility), never an ambiguous
+        # "same_as:value" reference to a nonexistent input.
+        unit="same_as:share",
+        output_unit="same_as:share",
     )
     metadata.tags = list(metadata.tags) + ["entity_identity"]
 

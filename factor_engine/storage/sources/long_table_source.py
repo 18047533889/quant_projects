@@ -38,12 +38,22 @@ class LongTableDataSource(DataSource):
             if hasattr(inner, attr):
                 setattr(self, attr, getattr(inner, attr))
 
+    def execution_spec(self) -> dict[str, Any] | None:
+        """长表包装：透传内层 canonical 执行规格（#收官轮 P0）。"""
+        fn = getattr(self._inner, "execution_spec", None)
+        if not callable(fn):
+            return None
+        spec = fn()
+        if not isinstance(spec, dict):
+            return None
+        return dict(spec)
+
     def load_column(self, name: str):
         """load_column。
-        
+
         参数:
             name: 逻辑列名
-        
+
         返回:
             无
         """

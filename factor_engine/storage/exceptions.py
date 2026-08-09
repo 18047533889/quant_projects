@@ -64,6 +64,32 @@ class ClickHouseWriteError(Exception):
         self.summary = summary or {}
 
 
+class MaterializedButCatalogCommitFailed(Exception):
+    """因子数据已落盘但依赖 / full-definition 写入 catalog 失败（#收官轮 P0）。
+
+    物理数据 + 水位线已提交，但依赖边 / full definition 未持久化——事件增量
+    重建链路（``DataEvent`` → dependency lookup → reconstruct 完整因子 →
+    incremental recompute）无法还原它。production 下抛此异常而非 warning 吞掉：
+    该因子处于 **IN_DOUBT**，调用方必须对账（重试 catalog 写入 / 标记
+    NEED_RECONCILE / 回滚水位线），绝不能把这次运行当作完整 PUBLISHED success。
+
+    ``materialization`` 携带已落盘的 ``materialize()`` 摘要供对账。
+    """
+
+    def __init__(self, message: str, *, materialization: dict | None = None):
+        """初始化实例。
+
+        参数:
+            message: 见函数签名
+            materialization: 见函数签名（可选）
+
+        返回:
+            无
+        """
+        super().__init__(message)
+        self.materialization = materialization or {}
+
+
 class DualWriteError(Exception):
     """多目标物化部分成功时抛出。
     

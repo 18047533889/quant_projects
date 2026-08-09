@@ -719,3 +719,69 @@ production-gate / R10 identity 全绿。DA 侧 `tests/unit/test_final_closure_ro
 （production+local 由 guard 拒绝；staging-only 水位线 defer）。预存失败：
 `tests/runtime/test_logical_source_production_contracts.py::test_minute_sessions_never_collide_across_lunch_boundary`
 （V2 `_session_slots` lunch 边界 bug，stash 验证为提交时已存在，与本批无关）。
+
+---
+
+## 第六批审计收口（HEAD `eccc35d` 复查，DA Core 冻结、FE 物化/matrix 最后一层）
+
+外部 AI 复查确认 **DataAccess Core 本体无新架构性 P0**；剩余问题集中在
+FactorEngine 物化与 matrix orchestration 的最后一层。本批修 **6+2**（含并发会话
+R13 对 factor_matrix 的深度整改：P0-21~23 / P1-14~16 已覆盖 matrix 三项）。
+
+### 6 项
+
+- ✅ **1. factor_matrix 部分日期 upsert 不丢历史**（`_merge_matrix_frames`）：
+  merge 用 `indicator` 精确追踪 key 来源——key 在本次增量中（both/right_only）
+  → 新值覆盖（**含显式 NaN/tombstone**）；key 只在旧分区（left_only）→ 保留旧值。
+  修掉「只重算 A 的某一天 → A 其它历史日期被整体删除」。并发会话进一步规范化 key
+  dtype + 输入去重（P0-21）。
+- ✅ **2. factor_matrix 旧分区读失败 fail-closed**：分区存在但读失败（损坏/IO/
+  schema 异常）→ 移动 `.quarantine/` 并抛 `FactorMatrixReadError` hard fail，绝不
+  按空分区覆盖（P0-22）。research 也默认 hard fail（`recovery` 已弃用）。
+- ✅ **3. `engine.run_mode` → 物化器 `production` 显式传播**：`execute_materialize`
+  用 `is_production_mode(engine.run_mode)` 一锤定音传给 `materializer.materialize
+  (production=...)`；`_resolve_production` 只作无显式值时的兜底。修掉「engine=
+  production + env=research → 物化器按 research 跑」（local 写守卫 / semantic
+  identity mismatch 门 / incremental tombstone 全失效）。
+- ✅ **4. `factor_version` 是完整 semantic identity**：`FactorSemanticIdentity`
+  新增 `frequency` 字段；orchestrator 层 `_build_semantic_identity` 用
+  factor/analysis/engine/run_lineage 组装含 frequency/market/universe/pit/dialect
+  的完整身份后显式传 `semantic_identity=` 给物化器（不再由物化器按残缺 ctx 重建）。
+  同公式 1d vs 5m → digest 不同 → production 下 `register` 抛
+  `FactorSemanticIdentityMismatchError`。
+- ✅ **5. dependency/full-definition 写入失败 fail-closed**：`execute_materialize`
+  里 `record_factor_dependency_from_analysis` 失败，production 抛
+  `MaterializedButCatalogCommitFailed`（IN_DOUBT，携带已落盘 summary 供对账），
+  不再 warning 吞掉返回「完整 success」；research 保留 warning 兼容。
+- ✅ **6. 程序化 materialize() 未传 data_source_config 时可复现**：正式 DataSource
+  实现 `execution_spec()`（data_access / composite(递归含 join 契约) / long_table
+  / parquet / kline / cleaned / clickhouse / intraday_daily），`execute_materialize`
+  用 `effective = explicit_config or engine.data_source.execution_spec()` 还原完整
+  source contract，供 lineage / semantic identity / full definition / 事件增量
+  rebuild 复用。`clean_execution_spec` 剔除 None 项以匹配 factory `_pop_option`
+  契约（None 与 [] 的区分保留）。
+
+### 2 项 P1（顺手收）
+
+- ✅ **7. dependency edge 物理 dataset 解析**：`_edges_from_analysis` 的
+  `source_dataset` 改为 `spec.dataset → TableSpec(spec.table).dataset →
+  anchor_dataset`，**绝不写 logical table name**（否则 `DataEvent.dataset` 匹配
+  不上、增量重算静默失效）。更新了断言旧 fallback 的过期测试。
+- ✅ **8. factor_matrix 纳入 DA 治理**：production 走 `.staging/<part>/` →
+  validate → manifest(CAS, P1-15) → 原子 publish（P1-14）；`factor_versions`
+  semantic_digest 绑定拒绝混列（P0-23）。并发会话实现，engine/materialize_matrix
+  参数已对齐转发。
+
+### 验证
+
+新增 `tests/integration/test_final_closure_audit_round3.py`（15 条 adversarial：
+matrix partial-date / tombstone / quarantine hard-fail、production 传播、freq
+identity 变化 + production reject、catalog-commit fail-closed（production raise /
+research warn）、execution_spec 恢复、edge physical dataset、production
+staging→publish）全绿。`test_r11_orchestration_closure.py`（edge fallback 更新 +
+新增 unknown-table fallback）、`test_r10_factor_identity.py`、`test_materializer.py`、
+`test_phase22_platform.py`、`test_round13_factor_matrix_governance_2026_08.py`、
+`test_input_dq_and_metadata.py`（更新为 digest 前缀 contract）全绿；前轮
+integration2+integration 34 条全绿。预存失败（并发会话 WIP，非本批）：P0-01
+`plan_updates_from_data_event` forward-impact end_date 语义变更后的过期测试、
+DA `estimate_column_null_ratios` 语义变更后的过期测试。

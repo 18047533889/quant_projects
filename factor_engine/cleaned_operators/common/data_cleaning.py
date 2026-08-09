@@ -28,6 +28,41 @@ from cleaned_operators.base import (
 import numpy as np
 import pandas as pd
 
+# R13 P1-12: fillna method spellings that are canonical forward-fill aliases.
+# ``fillna(x, method=...)`` must be rewritten onto the single gated ffill
+# implementation so the ``forward_fill_allowed`` / ``max_ffill_gap`` contract
+# cannot be bypassed by spelling the same operation through ``fillna``.
+_FFILL_METHOD_ALIASES = frozenset({"ffill", "pad", "forward_fill"})
+
+# Single source of truth for the forward-fill allowance gate.  A field provider
+# declares non-ffillable semantics (returns / events / revisions) by passing
+# ``forward_fill_allowed=False`` (missing stays missing, fail-closed).  The
+# defaults live here so ``ffill`` and ``fillna(method="ffill")`` share one
+# contract.  TODO(r13): derive from ``FieldSpec.missing_policy`` once that field
+# exists; today the gate is keyword-driven at the operator boundary.
+_FORWARD_FILL_ALLOWED_DEFAULT = True
+_MAX_FFILL_GAP_DEFAULT = 0
+
+
+def _forward_fill_panel(
+    x: pd.DataFrame,
+    *,
+    forward_fill_allowed: bool = _FORWARD_FILL_ALLOWED_DEFAULT,
+    max_ffill_gap: int = _MAX_FFILL_GAP_DEFAULT,
+) -> pd.DataFrame:
+    """Single gated forward-fill implementation (R13 P1-12).
+
+    ``ffill`` and ``fillna(method="ffill"/"pad"/"forward_fill")`` both land here
+    so the gate has exactly one path and cannot be bypassed.
+    """
+    if not bool(forward_fill_allowed):
+        return x.copy()
+    gap = int(max_ffill_gap)
+    if gap > 0:
+        return x.ffill(limit=gap)
+    return x.ffill()
+
+
 # canonical=dropna backend=pandas_numpy selected=dropna source=data_handling/missing_values.py
 @register_operator(name="dropna", category="data_handling", business_category="data_cleaning", canonical="dropna", source="factor_dsl_np", status="research")
 class DropNA(SeriesOperator):
@@ -326,20 +361,21 @@ class FillForward(SeriesOperator):
     def _calculate_series(
         self,
         x: pd.DataFrame,
-        forward_fill_allowed: bool = True,
-        max_ffill_gap: int = 0,
+        forward_fill_allowed: bool = _FORWARD_FILL_ALLOWED_DEFAULT,
+        max_ffill_gap: int = _MAX_FFILL_GAP_DEFAULT,
         **kwargs,
     ) -> pd.DataFrame:
         # R11 #179: the forward-fill allowance is part of the operator contract,
         # so a field provider can declare returns / events / revisions as
         # non-ffillable.  ``forward_fill_allowed=False`` fails closed (missing
         # stays missing) instead of manufacturing a stale value.
-        if not bool(forward_fill_allowed):
-            return x.copy()
-        gap = int(max_ffill_gap)
-        if gap > 0:
-            return x.ffill(limit=gap)
-        return x.ffill()
+        # R13 P1-12: single implementation path — ``fillna(method="ffill")``
+        # delegates here so the gate cannot be bypassed.
+        return _forward_fill_panel(
+            x,
+            forward_fill_allowed=forward_fill_allowed,
+            max_ffill_gap=max_ffill_gap,
+        )
 
 # aliases: FillForward, fillna_forward
 
@@ -363,14 +399,26 @@ class FillNA(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, method='zero', **kwargs) -> pd.DataFrame:
         if isinstance(method, (int, float)) and not isinstance(method, bool):
             return x.fillna(method)
+        if isinstance(method, str) and method.strip().lower() in _FFILL_METHOD_ALIASES:
+            # R13 P1-12: canonical rewrite — forward fill must go through the
+            # single gated ffill implementation so ``forward_fill_allowed`` /
+            # ``max_ffill_gap`` apply.  Previously this branch called
+            # ``x.fillna(method='ffill')`` directly and bypassed the gate.
+            return _forward_fill_panel(
+                x,
+                forward_fill_allowed=bool(
+                    kwargs.get("forward_fill_allowed", _FORWARD_FILL_ALLOWED_DEFAULT)
+                ),
+                max_ffill_gap=int(
+                    kwargs.get("max_ffill_gap", _MAX_FFILL_GAP_DEFAULT)
+                ),
+            )
         if method == 'mean':
             return x.fillna(x.mean(axis=1), axis=0)
         elif method == 'median':
             return x.fillna(x.median(axis=1), axis=0)
         elif method == 'zero':
             return x.fillna(0)
-        elif method == 'ffill':
-            return x.fillna(method='ffill')
         elif method == 'bfill':
             raise ValueError("fillna(method='bfill') was removed because it is not point-in-time safe")
         else:

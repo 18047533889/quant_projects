@@ -21,9 +21,16 @@ def execute_materialize_matrix(
     matrix_root: str | Path | None = None,
     partition_columns: list[str] | None = None,
     value_dtype: str = "float32",
+    recovery: bool = False,
+    factor_versions: dict[str, str] | None = None,
+    expected_manifest_version: int | None = None,
     **run_kwargs: Any,
 ) -> dict[str, Any]:
-    """``FactorEngine.materialize_matrix`` 实现体。"""
+    """``FactorEngine.materialize_matrix`` 实现体。
+
+    ``factor_versions`` / ``expected_manifest_version`` 透传给
+    ``FactorMatrixMaterializer.materialize``（P0-23 / P1-15），不会进入 run_many。
+    """
     ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
     if len(ids) != len(factors):
         raise ValueError("factor_ids 长度必须与 factors 一致")
@@ -33,6 +40,7 @@ def execute_materialize_matrix(
         for factor, fid in zip(factors, ids)
     }
     from storage.factor_matrix_materializer import FactorMatrixMaterializer
+    from runtime.production_policy import is_production_mode
 
     materializer = FactorMatrixMaterializer(matrix_root=matrix_root)
     summary = materializer.materialize(
@@ -41,6 +49,13 @@ def execute_materialize_matrix(
         frequency=frequency,
         partition_columns=partition_columns,
         value_dtype=value_dtype,
+        # #收官轮 P0：production 由 engine.run_mode 一锤定音，物化器不再自行
+        # 从环境变量猜（否则 engine=production + env=research 时 matrix 直写
+        # 本地不会被拒）。
+        production=is_production_mode(engine.run_mode),
+        recovery=recovery,
+        factor_versions=factor_versions,
+        expected_manifest_version=expected_manifest_version,
     )
     summary["run_many"] = {
         "factor_names": [f.name for f in factors],

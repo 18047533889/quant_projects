@@ -4,8 +4,9 @@
 * ``ts_hill_tail_index``        — Hill estimator of the tail index ξ (shape, not
   size): how thick the extreme tail is (P1).  Upper/lower via ``side``, both
   defined as explicit peaks-over-threshold exceedances (exact counterparts,
-  review #38); a raw nonstationary price level is rejected by a domain gate
-  (review #39).
+  review #38); a raw nonstationary price level is flagged by a data-quality
+  warning, never a hard semantic gate — the typed FieldSpec ``input_units``
+  declaration is the authoritative contract (review #39, demoted in R11).
 * ``ts_quantile_regression_beta`` — exact quantile-regression slope β_q via a
   linear program (P2 research): the marginal relationship of ``x`` when the
   stock is in its own q-th return state.  Carries ``unit(y)/unit(x)`` (review
@@ -15,6 +16,7 @@ Deterministic (fixed threshold fraction, LP with HiGHS), prefix-causal.
 """
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import numpy as np
@@ -24,6 +26,11 @@ from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_op
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
+
+# ISSUE 4 / R11: a numeric price-level heuristic is at most a data-quality
+# warning, never a hard semantic gate.  This set deduplicates the warning so a
+# given price-level-looking input warns once per process (module-level flag).
+_WARNED_PRICE_LEVEL: set[Any] = set()
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
@@ -60,15 +67,19 @@ def _column_map(xv: np.ndarray, fn) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 def _reject_price_level(series: np.ndarray) -> None:
-    """Reject a raw nonstationary price level input (review #39).
+    """Data-quality warning for a raw nonstationary price level input (R11).
 
     ``ts_hill_tail_index`` is a *shape* estimator on exceedance magnitudes;
     feeding it a raw price level (strictly positive and nonstationary, so the
-    level itself carries no tail-shape meaning) is a caller bug and must fail
-    closed.  The domain gate fires when all finite values are positive AND the
-    level's standard deviation is much larger than its first-difference
-    standard deviation — ``sd(x)/sd(Δx)`` is O(1) for stationary returns /
-    positive magnitudes, but grows like O(sqrt n) for a random-walk price level.
+    level itself carries no tail-shape meaning) is a caller bug.  Review #39
+    originally failed closed with a hard ValueError, but whether the input is a
+    RawPrice / Return / Residual / PositiveMagnitude is a decision owned by the
+    typed FieldSpec / IR layer — the operator's own metadata already declares
+    ``input_units={"x": "signed_return_or_centred_residual_or_signed_signal"}``
+    as the authoritative typed contract.  A numeric heuristic is at most a
+    data-quality warning, never a hard semantic gate (demoted in R11): we warn
+    once per distinct price-level-looking input (module-level dedup flag) and
+    return normally so the estimator runs.
     """
     vals = series[np.isfinite(series)]
     if vals.size < 8:
@@ -78,13 +89,24 @@ def _reject_price_level(series: np.ndarray) -> None:
     sd_level = float(np.std(vals))
     sd_diff = float(np.std(np.diff(vals)))
     # sd_diff ~ 0 -> a deterministic smooth trend (pure price level);
-    # sd_level / sd_diff large -> random-walk price level.  Both rejected.
-    if sd_level / max(sd_diff, _EPS) > 5.0:
-        raise ValueError(
-            "ts_hill_tail_index requires a return / residual / positive "
-            "magnitude / tail-loss input, not a raw nonstationary price level "
-            "(domain gate, review #39)"
-        )
+    # sd_level / sd_diff large -> random-walk price level.  Both are DQ flags.
+    ratio = sd_level / max(sd_diff, _EPS)
+    if ratio > 5.0:
+        # Dedupe by a coarse fingerprint of the input so repeated calls with the
+        # same price-level series warn once, not on every window/call.
+        stride = max(1, vals.size // 16)
+        key = (vals.size, tuple(np.round(vals[::stride] * 1e3).tolist()))
+        if key not in _WARNED_PRICE_LEVEL:
+            _WARNED_PRICE_LEVEL.add(key)
+            warnings.warn(
+                "ts_hill_tail_index received a series that looks like a raw "
+                "nonstationary price level (sd(level)/sd(diff) > 5).  The typed "
+                "FieldSpec input_units declaration is the authoritative input "
+                "contract; treat this as a data-quality warning, not a hard "
+                "semantic gate (review #39, demoted in R11).",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
 
 def _pot_exceedances(valid: np.ndarray, side: str, frac: float) -> np.ndarray:
@@ -106,6 +128,26 @@ def _pot_exceedances(valid: np.ndarray, side: str, frac: float) -> np.ndarray:
 
 
 def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: float, min_tail_count: int) -> np.ndarray:
+    """TRUE Hill estimator with a SINGLE tail selection (review #38 / R11).
+
+    One threshold ``u`` at the ``tail_fraction`` quantile and ALL exceedances
+    beyond it feed the shape estimate directly — the tail fraction is never
+    applied a second time (the pre-R11 code POT-thresholded at ``frac`` and then
+    sub-sampled ``k = floor(mags.size * frac)`` again, which with
+    window=120/frac=0.2/min_tail_count=10 produced ``k=4 < 10`` and long NaN
+    stretches under default parameters).
+
+    * upper: ``u = Q(valid, 1-frac)``, exceedances ``x_i > u``;
+    * lower: mirror of the upper tail on ``y = -x``, i.e. ``u = Q(valid, frac)``
+      and exceedances ``x_i < u`` — ``ξ_lower(x) == ξ_upper(-x)`` exactly.
+
+    Hill shape on the exceedance values scaled by the (positive) threshold:
+    ``ξ = (1/k) Σ log(x_i / u)``, ``k = len(exceedances)``.  A threshold that is
+    not finite or not strictly positive has no meaningful log-ratio and yields
+    NaN for that window (the input units are returns / centred residual / signed
+    signal / positive magnitude — see the authoritative ``input_units``).
+    ``min_tail_count`` gates the minimum number of exceedances.
+    """
     n = series.shape[0]
     w = max(2, int(window))
     # Invalid tail_fraction must fail loudly, never silently clip to a legal
@@ -123,19 +165,20 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
         valid = chunk[np.isfinite(chunk)]
         if valid.size < mtc:
             continue
-        mags = _pot_exceedances(valid, side, frac)
-        if mags.size < mtc:
+        if side == "upper":
+            u = float(np.quantile(valid, 1.0 - frac))
+            exc = valid[valid > u]
+        else:
+            # Mirror: lower tail of x == upper tail of -x, threshold Q(x, frac).
+            u = float(np.quantile(valid, frac))
+            exc = valid[valid < u]
+        if not np.isfinite(u) or u <= 0.0:
+            continue  # log-ratio is undefined for a non-positive threshold
+        if exc.size < mtc:
             continue
-        k = int(np.floor(mags.size * frac))
-        if k < mtc or k < 1 or k > mags.size - 1:
-            continue
-        ys = np.sort(mags)
-        threshold = ys[mags.size - k - 1]
-        if threshold <= 0.0 or not np.isfinite(threshold):
-            continue
-        top = ys[mags.size - k :]
-        xi = float(np.mean(np.log(top / threshold)))
-        out[t] = xi
+        xi = float(np.mean(np.log(exc / u)))
+        if np.isfinite(xi):
+            out[t] = xi
     return out
 
 
@@ -149,12 +192,14 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
 class TsHillTailIndex(SeriesOperator):
     """Hill 尾部指数 ξ（POT 上/下超阈值形状，非大小）。
 
-    显式 peaks-over-threshold：上尾超阈值 ``x - u``（``u = Q(1-frac)``），
-    下尾镜像超阈值 ``u - x``（``u = Q(frac)``）——上下尾是精确对偶
-    （review #38）。对超阈值取 ``k=floor(n*frac)`` 个大值:
-    ``ξ = (1/k) Σ log(Y_{n-j+1}/Y_{n-k})``。ξ 越大尾部越厚。``min_tail_count``
-    内样本不足则 NaN。输入必须是 return / residual / positive magnitude /
-    tail loss；原始非平稳价格水平被 domain gate 拒绝（review #39）。P1。
+    显式 peaks-over-threshold 单次尾部选择（review #38 / R11）：上尾阈值
+    ``u = Q(1-frac)`` 取全部 ``x > u`` 的超阈值样本，下尾是镜像
+    ``u = Q(frac)`` 取 ``x < u``（== 上尾作用于 ``-x``）。单次选择后
+    ``k = len(exceedances)``，``ξ = (1/k) Σ log(x_i/u)`` —— 绝不再按 frac
+    二次子抽样。ξ 越大尾部越厚。``min_tail_count`` 内样本不足则 NaN。
+    输入必须是 return / residual / positive magnitude / tail loss；原始非平稳
+    价格水平按 R11 只发 data-quality 警告、不再硬拒（类型契约由 typed
+    FieldSpec ``input_units`` 声明为准）。P1。
     """
 
     metadata = _metadata(
@@ -288,20 +333,31 @@ class TsQuantileRegressionBeta(SeriesOperator):
 # ---------------------------------------------------------------------------
 
 def _extremal_index_series(
-    series: np.ndarray, window: int, side: str, q: float, min_exceed: int
+    series: np.ndarray, window: int, side: str, q: float, min_exceed: int, run_length: int = 1
 ) -> np.ndarray:
     """Leadbetter extremal index θ via the runs estimator.
 
     Over the trailing window count exceedances above the empirical q-quantile
-    and the number of *runs* of consecutive exceedances (each run = one cluster).
+    and the number of *runs* of exceedances (each run = one cluster).
     ``θ = clusters / exceedances``: ≈1 = extremes arrive as isolated single
     observations (Poisson-like); →0 = extremes cluster strongly (regime-like).
+
+    Cluster semantics (R11):
+    * ``run_length`` (default 1): an exceedance only continues the current
+      cluster when the gap of non-exceedances since the last exceedance is
+      ``< run_length``; otherwise it starts a new cluster.
+    * a NaN (unknown-state) gap always BREAKS the current run — an exceedance on
+      the far side of a missing bar is never joined to one on the near side,
+      regardless of ``run_length`` (no compression across unknown gaps).
     """
     n = series.shape[0]
     w = max(2, int(window))
     quant = float(q)
     if not 0.0 < quant < 1.0:
         raise ValueError("q must be in (0, 1)")
+    rl = int(run_length)
+    if rl < 1:
+        raise ValueError("run_length must be >= 1")
     mex = max(2, int(min_exceed))
     out = np.full(n, np.nan)
     for t in range(n):
@@ -318,22 +374,28 @@ def _extremal_index_series(
             # positive price/valuation series keeps a well-defined lower tail.
             thr = float(np.quantile(valid, 1.0 - quant))
             is_exceed = lambda v: v < thr  # noqa: E731
-        # R4-88: missing bars are censored, NOT counted as non-exceedances.
-        # A missing bar between two extreme bars must not split one cluster into
-        # two: ``prev`` is carried across NaN so an extreme after a gap continues
-        # the current run.
+        # R11: gap-based clustering with an explicit run_length, and a NaN bar
+        # BREAKS the current run (pre-R11 carried ``prev`` across NaN, so
+        # ``Extreme, NaN, NaN, NaN, Extreme`` was miscounted as ONE cluster).
         count = 0
         clusters = 0
-        prev = False
+        seen_exceed = False
+        gap = 0  # consecutive non-exceedances since the last exceedance
         for v in chunk:
             if not np.isfinite(v):
-                continue  # censor: leave ``prev`` unchanged
+                # Unknown state: force a break — set the gap to run_length so
+                # the next exceedance necessarily opens a new cluster.
+                gap = rl
+                continue
             e = bool(is_exceed(v))
             if e:
                 count += 1
-                if not prev:
+                if not seen_exceed or gap >= rl:
                     clusters += 1
-            prev = e
+                seen_exceed = True
+                gap = 0
+            else:
+                gap += 1
         if count < mex:
             continue
         out[t] = float(clusters / count)
@@ -351,16 +413,17 @@ class TsExtremalIndex(SeriesOperator):
     """Leadbetter 极值指数 θ（runs 估计：簇数 / 超阈次数）。
 
     ≈1 = 极端观测以孤立单点到达（类 Poisson，可独立处理）；→0 = 极端高度成簇
-    （regime 型，波动聚集）。缺失 bar 按 R4-88 截删（censor）：缺失不当作
-    non-extreme，故两个极端之间的一个缺失不会把同一簇拆成两簇；已确认的
-    non-extreme 仍会断开运行。与 ``ts_extreme_cluster_ratio``（相邻极端对数/极
-    端数）数学不同：连续 3 个极端前者 2/3、这里 1/3。PIT 安全、确定性。
+    （regime 型，波动聚集）。``run_length``（默认 1）= 距上次超阈的连续
+    non-extreme 计数必须小于该值才续接同一簇；缺失 bar（NaN）永远断开当前簇，
+    跨越未知区间的两个极端绝不会被并入同一簇（R11 修正，不跨 gap 压缩）。
+    与 ``ts_extreme_cluster_ratio``（相邻极端对数/极端数）数学不同：连续 3 个
+    极端前者 2/3、这里 1/3。PIT 安全、确定性。
     """
 
     metadata = _metadata(
         "ts_extremal_index",
         "极值指数 θ = 簇数/超阈次数（[0,1]，低=成簇）。",
-        ["x", "window", "side", "q", "min_exceed"],
+        ["x", "window", "side", "q", "min_exceed", "run_length"],
         unit="ratio",
         cost=4,
     )
@@ -372,6 +435,7 @@ class TsExtremalIndex(SeriesOperator):
         side: str = "upper",
         q: float = 0.9,
         min_exceed: int = 3,
+        run_length: int = 1,
         **_: Any,
     ) -> pd.DataFrame:
         side_k = str(side).lower()
@@ -381,7 +445,7 @@ class TsExtremalIndex(SeriesOperator):
             x,
             _column_map(
                 x.to_numpy(dtype=float),
-                lambda s: _extremal_index_series(s, window, side_k, q, min_exceed),
+                lambda s: _extremal_index_series(s, window, side_k, q, min_exceed, run_length),
             ),
         )
 
@@ -398,7 +462,10 @@ def _mean_excess_slope_series(
     For thresholds at quantiles ``p ∈ {0.55..0.95}``, mean excess
     ``ME(u) = mean(y - u | y > u)``; the slope of ME vs u is dimensionless.
     For a GPD tail it equals ``ξ/(1-ξ)`` (negative = bounded light tail,
-    positive = heavy tail, ~0 = exponential).
+    positive = heavy tail, ~0 = exponential).  The lower tail is computed on the
+    mirrored series ``y = -x`` reusing the exact upper-tail computation, so
+    ``ME_lower(x) == ME_upper(-x)`` and the slope sign is interpreted
+    identically on both sides (positive = heavy tail).
     """
     n = series.shape[0]
     w = max(2, int(window))
@@ -410,18 +477,15 @@ def _mean_excess_slope_series(
         valid = chunk[np.isfinite(chunk)]
         if valid.size < mtc + 3:
             continue
+        # R11: the lower tail is the exact mirror of the upper tail on ``y = -x``
+        # (ME_lower(x) == ME_upper(-x)); reusing one code path keeps the slope
+        # direction consistent with the documented interpretation on both sides.
+        work = -valid if side == "lower" else valid
         us: list[float] = []
         mes: list[float] = []
         for p in np.linspace(0.55, 0.95, 9):
-            if side == "upper":
-                u = float(np.quantile(valid, p))
-                exc = valid[valid > u] - u
-            else:
-                # R4-87: lower-tail thresholds are the (1-p) quantiles and the
-                # exceedances are ``u - x``, keeping the lower tail defined for
-                # positive price/valuation series.
-                u = float(np.quantile(valid, 1.0 - p))
-                exc = u - valid[valid < u]
+            u = float(np.quantile(work, p))
+            exc = work[work > u] - u
             if exc.size < mtc:
                 continue
             us.append(u)

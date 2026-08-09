@@ -1142,6 +1142,52 @@ def availability_expr_of(descriptor: Any) -> AvailabilityExpr:
     return _LABEL_TO_EXPR.get(low, UNKNOWN)
 
 
+@dataclass(frozen=True)
+class SessionSegmentEnd(AvailabilityExpr):
+    """Value usable only after a session SEGMENT ends (R11 P0-05).
+
+    A morning-segment feature (``SegmentEnd("morning")``) is PIT-safe at the
+    morning session end — NOT before it, even though it is usable intra-day.
+    This is finer-grained than :class:`SessionClose` (full-day features) and
+    lets a factor declare ``available_at = morning_session_end`` instead of
+    being forced to the coarser ``session_close``.
+
+    ``segment`` is one of ``"morning"`` / ``"afternoon"``; ``end_minute`` is the
+    wall-clock minute-of-day of the segment end (default morning 11:30, afternoon
+    15:00).  ``resolve`` needs a trading calendar to know the session schedule; it
+    is intentionally fail-closed when no schedule is available.
+    """
+
+    segment: str = "morning"
+    end_minute: int | None = None
+    calendar: str = "TradeDate"
+    lateness: float = 25.0  # between PreClose (20) and SessionClose (40)
+
+    def __post_init__(self) -> None:
+        if self.segment not in {"morning", "afternoon"}:
+            raise ValueError(f"SessionSegmentEnd.segment={self.segment!r} is unknown")
+
+    @property
+    def label(self) -> str:
+        return f"{self.segment}_session_end"
+
+    def resolve(
+        self,
+        row: Any = None,
+        calendar: Any = None,
+        timezone: Any = None,
+        decision_context: Any = None,
+    ) -> Any:
+        end = self.end_minute
+        if end is None:
+            end = 690 if self.segment == "morning" else 900  # 11:30 / 15:00
+        return _wallclock_date(
+            row, calendar, timezone, decision_context,
+            (end // 60, end % 60),
+            "SessionSegmentEnd.resolve()",
+        )
+
+
 class MaxAvailability(AvailabilityExpr):
     """The latest of several availability expressions, resolved CONCRETELY.
 
@@ -1379,6 +1425,7 @@ __all__ = [
     "SEMANTIC_TYPE",
     "SessionClose",
     "SessionOpen",
+    "SessionSegmentEnd",
     "SemanticLattice",
     "SemanticType",
     "SourceVintageSpec",
