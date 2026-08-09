@@ -57,7 +57,7 @@ def test_intraday_return_alias_resolves():
     op = OperatorRegistry.get("open_close_return", "pandas_numpy")
     dates = pd.date_range("2024-01-02", periods=3)
     panel = _daily_panel(dates, ["A", "B"], {"A": [10.0, 11.0, 12.0], "B": [20.0, 19.0, 22.0]})
-    out = op._calculate_series(open_px=panel, close=panel * 1.01)
+    out = op._calculate_series(open_px=panel, close=panel * 1.01, price_basis="RAW")
     expected = panel * 1.01 / panel - 1.0
     pd.testing.assert_frame_equal(out, expected)
 
@@ -69,8 +69,15 @@ def test_intraday_return_alias_resolves():
 def test_intraday_realized_variance_matches_manual():
     from cleaned_operators.microstructure.intraday_agg import IntraRealizedVariance
 
-    close = np.array([10.0, 11.0, 11.5, 11.0])
-    panel = _minute_panel(["A"], ["2024-01-02"], [close])
+    # R11 P0-43: intraday aggregators require OFFICIAL-session coverage (>=90%
+    # of the 240-bar A-share grid), so the fixture must be a FULL day — morning
+    # 120 bars (09:31..11:30) + afternoon 120 bars (13:01..15:00), no lunch bars.
+    morning = [pd.Timestamp("2024-01-02 09:31") + pd.Timedelta(minutes=m) for m in range(120)]
+    afternoon = [pd.Timestamp("2024-01-02 13:01") + pd.Timedelta(minutes=m) for m in range(120)]
+    idx = pd.DatetimeIndex(morning + afternoon)
+    rng = np.random.default_rng(0)
+    close = 10.0 * np.exp(np.cumsum(rng.normal(0.0, 0.001, len(idx))))
+    panel = pd.DataFrame({"A": close}, index=idx)
     out = IntraRealizedVariance()._calculate_series(panel)
     r = np.diff(np.log(close))
     expected = float(np.sum(r * r))

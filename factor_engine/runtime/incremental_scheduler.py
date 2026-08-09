@@ -10,7 +10,11 @@ configs never share an engine.
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
+import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +24,41 @@ import pandas as pd
 from cleaned_operators.operator_policy import effective_lookback
 from runtime.incremental import build_incremental_plan
 from storage.catalog import FactorCatalog
+
+logger = logging.getLogger(__name__)
+
+
+class OperatorManifestUnavailable(RuntimeError):
+    """算子实现 manifest 无法构建（P0-37）。
+
+    production 下算子 manifest 是因子 lineage 的一部分——「无法证明算子实现」=
+    lineage 不完整，必须让物化失败而不是静默省略。research 下只 warning 并跳过。
+    """
+
+
+class CalendarFingerprintUnavailable(RuntimeError):
+    """日历指纹无法构建（P0-38/P0-39）。
+
+    production 下依赖交易日/会话/可用性的因子必须绑定日历 digest；构建失败 =
+    lineage 缺失，必须让物化失败。
+    """
+
+
+class CalendarOffsetError(RuntimeError):
+    """forward-impact 窗口扩展遇到日历错误（P0-42）。
+
+    production 下绝不允许把 ``t0`` 当作 ``t0+19``（零扩展 = 静默漏算）；必须
+    raise。research 下按自然日过扩（保守，绝不少于 N 个交易日）。
+    """
+
+
+class DependencyDatasetResolutionError(RuntimeError):
+    """被引用字段的物理 dataset 无法解析（P0-40/P0-41）。
+
+    production 下 Composite / 多源字段的物理 dataset 未知 = 依赖边无法建立 =
+    DataEvent 永远匹配不到该因子（增量重算静默失效），必须 fail。无 anchor
+    兜底。
+    """
 
 
 @dataclass(frozen=True)
@@ -75,8 +114,44 @@ class DataEvent:
         }
 
 
+def _strict_int(value: Any, name: str) -> int | None:
+    """严格整数校验（Section 十五 / R13）。
+
+    ``DataEvent.sequence`` 是强一致性的排序字段：``int(2.9)`` 截断成 ``2`` 会把
+    两个不同事件折叠成同一序号、破坏 chain-head 判定。**绝不截断**——非整数值
+    （含 bool）直接拒绝。
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"DataEvent.{name} must be an integer, got bool")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not value.is_integer():
+            raise ValueError(
+                f"DataEvent.{name} must be an integer, got non-integral float {value!r}"
+            )
+        return int(value)
+    # strings / numpy ints / Decimal …
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"DataEvent.{name} must be an integer, got {value!r}") from exc
+    # 字符串形式 ``2.9`` / ``"2.5"`` 虽可 int() 但会截断——拒绝。
+    if isinstance(value, str) and value.strip() != str(parsed).strip():
+        raise ValueError(
+            f"DataEvent.{name} must be an integer, got non-integral {value!r}"
+        )
+    return parsed
+
+
 def normalize_data_event(event: DataEvent | dict[str, Any]) -> DataEvent:
-    """Coerce a dict (or ``DataEvent``) to a :class:`DataEvent` (R10 #53)."""
+    """Coerce a dict (or ``DataEvent``) to a :class:`DataEvent` (R10 #53).
+
+    Section 十五 / R13: ``sequence`` is a strong-consistency ordering field —
+    strict integer validation (never truncate ``2.9`` -> ``2``).
+    """
     if isinstance(event, DataEvent):
         return event
     raw = dict(event)
@@ -92,7 +167,7 @@ def normalize_data_event(event: DataEvent | dict[str, Any]) -> DataEvent:
         revision_kind=str(raw["revision_kind"]) if raw.get("revision_kind") else None,
         deleted_keys=tuple(raw["deleted_keys"]) if raw.get("deleted_keys") else None,
         event_id=str(raw["event_id"]) if raw.get("event_id") else None,
-        sequence=int(raw["sequence"]) if raw.get("sequence") is not None else None,
+        sequence=_strict_int(raw.get("sequence"), "sequence"),
         status=str(raw["status"]) if raw.get("status") else None,
     )
 
@@ -181,20 +256,66 @@ def _physical_dataset_for_logical_table(table: str) -> str | None:
     return None
 
 
-def _operator_manifest_from_ir(ir: Any) -> list[dict[str, str]] | None:
+def _implementation_digest(impl: Any) -> str | None:
+    """Deterministic digest of the ACTUAL operator kernel + logical contract.
+
+    P0-35 / P1-36: never hash ``type(instance)``'s source file.  Overhaul ops
+    are the same ``PandasFunctionOperator`` / ``PolarsFunctionOperator`` wrapper
+    class whose real kernel lives in ``_fn`` — hashing the wrapper's source file
+    would make every kernel edit invisible AND every wrapper-base edit invalidate
+    hundreds of unrelated ops.  Resolution order:
+
+      1. ``_fn`` — the wrapped kernel callable (bridge / function operators):
+         ``_fn_payload`` hashes its bytecode + closure + defaults;
+      2. class-defined kernel methods (``_calculate_series`` /
+         ``_calculate_scalar`` / ``calculate``) via ``_impl_source_hash`` — code
+         objects, never whole source files.
+
+    The logical-contract hash (``_contract_hash``) is always appended so a
+    contract change invalidates even when the kernel is unchanged.
+    """
+    import hashlib
+
+    try:
+        from cleaned_operators.registry import (
+            _contract_hash,
+            _fn_payload,
+            _impl_source_hash,
+        )
+    except Exception:  # pragma: no cover - registry always importable
+        return None
+    try:
+        kernel_fn = getattr(impl, "_fn", None)
+        if callable(kernel_fn):
+            payload = _fn_payload(kernel_fn, type(impl))
+        else:
+            payload = _impl_source_hash(impl)
+        if not payload:
+            return None
+        contract = _contract_hash(impl) or ""
+        return hashlib.sha256(f"{payload}::{contract}".encode("utf-8")).hexdigest()[:16]
+    except Exception:  # pragma: no cover - 任一失败视为不可哈希
+        return None
+
+
+def _operator_manifest_from_ir(
+    ir: Any, *, production: bool = False
+) -> list[dict[str, str]] | None:
     """P2-02: operator semantic manifest for a factor's IR.
 
     Records every operator canonical used, its declared semantic version and a
-    source-file hash of its implementation — so an operator upgrade invalidates
-    the factor even when source data is unchanged.  ``None`` when the IR is
-    missing or the manifest cannot be built (caller stores nothing).
+    digest of its ACTUAL kernel + logical contract (``_implementation_digest``)
+    — so an operator upgrade invalidates the factor even when source data is
+    unchanged.  ``None`` when the IR has no operators (caller stores nothing).
+
+    P0-37: a *build failure* (registry unavailable / digest uncomputable) is NOT
+    silently omitted — in production it raises ``OperatorManifestUnavailable``
+    (materialization must fail: no operator lineage = not a complete factor);
+    research logs a warning and skips.
     """
     if ir is None:
         return None
     try:
-        import hashlib
-        import inspect
-
         from backend.cleaned_bridge import ensure_cleaned_loaded
         from cleaned_operators.registry import OperatorRegistry
 
@@ -213,16 +334,29 @@ def _operator_manifest_from_ir(ir: Any) -> list[dict[str, str]] | None:
                     impl = OperatorRegistry.get(canonical)
                 except Exception:
                     impl = None
-                source_hash = None
-                if impl is not None:
-                    try:
-                        src = inspect.getsourcefile(type(impl))
-                        if src:
-                            source_hash = hashlib.sha256(
-                                open(src, "rb").read()
-                            ).hexdigest()[:16]
-                    except Exception:
-                        source_hash = None
+                if impl is None:
+                    if production:
+                        raise OperatorManifestUnavailable(
+                            f"operator manifest: no implementation for canonical "
+                            f"{canonical!r} (operator lineage unavailable)"
+                        )
+                    logger.warning(
+                        "operator manifest: no implementation for %r (research, "
+                        "recorded without implementation_hash)",
+                        canonical,
+                    )
+                source_hash = _implementation_digest(impl) if impl is not None else None
+                if source_hash is None and production:
+                    raise OperatorManifestUnavailable(
+                        f"operator manifest: cannot compute implementation digest "
+                        f"for canonical {canonical!r} (P0-35/P0-37 fail-closed)"
+                    )
+                if source_hash is None:
+                    logger.warning(
+                        "operator manifest: implementation digest unavailable for "
+                        "%r (research, recorded without implementation_hash)",
+                        canonical,
+                    )
                 seen.setdefault(
                     canonical,
                     {
@@ -239,31 +373,138 @@ def _operator_manifest_from_ir(ir: Any) -> list[dict[str, str]] | None:
 
         walk(ir)
         return sorted(seen.values(), key=lambda m: m["canonical"]) if seen else None
-    except Exception:  # pragma: no cover - manifest 构建失败不阻塞记录
+    except OperatorManifestUnavailable:
+        raise
+    except Exception as exc:
+        if production:
+            raise OperatorManifestUnavailable(
+                f"operator manifest build failed (P0-37): {type(exc).__name__}: {exc}"
+            ) from exc
+        logger.warning("operator manifest build failed (research, skipped): %s", exc)
         return None
 
 
-def _calendar_version(data_source: Any) -> str | None:
+def _calendar_scope_payload(data_source: Any, calendar: Any) -> dict[str, Any]:
+    """日历指纹的额外作用域维度：会话段 / 时区 / DST / early-close 表。
+
+    这些字段大多数 data source / calendar 上不存在（``getattr`` 返回 None），
+    存在则必须进入 digest——同一组交易日在不同时区 / 会话段 / early-close 规则
+    下不是同一个执行日历。
+    """
+    sess = getattr(data_source, "session_calendar", None)
+    if sess is None:
+        sess = getattr(calendar, "session_calendar", None)
+    session_segments = None
+    if sess is not None:
+        segs = getattr(sess, "segments", None)
+        if segs:
+            session_segments = [tuple(str(x) for x in s) for s in segs]
+    early_close = None
+    for obj in (data_source, calendar):
+        val = getattr(obj, "early_close", None)
+        if val is None:
+            val = getattr(obj, "early_close_days", None)
+        if val is not None:
+            try:
+                early_close = sorted(str(v) for v in val)
+            except TypeError:
+                early_close = str(val)
+            break
+    dst_rules = None
+    for obj in (data_source, calendar):
+        val = getattr(obj, "dst_rules", None)
+        if val is None:
+            val = getattr(obj, "dst", None)
+        if val is not None:
+            dst_rules = str(val)
+            break
+    return {
+        "session_segments": session_segments,
+        "timezone": getattr(data_source, "timezone", None)
+        or getattr(calendar, "timezone", None),
+        "dst_rules": dst_rules,
+        "early_close": early_close,
+        "calendar_semantic_version": getattr(calendar, "semantic_version", None) or "1",
+    }
+
+
+def _calendar_version(data_source: Any, *, production: bool = False) -> str | None:
     """P2-04: calendar-contract fingerprint for the factor's lineage.
 
-    Captures ``len(first, last)`` of the active trading calendar — a calendar
-    revision / session change shifts this fingerprint and invalidates rolling
-    history / intraday aggregation / availability dependencies.
+    P0-38: the old ``v{len}:{first}:{last}`` fingerprint is insufficient — an
+    interior holiday swap leaves ``len/first/last`` unchanged.  The new digest
+    hashes the FULL ordered trading days plus session segments / timezone / DST
+    rules / early-close table / calendar semantic version, so any calendar
+    contract change shifts the fingerprint and invalidates rolling history /
+    intraday aggregation / availability dependencies.
+
+    P0-39: a *build failure* (market-bound but calendar unresolvable, or digest
+    computation error) is NOT silently ``None`` — in production it raises
+    ``CalendarFingerprintUnavailable`` (a factor depending on trading days must
+    bind a calendar digest); research logs a warning and skips.
     """
     try:
-        market = getattr(data_source, "market", None)
+        market = (
+            getattr(data_source, "market", None)
+            or getattr(data_source, "market_code", None)
+        )
+        if not market:
+            from storage.trading_calendar import infer_market
+
+            market = infer_market(
+                universe=getattr(data_source, "universe", None),
+                dataset=getattr(data_source, "dataset", None),
+            )
+        if not market:
+            # 无市场/无日历绑定：该数据源不依赖交易日历，无需指纹。
+            return None
         from storage.trading_calendar import get_trading_calendar
 
         calendar = get_trading_calendar(market)
         if calendar is None:
+            if production:
+                raise CalendarFingerprintUnavailable(
+                    f"calendar fingerprint: market {market!r} has no resolvable "
+                    "trading calendar (P0-39 fail-closed)"
+                )
+            logger.warning(
+                "calendar fingerprint: no trading calendar for market %r "
+                "(research, skipped)",
+                market,
+            )
             return None
         days = getattr(calendar, "days", None)
         if not days:
+            if production:
+                raise CalendarFingerprintUnavailable(
+                    f"calendar fingerprint: market {market!r} calendar has no "
+                    "trading days (P0-39 fail-closed)"
+                )
             return None
-        first = pd.Timestamp(days[0]).date()
-        last = pd.Timestamp(days[-1]).date()
-        return f"v{len(days)}:{first}:{last}"
-    except Exception:  # pragma: no cover - 日历不可用时无版本指纹
+        ordered = [str(pd.Timestamp(d).normalize().date()) for d in days]
+        payload = {
+            "market": str(market),
+            "calendar_id": getattr(data_source, "calendar_id", None)
+            or getattr(data_source, "calendar", None),
+            "trading_days": ordered,
+            **_calendar_scope_payload(data_source, calendar),
+        }
+        import hashlib
+
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
+        ).hexdigest()[:16]
+    except CalendarFingerprintUnavailable:
+        raise
+    except Exception as exc:
+        if production:
+            raise CalendarFingerprintUnavailable(
+                f"calendar fingerprint build failed (P0-39): "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+        logger.warning(
+            "calendar fingerprint build failed (research, skipped): %s", exc
+        )
         return None
 
 
@@ -329,11 +570,16 @@ def _extend_date_forward(
     *,
     market: str | None,
     cap: str | None = None,
+    production: bool = False,
 ) -> str | None:
     """把 ``end_date`` 向未来扩 ``bars`` 个交易日（P0-01 forward impact）。
 
     ``bars`` 为 None（unbounded）时返回 ``cap``（最新数据日）；否则按交易日历
     前移 ``bars`` 并把结果封顶在 ``cap``（不越过可用数据的最新日）。
+
+    P0-42: 日历错误时**绝不零扩展**（把 ``t0`` 当 ``t0+19`` = 静默漏算）。
+    production 下 raise ``CalendarOffsetError``；research 下按自然日过扩（至少
+    ``bars`` 个自然日，必 >= ``bars`` 个交易日），保证不会比正确窗口更窄。
     """
     if bars is None:
         return cap
@@ -348,8 +594,19 @@ def _extend_date_forward(
         if cap:
             return min(out, str(pd.Timestamp(cap).date()))
         return out
-    except Exception:  # pragma: no cover - 日历不可用时保守回退原 end
-        return end_date
+    except Exception as exc:
+        if production:
+            raise CalendarOffsetError(
+                f"forward-impact window extension failed (P0-42): end_date="
+                f"{end_date!r} bars={bars} market={market!r}: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+        # research: 自然日过扩（保守上界），绝不零扩展。
+        shifted_calendar_days = pd.Timestamp(end_date) + pd.Timedelta(days=int(bars))
+        out = str(pd.Timestamp(shifted_calendar_days).date())
+        if cap:
+            return min(out, str(pd.Timestamp(cap).date()))
+        return out
 
 
 def plan_updates_from_data_event(
@@ -386,11 +643,29 @@ def plan_updates_from_data_event(
             continue
         factor_id = str(dep["factor_id"])
         lookback = int(dep.get("lookback") or 0)
-        # P0-01: per-factor forward impact — None = unbounded (recursive /
-        # stateful / event-clock propagation to the latest data).
+        # P0-01 / P0-43: per-factor forward impact — the catalog read path now
+        # carries a tri-state ``ForwardImpactRequirement`` (finite / unbounded /
+        # unknown).  ``effective_forward_bars`` resolves it to scheduler bars:
+        # ``None`` = unbounded (reach cap / latest data), ``unknown`` in
+        # production resolves conservatively to unbounded (mandatory reindex).
+        from runtime.dependency_catalog import (
+            ForwardImpactRequirement,
+            effective_forward_bars,
+        )
+
         forward = dep.get("forward_impact")
+        forward_req = (
+            forward
+            if isinstance(forward, ForwardImpactRequirement)
+            else ForwardImpactRequirement.unknown()
+        )
+        forward_bars = effective_forward_bars(forward_req, production=production)
         eff_end = _extend_date_forward(
-            recompute_end, forward, market=market, cap=end_date
+            recompute_end,
+            forward_bars,
+            market=market,
+            cap=end_date,
+            production=production,
         )
         inc = build_incremental_plan(
             factor_id=factor_id,
@@ -401,7 +676,7 @@ def plan_updates_from_data_event(
             lookback_extra=lookback_extra,
             market=market,
             factor_freq=dep.get("frequency"),
-            forward_impact=forward,
+            forward_impact=forward_bars,
         )
         plans.append(
             FactorUpdatePlan(
@@ -425,6 +700,8 @@ def _edges_from_analysis(
     factor_id: str,
     analysis: Any,
     data_source: Any,
+    *,
+    production: bool = False,
 ) -> list[Any]:
     """Build rich dependency edges from the resolved physical source manifest.
 
@@ -437,10 +714,17 @@ def _edges_from_analysis(
     must record the second edge on ``ashare_stock_valuation_daily``, or
     ``DependencyCatalog.factors_for_event()`` (which queries
     ``source_dataset == event.dataset``) can never find it.
+
+    P0-40: logical→physical dataset resolution must NEVER anchor-fallback.  A
+    Composite source's valuation child resolving to the daily anchor would make
+    a valuation event never trigger the factor — the dependency would silently
+    point at the wrong dataset.  P0-41: a real dependency whose physical dataset
+    is unresolvable must not be silently dropped (``continue``).  In production
+    both fail with ``DependencyDatasetResolutionError``; research logs a warning
+    and skips the unresolved edge.
     """
     from runtime.dependency_catalog import FactorDependencyEdge, UNBOUNDED_FORWARD_IMPACT
 
-    anchor_dataset = _resolve_source_dataset(data_source)
     ref_fields = getattr(analysis, "referenced_fields", {}) or {}
     # P0-01: forward impact of the whole factor — any changed source field
     # propagates with the factor's forward reach (None = unbounded, stored as
@@ -465,18 +749,31 @@ def _edges_from_analysis(
         field_catalog_hash = None
     edges: list[FactorDependencyEdge] = []
     for name, spec in ref_fields.items():
-        # #收官轮 P0: 物理 source_dataset 必须解析成 DataAccess 物理 dataset。
-        # ``spec.dataset``（市场正确）→ ``TableSpec(spec.table).dataset`` →
-        # anchor dataset。**永远不要**把 logical table name（``StockDailyBar``）
-        # 写进物理 ``source_dataset``，否则 DataEvent 匹配不上、增量重算失效。
+        # #收官轮 P0/P0-40: 物理 source_dataset 必须解析成 DataAccess 物理
+        # dataset。``spec.dataset``（市场正确）→ ``TableSpec(spec.table).dataset``。
+        # **永远不要**把 logical table name（``StockDailyBar``）写进物理
+        # ``source_dataset``（DataEvent 匹配不上），**也不许** anchor-fallback
+        # （valuation child 解析到 daily 会让 valuation 事件永远触发不了因子）。
         physical_ds = getattr(spec, "dataset", None)
         if not physical_ds:
             physical_ds = _physical_dataset_for_logical_table(
                 getattr(spec, "table", None)
             )
         if not physical_ds:
-            physical_ds = anchor_dataset
-        if physical_ds is None:
+            if production:
+                raise DependencyDatasetResolutionError(
+                    f"factor {factor_id!r} references field {name!r} whose "
+                    f"physical dataset is unresolvable "
+                    f"(table={getattr(spec, 'table', None)!r}) — no anchor "
+                    f"fallback (P0-40/P0-41 fail-closed)"
+                )
+            logger.warning(
+                "dependency edge: field %r of factor %r has no physical dataset "
+                "(table=%r) — skipping (research)",
+                name,
+                factor_id,
+                getattr(spec, "table", None),
+            )
             continue
         field_id = str(getattr(spec, "field_id", None) or name)
         # P1-10: derive the REAL snapshot semantics from the field's transform /
@@ -517,6 +814,7 @@ def record_factor_dependency_from_analysis(
     data_source: Any,
     frequency: str | None = None,
     full_definition: dict[str, Any] | None = None,
+    production: bool = False,
 ) -> None:
     """从 ``AnalysisResult`` 写入依赖 catalog（legacy 行 + R10 edges [+ full spec]）。
 
@@ -524,18 +822,26 @@ def record_factor_dependency_from_analysis(
     ``DependencyCatalog.record_factor_manifest`` (single BEGIN IMMEDIATE
     transaction), so a concurrent ``factors_for_event`` reader or a crash can
     never observe a partially-replaced edge set (0/1/5 edges).
+
+    P0-37 / P0-39 / P0-40 / P0-41: ``production=True`` turns every lineage build
+    failure (operator manifest, calendar fingerprint, unresolvable physical
+    dataset) into a hard error — never silently omit lineage.
     """
     from runtime.dependency_catalog import DependencyCatalog
 
     referenced_columns = getattr(analysis, "referenced_columns", set()) or set()
     lookback = int(getattr(analysis, "lookback", 0))
     source_dataset = _resolve_source_dataset(data_source)
-    edges = _edges_from_analysis(factor_id, analysis, data_source)
+    edges = _edges_from_analysis(
+        factor_id, analysis, data_source, production=production
+    )
     # P2-02/P2-04: operator semantic manifest + calendar version enter the
     # full definition so an operator upgrade / calendar-contract change
     # invalidates the factor even when source data is unchanged.
-    manifest = _operator_manifest_from_ir(getattr(analysis, "ir", None))
-    cal_version = _calendar_version(data_source)
+    manifest = _operator_manifest_from_ir(
+        getattr(analysis, "ir", None), production=production
+    )
+    cal_version = _calendar_version(data_source, production=production)
     full_def = dict(full_definition or {})
     if manifest:
         full_def["operator_manifest"] = manifest
@@ -700,9 +1006,40 @@ class DataEventStaleError(ValueError):
     snapshot for its (dataset, field) chain — stale / out-of-order (P0-18)."""
 
 
+class DataEventLedgerCorruptionError(ValueError):
+    """Ledger 文件损坏且不是可恢复的尾部半行（崩溃残留）时抛出（R14 #5）。
+
+    旧实现 ``_load`` 把整文件损坏静默跳过/清空、``_append`` 把 OSError 直接吞掉
+    ——「顺序 / 幂等 / chain-head」保证会在损坏时悄悄失效。现在：
+      * 文件无法读取 / 中段 JSON 损坏 → fail loud（本异常），绝不静默降级；
+      * 仅最后一行是半行（崩溃 mid-append）→ 截断该行恢复（WAL 语义）。
+    """
+
+
 class PartialIncrementalFailureError(RuntimeError):
     """Production forbids partial-success events: some downstream factors failed,
-    so the event must stay pending (P0-20)."""
+    so the event must stay pending (P0-20).
+
+    R14 #5：production 下已经成功物化的 factor **不会**回滚（跨 factor 的
+    parquet 全量回滚不现实）；事件保持 ``rejected``/``pending``，重跑同一
+    ``event_id`` 幂等收敛（成功过的因子由 checkpoint 跳过，失败的重试）——
+    决不允许把 partial 结果当成功 publish。
+    """
+
+
+@contextlib.contextmanager
+def _ledger_lock(lock_path: Path):
+    """ledger 文件写锁（flock）：begin/commit/reject 与跨进程 reload 串行化。"""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(lock_path, "w")
+    try:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+        finally:
+            fh.close()
 
 
 class DataEventLedger:
@@ -712,10 +1049,21 @@ class DataEventLedger:
     (empty when ``lake_root`` is None).  Enforcement is per event:
 
       * an already-committed ``event_id`` is a duplicate retry (skipped);
-      * ``event.snapshot_before`` must equal the chain's last committed
-        ``snapshot_after``, else the event is stale (rejected);
+      * an in-flight ``pending`` record is a concurrent worker's reservation
+        (skipped as ``"in_flight"``);
+      * ``event.snapshot_before`` must equal the chain's **latest** committed
+        ``snapshot_after``（不是第一个匹配记录），且 ``sequence`` 必须严格递增，
+        否则事件 stale / out-of-order（R14 #5 修 chain-head 选择）；
       * only after ALL downstream factors succeed is ``snapshot_after``
         committed — a partial success leaves the event ``pending``/``failed``.
+
+    R14 #5（transactional 语义）：
+      * ``begin``/``commit``/``reject`` 都在 ``<path>.lock`` flock 内
+        reload + append —— 并发 worker 同事件只有一个能 begin（``pending`` 即
+        预留），append 串行化、crash 不吞 OSError；
+      * 文件损坏 fail loud（``DataEventLedgerCorruptionError``），仅尾部半行
+        （崩溃 mid-append）截断恢复；
+      * ``sequence`` 参与 chain-head 选择与乱序校验。
     """
 
     def __init__(self, lake_root: str | Path | None = None) -> None:
@@ -723,6 +1071,9 @@ class DataEventLedger:
         if lake_root is not None:
             self._path = Path(lake_root) / ".event_ledger.jsonl"
             self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock_path = (
+            Path(str(self._path) + ".lock") if self._path is not None else None
+        )
         self._records: dict[str, dict[str, Any]] = self._load()
 
     def _load(self) -> dict[str, dict[str, Any]]:
@@ -730,101 +1081,176 @@ class DataEventLedger:
             return {}
         records: dict[str, dict[str, Any]] = {}
         try:
-            for line in self._path.read_text(encoding="utf-8").splitlines():
-                if not line.strip():
-                    continue
-                try:
-                    rec = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                eid = rec.get("event_id")
-                if eid:
-                    records[str(eid)] = rec
-        except Exception:  # pragma: no cover - ledger 损坏时降级为内存状态
-            return {}
+            data = self._path.read_bytes()
+        except Exception as exc:  # pragma: no cover - 不可读即 fail loud
+            raise DataEventLedgerCorruptionError(
+                f"ledger 无法读取 {self._path}: {type(exc).__name__}: {exc}"
+            ) from exc
+        offset = 0
+        for i, line in enumerate(data.split(b"\n")):
+            if not line.strip():
+                offset += len(line) + 1
+                continue
+            try:
+                rec = json.loads(line.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                # 最后一条非空行 = 崩溃 mid-append 的尾部半行 → 截断恢复；
+                # 中段损坏 → fail loud，绝不静默跳过（会把顺序/幂等伪装成内存态）。
+                if i >= len(data.split(b"\n")) - 2:
+                    with open(self._path, "r+b") as fh:
+                        fh.truncate(offset)
+                    break
+                raise DataEventLedgerCorruptionError(
+                    f"ledger 中段 JSON 损坏（offset={offset}）: "
+                    f"{line[:80]!r} —— 顺序/幂等保证无法恢复，请人工修复或清除 "
+                    f"ledger"
+                ) from None
+            eid = rec.get("event_id")
+            if eid:
+                records[str(eid)] = rec
+            offset += len(line) + 1
         return records
 
-    def _append(self, rec: dict[str, Any]) -> None:
+    def _reload(self) -> None:
+        self._records = self._load()
+
+    def _append_unlocked(self, rec: dict[str, Any]) -> None:
         self._records[str(rec.get("event_id"))] = rec
         if self._path is not None:
-            try:
-                with open(self._path, "a", encoding="utf-8") as fh:
-                    fh.write(json.dumps(rec, sort_keys=True, default=str) + "\n")
-            except OSError:  # pragma: no cover - 写失败不阻塞处理
-                pass
+            with open(self._path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(rec, sort_keys=True, default=str) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
 
     def is_committed(self, event_id: str) -> bool:
         return self._records.get(str(event_id), {}).get("status") == "committed"
 
-    def last_committed_snapshot(self, dataset: str, field: str) -> Any | None:
+    def _last_committed_unlocked(
+        self, dataset: str, field: str
+    ) -> tuple[Any | None, int | None]:
+        """返回 (snapshot_after, sequence) 的**最新 chain head**（R14 #5）。
+
+        旧实现遍历后返回第一个匹配的 committed record——事件链 e1→e2→e3 时会把
+        e1 的 snapshot 当 chain head，把合法的 ``snapshot_before=s2`` 误判 stale。
+        现在取 sequence 最大者；sequence 为空时取文件顺序最后者。
+        """
+        best_snap: Any | None = None
+        best_seq: int | None = None
+        best_order = -1
+        order = 0
         for rec in self._records.values():
             if (
                 rec.get("status") == "committed"
                 and str(rec.get("dataset")) == str(dataset)
                 and str(rec.get("field")) == str(field)
             ):
-                return rec.get("snapshot_after")
-        return None
+                seq = rec.get("sequence")
+                seqk = int(seq) if seq is not None else -1
+                if seqk > (best_seq if best_seq is not None else -1) or (
+                    seqk == (best_seq if best_seq is not None else -1)
+                    and order > best_order
+                ):
+                    best_seq = seqk if seq is not None else None
+                    best_snap = rec.get("snapshot_after")
+                    best_order = order
+            order += 1
+        return best_snap, best_seq
+
+    def last_committed_snapshot(self, dataset: str, field: str) -> Any | None:
+        snap, _seq = self._last_committed_unlocked(dataset, field)
+        return snap
 
     def begin(self, event: DataEvent) -> str:
         """Validate ordering / idempotency; mark ``pending``.  Returns
-        ``"duplicate"`` when already committed, ``"ok"`` otherwise."""
+        ``"duplicate"`` when already committed, ``"in_flight"`` when another
+        worker holds a pending reservation, ``"ok"`` otherwise."""
         if not event.event_id:
             return "ok"
-        if self.is_committed(event.event_id):
-            return "duplicate"
-        if event.snapshot_before is not None:
-            last = self.last_committed_snapshot(event.dataset, event.field)
-            if last is not None and str(last) != str(event.snapshot_before):
-                raise DataEventStaleError(
-                    f"event {event.event_id!r}: snapshot_before={event.snapshot_before!r} "
-                    f"!= ledger last committed snapshot {last!r} for "
-                    f"({event.dataset}, {event.field}) — stale / out-of-order"
+        if self._path is None:
+            if self.is_committed(event.event_id):
+                return "duplicate"
+            self._append_unlocked(self._pending_record(event))
+            return "ok"
+        with _ledger_lock(self._lock_path):
+            self._reload()
+            status = self._records.get(str(event.event_id), {}).get("status")
+            if status == "committed":
+                return "duplicate"
+            if status == "pending":
+                return "in_flight"
+            if event.snapshot_before is not None:
+                last, _seq = self._last_committed_unlocked(event.dataset, event.field)
+                if last is not None and str(last) != str(event.snapshot_before):
+                    raise DataEventStaleError(
+                        f"event {event.event_id!r}: snapshot_before="
+                        f"{event.snapshot_before!r} != ledger last committed "
+                        f"snapshot {last!r} for ({event.dataset}, {event.field}) — "
+                        f"stale / out-of-order"
+                    )
+            if event.sequence is not None:
+                _last, last_seq = self._last_committed_unlocked(
+                    event.dataset, event.field
                 )
-        self._append(
-            {
-                "event_id": event.event_id,
-                "dataset": event.dataset,
-                "field": event.field,
-                "sequence": event.sequence,
-                "status": "pending",
-                "snapshot_before": event.snapshot_before,
-                "snapshot_after": None,
-                "received_at": event.updated_date,
-            }
-        )
-        return "ok"
+                if last_seq is not None and event.sequence <= last_seq:
+                    raise DataEventStaleError(
+                        f"event {event.event_id!r}: sequence={event.sequence} <= "
+                        f"chain head sequence {last_seq} for "
+                        f"({event.dataset}, {event.field}) — 乱序 / 重复事件"
+                    )
+            self._append_unlocked(self._pending_record(event))
+            return "ok"
+
+    @staticmethod
+    def _pending_record(event: DataEvent) -> dict[str, Any]:
+        return {
+            "event_id": event.event_id,
+            "dataset": event.dataset,
+            "field": event.field,
+            "sequence": event.sequence,
+            "status": "pending",
+            "snapshot_before": event.snapshot_before,
+            "snapshot_after": None,
+            "received_at": event.updated_date,
+        }
 
     def commit(self, event: DataEvent) -> None:
         if not event.event_id:
             return
-        self._append(
-            {
-                "event_id": event.event_id,
-                "dataset": event.dataset,
-                "field": event.field,
-                "sequence": event.sequence,
-                "status": "committed",
-                "snapshot_before": event.snapshot_before,
-                "snapshot_after": event.snapshot_after,
-                "received_at": event.updated_date,
-            }
-        )
+        rec = {
+            "event_id": event.event_id,
+            "dataset": event.dataset,
+            "field": event.field,
+            "sequence": event.sequence,
+            "status": "committed",
+            "snapshot_before": event.snapshot_before,
+            "snapshot_after": event.snapshot_after,
+            "received_at": event.updated_date,
+        }
+        if self._path is None:
+            self._append_unlocked(rec)
+            return
+        with _ledger_lock(self._lock_path):
+            self._reload()
+            self._append_unlocked(rec)
 
     def reject(self, event: DataEvent, reason: str) -> None:
         if not event.event_id:
             return
-        self._append(
-            {
-                "event_id": event.event_id,
-                "dataset": event.dataset,
-                "field": event.field,
-                "sequence": event.sequence,
-                "status": "rejected",
-                "reason": reason,
-                "received_at": event.updated_date,
-            }
-        )
+        rec = {
+            "event_id": event.event_id,
+            "dataset": event.dataset,
+            "field": event.field,
+            "sequence": event.sequence,
+            "status": "rejected",
+            "reason": reason,
+            "received_at": event.updated_date,
+        }
+        if self._path is None:
+            self._append_unlocked(rec)
+            return
+        with _ledger_lock(self._lock_path):
+            self._reload()
+            self._append_unlocked(rec)
 
 
 def _is_production_run(event: DataEvent) -> bool:
@@ -872,8 +1298,9 @@ def execute_incremental_updates_from_event(
     production = _is_production_run(event)
     ledger = DataEventLedger(lake_root=lake_root)
     ledger_status = ledger.begin(event) if event.event_id else "ok"
-    if ledger_status == "duplicate":
-        # Idempotent retry of an already-committed event: nothing to do.
+    if ledger_status in ("duplicate", "in_flight"):
+        # Idempotent retry of an already-committed event, or another worker's
+        # in-flight reservation (R14 #5): nothing to do.
         return {
             "event": event.to_dict(),
             "plans": [],

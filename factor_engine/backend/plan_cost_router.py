@@ -212,6 +212,9 @@ def estimate_plan_rows(ctx: Any) -> int:
         ds = inner
     try:
         filt = getattr(ds, "instrument_filter", None)
+        if isinstance(filt, (list, tuple, set, frozenset)) and len(filt) == 0:
+            # R13 P0-69: an explicit EMPTY instrument filter means zero rows.
+            return 1
         instruments = len(filt) if filt else 3000
         start = getattr(ds, "start_date", None)
         end = getattr(ds, "end_date", None)
@@ -224,13 +227,50 @@ def estimate_plan_rows(ctx: Any) -> int:
     return 500_000
 
 
-def _cost(canonical: str, backend: str, rows: int) -> float:
+#: R13 P1-65: delegate conversion penalty (to_pandas + rebuild + dispatch
+#: overhead), expressed in the same millisecond-scale units as BackendCost.
+_DELEGATE_CONVERSION_PENALTY = 3.0
+_DELEGATE_ROWS_COEFF = 0.10
+
+
+def _delegate_penalty(rows: int) -> float:
+    millions = max(rows / 1_000_000.0, 0.001)
+    return _DELEGATE_CONVERSION_PENALTY + _DELEGATE_ROWS_COEFF * millions
+
+
+def _polars_delegate_ops(ops: tuple[str, ...]) -> frozenset[str]:
+    """Return the subset of plan canonicals whose ``polars`` slot is a
+    pandas-delegating UDF (gap coverage), never a native polars implementation."""
+    if not ops:
+        return frozenset()
+    from backend.polars_backend_kind import canonical_polars_is_delegate
+
+    return frozenset(op for op in ops if canonical_polars_is_delegate(op))
+
+
+def _cost(
+    canonical: str,
+    backend: str,
+    rows: int,
+    *,
+    delegate_polars: bool = False,
+) -> float:
     from backend.operator_cost import estimate_backend_cost
 
     if backend in {"polars_long", "polars_panel"}:
         key = "polars"
     else:
         key = backend
+    if delegate_polars and key == "polars":
+        # A polars-delegate slot round-trips Polars→Pandas→Polars: it wraps the
+        # certified pandas reference, so it can never be cheaper than native
+        # pandas for the same canonical.  Cost it as the pandas reference plus a
+        # conversion penalty so the router never picks the delegate "polars" over
+        # native pandas on the backend name alone (R13 P1-65).
+        pandas_cost = estimate_backend_cost(
+            canonical, "pandas_numpy", row_count_estimate=rows
+        )
+        return pandas_cost + _delegate_penalty(rows)
     return estimate_backend_cost(
         canonical,
         key,
@@ -320,6 +360,9 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
     candidates: dict[str, float] = {}
     mem_budget = _execution_memory_budget(ctx)
     peak = estimate_plan_peak_memory(ops, rows)
+    # R13 P1-65: ops whose only "polars" slot is a pandas-delegating UDF must be
+    # costed with the conversion penalty (never preferred over native pandas).
+    delegate_ops = _polars_delegate_ops(ops)
     if mem_budget is not None and peak > mem_budget:
         # 显式资源预算下整计划峰值已超预算：无任何候选可安全执行。
         from backend.operator_capability import UnsupportedOperatorBackendError
@@ -341,7 +384,10 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
         supports_polars(op, mode=mode) for op in ops
     )
     if polars_panel_ok:
-        cost = sum(_cost(op, "polars_panel", rows) for op in ops)
+        cost = sum(
+            _cost(op, "polars_panel", rows, delegate_polars=op in delegate_ops)
+            for op in ops
+        )
         cost += 2.0 + 0.05 * max(rows / 1_000_000.0, 0.001)
         candidates["polars_panel"] = cost
 
@@ -350,7 +396,10 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
         for op in ops
     )
     if polars_long_ok:
-        candidates["polars_long"] = sum(_cost(op, "polars_long", rows) for op in ops)
+        candidates["polars_long"] = sum(
+            _cost(op, "polars_long", rows, delegate_polars=op in delegate_ops)
+            for op in ops
+        )
 
     sql_ok = bool(ops) and not source_ref and data_kind in {"duckdb", "clickhouse"} and all(
         supports_sql(op, data_source_kind=data_kind, mode=mode) for op in ops
@@ -369,7 +418,12 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
             if supports_pandas(op, mode=mode):
                 per_op.append(("pandas_numpy", _cost(op, "pandas_numpy", rows)))
             if supports_polars(op, mode=mode):
-                per_op.append(("polars_panel", _cost(op, "polars_panel", rows)))
+                per_op.append(
+                    (
+                        "polars_panel",
+                        _cost(op, "polars_panel", rows, delegate_polars=op in delegate_ops),
+                    )
+                )
             if not source_ref and supports_sql(op, data_source_kind=data_kind, mode=mode):
                 per_op.append(("sql", _cost(op, sql_backend, rows)))
             if not per_op:

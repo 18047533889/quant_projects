@@ -291,10 +291,50 @@ def test_strict_float_rejects_bool_and_nan_params():
 
 
 def test_canonicalize_parameter_values_normalises_proportional_weights():
-    from planner.canonicalize_params import canonicalize_parameter_values
+    """R13 NEW-P0-18: weight normalization is gated on the operator's declared
+    ``ParamSpec.equivalence == "positive_scale"`` — never inferred from the name.
 
+    Without a canonical context (no declared equivalence) a ``weights`` vector is
+    left verbatim; with the declaration, proportional vectors collapse to one
+    unit-sum key.
+    """
+    from planner.canonicalize_params import canonicalize_parameter_values
+    from types import SimpleNamespace
+
+    # No declared equivalence -> no name-based normalization (R13 NEW-P0-18).
     a = canonicalize_parameter_values({"weights": [1.0, 1.0, 1.0]})
     b = canonicalize_parameter_values({"weights": [0.1, 0.1, 0.1]})
-    assert a == b
-    total = sum(a["weights"])
-    assert abs(total - 1.0) < 1e-9
+    assert a != b
+    assert a == {"weights": (1.0, 1.0, 1.0)}
+
+    # Declared equivalence="positive_scale" -> unit-sum normalized hash key.
+    import planner.canonicalize_params as cmod
+
+    def _fake_contract(canon):
+        spec = SimpleNamespace(equivalence="positive_scale")
+        meta = SimpleNamespace(param_specs={"weights": spec}, param_names=["weights"])
+        return (object(), meta, meta.param_specs, {})
+
+    original = cmod._operator_contract
+    cmod._operator_contract = _fake_contract
+    try:
+        x = canonicalize_parameter_values({"weights": [1.0, 1.0, 1.0]}, canonical="op")
+        y = canonicalize_parameter_values({"weights": [0.1, 0.1, 0.1]}, canonical="op")
+    finally:
+        cmod._operator_contract = original
+    assert x == y
+    assert abs(sum(x["weights"]) - 1.0) < 1e-9
+
+    # R13 NEW-P0-19: a declared scale-equivalent vector with a non-numeric
+    # element is REJECTED whole, never silently filtered to a shorter vector.
+    import pytest
+    from backend.operator_errors import OperatorParameterError
+
+    cmod._operator_contract = _fake_contract
+    try:
+        with pytest.raises(OperatorParameterError, match="non-numeric"):
+            canonicalize_parameter_values(
+                {"weights": [1.0, "bad", 2.0]}, canonical="op"
+            )
+    finally:
+        cmod._operator_contract = original

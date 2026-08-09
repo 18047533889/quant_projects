@@ -21,7 +21,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -39,7 +45,49 @@ def _effective_pattern_floor(order: int, min_patterns: int) -> int:
     return max(int(min_patterns), _PE_FLOOR_C * math.factorial(order))
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _ordinal_floor_relational_expr(floor_operand: str, order_max: int) -> str:
+    """Grammar-expressible spelling of the order!-scaled sample floor.
+
+    The relational-expression grammar has no factorial operator (``order!`` is
+    not parseable), so ``floor_operand >= _PE_FLOOR_C * order!`` is spelled as a
+    per-order guarded clause joined with ``and``/``or`` — exact for the supported
+    integer order domain (NEW-P1-73).  ``order`` outside the guarded range leaves
+    every clause True (the kernel's own range gate rejects it).
+    """
+    clauses = [
+        f"(order != {o} or {floor_operand} >= {_PE_FLOOR_C * math.factorial(o)})"
+        for o in range(2, order_max + 1)
+    ]
+    return " and ".join(clauses)
+
+
+def _irreversibility_feasible(*, window: int, order: int, delay: int, min_patterns: int) -> bool:
+    """NEW-P1-73: a window can estimate an irreversibility JS distance only if it
+    contains at least ``_effective_pattern_floor(order, min_patterns)`` valid
+    ordinal embeddings: ``window - (order-1)*delay`` of them (delay spacing,
+    order-point embeddings)."""
+    floor = _effective_pattern_floor(int(order), int(min_patterns))
+    return int(window) - (int(order) - 1) * int(delay) >= floor
+
+
+def _multiscale_feasible(*, window: int, order: int, min_patterns: int) -> bool:
+    """NEW-P1-73: every coarse scale must yield enough ordinal patterns.  The
+    coarsest scale (8) gives ``window//8 - order + 1`` embeddings (delay=1); the
+    slope is only meaningful when even that scale clears the sample floor."""
+    floor = _effective_pattern_floor(int(order), int(min_patterns))
+    return int(window) // max(_SCALES) - int(order) + 1 >= floor
+
+
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    cost: int,
+    param_specs: dict[str, ParamSpec] | None = None,
+    relational_specs: list[RelationalParamSpec] | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="state_geometry",
@@ -52,6 +100,8 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        param_specs=param_specs or {},
+        relational_specs=relational_specs or [],
     )
 
 
@@ -258,6 +308,32 @@ class TsOrdinalIrreversibility(SeriesOperator):
         ["x", "window", "order", "delay", "min_patterns"],
         unit="ratio",
         cost=5,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2),
+            "order": ParamSpec(dtype=int, min=2, max=6),
+            "delay": ParamSpec(dtype=int, min=1),
+            "min_patterns": ParamSpec(dtype=int, min=1),
+        },
+        relational_specs=[
+            # NEW-P1-73: a window below ``(order-1)*delay + min_patterns`` (or
+            # below the order!-scaled sample floor) is guaranteed all-NaN — the
+            # search must prune it instead of spending expression budget on a
+            # kernel that can only fail.  ``_irreversibility_feasible`` is the
+            # single authority; these relations are its search-facing spelling.
+            RelationalParamSpec(
+                "window - (order - 1) * delay >= min_patterns",
+                "ts_ordinal_irreversibility requires "
+                "window-(order-1)*delay >= min_patterns valid ordinal patterns "
+                "(window={window}, order={order}, delay={delay}, "
+                "min_patterns={min_patterns})",
+            ),
+            RelationalParamSpec(
+                _ordinal_floor_relational_expr("window - (order - 1) * delay", 6),
+                "ts_ordinal_irreversibility window is below the 5*order! "
+                "ordinal-pattern sample floor for the given order (window={window}, "
+                "order={order}, delay={delay})",
+            ),
+        ],
     )
 
     def _calculate_series(
@@ -269,6 +345,14 @@ class TsOrdinalIrreversibility(SeriesOperator):
         dl = int(delay)
         if dl < 1:
             raise ValueError("ts_ordinal_irreversibility requires delay >= 1")
+        # NEW-P1-73: fail fast on a guaranteed-all-NaN parameter region (the
+        # declared RelationalParamSpec already prunes it at plan/search time).
+        if not _irreversibility_feasible(window=window, order=ord_, delay=dl, min_patterns=min_patterns):
+            raise ValueError(
+                "ts_ordinal_irreversibility window too small for order/delay: "
+                f"window={window}, order={ord_}, delay={dl}, min_patterns={min_patterns} "
+                f"(need >= {_effective_pattern_floor(ord_, min_patterns)} ordinal patterns)"
+            )
         return _frame_like(
             x,
             _column_map(
@@ -347,6 +431,30 @@ class TsMultiscalePermutationEntropySlope(SeriesOperator):
         ["x", "window", "order", "min_patterns"],
         unit="ratio",
         cost=7,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2),
+            "order": ParamSpec(dtype=int, min=2, max=5),
+            "min_patterns": ParamSpec(dtype=int, min=1),
+        },
+        relational_specs=[
+            # NEW-P1-73: the coarsest scale (8) must still yield enough ordinal
+            # patterns after coarse-graining; otherwise every coarse scale is
+            # under-sampled and the slope is all-NaN for any input.  ``window//
+            # 8`` is the coarse-segment count at scale 8, ``- order + 1`` the
+            # number of delay-1 ordinal embeddings it produces.
+            RelationalParamSpec(
+                "window // 8 - order + 1 >= min_patterns",
+                "ts_multiscale_permutation_entropy_slope: coarsest scale must "
+                "yield >= min_patterns ordinal patterns "
+                "(window={window}, order={order}, min_patterns={min_patterns})",
+            ),
+            RelationalParamSpec(
+                _ordinal_floor_relational_expr("window // 8 - order + 1", 5),
+                "ts_multiscale_permutation_entropy_slope: coarsest scale is below "
+                "the 5*order! ordinal-pattern sample floor (window={window}, "
+                "order={order})",
+            ),
+        ],
     )
 
     def _calculate_series(
@@ -355,6 +463,14 @@ class TsMultiscalePermutationEntropySlope(SeriesOperator):
         ord_ = int(order)
         if not 2 <= ord_ <= 5:
             raise ValueError("ts_multiscale_permutation_entropy_slope requires order in [2, 5]")
+        # NEW-P1-73: fail fast on a guaranteed-all-NaN parameter region.
+        if not _multiscale_feasible(window=window, order=ord_, min_patterns=min_patterns):
+            raise ValueError(
+                "ts_multiscale_permutation_entropy_slope window too small for "
+                f"order: window={window}, order={ord_}, min_patterns={min_patterns} "
+                f"(coarsest scale needs >= {_effective_pattern_floor(ord_, min_patterns)} "
+                "ordinal patterns)"
+            )
         return _frame_like(
             x,
             _column_map(

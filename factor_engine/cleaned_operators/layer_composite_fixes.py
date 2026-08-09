@@ -26,6 +26,27 @@ from cleaned_operators.overhaul.base import (
 from cleaned_operators.registry import OperatorRegistry
 
 
+def _assert_condition_bool(condition: pd.DataFrame, name: str = "condition") -> None:
+    """R11 #144: the condition input must be a ConditionBool.
+
+    Accepted values: {0, 1} (or boolean True/False); NaN/null = missing and is
+    excluded from selection.  Any other finite numeric value (e.g. 5.0, -3.0) is
+    neither a probability nor a boolean — silently treating it as "truthy" is a
+    hidden semantic the operator contract forbids.  Fail the call (raise) instead
+    of guessing.
+
+    Mirrors ``cleaned_operators.common.daily_panel._assert_condition_bool``.
+    """
+    cv = condition.to_numpy()
+    finite = np.isfinite(cv)
+    bad = finite & (cv != 0.0) & (cv != 1.0)
+    if np.any(bad):
+        raise ValueError(
+            f"{name} must be a ConditionBool (values in {{0, 1}} with NaN as "
+            f"missing); found {int(bad.sum())} finite value(s) outside {{0, 1}}"
+        )
+
+
 def pl_adx_strict(high, low, close, window=14, **_):
     """Wilder ADX with the same missing previous-close seed as pandas."""
     w = positive_int(window, "window")
@@ -77,14 +98,25 @@ def pl_adx_strict(high, low, close, window=14, **_):
 
 
 def pd_days_since_inclusive(condition: pd.DataFrame, max_lookback=None, **_):
-    """Distance to latest true observation; max_lookback is an inclusive distance."""
+    """Distance to latest true observation; max_lookback is an inclusive distance.
+
+    Condition is a ConditionBool ({0, 1} with NaN = unknown).  A NaN (unknown)
+    event state at row ``t`` censors ``output[t]`` to NaN AND resets the running
+    count — the previously known "last true" is no longer trustworthy, so it is
+    reset until an explicit true (1) observation rebuilds it (daily_panel.ts_days_since
+    semantics, kept here for the inclusive max_lookback variant).
+    """
+    _assert_condition_bool(condition)
     limit = None if max_lookback is None else positive_int(max_lookback, "max_lookback")
     values = condition.to_numpy(dtype=float)
     out = np.full(values.shape, np.nan, dtype=float)
     for col in range(values.shape[1]):
         last = -1
         for row, value in enumerate(values[:, col]):
-            if np.isfinite(value) and value != 0:
+            if pd.isna(value):
+                last = -1
+                continue
+            if bool(value):
                 last = row
             if last >= 0:
                 distance = row - last
@@ -94,16 +126,29 @@ def pd_days_since_inclusive(condition: pd.DataFrame, max_lookback=None, **_):
 
 
 def pl_days_since_inclusive(condition, max_lookback=None, **_):
+    """Distance to latest true observation; max_lookback is an inclusive distance.
+
+    ConditionBool semantics (see ``pd_days_since_inclusive``): a NaN condition
+    censors output to NaN and resets the running count so a later known-true
+    event restarts from 0.
+    """
+    _assert_condition_bool(condition)
     limit = None if max_lookback is None else positive_int(max_lookback, "max_lookback")
     replacements = {}
     for col in pl_cols(condition):
-        temp = pl.DataFrame({"c": condition[col]}).with_row_index("i")
-        true = pl_finite("c") & (pl.col("c") != 0)
-        last = pl.when(true).then(pl.col("i")).otherwise(None).forward_fill()
-        distance = pl.col("i").cast(pl.Float64) - last.cast(pl.Float64)
-        if limit is not None:
-            distance = pl.when(distance <= limit).then(distance).otherwise(None)
-        replacements[col] = temp.select(distance.alias("v"))["v"]
+        arr = condition[col].cast(pl.Float64, strict=False).to_numpy()
+        out, last = np.full(len(arr), np.nan, dtype=float), -1
+        for row, value in enumerate(arr):
+            if pd.isna(value):
+                last = -1
+                continue
+            if bool(value):
+                last = row
+            if last >= 0:
+                distance = row - last
+                if limit is None or distance <= limit:
+                    out[row] = float(distance)
+        replacements[col] = pl.Series(col, out)
     return pl_base_with(condition, replacements)
 
 

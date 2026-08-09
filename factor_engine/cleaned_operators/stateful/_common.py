@@ -67,10 +67,36 @@ def panel_or_scalar(value: Any, row: int, col: int) -> float:
     return float(value)
 
 
+def assert_condition_bool(panel: pd.DataFrame, name: str = "condition") -> None:
+    """R11 #144: a condition input must be a ConditionBool.
+
+    Accepted values: {0, 1} (or boolean True/False); NaN = missing/unknown.  Any
+    other finite numeric value (e.g. 5.0, -0.03) is neither a probability nor a
+    boolean — silently treating it as "truthy" is a hidden semantic.  Fail the
+    call (raise) instead of guessing.
+
+    Mirrors ``cleaned_operators.common.daily_panel._assert_condition_bool``.
+    """
+    cv = panel.to_numpy()
+    finite = np.isfinite(cv)
+    bad = finite & (cv != 0.0) & (cv != 1.0)
+    if np.any(bad):
+        raise ValueError(
+            f"{name} must be a ConditionBool (values in {{0, 1}} with NaN as "
+            f"missing); found {int(bad.sum())} finite value(s) outside {{0, 1}}"
+        )
+
+
 def truth_mask(panel: pd.DataFrame) -> np.ndarray:
-    """Finite, non-zero truth (condition uses finite AND != 0)."""
+    """ConditionBool truth: finite values equal to exactly 1.
+
+    ``1`` = true event, ``0`` = false, ``NaN`` = unknown.  Unknown (NaN) cells
+    are masked False here — a boolean mask cannot carry "unknown", so callers
+    that need to distinguish unknown from false must handle NaN separately per
+    the operator's documented missing policy (censor to NaN / keep prior state).
+    """
     v = panel.to_numpy()
-    return np.isfinite(v) & (v != 0)
+    return np.isfinite(v) & (v == 1)
 
 
 def finite_panel(panel: pd.DataFrame) -> np.ndarray:

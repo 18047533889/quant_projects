@@ -5,18 +5,25 @@
     {matrix_root}/
       universe={universe}/
         freq={freq}/
-          year=2025/
-            month=01/
-              data.parquet   # datetime, asset, factor_a, factor_b, ...
-          manifest.json      # P0-23: universe/freq 级 factor_version 绑定 + P1-15 CAS
+          manifest.json      # P0-23 factor_version 绑定 + P1-15 CAS + generation 指针
+          .matrix.lock       # 整个 (universe,freq) publish 的 flock
+          generation/<gid>/  # 一次性不可变 generation（全部分区 validate 后才可见）
+            year=2025/
+              month=01/
+                data.parquet   # datetime, asset, factor_a, factor_b, ...
 
-治理闭环（#收官轮 + R13）：
+治理闭环（#收官轮 + R13 + R14）：
   * P0-21 read-merge-write 区分「本次没有该 key」与「本次显式 NaN/tombstone」；
   * P0-22 旧分区读失败 → 移动 ``.quarantine/`` 并 hard fail，绝不按空分区覆盖；
   * P0-23 factor_version 绑定：semantic_digest 变化拒绝混列；
-  * P1-14 production 走 ``.staging/<part>/`` → validate → manifest(CAS) → publish；
   * P1-15 manifest CAS：并发写同 universe/freq 用版本号检测；
-  * P1-16 load 后重复 ``(datetime, asset)`` key 抛错，不再静默 keep="last"。
+  * P1-16 load 后重复 ``(datetime, asset)`` key 抛错，不再静默 keep="last"；
+  * R14 #1 generation-atomic publish：整个 ``(universe, frequency)`` 当一个
+    generation——先完整写入 ``generation/<gid>/`` 并全部 validate，再把
+    ``manifest.json``（含 ``generation`` 指针）用 ``os.replace`` 原子切一次。
+    reader 只读 ``manifest.generation`` 指向的那一代，任何崩溃点都只能看到
+    完整 old generation 或完整 new generation，**绝无半新半旧**（旧实现的
+    「先写 manifest、再逐分区 os.replace」会在切换一半时崩溃产生 mixed 状态）。
 """
 
 from __future__ import annotations
@@ -25,6 +32,8 @@ import contextlib
 import fcntl
 import json
 import os
+import shutil
+import threading as _threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -90,11 +99,28 @@ def _partition_write_lock(lock_path: Path):
             fh.close()
 
 
+_held_manifest_locks: set[Path] = set()
+_held_manifest_locks_guard = _threading.Lock()
+
+
 @contextlib.contextmanager
 def _manifest_write_lock(base: Path):
-    """``manifest.json`` 级写互斥：P1-15 CAS 的串行化点。"""
+    """``manifest.json`` 级写互斥：P1-15 CAS 的串行化点。
+
+    R14 #1：整个 (universe,freq) publish（generation 重建 + manifest 切换）在
+    base 级 flock 内串行化；``_update_manifest`` 在内部也会再进同一把锁——同一
+    进程内**可重入**（flock 对同一文件的第二把 fd 锁会 self-deadlock，因此用
+    进程内持有集合跳过重复获取）。
+    """
     base.mkdir(parents=True, exist_ok=True)
-    lock_path = base / ".manifest.lock"
+    lock_path = base / ".matrix.lock"
+    with _held_manifest_locks_guard:
+        reentrant = lock_path in _held_manifest_locks
+        if not reentrant:
+            _held_manifest_locks.add(lock_path)
+    if reentrant:
+        yield
+        return
     fh = open(lock_path, "w")
     try:
         fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
@@ -104,6 +130,8 @@ def _manifest_write_lock(base: Path):
             fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
         finally:
             fh.close()
+            with _held_manifest_locks_guard:
+                _held_manifest_locks.discard(lock_path)
 
 
 def _read_manifest(base: Path) -> dict[str, Any] | None:
@@ -123,6 +151,19 @@ def _write_manifest_atomic(base: Path, manifest: dict[str, Any]) -> None:
         f.flush()
         os.fsync(f.fileno())
     os.replace(str(tmp), str(mpath))
+
+
+def _link_or_copy(src: Path, dst: Path) -> None:
+    """把旧 generation 的不可变分区文件链接/复制进新 generation（copy-on-write）。
+
+    generation 内的 parquet 一旦写入不再原地修改，因此 ``os.link`` 共享 inode
+    是安全的；不支持硬链接的文件系统回退 ``shutil.copy2``。
+    """
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(str(src), str(dst))
+    except OSError:
+        shutil.copy2(str(src), str(dst))
 
 
 def _merge_matrix_frames(
@@ -351,11 +392,16 @@ class FactorMatrixMaterializer:
         factor_ids: list[str],
         factor_versions: dict[str, str] | None,
         expected_manifest_version: int | None,
+        generation: str | None = None,
     ) -> dict[str, Any]:
         """P0-23 + P1-15: 写 manifest（semantic_digest 校验 + CAS 版本比对）。
 
         ``factor_versions``（factor_id → semantic_digest/version）缺省为 None 时
         只推进 ``updated_at``/``manifest_version``，不做 digest 绑定。
+
+        R14 #1：``generation`` 是本次已完整 validate 的新 generation id。写入后
+        manifest 的 ``os.replace`` 就是全矩阵的**唯一原子切换点**——reader 从
+        ``manifest.generation`` 解析读取目录，任何崩溃窗口都看不到半新半旧。
         """
         factor_versions = factor_versions or {}
         with _manifest_write_lock(base):
@@ -420,6 +466,8 @@ class FactorMatrixMaterializer:
                     entry.setdefault(field, None)
             manifest["updated_at"] = _now_iso()
             manifest["manifest_version"] = current_version + 1
+            if generation:
+                manifest["generation"] = generation
             _write_manifest_atomic(base, manifest)
             return manifest
 
@@ -445,8 +493,8 @@ class FactorMatrixMaterializer:
             partition_columns: 见函数签名（可选）
             value_dtype: 见函数签名（可选）
             production: 显式 production 标志；缺省从运行模式解析（可选）。
-                production 走 ``.staging/<part>/`` → validate → manifest(CAS) →
-                原子 publish；research 保持直写但复用 merge 逻辑。
+                production 对每个分区写后再读回 validate，validate 全部通过才
+                原子切换 manifest generation 指针。
             recovery: **已弃用**（P0-22）：分区读失败一律 quarantine + hard fail，
                 不再支持按空分区破坏性重建；保留参数仅为兼容旧调用方。
             factor_versions: factor_id → semantic_digest/version 绑定（可选，
@@ -456,6 +504,13 @@ class FactorMatrixMaterializer:
 
         返回:
             dict[str, Any]
+
+        R14 #1（crash-atomic publish）：
+        整个 ``(universe, frequency)`` 是一个 generation。publish 顺序是
+        「完整写入 ``generation/<gid>/``（含未触达分区的 copy-on-write）→ 全部
+        validate → 一次 ``os.replace`` 切 ``manifest.json`` 的 ``generation``
+        指针」。reader 只读 ``manifest.generation`` 指向的那一代，任何崩溃窗口
+        只能看到完整 old generation 或完整 new generation，绝无半新半旧。
         """
         # #收官轮 P0：production 由调用方（matrix_service 从 engine.run_mode）
         # 显式传入，缺省才回退到运行模式解析——下游不再自行猜运行模式。
@@ -534,86 +589,114 @@ class FactorMatrixMaterializer:
         )
         work = attach_partition_columns(merged, policy)
         base = layout.base_dir(self._matrix_root)
-        # P1-15: manifest 版本快照；CAS 期望值缺省 = 读到的当前值
-        snapshot_version = self._current_manifest_version(base)
-        expected = (
-            expected_manifest_version
-            if expected_manifest_version is not None
-            else snapshot_version
-        )
-        staged: list[tuple[Path, Path, Path]] = []
-        partitions_written: list[str] = []
+        base.mkdir(parents=True, exist_ok=True)
 
-        try:
-            for part_values, partition_df in iter_partition_groups(work, policy):
-                drop_cols = [c for c in policy.columns if c in partition_df.columns]
-                out_df = partition_df.drop(columns=drop_cols).reset_index(drop=True)
-                part_dir = base / partition_path_segments(
-                    part_values, column_order=policy.columns
-                )
-                part_dir.mkdir(parents=True, exist_ok=True)
-                parquet_path = part_dir / "data.parquet"
-                lock_path = part_dir / ".data.parquet.lock"
-                # R11 #7: read-merge-write 在 flock 互斥内完成——并发 matrix 写
-                # 同一分区不再互相覆盖；tmp 文件名带 pid+uuid，崩溃残留不命中固定 .tmp。
-                with _partition_write_lock(lock_path):
-                    if parquet_path.exists():
-                        existing = self._read_existing_or_quarantine(parquet_path)
+        # R14 #1: 整个 (universe,freq) 在 base 级 flock 内完成「generation 重建 +
+        # manifest 原子切换」。同 host 并发 writer serial 化；跨 host 由 manifest
+        # CAS（expected_manifest_version）兜底。
+        with _manifest_write_lock(base):
+            snapshot_version = self._current_manifest_version(base)
+            expected = (
+                expected_manifest_version
+                if expected_manifest_version is not None
+                else snapshot_version
+            )
+            manifest = _read_manifest(base)
+            old_gid = (manifest or {}).get("generation")
+            old_gen_dir = base / "generation" / old_gid if old_gid else None
+            if old_gen_dir is not None and not old_gen_dir.is_dir():
+                old_gen_dir = None
+
+            new_gid = uuid.uuid4().hex
+            new_gen_dir = base / "generation" / new_gid
+            new_gen_dir.mkdir(parents=True, exist_ok=True)
+
+            partitions_written: list[str] = []
+            written_rel: list[Path] = []
+            try:
+                # 1) 本次触达的分区：read-merge-write 进新 generation（production
+                #    写后再读回 validate，validate 全部通过才允许切指针）。
+                for part_values, partition_df in iter_partition_groups(work, policy):
+                    drop_cols = [c for c in policy.columns if c in partition_df.columns]
+                    out_df = partition_df.drop(columns=drop_cols).reset_index(drop=True)
+                    rel = (
+                        partition_path_segments(
+                            part_values, column_order=policy.columns
+                        )
+                        / "data.parquet"
+                    )
+                    new_path = new_gen_dir / rel
+                    new_path.parent.mkdir(parents=True, exist_ok=True)
+                    old_path = old_gen_dir / rel if old_gen_dir is not None else None
+                    if old_path is not None and old_path.exists():
+                        existing = self._read_existing_or_quarantine(old_path)
                         merged_out = _merge_matrix_frames(
                             existing, out_df, value_dtype=value_dtype
                         )
                     else:
                         merged_out = out_df
+                    self._write_parquet_atomic(new_path, merged_out)
                     if effective_production:
-                        # P1-14: production 先写 staging + validate，manifest CAS
-                        # 通过后再统一原子 publish。
-                        staging_path = part_dir / ".staging" / "data.parquet"
-                        self._write_parquet_atomic(staging_path, merged_out)
-                        self._validate_staging(staging_path, merged_out)
-                        staged.append((part_dir, parquet_path, staging_path))
-                    else:
-                        self._write_parquet_atomic(parquet_path, merged_out)
-                pkey = "|".join(f"{k}={part_values[k]}" for k in sorted(part_values))
-                partitions_written.append(pkey)
-                logger.info(
-                    "factor_matrix 分区 upsert universe=%s partition=%s rows=%d cols=%d",
+                        self._validate_staging(new_path, merged_out)
+                    written_rel.append(rel)
+                    pkey = "|".join(
+                        f"{k}={part_values[k]}" for k in sorted(part_values)
+                    )
+                    partitions_written.append(pkey)
+                    logger.info(
+                        "factor_matrix 分区 upsert universe=%s partition=%s "
+                        "rows=%d cols=%d generation=%s",
+                        universe,
+                        pkey,
+                        len(merged_out),
+                        len(merged_out.columns),
+                        new_gid,
+                    )
+
+                # 2) 未触达的分区：hardlink/copy 旧 generation 的不可变文件到新
+                #    generation——partial 更新不用把整个矩阵重写一遍，IO 有界。
+                if old_gen_dir is not None:
+                    for old_part in old_gen_dir.rglob("data.parquet"):
+                        if (
+                            ".quarantine" in old_part.parts
+                            or ".staging" in old_part.parts
+                        ):
+                            continue
+                        rel = old_part.relative_to(old_gen_dir)
+                        if rel in written_rel:
+                            continue
+                        _link_or_copy(old_part, new_gen_dir / rel)
+
+                # 3) manifest：digest 校验 + CAS + generation 指针，一次 os.replace
+                #    原子切换——这是 reader 唯一能感知新数据的边界。
+                manifest = self._update_manifest(
+                    base,
                     universe,
-                    pkey,
-                    len(merged_out),
-                    len(merged_out.columns),
+                    frequency,
+                    factor_ids,
+                    factor_versions,
+                    expected,
+                    generation=new_gid,
                 )
 
-            # P0-23 + P1-15: manifest（校验 digest + CAS），失败则不发布任何 staging
-            manifest = self._update_manifest(
-                base,
-                universe,
-                frequency,
-                factor_ids,
-                factor_versions,
-                expected,
-            )
-            if effective_production:
-                for _part_dir, parquet_path, staging_path in staged:
-                    with _partition_write_lock(_part_dir / ".data.parquet.lock"):
-                        os.replace(str(staging_path), str(parquet_path))
-                    try:
-                        staging_path.parent.rmdir()
-                    except OSError:
-                        pass
-            logger.info(
-                "factor_matrix manifest updated universe=%s version=%s factors=%d",
-                universe,
-                manifest.get("manifest_version"),
-                len(manifest.get("factors", {})),
-            )
-        except Exception:
-            for _part_dir, _parquet_path, staging_path in staged:
-                try:
-                    staging_path.unlink(missing_ok=True)
-                except OSError:
-                    pass
-            raise
+                # 4) GC：只保留当前与上一代。在途 reader 可能仍按旧 manifest 读
+                #    上一代文件，因此上一代不能马上删。
+                for gdir in (base / "generation").glob("*"):
+                    if gdir.is_dir() and gdir.name not in {new_gid, old_gid or ""}:
+                        shutil.rmtree(gdir, ignore_errors=True)
+            except Exception:
+                # 新 generation 尚未被 manifest 引用（孤儿），失败即清理，不残留。
+                shutil.rmtree(new_gen_dir, ignore_errors=True)
+                raise
 
+        logger.info(
+            "factor_matrix manifest updated universe=%s version=%s factors=%d "
+            "generation=%s",
+            universe,
+            manifest.get("manifest_version"),
+            len(manifest.get("factors", {})),
+            new_gid,
+        )
         return {
             "universe": universe,
             "frequency": frequency,
@@ -623,6 +706,7 @@ class FactorMatrixMaterializer:
             "matrix_root": str(self._matrix_root),
             "columns": ["datetime", "asset", *factor_ids],
             "manifest_version": manifest.get("manifest_version"),
+            "generation": new_gid,
         }
 
     @staticmethod
@@ -647,6 +731,10 @@ class FactorMatrixMaterializer:
     ) -> pd.DataFrame:
         """读取 universe 下全部或指定因子列宽表。
 
+        R14 #1：只读取 ``manifest.generation`` 指向的那一代（通过 generation
+        指针隔离发布中的 half-published 状态）。无 ``generation`` 字段的旧布局
+        按 legacy 全局 glob 兜底。
+
         参数:
             matrix_root: factor_matrix 根目录
             universe: 标的池标识（可选）
@@ -664,14 +752,24 @@ class FactorMatrixMaterializer:
         if not base.exists():
             raise FileNotFoundError(f"factor_matrix 不存在: {base}")
 
-        frames: list[pd.DataFrame] = []
-        for pq in sorted(base.rglob("data.parquet")):
-            if ".staging" in pq.parts or ".quarantine" in pq.parts:
-                continue
-            if pq.name.startswith("."):
-                continue
-            df = pd.read_parquet(pq)
-            frames.append(df)
+        def _frames_from(dir_path: Path) -> list[pd.DataFrame]:
+            frames: list[pd.DataFrame] = []
+            for pq in sorted(dir_path.rglob("data.parquet")):
+                if ".staging" in pq.parts or ".quarantine" in pq.parts:
+                    continue
+                if pq.name.startswith("."):
+                    continue
+                frames.append(pd.read_parquet(pq))
+            return frames
+
+        manifest = _read_manifest(base)
+        gen_id = (manifest or {}).get("generation")
+        gen_dir = base / "generation" / gen_id if gen_id else None
+        if gen_dir is not None and gen_dir.is_dir():
+            frames = _frames_from(gen_dir)
+        else:
+            # 兼容旧布局（manifest 无 generation / 无 manifest）：直接 glob base。
+            frames = _frames_from(base)
         if not frames:
             raise FileNotFoundError(f"factor_matrix 无 parquet: {base}")
 

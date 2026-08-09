@@ -81,14 +81,20 @@ def ts_regression_compat(
 
 
 def register() -> None:
+    from cleaned_operators.overhaul.base import _inherit_canonical_logical_contract
+
+    op = PandasFunctionOperator(
+        "ts_regression_slope",
+        "time_series_regression",
+        ["y", "x", "window", "lag", "retval", "min_periods", "add_intercept"],
+        "滚动 OLS；兼容历史 ts_regression(lag, retval) 调用契约",
+        ts_regression_compat,
+    )
+    # R13 NEW-P0-04: a replacement may change only the implementation — the
+    # canonical logical contract is inherited / verified, never rebuilt.
+    _inherit_canonical_logical_contract("ts_regression_slope", op)
     OperatorRegistry.register(
-        PandasFunctionOperator(
-            "ts_regression_slope",
-            "time_series_regression",
-            ["y", "x", "window", "lag", "retval", "min_periods", "add_intercept"],
-            "滚动 OLS；兼容历史 ts_regression(lag, retval) 调用契约",
-            ts_regression_compat,
-        ),
+        op,
         canonical="ts_regression_slope",
         backend="pandas_numpy",
         source="operator_overhaul_compat",

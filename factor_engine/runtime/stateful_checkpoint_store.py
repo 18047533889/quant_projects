@@ -85,6 +85,17 @@ class StatefulCheckpointStore:
             StatefulCheckpointRegistry.validate(checkpoint)
         except StatefulContractError:
             return None
+        # NEW-P0-30 (defense-in-depth): a checkpoint whose record claims coverage
+        # up to/through a bar the state did not actually cover (as_of !=
+        # state.last_timestamp) is a false coverage claim — fail closed so a
+        # direct resume cannot silently interpolate forward over the gap.
+        state_last = (checkpoint.state or {}).get("last_timestamp")
+        if state_last is not None:
+            try:
+                if _as_utc(state_last) != _as_utc(checkpoint.as_of):
+                    return None
+            except (ValueError, TypeError):
+                return None
         return checkpoint
 
     def save(self, factor_id: str, checkpoint: StateCheckpoint) -> None:

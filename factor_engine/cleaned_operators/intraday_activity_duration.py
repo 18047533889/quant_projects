@@ -56,6 +56,14 @@ def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadat
         description=description,
         param_names=params,
         return_type="series",
+        # R11 P0-13: these operators consume minute bars and emit one scalar per
+        # (TradeDate, Symbol) — the grain contract is declared HERE so the
+        # policy layer classifies them non-shape-preserving from their own
+        # contract, not from any hand-maintained canonical list.
+        input_grain="minute",
+        output_grain="daily",
+        available_at="session_close",
+        same_session_usable=False,
         tags=[
             "intraday", "minute", "daily", "pit_safe", "causal", "deterministic",
             f"signature:{','.join(params)}->series", "domain:intraday",

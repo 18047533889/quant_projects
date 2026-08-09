@@ -139,6 +139,13 @@ class ParamSpec:
     # a second AST).  ``MISSING`` (the sentinel) means "no default declared";
     # ``None`` is a legitimate declared default.
     default: Any = MISSING
+    # R13 NEW-P0-18: declared VALUE-equivalence class, the ONLY authority that
+    # permits a hash-side canonicalizer to rewrite this parameter's value.  For
+    # ``"positive_scale"`` a vector is unit-sum-normalized (and floats rounded)
+    # so proportionally-identical factor arguments hash to one AST.  Canonicalization
+    # is NEVER inferred from the parameter name — ``*_weight`` / ``weights`` is
+    # not, by itself, proof of scale invariance.
+    equivalence: str | None = None
 
 
 # R6-24 (RelationalParamSpec): cross-parameter feasibility constraints that
@@ -387,21 +394,32 @@ _TYPED_BROADCAST_TAGS = frozenset(
 # ``verify_broadcast`` / the registration audit).
 @dataclass(frozen=True)
 class BroadcastSpec:
-    """Structured multi-panel broadcast declaration (R11 P0-09).
+    """Structured multi-panel broadcast declaration (R11 P0-09 / P0-10).
 
     ``mode`` is one of the supported mapping shapes; ``date_mapping`` describes
     how the broadcast input's dates align to the base panel's (``exact`` for
-    same-row, ``trading_date`` for same-trading-day, ``session`` for the owning
-    session); ``instrument_policy`` is ``exact`` / ``subset`` /
-    ``independent``; ``timezone`` anchors date normalisation.  Any axis the spec
-    does not cover (unknown index type, unknown grain, unknown mapping) must
-    fail closed at runtime rather than silently pass.
+    same-row, ``trading_date`` for same-trading-day, ``session`` for a daily
+    source broadcast onto the owning market session's minute grid);
+    ``instrument_policy`` is ``exact`` / ``subset`` / ``independent``;
+    ``timezone`` anchors date normalisation; ``source_grain`` / ``target_grain``
+    declare the frequency transform (``daily`` -> ``minute``), ``calendar_id``
+    names the session calendar, and ``availability_policy`` / ``missing_policy``
+    bound when the source row is usable and what happens to unmapped rows.  Any
+    axis the spec does not cover (unknown index type, unknown grain, unknown
+    mapping) must fail closed at runtime rather than silently pass.
     """
 
     mode: str  # one of the _TYPED_BROADCAST_TAGS (sans _broadcast suffix) or a registered alias
     date_mapping: str = "trading_date"
     instrument_policy: str = "subset"
     timezone: str | None = None
+    source_param: str | None = None     # the operator's name for the daily source panel
+    target_param: str | None = None     # the operator's name for the minute target panel
+    source_grain: str = "daily"         # frequency of the broadcast input
+    target_grain: str = "minute"        # frequency of the base panel the input maps onto
+    calendar_id: str | None = None      # e.g. "XSHG" / "Asia/Shanghai"
+    availability_policy: str = "unknown"  # before_open | session_close | official_limit
+    missing_policy: str = "fail_closed"   # fail_closed | nan
 
     def __post_init__(self) -> None:
         allowed_modes = {"daily_to_minute", "scalar_to_cross_section",
@@ -420,6 +438,32 @@ class BroadcastSpec:
             raise ValueError(
                 f"BroadcastSpec.instrument_policy={self.instrument_policy!r} is "
                 "unknown (R11 P0-09 fail-closed)"
+            )
+        if self.source_grain not in {"daily", "minute", "event"}:
+            raise ValueError(
+                f"BroadcastSpec.source_grain={self.source_grain!r} is unknown "
+                "(R11 P0-09 fail-closed)"
+            )
+        if self.target_grain not in {"daily", "minute"}:
+            raise ValueError(
+                f"BroadcastSpec.target_grain={self.target_grain!r} is unknown "
+                "(R11 P0-09 fail-closed)"
+            )
+        if self.availability_policy not in {"unknown", "before_open", "session_close", "official_limit"}:
+            raise ValueError(
+                f"BroadcastSpec.availability_policy={self.availability_policy!r} "
+                "is unknown (R11 P0-09 fail-closed)"
+            )
+        if self.missing_policy not in {"fail_closed", "nan"}:
+            raise ValueError(
+                f"BroadcastSpec.missing_policy={self.missing_policy!r} is unknown "
+                "(R11 P0-09 fail-closed)"
+            )
+        if self.date_mapping == "session" and self.source_grain == self.target_grain:
+            raise ValueError(
+                "BroadcastSpec.date_mapping='session' requires source_grain != "
+                f"target_grain, got {self.source_grain}->{self.target_grain} "
+                "(a session mapping is a frequency transform)"
             )
 
 
@@ -926,7 +970,16 @@ def _enforce_active_when(
     declared allowed set.  An inactive parameter must be unprovided or exactly
     equal to its canonical default — otherwise the call is rejected, because
     varying a dead knob creates two ASTs with identical output (a false search
-    space).  When the controller is unbound, the judge is skipped (fail-open).
+    space).
+
+    P0-05: an unbound controller is resolved through its canonical default
+    (kernel-signature default first, then ``ParamSpec.default``) and the judge
+    STILL runs.  The old behaviour skipped the judgement when the controller
+    was not in the explicit call — so ``op(x, foo=1)`` vs ``op(x, foo=2)`` both
+    entered the search space while the kernel default made ``foo`` inactive,
+    manufacturing two ASTs with identical output.  A controller with no
+    bindable default at all is a contract bug and raises (fail-closed), never a
+    silent skip.
     """
     names = list(getattr(metadata, "param_names", None) or [])
     specs = getattr(metadata, "param_specs", None) or {}
@@ -941,7 +994,21 @@ def _enforce_active_when(
         controller, allowed = spec.active_when
         ctrl_val = bound.get(controller)
         if ctrl_val is None:
-            continue  # controller unbound -> cannot judge; fail-open
+            # P0-05: resolve the controller through its canonical default and
+            # still enforce.  No resolution -> contract bug -> fail closed.
+            if controller in defaults:
+                ctrl_val = defaults[controller]
+            else:
+                ctrl_spec = specs.get(controller)
+                if ctrl_spec is not None and getattr(ctrl_spec, "default", MISSING) is not MISSING:
+                    ctrl_val = ctrl_spec.default
+                else:
+                    raise OperatorParameterError(
+                        f"{metadata.name}: active_when controller {controller!r} "
+                        f"for {pname!r} is unbound and has no bindable default — "
+                        "cannot judge active/inactive (fail-closed; declare a "
+                        "kernel/ParamSpec default for the controller)"
+                    )
         if _active_allows(allowed, ctrl_val):
             continue  # active
         # INACTIVE: only tolerate unprovided, or equal to the canonical default.
@@ -1244,6 +1311,7 @@ def _verify_broadcast_specs(
             "— the broadcast date mapping cannot be verified (R11 P0-09 fail-closed)"
         )
     base_dates = base_idx.normalize()
+    base_cols = list(base.columns)
     for position, frame in enumerate(frames[1:], start=1):
         other_idx = getattr(frame, "index", None)
         if not isinstance(other_idx, pd.DatetimeIndex):
@@ -1261,14 +1329,79 @@ def _verify_broadcast_specs(
                         f"date_mapping='exact') input panel {position} dates are "
                         "not row-aligned with the base (R11 P0-09)"
                     )
-            elif spec.date_mapping == "trading_date":
+            elif spec.date_mapping in ("trading_date", "session"):
+                # R11 P0-10: ``session`` is a REAL frequency-transform mapping —
+                # a daily source (one row per trade date) broadcast onto the
+                # minute grid of the owning market session.  The structural
+                # requirements are (a) the source is genuinely daily-grained
+                # (one row per normalized trade date — a minute source would
+                # carry multiple rows per day), and (b) every source trade date
+                # exists among the base's trading days.  This closes the old
+                # fail-open where date_mapping='session' was declared but never
+                # verified.
+                if spec.date_mapping == "session":
+                    _verify_daily_grain(metadata, spec, frame, position, other_dates)
                 if not set(other_dates).issubset(set(base_dates)):
                     raise ValueError(
                         f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}, "
-                        f"date_mapping='trading_date') input panel {position} "
+                        f"date_mapping={spec.date_mapping!r}) input panel {position} "
                         "carries trading dates absent from the base panel "
                         "(R11 P0-09 fail-closed)"
                     )
+            else:  # pragma: no cover - __post_init__ rejects unknown values
+                raise ValueError(
+                    f"{metadata.name}: BroadcastSpec.date_mapping={spec.date_mapping!r} "
+                    "is not verified (R11 P0-09 fail-closed)"
+                )
+            # R11 P0-10: instrument_policy is enforced, not just stored.
+            other_cols = list(frame.columns)
+            if spec.instrument_policy == "exact":
+                if other_cols != base_cols:
+                    raise ValueError(
+                        f"{metadata.name}: BroadcastSpec(instrument_policy='exact') "
+                        f"input panel {position} columns {other_cols} differ from "
+                        f"the base {base_cols} (R11 P0-10 fail-closed)"
+                    )
+            elif spec.instrument_policy == "subset":
+                if not set(other_cols).issubset(set(base_cols)):
+                    raise ValueError(
+                        f"{metadata.name}: BroadcastSpec(instrument_policy='subset') "
+                        f"input panel {position} columns {other_cols} include "
+                        f"instruments absent from the base {base_cols} "
+                        "(R11 P0-10 fail-closed)"
+                    )
+            # ``independent``: the source carries its own instrument axis; only the
+            # date mapping is constrained.  No column check (intended use:
+            # market-wide scalars, index weights, benchmark series).
+
+
+def _is_daily_grain(normalized_dates) -> bool:
+    """True when the index is daily-grained: each normalized date appears once."""
+    if len(normalized_dates) == 0:
+        return True
+    return normalized_dates.is_unique
+
+
+def _verify_daily_grain(
+    metadata: Any,
+    spec: "BroadcastSpec",
+    frame: Any,
+    position: int,
+    other_dates,
+) -> None:
+    """Verify a ``session``-mapped source is genuinely daily-grained (P0-10).
+
+    A minute-grain source (multiple bars per trade date) cannot be a
+    ``session`` daily source — its rows do not correspond one-to-one to trade
+    dates, so ``MarketSession.trade_date`` cannot map them.
+    """
+    if not _is_daily_grain(other_dates):
+        raise ValueError(
+            f"{metadata.name}: BroadcastSpec(date_mapping='session') input panel "
+            f"{position} is NOT daily-grained (multiple rows per trade date) — "
+            "a session mapping needs a one-row-per-trade-date source "
+            "(R11 P0-10 fail-closed)"
+        )
 
 
 def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:

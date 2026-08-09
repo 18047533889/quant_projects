@@ -35,6 +35,35 @@ _MORNING = (571, 690)   # 09:31 .. 11:30 (A-share 240-bar session, matches DataA
 _AFTERNOON = (781, 900) # 13:01 .. 15:00
 _SEGMENT_RANGES = {"morning": _MORNING, "afternoon": _AFTERNOON}
 
+# P0-43/45: official A-share session grid, derived from the declared segment
+# constants above (morning 09:31-11:30, afternoon 13:01-15:00 = 240 minutes).
+# Lunch-gap minutes (12:31-13:00) are NOT part of the grid: they never count as
+# missing, and a non-official bar must never inflate coverage.
+_OFFICIAL_MINUTES = np.asarray(
+    [m for lo, hi in _SEGMENT_RANGES.values() for m in range(lo, hi + 1)],
+    dtype=int,
+)
+
+
+def _bar_width_minutes(mods: np.ndarray) -> int:
+    """Structural bar width in minutes (modal positive minute delta).
+
+    Data-RESOLUTION property (1-min vs 5-min bars), never a completeness
+    signal.  Used to map the official session minutes onto the per-session BAR
+    count for the coverage denominator (P0-43/45).
+    """
+    diffs = np.diff(mods)
+    diffs = diffs[diffs > 0]
+    if diffs.size == 0:
+        return 1
+    vals, counts = np.unique(diffs, return_counts=True)
+    return int(vals[int(np.argmax(counts))])
+
+
+def _expected_slots(official_minutes: np.ndarray, width: int) -> int:
+    """Official-grid slot count for ``official_minutes`` at bar ``width``."""
+    return int(math.ceil(int(official_minutes.size) / max(1, width)))
+
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
     return OperatorMetadata(
@@ -110,18 +139,31 @@ def _daily_agg_two(
     frame_b: pd.DataFrame,
     fn: Callable[[np.ndarray, np.ndarray], float],
 ) -> pd.DataFrame:
-    """Apply fn(a_vals, b_vals) per (instrument, day)."""
+    """Apply fn(a_vals, b_vals) per (instrument, day).
+
+    PAIRED-MISSING policy (P0-44): the two panels form a pair — both present or
+    both missing.  A bar with exactly one of ``a``/``b`` finite is data-invalid
+    and must not silently act as a single-series bar (e.g. a bar with
+    amount=NaN but volume finite must never become volume-only).  Such rows are
+    dropped from BOTH panels; a missing pair member is never zero-filled.  A
+    deliberate single-field aggregation path (an fn that aggregates only one of
+    the two fields) still receives the pair-filtered rows, so the pairing is
+    enforced once here at the routing layer.
+    """
     frame_a, frame_b = _as_panel(frame_a), _as_panel(frame_b)
     out: dict[str, pd.Series] = {}
     for inst in frame_a.columns:
         a, b = frame_a[inst], frame_b[inst]
-        joined = pd.concat([a, b], axis=1, keys=["a", "b"]).dropna(subset=["a"])
+        # P0-44: usable rows require BOTH ``a`` and ``b`` finite.  Rows where
+        # only one member is finite are treated as missing in both (dropped) —
+        # never passed through as a single-series bar.
+        joined = pd.concat([a, b], axis=1, keys=["a", "b"]).dropna(subset=["a", "b"])
         joined["day"] = joined.index.normalize()
         per_day: dict[pd.Timestamp, float] = {}
         for day, group in joined.groupby("day"):
             vals_a = np.asarray(group["a"], dtype=float)
-            vals_b = np.asarray(np.where(np.isfinite(group["b"]), group["b"], np.nan), dtype=float)
-            if not np.any(np.isfinite(vals_a)):
+            vals_b = np.asarray(group["b"], dtype=float)
+            if not np.any(np.isfinite(vals_a)) or not np.any(np.isfinite(vals_b)):
                 per_day[day] = np.nan
                 continue
             try:
@@ -311,19 +353,38 @@ class IntraSegmentVwapDeviation(SeriesOperator):
         return pd.DataFrame(out).sort_index()
 
 
-def _coverage_ok(r: np.ndarray, floor: float = 0.9) -> bool:
+def _coverage_ok(
+    r: np.ndarray,
+    mods: np.ndarray,
+    expected_slots: int,
+    floor: float = 0.9,
+) -> bool:
     """Coverage gate: realised-variation estimates must not treat data gaps as
-    zero-return minutes (P1-56).  A day whose observed grid is < ``floor``
-    finite returns fails closed rather than reporting a partial RV."""
-    if r.size == 0:
+    zero-return minutes (P1-56 / P0-43/45).
+
+    The denominator is the OFFICIAL expected slot count for the measured grid
+    (``expected_slots``), never the observed row count — a wholly missing bar
+    silently shrinks ``r.size`` and could otherwise read 100% covered.  ``mods``
+    (minute-of-day, aligned with ``r``) selects only bars on the official
+    session grid, so lunch-gap bars never count as missing and a non-official
+    bar never inflates coverage.
+    """
+    if expected_slots <= 0:
         return False
-    return float(np.sum(np.isfinite(r))) / r.size >= floor
+    covered = int(np.sum(np.isfinite(r) & np.isin(mods, _OFFICIAL_MINUTES)))
+    return covered / expected_slots >= floor
 
 
 def _seg_realized_vol(close_v, times, segment):
+    mods = _minute_of_day(times)
     mask = _seg_mask(times, segment)
     r = _log_returns(close_v[mask])
-    if not _coverage_ok(r):
+    # P0-43/45: coverage is measured against the OFFICIAL segment grid, never
+    # the observed row count.
+    lo, hi = _SEGMENT_RANGES[str(segment)]
+    width = _bar_width_minutes(mods)
+    expected = _expected_slots(np.arange(lo, hi + 1, dtype=int), width)
+    if not _coverage_ok(r, mods[mask], expected):
         return np.nan
     with np.errstate(invalid="ignore"):
         return float(math.sqrt(float(np.nansum(r * r))))
@@ -350,9 +411,13 @@ class IntraSegmentRealizedVol(SeriesOperator):
 # § Realized variance / semivariance / bipower / jump
 # ---------------------------------------------------------------------------
 
-def _rv(close_v):
+def _rv(close_v, times):
     r = _log_returns(close_v)
-    if not _coverage_ok(r):
+    # P0-43/45: coverage is measured against the OFFICIAL day grid, never the
+    # observed row count.
+    mods = _minute_of_day(times)
+    width = _bar_width_minutes(mods)
+    if not _coverage_ok(r, mods, _expected_slots(_OFFICIAL_MINUTES, width)):
         return np.nan
     with np.errstate(invalid="ignore"):
         return float(np.nansum(r * r))
@@ -371,12 +436,16 @@ class IntraRealizedVariance(SeriesOperator):
     metadata = _metadata("intra_realized_variance", "日内已实现方差 sum(r_t^2)。", ["close"], unit="variance")
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, lambda v, t: _rv(v))
+        return _daily_agg(close, lambda v, t: _rv(v, t))
 
 
-def _semivariance(close_v, side):
+def _semivariance(close_v, times, side):
     r = _log_returns(close_v)
-    if not _coverage_ok(r):
+    # P0-43/45: coverage is measured against the OFFICIAL day grid, never the
+    # observed row count.
+    mods = _minute_of_day(times)
+    width = _bar_width_minutes(mods)
+    if not _coverage_ok(r, mods, _expected_slots(_OFFICIAL_MINUTES, width)):
         return np.nan
     if side == "down":
         r = np.where(r < 0, r, 0.0)
@@ -406,12 +475,16 @@ class IntraRealizedSemivariance(SeriesOperator):
         if side not in ("up", "down"):
             # Invalid side must fail loudly (P1-55), not fall back to full RV.
             raise ValueError("intra_realized_semivariance requires side in {'up', 'down'}")
-        return _daily_agg(close, lambda v, t: _semivariance(v, side))
+        return _daily_agg(close, lambda v, t: _semivariance(v, t, side))
 
 
-def _bipower(close_v):
+def _bipower(close_v, times):
     r = _log_returns(close_v)
-    if not _coverage_ok(r):
+    # P0-43/45: coverage is measured against the OFFICIAL day grid, never the
+    # observed row count.
+    mods = _minute_of_day(times)
+    width = _bar_width_minutes(mods)
+    if not _coverage_ok(r, mods, _expected_slots(_OFFICIAL_MINUTES, width)):
         return np.nan
     # Bipower variation must use *real adjacent* minute returns.  Compressing
     # the finite returns and differencing the compressed series pairs 09:40 with
@@ -435,12 +508,12 @@ class IntraBipowerVariation(SeriesOperator):
     metadata = _metadata("intra_bipower_variation", "日内双幂变差 (pi/2)*sum(|r_t||r_{t-1}|)。", ["close"], unit="variance")
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, lambda v, t: _bipower(v))
+        return _daily_agg(close, lambda v, t: _bipower(v, t))
 
 
-def _jump_ratio(close_v):
-    rv = _rv(close_v)
-    bv = _bipower(close_v)
+def _jump_ratio(close_v, times):
+    rv = _rv(close_v, times)
+    bv = _bipower(close_v, times)
     if not np.isfinite(rv) or not np.isfinite(bv) or rv <= _EPS:
         return np.nan
     return float(max(rv - bv, 0.0) / rv)
@@ -459,7 +532,7 @@ class IntraJumpRatio(SeriesOperator):
     metadata = _metadata("intra_jump_ratio", "日内跳跃占比 max(RV-BV,0)/RV。", ["close"], unit="ratio")
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, lambda v, t: _jump_ratio(v))
+        return _daily_agg(close, lambda v, t: _jump_ratio(v, t))
 
 
 # ---------------------------------------------------------------------------
@@ -614,10 +687,16 @@ def _vwap_cross_count(close_v, amount_v, volume_v):
     # exist.  The previous code compressed ``close`` to its finite rows but kept
     # ``amount``/``volume`` on the full axis — the two arrays could desync when a
     # close was missing (P0-24).
-    vol = np.where(np.isfinite(volume_v), volume_v, 0.0)
-    amt = np.where(np.isfinite(amount_v), amount_v, 0.0)
-    cum_v = np.cumsum(vol)
-    cum_a = np.cumsum(amt)
+    # P0-44: volume/amount are a PAIR — both present or both missing.  A bar with
+    # only one of the two finite is data-invalid; zero-filling the missing member
+    # would silently desync the cumulative VWAP (a missing amount folds in as 0
+    # while its volume counts, or vice versa).  Treat the pair as missing
+    # together and never zero-fill.
+    pair_ok = np.isfinite(volume_v) & np.isfinite(amount_v)
+    vol = np.where(pair_ok, volume_v, np.nan)
+    amt = np.where(pair_ok, amount_v, np.nan)
+    cum_v = np.nancumsum(vol)
+    cum_a = np.nancumsum(amt)
     with np.errstate(divide="ignore", invalid="ignore"):
         cum_vwap = np.where(cum_v > _EPS, cum_a / cum_v, np.nan)
     valid = np.isfinite(close_v) & np.isfinite(cum_vwap)
@@ -706,6 +785,9 @@ class IntraEntropy(SeriesOperator):
 
 def _signed_imbalance_proxy(close_v, value_v):
     r = np.sign(_log_returns(close_v))
+    # P0-44: ``value`` is pair-filtered at the ``_daily_agg_two`` routing layer
+    # (both panels finite), so the zero-fill below is a defensive no-op — a
+    # missing bar is never folded in as zero.
     value = np.where(np.isfinite(value_v), value_v, 0.0)
     total = float(value.sum())
     if total <= _EPS:
@@ -762,6 +844,9 @@ class IntraReturnActivityCorr(SeriesOperator):
 
 def _intra_amihud(close_v, amount_v, scale):
     r = np.abs(_log_returns(close_v))
+    # P0-44: ``amount`` is pair-filtered at the ``_daily_agg_two`` routing layer
+    # (both panels finite), so the zero-fill below is a defensive no-op — a
+    # missing amount is never folded in as a zero-amount bar.
     amount = np.where(np.isfinite(amount_v), amount_v, 0.0)
     denom = np.maximum(amount, _EPS)
     ratio = np.where(np.isfinite(r), r / denom, np.nan)
@@ -793,6 +878,9 @@ class IntraAmihud(SeriesOperator):
 
 def _kyle_lambda_proxy(close_v, amount_v):
     r = _log_returns(close_v)
+    # P0-44: ``amount`` is pair-filtered at the ``_daily_agg_two`` routing layer
+    # (both panels finite), so the zero-fill below is a defensive no-op — a
+    # missing amount is never folded in as a zero-amount bar.
     amount = np.where(np.isfinite(amount_v), amount_v, 0.0)
     total = float(amount.sum())
     if total <= _EPS:

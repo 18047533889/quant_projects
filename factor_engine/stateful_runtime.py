@@ -59,9 +59,16 @@ def _implementation_hash(canonical: str) -> str:
     human-written ``semantic_version``).  The ``semantic_version`` is a manual
     contract a developer can forget to bump; ``implementation_hash`` is a machine
     fact — editing the recurrence changes the hash and invalidates checkpoints
-    even when nobody bumps the version string."""
-    import hashlib
+    even when nobody bumps the version string.
 
+    NEW-P0-31: the kernel identity is the registry's ``_code_payload`` — a
+    normalized DISASSEMBLY ``[(opcode, resolved_operand), ...]`` in bytecode
+    order, resolving ``LOAD_CONST`` operands to their ORIGINAL ``co_consts``
+    values.  The old ``(code.co_code, tuple(sorted(map(repr, code.co_consts))))``
+    digest sorted the constant tuple, destroying the constant-index ↔ bytecode-
+    operand mapping, so ``2*x+3`` collided with ``3*x+2`` (same constant set
+    {2,3}, structurally identical bytecode).  Never invent a third hash — reuse
+    the registry's existing implementation identity."""
     kernel = {
         "ts_ema": _ema_segment,
         "RSI_WILDER": _rsi_segment,
@@ -80,10 +87,9 @@ def _implementation_hash(canonical: str) -> str:
     code = getattr(kernel, "__code__", None)
     if code is None:
         return "unknown"
-    # Deterministic digest: bytecode + sorted constants; never embeds memory
-    # addresses, stable across interpreter restarts.
-    payload = (code.co_code, tuple(sorted(map(repr, code.co_consts))))
-    return hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()[:16]
+    from cleaned_operators.registry import _code_payload
+
+    return _code_payload(code, include_names=True)
 
 
 def _effective_identity(canonical, input_identity, inputs, params, spec):
@@ -218,6 +224,23 @@ def execute_stateful_segment(canonical: str, inputs: Mapping[str, Sequence[Any]]
     StatefulCheckpointRegistry.require_for_segment(canonical, starts_at_dataset_origin=bool(starts_at_dataset_origin), checkpoint=checkpoint, input_identity=effective_identity if checkpoint else None, expected_instrument=str(instrument) if checkpoint else None)
     if checkpoint is not None and pd.Timestamp(ts[0]) <= pd.Timestamp(checkpoint.as_of):
         raise ValueError("segment must start strictly after checkpoint.as_of")
+    if checkpoint is not None:
+        # NEW-P0-30: the checkpoint record must not claim coverage up to/through a
+        # bar the state did not actually cover (no forward-bar interpolation).
+        # ``as_of`` is derived from the state's own ``last_timestamp`` at write
+        # time, so a mismatch is a false coverage claim -> hard fail, never resume.
+        state_last = (checkpoint.state or {}).get("last_timestamp")
+        if state_last is not None:
+            try:
+                if pd.Timestamp(state_last) != pd.Timestamp(checkpoint.as_of):
+                    raise ValueError(
+                        "checkpoint as_of does not match the state's last_timestamp "
+                        "(false coverage claim); refusing to resume"
+                    )
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "checkpoint as_of/state.last_timestamp is invalid; refusing to resume"
+                ) from exc
     state = dict(checkpoint.state) if checkpoint else {}
     if canonical == "ts_ema":
         values, state = _ema_segment(_array(inputs["x"], "x"), state, _positive(options.get("span", options.get("window", 20)), "span"))

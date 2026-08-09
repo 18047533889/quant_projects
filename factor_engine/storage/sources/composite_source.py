@@ -263,22 +263,36 @@ class CompositeDataSource(DataSource):
         self._snapshot_manifest: tuple[tuple[str, SnapshotState], ...] | None = None
         self._validate_join_policy()
 
-    def execution_spec(self) -> dict[str, Any]:
+    def execution_spec(self) -> dict[str, Any] | None:
         """返回可重建（``storage.factory.build_data_source``）的 canonical 配置。
 
         #收官轮 P0：递归序列化全部子源（含 join 契约 / aliases / production
         authority），供 lineage / semantic identity / full definition / 事件增量
         rebuild 复用——Composite 子源的 temporal join 语义必须原样还原。
+
+        #收官轮 P1：任一 child 不是 ``DataSource`` 或无法产生完整 ``execution_spec``
+        时，production 抛 ``UnreconstructableDataSource``；research 返回 ``None``。
+        旧实现会伪造 ``{"type": "data_access"}``（无 ``dataset``）——既不能 rebuild，
+        又把「无法恢复 source contract」伪装成「有 source config」。
         """
         from .datasource import DataSource, clean_execution_spec
 
+        from storage.exceptions import UnreconstructableDataSource
+
         child_specs: dict[str, Any] = {}
         for name, source in self.sources.items():
-            if isinstance(source, DataSource):
-                spec = source.execution_spec()
-            else:
-                spec = None
-            child_specs[str(name)] = spec if isinstance(spec, dict) else {"type": "data_access"}
+            spec = source.execution_spec() if isinstance(source, DataSource) else None
+            if not isinstance(spec, dict):
+                if self._effective_production:
+                    raise UnreconstructableDataSource(
+                        f"Composite child {name!r}（type={type(source).__name__}）无法"
+                        f"序列化完整 source contract：execution_spec() 返回 "
+                        f"{type(spec).__name__}。production 禁止伪造残缺 "
+                        f"{{'type': 'data_access'}} spec——事件增量 rebuild 无法还原"
+                        f"该子源的真实读取语义。"
+                    )
+                return None
+            child_specs[str(name)] = spec
         return clean_execution_spec(
             {
                 "type": "composite",

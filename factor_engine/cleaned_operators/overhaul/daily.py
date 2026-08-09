@@ -24,22 +24,55 @@ from cleaned_operators.overhaul.base import (
 )
 
 
+def _assert_condition_bool(condition: Any, name: str = "condition") -> None:
+    """R11 #144: the condition input must be a ConditionBool.
+
+    Accepted values: {0, 1} (or boolean True/False); NaN/null = missing and is
+    excluded from selection.  Any other finite numeric value (e.g. 5.0, -3.0) is
+    neither a probability nor a boolean — silently treating it as "truthy" is a
+    hidden semantic the operator contract forbids.  Fail the call (raise) instead
+    of guessing.
+
+    Mirrors ``cleaned_operators.common.daily_panel._assert_condition_bool``.
+    Accepts both pandas wide panels and polars wide frames (polars backend).
+    """
+    if isinstance(condition, pd.DataFrame):
+        cv = condition.to_numpy()
+    else:  # polars wide frame
+        columns = pl_cols(condition)
+        if not columns:
+            return
+        cv = np.column_stack(
+            [condition[col].cast(pl.Float64, strict=False).to_numpy() for col in columns]
+        )
+    finite = np.isfinite(cv)
+    bad = finite & (cv != 0.0) & (cv != 1.0)
+    if np.any(bad):
+        raise ValueError(
+            f"{name} must be a ConditionBool (values in {{0, 1}} with NaN as "
+            f"missing); found {int(bad.sum())} finite value(s) outside {{0, 1}}"
+        )
+
+
 def pd_count_if(condition: pd.DataFrame, window: int, min_periods: int = 1, **_: Any) -> pd.DataFrame:
+    _assert_condition_bool(condition)
     w, mp = window_params(window, min_periods)
-    finite = finite_pd(condition)
-    truth = finite & condition.ne(0)
-    return truth.astype(float).rolling(w, min_periods=1).sum().where(
-        finite.astype(float).rolling(w, min_periods=1).sum() >= mp
-    )
+    valid = condition.notna()
+    truth = valid & condition.eq(1)
+    count = truth.astype(float).rolling(w, min_periods=1).sum()
+    valid_count = valid.astype(float).rolling(w, min_periods=1).sum()
+    return count.where(valid_count >= mp)
 
 
 def pd_conditional(x, condition, window, min_periods, op, ddof=1):
     x, condition = aligned_pd(x, condition)
+    _assert_condition_bool(condition)
     w, mp = window_params(window, min_periods)
     ddof_i = nonnegative_int(ddof, "ddof")
     if ddof_i not in {0, 1}:
         raise ValueError("ddof must be 0 or 1")
-    selected = finite_pd(x) & finite_pd(condition) & condition.ne(0)
+    cond_valid = condition.notna()
+    selected = finite_pd(x) & cond_valid & condition.eq(1)
     masked = x.where(selected)
     count = selected.astype(float).rolling(w, min_periods=1).sum()
     if op == "sum":
@@ -66,6 +99,7 @@ def pd_std_if(x, condition, window, min_periods=2, ddof=1, **_):
 
 def pd_last_if(x, condition, window, **_):
     x, condition = aligned_pd(x, condition)
+    _assert_condition_bool(condition)
     w, _ = window_params(window, 1)
     xv, cv = x.to_numpy(dtype=float), condition.to_numpy(dtype=float)
     out = np.full_like(xv, np.nan)
@@ -73,20 +107,31 @@ def pd_last_if(x, condition, window, **_):
         for row in range(xv.shape[0]):
             start = max(0, row - w + 1)
             vals, cond = xv[start : row + 1, col], cv[start : row + 1, col]
-            hits = np.flatnonzero(np.isfinite(vals) & np.isfinite(cond) & (cond != 0))
+            # ConditionBool: only cond == 1 selects.  A NaN-condition row does
+            # not select but the previous known value is still carried forward
+            # (last selected value in the window); with no prior known the cell
+            # stays NaN (unknown, never 0).
+            hits = np.flatnonzero(np.isfinite(vals) & np.isfinite(cond) & (cond == 1.0))
             if hits.size:
                 out[row, col] = vals[hits[-1]]
     return frame_pd(x, out)
 
 
 def pd_days_since(condition, max_lookback=None, **_):
+    _assert_condition_bool(condition)
     limit = None if max_lookback is None else positive_int(max_lookback, "max_lookback")
     values = condition.to_numpy(dtype=float)
     out = np.full(values.shape, np.nan, dtype=float)
     for col in range(values.shape[1]):
         last = -1
         for row, value in enumerate(values[:, col]):
-            if np.isfinite(value) and value != 0:
+            if pd.isna(value):
+                # Unknown event state at t censors output[t] AND destroys state
+                # certainty: the previously known "last true" is reset until an
+                # explicit true (1) observation rebuilds it.
+                last = -1
+                continue
+            if bool(value):
                 last = row
             if last >= 0:
                 distance = row - last
@@ -96,30 +141,40 @@ def pd_days_since(condition, max_lookback=None, **_):
 
 
 def pd_true_streak(condition, **_):
+    _assert_condition_bool(condition)
     values = condition.to_numpy(dtype=float)
-    out = np.zeros(values.shape, dtype=float)
+    out = np.full(values.shape, np.nan, dtype=float)
     for col in range(values.shape[1]):
         streak = 0
         for row, value in enumerate(values[:, col]):
-            streak = streak + 1 if np.isfinite(value) and value != 0 else 0
-            out[row, col] = streak
+            if pd.isna(value):
+                # Unknown event state censors the output AND resets the streak
+                # counter (certainty is lost until a true observation restarts
+                # a run).  Only confirmed-false rows emit 0.
+                streak = 0
+                continue
+            streak = streak + 1 if bool(value) else 0
+            out[row, col] = float(streak)
     return frame_pd(condition, out)
 
 
 def pl_count_if(condition, window, min_periods=1, **_):
+    _assert_condition_bool(condition)
     w, mp = window_params(window, min_periods)
     replacements = {}
     for col in pl_cols(condition):
         temp = pl.DataFrame({"c": condition[col]})
         finite = pl_finite("c")
+        truth = finite & (pl.col("c") == 1)
         expr = pl.when(finite.cast(pl.Int64).rolling_sum(w, min_samples=1) >= mp).then(
-            (finite & (pl.col("c") != 0)).cast(pl.Float64).rolling_sum(w, min_samples=1)
+            truth.cast(pl.Float64).rolling_sum(w, min_samples=1)
         ).otherwise(None)
         replacements[col] = temp.select(expr.alias("v"))["v"]
     return pl_base_with(condition, replacements)
 
 
 def pl_conditional(x, condition, window, min_periods, op, ddof=1):
+    _assert_condition_bool(condition)
     w, mp = window_params(window, min_periods)
     ddof_i = nonnegative_int(ddof, "ddof")
     if ddof_i not in {0, 1}:
@@ -127,7 +182,7 @@ def pl_conditional(x, condition, window, min_periods, op, ddof=1):
     replacements = {}
     for col in [c for c in pl_cols(x) if c in condition.columns]:
         temp = pl.DataFrame({"x": x[col], "c": condition[col]})
-        selected = pl_finite("x") & pl_finite("c") & (pl.col("c") != 0)
+        selected = pl_finite("x") & pl_finite("c") & (pl.col("c") == 1)
         masked = pl.when(selected).then(pl.col("x").cast(pl.Float64)).otherwise(None)
         count = selected.cast(pl.Int64).rolling_sum(w, min_samples=1)
         if op == "sum":
@@ -156,11 +211,12 @@ def pl_std_if(x, condition, window, min_periods=2, ddof=1, **_):
 
 
 def pl_last_if(x, condition, window, **_):
+    _assert_condition_bool(condition)
     w, _ = window_params(window, 1)
     replacements = {}
     for col in [c for c in pl_cols(x) if c in condition.columns]:
         temp = pl.DataFrame({"x": x[col], "c": condition[col]})
-        selected = pl.when(pl_finite("x") & pl_finite("c") & (pl.col("c") != 0)).then(pl.col("x")).otherwise(None)
+        selected = pl.when(pl_finite("x") & pl_finite("c") & (pl.col("c") == 1)).then(pl.col("x")).otherwise(None)
         def last(values):
             arr = np.asarray(values, dtype=float)
             valid = arr[np.isfinite(arr)]
@@ -170,27 +226,40 @@ def pl_last_if(x, condition, window, **_):
 
 
 def pl_days_since(condition, max_lookback=None, **_):
+    _assert_condition_bool(condition)
     limit = None if max_lookback is None else positive_int(max_lookback, "max_lookback")
     replacements = {}
     for col in pl_cols(condition):
-        temp = pl.DataFrame({"c": condition[col]}).with_row_index("i")
-        true = pl_finite("c") & (pl.col("c") != 0)
-        last = pl.when(true).then(pl.col("i")).otherwise(None).forward_fill()
-        distance = pl.col("i").cast(pl.Float64) - last.cast(pl.Float64)
-        if limit is not None:
-            distance = pl.when(distance < limit).then(distance).otherwise(None)
-        replacements[col] = temp.select(distance.alias("v"))["v"]
+        arr = condition[col].cast(pl.Float64, strict=False).to_numpy()
+        out, last = np.full(len(arr), np.nan, dtype=float), -1
+        for row, value in enumerate(arr):
+            if pd.isna(value):
+                # Unknown event state censors output AND resets the running
+                # count (a later known-true event restarts from 0).
+                last = -1
+                continue
+            if bool(value):
+                last = row
+            if last >= 0:
+                distance = row - last
+                if limit is None or distance < limit:
+                    out[row] = float(distance)
+        replacements[col] = pl.Series(col, out)
     return pl_base_with(condition, replacements)
 
 
 def pl_true_streak(condition, **_):
+    _assert_condition_bool(condition)
     replacements = {}
     for col in pl_cols(condition):
         arr = condition[col].cast(pl.Float64, strict=False).to_numpy()
-        out, streak = np.zeros(len(arr), dtype=float), 0
+        out, streak = np.full(len(arr), np.nan, dtype=float), 0
         for i, value in enumerate(arr):
-            streak = streak + 1 if np.isfinite(value) and value != 0 else 0
-            out[i] = streak
+            if pd.isna(value):
+                streak = 0
+                continue
+            streak = streak + 1 if bool(value) else 0
+            out[i] = float(streak)
         replacements[col] = pl.Series(col, out)
     return pl_base_with(condition, replacements)
 

@@ -30,6 +30,42 @@ from cleaned_operators.registry import OperatorRegistry
 EPS = 1e-12
 SOURCE = "safe_ops"
 
+# P0-58 ImputationPolicy: gap forward-fill is only a legitimate imputation for
+# price/level lineages.  financial / return / event / revision values must never
+# be forward-filled — a missing fundamental disclosure or a missing return is
+# not "the same as yesterday's number".
+FFILL_LINEAGE_POLICY: dict[str, bool] = {
+    "price": True,
+    "financial": False,
+    "return": False,
+    "event": False,
+    "revision": False,
+}
+
+
+def _check_ffill_lineage(lineage: str | None) -> None:
+    """P0-58 ImputationPolicy gate for ``ts_ffill_limited``.
+
+    ``lineage`` names the value family of ``x``.  The policy forbids gap
+    forward-fill for financial/return/event/revision lineages (a missing
+    observation there must stay missing).  ``None`` keeps the legacy behaviour
+    (forward-fill allowed) and is the caller's assertion that ``x`` is a
+    price/level series.
+    """
+    if lineage is None:
+        return
+    if not isinstance(lineage, str):
+        raise ValueError(
+            f"ts_ffill_limited: lineage must be a string or None, got {lineage!r}"
+        )
+    allowed = FFILL_LINEAGE_POLICY.get(lineage)
+    if allowed is False:
+        raise ValueError(
+            f"ts_ffill_limited: forward-fill is not permitted for value lineage "
+            f"{lineage!r} (limited_ffill=False); only price/level series may be "
+            "gap-forward-filled"
+        )
+
 
 def _register(
     name: str,
@@ -243,13 +279,15 @@ _register(
 # Strict missing-value handling
 # --------------------------------------------------------------------------
 
-def pd_ts_ffill_limited(x, max_gap, **_):
+def pd_ts_ffill_limited(x, max_gap, lineage: str | None = None, **_):
     limit = positive_int(max_gap, "max_gap")
+    _check_ffill_lineage(lineage)
     return x.ffill(limit=limit)
 
 
-def _pl_ts_ffill_limited(x, max_gap, **_):
+def _pl_ts_ffill_limited(x, max_gap, lineage: str | None = None, **_):
     limit = positive_int(max_gap, "max_gap")
+    _check_ffill_lineage(lineage)
     return x.with_columns([pl.col(c).forward_fill(limit=limit).alias(c) for c in pl_cols(x)])
 
 
@@ -271,8 +309,8 @@ def _pl_log_positive_or_nan(x, **_):
 _register(
     "ts_ffill_limited",
     "data_cleaning",
-    ["x", "max_gap"],
-    "前向填充，最多跨过 max_gap 根 bar（防长期停牌/断档污染）。",
+    ["x", "max_gap", "lineage"],
+    "前向填充，最多跨过 max_gap 根 bar（防长期停牌/断档污染）；lineage 策略禁止对 financial/return/event/revision 值前向填充。",
     pd_ts_ffill_limited,
     _pl_ts_ffill_limited,
 )

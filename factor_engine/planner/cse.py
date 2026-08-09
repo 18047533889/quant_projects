@@ -123,7 +123,19 @@ def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode
         """将重复子树替换为 ``plan_ref`` 引用。"""
         k = structural_key(n, memo)
         if counts.get(k, 0) > 1:
-            return PlanNode(op="plan_ref", attrs={"sid": k}, inputs=[])
+            # R13 NEW-P0-21: a ``plan_ref`` must expose the shared subtree's
+            # OUTPUT semantic contract (unit / grain / availability / price-basis
+            # / source identity), not just the sid — downstream typing/PIT/SQL
+            # layers read ``plan_ref.semantic_attrs`` as if they had the full
+            # subtree.  The sid already binds semantics (structural_key embeds a
+            # semantic digest), but the attrs must travel with the reference too.
+            representative = first_seen[k]
+            return PlanNode(
+                op="plan_ref",
+                attrs={"sid": k},
+                inputs=[],
+                semantic_attrs=dict(getattr(representative, "semantic_attrs", None) or {}),
+            )
         return PlanNode(
             op=n.op,
             attrs=dict(n.attrs),

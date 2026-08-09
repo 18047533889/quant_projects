@@ -130,6 +130,20 @@ def _pl_rebuild(base: Any, result: Any) -> Any:
         pdf = pd.DataFrame(np.asarray(result, dtype=float), columns=cols)
     else:
         pdf = result
+    # P0-14: ``base.with_columns`` fundamentally requires a SHAPE-PRESERVING
+    # result — one row per base row.  A frequency-transform operator (minute ->
+    # daily) returns a strictly shorter panel; rebuilding it onto the minute base
+    # would misalign every daily value.  Fail fast instead of silently
+    # corrupting.  Such operators must NOT register a generic polars bridge (see
+    # ``register_polars_bridge``); they get a purpose-built polars backend or
+    # pandas-only admission.
+    if len(pdf) != len(base):
+        from backend.operator_errors import OperatorShapeError
+        raise OperatorShapeError(
+            f"polars rebuild of a non-shape-preserving result: {len(pdf)} rows "
+            f"vs {len(base)} base rows — a frequency-transform operator cannot be "
+            "rebuilt onto the base frame with with_columns (R11 P0-14 fail-closed)"
+        )
     return base.with_columns(
         [pl.Series(name=c, values=np.asarray(pdf[c], dtype=np.float64)) for c in cols]
     )

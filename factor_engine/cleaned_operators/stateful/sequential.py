@@ -23,7 +23,7 @@ import pandas as pd
 from cleaned_operators.base import SeriesOperator, register_operator
 from cleaned_operators.common.daily_panel import _aligned
 from cleaned_operators.rolling_pack import frame_like
-from cleaned_operators.stateful._common import metadata
+from cleaned_operators.stateful._common import assert_condition_bool, metadata
 
 _EPS = 1e-12
 
@@ -148,9 +148,10 @@ class TsRankIf(SeriesOperator):
         w = max(2, int(window))
         mp = max(2, int(min_periods))
         x, condition = _aligned(x, condition)
+        assert_condition_bool(condition)
         xv = x.to_numpy(dtype=float)
         cv = condition.to_numpy(dtype=float)
-        truth = np.isfinite(cv) & (cv != 0.0)
+        truth = np.isfinite(cv) & (cv == 1.0)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
@@ -206,9 +207,10 @@ class StateEwmIf(SeriesOperator):
             raise ValueError("half_life must be a finite number > 0")
         alpha = 1.0 - np.exp(-np.log(2.0) / hl)
         x, condition = _aligned(x, condition)
+        assert_condition_bool(condition)
         xv = x.to_numpy(dtype=float)
         cv = condition.to_numpy(dtype=float)
-        truth = np.isfinite(cv) & (cv != 0.0)
+        truth = np.isfinite(cv) & (cv == 1.0)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):

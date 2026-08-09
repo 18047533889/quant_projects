@@ -393,14 +393,18 @@ def test_state_density_has_1_over_h_normalization():
     from cleaned_operators.state_geometry import _state_density_series
     series = np.concatenate([np.linspace(10.0, 11.0, 60), [10.5]])
     out = _state_density_series(series, window=60, bandwidth=1.0, min_periods=5)
-    # Independent reference: f̂(x) = mean(K(u))/h with h = bandwidth*MAD-scale.
+    # Independent reference (NEW-P1-72): the operator emits a STANDARDIZED,
+    # dimensionless density — the raw 1/h KDE (f̂(x) = mean(K(u))/h with
+    # h = bandwidth*MAD-scale) multiplied by the past robust scale s, giving
+    # f̂(x)·s = mean(K)/bandwidth (density in MAD units, cross-series comparable).
+    # The metadata/description declare "无量纲 MAD 尺度" / unit=ratio.
     past = series[:60]
     med = float(np.median(past))
     scale = 1.4826 * float(np.median(np.abs(past - med)))
     h = max(1e-6, 1.0) * scale
     u = (past - 10.5) / h
     kern = 0.75 * (1.0 - u * u) * (np.abs(u) <= 1.0)
-    reference = float(np.mean(kern)) / h
+    reference = float(np.mean(kern)) / max(1e-6, 1.0)  # mean(K)/bandwidth
     last = out[-1]
     assert np.isfinite(last)
-    assert abs(last - reference) < 1e-9  # proper 1/h KDE, not raw kernel mass
+    assert abs(last - reference) < 1e-9  # standardized density, not raw 1/h KDE

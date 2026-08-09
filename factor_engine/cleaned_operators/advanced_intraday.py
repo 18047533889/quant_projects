@@ -24,7 +24,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import BroadcastSpec, OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg, _daily_agg_two
 from cleaned_operators.rolling_pack import register_polars_udf
 
@@ -258,8 +258,26 @@ class IntradayBarrierApproachAcceleration(SeriesOperator):
         unit="ratio",
         cost=5,
         # Minute ``close`` mixes with daily limit-price panels: the op aligns
-        # them per trading day itself, so panel-broadcast is intentional.
-        extra_tags=("allow_panel_broadcast",),
+        # them per trading day itself, so panel-broadcast is intentional and is
+        # declared structurally via ``broadcast_specs`` below (R11 P0-09).
+    )
+    # R11 P0-09: structured broadcast declaration replacing the bare
+    # ``allow_panel_broadcast`` waiver.  The DAILY high_limit/low_limit panels
+    # broadcast onto the base minute grid, aligned on the trading date; each
+    # limit-price panel carries the exact same instrument set as the base.
+    metadata.broadcast_specs = (
+        BroadcastSpec(
+            mode="daily_to_minute",
+            date_mapping="trading_date",
+            instrument_policy="exact",
+            timezone=_SESSION_TZ,
+        ),
+        BroadcastSpec(
+            mode="daily_to_minute",
+            date_mapping="trading_date",
+            instrument_policy="exact",
+            timezone=_SESSION_TZ,
+        ),
     )
     metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
 

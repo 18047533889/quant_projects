@@ -74,9 +74,92 @@ def _parse_json_field(raw: Any) -> dict[str, Any]:
 
 #: Sentinel forward-impact value meaning "unbounded" (a recursive / stateful /
 #: event-clock operator propagates an input change to the end of the series).
-#: ``None`` in storage means "not recorded" (legacy edge) and is treated as 0 —
-#: only this explicit sentinel is unbounded.
+#: ``None`` in storage means "not recorded" (legacy edge) — under the P0-43
+#: tri-state model that is ``ForwardImpactRequirement(kind="unknown")``.
 UNBOUNDED_FORWARD_IMPACT = -1
+
+
+@dataclass(frozen=True)
+class ForwardImpactRequirement:
+    """P0-43: tri-state forward-impact requirement.
+
+    A changed input bar at ``t`` affects future output bars according to the
+    operator's forward reach:
+
+    * ``kind="finite"`` — affects ``[t, t + rows - 1]`` (``rows`` is a
+      non-negative bar count);
+    * ``kind="unbounded"`` — recursive / stateful / event-clock reach: the
+      change propagates to the end of the series (``rows`` is ``None``);
+    * ``kind="unknown"`` — not recorded (legacy edge / unresolvable window).
+      Production treats this conservatively as unbounded (mandatory reindex to
+      the latest data); research keeps the legacy no-propagation behaviour.
+
+    Storage representation stays the plain integer column
+    (``UNBOUNDED_FORWARD_IMPACT = -1`` / positive finite / ``None`` unknown);
+    this dataclass is the *read-path* migration layer (P0-43).
+    """
+
+    kind: str = "unknown"
+    rows: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.kind not in {"finite", "unbounded", "unknown"}:
+            raise ValueError(f"invalid forward-impact kind: {self.kind!r}")
+        if self.kind == "finite":
+            object.__setattr__(self, "rows", max(0, int(self.rows if self.rows is not None else 0)))
+        else:
+            object.__setattr__(self, "rows", None)
+
+    @classmethod
+    def finite(cls, rows: int) -> "ForwardImpactRequirement":
+        return cls(kind="finite", rows=int(rows))
+
+    @classmethod
+    def unbounded(cls) -> "ForwardImpactRequirement":
+        return cls(kind="unbounded")
+
+    @classmethod
+    def unknown(cls) -> "ForwardImpactRequirement":
+        return cls(kind="unknown")
+
+
+def forward_impact_from_stored(value: int | None) -> ForwardImpactRequirement:
+    """Storage int (or ``None``) -> tri-state requirement (P0-43)."""
+    if value == UNBOUNDED_FORWARD_IMPACT:
+        return ForwardImpactRequirement(kind="unbounded")
+    if value is None:
+        return ForwardImpactRequirement(kind="unknown")
+    return ForwardImpactRequirement(kind="finite", rows=int(value))
+
+
+def stored_from_forward_impact(req: ForwardImpactRequirement) -> int | None:
+    """Tri-state requirement -> storage int (``None`` = unknown)."""
+    if req.kind == "unbounded":
+        return UNBOUNDED_FORWARD_IMPACT
+    if req.kind == "finite":
+        return max(0, int(req.rows or 0))
+    return None
+
+
+def effective_forward_bars(
+    req: ForwardImpactRequirement | None,
+    *,
+    production: bool = False,
+) -> int | None:
+    """Resolve a requirement to scheduler bars: ``None`` = unbounded (reach cap).
+
+    ``unknown`` is the only production-sensitive kind — in production it means we
+    cannot *prove* the forward reach is bounded, so it must conservatively reach
+    the end of the series (mandatory reindex).  Research keeps legacy behaviour
+    (no propagation).
+    """
+    if req is None:
+        return 0
+    if req.kind == "unbounded":
+        return None
+    if req.kind == "unknown":
+        return None if production else 0
+    return req.rows or 0
 
 
 def dependency_edge_id(edge: dict[str, Any]) -> str:
@@ -597,22 +680,32 @@ class DependencyCatalog:
             cur["referenced_columns"] = dep.get("referenced_columns") or []
             cur["field_id"] = edge.field_id
             cur["edges"] = list(cur.get("edges", [])) + [edge]
-            # P0-01: forward impact of THIS semantic reference — the scheduler
-            # extends recompute_end forward by it.  The explicit -1 sentinel is
-            # unbounded (propagate to the end of the series); a legacy
-            # ``None`` (never recorded) is 0 (no forward propagation).
-            fwd = edge.forward_impact
-            if fwd == UNBOUNDED_FORWARD_IMPACT:
-                fwd = None
-            elif fwd is None:
-                fwd = 0
+            # P0-01 / P0-43: forward impact of THIS semantic reference — the
+            # scheduler extends recompute_end forward by it.  The read path now
+            # migrates to the tri-state ``ForwardImpactRequirement``:
+            # ``unbounded`` (-1 sentinel) reaches the end of the series, a
+            # legacy ``None`` (never recorded) is ``unknown``, a positive int is
+            # ``finite``.  Any unbounded reading anywhere makes the whole factor
+            # unbounded; an unknown reading makes the whole factor unknown.
+            req = forward_impact_from_stored(edge.forward_impact)
             if "forward_impact" not in cur:
-                cur["forward_impact"] = fwd
-            elif cur["forward_impact"] is None or fwd is None:
-                # an unbounded reading anywhere makes the whole factor unbounded
-                cur["forward_impact"] = None
+                cur["forward_impact"] = req
+            elif (
+                cur["forward_impact"].kind == "unbounded"
+                or req.kind == "unbounded"
+            ):
+                cur["forward_impact"] = ForwardImpactRequirement.unbounded()
+            elif (
+                cur["forward_impact"].kind == "unknown"
+                or req.kind == "unknown"
+            ):
+                cur["forward_impact"] = ForwardImpactRequirement.unknown()
             else:
-                cur["forward_impact"] = max(cur["forward_impact"], fwd)
+                cur["forward_impact"] = ForwardImpactRequirement.finite(
+                    rows=max(
+                        cur["forward_impact"].rows or 0, req.rows or 0
+                    )
+                )
             spec = self._get_full_spec(fid)
             if spec:
                 cur.setdefault("operator_manifest", spec.get("operator_manifest"))

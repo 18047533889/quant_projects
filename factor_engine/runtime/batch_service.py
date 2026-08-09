@@ -78,7 +78,14 @@ def _release_consumed_sids(ctx: Any, root: Any) -> None:
 
 
 def _setup_cse_refcounts(ctx: Any, roots: list[Any]) -> None:
-    """初始化 CSE 引用计数表（挂在 ctx 上）。"""
+    """初始化 CSE 引用计数表（挂在 ctx 上）。
+
+    R13 NEW-P1-76: refcount-init failure is NEVER silent.  When a batch shares
+    subplans via CSE, ``_release_root_cse`` relies on ``ctx._cse_refcounts`` to
+    evict shared panels as consumers finish; if we cannot install the table the
+    shared panels would never be released and a large batch can drift into OOM.
+    Failing loudly beats silently continuing with an unreleased shared panel.
+    """
     from planner.cse import cse_consumer_counts
 
     roots_plans = [getattr(fp, "root", fp) for fp in roots]
@@ -86,8 +93,13 @@ def _setup_cse_refcounts(ctx: Any, roots: list[Any]) -> None:
     if counts:
         try:
             ctx._cse_refcounts = counts  # type: ignore[attr-defined]
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 — attribute install failure is a run-time fault
+            raise RuntimeError(
+                "CSE memory lifecycle: failed to install the shared-subplan "
+                f"refcount table on the execution context ({type(exc).__name__}: "
+                f"{exc}) — shared panels would never be released; refusing to run "
+                "with CSE memory accounting disabled (R13 NEW-P1-76)"
+            ) from exc
 
 
 def _clear_polars_long_shared_sid(ctx: Any) -> None:

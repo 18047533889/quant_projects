@@ -130,7 +130,9 @@ def test_polars_backend_enables_read_auto_on_data_access_source():
 
     with patch.object(PB, "_eval", return_value=pd.DataFrame()):
         backend.execute(plan, ctx)
-    assert src.read_auto is True
+    # R13 P1-66: a lazy run must NOT leave a persistent mutation on the source —
+    # the pre-run eager read semantics are restored afterwards.
+    assert src.read_auto is False
 
 
 @pytest.mark.parametrize("use_numba", [False, True])

@@ -17,7 +17,11 @@ import pandas as pd
 
 from cleaned_operators.base import SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like
-from cleaned_operators.stateful._common import metadata, truth_mask
+from cleaned_operators.stateful._common import (
+    assert_condition_bool,
+    metadata,
+    truth_mask,
+)
 
 _EPS = 1e-12
 
@@ -48,6 +52,7 @@ class EventRefractory(SeriesOperator):
     )
 
     def _calculate_series(self, condition: pd.DataFrame, cooldown: float = 5, **_: Any) -> pd.DataFrame:
+        assert_condition_bool(condition)
         cv = condition.to_numpy(dtype=float)
         cd = max(0, int(cooldown))
         rows, cols = cv.shape
@@ -56,10 +61,12 @@ class EventRefractory(SeriesOperator):
             last_accepted = None
             for row in range(rows):
                 if not np.isfinite(cv[row, col]):
+                    # NaN event state is unknown: it must not fire and it
+                    # re-baselines the accepted-event memory.
                     out[row, col] = np.nan
                     last_accepted = None
                     continue
-                truth = bool(cv[row, col] != 0.0)
+                truth = cv[row, col] == 1.0
                 if truth and (last_accepted is None or row - last_accepted > cd):
                     out[row, col] = 1.0
                     last_accepted = row

@@ -59,14 +59,20 @@ def register() -> None:
                 stat=_stat,
             )
 
+        op = PolarsFunctionOperator(
+            name,
+            "time_series_order",
+            ["x", "window", "k", "min_periods"],
+            description,
+            calculate,
+        )
+        # R13 NEW-P0-04: a replacement may change only the implementation — the
+        # canonical logical contract is inherited / verified, never rebuilt.
+        from cleaned_operators.overhaul.base import _inherit_canonical_logical_contract
+
+        _inherit_canonical_logical_contract(name, op)
         OperatorRegistry.register(
-            PolarsFunctionOperator(
-                name,
-                "time_series_order",
-                ["x", "window", "k", "min_periods"],
-                description,
-                calculate,
-            ),
+            op,
             canonical=name,
             backend="polars",
             source="operator_overhaul_native_polars",

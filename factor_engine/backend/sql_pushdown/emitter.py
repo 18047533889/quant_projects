@@ -27,6 +27,18 @@ class SqlDialect(str, Enum):
 from backend.sql_pushdown.sql_registry import SQL_CAPABLE_CANONICALS as SQL_CAPABLE_OPS  # noqa: E402
 
 
+class InstrumentFilterKind(str, Enum):
+    """Instrument filter cardinality (R13 P0-69).
+
+    ``None`` (ALL) and ``[]`` (EMPTY) must stay distinct: an explicit EMPTY
+    universe means *zero rows* (``WHERE FALSE``), not "no restriction".
+    """
+
+    ALL = "all"      # no instrument restriction
+    EMPTY = "empty"  # restriction to an empty set -> 0 rows
+    LIST = "list"    # restriction to an explicit instrument list
+
+
 @dataclass(frozen=True)
 class SqlPushdownFilter:
     """下推至 base CTE 的过滤条件（与 DataAccessSource 对齐）。"""
@@ -36,6 +48,10 @@ class SqlPushdownFilter:
     end: Any = None
     instrument_column: str | None = None
     instruments: tuple[str, ...] = ()
+    #: R13 P0-69: distinguishes ``instrument_filter=None`` (ALL) from ``[]``
+    #: (EMPTY).  ``ALL`` emits no instrument clause; ``EMPTY`` emits ``WHERE
+    #: FALSE`` (0 rows); ``LIST`` emits ``inst IN (...)``.
+    instrument_filter_kind: InstrumentFilterKind = InstrumentFilterKind.ALL
 
 
 @dataclass(frozen=True)
@@ -7139,9 +7155,16 @@ def _build_filter_clause(
     *,
     dialect: SqlDialect,
 ) -> str:
-    """根据 ``SqlPushdownFilter`` 生成 base CTE 的 WHERE 子句。"""
+    """根据 ``SqlPushdownFilter`` 生成 base CTE 的 WHERE 子句。
+
+    R13 P0-69：显式 EMPTY 仪器过滤器（``instrument_filter=[]``）与 ``None``
+    （ALL）不再合并——EMPTY 直接生成 ``WHERE FALSE``（0 行）。
+    """
     if filt is None:
         return ""
+    if filt.instrument_filter_kind == InstrumentFilterKind.EMPTY:
+        # Explicit empty universe: zero rows regardless of time bounds.
+        return " WHERE FALSE"
     parts: list[str] = []
     if filt.time_column and filt.start is not None:
         tc = _quote_ident(filt.time_column)
@@ -7149,6 +7172,9 @@ def _build_filter_clause(
     if filt.time_column and filt.end is not None:
         tc = _quote_ident(filt.time_column)
         parts.append(f"{tc} <= {_sql_literal(filt.end)}")
+    # Legacy callers pass a non-empty ``instruments`` without setting the kind;
+    # a non-empty tuple is an implicit LIST.  ``ALL`` carries ``()`` and ``EMPTY``
+    # returned above, so the two never collide.
     if filt.instrument_column and filt.instruments:
         ic = _quote_ident(filt.instrument_column)
         insts = ", ".join(_sql_literal(x) for x in filt.instruments)

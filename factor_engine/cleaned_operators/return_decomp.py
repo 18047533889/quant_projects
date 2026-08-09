@@ -15,15 +15,21 @@ from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_op
 
 
 def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str, price_params: tuple[str, ...]) -> OperatorMetadata:
+    # R11 P0-60: ``price_basis`` is a declared keyword-only scalar — the typed-IR
+    # / caller asserts the price basis (RAW vs CONTINUOUS vs ...) from semantic
+    # metadata; the runtime gate verifies it against concept columns.  Appended
+    # as a trailing slot so 2-panel positional calls bind price_basis to its
+    # kernel default (None).
+    declared = [*params, "price_basis"]
     return OperatorMetadata(
         name=name,
         category="return_decomposition",
         description=description,
-        param_names=params,
+        param_names=declared,
         return_type="series",
         tags=[
             "return_decomposition", "daily", "pit_safe", "causal", "typed_v2",
-            f"signature:{','.join(params)}->series", f"domain:{domain}",
+            f"signature:{','.join(declared)}->series", f"domain:{domain}",
             f"unit:{unit}", "cost:1",
         ],
         # R11 #164: every price input must share the same PriceBasis — the typed
@@ -74,18 +80,50 @@ def _price_basis_of_column(name: str) -> str | None:
     return None
 
 
-def _assert_shared_price_basis(*frames: pd.DataFrame) -> None:
-    """R11 #164: reject a mixed price basis across the inputs of a return
-    decomposition.  A raw open and an adjusted (continuous) close must NEVER be
-    combined into a return — the ratio would mix split-unadjusted and
-    split-adjusted levels.  The typed-IR layer enforces this at compile time;
-    this is the runtime defense-in-depth on resolvable column names."""
+def _assert_shared_price_basis(*frames: pd.DataFrame, price_basis: str | None = None) -> None:
+    """R11 #164 + P0-60: reject a mixed — or *unverifiable* — price basis.
+
+    A raw open and an adjusted (continuous) close must NEVER be combined into a
+    return — the ratio would mix split-unadjusted and split-adjusted levels.
+    The typed-IR layer enforces this at compile time; this is the runtime
+    defense-in-depth.
+
+    ``price_basis`` is the authoritative basis declared by the caller from the
+    AST child semantic type / panel metadata (P0-60 — the basis must come from
+    the type system, never inferred from instrument column names).  When
+    provided, every column that DOES resolve must agree with it, and unresolvable
+    instrument-code columns (``000001.SZ``) are trusted (the caller asserted the
+    basis).  When omitted, the gate FAILS CLOSED on any non-concept-named column
+    — a return decomposition requires every price column to positively resolve
+    to a single shared PriceBasis, otherwise the basis cannot be verified.
+    """
     resolved: set[str] = set()
+    unverifiable = False
     for frame in frames:
         for col in frame.columns:
             basis = _price_basis_of_column(str(col))
-            if basis:
-                resolved.add(basis)
+            if basis is None:
+                unverifiable = True
+                continue
+            resolved.add(basis)
+    if price_basis is not None:
+        if resolved and any(b != price_basis for b in resolved):
+            raise ValueError(
+                "mixed price basis: caller declared "
+                f"{price_basis!r} but concept columns resolve to "
+                f"{sorted(resolved)} — a return decomposition cannot combine "
+                "raw and adjusted levels (R11 #164 / P0-60)"
+            )
+        return  # caller asserted the basis; unresolvable columns are trusted
+    if unverifiable:
+        raise ValueError(
+            "cannot verify shared price basis: some price columns are not "
+            "concept-named (their PriceBasis — raw vs continuous vs ... — is "
+            "unknown).  A return decomposition must positively establish that "
+            "every price column shares one basis; an unverifiable "
+            "instrument-code column is rejected (P0-60 fail-closed) instead of "
+            "silently combining prices."
+        )
     if len(resolved) > 1:
         raise ValueError(
             "mixed price basis across inputs "
@@ -95,10 +133,61 @@ def _assert_shared_price_basis(*frames: pd.DataFrame) -> None:
         )
 
 
-def _safe_ratio(numerator: pd.DataFrame, denominator: pd.DataFrame) -> pd.DataFrame:
-    den = denominator.replace(0, np.nan) if hasattr(denominator, "replace") else denominator
-    out = numerator / den
-    return out.replace([np.inf, -np.inf], np.nan)
+def _data_quality_error_type() -> type[Exception] | None:
+    """Resolve the strict-mode error type for the P0-61 PositivePrice gate.
+
+    Prefers the runtime governance ``DataQualityError``, then the backend
+    ``OperatorDomainError``; returns ``None`` when neither is importable (the
+    gate then degrades to NaN-only, documented in ``_safe_ratio``).
+    """
+    try:
+        from runtime.resource_errors import DataQualityError
+        return DataQualityError
+    except Exception:  # pragma: no cover - leaf module, always importable in-tree
+        pass
+    try:
+        from backend.operator_errors import OperatorDomainError
+        return OperatorDomainError
+    except Exception:  # pragma: no cover - leaf module, always importable in-tree
+        return None
+
+
+def _safe_ratio(numerator: pd.DataFrame, denominator: pd.DataFrame, *, strict: bool = False) -> pd.DataFrame:
+    """Safe price ratio with the P0-61 PositivePrice gate.
+
+    A return is only defined on *positive* prices.  Any price input
+    (open / close / preclose / vwap) that is finite and <= 0 must NOT produce a
+    normal return: the cell is mapped to NaN (fail closed).  Zero denominators
+    and non-finite ratios are NaN as before.
+
+    ``strict=True`` raises the governance ``DataQualityError`` on the first
+    non-positive price input instead of returning NaN (when neither
+    ``DataQualityError`` nor ``OperatorDomainError`` is importable the strict
+    mode degrades to NaN — the gate's core "no normal return from a bad price"
+    invariant is preserved either way).
+    """
+    num = numerator.to_numpy(dtype=float) if hasattr(numerator, "to_numpy") else np.asarray(numerator, dtype=float)
+    den = denominator.to_numpy(dtype=float) if hasattr(denominator, "to_numpy") else np.asarray(denominator, dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out = num / den
+    # P0-61: a finite price <= 0 is not a price.  A zero denominator was already
+    # NaN; a negative denominator (or a zero/negative numerator) would otherwise
+    # emit a normal-looking return — reject the cell.
+    bad = (np.isfinite(num) & (num <= 0)) | (np.isfinite(den) & (den <= 0))
+    if strict and bool(np.any(bad)):
+        error_type = _data_quality_error_type()
+        if error_type is not None:
+            raise error_type(
+                "return decomposition received a non-positive price input "
+                "(finite price <= 0); a return must never be produced from a "
+                "zero/negative price (P0-61 PositivePrice gate)"
+            )
+        # error type not importable -> documented NaN fallback (fall through)
+    out[bad] = np.nan
+    out[~np.isfinite(out)] = np.nan
+    if isinstance(numerator, pd.DataFrame):
+        return pd.DataFrame(out, index=numerator.index, columns=numerator.columns)
+    return out
 
 
 @register_operator(
@@ -121,9 +210,9 @@ class OvernightReturn(SeriesOperator):
         price_params=("open", "pre_close"),
     )
 
-    def _calculate_series(self, open_px: pd.DataFrame, pre_close: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, open_px: pd.DataFrame, pre_close: pd.DataFrame, price_basis: str | None = None, **_: Any) -> pd.DataFrame:
         _assert_same_axes(open_px, pre_close)
-        _assert_shared_price_basis(open_px, pre_close)
+        _assert_shared_price_basis(open_px, pre_close, price_basis=price_basis)
         return _safe_ratio(open_px, pre_close) - 1.0
 
 
@@ -147,9 +236,9 @@ class OpenCloseReturn(SeriesOperator):
         price_params=("open", "close"),
     )
 
-    def _calculate_series(self, open_px: pd.DataFrame, close: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, open_px: pd.DataFrame, close: pd.DataFrame, price_basis: str | None = None, **_: Any) -> pd.DataFrame:
         _assert_same_axes(open_px, close)
-        _assert_shared_price_basis(open_px, close)
+        _assert_shared_price_basis(open_px, close, price_basis=price_basis)
         return _safe_ratio(close, open_px) - 1.0
 
 
@@ -173,9 +262,9 @@ class OpenToVwapReturn(SeriesOperator):
         price_params=("open", "vwap"),
     )
 
-    def _calculate_series(self, open_px: pd.DataFrame, vwap: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, open_px: pd.DataFrame, vwap: pd.DataFrame, price_basis: str | None = None, **_: Any) -> pd.DataFrame:
         _assert_same_axes(open_px, vwap)
-        _assert_shared_price_basis(open_px, vwap)
+        _assert_shared_price_basis(open_px, vwap, price_basis=price_basis)
         return _safe_ratio(vwap, open_px) - 1.0
 
 
@@ -199,7 +288,7 @@ class VwapToCloseReturn(SeriesOperator):
         price_params=("vwap", "close"),
     )
 
-    def _calculate_series(self, vwap: pd.DataFrame, close: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, vwap: pd.DataFrame, close: pd.DataFrame, price_basis: str | None = None, **_: Any) -> pd.DataFrame:
         _assert_same_axes(vwap, close)
-        _assert_shared_price_basis(vwap, close)
+        _assert_shared_price_basis(vwap, close, price_basis=price_basis)
         return _safe_ratio(close, vwap) - 1.0

@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-08-09 FactorEngine R14 production integration 收官（第 34 版）
+
+**内容**：外部 AI 复查确认 **DATAACCESS CORE FREEZE** 成立，但
+**FACTORENGINE ↔ DATAACCESS PRODUCTION INTEGRATION FREEZE 暂缓一轮**——修掉
+production 集成链 5 个 blocker + 1 个 P1（详见
+`docs/R14_PRODUCTION_INTEGRATION_CLOSURE_REPORT.md`）：
+
+- **#1 factor_matrix 全局 crash-atomic**：整个 `(universe, freq)` 当一个
+  generation——完整写 `generation/<gid>/`（未触达分区 copy-on-write 硬链接）+ 全部
+  validate 后，一次 `os.replace` 原子切 `manifest.json` 的 `generation` 指针；
+  `load_matrix` 只读该代。任何崩溃窗口 reader 只能见完整 old/new generation，无
+  mixed（旧「先 manifest 再逐分区 os.replace」在切换一半时崩溃会 mixed）。GC 保留
+  当前 + 上一代。
+- **#2 matrix version gate 自动绑定**：`matrix_service` 先校验 matrix 声明的
+  universe/frequency 与 factor 实际执行 scope（`_scope_from_factor`，优先
+  semantic_identity）一致；再按真实执行 scope+analysis+source contract 自动算
+  `semantic_digest`（与 execute_materialize 同源）；production 缺 version 直接拒绝。
+- **#3 语义身份统一消费**：execute_materialize 只算一次 canonical scope，把
+  frequency/universe/market/calendar/decision_time_policy 同时喂给
+  `_build_semantic_identity` + `_build_full_factor_definition`（decision_policy 不再
+  写死 None）——执行/cache scope/factor_version/full definition/rebuild 全消费同一
+  scope，杜绝「执行 5m、落库 1d」。
+- **#4 ClickHouse version parity**：orchestrator 只算一次 canonical factor_version
+  （semantic digest 前缀），显式传 ClickHouse 双写；data_snapshot_id 改用
+  effective_data_source_config。与并发会话 NEW-P0-59 unified digest 兼容。
+- **#5 DataEventLedger 事务语义**：last_committed_snapshot 取 sequence 最大 chain
+  head（修「返回第一个匹配」bug）；sequence 乱序校验；损坏 fail loud（仅尾部半行
+  截断恢复）；append OSError 上抛；begin/commit/reject 在 flock 内 reload+append，
+  并发 worker 同事件只有一个 begin（pending 预留 → in_flight）。
+- **#6 Composite execution_spec**：任一 child 无法序列化 → production 抛
+  `UnreconstructableDataSource`、research 返回 None，不再伪造缺 dataset 的
+  `{"type":"data_access"}`。
+
+新增测试 27 条（R14 4 个文件）；存量回归（r11 15 / materializer 48 / r13 matrix
+17 / round13 incremental 10 / r10 scheduler + composite 27 / phase21 matrix roundtrip）
+全绿。只改 factor_engine/ orchestration+storage 层，不碰 cleaned_operators/ir/scripts。
+
+---
+
 ## 2026-08-09 FactorEngine R11 orchestration 收官（第 33 版）
 
 **内容**：外部 AI 复查确认 DataAccess Core 不再扩架构后，把焦点转到 FactorEngine

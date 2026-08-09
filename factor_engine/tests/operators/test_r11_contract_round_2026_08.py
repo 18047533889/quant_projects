@@ -106,7 +106,15 @@ def test_registry_backfill_copies_full_logical_contract() -> None:
     assert m.panel_params == ("x",) and m.scalar_params == ("window",)
 
 
-def test_registry_backfill_never_overwrites_native_spec() -> None:
+def test_registry_backfill_native_spec_must_match_canonical() -> None:
+    """P0-23: the canonical logical contract is the single authority.
+
+    A backend that declares its own non-empty logical field that DIFFERS from the
+    canonical is a contract divergence and must fail registration — never
+    silently keep both (the old copy-if-empty backfill only inherited EMPTY
+    slots; a conflicting non-empty value was the bug).  An empty native slot
+    still inherits the canonical value.
+    """
     from cleaned_operators.base import ParamSpec
     from cleaned_operators.base_polars import (
         OperatorMetadata as PolarsMetadata,
@@ -116,7 +124,24 @@ def test_registry_backfill_never_overwrites_native_spec() -> None:
 
     prev = {"param_specs": {"window": ParamSpec(dtype=int, min=2)}}
 
-    class _Native(PolarsSeriesOperator):
+    # Matching native spec -> kept (no divergence).
+    class _NativeMatch(PolarsSeriesOperator):
+        metadata = PolarsMetadata(
+            name="y",
+            category="native",
+            param_names=["x", "window"],
+            param_specs={"window": ParamSpec(dtype=int, min=2)},
+        )
+
+        def _calculate_series(self, *a, **k):  # pragma: no cover - stub
+            return None
+
+    native_match = _NativeMatch()
+    _backfill_logical_contract(native_match, prev)
+    assert native_match.metadata.param_specs["window"].min == 2
+
+    # Divergent native spec (min=5 vs canonical min=2) -> registration failure.
+    class _NativeDivergent(PolarsSeriesOperator):
         metadata = PolarsMetadata(
             name="y",
             category="native",
@@ -127,9 +152,8 @@ def test_registry_backfill_never_overwrites_native_spec() -> None:
         def _calculate_series(self, *a, **k):  # pragma: no cover - stub
             return None
 
-    native = _Native()
-    _backfill_logical_contract(native, prev)
-    assert native.metadata.param_specs["window"].min == 5
+    with pytest.raises(ValueError, match="logical-contract divergence"):
+        _backfill_logical_contract(_NativeDivergent(), prev)
 
 
 # ---------------------------------------------------------------------------

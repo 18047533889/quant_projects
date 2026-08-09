@@ -199,41 +199,53 @@ def _resolve_official_grid(calendar: Any, mods: np.ndarray) -> tuple[int, int | 
 def _session_runs(
     x_col: np.ndarray,
     sid_col: np.ndarray,
+    dates: np.ndarray,
     mods: np.ndarray,
     expected_slots: int,
     official_close_mod: int | None,
 ) -> list[dict]:
     """Split one symbol's minute column into session candidates.
 
-    Consecutive rows with the same integral ``session_id`` form a run; adjacent
+    Session identity is the COMPOSED key ``(trade_date, session_id)`` (P0-41): a
+    caller that restarts ``session_id`` at 1 on every trading date must never
+    merge blocks across days, and a session that straddles a date boundary is
+    split — each day's rows form their own candidate.  Consecutive rows with the
+    same integral ``session_id`` within one ``trade_date`` form a run; adjacent
     runs separated only by censored (NaN / non-integral) ids with the SAME
-    ``sid`` are merged into one session (R11 #70).  A candidate is ``completed``
-    only when it reaches the official session close AND covers the full expected
-    minute grid (R11 #68).  ``vals`` are the x values at the valid-session rows
-    only (censored rows belong to no known session).
+    ``(trade_date, sid)`` are merged into one session (R11 #70).  A candidate is
+    ``completed`` only when it reaches the official session close AND covers the
+    full expected minute grid (R11 #68).  ``vals`` are the x values at the
+    valid-session rows only (censored rows belong to no known session).
     """
     n = len(x_col)
-    blocks: list[tuple[int, int, int]] = []  # (sid, start, end)
+    blocks: list[tuple[int, int, int, int]] = []  # (date, sid, start, end)
     i = 0
     while i < n:
         if not _valid_sid(sid_col[i]):
             i += 1
             continue
         sid = int(sid_col[i])
+        day = int(dates[i])
         j = i
-        while j < n and _valid_sid(sid_col[j]) and int(sid_col[j]) == sid:
+        while (
+            j < n
+            and _valid_sid(sid_col[j])
+            and int(sid_col[j]) == sid
+            and int(dates[j]) == day
+        ):
             j += 1
-        blocks.append((sid, i, j - 1))
+        blocks.append((day, sid, i, j - 1))
         i = j
     merged: list[dict] = []
-    for sid, start, end in blocks:
-        if merged and merged[-1]["sid"] == sid:
+    for day, sid, start, end in blocks:
+        if merged and merged[-1]["sid"] == sid and merged[-1]["date"] == day:
             merged[-1]["blocks"].append((start, end))
         else:
-            merged.append({"sid": sid, "blocks": [(start, end)]})
+            merged.append({"date": day, "sid": sid, "blocks": [(start, end)]})
     out: list[dict] = []
     for sess in merged:
         sid = sess["sid"]
+        day = sess["date"]
         rows: list[int] = []
         for bs, be in sess["blocks"]:
             rows.extend(range(bs, be + 1))
@@ -247,6 +259,7 @@ def _session_runs(
         )
         out.append(
             {
+                "date": day,
                 "sid": sid,
                 "vals": vals,
                 "start": start,
@@ -295,6 +308,7 @@ def _canonical_shape(vals: np.ndarray, n_nodes: int) -> np.ndarray | None:
 def _shape_novelty_series(
     x2d: np.ndarray,
     sid2d: np.ndarray,
+    dates: np.ndarray,
     mods: np.ndarray,
     history_days: int,
     min_history_sessions: int,
@@ -307,7 +321,7 @@ def _shape_novelty_series(
     mhs = max(1, int(min_history_sessions))
     for c in range(cols):
         n_nodes = max(2, expected_slots)
-        runs = _session_runs(x2d[:, c], sid2d[:, c], mods, expected_slots, official_close_mod)
+        runs = _session_runs(x2d[:, c], sid2d[:, c], dates, mods, expected_slots, official_close_mod)
         for i, run in enumerate(runs):
             if not run["completed"]:
                 continue  # partial session never emits a full-session factor (R11 #68)
@@ -336,6 +350,7 @@ def _shape_novelty_series(
 def _pca_residual_series(
     x2d: np.ndarray,
     sid2d: np.ndarray,
+    dates: np.ndarray,
     mods: np.ndarray,
     history_days: int,
     n_components: int,
@@ -350,7 +365,7 @@ def _pca_residual_series(
     mhs = max(1, int(min_history_sessions))
     for c in range(cols):
         n_nodes = max(2, expected_slots)
-        runs = _session_runs(x2d[:, c], sid2d[:, c], mods, expected_slots, official_close_mod)
+        runs = _session_runs(x2d[:, c], sid2d[:, c], dates, mods, expected_slots, official_close_mod)
         for i, run in enumerate(runs):
             if not run["completed"]:
                 continue
@@ -427,11 +442,16 @@ class IntradaySessionShapeNovelty(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         sid_arr = _validate_session_ids(session_id)
-        mods = _minute_of_day(x.index.to_numpy(dtype="datetime64[ns]"))
+        # P0-41: session identity is the composed (trade_date, session_id) key —
+        # a caller that restarts ``sid`` at 1 each day must never collapse blocks
+        # across days.  ``dates`` is the per-row day key derived from the index.
+        index_ns = x.index.to_numpy(dtype="datetime64[ns]")
+        dates = index_ns.astype("datetime64[D]").astype("int64")
+        mods = _minute_of_day(index_ns)
         # P0-10: official grid from the explicit exchange calendar, never modal.
         expected, close_mod = _resolve_official_grid(calendar, mods)
         arr = _shape_novelty_series(
-            x.to_numpy(dtype=float), sid_arr, mods, history_days, min_history_sessions,
+            x.to_numpy(dtype=float), sid_arr, dates, mods, history_days, min_history_sessions,
             expected, close_mod,
         )
         return frame_like(x, arr)
@@ -477,11 +497,16 @@ class IntradayProfilePcaResidual(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         sid_arr = _validate_session_ids(session_id)
-        mods = _minute_of_day(x.index.to_numpy(dtype="datetime64[ns]"))
+        # P0-41: session identity is the composed (trade_date, session_id) key —
+        # a caller that restarts ``sid`` at 1 each day must never collapse blocks
+        # across days.  ``dates`` is the per-row day key derived from the index.
+        index_ns = x.index.to_numpy(dtype="datetime64[ns]")
+        dates = index_ns.astype("datetime64[D]").astype("int64")
+        mods = _minute_of_day(index_ns)
         # P0-10: official grid from the explicit exchange calendar, never modal.
         expected, close_mod = _resolve_official_grid(calendar, mods)
         arr = _pca_residual_series(
-            x.to_numpy(dtype=float), sid_arr, mods,
+            x.to_numpy(dtype=float), sid_arr, dates, mods,
             history_days, n_components, min_history_sessions,
             expected, close_mod,
         )

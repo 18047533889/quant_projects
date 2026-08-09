@@ -8,30 +8,83 @@ final pass guarantees execution layers only receive canonical parameters.
 Also hosts the R6 P0-04 pre-lowering parameter validator and the R6 P1-19
 ``ParameterCanonicalizer``: composite lowering must never truncate / re-legalize
 a parameter that runtime validation rejects, and algebraically-identical
-parameter values (proportional weights, pure scale, float noise) must hash to
-the same factor.
+parameter values (declared-scale weights, float noise) must hash to the same
+factor.
+
+R13 NEW-P0-17/18/19/20 (execution vs hash split):
+
+* EXECUTION parameters are NEVER rewritten for dedup.  ``canonicalize_plan_parameters``
+  only re-spells parameter *names* (alias → canonical) and canonicalizes the op
+  name; every scalar/vector VALUE the user passed is carried into the execution
+  plan verbatim — a ``0.123456789012345`` stays ``0.123456789012345``.
+* HASH canonicalization lives on the *hash* side only (``canonicalize_parameter_values``
+  / ``structural_key`` / ``ParameterCanonicalizer.hash_key``): float-noise is
+  rounded to 12 significant digits, and a parameter is unit-sum-normalized ONLY
+  when its ``ParamSpec`` explicitly declares ``equivalence="positive_scale"``.
+  Weight normalization is never inferred from the parameter NAME.
+* A vector parameter is never silently length-changed: any non-numeric element
+  in a declared scale-equivalent vector is a hard error, and non-weight sequences
+  keep every element (numerics rounded, others verbatim).
+* ``validate_plan_params`` runs the SAME authority the runtime call gate uses —
+  per-param dtype/min/max/choices/finite, ``active_when``, the common
+  window/min_periods + k relations, and every declared ``RelationalParamSpec`` —
+  so lowering can never see a logically-illegal combination.
 """
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from planner.logical_plan import PlanNode
 
 
+def _operator_contract(canonical: str):
+    """Lazily resolve ``(operator, metadata, param_specs, param_types)`` for a canonical."""
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        operator = OperatorRegistry.get(canonical, "pandas_numpy")
+    except Exception:
+        operator = None
+    if operator is None:
+        return None, None, {}, {}
+    meta = getattr(operator, "metadata", None)
+    if meta is None:
+        return operator, None, {}, {}
+    return (
+        operator,
+        meta,
+        getattr(meta, "param_specs", None) or {},
+        getattr(meta, "param_types", None) or {},
+    )
+
+
 def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode:
-    """R6 P0-04: validate every operator node's scalar ``attrs`` against its
-    declared ``ParamSpec`` BEFORE composite lowering runs.
+    """R6 P0-04 + R13 NEW-P0-20: validate every operator node's scalar ``attrs``
+    against its declared contract BEFORE composite lowering runs.
 
     The pipeline contract is ``Parse → canonical parameter validation → typed IR
     → lowering → backend``.  Lowering must receive already-canonicalized values;
     this walk is the planning-time enforcement point.  Only operators that
     declare a ``ParamSpec`` / ``param_types`` are enforced — legacy operators
     without contracts are left untouched so nothing regresses.
+
+    R13 NEW-P0-20: validation is the FULL runtime authority, not just the integer
+    normalizer — per-param dtype/min/max/choices/finite (via ``_normalise_integer``),
+    ``active_when`` (dead-knob rejection), the common ``min_periods <= window`` /
+    ``k <= window`` relations, and every declared ``RelationalParamSpec`` are all
+    enforced here with the SAME helpers ``validate_operator_call`` uses, so a
+    logically-illegal parameter combination can never survive past planning.
     """
     from backend.parameter_aliases import normalize_parameter_aliases
+    from cleaned_operators.base import (
+        _enforce_active_when,
+        _kernel_param_defaults,
+        _normalise_integer,
+        _validate_common_integer_relations,
+        _validate_relational_specs,
+    )
     from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.base import _normalise_integer
     from backend.operator_errors import OperatorParameterError
 
     def _validate_op(node: PlanNode) -> None:
@@ -39,20 +92,22 @@ def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode
         if op in {"column", "literal", "plan_ref", "materialized_series"}:
             return
         canonical = OperatorRegistry._aliases.get(op, op)
-        meta = getattr(OperatorRegistry.get(canonical), "metadata", None)
-        if meta is None:
+        operator, meta, specs, types = _operator_contract(canonical)
+        if operator is None or meta is None:
             return
         param_names = list(getattr(meta, "param_names", None) or [])
         if not param_names:
             return
-        specs = getattr(meta, "param_specs", None) or {}
-        types = getattr(meta, "param_types", None) or {}
         attrs = normalize_parameter_aliases(canonical, dict(node.attrs))
+        defaults = _kernel_param_defaults(operator) or {}
+
+        # per-param scalar validation (dtype / min / max / choices / finite).
         # ``_normalise_integer`` is the SAME resolver the runtime uses in
         # ``validate_operator_call``: ParamSpec.dtype -> param_types ->
         # integer-name whitelist.  Reusing it gives planning-time == runtime
         # parity, so a ``window=5.9`` that runtime rejects is also rejected
         # here before any lowering can truncate it.
+        validated: dict[str, Any] = {}
         for key, value in attrs.items():
             if key not in param_names:
                 continue
@@ -62,12 +117,32 @@ def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode
             if not isinstance(value, (int, float, str, bool)):
                 continue
             try:
-                _normalise_integer(value, key, types.get(key), specs.get(key))
+                validated[key] = _normalise_integer(
+                    value, key, types.get(key), specs.get(key)
+                )
             except OperatorParameterError as exc:
                 raise OperatorParameterError(
                     f"{canonical}.{key}: planning-time parameter validation "
-                    f"failed (R6 P0-04): {exc}"
+                    f"failed (R6 P0-04 / R13 NEW-P0-20): {exc}"
                 ) from exc
+
+        # merge canonical defaults so relation/active_when judgements see the
+        # same value set the kernel receives at runtime.
+        bound = dict(defaults)
+        bound.update(validated)
+
+        try:
+            # dead-knob / active_when rejection (same helper as runtime).
+            _enforce_active_when(meta, (), bound, defaults)
+            # common cross-parameter relations (min_periods<=window, k<=window).
+            _validate_common_integer_relations(meta, (), bound)
+            # declared RelationalParamSpec expressions.
+            _validate_relational_specs(meta, operator, (), bound)
+        except Exception as exc:  # noqa: BLE001 — wrap-and-raise, never swallow
+            raise OperatorParameterError(
+                f"{canonical}: planning-time relational/active_when validation "
+                f"failed (R13 NEW-P0-20): {exc}"
+            ) from exc
 
     for node in _walk(plan):
         _validate_op(node)
@@ -80,35 +155,77 @@ def _walk(node: PlanNode):
         yield from _walk(child)
 
 
-def canonicalize_parameter_values(attrs: dict[str, Any]) -> dict[str, Any]:
-    """R6 P1-19: canonicalize parameter VALUES so algebraically-identical
-    factors share one AST hash.
+def canonicalize_parameter_values(
+    attrs: Mapping[str, Any], *, canonical: str | None = None
+) -> dict[str, Any]:
+    """HASH-SIDE parameter canonicalization (R13 NEW-P0-17).
+
+    This function is for CACHE / DEDUP KEYS ONLY — it is NEVER used to build the
+    execution plan.  It merges algebraically-identical factor arguments onto one
+    key:
 
     - floats are rounded to 12 significant digits (float-noise equality);
-    - proportional weight arrays (``*_weight``/``*_weights``/``weights``) are
-      normalized to unit sum when they are finite and non-empty;
+    - a SEQUENCE parameter is unit-sum normalized ONLY when its ``ParamSpec``
+      declares ``equivalence="positive_scale"`` (never guessed from the name);
     - booleans stay booleans; ints stay ints.
+
+    R13 NEW-P0-19: a vector parameter is never silently length-changed.  A
+    declared scale-equivalent vector containing any non-numeric element raises
+    (the whole parameter is rejected, not filtered).  Non-weight sequences keep
+    every element: numerics are rounded, everything else is preserved verbatim.
+
+    ``canonical`` (optional) resolves the operator's declared ``ParamSpec`` so
+    weight normalization is gated on ``equivalence="positive_scale"``; without a
+    canonical, NO name-based normalization is applied (R13 NEW-P0-18).
     """
     import math
+
+    _, _, param_specs, _ = (
+        _operator_contract(canonical) if canonical is not None else (None, None, {}, {})
+    )
+
+    def _is_declared_scale_equivalent(key: str) -> bool:
+        spec = (param_specs or {}).get(key)
+        return spec is not None and getattr(spec, "equivalence", None) == "positive_scale"
+
+    def _round_num(value: Any) -> Any:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return value
+        num = float(value)
+        if math.isfinite(num) and num != 0.0:
+            return _round_sig(num, 12)
+        return value
 
     out: dict[str, Any] = {}
     for key, value in attrs.items():
         if isinstance(value, float) or (isinstance(value, int) and not isinstance(value, bool)):
-            num = float(value)
-            if math.isfinite(num) and num != 0.0:
-                out[key] = _round_sig(num, 12)
-                continue
-            out[key] = value
+            out[key] = _round_num(value)
             continue
         if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
             seq = list(value)
-            if key.endswith("weight") or key.endswith("weights"):
-                nums = [float(v) for v in seq if isinstance(v, (int, float))]
+            if _is_declared_scale_equivalent(key):
+                # strict vector: every element must be numeric — never drop.
+                if not all(
+                    isinstance(v, (int, float)) and not isinstance(v, bool)
+                    for v in seq
+                ):
+                    from backend.operator_errors import OperatorParameterError
+
+                    raise OperatorParameterError(
+                        f"{key}: a scale-equivalent weight vector must contain "
+                        f"only numeric elements (got a non-numeric element); the "
+                        "whole parameter is rejected rather than silently "
+                        "filtered (R13 NEW-P0-19)"
+                    )
+                nums = [float(v) for v in seq]
                 total = sum(nums)
                 if nums and math.isfinite(total) and abs(total) > 1e-12:
                     out[key] = tuple(_round_sig(v / total, 12) for v in nums)
                     continue
-            out[key] = tuple(_round_sig(float(v), 12) if isinstance(v, (int, float)) else v for v in seq)
+                out[key] = tuple(seq)
+                continue
+            # non-weight / undeclared sequence: keep EVERY element, length stable.
+            out[key] = tuple(_round_num(v) for v in seq)
             continue
         out[key] = value
     return out
@@ -129,8 +246,8 @@ def _round_sig(value: float, digits: int) -> float:
 
 class ParameterCanonicalizer:
     """R6 P1-19: turn an operator node's parameter dict into a canonical form
-    used for AST-hash dedup.  Two plans that differ only by proportional weight
-    scale, pure float noise, or inactive parameters hash identically.
+    used for AST-hash dedup.  Two plans that differ only by declared-scale
+    proportional weight, pure float noise, or inactive parameters hash identically.
 
     The dedup chain is explicitly: ``canonicalize`` -> canonical parameter dict
     -> ``hash_key`` produces the equivalence-class key -> the caller (CSE /
@@ -138,17 +255,22 @@ class ParameterCanonicalizer:
     is stored here: it would only ever grow across calls (memory leak) and the
     caller already owns the key->node map.  Audit #388: removed the dead
     ``self._seen`` field that was initialized but never read or written.
+
+    R13 NEW-P0-17/18: this is the HASH side — the canonical form produced here is
+    a dedup key, never the execution plan's attrs.  Weight normalization is gated
+    on ``ParamSpec.equivalence == "positive_scale"`` (resolved via ``canonical``),
+    not on the parameter name.
     """
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, canonical: str | None = None) -> None:
+        self.canonical = canonical
 
-    def canonicalize(self, canonical: str, attrs: dict[str, Any]) -> dict[str, Any]:
-        return canonicalize_parameter_values(attrs)
+    def canonicalize(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        return canonicalize_parameter_values(attrs, canonical=self.canonical)
 
-    def hash_key(self, canonical: str, attrs: dict[str, Any]) -> tuple:
-        canon = self.canonicalize(canonical, attrs)
-        return (canonical,) + tuple(sorted((k, _freeze(v)) for k, v in canon.items()))
+    def hash_key(self, attrs: dict[str, Any]) -> tuple:
+        canon = self.canonicalize(attrs)
+        return (self.canonical or "") + tuple(sorted((k, _freeze(v)) for k, v in canon.items()))
 
 
 def _freeze(value: Any) -> Any:
@@ -160,7 +282,15 @@ def _freeze(value: Any) -> Any:
 
 
 def canonicalize_plan_parameters(plan: PlanNode) -> PlanNode:
-    """Return a structurally equivalent plan with canonical attrs everywhere."""
+    """Return a structurally equivalent EXECUTION plan with canonical SPELLING
+    everywhere — op name canonicalized and parameter names re-spelled from
+    aliases — while every VALUE stays exactly as the user passed it
+    (R13 NEW-P0-17: dedup canonicalization never mutates execution parameters).
+
+    ``semantic_attrs`` is carried through untouched (R13 NEW-P0-14): the typed
+    layer's unit / grain / availability / price-basis / source identity must
+    survive every optimizer rewrite.
+    """
     from backend.parameter_aliases import normalize_parameter_aliases
     from cleaned_operators.registry import OperatorRegistry
 
@@ -170,6 +300,11 @@ def canonicalize_plan_parameters(plan: PlanNode) -> PlanNode:
     if op not in {"column", "literal", "plan_ref", "materialized_series"}:
         canonical = OperatorRegistry._aliases.get(op, op)
         attrs = normalize_parameter_aliases(canonical, attrs)
-        attrs = canonicalize_parameter_values(attrs)
         op = canonical
-    return PlanNode(op=op, inputs=inputs, attrs=attrs, node_id=plan.node_id)
+    return PlanNode(
+        op=op,
+        inputs=inputs,
+        attrs=attrs,
+        semantic_attrs=dict(plan.semantic_attrs),
+        node_id=plan.node_id,
+    )

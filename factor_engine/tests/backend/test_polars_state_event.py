@@ -38,7 +38,16 @@ def _assert_parity(name, args, kwargs, rtol=1e-8, atol=1e-8):
     polars_op = OperatorRegistry.get(name, backend="polars")
     assert pandas_op is not None, f"{name} missing pandas"
     assert polars_op is not None, f"{name} missing polars"
-    pandas_out = pandas_op.calculate(*args, **kwargs)
+    # R11 P0-60: return-decomposition kernels now fail-closed on unverifiable
+    # instrument-code columns; the test's synthetic panels carry "A"/"B" columns,
+    # so the pandas reference is told the price basis explicitly (the basis comes
+    # from typed-IR metadata in real DSL calls, not from column names).  The
+    # native polars impl does not run the basis gate.
+    pandas_kwargs = dict(kwargs)
+    if name in {"open_close_return", "open_to_vwap_return", "overnight_return",
+                "vwap_to_close_return"}:
+        pandas_kwargs.setdefault("price_basis", "RAW")
+    pandas_out = pandas_op.calculate(*args, **pandas_kwargs)
     polars_out = polars_op.calculate(*[_polars(arg) for arg in args], **kwargs)
     assert list(pandas_out.columns) == list(polars_out.columns)
     for column in pandas_out.columns:

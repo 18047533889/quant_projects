@@ -18,34 +18,207 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Generic, Iterable, TypeVar
 
 from .exceptions import (
+    CatalogCorruptionError,
+    CatalogSerializationError,
     FactorHashMismatchError,
     FactorNotFoundError,
+    FactorRetiredError,
     FactorSemanticIdentityMismatchError,
 )
 
+T = TypeVar("T")
 
-def _parse_json_field(raw: Any) -> dict[str, Any]:
-    """将 JSON 字段解析为字典（容错空值）。
-    
+
+# ---------------------------------------------------------------------------
+# Typed JSON catalog fields (NEW-P0-44 / NEW-P0-45 / NEW-P1-74)
+#
+# production 下 catalog 的全量定义 / data-source config 必须走 typed JSON
+# schema：未知对象（callable / 自定义类 / enum-like 配置）直接抛
+# ``CatalogSerializationError``，绝不 ``default=str`` 字符串化（字符串化后无法
+# 还原重建）。损坏的 JSON 抛 ``CatalogCorruptionError``，绝不伪装成 ``{}``。
+# ---------------------------------------------------------------------------
+
+
+def _resolve_strict(strict: bool | None) -> bool:
+    """解析 strict 解码开关：显式值优先，缺省从运行模式推断。"""
+    if strict is not None:
+        return bool(strict)
+    try:
+        from runtime.production_policy import is_production_mode
+
+        return is_production_mode()
+    except Exception:  # pragma: no cover - 解析失败按 research 处理
+        return False
+
+
+def _strict_default(obj: Any) -> Any:
+    """``json.dumps`` 的 default 钩子：production 下未知类型直接报错。
+
+    绝不返回 ``str(obj)``——callable / 自定义类 / enum-like 配置字符串化后无法
+    从字符串重建，等于把「不可序列化」伪装成「字符串 config」。
+    """
+    raise CatalogSerializationError(
+        f"catalog typed JSON 序列化遇到不支持的类型 {type(obj).__name__}: {obj!r}。"
+        f"production 全量定义必须使用 typed JSON schema，禁止 default=str 字符串化"
+        f"（字符串化后的对象无法重建）。"
+    )
+
+
+def catalog_strict_dumps(
+    obj: Any,
+    *,
+    sort_keys: bool = True,
+    ensure_ascii: bool = False,
+) -> str:
+    """严格 JSON 序列化：未知类型 → ``CatalogSerializationError``。
+
+    参数:
+        obj: 待序列化对象
+        sort_keys: 是否按键排序（可选）
+        ensure_ascii: 是否转义非 ASCII（可选）
+
+    返回:
+        str
+    """
+    try:
+        return json.dumps(
+            obj, sort_keys=sort_keys, ensure_ascii=ensure_ascii, default=_strict_default
+        )
+    except CatalogSerializationError:
+        raise
+    except TypeError as exc:  # pragma: no cover - json.dumps 兜底
+        raise CatalogSerializationError(
+            f"catalog typed JSON 序列化失败: {exc}"
+        ) from exc
+
+
+def _canonical_checksum(value: Any) -> str:
+    """对 typed JSON 字段的值做 canonical SHA-256 校验和（NEW-P1-74）。"""
+    raw = catalog_strict_dumps(value)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class CatalogJsonField(Generic[T]):
+    """Typed JSON catalog 字段（NEW-P1-74）。
+
+    信封格式::
+
+        {"schema_version": N, "checksum": sha256(value), "value": <typed payload>}
+
+    - ``dumps()`` 使用严格编码器——未知类型抛 ``CatalogSerializationError``；
+    - ``loads(raw, strict=...)`` 严格解码：损坏 JSON 抛 ``CatalogCorruptionError``，
+      legacy 裸 JSON（无信封）经 ``migrate`` 迁移，checksum 不匹配抛
+      ``CatalogCorruptionError``；
+    - production 缺省 forbidden permissive decode（``_resolve_strict`` 自动按
+      运行模式推断）。
+
+    参数:
+        value: 字段值
+        schema_version: schema 版本（可选）
+    """
+
+    value: T
+    schema_version: int = 1
+
+    _ENVELOPE_KEYS = frozenset({"schema_version", "checksum", "value"})
+
+    def dumps(self, *, checksum: bool = True) -> str:
+        """严格序列化（含可选 checksum 信封）。"""
+        payload: dict[str, Any] = {
+            "schema_version": self.schema_version,
+            "value": self.value,
+        }
+        if checksum:
+            payload["checksum"] = _canonical_checksum(self.value)
+        return catalog_strict_dumps(payload)
+
+    @classmethod
+    def loads(
+        cls,
+        raw: Any,
+        *,
+        schema_version: int = 1,
+        strict: bool | None = None,
+        migrate: Any = None,
+    ) -> "CatalogJsonField[T]":
+        """严格解码；损坏/checksum 不匹配在 strict 下抛 ``CatalogCorruptionError``。"""
+        parsed = _parse_json_field(raw, strict=strict)
+        if not parsed:
+            return cls(None, schema_version=schema_version)  # type: ignore[arg-type]
+        if not set(parsed).issuperset({"value"}):
+            # legacy 裸 JSON payload（无信封）：整体迁移到当前 schema。
+            value: Any = parsed
+            if migrate is not None:
+                value = migrate(value)
+            return cls(value, schema_version=schema_version)
+        sv = int(parsed.get("schema_version", 1))
+        value = parsed.get("value")
+        if migrate is not None:
+            while sv < schema_version:
+                value = migrate(value)
+                sv += 1
+        checksum = parsed.get("checksum")
+        if checksum:
+            actual = _canonical_checksum(value)
+            if actual != str(checksum):
+                raise CatalogCorruptionError(
+                    f"catalog typed JSON 字段 checksum 不匹配（数据损坏或篡改）: "
+                    f"expected={checksum}, actual={actual}"
+                )
+        return cls(value, schema_version=sv)
+
+
+def _parse_json_field(
+    raw: Any,
+    *,
+    strict: bool | None = None,
+) -> dict[str, Any]:
+    """将 JSON 字段解析为字典。
+
     参数:
         raw: 见函数签名
-    
+        strict: 显式 strict 标志；缺省从运行模式推断（可选）。
+
     返回:
         dict[str, Any]
+
+    NEW-P0-45：损坏 JSON 在 strict（production）下抛 ``CatalogCorruptionError``，
+    绝不返回 ``{}`` 把「catalog 数据损坏」伪装成「config 缺失」。
     """
     if raw is None:
         return {}
     if isinstance(raw, dict):
         return raw
-    try:
-        return json.loads(str(raw))
-    except json.JSONDecodeError:
+    strict_effective = _resolve_strict(strict)
+    if not isinstance(raw, (str, bytes)):
+        if strict_effective:
+            raise CatalogCorruptionError(
+                f"catalog JSON 字段类型非法 {type(raw).__name__}（期望 str/dict）"
+            )
         return {}
+    try:
+        text = raw if isinstance(raw, str) else raw.decode("utf-8")
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        if strict_effective:
+            raise CatalogCorruptionError(
+                f"catalog JSON 字段损坏（{exc}）: {str(raw)[:80]!r}"
+            ) from exc
+        return {}
+    if isinstance(parsed, dict):
+        return parsed
+    if strict_effective:
+        raise CatalogCorruptionError(
+            f"catalog JSON 字段类型非法（期望 dict，实际 {type(parsed).__name__}）"
+        )
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +362,23 @@ CREATE TABLE IF NOT EXISTS factor_column_dep (
     PRIMARY KEY (column_name, factor_id),
     FOREIGN KEY (factor_id) REFERENCES factor_dependency(factor_id)
 );
+
+-- NEW-P0-56/57: 已删除（退役）因子的墓碑。delete_factor 只删 catalog 元数据、
+-- 不删物理分区文件，因此复用同一 factor_id 会混合旧世代分区。退役墓碑记录
+-- 删除时刻 + 全量语义 digest，register 时必须显式 rebuild=True 才能清墓碑复用。
+CREATE TABLE IF NOT EXISTS factor_retired (
+    factor_id       TEXT PRIMARY KEY,
+    retired_at      TEXT NOT NULL,
+    factor_version  TEXT,
+    ast_hash        TEXT,
+    retired_generation TEXT
+);
 """
+
+
+def _version_prefix(version: Any) -> str:
+    """取 factor_version 的 16 位显示前缀（兼容 legacy 16 位与 full SHA-256）。"""
+    return str(version or "")[:16]
 
 
 class FactorCatalog:
@@ -392,6 +581,7 @@ class FactorCatalog:
         data_source_config: dict | None = None,
         semantic_identity_digest: str | None = None,
         production: bool | None = None,
+        rebuild: bool = False,
     ) -> None:
         """注册因子。如 factor_id 已存在且 Hash 一致则静默跳过；不一致则报错。
 
@@ -404,8 +594,12 @@ class FactorCatalog:
             expression: 见函数签名（可选）
             data_source_config: 见函数签名（可选）
             semantic_identity_digest: ``FactorSemanticIdentity.identity_digest()``
-                （R11 #6，可选；缺省用 ``ast_hash`` 前缀）。
+                （R11 #6，可选；缺省用 ``ast_hash``）。
             production: 显式 production 标志；缺省从运行模式推断（可选）。
+            rebuild: 显式全量重建声明（NEW-P0-56/57）。factor 曾被
+                ``delete_factor`` 退役（墓碑存在）时，复用同一 factor_id 必须
+                传 ``rebuild=True`` 清除墓碑——否则旧世代物理分区会与新世代数据
+                混在同一个目录（抛 ``FactorRetiredError``）。
 
         返回:
             无
@@ -417,17 +611,54 @@ class FactorCatalog:
                     ``factor_id`` 已注册但 ``ast_hash`` 与既存记录不同。
                 FactorSemanticIdentityMismatchError
                     production 下 ``factor_id`` 已注册且 ``factor_version``
-                    （语义身份 digest 前缀）与当前不一致——AST 没变但执行语义
+                    （语义身份 digest）与当前不一致——AST 没变但执行语义
                     变了（data_source/universe/market/pit/backend/dialect…），
                     必须新版本或显式全量重建。
+                FactorRetiredError
+                    ``factor_id`` 已被删除/退役且未传 ``rebuild=True``——复用会
+                    混合旧世代物理分区。
+                CatalogSerializationError
+                    production 下 ``data_source_config`` 含不可 JSON 序列化对象
+                    （NEW-P0-44，typed JSON schema，禁止 default=str 字符串化）。
         """
-        ds_json = (
-            json.dumps(data_source_config, sort_keys=True, default=str, ensure_ascii=False)
-            if data_source_config
-            else None
-        )
-        # R11 #6: factor_version = semantic identity digest 前缀（缺省 ast_hash 前缀）。
-        new_version = str((semantic_identity_digest or ast_hash))[:16]
+        effective_production = production
+        if effective_production is None:
+            try:
+                from runtime.production_policy import is_production_mode
+
+                effective_production = is_production_mode()
+            except Exception:  # pragma: no cover - 解析失败按 research 处理
+                effective_production = False
+
+        # NEW-P0-56/57: deleted-factor 复用守卫。物理分区文件仍在磁盘上，直接
+        # 复用 factor_id 会混合旧世代（2020-2025）与新世代（2026）数据。
+        retired = self._get_retired(factor_id)
+        if retired is not None:
+            if not rebuild:
+                raise FactorRetiredError(
+                    f"因子 '{factor_id}' 已被删除/退役（retired_at="
+                    f"{retired.get('retired_at')}, factor_version="
+                    f"{retired.get('factor_version')}）。物理分区文件仍在磁盘上，"
+                    f"复用同一 factor_id 会混合旧世代数据。请使用新 factor_id，"
+                    f"或显式 rebuild=True 强制全量重建。"
+                )
+            self._exec_commit(
+                "DELETE FROM factor_retired WHERE factor_id = ?", (factor_id,)
+            )
+
+        # NEW-P0-44: production 下 data_source_config 走 typed JSON schema——
+        # 未知对象直接抛 CatalogSerializationError，绝不 default=str 字符串化。
+        ds_json = None
+        if data_source_config:
+            if effective_production:
+                ds_json = catalog_strict_dumps(data_source_config)
+            else:
+                ds_json = json.dumps(
+                    data_source_config, sort_keys=True, default=str, ensure_ascii=False
+                )
+        # NEW-P0-57: 权威 catalog 存**全量** SHA-256 digest；16 位前缀只用于
+        # Parquet 行 / ClickHouse / matrix manifest 等显示侧。
+        new_version = str((semantic_identity_digest or ast_hash))
         # Atomic register (Review-8 #443): ``INSERT OR IGNORE`` makes the
         # existence check + insert one statement, so concurrent materializers
         # writing the same factor_id cannot both pass a read-then-insert check
@@ -456,15 +687,8 @@ class FactorCatalog:
             )
         existing_version = existing.get("factor_version")
         # 语义身份版本门：production 下公式没变但执行语义变了 → 拒绝沿用同 ID。
-        if existing_version and existing_version != new_version:
-            effective_production = production
-            if effective_production is None:
-                try:
-                    from runtime.production_policy import is_production_mode
-
-                    effective_production = is_production_mode()
-                except Exception:  # pragma: no cover - 解析失败按 research 处理
-                    effective_production = False
+        # 用 16 位前缀比较，兼容 legacy 16 位记录与新的 full SHA-256。
+        if existing_version and _version_prefix(existing_version) != _version_prefix(new_version):
             if effective_production:
                 raise FactorSemanticIdentityMismatchError(
                     f"因子 '{factor_id}' 已注册（factor_version={existing_version}），"
@@ -480,6 +704,7 @@ class FactorCatalog:
                 (ds_json, new_version, factor_id),
             )
         elif existing_version != new_version:
+            # NEW-P0-57: 顺带把 legacy 16 位前缀升级为 full SHA-256。
             self._exec_commit(
                 "UPDATE factor_registry SET factor_version = ? WHERE factor_id = ?",
                 (new_version, factor_id),
@@ -585,15 +810,37 @@ class FactorCatalog:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def delete_factor(self, factor_id: str) -> None:
+    def delete_factor(self, factor_id: str, *, retire: bool = True) -> None:
         """从 Catalog 中删除因子注册信息和水位线（不删除物理文件）。
+
+        NEW-P0-56/57：删除前写入 ``factor_retired`` 墓碑（退役时刻 + 全量语义
+        digest）。物理分区文件仍在磁盘上，复用同一 factor_id 会混合旧世代数据；
+        ``register(..., rebuild=True)`` 才能清除墓碑显式全量重建。
 
         参数:
             factor_id: 因子唯一标识
+            retire: 是否写入退役墓碑（可选，缺省 True）
 
         返回:
             无
         """
+        info = self.get_factor_info(factor_id)
+        if retire and info is not None:
+            self._conn.execute(
+                "INSERT INTO factor_retired "
+                "(factor_id, retired_at, factor_version, ast_hash) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(factor_id) DO UPDATE SET "
+                "retired_at=excluded.retired_at, "
+                "factor_version=excluded.factor_version, "
+                "ast_hash=excluded.ast_hash",
+                (
+                    factor_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    info.get("factor_version"),
+                    info.get("ast_hash"),
+                ),
+            )
         self._conn.execute(
             "DELETE FROM factor_run WHERE factor_id = ?", (factor_id,)
         )
@@ -624,6 +871,21 @@ class FactorCatalog:
             "DELETE FROM factor_registry WHERE factor_id = ?", (factor_id,)
         )
         self._conn.commit()
+
+    def _get_retired(self, factor_id: str) -> dict | None:
+        """返回 ``factor_retired`` 墓碑记录（None 表示未退役）。"""
+        row = self._conn.execute(
+            "SELECT * FROM factor_retired WHERE factor_id = ?", (factor_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def is_factor_retired(self, factor_id: str) -> bool:
+        """该 factor_id 是否已被 ``delete_factor`` 退役（NEW-P0-56/57）。
+
+        退役墓碑意味着物理分区文件仍在磁盘上；复用该 factor_id 会混合旧世代
+        数据，必须显式 ``register(..., rebuild=True)`` 或换新 factor_id。
+        """
+        return self._get_retired(factor_id) is not None
 
     # ------------------------------------------------------------------
     # 运行血缘

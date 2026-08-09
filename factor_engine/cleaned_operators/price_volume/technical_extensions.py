@@ -70,13 +70,28 @@ def _register(
     description: str,
     tags: Iterable[str] = (),
 ) -> None:
+    names = list(param_names)
+    # Round-11 §37-C: operators whose warmup is driven by a NON-standard window
+    # spelling (left_window/right_window) must declare their compound history
+    # explicitly — the name-based window guesser does not recognise them, so
+    # the history layer would under-allocate the warmup (a confirmed pivot at
+    # ``pivot + right`` needs ``left + right`` prior bars).
+    param_specs = {}
+    if "left_window" in names and "right_window" in names:
+        from cleaned_operators.base import ParamSpec
+
+        param_specs["left_window"] = ParamSpec(
+            dtype=int, min=1, history_formula="left_window + right_window"
+        )
+        param_specs["right_window"] = ParamSpec(dtype=int, min=1)
     metadata = OperatorMetadata(
         name=name,
         category=category,
         description=description,
-        param_names=list(param_names),
+        param_names=names,
         return_type="series",
         tags=[*tags, "pit_safe", "causal", "production_extension"],
+        param_specs=param_specs or None,
     )
 
     def _calculate_series(self, *args, **kwargs):

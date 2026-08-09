@@ -20,6 +20,25 @@ def _governor():
     return global_memory_governor()
 
 
+class _SharedCache:
+    """Shared mutable backing store + byte counter for ``with_scope`` instances.
+
+    R13 P1-62: the old ``with_scope`` copied ``_cache`` and ``_bytes`` but never
+    reserved the copied bytes in the MemoryGovernor, so a child scope calling
+    ``set``/``evict``/``clear`` released accounting it never reserved and the
+    global accounting drifted below true resident bytes.  Sharing ONE mutable
+    backing store (dict + byte counter) makes every operation on any scope touch
+    the same bytes, so governor accounting always equals resident bytes.
+    """
+
+    __slots__ = ("cache", "nbytes", "refs")
+
+    def __init__(self) -> None:
+        self.cache: dict[str, object] = {}
+        self.nbytes: int = 0
+        self.refs: int = 1
+
+
 class CacheManager:
     """计划子树执行结果的内存键值缓存。
     
@@ -55,9 +74,26 @@ class CacheManager:
         # moves the entry to the most-recent end, and eviction drops the oldest
         # (least-recently-used) entry.  The previous plain dict evicted by
         # creation order, so a hot entry created early was evicted first.
-        self._cache: dict[str, object] = {}
+        self._shared = _SharedCache()
         self._budget_bytes = budget_bytes
-        self._bytes = 0
+
+    @property
+    def _cache(self) -> dict[str, object]:
+        """LRU dict of the shared backing store (R13 P1-62)."""
+        return self._shared.cache
+
+    @_cache.setter
+    def _cache(self, value: dict[str, object]) -> None:
+        self._shared.cache = value
+
+    @property
+    def _bytes(self) -> int:
+        """Resident byte counter of the shared backing store (R13 P1-62)."""
+        return self._shared.nbytes
+
+    @_bytes.setter
+    def _bytes(self, value: int) -> None:
+        self._shared.nbytes = int(value)
 
     @property
     def budget_bytes(self) -> int:
@@ -173,15 +209,20 @@ class CacheManager:
 
         返回:
             CacheManager
+
+        R13 P1-62：``clear_memory=False`` 时**共享**同一 backing store（dict +
+        字节计数），不再复制 ``_bytes`` 而不 reserve。所有 scope 的
+        set/evict/clear 都作用于同一字典与同一字节计数，MemoryGovernor 记账
+        始终等于真实驻留字节。``clear_memory=True`` 时创建全新的空 store。
         """
         out = type(self)(
             data_scope=data_scope,
             budget_bytes=self._budget_bytes,
             layer_name=self.layer_name,
         )
-        if not clear_memory and type(out) is CacheManager:
-            out._cache = dict(self._cache)
-            out._bytes = self._bytes
+        if not clear_memory:
+            out._shared = self._shared
+            out._shared.refs += 1
         return out
 
 
@@ -502,6 +543,9 @@ class PersistentPlanCache(CacheManager):
 
         返回:
             PersistentPlanCache
+
+        R13 P1-62：同 :meth:`CacheManager.with_scope`，``clear_memory=False`` 时
+        共享 backing store，内存记账对称。
         """
         out = PersistentPlanCache(
             self.root,
@@ -510,6 +554,6 @@ class PersistentPlanCache(CacheManager):
             layer_name=self.layer_name,
         )
         if not clear_memory:
-            out._cache = dict(self._cache)
-            out._bytes = self._bytes
+            out._shared = self._shared
+            out._shared.refs += 1
         return out

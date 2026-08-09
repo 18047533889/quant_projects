@@ -31,6 +31,11 @@ from stateful_runtime import execute_stateful_segment
 
 logger = logging.getLogger(__name__)
 
+
+def _as_utc(value: Any) -> pd.Timestamp:
+    ts = pd.Timestamp(value)
+    return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+
 # Positional leaf columns of each segmented canonical, in IR-input order, mapped
 # to the ``execute_stateful_segment`` input-key contract.
 _INPUT_KEYS: dict[str, tuple[str, ...]] = {
@@ -95,6 +100,94 @@ def _source_snapshot_scope(source: Any) -> str:
         return compute_data_scope(probe)
     except Exception:  # pragma: no cover - scope failure must not block resume
         return "ephemeral"
+
+
+def _boundary_timeline(source: Any, column_name: str, *, since: Any, start: Any) -> list[pd.Timestamp]:
+    """NEW-P0-26: the source bar timeline in ``[checkpoint.as_of, segment_start]``.
+
+    Probes ONLY the boundary window (never the full history) by widening the
+    source from the checkpoint's last-covered bar up to the segment start, so the
+    chunk auditor can see any bar that a direct resume would silently skip.
+    Returns ``[]`` when the source cannot be probed (the auditor then cannot
+    prove a gap — the as_of/state.last_timestamp consistency check still applies).
+    """
+    try:
+        import copy
+
+        probe = copy.copy(source)
+        if hasattr(probe, "start_date"):
+            probe.start_date = since
+        if hasattr(probe, "end_date"):
+            probe.end_date = start
+        series = probe.load_column(column_name)
+        idx = series.index
+        if isinstance(idx, pd.MultiIndex):
+            if "timestamp" in idx.names:
+                idx = idx.get_level_values("timestamp")
+            else:
+                idx = idx.get_level_values(0)
+        return sorted(pd.to_datetime(list(dict.fromkeys(idx)), utc=True))
+    except Exception:
+        return []
+
+
+def audit_segment_continuity(
+    *,
+    checkpoint: Any,
+    segment_start: Any,
+    source_timeline: Any = None,
+) -> bool:
+    """Chunk auditor (NEW-P0-26 / NEW-P0-30): is a checkpoint chain CONTIGUOUS?
+
+    Validates that resuming from ``checkpoint`` onto a segment beginning at
+    ``segment_start`` does not silently skip any bar:
+
+    * **false coverage claim** — ``checkpoint.as_of`` must equal the state's own
+      ``last_timestamp``.  A checkpoint record that claims coverage up to/through
+      a bar the state did not actually cover (e.g. as_of says Monday but the last
+      processed bar was Friday) must NOT be resumed with forward-bar
+      interpolation — the intervening Monday would be lost.
+    * **gap** — when ``source_timeline`` exposes the boundary, any source bar
+      STRICTLY between the checkpoint's last-covered bar and ``segment_start``
+      (e.g. Monday between Friday and Tuesday) is a missing bar that a direct
+      resume would skip.  The auditor fails closed: resume impossible.
+    * **boundary mismatch** — the last observable source bar before
+      ``segment_start`` must equal the checkpoint's last-covered bar; a stale /
+      not-in-data checkpoint is rejected rather than resumed.
+
+    Returns ``True`` = contiguous / resume OK; ``False`` = gap -> full replay.
+    """
+    state = getattr(checkpoint, "state", None) or {}
+    state_last = state.get("last_timestamp") if isinstance(state, Mapping) else None
+    try:
+        as_of = _as_utc(checkpoint.as_of)
+    except (ValueError, TypeError):
+        return False
+    if state_last is not None:
+        try:
+            if _as_utc(state_last) != as_of:
+                return False
+        except (ValueError, TypeError):
+            return False
+    try:
+        start_ts = _as_utc(segment_start)
+    except (ValueError, TypeError):
+        return False
+    if start_ts <= as_of:
+        return False
+    if source_timeline is not None:
+        try:
+            bars = sorted(_as_utc(t) for t in source_timeline)
+        except (ValueError, TypeError):
+            bars = []
+        if bars:
+            between = [t for t in bars if as_of < t < start_ts]
+            if between:
+                return False
+            boundary = [t for t in bars if t < start_ts]
+            if boundary and boundary[-1] != as_of:
+                return False
+    return True
 
 
 def _root_series_and_params(ir, canonical: str) -> tuple[list[str], dict[str, Any]] | None:
@@ -226,6 +319,11 @@ def try_stateful_segmented_incremental(
     # timestamp.  All instruments run first; only after every one succeeds are
     # their pending checkpoints committed atomically via ``store.commit_batch``.
     pending: dict[str, Any] = {}
+    # NEW-P0-26/NEW-P0-30: probe the boundary window once (using the first
+    # instrument's checkpoint as_of) so the chunk auditor can reject a
+    # non-contiguous resume — a bar strictly between the checkpoint's last-covered
+    # bar and the segment start would otherwise be silently skipped.
+    boundary_timeline: list[pd.Timestamp] | None = None
     for j, instrument in enumerate(instruments):
         checkpoint = None if bootstrap else store.load_latest(
             factor_id, canonical, instrument, before=start
@@ -233,6 +331,20 @@ def try_stateful_segmented_incremental(
         if checkpoint is None and not bootstrap:
             # At least one instrument lacks a usable checkpoint: full replay.
             return None
+        if checkpoint is not None and not bootstrap:
+            if boundary_timeline is None:
+                boundary_timeline = _boundary_timeline(
+                    source, input_names[0], since=checkpoint.as_of, start=start
+                )
+            if not audit_segment_continuity(
+                checkpoint=checkpoint,
+                segment_start=start,
+                source_timeline=boundary_timeline,
+            ):
+                # NEW-P0-30: the checkpoint's last-covered bar is NOT the bar
+                # immediately before the segment start (gap / false coverage
+                # claim) — a direct resume would silently drop a bar.
+                return None
         starts_at_origin = bootstrap or checkpoint is None
         inputs: Mapping[str, np.ndarray] = {
             key: frames[name][instrument].to_numpy(dtype=float)

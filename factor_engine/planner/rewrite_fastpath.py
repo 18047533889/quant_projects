@@ -2,10 +2,38 @@
 """自动改写公式/计划为更易进入 production fast path 的形式。"""
 from __future__ import annotations
 
+from typing import Any, Mapping
+
 from planner.logical_plan import PlanNode
 
 
 _COLUMN_SOURCE_KEYS = ("source_table", "field_id", "source_field", "field_registry_hash")
+
+
+def rewrite_node(
+    old: PlanNode,
+    *,
+    op: str | None = None,
+    inputs: list[PlanNode] | tuple[PlanNode, ...] | None = None,
+    attrs: Mapping[str, Any] | None = None,
+    semantic_attrs: Mapping[str, Any] | None = None,
+) -> PlanNode:
+    """R13 NEW-P1-70: the ONE planner-rewrite constructor.
+
+    Every planner rewrite must go through this instead of scattering bare
+    ``PlanNode(...)`` calls, so ``semantic_attrs`` (the typed layer's unit /
+    grain / availability / price-basis / source identity) is preserved by default
+    and node identity is carried.  ``semantic_attrs`` may be passed explicitly
+    when a rewrite legitimately changes the OUTPUT semantics (e.g. a semantic
+    transform); otherwise the original node's attrs are inherited.
+    """
+    return PlanNode(
+        op=str(op) if op is not None else old.op,
+        inputs=tuple(inputs) if inputs is not None else old.inputs,
+        attrs=dict(attrs) if attrs is not None else dict(old.attrs),
+        semantic_attrs=dict(semantic_attrs) if semantic_attrs is not None else dict(old.semantic_attrs),
+        node_id=old.node_id,
+    )
 
 
 def _column_identity_key(node: PlanNode) -> tuple | None:
@@ -120,7 +148,9 @@ def _try_rewrite_ts_zscore(node: PlanNode, inputs: list[PlanNode]) -> PlanNode |
         "ddof": den.attrs.get("ddof", 1),
         "zero_std_policy": den.attrs.get("zero_std_policy", "zero"),
     }
-    return PlanNode(op="ts_zscore", inputs=[left], attrs=attrs)
+    # R13 NEW-P1-70: rewrites carry the original node's semantic attrs (ts_zscore
+    # has the same output domain/unit as the divide it replaces).
+    return rewrite_node(node, op="ts_zscore", inputs=[left], attrs=attrs)
 
 
 def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode | None:
@@ -141,16 +171,22 @@ def _try_rewrite_log_returns(node: PlanNode, inputs: list[PlanNode]) -> PlanNode
     num, den = inner.inputs
     if num.op != "column":
         return None
-    col_name = str(num.attrs.get("name") or "")
     if den.op not in {"ts_delay", "delay"} or len(den.inputs) != 1:
         return None
     if not _same_column(num, den.inputs[0]):
         return None
     w = _window_value(den, default=1)
-    col = _column_node(col_name)
-    if col is None:
-        return None
-    return PlanNode(op="ts_log_return", inputs=[col], attrs={"d": w, "window": w})
+    # R13 NEW-P0-16: reuse the ORIGINAL column node ``num`` instead of rebuilding
+    # a bare ``Column(name)``.  ``sourceA.Close`` and ``sourceB.Close`` may share
+    # a display name but carry different data; rebuilding from the name alone
+    # drops the typed source identity (field_id / source_table / source_field /
+    # field_registry_hash) and would alias one source to the other.
+    return rewrite_node(
+        node,
+        op="ts_log_return",
+        inputs=[num],
+        attrs={"d": w, "window": w},
+    )
 
 
 def rewrite_plan_for_fastpath(
@@ -171,17 +207,27 @@ def rewrite_plan_for_fastpath(
     ]
     op = plan.op
     attrs = dict(plan.attrs)
+    # R13 NEW-P1-70: rewrites are built through ``rewrite_node`` so semantic
+    # attrs are never dropped.  The matchers see a node carrying the original
+    # node's semantic attrs, and every returned node inherits them.
+    current = PlanNode(
+        op=op,
+        inputs=inputs,
+        attrs=attrs,
+        semantic_attrs=dict(plan.semantic_attrs),
+        node_id=plan.node_id,
+    )
 
-    rewritten = _try_rewrite_ts_zscore(PlanNode(op=op, inputs=inputs, attrs=attrs), inputs)
+    rewritten = _try_rewrite_ts_zscore(current, inputs)
     if rewritten is not None:
         return rewritten
 
-    rewritten = _try_rewrite_log_returns(PlanNode(op=op, inputs=inputs, attrs=attrs), inputs)
+    rewritten = _try_rewrite_log_returns(current, inputs)
     if rewritten is not None:
         return rewritten
 
     if allow_semantic_rewrites and op in {"divide", "div"} and len(inputs) == 2:
-        return PlanNode(op="protected_div", inputs=inputs, attrs=attrs)
+        return rewrite_node(current, op="protected_div", inputs=inputs, attrs=attrs)
 
     if allow_semantic_rewrites and op in {"subtract", "sub"} and len(inputs) == 2:
         left, right = inputs
@@ -191,9 +237,9 @@ def rewrite_plan_for_fastpath(
             and _same_column(left, right.inputs[0])
         ):
             grp = right.inputs[1]
-            return PlanNode(op="group_neutralize", inputs=[left, grp], attrs=attrs)
+            return rewrite_node(current, op="group_neutralize", inputs=[left, grp], attrs=attrs)
 
-    return PlanNode(op=op, inputs=inputs, attrs=attrs)
+    return rewrite_node(current)
 
 
 def rewrite_formula_for_fastpath(formula: str) -> str:

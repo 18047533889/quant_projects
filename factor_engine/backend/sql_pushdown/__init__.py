@@ -3,6 +3,7 @@
 
 from backend.sql_pushdown.emitter import (
     CompiledSql,
+    InstrumentFilterKind,
     SqlDialect,
     SqlPushdownFilter,
     compile_plan_to_sql,
@@ -28,6 +29,7 @@ register_sql_backends()
 __all__ = [
     "SQL_CAPABLE_CANONICALS",
     "CompiledSql",
+    "InstrumentFilterKind",
     "SqlDialect",
     "SqlPushdownFilter",
     "PushdownContext",

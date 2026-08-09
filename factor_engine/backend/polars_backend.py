@@ -10,6 +10,14 @@
 - 默认 ``panel_native=True``，减少 stack/unstack 往返；
 - 可选 ``FACTOR_ENGINE_POLARS_LAZY`` 启用 lazy scan（预留 lazy collect）；
 - 可选 ``FACTOR_ENGINE_POLARS_EXPR`` 尝试整树 Polars 表达式编译。
+
+线程安全（R13 P1-66/P1-67）
+---------------------------
+后端实例相对 lazy 模式是**无状态**的：``execute_lazy`` 不再改写
+``self._use_lazy``，而是把 lazy 作为一次调用的参数传入 ``execute(..., lazy=True)``，
+两个线程共享同一 backend 不会互相污染。``execute`` 启用数据源的 lazy 读
+（``enable_lazy_scan`` / ``read_auto``）也会在 ``finally`` 中恢复，数据源不被
+执行副作用修改。
 """
 from __future__ import annotations
 
@@ -65,15 +73,79 @@ class PolarsBackend(PandasBackend):
         参数
         ----
         use_lazy : bool | None
-            是否启用 lazy scan；为 ``None`` 时读取环境变量
-            ``FACTOR_ENGINE_POLARS_LAZY``（默认 ``False``）。
+            后端默认是否启用 lazy scan；为 ``None`` 时读取环境变量
+            ``FACTOR_ENGINE_POLARS_LAZY``（默认 ``False``）。该值只是默认值，
+            可被 ``execute(..., lazy=...)`` 参数覆盖，且永不被执行修改。
         """
         super().__init__()
         self._use_lazy = use_lazy if use_lazy is not None else _env_flag(
             "FACTOR_ENGINE_POLARS_LAZY", False
         )
 
-    def execute(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
+    @staticmethod
+    def _apply_lazy_scan(data_source: Any, *, restore: list) -> None:
+        """启用数据源 lazy 读并注册恢复函数。
+
+        审计 R13 P1-66：执行不得在数据源上留下可观察副作用。启用
+        ``enable_lazy_scan(True)`` / ``read_auto=True`` 后，把改动前的
+        ``_lazy_scan`` / ``read_auto`` 记入 ``restore``，由调用方在 ``finally``
+        中还原。直接回写属性而非再次调用 ``enable_lazy_scan``，避免其
+        ``clear_cache()`` 副作用。
+
+        ``ExecutionContext`` 会用一个 LQTP 包装器包住真实数据源
+        （``__getattr__`` 委托到 ``inner``）。只回写包装器会产生 shadow 属性而
+        ``inner`` 仍保持 lazy——因此同时回写 ``inner``，保证后续 normal run 的
+        读语义与全新后端一致。
+        """
+        enable = getattr(data_source, "enable_lazy_scan", None)
+        if callable(enable):
+            prev_lazy = getattr(data_source, "_lazy_scan", None)
+            prev_auto = getattr(data_source, "read_auto", None)
+            enable(True)
+            inner = getattr(data_source, "inner", None) or getattr(
+                data_source, "_inner", None
+            )
+
+            def _restore_lazy_source() -> None:
+                if isinstance(prev_lazy, bool):
+                    try:
+                        data_source._lazy_scan = prev_lazy
+                    except Exception:
+                        pass
+                    if inner is not None:
+                        try:
+                            inner._lazy_scan = prev_lazy
+                        except Exception:
+                            pass
+                if isinstance(prev_auto, bool):
+                    try:
+                        data_source.read_auto = prev_auto
+                    except Exception:
+                        pass
+                    if inner is not None:
+                        try:
+                            inner.read_auto = prev_auto
+                        except Exception:
+                            pass
+
+            restore.append(_restore_lazy_source)
+        elif hasattr(data_source, "read_auto"):
+            prev_auto = getattr(data_source, "read_auto", None)
+            data_source.read_auto = True
+            if isinstance(prev_auto, bool):
+
+                def _restore_read_auto() -> None:
+                    data_source.read_auto = prev_auto
+
+                restore.append(_restore_read_auto)
+
+    def execute(
+        self,
+        plan: PlanNode,
+        ctx: ExecutionContext,
+        *,
+        lazy: bool | None = None,
+    ) -> Any:
         """执行逻辑计划，优先 Polars 算子与可选表达式编译路径。
 
         参数
@@ -82,6 +154,10 @@ class PolarsBackend(PandasBackend):
             待执行的逻辑计划根节点。
         ctx : ExecutionContext
             执行期上下文；会被注入 Polars 性能配置与运行时标签。
+        lazy : bool | None
+            本次调用的 lazy scan 开关；``None`` 时使用后端默认
+            ``self._use_lazy``。该参数是 per-call 的，不修改任何实例状态
+            （R13 P1-67）。
 
         返回
         ----
@@ -92,53 +168,63 @@ class PolarsBackend(PandasBackend):
         ----
         若 ``FACTOR_ENGINE_POLARS_EXPR=1`` 且计划具备 Polars 表达式能力，
         优先走 ``execute_polars_expr_plan``；失败时回退到逐节点 kernel 路径。
+        启用 lazy 读时对数据源的改动会在 ``finally`` 中恢复（R13 P1-66）。
         """
         root_ctx = ctx
         ctx = self._with_polars_perf(ctx)
-        if self._use_lazy and ctx.data_source is not None:
-            enable = getattr(ctx.data_source, "enable_lazy_scan", None)
-            if callable(enable):
-                enable(True)
-            elif hasattr(ctx.data_source, "read_auto"):
-                ctx.data_source.read_auto = True
-        if ctx.panel_cache is None:
-            ctx = replace(ctx, panel_cache={})
-        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
-        runtime["backend"] = "polars"
-        if self._use_lazy:
-            runtime["lazy_scan"] = True
-        ctx = replace(ctx, runtime_stats=runtime, prefer_polars_panel=True)
+        use_lazy = self._use_lazy if lazy is None else bool(lazy)
+        _restore: list = []
+        try:
+            if use_lazy and ctx.data_source is not None:
+                self._apply_lazy_scan(ctx.data_source, restore=_restore)
+            if ctx.panel_cache is None:
+                ctx = replace(ctx, panel_cache={})
+            runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+            runtime["backend"] = "polars"
+            if use_lazy:
+                runtime["lazy_scan"] = True
+            ctx = replace(ctx, runtime_stats=runtime, prefer_polars_panel=True)
 
-        if _env_flag("FACTOR_ENGINE_POLARS_EXPR") and ctx.data_source is not None:
-            from .polars_expr_backend import execute_polars_expr_plan, plan_is_polars_expr_capable
+            if _env_flag("FACTOR_ENGINE_POLARS_EXPR") and ctx.data_source is not None:
+                from .polars_expr_backend import execute_polars_expr_plan, plan_is_polars_expr_capable
 
-            if plan_is_polars_expr_capable(plan):
+                if plan_is_polars_expr_capable(plan):
+                    try:
+                        result = execute_polars_expr_plan(plan, ctx)
+                        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+                        runtime["polars_expr"] = True
+                        ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+                        root_ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+                        result = finalize_panel_result(result, ctx)
+                        from runtime.production_policy import assert_no_production_pandas_fallbacks
+
+                        assert_no_production_pandas_fallbacks(ctx, context="polars_execute")
+                        return result
+                    except (UnsupportedCausalOperatorError, UnsupportedOperatorBackendError) as exc:
+                        runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+                        runtime["polars_expr_fallback"] = True
+                        runtime["polars_expr_fallback_reason"] = str(exc)
+                        ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+                        root_ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+
+            result = finalize_panel_result(self._eval(plan, ctx), ctx)
+            from runtime.production_policy import assert_no_production_pandas_fallbacks
+
+            assert_no_production_pandas_fallbacks(ctx, context="polars_execute")
+            return result
+        finally:
+            for _fn in _restore:
                 try:
-                    result = execute_polars_expr_plan(plan, ctx)
-                    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
-                    runtime["polars_expr"] = True
-                    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-                    root_ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-                    result = finalize_panel_result(result, ctx)
-                    from runtime.production_policy import assert_no_production_pandas_fallbacks
-
-                    assert_no_production_pandas_fallbacks(ctx, context="polars_execute")
-                    return result
-                except (UnsupportedCausalOperatorError, UnsupportedOperatorBackendError) as exc:
-                    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
-                    runtime["polars_expr_fallback"] = True
-                    runtime["polars_expr_fallback_reason"] = str(exc)
-                    ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-                    root_ctx.runtime_stats = runtime  # type: ignore[attr-defined]
-
-        result = finalize_panel_result(self._eval(plan, ctx), ctx)
-        from runtime.production_policy import assert_no_production_pandas_fallbacks
-
-        assert_no_production_pandas_fallbacks(ctx, context="polars_execute")
-        return result
+                    _fn()
+                except Exception:
+                    pass
 
     def execute_lazy(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
-        """显式 lazy scan 入口（等价于 ``use_lazy=True`` 的 ``execute``）。
+        """显式 lazy scan 入口（等价于 ``lazy=True`` 的 ``execute``）。
+
+        与旧实现不同，本方法**不修改** ``self._use_lazy``：lazy 模式作为
+        per-call 参数传入 ``execute``，线程共享同一 backend 时互不干扰
+        （R13 P1-67）。
 
         参数
         ----
@@ -152,12 +238,7 @@ class PolarsBackend(PandasBackend):
         Any
             因子计算结果，与 ``execute`` 相同。
         """
-        prev = self._use_lazy
-        self._use_lazy = True
-        try:
-            return self.execute(plan, ctx)
-        finally:
-            self._use_lazy = prev
+        return self.execute(plan, ctx, lazy=True)
 
     @staticmethod
     def _with_polars_perf(ctx: ExecutionContext) -> ExecutionContext:
@@ -171,11 +252,13 @@ class PolarsBackend(PandasBackend):
         返回
         ----
         ExecutionContext
-            ``operator_backend`` 保持 ``auto``，并确保 ``query_budget`` 已构建的副本。
+            ``operator_backend`` 为 ``auto``/``None`` 时保持 ``auto``；**显式**
+            ``pandas_numpy`` / ``polars`` 偏好被保留（R13 P2-68），并确保
+            ``query_budget`` 已构建的副本。
         """
         perf = ctx.perf if ctx.perf is not None else PerfConfig.from_env()
         backend_pref = getattr(perf, "operator_backend", "auto")
-        if backend_pref in {"auto", "pandas_numpy"}:
+        if backend_pref in {None, "auto"}:
             perf = replace(perf, operator_backend="auto")
         query_budget = ctx.query_budget
         if query_budget is None:
@@ -189,6 +272,6 @@ class PolarsBackend(PandasBackend):
         返回
         ----
         bool
-            当前 lazy scan 开关状态。
+            后端默认 lazy scan 开关状态（执行期可被 per-call 参数覆盖）。
         """
         return bool(self._use_lazy)

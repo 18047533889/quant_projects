@@ -132,13 +132,19 @@ class PandasFunctionOperator(PandasOperator):
         fn: Callable[..., pd.DataFrame],
     ):
         self._fn = fn
+        # R13 NEW-P0-05: a backend implementation must NOT self-declare
+        # ``pit_safe`` / ``audited`` — registration is not a semantic audit nor a
+        # temporal certification.  PIT/certification is owned exclusively by the
+        # canonical certification record (semantic_certification / evidence), so
+        # those tags are stripped here.  The ``operator_overhaul_audited`` source
+        # string remains (it is provenance, not a certification tag).
         self.metadata = PandasMetadata(
             name=name,
             category=category,
             description=description,
             param_names=params,
             return_type="series",
-            tags=["daily", "panel", "pit_safe", "audited", category],
+            tags=["daily", "panel", category],
         )
 
     def calculate(self, *args: Any, **kwargs: Any) -> pd.DataFrame:
@@ -159,13 +165,16 @@ class PolarsFunctionOperator(PolarsOperator):
         fn: Callable[..., "pl.DataFrame"],
     ):
         self._fn = fn
+        # R13 NEW-P0-05: no self-declared ``pit_safe`` / ``audited`` tags — those
+        # are owned by the canonical certification record, never by a backend
+        # registration.
         self.metadata = PolarsMetadata(
             name=name,
             category=category,
             description=description,
             param_names=params,
             return_type="series",
-            tags=["daily", "panel", "pit_safe", "audited", "polars_native", category],
+            tags=["daily", "panel", "polars_native", category],
         )
 
     def calculate(self, *args: Any, **kwargs: Any) -> "pl.DataFrame":
@@ -186,6 +195,110 @@ class Spec:
     polars_fn: Callable[..., "pl.DataFrame"] | None = None
 
 
+# R13 NEW-P0-04: logical-contract fields a replacement implementation may ONLY
+# change via the canonical registration — never by rebuilding a reduced copy.
+# A backend replacement may alter {implementation callable, backend capability,
+# implementation hash} alone; every one of these dimensions must be inherited
+# from (or verified equal to) the canonical contract.
+_CONTRACT_FIELDS: tuple[tuple[str, Any], ...] = (
+    ("param_specs", {}),
+    ("param_aliases", {}),
+    ("relational_specs", []),
+    ("param_types", {}),
+    ("input_units", {}),
+    ("compatible_units", {}),
+    ("output_unit", None),
+    ("window_semantics", None),
+    ("input_grain", None),
+    ("output_grain", None),
+    ("available_at", None),
+    ("same_session_usable", None),
+    ("role", None),
+    ("input_arity", None),
+    ("panel_arity", None),
+    ("total_positional_arity", None),
+    ("scalar_params", ()),
+    ("panel_params", ()),
+    ("input_fields", []),
+    ("output_field", None),
+    ("broadcast_specs", ()),
+)
+
+
+def _contract_field_equal(left: Any, right: Any) -> bool:
+    """Structural equality for one logical-contract field (R13 NEW-P0-04).
+
+    Mirrors the registry's ``_logical_field_equal``: containers compare
+    element-wise (so a pandas ``param_specs`` dict and a parallel dict of the
+    same specs compare equal despite different object identities); scalars and
+    ``None`` compare directly.
+    """
+    if isinstance(left, dict) and isinstance(right, dict):
+        if set(left.keys()) != set(right.keys()):
+            return False
+        return all(_contract_field_equal(left[k], right[k]) for k in left)
+    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+        if len(left) != len(right):
+            return False
+        return all(_contract_field_equal(a, b) for a, b in zip(left, right))
+    if isinstance(left, float) and isinstance(right, float) and left != left and right != right:
+        return True  # NaN == NaN for contract comparison
+    return left == right
+
+
+def _inherit_canonical_logical_contract(canonical: str, operator: Any) -> None:
+    """R13 NEW-P0-04: replacement metadata inherits the canonical logical contract.
+
+    Before an overhaul replacement is registered, resolve the canonical's
+    logical contract (ParamSpec / aliases / units / compatible units / output
+    unit / active_when-in-specs / grains / availability / role / arity /
+    broadcast / semantic fields) from the existing catalog entry.  Every empty
+    slot on the replacement is copied from the canonical; every non-empty slot
+    must EQUAL the canonical or registration raises — a replacement may change
+    the implementation, not the logical contract.
+
+    The registry's ``_backfill_logical_contract`` already enforces this at
+    ``register()`` time; this helper makes the overhaul layer honest up front and
+    carries the canonical contract onto the operator *instance* metadata so the
+    central validator sees the same contract on every backend.
+    """
+    meta = getattr(operator, "metadata", None)
+    if meta is None:
+        return
+    catalog = OperatorRegistry._catalog.get(canonical) or {}
+    for field, empty in _CONTRACT_FIELDS:
+        canonical_value = catalog.get(field)
+        if canonical_value in (None, "", (), [], {}):
+            continue  # the canonical declares nothing here — nothing to inherit
+        try:
+            current = getattr(meta, field, None)
+        except AttributeError:  # pragma: no cover - metadata is a dataclass
+            continue
+        if current in (None, "", (), [], {}):
+            # Empty replacement slot -> inherit the canonical contract value so
+            # the operator instance (not just the catalog dict) carries it.
+            try:
+                if isinstance(canonical_value, dict):
+                    setattr(meta, field, dict(canonical_value))
+                elif isinstance(canonical_value, (list, tuple)):
+                    setattr(meta, field, type(canonical_value)(canonical_value))
+                else:
+                    setattr(meta, field, canonical_value)
+            except (AttributeError, TypeError, ValueError):
+                pass  # frozen metadata: the catalog still carries the contract
+            continue
+        # Non-empty replacement-declared value must MATCH the canonical.
+        if not _contract_field_equal(current, canonical_value):
+            raise ValueError(
+                f"overhaul replacement of {canonical!r} diverges from the "
+                f"canonical logical contract: field {field!r} declares "
+                f"{current!r} but the canonical contract holds "
+                f"{canonical_value!r} (R13 NEW-P0-04 — a replacement may change "
+                "only the implementation callable / backend capability / "
+                "implementation hash, never the logical contract)"
+            )
+
+
 def register_specs(specs: dict[str, Spec]) -> None:
     for name, spec in specs.items():
         prior_source = str(
@@ -193,8 +306,12 @@ def register_specs(specs: dict[str, Spec]) -> None:
             .get("pandas_numpy", {}).get("source", "")
             or ""
         )
+        pandas_op = PandasFunctionOperator(name, spec.category, spec.params, spec.description, spec.pandas_fn)
+        # R13 NEW-P0-04: a replacement may change only the implementation — the
+        # canonical logical contract must be inherited / verified, never rebuilt.
+        _inherit_canonical_logical_contract(name, pandas_op)
         OperatorRegistry.register(
-            PandasFunctionOperator(name, spec.category, spec.params, spec.description, spec.pandas_fn),
+            pandas_op,
             canonical=name,
             backend="pandas_numpy",
             source="operator_overhaul_audited",
@@ -208,8 +325,10 @@ def register_specs(specs: dict[str, Spec]) -> None:
             expected_old_source=prior_source,
         )
         if pl is not None and spec.polars_fn is not None:
+            polars_op = PolarsFunctionOperator(name, spec.category, spec.params, spec.description, spec.polars_fn)
+            _inherit_canonical_logical_contract(name, polars_op)
             OperatorRegistry.register(
-                PolarsFunctionOperator(name, spec.category, spec.params, spec.description, spec.polars_fn),
+                polars_op,
                 canonical=name,
                 backend="polars",
                 source="operator_overhaul_native_polars",

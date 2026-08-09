@@ -23,9 +23,19 @@ class FactorSemanticIdentityMismatchError(Exception):
     """
 
 
+class UnreconstructableDataSource(Exception):
+    """数据源的 ``execution_spec()`` 无法还原为可重建的 canonical 配置（#收官轮 P1）。
+
+    production 下 Composite 任一 child 缺失 / 无法序列化 source contract 时抛出，
+    绝不伪造 ``{"type": "data_access"}`` 这类缺 ``dataset`` 的残缺 spec——那会把
+    「无法恢复 source contract」伪装成「有 source config」，事件增量 rebuild 时会
+    拿到一个无法工作的假配置。research 下返回 ``None``（不发明 config）。
+    """
+
+
 class FactorNotFoundError(Exception):
     """因子未在 Catalog 注册时抛出。
-    
+
     参数:
         无
     """
@@ -92,7 +102,7 @@ class MaterializedButCatalogCommitFailed(Exception):
 
 class DualWriteError(Exception):
     """多目标物化部分成功时抛出。
-    
+
     参数:
         message: 见函数签名
         summary: 见函数签名（可选）
@@ -101,15 +111,44 @@ class DualWriteError(Exception):
 
     def __init__(self, message: str, *, summary: dict | None = None, cause: Exception | None = None):
         """初始化实例。
-        
+
         参数:
             message: 见函数签名
             summary: 见函数签名（可选）
             cause: 见函数签名（可选）
-        
+
         返回:
             无
         """
         super().__init__(message)
         self.summary = summary or {}
         self.cause = cause
+
+
+class CatalogCorruptionError(Exception):
+    """catalog JSON 字段损坏/不可解析时抛出（NEW-P0-45）。
+
+    production 下 ``_parse_json_field`` 遇到非法 JSON（如 ``"{broken"``）或
+    checksum 不匹配时，抛本异常而非返回 ``{}``——否则「catalog 数据损坏」会被
+    伪装成「config 缺失」，事件增量 rebuild 拿到假空配置。research 下保留容错
+    返回 ``{}`` 的历史行为。
+    """
+
+
+class CatalogSerializationError(Exception):
+    """catalog 全量定义序列化遇到不支持的对象时抛出（NEW-P0-44）。
+
+    production 下 full definition / data-source config 必须走 typed JSON schema：
+    未知类型（callable / 自定义类 / enum-like 配置）直接报错，绝不
+    ``json.dumps(..., default=str)`` 字符串化——字符串化后的对象无法还原重建。
+    """
+
+
+class FactorRetiredError(Exception):
+    """deleted-factor 复用被拒时抛出（NEW-P0-56/57）。
+
+    ``delete_factor`` 只删 catalog 元数据、不删物理分区文件。复用同一
+    ``factor_id`` 而不显式 ``rebuild=True`` 时，新世代数据会与旧世代分区
+    （2020-2025 旧因子 / 2026 新因子）混在同一个目录下。抛本异常强制调用方
+    升级 factor_id 或显式声明全量重建。
+    """

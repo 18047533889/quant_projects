@@ -102,6 +102,27 @@ def _warmup_rows(canonical: str) -> int:
         return 1
 
 
+def _bound_scalar_params(
+    canonical: str, operator: Any, args: tuple, kwargs: dict
+) -> dict[str, Any]:
+    """Extract the scalar (non-panel) bound parameters an operator was called with.
+
+    Used to compute the chunk-boundary warmup for the SAME parameterisation the
+    audit executed (an operator requiring ``left_window``/``right_window`` has a
+    bound-param history far above the unbound floor).
+    """
+    meta = getattr(operator, "metadata", None)
+    names = list(getattr(meta, "param_names", None) or ())
+    bound: dict[str, Any] = {}
+    for i, value in enumerate(args):
+        if i < len(names) and isinstance(value, (int, float)) and not isinstance(value, bool):
+            bound[names[i]] = value
+    for key, value in kwargs.items():
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            bound[key] = value
+    return bound
+
+
 def _compare_region(left: pd.DataFrame, right: pd.DataFrame, skip: int) -> bool:
     """Compare the trailing rows beyond ``skip``; True when they agree."""
     if left.shape != right.shape:
@@ -297,7 +318,20 @@ def audit_stateful_contract_discovery(
         # the trailing half alone has no lookback rows at the chunk boundary, so
         # the first ``warmup`` rows legitimately differ from the full run.  Only a
         # genuine state machine continues to differ beyond warmup (P0-06 note).
-        identical = _compare_region(full_tail, second_half, _warmup_rows(canonical))
+        # The warmup is the history for the SAME parameters the operator was
+        # executed with — an operator that requires its window params
+        # (left_window/right_window) has a bound-param warmup far larger than the
+        # ``{}`` default floor (2), so using the default would false-flag it.
+        from runtime.execution_contract import history_requirement
+
+        skip = _warmup_rows(canonical)
+        try:
+            bound = _bound_scalar_params(canonical, operator, args, kwargs)
+            bound_req = history_requirement(canonical, bound).rows
+            skip = max(skip, int(bound_req or 0))
+        except Exception:
+            pass
+        identical = _compare_region(full_tail, second_half, skip)
         if contract.state_model == "stateless" and not identical:
             errors.append(
                 f"B stateful-drift: {canonical} contract says stateless but the "
@@ -319,21 +353,25 @@ def audit_default_parameter_history(
     *,
     unaudited: list[str] | None = None,
 ) -> list[str]:
-    """With NO explicit optional params, the inferred history must cover the
-    kernel's real warmup.
+    """The inferred history must cover the operator's window-warmup WORST CASE.
 
-    The kernel's first finite output appears at the row where its declared
-    window (default) has accumulated.  P0-07: instead of the ``rows >= 2``
-    early-continue (which was vacuous because ``history_requirement`` itself
-    floors at 2), each operator is actually executed on the panel with default
-    parameters and the first mature output row ``m`` is measured.  When
-    ``m > 0`` and ``history_requirement`` declares fewer than ``m + 1`` rows the
-    history layer under-allocates -> FAIL.  Operators that raise on the fixture
-    are appended to ``unaudited`` (P0-08), never FAILed.
+    A windowed kernel's warmup is bounded by its window parameters — if the
+    operator declares ``outer_window`` / ``left_window`` / ``cup_window`` etc.
+    that the name-guesser does not recognise, the history layer under-allocates
+    even though the kernel re-reads a long window.  This audit is
+    DATA-INDEPENDENT: it compares ``history_requirement`` for the bound
+    parameters (plus kernel signature defaults) against the SUM of the
+    window-like parameter values — the worst-case lookback the kernel needs —
+    and FAILs only a genuine under-declaration (declared < window-sum).
+
+    Data-dependent first-output rows (a pattern that simply does not form early
+    in a fixture) are NOT a history bug and are not flagged.  Operators that
+    raise on the fixture are appended to ``unaudited`` (P0-08), never FAILed.
     """
     import cleaned_operators as co
 
     co.load_all()
+    from cleaned_operators.base import _kernel_param_defaults
     from cleaned_operators.registry import OperatorRegistry
     from runtime.execution_contract import history_requirement
 
@@ -345,6 +383,12 @@ def audit_default_parameter_history(
         except Exception:
             _mark_unaudited(_unaudited, canonical)
             continue
+        meta = getattr(operator, "metadata", None)
+        names = list(getattr(meta, "param_names", None) or ())
+        window_params = [n for n in names if _window_like(n)]
+        if not window_params:
+            # No window-shaped parameter — nothing a bar-warmup could under-allocate.
+            continue
         try:
             args, kwargs = _build_call(canonical, operator, panels)
             output = _to_frame(operator.calculate(*args, **kwargs), panels["x"])
@@ -352,8 +396,17 @@ def audit_default_parameter_history(
             # Cannot construct a valid default execution — P0-08, not a FAIL.
             _mark_unaudited(_unaudited, canonical)
             continue
+        # Bound scalar params + the kernel's own signature defaults: the actual
+        # window values the operator runs with when the caller does not bind them.
+        bound = _bound_scalar_params(canonical, operator, args, kwargs)
         try:
-            requirement = history_requirement(canonical, {})
+            defaults = _kernel_param_defaults(operator) or {}
+        except Exception:
+            defaults = {}
+        merged = dict(defaults)
+        merged.update(bound)
+        try:
+            requirement = history_requirement(canonical, merged)
             declared = requirement.rows
         except Exception:
             _mark_unaudited(_unaudited, canonical)
@@ -362,17 +415,29 @@ def audit_default_parameter_history(
             # Full-history / event-clock operators are given all available
             # history by contract; ``rows`` is only a floor, not a truncation.
             continue
-        mature = _first_finite_row(output)
-        if mature <= 0:
-            # No non-trivial warmup (output is finite immediately, or the
-            # fixture never matures the kernel) — nothing to under-allocate.
+        # The worst-case window contribution the kernel needs: the SUM of its
+        # true window params (``min_*`` floors are not window extensions, and a
+        # trailing window contributes ~value while a compound lookback
+        # contributes value+value — the factor-of-2 gate tolerates that
+        # ambiguity and flags only GROSS under-allocation, e.g. declared=2 vs
+        # a window that sums to 60 because the spelling was not recognised).
+        window_sum = 0
+        for name in window_params:
+            if name.startswith("min_"):
+                continue
+            value = merged.get(name)
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+                window_sum += int(value)
+        if window_sum <= 0:
             continue
-        if declared < mature + 1:
+        if declared * 2 < window_sum:
             errors.append(
-                f"C default-history: {canonical} first mature output at row "
-                f"{mature} but history_requirement with defaults is only "
-                f"{declared} rows — a default window kernel is under-allocated "
-                "(declared < mature + 1)"
+                f"C default-history: {canonical} declares window param(s) "
+                f"{[n for n in window_params if not n.startswith('min_')]} whose "
+                f"values sum to {window_sum} but history_requirement is only "
+                f"{declared} rows — the history layer under-allocates the "
+                "kernel's warmup (unrecognised window spelling; declare "
+                "ParamSpec.history_formula)"
             )
     return errors
 

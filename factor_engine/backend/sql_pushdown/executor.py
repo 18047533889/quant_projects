@@ -19,12 +19,32 @@ from workspace_paths import quant_projects_root
 from .emitter import (
     BatchCompiledSql,
     CompiledSql,
+    InstrumentFilterKind,
     SqlDialect,
     SqlPushdownFilter,
     compile_plan_to_sql,
     compile_plans_batch_to_sql,
 )
 from .source_resolver import resolve_pushdown_source
+
+
+def _instrument_filter_kind(
+    instrument_filter: Any,
+) -> tuple[InstrumentFilterKind, tuple[str, ...]]:
+    """Classify a data source ``instrument_filter`` into ALL / EMPTY / LIST.
+
+    R13 P0-69: ``None`` means ALL (no restriction), ``[]``/``()`` means EMPTY
+    (explicit zero-row universe), a non-empty sequence means LIST.  The old
+    ``getattr(ds, 'instrument_filter', None) or []`` collapsed ALL and EMPTY.
+    """
+    if instrument_filter is None:
+        return InstrumentFilterKind.ALL, ()
+    if isinstance(instrument_filter, (list, tuple, set, frozenset)):
+        if len(instrument_filter) == 0:
+            return InstrumentFilterKind.EMPTY, ()
+        return InstrumentFilterKind.LIST, tuple(str(x) for x in instrument_filter)
+    # A scalar / unknown type is treated as a single-instrument LIST.
+    return InstrumentFilterKind.LIST, (str(instrument_filter),)
 
 
 def _ensure_data_access() -> None:
@@ -129,13 +149,16 @@ def extract_pushdown_context(ctx: ExecutionContext) -> PushdownContext | None:
         time_col, inst_col = axis_fn()
         start = getattr(ds, "start_date", None)
         end = getattr(ds, "end_date", None)
-        inst_filter = getattr(ds, "instrument_filter", None) or []
+        inst_kind, insts = _instrument_filter_kind(
+            getattr(ds, "instrument_filter", None)
+        )
         filt = SqlPushdownFilter(
             time_column=time_col,
             start=start,
             end=end,
             instrument_column=inst_col,
-            instruments=tuple(inst_filter),
+            instruments=insts,
+            instrument_filter_kind=inst_kind,
         )
         return PushdownContext(
             dialect=SqlDialect.DUCKDB,
@@ -149,7 +172,9 @@ def extract_pushdown_context(ctx: ExecutionContext) -> PushdownContext | None:
     inst_col = getattr(ds, "instrument_column", "instrument")
     start = getattr(ds, "start_date", None)
     end = getattr(ds, "end_date", None)
-    inst_filter = getattr(ds, "instrument_filter", None) or []
+    inst_kind, insts = _instrument_filter_kind(
+        getattr(ds, "instrument_filter", None)
+    )
     ch_overrides = getattr(ds, "_ch_overrides", None)
     return PushdownContext(
         dialect=SqlDialect.CLICKHOUSE,
@@ -161,7 +186,8 @@ def extract_pushdown_context(ctx: ExecutionContext) -> PushdownContext | None:
             start=start,
             end=end,
             instrument_column=str(inst_col),
-            instruments=tuple(inst_filter),
+            instruments=insts,
+            instrument_filter_kind=inst_kind,
         ),
         ch_config=dict(ch_overrides) if ch_overrides else None,
     )

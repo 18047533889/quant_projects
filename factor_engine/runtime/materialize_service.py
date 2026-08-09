@@ -17,7 +17,10 @@ from logging_utils import get_logger
 from runtime import dual_write_service, lineage_service
 from runtime.production_policy import is_production_mode
 from storage.catalog import compute_ir_hash
-from storage.exceptions import MaterializedButCatalogCommitFailed
+from storage.exceptions import (
+    MaterializedButCatalogCommitFailed,
+    UnreconstructableDataSource,
+)
 from storage.materializer import ParquetMaterializer
 
 logger = get_logger("runtime.materialize_service")
@@ -53,6 +56,7 @@ def _build_full_factor_definition(
     data_source_config: dict | None,
     analysis: Any,
     pit_enforce: bool | None = None,
+    scope: Any = None,
 ) -> dict[str, Any]:
     """从 materialize 现场收集因子完整重建规格（R11 #5）。
 
@@ -60,20 +64,32 @@ def _build_full_factor_definition(
     dialect=None / market=None / universe=None / run_mode=None / backend=pandas /
     pit_enforce=None —— 即「公式一样，但执行语义已经不是原来的 factor」。
     正常成功 materialize 必须原子持久化完整规格。
+
+    #收官轮 P0：所有语义字段（market/universe/frequency/calendar/decision_policy）
+    一律取 canonical ``FactorExecutionScope``（``_scope_from_factor``，优先
+    ``factor.semantic_identity``）——绝不能在这里重新拼第二套 ``factor.freq`` /
+    ``factor.universe`` 语义，否则会出现「执行 scope=5m、落库 identity=1d」分裂。
     """
     ds = getattr(engine, "data_source", None)
+    if pit_enforce is None:
+        pit_enforce = getattr(ds, "pit_enforce", None)
+    scope_f = getattr(scope, "frequency", None)
+    scope_u = getattr(scope, "universe_id", None)
+    scope_m = getattr(scope, "market", None)
+    scope_c = getattr(scope, "calendar_id", None)
+    scope_d = getattr(scope, "decision_time_policy", None)
     market = (
-        getattr(factor, "market", None)
+        (scope_m or None)
+        or getattr(factor, "market", None)
         or getattr(ds, "market", None)
         or getattr(ds, "market_code", None)
     )
     calendar = (
-        getattr(ds, "calendar_id", None)
+        (scope_c or None)
+        or getattr(ds, "calendar_id", None)
         or getattr(ds, "calendar", None)
         or getattr(factor, "calendar_id", None)
     )
-    if pit_enforce is None:
-        pit_enforce = getattr(ds, "pit_enforce", None)
     return {
         "factor_id": factor_id,
         "expression": expression or getattr(factor, "source_expr", None),
@@ -81,10 +97,10 @@ def _build_full_factor_definition(
         "dialect": getattr(factor, "dialect", None),
         "dialect_version": getattr(factor, "dialect_version", None),
         "market": market,
-        "universe": getattr(factor, "universe", None),
-        "frequency": frequency or getattr(factor, "freq", None),
+        "universe": (scope_u or None) or getattr(factor, "universe", None),
+        "frequency": frequency or scope_f or getattr(factor, "freq", None),
         "data_source_config": data_source_config or {},
-        "decision_policy": None,
+        "decision_policy": (scope_d or None) or getattr(factor, "decision_time_policy", None),
         "run_mode": getattr(engine, "run_mode", None),
         "calendar": calendar,
         "backend": _backend_kind(getattr(engine, "backend", None)),
@@ -113,6 +129,10 @@ def _effective_data_source_config(
         return None
     try:
         spec = spec_fn()
+    except UnreconstructableDataSource:
+        # #收官轮 P1：production 下 Composite child 无法序列化是硬错误，必须
+        # 向上抛（调用方 production fail-closed），不能被当作「不可用」吞掉。
+        raise
     except Exception:  # pragma: no cover - 推导失败按不可用处理
         return None
     if isinstance(spec, dict) and spec:
@@ -130,6 +150,7 @@ def _build_semantic_identity(
     data_source_config: dict | None,
     run_lineage: dict | None,
     pit_enforce: bool | None,
+    scope: Any = None,
 ) -> Any:
     """从 materialize 现场构建完整 ``FactorSemanticIdentity``（#收官轮 P0）。
 
@@ -139,8 +160,14 @@ def _build_semantic_identity(
     同 factor_id（``FactorCatalog.register`` 的
     ``FactorSemanticIdentityMismatchError``）。
 
-    语义字段优先级：engine / data_source 显式执行语义 > factor 元数据 > 兜底
-    ``None``。无法获取真实语义时宁可显式 ``None`` 也不猜测。
+    语义字段优先级：canonical ``FactorExecutionScope``（``_scope_from_factor``，
+    优先 ``factor.semantic_identity``）> engine / data_source 显式执行语义 >
+    factor 元数据 > 兜底 ``None``。无法获取真实语义时宁可显式 ``None`` 也不猜测。
+
+    #收官轮 P0：market / calendar / universe / decision_time_policy / frequency
+    必须与执行引擎 ``_scope_from_factor`` 消费同一个 scope——否则因子 A 的
+    ``factor.freq=1d`` 但 ``semantic_identity.frequency=5m`` 时，执行按 5m 跑、
+    身份却按 1d 落库，factor_version 与实际执行语义 split-brain。
     """
     if ir_node is None and not ast_hash:
         return None
@@ -151,6 +178,10 @@ def _build_semantic_identity(
     pit_effective = bool(
         pit_enforce if pit_enforce is not None else getattr(ds, "pit_enforce", False)
     )
+    scope_u = getattr(scope, "universe_id", None)
+    scope_m = getattr(scope, "market", None)
+    scope_c = getattr(scope, "calendar_id", None)
+    scope_d = getattr(scope, "decision_time_policy", None)
     ctx: dict[str, Any] = {
         "ir_hash": ast_hash,
         "operator_contract_hash": (run_lineage or {}).get("operator_catalog_hash"),
@@ -161,18 +192,21 @@ def _build_semantic_identity(
         "factor": factor,
         "frequency": frequency,
         "market": (
-            getattr(engine, "market", None)
+            (scope_m or None)
+            or getattr(engine, "market", None)
             or getattr(ds, "market", None)
             or getattr(ds, "market_code", None)
         ),
         "calendar": (
-            getattr(ds, "calendar_id", None) or getattr(ds, "calendar", None)
+            (scope_c or None)
+            or getattr(ds, "calendar_id", None)
+            or getattr(ds, "calendar", None)
         ),
         "timezone": getattr(ds, "timezone", None),
-        "universe": getattr(factor, "universe", None),
+        "universe": (scope_u or None) or getattr(factor, "universe", None),
         "price_basis": getattr(ds, "price_basis", None),
         "pit_policy": "enforce" if pit_effective else None,
-        "decision_time_policy": getattr(ds, "decision_time_policy", None),
+        "decision_time_policy": (scope_d or None) or getattr(ds, "decision_time_policy", None),
         "dialect": getattr(factor, "dialect", None),
         "dialect_version": getattr(factor, "dialect_version", None),
     }
@@ -294,15 +328,24 @@ def execute_materialize(
     # #收官轮 P0：完整语义身份（含 frequency/market/universe/pit/dialect）在
     # orchestrator 层构建后显式传入——物化器不再根据残缺 ctx 重建（那样 freq
     # 1d 与 5m 会同 digest / 同 factor_version）。
+    # #收官轮 P0：执行作用域只算一次，且必须与执行引擎共用同一个
+    # ``_scope_from_factor``（优先 ``factor.semantic_identity``）——cache scope、
+    # factor_version、full definition、事件 rebuild 全部消费它，杜绝
+    # 「执行 5m / 落库 1d」的语义分裂。
+    from runtime.engine import _scope_from_factor
+
+    scope = _scope_from_factor(factor, data_source=engine.data_source)
+    frequency_effective = frequency or getattr(scope, "frequency", None) or factor.freq
     semantic_identity = _build_semantic_identity(
         engine=engine,
         factor=factor,
         ir_node=analysis.ir,
         ast_hash=ast_hash,
-        frequency=frequency or factor.freq,
+        frequency=frequency_effective,
         data_source_config=effective_data_source_config,
         run_lineage={**lineage.to_dict(), "factor_id": factor_id or factor.name},
         pit_enforce=pit_enforce,
+        scope=scope,
     )
 
     summary = materializer.materialize(
@@ -310,7 +353,7 @@ def execute_materialize(
         result=output["result"],
         ir_node=analysis.ir,
         author=author,
-        frequency=frequency or factor.freq,
+        frequency=frequency_effective,
         description=description or factor.description,
         expression=expression,
         dq_check=dq_check,
@@ -343,18 +386,20 @@ def execute_materialize(
             factor_id=factor_id or factor.name,
             analysis=analysis,
             data_source=engine.data_source,
-            frequency=frequency or factor.freq,
+            frequency=frequency_effective,
+            production=production,
             full_definition=_build_full_factor_definition(
                 engine=engine,
                 factor=factor,
                 factor_id=factor_id or factor.name,
                 author=author,
-                frequency=frequency,
+                frequency=frequency_effective,
                 description=description,
                 expression=expression,
                 data_source_config=effective_data_source_config,
                 analysis=analysis,
                 pit_enforce=pit_enforce,
+                scope=scope,
             ),
         )
     except Exception as exc:
@@ -373,15 +418,25 @@ def execute_materialize(
         logger.warning("因子依赖 catalog 写入失败 factor=%s: %s", factor.name, exc)
 
     if needs_clickhouse_write(target):
+        # #收官轮 P0：canonical factor_version 只算一次，Parquet/catalog/ClickHouse
+        # 用同一份（identity digest 前缀）。data_snapshot_id 也改用
+        # ``effective_data_source_config``（与 Parquet/lineage 同源），不再用调用方
+        # 原始 ``data_source_config``（可能为空 → snapshot id 两侧不一致）。
+        canonical_factor_version = (
+            semantic_identity.identity_digest()[:16]
+            if semantic_identity is not None
+            else ast_hash[:16]
+        )
         summary = dual_write_service.dual_write_clickhouse(
             materializer,
             summary,
             factor_id=factor_id or factor.name,
             result=output["result"],
             ast_hash=ast_hash,
+            factor_version=canonical_factor_version,
             write_target=target,
             data_snapshot_id=lineage_service.resolve_data_snapshot_id(
-            engine.data_source, data_source_config
+            engine.data_source, effective_data_source_config
         ),
             clickhouse_table=clickhouse_table,
             preserve_invalid_rows=preserve_invalid_rows,

@@ -548,14 +548,24 @@ def _leaf_fields(node: IRNode, out: set[str]) -> None:
         _leaf_fields(child, out)
 
 
-def _leaf_field_attrs(node: IRNode, out: list[tuple[str, dict[str, Any]]]) -> None:
-    """Collect ``(leaf_field_name, semantic_attrs)`` pairs under ``node``."""
-    if node.op == "column":
-        name = str((node.attrs or {}).get("field") or (node.attrs or {}).get("name") or "")
-        if name:
-            out.append((name, node.semantic_attrs or {}))
-    for child in node.inputs:
-        _leaf_field_attrs(child, out)
+def _direct_child_attrs(node: IRNode) -> list[tuple[str, dict[str, Any]]]:
+    """Collect ``(child_name, semantic_attrs)`` for a node's DIRECT children.
+
+    R11 contract: each AST node carries its OWN propagated ``OutputSemanticType``
+    (in ``semantic_attrs``), so a parent validates only its direct children's
+    semantic attributes — never a scan of descendant leaves.  ``child_name`` is
+    the child's column name when it is a leaf field, otherwise a positional
+    ``input[N]`` label used only for the legacy name-based fallbacks.
+    """
+    out: list[tuple[str, dict[str, Any]]] = []
+    for index, child in enumerate(node.inputs):
+        name = str(
+            (child.attrs or {}).get("field")
+            or (child.attrs or {}).get("name")
+            or f"input[{index}]"
+        )
+        out.append((name, child.semantic_attrs or {}))
+    return out
 
 
 def _is_return_field(name: str) -> bool:
@@ -618,14 +628,17 @@ def validate_typed_input_contracts(ir: IRNode) -> list[str]:
     ``fields.registry.resolve_field`` -> ``FieldSpec.price_basis``, then the
     canonical concept registry), falling back to the legacy hardcoded name-sets
     when a field carries no typed basis.
+
+    R11 P0-22: each validator checks only DIRECT children's own
+    ``semantic_attrs`` (never a descendant-leaf scan) — the parent reads each
+    child's propagated ``price_basis`` / name instead of sweeping the subtree.
     """
     errors: list[str] = []
 
     def walk(node: IRNode) -> None:
-        leaves: list[tuple[str, dict[str, Any]]] = []
-        _leaf_field_attrs(node, leaves)
+        children = _direct_child_attrs(node)
         if node.op in _DRAWDOWN_FAMILY:
-            for name, sem in leaves:
+            for name, sem in children:
                 basis = sem.get("price_basis") or _price_basis_of_field(name)
                 if _is_return_field(name) or basis in {"RETURN"}:
                     errors.append(
@@ -633,7 +646,7 @@ def validate_typed_input_contracts(ir: IRNode) -> list[str]:
                         "level / wealth-index input (audit P1-T)"
                     )
         elif node.op in _SPECTRAL_FAMILY:
-            for name, sem in leaves:
+            for name, sem in children:
                 basis = sem.get("price_basis") or _price_basis_of_field(name)
                 if name in _RAW_PRICE_FIELDS or basis in {"RAW"}:
                     errors.append(
@@ -641,7 +654,7 @@ def validate_typed_input_contracts(ir: IRNode) -> list[str]:
                         "analysis requires continuous/return input (audit P1-T)"
                     )
         elif str(node.op).startswith("ashare_limit_"):
-            for name, sem in leaves:
+            for name, sem in children:
                 basis = sem.get("price_basis") or _price_basis_of_field(name)
                 if name in _CONTINUOUS_PRICE_FIELDS or basis in {"CONTINUOUS", "RETURN"}:
                     errors.append(
@@ -663,28 +676,31 @@ def validate_semantic_kind_contracts(ir: IRNode) -> list[str]:
     / ``ReturnDecimal`` / ...) rather than field-name guessing, and is additive
     to :func:`validate_typed_input_contracts` (which keeps the name-set fallback
     for unresolvable legacy columns).
+
+    R11 P0-22: only DIRECT children's own ``semantic_attrs`` are validated (never
+    a descendant-leaf scan) — each child's propagated ``semantic_kind`` is the
+    single authority for its input type.
     """
     errors: list[str] = []
 
     def walk(node: IRNode) -> None:
-        leaves: list[tuple[str, dict[str, Any]]] = []
-        _leaf_field_attrs(node, leaves)
+        children = _direct_child_attrs(node)
         if node.op in _DRAWDOWN_FAMILY:
-            for name, sem in leaves:
+            for name, sem in children:
                 if sem.get("semantic_kind") == "ReturnDecimal" or _is_return_field(name):
                     errors.append(
                         f"{node.op} on return input {name}: drawdown requires a "
                         "level / wealth-index input (typed-IR P0-30)"
                     )
         elif node.op in _SPECTRAL_FAMILY:
-            for name, sem in leaves:
+            for name, sem in children:
                 if sem.get("semantic_kind") == "PriceRaw" or name in _RAW_PRICE_FIELDS:
                     errors.append(
                         f"{node.op} on raw split-sensitive price {name}: spectral "
                         "analysis requires continuous/return input (typed-IR P0-30)"
                     )
         elif str(node.op).startswith("ashare_limit_"):
-            for name, sem in leaves:
+            for name, sem in children:
                 if sem.get("semantic_kind") in {"PriceContinuous", "ReturnDecimal"}:
                     errors.append(
                         f"{node.op} on continuous price {name}: A-share limit "

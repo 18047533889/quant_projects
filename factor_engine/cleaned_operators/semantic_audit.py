@@ -38,6 +38,8 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
+from backend.operator_errors import OperatorParameterError
+
 # ---------------------------------------------------------------------------
 # findings / report
 # ---------------------------------------------------------------------------
@@ -60,8 +62,10 @@ class AuditFinding:
 @dataclass
 class AuditReport:
     findings: list[AuditFinding] = field(default_factory=list)
-    ran: dict[str, int] = field(default_factory=dict)          # rule -> ops checked
-    skipped: dict[str, list[str]] = field(default_factory=dict)  # rule -> reasons
+    ran: dict[str, int] = field(default_factory=dict)          # rule -> ops PASS-checked
+    skipped: dict[str, list[str]] = field(default_factory=dict)  # rule -> NOT_APPLICABLE reasons
+    audit_errors: dict[str, list[str]] = field(default_factory=dict)  # rule -> AUDIT_ERROR reasons
+    evidence: dict[str, dict[str, Any]] = field(default_factory=dict)  # canonical -> evidence record
 
     def add(self, finding: AuditFinding) -> None:
         self.findings.append(finding)
@@ -70,18 +74,54 @@ class AuditReport:
         self.ran[rule] = self.ran.get(rule, 0) + 1
 
     def note_skipped(self, rule: str, reason: str) -> None:
+        """NOT_APPLICABLE: the rule cannot decide for this operator by design
+        (no side param / not a CS op / fixture cannot exercise it).  Coverage is
+        never silently truncated — the reason is always recorded."""
         self.skipped.setdefault(rule, []).append(reason)
+
+    def note_audit_error(self, rule: str, reason: str) -> None:
+        """AUDIT_ERROR (R13 NEW-P0-07): the RULE itself raised on an operator.
+        This is a release-failing infrastructure fault, distinct from a
+        NOT_APPLICABLE skip and from a PASS/FAIL finding."""
+        self.audit_errors.setdefault(rule, []).append(reason)
 
     @property
     def errors(self) -> list[AuditFinding]:
         return [f for f in self.findings if f.severity == "error"]
 
+    @property
+    def audit_error_count(self) -> int:
+        return sum(len(v) for v in self.audit_errors.values())
+
+    def coverage(self) -> dict[str, int]:
+        """Per-rule outcome tally (R13 NEW-P0-06/07): PASS-checked vs
+        NOT_APPLICABLE vs AUDIT_ERROR.  ``audit_error_count`` must be 0 for any
+        release gate; ``audited / (audited + not_applicable)`` is the honest
+        decision coverage for the rule."""
+        return {
+            "checked": sum(self.ran.values()),
+            "not_applicable": sum(len(v) for v in self.skipped.values()),
+            "audit_errors": self.audit_error_count,
+        }
+
+    def certification_safe(self) -> bool:
+        """R13 NEW-P0-71: the audit run is safe to use as certification evidence
+        ONLY when no error-severity finding fired and no rule crashed."""
+        return not self.errors and self.audit_error_count == 0
+
     def summary(self) -> str:
         lines = [f"{len(self.findings)} findings across {len(self.ran)} rules"]
         for rule, count in sorted(self.ran.items()):
             skipped = self.skipped.get(rule)
-            extra = f" ({len(skipped)} skipped)" if skipped else ""
+            errs = self.audit_errors.get(rule)
+            extra = ""
+            if skipped:
+                extra += f" ({len(skipped)} not-applicable)"
+            if errs:
+                extra += f" ({len(errs)} AUDIT_ERROR)"
             lines.append(f"  {rule}: {count} checked{extra}")
+        if self.audit_error_count:
+            lines.append(f"AUDIT_ERRORS: {self.audit_error_count} (release gate FAILS)")
         return "\n".join(lines)
 
 
@@ -157,7 +197,10 @@ SAMPLE: dict[str, Callable[[], OperatorSample]] = {
     "ts_transfer_entropy_peak_excess": lambda: OperatorSample(
         "ts_transfer_entropy_peak_excess",
         list(_panel_pair(seed=7)),
-        {"window": 30},
+        # R13: window=30 was infeasible — the kernel requires window-lag >=
+        # min_transitions(30); with the default lag the effective window is
+        # window-20, so 30 left a 10<30 gap and every rule AUDIT_ERROR'd.
+        {"window": 60},
     ),
 }
 
@@ -198,6 +241,120 @@ def _unit_tag(op: Any) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# R13 NEW-P0-06: contract-driven fixture generation over the full catalog
+# ---------------------------------------------------------------------------
+
+def _stable_seed(canonical: str) -> int:
+    import zlib
+
+    return abs(zlib.crc32(canonical.encode("utf-8")))
+
+
+def _domain_panel(unit: str | None, seed: int = 0) -> pd.DataFrame:
+    """A synthetic panel appropriate to the declared input unit."""
+    if unit in {"condition", "event", "event_indicator"}:
+        return (_panel(seed=seed, positive=True) > 0.5).astype(float)
+    if unit in {"group", "group_id", "category", "membership"}:
+        idx = pd.date_range("2024-01-01", periods=40, freq="B")
+        cols = [f"S{i}" for i in range(3)]
+        return pd.DataFrame(
+            {c: pd.Series(["G"] * len(idx), index=idx, dtype=object) for c in cols}
+        )
+    if unit in {"price", "amount", "volume", "positive", "rate"}:
+        return _panel(seed=seed, positive=True)
+    return _panel(seed=seed)
+
+
+def contract_fixture(canonical: str) -> OperatorSample | None:
+    """R13 NEW-P0-06: best-effort OperatorSample generated from the operator's
+    DECLARED contract — panel inputs from ``panel_params`` / ``input_units``,
+    scalars from ``ParamSpec.default``.
+
+    Returns ``None`` when the panel arity is genuinely undeterminable (the caller
+    records it as NOT_APPLICABLE rather than guessing).  Family rules that cannot
+    run the resulting fixture report NOT_APPLICABLE; only rule-code faults become
+    AUDIT_ERROR.
+    """
+    from cleaned_operators.base import MISSING
+
+    try:
+        op = _resolve_op(canonical)
+    except KeyError:
+        return None
+    meta = getattr(op, "metadata", None)
+    if meta is None:
+        return None
+    param_names = list(getattr(meta, "param_names", None) or [])
+    panel_params = list(getattr(meta, "panel_params", None) or [])
+    scalar_params = list(getattr(meta, "scalar_params", None) or [])
+    input_units = getattr(meta, "input_units", None) or {}
+    specs = getattr(meta, "param_specs", None) or {}
+
+    if not panel_params:
+        panel_params = [
+            k for k in input_units if k in param_names and k not in specs
+        ]
+    if not panel_params and not scalar_params:
+        # unary elementwise family: exactly one implied panel
+        panel_params = ["x"]
+    if not panel_params:
+        return None
+
+    frames = [
+        _domain_panel(input_units.get(p), seed=_stable_seed(f"{canonical}:{i}"))
+        for i, p in enumerate(panel_params)
+    ]
+    kwargs: dict[str, Any] = {}
+    for name in scalar_params:
+        spec = specs.get(name)
+        if spec is not None and getattr(spec, "default", MISSING) is not MISSING:
+            kwargs[name] = spec.default
+    return OperatorSample(canonical, frames, kwargs, note="contract-fixture")
+
+
+@dataclass(frozen=True)
+class OutputRangeContract:
+    """R13 NEW-P1-13: the ONLY authority for output-range bounds.
+
+    ``unit``-tag guessing was dropped — "ratio" covers shapes that are not
+    [0,1]-bounded (slope, score), so a bounded output must be DECLARED.  A family
+    declares it via the metadata tag ``output_range:<lo>:<hi>:<cl|op>:<cl|op>``
+    (bounds + open/closed markers, both sides closed by default) or a
+    ``metadata.output_range`` tuple ``(lo, hi, closed_lo, closed_hi)``.
+    """
+
+    lower: float
+    upper: float
+    closed_lower: bool = True
+    closed_upper: bool = True
+    source: str = "declared"
+
+
+def _output_range_contract(op: Any) -> OutputRangeContract | None:
+    for tag in (getattr(op.metadata, "tags", None) or []):
+        text = str(tag)
+        if not text.startswith("output_range:"):
+            continue
+        parts = text.split(":")[1:]
+        try:
+            lo, hi = float(parts[0]), float(parts[1])
+        except (IndexError, ValueError):
+            continue
+        cl = parts[2] != "op" if len(parts) > 2 else True
+        cu = parts[3] != "op" if len(parts) > 3 else True
+        return OutputRangeContract(lo, hi, cl, cu)
+    attr = getattr(op.metadata, "output_range", None)
+    if isinstance(attr, (tuple, list)) and len(attr) >= 2:
+        return OutputRangeContract(
+            float(attr[0]),
+            float(attr[1]),
+            bool(attr[2]) if len(attr) > 2 else True,
+            bool(attr[3]) if len(attr) > 3 else True,
+        )
+    return None
+
+
+# ---------------------------------------------------------------------------
 # rules
 # ---------------------------------------------------------------------------
 
@@ -218,7 +375,14 @@ def _rule(name: str, *, category: str, description: str):
 @_rule("default_output_finite", category="default", description="defaults must not make a factor (nearly) dead")
 def _default_output_finite(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     sample = ctx["sample"]
-    out = _run(op, sample.frames, sample.kwargs)
+    try:
+        out = _run(op, sample.frames, sample.kwargs)
+    except Exception as exc:  # noqa: BLE001 — fixture cannot exercise the op
+        ctx["report"].note_skipped(
+            "default_output_finite",
+            f"{op.metadata.name}: sample not runnable ({type(exc).__name__}: {exc})",
+        )
+        return []
     ratio = _finite_ratio(out, warmup_rows=10)
     if ratio < 0.05:
         return [AuditFinding(
@@ -231,26 +395,57 @@ def _default_output_finite(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
 
 @_rule("parameter_injectivity", category="parameter", description="5.1 must never silently equal 5")
 def _parameter_injectivity(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
+    from cleaned_operators.base import MISSING
+
     sample = ctx["sample"]
-    int_param = next(
-        (n for n, s in (getattr(op.metadata, "param_specs", None) or {}).items()
-         if getattr(s, "dtype", None) is int),
-        None,
-    )
-    if int_param is None or int_param in sample.kwargs:
-        return []  # no declared int param auditable through defaults (or pinned)
-    current = sample.kwargs.get(int_param)
-    value = current if current is not None else 5
-    broken = float(value) + 0.1
-    try:
-        _run(op, sample.frames, {**sample.kwargs, int_param: broken})
-    except Exception:
-        return []  # loud failure: 5.1 rejected — correct
-    return [AuditFinding(
-        "parameter_injectivity", op.metadata.name, "error",
-        f"int param {int_param}: {broken} silently accepted (truncated to "
-        f"{int(broken)}), corrupting the search space",
-    )]
+    specs = getattr(op.metadata, "param_specs", None) or {}
+    types = getattr(op.metadata, "param_types", None) or {}
+    names = list(getattr(op.metadata, "param_names", None) or [])
+    # R13 NEW-P1-12: EVERY declared searchable int parameter is probed — not just
+    # the first one that happens not to be pinned in the sample kwargs.
+    int_params: list[str] = []
+    for n in names:
+        spec = specs.get(n)
+        if spec is not None:
+            if getattr(spec, "dtype", None) is int and getattr(spec, "searchable", True):
+                int_params.append(n)
+        elif types.get(n) is int:
+            int_params.append(n)
+    findings: list[AuditFinding] = []
+    for int_param in int_params:
+        if int_param in sample.kwargs:
+            base = sample.kwargs[int_param]
+        else:
+            base = getattr(specs.get(int_param), "default", MISSING)
+            if base is MISSING:
+                base = 5
+        if isinstance(base, bool) or not isinstance(base, (int, float)):
+            continue
+        broken = float(base) + 0.1
+        spec = specs.get(int_param)
+        if spec is not None:
+            mx = getattr(spec, "max", None)
+            mn = getattr(spec, "min", None)
+            if mx is not None and broken > mx:
+                continue  # cannot construct a legal fractional probe above max
+            if mn is not None and broken < mn:
+                continue
+        try:
+            _run(op, sample.frames, {**sample.kwargs, int_param: broken})
+        except OperatorParameterError:
+            continue  # loud failure: 5.1 rejected — correct
+        except Exception as exc:  # noqa: BLE001 — fixture cannot exercise the op
+            ctx["report"].note_skipped(
+                "parameter_injectivity",
+                f"{op.metadata.name}: fixture not runnable ({type(exc).__name__}: {exc})",
+            )
+            return []
+        findings.append(AuditFinding(
+            "parameter_injectivity", op.metadata.name, "error",
+            f"int param {int_param}: {broken} silently accepted (truncated to "
+            f"{int(broken)}), corrupting the search space",
+        ))
+    return findings
 
 
 @_rule("relational_constraints", category="parameter", description="min_periods<=window, lag<window, k<=N")
@@ -273,11 +468,15 @@ def _relational_constraints(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
                 "accepted silently; window/min_periods must be validated",
             ))
     if "lag" in names:
-        w = sample.kwargs.get("window", 20)
-        lag = sample.kwargs.get("lag", 5)
-        bad = {"lag": max(int(w), int(lag)) + 5, **sample.kwargs}
-        if "window" in bad:
-            bad["window"] = int(w)
+        w = int(sample.kwargs.get("window", 20))
+        lag = int(sample.kwargs.get("lag", 5))
+        # R13: the old ``{"lag": X, **sample.kwargs}`` unpack let a pinned
+        # ``lag`` in the sample overwrite the injected violation, so the rule
+        # reported a false positive on the ORIGINAL (valid) lag.  Build from the
+        # sample kwargs and THEN override lag — the violation is real.
+        bad = dict(sample.kwargs)
+        bad["lag"] = max(w, lag) + 5
+        bad["window"] = w
         try:
             _run(op, sample.frames, bad)
         except Exception:
@@ -333,12 +532,26 @@ def _column_permutation(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
         ctx["report"].note_skipped("column_permutation", f"{op.metadata.name}: not cross-sectional")
         return []
     frames = [f.copy() for f in sample.frames]
-    out0 = _run(op, frames, sample.kwargs)
+    try:
+        out0 = _run(op, frames, sample.kwargs)
+    except Exception as exc:  # noqa: BLE001 — fixture cannot exercise the op
+        ctx["report"].note_skipped(
+            "column_permutation",
+            f"{op.metadata.name}: fixture not runnable ({type(exc).__name__}: {exc})",
+        )
+        return []
     order = list(range(frames[0].shape[1]))
     rng = np.random.default_rng(42)
     shuffled = list(rng.permutation(order))
     perm_frames = [f.iloc[:, shuffled] for f in frames]
-    outp = _run(op, perm_frames, sample.kwargs)
+    try:
+        outp = _run(op, perm_frames, sample.kwargs)
+    except Exception as exc:  # noqa: BLE001 — fixture not runnable on the shuffled panels
+        ctx["report"].note_skipped(
+            "column_permutation",
+            f"{op.metadata.name}: fixture not runnable after permutation ({type(exc).__name__}: {exc})",
+        )
+        return []
     # undo the permutation on the OUTPUT columns
     inv = sorted(range(len(shuffled)), key=lambda i: shuffled[i])
     outp = outp.iloc[:, inv]
@@ -353,6 +566,23 @@ def _column_permutation(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     return []
 
 
+# Count/aggregation families legitimately EXCLUDE unknown rows from both the
+# numerator and denominator (documented ConditionBool policy, R12) — a NaN
+# condition row yields a finite "count of confirmed-True among confirmed", which
+# is NOT treating the unknown as confirmed.  The strict NaN->NaN output rule
+# applies only to STATE-output operators, where the output at row t IS the
+# current row's event/condition state (R13 NEW-P0-08 + family scoping).
+_STATE_OUTPUT_MARKERS = (
+    "state", "days_since", "time_since", "true_streak", "streak", "latch",
+    "since", "until", "transition", "flag", "if_last", "last_if", "is_",
+    "segment_state",
+)
+_COUNT_FAMILY_MARKERS = (
+    "count", "sum_if", "mean_if", "std_if", "ratio", "share", "coverage",
+    "spacing", "entropy", "prob",
+)
+
+
 @_rule("missing_state", category="state", description="NaN event/condition state is not 'confirmed'")
 def _missing_state(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     sample = ctx["sample"]
@@ -360,6 +590,15 @@ def _missing_state(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     cond_name = next((n for n in names if n in {"condition", "event", "event_indicator"}), None)
     if cond_name is None:
         ctx["report"].note_skipped("missing_state", f"{op.metadata.name}: no condition/event param")
+        return []
+    op_name = op.metadata.name
+    if any(m in op_name for m in _COUNT_FAMILY_MARKERS) and not any(m in op_name for m in _STATE_OUTPUT_MARKERS):
+        ctx["report"].note_skipped(
+            "missing_state",
+            f"{op_name}: windowed count/aggregation family — unknown rows are "
+            "EXCLUDED from num and den (documented ConditionBool policy), not "
+            "treated as confirmed (R13 family scoping)",
+        )
         return []
     cond = (_panel(seed=13) > 0).astype(float)  # 0/1 ConditionBool panel
     cond.iloc[20, 0] = np.nan  # unknown state mid-panel
@@ -379,11 +618,16 @@ def _missing_state(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
         return []
     arr = out.to_numpy(dtype=float)
     row = 20
-    if np.isfinite(arr[row, 0]) and not np.isnan(cond.to_numpy()[row, 0]):
+    # R13 NEW-P0-08: the judgement was INVERTED — the injected cell is NaN, so the
+    # old guard ``not np.isnan(cond[row,0])`` was always False and the failure
+    # ("NaN condition -> finite output") could never fire.  The rule fires exactly
+    # when the unknown state yields a finite (confirmed-looking) output.
+    if np.isnan(cond.to_numpy()[row, 0]) and np.isfinite(arr[row, 0]):
         return [AuditFinding(
-            "missing_state", op.metadata.name, "warning",
-            "a NaN (unknown) event/condition state at row 20 yields a finite output — "
-            "unknown state must be censored (NaN), not treated as confirmed",
+            "missing_state", op.metadata.name, "error",
+            "a NaN (unknown) event/condition state at row 20 yields a FINITE "
+            "output — unknown state must be censored (NaN), never treated as "
+            "confirmed True/False (R13 NEW-P0-08)",
         )]
     return []
 
@@ -430,34 +674,45 @@ def _semantic_type_gate(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     )]
 
 
-_RANGE_BOUNDS: dict[str, tuple[float, float]] = {
-    "ratio": (0.0, 1.0),
-    "probability": (0.0, 1.0),
-    "correlation": (-1.0, 1.0),
-}
-
-
-@_rule("finite_range", category="range", description="declared probability/correlation/count bounds hold")
+@_rule("finite_range", category="range", description="declared output-range bounds hold")
 def _finite_range(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     sample = ctx["sample"]
-    unit = (_unit_tag(op) or "").lower()
-    if unit == "ratio":
-        return []  # "ratio" covers many non-bounded shapes (e.g. slope) — not auditable
-    if unit not in _RANGE_BOUNDS:
-        ctx["report"].note_skipped("finite_range", f"{op.metadata.name}: unit={unit!r} not in {sorted(_RANGE_BOUNDS)}")
+    # R13 NEW-P1-13: bounds come ONLY from a declared OutputRangeContract — never
+    # guessed from the unit tag ("ratio" covers slope/score shapes that are not
+    # [0,1]-bounded; probability/correlation unit guessing is equally unreliable).
+    contract = _output_range_contract(op)
+    if contract is None:
+        ctx["report"].note_skipped(
+            "finite_range",
+            f"{op.metadata.name}: no declared OutputRangeContract; output bounds are "
+            "not guessed from the unit tag (R13 NEW-P1-13)",
+        )
         return []
-    low, high = _RANGE_BOUNDS[unit]
-    out = _run(op, sample.frames, sample.kwargs)
+    try:
+        out = _run(op, sample.frames, sample.kwargs)
+    except Exception as exc:  # noqa: BLE001 — contract fixture cannot exercise it
+        ctx["report"].note_skipped(
+            "finite_range",
+            f"{op.metadata.name}: fixture not runnable ({type(exc).__name__}: {exc})",
+        )
+        return []
     arr = out.to_numpy(dtype=float)
     fin = arr[np.isfinite(arr)]
     if fin.size == 0:
         return []
-    frac = float(np.mean((fin >= low - 1e-9) & (fin <= high + 1e-9)))
+    within = np.ones(fin.shape, dtype=bool)
+    eps = 1e-9
+    within &= fin >= contract.lower - eps if contract.closed_lower else fin > contract.lower - eps
+    within &= fin <= contract.upper + eps if contract.closed_upper else fin < contract.upper + eps
+    frac = float(np.mean(within))
     if frac < 0.999:
+        bounds = "[" if contract.closed_lower else "("
+        bounds += f"{contract.lower}, {contract.upper}"
+        bounds += "]" if contract.closed_upper else ")"
         return [AuditFinding(
             "finite_range", op.metadata.name, "error",
-            f"unit={unit} should be within [{low}, {high}] but {1.0 - frac:.3f} "
-            "of finite values lie outside",
+            f"declared OutputRangeContract {bounds} violated: {1.0 - frac:.3f} of "
+            "finite values lie outside (R13 NEW-P1-13)",
         )]
     return []
 
@@ -495,6 +750,10 @@ def _group_migration(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     if not any(k in name for k in _GROUP_MIGRATION_NAMES):
         ctx["report"].note_skipped("group_migration", f"{name}: not a churn/retention/migration operator")
         return []
+    # R13 NEW-P0-09: ``sample`` was never bound in the original rule — every
+    # ``sample.kwargs`` reference raised NameError, swallowed as "not runnable",
+    # so this rule NEVER validated anything.
+    sample = ctx["sample"]
     # one stock moves group A -> B between two dates; the A-side churn must rise.
     idx = pd.date_range("2024-01-01", periods=4, freq="B")
     cols = ["S0", "S1", "S2", "S3"]
@@ -535,6 +794,10 @@ def _native_cohort(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     if not any(k in name for k in _NATIVE_COHORT_NAMES):
         ctx["report"].note_skipped("native_cohort", f"{name}: not a retention/overlap/churn operator")
         return []
+    # R13 NEW-P0-09: ``sample`` was never bound in the original rule — every
+    # ``sample.kwargs`` reference raised NameError, which the broad ``except``
+    # swallowed as "not runnable", so this rule NEVER validated anything.
+    sample = ctx["sample"]
     # A stock that exits the group must not be silently removed from the PAST
     # tail definition: the lagged tail is over the FULL lagged cohort.
     idx = pd.date_range("2024-01-01", periods=4, freq="B")
@@ -557,7 +820,37 @@ def _native_cohort(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     except Exception:
         ctx["report"].note_skipped("native_cohort", f"{name}: not runnable with a group frame")
         return []
-    return []  # the migration test above already pins native-cohort ordering
+    # R13 NEW-P0-09: the rule must actually assert native-cohort semantics.
+    ma = mig.to_numpy(dtype=float)
+    ca = ctl.to_numpy(dtype=float)
+    # 1) PAST rows (0..2) must be identical between mig and ctl: the lagged tail
+    #    is native to its OWN date — S4 leaving G at row 3 must NOT rewrite the
+    #    historical tail definition.
+    past = slice(0, 3)
+    both_past = np.isfinite(ma[past]) & np.isfinite(ca[past])
+    if np.any(both_past) and not np.allclose(
+        ma[past][both_past], ca[past][both_past], rtol=1e-9, atol=1e-12
+    ):
+        return [AuditFinding(
+            "native_cohort", name, "error",
+            "past (pre-migration) rows change when a stock exits the group later — "
+            "the lagged cohort is being redefined by the CURRENT membership "
+            "instead of each row's native-date cohort (R13 NEW-P0-09)",
+        )]
+    # 2) the membership change on the LAST date is real: the current-date metric
+    #    must not be byte-identical to the stable control (the exit would be
+    #    silently dropped from the current cohort).
+    last_fin = np.isfinite(ma[3]) & np.isfinite(ca[3])
+    if np.any(last_fin) and np.allclose(
+        ma[3][last_fin], ca[3][last_fin], rtol=0, atol=1e-12
+    ):
+        return [AuditFinding(
+            "native_cohort", name, "warning",
+            "a group exit on the last date leaves the current-date metric identical "
+            "to the stable control — the membership change is being dropped from "
+            "the current cohort (R13 NEW-P0-09)",
+        )]
+    return []
 
 
 @_rule("psd_geometry", category="geometry", description="spectral eigen metrics share one PSD matrix")
@@ -569,26 +862,90 @@ def _psd_geometry(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     )):
         ctx["report"].note_skipped("psd_geometry", f"{name}: not a spectral/geometry operator")
         return []
-    # The audit cannot introspect an internal correlation matrix; the R11 tests
-    # for feature_geometry pin the shared-PSD-matrix property directly.  This
-    # rule exists as the catalog-level hook — see tests/operators/test_r11_feature_geometry_psd.py.
-    ctx["report"].note_skipped("psd_geometry", f"{name}: matrix not exposed; pinned by unit tests")
-    return []
+    # R13 NEW-P0-10: the kernel exposes a TEST bundle (raw corr, projected corr,
+    # eigvals, eigvecs).  The machine audit verifies the shared-PSD property
+    # directly instead of always skipping "matrix not exposed".
+    from cleaned_operators import feature_geometry as fg
+
+    accessor = getattr(fg, "geometry_audit_bundle", None)
+    if accessor is None:
+        ctx["report"].note_skipped(
+            "psd_geometry",
+            f"{name}: feature_geometry.geometry_audit_bundle is not exposed",
+        )
+        return []
+    rng = np.random.default_rng(31)
+    panel = pd.DataFrame(rng.normal(0.0, 1.0, (80, 3)), columns=["F0", "F1", "F2"])
+    try:
+        bundle = accessor(panel)
+    except Exception as exc:  # noqa: BLE001
+        ctx["report"].note_skipped("psd_geometry", f"{name}: bundle raised ({type(exc).__name__}: {exc})")
+        return []
+    if bundle is None:
+        ctx["report"].note_skipped("psd_geometry", f"{name}: bundle returned None (panel not valid)")
+        return []
+    raw, projected, eigvals, eigvecs = bundle
+    findings: list[AuditFinding] = []
+    if float(np.min(eigvals)) < -1e-8:
+        findings.append(AuditFinding(
+            "psd_geometry", name, "error",
+            "projected correlation has a negative eigenvalue (not PSD)",
+        ))
+    # eigenpair consistency: A @ v == lambda * v for the projected matrix.
+    resid = projected @ eigvecs - eigvecs * eigvals
+    if float(np.max(np.abs(resid))) > 1e-6:
+        findings.append(AuditFinding(
+            "psd_geometry", name, "error",
+            "eigvals/eigvecs do not diagonalize the projected matrix (mismatched matrix)",
+        ))
+    # eigvecs orthonormal (the matrix they come from is symmetric PSD).
+    gram = eigvecs.T @ eigvecs
+    if float(np.max(np.abs(gram - np.eye(gram.shape[0])))) > 1e-6:
+        findings.append(AuditFinding(
+            "psd_geometry", name, "warning",
+            "eigvecs are not orthonormal",
+        ))
+    return findings
 
 
 @_rule("golden_reference", category="reference", description="Hill/GPD/MI/TE/entropy vs known DGP / SciPy")
 def _golden_reference(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     name = op.metadata.name
-    if name != "ts_hill_tail_index":
-        ctx["report"].note_skipped("golden_reference", f"{name}: golden DGP only pinned for ts_hill_tail_index here")
+    adapter = _GOLDEN_ADAPTERS.get(name) or _family_golden(name)
+    if adapter is None:
+        ctx["report"].note_skipped(
+            "golden_reference",
+            f"{name}: no golden adapter registered for its statistical family "
+            "(R13 NEW-P0-11 — families are enumerated, not silently only-Hill)",
+        )
         return []
+    try:
+        return adapter(op, ctx)
+    except Exception as exc:  # noqa: BLE001 — golden fixture cannot exercise the op
+        ctx["report"].note_skipped(
+            "golden_reference",
+            f"{name}: golden fixture not runnable ({type(exc).__name__}: {exc})",
+        )
+        return []
+
+
+def _family_golden(name: str):
+    if "hill" in name:
+        return _golden_hill
+    return None
+
+
+def _golden_hill(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     # Pareto with a known tail shape: Hill must recover it within tolerance.
+    # ``X = U ** (-xi)`` with ``U ~ U(0,1)`` has survival ``P(X > x) = x **
+    # (-1/xi)``, i.e. GPD tail index exactly ``xi`` (NOT ``(1-U) ** (-1/xi)``,
+    # which has tail index 1).
+    name = op.metadata.name
     xi_true = 0.5
-    scale = 1.0
     rng = np.random.default_rng(17)
     n = 600
     u = rng.uniform(size=n)
-    vals = scale / (1.0 - u) ** (1.0 / xi_true)  # Pareto(scale=1, shape=xi_true)
+    vals = u ** (-xi_true)
     idx = pd.date_range("2024-01-01", periods=n, freq="B")
     frame = pd.DataFrame(vals[:, None], index=idx, columns=["S0"])
     out = _run(op, [frame], {"window": n, "side": "upper", "tail_fraction": 0.2, "min_tail_count": 20})
@@ -603,6 +960,21 @@ def _golden_reference(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
             f"Hill on Pareto(shape={xi_true}) recovers {median_est:.3f} (|Δ| > 0.25)",
         )]
     return []
+
+
+# canonical -> golden adapter (R13 NEW-P0-11): each statistical family pins a
+# known-DGP reference.  Families without an adapter report NOT_APPLICABLE with
+# the reason, so "only Hill was pinned" can never be mistaken for coverage.
+#
+# A mean-excess adapter was trialled and REMOVED: the OLS-over-quantile-grid
+# estimator of ``ξ/(1-ξ)`` is unstable on finite Pareto samples (slope drifts
+# 0.70 -> 1.36 across n on the SAME seed while the kernel matches the direct
+# empirical slope exactly), so it cannot distinguish a kernel bug from estimator
+# bias — a flaky golden that flags correct kernels is worse than an explicit
+# NOT_APPLICABLE.  Family dispatch remains so new adapters slot in per family.
+_GOLDEN_ADAPTERS: dict[str, Any] = {
+    "ts_hill_tail_index": _golden_hill,
+}
 
 
 _HONESTY_TERMS = ("robust", "hill", "allan", "granger", "tail_dependence", "extremal", "entropy")
@@ -631,7 +1003,15 @@ def _canonical_honesty(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
 @_rule("default_searchability", category="default", description="defaults must not yield all-NaN/constant/near-zero output")
 def _default_searchability(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
     sample = ctx["sample"]
-    out = _run(op, sample.frames, {})
+    try:
+        out = _run(op, sample.frames, {})
+    except Exception as exc:  # noqa: BLE001 — no runnable pure-default set
+        ctx["report"].note_skipped(
+            "default_searchability",
+            f"{op.metadata.name}: no runnable pure-default parameter set "
+            f"({type(exc).__name__}: {exc})",
+        )
+        return []
     arr = out.to_numpy(dtype=float)
     fin = arr[np.isfinite(arr)]
     if fin.size == 0:
@@ -664,7 +1044,9 @@ def run_audit(
 
     ``sample_names`` filters which SAMPLE entries run; ``rule_names`` filters
     which rules run (default: all registered).  Returns a report with findings,
-    per-rule checked counts and honest skip reasons.
+    per-rule PASS-checked counts, honest NOT_APPLICABLE reasons and — since
+    R13 NEW-P0-07 — a separate AUDIT_ERROR tally.  A rule that RAISES is an
+    AUDIT_ERROR (release gate), never a silent skip.
     """
     report = AuditReport()
     names = sample_names or sorted(SAMPLE)
@@ -678,22 +1060,110 @@ def run_audit(
         except KeyError:
             report.note_skipped("(resolve)", f"{name}: not in registry")
             continue
-        ctx = {"sample": sample, "report": report}
-        for rule in rules:
-            entry = RULES.get(rule)
-            if entry is None:
-                raise KeyError(f"no audit rule {rule!r}")
-            try:
-                findings = entry["check"](op, ctx)
-            except Exception as exc:  # noqa: BLE001 — a rule must never kill the sweep
-                report.note_skipped(rule, f"{name}: {type(exc).__name__}: {exc}")
-                continue
-            for finding in findings:
-                report.add(finding)
-            report.note_ran(rule)
+        _run_rule_sweep(report, op, sample, rules)
     return report
 
 
-def audit_all() -> AuditReport:
-    """Run the full rule set over the complete curated sample."""
-    return run_audit()
+def _run_rule_sweep(
+    report: AuditReport,
+    op: Any,
+    sample: OperatorSample,
+    rules: tuple[str, ...],
+) -> None:
+    """Run one operator through the given rules with R13 NEW-P0-07 outcome
+    classes: findings (FAIL/warning) -> added; rule raised -> AUDIT_ERROR
+    (release gate), never a silent skip."""
+    ctx = {"sample": sample, "report": report}
+    name = sample.name
+    for rule in rules:
+        entry = RULES.get(rule)
+        if entry is None:
+            raise KeyError(f"no audit rule {rule!r}")
+        try:
+            findings = entry["check"](op, ctx)
+        except Exception as exc:  # noqa: BLE001 — rule crashed on the operator
+            report.note_audit_error(rule, f"{name}: {type(exc).__name__}: {exc}")
+            continue
+        for finding in findings:
+            report.add(finding)
+        report.note_ran(rule)
+
+
+# R13 NEW-P0-06: rules that can run on a contract-generated fixture over the
+# WHOLE production/searchable catalog (not just the 7 curated SAMPLE ops).
+_CONTRACT_CATALOG_RULES: tuple[str, ...] = (
+    "default_output_finite",
+    "default_searchability",
+    "parameter_injectivity",
+    "column_permutation",
+    "finite_range",
+    "scale_shift_invariance",
+    "mirror_symmetry",
+    "canonical_honesty",
+    "semantic_type_gate",
+)
+
+
+def audit_all(*, rule_names: tuple[str, ...] | None = None, sample_limit: int | None = None) -> AuditReport:
+    """R13 NEW-P0-06/71: full-catalog semantic audit.
+
+    ``sample_limit`` bounds the number of production targets swept (for fast CI
+    gates); ``None`` sweeps the entire production/searchable catalog.
+
+    Two sweeps:
+
+    1. the curated SAMPLE (hand-built fixtures that exercise tail/state/group/
+       dependence kernels precisely) through the full rule set;
+    2. EVERY production/searchable canonical through the :data:`_CONTRACT_CATALOG_RULES`
+       family, with the fixture generated from the operator's declared contract
+       (``ContractFixtureFactory``).  Operators whose contract cannot be turned
+       into a runnable fixture are recorded as NOT_APPLICABLE with the reason —
+       never silently dropped.
+
+    The returned report's ``certification_safe()`` is the R13 NEW-P0-71 gate:
+    no error-severity finding and zero AUDIT_ERRORs.  Only then may a production
+    certification record cite the audit as semantic evidence.
+    """
+    from backend.evidence_provenance import implementation_hashes_for
+    from cleaned_operators.production_hardening import factor_production_targets
+
+    report = run_audit()
+    rules = tuple(rule_names) if rule_names is not None else _CONTRACT_CATALOG_RULES
+
+    targets: list[str] = []
+    try:
+        targets = sorted(factor_production_targets())
+    except Exception:  # pragma: no cover - hardened production list should load
+        report.note_audit_error("(catalog)", "factor_production_targets() unavailable")
+        return report
+    if sample_limit is not None:
+        targets = targets[: int(sample_limit)]
+
+    for canonical in targets:
+        try:
+            op = _resolve_op(canonical)
+        except KeyError:
+            report.note_skipped("(catalog-resolve)", f"{canonical}: not in registry")
+            continue
+        fixture = contract_fixture(canonical)
+        if fixture is None:
+            report.note_skipped(
+                "(catalog-fixture)",
+                f"{canonical}: no runnable contract fixture (required panels/units undeterminable)",
+            )
+            continue
+        _run_rule_sweep(report, op, fixture, rules)
+        # R13 NEW-P0-71: a per-canonical evidence record binds the audited
+        # implementation hash + fixture source + rule family, so a production
+        # certification record can cite WHICH implementation + WHICH rules were
+        # audited — not just "semantic_audit.py passed".
+        try:
+            impl_hash = implementation_hashes_for(canonical)
+        except Exception:  # noqa: BLE001
+            impl_hash = {}
+        report.evidence[canonical] = {
+            "implementation_hash": impl_hash,
+            "fixture": "contract",
+            "rule_family": list(rules),
+        }
+    return report

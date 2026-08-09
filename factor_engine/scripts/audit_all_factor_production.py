@@ -29,6 +29,7 @@ _PANEL_PARAMETERS = frozenset({
     "market_ret", "benchmark", "market", "open", "high", "low", "close",
     "price", "volume", "amount", "vwap", "turnover", "weight", "weights",
     "signal", "fallback", "condition", "group", "industry", "sector",
+    "universe", "annualized_ocf",
     "fiscal_quarter", "period_id", "target_period_id", "quarter", "revision_id",
     "decision_time", "available_time", "available_at", "exposure", "exposures",
     "control", "controls", "factor", "target", "mask", "event", "value",
@@ -356,6 +357,20 @@ _SCALAR_VALUES: dict[str, Any] = {
     "max_lag": 3,
     "min_events": 2,
     "min_count": 3,
+    # R11 unusable-operators sweep: scalar enums / selectors that operators
+    # accept as keyword defaults (the kernel signature may not name them — they
+    # flow through **kwargs), so the declared-default fallback cannot see them.
+    "flow_type": "operating",
+    "theiler": 0,
+    "initial_semantics": "since_transition",
+    "event_kind": "marked",
+    "mark_missing_policy": "censor",
+    "refractory": 0,
+    "cohort": "intersection",
+    "lineage": None,
+    "n_surrogates": 20,
+    "price_basis": "close",
+    "seed": 0,
     # Minute/relation integration (2026-08).
     "segment": "morning",
     "transition": "open",
@@ -688,6 +703,15 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("ts_bds_statistic", "window"): 60,
     ("ts_kernel_granger_score", "window"): 60,
     ("ts_residualized_hsic", "window"): 60,
+    # R11 unusable-operators sweep: generic ``q=0.2`` / ``missing_policy="break"``
+    # collide with per-operator domains the generic map cannot express.
+    ("ts_variance_ratio", "q"): 5,
+    ("ts_upper_tail_coexceedance_probability", "q"): 0.9,
+    ("ts_lower_tail_coexceedance_probability", "q"): 0.1,
+    ("update_acceleration", "missing_policy"): "BREAK",
+    ("update_direction_persistence", "missing_policy"): "BREAK",
+    ("update_path_efficiency", "missing_policy"): "BREAK",
+    ("update_surprise", "missing_policy"): "BREAK",
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
@@ -698,6 +722,10 @@ _SPECIAL_POSITIONAL = {
     "relation_entropy": ("s1", "s2", "s3"),
     "relation_topk_sum": ("s1", "s2", "s3"),
     "relation_rank_weighted_sum": ("s1", "s2", "s3"),
+    # Variadic distribution operators need 3+ / 4+ ranked panels in the single
+    # positional ``relations`` slot (R11 unusable-operators sweep).
+    "relation_distribution_skew": ("s1", "s2", "s3", "s4"),
+    "relation_distribution_kurtosis": ("s1", "s2", "s3", "s4", "s5"),
 }
 _SPECIAL_KWARGS = {
     "cs_multi_resid": {"add_intercept": True, "min_obs": 8},
@@ -781,20 +809,50 @@ def _minute_source(canonical: str) -> bool:
     return "minute" in tags
 
 
-def _minute_index(dates: pd.DatetimeIndex, minutes_per_day: int = _MINUTES_PER_DAY):
-    """Naive per-minute DatetimeIndex across the same business days as ``dates``.
+# A-share continuous-trading session in fixture minute-of-day offsets (minutes
+# since 00:00): morning 09:31..11:30 (571..690, 120 bars), lunch break
+# 11:31..13:00 (no bars), afternoon 13:01..15:00 (781..900, 120 bars) — 240
+# bars/day with a REAL 90-minute lunch gap, not a continuous 09:31..13:30 block.
+_MORNING_MINUTE_START = 571   # 09:31
+_MORNING_MINUTE_END = 690     # 11:30 (inclusive)
+_AFTERNOON_MINUTE_START = 781  # 13:01
+_AFTERNOON_MINUTE_END = 900    # 15:00 (inclusive)
 
-    Minute-of-day spans 571..810 (morning 09:31..11:30, afternoon 13:01..15:00
-    approximate), so ``minute_of_day``-based segment masks see real session
-    structure instead of a flat 00:00..03:59 block.
+
+def _session_segment(minute_of_day: int) -> int:
+    """Map a minute-of-day to its session segment: 0=morning, 1=afternoon, -1=off.
+
+    Off includes the lunch gap (11:31..13:00) and the pre/post continuous
+    session — the minute fixture NEVER emits a lunch-gap bar (P0-04: a real
+    session structure, not a flat 09:31..13:30 block).
     """
-    offset = 571
+    if _MORNING_MINUTE_START <= minute_of_day <= _MORNING_MINUTE_END:
+        return 0
+    if _AFTERNOON_MINUTE_START <= minute_of_day <= _AFTERNOON_MINUTE_END:
+        return 1
+    return -1
+
+
+def _minute_index(dates: pd.DatetimeIndex, minutes_per_day: int = _MINUTES_PER_DAY):
+    """Per-minute DatetimeIndex across the same business days as ``dates``.
+
+    P0-04: the fixture grid is the REAL A-share session — morning 09:31..11:30,
+    a lunch gap (no bars emitted), then afternoon 13:01..15:00 — instead of 240
+    continuous minutes that fused the two segments.  Session-boundary, lunch-gap
+    and segment-anchor-sensitive operators therefore see the true structure.
+    Each day contributes exactly ``minutes_per_day`` bars (120 morning + 120
+    afternoon when left at the default 240).
+    """
+    morning = list(range(_MORNING_MINUTE_START, _MORNING_MINUTE_END + 1))
+    afternoon = list(range(_AFTERNOON_MINUTE_START, _AFTERNOON_MINUTE_END + 1))
+    grid = morning + afternoon
+    if minutes_per_day != len(grid):
+        # Callers that request a different bar count still get a session-shaped
+        # grid: scale the per-segment bar count proportionally.
+        half = max(1, minutes_per_day // 2)
+        grid = morning[:half] + afternoon[:half]
     return pd.DatetimeIndex(
-        [
-            d + pd.Timedelta(minutes=offset + m)
-            for d in dates
-            for m in range(minutes_per_day)
-        ]
+        [d + pd.Timedelta(minutes=off) for d in dates for off in grid]
     )
 
 
@@ -1046,7 +1104,38 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
     return panels
 
 
-def _value(canonical: str, name: str, panels: dict[str, pd.DataFrame]) -> Any:
+_MISSING = object()
+
+
+def _declared_default(operator: Any, key: str) -> Any:
+    """The operator's own declared default for ``key``, if it has one.
+
+    R11 unusable-operators sweep: the audit's generic scalar map cannot know
+    every parameter of ~1300 operators (``flow_type``, ``initial_semantics``,
+    ``theiler``, ...).  When the map and heuristics have no value, fall back to
+    the operator's OWN signature default — that is the honest ``default``
+    parameter domain the certifier records (``certified_parameter_domain``).
+    Only the explicit per-op overrides / panels / generic scalars win before
+    this; the fallback is strictly additive (ops that already resolve are
+    untouched).  Returns ``_MISSING`` when the operator declares no default.
+    """
+    callable_ = getattr(operator, "_calculate_series", None) or getattr(
+        operator, "_calculate", None
+    ) or getattr(operator, "_calculate_scalar", None)
+    if callable_ is None:
+        return _MISSING
+    try:
+        import inspect
+
+        param = inspect.signature(callable_).parameters.get(key)
+    except (TypeError, ValueError):
+        return _MISSING
+    if param is None or param.default is inspect.Parameter.empty:
+        return _MISSING
+    return param.default
+
+
+def _value(canonical: str, name: str, panels: dict[str, pd.DataFrame], *, operator: Any = None) -> Any:
     key = str(name)
     special = _SPECIAL_SCALARS.get((canonical, key))
     if special is not None:
@@ -1087,6 +1176,12 @@ def _value(canonical: str, name: str, panels: dict[str, pd.DataFrame]) -> Any:
         return 3
     if key.startswith("eps"):
         return 0.1
+    # R11 unusable-operators sweep: last resort before failing closed — the
+    # operator's own declared default for this parameter (see ``_declared_default``).
+    if operator is not None:
+        declared = _declared_default(operator, key)
+        if declared is not _MISSING:
+            return declared
     raise KeyError(f"unclassified public parameter {canonical}.{key}")
 
 
@@ -1101,12 +1196,14 @@ def _build_call(canonical: str, operator: Any, panels: dict[str, pd.DataFrame]):
     ) or ("x",)
     if canonical in _SPECIAL_POSITIONAL:
         arguments = [
-            _value(canonical, name, panels)
+            _value(canonical, name, panels, operator=operator)
             for name in _SPECIAL_POSITIONAL[canonical]
         ]
         return arguments, dict(_SPECIAL_KWARGS.get(canonical, {}))
     return [
-        _value(canonical, name, panels) for name in names if name != "..."
+        _value(canonical, name, panels, operator=operator)
+        for name in names
+        if name != "..."
     ], dict(_SPECIAL_KWARGS.get(canonical, {}))
 
 
@@ -1233,7 +1330,13 @@ def audit(*, require_admission: bool = True) -> list[str]:
             )
         if not policy.pit_safe or policy.lag < 0:
             errors.append(f"{canonical}: PIT policy is not causal")
-        if not policy.shape_preserving:
+        if not policy.shape_preserving and not _minute_source(canonical):
+            # Minute-source operators (intra_* / minute-tagged) legitimately
+            # aggregate minute -> daily: their output is daily-shaped (the
+            # runtime prefix check below verifies axes against the daily
+            # template), so ``shape_preserving=False`` is their design, not a
+            # defect.  Daily-frequency grain-changing operators are still
+            # flagged below.
             errors.append(f"{canonical}: shape_preserving=False")
         if require_admission:
             specification = build_operator_spec(canonical)

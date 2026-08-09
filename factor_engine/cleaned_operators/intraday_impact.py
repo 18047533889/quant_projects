@@ -123,13 +123,25 @@ def _impact_decay_day(
             thr = float(np.quantile(prefix, float(shock_quantile)))
             if not (absr[e] > thr and absr[e] > _EPS and a[e] > 0.0):
                 continue
+            # P0-38: remaining impact must be measured from the bar BEFORE the
+            # shock.  ``logp[e+h]-logp[e]`` (post-shock cumulative return) reads
+            # a jump-then-flat price as ~0 → "fully decayed" — the OPPOSITE of
+            # truth (impact is 100% persisted, kappa≈0).  ``I_h = sign(r_e)*
+            # (logp[e+h]-logp[e-1])`` keeps a persisting shock at I_h == I_0, so
+            # the normalised decay curve is flat → kappa≈0.
+            if e < 1:  # no bar before the shock to anchor I_0 / I_h on
+                continue
             sign_e = 1.0 if r[e] > 0.0 else -1.0
-            impacts = sign_e * (logp[e + 1 : e + 1 + horizon] - logp[e])
-            valid = np.abs(impacts) > 1e-9
+            i0 = sign_e * (logp[e] - logp[e - 1])
+            if abs(i0) <= _EPS:
+                continue
+            impacts = sign_e * (logp[e + 1 : e + 1 + horizon] - logp[e - 1])
+            norm = impacts / abs(i0)
+            valid = np.abs(norm) > 1e-9
             if int(valid.sum()) < 2:
                 continue
             hvals = np.arange(1, horizon + 1, dtype=float)[valid]
-            logi = np.log(np.abs(impacts[valid]))
+            logi = np.log(np.abs(norm[valid]))
             slope = np.polyfit(hvals, logi, 1)[0]
             kappa = float(-slope)
             if np.isfinite(kappa):

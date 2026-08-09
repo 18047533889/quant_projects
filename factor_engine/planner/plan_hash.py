@@ -128,6 +128,55 @@ def contract_is_resolved(node: PlanNode, memo: dict[int, bool] | None = None) ->
     return ok
 
 
+def _hash_canonical_attrs(node: PlanNode) -> dict[str, Any]:
+    """Hash-side parameter canonicalization (R13 NEW-P0-17/18).
+
+    Only the HASH payload canonicalizes values (float-noise rounding + declared
+    ``equivalence="positive_scale"`` weight normalization).  Execution plans keep
+    user values verbatim — see ``planner.canonicalize_params``.  Literals/columns
+    are never touched: an explicit constant must hash by its true value.
+    """
+    if node.op in {"column", "literal", "plan_ref", "materialized_series"}:
+        return dict(node.attrs)
+    from planner.canonicalize_params import canonicalize_parameter_values
+
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        canonical = OperatorRegistry._aliases.get(str(node.op), str(node.op))
+    except Exception:  # pragma: no cover - bootstrap
+        canonical = str(node.op)
+    return canonicalize_parameter_values(node.attrs, canonical=canonical)
+
+
+def _semantic_digest(node: PlanNode) -> str | None:
+    """Stable digest of the node's output semantic attrs, or ``None`` when empty.
+
+    R13 NEW-P1-22: two structurally-identical subtrees whose typed resolution
+    differs (unit / grain / availability / price-basis / semantic kind) must not
+    share a CSE / cache key — they compute different quantities.  Binding the
+    digest only when present keeps legacy/synthetic plans (no semantic_attrs)
+    on their historical key namespace.
+    """
+    if not node.semantic_attrs:
+        return None
+
+    def _norm(v: Any) -> Any:
+        if isinstance(v, (str, int, float, bool)) or v is None:
+            return v
+        if isinstance(v, (set, frozenset)):
+            return sorted((_norm(x) for x in v), key=repr)
+        if isinstance(v, (list, tuple)):
+            return [_norm(x) for x in v]
+        if isinstance(v, dict):
+            return {str(k): _norm(val) for k, val in sorted(v.items())}
+        return repr(v)
+
+    payload = sorted((k, _norm(v)) for k, v in node.semantic_attrs.items())
+    s = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=repr)
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
 def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
     """递归计算子树结构键；同一子树形状得到相同字符串。
 
@@ -136,7 +185,8 @@ def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
         memo: 可选 ``id(node) → key`` 缓存，避免重复遍历共享引用
 
     返回：
-        稳定 JSON 字符串，编码 ``op``、排序后的 ``attrs`` 与子节点键列表
+        稳定 JSON 字符串，编码 ``op``、排序后的 ``attrs``、子节点键列表，
+        以及（当存在时）输出 semantic-attr 摘要与算子语义契约
     """
     if memo is None:
         memo = {}
@@ -146,7 +196,10 @@ def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
     child_keys = [structural_key(c, memo) for c in node.inputs]
     payload = {
         "op": node.op,
-        "attrs": {k: _jsonable(v) for k, v in sorted(node.attrs.items())},
+        "attrs": {
+            k: _jsonable(v)
+            for k, v in sorted(_hash_canonical_attrs(node).items())
+        },
         "in": child_keys,
         "operator_contract": _operator_semantic_contract(node.op),
     }
@@ -157,6 +210,9 @@ def structural_key(node: PlanNode, memo: dict[int, str] | None = None) -> str:
             payload["field_catalog_hash"] = compute_field_catalog_hash()
         except (ImportError, RuntimeError, ValueError):
             payload["field_catalog_hash"] = "unavailable"
+    semantic = _semantic_digest(node)
+    if semantic is not None:
+        payload["semantic"] = semantic
     s = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     key = hashlib.sha256(s.encode("utf-8")).hexdigest()
     memo[nid] = key

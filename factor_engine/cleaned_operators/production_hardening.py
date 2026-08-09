@@ -496,7 +496,10 @@ def _mark_experimental(canonical: str, catalog: dict[str, Any]) -> None:
 
 
 def apply_production_hardening() -> None:
-    from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
+    from cleaned_operators.operator_policy import (
+        PIT_UNSAFE_CANONICALS,
+        _EXPLICIT_POLICIES,
+    )
     from cleaned_operators.registry import OperatorRegistry
 
     targets = factor_production_targets()
@@ -514,6 +517,27 @@ def apply_production_hardening() -> None:
         patch = _policy_patch(canonical, catalog)
         existing_policy = dict(_EXPLICIT_POLICIES.get(canonical) or {})
         merged_policy = {**patch, **existing_policy}
+        # Structural-causality declaration (review §2.4 / R11 P0-A03): an
+        # operator that ships its own ``pit_safe``/``causal`` metadata tags — or
+        # whose scope is elementwise / cross-sectional / group (causal by
+        # construction, no cross-time lookahead) — declares itself structurally
+        # causal.  The lqtp patch may have pre-seeded a placeholder False for
+        # un-reviewed canonicals; that placeholder must not mask the operator's
+        # real causal contract, or the certifier bootstrap deadlocks (the
+        # reconcile below never downgrades an explicit structural True).  The
+        # genuinely non-causal set (``PIT_UNSAFE_CANONICALS``) and the
+        # fail-closed lifecycle keep pit_safe=False.  Production ADMISSION is
+        # still evidence-gated through ``catalog["pit_safe"]``; the runtime
+        # audit's prefix-causality check verifies every structural claim before
+        # evidence is written.
+        if canonical not in PIT_UNSAFE_CANONICALS:
+            declared = [str(t).lower() for t in (catalog.get("tags") or [])]
+            if (
+                "pit_safe" in declared
+                or "causal" in declared
+                or patch["scope"] in {"elementwise", "cs", "group"}
+            ):
+                merged_policy["pit_safe"] = True
         if _scope_is_authoritative(canonical):
             merged_policy["scope"] = patch["scope"]
             if "min_periods" in patch:
@@ -538,7 +562,12 @@ def apply_production_hardening() -> None:
                 merged_policy["min_periods"] = 1
             if "lag" in patch:
                 merged_policy["lag"] = patch["lag"]
-        merged_policy["pit_safe"] = bool(catalog.get("pit_safe", False))
+        # Never downgrade a declared structural True (elementwise / cs / group /
+        # trailing-window causality): reconcile gates production ADMISSION via
+        # ``catalog["pit_safe"]``, so overwriting structural causality here
+        # would deadlock the certifier bootstrap (review §2.4).
+        if not merged_policy.get("pit_safe"):
+            merged_policy["pit_safe"] = bool(catalog.get("pit_safe", False))
         _EXPLICIT_POLICIES[canonical] = merged_policy
 
         certified = bool(catalog.get("pit_safe", False))

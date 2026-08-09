@@ -247,7 +247,13 @@ def test_edges_fallback_when_no_dataset():
     assert edges[0].logical_table == "StockDailyBar"
 
 
-def test_edges_fallback_logical_table_unresolved_uses_anchor():
+def test_edges_unresolved_logical_table_skips_research_fails_production():
+    """P0-40/P0-41：逻辑表名解析不到物理 dataset 时**绝不 anchor-fallback**。
+
+    anchor-fallback 会让 valuation 事件永远匹配不到依赖它的因子（增量重算静默
+    失效）——旧实现「回落 anchor」在此被废止。research 跳过该 edge 并 warning；
+    production fail-closed 抛 ``DependencyDatasetResolutionError``。
+    """
     spec = SimpleNamespace(
         dataset=None,
         table="UnknownLogicalTable999",
@@ -256,9 +262,14 @@ def test_edges_fallback_logical_table_unresolved_uses_anchor():
     )
     analysis = SimpleNamespace(referenced_fields={"close": spec})
     data_source = SimpleNamespace(dataset="ashare_stock_daily")
-    edges = _edges_from_analysis("f", analysis, data_source)
-    # 逻辑表名在 registry 里解析不到 → 才回落到 anchor dataset（仍是物理 dataset）
-    assert edges[0].source_dataset == "ashare_stock_daily"
+    # research：edge 被跳过（不能写错的 source_dataset）
+    edges = _edges_from_analysis("f", analysis, data_source, production=False)
+    assert edges == []
+    # production：fail-closed
+    from runtime.incremental_scheduler import DependencyDatasetResolutionError
+
+    with pytest.raises(DependencyDatasetResolutionError):
+        _edges_from_analysis("f", analysis, data_source, production=True)
 
 
 # ---------------------------------------------------------------------------
@@ -318,14 +329,15 @@ def test_register_factor_version_from_identity(tmp_path):
         semantic_identity_digest="digest_v1",
     )
     assert catalog.get_factor_info("f_v")["factor_version"] == "digest_v1"[:16]
-    # 缺省 digest → ast_hash 前缀
+    # 缺省 digest → ast_hash 全量 SHA-256（NEW-P0-57：权威 catalog 存全量 digest，
+    # 16 位前缀只用于 Parquet/ClickHouse/matrix 显示侧）。
     catalog.register(
         "f_legacy",
         author="tester",
         frequency="1d",
         ast_hash="b" * 64,
     )
-    assert catalog.get_factor_info("f_legacy")["factor_version"] == ("b" * 64)[:16]
+    assert catalog.get_factor_info("f_legacy")["factor_version"] == ("b" * 64)
 
 
 def test_register_production_rejects_identity_change(tmp_path):

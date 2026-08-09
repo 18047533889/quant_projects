@@ -10,13 +10,20 @@ from expr.base import Expr
 
 
 @dataclass(frozen=True)
-class FactorSemanticIdentity:
-    """因子执行语义身份（P1-01）。
+class FactorExecutionScopeHint:
+    """因子执行作用域提示（P1-01 / P1-33）。
 
-    携带跨执行路径完整的 semantic identity（market / universe_id / frequency /
+    携带跨执行路径完整的执行作用域字段（market / universe_id / frequency /
     calendar_id / decision_time_policy / source_scope_hash），供
     ``runtime.engine._scope_from_factor`` 推断 ``FactorExecutionScope``。
     字段缺省 ``None``，保持向后兼容：未显式声明的字段不覆盖因子级属性。
+
+    .. note:: 这是**执行作用域提示**，不是因子语义身份（runtime
+       ``FactorSemanticIdentity`` 才是单一定义身份，见
+       ``runtime/factor_identity.py``）。P1-33：本类原名为
+       ``FactorSemanticIdentity``，与 runtime 身份重名造成歧义；保留
+       ``FactorSemanticIdentity = FactorExecutionScopeHint`` 模块级别名以兼容
+       既有导入。
 
     Attributes
     ----------
@@ -40,6 +47,12 @@ class FactorSemanticIdentity:
     calendar_id: str | None = None
     decision_time_policy: str | None = None
     source_scope_hash: str | None = None
+
+
+# P1-33: 兼容别名。历史导入 ``from api.factor import FactorSemanticIdentity``
+# 拿到的仍是执行作用域提示（供 ``Factor.semantic_identity`` 注解 / 引擎 scope
+# 推断）。真正的因子语义身份在 ``runtime.factor_identity``。
+FactorSemanticIdentity = FactorExecutionScopeHint
 
 
 @dataclass(frozen=True)
@@ -76,6 +89,6 @@ class Factor:
     surface: str = "daily"
     dialect: str = "native"
     dialect_version: str | None = None
-    # P1-01: 完整执行语义身份；None 时引擎回退到因子级属性推断。默认 None
+    # P1-01: 完整执行作用域提示；None 时引擎回退到因子级属性推断。默认 None
     # 保持向后兼容（parse_factor / 既有构造调用点不受影响）。
-    semantic_identity: FactorSemanticIdentity | None = None
+    semantic_identity: FactorExecutionScopeHint | None = None

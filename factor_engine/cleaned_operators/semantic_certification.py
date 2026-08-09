@@ -745,14 +745,20 @@ def reconcile_operator_certification(
     # structural table.  ``infer_operator_policy`` then agrees with the
     # fail-closed lifecycle and the manifest/catalog surfaces stay consistent.
     try:
-        from cleaned_operators.operator_policy import _EXPLICIT_POLICIES
-
+        import cleaned_operators.operator_policy as _operator_policy_mod
+    except ImportError:
+        # P0-34: only a genuinely unimportable policy module is benign (nothing
+        # to sync).  Any OTHER failure — including a missing ``_EXPLICIT_POLICIES``
+        # attribute (code drift) or an exception raised DURING the sync — must
+        # propagate so certification/finalization fails rather than leaving the
+        # catalog and policy table divergent.
+        _operator_policy_mod = None
+    if _operator_policy_mod is not None:
+        _EXPLICIT_POLICIES = _operator_policy_mod._EXPLICIT_POLICIES
         existing = dict(_EXPLICIT_POLICIES.get(canonical) or {})
         if should_fail_closed(canonical):
             existing["pit_safe"] = False
         else:
             existing["pit_safe"] = existing.get("pit_safe", False) or bool(certified)
         _EXPLICIT_POLICIES[canonical] = existing
-    except Exception:  # pragma: no cover - policy module not importable
-        pass
     return six

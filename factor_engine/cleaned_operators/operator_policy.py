@@ -1104,6 +1104,34 @@ _FINAL_PACK_POLICIES = {
 }
 _EXPLICIT_POLICIES.update(_FINAL_PACK_POLICIES)
 
+# R11 unusable-operators sweep: structural policies that must SURVIVE the
+# active-surface filter.  These trailing-window / elementwise operators are
+# surfaced into the daily surface DURING module import (after ``operator_policy``
+# has already run its filter), so they have no entry in ``_ACTIVE_POLICY_CANONICALS``
+# at filter time and would otherwise fail closed to ``pit_safe=False``, blocking
+# the certifier bootstrap (review §2.4).  Applied unconditionally, like
+# ``_FINAL_PACK_POLICIES`` above.
+_R11_UNUSABLE_SWEEP_POLICIES = {
+    "ts_argmax_age": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_argmin_age": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_argmax_index_from_oldest": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_argmin_index_from_oldest": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_coverage_ratio": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_ffill_limited": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_staleness": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_valid_count": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_regression_forecast_error": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_regression_forecast_error_z": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_regression_in_sample_resid": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_regression_resid_mean": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ADX": {"scope": "ts", "pit_safe": True, "min_periods": 2},
+    "MACD_line": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "MACD_signal": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "MACD_hist": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "true_range": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+}
+_EXPLICIT_POLICIES.update(_R11_UNUSABLE_SWEEP_POLICIES)
+
 # Alpha-language expansion (2026-08): run/hysteresis state, path geometry,
 # distribution shift, volatility structure, cs locality, events, report seq.
 # All are causal trailing-window / sequential transforms -> pit_safe.
@@ -1664,7 +1692,20 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
         pass
     if canon in _EXPLICIT_POLICIES:
         base = {"scope": "unknown", "pit_safe": False}
-        if canon in NON_SHAPE_PRESERVING_CANONICALS or canon in GRAIN_CHANGING_CANONICALS:
+        # R11 P0-13: the authoritative grain-changing signal is the operator's
+        # OWN contract (declared input_grain/output_grain).  The hand lists are
+        # only fallbacks for legacy ops that never declared their grains — an
+        # explicit-policy op that declares minute -> daily must be classified
+        # non-shape-preserving even though it is not in the hand set.
+        _emeta = getattr(op, "metadata", None)
+        _eig = (getattr(_emeta, "input_grain", None) or "").lower()
+        _eog = (getattr(_emeta, "output_grain", None) or "").lower()
+        _declared = bool(_eig and _eog and _eig != _eog)
+        if (
+            canon in NON_SHAPE_PRESERVING_CANONICALS
+            or canon in GRAIN_CHANGING_CANONICALS
+            or _declared
+        ):
             base.update(
                 shape_preserving=False,
                 index_preserving=False,
@@ -1763,12 +1804,21 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
         lookback = None
         min_periods = None
 
-    # WS4 P0-07: grain-changing (minute -> daily) operators are not shape /
-    # index preserving even though they are PIT-safe.  Enumerated canonicals in
-    # GRAIN_CHANGING_CANONICALS, or any op that declares the
-    # ``grain_minute_to_daily`` metadata tag, are treated as non-shape-preserving.
+    # WS4 P0-07 / R11 P0-13: grain-changing (minute -> daily) operators are not
+    # shape / index preserving even though they are PIT-safe.  The AUTHORITATIVE
+    # signal is the operator's own contract — a declared ``input_grain`` /
+    # ``output_grain`` pair (e.g. minute -> daily).  The hand-maintained
+    # ``GRAIN_CHANGING_CANONICALS`` set and the ``grain_minute_to_daily`` tag are
+    # only fallbacks for legacy ops that never declared their grains.  A new
+    # minute->daily operator that declares its grains in its own metadata is
+    # classified correctly WITHOUT being added to any hand list.
+    _ig = (getattr(meta, "input_grain", None) or "").lower()
+    _og = (getattr(meta, "output_grain", None) or "").lower()
+    _declared_grain_changing = bool(_ig and _og and _ig != _og)
     _grain_changing = (
-        canon in GRAIN_CHANGING_CANONICALS or "grain_minute_to_daily" in tags
+        _declared_grain_changing
+        or canon in GRAIN_CHANGING_CANONICALS
+        or "grain_minute_to_daily" in tags
     )
     shape_preserving = canon not in NON_SHAPE_PRESERVING_CANONICALS and not _grain_changing
     index_preserving = shape_preserving

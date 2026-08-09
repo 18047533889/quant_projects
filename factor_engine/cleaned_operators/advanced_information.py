@@ -353,7 +353,10 @@ def _effective_transfer_entropy_window(
         ys_shift = np.empty_like(ys)
         ys_shift[: w_eff - off] = ys[off:]
         ys_shift[w_eff - off :] = ys[:off]
-        te_s = _te_from_transitions(xs, ys_shift, x_next, bins, min_cells_ratio=min_cells_ratio)
+        # P0-66: use the same MASKED future axis as the real TE path — ``xs`` /
+        # ``ys_shift`` are already ``mask``-compacted, so the unmasked ``x_next``
+        # misaligns when any NaN gap exists inside the window.
+        te_s = _te_from_transitions(xs, ys_shift, xn, bins, min_cells_ratio=min_cells_ratio)
         if np.isfinite(te_s):
             surr.append(te_s)
     if not surr:

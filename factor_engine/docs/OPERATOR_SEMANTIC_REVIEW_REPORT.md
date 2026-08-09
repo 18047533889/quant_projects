@@ -71,7 +71,7 @@ native-date 定义 → 再 cohort 限制；production 侧 fail-closed；全部�
 14. `canonical_honesty` — robust/hill/allan/granger/tail_dependence/extremal/entropy 名必须绑定义/公式。
 15. `default_searchability` — 默认参数不得 all-NaN/常数/恒零。
 
-框架：`AuditFinding/AuditReport`，每条规则 `check(op, ctx)`，`run_audit(sample_names, rule_names)`；每规则报告 ran 计数与**诚实 skip 原因**（不静默截断覆盖率）。7 条框架/负检测测试 + 3 条正收益测试（待 Agent A 完成后全绿）。
+框架：`AuditFinding/AuditReport`，每条规则 `check(op, ctx)`，`run_audit(sample_names, rule_names)`；每规则报告 ran 计数与**诚实 skip 原因**（不静默截断覆盖率）。`test_r11_semantic_audit.py` **10 passed**：7 框架/负检测 + 3 正收益（Pareto golden 用 `U**(-ξ)`——`(1-U)**(-1/ξ)` 是 tail index=1 的陷阱）。
 
 ## 五、验证
 

@@ -285,6 +285,30 @@ def _dominant_direction(z: np.ndarray) -> np.ndarray | None:
     return v1
 
 
+def geometry_audit_bundle(
+    panel: pd.DataFrame, *, window: int = 30, min_rows: int = 10
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+    """R13 NEW-P0-10: internal TEST bundle exposing the shared-PSD-matrix property.
+
+    NOT part of the operator surface.  Returns ``(raw_corr, projected_corr,
+    eigvals, eigvecs)`` so the machine semantic auditor can verify that the
+    nearest-PSD projection, the eigenvalues and the eigenvectors all come from
+    ONE matrix — the mode-share / effective-rank / dominant-direction kernels
+    must never read a raw (possibly non-PSD) correlation while another reads the
+    projected one.  ``None`` when the panel cannot form a valid correlation.
+    """
+    z = panel.to_numpy(dtype=float)
+    if z.ndim != 2 or z.shape[1] < 3 or z.shape[0] < min_rows:
+        return None
+    seg = z[:window]
+    raw = _bicor_matrix(seg)
+    if raw is None:
+        return None
+    projected = _nearest_psd_correlation(raw)
+    eigvals, eigvecs = np.linalg.eigh(projected)
+    return raw, projected, eigvals, eigvecs
+
+
 def _subspace_rotation_chunk(c1, c2, c3, recent: int, prior: int, min_rows: int) -> float:
     n = c1.shape[0]
     if n < recent + prior or recent < min_rows or prior < min_rows:
@@ -314,7 +338,8 @@ def _true_beta(yy: np.ndarray, xx: np.ndarray, min_pairs: int) -> float | None:
     break).  The operator is named ``beta_break``, so it must report a change
     in the genuine regression coefficient ``Cov(y,x)/Var(x)`` (which carries
     ``unit(y)/unit(x)``).  The break score is then normalised by
-    ``1+|beta_prior|`` so the relative change stays scale-aware.
+    ``|beta_prior| + rolling_median(|beta_recent|)`` — a scale in the same
+    beta unit — so the relative change stays scale-aware.
     """
     ok = np.isfinite(yy) & np.isfinite(xx)
     if int(ok.sum()) < min_pairs:
@@ -340,7 +365,24 @@ def _beta_break_chunk(yc, xc, recent: int, prior: int, min_pairs: int) -> float:
     bp = _true_beta(yp, xp, min_pairs)
     if br is None or bp is None:
         return np.nan
-    return float((br - bp) / (1.0 + abs(bp)))
+    # P0-51: the old ``1 + |beta_prior|`` denominator mixed a dimensionless 1
+    # with a unitful beta (unit(y)/unit(x)) — dimensionally invalid.  Normalise
+    # by a robust scale in the SAME beta unit: |beta_prior| plus the rolling
+    # median of |beta| over sub-windows of the recent window.
+    sub = min(20, int(yr.shape[0]))
+    abs_betas: list[float] = []
+    if sub >= min_pairs:
+        for s in range(yr.shape[0] - sub + 1):
+            b = _true_beta(yr[s : s + sub], xr[s : s + sub], min_pairs)
+            if b is not None:
+                abs_betas.append(abs(b))
+    if abs_betas:
+        scale = abs(bp) + float(np.median(abs_betas))
+    else:
+        scale = abs(bp) + abs(br)
+    if not np.isfinite(scale) or scale <= _EPS:
+        return np.nan
+    return float((br - bp) / scale)
 
 
 @register_operator(
@@ -491,16 +533,17 @@ class TsFeatureSubspaceRotation(SeriesOperator):
 class TsBetaBreakScore(SeriesOperator):
     """字段关系突变（recent vs prior 滚动真实 beta 的归一化变化）。
 
-    ``(beta_recent - beta_prior) / (1 + |beta_prior|)``，其中
+    ``(beta_recent - beta_prior) / (|beta_prior| + rolling_median(|beta_recent|))``，其中
     ``beta = Cov(y, x)/Var(x)`` 是真实回归斜率（携带 unit(y)/unit(x)）。
     Review #30：若把 x、y 各自标准化再取斜率，beta 就退化成相关系数——那是
-    correlation break，不是 beta break。本算子坚持真实 beta；断点分数再用
-    ``1+|β_prior|`` 归一化，使其在不同 y/x 组合间仍是相对变化。P1。
+    correlation break，不是 beta break。本算子坚持真实 beta；断点分数用与 beta
+    同量纲的 robust scale（|β_prior| + median|β_recent|）归一化，使其在不同
+    y/x 组合间仍是相对变化。P1。
     """
 
     metadata = _metadata(
         "ts_beta_break_score",
-        "recent vs prior 真实 beta=Cov(y,x)/Var(x) 变化 (Δβ)/(1+|β_prior|)。",
+        "recent vs prior 真实 beta=Cov(y,x)/Var(x) 变化 (Δβ)/(|β_prior|+median|β_recent|)。",
         ["y", "x", "recent_window", "prior_window"],
         domain="price_volume",
         unit="unit(y)/unit(x)",

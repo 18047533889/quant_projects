@@ -24,7 +24,11 @@ import pandas as pd
 from cleaned_operators.base import SeriesOperator, register_operator
 from cleaned_operators.common.daily_panel import _aligned
 from cleaned_operators.rolling_pack import frame_like
-from cleaned_operators.stateful._common import metadata, panel_or_scalar
+from cleaned_operators.stateful._common import (
+    assert_condition_bool,
+    metadata,
+    panel_or_scalar,
+)
 
 _EPS = 1e-12
 
@@ -59,6 +63,8 @@ class StateLatch(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         set_condition, reset_condition = _aligned(set_condition, reset_condition)
+        assert_condition_bool(set_condition, name="set_condition")
+        assert_condition_bool(reset_condition, name="reset_condition")
         sc = set_condition.to_numpy(dtype=float)
         rc = reset_condition.to_numpy(dtype=float)
         # P1-28: ``initial_state`` is strictly a boolean state — 2 or -1 must
@@ -73,12 +79,14 @@ class StateLatch(SeriesOperator):
             state = init
             for row in range(rows):
                 if not (np.isfinite(sc[row, col]) and np.isfinite(rc[row, col])):
+                    # NaN condition is unknown: it does not flip the latch and
+                    # re-baselines to the initial state.
                     out[row, col] = np.nan
                     state = init
                     continue
-                if bool(rc[row, col] != 0.0):
+                if rc[row, col] == 1.0:
                     state = 0.0
-                elif bool(sc[row, col] != 0.0):
+                elif sc[row, col] == 1.0:
                     state = 1.0
                 out[row, col] = state
         return frame_like(set_condition, out)
@@ -118,6 +126,9 @@ class StateHold(SeriesOperator):
             value, update_condition, reset_condition = _aligned(value, update_condition, reset_condition)
         else:
             value, update_condition = _aligned(value, update_condition)
+        assert_condition_bool(update_condition, name="update_condition")
+        if reset_condition is not None:
+            assert_condition_bool(reset_condition, name="reset_condition")
         vv = value.to_numpy(dtype=float)
         uc = update_condition.to_numpy(dtype=float)
         rv = None if reset_condition is None else reset_condition.to_numpy(dtype=float)
@@ -129,12 +140,14 @@ class StateHold(SeriesOperator):
                 u_ok = bool(np.isfinite(uc[row, col]))
                 r_ok = True if rv is None else bool(np.isfinite(rv[row, col]))
                 if not (u_ok and r_ok):
+                    # NaN condition is unknown: it must not flip the hold and
+                    # re-baselines the memory.
                     out[row, col] = np.nan
                     held = np.nan
                     continue
-                if rv is not None and bool(rv[row, col] != 0.0):
+                if rv is not None and rv[row, col] == 1.0:
                     held = np.nan
-                elif bool(uc[row, col] != 0.0):
+                elif uc[row, col] == 1.0:
                     # P1-29: an explicit update whose payload is NaN means "we
                     # cannot confirm the new value" — it must clear the hold,
                     # not silently keep the previous snapshot.

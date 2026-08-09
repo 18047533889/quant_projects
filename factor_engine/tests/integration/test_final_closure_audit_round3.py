@@ -435,7 +435,15 @@ def test_edges_fallback_resolves_physical_dataset():
     assert edges[0].logical_table == "StockDailyBar"
 
 
-def test_edges_fallback_unknown_table_uses_anchor():
+def test_edges_fallback_unknown_table_no_anchor_skips_or_fails():
+    """P0-40/P0-41: logical→physical 解析失败时**绝不 anchor-fallback**。
+
+    旧行为把 valuation child 解析到 daily anchor，导致 valuation 事件永远触发
+    不了因子（增量重算静默失效）。新行为：research 跳过该 edge（warning），
+    production fail-closed 抛 ``DependencyDatasetResolutionError``。
+    """
+    from runtime.incremental_scheduler import DependencyDatasetResolutionError
+
     spec = SimpleNamespace(
         dataset=None,
         table="UnknownLogicalTable999",
@@ -443,8 +451,11 @@ def test_edges_fallback_unknown_table_uses_anchor():
         source_name="Close",
     )
     analysis = SimpleNamespace(referenced_fields={"close": spec})
-    edges = _edges_from_analysis("f", analysis, SimpleNamespace(dataset="ashare_stock_daily"))
-    assert edges[0].source_dataset == "ashare_stock_daily"
+    ds = SimpleNamespace(dataset="ashare_stock_daily")
+    edges = _edges_from_analysis("f", analysis, ds)
+    assert edges == []  # research: 不写 anchor，edge 被跳过
+    with pytest.raises(DependencyDatasetResolutionError):
+        _edges_from_analysis("f", analysis, ds, production=True)
 
 
 # ---------------------------------------------------------------------------

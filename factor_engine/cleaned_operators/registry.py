@@ -728,16 +728,21 @@ _LOGICAL_CONTRACT_FIELDS: tuple[tuple[str, str], ...] = (
 
 
 def _backfill_logical_contract(operator: Any, prev: dict[str, Any]) -> None:
-    """Copy every undeclared logical-contract field from the canonical contract.
+    """Copy every undeclared logical-contract field from the canonical contract,
+    and REJECT any backend-declared field that CONTRADICTS the canonical.
 
     ``prev`` is the existing catalog entry (the pandas backend — registered
-    first — owns the canonical logical contract).  Fields the operator metadata
-    already declares are left untouched; only genuinely empty slots inherit the
-    canonical value, so a native polars implementation that deliberately declares
-    its own contract keeps it.  Containers are shallow-copied (leaf objects like
-    the frozen :class:`ParamSpec` are shared); frozen metadata objects are
-    skipped silently — the catalog dict still carries the contract for consumers
-    that read it there.
+    first — owns the canonical logical contract).  P0-23: the canonical is the
+    single logical authority.  A backend metadata field that is non-empty AND
+    differs from the canonical is a real contract divergence (e.g. pandas
+    ``unit=return`` vs polars ``unit=level``), which must fail registration —
+    never silently keep both.  Only genuinely empty slots inherit the canonical
+    value.  Containers are shallow-copied (leaf objects like the frozen
+    :class:`ParamSpec` are shared); frozen metadata objects are skipped
+    silently — the catalog dict still carries the contract for consumers that
+    read it there.  Backend-only physical fields (``execution_kind`` /
+    ``supports_lazy`` / ``cost``) are not in ``_LOGICAL_CONTRACT_FIELDS`` and are
+    never compared.
     """
     meta = getattr(operator, "metadata", None)
     if meta is None:
@@ -750,16 +755,45 @@ def _backfill_logical_contract(operator: Any, prev: dict[str, Any]) -> None:
             cur = getattr(meta, field, None)
         except AttributeError:
             continue
-        if cur not in (None, "", (), [], {}):
+        if cur in (None, "", (), [], {}):
+            # Empty backend slot -> inherit the canonical value.
+            try:
+                if kind in ("dict", "list", "tuple"):
+                    value = type(canonical)(canonical)
+                else:
+                    value = canonical
+                setattr(meta, field, value)
+            except (AttributeError, TypeError, ValueError):
+                pass  # frozen metadata: the catalog contract still carries it
             continue
-        try:
-            if kind in ("dict", "list", "tuple"):
-                value = type(canonical)(canonical)
-            else:
-                value = canonical
-            setattr(meta, field, value)
-        except (AttributeError, TypeError, ValueError):
-            pass  # frozen metadata: the catalog contract still carries it
+        # Non-empty backend-declared value: must MATCH the canonical, or the
+        # backend carries a contradictory logical contract (P0-23 fail-closed).
+        if not _logical_field_equal(field, canonical, cur):
+            raise ValueError(
+                f"logical-contract divergence for backend of canonical "
+                f"{getattr(meta, 'name', '?')!r}: field {field!r} declares "
+                f"{cur!r} but the canonical contract holds {canonical!r} "
+                "(P0-23 — a backend may not carry its own contradicting logical "
+                "contract; register the change on the canonical pandas backend)"
+            )
+
+
+def _logical_field_equal(field: str, left: Any, right: Any) -> bool:
+    """Structural equality for a logical-contract field across backends.
+
+    Containers compare element-wise so a pandas ``param_specs`` dict and a
+    polars-parallel dict of the same specs compare equal despite different
+    object identities.  Scalar/``None`` fields compare directly.
+    """
+    if isinstance(left, dict) and isinstance(right, dict):
+        if set(left.keys()) != set(right.keys()):
+            return False
+        return all(_logical_field_equal(field, left[k], right[k]) for k in left)
+    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
+        if len(left) != len(right):
+            return False
+        return all(_logical_field_equal(field, a, b) for a, b in zip(left, right))
+    return left == right
 
 
 # R10 #15: canonical-contract fields that a silent merge/rename must never

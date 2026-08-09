@@ -33,6 +33,12 @@ class CheckpointFieldSpec:
     ``min``/``max`` bound numeric values (inclusive).  ``nested_schema`` lists
     the required keys of an object-valued field (e.g. an ``EwmState`` dict); the
     field's ``finite`` then applies to the nested numeric values.
+    ``nested_fields`` (NEW-P1-32) is a RECURSIVE typed schema for an object-valued
+    field: each ``CheckpointFieldSpec`` declares the sub-field's own
+    dtype / finite / min / max, so validation on read checks sub-field TYPES and
+    RANGES — not just required key names.  When present it supersedes the
+    key-name-only ``nested_schema`` check (``nested_schema`` is kept for legacy
+    readers / diagnostics).
     """
 
     name: str
@@ -42,6 +48,7 @@ class CheckpointFieldSpec:
     min: float | None = None
     max: float | None = None
     nested_schema: tuple[str, ...] = ()
+    nested_fields: tuple["CheckpointFieldSpec", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -231,6 +238,24 @@ class StatefulCheckpointRegistry:
             if fs.name not in state:
                 raise StatefulContractError(f"checkpoint state missing field for spec: {fs.name}")
             value = state[fs.name]
+            # NEW-P1-32: recursive typed schema — validate every sub-field's own
+            # dtype / finite / range, not just the required key names.
+            if fs.nested_fields:
+                if isinstance(value, Mapping):
+                    for sub in fs.nested_fields:
+                        if sub.name not in value:
+                            raise StatefulContractError(
+                                f"checkpoint field {fs.name} missing nested key: {sub.name}"
+                            )
+                        # Recurse so a sub-field's own nested_schema / nested_fields
+                        # (and its dtype/finite/min/max) are enforced.
+                        StatefulCheckpointRegistry._validate_field_specs(
+                            (sub,), {sub.name: value[sub.name]}
+                        )
+                    continue
+                # A non-object value in an object-schema field falls through to the
+                # scalar dtype check below (tolerates legacy scalar states while
+                # still validating them as numeric when the dtype demands it).
             if fs.nested_schema:
                 if isinstance(value, Mapping):
                     missing_nested = sorted(set(fs.nested_schema) - set(value))
@@ -328,12 +353,27 @@ class StatefulCheckpointRegistry:
 def _nested_ewm(name: str) -> CheckpointFieldSpec:
     # The production state is an ``EwmState`` dict; a scalar float is tolerated
     # for legacy/foreign checkpoints and validated as numeric.
+    # NEW-P1-32: declare the recursive typed schema so read-time validation checks
+    # the sub-fields' dtype / finite / range (weighted_avg/old_wt may hold a NaN
+    # "missing" marker; valid_count must be a non-negative integer), not just the
+    # required key names.
     return CheckpointFieldSpec(
         name=name,
         dtype="float",
         nullable=False,
         finite=True,
         nested_schema=("weighted_avg", "old_wt", "valid_count"),
+        nested_fields=(
+            CheckpointFieldSpec(
+                name="weighted_avg", dtype="float", nullable=True, finite=False
+            ),
+            CheckpointFieldSpec(
+                name="old_wt", dtype="float", nullable=True, finite=False
+            ),
+            CheckpointFieldSpec(
+                name="valid_count", dtype="int", nullable=True, min=0
+            ),
+        ),
     )
 
 
