@@ -38,7 +38,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 # R6-133: one canonical k-NN implementation.  This module previously duplicated
 # the competition-rank (nested argsort) kNN with a stable ``order[:k_eff]`` cut
@@ -128,13 +128,25 @@ def _local_moran_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.nda
     for t in range(rows):
         U, valid = _rank_features(feats, t)
         z = _zscore_cross(target[t])
+        fin = np.isfinite(z)
+        m = int(fin.sum())
+        if m < 2:
+            continue
+        # R11 round-3 P1-A (item 91): classical Local Moran I with the GLOBAL
+        # second moment normalisation  m2 = (1/n)·Σ_i z_i².  For cross-sectional
+        # z-scores (population std, ddof=0) this is identically 1, but it is
+        # computed explicitly so the statistic is the standard one and stays
+        # correct if the z-score normalisation ever changes.
+        m2 = float(np.sum(z[fin] ** 2) / m)
+        if not np.isfinite(m2) or m2 <= _EPS:
+            continue
         # R6-134: neighbour candidates must be feature-valid AND target-valid
         # from the start.  Selecting k feature-neighbours and then dropping
         # target-NaN members would silently leave k-3 neighbours while a
         # farther target-valid name was never considered.  ``feat_valid`` is
         # the feature mask ANDed with the target mask before the kth-distance
         # selection.
-        feat_valid = valid & np.isfinite(z)
+        feat_valid = valid & fin
         for i in range(n):
             if not valid[i] or not np.isfinite(z[i]):
                 continue
@@ -142,7 +154,9 @@ def _local_moran_series(target: np.ndarray, feats: np.ndarray, k: int) -> np.nda
             if nbrs.size == 0:
                 continue
             nz = z[nbrs]
-            out[t, i] = float(z[i] * np.mean(nz))
+            # Row-standardised weights w_ij = 1/|NN(i)|  (Σ_j w_ij = 1), so
+            # Σ_j w_ij·z_j = mean(z_NN);  I_i = z_i · Σ_j w_ij z_j / m2.
+            out[t, i] = float(z[i] * np.mean(nz) / m2)
     return out
 
 
@@ -266,6 +280,50 @@ def _isotonic_residual_series(y2d: np.ndarray, x2d: np.ndarray) -> np.ndarray:
             sse_dn = float(np.sum((ys - dn) ** 2))
             fitted = up if sse_up <= sse_dn else dn
         out[t, m] = ys - fitted
+    return out
+
+
+def _isotonic_residual_lagged_series(y2d: np.ndarray, x2d: np.ndarray, lookback: int) -> np.ndarray:
+    """Isotonic residual whose monotone DIRECTION is fixed by PRIOR dates.
+
+    ``cs_isotonic_residual`` picks the direction from the SAME day's Spearman
+    correlation — that is in-sample model selection, so it is a *descriptive*
+    residual.  This variant (round-3 P1-A / item 92) estimates the direction
+    from the trailing ``lookback``-day aligned (x, y) sample and applies it to
+    today's fit, so the direction is fixed before the day is seen.  When the
+    lagged direction is ambiguous (|rho| <= _RHO_EPS) the value fails closed to
+    NaN — there is no in-sample re-picking, which is what makes this usable as a
+    pre-determined predictive-neutralization residual.
+    """
+    rows, cols = y2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    lb = int(lookback)
+    for t in range(rows):
+        if t < 1:
+            continue  # need at least one prior date to fix the direction
+        lo = max(0, t - lb)
+        xw = x2d[lo:t].ravel()
+        yw = y2d[lo:t].ravel()
+        m = np.isfinite(xw) & np.isfinite(yw)
+        xs_p = xw[m].astype(float)
+        ys_p = yw[m].astype(float)
+        if xs_p.size < _MIN_ISOTONIC_BREADTH:
+            continue
+        rho = _spearman(xs_p, ys_p)
+        if rho > _RHO_EPS:
+            decreasing = False
+        elif rho < -_RHO_EPS:
+            decreasing = True
+        else:
+            continue  # lagged direction ambiguous -> fail closed (no in-sample pick)
+        xr, yr = x2d[t], y2d[t]
+        m2 = np.isfinite(xr) & np.isfinite(yr)
+        xs = xr[m2].astype(float)
+        ys = yr[m2].astype(float)
+        if xs.size < _MIN_ISOTONIC_BREADTH:
+            continue
+        fitted = _iso_fit(ys, xs, decreasing=decreasing)
+        out[t, m2] = ys - fitted
     return out
 
 
@@ -451,8 +509,10 @@ class CsKnnLocalMoran(SeriesOperator):
     """局部 Moran I：目标在风格 k-NN 图上的空间自相关。
 
     每日期截面：f1..f3 秩标准化后建 kNN 图（排除自身），target 截面 z-score 为
-    z_i，Local Moran I_i = z_i · mean(z of neighbors)。高正 = 我和风格近邻同步
-    极值（局部抱团）；高负 = 我相对风格近邻反向（风格内 alpha）。P1。
+    z_i。标准 Local Moran I = z_i · Σ_j w_ij·z_j / m2，其中 w_ij = 1/|NN(i)|
+    为行标准化权重（Σ_j w_ij = 1，故 Σ_j w_ij·z_j = 邻居 z 的均值），m2 =
+    (1/n)·Σ z_i² 为全局二阶矩（对截面 z-score 恰为 1，显式保留）。高正 = 我和
+    风格近邻同步极值（局部抱团）；高负 = 我相对风格近邻反向（风格内 alpha）。P1。
     """
 
     metadata = _metadata(
@@ -481,16 +541,22 @@ class CsKnnLocalMoran(SeriesOperator):
     source="cross_section_ext",
 )
 class CsIsotonicResidual(SeriesOperator):
-    """截面等渗回归残差：y 对 x 的单调拟合残差。
+    """截面等渗回归残差：y 对 x 的单调拟合残差（描述性）。
 
     每日期截面按 Spearman 秩相关符号决定单调方向（增/减），用 pool-adjacent-
     violators 拟合；|rho| 接近 0 时同时拟合升/降两条并取残差平方和更小者。
     残差 = y - ŷ。捕捉与 x 单调关系正交的截面 alpha。P1。
+
+    注意（round-3 P1-A / item 92）：方向由**当日** Spearman 相关选择，属样本内
+    模型选择——这是一个**描述性** residual（描述"当日与 x 的单调关系正交的
+    偏离"），不是可泛化的**预测性中性化** residual。若需要方向由先前日期固定的
+    变体，使用 ``cs_isotonic_residual_lagged_direction``。
     """
 
     metadata = _metadata(
         "cs_isotonic_residual",
-        "y 对 x 的截面等渗（单调）回归残差。",
+        "y 对 x 的截面等渗（单调）回归残差（描述性：方向由当日 Spearman 相关样本内选择，"
+        "非预测性中性化；预测性变体见 cs_isotonic_residual_lagged_direction）。",
         ["y", "x"],
         unit="residual",
         cost=6,
@@ -498,6 +564,49 @@ class CsIsotonicResidual(SeriesOperator):
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, **_: Any) -> pd.DataFrame:
         return frame_like(y, _isotonic_residual_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float)))
+
+
+@register_operator(
+    name="cs_isotonic_residual_lagged_direction",
+    category="cross_sectional",
+    business_category="cross_sectional",
+    canonical="cs_isotonic_residual_lagged_direction",
+    source="cross_section_ext",
+)
+class CsIsotonicResidualLaggedDirection(SeriesOperator):
+    """截面等渗回归残差，单调方向由 prior ``lookback`` 天固定。
+
+    与 ``cs_isotonic_residual``（描述性：方向取自当日 Spearman 相关，属样本内
+    模型选择）不同，此变体用 trailing ``lookback`` 天的对齐 (x, y) 样本估计
+    单调方向并固定应用于当日拟合。滞后方向模糊（|rho| <= eps）→ NaN
+    （fail-closed，不进行样本内再选择）。方向在见到当日数据前已固定，因此可作
+    **预测性** 中性化残差使用。P1。
+    """
+
+    metadata = _metadata(
+        "cs_isotonic_residual_lagged_direction",
+        "y 对 x 的截面等渗回归残差，单调方向由 prior lookback 天对齐样本固定。",
+        ["y", "x", "lookback"],
+        unit="residual",
+        cost=6,
+    )
+    # round-3 knob contract: ``lookback`` is an estimator-resolution knob
+    # (how much history is used to fix the direction), not an economic alpha.
+    metadata.param_specs = {
+        "lookback": ParamSpec(
+            dtype=int, min=1, searchable=False,
+            param_role=ParamRole.ESTIMATOR_RESOLUTION,
+        ),
+    }
+
+    def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, lookback: int = 20, **_: Any) -> pd.DataFrame:
+        lb = int(lookback)
+        if lb < 1:
+            raise ValueError("cs_isotonic_residual_lagged_direction requires lookback >= 1")
+        return frame_like(
+            y,
+            _isotonic_residual_lagged_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float), lb),
+        )
 
 
 @register_operator(
@@ -603,6 +712,7 @@ class GroupCorrMstLength(SeriesOperator):
 _NEW_CANONICALS = (
     "cs_knn_local_moran",
     "cs_isotonic_residual",
+    "cs_isotonic_residual_lagged_direction",
     "group_current_members_tail_coexceedance",
     "group_corr_mst_length",
 )

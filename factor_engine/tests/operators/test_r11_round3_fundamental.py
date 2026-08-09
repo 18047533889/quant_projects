@@ -310,12 +310,27 @@ def test_growth_ops_declare_rate_not_price_volume():
 
 
 def test_ratio_ops_declare_flow_stock_input_units():
-    assert _op("operating_margin").metadata.input_units == {
+    # ``operating_margin``/``current_ratio`` are registered from the legacy
+    # fundamental ``ops.py`` but are NOT surfaced as extended-only canonicals,
+    # so post-``load_all`` governance prunes them from the registry.  Assert the
+    # metadata on the operator CLASS directly.
+    from cleaned_operators.fundamental.ops import (
+        CurrentRatioOp,
+        DebtToEquityOp,
+        OperatingMarginOp,
+        QuickRatioOp,
+    )
+
+    assert OperatingMarginOp.metadata.input_units == {
         "operating_income": "flow", "revenue": "flow",
     }
-    assert _op("current_ratio").metadata.input_units == {
+    assert CurrentRatioOp.metadata.input_units == {
         "current_assets": "stock", "current_liabilities": "stock",
     }
+    assert QuickRatioOp.metadata.input_units["inventory"] == "stock"
+    assert DebtToEquityOp.metadata.input_units["total_equity"] == "stock"
+    # ``holder_pledge_ratio`` IS surfaced (churn_network ``_mk``) so it stays
+    # reachable through the post-governance registry.
     assert _op("holder_pledge_ratio").metadata.input_units == {
         "pledge_shares": "shares", "total_capital": "shares",
     }

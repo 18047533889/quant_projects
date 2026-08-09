@@ -6,11 +6,20 @@ Nonlinear / directed dependence measures beyond plain correlation:
 * ``ts_chatterjee_xi``          — Chatterjee's directed rank correlation
   (functional dependence of ``y`` on ``x``; 1 when ``y = f(x)`` is deterministic).
 * ``ts_hsic``                   — normalized Hilbert-Schmidt independence
-  criterion with RBF kernels and the median pairwise-distance bandwidth.
+  criterion with RBF kernels and the median *positive* pairwise-distance
+  bandwidth (audit #53: a zero median under heavy ties must not fall back to a
+  near-identity kernel).
 * ``ts_conditional_mutual_information`` — CMI(X;Y|Z) from quantile-discretized
-  joint counts, normalized by ``log(bins)`` (base-e entropy).
-* ``ts_partial_distance_correlation`` — partial distance correlation of
-  ``X, Y`` given ``Z`` built from double-centered Euclidean distance matrices.
+  joint counts, normalized by ``log(effective_bins)`` (base-e entropy; audit
+  #54: after ties collapse the effective state space, the denominator uses the
+  effective cell counts, never the requested ``bins``).
+* ``ts_distance_correlation_partial_proxy`` — the Pearson-combination of
+  distance correlations ``(r_xy - r_xz·r_yz) / sqrt((1-r_xz²)(1-r_yz²))`` built
+  from double-centered Euclidean distance matrices.  This is a *proxy*, NOT the
+  strict Székely/Rizzo partial distance correlation (which requires U-centered
+  distance matrices plus a Hilbert-space projection); the name is deliberately
+  honest (audit #52).  The legacy ``ts_partial_distance_correlation`` resolves
+  as a deprecated alias.
 
 All operators are trailing-window, prefix-causal and deterministic.  Only
 same-position finite aligned triples/pairs are used; degenerate windows (too
@@ -24,7 +33,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import (
     aligned_pairs,
     check_window,
@@ -113,9 +122,19 @@ def _rbf_kernel(v: np.ndarray) -> np.ndarray | None:
     tri = d[np.triu_indices(n, 1)]
     if tri.size == 0:
         return None
-    sigma = float(np.median(tri))
+    # Audit #53: bandwidth is the median of the POSITIVE pairwise distances.
+    # With heavy ties (e.g. 0,0,0,0,0,1,2) more than half the pairwise distances
+    # are zero, so ``median(all)`` = 0; the old ``sigma = max(median, EPS)``
+    # fallback made the kernel ≈ identity and HSIC mostly reflected the tie
+    # rate, not genuine dependence.  Positive distances give the real scale of
+    # the non-constant structure.  If too few positive distances exist the
+    # series is (near-)constant -> fail closed to NaN.
+    pos = tri[tri > _EPS]
+    if pos.size < max(2, int(np.sqrt(n))):
+        return None
+    sigma = float(np.median(pos))
     if sigma <= _EPS:
-        sigma = _EPS
+        return None
     return np.exp(-(d * d) / (2.0 * sigma * sigma))
 
 
@@ -162,7 +181,17 @@ def _cmi(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray, bins: int) -> float:
     np.add.at(cxyz, (bx, by, bz), 1.0)
     hxyz = _entropy_from_counts(cxyz.ravel(), n)
     cmi = hxz + hyz - hz - hxyz
-    return float(cmi / np.log(bins))
+    # Audit #54: after ties collapse the effective state space, the normalized
+    # denominator must use the EFFECTIVE occupied cell counts — CMI <=
+    # min(H(X), H(Y)) <= min(log n_x_eff, log n_y_eff) — never log(requested
+    # bins).  A marginal that degenerated to a single occupied cell carries no
+    # conditional information -> fail closed.
+    n_x_eff = int(np.unique(bx).size)
+    n_y_eff = int(np.unique(by).size)
+    eff = min(n_x_eff, n_y_eff)
+    if eff < 2:
+        return np.nan
+    return float(cmi / np.log(eff))
 
 
 def _double_center(v: np.ndarray) -> np.ndarray:
@@ -181,7 +210,17 @@ def _normalized_dcov(A: np.ndarray, B: np.ndarray) -> float:
     return float(np.sqrt(max(dcov2, 0.0) / np.sqrt(dvar2_a * dvar2_b)))
 
 
-def _partial_dcor(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray) -> float:
+def _partial_dcor_proxy(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray) -> float:
+    """Pearson-formula proxy for partial distance correlation (audit #52).
+
+    This computes ``(r_xy - r_xz·r_yz) / sqrt((1 - r_xz²)(1 - r_yz²))`` over the
+    plain double-centered distance correlations.  That is the standard partial
+    CORRELATION combination, NOT the strict Székely/Rizzo partial distance
+    correlation (which requires U-centered distance matrices plus a Hilbert
+    space projection of the distance-covariance operator).  It is kept and
+    RENAMED honestly as ``ts_distance_correlation_partial_proxy`` — a fast,
+    interpretable control-for-Z dependence proxy, but not the certified pdCor.
+    """
     n = xv.size
     if n < 5:
         return np.nan
@@ -194,9 +233,9 @@ def _partial_dcor(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray) -> float:
     if not (np.isfinite(r_xy) and np.isfinite(r_xz) and np.isfinite(r_yz)):
         return np.nan
     num = r_xy - r_xz * r_yz
-    # Standard partial-distance-correlation combination (review R4-15): the
-    # partial correlation denominator needs the *squared* conditioning
-    # correlations, sqrt((1-r_xz²)(1-r_yz²)), not sqrt((1-r_xz)(1-r_yz)).
+    # Partial-correlation combination (review R4-15): the denominator needs the
+    # *squared* conditioning correlations, sqrt((1-r_xz²)(1-r_yz²)), not
+    # sqrt((1-r_xz)(1-r_yz)).
     denom = float(np.sqrt((1.0 - r_xz * r_xz) * (1.0 - r_yz * r_yz) + _EPS))
     if not np.isfinite(denom) or denom <= _EPS:
         return np.nan
@@ -305,7 +344,7 @@ class TsConditionalMutualInformation(SeriesOperator):
     )
     metadata.param_specs = {
         # R4-50: bins^3 plug-in cells need large N; production grid is {2, 3}.
-        "bins": ParamSpec(dtype=int, min=2, max=3, choices=(2, 3)),
+        "bins": ParamSpec(dtype=int, min=2, max=3, choices=(2, 3), param_role=ParamRole.ESTIMATOR_RESOLUTION),
         "window": ParamSpec(dtype=int, min=2),
     }
 
@@ -324,22 +363,27 @@ class TsConditionalMutualInformation(SeriesOperator):
 
 
 @register_operator(
-    name="ts_partial_distance_correlation",
+    name="ts_distance_correlation_partial_proxy",
     category="dependence_ext",
     business_category="dependence_ext",
-    canonical="ts_partial_distance_correlation",
+    canonical="ts_distance_correlation_partial_proxy",
     source="dependence_ext",
 )
 class TsPartialDistanceCorrelation(SeriesOperator):
-    """偏距离相关:控制 Z 后 X 与 Y 的距离相关。
+    """偏距离相关代理:控制 Z 后 X-Y 的 Pearson 组合距离相关（非严格 pdCor）。
 
     用双中心化欧氏距离矩阵构造,全部使用归一化 dCov
-    (= dcov/sqrt(dvar_x·dvar_y)),再套用偏相关组合式。P2。
+    (= dcov/sqrt(dvar_x·dvar_y)),再套用偏相关组合式
+    ``(r_xy - r_xz·r_yz) / sqrt((1-r_xz²)(1-r_yz²))``。审计 #52：这是
+    **proxy**，不是 Székely/Rizzo 的严格偏距离相关（后者需要 U-center 距离
+    矩阵 + Hilbert 空间投影）；命名已诚实改为 ``ts_distance_correlation_
+    partial_proxy``，旧名 ``ts_partial_distance_correlation`` 作为弃用别名。
+    P2。
     """
 
     metadata = _metadata(
-        "ts_partial_distance_correlation",
-        "控制 Z 后的 X-Y 偏距离相关（双中心距离矩阵 + 归一化 dCov）。",
+        "ts_distance_correlation_partial_proxy",
+        "控制 Z 后的 X-Y 距离相关代理（Pearson 组合，非严格 Székely/Rizzo pdCor）。",
         ["x", "y", "z", "window"],
         unit="corr",
         cost=7,
@@ -351,7 +395,7 @@ class TsPartialDistanceCorrelation(SeriesOperator):
             x,
             _triple_series(
                 x.to_numpy(dtype=float), y.to_numpy(dtype=float), z.to_numpy(dtype=float), w,
-                _partial_dcor,
+                _partial_dcor_proxy,
             ),
         )
 
@@ -360,14 +404,26 @@ _NEW_CANONICALS = (
     "ts_chatterjee_xi",
     "ts_hsic",
     "ts_conditional_mutual_information",
-    "ts_partial_distance_correlation",
+    "ts_distance_correlation_partial_proxy",
 )
+# Audit #52 honest rename: the legacy name computed the Pearson combination of
+# distance correlations, NOT the strict Székely/Rizzo partial distance
+# correlation.  It resolves as a deprecated alias so existing recipes load.
+_DEPRECATED_ALIASES = {
+    "ts_partial_distance_correlation": "ts_distance_correlation_partial_proxy",
+}
 
 
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
+    from cleaned_operators.registry import OperatorRegistry
 
     _surface.extend_extended_only(set(_NEW_CANONICALS))
+    for _old, _new in _DEPRECATED_ALIASES.items():
+        try:
+            OperatorRegistry.register_alias(_old, _new)
+        except (KeyError, ValueError):
+            pass  # already registered
     for _canon in _NEW_CANONICALS:
         register_polars_bridge(_canon)
 

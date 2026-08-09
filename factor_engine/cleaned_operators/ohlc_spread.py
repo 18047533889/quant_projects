@@ -15,12 +15,20 @@
   mid-range), so ``output[T]`` uses only completed pairs ``s ≤ T-1`` — the
   last pair is ``(c_{T-1}, η_{T-1}, η_T)`` with day-*T*'s high/low (known at
   day-*T* close) — never ``(c_T, η_T, η_{T+1})``.  Output
-  ``sqrt(max(4·mean[...], 0))``.
+  ``sqrt(4·mean[...])`` when the squared-spread estimate is non-negative;
+  a *negative* squared spread (an unreliable variance estimate, NOT a zero
+  spread) fails closed to NaN (P0-M-72 — the old ``max(..., 0)`` silently
+  clipped it to 0).
 * ``ts_pastor_stambaugh_liquidity_gamma`` — Pastor & Stambaugh (2003, JPE)
-  order-flow-reversal gamma.  ``flow_t = sign(r_t^e)·amount_t`` (internally
-  scaled by 1e6; the gamma unit scales with that convention and is documented
-  in metadata), regressed as ``r_{t+1}^e = α + β r_t^e + γ flow_t + ε`` over a
-  trailing window of *completed* pairs (``s+1 ≤ T``).  Output ``γ``.
+  order-flow-reversal gamma.  ``flow_t = sign(r_t^e)·amount_t / flow_scale``
+  (P0-M-73: the unit convention is an explicit ``flow_scale`` parameter, default
+  1e6 = "per million currency" — never a hidden kernel constant), regressed as
+  ``r_{t+1}^e = α + β r_t^e + γ flow_t + ε`` over a trailing window of
+  *completed* pairs (``s+1 ≤ T``).  Output ``γ``.
+* ``ts_edge_effective_spread`` — valid-pair coverage gates (P0-M-71):
+  ``min_valid_pairs`` (default 2) and ``min_valid_ratio`` (default 0 = disabled)
+  fail the window closed to NaN when too few OHLC pairs survive the estimator's
+  internal valid pattern.
 
 All operators are strict-PIT, deterministic, and NaN fail-closed.  The unit
 conventions (return in decimal, price as continuous price) are assumed to be
@@ -35,7 +43,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec, RelationalParamSpec
+from cleaned_operators.base import ParamRole, ParamSpec, RelationalParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -45,13 +53,39 @@ from cleaned_operators.gemini_v2_common import (
 
 _EPS = 1e-12
 
-_EDGE_SPECS = {"window": ParamSpec(dtype=int, min=3)}
+_EDGE_SPECS = {
+    "window": ParamSpec(dtype=int, min=3),
+    # P0-M-71: valid-pair coverage gates.  Even with every row finite, many OHLC
+    # pairs can internally violate the EDGE valid pattern (impossible OHLC
+    # geometry, degenerate ``(h==l) and (l==c1)`` pairs) and be masked out.
+    # ``min_valid_pairs`` / ``min_valid_ratio`` are opt-in fail-closed output
+    # gates — pure estimator-resolution knobs, never search dimensions.
+    "min_valid_pairs": ParamSpec(
+        dtype=int, min=2, default=2, searchable=False, param_role=ParamRole.NUMERICAL,
+    ),
+    "min_valid_ratio": ParamSpec(
+        dtype=float, min=0.0, max=1.0, default=0.0, searchable=False,
+        param_role=ParamRole.NUMERICAL,
+    ),
+}
 _ABDI_SPECS = {
     "window": ParamSpec(dtype=int, min=3),
 }
 _PS_SPECS = {
     "window": ParamSpec(dtype=int, min=4),
     "min_periods": ParamSpec(dtype=int, min=3),
+    # P0-M-73: the order-flow is ``flow_t = sign(r_t^e)·amount_t / flow_scale``.
+    # The old kernel hard-coded ``/1e6`` — a hidden RMB-元-vs-千元-vs-百万元 unit
+    # convention that silently rescales the gamma.  The unit is now explicit as a
+    # parameter: the consumer supplies the scale that turns their ``amount``
+    # (declared ``money_local``) into the flow unit, and the declared output unit
+    # is ``return_per_{flow_scale}_currency``.  Default 1e6 preserves the
+    # reference Pastor-Stambaugh "per million" convention; never a search
+    # dimension (a pure unit conversion).
+    "flow_scale": ParamSpec(
+        dtype=float, min=1e-9, default=1e6, searchable=False,
+        param_role=ParamRole.NUMERICAL,
+    ),
 }
 # R6-164: the regression has N-1 completed pairs (response e_{s+1} for
 # s = 0..N-2), so min_periods == window can never be satisfied.  Declared as a
@@ -68,12 +102,27 @@ _PS_RELATIONAL_SPECS = [
 # ---------------------------------------------------------------------------
 # EDGE — faithful port of the official estimator
 # ---------------------------------------------------------------------------
-def _edge_window(open_: np.ndarray, high: np.ndarray, low: np.ndarray, close: np.ndarray) -> float:
+def _edge_window(
+    open_: np.ndarray,
+    high: np.ndarray,
+    low: np.ndarray,
+    close: np.ndarray,
+    min_valid_pairs: int = 2,
+    min_valid_ratio: float = 0.0,
+) -> float:
     """Reference ``edge()`` translated 1:1 from ``bidask.edge.edge``.
 
     Operates on the aligned trailing window (already finite).  Rows violating
     the OHLC geometry or with non-positive prices are masked to NaN; the
     reference algorithm's ``nanmean`` handling then skips the affected pairs.
+
+    P0-M-71 valid-pair coverage gates: ``tau`` marks each adjacent pair as
+    usable (non-degenerate, both rows valid).  ``n_valid_pairs`` counts those
+    and ``valid_ratio = n_valid_pairs / (nobs - 1)`` is the coverage of the
+    window.  ``min_valid_pairs`` (default 2 = the reference algorithm's own
+    floor) and ``min_valid_ratio`` (default 0 = disabled) fail the window closed
+    to NaN when coverage is too low — a few surviving pairs must not be read as
+    a reliable spread.
     """
     nobs = int(open_.shape[0])
     if nobs < 3:
@@ -125,6 +174,13 @@ def _edge_window(open_: np.ndarray, high: np.ndarray, low: np.ndarray, close: np
         pc = np.nanmean(pc1) + np.nanmean(pc2)
         if np.nansum(tau) < 2 or po == 0 or pc == 0:
             return np.nan
+        # P0-M-71: explicit valid-pair coverage gates (defaults preserve the
+        # reference behaviour: min_valid_pairs=2, min_valid_ratio=0 disables).
+        n_valid_pairs = int(np.nansum(tau))
+        n_pairs_total = nobs - 1
+        valid_ratio = n_valid_pairs / n_pairs_total if n_pairs_total > 0 else 0.0
+        if n_valid_pairs < int(min_valid_pairs) or valid_ratio < float(min_valid_ratio):
+            return np.nan
         d1 = r1 - np.nanmean(r1) / pt * tau
         d3 = r3 - np.nanmean(r3) / pt * tau
         d5 = r5 - np.nanmean(r5) / pt * tau
@@ -140,7 +196,15 @@ def _edge_window(open_: np.ndarray, high: np.ndarray, low: np.ndarray, close: np
     return float(np.sqrt(np.abs(s2)))
 
 
-def _edge_series(open_2d: np.ndarray, high_2d: np.ndarray, low_2d: np.ndarray, close_2d: np.ndarray, window: int) -> np.ndarray:
+def _edge_series(
+    open_2d: np.ndarray,
+    high_2d: np.ndarray,
+    low_2d: np.ndarray,
+    close_2d: np.ndarray,
+    window: int,
+    min_valid_pairs: int = 2,
+    min_valid_ratio: float = 0.0,
+) -> np.ndarray:
     rows, cols = open_2d.shape
     w = max(3, int(window))
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -162,7 +226,7 @@ def _edge_series(open_2d: np.ndarray, high_2d: np.ndarray, low_2d: np.ndarray, c
                 continue
             if np.any(run[0] <= 0.0) or np.any(run[1] <= 0.0) or np.any(run[2] <= 0.0) or np.any(run[3] <= 0.0):
                 continue
-            val = _edge_window(run[3], run[1], run[2], run[0])
+            val = _edge_window(run[3], run[1], run[2], run[0], min_valid_pairs, min_valid_ratio)
             if np.isfinite(val):
                 out[r, c] = val
     return out
@@ -174,12 +238,15 @@ def _ts_edge_effective_spread(
     low: pd.DataFrame,
     close: pd.DataFrame,
     window: int = 20,
+    min_valid_pairs: int = 2,
+    min_valid_ratio: float = 0.0,
 ) -> pd.DataFrame:
     if int(window) < 3:
         raise ValueError("ts_edge_effective_spread requires window >= 3")
     out = _edge_series(
         open.to_numpy(dtype=float), high.to_numpy(dtype=float),
         low.to_numpy(dtype=float), close.to_numpy(dtype=float), int(window),
+        int(min_valid_pairs), float(min_valid_ratio),
     )
     return frame_like(close, out)
 
@@ -200,7 +267,14 @@ def _abdi_ranaldo_window(c: np.ndarray, eta: np.ndarray, window: int) -> float:
     if not np.isfinite(mean_term):
         return np.nan
     s2 = 4.0 * mean_term
-    return float(np.sqrt(max(s2, 0.0)))
+    # P0-M-72: a negative squared-spread estimate (s2 < 0) is an unreliable
+    # variance estimate, NOT a "true spread of 0".  The old ``max(s2, 0.0)``
+    # silently clipped it to 0 — a read as "no spread" from a broken estimate.
+    # Fail closed to NaN instead.  Exact 0 (a genuinely constant price path)
+    # remains a legitimate zero spread.
+    if s2 < 0.0:
+        return np.nan
+    return float(np.sqrt(s2))
 
 
 def _abdi_ranaldo_series(close_2d: np.ndarray, high_2d: np.ndarray, low_2d: np.ndarray, window: int) -> np.ndarray:
@@ -269,7 +343,14 @@ def _ps_gamma_window(e: np.ndarray, flow: np.ndarray, min_periods: int) -> float
     return gamma if np.isfinite(gamma) else np.nan
 
 
-def _ps_series(ret_2d: np.ndarray, bench_2d: np.ndarray, amount_2d: np.ndarray, window: int, min_periods: int) -> np.ndarray:
+def _ps_series(
+    ret_2d: np.ndarray,
+    bench_2d: np.ndarray,
+    amount_2d: np.ndarray,
+    window: int,
+    min_periods: int,
+    flow_scale: float = 1e6,
+) -> np.ndarray:
     rows, cols = ret_2d.shape
     w = max(4, int(window))
     mp = max(3, int(min_periods))
@@ -285,7 +366,12 @@ def _ps_series(ret_2d: np.ndarray, bench_2d: np.ndarray, amount_2d: np.ndarray, 
             if run[0].shape[0] < 4:
                 continue
             e = run[0] - run[1]
-            flow = np.sign(e) * run[2] / 1e6
+            # P0-M-73: flow unit is explicit via ``flow_scale`` (default 1e6 =
+            # the reference "per million" convention).  The kernel never
+            # hard-codes a currency-unit convention; the consumer passes the
+            # scale that normalises their ``amount`` (money_local) to the flow
+            # unit, so RMB 元 vs 千元 vs 百万元 inputs map to the same factor.
+            flow = np.sign(e) * run[2] / float(flow_scale)
             val = _ps_gamma_window(e, flow, mp)
             if np.isfinite(val):
                 out[r, c] = val
@@ -298,12 +384,13 @@ def _ts_pastor_stambaugh_liquidity_gamma(
     amount: pd.DataFrame,
     window: int = 60,
     min_periods: int = 20,
+    flow_scale: float = 1e6,
 ) -> pd.DataFrame:
     if int(window) < 4:
         raise ValueError("ts_pastor_stambaugh_liquidity_gamma requires window >= 4")
     out = _ps_series(
         ret.to_numpy(dtype=float), benchmark_ret.to_numpy(dtype=float),
-        amount.to_numpy(dtype=float), int(window), int(min_periods),
+        amount.to_numpy(dtype=float), int(window), int(min_periods), float(flow_scale),
     )
     return frame_like(ret, out)
 
@@ -311,7 +398,7 @@ def _ts_pastor_stambaugh_liquidity_gamma(
 _SPECS: dict[str, dict[str, Any]] = {
     "ts_edge_effective_spread": {
         "fn": _ts_edge_effective_spread,
-        "params": ["open", "high", "low", "close", "window"],
+        "params": ["open", "high", "low", "close", "window", "min_valid_pairs", "min_valid_ratio"],
         "category": "market_microstructure",
         "domain": "liquidity",
         "unit": "ratio",
@@ -340,12 +427,14 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
     "ts_pastor_stambaugh_liquidity_gamma": {
         "fn": _ts_pastor_stambaugh_liquidity_gamma,
-        "params": ["ret", "benchmark_ret", "amount", "window", "min_periods"],
+        "params": ["ret", "benchmark_ret", "amount", "window", "min_periods", "flow_scale"],
         "category": "market_microstructure",
         "domain": "liquidity",
-        # R6-163: flow = sign(e)·amount/1e6, so [gamma] = return / million-currency,
-        # NOT a dimensionless ratio.  Declared honestly; the per-market scaling
-        # (CNY vs USD) is an explicit convention the consumer must handle.
+        # R6-163 + P0-M-73: flow = sign(e)·amount/flow_scale, so
+        # [gamma] = return / (flow_scale currency units) — NOT a dimensionless
+        # ratio.  Declared honestly; ``flow_scale`` makes the unit convention
+        # explicit (default 1e6 = "per million currency") instead of a hidden
+        # hard-coded 1e6 in the kernel.
         "unit": "return_per_million_currency",
         "cost": 4,
         "tags_extra": [],

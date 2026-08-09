@@ -60,7 +60,7 @@ _GEOMETRY_MATH_CANONICALS: tuple[str, ...] = (
     "ts_response_slope_asymmetry",
     # nonlinear dependence
     "ts_chatterjee_xi", "ts_hsic", "ts_conditional_mutual_information",
-    "ts_partial_distance_correlation",
+    "ts_distance_correlation_partial_proxy",
     # 2D joint trajectory geometry
     "ts_vector_path_efficiency", "ts_vector_turning_coherence",
     "ts_vector_path_curvature", "ts_vector_self_intersection_rate",
@@ -85,7 +85,7 @@ _GEOMETRY_MATH_CANONICALS: tuple[str, ...] = (
     "ts_delay_intrinsic_dimension",
     "ts_persistence_entropy_h0", "ts_persistence_entropy_h1",
     # cs / group locality
-    "cs_knn_local_moran", "cs_isotonic_residual",
+    "cs_knn_local_moran", "cs_isotonic_residual", "cs_isotonic_residual_lagged_direction",
     "group_current_members_tail_coexceedance", "group_corr_mst_length",
     # intraday session shape
     "intraday_session_shape_novelty", "intraday_profile_pca_residual",

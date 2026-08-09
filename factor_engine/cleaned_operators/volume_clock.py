@@ -15,16 +15,23 @@ paths when one moves its price mostly on thin volume.
 ``activity`` is a user-supplied per-minute intensity (volume / amount / trades);
 the clock is built on its cumulative sum, so the operator stays activity-agnostic.
 Only the day's own bars enter the computation — prefix-causal and deterministic.
+
+P0-O #80/#81/#82: a zero-activity bar must carry the SAME price as the previous
+observable bar (else the day fails closed — deleting the bar would reconnect two
+different prices); the Q=0 grid point is anchored at the day's SESSION OPEN
+(optional ``open`` panel; default = first observed bar's price) instead of an
+interpolation artifact; and ``buckets`` is ESTIMATOR resolution on the fixed
+grid {8, 16, 32}, not an economic search dimension.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
-from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg_two
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.microstructure.intraday_agg import _as_panel
 
 _EPS = 1e-12
 
@@ -45,13 +52,31 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
     )
 
 
-def _volume_clock_log_path(price: np.ndarray, activity: np.ndarray, buckets: int) -> tuple[np.ndarray, np.ndarray] | None:
+def _volume_clock_log_path(
+    price: np.ndarray,
+    activity: np.ndarray,
+    buckets: int,
+    open_px: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray] | None:
     """Resampled log-price path on the equal-activity grid -> (q_grid, log_p).
 
     R6-141: price must be strictly positive (``log`` domain) — a non-positive
     price is data-invalid, not a valid log-price.  R6-142: negative activity is
     a data error, not "no activity" — it fails the whole path closed rather
     than being filtered out and silently reconnecting the grid around it.
+
+    P0-O #80: zero-activity bars are dropped from the equal-activity grid, so a
+    zero-activity bar whose price differs from the previous OBSERVABLE
+    (positive-activity) price would silently reconnect two different prices
+    across the deleted bar.  When ``activity == 0`` the price must equal the
+    previous observable price, else the day's data is inconsistent and the path
+    fails closed (``None`` -> NaN).
+
+    P0-O #81: the Q=0 point is the SESSION OPEN, prepended EXPLICITLY (never
+    left to ``np.interp`` to clamp/extrapolate the first observation back to
+    q=0).  When an ``open_px`` panel is supplied its first finite value is the
+    session open; otherwise the first observed bar's price is the honest
+    session-open proxy.
     """
     # R6-142: negative activity invalidates the entire path (a negative
     # contribution to cumulative activity is not a valid clock).  Zero activity
@@ -65,6 +90,18 @@ def _volume_clock_log_path(price: np.ndarray, activity: np.ndarray, buckets: int
     valid = activity > 0.0
     if int(valid.sum()) < 3:
         return None
+    # P0-O #80: a zero-activity bar must carry the SAME price as the previous
+    # observable bar, else deleting it reconnects two different prices.
+    if np.any(~valid):
+        obs_idx = np.flatnonzero(valid)
+        zero_idx = np.flatnonzero(~valid)
+        pos = np.searchsorted(obs_idx, zero_idx, side="left") - 1
+        for i, z in enumerate(zero_idx):
+            if pos[i] < 0:
+                continue  # leading zero-activity bars: nothing to reconnect
+            prev = obs_idx[pos[i]]
+            if float(price[z]) != float(price[prev]):
+                return None
     act = activity[valid].astype(float)
     logp = np.log(price[valid].astype(float))
     Q = np.cumsum(act)
@@ -75,20 +112,32 @@ def _volume_clock_log_path(price: np.ndarray, activity: np.ndarray, buckets: int
     logp = logp[keep]
     if Q.shape[0] < 2 or Q[0] != Q[0]:
         return None
+    # P0-O #81: explicit session-open anchor at Q=0.
+    if open_px is not None:
+        fin = np.isfinite(open_px)
+        session_open = float(open_px[fin][0]) if np.any(fin) else float(price[valid][0])
+    else:
+        session_open = float(price[valid][0])
+    if not np.isfinite(session_open) or session_open <= 0.0:
+        return None
+    Q0 = np.concatenate(([0.0], Q))
+    logp0 = np.concatenate(([np.log(session_open)], logp))
     B = max(4, int(buckets))
     # R6-144: a smooth B-point path cannot be built from fewer distinct activity
     # points than B+1 — the interpolation would fabricate a path between
     # missing observations (roughness/curvature becomes an interpolation
     # artifact).  Fail closed instead of manufacturing smoothness.
-    if Q.shape[0] < B + 1:
+    if Q0.shape[0] < B + 1:
         return None
     grid = np.linspace(0.0, 1.0, B + 1)
-    path = np.interp(grid, Q, logp)
+    path = np.interp(grid, Q0, logp0)
     return grid, path
 
 
-def _volume_clock_efficiency(price: np.ndarray, activity: np.ndarray, buckets: int) -> float:
-    res = _volume_clock_log_path(price, activity, buckets)
+def _volume_clock_efficiency(
+    price: np.ndarray, activity: np.ndarray, buckets: int, open_px: np.ndarray | None = None
+) -> float:
+    res = _volume_clock_log_path(price, activity, buckets, open_px)
     if res is None:
         return np.nan
     _, path = res
@@ -98,8 +147,10 @@ def _volume_clock_efficiency(price: np.ndarray, activity: np.ndarray, buckets: i
     return float(abs(path[-1] - path[0]) / total_path)
 
 
-def _volume_clock_roughness(price: np.ndarray, activity: np.ndarray, buckets: int) -> float:
-    res = _volume_clock_log_path(price, activity, buckets)
+def _volume_clock_roughness(
+    price: np.ndarray, activity: np.ndarray, buckets: int, open_px: np.ndarray | None = None
+) -> float:
+    res = _volume_clock_log_path(price, activity, buckets, open_px)
     if res is None:
         return np.nan
     _, path = res
@@ -109,6 +160,50 @@ def _volume_clock_roughness(price: np.ndarray, activity: np.ndarray, buckets: in
     if denom <= _EPS:
         return 0.0
     return float(np.sum(delta2 * delta2) / denom)
+
+
+def _volume_clock_daily_agg(
+    price: pd.DataFrame,
+    activity: pd.DataFrame,
+    open_px: pd.DataFrame | None,
+    fn: Callable[[np.ndarray, np.ndarray, np.ndarray | None], float],
+) -> pd.DataFrame:
+    """Per-(instrument, calendar-day) volume-clock aggregation.
+
+    Replicates the PAIRED-MISSING policy of ``_daily_agg_two`` (a usable bar
+    requires BOTH ``price`` and ``activity`` finite; a bar with exactly one
+    finite member is dropped from both — never zero-filled), and attaches the
+    minute-level ``open`` panel as a third series so the kernel can anchor the
+    Q=0 point at the day's session open (P0-O #81).
+    """
+    pa = _as_panel(price)
+    act = _as_panel(activity)
+    opn = _as_panel(open_px) if open_px is not None else None
+    out: dict[str, pd.Series] = {}
+    for inst in pa.columns:
+        a, b = pa[inst], act[inst]
+        joined = pd.concat([a, b], axis=1, keys=["p", "a"]).dropna(subset=["p", "a"])
+        if opn is not None and inst in opn.columns:
+            joined["o"] = opn[inst]
+        else:
+            joined["o"] = np.nan
+        joined["day"] = joined.index.normalize()
+        per_day: dict[pd.Timestamp, float] = {}
+        for day, group in joined.groupby("day"):
+            vals_p = np.asarray(group["p"], dtype=float)
+            vals_a = np.asarray(group["a"], dtype=float)
+            vals_o = np.asarray(group["o"], dtype=float)
+            if not np.any(np.isfinite(vals_p)) or not np.any(np.isfinite(vals_a)):
+                per_day[day] = np.nan
+                continue
+            try:
+                per_day[day] = float(fn(vals_p, vals_a, vals_o))
+            except (ValueError, ZeroDivisionError, OverflowError):
+                per_day[day] = np.nan
+        out[inst] = pd.Series(per_day, dtype=float)
+    if not out:
+        return pd.DataFrame(dtype=float)
+    return pd.DataFrame(out).sort_index()
 
 
 @register_operator(
@@ -129,23 +224,38 @@ class IntradayVolumeClockPathEfficiency(SeriesOperator):
     metadata = _metadata(
         "intraday_volume_clock_path_efficiency",
         "成交量时钟路径效率（等 activity 网格，log-price）。",
-        ["price", "activity", "buckets"],
+        ["price", "activity", "buckets", "open"],
         unit="ratio",
         cost=4,
     )
     # R6-141/142: price must be > 0 (log domain), activity must be >= 0
     # (negative activity is a data error, not "no trade").  R6-144: buckets
     # must not exceed the distinct positive-activity points - 1, else the path
-    # is interpolated smoothness, not observation.
+    # is interpolated smoothness, not observation.  P0-O #82: ``buckets`` is
+    # ESTIMATOR resolution, not an economic dimension — a fixed small grid
+    # {8, 16, 32}, non-searchable.
     metadata.param_specs = {
-        "buckets": ParamSpec(dtype=int, min=4),
+        "buckets": ParamSpec(
+            dtype=int,
+            choices=(8, 16, 32),
+            default=16,
+            searchable=False,
+            param_role=ParamRole.ESTIMATOR_RESOLUTION,
+        ),
     }
 
     def _calculate_series(
-        self, price: pd.DataFrame, activity: pd.DataFrame, buckets: int = 16, **_: Any
+        self,
+        price: pd.DataFrame,
+        activity: pd.DataFrame,
+        buckets: int = 16,
+        open: pd.DataFrame | None = None,
+        **_: Any,
     ) -> pd.DataFrame:
         b = max(4, int(buckets))
-        return _daily_agg_two(price, activity, lambda p, a: _volume_clock_efficiency(p, a, b))
+        return _volume_clock_daily_agg(
+            price, activity, open, lambda p, a, o: _volume_clock_efficiency(p, a, b, o)
+        )
 
 
 @register_operator(
@@ -165,19 +275,33 @@ class IntradayVolumeClockRoughness(SeriesOperator):
     metadata = _metadata(
         "intraday_volume_clock_roughness",
         "成交量时钟粗糙度（等 activity 网格二阶/一阶差平方比）。",
-        ["price", "activity", "buckets"],
+        ["price", "activity", "buckets", "open"],
         unit="ratio",
         cost=4,
     )
+    # P0-O #82: ``buckets`` is estimator resolution, not an economic dimension.
     metadata.param_specs = {
-        "buckets": ParamSpec(dtype=int, min=4),
+        "buckets": ParamSpec(
+            dtype=int,
+            choices=(8, 16, 32),
+            default=16,
+            searchable=False,
+            param_role=ParamRole.ESTIMATOR_RESOLUTION,
+        ),
     }
 
     def _calculate_series(
-        self, price: pd.DataFrame, activity: pd.DataFrame, buckets: int = 16, **_: Any
+        self,
+        price: pd.DataFrame,
+        activity: pd.DataFrame,
+        buckets: int = 16,
+        open: pd.DataFrame | None = None,
+        **_: Any,
     ) -> pd.DataFrame:
         b = max(4, int(buckets))
-        return _daily_agg_two(price, activity, lambda p, a: _volume_clock_roughness(p, a, b))
+        return _volume_clock_daily_agg(
+            price, activity, open, lambda p, a, o: _volume_clock_roughness(p, a, b, o)
+        )
 
 
 def _register_surface() -> None:

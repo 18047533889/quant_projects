@@ -281,3 +281,43 @@ layer_governance/catalog docs）。
   recursive_rewarmup(4)/unit_algebra(5)/boundary_behavior(8)/semantic_duplicates(11)；
   operator_audits 有 golden_reference(6)/effective_sample_size(8)/column_permutation(9)。
   本会话补：null_calibration(7)、practical_usability(12)、semantic_input_type(10)。
+
+### Wave-1 执行结果（第一批 确定算错，10 agent 全部完成）
+- **stat**（Mad/ACF/Mode/Residual）：5/5 FIXED。ts_mean_abs_deviation/ts_median_abs_deviation 新 canonical
+  （单中心 per-window）；ACF lag≥1+ACF(0)=1+不可估→NaN；Mode max_frequency≥2+ties→modal 中位数；
+  Residual 族显式 document=rolling mean of in-sample OLS residuals。**本会话** operator_policy 补 2 条
+  _EXPLICIT_POLICIES（scope=ts, pit_safe=True）。测试 22 passed。
+- **candle**（OHLC invariant/candle_gap_atr）：8/8 FIXED。共享 `_validate_ohlc`（High≥max(O,C)/Low≤min/
+  High≥Low/O,H,L,C>0）gate 27+ 算子 pandas+polars；candle_gap_atr 分母=ATR_{t-1}。测试 8 passed。
+- **structure**（swing/support/days_since）：13/13 FIXED。ts_days_since_high/low ties 取最近；
+  ts_resistance_log_slope/ts_support_log_slope 新 canonical（log-price）；swing amplitude/duration/velocity
+  共享 `_swing_segment` 相邻异侧 pivot 对；fit R² points≥3；line_parallelism log-slope；impulse_strength
+  分母=vol_{t-1}（pandas 侧）。SQL emitter 旧语义（first-hit / vol 含当前 bar）已标记延后。测试 13 passed。
+- **group_cs**（group_decay_linear/aggr_top_n/argmax）：6/6 FIXED。group_rank_weighted_value 新 canonical
+  （无 window）+ group_decay_linear 保留 window=POLICY + ties→average rank；aggr_top_n→cross_sectional
+  routing + 非法 aggr_func raise；ts_argmax/argmin 单一 window 参数 + d 别名。测试 30 passed。
+- **tsmodel**（dyn-reg/Kalman/GARCH/HAR）：4/4 FIXED。ts_quantile_regression_coeff_prior 新增（causal）；
+  Kalman gap-safe + 非 finite q/r fail-closed；GARCH/HAR input_units=return + 运行时价格水平拒绝；
+  HAR 拆 ts_har_rv_next_vol_forecast/ts_har_rv_next_var_forecast（alias ts_har_rv_next_forecast→vol）。
+  测试 39 passed。
+- **level_profile**（pivot/Matrix Profile/Mahalanobis/RQA）：6/6 FIXED。max_pivot_age POLICY；motif age
+  off-by-(L-1) 修正；constant subsequence→NaN；Mahalanobis mean+cov + N≥5p；RQA effective-length≥0.8w；
+  ts_rqa_determinism_fixed_rr/ts_rqa_laminarity_fixed_rr 新增。测试 18 passed。
+- **fundamental**（ledger/holder/consecutive/score）：4/4 FIXED。新增 fundamental/ledger.py 修订期 ledger
+  （fin_period_restated/fin_period_revision_count/fin_period_revision_age）；holder_disclosure_count/
+  coverage/topk_share_sum；polars 侧 consecutive-period parity；score 族 input_semantics 元数据。
+  测试 23 passed。
+- **complexity**（permutation/sample entropy/MSE/regime）：5/5 FIXED。ordinal ties→drop embedding；
+  sample entropy A=0→NaN + ts_pseudocount_sample_entropy；MSE 右对齐；multiscale slope=log(scale)；
+  two-state regime→真 Markov filter（transition_prob POLICY）。测试 17 passed。
+- **spectral_mem**（wavelet/ACF-time/IACT/fractional）：8/8 FIXED。wavelet NaN fail-closed + 固定 anchor
+  {32,64,128,256} + 单 band H=0；禁 partial warmup；ts_dominant_cycle_period window 非搜索；
+  γ_k=(1/(N−k)) 标准 ACF-time + Geyer initial-monotone + ts_autocorrelation_time_initial_positive_sequence；
+  fractional diff discarded_weight_mass gate。测试 22 passed。
+- **liquidity**（volume 族/ADL/volume_to_range/impulse_polars）：6/6 FIXED。volume_autocorr window+lag
+  + lag<window；0 基 pct_change guard；input_units=non_negative_volume + 运行时检查（去 abs 分母）；
+  ADL→rolling_adl_flow + volume_to_range→volume_price_range_density（alias 保留）；impulse_strength polars
+  =vol_{t-1}。**本会话** operator_surface 换名（_LIQUIDITY_V2_CANONICALS + DAILY_FACTOR_MIGRATED）+ 
+  group_rank_weighted_value 加入 extended/daily。测试 23 passed。
+
+**Wave-1 合并验证：11 个 test_r11_round3_*.py 226 passed**；load_all 1409 canonicals 全绿。

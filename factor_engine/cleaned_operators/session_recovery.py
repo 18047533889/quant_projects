@@ -26,6 +26,19 @@ Round-11 contract (findings #75-#79)
 * Overlapping shocks do not reuse the same future recovery path as separate
   events: a ``refractory``-minute quiet window suppresses re-firing (R11 #79).
 
+Round-3 audit (findings P0-87/P0-88/P0-89)
+------------------------------------------
+* The session timezone is NEVER guessed: a bare UTC / unknown tz-aware index
+  must not silently default to Asia/Shanghai (a future US minute-data deployment
+  would be misaligned).  An explicit ``session_tz`` or a ``calendar`` whose
+  market maps to a session zone is required; otherwise the operator FAILS CLOSED
+  (raises) (P0-87).
+* A single shock is statistically unstable: the daily median over ``min_events``
+  effective events is required, otherwise the day emits NaN (P0-88).
+* ``residual_fraction`` is ``0 < f <= 1`` at BOTH compile time and runtime
+  (a ``RelationalParamSpec`` makes 0 compile-invalid, matching the runtime) so
+  the contract never admits a value that the kernel rejects (P0-89).
+
 This is an EOD daily factor: it may use the whole day's minute data, so its
 policy carries ``available_at = session_close`` and it must never be used as a
 mid-session real-time minute signal.  Deterministic and prefix-causal.
@@ -37,26 +50,83 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.microstructure.intraday_agg import _as_panel
 
 _EPS = 1e-12
 _SESSION_TZ = "Asia/Shanghai"
 _US_TZ = "America/New_York"
+_KNOWN_SESSION_ZONES = {
+    "America/New_York", "US/Eastern", "Asia/Shanghai", "Asia/Hong_Kong",
+    "Asia/Chongqing", "Asia/Urumqi",
+}
 
 
-def _infer_session_tz(index: pd.DatetimeIndex) -> str:
-    tz = str(getattr(index, "tz", None) or "")
-    if tz in ("America/New_York", "US/Eastern", "Asia/Shanghai", "Asia/Hong_Kong"):
+def _market_session_tz(market: str | None) -> str:
+    """Session wall-clock zone for an explicit calendar market; "" if unknown.
+
+    P0-87: this is a DECLARED mapping from an explicit ``SessionCalendar``
+    market — never a guess from a bare UTC index.
+    """
+    m = str(market or "").upper()
+    if m in {"CN", "ASHARE", "A_SHARE"}:
+        return _SESSION_TZ
+    if m in {"HK", "HONG_KONG"}:
+        return "Asia/Hong_Kong"
+    if m in {"US"}:
+        return _US_TZ
+    return ""
+
+
+def _resolve_session_tz(
+    index: pd.DatetimeIndex,
+    session_tz: str | None = None,
+    calendar: Any = None,
+) -> str:
+    """Resolve the session wall-clock zone for a minute index (P0-87).
+
+    Resolution order:
+      1. explicit ``session_tz`` parameter;
+      2. an explicit ``calendar`` whose ``market`` maps to a known session zone;
+      3. a KNOWN session zone already stored on the index (conversion is then a
+         no-op rename);
+    otherwise FAIL CLOSED (raise) — the zone is never guessed.
+    """
+    tz = str(session_tz or "").strip()
+    if not tz and calendar is not None:
+        tz = _market_session_tz(getattr(calendar, "market", ""))
+    if tz:
         return tz
-    return _SESSION_TZ
+    stored = str(getattr(index, "tz", None) or "")
+    if stored and stored in _KNOWN_SESSION_ZONES:
+        return stored
+    if not stored:
+        # tz-naive index: already in session wall-clock, no conversion needed.
+        return ""
+    raise ValueError(
+        "session_event_recovery_score cannot resolve the session timezone for a "
+        f"tz-aware index stored in {stored!r}: pass an explicit `session_tz` (or "
+        "a `calendar` with a known market) — the session timezone is never "
+        "guessed (P0-87)"
+    )
 
 
-def _session_local_frame(frame: pd.DataFrame, session_tz: str | None = None) -> pd.DataFrame:
+def _session_local_frame(
+    frame: pd.DataFrame,
+    session_tz: str | None = None,
+    calendar: Any = None,
+) -> pd.DataFrame:
     """Convert a tz-aware minute panel to session wall-clock (naive) (R11 #77)."""
     idx = frame.index
     if isinstance(idx, pd.DatetimeIndex) and getattr(idx, "tz", None) is not None:
-        tz = session_tz or _infer_session_tz(idx)
+        tz = _resolve_session_tz(idx, session_tz, calendar)
         out = frame.tz_convert(tz)
         out.index = out.index.tz_localize(None)
         return out
@@ -85,12 +155,14 @@ def _recovery_day(
     horizon: int,
     residual_fraction: float,
     refractory: int = 1,
+    min_events: int = 1,
 ) -> float:
     H = max(1, int(horizon))
     if not (0.0 < float(residual_fraction) <= 1.0):
         raise ValueError("session_event_recovery_score requires 0 < residual_fraction <= 1")
     c = float(residual_fraction)
     rf = max(0, int(refractory))
+    me = max(1, int(min_events))
     n = x.shape[0]
     # R11 #75: event must be EventBool (0/1).  Any finite non-binary value is an
     # invalid event panel -> the whole day fails closed.
@@ -137,7 +209,11 @@ def _recovery_day(
             return np.nan
         taus.append(float(tau))
         suppress_until = s + rf
-    if not taus:
+    if len(taus) < me:
+        # P0-88: a single shock -> the median is that one shock -> statistically
+        # unstable.  The day needs at least ``min_events`` effective events
+        # (after right-censoring / refractory suppression) before the median is
+        # meaningful; otherwise fail closed.
         return np.nan
     return float(np.median(taus) / (H + 1))
 
@@ -160,16 +236,25 @@ class SessionEventRecoveryScore(SeriesOperator):
     metadata = _metadata(
         "session_event_recovery_score",
         "日内事件冲击恢复得分 median τ/(H+1)（EOD 因子）。",
-        ["x", "event", "horizon", "residual_fraction", "refractory", "session_tz"],
+        ["x", "event", "horizon", "residual_fraction", "refractory", "session_tz", "min_events", "calendar"],
         unit="ratio",
         cost=4,
     )
     metadata.param_specs = {
         "horizon": ParamSpec(dtype=int, min=1),
+        # P0-89: the strict lower bound lives in relational_specs below so that
+        # 0 is compile-INVALID exactly like the runtime, not just runtime-invalid.
         "residual_fraction": ParamSpec(dtype=float, min=0.0, max=1.0),
-        "refractory": ParamSpec(dtype=int, min=0, searchable=False),
-        "session_tz": ParamSpec(dtype=str, searchable=False),  # R11 #77
+        "refractory": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.POLICY),
+        "min_events": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),  # P0-88
+        "session_tz": ParamSpec(dtype=str, searchable=False, param_role=ParamRole.POLICY),  # R11 #77 / P0-87
     }
+    metadata.relational_specs = [
+        RelationalParamSpec(
+            expression="residual_fraction > 0",
+            message="residual_fraction must be > 0 (compile-time and runtime agree, P0-89)",
+        )
+    ]
 
     def _calculate_series(
         self,
@@ -179,13 +264,16 @@ class SessionEventRecoveryScore(SeriesOperator):
         residual_fraction: float = 0.25,
         refractory: int = 1,
         session_tz: str | None = None,
+        min_events: int = 1,
+        calendar: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
         if not (0.0 < float(residual_fraction) <= 1.0):
             raise ValueError("session_event_recovery_score requires 0 < residual_fraction <= 1")
         rf = max(0, int(refractory))
-        x = _session_local_frame(_as_panel(x), session_tz)
-        event = _session_local_frame(_as_panel(event), session_tz)
+        me = max(1, int(min_events))
+        x = _session_local_frame(_as_panel(x), session_tz, calendar)
+        event = _session_local_frame(_as_panel(event), session_tz, calendar)
         out: dict[str, pd.Series] = {}
         for inst in x.columns:
             col = x[inst]
@@ -200,7 +288,7 @@ class SessionEventRecoveryScore(SeriesOperator):
                 if not np.any(np.isfinite(vals)):
                     per_day[day] = np.nan
                     continue
-                per_day[day] = _recovery_day(vals, ev_vals, horizon, float(residual_fraction), rf)
+                per_day[day] = _recovery_day(vals, ev_vals, horizon, float(residual_fraction), rf, me)
             out[inst] = pd.Series(per_day, dtype=float)
         if not out:
             return pd.DataFrame(dtype=float)

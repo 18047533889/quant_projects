@@ -25,6 +25,9 @@ Session semantics (Round-11 findings #68-#74)
 * ``history_days`` is a SESSION-count history, not a daily/minute-bar guess; the
   ``history_days`` parameter declares ``history_semantics="session_count"`` so
   the runtime never treats it as bar warmup (R11 #71).
+* ``history_days`` counts COMPLETED sessions, not candidate runs: incomplete
+  days are skipped, so the history window expands backward until ``history_days``
+  completed sessions are collected (or the history is exhausted) (P0-85).
 * Novelty needs a minimum number of completed historical sessions before its
   first output (``min_history_sessions``, R11 #72).
 * Session PCA needs a numerical-rank gate — ``len(hist) >= n_components + 1``
@@ -32,6 +35,17 @@ Session semantics (Round-11 findings #68-#74)
 * History shapes are resampled onto a market-specific canonical grid (the
   official full-session width), never onto the *current* session's observation
   length, so half-days / gaps do not drift the factor definition (R11 #74).
+* The novelty distance is RMSE-normalised (``sqrt(mean(d_i^2))``) so a 1-min
+  240-node shape and a 5-min 48-node shape are comparable — raw Euclidean scales
+  with node count (P0-86).
+* Session completeness compares the OBSERVED minute-of-day slot set against the
+  OFFICIAL set (``observed_slot_set == official_slot_set``), never just the
+  counts — a missing 09:45 plus a stray 09:46:30 has the same length but a
+  different set (P0-83).
+* Bar width is a data-contract property: it comes from the calendar's declared
+  ``bar_freq`` (SessionCalendar / DataContract / SourceMetadata), NEVER from a
+  modal of observed minute deltas — a dataset that systematically drops every
+  other bar must not get re-certified at 2-min resolution (P0-84).
 
 Both operators are per-symbol and strictly prefix-causal / PIT-safe: a session's
 shape is only known once the session has completed, so the value is emitted at
@@ -120,57 +134,84 @@ def _hhmm_minute(value: str) -> int:
     return hour * 60 + minute
 
 
-def _bar_width_minutes(mods: np.ndarray) -> int:
-    """Structural bar width in minutes (modal positive minute delta).
+def _calendar_bar_width_minutes(calendar: Any) -> int:
+    """Structural bar width in minutes from the calendar's declared ``bar_freq``.
 
-    This is a data-RESOLUTION property (1-min vs 5-min bars), never a
-    completeness signal.  It is used only to convert the calendar's total
-    session minutes into the expected per-session BAR count.
+    P0-84: bar resolution is a data-contract property.  It comes from the
+    calendar / DataContract / SourceMetadata, NEVER from a modal of observed
+    minute deltas.  A dataset that systematically drops every other bar (modal
+    delta 2) must not get its completeness silently re-certified at 2-min
+    resolution.  An unresolvable resolution fails closed (raises) so the caller
+    never emits on a guessed grid.
     """
-    diffs = np.diff(mods)
-    diffs = diffs[diffs > 0]
-    if diffs.size == 0:
-        return 1
-    vals, counts = np.unique(diffs, return_counts=True)
-    return int(vals[int(np.argmax(counts))])
+    bar_freq = getattr(calendar, "bar_freq", None)
+    if not bar_freq:
+        raise ValueError(
+            "calendar must declare `bar_freq` (bar resolution); the resolution "
+            "is never inferred from observed minute deltas (P0-84)"
+        )
+    text = str(bar_freq).strip().lower()
+    if text.endswith("min"):
+        text = text[:-3]
+    elif text.endswith("m"):
+        text = text[:-1]
+    if not text.isdigit():
+        raise ValueError(
+            f"calendar bar_freq must be a minute resolution, got {bar_freq!r}"
+        )
+    width = int(text)
+    if width < 1:
+        raise ValueError(f"calendar bar_freq must be >= 1 minute, got {bar_freq!r}")
+    return width
 
 
-def _official_grid(calendar: Any, mods: np.ndarray) -> tuple[int, int | None]:
+def _official_grid(calendar: Any) -> tuple[int, int | None, set[int] | None]:
     """Official full-session grid derived from an EXPLICIT exchange calendar.
 
-    P0-10: the official session width and the official session close are NEVER
-    inferred from the observed minute data.  A dataset that systematically drops
-    the final bar of every session (239 bars instead of 240) must not be able to
-    re-define "official" — the modal-grid self-certification is removed.  The
-    calendar is a ``runtime.session_calendar.SessionCalendar`` (duck-typed:
-    ``segments`` of ``("HH:MM","HH:MM")``, ``timestamp_convention`` in
-    {``bar_start``, ``bar_end``}).
+    P0-10 + P0-84: the official session grid is NEVER inferred from the observed
+    minute data — neither the width nor the close.  The bar width comes from the
+    calendar's declared ``bar_freq``, the minute-of-day slots from the calendar's
+    ``segments`` + ``timestamp_convention``.  A dataset that systematically drops
+    the final bar of every session (239 bars instead of 240) or every other bar
+    must not be able to re-define "official".  The calendar is a
+    ``runtime.session_calendar.SessionCalendar`` (duck-typed: ``segments`` of
+    ``("HH:MM","HH:MM")``, ``timestamp_convention`` in {``bar_start``,
+    ``bar_end``}, ``bar_freq`` in {``1min``, ``5min``, ...}).
 
-    Returns ``(expected_slots, official_close_mod)``:
-    * ``expected_slots`` — the calendar's per-session bar count at the data's
-      structural bar width;
+    Returns ``(expected_slots, official_close_mod, official_slot_set)``:
+    * ``expected_slots`` — the calendar's per-session bar count at its declared
+      resolution;
     * ``official_close_mod`` — the minute-of-day of the final session bar's
-      label (``stop - 1`` under ``bar_start``, ``stop`` under ``bar_end``).
+      label (``stop - width`` under ``bar_start``, ``stop`` under ``bar_end``);
+    * ``official_slot_set`` — the full ordered minute-of-day slot set of a
+      complete session (P0-83: completeness compares the observed set against
+      this set, not just the count).
     """
     segments = list(getattr(calendar, "segments", None) or ())
     if not segments:
         raise ValueError("calendar must define non-empty session segments")
-    total_minutes = 0
-    for start_text, stop_text in segments:
-        total_minutes += _hhmm_minute(stop_text) - _hhmm_minute(start_text)
-    if total_minutes <= 0:
-        raise ValueError("calendar segments must be increasing intervals")
+    width = _calendar_bar_width_minutes(calendar)
     convention = str(getattr(calendar, "timestamp_convention", "bar_end")).lower()
     if convention not in {"bar_start", "bar_end"}:
         raise ValueError("calendar timestamp_convention must be bar_start or bar_end")
-    width = _bar_width_minutes(mods)
-    expected_slots = int(np.ceil(total_minutes / max(1, width)))
-    stop = _hhmm_minute(segments[-1][1])
-    close_mod = stop - 1 if convention == "bar_start" else stop
-    return expected_slots, close_mod
+    slots: set[int] = set()
+    for start_text, stop_text in segments:
+        start = _hhmm_minute(start_text)
+        stop = _hhmm_minute(stop_text)
+        if stop <= start:
+            raise ValueError("calendar segments must be increasing intervals")
+        if convention == "bar_start":
+            slots.update(range(start, stop, width))
+        else:
+            slots.update(range(start + width, stop + 1, width))
+    if not slots:
+        raise ValueError("calendar segments must span at least one bar")
+    last_stop = _hhmm_minute(segments[-1][1])
+    close_mod = last_stop - width if convention == "bar_start" else last_stop
+    return len(slots), close_mod, slots
 
 
-def _resolve_official_grid(calendar: Any, mods: np.ndarray) -> tuple[int, int | None]:
+def _resolve_official_grid(calendar: Any) -> tuple[int, int | None, set[int] | None]:
     """Grid authority with fail-closed semantics (P0-10).
 
     With an explicit calendar the official grid comes from the calendar and
@@ -192,8 +233,8 @@ def _resolve_official_grid(calendar: Any, mods: np.ndarray) -> tuple[int, int | 
                 RuntimeWarning,
                 stacklevel=2,
             )
-        return 0, None
-    return _official_grid(calendar, mods)
+        return 0, None, None
+    return _official_grid(calendar)
 
 
 def _session_runs(
@@ -203,6 +244,7 @@ def _session_runs(
     mods: np.ndarray,
     expected_slots: int,
     official_close_mod: int | None,
+    official_slot_set: set[int] | None = None,
 ) -> list[dict]:
     """Split one symbol's minute column into session candidates.
 
@@ -252,9 +294,14 @@ def _session_runs(
         start, end = rows[0], rows[-1]
         vals = np.asarray([x_col[r] for r in rows], dtype=float)
         obs_slots = {int(mods[r]) for r in rows}
+        # P0-83: completeness compares the OBSERVED minute-of-day set against the
+        # OFFICIAL set — a missing 09:45 plus a stray 09:46:30 has the same count
+        # but a different set and must never certify as complete.  The official
+        # close check is kept as an extra belt (redundant once the sets match).
         completed = (
             expected_slots > 0
-            and len(obs_slots) == expected_slots
+            and official_slot_set is not None
+            and obs_slots == official_slot_set
             and (official_close_mod is None or int(mods[end]) == official_close_mod)
         )
         out.append(
@@ -314,6 +361,7 @@ def _shape_novelty_series(
     min_history_sessions: int,
     expected_slots: int,
     official_close_mod: int | None,
+    official_slot_set: set[int] | None = None,
 ) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -321,7 +369,7 @@ def _shape_novelty_series(
     mhs = max(1, int(min_history_sessions))
     for c in range(cols):
         n_nodes = max(2, expected_slots)
-        runs = _session_runs(x2d[:, c], sid2d[:, c], dates, mods, expected_slots, official_close_mod)
+        runs = _session_runs(x2d[:, c], sid2d[:, c], dates, mods, expected_slots, official_close_mod, official_slot_set)
         for i, run in enumerate(runs):
             if not run["completed"]:
                 continue  # partial session never emits a full-session factor (R11 #68)
@@ -330,17 +378,24 @@ def _shape_novelty_series(
                 continue
             best = np.inf
             seen = 0
-            for j in range(max(0, i - hd), i):  # completed sessions ending before current only
+            # P0-85: history_days counts COMPLETED sessions, not candidate runs.
+            # Scan backward from the previous run, skipping incomplete candidates,
+            # until ``history_days`` completed sessions are collected (or the
+            # history is exhausted).  P0-86: the distance is RMSE-normalised so a
+            # 1-min 240-node shape and a 5-min 48-node shape are comparable.
+            for j in range(i - 1, -1, -1):
                 hrun = runs[j]
                 if not hrun["completed"]:
                     continue
                 hshape = _canonical_shape(hrun["vals"], n_nodes)
                 if hshape is None:
                     continue
-                d = float(np.linalg.norm(hshape - shape))
+                d = float(np.linalg.norm(hshape - shape) / np.sqrt(n_nodes))
                 seen += 1
                 if d < best:
                     best = d
+                if seen >= hd:
+                    break
             if seen < mhs:
                 continue  # too few historical sessions -> too weak an estimate (R11 #72)
             out[run["end"], c] = float(best)
@@ -357,6 +412,7 @@ def _pca_residual_series(
     min_history_sessions: int,
     expected_slots: int,
     official_close_mod: int | None,
+    official_slot_set: set[int] | None = None,
 ) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -365,7 +421,7 @@ def _pca_residual_series(
     mhs = max(1, int(min_history_sessions))
     for c in range(cols):
         n_nodes = max(2, expected_slots)
-        runs = _session_runs(x2d[:, c], sid2d[:, c], dates, mods, expected_slots, official_close_mod)
+        runs = _session_runs(x2d[:, c], sid2d[:, c], dates, mods, expected_slots, official_close_mod, official_slot_set)
         for i, run in enumerate(runs):
             if not run["completed"]:
                 continue
@@ -373,7 +429,10 @@ def _pca_residual_series(
             if shape is None:
                 continue
             hist: list[np.ndarray] = []
-            for j in range(max(0, i - hd), i):  # past completed sessions only
+            # P0-85: history_days counts COMPLETED sessions, not candidate runs —
+            # scan backward skipping incomplete candidates until ``history_days``
+            # completed sessions are collected (or history is exhausted).
+            for j in range(i - 1, -1, -1):
                 hrun = runs[j]
                 if not hrun["completed"]:
                     continue
@@ -381,6 +440,8 @@ def _pca_residual_series(
                 if hshape is None:
                     continue
                 hist.append(hshape)
+                if len(hist) >= hd:
+                    break
             if len(hist) < max(mhs, nc + 1):
                 continue  # too few past sessions for an nc-component fit (R11 #72/#73)
             M = np.stack(hist, axis=0)  # (n_past, n_nodes)
@@ -414,14 +475,15 @@ class IntradaySessionShapeNovelty(SeriesOperator):
     """日内分时形态新颖度：当前 session 分时形态相对最近历史 session 形态的最近距离。
 
     每个 session 的形态先标准化 ``(x-mean)/std``，再重采样到官方全场 session 网格
-    （``expected_slots`` 个节点），最后求欧氏距离取最小值。只有 *completed* session
-    （末行即官方收盘且覆盖完整网格）才在收盘分钟输出；少于 ``min_history_sessions``
-    个 completed 历史 session -> NaN。P1。
+    （``expected_slots`` 个节点），最后求 **RMSE** 距离（``sqrt(mean(d_i^2))``，
+    消除节点数对欧氏距离的尺度依赖）取最小值。只有 *completed* session（末行即官方
+    收盘且覆盖完整网格）才在收盘分钟输出；少于 ``min_history_sessions`` 个 completed
+    历史 session -> NaN。P1。
     """
 
     metadata = _metadata(
         "intraday_session_shape_novelty",
-        "当前 session 标准化分时形态到最近历史 session 形态的欧氏距离。",
+        "当前 session 标准化分时形态到最近历史 session 形态的 RMSE 距离（节点数无关）。",
         ["x", "session_id", "history_days", "min_history_sessions", "calendar"],
         unit="ratio",
         cost=7,
@@ -448,11 +510,12 @@ class IntradaySessionShapeNovelty(SeriesOperator):
         index_ns = x.index.to_numpy(dtype="datetime64[ns]")
         dates = index_ns.astype("datetime64[D]").astype("int64")
         mods = _minute_of_day(index_ns)
-        # P0-10: official grid from the explicit exchange calendar, never modal.
-        expected, close_mod = _resolve_official_grid(calendar, mods)
+        # P0-10/P0-84: official grid from the explicit exchange calendar (bar
+        # width included), never from a modal of the observed minutes.
+        expected, close_mod, slot_set = _resolve_official_grid(calendar)
         arr = _shape_novelty_series(
             x.to_numpy(dtype=float), sid_arr, dates, mods, history_days, min_history_sessions,
-            expected, close_mod,
+            expected, close_mod, slot_set,
         )
         return frame_like(x, arr)
 
@@ -503,12 +566,13 @@ class IntradayProfilePcaResidual(SeriesOperator):
         index_ns = x.index.to_numpy(dtype="datetime64[ns]")
         dates = index_ns.astype("datetime64[D]").astype("int64")
         mods = _minute_of_day(index_ns)
-        # P0-10: official grid from the explicit exchange calendar, never modal.
-        expected, close_mod = _resolve_official_grid(calendar, mods)
+        # P0-10/P0-84: official grid from the explicit exchange calendar (bar
+        # width included), never from a modal of the observed minutes.
+        expected, close_mod, slot_set = _resolve_official_grid(calendar)
         arr = _pca_residual_series(
             x.to_numpy(dtype=float), sid_arr, dates, mods,
             history_days, n_components, min_history_sessions,
-            expected, close_mod,
+            expected, close_mod, slot_set,
         )
         return frame_like(x, arr)
 

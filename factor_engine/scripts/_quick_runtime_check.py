@@ -124,6 +124,14 @@ TARGETS = [
     'ts_state_integral',
     'ts_transfer_entropy_peak_excess',
     'ts_variance_ratio_proxy',
+    'ts_fractional_difference_discarded_weight_mass',
+    'ts_mean_abs_deviation',
+    'ts_median_abs_deviation',
+    'ts_nearest_structural_level_distance',
+    'ts_rqa_determinism_fixed_rr',
+    'ts_rqa_laminarity_fixed_rr',
+    'ts_structural_level_density',
+    'ts_structural_level_strength',
 ]
 
 

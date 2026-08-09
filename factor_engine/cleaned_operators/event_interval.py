@@ -54,8 +54,21 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 
 def _event_mask(col: np.ndarray) -> np.ndarray:
-    """EventBool rows: finite nonzero = event; ``0`` = confirmed no event; ``NaN`` = unknown."""
-    return np.isfinite(col) & (col != 0)
+    """Strict EventBool mask (Master Spec Part M-63/64).
+
+    Only ``1`` is an event, only ``0`` is a *confirmed* no-event row and only
+    ``NaN`` is an unknown row.  Any other finite value (``-1``, ``0.2``, ``2``)
+    is out-of-domain and raises ``ValueError`` instead of being silently
+    interpreted — a mis-labelled mark must fail loudly, never invent an event.
+    """
+    valid_bool = np.isnan(col) | (col == 0.0) | (col == 1.0)
+    if not bool(np.all(valid_bool | ~np.isfinite(col))):
+        bad = col[np.isfinite(col) & ~valid_bool]
+        raise ValueError(
+            "event panel must be strict EventBool {0, 1, NaN}; got "
+            f"out-of-domain value(s) {np.unique(bad)[:5]!r}"
+        )
+    return col == 1.0
 
 
 def _window_taus(
@@ -114,7 +127,10 @@ def _interval_memory_series(event2d: np.ndarray, window: int, max_pre_window_age
             lo = np.searchsorted(ev_pos, i0, side="left")
             hi = np.searchsorted(ev_pos, r, side="right")
             taus = _window_taus(ev_pos, lo, hi, i0, unknown, max_pre_window_age)
-            if taus is None or taus.size < 4:
+            # Master Spec N-69: 3-4 intervals is not production support for a
+            # correlation — the effective sample is the interval COUNT.  Six
+            # intervals minimum.
+            if taus is None or taus.size < 6:
                 continue
             corr = np.corrcoef(taus[:-1], taus[1:])
             val = corr[0, 1]
@@ -136,7 +152,8 @@ def _local_variation_series(event2d: np.ndarray, window: int, max_pre_window_age
             lo = np.searchsorted(ev_pos, i0, side="left")
             hi = np.searchsorted(ev_pos, r, side="right")
             taus = _window_taus(ev_pos, lo, hi, i0, unknown, max_pre_window_age)
-            if taus is None or taus.size < 3:
+            # Master Spec N-69: minimum 6 intervals for production support.
+            if taus is None or taus.size < 6:
                 continue
             n = taus.size
             d = taus[1:] - taus[:-1]
@@ -146,7 +163,14 @@ def _local_variation_series(event2d: np.ndarray, window: int, max_pre_window_age
     return out
 
 
-def _fano_factor_series(event2d: np.ndarray, window: int, block: int) -> np.ndarray:
+def _fano_factor_series(
+    event2d: np.ndarray,
+    window: int,
+    block: int,
+    *,
+    min_valid_blocks: int = 5,
+    sample_variance: bool = True,
+) -> np.ndarray:
     rows, cols = event2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w, b = int(window), int(block)
@@ -156,36 +180,51 @@ def _fano_factor_series(event2d: np.ndarray, window: int, block: int) -> np.ndar
             i0 = max(0, r - w + 1)
             chunk = ev[i0 : r + 1]
             length = chunk.shape[0]
-            # Review R4-55: only FULL blocks enter the count distribution — a
-            # trailing partial block (e.g. window 45 / block 20 -> 20/20/5) must
-            # not be weighted equally to a full block.
+            # Master Spec N-66: the blocks are RIGHT-aligned to the newest bar —
+            # window 45 / block 20 must use the latest 40 rows (20/20), not the
+            # oldest 40, so the current observation is never dropped.  A trailing
+            # partial block on the OLD side is discarded (R4-55 stays: partial
+            # blocks never enter the distribution).
             n_full = length // b
-            if n_full < 2:
+            if n_full < min_valid_blocks:
                 continue
+            start = r + 1 - n_full * b
             counts = np.empty(n_full, dtype=float)
             valid = np.zeros(n_full, dtype=bool)
             for k in range(n_full):
-                seg = chunk[k * b : (k + 1) * b]
+                seg = chunk[start - i0 + k * b : start - i0 + (k + 1) * b]
                 if np.any(~np.isfinite(seg)):
                     continue  # unknown minute -> block count is not defined
                 counts[k] = float(np.count_nonzero(_event_mask(seg)))
                 valid[k] = True
-            if int(valid.sum()) < 2:
+            if int(valid.sum()) < min_valid_blocks:
                 continue
             v = counts[valid]
             if float(v.sum()) <= 0.0:  # degenerate: no events in the window
                 continue
             mean = float(v.mean())
-            var = float(v.var())
+            # N-67: sample variance (ddof=1); with a small number of blocks the
+            # population variance mechanically understates the Poisson baseline.
+            var = float(v.var(ddof=1) if sample_variance and len(v) > 1 else v.var())
             out[r, c] = var / (mean + _EPS)
     return out
 
 
 def _check_event_params(window: int, block: int | None = None) -> tuple[int, int | None]:
+    """Strict-int param gate (Master Spec A-4): a float ``20.2`` must not
+    silently truncate to 20 — it is a contract error and raises."""
+    if isinstance(window, (bool, np.bool_)):
+        raise ValueError("window must be an integer, not bool")
+    if not isinstance(window, (int, np.integer)):
+        raise ValueError(f"window must be an integer, got {window!r}")
     w = int(window)
     if w < 2:
         raise ValueError("window must be >= 2")
     if block is not None:
+        if isinstance(block, (bool, np.bool_)):
+            raise ValueError("block must be an integer, not bool")
+        if not isinstance(block, (int, np.integer)):
+            raise ValueError(f"block must be an integer, got {block!r}")
         b = int(block)
         if b < 1:
             raise ValueError("block must be >= 1")
@@ -288,10 +327,44 @@ class EventFanoFactor(SeriesOperator):
         return frame_like(event, _fano_factor_series(event.to_numpy(dtype=float), w, b))
 
 
+@register_operator(
+    name="event_fano_excess",
+    category="event_interval",
+    business_category="event_interval",
+    canonical="event_fano_excess",
+    source="event_interval",
+)
+class EventFanoExcess(SeriesOperator):
+    """事件 Fano 超额：``F - 1``。
+
+    ``event_fano_factor`` 的 Poisson-null 校准版（Master Spec N-68）：对泊松
+    过程 F≈1，所以 ``excess = F - 1`` 是零中心的 burstiness 度量，比 raw Fano
+    更适合自动搜索（正 → 聚集/爆发，负 → 更规则，≈0 → 泊松）。继承 Fano 的
+    右对齐完整块、sample variance (ddof=1)、``min_valid_blocks >= 5`` 支持门。
+    EventBool 严格 {0,1,NaN}，NaN 块不计数，跨 unknown 的间隔被 censored。
+    """
+
+    metadata = _metadata(
+        "event_fano_excess",
+        "事件 Fano 因子相对泊松基线（=1）的超额：F-1（零中心 burstiness）。",
+        ["event", "window", "block"],
+        unit="ratio",
+        cost=3,
+    )
+
+    def _calculate_series(self, event: pd.DataFrame, window: int = 240, block: int = 20, **_: Any) -> pd.DataFrame:
+        w, b = _check_event_params(window, block)
+        fano = _fano_factor_series(event.to_numpy(dtype=float), w, b)
+        out = fano - 1.0
+        out[~np.isfinite(fano)] = np.nan
+        return frame_like(event, out)
+
+
 _NEW_CANONICALS = (
     "event_interval_memory",
     "event_local_variation",
     "event_fano_factor",
+    "event_fano_excess",
 )
 
 
@@ -304,3 +377,29 @@ def _register_surface() -> None:
 
 
 _register_surface()
+
+
+# ---------------------------------------------------------------------------
+# Semantic Closure declarations (Master Spec P0)
+# ---------------------------------------------------------------------------
+
+def _declare_closure_contracts() -> None:
+    from cleaned_operators.closure import (
+        MissingPolicy,
+        WindowSemantics,
+        declare_missing_policy,
+        declare_window_semantics,
+    )
+
+    # Event-interval statistics count EVENTS, not rows: the trailing window is
+    # an event-clock history; an interval crossing an unknown (NaN) mark is
+    # censored (BREAK), never silently spanned.
+    for _canon in ("event_interval_memory", "event_local_variation"):
+        declare_missing_policy(_canon, MissingPolicy.BREAK)
+        declare_window_semantics(_canon, WindowSemantics.EVENT_COUNT_WINDOW)
+    for _canon in ("event_fano_factor", "event_fano_excess"):
+        declare_missing_policy(_canon, MissingPolicy.BREAK)
+        declare_window_semantics(_canon, WindowSemantics.CONTIGUOUS_FULL_WINDOW)
+
+
+_declare_closure_contracts()

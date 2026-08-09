@@ -25,7 +25,7 @@ def _register(name,params,fn,desc,*,param_specs=None,relational_specs=None,input
     if input_units: meta.input_units=dict(input_units)
     if output_unit: meta.output_unit=output_unit
     if window_semantics: meta.window_semantics=window_semantics
-    def _calculate_series(self,*args,**kwargs): return fn(*args,**kwargs)
+    def _calculate_series(self,*args,_fn=fn,**kwargs): return _fn(*args,**kwargs)
     cls=type(f"LiquidityV2_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})
     register_operator(name=name,category="price_volume_extension",business_category="price_volume",canonical=name,source="liquidity_v2",backend="pandas_numpy",status="production")(cls)
 
@@ -56,14 +56,16 @@ def abnormal_turnover(turnover,window): return abnormal_volume(turnover,window)
 def volume_volatility(volume,window):
     w=_pi(window,"window",2); return _volume_growth(volume).rolling(w,min_periods=w).std()
 def turnover_volatility(turnover,window): return volume_volatility(turnover,window)
-def volume_autocorr(volume,window,lag):
+def volume_autocorr(volume,window=20,lag=1):
     # R11 round-3 #17: ``window`` counts the ALIGNED PAIRS actually used in the
     # autocorrelation; the raw lookback is ``window + lag`` prior bars (first
     # output appears at raw index ``window + lag - 1``) so the lag term has
     # genuine history.  ``lag >= window`` would leave fewer than ``window``
     # aligned pairs -> declared infeasible via RelationalParamSpec("lag < window").
+    # Defaults are exposed so planning-time validation sees a feasible baseline
+    # even for positional calls (the actual values are enforced at runtime).
     w=_pi(window,"window",3); l=_pi(lag,"lag"); return volume.rolling(w,min_periods=w).corr(volume.shift(l))
-def turnover_autocorr(turnover,window,lag): return volume_autocorr(turnover,window,lag)
+def turnover_autocorr(turnover,window=20,lag=1): return volume_autocorr(turnover,window,lag)
 def amihud_illiquidity(ret,close,volume,window):
     w=_pi(window,"window"); dv=(close.abs()*volume).replace(0,np.nan); raw=ret.abs()/dv; return raw.rolling(w,min_periods=w).mean()
 def price_impact(ret,dollar_volume,window):

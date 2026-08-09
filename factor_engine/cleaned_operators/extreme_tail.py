@@ -167,15 +167,23 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
             continue
         # ONE kernel for both sides: upper operates on x, lower on the mirrored
         # series z = -x.  HillLower(x) == HillUpper(-x) exactly — there is no
-        # separate lower-tail code path to drift.  The ``u <= 0`` guard applies
-        # to the (mirrored) upper-tail threshold, which for a signed centred
-        # series is positive (Q(-x, 1-frac) = -Q(x, frac) > 0), so the lower
-        # tail is NOT spuriously NaN'd by the old guard on Q(x, frac) < 0.
+        # separate lower-tail code path to drift.  The log-ratio needs every
+        # exceedance to share the sign of the threshold and a non-zero
+        # threshold, which holds on BOTH mirrors:
+        #   * centred signed series, lower: z = -x, u = Q(-x, 1-frac) > 0,
+        #     exceedances z > u > 0  (the old ``u <= 0`` guard spuriously NaN'd
+        #     this case because it tested Q(x, frac) < 0 instead);
+        #   * positive-magnitude series, lower: z = -mag < 0, u = -Q(mag, frac)
+        #     < 0, exceedances z > u are likewise < 0 — same sign, ratio
+        #     positive, identical to the direct x-space computation.
+        # Only an exact zero / non-finite threshold is degenerate (division by
+        # zero / no defined ratio); a mixed-sign exceedance set falls out as NaN
+        # through the ``np.isfinite(xi)`` guard below.
         z = valid if side == "upper" else -valid
         u = float(np.quantile(z, 1.0 - frac))
         exc = z[z > u]
-        if not np.isfinite(u) or u <= 0.0:
-            continue  # log-ratio is undefined for a non-positive threshold
+        if not np.isfinite(u) or u == 0.0:
+            continue  # log-ratio is undefined for a zero / non-finite threshold
         if exc.size < mtc:
             continue
         xi = float(np.mean(np.log(exc / u)))

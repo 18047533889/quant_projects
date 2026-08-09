@@ -31,6 +31,10 @@ from cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
 _EPS = 1e-12
 _ALPHA = 0.5  # Jeffreys smoothing for copula histograms (deterministic).
+# R11 round-3 P1-A (item 95): a top-2 tangent plane needs a genuine second
+# principal direction.  When s2/s1 < this ratio the "plane" is one dominant
+# direction padded with numerical noise -> fail closed to NaN.
+_TANGENT_MIN_S2_S1 = 0.05
 
 
 def _metadata(
@@ -42,6 +46,11 @@ def _metadata(
     cost: int,
     extra_tags: tuple[str, ...] = (),
 ) -> OperatorMetadata:
+    # R11 §37-D unit-algebra honesty: algebraic units (``same_as:`` /
+    # ``unit(...)`` / ``dimensionless``) propagate to ``output_unit`` so typed
+    # algebra / the catalog see the real output dimension instead of an opaque
+    # tag (mirrors dynamic_knn / cross_section_ext).
+    output_unit = unit if (unit.startswith("same_as:") or unit.startswith("unit(") or unit == "dimensionless") else None
     return OperatorMetadata(
         name=name,
         category="cross_sectional",
@@ -54,6 +63,7 @@ def _metadata(
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        output_unit=output_unit,
     )
 
 
@@ -121,6 +131,12 @@ def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int, peer_mask: np.n
 def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: float) -> np.ndarray:
     rows, n, d = feats.shape
     out = np.full((rows, n), np.nan, dtype=float)
+    # R11 round-3 P1-A (item 93): 3 features + intercept = 4 parameters; k≈4-5
+    # almost interpolates and collapses the residual scale -> huge z-scores.
+    # Enforce a minimum effective neighbourhood = max(10, 5*(d+1)); below the
+    # DOF floor the fit is near-interpolation and emits NaN (fail-closed, never
+    # a spurious z-score).
+    min_neigh = max(10, 5 * (d + 1))
     for t in range(rows):
         U, valid = _rank_features(feats, t)
         y_t = target[t]
@@ -138,14 +154,15 @@ def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: f
                 continue
             nbrs = _neighbors(U, valid, k, i, peer_mask)
             # P1-45(a): fail-close when fewer than the requested k peers exist —
-            # a k=10 request must not silently degrade into a 4-peer fit.
-            if nbrs.size < max(4, k):
+            # a k=10 request must not silently degrade into a 4-peer fit.  The
+            # round-3 DOF floor is applied on top of the requested k.
+            if nbrs.size < max(min_neigh, k):
                 continue
             Z = U[nbrs]
             y = y_t[nbrs]
             # all neighbours are target-finite by construction; keep the guard.
             fin = np.isfinite(y)
-            if int(fin.sum()) < max(4, k):
+            if int(fin.sum()) < max(min_neigh, k):
                 continue
             Z = Z[fin]
             y = y[fin]
@@ -180,6 +197,10 @@ def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: f
 def _local_gradient_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: float) -> np.ndarray:
     rows, n, d = feats.shape
     out = np.full((rows, n), np.nan, dtype=float)
+    # R11 round-3 P1-A (item 93): same DOF floor as the linear residual — a
+    # 4-parameter fit needs max(10, 5*(d+1)) neighbours to be more than
+    # interpolation; below the floor -> NaN.
+    min_neigh = max(10, 5 * (d + 1))
     for t in range(rows):
         U, valid = _rank_features(feats, t)
         y_t = target[t]
@@ -191,12 +212,12 @@ def _local_gradient_series(target: np.ndarray, feats: np.ndarray, k: int, ridge:
                 continue
             nbrs = _neighbors(U, valid, k, i, peer_mask)
             # P1-45(a): fail-close when fewer than the requested k peers exist.
-            if nbrs.size < max(4, k):
+            if nbrs.size < max(min_neigh, k):
                 continue
             Z = U[nbrs]
             y = y_t[nbrs]
             fin = np.isfinite(y)
-            if int(fin.sum()) < max(4, k):
+            if int(fin.sum()) < max(min_neigh, k):
                 continue
             Z = Z[fin]
             y = y[fin]
@@ -232,9 +253,15 @@ def _tangent_series(feats: np.ndarray, k: int) -> np.ndarray:
                 _, s, vt = np.linalg.svd(Zc, full_matrices=False)
             except np.linalg.LinAlgError:
                 continue
+            # R11 round-3 P1-A (item 95): numerical-rank gate.  A top-2 tangent
+            # plane when s1 >> s2 ≈ 0 is one noisy direction padded with noise.
+            # Require numerical rank >= 2 AND a minimum s2/s1 ratio; below ->
+            # NaN (no off-manifold distance against a rank-1 fit).
             if s.size < 2 or s[0] <= _EPS:
                 continue
-            tangent_dim = max(1, min(2, d - 1))
+            if s[1] <= _EPS or s[1] / s[0] < _TANGENT_MIN_S2_S1:
+                continue
+            tangent_dim = 2
             V = vt[:tangent_dim].T  # (d, tangent_dim)
             local_scale = float(np.sqrt(np.mean(np.sum(Zc ** 2, axis=1)))) + _EPS
             off = U[i] - mu
@@ -294,8 +321,10 @@ CsKnnLocalLinearResidual = _register_knn_op(
 )
 CsKnnLocalGradientNorm = _register_knn_op(
     "cs_knn_local_gradient_norm",
-    "KNN 局部回归梯度范数 ||beta||（局部响应灵敏度）。",
-    "norm",
+    "KNN 局部回归梯度范数 ||beta||（局部响应灵敏度）。"
+    "预测因子是秩坐标（无量纲），故 ||beta|| 单位与 target 相同（same_as:target），"
+    "不是 generic norm。",
+    "same_as:target",
     8,
     _local_gradient_series,
 )
@@ -315,6 +344,10 @@ class CsKnnTangentResidual(SeriesOperator):
     每日对特征云做 KNN，邻居云局部 PCA 取 top-2 切空间，输出个股到切平面的
     距离除以邻居云局部尺度。与 local density/isolation 不同：即使附近邻居
     很多，偏离正常流形方向仍会被捕获。P2 / Research。
+
+    R11 round-3 P1-A (item 95)：切平面需满足数值秩 >= 2 且 s2/s1 >= 0.05，
+    否则视为单主方向+噪声，输出 NaN（不报告基于 rank-1 拟合的伪 off-manifold
+    距离）。
     """
 
     metadata = _metadata(

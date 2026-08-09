@@ -5,8 +5,12 @@ Minute panels in, one scalar per ``(TradeDate, Symbol)`` out.  All kernels are
 prefix-causal (only the day's own bars plus that day's daily limit prices) and
 deterministic (quantile grids, no random projection).
 
-* ``intraday_wasserstein_pair_distance``          — W1 between two intraday
-  distributions (e.g. stock vs market minute returns), MAD-standardised (P1).
+* ``baseline_scaled_wasserstein_distance``        — W1 between two intraday
+  distributions (e.g. stock vs market minute returns), scaled by the BASELINE
+  (``y``) series' same-day MAD.  The baseline-scaling is not symmetric
+  (``D(x,y) != D(y,x)``), so the honest name is ``baseline_scaled_...``, never
+  a bare "normalized W1" (P0-90).  ``intraday_wasserstein_pair_distance`` is
+  kept as a back-compat canonical for the same computation.
 * ``intraday_barrier_approach_acceleration``      — signed acceleration of the
   approach to the day's upper/lower limit price, from the second difference of
   the (linear) headroom (P1).
@@ -163,7 +167,38 @@ class IntradayWassersteinPairDistance(SeriesOperator):
 
     metadata = _metadata(
         "intraday_wasserstein_pair_distance",
-        "两日内分布 W1 距离（分位网格 + MAD 标准化）。",
+        "两日内分布 W1 距离（分位网格 + 基准序列同日 MAD 缩放，非对称）。",
+        ["x", "y", "session_tz"],
+        unit="ratio",
+        cost=4,
+    )
+    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64
+
+    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, session_tz: str | None = None, **_: Any) -> pd.DataFrame:
+        x = _session_local_frame(_as_panel(x), session_tz)
+        y = _session_local_frame(_as_panel(y), session_tz)
+        return _daily_agg_two(x, y, _pair_w1)
+
+
+@register_operator(
+    name="baseline_scaled_wasserstein_distance",
+    category="intraday_microstructure",
+    business_category="intraday_microstructure",
+    canonical="baseline_scaled_wasserstein_distance",
+    source="advanced_intraday",
+)
+class BaselineScaledWassersteinDistance(SeriesOperator):
+    """两个日内分布之间的 Wasserstein-1 距离（按基准序列同日 MAD 缩放）。
+
+    P0-90: 与 ``intraday_wasserstein_pair_distance`` 相同的计算（99 点分位网格上
+    ``mean|Q_X(q) - Q_Y(q)|`` 再除以 ``MAD(Y)``），但名字诚实地表明这是 **基准序列
+    缩放** 距离 —— ``D(x,y) != D(y,x)``，它不是一个对称的归一化 W1。基准 MAD 为 0
+    时 fail-closed 返回 NaN。P1。
+    """
+
+    metadata = _metadata(
+        "baseline_scaled_wasserstein_distance",
+        "两日内分布 W1 距离，按基准序列同日 MAD 缩放（baseline-scaled，非对称）。",
         ["x", "y", "session_tz"],
         unit="ratio",
         cost=4,
@@ -865,6 +900,7 @@ def _register_surface() -> None:
 
     _surface.extend_extended_only({
             "intraday_wasserstein_pair_distance",
+            "baseline_scaled_wasserstein_distance",
             "intraday_barrier_approach_acceleration",
             "intraday_subsampled_rv_dispersion",
             "intraday_volatility_signature_slope",

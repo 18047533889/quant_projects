@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-09T10:14:06.617508+00:00",
+  "generated_at": "2026-08-09T11:06:24.290500+00:00",
   "threshold": 0.02,
   "years": [
     2019,
@@ -28,7 +28,7 @@
   ],
   "n_crawled": 142,
   "n_ok": 142,
-  "n_selected": 99,
+  "n_selected": 102,
   "neutralization_summary": {
     "n_probed": 142,
     "n_looks_cs_neutral": 142,
@@ -2064,7 +2064,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.053083314568704985,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.5052350679986775,
       "panel_qc": {
         "year": 2026,
@@ -2096,8 +2096,8 @@
       },
       "mem_available_gb": 24.49,
       "has_formula": true,
-      "dsl": "ts_mean((high - low) / (close + 0.001), 10)",
-      "lqtp_formula": "ts_mean((high - low) / (close + 0.001), 10)",
+      "dsl": "-(ts_mean((high - low) / (close + 0.001), 10))",
+      "lqtp_formula": "-(ts_mean((high - low) / (close + 0.001), 10))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -2108,7 +2108,12 @@
       "definition_id": "120ad3d8-a290-4c34-8106-86aaa77b1dce",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_5d58bc15"
+      "display_name": "alpha_5d58bc15",
+      "formula_raw": "ts_mean((high - low) / (close + 0.001), 10)",
+      "formula_display": "-(ts_mean((high - low) / (close + 0.001), 10))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.022527591260593827,
+      "rank_ic_2026_raw": 0.022527591260593827
     },
     {
       "factor_id": "alpha_20260701_e885c4b1",
@@ -2149,7 +2154,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.05216684796816129,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.5903651954803398,
       "panel_qc": {
         "year": 2026,
@@ -2181,8 +2186,8 @@
       },
       "mem_available_gb": 24.41,
       "has_formula": true,
-      "dsl": "ts_std(close / (low + 0.001), 20)",
-      "lqtp_formula": "ts_std(close / (low + 0.001), 20)",
+      "dsl": "-(ts_std(close / (low + 0.001), 20))",
+      "lqtp_formula": "-(ts_std(close / (low + 0.001), 20))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -2193,7 +2198,12 @@
       "definition_id": "4b085d6b-2bd3-421e-8433-de779213677a",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_e885c4b1"
+      "display_name": "alpha_e885c4b1",
+      "formula_raw": "ts_std(close / (low + 0.001), 20)",
+      "formula_display": "-(ts_std(close / (low + 0.001), 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.025399445740526414,
+      "rank_ic_2026_raw": 0.025399445740526414
     },
     {
       "factor_id": "ext_20260630113105_c66aad59",
@@ -2205,8 +2215,8 @@
       "ok_for_select": true,
       "has_formula": true,
       "lqtp_native": true,
-      "dsl": "rank(ts_corr(close, volume, 20)) * (0 - 1) * ts_std(returns, 10)",
-      "lqtp_formula": "rank(ts_corr(close, volume, 20)) * (0 - 1) * ts_std(ret, 10)",
+      "dsl": "-(rank(ts_corr(close, volume, 20)) * ts_std(ret, 10))",
+      "lqtp_formula": "-(rank(ts_corr(close, volume, 20)) * ts_std(ret, 10))",
       "platform_submit": "submitted",
       "definition_id": "5de07993-045d-48aa-9412-3ca8ae54b714",
       "platform_mean_ic": 0.05192835957370747,
@@ -2239,7 +2249,12 @@
       "industry_size_neutral_mean_rank_ic": 0.045617541116009006,
       "factor_rank_turnover": 0.04197370023514993,
       "ic_half_life_days": 0.4612181022309758,
-      "display_name": "ext_c66aad59"
+      "display_name": "ext_c66aad59",
+      "formula_raw": "rank(ts_corr(close, volume, 20)) * (0 - 1) * ts_std(ret, 10)",
+      "formula_display": "-(rank(ts_corr(close, volume, 20)) * ts_std(ret, 10))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.02065615988731738,
+      "rank_ic_2026_raw": 0.02065615988731738
     },
     {
       "factor_id": "alpha_20260701_bb4a002c",
@@ -2280,7 +2295,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.048393077426155486,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.5518209576326678,
       "panel_qc": {
         "year": 2026,
@@ -2312,8 +2327,8 @@
       },
       "mem_available_gb": 24.1,
       "has_formula": true,
-      "dsl": "ts_std(returns, 10)",
-      "lqtp_formula": "ts_std(ret, 10)",
+      "dsl": "-(ts_std(ret, 10))",
+      "lqtp_formula": "-(ts_std(ret, 10))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -2324,7 +2339,12 @@
       "definition_id": "5e3c4811-a9b2-4103-af4a-da6292d1d406",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_bb4a002c"
+      "display_name": "alpha_bb4a002c",
+      "formula_raw": "ts_std(ret, 10)",
+      "formula_display": "-(ts_std(ret, 10))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.02572315853509309,
+      "rank_ic_2026_raw": 0.02572315853509309
     },
     {
       "factor_id": "alpha_20260702_1281ccaa",
@@ -2365,7 +2385,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.04804688350559102,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.6001622484215556,
       "panel_qc": {
         "year": 2026,
@@ -2397,8 +2417,8 @@
       },
       "mem_available_gb": 24.39,
       "has_formula": true,
-      "dsl": "(high - low) / (open + 0.001)",
-      "lqtp_formula": "(high - low) / (open + 0.001)",
+      "dsl": "-((high - low) / (open + 0.001))",
+      "lqtp_formula": "-((high - low) / (open + 0.001))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -2409,7 +2429,12 @@
       "definition_id": "aaf2c0db-4f22-4316-893d-d9e90af92fc4",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_1281ccaa"
+      "display_name": "alpha_1281ccaa",
+      "formula_raw": "(high - low) / (open + 0.001)",
+      "formula_display": "-((high - low) / (open + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.023253825580922073,
+      "rank_ic_2026_raw": 0.023253825580922073
     },
     {
       "factor_id": "alpha_20260702_55152d82",
@@ -2450,7 +2475,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.047898378813862795,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.5904389653880436,
       "panel_qc": {
         "year": 2026,
@@ -2482,8 +2507,8 @@
       },
       "mem_available_gb": 24.54,
       "has_formula": true,
-      "dsl": "(high - low) / (close + 0.001)",
-      "lqtp_formula": "(high - low) / (close + 0.001)",
+      "dsl": "-((high - low) / (close + 0.001))",
+      "lqtp_formula": "-((high - low) / (close + 0.001))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -2494,7 +2519,12 @@
       "definition_id": "3ebc39b8-3d76-4835-be2f-bf5bf1379517",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_55152d82"
+      "display_name": "alpha_55152d82",
+      "formula_raw": "(high - low) / (close + 0.001)",
+      "formula_display": "-((high - low) / (close + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.022595198789825528,
+      "rank_ic_2026_raw": 0.022595198789825528
     },
     {
       "factor_id": "alpha_20260702_86a7e37a",
@@ -2535,7 +2565,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.0477289727244795,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.7120577055889417,
       "panel_qc": {
         "year": 2026,
@@ -2567,8 +2597,8 @@
       },
       "mem_available_gb": 24.3,
       "has_formula": true,
-      "dsl": "rank(ts_corr(close, volume, 10)) * ts_std(returns, 20)",
-      "lqtp_formula": "rank(ts_corr(close, volume, 10)) * ts_std(ret, 20)",
+      "dsl": "-(rank(ts_corr(close, volume, 10)) * ts_std(ret, 20))",
+      "lqtp_formula": "-(rank(ts_corr(close, volume, 10)) * ts_std(ret, 20))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -2579,7 +2609,12 @@
       "definition_id": "9283ee8c-4d99-4b9b-b4ac-848e6a046b44",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_86a7e37a"
+      "display_name": "alpha_86a7e37a",
+      "formula_raw": "rank(ts_corr(close, volume, 10)) * ts_std(ret, 20)",
+      "formula_display": "-(rank(ts_corr(close, volume, 10)) * ts_std(ret, 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.028717328096439038,
+      "rank_ic_2026_raw": 0.028717328096439038
     },
     {
       "factor_id": "alpha_20260702_afd40784",
@@ -2651,9 +2686,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_afd40784/values.parquet"
       },
       "mem_available_gb": 24.0,
-      "dsl": "ts_corr(close, volume, 10) * (0 - 1) * ts_std(returns, 20)",
+      "dsl": "-(ts_corr(close, volume, 10) * ts_std(ret, 20))",
       "fe_formula": "ts_corr(close, volume, 10) * (0 - 1) * ts_std(returns, 20)",
-      "lqtp_formula": "ts_corr(close, volume, 10) * (0 - 1) * ts_std(ret, 20)",
+      "lqtp_formula": "-(ts_corr(close, volume, 10) * ts_std(ret, 20))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -2667,7 +2702,12 @@
       "csv_name": "Vol_Price_Reversal_20",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_afd40784"
+      "display_name": "alpha_afd40784",
+      "formula_raw": "ts_corr(close, volume, 10) * (0 - 1) * ts_std(ret, 20)",
+      "formula_display": "-(ts_corr(close, volume, 10) * ts_std(ret, 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.02739995341044455,
+      "rank_ic_2026_raw": 0.02739995341044455
     },
     {
       "factor_id": "alpha_20260702_caa184c6",
@@ -2708,7 +2748,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.04657378851014424,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.6739466101306008,
       "panel_qc": {
         "year": 2026,
@@ -2740,8 +2780,8 @@
       },
       "mem_available_gb": 24.33,
       "has_formula": true,
-      "dsl": "ts_corr(close, volume, 10) * ts_std(returns, 20)",
-      "lqtp_formula": "ts_corr(close, volume, 10) * ts_std(ret, 20)",
+      "dsl": "-(ts_corr(close, volume, 10) * ts_std(ret, 20))",
+      "lqtp_formula": "-(ts_corr(close, volume, 10) * ts_std(ret, 20))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -2752,7 +2792,12 @@
       "definition_id": "6dd6903e-96aa-4bc4-b578-d0683acbbaa0",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_caa184c6"
+      "display_name": "alpha_caa184c6",
+      "formula_raw": "ts_corr(close, volume, 10) * ts_std(ret, 20)",
+      "formula_display": "-(ts_corr(close, volume, 10) * ts_std(ret, 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.027399953410444617,
+      "rank_ic_2026_raw": 0.027399953410444617
     },
     {
       "factor_id": "ext_20260703011536_b84c1c2c",
@@ -2798,7 +2843,12 @@
       "industry_size_neutral_mean_rank_ic": 0.042039937522960584,
       "factor_rank_turnover": 0.18084062619379257,
       "ic_half_life_days": 0.41874052696380104,
-      "display_name": "ext_b84c1c2c"
+      "display_name": "ext_b84c1c2c",
+      "formula_raw": "ts_min(low, 10) / (close + 0.001)",
+      "formula_display": "ts_min(low, 10) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.008649611875255004,
+      "rank_ic_2026_raw": 0.008649611875255004
     },
     {
       "factor_id": "ext_20260629194635_53ed651c",
@@ -2844,7 +2894,12 @@
       "industry_size_neutral_mean_rank_ic": 0.04142269147805303,
       "factor_rank_turnover": 0.31328309918830327,
       "ic_half_life_days": 0.41235219490208774,
-      "display_name": "ext_53ed651c"
+      "display_name": "ext_53ed651c",
+      "formula_raw": "ts_min(low, 5) / (close + 0.001)",
+      "formula_display": "ts_min(low, 5) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.01354184768107768,
+      "rank_ic_2026_raw": 0.01354184768107768
     },
     {
       "factor_id": "alpha_20260702_16104691",
@@ -2916,9 +2971,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_16104691/values.parquet"
       },
       "mem_available_gb": 24.08,
-      "dsl": "rank((0 - 1) * ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
+      "dsl": "rank(-ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
       "fe_formula": "rank((0 - 1) * ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
-      "lqtp_formula": "rank((0 - 1) * ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
+      "lqtp_formula": "rank(-ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -2932,7 +2987,12 @@
       "csv_name": "Reversal_Volatility_ROC60",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_16104691"
+      "display_name": "alpha_16104691",
+      "formula_raw": "rank((0 - 1) * ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
+      "formula_display": "rank(-ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.015712227947380628,
+      "rank_ic_2026_raw": 0.015712227947380628
     },
     {
       "factor_id": "ext_20260630113105_190822fa",
@@ -2944,8 +3004,8 @@
       "ok_for_select": true,
       "has_formula": true,
       "lqtp_native": true,
-      "dsl": "ts_std(returns, 10) * (0 - 1) * rank(ts_delta(close, 5))",
-      "lqtp_formula": "ts_std(ret, 10) * (0 - 1) * rank(ts_delta(close, 5))",
+      "dsl": "-(ts_std(ret, 10) * rank(ts_delta(close, 5)))",
+      "lqtp_formula": "-(ts_std(ret, 10) * rank(ts_delta(close, 5)))",
       "platform_submit": "submitted",
       "definition_id": "91449448-1d07-46dc-b9ba-4118d2d9ba07",
       "platform_mean_ic": 0.043333637905831515,
@@ -2978,7 +3038,12 @@
       "industry_size_neutral_mean_rank_ic": 0.03979329567859332,
       "factor_rank_turnover": 0.2466769560514113,
       "ic_half_life_days": 0.3688713840982319,
-      "display_name": "ext_190822fa"
+      "display_name": "ext_190822fa",
+      "formula_raw": "ts_std(ret, 10) * (0 - 1) * rank(ts_delta(close, 5))",
+      "formula_display": "-(ts_std(ret, 10) * rank(ts_delta(close, 5)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.009253947179818603,
+      "rank_ic_2026_raw": 0.009253947179818603
     },
     {
       "factor_id": "alpha_20260701_66ea5325",
@@ -3019,7 +3084,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.04258294008986661,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.6350873052173376,
       "panel_qc": {
         "year": 2026,
@@ -3051,8 +3116,8 @@
       },
       "mem_available_gb": 24.14,
       "has_formula": true,
-      "dsl": "rank(ts_delta(close, 5)) * rank(ts_std(returns, 20))",
-      "lqtp_formula": "rank(ts_delta(close, 5)) * rank(ts_std(ret, 20))",
+      "dsl": "-(rank(ts_delta(close, 5)) * rank(ts_std(ret, 20)))",
+      "lqtp_formula": "-(rank(ts_delta(close, 5)) * rank(ts_std(ret, 20)))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -3063,7 +3128,12 @@
       "definition_id": "12e1761c-1709-466c-9b1b-45b29b7150ab",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_66ea5325"
+      "display_name": "alpha_66ea5325",
+      "formula_raw": "rank(ts_delta(close, 5)) * rank(ts_std(ret, 20))",
+      "formula_display": "-(rank(ts_delta(close, 5)) * rank(ts_std(ret, 20)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.014450474633162064,
+      "rank_ic_2026_raw": 0.014450474633162064
     },
     {
       "factor_id": "alpha_20260703_f609ea4d",
@@ -3150,7 +3220,12 @@
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
       "definition_id": "c636438c-8442-4664-aefe-d81f0d6bfb3f",
       "lqtp_formula_platform": "(0 + (ts_min(low, 10) / (close + 0.001)))",
-      "display_name": "alpha_f609ea4d"
+      "display_name": "alpha_f609ea4d",
+      "formula_raw": "ts_min(low, 10) / (close + 0.001)",
+      "formula_display": "ts_min(low, 10) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.008649611875255177,
+      "rank_ic_2026_raw": 0.008649611875255177
     },
     {
       "factor_id": "alpha_20260701_549b43e6",
@@ -3191,7 +3266,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.04172905582793453,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.575975091838762,
       "panel_qc": {
         "year": 2026,
@@ -3222,9 +3297,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_549b43e6/values.parquet"
       },
       "mem_available_gb": 24.3,
-      "dsl": "ts_rank(ts_delta(close, 5), 20) * ts_std(returns, 20)",
+      "dsl": "-(ts_rank(ts_delta(close, 5), 20) * ts_std(ret, 20))",
       "fe_formula": "ts_rank(ts_delta(close, 5), 20) * ts_std(returns, 20)",
-      "lqtp_formula": "ts_rank(ts_delta(close, 5), 20) * ts_std(ret, 20)",
+      "lqtp_formula": "-(ts_rank(ts_delta(close, 5), 20) * ts_std(ret, 20))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -3238,7 +3313,12 @@
       "csv_name": "reversal_volatility_hybrid",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_549b43e6"
+      "display_name": "alpha_549b43e6",
+      "formula_raw": "ts_rank(ts_delta(close, 5), 20) * ts_std(ret, 20)",
+      "formula_display": "-(ts_rank(ts_delta(close, 5), 20) * ts_std(ret, 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.019351302183816064,
+      "rank_ic_2026_raw": 0.019351302183816064
     },
     {
       "factor_id": "alpha_20260702_4e49a3f5",
@@ -3323,7 +3403,12 @@
       "definition_id": "fed5f5af-9ea0-4683-ad97-a8641e92e978",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_4e49a3f5"
+      "display_name": "alpha_4e49a3f5",
+      "formula_raw": "ts_min(low, 20) / (close + 0.001)",
+      "formula_display": "ts_min(low, 20) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.008738198608526022,
+      "rank_ic_2026_raw": 0.008738198608526022
     },
     {
       "factor_id": "alpha_20260701_30e468c0",
@@ -3410,7 +3495,12 @@
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
       "definition_id": "fb266326-3e94-401f-a5ec-682a6bf7b87d",
       "lqtp_formula_platform": "(0 + (ts_min(low, 5) / (close + 0.001)))",
-      "display_name": "alpha_30e468c0"
+      "display_name": "alpha_30e468c0",
+      "formula_raw": "ts_min(low, 5) / (close + 0.001)",
+      "formula_display": "ts_min(low, 5) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.013541847681077562,
+      "rank_ic_2026_raw": 0.013541847681077562
     },
     {
       "factor_id": "alpha_20260702_873469e0",
@@ -3495,7 +3585,12 @@
       "definition_id": "c858611e-5c64-4d30-b091-fdc432ca6f0a",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_873469e0"
+      "display_name": "alpha_873469e0",
+      "formula_raw": "ts_min(low, 30) / (close + 0.001)",
+      "formula_display": "ts_min(low, 30) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0058200659997043125,
+      "rank_ic_2026_raw": 0.0058200659997043125
     },
     {
       "factor_id": "alpha_20260703_d485a3b3",
@@ -3536,7 +3631,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.040249706201320186,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.4021638159216961,
       "panel_qc": {
         "year": 2026,
@@ -3568,8 +3663,8 @@
       },
       "mem_available_gb": 24.75,
       "has_formula": true,
-      "dsl": "ts_std(returns, 60)",
-      "lqtp_formula": "ts_std(ret, 60)",
+      "dsl": "-(ts_std(ret, 60))",
+      "lqtp_formula": "-(ts_std(ret, 60))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -3580,7 +3675,12 @@
       "definition_id": "243b72a4-1be9-4a00-88b2-6503744f484e",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_d485a3b3"
+      "display_name": "alpha_d485a3b3",
+      "formula_raw": "ts_std(ret, 60)",
+      "formula_display": "-(ts_std(ret, 60))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.02725096844381865,
+      "rank_ic_2026_raw": 0.02725096844381865
     },
     {
       "factor_id": "alpha_20260703_9e3b2920",
@@ -3652,9 +3752,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_9e3b2920/values.parquet"
       },
       "mem_available_gb": 24.44,
-      "dsl": "((0 - 1) * rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
+      "dsl": "(-rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
       "fe_formula": "((0 - 1) * rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
-      "lqtp_formula": "((0 - 1) * rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
+      "lqtp_formula": "(-rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -3668,7 +3768,12 @@
       "csv_name": "Alpha101_040",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_9e3b2920"
+      "display_name": "alpha_9e3b2920",
+      "formula_raw": "((0 - 1) * rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
+      "formula_display": "(-rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.018832588810279174,
+      "rank_ic_2026_raw": 0.018832588810279174
     },
     {
       "factor_id": "alpha_20260703_99eb3d11",
@@ -3740,9 +3845,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_99eb3d11/values.parquet"
       },
       "mem_available_gb": 24.27,
-      "dsl": "(0 - 1) * rank(ts_std(high, 10)) * ts_corr(high, volume, 10)",
+      "dsl": "-(rank(ts_std(high, 10)) * ts_corr(high, volume, 10))",
       "fe_formula": "(0 - 1) * rank(ts_std(high, 10)) * ts_corr(high, volume, 10)",
-      "lqtp_formula": "(0 - 1) * rank(ts_std(high, 10)) * ts_corr(high, volume, 10)",
+      "lqtp_formula": "-(rank(ts_std(high, 10)) * ts_corr(high, volume, 10))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -3756,7 +3861,12 @@
       "csv_name": "Alpha101_040",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_99eb3d11"
+      "display_name": "alpha_99eb3d11",
+      "formula_raw": "(0 - 1) * rank(ts_std(high, 10)) * ts_corr(high, volume, 10)",
+      "formula_display": "-(rank(ts_std(high, 10)) * ts_corr(high, volume, 10))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.018832588810279147,
+      "rank_ic_2026_raw": 0.018832588810279147
     },
     {
       "factor_id": "ext_20260630113105_d17d6ed7",
@@ -3802,7 +3912,12 @@
       "industry_size_neutral_mean_rank_ic": 0.03499381318844288,
       "factor_rank_turnover": 0.4241721121572966,
       "ic_half_life_days": 0.36525732063711525,
-      "display_name": "ext_d17d6ed7"
+      "display_name": "ext_d17d6ed7",
+      "formula_raw": "ts_min(low, 5) / (delay(close, 1) + 0.001)",
+      "formula_display": "ts_min(low, 5) / (delay(close, 1) + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.011849576925574085,
+      "rank_ic_2026_raw": 0.011849576925574085
     },
     {
       "factor_id": "alpha_20260702_68529a49",
@@ -3874,9 +3989,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_68529a49/values.parquet"
       },
       "mem_available_gb": 24.55,
-      "dsl": "rank(ts_delta(close, 20)) * (0 - 1) * ts_std(returns, 20)",
+      "dsl": "-(rank(ts_delta(close, 20)) * ts_std(ret, 20))",
       "fe_formula": "rank(ts_delta(close, 20)) * (0 - 1) * ts_std(returns, 20)",
-      "lqtp_formula": "rank(ts_delta(close, 20)) * (0 - 1) * ts_std(ret, 20)",
+      "lqtp_formula": "-(rank(ts_delta(close, 20)) * ts_std(ret, 20))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -3890,7 +4005,12 @@
       "csv_name": "volatility_reversal_hybrid",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_68529a49"
+      "display_name": "alpha_68529a49",
+      "formula_raw": "rank(ts_delta(close, 20)) * (0 - 1) * ts_std(ret, 20)",
+      "formula_display": "-(rank(ts_delta(close, 20)) * ts_std(ret, 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.012723000728441987,
+      "rank_ic_2026_raw": 0.012723000728441987
     },
     {
       "factor_id": "alpha_20260701_f487f8ba",
@@ -3975,7 +4095,12 @@
       "definition_id": "033c7805-bfdb-406f-a435-1f3e105745e1",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_f487f8ba"
+      "display_name": "alpha_f487f8ba",
+      "formula_raw": "ts_min(low, 60) / (close + 0.001)",
+      "formula_display": "ts_min(low, 60) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.006003748923264608,
+      "rank_ic_2026_raw": 0.006003748923264608
     },
     {
       "factor_id": "alpha_20260702_57dd1981",
@@ -4016,7 +4141,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.0387117531253589,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.6931100253911248,
       "panel_qc": {
         "year": 2026,
@@ -4048,8 +4173,8 @@
       },
       "mem_available_gb": 24.71,
       "has_formula": true,
-      "dsl": "ts_corr(close, volume, 10) * (ts_std(volume, 20) / (ts_mean(volume, 20) + 1))",
-      "lqtp_formula": "ts_corr(close, volume, 10) * (ts_std(volume, 20) / (ts_mean(volume, 20) + 1))",
+      "dsl": "-(ts_corr(close, volume, 10) * (ts_std(volume, 20) / (ts_mean(volume, 20) + 1)))",
+      "lqtp_formula": "-(ts_corr(close, volume, 10) * (ts_std(volume, 20) / (ts_mean(volume, 20) + 1)))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -4060,7 +4185,12 @@
       "definition_id": "7ff7f5df-b60a-41d0-bc6f-eb26a5de2f35",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_57dd1981"
+      "display_name": "alpha_57dd1981",
+      "formula_raw": "ts_corr(close, volume, 10) * (ts_std(volume, 20) / (ts_mean(volume, 20) + 1))",
+      "formula_display": "-(ts_corr(close, volume, 10) * (ts_std(volume, 20) / (ts_mean(volume, 20) + 1)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.022612739019229583,
+      "rank_ic_2026_raw": 0.022612739019229583
     },
     {
       "factor_id": "alpha_20260703_ef5302fe",
@@ -4101,7 +4231,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.038306759045565894,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.46394059285900463,
       "panel_qc": {
         "year": 2026,
@@ -4133,8 +4263,8 @@
       },
       "mem_available_gb": 24.48,
       "has_formula": true,
-      "dsl": "ts_std(close, 5) / (close + 0.001)",
-      "lqtp_formula": "ts_std(close, 5) / (close + 0.001)",
+      "dsl": "-(ts_std(close, 5) / (close + 0.001))",
+      "lqtp_formula": "-(ts_std(close, 5) / (close + 0.001))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -4145,7 +4275,12 @@
       "definition_id": "4f6c6319-af06-4484-bc7f-5821ecd1110a",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_ef5302fe"
+      "display_name": "alpha_ef5302fe",
+      "formula_raw": "ts_std(close, 5) / (close + 0.001)",
+      "formula_display": "-(ts_std(close, 5) / (close + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.01427833816261586,
+      "rank_ic_2026_raw": 0.01427833816261586
     },
     {
       "factor_id": "alpha_20260703_42cca713",
@@ -4186,7 +4321,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.037767002518066486,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.41742474981207356,
       "panel_qc": {
         "year": 2026,
@@ -4218,8 +4353,8 @@
       },
       "mem_available_gb": 24.42,
       "has_formula": true,
-      "dsl": "ts_std(close, 10) / (close + 0.001)",
-      "lqtp_formula": "ts_std(close, 10) / (close + 0.001)",
+      "dsl": "-(ts_std(close, 10) / (close + 0.001))",
+      "lqtp_formula": "-(ts_std(close, 10) / (close + 0.001))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -4230,7 +4365,12 @@
       "definition_id": "82f65d86-cb64-4e44-bda8-b9d77a2bae28",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_42cca713"
+      "display_name": "alpha_42cca713",
+      "formula_raw": "ts_std(close, 10) / (close + 0.001)",
+      "formula_display": "-(ts_std(close, 10) / (close + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.007023424192717358,
+      "rank_ic_2026_raw": 0.007023424192717358
     },
     {
       "factor_id": "ext_20260701141641_cff71dce",
@@ -4276,7 +4416,12 @@
       "industry_size_neutral_mean_rank_ic": 0.03405618766831986,
       "factor_rank_turnover": 0.06665508038919113,
       "ic_half_life_days": 0.9379220006981261,
-      "display_name": "ext_cff71dce"
+      "display_name": "ext_cff71dce",
+      "formula_raw": "ts_mean(close, 30) / (close + 0.001)",
+      "formula_display": "ts_mean(close, 30) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.007154217290044937,
+      "rank_ic_2026_raw": 0.007154217290044937
     },
     {
       "factor_id": "alpha_20260701_61d3d4de",
@@ -4363,7 +4508,12 @@
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
       "definition_id": "a9d54271-b6cd-4c64-a31b-238140c80342",
       "lqtp_formula_platform": "(0 + (low / (close + 0.001)))",
-      "display_name": "alpha_61d3d4de"
+      "display_name": "alpha_61d3d4de",
+      "formula_raw": "low / (close + 0.001)",
+      "formula_display": "low / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.012334157531773493,
+      "rank_ic_2026_raw": 0.012334157531773493
     },
     {
       "factor_id": "ext_1800639a",
@@ -4378,8 +4528,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "rank(ts_corr(close, volume, 10)) * (0 - 1) * ts_mean(ret, 20)",
-      "lqtp_formula": "rank(ts_corr(close, volume, 10)) * (0 - 1) * ts_mean(ret, 20)",
+      "dsl": "-(rank(ts_corr(close, volume, 10)) * ts_mean(ret, 20))",
+      "lqtp_formula": "-(rank(ts_corr(close, volume, 10)) * ts_mean(ret, 20))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.034886,
@@ -4400,7 +4550,10 @@
       "materialize": "platform_only",
       "family": "rank(ts_corr(close,volume,N))*(N-N)*ts_mean(ret,N)",
       "description": "Vol_Price_Reversal_20_v2",
-      "report_href": "/reports_weekly_dug/ext_1800639a.html"
+      "report_href": "/reports_weekly_dug/ext_1800639a.html",
+      "formula_raw": "rank(ts_corr(close, volume, 10)) * (0 - 1) * ts_mean(ret, 20)",
+      "formula_display": "-(rank(ts_corr(close, volume, 10)) * ts_mean(ret, 20))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "ext_14f541dd",
@@ -4415,8 +4568,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "ts_corr(close, volume, 10) * (0 - 1) * rank(ts_delta(close, 5))",
-      "lqtp_formula": "ts_corr(close, volume, 10) * (0 - 1) * rank(ts_delta(close, 5))",
+      "dsl": "-(ts_corr(close, volume, 10) * rank(ts_delta(close, 5)))",
+      "lqtp_formula": "-(ts_corr(close, volume, 10) * rank(ts_delta(close, 5)))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.039524,
@@ -4437,7 +4590,10 @@
       "materialize": "platform_only",
       "family": "ts_corr(close,volume,N)*(N-N)*rank(ts_delta(close,N))",
       "description": "Basic_Vol_Price_Corr_10_mut",
-      "report_href": "/reports_weekly_dug/ext_14f541dd.html"
+      "report_href": "/reports_weekly_dug/ext_14f541dd.html",
+      "formula_raw": "ts_corr(close, volume, 10) * (0 - 1) * rank(ts_delta(close, 5))",
+      "formula_display": "-(ts_corr(close, volume, 10) * rank(ts_delta(close, 5)))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260703_c6169b2e",
@@ -4478,7 +4634,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.03661320565454456,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.5986067544177213,
       "panel_qc": {
         "year": 2026,
@@ -4509,9 +4665,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_c6169b2e/values.parquet"
       },
       "mem_available_gb": 24.32,
-      "dsl": "close / (low + 0.001)",
+      "dsl": "-(close / (low + 0.001))",
       "fe_formula": "close / (low + 0.001)",
-      "lqtp_formula": "close / (low + 0.001)",
+      "lqtp_formula": "-(close / (low + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -4525,7 +4681,12 @@
       "csv_name": "Basic_Close_Low_Ratio",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_c6169b2e"
+      "display_name": "alpha_c6169b2e",
+      "formula_raw": "close / (low + 0.001)",
+      "formula_display": "-(close / (low + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.01204353194200887,
+      "rank_ic_2026_raw": 0.01204353194200887
     },
     {
       "factor_id": "alpha_20260703_6c174054",
@@ -4566,7 +4727,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.03608381369193557,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.6108148184121952,
       "panel_qc": {
         "year": 2026,
@@ -4597,9 +4758,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_6c174054/values.parquet"
       },
       "mem_available_gb": 24.45,
-      "dsl": "(high - open) / (open + 0.001)",
+      "dsl": "-((high - open) / (open + 0.001))",
       "fe_formula": "(high - open) / (open + 0.001)",
-      "lqtp_formula": "(high - open) / (open + 0.001)",
+      "lqtp_formula": "-((high - open) / (open + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -4613,7 +4774,12 @@
       "csv_name": "Alpha158_KUP",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_6c174054"
+      "display_name": "alpha_6c174054",
+      "formula_raw": "(high - open) / (open + 0.001)",
+      "formula_display": "-((high - open) / (open + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.015028781241784833,
+      "rank_ic_2026_raw": 0.015028781241784833
     },
     {
       "factor_id": "alpha_20260701_149b529b",
@@ -4686,8 +4852,8 @@
       },
       "mem_available_gb": 24.32,
       "has_formula": true,
-      "dsl": "rank(close / (low + 0.001)) * (0 - 1) * rank(ts_std(ts_delta(close, 5), 20))",
-      "lqtp_formula": "rank(close / (low + 0.001)) * (0 - 1) * rank(ts_std(ts_delta(close, 5), 20))",
+      "dsl": "-(rank(close / (low + 0.001)) * rank(ts_std(ts_delta(close, 5), 20)))",
+      "lqtp_formula": "-(rank(close / (low + 0.001)) * rank(ts_std(ts_delta(close, 5), 20)))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -4700,7 +4866,12 @@
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
       "definition_id": "16849d6a-fa42-448d-9a20-83330485865a",
       "lqtp_formula_platform": "(0 + (rank(close / (low + 0.001)) * (0 - 1) * rank(ts_std(ts_delta(close, 5), 20))))",
-      "display_name": "alpha_149b529b"
+      "display_name": "alpha_149b529b",
+      "formula_raw": "rank(close / (low + 0.001)) * (0 - 1) * rank(ts_std(ts_delta(close, 5), 20))",
+      "formula_display": "-(rank(close / (low + 0.001)) * rank(ts_std(ts_delta(close, 5), 20)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0142509014836078,
+      "rank_ic_2026_raw": 0.0142509014836078
     },
     {
       "factor_id": "ext_d09a8963",
@@ -4715,8 +4886,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "rank((0 - 1) * ts_corr(ret, ts_delta(amount, 1), 10))",
-      "lqtp_formula": "rank((0 - 1) * ts_corr(ret, ts_delta(amount, 1), 10))",
+      "dsl": "rank(-ts_corr(ret, ts_delta(amount, 1), 10))",
+      "lqtp_formula": "rank(-ts_corr(ret, ts_delta(amount, 1), 10))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.036636,
@@ -4737,7 +4908,10 @@
       "materialize": "platform_only",
       "family": "rank((N-N)*ts_corr(ret,ts_delta(amount,N),N))",
       "description": "reversal_vol_flow",
-      "report_href": "/reports_weekly_dug/ext_d09a8963.html"
+      "report_href": "/reports_weekly_dug/ext_d09a8963.html",
+      "formula_raw": "rank((0 - 1) * ts_corr(ret, ts_delta(amount, 1), 10))",
+      "formula_display": "rank(-ts_corr(ret, ts_delta(amount, 1), 10))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260702_393d28b7",
@@ -4778,7 +4952,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.03414955885212843,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.36629132045768,
       "panel_qc": {
         "year": 2026,
@@ -4810,8 +4984,8 @@
       },
       "mem_available_gb": 24.22,
       "has_formula": true,
-      "dsl": "ts_std(close, 20) * 2 / (ts_mean(close, 20) + 0.001)",
-      "lqtp_formula": "ts_std(close, 20) * 2 / (ts_mean(close, 20) + 0.001)",
+      "dsl": "-(ts_std(close, 20) * 2 / (ts_mean(close, 20) + 0.001))",
+      "lqtp_formula": "-(ts_std(close, 20) * 2 / (ts_mean(close, 20) + 0.001))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -4822,7 +4996,12 @@
       "definition_id": "9946ab59-9863-4581-9e24-29467fda4a09",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_393d28b7"
+      "display_name": "alpha_393d28b7",
+      "formula_raw": "ts_std(close, 20) * 2 / (ts_mean(close, 20) + 0.001)",
+      "formula_display": "-(ts_std(close, 20) * 2 / (ts_mean(close, 20) + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.007199032015275679,
+      "rank_ic_2026_raw": 0.007199032015275679
     },
     {
       "factor_id": "ext_20260701222951_b6074f02",
@@ -4868,7 +5047,12 @@
       "industry_size_neutral_mean_rank_ic": 0.030658455184868198,
       "factor_rank_turnover": 0.6721976124425926,
       "ic_half_life_days": 0.28989155207335465,
-      "display_name": "ext_b6074f02"
+      "display_name": "ext_b6074f02",
+      "formula_raw": "delay(low, 1) / (close + 0.001)",
+      "formula_display": "delay(low, 1) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.013680118178193257,
+      "rank_ic_2026_raw": 0.013680118178193257
     },
     {
       "factor_id": "alpha_20260701_741a044f",
@@ -4955,7 +5139,12 @@
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
       "definition_id": "fa2e2377-c651-4722-be97-4589b7bcb089",
       "lqtp_formula_platform": "(0 + (ts_mean(close, 30) / (close + 0.001)))",
-      "display_name": "alpha_741a044f"
+      "display_name": "alpha_741a044f",
+      "formula_raw": "ts_mean(close, 30) / (close + 0.001)",
+      "formula_display": "ts_mean(close, 30) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.007154217290044834,
+      "rank_ic_2026_raw": 0.007154217290044834
     },
     {
       "factor_id": "alpha_20260702_b37f3fb9",
@@ -4996,7 +5185,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.03354607913909432,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.5739455454061381,
       "panel_qc": {
         "year": 2026,
@@ -5028,8 +5217,8 @@
       },
       "mem_available_gb": 24.23,
       "has_formula": true,
-      "dsl": "ts_corr(ts_delta(close, 5), ts_delta(volume, 5), 20)",
-      "lqtp_formula": "ts_corr(ts_delta(close, 5), ts_delta(volume, 5), 20)",
+      "dsl": "-(ts_corr(ts_delta(close, 5), ts_delta(volume, 5), 20))",
+      "lqtp_formula": "-(ts_corr(ts_delta(close, 5), ts_delta(volume, 5), 20))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -5040,7 +5229,12 @@
       "definition_id": "558e895e-01bb-466b-9669-15c27e7d1e48",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_b37f3fb9"
+      "display_name": "alpha_b37f3fb9",
+      "formula_raw": "ts_corr(ts_delta(close, 5), ts_delta(volume, 5), 20)",
+      "formula_display": "-(ts_corr(ts_delta(close, 5), ts_delta(volume, 5), 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.022482252487409905,
+      "rank_ic_2026_raw": 0.022482252487409905
     },
     {
       "factor_id": "alpha_20260702_576e0a0b",
@@ -5081,7 +5275,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.03299228649940185,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.3427445513307142,
       "panel_qc": {
         "year": 2026,
@@ -5112,9 +5306,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_576e0a0b/values.parquet"
       },
       "mem_available_gb": 24.5,
-      "dsl": "(close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001)",
+      "dsl": "-((close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001))",
       "fe_formula": "(close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001)",
-      "lqtp_formula": "(close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001)",
+      "lqtp_formula": "-((close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -5128,7 +5322,12 @@
       "csv_name": "GTJA191_M021",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_576e0a0b"
+      "display_name": "alpha_576e0a0b",
+      "formula_raw": "(close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001)",
+      "formula_display": "-((close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0023917390618309257,
+      "rank_ic_2026_raw": 0.0023917390618309257
     },
     {
       "factor_id": "alpha_20260702_a1c128d5",
@@ -5200,9 +5399,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_a1c128d5/values.parquet"
       },
       "mem_available_gb": 24.24,
-      "dsl": "rank((0 - 1) * ts_corr(close, volume, 20))",
+      "dsl": "rank(-ts_corr(close, volume, 20))",
       "fe_formula": "rank((0 - 1) * ts_corr(close, volume, 20))",
-      "lqtp_formula": "rank((0 - 1) * ts_corr(close, volume, 20))",
+      "lqtp_formula": "rank(-ts_corr(close, volume, 20))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -5216,7 +5415,12 @@
       "csv_name": "Rank_Volume_Reversal_20",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_a1c128d5"
+      "display_name": "alpha_a1c128d5",
+      "formula_raw": "rank((0 - 1) * ts_corr(close, volume, 20))",
+      "formula_display": "rank(-ts_corr(close, volume, 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.013418196644625745,
+      "rank_ic_2026_raw": 0.013418196644625745
     },
     {
       "factor_id": "alpha_20260701_cf427acf",
@@ -5257,7 +5461,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.03217327196992791,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.5634581855712196,
       "panel_qc": {
         "year": 2026,
@@ -5289,8 +5493,8 @@
       },
       "mem_available_gb": 24.48,
       "has_formula": true,
-      "dsl": "ts_std(returns, 60) + ts_corr(close, volume, 20)",
-      "lqtp_formula": "ts_std(ret, 60) + ts_corr(close, volume, 20)",
+      "dsl": "-(ts_std(ret, 60) + ts_corr(close, volume, 20))",
+      "lqtp_formula": "-(ts_std(ret, 60) + ts_corr(close, volume, 20))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -5301,7 +5505,12 @@
       "definition_id": "45cca113-e18a-4801-9558-ba1e06080d66",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_cf427acf"
+      "display_name": "alpha_cf427acf",
+      "formula_raw": "ts_std(ret, 60) + ts_corr(close, volume, 20)",
+      "formula_display": "-(ts_std(ret, 60) + ts_corr(close, volume, 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.013147421389259825,
+      "rank_ic_2026_raw": 0.013147421389259825
     },
     {
       "factor_id": "alpha_20260702_40002fd7",
@@ -5342,7 +5551,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.03217305199331801,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.5634552070774381,
       "panel_qc": {
         "year": 2026,
@@ -5374,8 +5583,8 @@
       },
       "mem_available_gb": 24.14,
       "has_formula": true,
-      "dsl": "ts_corr(close, volume, 20)",
-      "lqtp_formula": "ts_corr(close, volume, 20)",
+      "dsl": "-(ts_corr(close, volume, 20))",
+      "lqtp_formula": "-(ts_corr(close, volume, 20))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -5388,7 +5597,12 @@
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
       "definition_id": "c1bea054-e09e-47a0-be97-306e524ee64b",
       "lqtp_formula_platform": "(0 + (ts_corr(close, volume, 20)))",
-      "display_name": "alpha_40002fd7"
+      "display_name": "alpha_40002fd7",
+      "formula_raw": "ts_corr(close, volume, 20)",
+      "formula_display": "-(ts_corr(close, volume, 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.013147317594483732,
+      "rank_ic_2026_raw": 0.013147317594483732
     },
     {
       "factor_id": "ext_f3f2822a",
@@ -5425,7 +5639,10 @@
       "materialize": "platform_only",
       "family": "ts_min(low,N)/(ts_mean(close,N)+N)",
       "description": "Alpha158_MIN60_TURNOVER",
-      "report_href": "/reports_weekly_dug/ext_f3f2822a.html"
+      "report_href": "/reports_weekly_dug/ext_f3f2822a.html",
+      "formula_raw": "ts_min(low, 60) / (ts_mean(close, 20) + 0.001)",
+      "formula_display": "ts_min(low, 60) / (ts_mean(close, 20) + 0.001)",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "ext_dbcffcca",
@@ -5440,8 +5657,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "rank(ts_delta(volume, 20)) * (0 - 1) * rank(ts_delta(close, 20))",
-      "lqtp_formula": "rank(ts_delta(volume, 20)) * (0 - 1) * rank(ts_delta(close, 20))",
+      "dsl": "-(rank(ts_delta(volume, 20)) * rank(ts_delta(close, 20)))",
+      "lqtp_formula": "-(rank(ts_delta(volume, 20)) * rank(ts_delta(close, 20)))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.030018,
@@ -5462,7 +5679,10 @@
       "materialize": "platform_only",
       "family": "rank(ts_delta(volume,N))*(N-N)*rank(ts_delta(close,N))",
       "description": "rank_volume_reversal_20",
-      "report_href": "/reports_weekly_dug/ext_dbcffcca.html"
+      "report_href": "/reports_weekly_dug/ext_dbcffcca.html",
+      "formula_raw": "rank(ts_delta(volume, 20)) * (0 - 1) * rank(ts_delta(close, 20))",
+      "formula_display": "-(rank(ts_delta(volume, 20)) * rank(ts_delta(close, 20)))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "ext_3b68cb65",
@@ -5477,8 +5697,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "rank(ts_corr(ret, delay(close, 5), 10)) * (0 - 1) * ts_std(ret, 10)",
-      "lqtp_formula": "rank(ts_corr(ret, delay(close, 5), 10)) * (0 - 1) * ts_std(ret, 10)",
+      "dsl": "-(rank(ts_corr(ret, delay(close, 5), 10)) * ts_std(ret, 10))",
+      "lqtp_formula": "-(rank(ts_corr(ret, delay(close, 5), 10)) * ts_std(ret, 10))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.032943,
@@ -5499,7 +5719,10 @@
       "materialize": "platform_only",
       "family": "rank(ts_corr(ret,delay(close,N),N))*(N-N)*ts_std(ret,N)",
       "description": "reversal_volatility_corr",
-      "report_href": "/reports_weekly_dug/ext_3b68cb65.html"
+      "report_href": "/reports_weekly_dug/ext_3b68cb65.html",
+      "formula_raw": "rank(ts_corr(ret, delay(close, 5), 10)) * (0 - 1) * ts_std(ret, 10)",
+      "formula_display": "-(rank(ts_corr(ret, delay(close, 5), 10)) * ts_std(ret, 10))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260702_efd125a8",
@@ -5540,7 +5763,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.031156884292078676,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.5872351179438577,
       "panel_qc": {
         "year": 2026,
@@ -5572,8 +5795,8 @@
       },
       "mem_available_gb": 24.07,
       "has_formula": true,
-      "dsl": "ts_corr(ts_delta(close, 1), ts_delta(volume, 1), 20)",
-      "lqtp_formula": "ts_corr(ts_delta(close, 1), ts_delta(volume, 1), 20)",
+      "dsl": "-(ts_corr(ts_delta(close, 1), ts_delta(volume, 1), 20))",
+      "lqtp_formula": "-(ts_corr(ts_delta(close, 1), ts_delta(volume, 1), 20))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -5584,7 +5807,12 @@
       "definition_id": "f58e6ad0-00ca-4315-9eb0-6299c6dc76ef",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_efd125a8"
+      "display_name": "alpha_efd125a8",
+      "formula_raw": "ts_corr(ts_delta(close, 1), ts_delta(volume, 1), 20)",
+      "formula_display": "-(ts_corr(ts_delta(close, 1), ts_delta(volume, 1), 20))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.023644561202138568,
+      "rank_ic_2026_raw": 0.023644561202138568
     },
     {
       "factor_id": "alpha_20260701_1958c186",
@@ -5625,7 +5853,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.031147887046761056,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.6082997993708132,
       "panel_qc": {
         "year": 2026,
@@ -5657,8 +5885,8 @@
       },
       "mem_available_gb": 24.1,
       "has_formula": true,
-      "dsl": "ts_std(volume, 10) / (ts_mean(volume, 20) + 1)",
-      "lqtp_formula": "ts_std(volume, 10) / (ts_mean(volume, 20) + 1)",
+      "dsl": "-(ts_std(volume, 10) / (ts_mean(volume, 20) + 1))",
+      "lqtp_formula": "-(ts_std(volume, 10) / (ts_mean(volume, 20) + 1))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -5669,7 +5897,12 @@
       "definition_id": "a74f68e9-b251-4849-a50a-bdb3a10491d2",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_1958c186"
+      "display_name": "alpha_1958c186",
+      "formula_raw": "ts_std(volume, 10) / (ts_mean(volume, 20) + 1)",
+      "formula_display": "-(ts_std(volume, 10) / (ts_mean(volume, 20) + 1))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.014348626393972096,
+      "rank_ic_2026_raw": 0.014348626393972096
     },
     {
       "factor_id": "alpha_20260701_673406ba",
@@ -5742,8 +5975,8 @@
       },
       "mem_available_gb": 24.36,
       "has_formula": true,
-      "dsl": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
-      "lqtp_formula": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
+      "dsl": "-(rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10)))",
+      "lqtp_formula": "-(rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10)))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -5758,7 +5991,12 @@
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
       "definition_id": "08110159-7e9f-4980-b8fb-b9587f9df4cf",
       "lqtp_formula_platform": "(0 + ((0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))))",
-      "display_name": "alpha_673406ba"
+      "display_name": "alpha_673406ba",
+      "formula_raw": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
+      "formula_display": "-(rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.004364343297053515,
+      "rank_ic_2026_raw": 0.004364343297053515
     },
     {
       "factor_id": "ext_6d6a1814",
@@ -5773,8 +6011,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "rank(ts_corr(close, ts_min(low, 60), 10)) * (0 - 1) * rank(ts_std(ret, 10))",
-      "lqtp_formula": "rank(ts_corr(close, ts_min(low, 60), 10)) * (0 - 1) * rank(ts_std(ret, 10))",
+      "dsl": "-(rank(ts_corr(close, ts_min(low, 60), 10)) * rank(ts_std(ret, 10)))",
+      "lqtp_formula": "-(rank(ts_corr(close, ts_min(low, 60), 10)) * rank(ts_std(ret, 10)))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.028263,
@@ -5795,7 +6033,10 @@
       "materialize": "platform_only",
       "family": "rank(ts_corr(close,ts_min(low,N),N))*(N-N)*rank(ts_std(ret,N))",
       "description": "value_volatility_hybrid",
-      "report_href": "/reports_weekly_dug/ext_6d6a1814.html"
+      "report_href": "/reports_weekly_dug/ext_6d6a1814.html",
+      "formula_raw": "rank(ts_corr(close, ts_min(low, 60), 10)) * (0 - 1) * rank(ts_std(ret, 10))",
+      "formula_display": "-(rank(ts_corr(close, ts_min(low, 60), 10)) * rank(ts_std(ret, 10)))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "ext_20260629194635_4451e8dc",
@@ -5807,8 +6048,8 @@
       "ok_for_select": true,
       "has_formula": true,
       "lqtp_native": true,
-      "dsl": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
-      "lqtp_formula": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
+      "dsl": "-(rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10)))",
+      "lqtp_formula": "-(rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10)))",
       "platform_submit": "submitted",
       "definition_id": "95236783-9f5c-4e9b-a987-5d71d6fcba05",
       "platform_mean_ic": 0.031051759071435075,
@@ -5841,7 +6082,12 @@
       "industry_size_neutral_mean_rank_ic": 0.03118313373602215,
       "factor_rank_turnover": 0.8638255400500006,
       "ic_half_life_days": NaN,
-      "display_name": "ext_4451e8dc"
+      "display_name": "ext_4451e8dc",
+      "formula_raw": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
+      "formula_display": "-(rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0043643432970534995,
+      "rank_ic_2026_raw": 0.0043643432970534995
     },
     {
       "factor_id": "ext_20260701221018_2b6cff9a",
@@ -5853,8 +6099,8 @@
       "ok_for_select": true,
       "has_formula": true,
       "lqtp_native": true,
-      "dsl": "(0 - 1) * rank(((ts_std(abs((close - open)), 5) + (close - open)) + ts_corr(close, open, 10)))",
-      "lqtp_formula": "(0 - 1) * rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))",
+      "dsl": "-(rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10)))",
+      "lqtp_formula": "-(rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10)))",
       "platform_submit": "submitted",
       "definition_id": "a1941d4a-1035-4ca2-976c-50dbfb3a5eb3",
       "platform_mean_ic": 0.031051759071435075,
@@ -5887,7 +6133,12 @@
       "industry_size_neutral_mean_rank_ic": 0.029426384369473067,
       "factor_rank_turnover": 0.7896686989614863,
       "ic_half_life_days": 24.667673301268444,
-      "display_name": "ext_2b6cff9a"
+      "display_name": "ext_2b6cff9a",
+      "formula_raw": "(0 - 1) * rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))",
+      "formula_display": "-(rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0027748518023355553,
+      "rank_ic_2026_raw": 0.0027748518023355553
     },
     {
       "factor_id": "alpha_20260701_75f1066f",
@@ -5959,9 +6210,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_75f1066f/values.parquet"
       },
       "mem_available_gb": 24.18,
-      "dsl": "rank(ts_delta(volume, 5)) * (0 - 1) * ts_std(returns, 10)",
+      "dsl": "-(rank(ts_delta(volume, 5)) * ts_std(ret, 10))",
       "fe_formula": "rank(ts_delta(volume, 5)) * (0 - 1) * ts_std(returns, 10)",
-      "lqtp_formula": "rank(ts_delta(volume, 5)) * (0 - 1) * ts_std(ret, 10)",
+      "lqtp_formula": "-(rank(ts_delta(volume, 5)) * ts_std(ret, 10))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -5975,7 +6226,12 @@
       "csv_name": "reversal_volume_volatility",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_75f1066f"
+      "display_name": "alpha_75f1066f",
+      "formula_raw": "rank(ts_delta(volume, 5)) * (0 - 1) * ts_std(ret, 10)",
+      "formula_display": "-(rank(ts_delta(volume, 5)) * ts_std(ret, 10))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.01788315596666983,
+      "rank_ic_2026_raw": 0.01788315596666983
     },
     {
       "factor_id": "alpha_20260702_844ceabc",
@@ -6047,9 +6303,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_844ceabc/values.parquet"
       },
       "mem_available_gb": 24.32,
-      "dsl": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "dsl": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max(-ts_delta(close, 1), 0), 60) + 0.001)",
       "fe_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
-      "lqtp_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "lqtp_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max(-ts_delta(close, 1), 0), 60) + 0.001)",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -6063,7 +6319,12 @@
       "csv_name": "Alpha158_SUMD60_v2",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_844ceabc"
+      "display_name": "alpha_844ceabc",
+      "formula_raw": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "formula_display": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max(-ts_delta(close, 1), 0), 60) + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.01244391341504733,
+      "rank_ic_2026_raw": 0.01244391341504733
     },
     {
       "factor_id": "alpha_20260701_57e30cff",
@@ -6104,7 +6365,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.030777295498247505,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.637921310699438,
       "panel_qc": {
         "year": 2026,
@@ -6136,8 +6397,8 @@
       },
       "mem_available_gb": 24.21,
       "has_formula": true,
-      "dsl": "ts_std(volume, 20) / (ts_mean(volume, 20) + 1)",
-      "lqtp_formula": "ts_std(volume, 20) / (ts_mean(volume, 20) + 1)",
+      "dsl": "-(ts_std(volume, 20) / (ts_mean(volume, 20) + 1))",
+      "lqtp_formula": "-(ts_std(volume, 20) / (ts_mean(volume, 20) + 1))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -6148,7 +6409,12 @@
       "definition_id": "871277d4-8177-45fe-9847-7e740d8202f0",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_57e30cff"
+      "display_name": "alpha_57e30cff",
+      "formula_raw": "ts_std(volume, 20) / (ts_mean(volume, 20) + 1)",
+      "formula_display": "-(ts_std(volume, 20) / (ts_mean(volume, 20) + 1))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.017111981675288754,
+      "rank_ic_2026_raw": 0.017111981675288754
     },
     {
       "factor_id": "ext_1312d20f",
@@ -6185,7 +6451,10 @@
       "materialize": "platform_only",
       "family": "rank(ts_corr(ts_delta(close,N),ts_sum(ret,N),N))",
       "description": "Alpha158_ROC20_GTJA191_M016_hybrid_v2",
-      "report_href": "/reports_weekly_dug/ext_1312d20f.html"
+      "report_href": "/reports_weekly_dug/ext_1312d20f.html",
+      "formula_raw": "rank(ts_corr(ts_delta(close, 5), ts_sum(ret, 5), 10))",
+      "formula_display": "rank(ts_corr(ts_delta(close, 5), ts_sum(ret, 5), 10))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260702_581774bc",
@@ -6272,7 +6541,12 @@
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
       "definition_id": "7ec929e9-dcd0-4f5c-a590-623b9ed22da0",
       "lqtp_formula_platform": "(0 + (delay(low, 1) / (close + 0.001)))",
-      "display_name": "alpha_581774bc"
+      "display_name": "alpha_581774bc",
+      "formula_raw": "delay(low, 1) / (close + 0.001)",
+      "formula_display": "delay(low, 1) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.013680118178193191,
+      "rank_ic_2026_raw": 0.013680118178193191
     },
     {
       "factor_id": "alpha_20260702_6d5f848e",
@@ -6313,7 +6587,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.03040189045794825,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.43828891577627854,
       "panel_qc": {
         "year": 2026,
@@ -6344,9 +6618,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_6d5f848e/values.parquet"
       },
       "mem_available_gb": 24.09,
-      "dsl": "rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5))",
+      "dsl": "-(rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5)))",
       "fe_formula": "rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5))",
-      "lqtp_formula": "rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5))",
+      "lqtp_formula": "-(rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5)))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -6360,7 +6634,12 @@
       "csv_name": "GTJA191_M020",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_6d5f848e"
+      "display_name": "alpha_6d5f848e",
+      "formula_raw": "rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5))",
+      "formula_display": "-(rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.013205261756825497,
+      "rank_ic_2026_raw": 0.013205261756825497
     },
     {
       "factor_id": "alpha_20260701_726efa4d",
@@ -6401,7 +6680,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.029622792258442603,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.3292530699279378,
       "panel_qc": {
         "year": 2026,
@@ -6432,9 +6711,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_726efa4d/values.parquet"
       },
       "mem_available_gb": 24.04,
-      "dsl": "(close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001)",
+      "dsl": "-((close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001))",
       "fe_formula": "(close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001)",
-      "lqtp_formula": "(close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001)",
+      "lqtp_formula": "-((close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -6448,7 +6727,12 @@
       "csv_name": "Basic_BB_Position_20",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_726efa4d"
+      "display_name": "alpha_726efa4d",
+      "formula_raw": "(close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001)",
+      "formula_display": "-((close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0007525351582394345,
+      "rank_ic_2026_raw": 0.0007525351582394345
     },
     {
       "factor_id": "alpha_20260703_3962e26e",
@@ -6533,7 +6817,12 @@
       "definition_id": "f06e45aa-c1a9-45ee-8013-a3dd2acccf4d",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_3962e26e"
+      "display_name": "alpha_3962e26e",
+      "formula_raw": "delay(close, 10) / (close + 0.001)",
+      "formula_display": "delay(close, 10) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.004322396350871258,
+      "rank_ic_2026_raw": 0.004322396350871258
     },
     {
       "factor_id": "alpha_20260702_1f8103b7",
@@ -6606,8 +6895,8 @@
       },
       "mem_available_gb": 24.48,
       "has_formula": true,
-      "dsl": "(0 - 1) * rank(((ts_std(abs((close - open)), 5) + (close - open)) + ts_corr(close, open, 10)))",
-      "lqtp_formula": "(0 - 1) * rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))",
+      "dsl": "-(rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10)))",
+      "lqtp_formula": "-(rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10)))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -6620,7 +6909,12 @@
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
       "definition_id": "da72a394-818d-46ef-a01c-eedaee60f0b0",
       "lqtp_formula_platform": "(0 + ((0 - 1) * rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))))",
-      "display_name": "alpha_1f8103b7"
+      "display_name": "alpha_1f8103b7",
+      "formula_raw": "(0 - 1) * rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))",
+      "formula_display": "-(rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0027748518023355674,
+      "rank_ic_2026_raw": 0.0027748518023355674
     },
     {
       "factor_id": "alpha_20260702_f50c69da",
@@ -6693,8 +6987,8 @@
       },
       "mem_available_gb": 24.56,
       "has_formula": true,
-      "dsl": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
-      "lqtp_formula": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
+      "dsl": "-(rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10)))",
+      "lqtp_formula": "-(rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10)))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -6707,7 +7001,12 @@
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
       "definition_id": "8885ff73-1bc0-4a41-8329-9218cf835c01",
       "lqtp_formula_platform": "(1.0 * ((0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))))",
-      "display_name": "alpha_f50c69da"
+      "display_name": "alpha_f50c69da",
+      "formula_raw": "(0 - 1) * rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10))",
+      "formula_display": "-(rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.002774851802335704,
+      "rank_ic_2026_raw": 0.002774851802335704
     },
     {
       "factor_id": "alpha_20260701_5685f3e9",
@@ -6779,9 +7078,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_5685f3e9/values.parquet"
       },
       "mem_available_gb": 24.44,
-      "dsl": "rank((0 - 1) * ts_std(returns, 10)) * rank(ts_sum(returns, 6))",
+      "dsl": "rank(-ts_std(ret, 10)) * rank(ts_sum(ret, 6))",
       "fe_formula": "rank((0 - 1) * ts_std(returns, 10)) * rank(ts_sum(returns, 6))",
-      "lqtp_formula": "rank((0 - 1) * ts_std(ret, 10)) * rank(ts_sum(ret, 6))",
+      "lqtp_formula": "rank(-ts_std(ret, 10)) * rank(ts_sum(ret, 6))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -6795,7 +7094,12 @@
       "csv_name": "reversal_volatility_rank",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_5685f3e9"
+      "display_name": "alpha_5685f3e9",
+      "formula_raw": "rank((0 - 1) * ts_std(ret, 10)) * rank(ts_sum(ret, 6))",
+      "formula_display": "rank(-ts_std(ret, 10)) * rank(ts_sum(ret, 6))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.018438469954623195,
+      "rank_ic_2026_raw": 0.018438469954623195
     },
     {
       "factor_id": "alpha_20260701_5f690b22",
@@ -6836,7 +7140,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.02898057152141599,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.3294720728195312,
       "panel_qc": {
         "year": 2026,
@@ -6867,9 +7171,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_5f690b22/values.parquet"
       },
       "mem_available_gb": 24.25,
-      "dsl": "ts_delta(close, 10) / (delay(close, 10) + 0.001)",
+      "dsl": "-(ts_delta(close, 10) / (delay(close, 10) + 0.001))",
       "fe_formula": "ts_delta(close, 10) / (delay(close, 10) + 0.001)",
-      "lqtp_formula": "ts_delta(close, 10) / (delay(close, 10) + 0.001)",
+      "lqtp_formula": "-(ts_delta(close, 10) / (delay(close, 10) + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -6883,7 +7187,12 @@
       "csv_name": "Basic_Momentum_10",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_5f690b22"
+      "display_name": "alpha_5f690b22",
+      "formula_raw": "ts_delta(close, 10) / (delay(close, 10) + 0.001)",
+      "formula_display": "-(ts_delta(close, 10) / (delay(close, 10) + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0006064135535793334,
+      "rank_ic_2026_raw": 0.0006064135535793334
     },
     {
       "factor_id": "ext_bae31256",
@@ -6898,8 +7207,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "rank(ts_delta(close, 20)) * (0 - 1) * rank(ts_sum(ret, 5))",
-      "lqtp_formula": "rank(ts_delta(close, 20)) * (0 - 1) * rank(ts_sum(ret, 5))",
+      "dsl": "-(rank(ts_delta(close, 20)) * rank(ts_sum(ret, 5)))",
+      "lqtp_formula": "-(rank(ts_delta(close, 20)) * rank(ts_sum(ret, 5)))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.02891,
@@ -6920,7 +7229,10 @@
       "materialize": "platform_only",
       "family": "rank(ts_delta(close,N))*(N-N)*rank(ts_sum(ret,N))",
       "description": "hybrid_factor_reversal_roc_rank",
-      "report_href": "/reports_weekly_dug/ext_bae31256.html"
+      "report_href": "/reports_weekly_dug/ext_bae31256.html",
+      "formula_raw": "rank(ts_delta(close, 20)) * (0 - 1) * rank(ts_sum(ret, 5))",
+      "formula_display": "-(rank(ts_delta(close, 20)) * rank(ts_sum(ret, 5)))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "ext_188457b1",
@@ -6957,7 +7269,10 @@
       "materialize": "platform_only",
       "family": "rank((open-delay(high,N))/(delay(high,N)+N))",
       "description": "GTJA191_M006",
-      "report_href": "/reports_weekly_dug/ext_188457b1.html"
+      "report_href": "/reports_weekly_dug/ext_188457b1.html",
+      "formula_raw": "rank((open - delay(high, 1)) / (delay(high, 1) + 0.001))",
+      "formula_display": "rank((open - delay(high, 1)) / (delay(high, 1) + 0.001))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260702_9443699f",
@@ -7043,7 +7358,12 @@
       "definition_id": "d4235686-7377-4914-aea1-a5c304da4499",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_9443699f"
+      "display_name": "alpha_9443699f",
+      "formula_raw": "(rank(delay(close, 5)) - rank(close)) * rank(volume / (ts_mean(volume, 20) + 1))",
+      "formula_display": "(rank(delay(close, 5)) - rank(close)) * rank(volume / (ts_mean(volume, 20) + 1))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.009251105157808493,
+      "rank_ic_2026_raw": 0.009251105157808493
     },
     {
       "factor_id": "ext_2eee007e",
@@ -7058,8 +7378,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "rank((0 - 1) * ts_std(ret, 20)) * rank(ts_delta(close, 20))",
-      "lqtp_formula": "rank((0 - 1) * ts_std(ret, 20)) * rank(ts_delta(close, 20))",
+      "dsl": "rank(-ts_std(ret, 20)) * rank(ts_delta(close, 20))",
+      "lqtp_formula": "rank(-ts_std(ret, 20)) * rank(ts_delta(close, 20))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.035449,
@@ -7080,7 +7400,50 @@
       "materialize": "platform_only",
       "family": "rank((N-N)*ts_std(ret,N))*rank(ts_delta(close,N))",
       "description": "Volatility_Reversal_20",
-      "report_href": "/reports_weekly_dug/ext_2eee007e.html"
+      "report_href": "/reports_weekly_dug/ext_2eee007e.html",
+      "formula_raw": "rank((0 - 1) * ts_std(ret, 20)) * rank(ts_delta(close, 20))",
+      "formula_display": "rank(-ts_std(ret, 20)) * rank(ts_delta(close, 20))",
+      "sign_baked_into_formula": true
+    },
+    {
+      "factor_id": "ext_105e806c",
+      "display_name": "ext_105e806c",
+      "candidate_id": "evoalpha_20260630113105_105e806c",
+      "source": "pack_dsl_complex",
+      "label": "本周新挖",
+      "source_label": "本周新挖",
+      "ok": true,
+      "ok_for_select": true,
+      "from_pack_top_pick": true,
+      "already_neutralized": false,
+      "neutralization_note": "未中性化（包内DSL）",
+      "has_formula": true,
+      "dsl": "ts_min(low, 5) / (ts_mean(close, 10) + 0.001)",
+      "lqtp_formula": "ts_min(low, 5) / (ts_mean(close, 10) + 0.001)",
+      "formula_raw": "ts_min(low, 5) / (ts_mean(close, 10) + 0.001)",
+      "lqtp_native": true,
+      "formula_from": "pack_wave2",
+      "pack_rank_ic": 0.031353,
+      "platform_mean_ic": 0.02785359422803257,
+      "platform_icir": 0.1822279256112073,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 1.1282266555690001,
+      "mean_rank_ic": 0.02785359422803257,
+      "abs_mean_rank_ic": 0.02785359422803257,
+      "display_rank_ic": 0.02785359422803257,
+      "rank_icir": 0.1822279256112073,
+      "display_rank_icir": 0.1822279256112073,
+      "mean_daily_coverage": 0.9961360894012794,
+      "long_short_sharpe": 1.1282266555690001,
+      "rank_ic_2026": 0.01931057937990439,
+      "rank_ic_2026_raw": 0.01931057937990439,
+      "sign_flipped": false,
+      "sign_baked_into_formula": true,
+      "platform_submit": "submitted",
+      "materialize": "platform_only",
+      "ops": 2,
+      "formula_display": "ts_min(low, 5) / (ts_mean(close, 10) + 0.001)",
+      "report_href": "/reports_weekly_dug/ext_105e806c.html"
     },
     {
       "factor_id": "ext_98abc12f",
@@ -7117,7 +7480,10 @@
       "materialize": "platform_only",
       "family": "rank(ts_delta(close,N))*rank(ts_min(low,N)/(close+N))",
       "description": "volatility_value_proxy_v2",
-      "report_href": "/reports_weekly_dug/ext_98abc12f.html"
+      "report_href": "/reports_weekly_dug/ext_98abc12f.html",
+      "formula_raw": "rank(ts_delta(close, 5)) * rank(ts_min(low, 60) / (close + 0.001))",
+      "formula_display": "rank(ts_delta(close, 5)) * rank(ts_min(low, 60) / (close + 0.001))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260702_89d0956b",
@@ -7205,7 +7571,12 @@
       "csv_name": "Alpha158_MA60_turnover",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_89d0956b"
+      "display_name": "alpha_89d0956b",
+      "formula_raw": "ts_mean(close, 60) / (delay(close, 1) + 0.001)",
+      "formula_display": "ts_mean(close, 60) / (delay(close, 1) + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0068450549792540396,
+      "rank_ic_2026_raw": 0.0068450549792540396
     },
     {
       "factor_id": "alpha_20260702_f0fd9be3",
@@ -7246,7 +7617,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.02728909742521043,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.26831702888035214,
       "panel_qc": {
         "year": 2026,
@@ -7278,8 +7649,8 @@
       },
       "mem_available_gb": 24.23,
       "has_formula": true,
-      "dsl": "ts_std(close, 30) / (close + 0.001)",
-      "lqtp_formula": "ts_std(close, 30) / (close + 0.001)",
+      "dsl": "-(ts_std(close, 30) / (close + 0.001))",
+      "lqtp_formula": "-(ts_std(close, 30) / (close + 0.001))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -7290,7 +7661,12 @@
       "definition_id": "410efd94-3370-49dd-965b-4221f3122963",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_f0fd9be3"
+      "display_name": "alpha_f0fd9be3",
+      "formula_raw": "ts_std(close, 30) / (close + 0.001)",
+      "formula_display": "-(ts_std(close, 30) / (close + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0028104012928875945,
+      "rank_ic_2026_raw": 0.0028104012928875945
     },
     {
       "factor_id": "alpha_20260701_2f5c25fe",
@@ -7362,9 +7738,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_2f5c25fe/values.parquet"
       },
       "mem_available_gb": 24.14,
-      "dsl": "rank((0 - 1) * ts_std(returns, 20)) * ts_rank(ts_delta(close, 5), 20)",
+      "dsl": "rank(-ts_std(ret, 20)) * ts_rank(ts_delta(close, 5), 20)",
       "fe_formula": "rank((0 - 1) * ts_std(returns, 20)) * ts_rank(ts_delta(close, 5), 20)",
-      "lqtp_formula": "rank((0 - 1) * ts_std(ret, 20)) * ts_rank(ts_delta(close, 5), 20)",
+      "lqtp_formula": "rank(-ts_std(ret, 20)) * ts_rank(ts_delta(close, 5), 20)",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -7378,7 +7754,12 @@
       "csv_name": "reversal_volatility_hybrid",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_2f5c25fe"
+      "display_name": "alpha_2f5c25fe",
+      "formula_raw": "rank((0 - 1) * ts_std(ret, 20)) * ts_rank(ts_delta(close, 5), 20)",
+      "formula_display": "rank(-ts_std(ret, 20)) * ts_rank(ts_delta(close, 5), 20)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.017780827949132768,
+      "rank_ic_2026_raw": 0.017780827949132768
     },
     {
       "factor_id": "alpha_20260701_463d42d0",
@@ -7463,7 +7844,12 @@
       "definition_id": "7197725d-db91-4a39-9087-e3769b3cc506",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_463d42d0"
+      "display_name": "alpha_463d42d0",
+      "formula_raw": "delay(open, 3) / (close + 0.001)",
+      "formula_display": "delay(open, 3) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.006724174440922412,
+      "rank_ic_2026_raw": 0.006724174440922412
     },
     {
       "factor_id": "alpha_20260701_abf0beb7",
@@ -7504,7 +7890,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.02696511653096264,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.3032961470960132,
       "panel_qc": {
         "year": 2026,
@@ -7535,9 +7921,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_abf0beb7/values.parquet"
       },
       "mem_available_gb": 24.36,
-      "dsl": "ts_delta(close, 5) / (delay(close, 5) + 0.001)",
+      "dsl": "-(ts_delta(close, 5) / (delay(close, 5) + 0.001))",
       "fe_formula": "ts_delta(close, 5) / (delay(close, 5) + 0.001)",
-      "lqtp_formula": "ts_delta(close, 5) / (delay(close, 5) + 0.001)",
+      "lqtp_formula": "-(ts_delta(close, 5) / (delay(close, 5) + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -7551,7 +7937,12 @@
       "csv_name": "Basic_Momentum_5",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_abf0beb7"
+      "display_name": "alpha_abf0beb7",
+      "formula_raw": "ts_delta(close, 5) / (delay(close, 5) + 0.001)",
+      "formula_display": "-(ts_delta(close, 5) / (delay(close, 5) + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.003242165702708362,
+      "rank_ic_2026_raw": 0.003242165702708362
     },
     {
       "factor_id": "ext_b25eb1f4",
@@ -7566,8 +7957,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "rank((0 - 1) * ts_delta(close, 5))",
-      "lqtp_formula": "rank((0 - 1) * ts_delta(close, 5))",
+      "dsl": "rank(-ts_delta(close, 5))",
+      "lqtp_formula": "rank(-ts_delta(close, 5))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.028662,
@@ -7588,7 +7979,10 @@
       "materialize": "platform_only",
       "family": "rank((N-N)*ts_delta(close,N))",
       "description": "Basic_Rank_Reversal_5",
-      "report_href": "/reports_weekly_dug/ext_b25eb1f4.html"
+      "report_href": "/reports_weekly_dug/ext_b25eb1f4.html",
+      "formula_raw": "rank((0 - 1) * ts_delta(close, 5))",
+      "formula_display": "rank(-ts_delta(close, 5))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "ext_f04c2572",
@@ -7625,7 +8019,10 @@
       "materialize": "platform_only",
       "family": "ts_mean(volume,N)/(volume+N)",
       "description": "Alpha158_VMA20",
-      "report_href": "/reports_weekly_dug/ext_f04c2572.html"
+      "report_href": "/reports_weekly_dug/ext_f04c2572.html",
+      "formula_raw": "ts_mean(volume, 20) / (volume + 1)",
+      "formula_display": "ts_mean(volume, 20) / (volume + 1)",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "ext_3777651d",
@@ -7662,7 +8059,10 @@
       "materialize": "platform_only",
       "family": "rank(ts_delta(close,N))*(N-rank(ts_mean(ret,N)))",
       "description": "GTJA191_M008_mut",
-      "report_href": "/reports_weekly_dug/ext_3777651d.html"
+      "report_href": "/reports_weekly_dug/ext_3777651d.html",
+      "formula_raw": "rank(ts_delta(close, 5)) * (1 - rank(ts_mean(ret, 20)))",
+      "formula_display": "rank(ts_delta(close, 5)) * (1 - rank(ts_mean(ret, 20)))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "ext_20260701175237_59269c2f",
@@ -7674,7 +8074,7 @@
       "ok_for_select": true,
       "has_formula": true,
       "lqtp_native": true,
-      "dsl": "rank((vwap - close)) / rank((vwap + close))",
+      "dsl": "rank(vwap - close) / rank(vwap + close)",
       "lqtp_formula": "rank(vwap - close) / rank(vwap + close)",
       "platform_submit": "submitted",
       "definition_id": "5193382c-715e-4589-bdfd-17c8ac29ac7d",
@@ -7708,7 +8108,12 @@
       "industry_size_neutral_mean_rank_ic": 0.008986540995405265,
       "factor_rank_turnover": 0.40024934149261693,
       "ic_half_life_days": 2.153584486796089,
-      "display_name": "ext_59269c2f"
+      "display_name": "ext_59269c2f",
+      "formula_raw": "rank(vwap - close) / rank(vwap + close)",
+      "formula_display": "rank(vwap - close) / rank(vwap + close)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.002572134638844146,
+      "rank_ic_2026_raw": 0.002572134638844146
     },
     {
       "factor_id": "ext_74098cb4",
@@ -7745,7 +8150,10 @@
       "materialize": "platform_only",
       "family": "rank(ts_min(low,N)/(close+N))*ts_rank(ts_delta(close,N),N)",
       "description": "value_volatility_proxy_v3",
-      "report_href": "/reports_weekly_dug/ext_74098cb4.html"
+      "report_href": "/reports_weekly_dug/ext_74098cb4.html",
+      "formula_raw": "rank(ts_min(low, 60) / (close + 0.001)) * ts_rank(ts_delta(close, 5), 10)",
+      "formula_display": "rank(ts_min(low, 60) / (close + 0.001)) * ts_rank(ts_delta(close, 5), 10)",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "ext_20260701221018_3622e083",
@@ -7791,7 +8199,12 @@
       "industry_size_neutral_mean_rank_ic": 0.01044028229229099,
       "factor_rank_turnover": 0.40110068549869177,
       "ic_half_life_days": 2.2531337856890055,
-      "display_name": "ext_3622e083"
+      "display_name": "ext_3622e083",
+      "formula_raw": "rank(vwap - close) / (rank(vwap + close) + 0.001)",
+      "formula_display": "rank(vwap - close) / (rank(vwap + close) + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.002501475305933356,
+      "rank_ic_2026_raw": 0.002501475305933356
     },
     {
       "factor_id": "ext_a036d4cb",
@@ -7806,8 +8219,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "(0 - 1) * rank(ts_sum(ret, 6)) * ts_corr(open, volume, 10)",
-      "lqtp_formula": "(0 - 1) * rank(ts_sum(ret, 6)) * ts_corr(open, volume, 10)",
+      "dsl": "-(rank(ts_sum(ret, 6)) * ts_corr(open, volume, 10))",
+      "lqtp_formula": "-(rank(ts_sum(ret, 6)) * ts_corr(open, volume, 10))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.027829,
@@ -7828,7 +8241,10 @@
       "materialize": "platform_only",
       "family": "(N-N)*rank(ts_sum(ret,N))*ts_corr(open,volume,N)",
       "description": "GTJA191_M026",
-      "report_href": "/reports_weekly_dug/ext_a036d4cb.html"
+      "report_href": "/reports_weekly_dug/ext_a036d4cb.html",
+      "formula_raw": "(0 - 1) * rank(ts_sum(ret, 6)) * ts_corr(open, volume, 10)",
+      "formula_display": "-(rank(ts_sum(ret, 6)) * ts_corr(open, volume, 10))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260701_d332134b",
@@ -7869,7 +8285,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.02587686426836177,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.2926403668321517,
       "panel_qc": {
         "year": 2026,
@@ -7900,9 +8316,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_d332134b/values.parquet"
       },
       "mem_available_gb": 24.32,
-      "dsl": "ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001)",
+      "dsl": "-(ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001))",
       "fe_formula": "ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001)",
-      "lqtp_formula": "ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001)",
+      "lqtp_formula": "-(ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -7916,7 +8332,12 @@
       "csv_name": "Basic_Skew_Proxy_20",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_d332134b"
+      "display_name": "alpha_d332134b",
+      "formula_raw": "ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001)",
+      "formula_display": "-(ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.00278514420912172,
+      "rank_ic_2026_raw": -0.00278514420912172
     },
     {
       "factor_id": "ext_7940b9ee",
@@ -7931,8 +8352,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "rank(ts_delta(close, 10)) * (0 - 1) * rank(ts_delta(volume, 10))",
-      "lqtp_formula": "rank(ts_delta(close, 10)) * (0 - 1) * rank(ts_delta(volume, 10))",
+      "dsl": "-(rank(ts_delta(close, 10)) * rank(ts_delta(volume, 10)))",
+      "lqtp_formula": "-(rank(ts_delta(close, 10)) * rank(ts_delta(volume, 10)))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.02745,
@@ -7953,7 +8374,10 @@
       "materialize": "platform_only",
       "family": "rank(ts_delta(close,N))*(N-N)*rank(ts_delta(volume,N))",
       "description": "Value_VolumePrice_10",
-      "report_href": "/reports_weekly_dug/ext_7940b9ee.html"
+      "report_href": "/reports_weekly_dug/ext_7940b9ee.html",
+      "formula_raw": "rank(ts_delta(close, 10)) * (0 - 1) * rank(ts_delta(volume, 10))",
+      "formula_display": "-(rank(ts_delta(close, 10)) * rank(ts_delta(volume, 10)))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260702_21fb502a",
@@ -7994,7 +8418,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.024158827627327923,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.26391869225096176,
       "panel_qc": {
         "year": 2026,
@@ -8025,9 +8449,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_21fb502a/values.parquet"
       },
       "mem_available_gb": 24.38,
-      "dsl": "(close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001)",
+      "dsl": "-((close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001))",
       "fe_formula": "(close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001)",
-      "lqtp_formula": "(close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001)",
+      "lqtp_formula": "-((close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -8041,7 +8465,12 @@
       "csv_name": "GTJA191_M003",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_21fb502a"
+      "display_name": "alpha_21fb502a",
+      "formula_raw": "(close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001)",
+      "formula_display": "-((close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.001481113483731489,
+      "rank_ic_2026_raw": 0.001481113483731489
     },
     {
       "factor_id": "alpha_20260702_66b498d6",
@@ -8082,7 +8511,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.02408539334715095,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.47581770114582883,
       "panel_qc": {
         "year": 2026,
@@ -8114,8 +8543,8 @@
       },
       "mem_available_gb": 24.47,
       "has_formula": true,
-      "dsl": "rank(ts_corr(volume, ts_mean(volume, 60), 12)) * (ts_mean(volume, 9) - ts_mean(volume, 26)) / (ts_mean(volume, 12) + 1)",
-      "lqtp_formula": "rank(ts_corr(volume, ts_mean(volume, 60), 12)) * (ts_mean(volume, 9) - ts_mean(volume, 26)) / (ts_mean(volume, 12) + 1)",
+      "dsl": "-(rank(ts_corr(volume, ts_mean(volume, 60), 12)) * (ts_mean(volume, 9) - ts_mean(volume, 26)) / (ts_mean(volume, 12) + 1))",
+      "lqtp_formula": "-(rank(ts_corr(volume, ts_mean(volume, 60), 12)) * (ts_mean(volume, 9) - ts_mean(volume, 26)) / (ts_mean(volume, 12) + 1))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -8126,7 +8555,12 @@
       "definition_id": "54dc1073-e004-4aeb-8556-c92be7b7bd71",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_66b498d6"
+      "display_name": "alpha_66b498d6",
+      "formula_raw": "rank(ts_corr(volume, ts_mean(volume, 60), 12)) * (ts_mean(volume, 9) - ts_mean(volume, 26)) / (ts_mean(volume, 12) + 1)",
+      "formula_display": "-(rank(ts_corr(volume, ts_mean(volume, 60), 12)) * (ts_mean(volume, 9) - ts_mean(volume, 26)) / (ts_mean(volume, 12) + 1))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.008127562211780522,
+      "rank_ic_2026_raw": 0.008127562211780522
     },
     {
       "factor_id": "ext_efb920f2",
@@ -8141,8 +8575,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "(((0 - 1) * sign((close - delay(close, 7)) + ts_delta(close, 7))) * (1 + rank(1 + ts_sum(ret, 250))))",
-      "lqtp_formula": "(((0 - 1) * sign((close - delay(close, 7)) + ts_delta(close, 7))) * (1 + rank(1 + ts_sum(ret, 250))))",
+      "dsl": "((-sign((close - delay(close, 7)) + ts_delta(close, 7))) * (1 + rank(1 + ts_sum(ret, 250))))",
+      "lqtp_formula": "((-sign((close - delay(close, 7)) + ts_delta(close, 7))) * (1 + rank(1 + ts_sum(ret, 250))))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.024798,
@@ -8163,7 +8597,10 @@
       "materialize": "platform_only",
       "family": "(((N-N)*sign((close-delay(close,N))+ts_delta(close,N)))*(N+rank(N+ts_sum(ret,N))))",
       "description": "Alpha101_019",
-      "report_href": "/reports_weekly_dug/ext_efb920f2.html"
+      "report_href": "/reports_weekly_dug/ext_efb920f2.html",
+      "formula_raw": "(((0 - 1) * sign((close - delay(close, 7)) + ts_delta(close, 7))) * (1 + rank(1 + ts_sum(ret, 250))))",
+      "formula_display": "((-sign((close - delay(close, 7)) + ts_delta(close, 7))) * (1 + rank(1 + ts_sum(ret, 250))))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260702_f5562d5a",
@@ -8204,7 +8641,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.02279184148208332,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.210682233130272,
       "panel_qc": {
         "year": 2026,
@@ -8236,8 +8673,8 @@
       },
       "mem_available_gb": 24.35,
       "has_formula": true,
-      "dsl": "ts_std(close, 60) / (close + 0.001)",
-      "lqtp_formula": "ts_std(close, 60) / (close + 0.001)",
+      "dsl": "-(ts_std(close, 60) / (close + 0.001))",
+      "lqtp_formula": "-(ts_std(close, 60) / (close + 0.001))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -8248,7 +8685,12 @@
       "definition_id": "73515d03-b49b-4fee-8d57-ed3525f5a89f",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_f5562d5a"
+      "display_name": "alpha_f5562d5a",
+      "formula_raw": "ts_std(close, 60) / (close + 0.001)",
+      "formula_display": "-(ts_std(close, 60) / (close + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.004037846944621699,
+      "rank_ic_2026_raw": 0.004037846944621699
     },
     {
       "factor_id": "alpha_20260701_77eb1727",
@@ -8333,7 +8775,52 @@
       "definition_id": "e62ea892-8f99-4d12-afa9-5359b560bbbc",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_77eb1727"
+      "display_name": "alpha_77eb1727",
+      "formula_raw": "delay(vwap, 3) / (close + 0.001)",
+      "formula_display": "delay(vwap, 3) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.004220201436185167,
+      "rank_ic_2026_raw": 0.004220201436185167
+    },
+    {
+      "factor_id": "ext_04ea6252",
+      "display_name": "ext_04ea6252",
+      "candidate_id": "evoalpha_20260701204104_04ea6252",
+      "source": "pack_dsl_complex",
+      "label": "本周新挖",
+      "source_label": "本周新挖",
+      "ok": true,
+      "ok_for_select": true,
+      "from_pack_top_pick": true,
+      "already_neutralized": false,
+      "neutralization_note": "未中性化（包内DSL）",
+      "has_formula": true,
+      "dsl": "rank(-ts_corr(ts_std(ret, 20), ts_delta(close, 20), 10))",
+      "lqtp_formula": "rank(-ts_corr(ts_std(ret, 20), ts_delta(close, 20), 10))",
+      "formula_raw": "rank((0 - 1) * ts_corr(ts_std(returns, 20), ts_delta(close, 20), 10))",
+      "lqtp_native": true,
+      "formula_from": "pack_wave2",
+      "pack_rank_ic": 0.021924,
+      "platform_mean_ic": 0.022399534296691805,
+      "platform_icir": 0.2817605836527936,
+      "platform_coverage": 0.9914330515379951,
+      "platform_long_short_sharpe": 2.1883325614511935,
+      "mean_rank_ic": 0.022399534296691805,
+      "abs_mean_rank_ic": 0.022399534296691805,
+      "display_rank_ic": 0.022399534296691805,
+      "rank_icir": 0.2817605836527936,
+      "display_rank_icir": 0.2817605836527936,
+      "mean_daily_coverage": 0.9914330515379951,
+      "long_short_sharpe": 2.1883325614511935,
+      "rank_ic_2026": 0.01631342686267328,
+      "rank_ic_2026_raw": 0.01631342686267328,
+      "sign_flipped": false,
+      "sign_baked_into_formula": true,
+      "platform_submit": "submitted",
+      "materialize": "platform_only",
+      "ops": 4,
+      "formula_display": "rank(-ts_corr(ts_std(ret, 20), ts_delta(close, 20), 10))",
+      "report_href": "/reports_weekly_dug/ext_04ea6252.html"
     },
     {
       "factor_id": "ext_f9b2117b",
@@ -8348,8 +8835,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "((0 - 1) * ts_corr(open, volume, 10))",
-      "lqtp_formula": "((0 - 1) * ts_corr(open, volume, 10))",
+      "dsl": "(-ts_corr(open, volume, 10))",
+      "lqtp_formula": "(-ts_corr(open, volume, 10))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.03352193388539831,
@@ -8370,7 +8857,10 @@
       "materialize": "platform_only",
       "family": "((N-N)*ts_corr(open,volume,N))",
       "description": "GTJA191_006",
-      "report_href": "/reports_weekly_dug/ext_f9b2117b.html"
+      "report_href": "/reports_weekly_dug/ext_f9b2117b.html",
+      "formula_raw": "((0 - 1) * ts_corr(open, volume, 10))",
+      "formula_display": "(-ts_corr(open, volume, 10))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "ext_c26a3d0b",
@@ -8385,8 +8875,8 @@
       "already_neutralized": false,
       "neutralization_note": "未中性化（包内DSL/平台重算）",
       "has_formula": true,
-      "dsl": "ts_mean(sign(ts_delta(volume, 1)), 60) / (ts_mean(volume, 5) + 1)",
-      "lqtp_formula": "ts_mean(sign(ts_delta(volume, 1)), 60) / (ts_mean(volume, 5) + 1)",
+      "dsl": "-(ts_mean(sign(ts_delta(volume, 1)), 60) / (ts_mean(volume, 5) + 1))",
+      "lqtp_formula": "-(ts_mean(sign(ts_delta(volume, 1)), 60) / (ts_mean(volume, 5) + 1))",
       "lqtp_native": true,
       "formula_from": "pack_dsl",
       "pack_rank_ic": 0.03246930503825591,
@@ -8401,13 +8891,16 @@
       "display_rank_icir": 0.34108903613340746,
       "mean_daily_coverage": 0.9959127848554044,
       "long_short_sharpe": 6.517079779290112,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "platform_submit": "submitted",
       "definition_id": "0bb1d246-5be1-441b-a41f-03aa8216041c",
       "materialize": "platform_only",
       "family": "ts_mean(sign(ts_delta(volume,N)),N)/(ts_mean(volume,N)+N)",
       "description": "Alpha158_CNVMA60",
-      "report_href": "/reports_weekly_dug/ext_c26a3d0b.html"
+      "report_href": "/reports_weekly_dug/ext_c26a3d0b.html",
+      "formula_raw": "ts_mean(sign(ts_delta(volume, 1)), 60) / (ts_mean(volume, 5) + 1)",
+      "formula_display": "-(ts_mean(sign(ts_delta(volume, 1)), 60) / (ts_mean(volume, 5) + 1))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260702_98ed259d",
@@ -8448,7 +8941,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.021326508780514383,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.4141738612176838,
       "panel_qc": {
         "year": 2026,
@@ -8479,9 +8972,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_98ed259d/values.parquet"
       },
       "mem_available_gb": 24.52,
-      "dsl": "rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10)",
+      "dsl": "-(rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10))",
       "fe_formula": "rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10)",
-      "lqtp_formula": "rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10)",
+      "lqtp_formula": "-(rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -8495,7 +8988,12 @@
       "csv_name": "GTJA191_M004_Alpha101_hybrid",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_98ed259d"
+      "display_name": "alpha_98ed259d",
+      "formula_raw": "rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10)",
+      "formula_display": "-(rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.003528333354109563,
+      "rank_ic_2026_raw": 0.003528333354109563
     },
     {
       "factor_id": "alpha_20260701_75057f17",
@@ -8567,9 +9065,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_75057f17/values.parquet"
       },
       "mem_available_gb": 24.24,
-      "dsl": "ts_std(returns, 60) * (0 - 1) * sign(ts_delta(close, 5))",
+      "dsl": "-(ts_std(ret, 60) * sign(ts_delta(close, 5)))",
       "fe_formula": "ts_std(returns, 60) * (0 - 1) * sign(ts_delta(close, 5))",
-      "lqtp_formula": "ts_std(ret, 60) * (0 - 1) * sign(ts_delta(close, 5))",
+      "lqtp_formula": "-(ts_std(ret, 60) * sign(ts_delta(close, 5)))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -8583,7 +9081,12 @@
       "csv_name": "Basic_Volatility_60_mutated",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_75057f17"
+      "display_name": "alpha_75057f17",
+      "formula_raw": "ts_std(ret, 60) * (0 - 1) * sign(ts_delta(close, 5))",
+      "formula_display": "-(ts_std(ret, 60) * sign(ts_delta(close, 5)))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.00036794943073492224,
+      "rank_ic_2026_raw": -0.00036794943073492224
     },
     {
       "factor_id": "alpha_20260703_454725cc",
@@ -8668,7 +9171,12 @@
       "definition_id": "6090cac0-3f9c-40e3-bb70-2e69ee194af5",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_454725cc"
+      "display_name": "alpha_454725cc",
+      "formula_raw": "delay(open, 1) / (close + 0.001)",
+      "formula_display": "delay(open, 1) / (close + 0.001)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.009390476609547158,
+      "rank_ic_2026_raw": 0.009390476609547158
     },
     {
       "factor_id": "alpha_20260702_6ce5f556",
@@ -8753,7 +9261,12 @@
       "definition_id": "35fb69fe-97e5-4d6a-ad33-54aa1306333a",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_6ce5f556"
+      "display_name": "alpha_6ce5f556",
+      "formula_raw": "rank(ts_corr(delay(open - close, 1), close, 200)) + rank(open - close)",
+      "formula_display": "rank(ts_corr(delay(open - close, 1), close, 200)) + rank(open - close)",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.008235401268777143,
+      "rank_ic_2026_raw": 0.008235401268777143
     },
     {
       "factor_id": "alpha_20260702_153d5b20",
@@ -8826,8 +9339,8 @@
       },
       "mem_available_gb": 24.47,
       "has_formula": true,
-      "dsl": "rank((0 - 1) + open / (close + 0.001))",
-      "lqtp_formula": "rank((0 - 1) + open / (close + 0.001))",
+      "dsl": "rank(-1 + open / (close + 0.001))",
+      "lqtp_formula": "rank(-1 + open / (close + 0.001))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -8838,7 +9351,12 @@
       "definition_id": "a7c6dc41-6c3c-48e9-8959-d34d60d43e24",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_153d5b20"
+      "display_name": "alpha_153d5b20",
+      "formula_raw": "rank((0 - 1) + open / (close + 0.001))",
+      "formula_display": "rank(-1 + open / (close + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.004420198011997966,
+      "rank_ic_2026_raw": 0.004420198011997966
     },
     {
       "factor_id": "alpha_20260702_f204de74",
@@ -8879,7 +9397,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.02062019882934937,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.21762944519760205,
       "panel_qc": {
         "year": 2026,
@@ -8910,9 +9428,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f204de74/values.parquet"
       },
       "mem_available_gb": 24.08,
-      "dsl": "(close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001)",
+      "dsl": "-((close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001))",
       "fe_formula": "(close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001)",
-      "lqtp_formula": "(close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001)",
+      "lqtp_formula": "-((close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -8926,7 +9444,52 @@
       "csv_name": "Basic_Price_Position_60",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_f204de74"
+      "display_name": "alpha_f204de74",
+      "formula_raw": "(close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001)",
+      "formula_display": "-((close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.005631565463275501,
+      "rank_ic_2026_raw": -0.005631565463275501
+    },
+    {
+      "factor_id": "ext_35b6ffaf",
+      "display_name": "ext_35b6ffaf",
+      "candidate_id": "evoalpha_20260701221018_35b6ffaf",
+      "source": "pack_dsl_top_pick",
+      "label": "本周新挖·包内DSL",
+      "source_label": "本周新挖·包内DSL",
+      "ok": true,
+      "ok_for_select": true,
+      "from_pack_top_pick": true,
+      "already_neutralized": false,
+      "neutralization_note": "未中性化（包内DSL/平台重算）",
+      "has_formula": true,
+      "dsl": "rank(ts_delta(ts_mean((high - low) / (close + 0.001), 10), 1)) * rank(delay(close, 60) / (close + 0.001))",
+      "lqtp_formula": "rank(ts_delta(ts_mean((high - low) / (close + 0.001), 10), 1)) * rank(delay(close, 60) / (close + 0.001))",
+      "lqtp_native": true,
+      "formula_from": "pack_dsl",
+      "pack_rank_ic": 0.024153,
+      "platform_mean_ic": 0.020466751304712243,
+      "platform_icir": 0.16596419477953664,
+      "platform_coverage": 0.9827312347891729,
+      "platform_long_short_sharpe": 1.194019661229604,
+      "mean_rank_ic": 0.020466751304712243,
+      "abs_mean_rank_ic": 0.020466751304712243,
+      "display_rank_ic": 0.020466751304712243,
+      "rank_icir": 0.16596419477953664,
+      "display_rank_icir": 0.16596419477953664,
+      "mean_daily_coverage": 0.9827312347891729,
+      "long_short_sharpe": 1.194019661229604,
+      "sign_flipped": false,
+      "platform_submit": "submitted",
+      "definition_id": "8d3942a1-cf7e-4718-8ba1-a879753c0613",
+      "materialize": "platform_only",
+      "family": "rank(ts_delta(ts_mean((high-low)/(close+N),N),N))*rank(delay(close,N)/(close+N))",
+      "description": "Range_ROC_Reversal_10",
+      "report_href": "/reports_weekly_dug/ext_35b6ffaf.html",
+      "formula_raw": "rank(ts_delta(ts_mean((high - low) / (close + 0.001), 10), 1)) * rank(delay(close, 60) / (close + 0.001))",
+      "formula_display": "rank(ts_delta(ts_mean((high - low) / (close + 0.001), 10), 1)) * rank(delay(close, 60) / (close + 0.001))",
+      "sign_baked_into_formula": true
     },
     {
       "factor_id": "alpha_20260702_2e48ae98",
@@ -8967,7 +9530,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.020227308737052415,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.2670171579013531,
       "panel_qc": {
         "year": 2026,
@@ -8998,9 +9561,9 @@
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_2e48ae98/values.parquet"
       },
       "mem_available_gb": 24.34,
-      "dsl": "(close - open) / (open + 0.001)",
+      "dsl": "-((close - open) / (open + 0.001))",
       "fe_formula": "(close - open) / (open + 0.001)",
-      "lqtp_formula": "(close - open) / (open + 0.001)",
+      "lqtp_formula": "-((close - open) / (open + 0.001))",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
@@ -9014,7 +9577,12 @@
       "csv_name": "Basic_Intraday_Return",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_2e48ae98"
+      "display_name": "alpha_2e48ae98",
+      "formula_raw": "(close - open) / (open + 0.001)",
+      "formula_display": "-((close - open) / (open + 0.001))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.0037262621266314394,
+      "rank_ic_2026_raw": 0.0037262621266314394
     },
     {
       "factor_id": "alpha_20260702_80bca4fc",
@@ -9055,7 +9623,7 @@
         "year": 2025
       },
       "display_rank_ic": 0.020205747167876712,
-      "sign_flipped": true,
+      "sign_flipped": false,
       "display_rank_icir": 0.4585109033963682,
       "panel_qc": {
         "year": 2026,
@@ -9087,8 +9655,8 @@
       },
       "mem_available_gb": 24.28,
       "has_formula": true,
-      "dsl": "rank(ts_corr(close, ts_delta(log(volume + 1), 5), 10)) * ts_corr(open, volume, 10)",
-      "lqtp_formula": "rank(ts_corr(close, ts_delta(log(volume + 1), 5), 10)) * ts_corr(open, volume, 10)",
+      "dsl": "-(rank(ts_corr(close, ts_delta(log(volume + 1), 5), 10)) * ts_corr(open, volume, 10))",
+      "lqtp_formula": "-(rank(ts_corr(close, ts_delta(log(volume + 1), 5), 10)) * ts_corr(open, volume, 10))",
       "formula_from": "formulas.csv",
       "lqtp_native": true,
       "platform_field_ok": true,
@@ -9099,7 +9667,12 @@
       "definition_id": "d2c38f3a-07c3-4fb1-bfae-52ba605625af",
       "already_neutralized": true,
       "neutralization_note": "已中性化（候选池落盘）；免补行业/市值中性IC",
-      "display_name": "alpha_80bca4fc"
+      "display_name": "alpha_80bca4fc",
+      "formula_raw": "rank(ts_corr(close, ts_delta(log(volume + 1), 5), 10)) * ts_corr(open, volume, 10)",
+      "formula_display": "-(rank(ts_corr(close, ts_delta(log(volume + 1), 5), 10)) * ts_corr(open, volume, 10))",
+      "sign_baked_into_formula": true,
+      "rank_ic_2026": 0.010548592071537449,
+      "rank_ic_2026_raw": 0.010548592071537449
     }
   ],
   "all_results": [
@@ -16271,7 +16844,7 @@
   ],
   "n_degenerate_filtered": 11,
   "selection_note": "Excluded near-constant / all-zero panels that can fabricate RankIC via ties.",
-  "platform_note": "本周新挖 99 条均按 |RankIC| 降序；展示名已去掉挖掘日期；命名仅用 alpha_/ext_，不含算法品牌。",
+  "platform_note": "本周新挖 102 条；公式已去 (0-1)/取负栏；优先复杂且 2026 不猛衰减。",
   "backtested_at": "2026-08-09T00:40:45.637524",
   "formula_attach": {
     "n_with_dsl": 25,
@@ -16550,7 +17123,7 @@
       "report_href": ""
     }
   ],
-  "n_pack_merged": 33,
+  "n_pack_merged": 34,
   "pack_top_picks_merged_into_selected": true,
   "csv_fill_summary": {
     "n_selected": 79,
@@ -17432,5 +18005,7 @@
       }
     ]
   },
-  "pack_topup_added": 5
+  "pack_topup_added": 1,
+  "complex_topup_added": 0,
+  "wave2_added": 2
 }

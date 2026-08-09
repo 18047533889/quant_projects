@@ -149,7 +149,7 @@ def volume_volatility(volume, window):
     })
 
 
-def volume_autocorr(volume, window, lag):
+def volume_autocorr(volume, window=20, lag=1):
     # R11 round-3 #17: ``window`` counts ALIGNED PAIRS; the raw lookback is
     # ``window + lag`` prior bars (first output at raw index ``window + lag - 1``)
     # so the lag term has genuine history.  ``lag < window`` is a declared
@@ -842,8 +842,8 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         if extra.get("output_unit"):
             metadata.output_unit = extra["output_unit"]
 
-    def _calculate_series(self, *args, **kwargs):
-        return function(*args, **kwargs)
+    def _calculate_series(self, *args, _fn=function, **kwargs):
+        return _fn(*args, **kwargs)
 
     cls = type(
         f"PolarsLiquidityV2_{name}",

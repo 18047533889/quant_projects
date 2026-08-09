@@ -1129,6 +1129,8 @@ _R11_UNUSABLE_SWEEP_POLICIES = {
     "ts_regression_forecast_error_z": {"scope": "ts", "pit_safe": True, "min_periods": 3},
     "ts_regression_in_sample_resid": {"scope": "ts", "pit_safe": True, "min_periods": 3},
     "ts_regression_resid_mean": {"scope": "ts", "pit_safe": True, "min_periods": 3},
+    "ts_mean_abs_deviation": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_median_abs_deviation": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ADX": {"scope": "ts", "pit_safe": True, "min_periods": 2},
     "MACD_line": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "MACD_signal": {"scope": "ts", "pit_safe": True, "min_periods": 1},

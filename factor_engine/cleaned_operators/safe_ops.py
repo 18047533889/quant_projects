@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec
+from cleaned_operators.base import ParamRole, ParamSpec
 from cleaned_operators.overhaul.base import (
     PandasFunctionOperator,
     PolarsFunctionOperator,
@@ -108,14 +108,35 @@ def _register(
 # Validity / coverage / staleness gates
 # --------------------------------------------------------------------------
 
+def _finite_mask(x: pd.DataFrame) -> pd.DataFrame:
+    """``1.0`` for finite (np.isfinite), ``NaN`` for NaN / +Inf / -Inf.
+
+    Master Spec Part C-14: "valid" is ``np.isfinite`` — a ``+Inf`` / ``-Inf``
+    observation is as unusable as ``NaN`` and must never count toward a
+    validity / coverage statistic.  ``rolling().count()`` counts non-NaN, so a
+    raw mask would still count Inf; mapping non-finite to NaN makes the count
+    agree with ``np.isfinite``.
+    """
+    arr = x.to_numpy(dtype=float)
+    finite = np.isfinite(arr).astype(float)
+    finite[~np.isfinite(arr)] = np.nan
+    return pd.DataFrame(finite, index=x.index, columns=x.columns)
+
+
 def pd_ts_valid_count(x, window, min_periods=1, **_):
     w = positive_int(window, "window")
-    return x.rolling(w, min_periods=int(min_periods)).count()
+    mp = int(min_periods)
+    if mp < 1:
+        raise ValueError("ts_valid_count: min_periods must be >= 1")
+    return _finite_mask(x).rolling(w, min_periods=mp).count()
 
 
 def pd_ts_coverage_ratio(x, window, min_periods=1, **_):
     w = positive_int(window, "window")
-    count = x.rolling(w, min_periods=int(min_periods)).count()
+    mp = int(min_periods)
+    if mp < 1:
+        raise ValueError("ts_coverage_ratio: min_periods must be >= 1")
+    count = _finite_mask(x).rolling(w, min_periods=mp).count()
     return count / float(w)
 
 
@@ -142,41 +163,76 @@ def pd_ts_staleness(x, window, **_):
     return frame_pd(x, out)
 
 
+def _pl_finite_count_expr(col, w: int, mp: int):
+    """Polars twin of :func:`_finite_mask` + pandas ``rolling().count()``.
+
+    ``is_finite()`` → True for finite, null for NaN, False for ±Inf (so Inf is
+    never counted); ``when/then/otherwise`` maps the finite cells to ``1`` and
+    everything else (incl. null) to ``null``.
+
+    Pandas ``rolling(w, min_periods=mp).count()`` gates on WINDOW SLOTS — the
+    number of rows in the window (``min(r+1, w)``) — not on the number of valid
+    values.  With ``w >= mp`` (enforced by the central validator) that gate
+    reduces to ``row_index + 1 >= mp``, expressible directly with
+    ``pl.int_range`` (a literal 1 series does NOT roll in Polars, so no slot
+    column is used).  An all-null window (every row non-finite) must yield 0 —
+    not null — exactly like ``pandas .count()``, so ``fill_null(0)`` precedes
+    the slot gate.
+    """
+    mask = pl.when(pl.col(col).is_finite()).then(pl.lit(1)).otherwise(None).cast(pl.Int32)
+    cnt = mask.rolling_sum(window_size=w, min_samples=1).fill_null(0)
+    slot_gate = (pl.int_range(0, pl.len()) + 1) >= mp
+    return pl.when(slot_gate).then(cnt).otherwise(None)
+
+
 def _pl_ts_valid_count(x, window, min_periods=1, **_):
     w = positive_int(window, "window")
+    mp = int(min_periods)
+    if mp < 1:
+        raise ValueError("ts_valid_count: min_periods must be >= 1")
     cols = pl_cols(x)
-    # pandas rolling().count() 排除 NaN；``is_not_null`` 会把 NaN 当有效。
-    # 先 fill_nan(None) 使 NaN→null，再计数才与 pandas 一致。
     return x.with_columns([
-        pl.col(c).fill_nan(None).is_not_null().cast(pl.Int32).rolling_sum(window_size=w, min_samples=int(min_periods)).alias(c)
-        for c in cols
+        _pl_finite_count_expr(c, w, mp).alias(c) for c in cols
     ])
 
 
 def _pl_ts_coverage_ratio(x, window, min_periods=1, **_):
     w = positive_int(window, "window")
+    mp = int(min_periods)
+    if mp < 1:
+        raise ValueError("ts_coverage_ratio: min_periods must be >= 1")
     cols = pl_cols(x)
     return x.with_columns([
-        (pl.col(c).fill_nan(None).is_not_null().cast(pl.Int32).rolling_sum(window_size=w, min_samples=int(min_periods)) / w).alias(c)
-        for c in cols
+        (_pl_finite_count_expr(c, w, mp) / w).alias(c) for c in cols
     ])
 
+
+_VALIDITY_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=1, history_semantics="max_rows"),
+    # min_periods <= window is enforced centrally by _validate_common_integer_relations
+    "min_periods": ParamSpec(
+        dtype=int, min=1,
+        param_role=ParamRole.POLICY,  # support knob: never a search dimension
+    ),
+}
 
 _register(
     "ts_valid_count",
     "time_series",
     ["x", "window", "min_periods"],
-    "窗口内有限值个数。",
+    "窗口内有限值个数（valid = np.isfinite，NaN 与 ±Inf 均不计）。",
     pd_ts_valid_count,
     _pl_ts_valid_count,
+    param_specs=_VALIDITY_PARAM_SPECS,
 )
 _register(
     "ts_coverage_ratio",
     "time_series",
     ["x", "window", "min_periods"],
-    "窗口内有限值占比（有限值个数 / window）。",
+    "窗口内有限值占比（有限值个数 / window；valid = np.isfinite）。",
     pd_ts_coverage_ratio,
     _pl_ts_coverage_ratio,
+    param_specs=_VALIDITY_PARAM_SPECS,
 )
 _register(
     "ts_staleness",
@@ -467,3 +523,32 @@ _register(
     pd_cs_impute_median,
     param_specs={"min_finite": ParamSpec(dtype=int, min=1)},
 )
+
+
+# --------------------------------------------------------------------------
+# Semantic Closure declarations (Master Spec P0)
+# --------------------------------------------------------------------------
+
+def _declare_closure_contracts() -> None:
+    """Register the MissingPolicy / WindowSemantics / axis-contract side-
+    registry entries for the source-safe building blocks (Parts C-10 / D-16 /
+    BM-259).  A validity/count operator counts only finite values and never
+    connects across a gap, so it is WINDOW_VALID / MIN_SUPPORT_WINDOW."""
+    from cleaned_operators.closure import (
+        MissingPolicy,
+        WindowSemantics,
+        declare_missing_policy,
+        declare_window_semantics,
+    )
+
+    declare_missing_policy("ts_valid_count", MissingPolicy.WINDOW_VALID)
+    declare_missing_policy("ts_coverage_ratio", MissingPolicy.WINDOW_VALID)
+    declare_missing_policy("ts_staleness", MissingPolicy.WINDOW_VALID)
+    declare_missing_policy("cs_valid_count", MissingPolicy.PAIRWISE_VALID)
+    declare_missing_policy("cs_coverage_ratio", MissingPolicy.PAIRWISE_VALID)
+    declare_missing_policy("group_valid_count", MissingPolicy.WINDOW_VALID)
+    declare_window_semantics("ts_valid_count", WindowSemantics.MIN_SUPPORT_WINDOW)
+    declare_window_semantics("ts_coverage_ratio", WindowSemantics.MIN_SUPPORT_WINDOW)
+
+
+_declare_closure_contracts()

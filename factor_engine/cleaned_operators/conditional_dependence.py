@@ -19,55 +19,27 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, map_pair_rolling, register_polars_udf
 
 _ALPHA = 0.5  # Jeffreys smoothing, matching the plain-TE kernel.
 _EPS = 1e-12
-# Audit #21: the magnitude of the deterministic tie-breaking perturbation,
-# expressed as a fraction of the window's value range.
-_TIE_JITTER = 1e-9
 
 
 def _break_ties_deterministic(v: np.ndarray) -> np.ndarray:
-    """Deterministically break exact ties for quantile binning (audit #21).
+    """DEPRECATED no-op (audit #49): deterministic tie jitter is REMOVED.
 
-    The conditional TE quantile bins silently collapse when a series carries
-    exact ties (0-return days / limit bars / discrete financials).  Each exact
-    tie group is perturbed by an index-scaled epsilon keyed to its stable-sort
-    position — never randomness — so digitization lands the tied states in
-    distinct cells while genuinely distinct values are left untouched.  NaNs
-    are preserved (they sort last and are never grouped into a tie run).
+    The round-2 kernel perturbed each exact tie group (0-return days / limit
+    bars / discrete financials) with an index-scaled epsilon keyed to the
+    stable-sort position.  That turned real time-order into artificial
+    micro-differences and could manufacture a spurious conditional TE.  Audit
+    #49 removes the jitter entirely: ties are treated as a categorical STATE,
+    ``_quantile_edges`` collapses to ``min(bins, n_distinct)`` effective cells,
+    and the joint tensor is built at the effective dimensions.  The function is
+    kept only as a documented identity so the round-2 test module (which
+    imports it) still collects; ``_conditional_te_window`` no longer calls it.
     """
-    v = np.asarray(v, dtype=float)
-    n = v.size
-    if n < 2:
-        return v
-    finite = v[np.isfinite(v)]
-    if finite.size == 0:
-        return v
-    # A fully-degenerate (constant) series carries no structure to recover:
-    # leave it untouched so the kernel's ``< 2 distinct states`` check still
-    # fails closed.  Perturbing a constant series would *invent* information.
-    if np.unique(finite).size < 2:
-        return v
-    rng = float(np.nanmax(finite) - np.nanmin(finite))
-    if not np.isfinite(rng) or rng <= _EPS:
-        rng = 1.0
-    out = v.copy()
-    order = np.argsort(v, kind="mergesort")
-    s = v[order]
-    i = 0
-    while i < n:
-        j = i
-        while j + 1 < n and s[j + 1] == s[i]:
-            j += 1
-        if j > i:
-            for k in range(i, j + 1):
-                frac = (k - i) / float(j - i)
-                out[order[k]] += _TIE_JITTER * rng * frac
-        i = j + 1
-    return out
+    return np.asarray(v, dtype=float)
 
 
 def _metadata(
@@ -96,6 +68,19 @@ def _metadata(
 
 
 def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
+    """Quantile bin edges, collapsing ties to EFFECTIVE categorical cells.
+
+    Returns ``(effective_cells + 1)`` edges.  With heavy ties the unique
+    quantile edges can be fewer than ``n_bins + 1``; those fewer edges are kept
+    (never re-expanded to equal-width ``linspace`` bins — that would switch the
+    estimator's discretization with the data's tie rate, round-7 P0).  When ties
+    collapse the unique edges BELOW the distinct-value resolution (e.g. a binary
+    margin under ``bins=3``), fall back to categorical-state boundaries at the
+    midpoints of evenly spaced DISTINCT values, so every distinct value lands in
+    exactly one of ``min(bins, n_distinct)`` effective cells.  This is the audit
+    #49/#50 semantics: no deterministic jitter — ties are states, not
+    micro-perturbations.
+    """
     finite = values[np.isfinite(values)]
     if finite.size == 0:
         return np.array([-np.inf, np.inf], dtype=float)
@@ -106,12 +91,23 @@ def _quantile_edges(values: np.ndarray, n_bins: int) -> np.ndarray:
         # single distinct value: the caller's ``< 2 unique states`` check
         # normally guards this; keep a minimal 2-cell split defensively.
         return np.array([edges[0] - 1.0, edges[0] + 1.0], dtype=float)
-    # Round-7 P0: keep the ACTUAL quantile cell structure.  With heavy ties the
-    # unique quantile edges can be fewer than ``n_bins + 1``; the old fallback
-    # silently re-binned with equal-width ``linspace`` edges, so the estimator
-    # changed meaning with the data's tie rate.  Fewer unique edges simply mean
-    # fewer effective cells — the kernel's digitize/clip handles that honestly.
-    return edges
+    u = np.unique(finite)
+    n_distinct = int(u.size)
+    k = min(n_bins, n_distinct)
+    if k < 2:
+        k = 2
+    if edges.size - 1 >= k:
+        return edges
+    # Categorical-state fallback: ``k`` cells from the distinct-value rank
+    # space, boundaries at the midpoints between consecutive distinct values.
+    bnd = np.empty(k + 1, dtype=float)
+    bnd[0] = u[0]
+    bnd[-1] = u[-1]
+    for j in range(1, k):
+        b = int(np.floor(j * n_distinct / k))
+        b = max(1, min(n_distinct - 1, b))
+        bnd[j] = 0.5 * (u[b - 1] + u[b])
+    return np.unique(bnd)
 
 
 def _conditional_te_window(
@@ -124,12 +120,13 @@ def _conditional_te_window(
     min_cells_ratio: float = 1.0,
 ) -> float:
     """Conditional transfer entropy I(T_{s+lag}; S_s | T_s, C_s) for one window."""
-    # Audit #21: break exact ties in ALL three series BEFORE lagging so a tied
-    # state cannot silently collapse a quantile bin and the perturbation is
-    # consistent between the ``t_s`` and ``t_{s+lag}`` views of the same value.
-    tw = _break_ties_deterministic(tw)
-    sw = _break_ties_deterministic(sw)
-    cw = _break_ties_deterministic(cw)
+    # Audit #49/#50: exact ties (0-return days / limit bars / discrete
+    # financials) are NOT perturbed with stable-position jitter — jitter turns
+    # real time-order into artificial micro-differences and can manufacture a
+    # spurious TE.  Ties are treated as a categorical state: ``_quantile_edges``
+    # yields ``min(bins, n_distinct)`` EFFECTIVE cells per margin, and the joint
+    # tensor below is sized to the effective cell counts (never the requested
+    # ``bins^4``).
     # Lag is applied on the original time axis, then NaN rows are masked: a NaN
     # gap must not silently redefine the lag (see the plain-TE kernel).  The
     # "future" window ``tw[lag:]`` only ever reaches the trailing window's last
@@ -142,11 +139,7 @@ def _conditional_te_window(
     c_t = cw[:-lag]  # c_s
     t_next = tw[lag:]  # t_{s+lag}
     mask = np.isfinite(t_t) & np.isfinite(s_t) & np.isfinite(c_t) & np.isfinite(t_next)
-    # R5 P1-43(a): a 4-D joint distribution over ``bins^4`` cells needs far more
-    # transitions than a plain count floor — under-powered windows fail closed
-    # to NaN instead of emitting a noisy CTE from a near-empty contingency table.
-    required = 3 * (bins ** 4)
-    if int(mask.sum()) < max(lag + 2, min_transitions, required):
+    if int(mask.sum()) < max(lag + 2, min_transitions):
         return np.nan
     xs = t_t[mask]
     ys = s_t[mask]
@@ -158,24 +151,29 @@ def _conditional_te_window(
     x_edges = _quantile_edges(xs, bins)
     y_edges = _quantile_edges(ys, bins)
     c_edges = _quantile_edges(cs, bins)
-    xb = np.clip(np.digitize(xs, x_edges) - 1, 0, bins - 1).astype(np.int64)
-    xnb = np.clip(np.digitize(xn, x_edges) - 1, 0, bins - 1).astype(np.int64)
-    yb = np.clip(np.digitize(ys, y_edges) - 1, 0, bins - 1).astype(np.int64)
-    cb = np.clip(np.digitize(cs, c_edges) - 1, 0, bins - 1).astype(np.int64)
-    # Audit #20: effective-state-space sample gate.  The joint (t', t, s, c)
-    # has ``nxb * nxb * nyb * ncb`` possible cells; below ``k * cells`` usable
-    # transitions the plug-in histogram is dominated by smoothing mass.
-    nxb = int(x_edges.size - 1)
-    nyb = int(y_edges.size - 1)
-    ncb = int(c_edges.size - 1)
+    nxb = int(x_edges.size - 1)  # EFFECTIVE x cells (ties collapse the state space)
+    nyb = int(y_edges.size - 1)  # EFFECTIVE y cells
+    ncb = int(c_edges.size - 1)  # EFFECTIVE c cells
     if nxb < 2 or nyb < 2 or ncb < 2:
         return np.nan
+    xb = np.clip(np.digitize(xs, x_edges) - 1, 0, nxb - 1).astype(np.int64)
+    xnb = np.clip(np.digitize(xn, x_edges) - 1, 0, nxb - 1).astype(np.int64)
+    yb = np.clip(np.digitize(ys, y_edges) - 1, 0, nyb - 1).astype(np.int64)
+    cb = np.clip(np.digitize(cs, c_edges) - 1, 0, ncb - 1).astype(np.int64)
+    # R5 P1-43(a) / audit #20: effective-state-space sample gate.  The joint
+    # (t', t, s, c) has ``nxb * nxb * nyb * ncb`` possible cells; below
+    # ``k * cells`` usable transitions the plug-in histogram is dominated by
+    # Jeffreys smoothing mass — fail closed to NaN instead of a noisy CTE.
+    cells = nxb * nxb * nyb * ncb
+    required = max(min_transitions, 3 * cells)
     ratio = float(min_cells_ratio)
     if np.isfinite(ratio) and ratio > 0.0:
-        required = max(required, int(np.ceil(ratio * nxb * nxb * nyb * ncb)))
+        required = max(required, int(np.ceil(ratio * cells)))
     if n < required:
         return np.nan
-    joint = np.zeros((bins, bins, bins, bins), dtype=np.float64)  # [t', t, s, c]
+    # Audit #50: build the joint tensor at the EFFECTIVE dimensions — never the
+    # requested ``bins`` (ties may collapse a margin to fewer cells).
+    joint = np.zeros((nxb, nxb, nyb, ncb), dtype=np.float64)  # [t', t, s, c]
     for k in range(n):
         joint[xnb[k], xb[k], yb[k], cb[k]] += 1.0
     # Audit #22: a conditioning bin that collapsed to zero empirical samples
@@ -192,10 +190,10 @@ def _conditional_te_window(
     ptptc = joint.sum(axis=2)  # [t', t, c]
     ptsc = joint.sum(axis=0)  # [t, s, c]
     te = 0.0
-    for i in range(bins):  # t'
-        for j in range(bins):  # t
-            for k in range(bins):  # s
-                for l in range(bins):  # c
+    for i in range(nxb):  # t'
+        for j in range(nxb):  # t
+            for k in range(nyb):  # s
+                for l in range(ncb):  # c
                     p = p4[i, j, k, l]
                     if p <= _EPS:
                         continue
@@ -230,8 +228,12 @@ class TsConditionalTransferEntropy(SeriesOperator):
     在给定条件序列 C（regime/market/valuation...）状态的前提下，S 对 T 的方向
     信息传递。用于检验预测关系是否在控制状态变量后依然存在（如 turnover→return
     的关系在估值高/低状态下是否显著不同）。分位数分箱 + Jeffreys 平滑，
-    常量/退化状态 fail-closed。R5 P1-43(a)：四维联合 (t',t,s,c) 有 ``bins^4``
-    个格子，bins 限 {2,3} 且需 N >> bins^4 样本，否则 fail-closed NaN。
+    常量/退化状态 fail-closed。R5 P1-43(a)：四维联合 (t',t,s,c) 的格子数随
+    有效状态数增长（``nxb^2·nyb·ncb``），bins 限 {2,3} 且需 N 足够，否则
+    fail-closed NaN。审计 #49/#50：精确并列值（0 收益/涨跌停/离散财务值）
+    不做确定性抖动 —— 并列即状态，分箱回退到 ``min(bins, n_distinct)`` 个
+    有效格子，联合张量按有效维度构建。默认 ``bins=2``（审计 #51：默认参数
+    必须可调用；``bins=3`` 需要 3·3^4=243 个转移样本，超出默认 window=60）。
     P2 / Research。
     """
 
@@ -245,9 +247,9 @@ class TsConditionalTransferEntropy(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
-        "bins": ParamSpec(dtype=int, choices=(2, 3)),
+        "bins": ParamSpec(dtype=int, choices=(2, 3), param_role=ParamRole.ESTIMATOR_RESOLUTION),
         "lag": ParamSpec(dtype=int, min=1),
-        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
     def _calculate_series(
@@ -256,7 +258,7 @@ class TsConditionalTransferEntropy(SeriesOperator):
         source: pd.DataFrame,
         condition: pd.DataFrame,
         window: int = 60,
-        bins: int = 3,
+        bins: int = 2,
         lag: int = 1,
         min_transitions: Any = None,
         min_cells_ratio: float = 1.0,
@@ -278,15 +280,17 @@ class TsConditionalTransferEntropy(SeriesOperator):
             raise ValueError("ts_conditional_transfer_entropy requires lag >= 1")
         if w < lg + 2:
             raise ValueError("ts_conditional_transfer_entropy requires window >= lag + 2")
-        # Feasibility gate (R5 P1-43(a) / round-7 P0): the 4-D joint
+        # Feasibility gate (R5 P1-43(a) / round-7 P0 / audit #51): the 4-D joint
         # ``(t', t, s, c)`` needs ``3*bins^4`` transitions to be estimable.  The
         # gate must use the SAME requirement as the kernel — the older looser
         # floor ``2*bins^3`` let the default ``window=60 / bins=3`` pass the gate
         # (59 >= 54) while the kernel silently returned all-NaN (3*3^4 = 243
-        # required), i.e. a dead operator.  Reject infeasible (window, bins,
-        # lag) combinations loudly at execution time instead of failing inside
-        # the kernel.  Audit #20: the effective-state-space floor
-        # ``k * bins^4`` is folded into the same feasibility gate.
+        # required), i.e. a dead operator.  Audit #51: the DEFAULT must be
+        # callable, so the default ``bins`` is 2 — ``window=60, bins=2`` needs
+        # only 3*2^4 = 48 transitions (59 available), while ``bins=3`` needs
+        # 243 (> 59) and is rejected loudly unless ``window`` is raised.
+        # Audit #20: the effective-state-space floor ``k * bins^4`` is folded
+        # into the same feasibility gate.
         if min_transitions is None:
             mt = max(30, 2 * nb * nb * nb)
         else:
@@ -298,8 +302,8 @@ class TsConditionalTransferEntropy(SeriesOperator):
             raise ValueError(
                 "ts_conditional_transfer_entropy window-lag "
                 f"({w - lg}) < required transitions ({mt}) with bins={nb}; "
-                "raise window or lower bins (bins=3 needs window >= "
-                f"{mt + lg}, bins=2 needs window >= {3 * 16 + lg})"
+                "raise window or lower bins (bins=2 needs window >= "
+                f"{3 * 16 + lg}; bins=3 needs window >= {3 * 81 + lg})"
             )
         return frame_like(
             target,

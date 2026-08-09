@@ -220,12 +220,15 @@ class AggrTopNPolars(SeriesOperator):
 
         if x is None:
             raise ValueError("aggr_top_n requires an x panel")
-        op = OperatorRegistry.get("aggr_top_n", backend="pandas_numpy")
+        # Use the pandas class directly (not the registry lookup): aggr_top_n is
+        # governance-blocked and unregistered from the final registry after a
+        # full load_all, but the owned implementation must still be invokable.
+        from cleaned_operators.common.time_series import AggrTopN as _AggrTopN
 
         # bridge_pandas calls compute(pdf, *pargs); pargs = (aggr_func, sort_col,
         # top, asc) and pdf is the x panel.
         def _compute(pdf, aggr_func, sort_col, top, asc, **kwargs):
-            return op.calculate(aggr_func, pdf, sort_col, top, asc, **kwargs)
+            return _AggrTopN().calculate(aggr_func, pdf, sort_col, top, asc, **kwargs)
 
         return bridge_pandas(x, _compute, aggr_func, sort_col, top, asc, **kwargs)
 

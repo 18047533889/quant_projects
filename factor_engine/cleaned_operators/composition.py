@@ -37,6 +37,14 @@ Contract:
   names, ``x_i`` must correspond to the SAME named part ``y_i`` before the
   positional pairing is trusted (P0-70); anonymous positional panels keep the
   positional pairing.
+* CompositionSchema (P0-74..77): the family is NOT a single broad
+  "fundamental" bag.  A composition part must have the same unit, be strictly
+  positive, describe one economic whole, and carry an explicit PartId.  Known
+  misclassified parts — EPS (per-share unit), MarketCap / Turnover (whole-firm
+  valuations, not parts of a whole), raw Volume / Amount (shares vs currency;
+  only composable once converted to share-of-total activity), raw OHLC (four
+  price statistics, not four parts of a total) — are gated with a clear
+  ``ValueError`` at the call boundary.
 """
 from __future__ import annotations
 
@@ -65,15 +73,39 @@ def _parts(*frames: pd.DataFrame | None) -> list[pd.DataFrame]:
 
 
 # ---------------------------------------------------------------------------
-# P0-69 CompositionId / P0-70 PartId — composition-family identity.
+# P0-69 CompositionId / P0-70 PartId / P0-74..77 CompositionSchema —
+# composition-family identity.
 # ---------------------------------------------------------------------------
-# A composition is a vector of parts that belong to ONE family (all
-# financial-statement flows, or all trading-activity fields, ...).  Mixing
-# parts from different families (e.g. ``Revenue + MarketCap + Volume``)
-# produces an Aitchison geometry that is meaningless across money/volume
-# magnitudes, so the operators fail closed at the call boundary.
-_COMPOSITION_IDS: dict[str, str] = {
-    # financial-statement flows
+# A composition is a vector of parts that (a) have the SAME unit, (b) are
+# strictly positive, (c) describe ONE economic whole, and (d) carry an explicit
+# PartId.  ``_COMPOSITION_SCHEMA_FIELDS`` is the allow-list of *known* fields
+# that satisfy that schema (financial-statement money flows — same currency,
+# same firm).  Mixing parts from different families (e.g.
+# ``Revenue + MarketCap + Volume``) produces an Aitchison geometry that is
+# meaningless across money/volume magnitudes, so the operators fail closed at
+# the call boundary.
+#
+# P0-74/75/76/77 — ``_MISCLASSIFIED_PARTS`` is the explicit gate for known
+# fields that do NOT satisfy the schema and must never enter a composition as a
+# part:
+#   * ``eps`` is per-share — a DIFFERENT unit from the money-flow whole, so
+#     Revenue/NetIncome/TotalAssets/Liabilities/Equity are NOT one single
+#     compositional whole with EPS.
+#   * ``market_cap`` / ``turnover`` are valuations / whole-firm flows, not
+#     positive parts of one part-whole decomposition.
+#   * raw ``volume`` / ``amount`` are shares vs currency — NOT composable with
+#     each other (or with money flows); only usable once converted to
+#     share-of-total activity (in which case the part carries a *share* field
+#     name and is no longer raw ``volume``).
+#   * raw OHLC (open/high/low/close/pre_close/vwap) are four price STATISTICS,
+#     not four positive parts of a total.
+# A named part that is neither in the schema allow-list nor in the
+# misclassified gate is an *unknown* field and passes (a caller declaring a
+# volume-by-bucket share ``share_of_volume_bucket_1`` or a holder share
+# ``holder_share_3`` supplies its own CompositionSchema).
+_COMPOSITION_SCHEMA_FIELDS: dict[str, str] = {
+    # financial-statement money flows / balances — same unit (currency), same
+    # economic whole (the firm).  EPS is deliberately NOT here (per-share unit).
     "revenue": "financial_statement",
     "operating_revenue": "financial_statement",
     "net_profit": "financial_statement",
@@ -82,26 +114,27 @@ _COMPOSITION_IDS: dict[str, str] = {
     "total_liabilities": "financial_statement",
     "equity": "financial_statement",
     "shareholders_equity": "financial_statement",
-    "eps": "financial_statement",
-    # market / valuation
-    "market_cap": "market_cap",
-    "mkt_cap": "market_cap",
-    "free_market_cap": "market_cap",
-    "turnover_ratio": "market_cap",
-    "turnover": "market_cap",
-    # trading activity
-    "volume": "trading_activity",
-    "vol": "trading_activity",
-    "amount": "trading_activity",
-    "amt": "trading_activity",
-    # price levels
-    "open": "price",
-    "close": "price",
-    "high": "price",
-    "low": "price",
-    "pre_close": "price",
-    "prev_close": "price",
-    "vwap": "price",
+}
+
+# Known fields that are NOT valid composition parts (P0-74/75/76/77).
+_MISCLASSIFIED_PARTS: dict[str, str] = {
+    "eps": "per-share value (different unit from a money-flow whole; P0-74)",
+    "market_cap": "market valuation (not a positive part of one economic whole; P0-75)",
+    "mkt_cap": "market valuation (not a positive part of one economic whole; P0-75)",
+    "free_market_cap": "market valuation (not a positive part of one economic whole; P0-75)",
+    "turnover_ratio": "turnover (not a positive part of one economic whole; P0-75)",
+    "turnover": "turnover (not a positive part of one economic whole; P0-75)",
+    "volume": "raw shares/count — convert to a share-of-total first (P0-76)",
+    "vol": "raw shares/count — convert to a share-of-total first (P0-76)",
+    "amount": "raw currency turnover — convert to a share-of-total first (P0-76)",
+    "amt": "raw currency turnover — convert to a share-of-total first (P0-76)",
+    "open": "OHLC price statistic, not a positive part of a total (P0-77)",
+    "close": "OHLC price statistic, not a positive part of a total (P0-77)",
+    "high": "OHLC price statistic, not a positive part of a total (P0-77)",
+    "low": "OHLC price statistic, not a positive part of a total (P0-77)",
+    "pre_close": "price statistic, not a positive part of a total (P0-77)",
+    "prev_close": "price statistic, not a positive part of a total (P0-77)",
+    "vwap": "price statistic, not a positive part of a total (P0-77)",
 }
 
 
@@ -125,7 +158,13 @@ def _part_field_name(frame: pd.DataFrame) -> str | None:
 
 
 def _same_composition(parts: Sequence[pd.DataFrame], composition_id: str | None = None) -> None:
-    """P0-69: all parts of one composition must belong to the SAME family.
+    """P0-69 + P0-74/75/76/77: all parts of one composition must satisfy the
+    CompositionSchema AND belong to the SAME family.
+
+    A named part is checked against the schema FIRST: a *known* field that is
+    not composable (EPS, market_cap, turnover, raw volume/amount, raw OHLC) is
+    rejected with a clear error regardless of ``composition_id``.  Then the
+    P0-69 family consistency is enforced:
 
     * ``composition_id`` provided -> every part whose field is known must
       belong to that exact family; anonymous / unknown parts are not checkable
@@ -141,7 +180,15 @@ def _same_composition(parts: Sequence[pd.DataFrame], composition_id: str | None 
         field = _part_field_name(frame)
         if field is None:
             continue
-        family = _COMPOSITION_IDS.get(str(field).lower())
+        key = str(field).lower()
+        if key in _MISCLASSIFIED_PARTS:
+            raise ValueError(
+                f"composition part {field!r} is not a valid composition part: "
+                f"{_MISCLASSIFIED_PARTS[key]}; composition operators accept "
+                "ONLY a CompositionSchema — same units, strictly positive, one "
+                "economic whole, explicit PartId (P0-74/75/76/77)"
+            )
+        family = _COMPOSITION_SCHEMA_FIELDS.get(key)
         if family is None:
             continue
         seen.add(family)

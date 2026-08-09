@@ -7,9 +7,14 @@ how many trading days are needed to consume a fixed ``budget``.  This one
 kernel serves both volume-time and volatility-time factor construction:
 
 * ``ts_activity_clock_lagged_value`` — ``x`` at the activity-clock lag ``k*``
-  (the row at which the accumulated scaled activity first reaches ``budget``).
-  ``x - ts_activity_clock_lagged_value(x, activity, ...)`` is an activity-clock
+  (the row at which the accumulated scaled activity first reaches ``budget``),
+  CURRENT-INCLUSIVE (``include_current=True`` default).  ``x -
+  ts_activity_clock_lagged_value(x, activity, ...)`` is an activity-clock
   momentum recipe.
+* ``ts_activity_clock_lagged_value_prior`` — same lagged value with the current
+  bar ALWAYS excluded (P0-O #79): a single high-activity bar can never consume
+  the whole budget at ``k*=0`` and manufacture a zero momentum on the shock
+  day.  This is the canonical to build activity-clock momentum from.
 * ``ts_activity_clock_age``           — the lag ``k*`` itself.
 * ``ts_max_drawdown_activity_cost``   — share of window activity consumed by the
   max-drawdown peak→trough segment (turnover-clock drawdown cost).
@@ -27,19 +32,32 @@ import pandas as pd
 from cleaned_operators.base import ParamSpec
 from cleaned_operators.base_polars import OperatorMetadata as PolarsMetadata
 from cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
+from cleaned_operators.closure import SameAxisError
 from cleaned_operators.registry import OperatorRegistry
 
 _EPS = 1e-12
 
 
 def _align(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
+    """SameAxis align of multi-panel inputs.
+
+    P0-O (78): a silent ``frame.reindex(...)`` would bridge a date-shifted
+    panel (``x_t`` vs ``activity_{t+1}``) or a differently-ordered instrument
+    axis back onto the base — manufacturing a momentum/age series that the data
+    never actually contained.  Fail closed instead: the panels must share the
+    EXACT same row index and instrument columns, else ``SameAxisError``.
+    """
     if not frames:
         return ()
     base = frames[0]
     out = [base]
-    for frame in frames[1:]:
+    for position, frame in enumerate(frames[1:], start=1):
         if not frame.index.equals(base.index) or not frame.columns.equals(base.columns):
-            frame = frame.reindex(index=base.index, columns=base.columns)
+            raise SameAxisError(
+                f"activity-clock input {position} is not aligned with input 0: "
+                "row index or instrument columns differ (no silent reindex; "
+                "date-shifted / different-stock panels are rejected — P0-O #78)"
+            )
         out.append(frame)
     return tuple(out)
 
@@ -142,6 +160,48 @@ def _ts_activity_clock_lagged_value(
     return _frame_like(x, out)
 
 
+def _ts_activity_clock_lagged_value_prior(
+    x: pd.DataFrame,
+    activity: pd.DataFrame,
+    budget: float = 1.0,
+    scale_window: int = 20,
+    max_lookback: int = 60,
+) -> pd.DataFrame:
+    """``x`` at the activity-clock lag with the CURRENT bar always excluded.
+
+    P0-O #79: the current-inclusive variant returns ``k* = 0`` on a
+    high-activity shock day (a single bar consumes the whole budget), so
+    ``x - lagged_value = x_t - x_t = 0`` — momentum reads zero on the very day
+    it should spike.  This canonical starts the budget path one bar back
+    (``include_current=False`` fixed), so the lagged value is always a STRICTLY
+    PRIOR observable ``x`` and an activity-clock momentum built on it is never
+    identically zero on the shock bar.
+    """
+    x, activity = _align(x, activity)
+    sw = max(2, int(scale_window))
+    ml = max(1, int(max_lookback))
+    budget_f = float(budget)
+    if budget_f <= _EPS:
+        raise ValueError("budget must be > 0")
+    xv = x.to_numpy(dtype=float)
+    av = activity.to_numpy(dtype=float)
+    rows, cols = xv.shape
+    k = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        k[:, c] = _activity_clock_kernel(av[:, c], sw, ml, budget_f, include_current=False)
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        for r in range(rows):
+            back = k[r, c]
+            if np.isnan(back):
+                continue
+            s = int(r - back)
+            if s < 0 or not np.isfinite(xv[s, c]):
+                continue
+            out[r, c] = float(xv[s, c])
+    return _frame_like(x, out)
+
+
 def _ts_activity_clock_age(
     activity: pd.DataFrame,
     budget: float = 1.0,
@@ -220,24 +280,28 @@ def _ts_max_drawdown_activity_cost(
 # ---------------------------------------------------------------------------
 _DAILY_CANONICALS: tuple[str, ...] = (
     "ts_activity_clock_lagged_value",
+    "ts_activity_clock_lagged_value_prior",
     "ts_activity_clock_age",
     "ts_max_drawdown_activity_cost",
 )
 
 _KERNELS: dict[str, Callable[..., pd.DataFrame]] = {
     "ts_activity_clock_lagged_value": _ts_activity_clock_lagged_value,
+    "ts_activity_clock_lagged_value_prior": _ts_activity_clock_lagged_value_prior,
     "ts_activity_clock_age": _ts_activity_clock_age,
     "ts_max_drawdown_activity_cost": _ts_max_drawdown_activity_cost,
 }
 
 _PARAMS: dict[str, list[str]] = {
     "ts_activity_clock_lagged_value": ["x", "activity", "budget", "scale_window", "max_lookback", "include_current"],
+    "ts_activity_clock_lagged_value_prior": ["x", "activity", "budget", "scale_window", "max_lookback"],
     "ts_activity_clock_age": ["activity", "budget", "scale_window", "max_lookback", "include_current"],
     "ts_max_drawdown_activity_cost": ["x", "activity", "window"],
 }
 
 _CATEGORIES: dict[str, str] = {
     "ts_activity_clock_lagged_value": "time_series_event",
+    "ts_activity_clock_lagged_value_prior": "time_series_event",
     "ts_activity_clock_age": "time_series_event",
     "ts_max_drawdown_activity_cost": "time_series_risk",
 }
@@ -248,6 +312,7 @@ _CATEGORIES: dict[str, str] = {
 # max-drawdown cost is a dimensionless share of window activity (a ratio).
 _UNITS: dict[str, str] = {
     "ts_activity_clock_lagged_value": "same_as:target",
+    "ts_activity_clock_lagged_value_prior": "same_as:target",
     "ts_activity_clock_age": "bars",
     "ts_max_drawdown_activity_cost": "ratio",
 }
@@ -263,6 +328,9 @@ _PARAM_SPECS: dict[str, dict[str, ParamSpec]] = {
         "scale_window": ParamSpec(dtype=int, min=5),
         "include_current": ParamSpec(dtype=bool, choices=(True, False)),
     },
+    "ts_activity_clock_lagged_value_prior": {
+        "scale_window": ParamSpec(dtype=int, min=5),
+    },
     "ts_activity_clock_age": {
         "scale_window": ParamSpec(dtype=int, min=5),
         "include_current": ParamSpec(dtype=bool, choices=(True, False)),
@@ -274,6 +342,10 @@ _PARAM_SPECS: dict[str, dict[str, ParamSpec]] = {
 # consumed by the unit-aware catalog consumers).
 _INPUT_UNITS: dict[str, dict[str, str]] = {
     "ts_activity_clock_lagged_value": {
+        "x": "target_value",
+        "activity": "non_negative_activity",
+    },
+    "ts_activity_clock_lagged_value_prior": {
         "x": "target_value",
         "activity": "non_negative_activity",
     },
@@ -294,6 +366,7 @@ _INPUT_UNITS: dict[str, dict[str, str]] = {
 #     activity series must be finite for the drawdown episode).
 _WINDOW_SEMANTICS: dict[str, str] = {
     "ts_activity_clock_lagged_value": "finite_observations",
+    "ts_activity_clock_lagged_value_prior": "finite_observations",
     "ts_activity_clock_age": "finite_observations",
     "ts_max_drawdown_activity_cost": "trailing_contiguous",
 }
@@ -361,6 +434,15 @@ def _register() -> None:
     import cleaned_operators.operator_surface as _surface
 
     _surface.extend_extended_only(set(_DAILY_CANONICALS))
+
+    # P0-O #79 back-compat spelling: the prior-only lagged-value canonical is
+    # also reachable under the un-prefixed audit name ``activity_clock_lagged_value_prior``.
+    try:
+        OperatorRegistry.register_alias(
+            "activity_clock_lagged_value_prior", "ts_activity_clock_lagged_value_prior"
+        )
+    except (KeyError, ValueError):
+        pass
 
 
 _register()

@@ -14,16 +14,29 @@ silently returning all-NaN.
 
 * ``ts_glr_mean_shift_score``      — generalised likelihood ratio for a mean
   shift: ``LLR_τ = (n/2)·ln(σ̂² / σ̂_w²)``, output ``sign(μ_post - μ_pre) ·
-  sqrt(max_LLR)``.  Prefix sums make the whole scan ``O(n)`` per window.
+  sqrt(calibrated_LLR)``.  Prefix sums make the whole scan ``O(n)`` per window.
 * ``ts_glr_variance_shift_score``  — same scan against H1 "two variances":
   ``LLR_τ = (n/2)ln(σ̂²) - (n₁/2)ln(σ̂₁²) - (n₂/2)ln(σ̂₂²)``, output
-  ``sign(ln(var_post/var_pre)) · sqrt(max_LLR)``.
+  ``sign(ln(var_post/var_pre)) · sqrt(calibrated_LLR)``.
 * ``ts_pettitt_change_score``      — rank-based Pettitt statistic
   ``U_t = 2·Σ_{i≤t} r_i - t(n+1)`` (average-rank ties), output
   ``sign(U_τ*) · |U_τ*| / (n²/4)`` (bounded in [-1, 1]; 0 ≈ no change).
 
 All are strict-PIT (only the trailing contiguous finite window), deterministic
 and NaN fail-closed.
+
+P0-L round-3 calibration (both GLR scores):
+* *Perfect-split cap.*  A perfect split (residual within-segment SS ≈ 0) has an
+  unbounded true LLR.  The old ``EPS * full_ss`` denominator made the max score
+  a data-independent function of the program constant ``1e-12``.  The LLR is
+  now computed from the genuine floating-point cancellation floor of the
+  prefix-sum SS (relative error ~ ``n·eps``) purely to *classify* a split as
+  perfect, and every LLR is clamped at the documented cap ``_GLR_MAX_LLR = 40``
+  (output score saturates at ``sqrt(40) ≈ 6.32``).
+* *Scan-selection null calibration.*  A window of ``n`` bars scans
+  ``m = n - 2·min_segment + 1`` candidate breakpoints, so the raw max LLR's null
+  rises with the window (multiple-testing bias).  A BIC-style ``ln(m)`` penalty
+  is subtracted so the null is centred near 0 regardless of window.
 """
 from __future__ import annotations
 
@@ -40,7 +53,59 @@ from cleaned_operators.gemini_v2_common import (
     union_extended,
 )
 
-_EPS = 1e-12
+_EPS = 1e-12  # used ONLY for near-zero classification in the rank Pettitt score
+
+# P0-L-69: GLR perfect-split handling.  A change-point GLR divides by the pooled
+# within-segment residual sum of squares; a *perfect* split (both segments
+# constant) drives that residual SS to floating-point zero and the true LLR is
+# unbounded.  The old ``max(pooled, _EPS * full_ss)`` denominator made the max
+# score a data-independent function of an arbitrary program epsilon
+# (``sqrt((n/2)·ln 1e12)``).  Instead:
+#   * ``_GLR_MEASURE_NOISE_MULT`` scales the genuine floating-point cancellation
+#     floor of the prefix-sum SS computation (relative error ~ n·eps) and is used
+#     ONLY to classify a split as "perfect" — NEVER as a denominator;
+#   * ``_GLR_MAX_LLR`` is the documented cap on any change-point LLR; the output
+#     score saturates at ``sqrt(_GLR_MAX_LLR)`` so it is never dominated by a
+#     program constant.
+_GLR_MEASURE_NOISE_MULT = 8.0
+_GLR_MAX_LLR = 40.0
+
+# P0-L-70: max-over-breakpoint scan-selection bias.  A window of n bars scans
+# m = n - 2·min_segment + 1 candidate breakpoints, so the raw max LLR's null
+# rises with the window (multiple-testing bias).  Null-calibrate by subtracting
+# a BIC-style ``ln(m)`` penalty: under the null the sup of ~chi-square_1 GLR
+# stats grows ~ ln m, so subtracting ``ln m`` centres the null near 0
+# independent of the window.  Output is ``sign · sqrt(max(calibrated_LLR, 0))``.
+_GLR_SCAN_PENALTY_COEF = 1.0
+
+
+def _ss_noise_floor(full_ss: float, n: int) -> float:
+    """Floating-point measurement-noise floor for a prefix-sum SS.
+
+    Prefix-sum SS cancellation carries relative error ~ ``n·eps_machine``; any
+    pooled within-segment SS at or below this floor is indistinguishable from a
+    PERFECT split (residual SS = 0).  Used only as a classifier, never as a
+    denominator."""
+    return full_ss * n * _GLR_MEASURE_NOISE_MULT * np.finfo(float).eps
+
+
+def _null_calibrate_llr(best: float, n: int, min_segment: int) -> float:
+    """Apply the documented LLR cap and the scan-selection null calibration.
+
+    ``best`` is the max raw LLR over all candidate breakpoints (``inf`` when a
+    perfect split was found).  Returns the calibrated LLR in ``[0, _GLR_MAX_LLR]``:
+    subtract the ``ln(#candidates)`` penalty, then clamp at the documented cap.
+    A perfect split therefore scores ``sqrt(_GLR_MAX_LLR)`` — a documented cap,
+    never a function of a program epsilon."""
+    if best <= 0.0:
+        return 0.0
+    m = max(n - 2 * min_segment + 1, 2)
+    adj = best - _GLR_SCAN_PENALTY_COEF * np.log(float(m))
+    if not np.isfinite(adj):
+        # perfect split: unbounded raw LLR -> the documented cap
+        adj = _GLR_MAX_LLR
+    return min(adj, _GLR_MAX_LLR)
+
 
 # R5 P1-01: ``min_segment`` is an int (5.9 -> 5 is rejected).
 _GLR_PARAM_SPECS = {
@@ -66,8 +131,9 @@ def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
     ps = np.concatenate(([0.0], np.cumsum(v)))
     pss = np.concatenate(([0.0], np.cumsum(v * v)))
     full_ss = pss[n] - ps[n] * ps[n] / n
-    if full_ss <= _EPS:
+    if not np.isfinite(full_ss) or full_ss <= _EPS:
         return np.nan
+    floor = _ss_noise_floor(full_ss, n)
     best = 0.0
     best_sign = 0.0
     for tau in range(min_segment, n - min_segment + 1):
@@ -78,18 +144,20 @@ def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
         ss1 = pss[tau] - ps[tau] * ps[tau] / n1
         ss2 = (pss[n] - pss[tau]) - (ps[n] - ps[tau]) ** 2 / n2
         pooled = ss1 + ss2
-        # R6-161: a PERFECT change point (constant A then constant B) has
-        # pooled == 0 — the strongest change in the sample.  The old
-        # ``if pooled <= _EPS: continue`` skipped exactly the best evidence.
-        # Floor the pooled SS at a tiny RELATIVE fraction of the total SS (not
-        # an absolute epsilon, which would be meaningless across price scales)
-        # so the LLR is computed in the degenerate limit and capped, never
-        # skipped.
-        pooled = max(pooled, _EPS * full_ss)
-        llr = (n / 2.0) * np.log(full_ss / pooled)
+        # P0-L-69: a PERFECT change point (constant A then constant B) has
+        # pooled residual SS at floating-point zero — the strongest evidence in
+        # the sample.  The old ``max(pooled, _EPS*full_ss)`` denominator made
+        # the max score a data-independent function of 1e-12.  A perfect split
+        # has an unbounded true LLR, so record ``inf`` and let
+        # ``_null_calibrate_llr`` clamp it at the documented cap.
+        if pooled <= floor:
+            llr = np.inf
+        else:
+            llr = (n / 2.0) * np.log(full_ss / pooled)
         if llr > best:
             best = llr
             best_sign = 1.0 if mu2 > mu1 else (-1.0 if mu2 < mu1 else 0.0)
+    best = _null_calibrate_llr(best, n, min_segment)
     if best <= 0.0:
         return 0.0
     return float(best_sign * np.sqrt(best))
@@ -102,8 +170,9 @@ def _variance_shift_score(v: np.ndarray, min_segment: int) -> float:
     ps = np.concatenate(([0.0], np.cumsum(v)))
     pss = np.concatenate(([0.0], np.cumsum(v * v)))
     full_ss = pss[n] - ps[n] * ps[n] / n
-    if full_ss <= _EPS:
+    if not np.isfinite(full_ss) or full_ss <= _EPS:
         return np.nan
+    floor = _ss_noise_floor(full_ss, n)
     best = 0.0
     best_sign = 0.0
     for tau in range(min_segment, n - min_segment + 1):
@@ -111,25 +180,37 @@ def _variance_shift_score(v: np.ndarray, min_segment: int) -> float:
         n2 = n - tau
         ss1 = pss[tau] - ps[tau] * ps[tau] / n1
         ss2 = (pss[n] - pss[tau]) - (ps[n] - ps[tau]) ** 2 / n2
-        # R6-161: a segment with zero variance (perfectly constant) is the
-        # strongest variance evidence, not a skip — floor the within-segment SS
-        # at a relative fraction of the total SS.
-        ss1 = max(ss1, _EPS * full_ss)
-        ss2 = max(ss2, _EPS * full_ss)
-        var1 = ss1 / n1
-        var2 = ss2 / n2
-        # R6-160: the null model for a VARIANCE shift must use a CONSISTENT
-        # location model — the pooled WITHIN-SEGMENT variance, not the global
-        # variance around the grand mean.  The old ``full_ss / n`` mixed a pure
-        # mean shift (which inflates the grand-mean variance) into the H0 term,
-        # so an equal-variance mean shift still fired the "variance shift"
-        # detector.  Using the pooled within-segment variance keeps the LLR
-        # measuring variance change only, with the location terms cancelling.
-        pooled_var = (ss1 + ss2) / n
-        llr = (n / 2.0) * np.log(pooled_var) - (n1 / 2.0) * np.log(var1) - (n2 / 2.0) * np.log(var2)
+        # P0-L-69: a segment with zero variance (perfectly constant) is the
+        # strongest variance evidence — but the old ``max(ss_i, _EPS*full_ss)``
+        # denominator made the LLR a data-independent function of 1e-12.  A
+        # one-side-constant split has an unbounded variance-ratio LLR -> record
+        # ``inf`` (clamped at the documented cap); a both-sides-constant split
+        # carries no variance DIFFERENCE evidence -> skip.
+        if ss1 <= floor and ss2 <= floor:
+            continue
+        if ss1 <= floor or ss2 <= floor:
+            llr = np.inf
+        else:
+            var1 = ss1 / n1
+            var2 = ss2 / n2
+            # R6-160: the null model for a VARIANCE shift must use a CONSISTENT
+            # location model — the pooled WITHIN-SEGMENT variance, not the global
+            # variance around the grand mean.  The old ``full_ss / n`` mixed a pure
+            # mean shift (which inflates the grand-mean variance) into the H0 term,
+            # so an equal-variance mean shift still fired the "variance shift"
+            # detector.  Using the pooled within-segment variance keeps the LLR
+            # measuring variance change only, with the location terms cancelling.
+            pooled_var = (ss1 + ss2) / n
+            llr = (n / 2.0) * np.log(pooled_var) - (n1 / 2.0) * np.log(var1) - (n2 / 2.0) * np.log(var2)
         if llr > best:
             best = llr
-            best_sign = 1.0 if np.log(var2 / var1) > 0.0 else -1.0
+            if ss1 <= floor:
+                best_sign = 1.0  # var2 > var1 = 0 -> post-variance higher
+            elif ss2 <= floor:
+                best_sign = -1.0  # var1 > var2 = 0 -> post-variance lower
+            else:
+                best_sign = 1.0 if np.log(var2 / var1) > 0.0 else -1.0
+    best = _null_calibrate_llr(best, n, min_segment)
     if best <= 0.0:
         return 0.0
     return float(best_sign * np.sqrt(best))
