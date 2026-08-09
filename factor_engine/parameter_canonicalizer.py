@@ -842,3 +842,144 @@ def _round_sig(value: float, digits: int) -> float:
         return value
     factor = 10.0 ** shift
     return math.floor(value * factor + 0.5) / factor
+
+
+# ---------------------------------------------------------------------------
+# R10 #28 — explicit panel metadata beats the legacy name heuristic
+# ---------------------------------------------------------------------------
+
+# Legacy name-heuristic fallback: numeric-control-looking parameter names are
+# treated as SCALAR knobs ONLY when no explicit panel metadata declares them
+# panel inputs.  Explicit ``panel_params`` / ``input_fields`` / ``scalar_params``
+# always win over this heuristic (R10 #28).
+_LEGACY_NUMERIC_CONTROL_PARAMS: frozenset[str] = frozenset({
+    "window", "min_periods", "order", "lag", "periods", "bins",
+    "coefficient_index", "max_q", "block", "level", "band", "d", "k", "q",
+    "short_periods", "long_periods", "span", "alpha", "lower", "upper",
+    "threshold", "min_bin_count", "n_quantiles", "cap", "floor",
+    "body_window", "shadow_window", "penetration", "ratio", "pct", "shift",
+    "max_iter", "n_iter", "segments", "min_segments", "max_segments",
+    "include_current", "left", "right", "up_count", "down_count",
+    "n_levels", "n_buckets", "preset", "side",
+})
+
+
+def classify_panel_scalar_params(
+    all_params: list[str] | tuple[str, ...] | None,
+    *,
+    panel_params: tuple[str, ...] | list[str] | None = None,
+    input_fields: tuple[str, ...] | list[str] | None = None,
+    scalar_params: tuple[str, ...] | list[str] | None = None,
+    numeric_control_params: frozenset[str] = _LEGACY_NUMERIC_CONTROL_PARAMS,
+) -> tuple[list[str], list[str]]:
+    """Split ``all_params`` into ``(scalar, panel)`` (R10 #28).
+
+    Explicit metadata takes precedence over the name heuristic:
+
+      1. ``panel_params`` — authoritative PANEL inputs; a name declared here is
+         NEVER reclassified by the numeric-control-name heuristic (even
+         ``level`` / ``ratio`` / ``band`` / ``side``).
+      2. ``input_fields`` — authoritative PANEL inputs (legacy spelling).
+      3. ``scalar_params`` — authoritative SCALAR knobs when declared.
+      4. The name heuristic is applied ONLY to names with no explicit
+         declaration: a numeric-control-looking name -> scalar; everything else
+         -> panel (legacy fallback).
+
+    The legacy fallback never overrides an explicit declaration.
+    """
+    all_params = list(all_params or [])
+    if not all_params:
+        return [], []
+    declared_panel = set(panel_params or ())
+    declared_inputs = set(input_fields or ())
+    declared_scalar = set(scalar_params or ())
+    panel: set[str] = set()
+    scalar: set[str] = set()
+    for p in all_params:
+        if p in declared_panel or p in declared_inputs:
+            panel.add(p)
+        elif p in declared_scalar:
+            scalar.add(p)
+    for p in all_params:
+        if p in panel or p in scalar:
+            continue
+        if p in numeric_control_params:
+            scalar.add(p)
+        else:
+            panel.add(p)
+    return (
+        [p for p in all_params if p in scalar],
+        [p for p in all_params if p in panel],
+    )
+
+
+# ---------------------------------------------------------------------------
+# R10 #29 — fail-closed contract build (exclude failed contracts from search)
+# ---------------------------------------------------------------------------
+
+
+def build_operator_contract(operator: Any) -> dict[str, Any]:
+    """Build a structured operator contract (fail-closed, R10 #29).
+
+    Returns a contract dict on success, or :data:`CONTRACT_ERROR` when the
+    operator's contract cannot be built — the operator must then be excluded
+    from production search.  There is NO silent fallback to name-guessing.
+    """
+    try:
+        meta = getattr(operator, "metadata", None)
+        if meta is None:
+            raise ValueError("operator has no metadata contract")
+        canonical = str(getattr(meta, "name", None) or "")
+        if not canonical:
+            raise ValueError("operator metadata declares no name")
+        param_names = tuple(getattr(meta, "param_names", None) or ())
+        param_specs = dict(getattr(meta, "param_specs", None) or {})
+        param_aliases = dict(getattr(meta, "param_aliases", None) or {})
+        panel_params = tuple(getattr(meta, "panel_params", None) or ())
+        input_fields = tuple(getattr(meta, "input_fields", None) or ())
+        scalar_params = tuple(getattr(meta, "scalar_params", None) or ())
+        _validate_contract_invariants(canonical, param_names, param_specs, param_aliases)
+        return {
+            "canonical": canonical,
+            "param_names": param_names,
+            "param_specs": param_specs,
+            "param_aliases": param_aliases,
+            "panel_params": panel_params,
+            "input_fields": input_fields,
+            "scalar_params": scalar_params,
+        }
+    except Exception as exc:  # noqa: BLE001 - fail-closed by contract
+        return CONTRACT_ERROR
+
+
+def _validate_contract_invariants(
+    canonical: str,
+    param_names: tuple[str, ...],
+    param_specs: dict[str, Any],
+    param_aliases: dict[str, str],
+) -> None:
+    """Internal-consistency checks for a built contract (R10 #29)."""
+    names = set(param_names)
+    alias_keys = set(param_aliases)
+    for pname in param_specs:
+        if pname not in names and pname not in alias_keys:
+            raise ValueError(
+                f"{canonical}: ParamSpec key {pname!r} is not a declared "
+                "param_name or alias (R10 #29 — a dead spec cannot build a "
+                "searchable contract)"
+            )
+    for alias, target in param_aliases.items():
+        if target not in names:
+            raise ValueError(
+                f"{canonical}: alias {alias!r} -> {target!r}, but {target!r} is "
+                "not a declared param_name (R10 #29)"
+            )
+
+
+def operator_contract_searchable(contract: Any) -> bool:
+    """An operator is production-searchable only when its contract built cleanly.
+
+    ``CONTRACT_ERROR`` / ``None`` (no contract) exclude the operator from
+    production search (R10 #29).
+    """
+    return contract is not CONTRACT_ERROR and contract is not None
