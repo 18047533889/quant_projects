@@ -102,8 +102,11 @@ def test_beta_break_uses_true_cov_var_slope():
 def test_dc_fixed_absolute_prefix_invariance_and_anchor_stability():
     rng = np.random.default_rng(11)
     n = 200
+    # Strictly positive price path (the concurrent R13/R14 directional-change
+    # contract requires input_units='price' to be > 0; a bare random walk can go
+    # negative and is no longer a valid price fixture).
     x = pd.DataFrame(
-        np.cumsum(rng.normal(0.0, 0.1, n)), index=pd.date_range("2024-01-01", periods=n, freq="B")
+        np.exp(np.cumsum(rng.normal(0.0, 0.1, n))), index=pd.date_range("2024-01-01", periods=n, freq="B")
     )
     s = pd.DataFrame(
         np.abs(rng.normal(1.0, 0.3, n)) + 0.5, index=pd.date_range("2024-01-01", periods=n, freq="B")
@@ -134,7 +137,9 @@ def test_dc_scale_missing_breaks_episode():
     # Without the gap there are events at bars 2, 3, 5 (rate 3/6); with a NaN
     # scale at bar 2 the episode breaks and only the post-gap event survives
     # (rate 1/6) — the gap never connects the two sides into one episode.
-    x = _col([0.0, 2.0, 1.0, 3.0, 4.0, 2.0])
+    # Prices must be strictly positive (concurrent R13/R14 price>0 contract);
+    # adding a constant preserves the DC path shape and event positions.
+    x = _col([1.0, 3.0, 2.0, 4.0, 5.0, 3.0])
     s_gap = _col([1.0, 1.0, np.nan, 1.0, 1.0, 1.0])
     s_full = _col([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
     rate_gap = _get("ts_dc_event_rate").calculate(x, s_gap, threshold=1.0, window=10)
