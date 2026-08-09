@@ -203,11 +203,17 @@ class ParameterCanonicalizer:
         *,
         terminal_rank_equivalence: bool = False,
         param_specs: dict[str, Any] | None = None,
+        param_aliases: dict[str, str] | None = None,
     ):
         self.canonical = canonical
         self.normalizers = {n.name: n for n in normalizers}
         self.terminal_rank_equivalence = terminal_rank_equivalence
         self.param_specs: dict[str, Any] = dict(param_specs) if param_specs else {}
+        # R10 #19: alias -> canonical-target map (from the operator's declared
+        # ``OperatorMetadata.param_aliases``).  The canonical parameter and any
+        # of its aliases must map to the SAME logical target, bound at most once
+        # per call.
+        self.param_aliases: dict[str, str] = dict(param_aliases) if param_aliases else {}
 
     def _sequence_dtype_is_bool(self, name: str) -> bool:
         spec = self.param_specs.get(name)
@@ -244,6 +250,68 @@ class ParameterCanonicalizer:
                         f"{self.canonical}: parameter {name} contains non-numeric element"
                     )
 
+    def _logical_name(self, name: str) -> str:
+        """Alias -> canonical-target name (R10 #19)."""
+        return self.param_aliases.get(name, name)
+
+    def _validate_no_duplicate_logical_binding(self, params: dict[str, Any]) -> None:
+        """R10 #19: a single call must bind each logical parameter at most once.
+
+        The canonical parameter and any of its aliases map to the same logical
+        target.  Binding two spellings of one logical parameter (``window=20``
+        and ``d=30`` when ``d`` aliases ``window``) is a duplicate logical
+        binding and is rejected.
+        """
+        if not self.param_aliases:
+            return
+        bound_logical: dict[str, str] = {}
+        for name in params:
+            target = self._logical_name(name)
+            prior = bound_logical.get(target)
+            if prior is not None:
+                raise ValueError(
+                    f"{self.canonical}: duplicate logical binding for parameter "
+                    f"{target!r}: both {prior!r} and {name!r} are bound (R10 #19 "
+                    "— a single call must bind each logical parameter once)"
+                )
+            bound_logical[target] = name
+
+    def _validate_active_when(self, params: dict[str, Any]) -> None:
+        """R10 #18: enforce ``ParamSpec.active_when`` with controller defaults.
+
+        When the controller is omitted from ``params`` its ``ParamSpec.default``
+        is used to decide whether the dependent parameter is active.  An
+        INACTIVE parameter that is explicitly bound to a NON-default value is
+        rejected — a dead knob must not manufacture a second AST.
+        """
+        for name, spec in self.param_specs.items():
+            if spec is None:
+                continue
+            active_when = getattr(spec, "active_when", None)
+            if active_when is None:
+                continue
+            controller, allowed = active_when
+            ctrl_val = params.get(controller)
+            if ctrl_val is None:
+                ctrl_val = _resolve_controller_default(controller, self.param_specs)
+            if ctrl_val is None:
+                continue  # controller undecidable -> fail-open (cannot judge)
+            if _active_allows(allowed, ctrl_val):
+                continue  # active
+            # INACTIVE: only tolerate an omitted parameter or its canonical
+            # default.
+            if name not in params:
+                continue
+            provided = params[name]
+            if not _is_missing_default(spec.default) and provided == spec.default:
+                continue
+            raise ValueError(
+                f"{self.canonical}: parameter {name!r} is inactive when "
+                f"{controller}={ctrl_val!r} (allowed: {allowed!r}); explicitly "
+                f"bound to non-default {provided!r} (R10 #18 — a dead knob must "
+                "not create a second AST)"
+            )
+
     def canonical_key(self, params: dict[str, Any]) -> tuple[Any, ...]:
         groups: dict[str, dict[str, float]] = {}
         processed: dict[str, Any] = {}
@@ -252,6 +320,15 @@ class ParameterCanonicalizer:
         # parameter invalid.  We never drop a partial element (that would quietly
         # canonicalize a corrupted weight vector into a shorter one).
         self._validate_sequence_params(params)
+        # R10 #19: reject duplicate logical bindings (canonical + alias, or two
+        # aliases of the same canonical) BEFORE any alias remap could hide them.
+        self._validate_no_duplicate_logical_binding(params)
+        # R10 #18: reject an inactive parameter bound to a non-default value.
+        self._validate_active_when(params)
+        # R10 #19: map aliases onto their canonical targets so ``d=30`` and
+        # ``window=30`` produce the SAME canonical key.
+        if self.param_aliases:
+            params = {self._logical_name(k): v for k, v in params.items()}
         # Pass 1: pure scales and strict-positives.
         for name, value in params.items():
             norm = self.normalizers.get(name)
