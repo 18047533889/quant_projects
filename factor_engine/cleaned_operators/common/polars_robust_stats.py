@@ -443,6 +443,7 @@ def ts_min_if(x, condition, window, min_periods=1):
 
 
 def ts_quantile_if(x, condition, window, q=0.5, min_periods=1):
+    _assert_condition_bool(condition)
     w = _pi(window, "window")
     quantile = _pf(q, "q")
     if not (0.0 <= quantile <= 1.0):
@@ -464,6 +465,7 @@ def ts_quantile_if(x, condition, window, q=0.5, min_periods=1):
 
 
 def _pair_condition(x, y, condition, window, min_periods, kind):
+    _assert_condition_bool(condition)
     w = _pi(window, "window")
     mp = max(2 if kind != "resid" else 3, int(min_periods))
     if kind == "resid":
@@ -478,6 +480,26 @@ def _pair_condition(x, y, condition, window, min_periods, kind):
             start = max(0, t - w + 1)
             xs = xv[start : t + 1][mask[start : t + 1]]
             ys = yv[start : t + 1][mask[start : t + 1]]
+            if kind == "resid":
+                # R11 #143: the current row is EXCLUDED from the fit, so
+                # ``mp`` must constrain the TRAINING observations (condition-true
+                # rows strictly before the current row) — never the total window
+                # count including the current row.  Mirrors conditional_ext.
+                x_fit = xv[start:t][mask[start:t]]
+                y_fit = yv[start:t][mask[start:t]]
+                x_cur = xv[t]
+                y_cur = yv[t]
+                if (
+                    x_fit.size >= mp
+                    and bool(mask[t])
+                    and np.isfinite(x_cur)
+                    and np.isfinite(y_cur)
+                    and x_fit.size >= 2
+                    and np.std(x_fit) > 0
+                ):
+                    coeffs = np.polyfit(x_fit, y_fit, 1)
+                    out[t, i] = float(y_cur - np.polyval(coeffs, x_cur))
+                continue
             if xs.size < mp:
                 continue
             if kind == "corr":
@@ -488,24 +510,6 @@ def _pair_condition(x, y, condition, window, min_periods, kind):
                 if var_x > 0 and np.isfinite(var_x):
                     cov = float(np.mean((xs - np.mean(xs)) * (ys - np.mean(ys))))
                     out[t, i] = cov / var_x
-            elif kind == "resid":
-                # Out-of-sample residual: fit on condition-valid samples strictly
-                # BEFORE the current row, then evaluate the current row against
-                # that fit.  Including the current row would be an in-sample
-                # (self-fit) residual and breaks pandas parity.
-                x_fit = xv[start:t][mask[start:t]]
-                y_fit = yv[start:t][mask[start:t]]
-                x_cur = xv[t]
-                y_cur = yv[t]
-                if (
-                    bool(mask[t])
-                    and np.isfinite(x_cur)
-                    and np.isfinite(y_cur)
-                    and x_fit.size >= 2
-                    and np.std(x_fit) > 0
-                ):
-                    coeffs = np.polyfit(x_fit, y_fit, 1)
-                    out[t, i] = float(y_cur - np.polyval(coeffs, x_cur))
     return _make(y if kind in ("beta", "resid") else x, cols, out)
 
 

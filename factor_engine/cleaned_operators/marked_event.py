@@ -185,7 +185,41 @@ class EventMarkAutocorr(SeriesOperator):
         return frame_like(event, out)
 
 
-def _interval_mark_chunk(in_idx: np.ndarray, prev_idx: int | None, mkv: np.ndarray) -> float:
+def _corr_longest_run(xv: np.ndarray, yv: np.ndarray, ok: np.ndarray, min_pairs: int = 4) -> float:
+    """Corr(x, y) within the longest contiguous run of valid observations.
+
+    Used by the ``censor`` MarkMissingPolicy: an invalid observation (an
+    interval spanning an unknown event observation, or an event whose mark is
+    unavailable) *breaks* the sequence, so observations on either side of the
+    gap belong to different epochs and are never pooled.  Fail-closed to NaN
+    when no run is large enough.
+    """
+    best = np.nan
+    best_size = -1
+    j = 0
+    n = ok.shape[0]
+    while j < n:
+        if not ok[j]:
+            j += 1
+            continue
+        k = j
+        while k < n and ok[k]:
+            k += 1
+        if k - j >= min_pairs:
+            xs = xv[j:k]
+            ys = yv[j:k]
+            vx = float(np.var(xs))
+            vy = float(np.var(ys))
+            if vx > _EPS and vy > _EPS:
+                c = float(np.corrcoef(xs, ys)[0, 1])
+                if np.isfinite(c) and (k - j) > best_size:
+                    best = c
+                    best_size = k - j
+        j = k
+    return best
+
+
+def _interval_mark_chunk(evc: np.ndarray, in_idx: np.ndarray, prev_idx: int | None, mkv: np.ndarray, mark_missing_policy: str = "censor") -> float:
     """Corr(interval -> following event mark) over a window's events.
 
     ``in_idx`` are the absolute event rows inside the window; ``prev_idx`` is the
@@ -193,19 +227,37 @@ def _interval_mark_chunk(in_idx: np.ndarray, prev_idx: int | None, mkv: np.ndarr
     first-in-window interval is *included* (paired with the first in-window
     event's mark); dropping it biases the estimate against long intervals that
     merely straddle the window boundary (review P1-47b).
+
+    Review #42: an interval that spans an *unknown* event observation (a NaN in
+    the event indicator strictly between the two bounding events) is censored —
+    the interval length is unknown, so it must not connect the two events.
+    Review #43: an event that occurred but whose mark is NaN is "event occurred,
+    mark unavailable"; the ``mark_missing_policy`` decides whether it breaks the
+    interval sequence (``censor``) or is simply dropped (``drop``).
     """
     if in_idx.size < 4:
         return np.nan
     marks = mkv[in_idx]
     if prev_idx is not None:
-        intervals = np.diff(np.concatenate([[prev_idx], in_idx])).astype(float)
+        starts = np.concatenate([[prev_idx], in_idx[:-1]])
+        ends = in_idx
         marks_after = marks            # first interval pairs with marks[0]
     else:
-        intervals = np.diff(in_idx).astype(float)
+        starts = in_idx[:-1]
+        ends = in_idx[1:]
         marks_after = marks[1:]
+    intervals = (ends - starts).astype(float)
     ok = np.isfinite(intervals) & np.isfinite(marks_after)
+    # #42: censor any interval spanning an unknown event observation.
+    for j in range(len(intervals)):
+        a = int(starts[j])
+        b = int(ends[j])
+        if b - a > 1 and np.isnan(evc[a + 1 : b]).any():
+            ok[j] = False
     if int(ok.sum()) < 4:
         return np.nan
+    if mark_missing_policy == "censor":
+        return _corr_longest_run(intervals, marks_after, ok, min_pairs=4)
     ti = intervals[ok]
     mi = marks_after[ok]
     vt = float(np.var(ti))
