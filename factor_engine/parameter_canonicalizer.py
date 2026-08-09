@@ -716,45 +716,129 @@ def _check_relational_specs(
     return value
 
 
-def _output_signature(out: Any) -> tuple[str, str, str]:
-    """Multi-level output signature (R9-P1-039).
+def _output_signature(
+    out: Any, *, sensitivity_mode: str = "compositional"
+) -> tuple[str, ...]:
+    """Multi-level output signature (R9-P1-039, R10 #20).
 
-    Level 1 — full finite-mask hash: NaN placement (a partially-NaN vector is
-      structurally different from an all-finite one even when the finite values
-      coincide).
-    Level 2 — rank-vector hash: the order of the finite values, so two vectors
-      with identical mean/std/count but different value patterns hash
-      differently (a monotone transform keeps the rank hash but is caught by
-      level 3).
-    Level 3 — quantized normalized-value hash: finite values min-max normalized
-      and quantized to ``_SIGNATURE_QUANT_LEVELS`` bins, so tiny float noise
-      below one bin does not flip the signature while a genuinely different
-      magnitude pattern does.
+    ``sensitivity_mode`` selects the sensitivity policy:
 
-    Two signatures are equal ONLY when all three levels match.
+    * ``"compositional"`` (default) — the signature binds structural identity
+      (shape + index + columns), the finite-mask, the cross-sectional rank AND
+      the quantized RAW-value behavior (12 significant digits).  A pure scale
+      (``f -> 2f``) or additive shift (``f -> f+1``) changes the raw-value hash,
+      so such a parameter is judged SENSITIVE — it feeds into
+      add/subtract/divide/threshold/where/interaction where the composed
+      expression changes (R10 #20).
+    * ``"terminal_rank_equivalence"`` — the signature binds structural identity,
+      the finite-mask, the cross-sectional rank and the quantized
+      NORMALIZED-value behavior (min-max, scale/shift-invariant).  ``f -> 2f``
+      and ``f -> f+1`` collapse to the same signature because only the terminal
+      cross-sectional rank / normalized pattern matters.
+
+    Two signatures are equal ONLY when every level matches.
     """
-    if isinstance(out, pd.DataFrame):
-        arr = out.to_numpy(dtype=float, copy=False)
-    else:
-        arr = np.asarray(out, dtype=float)
+    if sensitivity_mode not in ("compositional", "terminal_rank_equivalence"):
+        raise ValueError(f"unknown sensitivity_mode {sensitivity_mode!r}")
+    is_frame = isinstance(out, pd.DataFrame)
+    arr = (
+        out.to_numpy(dtype=float, copy=False)
+        if is_frame
+        else np.asarray(out, dtype=float)
+    )
+    # Level 1 — structural identity (shape / index / columns) so two outputs
+    # that differ only in their axes never collide on values alone.
+    structural = _frame_structural_hash(out) if is_frame else hashlib.sha1(
+        repr(arr.shape).encode("utf-8")
+    ).hexdigest()
+    # Level 2 — full finite-mask hash: NaN placement (a partially-NaN vector is
+    # structurally different from an all-finite one even when the finite values
+    # coincide).
     finite_mask = np.isfinite(arr)
     mask_hash = hashlib.sha1(finite_mask.tobytes()).hexdigest()
     finite = arr[finite_mask]
     if finite.size == 0:
-        return (mask_hash, "empty-rank", "empty-values")
-    ranks = np.argsort(np.argsort(finite, kind="stable"), kind="stable").astype(np.int64)
-    rank_hash = hashlib.sha1(ranks.tobytes()).hexdigest()
-    fmin = float(finite.min())
-    fmax = float(finite.max())
+        return (structural, mask_hash, "empty-rank", "empty-values")
+    # Level 3 — cross-sectional rank (for a panel: rank each row across
+    # instruments; for a flat array: rank the flattened finite values).
+    rank_hash = _cross_sectional_rank_hash(out, arr, finite_mask)
+    # Level 4 — value behavior: raw (compositional) vs normalized (rank-equiv).
+    if sensitivity_mode == "compositional":
+        value_hash = _rounded_raw_hash(finite)
+    else:
+        value_hash = _quantized_normalized_hash(finite)
+    return (structural, mask_hash, rank_hash, value_hash)
+
+
+def _frame_structural_hash(frame: pd.DataFrame) -> str:
+    """Hash of a panel's structural identity (shape + index + columns)."""
+    h = hashlib.sha1()
+    h.update(repr(frame.shape).encode("utf-8"))
+    try:
+        h.update(repr(list(frame.index)).encode("utf-8"))
+    except Exception:  # pragma: no cover - exotic index, cosmetic
+        pass
+    try:
+        h.update(repr(list(frame.columns)).encode("utf-8"))
+    except Exception:  # pragma: no cover - exotic columns, cosmetic
+        pass
+    return h.hexdigest()
+
+
+def _cross_sectional_rank_hash(out: Any, arr: np.ndarray, finite_mask: np.ndarray) -> str:
+    """Cross-sectional rank hash of the finite output cells.
+
+    For a panel, ranks each ROW across columns (instruments) — the A-share
+    convention.  For a flat array, ranks the flattened finite values.
+    """
+    if isinstance(out, pd.DataFrame):
+        ranks = out.rank(axis=1, method="average").to_numpy(dtype=float)
+        finite_ranks = ranks[finite_mask]
+    else:
+        finite = arr[finite_mask]
+        order = np.argsort(finite, kind="stable")
+        finite_ranks = np.empty(finite.size, dtype=np.int64)
+        finite_ranks[order] = np.arange(finite.size)
+    return hashlib.sha1(np.asarray(finite_ranks).tobytes()).hexdigest()
+
+
+def _rounded_raw_hash(finite: np.ndarray) -> str:
+    """Hash of the RAW value behavior (12 significant digits).
+
+    Rounding to 12 significant digits absorbs sub-1e-12 relative float noise
+    while any real scale/shift difference — ``2*f(x)``, ``f(x)+1`` — changes the
+    hash.  This is the compositional-mode value level (R10 #20).
+    """
+    vals = finite.astype(np.float64)
+    rounded = np.asarray([_round_sig(v, 12) for v in vals], dtype=np.float64)
+    return hashlib.sha1(rounded.tobytes()).hexdigest()
+
+
+def _quantized_normalized_hash(finite: np.ndarray) -> str:
+    """Hash of the min-max NORMALIZED value pattern (scale/shift-invariant)."""
+    vals = finite.astype(np.float64)
+    fmin = float(vals.min())
+    fmax = float(vals.max())
     span = fmax - fmin
     if span > 0.0 and math.isfinite(span):
-        normalized = (finite.astype(np.float64) - fmin) / span
+        normalized = (vals - fmin) / span
     else:
-        normalized = np.zeros(finite.shape, dtype=np.float64)
+        normalized = np.zeros(vals.shape, dtype=np.float64)
     quantized = np.clip(
         np.floor(normalized * _SIGNATURE_QUANT_LEVELS).astype(np.int64),
         0,
         _SIGNATURE_QUANT_LEVELS - 1,
     )
-    quant_hash = hashlib.sha1(quantized.tobytes()).hexdigest()
-    return (mask_hash, rank_hash, quant_hash)
+    return hashlib.sha1(quantized.tobytes()).hexdigest()
+
+
+def _round_sig(value: float, digits: int) -> float:
+    """Round ``value`` to ``digits`` significant digits (stable for log10)."""
+    if value == 0.0 or not math.isfinite(value):
+        return value
+    try:
+        shift = digits - int(math.floor(math.log10(abs(value)))) - 1
+    except (ValueError, OverflowError):
+        return value
+    factor = 10.0 ** shift
+    return math.floor(value * factor + 0.5) / factor
