@@ -119,8 +119,51 @@ class ReadLineage:
     dataset: str
     columns: tuple[str, ...] = ()
     time_range: tuple[Any, Any] | None = None
-    instrument_filter: tuple[str, ...] = ()
+    # #P1-final closure：保留 None（全市场）与 ()（空股票池）的区别——lineage 是
+    # provenance/reproducibility 记录，``None`` 和 ``[]`` 语义不同（None=不限制，
+    # []=空池 WHERE FALSE），不能折叠成同一个 ()。
+    instrument_filter: tuple[str, ...] | None = ()
     params: tuple[tuple[str, Any], ...] = ()
+
+    def __post_init__(self) -> None:
+        # 统一把序列型字段冻结成 tuple（list/set 传入时防 lineage 被外部变异）。
+        object.__setattr__(
+            self,
+            "columns",
+            tuple(self.columns) if self.columns is not None else (),
+        )
+        if self.instrument_filter is not None:
+            object.__setattr__(self, "instrument_filter", tuple(self.instrument_filter))
+        object.__setattr__(
+            self,
+            "params",
+            tuple(self.params) if self.params is not None else (),
+        )
+
+
+def lineage_params(params: Mapping[str, Any] | None) -> tuple[tuple[str, Any], ...]:
+    """把 params canonicalize 成**不可变**的 (k, v) 元组序列（lineage 用）。
+
+    #P1-final closure：stream/aggregation 路径此前把 mutable dict 直接塞给声明为
+    tuple 的 ``ReadLineage.params``——调用方之后改 params 会污染 lineage。
+    canonicalize（稳定排序 + jsonable 化）后按值冻结成不可变嵌套结构。
+    """
+    if not params:
+        return ()
+    canon = canonicalize_params(params)
+    return tuple(
+        sorted((str(k), _freeze_lineage_value(v)) for k, v in canon.items())
+    )
+
+
+def _freeze_lineage_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return tuple(
+            sorted((str(k), _freeze_lineage_value(v)) for k, v in value.items())
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_lineage_value(v) for v in value)
+    return value
 
 
 @dataclass(frozen=True)

@@ -48,6 +48,7 @@ _COMMON_DATASET_KEYS = frozenset({
     "hive_partitioning", "union_by_name", "format", "storage", "partitioning",
     "semantic", "engine", "schema", "query_policy", "partition_columns",
     "storage_format", "layout_policy", "schema_version", "authorized_root",
+    "specialized_only", "specialized_only_reason",
 })
 _STATIC_DATASET_KEYS = _COMMON_DATASET_KEYS | frozenset({"root", "glob"})
 _PARAMETRIC_DATASET_KEYS = _COMMON_DATASET_KEYS | frozenset({
@@ -88,6 +89,11 @@ class StaticDataset(DatasetBase):
     partition_columns: tuple[str, ...] = field(default_factory=tuple)
     storage_format: str = "long"
     layout_policy: LayoutPolicy | None = None
+    # #P1-final closure：specialized_only 数据集（如 factor_lake_wide——宽表 pivot，
+    # 标的在列轴上，不是 time×instrument 普通 long 表）**不进入 generic 读契约**。
+    # generic read/scan 遇到直接拒绝，杜绝在「asset」这种列轴上假过滤。
+    specialized_only: bool = False
+    specialized_only_reason: str | None = None
     # ---- 通用 Data IO Layer 新增字段（全部带默认值，向后兼容） ----
     format_spec: FormatSpec = field(default_factory=FormatSpec)   # 物理文件格式（parquet/csv/...）
     storage: StorageSpec | None = None                            # #P0-final closure 4 typed StorageSpec
@@ -133,6 +139,9 @@ class ParametricDataset(DatasetBase):
     partition_columns: tuple[str, ...] = field(default_factory=tuple)
     storage_format: str = "long"
     layout_policy: LayoutPolicy | None = None
+    # #P1-final closure：specialized_only（见 StaticDataset 注释）。
+    specialized_only: bool = False
+    specialized_only_reason: str | None = None
     # ---- 通用 Data IO Layer 新增字段（全部带默认值，向后兼容） ----
     format_spec: FormatSpec = field(default_factory=FormatSpec)   # 物理文件格式（parquet/csv/...）
     storage: StorageSpec | None = None                            # #P0-final closure 4 typed StorageSpec
@@ -395,6 +404,19 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             f"{context}: storage_format 必须是 long|wide，收到 {storage_format!r}"
         )
     layout_policy = parse_layout_policy(raw.get("layout_policy"))
+    specialized_only = _strict_bool(
+        raw.get("specialized_only", False), key="specialized_only", context=context
+    )
+    specialized_reason = raw.get("specialized_only_reason")
+    if specialized_reason is not None and not isinstance(specialized_reason, str):
+        raise ValidationError(
+            f"{context}: specialized_only_reason 必须是字符串，收到 {specialized_reason!r}"
+        )
+    if specialized_only and not specialized_reason:
+        raise ValidationError(
+            f"{context}: specialized_only=true 时必须同时给出 specialized_only_reason"
+            "（说明为什么不能 generic 读、该用什么专用入口）"
+        )
 
     if kind == "static":
         # published 数据集的 root 是直接路径；namespaced 数据集在 static 里
@@ -436,6 +458,8 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             partition_columns=partition_columns,
             storage_format=storage_format,
             layout_policy=layout_policy,
+            specialized_only=specialized_only,
+            specialized_only_reason=specialized_reason,
         )
     root_template_raw = _require_str(raw, "root_template", context=context)
     root_template = expand_env(root_template_raw)
@@ -495,6 +519,8 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         partition_columns=partition_columns,
         storage_format=storage_format,
         layout_policy=layout_policy,
+        specialized_only=specialized_only,
+        specialized_only_reason=specialized_reason,
     )
 
 

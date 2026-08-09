@@ -19,6 +19,7 @@ data_access.predicate —— 结构化谓词生成 SQL
 
 from __future__ import annotations
 
+import collections.abc
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
@@ -87,6 +88,14 @@ def strict_sequence(
     elif isinstance(value, (set, frozenset)):
         # 成员语义：set 可以，但转 deterministic canonical order（repr key）。
         items = sorted(value, key=repr)
+    elif isinstance(value, collections.abc.Iterator):
+        # #收官轮 P0（Integration）：generator/iterator 是一次性迭代器，``tuple()``
+        # 会静默消费掉——docstring 已声明「generator 拒绝」，实现必须兑现，
+        # 否则 adapter 层 ``instrument_filter=(x for x in ...)`` 会悄悄被吞掉。
+        raise ValidationError(
+            f"{name} 不接受 generator/iterator（一次性迭代器，会被静默消费），"
+            f"收到 {type(value).__name__} {value!r}"
+        )
     else:
         try:
             items = tuple(value)

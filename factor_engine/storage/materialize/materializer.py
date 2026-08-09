@@ -257,6 +257,29 @@ class ParquetMaterializer:
                 f"Pass ast_hash or ir_node."
             )
 
+        # #收官轮 P0（Integration）：write_target 在任何 side effect（注册因子 /
+        # 写文件 / 更新水位线 / 返回 rows_written>0）之前严格枚举。``"locla"``
+        # 这类拼写错误必须直接拒绝，不能再静默变成 write_local=False ∧
+        # write_staging=False 却照样提交（metadata 说已提交、物理数据不存在）。
+        from storage.write_targets import normalize_write_target
+
+        try:
+            target_flags = normalize_write_target(write_target)
+        except ValueError:
+            raise
+        write_target_flags = target_flags
+        # #收官轮 P0（Integration，incomplete-fix bypass）：production 禁止
+        # direct-local 因子湖直写——之前 guard 只放在 LocalParquetWriteTarget，
+        # materialize() 主路径直接 ``_upsert_partition`` 绕过它。这里把 guard
+        # 提到统一 orchestrator（materialize 本体）：production 下任何含 local
+        # 落盘的目标都拒绝，必须走 staging→publish。
+        if production and write_target_flags["local"]:
+            raise ValueError(
+                f"factor_id={factor_id!r}: production 禁止 direct-local factor-lake "
+                "write（绕过 DataAccess staging→publish 原子发布/journal/snapshot "
+                "manifest）。请用 write_target='staging' + publish_factor_lake。"
+            )
+
         # R10 #47: 断点续写必须绑定身份 —— 在分区循环前算好身份级指纹组件，
         # 分区级输入指纹在循环内逐分区计算。
         checkpoint_identity = semantic_identity
@@ -357,16 +380,29 @@ class ParquetMaterializer:
             }
 
         target = str(write_target or "local").lower()
-        write_local = target in ("local", "both")
-        write_staging = target in ("staging", "both", "staging_clickhouse")
-        # clickhouse / staging_clickhouse：写 catalog + watermark，不落本地分区
-        if target in ("clickhouse", "staging_clickhouse"):
-            write_local = False
+        write_local = bool(write_target_flags["local"])
+        write_staging = bool(write_target_flags["staging"])
+        write_clickhouse = bool(write_target_flags["clickhouse"])
+        if write_target_flags.get("staging_dataset"):
+            self._staging_dataset = str(write_target_flags["staging_dataset"])
 
         # R9-P0-025/026: watermark_deferred must be defined before the partition
         # loop — the failure-adjudication block below reads it, and it must never
         # advance the watermark on a failed run.
         watermark_deferred = bool(defer_watermark)
+        # #收官轮 P0（Integration）：staging-only（不写本地 lake 也不写 CH）不能
+        # 推进**权威水位线**——否则增量调度器误以为「正式 factor lake 已提交到
+        # 这里」而 skip。staging-only 强制 defer，只有 publish 成功后 commit 才
+        # 推进（权威水位线 = CALCULATED → STAGED → PUBLISHED 语义）。
+        if write_staging and not write_local and not write_clickhouse:
+            watermark_deferred = True
+            if production:
+                logger.warning(
+                    "factor_id=%s write_target=%s 是 staging-only，权威水位线已 defer"
+                    "（publish 成功后由 publish_factor_lake 推进）",
+                    factor_id,
+                    target,
+                )
 
         # --- 3. 注册 / Hash 校验（可能抛 FactorHashMismatchError）---
         self._catalog.register(

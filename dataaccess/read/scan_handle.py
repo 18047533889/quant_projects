@@ -200,7 +200,7 @@ class ScanHandle:
                     "snapshot_id": self.snapshot.snapshot_id,
                     "columns": list(self.lineage.columns) or None,
                     "time_range": self.lineage.time_range,
-                    "instrument_count": len(self.lineage.instrument_filter),
+                    "instrument_count": len(self.lineage.instrument_filter or ()),
                 },
             )
 

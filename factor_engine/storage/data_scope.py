@@ -174,6 +174,10 @@ def compute_data_scope(
         "mining_coverage_threshold",
         "enforce_mining_gate",
         "strict_unknown_fields",
+        # #收官轮 P0（Integration）：pit_enforce 改变实际读语义（production 下四层
+        # PIT fail-closed vs research 放行），两个仅差 pit_enforce 的 source 不得
+        # 共享缓存 namespace。
+        "pit_enforce",
     ):
         val = getattr(data_source, attr, None)
         if val is not None and (not isinstance(val, str) or val.strip()):
@@ -194,7 +198,16 @@ def compute_data_scope(
         payload["fields"] = _jsonable(fields)
 
     instrument_filter = getattr(data_source, "instrument_filter", None)
-    if instrument_filter:
+    # #收官轮 P0：``None``（全市场）与 ``[]``（空股票池，0 行）是**不同执行语义**，
+    # 绝不能共用缓存作用域——否则「先缓存全市场结果 → 后执行空 universe → cache
+    # hit → 空 universe 拿到全市场结果」。显式编码 ALL / EMPTY / LIST(...) 三种
+    # 身份，保证三者的 cache namespace 互不相同。
+    if instrument_filter is None:
+        payload["instrument_filter_kind"] = "ALL"
+    elif len(instrument_filter) == 0:
+        payload["instrument_filter_kind"] = "EMPTY"
+    else:
+        payload["instrument_filter_kind"] = "LIST"
         payload["instrument_filter"] = _jsonable(sorted(instrument_filter))
 
     if not payload:

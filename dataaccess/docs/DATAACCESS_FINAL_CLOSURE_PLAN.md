@@ -92,6 +92,26 @@ date-only end 含最后一天。
   certification 语义，可走 `.data_access_allowlist.yaml` 豁免（有先例）或迁到
   DataAccess 正式 API——由 owner 决定。
 
+## 收官轮第 3 批 closure ledger（0.9.8，3+1 排除式复查，2026-08-09）
+
+按最新已提交 `a2dc80c` 做的排除式检查的「真正收官项」。外部 AI 结论：DataAccess
+不再需要扩架构，补完这批即可 Core Freeze。改动只在 `dataaccess/` 树。
+
+| ID | Area | Test | Backend | Result | Bug root cause | Fix | Regression test | Status |
+|----|------|------|---------|--------|----------------|-----|-----------------|--------|
+| R12-1 | plan | ReadPlan/CompiledDataRequest **真正 immutable** | duckdb | FIXED | `_deep_freeze_mapping` 返回普通 dict、`ReadPlan` 非 frozen + 可变 list/dict → `plan.datasets.clear()` / `plan.compiled.source_params["x"]["y"]=z` 能改编译结果，explain≠execute | `CompiledDataRequest` 深冻结成 MappingProxyType/tuple/frozenset；`ReadPlan` `@dataclass(frozen=True)` + `__post_init__` 冻结 datasets/per_dataset_columns/join_policies/snapshot_info/join_specs_effective/plan_snapshot_tokens/plan_pinned_files | round12 | FIXED |
+| R12-2 | enum | `read()` engine/result strict enum | 所有入口 | FIXED | `_read_handle` dispatch 对未知 `engine="polarr"`/`result="lazzy"` 静默落到 duckdb 物化路径 | `validate_engine_result` 顶部门禁（auto/duckdb/polars/pyarrow × auto/arrow/pandas/polars/lazy/stream） | round12 | FIXED |
+| R12-2b | typed | DataRequest typed fields | duckdb | FIXED | `compile_data_request` `pit=bool(request.pit)` → `pit="false"` 变 True；limit 未校验 | `__post_init__` 严格 bool（pit/normalize_units/time_varying_universe）、limit 非负 int\|None、engine/result/snapshot_policy enum + 小写归一 | round12 | FIXED |
+| R12-3 | registry | factor_lake_wide contract 错位 | registry | FIXED | 宽表是 datetime × {asset} pivot，**asset 是列轴不是物理列**，declaring `instrument_column: asset` 会让 generic 读在假列上过滤 | `specialized_only` + `specialized_only_reason`（registry 新增字段，裸标记无 reason 拒绝）；`_prepare_read_request` 门禁覆盖所有 read/scan/sql 路径 | round12 | FIXED |
+| R12-4 | lineage | ReadLineage None/[] + params canonicalize | duckdb | FIXED | `tuple(x) if x else ()` 把 None 与 [] 都折叠成 ()（provenance 丢失 None=全市场 vs []=空池）；stream 路径把 mutable dict 塞给 tuple 型 params | `instrument_filter: tuple\|None`（None=全市场，( )=空池）；`lineage_params()` canonicalize 成不可变 tuple | round12 | FIXED |
+
+**本批验收**：plan() 后改 compiled.source_params / filters / plan.snapshot_policy /
+datasets / per_dataset_columns / plan_snapshot_tokens 全部 TypeError，execute 仍按
+plan 时刻语义执行；`engine="polarr"` / `result="lazzy"` / `DataRequest(pit="false")` /
+`limit=-1` / `snapshot_policy="bogus"` 全部 ValidationError；factor_lake_wide generic
+read/read_arrow/scan_polars/read_result 全拒绝（instrument_column 已从 asset 移除）；
+ReadLineage None vs () 保留、lineage/stream params 不可变。
+
 ## 执行状态（2026-08-09 完成）
 
 ### 第七轮二阶回归收口（0.9.6，main=`608f602` 排除前 54 项后再审的 12 项）
@@ -612,3 +632,90 @@ Freeze blocker，8–12 P1 收尾）：
 `test_catalog_us.py` + `test_data_access_catalog_errors.py` 15 passed；
 `tests/market + tests/storage` 其余失败均为并发会话 FE WIP（operator manifest 未
 重新生成 / R7-229 override reason），与本批无关。未碰 GitHub。
+
+---
+
+## 第五批审计收口（DA+FE Integration Freeze，main @ `ecffd56`）
+
+外部 AI 复查确认 **DataAccess Core 本身已可停止新增架构**；剩余为 DA+FactorEngine
+联合链路的最后一批 integration root issue（6 项）+ 2 个 incomplete-fix bypass +
+1 个 P1。全部本地实现，未碰 GitHub。
+
+### 新发现 6 项
+
+- ✅ **1. source-level 四层 PIT 真正挂到 production runtime**：`DataSourceBuildContext`
+  的 `pit_enforce` 之前只进 build_context、factory 不取、`DataAccessSource` 不存、
+  `_ensure_field_plans()` 只自动跑 mining/coverage gate——「有安全门、主通道没经过
+  安全门」。现在 factory 把 `pit_enforce`（ctx 默认，source 可覆盖）传给
+  `DataAccessSource`（新增 `self.pit_enforce`），`_ensure_field_plans()` 在
+  `pit_enforce` 时自动 `assert_four_layer_pit(plans)`（UNKNOWN 层 production
+  fail-closed / research 告警降级，与 mining/coverage gate 同为 opt-in）。
+- ✅ **2. Secondary SourceRef child 继承父级 execution policy**：
+  `LQTPLogicalDataSource._child()` 原来不传 run_mode/production/mining/PIT，生产
+  anchor 的二级 SourceRef child 会退回 research/fail-open。现在 `_child()` 从
+  `self.inner` 继承 run_mode / production / strict_unknown_fields /
+  enforce_mining_gate / snapshot_now_only / mining_coverage_threshold / pit_enforce。
+- ✅ **3. CompositeDataSource temporal join authority 定界**：Composite 只认识
+  exact/asof_backward/tolerance 并自行 `merge_asof`——E1/E2/RAW_EVENT/revision/
+  period-selection 不能交给它。新增 `_enforce_join_authority`：非 exact join +
+  PIT 敏感源（read_mode event/pit、`_NO_KNOWLEDGE_TIME_FUNDAMENTALS` 财务、
+  COS pit_policy==strict）→ production fail-closed、research 告警放行；
+  exact 保留（child 已把 temporal 语义对齐好）。
+- ✅ **4. Composite snapshot cache coherence**：`_invalidate_if_snapshot_changed`
+  原来只读 child.`data_snapshot_id` 不主动 `refresh_snapshot()`，底层 A→B 后仍命中
+  Composite 自己的 `_column_cache`。现在统一 child snapshot protocol：先调用每个
+  子源 `refresh_snapshot()`，再读新增的 `DataAccessSource.snapshot_token`
+  （`_manifest_token or data_snapshot_id`，弥补廉价 manifest token 不更新
+  `data_snapshot_id` 的盲区），变化才清缓存；production 下 refresh 失败 →
+  fail-closed 清缓存强制重读。
+- ✅ **5. data_scope 区分 None / [] / LIST**：`compute_data_scope` 原来 `if
+  instrument_filter:` 让 None 和 [] 都进不了 scope（全市场结果可污染空 universe）。
+  现在显式编码 `instrument_filter_kind ∈ {ALL, EMPTY, LIST}`，三种身份缓存
+  namespace 互不相同；`pit_enforce` 也纳入 scope（改变实际读语义）。
+- ✅ **6. FE adapter 拒绝裸 str instrument_filter**：`DataAccessSource.__init__`
+  复用 DA `strict_sequence`（`_strict_instrument_filter`）——None / list / tuple /
+  set[str] 接受；裸 str/bytes（"AAPL"→["A","A","P","L"]）、dict、generator、
+  非 str 元素全部构造期拒绝。顺带修掉 DA `strict_sequence` 一个 docstring 撒谎：
+  generator 原来被 `tuple()` 静默消费，现在按声明拒绝。
+
+### 两个 incomplete-fix bypass
+
+- ✅ **A. production direct-local 写 guard 上提**：guard 原来只在
+  `LocalParquetWriteTarget`，`ParquetMaterializer.materialize()` 主路径直接
+  `_upsert_partition` 绕过。现在 `materialize()` 在**任何 side effect 之前**统一
+  消费 `write_targets.normalize_write_target()` 严格枚举（`"locla"` 拼写错误 → 在
+  注册因子/写文件/更新水位线之前 `ValueError`，不再「metadata 说已提交、物理数据
+  不存在」），且 production + 含 local 的目标直接拒绝（必须 staging→publish）。
+- ✅ **B. native Polars long 与 governed-lazy 同源**：`_store_scan_polars_native`
+  原来优先 `store.scan_polars()` 拿裸 LazyFrame，绕过 ScanHandle 的 collect-time
+  revalidation / budget / audit。现在与 `scan_dataset_columns` 同走
+  `store.scan()`（ScanHandle 绑定 snapshot+budget），composition 链拿到真实
+  LazyFrame，collect 前由 `revalidate_for_long_collect` + `enforce_arrow_budget`
+  受控；strict 下 `native_lazyframe()` 抛错 = 要求受控 collect 的 fail-closed。
+
+### P1（顺手清）
+
+- ✅ **streaming_bars registry contract**：声明 `instrument_column: symbol` 但
+  schema 无 symbol（symbol 在 `{symbol}/{YYYY-MM-DD}/{symbol}.parquet` 文件名里）。
+  标记 `specialized_only: true` + reason，generic read/scan 一律拒绝（不再在假的
+  asset 列上过滤）；`instrument_column` 置空。专用读取需 writer 侧 hive 化。
+
+### 权威水位线状态机（staging-only）
+
+staging-only（不写本地 lake）物化强制 `watermark_deferred=True`——不再在
+materialize() 推进正式 FactorCatalog 水位线（增量调度器不会误以为已正式提交）。
+`publish_factor_lake` 在 `publish_from_staging` **成功**后调用
+`advance_published_watermark()` 计算 published lake 的 min/max datetime + row_count
+推进水位线（CALCULATED → STAGED → PUBLISHED）；publish 失败抛异常 → 水位线不动。
+
+### 回归
+
+FE 新增 `tests/integration/test_final_closure_fe_integration2.py`（22 条 adversarial，
+覆盖全部 6+2+1 项）+ 既有 `test_final_closure_fe_integration.py`（16 条）全绿；
+`tests/runtime + tests/storage`、`tests/backend + tests/integration`、materializer /
+production-gate / R10 identity 全绿。DA 侧 `tests/unit/test_final_closure_round12.py`
++ round11（specialized_only / strict_sequence）23 条全绿。按新 contract 更新了
+`test_r10_factor_identity.py` 与 `test_materializer.py::test_staging_write_target_*`
+（production+local 由 guard 拒绝；staging-only 水位线 defer）。预存失败：
+`tests/runtime/test_logical_source_production_contracts.py::test_minute_sessions_never_collide_across_lunch_boundary`
+（V2 `_session_slots` lunch 边界 bug，stash 验证为提交时已存在，与本批无关）。

@@ -266,15 +266,44 @@ class CompositeDataSource(DataSource):
         return reports
 
     def _child_snapshot_manifest(self) -> tuple[tuple[str, str | None], ...]:
-        """组合子源快照清单（R10 #44）。
+        """组合子源快照清单（R10 #44 + #收官轮 P0 Integration）。
 
-        每个子源（``DataAccessSource``）暴露只读 ``data_snapshot_id``；没有该
-        属性的子源报告 ``None`` —— 稳定 token，子源后来具备快照身份时仍能
-        触发缓存失效。
+        **先调用每个子源的 ``refresh_snapshot()``**（proactive 刷新，TTL 内短路；
+        DataAccessSource 的廉价路径走 manifest token），再读统一 ``snapshot_token``
+        （``_manifest_token or data_snapshot_id``）—— 否则 Composite 永远只看
+        ``data_snapshot_id`` 而看不到 manifest 级变化，底层 dataset A→B 后仍
+        命中自己的旧缓存（cache-of-cache coherence bug）。
+
+        refresh 无法确认时：production 子源 fail-closed（视为变化、清缓存，
+        下次 load 强制重读，不再信旧 cache）；research 告警后按 unknown 处理。
+        没有 ``refresh_snapshot`` 的子源退化为只读 ``data_snapshot_id``（None）。
         """
         manifest: list[tuple[str, str | None]] = []
         for name, source in self.sources.items():
-            snapshot = getattr(source, "data_snapshot_id", None)
+            refresher = getattr(source, "refresh_snapshot", None)
+            if callable(refresher):
+                try:
+                    refresher()
+                except Exception as exc:  # refresh 失败 → 无法确认 → fail-closed
+                    production = bool(getattr(source, "production", False))
+                    if production:
+                        logger.warning(
+                            "组合源子源 %r refresh_snapshot 失败（%s: %s）；production "
+                            "fail-closed：清缓存强制重读，不信任旧 snapshot。",
+                            name,
+                            type(exc).__name__,
+                            exc,
+                        )
+                        manifest.append((name, None))
+                        continue
+                    logger.warning(
+                        "组合源子源 %r refresh_snapshot 失败（research 按 unknown）: %s",
+                        name,
+                        exc,
+                    )
+            snapshot = getattr(source, "snapshot_token", None)
+            if snapshot is None:
+                snapshot = getattr(source, "data_snapshot_id", None)
             if callable(snapshot):
                 try:
                     snapshot = snapshot()
@@ -285,10 +314,12 @@ class CompositeDataSource(DataSource):
         return tuple(manifest)
 
     def _invalidate_if_snapshot_changed(self) -> None:
-        """子源快照版本变化时清除列/锚点缓存（R10 #44）。
+        """子源快照版本变化时清除列/锚点缓存（R10 #44 + #收官轮 P0）。
 
-        在公共 load 方法顶部调用：若任一子源快照 id 与上次记录不同，旧列缓存
-        与锚点索引缓存全部失效，下次读取强制重建。
+        在公共 load 方法顶部调用：**主动 refresh 每个子源** 后比较最新
+        snapshot_token 清单；任一子源 token 变化（或 production 下 refresh
+        无法确认）→ 旧列缓存与锚点索引缓存全部失效，下次读取强制重建——
+        Composite 自己的缓存不能比底层数据更长寿。
         """
         current = self._child_snapshot_manifest()
         if self._snapshot_manifest is not None and current != self._snapshot_manifest:
@@ -548,6 +579,79 @@ class CompositeDataSource(DataSource):
             )
         )
 
+    @staticmethod
+    def _is_pit_sensitive_source(source: Any) -> bool:
+        """源是否 PIT 语义敏感（不能交给 Composite 自行 merge_asof）。
+
+        #收官轮 P0（Integration）：以下三类源的 temporal 对齐必须由 DataAccess
+        read_joined / SourceRef certified PIT resolver 完成，Composite 只允许
+        ``exact`` 对齐（源自己已经把 temporal 语义对齐好）：
+          * ``read_mode in {event, pit}`` 的 DataAccessSource；
+          * 已知无 knowledge-time 的 cleaned 财务源（``_NO_KNOWLEDGE_TIME_FUNDAMENTALS``，
+            period_end 无 filing_date，asof 拼接有真实前视风险）；
+          * COS 契约 ``pit_policy=="strict"`` 的 E2 源（availability/filing_date 时钟）。
+        """
+        if not hasattr(source, "dataset"):
+            return False
+        dataset = str(getattr(source, "dataset", "") or "")
+        try:
+            from .data_access_source import _NO_KNOWLEDGE_TIME_FUNDAMENTALS
+
+            if dataset in _NO_KNOWLEDGE_TIME_FUNDAMENTALS:
+                return True
+        except ImportError:
+            pass
+        read_mode = str(getattr(source, "read_mode", "panel") or "panel").lower()
+        if read_mode in {"event", "pit"}:
+            return True
+        try:
+            from data_access.cos_contract import get_cos_contract
+
+            contract = get_cos_contract(dataset)
+            if contract is not None and (
+                str(getattr(contract, "pit_policy", "") or "") == "strict"
+            ):
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _enforce_join_authority(
+        self,
+        *,
+        source_name: str,
+        join_spec: CompositeJoinSpec,
+    ) -> None:
+        """#收官轮 P0（Integration）：PIT 敏感源禁止 Composite 自行 merge_asof。
+
+        边界：普通 D1/S1 同频数据 Composite ``exact`` 保留；PIT / E1 / E2 /
+        RAW_EVENT / revision / period-selection 必须下沉到 DataAccess
+        read_joined / SourceRef certified PIT resolver，Composite 不能再把
+        period_end 数据当 decision-time 做 backward asof（前视泄漏）。
+        production（子源 production=True）fail-closed；research 告警放行。
+        """
+        source = self.sources[source_name]
+        if join_spec.method == "exact":
+            return
+        if not self._is_pit_sensitive_source(source):
+            return
+        production = bool(getattr(source, "production", False))
+        if production:
+            raise ValueError(
+                f"Composite 非 exact 对齐 source={source_name!r}（dataset="
+                f"{getattr(source, 'dataset', '?')!r}）是 PIT 敏感源（event/pit/"
+                "无知识时钟财务/E2 strict-pit），禁止 Composite 自行 merge_asof——"
+                "必须下沉到 DataAccess read_joined / SourceRef certified PIT "
+                "resolver。production fail-closed。"
+            )
+        warnings.warn(
+            f"Composite 非 exact 对齐 source={source_name!r}（dataset="
+            f"{getattr(source, 'dataset', '?')!r}）是 PIT 敏感源，asof 拼接有前视"
+            "风险（period_end 无 knowledge-time）；production 将拒绝。请改用 "
+            "DataAccess read_joined / SourceRef certified PIT resolver。",
+            stacklevel=4,
+        )
+
     def _align_to_anchor(
         self,
         series,
@@ -558,17 +662,18 @@ class CompositeDataSource(DataSource):
         canonical_name: str,
     ):
         """_align_to_anchor。
-        
+
         参数:
             series: MultiIndex Series
             join_spec: 见函数签名
             source_name: 见函数签名（可选）
             column_name: 数据列名（可选）
             canonical_name: 见函数签名（可选）
-        
+
         返回:
             无
         """
+        self._enforce_join_authority(source_name=source_name, join_spec=join_spec)
         anchor_index = self._get_anchor_index()
         key_matched_rows: int
         if join_spec.method == "exact":

@@ -26,7 +26,10 @@ def test_size_and_dual_backends_registered() -> None:
         backends = OperatorRegistry.backends_for(name)
         assert "pandas_numpy" in backends, (name, backends)
         assert "polars" in backends, (name, backends)
-        assert "sql" in backends, (name, backends)
+    # industry_size_neutralize 在 SQL 回退清单（暖启动/NaN 缺口语义无法精确复刻），
+    # 只走 pandas+polars；其余两个 neutralize 保持三后端。
+    for name in ("size_neutralize", "group_neutralize"):
+        assert "sql" in OperatorRegistry.backends_for(name), (name, "expected sql")
 
 
 def test_size_neutralize_sql_emitter() -> None:

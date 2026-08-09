@@ -399,7 +399,7 @@
       "factor_name": "alpha_20260702_844ceabc",
       "source_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
       "fe_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
-      "lqtp_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "lqtp_formula": "ts_sum(where(ts_delta(close, 1) > 0, ts_delta(close, 1), 0), 60) / (ts_sum(where((0 - 1) * ts_delta(close, 1) > 0, (0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
       "status": "ready",
       "lqtp_native": true,
       "unknown_ops": [],
@@ -412,12 +412,13 @@
       "in_weekly_selected": true,
       "expression_type": "dsl",
       "description": "Alpha158_SUMD60_v2",
-      "lqtp_formula_rewritten": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "lqtp_formula_rewritten": "ts_sum(where(ts_delta(close, 1) > 0, ts_delta(close, 1), 0), 60) / (ts_sum(where((0 - 1) * ts_delta(close, 1) > 0, (0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
       "bare_fields": [
         "close"
       ],
       "unknown_bare_fields": [],
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "rewrite_note": "ts_max(x,0)->where(x>0,x,0) elementwise"
     },
     {
       "factor_key": "alpha_20260702_89d0956b",

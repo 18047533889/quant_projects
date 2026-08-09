@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-08T23:26:35.885332",
+  "generated_at": "2026-08-09T04:28:59.022380+00:00",
   "threshold": 0.02,
   "years": [
     2019,
@@ -2523,7 +2523,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 3.028458898567357,
       "report_href": "/reports_weekly_dug/alpha_20260702_afd40784.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8479683,
         "years": [
@@ -2545,7 +2545,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "a9ef7465-f67c-4a12-bb94-5fc3d35e1593",
+      "platform_mean_ic": 0.05196458199986722,
+      "platform_icir": 0.4715305662027838,
+      "platform_coverage": 0.9958138176209784,
+      "platform_long_short_sharpe": 3.5707438871538737
     },
     {
       "factor_id": "alpha_20260702_caa184c6",
@@ -2675,7 +2680,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 1.0740643870548767,
       "report_href": "/reports_weekly_dug/alpha_20260702_16104691.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8383997,
         "years": [
@@ -2697,7 +2702,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "4aa8b650-e07a-419f-b250-2ac6977b0f6e",
+      "platform_mean_ic": 0.05241773320147485,
+      "platform_icir": 0.35051428551586944,
+      "platform_coverage": 0.9827312347891729,
+      "platform_long_short_sharpe": 1.6640367217268248
     },
     {
       "factor_id": "alpha_20260701_66ea5325",
@@ -2901,7 +2911,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.5928740473608523,
       "report_href": "/reports_weekly_dug/alpha_20260701_549b43e6.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8487106,
         "years": [
@@ -2923,7 +2933,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "a6de8de9-83ee-481a-b900-81ee8cf57744",
+      "platform_mean_ic": -0.045909095449040115,
+      "platform_icir": -0.36360423042284273,
+      "platform_coverage": 0.9950188486508564,
+      "platform_long_short_sharpe": -2.4917721345820456
     },
     {
       "factor_id": "alpha_20260702_4e49a3f5",
@@ -3275,7 +3290,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.675967009439775,
       "report_href": "/reports_weekly_dug/alpha_20260703_9e3b2920.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8480339,
         "years": [
@@ -3297,7 +3312,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "69988fd7-259a-4edd-b2b6-9720b91a1754",
+      "platform_mean_ic": 0.04597007108809132,
+      "platform_icir": 0.44740889957109414,
+      "platform_coverage": 0.9958178864069162,
+      "platform_long_short_sharpe": 3.5158800040224754
     },
     {
       "factor_id": "alpha_20260703_99eb3d11",
@@ -3353,7 +3373,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.6759670094397747,
       "report_href": "/reports_weekly_dug/alpha_20260703_99eb3d11.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8480339,
         "years": [
@@ -3375,7 +3395,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "2a0597c8-060d-47f2-be38-d95d35c4517c",
+      "platform_mean_ic": 0.04597007108809132,
+      "platform_icir": 0.44740889957109414,
+      "platform_coverage": 0.9958178864069162,
+      "platform_long_short_sharpe": 3.5158800040224754
     },
     {
       "factor_id": "alpha_20260702_68529a49",
@@ -3431,7 +3456,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.73347269832895,
       "report_href": "/reports_weekly_dug/alpha_20260702_68529a49.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8459042,
         "years": [
@@ -3453,7 +3478,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "0877d77a-ed29-474b-b8df-d60b04a8c31b",
+      "platform_mean_ic": 0.04383303556655349,
+      "platform_icir": 0.34759658939587557,
+      "platform_coverage": 0.9916686821118579,
+      "platform_long_short_sharpe": 2.0600026729238365
     },
     {
       "factor_id": "alpha_20260701_f487f8ba",
@@ -3879,7 +3909,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.862872144810135,
       "report_href": "/reports_weekly_dug/alpha_20260703_c6169b2e.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8496455,
         "years": [
@@ -3901,7 +3931,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "88d67262-f757-45c1-b910-90035028b2af",
+      "platform_mean_ic": -0.04169099723466154,
+      "platform_icir": -0.3701978892467635,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": -3.0276766334995138
     },
     {
       "factor_id": "alpha_20260703_6c174054",
@@ -3957,7 +3992,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.389233954330673,
       "report_href": "/reports_weekly_dug/alpha_20260703_6c174054.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8496455,
         "years": [
@@ -3979,7 +4014,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "8c12e3a6-28ac-4745-929c-b702d4ead4c9",
+      "platform_mean_ic": -0.038802915595491504,
+      "platform_icir": -0.35839869018580556,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 1.0159805803247846
     },
     {
       "factor_id": "alpha_20260701_149b529b",
@@ -4331,7 +4371,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.588064600051662,
       "report_href": "/reports_weekly_dug/alpha_20260702_576e0a0b.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8496455,
         "years": [
@@ -4353,7 +4393,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "ac1df0e9-e973-434c-b7e5-f7b0615db7f9",
+      "platform_mean_ic": -0.03660843904921337,
+      "platform_icir": -0.23977372463435093,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": -1.7444274738216503
     },
     {
       "factor_id": "alpha_20260702_a1c128d5",
@@ -4409,7 +4454,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.412104572975959,
       "report_href": "/reports_weekly_dug/alpha_20260702_a1c128d5.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8483649,
         "years": [
@@ -4431,7 +4476,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "516ec13c-a7d0-40c8-894e-7e11638092d8",
+      "platform_mean_ic": 0.03643662350284487,
+      "platform_icir": 0.3960281698928579,
+      "platform_coverage": 0.9958927999362397,
+      "platform_long_short_sharpe": 3.3732231111878233
     },
     {
       "factor_id": "alpha_20260701_cf427acf",
@@ -4857,7 +4907,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 1.9295347868505222,
       "report_href": "/reports_weekly_dug/alpha_20260701_75f1066f.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8487106,
         "years": [
@@ -4879,7 +4929,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "76ad08d5-cbd6-423e-99b0-abfdd18097d5",
+      "platform_mean_ic": 0.033635363009558564,
+      "platform_icir": 0.3794742510174855,
+      "platform_coverage": 0.9950188486508564,
+      "platform_long_short_sharpe": 2.502838240511448
     },
     {
       "factor_id": "alpha_20260702_844ceabc",
@@ -4935,7 +4990,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 1.5281760741497608,
       "report_href": "/reports_weekly_dug/alpha_20260702_844ceabc.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8496455,
         "years": [
@@ -4953,11 +5008,16 @@
       "mem_available_gb": 24.32,
       "dsl": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
       "fe_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
-      "lqtp_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "lqtp_formula": "ts_sum(where(ts_delta(close, 1) > 0, ts_delta(close, 1), 0), 60) / (ts_sum(where((0 - 1) * ts_delta(close, 1) > 0, (0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "90b09c5d-8b98-48a8-a6bc-8125825d984b",
+      "platform_mean_ic": -0.02792230467454203,
+      "platform_icir": -0.19681626434036065,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": -1.0068605532287147
     },
     {
       "factor_id": "alpha_20260701_57e30cff",
@@ -5161,7 +5221,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.2013911634251286,
       "report_href": "/reports_weekly_dug/alpha_20260702_6d5f848e.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8467201,
         "years": [
@@ -5183,7 +5243,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "f7598724-b645-424d-ace0-58967b3b8247",
+      "platform_mean_ic": -0.03188946807657077,
+      "platform_icir": -0.27731772318602166,
+      "platform_coverage": 0.9948215125328779,
+      "platform_long_short_sharpe": -1.749155677654132
     },
     {
       "factor_id": "alpha_20260701_726efa4d",
@@ -5239,7 +5304,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.0447576026458094,
       "report_href": "/reports_weekly_dug/alpha_20260701_726efa4d.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "already_registered",
       "materialize": {
         "n_rows": 8494590,
         "years": [
@@ -5261,7 +5326,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "3a5bbc8c-3db4-4e93-9386-6e5c0da33795",
+      "platform_mean_ic": -0.03166439795395409,
+      "platform_icir": -0.23060666586590822,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": -1.4835872296229917
     },
     {
       "factor_id": "alpha_20260703_3962e26e",
@@ -5539,7 +5609,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 1.014596661608483,
       "report_href": "/reports_weekly_dug/alpha_20260701_5685f3e9.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8494590,
         "years": [
@@ -5561,7 +5631,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "02104be2-8660-4f64-8da2-4e7185dd621d",
+      "platform_mean_ic": 0.03101344181889711,
+      "platform_icir": 0.19968438289867746,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 1.261141884033367
     },
     {
       "factor_id": "alpha_20260701_5f690b22",
@@ -5617,7 +5692,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.539777948011369,
       "report_href": "/reports_weekly_dug/alpha_20260701_5f690b22.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "already_registered",
       "materialize": {
         "n_rows": 8477751,
         "years": [
@@ -5639,7 +5714,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "1a2086af-1939-4038-b99c-6b1ee6eae64f",
+      "platform_mean_ic": -0.032135898678759024,
+      "platform_icir": -0.22715300928048024,
+      "platform_coverage": 0.9939017275706081,
+      "platform_long_short_sharpe": -1.8141557856553425
     },
     {
       "factor_id": "alpha_20260702_9443699f",
@@ -5769,7 +5849,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.1424925784423126,
       "report_href": "/reports_weekly_dug/alpha_20260702_89d0956b.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8494590,
         "years": [
@@ -5791,7 +5871,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "68443100-5e5a-480e-a8d4-93f059f5f823",
+      "platform_mean_ic": 0.03432377670289815,
+      "platform_icir": 0.21770823566369518,
+      "platform_coverage": 0.9959127848554044,
+      "platform_long_short_sharpe": 1.5730834945183731
     },
     {
       "factor_id": "alpha_20260702_f0fd9be3",
@@ -5921,7 +6006,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 0.49523826575739344,
       "report_href": "/reports_weekly_dug/alpha_20260701_2f5c25fe.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8487106,
         "years": [
@@ -5943,7 +6028,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "7e9259f8-529a-46a8-9aad-c10ac10d821e",
+      "platform_mean_ic": 0.028706333064481056,
+      "platform_icir": 0.18613929275752686,
+      "platform_coverage": 0.9950188486508564,
+      "platform_long_short_sharpe": 0.8865669415769459
     },
     {
       "factor_id": "alpha_20260701_463d42d0",
@@ -6073,7 +6163,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.413450736262328,
       "report_href": "/reports_weekly_dug/alpha_20260701_abf0beb7.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "already_registered",
       "materialize": {
         "n_rows": 8487106,
         "years": [
@@ -6095,7 +6185,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "47e9bf15-8a91-406f-b16c-40cb204bad95",
+      "platform_mean_ic": -0.02908952575903505,
+      "platform_icir": -0.19962281517254307,
+      "platform_coverage": 0.9950188486508564,
+      "platform_long_short_sharpe": -1.7005236825709713
     },
     {
       "factor_id": "alpha_20260701_d332134b",
@@ -6151,7 +6246,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 1.396198745052759,
       "report_href": "/reports_weekly_dug/alpha_20260701_d332134b.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8492720,
         "years": [
@@ -6173,7 +6268,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "bbdfa2d5-d78d-4b43-9bd5-41b7c1e72daa",
+      "platform_mean_ic": -0.02865161563677333,
+      "platform_icir": -0.20669234982142426,
+      "platform_coverage": 0.9959127848554044,
+      "platform_long_short_sharpe": -1.0241206089428594
     },
     {
       "factor_id": "alpha_20260702_21fb502a",
@@ -6229,7 +6329,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 1.7391523099855295,
       "report_href": "/reports_weekly_dug/alpha_20260702_21fb502a.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8496455,
         "years": [
@@ -6251,7 +6351,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "37f3dd72-c1d4-4c85-8cad-06d7e93cac67",
+      "platform_mean_ic": -0.025636695419488605,
+      "platform_icir": -0.17377780998485254,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": -1.2167000096262945
     },
     {
       "factor_id": "alpha_20260702_66b498d6",
@@ -6529,7 +6634,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.2258764229711403,
       "report_href": "/reports_weekly_dug/alpha_20260702_98ed259d.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8473070,
         "years": [
@@ -6551,7 +6656,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "2ed32831-be7f-4c83-bdce-4abe76bdfc3f",
+      "platform_mean_ic": -0.024188963281758513,
+      "platform_icir": -0.2713604560776674,
+      "platform_coverage": 0.9949258649251624,
+      "platform_long_short_sharpe": -3.182255363255693
     },
     {
       "factor_id": "alpha_20260701_75057f17",
@@ -6607,7 +6717,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 1.7750363821186441,
       "report_href": "/reports_weekly_dug/alpha_20260701_75057f17.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8487106,
         "years": [
@@ -6629,7 +6739,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "899f1e44-cf03-4a5b-9564-5a9a311597d8",
+      "platform_mean_ic": 0.024012575312532744,
+      "platform_icir": 0.17189977994078537,
+      "platform_coverage": 0.9950188486508564,
+      "platform_long_short_sharpe": 1.92659901614966
     },
     {
       "factor_id": "alpha_20260703_454725cc",
@@ -6907,7 +7022,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 0.37913162719736604,
       "report_href": "/reports_weekly_dug/alpha_20260702_f204de74.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8496455,
         "years": [
@@ -6929,7 +7044,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "b38b3f9b-c9d4-434f-b9da-7e0b11edd70e",
+      "platform_mean_ic": -0.025689153012967064,
+      "platform_icir": -0.17977390492538303,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": -0.08937913936469842
     },
     {
       "factor_id": "alpha_20260702_2e48ae98",
@@ -6985,7 +7105,7 @@
       "source_label": "外部中性化候选 A",
       "long_short_return_sum": 2.1060321764661265,
       "report_href": "/reports_weekly_dug/alpha_20260702_2e48ae98.html",
-      "platform_submit": "skipped_no_formula",
+      "platform_submit": "submitted",
       "materialize": {
         "n_rows": 8496455,
         "years": [
@@ -7007,7 +7127,12 @@
       "lqtp_status": "ready",
       "lqtp_native": true,
       "has_formula": true,
-      "platform_field_ok": true
+      "platform_field_ok": true,
+      "definition_id": "c1c9390e-5205-4ea1-a461-ac06516cdf0d",
+      "platform_mean_ic": -0.02145706924054808,
+      "platform_icir": -0.16362970497164903,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": -2.0521046266480183
     },
     {
       "factor_id": "alpha_20260702_80bca4fc",
@@ -14253,11 +14378,23 @@
   ],
   "n_degenerate_filtered": 11,
   "selection_note": "Excluded near-constant / all-zero panels that can fabricate RankIC via ties.",
-  "platform_note": "已附 DSL 25/67；可转平台 25 个将提交平台；无公式 42 个继续本地面板回测。",
+  "platform_note": "本周67条：有DSL且可转平台的已提交LQTP（平台成功 25）；无DSL或字段不兼容的保留本地面板回测。returns→ret；ts_max(x,0)→where。",
   "backtested_at": "2026-08-09T00:40:45.637524",
   "formula_attach": {
     "n_with_dsl": 25,
     "n_without_dsl": 42,
     "note": "DSL 来自外部交付包；无公式者仅保留本地面板回测。"
+  },
+  "platform_summary": {
+    "n_with_dsl": 25,
+    "n_platform": 25,
+    "n_local": 42,
+    "submit_counts": {
+      "submitted": 36,
+      "already_registered": 3,
+      "duplicate_formula_skipped": 40,
+      "blocked_local_only": 1
+    },
+    "extras_submitted": 14
   }
 }

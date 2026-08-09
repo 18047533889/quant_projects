@@ -42,10 +42,18 @@ def _ensure_polars_lazyframe(lf: Any) -> Any:
 
 
 def _store_scan_polars_native(store: Any, dataset: str, read_kwargs: dict[str, Any]) -> Any:
-    """Polars long 原生路径：优先 ``scan_polars``，避免 ``ScanHandle.collect()`` 返回 ``ReadResult``。"""
-    scan_fn = getattr(store, "scan_polars", None)
-    if callable(scan_fn):
-        return scan_fn(dataset, **read_kwargs)
+    """Polars long 原生路径与 governed-lazy **统一**：走 ``store.scan()``（ScanHandle，
+    budget + snapshot 绑定），再取 composition-only LazyFrame。
+
+    #收官轮 P0（Integration，incomplete-fix bypass）：旧实现优先
+    ``store.scan_polars()`` 拿裸 LazyFrame，绕过 ScanHandle 的 collect-time
+    snapshot revalidation / terminal QueryBudget / audit——两个 helper（
+    ``scan_dataset_columns`` vs ``build_scan_polars_long``）各走一条路。现在
+    native-long 与 lazy bundle 同源：compile 链拿到真实 LazyFrame（join 参数需要），
+    而 scan 时刻的 snapshot 由 ScanHandle 绑定，collect 前由
+    ``revalidate_for_long_collect`` + budget 受控。strict 模式下
+    ``native_lazyframe()`` 抛错 = 要求走受控 collect 的 fail-closed 语义。
+    """
     return _ensure_polars_lazyframe(_store_scan(store, dataset, read_kwargs))
 
 

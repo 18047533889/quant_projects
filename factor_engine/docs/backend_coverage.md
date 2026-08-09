@@ -11,7 +11,7 @@
 - Polars non-bridge implementation: **933**
 - Polars parity verified: **0**
 - Polars production safe: **0**
-- DuckDB SQL emitter implemented: **340**
+- DuckDB SQL emitter implemented: **354**
 - DuckDB parity verified: **0**
 - DuckDB production safe: **0**
 - Polars and DuckDB both production safe: **0**
@@ -62,7 +62,7 @@
 | abnormal_turnover | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | abnormal_volume | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | abs | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| abs_return_volume_corr | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| abs_return_volume_corr | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | acos | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | add | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | adv | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
@@ -105,10 +105,10 @@
 | calendar_day_diff | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | candle_abs_body | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_body | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| candle_body_percentile | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| candle_body_percentile | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_body_position | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_body_ratio | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| candle_body_zscore | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| candle_body_zscore | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_close_location | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_close_strength | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_direction | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
@@ -118,17 +118,17 @@
 | candle_inside_ratio | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_lower_shadow | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_lower_shadow_ratio | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| candle_lower_shadow_zscore | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| candle_lower_shadow_zscore | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_overlap_ratio | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_range | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_range_atr | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| candle_range_percentile | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
-| candle_range_zscore | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| candle_range_percentile | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
+| candle_range_zscore | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_rejection_lower | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_rejection_upper | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_upper_shadow | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candle_upper_shadow_ratio | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| candle_upper_shadow_zscore | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| candle_upper_shadow_zscore | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | candlestick_pattern | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | capital_change_age | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | capital_change_magnitude | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
@@ -282,7 +282,7 @@
 | event_return_since_last | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | exp | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | exp_neg | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| expanding_rank | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| expanding_rank | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | ffill_limit | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | fillna_const | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | fin_accrual_ratio | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
@@ -437,7 +437,7 @@
 | group_decay_linear | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
 | group_distribution_js_divergence | daily | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
 | group_ex_self_mad | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
-| group_ex_self_mean | daily | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
+| group_ex_self_mean | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
 | group_ex_self_quantile | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | group_ex_self_std | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | group_ex_self_weighted_mean | daily | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
@@ -449,7 +449,7 @@
 | group_feature_spectral_gap | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | group_feature_valid_member_count | extended | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | group_impute_median | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
-| group_kurtosis | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
+| group_kurtosis | daily | yes | yes | unsupported | no | no | no | no | no | yes | no | no |
 | group_leader_laggard_exposure | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | group_max | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
 | group_mean | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
@@ -461,11 +461,11 @@
 | group_peer_deviation_index | daily | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
 | group_peer_information_diffusion | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | group_percentile | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
-| group_quantile_spread | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
+| group_quantile_spread | daily | yes | yes | unsupported | no | no | no | no | no | yes | no | no |
 | group_rank | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
 | group_return_dispersion_exposure | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | group_signal_attraction_share | research | yes | yes | polars_eager_native | no | no | no | no | yes | no | no | no |
-| group_skewness | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
+| group_skewness | daily | yes | yes | unsupported | no | no | no | no | no | yes | no | no |
 | group_spd_feature_structure_shift | extended | yes | yes | unsupported | no | no | no | no | no | no | no | no |
 | group_std | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
 | group_sum | daily | yes | yes | polars_eager_native | no | no | no | no | yes | yes | no | no |
@@ -521,7 +521,7 @@
 | ichimoku_senkou_a | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | ichimoku_senkou_b | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | ichimoku_tenkan | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| identity | internal | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| identity | internal | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | idio_skew | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | idio_vol | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
 | index_entry_exit_event | daily | yes | yes | unsupported | no | no | no | no | no | no | no | no |
@@ -1347,7 +1347,7 @@
 | turnover_volatility | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | turnover_zscore | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | ulcer_index | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
-| unitize | daily | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |
+| unitize | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | up_down_volume_ratio | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | up_volume_ratio | daily | yes | yes | expression_native | no | no | yes | yes | no | yes | no | no |
 | update_acceleration | extended | yes | yes | expression_native | no | no | yes | yes | no | no | no | no |

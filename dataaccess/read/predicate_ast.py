@@ -23,6 +23,7 @@ data_access.read.predicate_ast —— 通用过滤表达式（Filter AST）
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Sequence
 
@@ -302,7 +303,9 @@ def parse_filters(filters: Any) -> Filter | None:
         return None
     if isinstance(filters, Filter):
         return filters
-    if isinstance(filters, dict):
+    # #P1-final closure：Mapping（含不可变 MappingProxyType）——CompiledDataRequest
+    # 冻结后的 filters 也是 Mapping，不能只认 dict。
+    if isinstance(filters, Mapping):
         clauses: list[Filter] = []
         for col, value in filters.items():
             clauses.append(_build_column_filter(str(col), value))

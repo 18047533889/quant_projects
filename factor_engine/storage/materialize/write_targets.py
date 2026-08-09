@@ -371,6 +371,63 @@ class ClickHouseWriteTarget:
         return out
 
 
+#: #收官轮 P0（Integration）：write_target 严格枚举。未知/拼写错误的目标
+#: （如 ``"locla"``）必须在**任何 side effect 之前**拒绝——否则 ``write_local=False
+#: ∧ write_staging=False`` 却照样注册因子/计算 active_df/更新水位线/返回
+#: rows_written>0，出现「metadata 说已提交、物理数据根本不存在」。
+_ALLOWED_WRITE_TARGETS = frozenset({
+    "local",
+    "parquet",
+    "staging",
+    "factor_lake_staging",
+    "both",
+    "clickhouse",
+    "ch",
+    "staging_clickhouse",
+})
+
+
+def normalize_write_target(name: str) -> dict[str, Any]:
+    """严格解析 ``write_target`` → ``{local, staging, clickhouse}`` 布尔集合。
+
+    - ``local`` / ``parquet`` → 本地 lake
+    - ``staging`` / ``factor_lake_staging`` / ``staging:<dataset>`` → staging 数据集
+    - ``both`` → local + staging 双写
+    - ``clickhouse`` / ``ch`` → ClickHouse
+    - ``staging_clickhouse`` → staging + ClickHouse
+
+    未知 / 拼写错误目标 → ``ValueError``（在注册因子 / 写文件 / 更新水位线等任何
+    side effect 之前 fail-closed）。
+    """
+    raw = str(name or "local").strip().lower()
+    if not raw:
+        raw = "local"
+    if raw.startswith("staging:"):
+        dataset = raw.split(":", 1)[1].strip()
+        if not dataset:
+            raise ValueError(f"write_target 'staging:<dataset>' 需要非空 dataset，收到 {name!r}")
+        return {
+            "local": False,
+            "staging": True,
+            "clickhouse": False,
+            "staging_dataset": dataset,
+        }
+    if raw in {"local", "parquet"}:
+        return {"local": True, "staging": False, "clickhouse": False}
+    if raw in {"staging", "factor_lake_staging"}:
+        return {"local": False, "staging": True, "clickhouse": False}
+    if raw == "both":
+        return {"local": True, "staging": True, "clickhouse": False}
+    if raw in {"clickhouse", "ch"}:
+        return {"local": False, "staging": False, "clickhouse": True}
+    if raw == "staging_clickhouse":
+        return {"local": False, "staging": True, "clickhouse": True}
+    raise ValueError(
+        f"未知 FactorWriteTarget {name!r}；可用 local / staging / staging:<dataset> "
+        f"/ both / clickhouse / staging_clickhouse"
+    )
+
+
 def resolve_write_target(
     name: str,
     *,
@@ -380,25 +437,27 @@ def resolve_write_target(
     **ch_overrides: Any,
 ) -> FactorWriteTarget:
     """按名称解析因子写目标实例。
-    
+
     参数:
         name: 逻辑列名
         lake_root: 因子湖根目录（可选）
         staging_dataset: 见函数签名（可选）
         clickhouse_table: 见函数签名（可选）
-    
+
     返回:
         FactorWriteTarget
     """
-    normalized = str(name or "local").lower()
-    if normalized in {"local", "parquet"}:
+    # #收官轮 P0：统一走严格枚举（未知目标在这里拒绝），不再逐分支 if 放行。
+    flags = normalize_write_target(name)
+    if flags["local"] and not flags["staging"] and not flags["clickhouse"]:
         return LocalParquetWriteTarget(lake_root=lake_root)
-    if normalized in {"staging", "factor_lake_staging"}:
-        return StagingWriteTarget(staging_dataset)
-    if normalized.startswith("staging:"):
-        return StagingWriteTarget(normalized.split(":", 1)[1])
-    if normalized in {"clickhouse", "ch"}:
+    if flags["staging"] and not flags["local"] and not flags["clickhouse"]:
+        return StagingWriteTarget(flags.get("staging_dataset") or staging_dataset)
+    if flags["clickhouse"] and not flags["local"] and not flags["staging"]:
         return ClickHouseWriteTarget(table=clickhouse_table, **ch_overrides)
+    # ``both`` / ``staging_clickhouse`` 是多目标组合，单 target 实例无法表达，
+    # 由 ParquetMaterializer / orchestrator 消费 normalize_write_target 自行编排。
     raise ValueError(
-        f"未知 FactorWriteTarget '{name}'；可用 local / staging / staging:<dataset> / clickhouse"
+        f"write_target {name!r} 是多目标组合（both / staging_clickhouse），"
+        "不能解析为单个 FactorWriteTarget；请由 materialize orchestrator 处理。"
     )

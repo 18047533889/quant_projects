@@ -40,17 +40,20 @@ def test_production_lookup_failure_raises(monkeypatch):
 
 
 def test_research_lookup_failure_marks_unknown_not_stateless(monkeypatch):
+    # An operator NOT covered by the stateful seed is the dangerous fail-open
+    # path: before the fix, a checkpoint-registry error silently resolved it to
+    # stateless/independent.  Now research falls back with the UNKNOWN marker.
     def _boom(*a, **k):
         raise RuntimeError("checkpoint registry corrupt")
 
     import stateful_contract
 
     monkeypatch.setattr(stateful_contract.StatefulCheckpointRegistry, "get", _boom)
-    c = execution_contract("ts_ema")  # research default
+    c = execution_contract("nonsense_operator_xyz")  # research default
     assert c.resolution_error == "UNKNOWN_EXECUTION_CONTRACT"
     # fail-closed: an unresolved contract is treated as full-history, NOT
     # stateless and NOT a finite independent window.
-    assert c.state_model != "stateless"
+    assert c.state_model == "unknown"
     assert c.requires_full_history is True
 
 
@@ -62,7 +65,7 @@ def test_history_requirement_production_raises(monkeypatch):
 
     monkeypatch.setattr(stateful_contract.StatefulCheckpointRegistry, "get", _boom)
     with pytest.raises(ExecutionContractResolutionError):
-        history_requirement("ts_ema", {"window": 20}, production=True)
+        history_requirement("nonsense_operator_xyz", {"window": 20}, production=True)
 
 
 def test_history_requirement_research_unknown_is_full_history(monkeypatch):
@@ -72,5 +75,5 @@ def test_history_requirement_research_unknown_is_full_history(monkeypatch):
     import stateful_contract
 
     monkeypatch.setattr(stateful_contract.StatefulCheckpointRegistry, "get", _boom)
-    req = history_requirement("ts_ema", {"window": 20})
+    req = history_requirement("nonsense_operator_xyz", {"window": 20})
     assert req.kind == "full_history"  # unknown contract => conservative

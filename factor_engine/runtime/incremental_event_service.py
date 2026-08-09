@@ -14,7 +14,7 @@ from typing import Any, Sequence
 from runtime.incremental_scheduler import (
     DataEvent,
     execute_incremental_updates_from_event,
-    normalize_data_event,
+    normalize_data_event as _normalize_data_event,
     plan_updates_from_data_event,
 )
 from storage.materializer import ParquetMaterializer
@@ -22,7 +22,7 @@ from storage.materializer import ParquetMaterializer
 
 def normalize_data_event(event: DataEvent | dict[str, Any]) -> DataEvent:
     """Normalize a dict / ``DataEvent`` to :class:`DataEvent` (R10 #53)."""
-    return normalize_data_event(event)
+    return _normalize_data_event(event)
 
 
 def _event_summary(event: DataEvent) -> dict[str, Any]:

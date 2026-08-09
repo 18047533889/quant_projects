@@ -75,6 +75,28 @@ def segmented_incremental_available(*, ir) -> bool:
     return canonicals[0] == ir.op and ir.op in SEGMENTED_EXECUTION_CANONICALS
 
 
+def _source_snapshot_scope(source: Any) -> str:
+    """Window-independent data-snapshot scope for the checkpoint identity.
+
+    R10-P0-019: ``compute_data_scope`` includes the query window (start/end),
+    which must NOT be part of the checkpoint fingerprint — the SAME data
+    snapshot queried over a different incremental window must resume the same
+    checkpoint.  Only the dataset / read options / snapshot-id carry the data
+    identity.
+    """
+    try:
+        import copy
+
+        from storage.data_scope import compute_data_scope
+
+        probe = copy.copy(source)
+        probe.start_date = None
+        probe.end_date = None
+        return compute_data_scope(probe)
+    except Exception:  # pragma: no cover - scope failure must not block resume
+        return "ephemeral"
+
+
 def _root_series_and_params(ir, canonical: str) -> tuple[list[str], dict[str, Any]] | None:
     """Extract the root's source columns and operator parameters.
 
@@ -175,11 +197,20 @@ def try_stateful_segmented_incremental(
     # keeps the source's original (naive) index so the result matches a full run.
     segment_timestamps = pd.to_datetime(reference.index, utc=True)
 
+    # R10-P0-019: the checkpoint identity must be bound to the DATA SNAPSHOT,
+    # not just the formula.  ``_effective_identity`` fingerprints everything in
+    # ``input_identity``, and ``require_for_segment`` re-checks it on resume —
+    # so a checkpoint written against an older dataset / read-mode / snapshot
+    # is rejected (fail-closed to full replay) instead of resuming stale state.
+    # The scope is computed WITHOUT the query window (start/end) so an
+    # incremental resume across a different output window still matches.
+    source_scope = _source_snapshot_scope(source)
     input_identity: dict[str, Any] = {
         "factor_id": str(factor_id),
         "canonical": canonical,
         "input_columns": input_names,
         "params": params,
+        "source_snapshot_scope": source_scope,
     }
 
     # Audit #379: the complete (timestamp, instrument) grid the source anchors.

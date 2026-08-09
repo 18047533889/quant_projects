@@ -128,8 +128,21 @@ def test_production_gate_rejects_research_only_precompiled_plan():
         )
 
 
-def test_production_gate_accepts_production_plan():
-    plan = PlanNode(op="ts_mean", attrs={"window": 20}, inputs=[_col("close")])
+def test_production_gate_accepts_clean_plan():
+    # a plan with no operators (just a column) has nothing to reject
+    plan = _col("close")
     _assert_production_plan_gates(
         plan, _FakeAnalysis(), run_mode="production", context="run:test"
+    )
+
+
+def test_production_gate_noop_in_research_mode():
+    # research mode never enforces the production operator gate
+    plan = PlanNode(
+        op="panel_rolling_pca_loading",
+        attrs={"window": 60, "component": 0},
+        inputs=[_col("ret")],
+    )
+    _assert_production_plan_gates(
+        plan, _FakeAnalysis(), run_mode="research", context="run:test"
     )

@@ -53,6 +53,45 @@ roundtrip）；`factor_engine/tests/integration/test_final_closure_fe_integratio
 （空股票池 / read_mode 贯穿 / semantic_filters 落 WHERE / PIT UNKNOWN fail-closed /
 catalog 无二次 scale / long collect revalidate / 真实 A股 eager==lazy==raw×1e-4）。
 
+### 0.9.8 追加：3+1 排除式复查收官（2026-08-09）
+
+按最新已提交 `a2dc80c` 的排除式检查，收掉「真正收官项」（外部 AI：这批补完即
+Core Freeze，不再扩架构）。改动只在 `dataaccess/` 树。
+
+- **ReadPlan / CompiledDataRequest 真正 immutable**（R12-1）：`compile_data_request`
+  的 `source_params / joins / join_specs / filters_by_dataset / field_params /
+  transforms` 从普通 dict 改为深冻结的 `MappingProxyType`（`_immutable` 递归冻结
+  dict→proxy、list/set→tuple/frozenset）。`ReadPlan` 改 `@dataclass(frozen=True)`，
+  `__post_init__` 把 `datasets / per_dataset_columns / join_policies / scan_costs /
+  storage / snapshot_info / join_specs_effective / plan_snapshot_tokens /
+  plan_pinned_files` 全部冻结成 tuple / MappingProxyType。plan() 之后
+  `plan.datasets.clear()`、`plan.per_dataset_columns["x"]=[...]`、
+  `plan.snapshot_policy="pin"`、`plan.compiled.source_params["x"]["y"]="z"` 全部
+  TypeError——「plan 即声明」真正成立（explain 显示 == execute 执行）。
+- **`read()` 的 `engine/result` strict enum**（R12-2）：`_read_handle` 顶部
+  `validate_engine_result`——`engine="polarr"` / `result="lazzy"` 不再静默落到
+  duckdb 物化路径，未知值直接 `ValidationError`（auto/duckdb/polars/pyarrow ×
+  auto/arrow/pandas/polars/lazy/stream，大小写归一）。
+- **Typed DataRequest**（R12-2b）：`__post_init__` 严格校验——`pit` /
+  `normalize_units` / `time_varying_universe` 必须真 bool（`pit="false"` 不再
+  bool()→True）、`limit` 非负 int|None（bool/负数/float 拒绝）、`engine` /
+  `result` / `snapshot_policy` 严格 enum。`compile_data_request` 同步严格。
+- **`factor_lake_wide` contract 修正**（R12-3）：宽表是 `datetime × {asset}` 的
+  pivot，**asset 是列轴不是物理列**。registry 新增 `specialized_only` +
+  `specialized_only_reason`（裸标记无 reason 启动即拒）；`factor_lake_wide` 移除
+  误导性的 `instrument_column: asset` 并标记 specialized_only；`_prepare_read_request`
+  门禁覆盖所有 read/scan/sql 路径（`read` / `read_arrow` / `scan_polars` /
+  `read_result` 全拒绝）。宽因子读取走 `read_factors(layout="wide")` / factor_matrix。
+- **ReadLineage 保留 None/[] + params 不可变**（R12-4）：`instrument_filter` 改
+  `tuple[str,...] | None`（None=全市场，( )=空股票池，provenance 不再折叠）；
+  `lineage_params()` 把 stream/aggregation 路径的 mutable dict canonicalize 成
+  不可变 `(k, v)` tuple 序列。
+
+**新增回归测试**：`dataaccess/tests/unit/test_final_closure_round12.py`（16 项：
+plan/compiled 不可变性 + execute 按 plan 时刻语义执行、engine/result/typed 拒绝、
+factor_lake_wide specialized_only 全路径拒绝 + 无 reason 拒绝、ReadLineage None/[]
++ params 不可变）。
+
 ## 0.9.7 — 收官轮：真实数据 + 运行时 + 破坏性修复（Core Freeze 定版）
 
 0.9.6 之后的**最后一轮**（真实 A股/美股 数据 + 并发/crash/破坏性测试驱动）修复：

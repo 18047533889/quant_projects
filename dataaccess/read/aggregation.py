@@ -537,6 +537,7 @@ def _audit_and_handle(
         ReadLineage,
         ReadStats,
         build_data_snapshot,
+        lineage_params,
     )
     from data_access.read.read_handle import ReadHandle
 
@@ -553,8 +554,14 @@ def _audit_and_handle(
         dataset=dataset,
         columns=tuple(spec_info.get("fields") or ()) if spec_info else (),
         time_range=time_range,
-        instrument_filter=tuple(instrument_filter or ()),
-        params=params or None,
+        # #P1-final closure：None（全市场）与 []（空池）必须保留区别。
+        instrument_filter=(
+            tuple(instrument_filter)
+            if instrument_filter is not None
+            else None
+        ),
+        # #P1-final closure：params canonicalize 成不可变 tuple。
+        params=lineage_params(params),
     )
     stats = ReadStats(rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms)
     extra: dict[str, Any] = {"aggregation": True}

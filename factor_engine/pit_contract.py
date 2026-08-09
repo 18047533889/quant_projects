@@ -2,11 +2,14 @@
 """Point-in-time contracts for fundamental event data before factor calculation."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Literal
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 VisiblePeriodSelector = Literal["latest_visible_period", "annual_only", "quarterly_only"]
 
@@ -130,7 +133,11 @@ def _market_visible_shift(
     if market_calendar is None:
         return k
     cal = pd.DatetimeIndex(market_calendar)
-    if getattr(cal.tz, "zone", None):
+    # R10 #8: tz detection must be ``cal.tz is not None`` — for a UTC-aware
+    # DatetimeIndex ``getattr(cal.tz, "zone", None)`` is None (zone is a pytz
+    # concept), so the old check wrongly fell into ``tz_localize("UTC")`` on an
+    # already-tz-aware index and raised "Already tz-aware".
+    if cal.tz is not None:
         cal_local = cal.tz_convert(market_timezone).tz_localize(None)
     else:
         cal_local = cal.tz_localize("UTC").tz_convert(market_timezone).tz_localize(None)
@@ -174,6 +181,57 @@ def validate_fundamental_events(events: pd.DataFrame, columns: PITColumns = PITC
         raise ValueError(f"duplicate fundamental event vintages on keys={keys}")
 
 
+def _same_day_precision_check(
+    available: pd.Series,
+    *,
+    production: bool,
+    dataset: str,
+) -> None:
+    """R10 #46: ``same_day`` requires TIMESTAMP-precision availability.
+
+    A date-only ``PubDate`` (midnight, e.g. ``2026-08-01 00:00:00``) under
+    ``same_day`` lets an after-close filing drive that same day's close (leak).
+    Production rejects any event whose ``available_at`` is date-only; research
+    keeps the legacy opt-in but warns loudly.
+    """
+    avail = pd.to_datetime(available, errors="coerce", utc=True)
+    midnight = pd.Timestamp("00:00:00").time()
+    has_date_only = avail.notna().any() and bool(
+        (avail.dt.time == midnight).any()
+    )
+    if not has_date_only:
+        return
+    if production:
+        raise ValueError(
+            f"same_day PIT on {dataset!r} requires TIMESTAMP-precision "
+            "available_at (AvailabilityPrecision.TIMESTAMP); date-only "
+            "(midnight) PubDate cannot safely drive a same-day decision — "
+            "use next_trading_day or provide real announcement timestamps."
+        )
+    logger.warning(
+        "same_day PIT on %r uses date-only (midnight) available_at; "
+        "after-close filing could leak into the same day's close. "
+        "production rejects this; research keeps legacy behaviour.",
+        dataset,
+    )
+
+
+def _pit_tie_break_columns(columns: PITColumns, frame: pd.DataFrame) -> list[str]:
+    """Deterministic tie-break for same-instrument/same-available_at candidates.
+
+    R10 #45: ``merge_asof`` picks the LAST row among exact key ties, so the
+    ``right`` frame must be sorted by a total order — never left to original row
+    order.  Preference: later ``period_end`` (newer report) wins; then a later
+    ``revision_id`` (newer revision) wins.
+    """
+    cols: list[str] = [columns.available_at, columns.instrument]
+    if columns.period_end in frame.columns:
+        cols.append(columns.period_end)
+    if columns.revision_id in frame.columns:
+        cols.append(columns.revision_id)
+    return cols
+
+
 def pit_asof_join(
     decisions: pd.DataFrame,
     events: pd.DataFrame,
@@ -185,6 +243,7 @@ def pit_asof_join(
     market_calendar: pd.DatetimeIndex | None = None,
     market_timezone: str = "UTC",
     staleness_basis: Literal["knowledge_at", "market_visible_at"] = "knowledge_at",
+    production: bool = False,
 ) -> pd.DataFrame:
     """Backward as-of join enforcing ``market_visible_at <= decision_timestamp``.
 
@@ -230,11 +289,30 @@ def pit_asof_join(
         raise ValueError(f"decisions missing {decision_time!r}")
     if columns.instrument not in decisions.columns:
         raise ValueError(f"decisions missing {columns.instrument!r}")
+    # R10 #8: ``next_trading_day`` defines market visibility via the exchange
+    # calendar.  Without one the decision-grid fallback CONFLATES
+    # ``market_visible_at`` with ``decision_at`` — production must reject, never
+    # fall back.
+    if (
+        production
+        and available_policy == "next_trading_day"
+        and market_calendar is None
+    ):
+        raise ValueError(
+            "production PIT with available_policy='next_trading_day' requires "
+            "a real exchange calendar (market_calendar + market_timezone); the "
+            "decision-grid fallback conflates market_visible_at with decision_at."
+        )
 
     left = decisions.copy()
     right = events.copy()
     left[decision_time] = pd.to_datetime(left[decision_time], errors="raise", utc=True)
     right[columns.available_at] = pd.to_datetime(right[columns.available_at], errors="raise", utc=True)
+    # R10 #46: same_day requires TIMESTAMP precision.
+    if available_policy == "same_day":
+        _same_day_precision_check(
+            right[columns.available_at], production=production, dataset=columns.instrument
+        )
     # R9-P0-020: preserve the ORIGINAL announcement time under a distinct name —
     # the join key below is the market-visible time, so ``available_at`` in the
     # output stays the shifted join key (backward compatible) while the true
@@ -246,10 +324,10 @@ def pit_asof_join(
                 right[columns.available_at], market_calendar, market_timezone=market_timezone
             )
         else:
-            # Fallback (legacy): shift to the next DECISION grid timestamp.  This
-            # conflates market visibility with the factor's own decision cadence
-            # and understates age; documented for backward compatibility — pass
-            # ``market_calendar`` for production PIT.
+            # Fallback (legacy, research only): shift to the next DECISION grid
+            # timestamp.  This conflates market visibility with the factor's own
+            # decision cadence and understates age; documented for backward
+            # compatibility — production requires ``market_calendar`` (R10 #8).
             market_visible = _shift_available_to_next_decision(
                 right[columns.available_at], left, decision_time=decision_time
             )
@@ -270,7 +348,12 @@ def pit_asof_join(
     left = left.copy()
     left["__pit_row_order__"] = range(len(left))
     left = left.sort_values([decision_time, columns.instrument]).reset_index(drop=True)
-    right = right.sort_values([columns.available_at, columns.instrument]).reset_index(drop=True)
+    # R10 #45: merge_asof returns the LAST row among exact key ties, so the
+    # right frame must have a deterministic total order — newest period_end wins,
+    # then newest revision_id.  Original-row order is never used to break ties.
+    right = right.sort_values(
+        _pit_tie_break_columns(columns, right)
+    ).reset_index(drop=True)
 
     joined = pd.merge_asof(
         left,
@@ -324,6 +407,7 @@ def select_visible_row_bundles(
     available_policy: AvailablePolicy = "next_trading_day",
     market_calendar: pd.DatetimeIndex | None = None,
     market_timezone: str = "UTC",
+    production: bool = False,
 ) -> pd.DataFrame:
     """Select one whole visible report row for every decision.
 
@@ -335,9 +419,20 @@ def select_visible_row_bundles(
     visible to the first exchange session (``market_calendar`` / market
     timezone, when provided) strictly after ``PubDate``; ``same_day`` is
     the legacy exact-match behaviour for callers with real timestamps.
+    ``production`` (R10 #8/#46) rejects next_trading_day without a market
+    calendar and same_day on date-only availability.
     """
     if available_policy not in {"same_day", "next_trading_day"}:
         raise ValueError(f"unknown available policy {available_policy!r}")
+    if (
+        production
+        and available_policy == "next_trading_day"
+        and market_calendar is None
+    ):
+        raise ValueError(
+            "production PIT with available_policy='next_trading_day' requires "
+            "a real exchange calendar (market_calendar + market_timezone)."
+        )
     validate_fundamental_events(events, columns)
     if decision_time not in decisions.columns or columns.instrument not in decisions.columns:
         raise ValueError("decisions missing PIT decision columns")
@@ -351,6 +446,11 @@ def select_visible_row_bundles(
     filtered[columns.period_end] = pd.to_datetime(
         filtered[columns.period_end], errors="raise", utc=True
     )
+    # R10 #46: same_day requires TIMESTAMP precision.
+    if available_policy == "same_day":
+        _same_day_precision_check(
+            filtered[columns.available_at], production=production, dataset=columns.instrument
+        )
     # R9-P0-019/021: preserve the original knowledge time; visibility is the
     # market-session time, distinct from the factor's decision cadence.
     filtered["knowledge_at"] = filtered[columns.available_at]
@@ -381,6 +481,9 @@ def select_visible_row_bundles(
             continue
         latest_period = visible[columns.period_end].max()
         candidates = visible.loc[visible[columns.period_end] == latest_period]
+        # R10 #45: deterministic total order — newest period_end already selected
+        # above; within the latest period the newest revision wins, ties broken
+        # by available_at (later announcement), never by original row order.
         sort_columns = [columns.available_at]
         if columns.revision_id in candidates.columns:
             sort_columns.append(columns.revision_id)

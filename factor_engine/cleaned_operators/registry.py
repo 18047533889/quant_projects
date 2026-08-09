@@ -75,20 +75,45 @@ def _freeze_const(value: Any) -> Any:
 
 
 def _code_payload(code: Any, *, include_names: bool) -> str:
-    """Deterministic digest of a ``types.CodeType`` object.
+    """Deterministic digest of a ``types.CodeType`` object (R10 #13).
 
-    Hashes bytecode (``co_code``) plus the (sorted) constants and, when
-    requested, the (sorted) ``co_names``.  Sorting keeps the digest stable under
-    compiler reorderings while still distinguishing genuinely different kernels.
+    Computes a normalized implementation identity from the DISASSEMBLED
+    bytecode: an ordered ``[(opname, resolved_operand), ...]`` sequence where
+    every operand is resolved to its actual value —
+
+    * ``LOAD_CONST`` -> the frozen constant value (nested code objects recurse
+      through :func:`_freeze_const`);
+    * name ops (``LOAD_GLOBAL`` / ``LOAD_NAME`` / ``LOAD_ATTR`` / ...) -> the
+      actual name string when ``include_names`` is true, otherwise the raw arg
+      (the positional index into ``co_names``);
+    * every other op -> the raw argument.
+
+    The tuples are NEVER sorted: bytecode operands reference the ORIGINAL
+    ``co_consts`` / ``co_names`` tuple index, so sorting breaks the
+    index->value correspondence and lets ``2*x+3`` collide with ``3*x+2`` (same
+    constant set ``{2, 3}`` with structurally identical bytecode and resolved
+    indices).  ``dis.get_instructions`` is deterministic across processes
+    (bytecode disassembly does not depend on hash seeds or memory addresses),
+    so the digest is stable.
     """
+    import dis
     import hashlib
 
-    consts = tuple(
-        sorted((_freeze_const(c) for c in code.co_consts), key=repr)
-    )
-    names = tuple(sorted(code.co_names)) if include_names else ()
-    payload = (code.co_code, consts, names)
-    return hashlib.sha256(repr(payload).encode("utf-8")).hexdigest()[:16]
+    name_codes = frozenset(dis.hasname)
+    ops: list[tuple[str, Any]] = []
+    for instr in dis.get_instructions(code):
+        if instr.opname == "CACHE":  # adaptive-interpreter noise, not semantic
+            continue
+        opname = instr.opname
+        arg = instr.arg
+        if opname == "LOAD_CONST" and arg is not None:
+            resolved = _freeze_const(code.co_consts[arg])
+        elif arg is not None and instr.opcode in name_codes:
+            resolved = code.co_names[arg] if include_names else arg
+        else:
+            resolved = arg
+        ops.append((opname, resolved))
+    return hashlib.sha256(repr(tuple(ops)).encode("utf-8")).hexdigest()[:16]
 
 
 def _freeze_value(value: Any) -> str:
@@ -124,6 +149,12 @@ def _freeze_value(value: Any) -> str:
             + _freeze_value(value.value)
             + ")"
         )
+    if value is MISSING:
+        # R7-222 sentinel: "no default declared" is a distinct semantic payload
+        # from an explicit ``None`` default.  Previously this raised a cryptic
+        # TypeError; R10 #14 makes it a first-class canonical payload so e.g. a
+        # ParamSpec with ``default=MISSING`` freezes deterministically.
+        return "MISSING"
     if value is None or isinstance(value, (bool, int, str, bytes, complex)):
         return repr(value)
     if isinstance(value, float):
@@ -151,10 +182,19 @@ def _freeze_value(value: Any) -> str:
         ) + "}"
     if isinstance(value, np.ndarray):
         # dtype + shape + raw bytes: the bytes encode the exact numeric payload.
-        try:
-            blob = np.ascontiguousarray(value).tobytes()
-        except (TypeError, ValueError):  # non-contiguous / object dtype
-            blob = repr(value.tolist()).encode("utf-8")
+        if value.dtype.kind == "O":
+            # R10 #14: object-dtype arrays must NEVER hash their raw bytes —
+            # ``ndarray.tobytes()`` on an object array returns the element
+            # POINTERS, which embed memory addresses and drift across processes.
+            # Canonical recursive freeze of every element; elements that cannot
+            # be canonically frozen raise a clear TypeError instead of silently
+            # producing an address-dependent digest.
+            blob = ",".join(_freeze_value(v) for v in value.flat).encode("utf-8")
+        else:
+            try:
+                blob = np.ascontiguousarray(value).tobytes()
+            except (TypeError, ValueError):  # mixed / unsupported numeric dtype
+                blob = ",".join(_freeze_value(v) for v in value.flat).encode("utf-8")
         return f"ndarray({value.dtype},{value.shape}," + hashlib.sha256(blob).hexdigest()[:16] + ")"
     if isinstance(value, np.datetime64):
         try:
@@ -190,21 +230,26 @@ def _freeze_value(value: Any) -> str:
                 if _v is pd.NaT or (isinstance(_v, float) and _v != _v):
                     _vals.append("NaT")
                 else:
-                    _vals.append(_v.isoformat() if hasattr(_v, "isoformat") else repr(_v))
+                    _vals.append(_v.isoformat() if hasattr(_v, "isoformat") else _freeze_value(_v))
             idx_vals = _h.sha256(",".join(_vals).encode("utf-8")).hexdigest()[:16]
             tz = str(idx.tz)
         elif isinstance(idx, pd.MultiIndex):
-            idx_vals = _h.sha256(repr(list(idx)).encode("utf-8")).hexdigest()[:16]
+            # R10 #14: MultiIndex levels may hold arbitrary labels (tuples,
+            # timestamps, object elements) — freeze recursively, never repr()
+            # (repr of the level tuple list embeds object addresses).
+            idx_vals = _h.sha256(
+                _freeze_value(list(idx)).encode("utf-8")
+            ).hexdigest()[:16]
             tz = ""
         else:
             idx_vals = _h.sha256(
-                ",".join("NaT" if v is pd.NaT else repr(v) for v in idx).encode("utf-8")
+                ",".join(_freeze_value(v) for v in idx).encode("utf-8")
             ).hexdigest()[:16]
             tz = ""
         idx_name = (
-            "|".join(repr(n) for n in idx.names)
+            "|".join(_freeze_value(n) for n in idx.names)
             if isinstance(idx, pd.MultiIndex)
-            else repr(idx.name)
+            else _freeze_value(idx.name)
         )
         # NaN mask: canonicalizes the many NaN bit patterns AND distinguishes a
         # real NaN from a numerically-equal placeholder (e.g. 0.0).
@@ -216,9 +261,10 @@ def _freeze_value(value: Any) -> str:
         try:
             arr = value.to_numpy(dtype=float)
         except (TypeError, ValueError):
-            # non-numeric / object columns: hash the canonicalised repr list.
+            # non-numeric / object columns: hash the canonical recursive freeze
+            # (R10 #14) — never a repr-based digest of object cells.
             payload = _h.sha256(
-                repr(value.to_numpy(dtype=object).tolist()).encode("utf-8")
+                _freeze_value(value.to_numpy(dtype=object).tolist()).encode("utf-8")
             ).hexdigest()[:16]
         else:
             try:
@@ -227,8 +273,10 @@ def _freeze_value(value: Any) -> str:
                     arr = arr.copy()
                     arr[mask] = 0.0  # NaN -> fixed byte pattern; mask records it
                 payload = _h.sha256(arr.tobytes()).hexdigest()[:16]
-            except Exception:
-                payload = _h.sha256(repr(arr.tolist()).encode("utf-8")).hexdigest()[:16]
+            except (TypeError, ValueError):
+                payload = _h.sha256(
+                    _freeze_value(arr.tolist()).encode("utf-8")
+                ).hexdigest()[:16]
         return (
             f"DataFrame(cols={cols}|dtypes={dtypes}|idx=({idx_vals})|"
             f"idxname={idx_name}|tz={tz}|mask={mask_hex}|payload={payload})"
@@ -239,7 +287,7 @@ def _freeze_value(value: Any) -> str:
         import hashlib as _h
 
         _dt = str(value.dtype)
-        _name = repr(value.name)
+        _name = _freeze_value(value.name)
         _idx = value.index
         if isinstance(_idx, pd.DatetimeIndex):
             _vlist: list[str] = []
@@ -247,12 +295,14 @@ def _freeze_value(value: Any) -> str:
                 if _v is pd.NaT or (isinstance(_v, float) and _v != _v):
                     _vlist.append("NaT")
                 else:
-                    _vlist.append(_v.isoformat() if hasattr(_v, "isoformat") else repr(_v))
+                    _vlist.append(_v.isoformat() if hasattr(_v, "isoformat") else _freeze_value(_v))
             _idx_hex = _h.sha256(",".join(_vlist).encode("utf-8")).hexdigest()[:16]
             _tz = str(_idx.tz)
         else:
+            # R10 #14: canonical recursive freeze of each index label — never
+            # repr() (object labels embed addresses).
             _idx_hex = _h.sha256(
-                ",".join("NaT" if v is pd.NaT else repr(v) for v in _idx).encode("utf-8")
+                ",".join(_freeze_value(v) for v in _idx).encode("utf-8")
             ).hexdigest()[:16]
             _tz = ""
         try:
@@ -267,8 +317,10 @@ def _freeze_value(value: Any) -> str:
                 _arr[_mask] = 0.0
             _payload = _h.sha256(_arr.tobytes()).hexdigest()[:16]
         except (TypeError, ValueError):
+            # R10 #14: object-dtype payload -> canonical recursive freeze, never
+            # a repr-based digest (object cell reprs embed addresses).
             _payload = _h.sha256(
-                repr(value.to_numpy(dtype=object).tolist()).encode("utf-8")
+                _freeze_value(value.to_numpy(dtype=object).tolist()).encode("utf-8")
             ).hexdigest()[:16]
         return (
             f"Series(dtype={_dt}|name={_name}|idx=({_idx_hex})|tz={_tz}|"
@@ -643,6 +695,112 @@ def _merge_param_names(existing: list[str] | None, new: list[str] | None) -> lis
     # remains the first registered declaration; backend-specific details are
     # retained in backend metadata and validated by execution tests.
     return old
+
+
+# R10 #15: canonical-contract fields that a silent merge/rename must never
+# drop or overwrite.  Two canonicals merging under the same name must agree on
+# every one of these that BOTH declare (the "first non-empty wins" rule applies
+# when exactly one side declares a value).  ``param_names`` is deliberately
+# excluded: legacy dialect renames (``ts_regression`` -> ``ts_regression_slope``)
+# legitimately differ in their positional names, and the canonical positional
+# contract is already governed by :func:`_merge_param_names`.  ``aliases`` and
+# ``backends`` are excluded because they are UNIONED, not required to match.
+_CANONICAL_CONTRACT_FIELDS: tuple[str, ...] = (
+    "param_specs",
+    "param_aliases",
+    "panel_params",
+    "scalar_params",
+    "input_units",
+    "output_unit",
+    "compatible_units",
+    "input_grain",
+    "output_grain",
+    "available_at",
+    "same_session_usable",
+    "input_fields",
+    "window_semantics",
+    "semantic_version",
+    "role",
+    "input_arity",
+    "panel_arity",
+    "total_positional_arity",
+)
+
+# Backend-keyed catalog fields: on a merge the values for backends the target
+# does NOT already hold must be carried over — they must never be silently
+# dropped.  Backend-keyed fields are NOT conflict-checked: for a backend BOTH
+# sides hold, the target's backend wins (the source's backend operator is
+# discarded, not moved), so a different source/provenance there is expected and
+# not a contract violation.
+_BACKEND_KEYED_CATALOG_FIELDS: tuple[str, ...] = (
+    "backend_meta",
+    "backend_signatures",
+)
+
+
+def _catalog_field_is_declared(value: Any) -> bool:
+    """Is ``value`` a non-empty declared contract value?
+
+    ``None``, empty containers and empty strings mean "not declared" — the
+    other side of a merge may fill them in.  Everything else (including ``False``,
+    ``0`` and ``""``-adjacent sentinels) is a real declaration.
+    """
+    if value is None:
+        return False
+    if isinstance(value, (str, list, tuple, dict, set, frozenset)):
+        return len(value) > 0
+    return True
+
+
+def _contract_conflicts(cat_a: Mapping, cat_b: Mapping) -> list[tuple[str, Any, Any]]:
+    """Rich-contract fields where BOTH catalog dicts declare a non-empty value
+    and those values differ (R10 #15).
+
+    Used to prove that a merge of two canonicals under the same name is
+    contract-preserving: a conflict means the merge would silently overwrite one
+    side's declared param_specs / argument roles / units / grains / availability
+    / semantic version / history semantics / backend provenance.
+    """
+    conflicts: list[tuple[str, Any, Any]] = []
+    for key in _CANONICAL_CONTRACT_FIELDS:
+        av = cat_a.get(key)
+        bv = cat_b.get(key)
+        if _catalog_field_is_declared(av) and _catalog_field_is_declared(bv) and av != bv:
+            conflicts.append((key, av, bv))
+    return conflicts
+
+
+def _raise_contract_conflict(old: str, new: str, conflicts: list[tuple[str, Any, Any]]) -> None:
+    """Raise the R10 #15 merge-failure error for a non-empty conflict list."""
+    detail = "; ".join(f"{key}: {av!r} vs {bv!r}" for key, av, bv in conflicts[:6])
+    raise ValueError(
+        f"cannot merge canonical {old!r} into {new!r}: rich canonical contracts "
+        f"differ (R10 #15) — {detail}.  A merge/rename must not silently drop or "
+        "overwrite param_specs / argument roles / units / compatible units / "
+        "grains / availability / semantic version / backend provenance / "
+        "history semantics."
+    )
+
+
+def _merge_catalog_contracts(target: dict, source: Mapping, *, keep: str) -> dict:
+    """Merge ``source``'s rich contract into ``target`` without dropping fields.
+
+    R10 #15: the target (the surviving canonical) keeps every field it already
+    declares; the source fills in any field the target is MISSING (``None`` /
+    empty).  Backend-keyed fields are merged per backend.  ``keep`` names the
+    canonical that owns the final dict (used to rewrite the ``canonical`` key).
+    """
+    merged = dict(target)
+    for key, value in source.items():
+        if key in _BACKEND_KEYED_CATALOG_FIELDS:
+            merged.setdefault(key, {})
+            for backend, meta in (value or {}).items():
+                merged[key].setdefault(backend, meta)
+        elif key not in merged or not _catalog_field_is_declared(merged.get(key)):
+            if _catalog_field_is_declared(value):
+                merged[key] = value
+    merged["canonical"] = keep
+    return merged
 
 
 class OperatorRegistry:
@@ -1174,6 +1332,33 @@ class OperatorRegistry:
                 prev.get("panel_params"),
                 tuple(getattr(_metadata, "panel_params", None) or ()),
             ),
+            "scalar_params": _first_non_null(
+                prev.get("scalar_params"),
+                tuple(getattr(_metadata, "scalar_params", None) or ()),
+            ),
+            "role": _first_non_null(
+                prev.get("role"),
+                getattr(_metadata, "role", None),
+            ),
+            "input_arity": _first_non_null(
+                prev.get("input_arity"),
+                getattr(_metadata, "input_arity", None),
+            ),
+            "panel_arity": _first_non_null(
+                prev.get("panel_arity"),
+                getattr(_metadata, "panel_arity", None),
+            ),
+            "total_positional_arity": _first_non_null(
+                prev.get("total_positional_arity"),
+                getattr(_metadata, "total_positional_arity", None),
+            ),
+            # R10 #15: semantic version is part of the canonical contract and must
+            # survive merges/renames — persist it on the catalog dict here (first
+            # non-empty wins) so it is never lost when a backend marker is added.
+            "semantic_version": _first_non_null(
+                prev.get("semantic_version"),
+                str(semantic_version or ""),
+            ),
         })
         # Keep legacy catalog readers from seeing a registration-order-dependent
         # source.  New consumers must use backend_meta[backend].source.
@@ -1294,6 +1479,25 @@ class OperatorRegistry:
         description: str = "",
         source: str = "",
         merge_existing: bool = False,
+        # R10 #15: optional rich-contract overlay fields.  When merging onto an
+        # existing canonical (``merge_existing=True``) a declared overlay field
+        # must EQUAL the existing canonical's value — a catalog-only overlay must
+        # never silently rewrite the runtime-backed contract.  When the existing
+        # canonical has no value for the field, the overlay value is preserved.
+        param_specs: Optional[dict] = None,
+        param_aliases: Optional[dict] = None,
+        panel_params: Optional[tuple] = None,
+        scalar_params: Optional[tuple] = None,
+        input_units: Optional[dict] = None,
+        output_unit: Optional[str] = None,
+        compatible_units: Optional[dict] = None,
+        input_grain: Optional[str] = None,
+        output_grain: Optional[str] = None,
+        available_at: Optional[str] = None,
+        same_session_usable: Optional[bool] = None,
+        input_fields: Optional[List[str]] = None,
+        window_semantics: Optional[str] = None,
+        semantic_version: Optional[str] = None,
     ) -> None:
         """登记仅文档/catalog 占位条目（无 runtime 实现）。
 
@@ -1307,6 +1511,13 @@ class OperatorRegistry:
             merge_existing: 若 canonical 已有 runtime 而仍要覆盖 catalog，必须
                 显式置 True（P1-38），否则拒绝——避免
                 ``runtime 存在但 catalog.backends=[]/param_names=[]`` 的分裂状态。
+            其余 ``param_specs`` / ``param_aliases`` / ``panel_params`` /
+            ``scalar_params`` / ``input_units`` / ``output_unit`` /
+            ``compatible_units`` / ``input_grain`` / ``output_grain`` /
+            ``available_at`` / ``same_session_usable`` / ``input_fields`` /
+            ``window_semantics`` / ``semantic_version``: 可选 rich-contract
+            覆盖字段（R10 #15）。``merge_existing=True`` 时若传入且与既有
+            canonical 的声明值不同则报错；既有值为空时则保留传入值。
 
         返回:
             None
@@ -1326,23 +1537,61 @@ class OperatorRegistry:
         for alias in stale_aliases:
             if cls._aliases.get(alias) == canonical:
                 cls._aliases.pop(alias, None)
-        # P1-38: with merge_existing=True, preserve the runtime-backed contract
-        # (backends / param_names) instead of resetting it to [] — that split
-        # state is what the guard above exists to prevent.
-        cls._catalog[canonical] = {
-            "canonical": canonical,
-            "aliases": sorted(set(aliases or [])),
-            "backends": list(
+        if merge_existing and previous:
+            # R10 #15: a catalog-only overlay is a MERGE under the same name —
+            # prove the rich contracts are equivalent before touching anything.
+            overlay = {
+                "param_specs": param_specs,
+                "param_aliases": param_aliases,
+                "panel_params": panel_params,
+                "scalar_params": scalar_params,
+                "input_units": input_units,
+                "output_unit": output_unit,
+                "compatible_units": compatible_units,
+                "input_grain": input_grain,
+                "output_grain": output_grain,
+                "available_at": available_at,
+                "same_session_usable": same_session_usable,
+                "input_fields": input_fields,
+                "window_semantics": window_semantics,
+                "semantic_version": semantic_version,
+            }
+            declared = {k: v for k, v in overlay.items() if v is not None}
+            conflicts = _contract_conflicts(previous, declared)
+            if conflicts:
+                _raise_contract_conflict("<overlay>", canonical, conflicts)
+            # PRESERVE the ENTIRE previous contract and only update the fields
+            # this call explicitly declares.  The old minimal-dict rebuild
+            # dropped param_specs / units / grains / availability /
+            # semantic_version / backend_meta / history semantics (R10 #15).
+            updated = _merge_catalog_contracts(dict(previous), declared, keep=canonical)
+            updated["aliases"] = sorted(set((aliases or []) + (previous.get("aliases") or [])))
+            updated["status"] = status
+            if description:
+                updated["description"] = description
+            if business_category:
+                updated["business_category"] = business_category
+            updated["backends"] = sorted(
                 previous.get("backends")
                 or sorted(cls._operators[canonical].keys())
-                if merge_existing
-                else []
-            ),
-            "status": status,
-            "description": description,
-            "param_names": list(previous.get("param_names") or []) if merge_existing else [],
-            "business_category": business_category,
-        }
+            )
+            updated["param_names"] = list(previous.get("param_names") or [])
+            cls._catalog[canonical] = updated
+        else:
+            cls._catalog[canonical] = {
+                "canonical": canonical,
+                "aliases": sorted(set(aliases or [])),
+                "backends": list(
+                    previous.get("backends")
+                    or sorted(cls._operators[canonical].keys())
+                    if merge_existing
+                    else []
+                ),
+                "status": status,
+                "description": description,
+                "param_names": list(previous.get("param_names") or []) if merge_existing else [],
+                "business_category": business_category,
+            }
         for alias in aliases or []:
             cls.register_alias(alias, canonical)
 
@@ -1417,22 +1666,34 @@ class OperatorRegistry:
         if new in cls._operators:
             # Merge backends (e.g. sql placeholder registered under new name before
             # pandas/polars were renamed onto it).
+            old_cat = cls._catalog.get(old, {})
+            new_cat = cls._catalog.get(new, {})
+            # R10 #15: merging two canonicals under the same name must first prove
+            # the rich canonical contracts are equivalent — the merge must never
+            # silently drop or overwrite param_specs / argument roles / units /
+            # compatible units / grains / availability / semantic_version /
+            # backend provenance / history semantics.
+            conflicts = _contract_conflicts(old_cat, new_cat)
+            if conflicts:
+                _raise_contract_conflict(old, new, conflicts)
+            # Carry ALL fields over: the surviving canonical keeps what it already
+            # declares; the renamed-away canonical fills in every field the target
+            # is missing (incl. backend-keyed provenance for the moved backends).
+            merged = _merge_catalog_contracts(dict(new_cat), old_cat, keep=new)
             for backend, op in list(cls._operators.get(old, {}).items()):
                 if backend not in cls._operators[new]:
                     cls._operators[new][backend] = op
-            old_cat = cls._catalog.pop(old, {})
-            new_cat = cls._catalog.get(new, {})
-            new_cat["backends"] = sorted(cls._operators[new].keys())
-            new_cat["canonical"] = new
+            merged["backends"] = sorted(cls._operators[new].keys())
             # Prefer non-empty description / params from either side.
-            if not new_cat.get("description") and old_cat.get("description"):
-                new_cat["description"] = old_cat.get("description", "")
-            if not new_cat.get("param_names") and old_cat.get("param_names"):
-                new_cat["param_names"] = old_cat.get("param_names", [])
-            aliases = set(new_cat.get("aliases") or []) | set(old_cat.get("aliases") or [])
+            if not merged.get("description") and old_cat.get("description"):
+                merged["description"] = old_cat.get("description", "")
+            if not merged.get("param_names") and old_cat.get("param_names"):
+                merged["param_names"] = old_cat.get("param_names", [])
+            aliases = set(merged.get("aliases") or []) | set(old_cat.get("aliases") or [])
             aliases.add(old)
-            new_cat["aliases"] = sorted(a for a in aliases if a != new)
-            cls._catalog[new] = new_cat
+            merged["aliases"] = sorted(a for a in aliases if a != new)
+            cls._catalog[new] = merged
+            cls._catalog.pop(old, None)
             cls._operators.pop(old, None)
             for alias, canon in list(cls._aliases.items()):
                 if canon == old:

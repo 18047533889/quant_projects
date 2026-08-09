@@ -34,6 +34,29 @@ class EngineConfig:
     plan_cache_dir: str | None = None
 
 @dataclass(frozen=True)
+class MarketExecutionSpec:
+    """Independent market-execution spec (R10 #12).
+
+    One ``calendar`` string can no longer carry every meaning: ``market`` is the
+    MarketID (ashare/us), ``calendar_id`` the trading-calendar identity
+    (SSE/SZSE/NYSE/NASDAQ), ``timezone`` the exchange timezone
+    (Asia/Shanghai / America/New_York), ``decision_time`` when the bar's
+    decision is taken (close), and ``bar_timestamp_role`` whether the bar index
+    is bar-open or bar-end.  Used by PIT visibility / session mapping — never
+    conflated into the calendar string.
+    """
+
+    market: str | None = None
+    calendar_id: str | None = None
+    timezone: str | None = None
+    decision_time: str = "close"
+    bar_timestamp_role: str = "bar_end"
+
+    def as_market_execution(self) -> "MarketExecutionSpec":
+        return self
+
+
+@dataclass(frozen=True)
 class RunConfig:
     mode: str = "research"
     auto_warmup: bool = False
@@ -44,6 +67,22 @@ class RunConfig:
     # into one variable.
     market: str | None = None
     calendar: str | None = None
+    # R10 #12: independent timezone / decision-time / bar-timestamp-role, kept
+    # out of the single ``calendar`` string.  ``market_execution`` is derived
+    # from this run section.
+    timezone: str | None = None
+    decision_time: str = "close"
+    bar_timestamp_role: str = "bar_end"
+
+    @property
+    def market_execution(self) -> MarketExecutionSpec:
+        return MarketExecutionSpec(
+            market=self.market,
+            calendar_id=self.calendar,
+            timezone=self.timezone,
+            decision_time=self.decision_time,
+            bar_timestamp_role=self.bar_timestamp_role,
+        )
 
 @dataclass(frozen=True)
 class DQConfig:
@@ -116,6 +155,78 @@ def _resolve_optional_path(value: Any, *, base_dir: Path) -> str | None:
     text=str(value).strip()
     return str(resolve_path(text,base_dir=base_dir)) if text else None
 
+_TRUE_STRINGS = {"true", "1", "yes", "on"}
+_FALSE_STRINGS = {"false", "0", "no", "off"}
+
+
+def _strict_bool(value: Any, *, name: str) -> bool:
+    """Strict boolean coercion (R10 #10).
+
+    ``bool("false")`` is True in Python — a YAML ``auto_warmup: "false"`` string
+    would silently enable a gate.  Accept real bools, 0/1, and the canonical
+    string set; anything else raises instead of Python-truthiness coercion.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, float) and value in (0.0, 1.0):
+        return bool(value)
+    if isinstance(value, str):
+        low = value.strip().lower()
+        if low in _TRUE_STRINGS:
+            return True
+        if low in _FALSE_STRINGS:
+            return False
+    raise ValueError(
+        f"config field {name!r}: expected a boolean (true/false/0/1), got {value!r}"
+    )
+
+
+def _strict_int(value: Any, *, name: str) -> int:
+    """Strict integer coercion (R10 #11).
+
+    ``int(5.9) -> 5`` silently truncates a fractional config value.  Reject
+    non-integral values instead; accept ints, integral floats, and integral
+    strings.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"config field {name!r}: bool is not an integer: {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        raise ValueError(
+            f"config field {name!r}: fractional integer {value!r} would be "
+            "truncated — provide an integral value"
+        )
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            return int(text)
+        except ValueError as exc:
+            raise ValueError(
+                f"config field {name!r}: expected an integer, got {value!r}"
+            ) from exc
+    raise ValueError(f"config field {name!r}: expected an integer, got {value!r}")
+
+
+def _forbid_unknown(section: dict[str, Any], allowed: set[str], *, name: str) -> None:
+    """Fail-fast on unknown keys (R10 #9).
+
+    ``extra="forbid"`` semantics: a typo like ``run: {mdoe: production}`` is
+    silently ignored today (``mode`` falls back to research — dangerous for a
+    production intent).  Any key not in ``allowed`` raises instead.
+    """
+    unknown = sorted(k for k in section if k not in allowed)
+    if unknown:
+        raise ValueError(
+            f"config section {name!r} has unknown key(s): {', '.join(unknown)}. "
+            f"Allowed: {', '.join(sorted(allowed))}"
+        )
+
+
 def _deep_merge(base: dict[str,Any], override: dict[str,Any]) -> dict[str,Any]:
     merged=dict(base)
     for key,value in override.items():
@@ -152,9 +263,29 @@ def load_config(path: str|Path, *, profile: str|None=None) -> FactorEngineConfig
     profile_name=profile or payload.get("profile")
     if profile_name: payload=_deep_merge(load_profile(str(profile_name)),payload)
     base_dir=config_path.parent.resolve()
+    # R10 #9: extra="forbid" semantics — a typo like ``run: {mdoe: production}``
+    # must fail fast instead of silently falling back to research.
+    _forbid_unknown(
+        payload,
+        {
+            "factor","data_source","backend","engine","run","dq","pit",
+            "pipeline","materialization","materialize","profile",
+            # existing profile sections (merged into the payload from
+            # examples/profiles/*.yaml) — documented, not consumed by loader.
+            "data_access","label",
+        },
+        name="config",
+    )
     fp=payload.get("factor",{}); dsp=payload.get("data_source",{}); bp=payload.get("backend",{}); ep=payload.get("engine",{}); rp=payload.get("run",{}); dqp=payload.get("dq",{}); pp=payload.get("pit",{}); pipe=payload.get("pipeline",{}); mp=payload.get("materialization",payload.get("materialize"))
     if not isinstance(fp,dict) or "name" not in fp or "expr" not in fp: raise ValueError("Config must include factor.name and factor.expr")
     if not isinstance(dsp,dict) or "type" not in dsp: raise ValueError("Config must include data_source.type")
+    _forbid_unknown(fp, {"name","expr","freq","universe","description","surface","dsl_surface","dialect","dialect_version"}, name="factor")
+    _forbid_unknown(bp, {"type"}, name="backend")
+    _forbid_unknown(ep, {"enable_cache","plan_cache_dir"}, name="engine")
+    _forbid_unknown(rp, {"mode","auto_warmup","trim_warmup","market","calendar","timezone","decision_time","bar_timestamp_role"}, name="run")
+    _forbid_unknown(dqp, {"profile","strict","input_strict"}, name="dq")
+    _forbid_unknown(pp, {"enforce","forbid_forward_fill"}, name="pit")
+    _forbid_unknown(pipe, {"batched_engine"}, name="pipeline")
     canonical_surface,dialect,version=_factor_dialect(fp)
     # FactorEngine.from_loaded_config in the current public API still consumes
     # one parser-surface argument. Preserve the orthogonal metadata on the config
@@ -164,16 +295,33 @@ def load_config(path: str|Path, *, profile: str|None=None) -> FactorEngineConfig
     factor_config=FactorDefinitionConfig(name=str(fp["name"]),expr=str(fp["expr"]),freq=str(fp.get("freq","1d")),universe=fp.get("universe"),description=fp.get("description"),surface=parser_surface,dialect=dialect,dialect_version=version)
     data_source_config=DataSourceConfig(type=str(dsp["type"]),options={k:v for k,v in dsp.items() if k!="type"})
     backend_config=BackendConfig(type=str(bp.get("type","auto")))
-    engine_config=EngineConfig(enable_cache=bool(ep.get("enable_cache",True)),plan_cache_dir=_resolve_optional_path(ep.get("plan_cache_dir"),base_dir=base_dir))
+    engine_config=EngineConfig(enable_cache=_strict_bool(ep.get("enable_cache",True),name="engine.enable_cache"),plan_cache_dir=_resolve_optional_path(ep.get("plan_cache_dir"),base_dir=base_dir))
     materialization_config=None
     if mp is not None:
         if not isinstance(mp,dict): raise ValueError("Config materialization section must be a mapping")
+        _forbid_unknown(
+            mp,
+            {
+                "lake_root","factor_id","author","frequency","description",
+                "expression","target","preserve_invalid_rows","value_dtype",
+                "isolate_partition_failures","resume_materialize","ch_ensure_table",
+                "incremental","clickhouse_table","clickhouse_host","clickhouse_port",
+                "clickhouse_database","clickhouse_username","clickhouse_password",
+                "clickhouse_secure","staging_dataset","storage_format",
+                "partition_columns",
+            },
+            name="materialization",
+        )
         inc=mp.get("incremental")
+        if inc is not None and not isinstance(inc,dict):
+            raise ValueError("Config materialization.incremental must be a mapping")
+        if isinstance(inc,dict):
+            _forbid_unknown(inc, {"since","end_date","lookback_extra","recompute_tail_bars"}, name="materialization.incremental")
         materialization_config=MaterializationConfig(
-            lake_root=_resolve_optional_path(mp.get("lake_root"),base_dir=base_dir) or str(default_factor_lake_root()),factor_id=mp.get("factor_id"),author=mp.get("author"),frequency=mp.get("frequency"),description=mp.get("description"),expression=mp.get("expression"),target=str(mp.get("target","local")),preserve_invalid_rows=bool(mp.get("preserve_invalid_rows",False)),value_dtype=str(mp.get("value_dtype","float32")),isolate_partition_failures=bool(mp.get("isolate_partition_failures",True)),resume_materialize=bool(mp.get("resume_materialize",False)),ch_ensure_table=bool(mp.get("ch_ensure_table",True)),
-            incremental=IncrementalConfig(since=inc.get("since"),end_date=inc.get("end_date"),lookback_extra=int(inc.get("lookback_extra",5)),recompute_tail_bars=inc.get("recompute_tail_bars")) if isinstance(inc,dict) else None,
+            lake_root=_resolve_optional_path(mp.get("lake_root"),base_dir=base_dir) or str(default_factor_lake_root()),factor_id=mp.get("factor_id"),author=mp.get("author"),frequency=mp.get("frequency"),description=mp.get("description"),expression=mp.get("expression"),target=str(mp.get("target","local")),preserve_invalid_rows=_strict_bool(mp.get("preserve_invalid_rows",False),name="materialization.preserve_invalid_rows"),value_dtype=str(mp.get("value_dtype","float32")),isolate_partition_failures=_strict_bool(mp.get("isolate_partition_failures",True),name="materialization.isolate_partition_failures"),resume_materialize=_strict_bool(mp.get("resume_materialize",False),name="materialization.resume_materialize"),ch_ensure_table=_strict_bool(mp.get("ch_ensure_table",True),name="materialization.ch_ensure_table"),
+            incremental=IncrementalConfig(since=inc.get("since"),end_date=inc.get("end_date"),lookback_extra=_strict_int(inc.get("lookback_extra",5),name="materialization.incremental.lookback_extra"),recompute_tail_bars=inc.get("recompute_tail_bars")) if isinstance(inc,dict) else None,
             clickhouse_table=mp.get("clickhouse_table"),clickhouse_host=mp.get("clickhouse_host"),clickhouse_port=mp.get("clickhouse_port"),clickhouse_database=mp.get("clickhouse_database"),clickhouse_username=mp.get("clickhouse_username"),clickhouse_password=mp.get("clickhouse_password"),clickhouse_secure=mp.get("clickhouse_secure"),staging_dataset=str(mp.get("staging_dataset","factor_lake_staging")),storage_format=str(mp.get("storage_format","long")),partition_columns=_parse_partition_columns(mp.get("partition_columns")))
     return FactorEngineConfig(factor=factor_config,data_source=data_source_config,backend=backend_config,engine=engine_config,materialization=materialization_config,
-        run=RunConfig(mode=str(rp.get("mode","research")),auto_warmup=bool(rp.get("auto_warmup",False)),trim_warmup=bool(rp.get("trim_warmup",True)),market=rp.get("market"),calendar=rp.get("calendar")),
-        dq=DQConfig(profile=dqp.get("profile"),strict=bool(dqp.get("strict",False)),input_strict=bool(dqp.get("input_strict",True))),
-        pit=PITConfig(enforce=bool(pp.get("enforce",False)),forbid_forward_fill=bool(pp.get("forbid_forward_fill",False))),pipeline=PipelineConfig(batched_engine=bool(pipe.get("batched_engine",False))))
+        run=RunConfig(mode=str(rp.get("mode","research")),auto_warmup=_strict_bool(rp.get("auto_warmup",False),name="run.auto_warmup"),trim_warmup=_strict_bool(rp.get("trim_warmup",True),name="run.trim_warmup"),market=rp.get("market"),calendar=rp.get("calendar"),timezone=rp.get("timezone"),decision_time=str(rp.get("decision_time","close")),bar_timestamp_role=str(rp.get("bar_timestamp_role","bar_end"))),
+        dq=DQConfig(profile=dqp.get("profile"),strict=_strict_bool(dqp.get("strict",False),name="dq.strict"),input_strict=_strict_bool(dqp.get("input_strict",True),name="dq.input_strict")),
+        pit=PITConfig(enforce=_strict_bool(pp.get("enforce",False),name="pit.enforce"),forbid_forward_fill=_strict_bool(pp.get("forbid_forward_fill",False),name="pit.forbid_forward_fill")),pipeline=PipelineConfig(batched_engine=_strict_bool(pipe.get("batched_engine",False),name="pipeline.batched_engine")))

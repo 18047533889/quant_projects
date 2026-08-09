@@ -28,8 +28,10 @@ data_access.read.data_request —— DataRequest / ReadPlan 统一数据请求�
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Mapping, Sequence
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Sequence
 
 from data_access.core.exceptions import ValidationError
 from data_access.read.predicate import strict_sequence
@@ -41,6 +43,10 @@ if TYPE_CHECKING:
 
 _VALID_JOIN_POLICIES = {"exact", "asof", "pit_asof"}
 _VALID_SNAPSHOT_POLICIES = {"latest", "fail_if_changed", "pin"}
+# #P1-final closure：engine/result 是 strict enum——``engine="polarr"`` 不能静默
+# 落到 duckdb（调用方以为指定了 backend 实际执行另一个），未知值直接拒绝。
+_VALID_ENGINES = {"auto", "duckdb", "polars", "pyarrow"}
+_VALID_RESULTS = {"auto", "arrow", "pandas", "polars", "lazy", "stream"}
 
 
 @dataclass(frozen=True)
@@ -108,6 +114,42 @@ class CompiledDataRequest:
         }
 
 
+def _immutable(value: Any) -> Any:
+    """深拷贝并递归冻结可变容器（dict→MappingProxyType，list/set→tuple/frozenset）。
+
+    #P1-final closure：``CompiledDataRequest`` 虽然 ``@dataclass(frozen=True)``，
+    但内部 ``source_params / joins / filters_by_dataset / transforms`` 此前是普通
+    dict——``plan.compiled.source_params["x"]["y"]="z"`` 仍能改编译结果。这里把
+    嵌套结构全部冻结成不可变容器；``dict(proxy)`` / ``proxy.get()`` / 迭代照常
+    工作，写入直接 TypeError。
+
+    MappingProxyType 已是不可变映射：直接复用（deepcopy/pickle 不支持它，不能
+    再走一遍深拷贝）。
+    """
+    if isinstance(value, MappingProxyType):
+        return value
+    import copy
+
+    try:
+        value = copy.deepcopy(value)
+    except Exception:
+        try:
+            value = copy.copy(value)
+        except Exception:
+            return value
+    if isinstance(value, dict):
+        return MappingProxyType(
+            {str(k): _immutable(v) for k, v in value.items()}
+        )
+    if isinstance(value, list):
+        return tuple(_immutable(v) for v in value)
+    if isinstance(value, set):
+        return frozenset(_immutable(v) for v in value)
+    if isinstance(value, tuple):
+        return tuple(_immutable(v) for v in value)
+    return value
+
+
 def _deep_freeze(value: Any) -> Any:
     """把任意嵌套结构深拷贝成独立对象（彻底脱离活的 request）。
 
@@ -115,7 +157,11 @@ def _deep_freeze(value: Any) -> Any:
     万一遇到不可 deepcopy 的奇葩对象（如带 file handle），回退浅拷贝——至少
     顶层容器独立。调用方之后改原始 req 的嵌套 dict / join spec / aggregation
     项都不会再影响编译结果。
+
+    #P1-final closure：已冻结的 MappingProxyType 直接复用（见 ``_immutable``）。
     """
+    if isinstance(value, MappingProxyType):
+        return value
     import copy
 
     try:
@@ -127,16 +173,48 @@ def _deep_freeze(value: Any) -> Any:
             return value
 
 
-def _deep_freeze_mapping(value: Any) -> dict[str, Any] | None:
+def _deep_freeze_mapping(value: Any) -> MappingProxyType | None:
+    """深拷贝并**冻结**成不可变映射（调用方无法再改 plan 编译结果）。"""
     if value is None:
         return None
-    return dict(_deep_freeze(value))
+    return _immutable(dict(value))
 
 
-def _deep_freeze_nested_mapping(value: Any) -> dict[str, Any] | None:
+def _deep_freeze_nested_mapping(value: Any) -> MappingProxyType | None:
+    """每数据集/每字段参数：外层 + 内层都是不可变映射。"""
     if value is None:
         return None
-    return {k: dict(_deep_freeze(v)) for k, v in value.items()}
+    return MappingProxyType(
+        {str(k): _immutable(dict(v)) for k, v in value.items()}
+    )
+
+
+def _freeze_token(value: Any) -> Any:
+    """把 manifest/token 值冻结成不可变（dict→MappingProxyType，序列→tuple）。"""
+    if isinstance(value, Mapping) and not isinstance(value, MappingProxyType):
+        return MappingProxyType({str(k): _freeze_token(v) for k, v in value.items()})
+    if isinstance(value, (list, tuple, set, frozenset)) and not isinstance(
+        value, (str, bytes)
+    ):
+        return tuple(_freeze_token(v) for v in value)
+    return value
+
+
+def _require_bool(value: Any, name: str) -> bool:
+    """#P1-final closure：bool 必须严格是 bool——``pit="false"`` 不得静默变 True。"""
+    if not isinstance(value, bool):
+        raise ValidationError(f"{name} 必须是 bool，收到 {value!r}")
+    return value
+
+
+def _require_enum(value: Any, name: str, valid: set[str]) -> str:
+    """enum 字段：未知值直接 ValidationError（fail-closed），返回规范小写值。"""
+    s = str(value).strip().lower()
+    if s not in valid:
+        raise ValidationError(
+            f"{name} 必须是 {'/'.join(sorted(valid))}，收到 {value!r}"
+        )
+    return s
 
 
 def compile_data_request(request: Any) -> CompiledDataRequest:
@@ -156,6 +234,27 @@ def compile_data_request(request: Any) -> CompiledDataRequest:
     aggregations = request.aggregations
     if aggregations is not None:
         aggregations = tuple(_deep_freeze(a) for a in aggregations)
+    # #P1-final closure：pit/normalize_units/time_varying_universe 严格 bool（不再
+    # ``bool("false")``→True 的静默反转）；engine/result/snapshot_policy 严格 enum。
+    pit = _require_bool(getattr(request, "pit", False), "request.pit")
+    normalize_units = _require_bool(
+        getattr(request, "normalize_units", False), "request.normalize_units"
+    )
+    time_varying_universe = _require_bool(
+        getattr(request, "time_varying_universe", True),
+        "request.time_varying_universe",
+    )
+    engine = _require_enum(
+        getattr(request, "engine", "auto"), "engine", _VALID_ENGINES
+    )
+    result = _require_enum(
+        getattr(request, "result", "auto"), "result", _VALID_RESULTS
+    )
+    snapshot_policy = _require_enum(
+        getattr(request, "snapshot_policy", "latest") or "latest",
+        "snapshot_policy",
+        _VALID_SNAPSHOT_POLICIES,
+    )
     return CompiledDataRequest(
         fields=fields,
         start=request.start,
@@ -164,14 +263,14 @@ def compile_data_request(request: Any) -> CompiledDataRequest:
             tuple(request.instruments) if request.instruments is not None else None
         ),
         universe=request.universe,
-        pit=bool(request.pit),
+        pit=pit,
         anchor=request.anchor,
         frequency=request.frequency,
-        normalize_units=bool(request.normalize_units),
-        engine=request.engine,
-        result=request.result,
+        normalize_units=normalize_units,
+        engine=engine,
+        result=result,
         limit=request.limit,
-        filters=_deep_freeze(request.filters),
+        filters=_immutable(request.filters),
         filters_by_dataset=_deep_freeze_mapping(request.filters_by_dataset),
         joins=_deep_freeze_mapping(request.joins),
         join_specs=_deep_freeze_mapping(request.join_specs),
@@ -179,9 +278,9 @@ def compile_data_request(request: Any) -> CompiledDataRequest:
         field_params=_deep_freeze_nested_mapping(request.field_params),
         transforms=_deep_freeze_mapping(request.transforms),
         aggregations=aggregations,
-        time_varying_universe=bool(getattr(request, "time_varying_universe", True)),
+        time_varying_universe=time_varying_universe,
         order_by=tuple(request.order_by) if request.order_by else None,
-        snapshot_policy=str(getattr(request, "snapshot_policy", "latest") or "latest"),
+        snapshot_policy=snapshot_policy,
     )
 
 
@@ -250,6 +349,26 @@ class DataRequest:
             allow_none=True,
             ordered=True,
         )
+        # #P1-final closure：Typed DataRequest——pit/normalize_units/
+        # time_varying_universe 严格 bool（``pit="false"`` 是典型 silent semantic
+        # inversion，bool("false")→True）；limit 非负 int|None（bool 是 int 子类，
+        # 显式拒绝）；engine/result/snapshot_policy 严格 enum，未知 fail-closed。
+        for _name in ("pit", "normalize_units", "time_varying_universe"):
+            _require_bool(getattr(self, _name), f"request.{_name}")
+        if self.limit is not None:
+            if (
+                isinstance(self.limit, bool)
+                or not isinstance(self.limit, int)
+                or self.limit < 0
+            ):
+                raise ValidationError(
+                    f"request.limit 必须是非负 int 或 None，收到 {self.limit!r}"
+                )
+        self.engine = _require_enum(self.engine, "engine", _VALID_ENGINES)
+        self.result = _require_enum(self.result, "result", _VALID_RESULTS)
+        self.snapshot_policy = _require_enum(
+            self.snapshot_policy or "latest", "snapshot_policy", _VALID_SNAPSHOT_POLICIES
+        )
 
     @property
     def time_range(self) -> tuple[Any, Any] | None:
@@ -263,18 +382,25 @@ class DataRequest:
         return dict(sp.get(dataset, fallback or {}) or {})
 
 
-@dataclass
+@dataclass(frozen=True)
 class ReadPlan:
-    """编译好的数据读取计划：可 explain，可 execute。"""
+    """编译好的数据读取计划：可 explain，可 execute。
+
+    #P1-final closure：``frozen=True`` + ``__post_init__`` 把 execute 消费的全部
+    状态冻结成不可变容器（tuple / MappingProxyType）。``plan.datasets.clear()``、
+    ``plan.per_dataset_columns["x"]=[...]``、``plan.snapshot_policy="latest"``、
+    ``plan.compiled.source_params["x"]["y"]="z"`` 全部直接 TypeError——「plan 即
+    声明」真正成立，explain 显示的 == execute 执行的。
+    """
 
     request: DataRequest
-    datasets: list[str]                                  # 有序：anchor 在前
-    fields: list["SemanticField"]                        # 已解析字段（去重，保序）
-    per_dataset_columns: dict[str, list[str]]            # dataset -> 物理列
-    join_policies: dict[str, str]                        # dataset -> join 策略
-    scan_costs: dict[str, Any]                           # dataset -> ScanCost
-    storage: dict[str, str]                              # dataset -> backend 描述
-    snapshot_info: dict[str, dict[str, Any]]             # dataset -> manifest 版本信息
+    datasets: tuple[str, ...]                            # 有序：anchor 在前
+    fields: tuple["SemanticField", ...]                  # 已解析字段（去重，保序）
+    per_dataset_columns: Mapping[str, tuple[str, ...]]   # dataset -> 物理列
+    join_policies: Mapping[str, str]                     # dataset -> join 策略
+    scan_costs: Mapping[str, Any]                        # dataset -> ScanCost
+    storage: Mapping[str, str]                           # dataset -> backend 描述
+    snapshot_info: Mapping[str, Mapping[str, Any]]       # dataset -> manifest 版本信息
     engine: str = "auto"
     result: str = "auto"
     time_range: tuple[Any, Any] | None = None
@@ -282,7 +408,7 @@ class ReadPlan:
     universe: str | None = None
     # #P0-2 统一 effective_join_specs（字段语义 → COS 契约 → 显式覆盖）：
     # PIT validator / 组合执行 / explain 消费同一份 join 语义。
-    join_specs_effective: dict[str, Any] = field(default_factory=dict)
+    join_specs_effective: Mapping[str, Any] = field(default_factory=dict)
     # #4 物理计划 DAG（由 store.plan 注入；explain() 渲染，execute() 消费）
     physical: Any = field(default=None, repr=False)
     # #4 不可变编译请求：execute() 只消费它，不读活的 request（防 plan 后篡改）
@@ -290,14 +416,51 @@ class ReadPlan:
     # #5 snapshot pin：latest / fail_if_changed / pin
     snapshot_policy: str = "latest"
     # #5 plan 时刻每数据集的 manifest token（execute 前对比，变化即拒绝）
-    plan_snapshot_tokens: dict[str, dict[str, Any]] = field(default_factory=dict)
+    plan_snapshot_tokens: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     # #P1-final closure 3：snapshot_policy=pin 时 plan 时刻每数据集冻结的
     # 物理文件清单（path + size + mtime_ns / etag / version_id）。execute 必须
     # 逐文件核对——不只看 source_epoch（外部系统直接替换 parquet、没走
     # DataAccess epoch 时不变化，只有物理 pin 能证明）。
-    plan_pinned_files: dict[str, tuple[Any, ...]] = field(default_factory=dict)
+    plan_pinned_files: Mapping[str, tuple[Any, ...]] = field(default_factory=dict)
     # 绑定到 store 以便 execute（由 store.plan 注入）
     _store: Any = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        # #P1-final closure：无论构造方传 list/dict，统一冻结成不可变容器。
+        object.__setattr__(self, "datasets", tuple(self.datasets))
+        object.__setattr__(self, "fields", tuple(self.fields))
+        object.__setattr__(
+            self,
+            "per_dataset_columns",
+            MappingProxyType(
+                {str(k): tuple(v) for k, v in dict(self.per_dataset_columns).items()}
+            ),
+        )
+        object.__setattr__(
+            self, "join_policies", MappingProxyType(dict(self.join_policies))
+        )
+        object.__setattr__(self, "scan_costs", MappingProxyType(dict(self.scan_costs)))
+        object.__setattr__(self, "storage", MappingProxyType(dict(self.storage)))
+        object.__setattr__(
+            self,
+            "snapshot_info",
+            MappingProxyType({str(k): _freeze_token(v) for k, v in dict(self.snapshot_info).items()}),
+        )
+        object.__setattr__(
+            self,
+            "join_specs_effective",
+            MappingProxyType(dict(self.join_specs_effective)),
+        )
+        object.__setattr__(
+            self,
+            "plan_snapshot_tokens",
+            MappingProxyType({str(k): _freeze_token(v) for k, v in dict(self.plan_snapshot_tokens).items()}),
+        )
+        object.__setattr__(
+            self,
+            "plan_pinned_files",
+            MappingProxyType({str(k): tuple(v) if v is not None else () for k, v in dict(self.plan_pinned_files).items()}),
+        )
 
     @property
     def anchor(self) -> str | None:
@@ -607,6 +770,18 @@ class ReadPlan:
             f"ReadPlan(datasets={self.datasets}, fields={len(self.fields)}, "
             f"engine={self.engine}, result={self.result})"
         )
+
+
+def validate_engine_result(engine: Any, result: Any) -> tuple[str, str]:
+    """严格校验 engine/result（未知值 ValidationError，返回规范小写值）。
+
+    #P1-final closure：``_read_handle`` 的 dispatch 对未知 engine/result 会静默
+    落到 duckdb 物化路径——``engine="polarr"`` 不报错却执行 DuckDB，调用方以为
+    指定了别的 backend。所有 read 入口统一先过这里，fail-closed。
+    """
+    eng = _require_enum(engine, "engine", _VALID_ENGINES)
+    res = _require_enum(result, "result", _VALID_RESULTS)
+    return eng, res
 
 
 def normalize_join_policy(policy: str | None) -> str:

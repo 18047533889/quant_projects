@@ -59,6 +59,50 @@ def _hash_time_values(values: Iterable[Any]) -> int:
     return hash(tuple(out))
 
 
+def _multiindex_time_hash(index: pd.MultiIndex) -> int | None:
+    """Time-axis hash for a ``(timestamp, instrument)``-style MultiIndex panel.
+
+    R10 #5: a long panel's time level is a real execution axis and must be
+    verified, not blanked to ``None``.  Prefer a level whose name is a time-axis
+    name (``timestamp`` / ``date`` / ``trade_date`` / ``datetime``); otherwise
+    the first ``DatetimeIndex`` level.  ``None`` only when no level is a
+    datetime axis (a genuine unknown, not an accidental blank).
+    """
+    levels = index.levels
+    names = list(index.names)
+    for i, name in enumerate(names):
+        if str(name) in _TIME_AXIS_COLUMNS:
+            return _hash_time_values(levels[i])
+    for i, level in enumerate(levels):
+        if isinstance(level, pd.DatetimeIndex):
+            return _hash_time_values(level)
+    return None
+
+
+def _multiindex_instrument_hash(
+    index: pd.MultiIndex, value_cols: tuple[str, ...]
+) -> int:
+    """Instrument-axis hash for a MultiIndex long panel.
+
+    R10 #5: for ``(timestamp, instrument)`` long format the instruments live in
+    the INDEX LEVELS, not the (single) value column.  Hash every non-time level
+    (name + ordered unique values) together with the value columns so two panels
+    with the same columns but different instrument pools are NOT the same
+    execution identity.  A pure-time single-level MultiIndex (wide format with
+    instruments as columns) is unaffected — no identity level to add.
+    """
+    names = list(index.names)
+    parts: list[tuple[str, tuple[Any, ...]]] = []
+    for i, level in enumerate(index.levels):
+        name = str(names[i] if i < len(names) else i)
+        if name in _TIME_AXIS_COLUMNS:
+            continue
+        if isinstance(level, pd.DatetimeIndex):
+            continue  # datetime level that is not time-named: ambiguous, skip
+        parts.append((name, tuple(level)))
+    return hash((value_cols, tuple(parts)))
+
+
 @dataclass(frozen=True)
 class PanelSchema:
     """描述一个宽表 panel 的轴/列结构（#235-#238 元数据/索引语义统一）。
@@ -150,7 +194,12 @@ class PanelIdentity:
         """Compute a PanelIdentity from a pandas wide panel or polars wide frame."""
         if isinstance(frame, pd.DataFrame):
             if isinstance(frame.index, pd.MultiIndex):
-                time_hash: int | None = None
+                # R10 #5: a (timestamp, instrument) long panel must still be
+                # time-verified.  Previously MultiIndex -> time_hash=None, so
+                # two panels with DIFFERENT date axes but the same instrument
+                # columns were indistinguishable on the time axis.  Detect a
+                # datetime level (by name first, then by type) and hash it.
+                time_hash = _multiindex_time_hash(frame.index)
             else:
                 time_hash = _hash_time_values(frame.index)
             columns = tuple(str(c) for c in frame.columns)
@@ -158,7 +207,11 @@ class PanelIdentity:
             grain, frequency = _pandas_grain_frequency(frame)
             return cls(
                 time_index_hash=time_hash,
-                instrument_axis_hash=hash(value_cols),
+                instrument_axis_hash=_multiindex_instrument_hash(
+                    frame.index, value_cols
+                )
+                if isinstance(frame.index, pd.MultiIndex)
+                else hash(value_cols),
                 grain=grain,
                 frequency=frequency,
             )

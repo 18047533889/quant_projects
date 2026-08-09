@@ -68,7 +68,10 @@ def _regime_flip_factor(threshold: float = 5.0):
     """
     def _fn(p: pd.DataFrame) -> pd.DataFrame:
         arr = p.to_numpy(dtype=float)
-        extreme = np.nanmax(np.abs(arr), axis=1) > threshold
+        abs_arr = np.abs(arr)
+        finite_rows = np.isfinite(abs_arr).any(axis=1)
+        extreme = np.zeros(arr.shape[0], dtype=bool)
+        extreme[finite_rows] = np.nanmax(abs_arr[finite_rows], axis=1) > threshold
         arr[extreme] = -arr[extreme]
         return pd.DataFrame(arr, index=p.index, columns=p.columns)
     return _fn

@@ -324,7 +324,11 @@ class TestParquetMaterializer:
         assert result["staging"]["dataset"] == "factor_lake_staging"
         assert len(calls) == 1
         assert not (tmp_path / "factors" / "staging_only_test" / "year=2024").exists()
-        assert result["watermark"] is not None
+        # #收官轮 P0（Integration）：staging-only 不写本地 lake → 不推进权威水位线
+        # （defer，publish 成功后由 publish_factor_lake 推进 PUBLISHED）。
+        assert result["watermark_deferred"] is True
+        assert result["watermark"] is None, "staging-only 不得推进权威水位线"
+        assert result["pending_watermark"] is not None
 
     def test_nan_dropped(self, tmp_path):
         """NaN 值行被 dropna 清除。"""

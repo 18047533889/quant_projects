@@ -869,11 +869,16 @@ factor_lake_wide:
   params_schema:
     factor_id: str
   time_column: datetime
-  instrument_column: asset
   hive_partitioning: true
   union_by_name: true
   schema: {}
   # 宽表列随标的动态扩展，不做静态 schema 校验
+  # #P1-final closure：宽表是 datetime × {asset} 的 pivot——**asset 是列轴，
+  # 不是物理列**。declaring instrument_column=asset 会让 generic 读在不存在
+  # 的 asset 列上做假过滤。标记 specialized_only，generic read/scan 一律拒绝；
+  # 宽因子读取请走 factor lake（read_factors(layout="wide")）或 factor_matrix。
+  specialized_only: true
+  specialized_only_reason: "宽表 pivot 布局：标的在列轴上（datetime × {asset}），不是 time×instrument 普通 long 表；generic read/scan 无法在 instrument_column 上过滤。请用 read_factors(layout='wide') / factor_matrix 专用入口。"
 
 factor_matrix:
   kind: parametric
@@ -987,9 +992,11 @@ factor_values_stream:
 
 # ---- streaming bars（实时 K 线） --------------------------------------------
 # 写入：streaming/persistence/bar_writer.py，布局 {freq}/{YYYY-MM-DD}/{symbol}.parquet
-# symbol 是文件名不是列——read 时按 time_column + 目录结构过滤；若要按 symbol 筛，
-# 调用方目前只能传 time_range 后在结果上二次过滤（或 load_columns 后按 filename）。
-# 如果以后有大量按 symbol 读的需求，再改成 parametric 带 {symbol} / {freq}。
+# symbol 是文件名不是列——generic read 无法真正做 instrument_filter / time×instrument
+# panel（读出的 parquet 行里没有 symbol，混多个 symbol 文件后连每行属于哪个标的都
+# 无法恢复）。#收官轮 P1：标记 specialized_only，generic read/scan 一律拒绝（不再在
+# 假的 instrument 列上过滤）；symbol 维度必须由专用 writer 侧 hive 化（symbol=...）
+# 或在调用方按 {symbol}/{YYYY-MM-DD} 路径专用读取。
 # 列：timestamp (pa.timestamp ns), open/high/low/close/volume/vwap/trade_count
 streaming_bars:
   kind: static
@@ -998,9 +1005,10 @@ streaming_bars:
   root: ${QUANTSOCIETY_WORKSPACE_DATA_ROOT:-/home/yluel/share/projects/quantsociety_backend_project/workspace_data}/streaming/bars
   glob: "**/*.parquet"
   time_column: timestamp
-  instrument_column: symbol
   hive_partitioning: false
   union_by_name: true
+  specialized_only: true
+  specialized_only_reason: "symbol 是文件路径段不是物理列（schema 无 symbol）；generic panel/read 无法按标的过滤或还原行归属。请用专用读取路径，或将 writer 改成 hive 布局 symbol=... 以启用 DataAccess virtual partition column。"
   schema:
     timestamp: timestamp
     open: double

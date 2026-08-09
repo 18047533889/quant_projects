@@ -377,6 +377,50 @@ _NO_KNOWLEDGE_TIME_FUNDAMENTALS = frozenset({
 })
 
 
+def _strict_instrument_filter(value: Any) -> list[str] | None:
+    """#收官轮 P0：FE 入口复用 DataAccess 的 ``strict_sequence`` 契约。
+
+    ``None`` → 全市场；``list/tuple/set[str]``（成员语义）→ 规范化 list；裸
+    ``str/bytes``（会被逐字符拆成 ``["A","A","P","L"]`` 的 silent semantic
+    inversion）、``dict``（退化成键列表）、``generator``、非 str 元素 → 构造期
+    即拒绝。这样 adapter 层不再把非法输入「洗成合法但错误」的 list 交给 DataAccess。
+    """
+    if value is None:
+        return None
+    try:
+        from data_access.read.predicate import strict_sequence
+    except ImportError:  # pragma: no cover - DA 不可导入时退化为手动校验
+        strict_sequence = None
+    if strict_sequence is not None:
+        normalized = strict_sequence(
+            value,
+            name="instrument_filter",
+            element_type=str,
+            allow_none=True,
+        )
+        return None if normalized is None else list(normalized)
+    # 手动 fallback（DA 未安装）：拒绝 str/bytes/dict/generator + 非 str 元素。
+    if isinstance(value, (str, bytes)):
+        raise ValueError(
+            f"instrument_filter 必须是序列（list/tuple/set），收到 str/bytes {value!r}。"
+            "字符串会被误当成字符序列逐项过滤，是典型的 silent semantic inversion。"
+        )
+    if isinstance(value, dict):
+        raise ValueError(f"instrument_filter 不接受 mapping/dict，收到 {value!r}")
+    import collections.abc
+
+    if isinstance(value, collections.abc.Iterator):
+        raise ValueError(f"instrument_filter 不接受 generator/iterator，收到 {value!r}")
+    out: list[str] = []
+    for element in value:
+        if not isinstance(element, str):
+            raise ValueError(
+                f"instrument_filter 元素必须是 str，收到 {type(element).__name__} {element!r}"
+            )
+        out.append(element)
+    return out
+
+
 class DataAccessSource(DataSource):
     """FactorEngine DataAccess source with snapshot-bound caches and preflight."""
 
@@ -400,6 +444,7 @@ class DataAccessSource(DataSource):
         enforce_mining_gate: bool = False,
         snapshot_now_only: bool = False,
         mining_coverage_threshold: float | None = None,
+        pit_enforce: bool = False,
     ) -> None:
         self.dataset = dataset
         self.fields = dict(fields or {})
@@ -450,10 +495,13 @@ class DataAccessSource(DataSource):
         self.end_date = end_date
         # #收官轮 P0：``[]`` 是**空股票池**（0 行），绝不能折叠成 ``None``——
         # DataAccess 本体已经修过 ``None != []``（[]→WHERE FALSE），这里不能再
-        # 用 ``if instrument_filter else None`` 把它变回全市场。
-        self.instrument_filter = (
-            None if instrument_filter is None else list(instrument_filter)
-        )
+        # 用 ``if instrument_filter else None`` 把它变回全市场。同时用 DA 的
+        # ``strict_sequence`` 契约拒绝裸 str/bytes/dict/generator——``"AAPL"``
+        # 不能再被 ``list(instrument_filter)`` 洗成 ``["A","A","P","L"]``。
+        self.instrument_filter = _strict_instrument_filter(instrument_filter)
+        #: #收官轮 P0：四层 PIT 门禁开关（engine ``config.pit.enforce`` / production
+        #: 由 DataSourceBuildContext 注入；SourceRef child 必须继承父级策略）。
+        self.pit_enforce = bool(pit_enforce)
         self.normalize_timestamp = normalize_timestamp
         self.timestamp_unit = timestamp_unit
         self.params = dict(params or {})
@@ -557,6 +605,17 @@ class DataAccessSource(DataSource):
     @property
     def data_snapshot_id(self) -> str | None:
         return self._data_snapshot_id
+
+    @property
+    def snapshot_token(self) -> str | None:
+        """组合快照 token：manifest token（廉价变化检测）优先，其次 snapshot id。
+
+        #收官轮 P0（Integration）：``refresh_snapshot()`` 的廉价路径只更新
+        ``_manifest_token``（不每次 describe），而 Composite 若只比较
+        ``data_snapshot_id`` 会**永远看不到 manifest 级变化**。暴露统一 token
+        让 Composite 能真正检测「refresh 后 token 变了」。
+        """
+        return self._manifest_token or self._data_snapshot_id
 
     @property
     def lazy_scan(self) -> bool:
@@ -770,6 +829,14 @@ class DataAccessSource(DataSource):
                 self._field_plans[(n, version)] = plan
         plans = {n: self._field_plans[(n, version)] for n in names}
         self._enforce_field_contract_gates(plans)
+        # #收官轮 P0（Integration）：four-layer PIT gate 自动挂在主通道上——
+        # ``pit_enforce`` 时不需要调用方记得手动 ``assert_four_layer_pit()``。
+        # 与 mining/coverage gate 一样是 opt-in：engine 的 DataSourceBuildContext
+        # 注入 ``config.pit.enforce``（production 强制 True）；UNKNOWN 层在
+        # production（strict_unknown_fields）下由 ``assert_four_layer_pit``
+        # fail-closed 拒绝，research 告警降级。
+        if self.pit_enforce:
+            self.assert_four_layer_pit(plans)
         return plans
 
     def _window_is_historical(self) -> bool:

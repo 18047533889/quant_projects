@@ -63,8 +63,25 @@ class LQTPLogicalDataSource(DataSource):
     def _child(self, dataset: str, *, instrument_filter: list[str] | None = None) -> DataAccessSource:
         start = getattr(self.inner, "start_date", None)
         end = getattr(self.inner, "end_date", None)
-        return DataAccessSource(dataset=dataset, start_date=start, end_date=end,
-                                instrument_filter=instrument_filter)
+        # #收官轮 P0（Integration）：二级 SourceRef child 必须继承父级 execution
+        # policy（run_mode / production / strict / mining / PIT）。旧代码不传——
+        # 生产 anchor 是 production、二级 SourceRef child 却变成 research/fail-open，
+        # 四层 PIT gate 在 SourceRef 路径形同虚设。
+        return DataAccessSource(
+            dataset=dataset,
+            start_date=start,
+            end_date=end,
+            instrument_filter=instrument_filter,
+            run_mode=getattr(self.inner, "run_mode", None),
+            production=getattr(self.inner, "production", None),
+            strict_unknown_fields=getattr(self.inner, "strict_unknown_fields", None),
+            enforce_mining_gate=bool(getattr(self.inner, "enforce_mining_gate", False)),
+            snapshot_now_only=bool(getattr(self.inner, "snapshot_now_only", False)),
+            mining_coverage_threshold=getattr(
+                self.inner, "mining_coverage_threshold", None
+            ),
+            pit_enforce=bool(getattr(self.inner, "pit_enforce", False)),
+        )
 
     @staticmethod
     def _align_by_instrument(anchor: pd.MultiIndex, series: pd.Series) -> pd.Series:

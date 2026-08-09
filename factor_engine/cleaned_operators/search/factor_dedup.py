@@ -150,9 +150,26 @@ def build_typed_fixtures(
         ohlc[:, 4 * b + 3] = close[:, b]
     fixtures["ohlc"] = frame(ohlc)
 
-    # R10 #21: A-share realistic trading fixture — random walk with jumps and
-    # vol clustering (GARCH(1,1)-style).  Jump-heavy / high-vol days stress the
-    # extreme-day behavior that a flattened Gaussian rho hides entirely.
+    return fixtures
+
+
+def build_ashare_fixture(
+    *,
+    rows: int = _PROBE_ROWS,
+    cols: int = _PROBE_COLS,
+    seed: int = _PROBE_SEED,
+) -> pd.DataFrame:
+    """A-share realistic trading fixture (R10 #21).
+
+    Random walk with jumps and vol clustering (GARCH(1,1)-style), so
+    jump-heavy / high-vol days stress the extreme-day behavior that a flattened
+    Gaussian rho hides entirely.  Kept OUT of :func:`build_typed_fixtures` to
+    preserve that function's fixed fixture contract; the dedup decision merges
+    it in via :func:`_fixture_bank`.
+    """
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2023-01-02", periods=rows, freq="D")
+    cols_list = [f"C{i}" for i in range(cols)]
     returns = np.zeros((rows, cols))
     vol = np.full((1, cols), 0.01)
     for i in range(1, rows):
@@ -162,8 +179,17 @@ def build_typed_fixtures(
         shocks += jumps * rng.standard_normal(size=(1, cols)) * 0.06
         returns[i] = shocks
     price = np.exp(np.cumsum(returns, axis=0))
-    fixtures["ashare"] = frame(price)
+    return pd.DataFrame(price, index=idx, columns=cols_list)
 
+
+def _fixture_bank() -> dict[str, pd.DataFrame]:
+    """Typed fixture bank for the multi-regime DECISION (R10 #21).
+
+    ``build_typed_fixtures`` (kept as the stable contract) + the A-share
+    trading fixture.
+    """
+    fixtures = build_typed_fixtures()
+    fixtures["ashare"] = build_ashare_fixture()
     return fixtures
 
 
@@ -683,7 +709,8 @@ def per_date_metrics(
         bv = b[mask]
         state = _state_agreement_day(av, bv) if state_labels else None
         if len(av) > 1:
-            sp = float(np.corrcoef(av, bv)[0, 1])
+            with np.errstate(invalid="ignore", divide="ignore"):
+                sp = float(np.corrcoef(av, bv)[0, 1])
         else:
             sp = 1.0
         if not np.isfinite(sp):
@@ -1006,7 +1033,7 @@ def regime_similarity_report(
     caller sees WHERE the pair diverges (heavy-tail? gaps? events?) instead of a
     single flattened rho.
     """
-    fixtures = build_typed_fixtures()
+    fixtures = _fixture_bank()
     return {
         name: _regime_summary(
             fa, fb, fixtures[name], factor_kind=factor_kind, policy=policy,
@@ -1040,7 +1067,7 @@ def multi_regime_duplicate_decision(
     if panel is not None:
         probes = (("gaussian", panel),)
     else:
-        fixtures = build_typed_fixtures()
+        fixtures = _fixture_bank()
         probes = tuple(
             (name, fixtures[name])
             for name in (regimes or _RICH_MULTI_REGIMES)

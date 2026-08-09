@@ -3,7 +3,7 @@
 > Generated from active runtime canonicals. SQL means DuckDB emitter support unless a dialect-specific certification says otherwise.
 > ClickHouse production certification remains separate and is not inferred from DuckDB.
 
-- active SQL emitter implementations: **340**
+- active SQL emitter implementations: **354**
 - DuckDB parity verified: **0**
 - DuckDB production safe: **0**
 
@@ -19,6 +19,7 @@
 | abnormal_turnover | yes | no | no |
 | abnormal_volume | yes | no | no |
 | abs | yes | no | no |
+| abs_return_volume_corr | yes | no | no |
 | acos | yes | no | no |
 | add | yes | no | no |
 | adv | yes | no | no |
@@ -38,8 +39,10 @@
 | bounded_pvi | yes | no | no |
 | candle_abs_body | yes | no | no |
 | candle_body | yes | no | no |
+| candle_body_percentile | yes | no | no |
 | candle_body_position | yes | no | no |
 | candle_body_ratio | yes | no | no |
+| candle_body_zscore | yes | no | no |
 | candle_close_location | yes | no | no |
 | candle_close_strength | yes | no | no |
 | candle_direction | yes | no | no |
@@ -49,13 +52,17 @@
 | candle_inside_ratio | yes | no | no |
 | candle_lower_shadow | yes | no | no |
 | candle_lower_shadow_ratio | yes | no | no |
+| candle_lower_shadow_zscore | yes | no | no |
 | candle_overlap_ratio | yes | no | no |
 | candle_range | yes | no | no |
 | candle_range_atr | yes | no | no |
+| candle_range_percentile | yes | no | no |
+| candle_range_zscore | yes | no | no |
 | candle_rejection_lower | yes | no | no |
 | candle_rejection_upper | yes | no | no |
 | candle_upper_shadow | yes | no | no |
 | candle_upper_shadow_ratio | yes | no | no |
+| candle_upper_shadow_zscore | yes | no | no |
 | cbrt | yes | no | no |
 | cdl_dark_cloud_cover | yes | no | no |
 | cdl_doji | yes | no | no |
@@ -127,6 +134,7 @@
 | event_frequency | yes | no | no |
 | exp | yes | no | no |
 | exp_neg | yes | no | no |
+| expanding_rank | yes | no | no |
 | fillna_const | yes | no | no |
 | fin_ratio | yes | no | no |
 | fix | yes | no | no |
@@ -137,13 +145,17 @@
 | ge | yes | no | no |
 | group_count | yes | no | no |
 | group_decay_linear | yes | no | no |
+| group_ex_self_mean | yes | no | no |
+| group_kurtosis | yes | no | no |
 | group_max | yes | no | no |
 | group_mean | yes | no | no |
 | group_min | yes | no | no |
 | group_neutralize | yes | no | no |
 | group_normalize | yes | no | no |
 | group_percentile | yes | no | no |
+| group_quantile_spread | yes | no | no |
 | group_rank | yes | no | no |
+| group_skewness | yes | no | no |
 | group_std | yes | no | no |
 | group_sum | yes | no | no |
 | group_topk_mean | yes | no | no |
@@ -160,6 +172,7 @@
 | ichimoku_senkou_a | yes | no | no |
 | ichimoku_senkou_b | yes | no | no |
 | ichimoku_tenkan | yes | no | no |
+| identity | yes | no | no |
 | index_weight | yes | no | no |
 | intraday_realized_semivariance_balance | yes | no | no |
 | intraday_volatility | yes | no | no |
@@ -330,6 +343,7 @@
 | turnover_volatility | yes | no | no |
 | turnover_zscore | yes | no | no |
 | ulcer_index | yes | no | no |
+| unitize | yes | no | no |
 | up_down_volume_ratio | yes | no | no |
 | up_volume_ratio | yes | no | no |
 | volume_acceleration | yes | no | no |

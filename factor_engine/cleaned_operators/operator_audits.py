@@ -197,12 +197,15 @@ def _missing_policy(op: Any, kwargs: dict[str, Any]) -> str | None:
         direct = getattr(md, "missing_policy", None)
     if direct is not None:
         return str(direct).strip().lower()
-    import inspect
+    try:
+        import inspect
 
-    sig = inspect.signature(getattr(op, "calculate", None))
-    p = sig.parameters.get("missing_policy")
-    if p is not None and p.default is not inspect.Parameter.empty:
-        return str(p.default).strip().lower()
+        sig = inspect.signature(getattr(op, "calculate", None))
+        p = sig.parameters.get("missing_policy")
+        if p is not None and p.default is not inspect.Parameter.empty:
+            return str(p.default).strip().lower()
+    except (TypeError, ValueError):  # non-inspectable callable — keep going
+        pass
     tags = list(getattr(md, "tags", None) or [])
     for t in tags:
         t = str(t)

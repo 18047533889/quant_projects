@@ -316,7 +316,15 @@ class FactorEngine:
         optimizer: 逻辑计划优化器。
     """
 
-    def __init__(self, backend, data_source, cache=None, *, run_mode: str | None = None) -> None:
+    def __init__(
+        self,
+        backend,
+        data_source,
+        cache=None,
+        *,
+        run_mode: str | None = None,
+        production_fallback_policy: str | None = None,
+    ) -> None:
         """构造因子引擎实例。
 
         Args:
@@ -334,6 +342,10 @@ class FactorEngine:
         self.run_mode = resolve_run_mode(run_mode)
         # #6：严格 run_mode 校验——非法值（含 typo）启动即失败，不静默回落。
         _validate_run_mode(self.run_mode)
+        # R10 #7: production fallback policy ("error" default / "warn") threaded
+        # into the ExecutionContext so the post-execute pandas-fallback hard gate
+        # can be explicitly relaxed by a caller that opts in.
+        self.production_fallback_policy = production_fallback_policy
         # R9-P0-001: the Analyzer must be constructed WITH the production policy
         # from THIS engine's run_mode.  Previously ``Analyzer()`` defaulted to
         # production=False, so the production typed-field gate (unknown raw column
@@ -1527,6 +1539,9 @@ class FactorEngine:
         base = ExecutionContext(
             data_source=self.data_source,
             run_mode=self.run_mode,
+            production_fallback_policy=(
+                self.production_fallback_policy or "error"
+            ),
             registry_version=OperatorRegistry.version(),
             evidence_version=evidence_version,
             cache=plan_cache,
@@ -1838,6 +1853,18 @@ class FactorEngine:
         from runtime.production_policy import assert_production_fastpath_runtime
 
         assert_production_fastpath_runtime(ctx, mode=engine_to_use.run_mode, context=f"run:{factor.name}")
+        # R10 #7: production hard gate on unplanned pandas fallbacks — the gate
+        # function already existed but was never invoked after execution; it only
+        # got logged below.  Now a production run REJECTS the result when the
+        # backend fell back to pandas for an operator that has backend evidence,
+        # unless ``production_fallback_policy='warn'``.
+        from runtime.production_policy import assert_no_production_pandas_fallbacks
+
+        assert_no_production_pandas_fallbacks(
+            ctx,
+            mode=engine_to_use.run_mode,
+            context=f"run:{factor.name}",
+        )
 
         if run_window is not None and run_window.trim_output and run_window.requested_start:
             from storage.time_window import slice_series_time_window

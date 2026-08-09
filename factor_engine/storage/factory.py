@@ -296,11 +296,15 @@ def build_data_source(config: Any, *, build_context: DataSourceBuildContext | No
         mining_coverage_threshold = _pop_option(
             options, "mining_coverage_threshold", default=None
         )
+        # #收官轮 P0（Integration）：pit_enforce 从 engine build context 注入——
+        # 之前 ``config.pit.enforce`` 只进 DataSourceBuildContext、factory 不取、
+        # 构造 DataAccessSource 时不传，四层 PIT gate「有安全门、主通道没经过」。
+        pit_enforce = _pop_option(options, "pit_enforce", default=None)
         # run_mode: context default, source override wins.  The constructor
         # derives ``production``/``strict_unknown_fields`` from the resolved
         # run_mode (R10 #3 makes production a floor the source cannot lower),
-        # so the factory only propagates the mining/snapshot gates that have no
-        # run_mode-derivable default.
+        # so the factory only propagates the mining/snapshot/PIT gates that have
+        # no run_mode-derivable default.
         if run_mode is None:
             run_mode = ctx.run_mode
         if enforce_mining_gate is None:
@@ -309,6 +313,8 @@ def build_data_source(config: Any, *, build_context: DataSourceBuildContext | No
             snapshot_now_only = ctx.snapshot_now_only
         if mining_coverage_threshold is None:
             mining_coverage_threshold = ctx.coverage_policy
+        if pit_enforce is None:
+            pit_enforce = ctx.pit_enforce
         source = DataAccessSource(
             dataset=str(dataset),
             fields=fields,
@@ -327,6 +333,7 @@ def build_data_source(config: Any, *, build_context: DataSourceBuildContext | No
             enforce_mining_gate=bool(enforce_mining_gate),
             snapshot_now_only=bool(snapshot_now_only),
             mining_coverage_threshold=mining_coverage_threshold,
+            pit_enforce=bool(pit_enforce),
         )
         _ensure_no_extra_options(source_type, options)
         return _wrap_long_table(_attach_bar_freq(source, bar_freq), long_table=long_table)

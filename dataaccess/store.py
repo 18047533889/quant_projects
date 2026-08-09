@@ -75,6 +75,7 @@ from data_access.read.read_contract import (
     build_data_snapshot,
     build_file_manifest,
     file_manifest_hash,
+    lineage_params,
     merge_sql_data_snapshots,
     schema_hash_from_decl,
 )
@@ -873,6 +874,18 @@ class DataAccessStore:
 
         返回解析出的 fields_meta（供 normalize 等复用；无 columns 时为空）。
         """
+        # #P1-final closure：specialized_only 数据集（factor_lake_wide——宽表 pivot，
+        # 标的在列轴上不是物理列）不进入 generic 读契约。所有 read/scan/sql 路径都
+        # 先过这里；无法从 name 解析（virtual dataset 如 <uri:...>）时跳过。
+        try:
+            _ds_for_gate = self._registry.get(dataset)
+        except Exception:
+            _ds_for_gate = None
+        if _ds_for_gate is not None and getattr(_ds_for_gate, "specialized_only", False):
+            raise ValidationError(
+                f"数据集 {dataset} 标记 specialized_only，不适用 generic read/scan："
+                f"{getattr(_ds_for_gate, 'specialized_only_reason', '') or '专用入口读取'}"
+            )
         self._enforce_read_contract(
             dataset,
             mode=mode,
@@ -1043,7 +1056,11 @@ class DataAccessStore:
             dataset=dataset,
             columns=tuple(columns) if columns else (),
             time_range=time_range,
-            instrument_filter=tuple(instrument_filter) if instrument_filter else (),
+            instrument_filter=(
+                tuple(instrument_filter)
+                if instrument_filter is not None
+                else None
+            ),
             params=snapshot.params,
         )
 
@@ -1619,7 +1636,11 @@ class DataAccessStore:
             dataset=dataset,
             columns=tuple(columns) if columns else (),
             time_range=time_range,
-            instrument_filter=tuple(instrument_filter) if instrument_filter else (),
+            instrument_filter=(
+                tuple(instrument_filter)
+                if instrument_filter is not None
+                else None
+            ),
             params=snapshot.params,
         )
         return ScanHandle(
@@ -3971,6 +3992,13 @@ class DataAccessStore:
         from data_access.read.formats import format_adapter_for_dataset
         from data_access.read.read_handle import ReadHandle
 
+        # #P1-final closure：engine/result 严格 enum。旧 dispatch 对未知值静默落到
+        # duckdb 物化路径（``engine="polarr"`` / ``result="lazzy"`` 不报错但执行的
+        # 是另一个 backend/形态），调用方成本与内存假设全错。这里 fail-closed。
+        from data_access.read.data_request import validate_engine_result
+
+        engine, result = validate_engine_result(engine, result)
+
         adapter = format_adapter_for_dataset(ds)
 
         if engine == "auto":
@@ -4043,7 +4071,11 @@ class DataAccessStore:
                 dataset=dataset,
                 columns=tuple(columns) if columns else (),
                 time_range=time_range,
-                instrument_filter=tuple(instrument_filter) if instrument_filter else (),
+                instrument_filter=(
+                tuple(instrument_filter)
+                if instrument_filter is not None
+                else None
+            ),
                 params=snapshot.params,
             )
             if result in {"lazy", "polars"}:
@@ -4119,8 +4151,14 @@ class DataAccessStore:
                 dataset=dataset,
                 columns=tuple(columns) if columns else (),
                 time_range=time_range,
-                instrument_filter=tuple(instrument_filter) if instrument_filter else (),
-                params=params,
+                instrument_filter=(
+                    tuple(instrument_filter)
+                    if instrument_filter is not None
+                    else None
+                ),
+                # #P1-final closure：params canonicalize 成不可变 tuple，不再把
+                # mutable dict 塞给声明为 tuple 的 ReadLineage.params。
+                params=lineage_params(params),
             )
             stream_normalize = None
             if normalize_units and columns:
@@ -4261,7 +4299,11 @@ class DataAccessStore:
             dataset=dataset,
             columns=tuple(columns) if columns else (),
             time_range=time_range,
-            instrument_filter=tuple(instrument_filter) if instrument_filter else (),
+            instrument_filter=(
+                tuple(instrument_filter)
+                if instrument_filter is not None
+                else None
+            ),
             params=snapshot.params,
         )
         stats = ReadStats(

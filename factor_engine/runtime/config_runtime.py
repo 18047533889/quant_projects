@@ -277,6 +277,7 @@ def config_data_scope_key(config: FactorEngineConfig) -> str:
         run_mode=getattr(config.run, "mode", None),
         market=getattr(config.run, "market", None),
         calendar_id=getattr(config.run, "calendar", None),
+        pit_enforce=bool(getattr(config.pit, "enforce", False)),
     )
     ds = build_data_source(config.data_source, build_context=build_context)
     return compute_data_scope(ds)
