@@ -13,6 +13,10 @@ Contract notes
 * Aligned pairs only: ``x[t]`` and ``y[t]`` are paired at the same position;
   NaN is never dropped and then re-compressed.
 * ``min_periods`` counts *valid pairs*; below it the output is NaN.
+* ``ts_lagged_mutual_information.window`` counts the ALIGNED PAIRS used in the
+  statistic, so its raw history requirement is ``window + lag`` bars and the
+  parameter means the same thing across lags (window=60,lag=1 and
+  window=60,lag=10 both report 60 aligned pairs).
 * Constant windows and degenerate quantiles return NaN (fail-closed).
 * Deterministic: the MI estimator is rank-quantile-binned (no randomness).
 """
@@ -23,7 +27,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import (
     aligned_pairs,
     check_window,
@@ -34,6 +44,18 @@ from cleaned_operators.rolling_pack import (
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
+    # R11 #18 unit-algebra honesty: algebraic output units (``same_as:`` /
+    # ``unit(...)`` / ``sqrt(...)`` / ``dimensionless``) are propagated to
+    # ``output_unit`` so the catalog / typed search see the real output
+    # dimension instead of an opaque ``level`` tag.  ``ts_distance_cov`` uses
+    # the sqrt-product form ``sqrt(unit(x)*unit(y))`` (review #18): distance
+    # covariance is a scale-laden statistic, and declaring the exact output
+    # dimension makes cross-scale mixing (price x turnover vs return x amount)
+    # visible in the metadata instead of silently changing with input scale.
+    output_unit = unit if (
+        unit.startswith("same_as:") or unit.startswith("unit(")
+        or unit.startswith("sqrt(") or unit == "dimensionless"
+    ) else None
     return OperatorMetadata(
         name=name,
         category="time_series_risk",
@@ -45,6 +67,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
             f"signature:{','.join(params)}->series", "domain:dependence",
             f"unit:{unit}", "cost:5",
         ],
+        output_unit=output_unit,
     )
 
 
@@ -89,10 +112,17 @@ class TsDistanceCorr(SeriesOperator):
         ["x", "y", "window", "min_periods"],
         unit="ratio",
     )
+    # R11 #16: ``min_periods`` is a real lower bound, not a clamped minimum —
+    # values 2..10 used to be silently coerced to 10, manufacturing a fake
+    # parameter interval.  A value < 10 now raises at binding.
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2),
+        "min_periods": ParamSpec(dtype=int, min=10),
+    }
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 40, min_periods: int = 10, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        mp = max(10, int(min_periods))
+        mp = min_periods  # strict ParamSpec(dtype=int, min=10) — no silent clamp
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
 
@@ -119,12 +149,24 @@ class TsDistanceCov(SeriesOperator):
         "ts_distance_cov",
         "距离协方差（distance covariance）。",
         ["x", "y", "window", "min_periods"],
-        unit="level",
+        # R11 #18: distance covariance is scale-laden — its dimension is
+        # sqrt(unit(x) * unit(y)), NOT a plain ``level``.  Declaring the exact
+        # output dimension (the sqrt-product algebraic form) makes cross-scale
+        # mixes (price x turnover vs return x amount) visible in the metadata
+        # instead of silently scaling the output with the inputs.
+        unit="sqrt(unit(x)*unit(y))",
     )
+    # R11 #16: ``min_periods`` is a real lower bound, not a clamped minimum —
+    # values 2..10 used to be silently coerced to 10, manufacturing a fake
+    # parameter interval.  A value < 10 now raises at binding.
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=2),
+        "min_periods": ParamSpec(dtype=int, min=10),
+    }
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 40, min_periods: int = 10, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        mp = max(10, int(min_periods))
+        mp = min_periods  # strict ParamSpec(dtype=int, min=10) — no silent clamp
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
 
@@ -219,8 +261,16 @@ class TsMutualInformation(SeriesOperator):
     )
     metadata.param_specs = {
         "bias_correction": ParamSpec(dtype=bool, choices=(True, False)),
+        # R11 #17: strict bool, matching bias_correction — ``bool(normalized)``
+        # used to accept 1/2/"False"/-1 via Python truthiness, manufacturing
+        # false search-space duplicates.  Only True/False pass the gate.
+        "normalized": ParamSpec(dtype=bool, choices=(True, False)),
         "window": ParamSpec(dtype=int, min=2),
         "bins": ParamSpec(dtype=int, min=2, max=10),
+        # R11 #16: ``min_periods`` is a real lower bound, not a clamped minimum —
+        # values 2..10 used to be silently coerced to 10, manufacturing a fake
+        # parameter interval.  A value < 10 now raises at binding.
+        "min_periods": ParamSpec(dtype=int, min=10),
     }
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 40, estimator: str = "quantile_hist", bins: int = 5, min_periods: int = 10, normalized: bool = True, bias_correction: bool = True, **_: Any) -> pd.DataFrame:
@@ -230,9 +280,9 @@ class TsMutualInformation(SeriesOperator):
         nb = int(bins)
         if not 2 <= nb <= 10:
             raise ValueError("bins must be in [2, 10]")
-        mp = max(10, int(min_periods))
-        norm = bool(normalized)
-        bc = bool(bias_correction)
+        mp = min_periods  # strict ParamSpec(dtype=int, min=10) — no silent clamp
+        norm = normalized  # strict bool ParamSpec — no bool() truthiness coercion
+        bc = bias_correction
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
 
@@ -263,26 +313,49 @@ class TsLaggedMutualInformation(SeriesOperator):
     )
     metadata.param_specs = {
         "bias_correction": ParamSpec(dtype=bool, choices=(True, False)),
+        # R11 #15: strict-integer lag — ``int(lag)`` used to truncate 1.9 -> 1,
+        # manufacturing false search-space duplicates.  Non-integer finite values
+        # raise; lag >= 1 (a 0-lag MI is the synchronous ts_mutual_information).
+        "lag": ParamSpec(dtype=int, min=1),
         "window": ParamSpec(dtype=int, min=2),
         "bins": ParamSpec(dtype=int, min=2, max=10),
+        # R11 #16: ``min_periods`` is a real lower bound, not a clamped minimum —
+        # values 2..10 used to be silently coerced to 10, manufacturing a fake
+        # parameter interval.  A value < 10 now raises at binding.
+        "min_periods": ParamSpec(dtype=int, min=10),
     }
+    # R11 #14/#15: ``window`` counts the ALIGNED PAIRS actually used in the
+    # statistic, so the raw history requirement is ``window + lag`` bars and the
+    # parameter means the same thing across lags (window=60,lag=1 and
+    # window=60,lag=10 now use the SAME 60 aligned pairs).  A lag >= window
+    # would leave zero aligned pairs -> infeasible at the call boundary.
+    metadata.relational_specs = [
+        RelationalParamSpec(
+            "lag < window",
+            message="lag must be < window (window counts aligned pairs; raw history = window + lag)",
+        ),
+    ]
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 40, lag: int = 1, bins: int = 5, min_periods: int = 10, bias_correction: bool = True, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        lag_v = int(lag)
-        if lag_v < 0:
-            raise ValueError("lag must be a non-negative integer")
+        lag_v = lag  # strict-integer ParamSpec(dtype=int, min=1) — never int()-truncated
+        if lag_v < 1:
+            raise ValueError("lag must be >= 1")
         nb = int(bins)
         if not 2 <= nb <= 10:
             raise ValueError("bins must be in [2, 10]")
-        mp = max(10, int(min_periods))
-        bc = bool(bias_correction)
+        mp = min_periods  # strict ParamSpec(dtype=int, min=10) — no silent clamp
+        bc = bias_correction
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
+        # R11 #14: raw history = window + lag bars so every lag reports exactly
+        # ``window`` aligned pairs (the rolling kernel consumes window+lag raw
+        # bars, then the lag-shift pairs x[..:raw-lag] with y[lag:..]).
+        raw_w = w + lag_v
 
         def _fn(a: np.ndarray, b: np.ndarray) -> float:
             n = a.size
-            if n <= lag_v:
+            if n < raw_w:
                 return np.nan
             x_lead = a[: n - lag_v]
             y_lag = b[lag_v:]
@@ -291,7 +364,7 @@ class TsLaggedMutualInformation(SeriesOperator):
                 return np.nan
             return _quantile_hist_mi(pa, pb, nb, False, bias_correction=bc)
 
-        return frame_like(x, map_pair_rolling(xv, yv, w, _fn))
+        return frame_like(x, map_pair_rolling(xv, yv, raw_w, _fn))
 
 
 def _fractional_tail_membership(vals: np.ndarray, quantile: float, direction: str) -> np.ndarray:

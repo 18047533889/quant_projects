@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Iterable
 import numpy as np
 import pandas as pd
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
 
 _EPS=1e-12
 
@@ -33,9 +33,10 @@ def _tr(high,low,close):
     arr=np.maximum.reduce([(high-low).to_numpy(float),(high-prev).abs().to_numpy(float),(low-prev).abs().to_numpy(float)])
     return pd.DataFrame(arr,index=high.index,columns=high.columns)
 
-def _register(name,params,fn,desc,*,tags=(),param_specs=None,expected_old_source=""):
+def _register(name,params,fn,desc,*,tags=(),param_specs=None,relational_specs=None,expected_old_source=""):
     meta=OperatorMetadata(name=name,category="technical_signal",description=desc,param_names=list(params),return_type="series",
-        tags=["pit_safe","causal","production_extension",*tags], param_specs=dict(param_specs or {}))
+        tags=["pit_safe","causal","production_extension",*tags], param_specs=dict(param_specs or {}),
+        relational_specs=list(relational_specs or []))
     def _calculate_series(self,*args,**kwargs): return fn(*args,**kwargs)
     cls=type(f"TechnicalV2_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})
     register_operator(name=name,category="technical_signal",business_category="technical",canonical=name,
@@ -141,61 +142,54 @@ def ichimoku_cloud_position(high,low,close,tenkan_window,kijun_window,senkou_b_w
     a=ichimoku_senkou_a(high,low,tenkan_window,kijun_window); b=ichimoku_senkou_b(high,low,senkou_b_window); lo=pd.DataFrame(np.minimum(a,b),index=a.index,columns=a.columns); hi=pd.DataFrame(np.maximum(a,b),index=a.index,columns=a.columns)
     return (close-lo)/(hi-lo).replace(0,np.nan)
 
-def KAMA(close,er_window,fast_window,slow_window,missing_policy="interrupt",max_gap=0):
+def KAMA(close,er_window,fast_window,slow_window):
     er=_pi(er_window,"er_window",2); fast=_pi(fast_window,"fast_window"); slow=_pi(slow_window,"slow_window")
     if fast>=slow: raise ValueError("fast_window must be < slow_window")
-    if missing_policy not in ("interrupt","carry"):
-        raise ValueError("missing_policy must be 'interrupt' or 'carry'")
-    gap_max=max(int(max_gap),0)
     change=(close-close.shift(er)).abs(); vol=close.diff().abs().rolling(er,min_periods=er).sum(); efficiency=change/vol.replace(0,np.nan)
     fast_sc=2.0/(fast+1.0); slow_sc=2.0/(slow+1.0); sc=(efficiency*(fast_sc-slow_sc)+slow_sc)**2
     arr=close.to_numpy(float); alpha=sc.to_numpy(float); out=np.full_like(arr,np.nan,float)
     for c in range(arr.shape[1]):
+        # break + rewarm (single production missing-state policy): a NaN price
+        # INVALIDATES the recursive state.  KAMA then emits NaN until
+        # ``er_window`` consecutive finite prices re-accumulate and the ER is
+        # re-derived over that contiguous history — no frozen flat line between
+        # the re-seed and the ER window re-filling (round-11 P0).
         last=np.nan
-        gap=0
+        contiguous=0
         for t in range(arr.shape[0]):
             if not np.isfinite(arr[t,c]):
-                # Unified missing-state policy (audit 13.6): a missing price must
-                # not silently bridge a suspension / data gap.  Default
-                # ``interrupt`` -> NaN and break the recursion so the next finite
-                # bar re-seeds.  ``carry`` may bridge at most ``max_gap`` missing
-                # bars with the last finite value, then interrupts too.
-                gap += 1
-                if missing_policy == "carry" and gap <= gap_max and np.isfinite(last):
-                    out[t,c] = last
-                else:
-                    last = np.nan
+                last=np.nan
+                contiguous=0
                 continue
-            gap = 0
+            contiguous+=1
+            if contiguous<er:
+                # Not enough contiguous history to re-derive the ER yet.
+                continue
             if not np.isfinite(last): last=arr[t,c]
             elif np.isfinite(alpha[t,c]): last=last+alpha[t,c]*(arr[t,c]-last)
             out[t,c]=last
     return pd.DataFrame(out,index=close.index,columns=close.columns)
 
-def Supertrend(high,low,close,atr_window,multiplier,missing_policy="interrupt",max_gap=0):
-    w=_pi(atr_window,"atr_window",2); mult=_pf(multiplier,"multiplier",0); atr=_wilder(_tr(high,low,close),w); mid=(high+low)/2.0; basic_u=mid+mult*atr; basic_l=mid-mult*atr
-    if missing_policy not in ("interrupt","carry"):
-        raise ValueError("missing_policy must be 'interrupt' or 'carry'")
-    gap_max=max(int(max_gap),0)
-    rows,cols=close.shape; out=np.full((rows,cols),np.nan); cu=basic_u.to_numpy(float); cl=basic_l.to_numpy(float); cv=close.to_numpy(float); final_u=cu.copy(); final_l=cl.copy(); trend=np.ones((rows,cols),dtype=int)
+def Supertrend(high,low,close,atr_window,multiplier):
+    w=_pi(atr_window,"atr_window",2); mult=_pf(multiplier,"multiplier",0)
+    if mult<=0: raise ValueError("multiplier must be > 0 (Supertrend multiplier=0 collapses upper/lower to the midpoint)")
+    atr=_wilder(_tr(high,low,close),w); mid=(high+low)/2.0; basic_u=mid+mult*atr; basic_l=mid-mult*atr
+    rows,cols=close.shape; out=np.full((rows,cols),np.nan)
+    hh=high.to_numpy(float); ll=low.to_numpy(float); cu=basic_u.to_numpy(float); cl=basic_l.to_numpy(float); cv=close.to_numpy(float)
+    final_u=cu.copy(); final_l=cl.copy(); trend=np.ones((rows,cols),dtype=int)
     for c in range(cols):
-        gap=0
         for t in range(1,rows):
-            if not np.isfinite(cv[t,c]):
-                # Unified missing-state policy (audit 13.6): a missing close must
-                # not silently bridge a suspension / data gap.  ``interrupt``
-                # (default) -> NaN and break the recursion (next finite bar
-                # re-seeds); ``carry`` bridges at most ``max_gap`` bars with the
-                # previous finite level, then interrupts.
-                gap += 1
-                if missing_policy == "carry" and gap <= gap_max and np.isfinite(final_u[t-1,c]) and np.isfinite(final_l[t-1,c]):
-                    out[t,c] = out[t-1,c]
-                else:
-                    trend[t,c] = 0  # sentinel: state broken, next finite bar re-seeds
+            # break + rewarm: a bar is state-valid only when high/low/close AND
+            # the derived ATR-based bands are ALL finite.  A single non-finite
+            # component (e.g. high/NaN + low/NaN with a finite close) must NOT
+            # keep the stale trend alive — it invalidates the state and re-warms
+            # over the next contiguous valid segment (round-11 P0).
+            if not (np.isfinite(hh[t,c]) and np.isfinite(ll[t,c]) and np.isfinite(cv[t,c])
+                    and np.isfinite(cu[t,c]) and np.isfinite(cl[t,c])):
+                trend[t,c] = 0  # sentinel: state broken, next valid bar re-seeds
                 continue
-            gap = 0
             if trend[t-1,c] == 0:
-                # Re-seed after a gap: restart bands from the current bar.
+                # Re-seed after a gap from the current bar's own valid bands.
                 trend[t,c] = 1
                 final_u[t,c] = cu[t,c]
                 final_l[t,c] = cl[t,c]
@@ -208,15 +202,12 @@ def Supertrend(high,low,close,atr_window,multiplier,missing_policy="interrupt",m
             else: trend[t,c]=trend[t-1,c]
             out[t,c]=final_l[t,c] if trend[t,c]>0 else final_u[t,c]
     return pd.DataFrame(out,index=close.index,columns=close.columns)
-def SupertrendDirection(high,low,close,atr_window,multiplier,missing_policy="interrupt",max_gap=0):
-    st=Supertrend(high,low,close,atr_window,multiplier,missing_policy,max_gap); return pd.DataFrame(np.where(close>=st,1.0,-1.0),index=close.index,columns=close.columns).where(st.notna())
+def SupertrendDirection(high,low,close,atr_window,multiplier):
+    st=Supertrend(high,low,close,atr_window,multiplier); return pd.DataFrame(np.where(close>=st,1.0,-1.0),index=close.index,columns=close.columns).where(st.notna())
 
-def PSAR(high,low,acceleration,maximum,missing_policy="interrupt",max_gap=0):
+def PSAR(high,low,acceleration,maximum):
     af0=_pf(acceleration,"acceleration",0); afmax=_pf(maximum,"maximum",0)
     if af0<=0 or afmax<af0: raise ValueError("require 0 < acceleration <= maximum")
-    if missing_policy not in ("interrupt","carry"):
-        raise ValueError("missing_policy must be 'interrupt' or 'carry'")
-    gap_max=max(int(max_gap),0)
     h,l=high.to_numpy(float),low.to_numpy(float); rows,cols=h.shape; out=np.full((rows,cols),np.nan)
     for c in range(cols):
         # R5-37: seed from the FIRST jointly-valid (h,l) bar, never from row 0
@@ -224,23 +215,15 @@ def PSAR(high,low,acceleration,maximum,missing_policy="interrupt",max_gap=0):
         # state).  The t-1/t-2 references use a *valid-bar* history — after a
         # gap / re-seed the history is reset, so SAR never reads raw rows from
         # inside a suspension (half-carry / half-raw-index mixing).
-        bull=True; sar=None; ep=None; af=af0; live=False; gap=0; seeded_once=False
+        # break + rewarm (single production missing-state policy): a missing bar
+        # invalidates the state; the next jointly-valid bar re-seeds.
+        bull=True; sar=None; ep=None; af=af0; live=False; seeded_once=False
         prev1_h=prev1_l=prev2_h=prev2_l=None
         for t in range(rows):
             hv, lv = h[t,c], l[t,c]
             if not (np.isfinite(hv) and np.isfinite(lv)):
-                # Unified missing-state policy (audit 13.6): a missing bar must
-                # not silently bridge a suspension / data gap.  ``interrupt``
-                # (default) -> NaN and break the recursion (next finite bar
-                # re-seeds); ``carry`` bridges at most ``max_gap`` bars with the
-                # previous finite SAR, then interrupts.
-                gap += 1
-                if missing_policy == "carry" and gap <= gap_max and live:
-                    out[t,c] = sar
-                else:
-                    live = False
+                live = False
                 continue
-            gap = 0
             if not live:
                 # Seed / re-seed from this jointly-valid bar and reset the
                 # valid-bar history (a gap breaks the sequence; the pre-gap
@@ -316,19 +299,93 @@ _RECURSIVE_EWM = {
     "KeltnerMid", "KeltnerUpper", "KeltnerLower", "KeltnerPosition",
     "TSI", "TSI_signal", "DEMA", "TEMA",
 }
-# R5-35/36: search-space contracts — the UltimateOscillator weight triple is ONE
-# ratio dimension (kernel normalizes to ``w3=1``), so the individual weights must
-# not be independently mined; Keltner multiplier is a strict positive (0
-# degenerates to the mid band and is rejected by the kernel).
+# R5-35/36 + round-11 P0 (search-space contracts): EVERY parameter of the
+# technical indicators below gets a formal ``ParamSpec`` — never a silent
+# ``_pi`` float truncation.  A window declared ``dtype=int`` rejects 20.1/20.5/
+# 20.9 at the call boundary (they all used to truncate to the SAME 20, a fake
+# search space); a multiplier/acceleration is a strict positive float.
+_WIN_GE2 = ParamSpec(dtype=int, min=2)   # windows whose kernel uses _pi(w, name, 2)
+_WIN_GE1 = ParamSpec(dtype=int, min=1)   # windows whose kernel uses _pi(w, name)
+_POS_FLOAT = ParamSpec(dtype=float, min=1e-9)  # strict positive (finite) float
+
+
+def _rel(expression, message):
+    return RelationalParamSpec(expression=expression, message=message)
+
+
 _PARAM_SPECS = {
+    "DMI_plus": {"window": _WIN_GE2},
+    "DMI_minus": {"window": _WIN_GE2},
+    "DX": {"window": _WIN_GE2},
+    "NATR": {"window": _WIN_GE2},
+    "PPO": {"fast_window": _WIN_GE1, "slow_window": _WIN_GE1},
+    "PPO_signal": {"fast_window": _WIN_GE1, "slow_window": _WIN_GE1, "signal_window": _WIN_GE1},
+    "PPO_hist": {"fast_window": _WIN_GE1, "slow_window": _WIN_GE1, "signal_window": _WIN_GE1},
+    "PVO": {"fast_window": _WIN_GE1, "slow_window": _WIN_GE1},
+    "PVO_signal": {"fast_window": _WIN_GE1, "slow_window": _WIN_GE1, "signal_window": _WIN_GE1},
+    "PVO_hist": {"fast_window": _WIN_GE1, "slow_window": _WIN_GE1, "signal_window": _WIN_GE1},
+    "CMO": {"window": _WIN_GE2},
+    "VortexPlus": {"window": _WIN_GE2},
+    "VortexMinus": {"window": _WIN_GE2},
+    "KeltnerMid": {"ema_window": _WIN_GE1},
+    "KeltnerUpper": {"ema_window": _WIN_GE1, "atr_window": _WIN_GE1, "multiplier": _POS_FLOAT},
+    "KeltnerLower": {"ema_window": _WIN_GE1, "atr_window": _WIN_GE1, "multiplier": _POS_FLOAT},
+    "KeltnerPosition": {"ema_window": _WIN_GE1, "atr_window": _WIN_GE1, "multiplier": _POS_FLOAT},
+    "TSI": {"long_window": _WIN_GE2, "short_window": _WIN_GE2},
+    "TSI_signal": {"long_window": _WIN_GE2, "short_window": _WIN_GE2, "signal_window": _WIN_GE1},
     "UltimateOscillator": {
+        "short_window": _WIN_GE2,
+        "medium_window": _WIN_GE2,
+        "long_window": _WIN_GE2,
+        # R5-35: the weight triple is ONE ratio dimension (kernel normalizes to
+        # ``w3=1``), so the individual weights must not be independently mined.
         "short_weight": ParamSpec(dtype=float, searchable=False),
         "medium_weight": ParamSpec(dtype=float, searchable=False),
         "long_weight": ParamSpec(dtype=float, searchable=False),
     },
-    "KeltnerUpper": {"multiplier": ParamSpec(dtype=float, min=1e-9)},
-    "KeltnerLower": {"multiplier": ParamSpec(dtype=float, min=1e-9)},
-    "KeltnerPosition": {"multiplier": ParamSpec(dtype=float, min=1e-9)},
+    "DEMA": {"window": _WIN_GE1},
+    "TEMA": {"window": _WIN_GE1},
+    "ichimoku_tenkan": {"tenkan_window": _WIN_GE2},
+    "ichimoku_kijun": {"kijun_window": _WIN_GE2},
+    "ichimoku_senkou_a": {"tenkan_window": _WIN_GE2, "kijun_window": _WIN_GE2},
+    "ichimoku_senkou_b": {"senkou_b_window": _WIN_GE2},
+    "ichimoku_cloud_width": {"tenkan_window": _WIN_GE2, "kijun_window": _WIN_GE2, "senkou_b_window": _WIN_GE2},
+    "ichimoku_cloud_position": {"tenkan_window": _WIN_GE2, "kijun_window": _WIN_GE2, "senkou_b_window": _WIN_GE2},
+    "KAMA": {"er_window": _WIN_GE2, "fast_window": _WIN_GE1, "slow_window": _WIN_GE1},
+    "Supertrend": {"atr_window": _WIN_GE2, "multiplier": _POS_FLOAT},
+    "SupertrendDirection": {"atr_window": _WIN_GE2, "multiplier": _POS_FLOAT},
+    "PSAR": {"acceleration": _POS_FLOAT, "maximum": _POS_FLOAT},
+}
+
+# R6-24 relational feasibility constraints (round-11 P0): TSI's dual-EMA window
+# swap (long < short) creates near-duplicate search nodes and is rejected before
+# budget is spent; PPO/PVO/KAMA fast/slow and UltimateOscillator's window chain
+# are declared the same way.  PSAR requires 0 < acceleration <= maximum.
+_PPO_REL = [
+    _rel("fast_window < slow_window", "fast_window must be < slow_window (fast={fast_window}, slow={slow_window})")
+]
+_TSI_REL = [
+    _rel("long_window > short_window", "long_window must be > short_window (long={long_window}, short={short_window})")
+]
+_UO_REL = [
+    _rel("short_window < medium_window", "require short_window < medium_window (short={short_window}, medium={medium_window})"),
+    _rel("medium_window < long_window", "require medium_window < long_window (medium={medium_window}, long={long_window})"),
+]
+_PSAR_REL = [
+    _rel("acceleration <= maximum", "require 0 < acceleration <= maximum (acceleration={acceleration}, maximum={maximum})")
+]
+_RELATIONAL_SPECS = {
+    "PPO": _PPO_REL,
+    "PPO_signal": _PPO_REL,
+    "PPO_hist": _PPO_REL,
+    "PVO": _PPO_REL,
+    "PVO_signal": _PPO_REL,
+    "PVO_hist": _PPO_REL,
+    "KAMA": _PPO_REL,
+    "TSI": _TSI_REL,
+    "TSI_signal": _TSI_REL,
+    "UltimateOscillator": _UO_REL,
+    "PSAR": _PSAR_REL,
 }
 for _name,_params,_fn,_desc in _SPECS:
     _tags=("stateful","full_replay") if _name in _RECURSIVE_EWM or _name in {"KAMA","Supertrend","SupertrendDirection","PSAR"} else ()
@@ -336,4 +393,5 @@ for _name,_params,_fn,_desc in _SPECS:
     # exact source it replaces so the chain is independent of import order
     # (round-7 P0).  Other spec entries register fresh — no pin needed.
     _pin = "composite_fastpath_primitives" if _name == "KAMA" else ""
-    _register(_name,_params,_fn,_desc,tags=_tags,param_specs=_PARAM_SPECS.get(_name),expected_old_source=_pin)
+    _register(_name,_params,_fn,_desc,tags=_tags,param_specs=_PARAM_SPECS.get(_name),
+              relational_specs=_RELATIONAL_SPECS.get(_name),expected_old_source=_pin)

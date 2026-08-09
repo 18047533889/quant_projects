@@ -109,23 +109,21 @@ def _mark_autocorr_chunk(evc: np.ndarray, mkc: np.ndarray, event_lag: int, mark_
     if mark_missing_policy == "censor":
         # #43 censor: an event that occurred but whose mark is unavailable is a
         # *break* in the event-index sequence — magnitude memory across the gap
-        # is unknown, so autocorrelation is computed within the longest
-        # contiguous segment of available marks and events on either side of
-        # the missing-mark event are never paired.
-        best = np.nan
-        best_size = -1
-        seg_start = 0
-        for j in range(n + 1):
-            if j < n and has_mark[j]:
-                continue
-            seg = marks[seg_start:j]
-            if seg.size >= 2:
-                c = _mark_autocorr_1d(seg, event_lag)
-                if np.isfinite(c) and seg.size > best_size:
-                    best = c
-                    best_size = seg.size
-            seg_start = j + 1
-        return best
+        # is unknown, so events on either side of the missing-mark event are
+        # never paired.  P0-8: the default censor uses the LATEST (trailing /
+        # current) contiguous segment of available marks — the current regime,
+        # NOT the longest historical one.  A stale pre-break regime (a long run
+        # of old events) must not dominate the current regime: when the newest
+        # mark is missing, walk back to the most recent contiguous finite-mark
+        # run and use that; fail closed to NaN when that trailing run is too
+        # small for a correlation.
+        seg_start = n
+        while seg_start > 0 and has_mark[seg_start - 1]:
+            seg_start -= 1
+        seg = marks[seg_start:n]
+        if seg.size >= 2:
+            return _mark_autocorr_1d(seg, event_lag)
+        return np.nan
     # drop: drop unavailable-mark events and re-index the survivors.
     return _mark_autocorr_1d(marks[has_mark], event_lag)
 
@@ -185,38 +183,34 @@ class EventMarkAutocorr(SeriesOperator):
         return frame_like(event, out)
 
 
-def _corr_longest_run(xv: np.ndarray, yv: np.ndarray, ok: np.ndarray, min_pairs: int = 4) -> float:
-    """Corr(x, y) within the longest contiguous run of valid observations.
+def _corr_trailing_run(xv: np.ndarray, yv: np.ndarray, ok: np.ndarray, min_pairs: int = 4) -> float:
+    """Corr(x, y) within the TRAILING (latest) contiguous run of valid observations.
 
     Used by the ``censor`` MarkMissingPolicy: an invalid observation (an
     interval spanning an unknown event observation, or an event whose mark is
     unavailable) *breaks* the sequence, so observations on either side of the
-    gap belong to different epochs and are never pooled.  Fail-closed to NaN
-    when no run is large enough.
+    gap belong to different epochs and are never pooled.  P0-8: a trailing-window
+    operator reflects the CURRENT epoch, so the censor uses the LATEST valid
+    run, never the longest historical one — a stale pre-break regime must not
+    dominate the trailing-window result.  Fail-closed to NaN when the trailing
+    run is not large enough.
     """
-    best = np.nan
-    best_size = -1
-    j = 0
     n = ok.shape[0]
-    while j < n:
-        if not ok[j]:
-            j += 1
-            continue
-        k = j
-        while k < n and ok[k]:
-            k += 1
-        if k - j >= min_pairs:
-            xs = xv[j:k]
-            ys = yv[j:k]
-            vx = float(np.var(xs))
-            vy = float(np.var(ys))
-            if vx > _EPS and vy > _EPS:
-                c = float(np.corrcoef(xs, ys)[0, 1])
-                if np.isfinite(c) and (k - j) > best_size:
-                    best = c
-                    best_size = k - j
-        j = k
-    return best
+    j = n
+    while j > 0 and ok[j - 1]:
+        j -= 1
+    if n - j < min_pairs:
+        return np.nan
+    xs = xv[j:n]
+    ys = yv[j:n]
+    vx = float(np.var(xs))
+    vy = float(np.var(ys))
+    if vx <= _EPS or vy <= _EPS:
+        return np.nan
+    c = float(np.corrcoef(xs, ys)[0, 1])
+    if not np.isfinite(c):
+        return np.nan
+    return c
 
 
 def _interval_mark_chunk(evc: np.ndarray, in_idx: np.ndarray, prev_idx: int | None, mkv: np.ndarray, mark_missing_policy: str = "censor") -> float:
@@ -257,7 +251,7 @@ def _interval_mark_chunk(evc: np.ndarray, in_idx: np.ndarray, prev_idx: int | No
     if int(ok.sum()) < 4:
         return np.nan
     if mark_missing_policy == "censor":
-        return _corr_longest_run(intervals, marks_after, ok, min_pairs=4)
+        return _corr_trailing_run(intervals, marks_after, ok, min_pairs=4)
     ti = intervals[ok]
     mi = marks_after[ok]
     vt = float(np.var(ti))
@@ -279,13 +273,20 @@ class EventIntervalMarkCoupling(SeriesOperator):
 
     τ_j = 相邻事件日期间隔，m_j = 事件 mark。正相关 = 长时间平静后憋出大事件；
     负相关 = 事件越密集越强。适合 limit event / abnormal return / turnover spike
-    / financial surprise。P1。
+    / financial surprise。
+
+    P0-9 (bounded bar-window): this is a strict ``window``-bar operator.  The
+    pre-window -> first-in-window interval is included ONLY when the previous
+    event lies within ``max_boundary_extension`` bars before the window edge; a
+    distant previous event (arbitrarily far in the past) is NOT allowed to make
+    the window unbounded.  ``max_boundary_extension=0`` disables boundary
+    extension entirely (in-window events only).  P1。
     """
 
     metadata = _metadata(
         "event_interval_mark_coupling",
         "事件间隔与事件强度相关 Corr(τ_j, m_j)。",
-        ["event", "mark", "window", "mark_missing_policy"],
+        ["event", "mark", "window", "mark_missing_policy", "max_boundary_extension"],
         unit="corr",
         cost=4,
     )
@@ -296,11 +297,15 @@ class EventIntervalMarkCoupling(SeriesOperator):
         mark: pd.DataFrame,
         window: int = 252,
         mark_missing_policy: str = "censor",
+        max_boundary_extension: int = 5,
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
+        mbe = int(max_boundary_extension)
         if w < 6:
             raise ValueError("event_interval_mark_coupling requires window >= 6")
+        if mbe < 0:
+            raise ValueError("event_interval_mark_coupling requires max_boundary_extension >= 0")
         if mark_missing_policy not in ("censor", "drop"):
             raise ValueError("event_interval_mark_coupling mark_missing_policy must be 'censor' or 'drop'")
 
@@ -317,6 +322,14 @@ class EventIntervalMarkCoupling(SeriesOperator):
                 end_pos = int(np.searchsorted(all_idx, r + 1, side="left"))
                 in_idx = all_idx[start_pos:end_pos]
                 prev_idx = int(all_idx[start_pos - 1]) if start_pos > 0 else None
+                # P0-9: strict bounded bar-window.  The pre-window interval is
+                # kept ONLY when the previous event is near the window edge
+                # (within ``max_boundary_extension`` bars).  An arbitrarily
+                # distant previous event must not leak into a ``window``-bar
+                # coupling — if it is too far back, fall back to the
+                # no-previous-event semantics (in-window events only).
+                if prev_idx is not None and prev_idx < lo - mbe:
+                    prev_idx = None
                 out[r, c] = _interval_mark_chunk(evv[:, c], in_idx, prev_idx, mkv[:, c], mark_missing_policy)
         return frame_like(event, out)
 

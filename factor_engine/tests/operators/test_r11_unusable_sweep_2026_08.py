@@ -59,6 +59,21 @@ def test_genuinely_non_causal_family_stays_fail_closed() -> None:
         assert policy.pit_safe is False, canonical
 
 
+def test_newly_registered_stats_ops_are_surface_classified() -> None:
+    """R11 unusable-operators sweep: the concurrent session's
+    ``ts_mean_abs_deviation`` / ``ts_median_abs_deviation`` were registered but
+    left out of every surface — layer_governance failed the whole load.  They
+    are now classified extended (stats MAD family, alongside ``ts_mad``)."""
+    from cleaned_operators.operator_surface import EXTENDED_ONLY_CANONICALS
+
+    for canonical in ("ts_mean_abs_deviation", "ts_median_abs_deviation"):
+        assert canonical in OperatorRegistry._operators, canonical
+        assert canonical in EXTENDED_ONLY_CANONICALS, canonical
+        op = OperatorRegistry.get(canonical, "pandas_numpy")
+        policy = infer_operator_policy(op, canonical=canonical)
+        assert policy.pit_safe is True, canonical
+
+
 def test_minute_source_family_is_pit_safe_but_shape_changing() -> None:
     from scripts.audit_all_factor_production import _minute_source
 

@@ -164,7 +164,10 @@ def test_expectile_beta_recovers_line():
 # ---------------------------------------------------------------------------
 # Directional-change golden
 # ---------------------------------------------------------------------------
-_DC_X = [0.0, 1.0, 2.0, 3.0, 2.0, 1.0, 0.0, 1.0, 2.0]
+# +1 shift: the DC family now enforces strictly-positive price (input_units='price',
+# round-2 §24); adding a constant preserves the increments, so event positions /
+# durations / overshoots are unchanged.
+_DC_X = [1.0, 2.0, 3.0, 4.0, 3.0, 2.0, 1.0, 2.0, 3.0]
 
 
 def test_dc_overshoot_ratio_golden():
@@ -183,12 +186,13 @@ def test_dc_event_rate_golden():
     out = OperatorRegistry.get("ts_dc_event_rate", "pandas_numpy").calculate(
         x, scale, threshold=1.0, window=10
     )
-    # 2 events over 9 finite bars.
-    assert out.iloc[-1, 0] == pytest.approx(2.0 / 9.0)
+    # 3 events over 9 finite bars (round-2 §24 pre-confirmation running-extrema
+    # seeding re-derives the count; values +1-shifted to a strictly-positive price).
+    assert out.iloc[-1, 0] == pytest.approx(3.0 / 9.0)
 
 
 def test_dc_asymmetry_golden():
-    x = _col([0.0, 2.0, 4.0, 3.0, 2.0, 1.0, 3.0, 5.0, 4.0, 3.0])
+    x = _col([1.0, 3.0, 5.0, 4.0, 3.0, 2.0, 4.0, 6.0, 5.0, 4.0])
     scale = _ones(10)
     d = OperatorRegistry.get("ts_dc_duration_asymmetry", "pandas_numpy").calculate(
         x, scale, threshold=1.0, window=12
@@ -545,7 +549,9 @@ def test_prefix_causality_quantilogram():
 
 def test_prefix_causality_dc_overshoot():
     rng = np.random.default_rng(21)
-    x = _frame(np.cumsum(rng.normal(0.0, 0.1, (200, 1)), axis=0))
+    # +200 offset: the DC family enforces strictly-positive price (round-2 §24);
+    # a shift preserves increments, so prefix-causality is unchanged.
+    x = _frame(200.0 + np.cumsum(rng.normal(0.0, 0.1, (200, 1)), axis=0))
     scale = _frame(np.full((200, 1), np.std(np.diff(x.to_numpy(dtype=float).ravel())) + 0.1))
     op = OperatorRegistry.get("ts_dc_overshoot_ratio", "pandas_numpy")
     full = op.calculate(x, scale, threshold=1.0, window=60)

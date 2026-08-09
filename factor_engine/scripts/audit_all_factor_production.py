@@ -360,7 +360,7 @@ _SCALAR_VALUES: dict[str, Any] = {
     # R11 unusable-operators sweep: scalar enums / selectors that operators
     # accept as keyword defaults (the kernel signature may not name them — they
     # flow through **kwargs), so the declared-default fallback cannot see them.
-    "flow_type": "operating",
+    "flow_type": "TTMFlow",
     "theiler": 0,
     "initial_semantics": "since_transition",
     "event_kind": "marked",
@@ -371,6 +371,17 @@ _SCALAR_VALUES: dict[str, Any] = {
     "n_surrogates": 20,
     "price_basis": "close",
     "seed": 0,
+    # Integer-count scalars: the generic ``min_`` fallback returns a float
+    # (0.01) which fails the operators' integer validation.
+    "min_finite": 3,
+    "min_history_sessions": 5,
+    "min_line": 3,
+    "min_per_bin": 3,
+    "min_effective_n": 3,
+    "min_embeddings": 3,
+    "min_nodes": 4,
+    "purge_gap": 5,
+    "session_tz": "Asia/Shanghai",
     # Minute/relation integration (2026-08).
     "segment": "morning",
     "transition": "open",
@@ -594,8 +605,8 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("intraday_quantile_curve_pca_score", "k"): 1,
     ("intraday_quantile_curve_pca_residual", "window"): 60,
     ("intraday_quantile_curve_pca_residual", "k"): 1,
-    ("ts_kramers_moyal_drift", "min_bin_count"): 0,
-    ("ts_kramers_moyal_diffusion", "min_bin_count"): 0,
+    ("ts_kramers_moyal_drift", "min_bin_count"): 2,
+    ("ts_kramers_moyal_diffusion", "min_bin_count"): 2,
     ("group_spd_feature_structure_shift", "min_peers"): 5,
     ("group_spd_feature_structure_shift", "min_reference_days"): 5,
     ("ts_transfer_entropy", "min_transitions"): 30,
@@ -712,6 +723,57 @@ _SPECIAL_SCALARS: dict[tuple[str, str], Any] = {
     ("update_direction_persistence", "missing_policy"): "BREAK",
     ("update_path_efficiency", "missing_policy"): "BREAK",
     ("update_surprise", "missing_policy"): "BREAK",
+    # R11 unusable-operators sweep (runtime domain): generic scalar values that
+    # violate the operator's declared parameter domain.  Each value is the
+    # operator's own valid default / a feasible value for the audit window.
+    ("cs_tail_breadth", "side"): "top",
+    ("event_allan_factor", "scale"): 5,
+    ("event_allan_log_mean", "scale"): 5,
+    ("event_allan_scaling_slope", "scale"): 5,
+    ("event_interval_memory", "max_pre_window_age"): 3,
+    ("event_local_variation", "max_pre_window_age"): 3,
+    ("group_current_members_tail_coexceedance", "quantile"): 0.9,
+    ("ts_bicoherence_top_decile_mean", "n_segments"): 2,
+    ("ts_bicoherence_top_decile_excess", "n_segments"): 2,
+    ("ts_evt_threshold_stability", "k_max"): 8,
+    ("ts_variance_ratio_proxy", "q"): 5,
+    ("ts_binned_response_curvature", "bins"): 3,
+    ("ts_binned_response_monotonicity", "bins"): 3,
+    ("ts_conditional_mutual_information", "bins"): 3,
+    ("ts_cross_spectral_coherence", "window"): 60,
+    ("ts_cross_spectral_phase", "window"): 60,
+    ("ts_cross_spectral_coherence", "band"): "all",
+    ("ts_cross_spectral_phase", "band"): "all",
+    ("ts_rolling_sr_gaussian_mean_shift_score", "window"): 60,
+    ("ts_transfer_entropy_peak_excess", "window"): 60,
+    ("ts_dmd_dominant_frequency", "rank"): 2,
+    ("ts_dmd_dominant_growth_rate", "rank"): 2,
+    ("ts_dmd_mode_concentration", "rank"): 2,
+    ("ts_generalized_hurst_exponent", "q"): 1.0,
+    ("ts_distance_corr", "min_periods"): 10,
+    ("ts_distance_cov", "min_periods"): 10,
+    ("ts_lagged_mutual_information", "min_periods"): 10,
+    ("ts_mutual_information", "min_periods"): 10,
+    ("ts_forbidden_ordinal_pattern_ratio", "order"): 3,
+    ("ts_forbidden_ordinal_pattern_excess", "order"): 3,
+    ("ts_forbidden_ordinal_pattern_signed_excess", "order"): 3,
+    ("ts_forbidden_ordinal_pattern_ratio", "delay"): 1,
+    ("ts_forbidden_ordinal_pattern_excess", "delay"): 1,
+    ("ts_forbidden_ordinal_pattern_signed_excess", "delay"): 1,
+    ("ts_forbidden_ordinal_pattern_ratio", "min_embeddings"): 8,
+    ("ts_forbidden_ordinal_pattern_excess", "min_embeddings"): 8,
+    ("ts_forbidden_ordinal_pattern_signed_excess", "min_embeddings"): 8,
+    ("ts_glr_mean_shift_score", "min_segment"): 5,
+    ("ts_glr_variance_shift_score", "min_segment"): 5,
+    ("ts_pettitt_change_score", "min_segment"): 5,
+    ("ts_hysteresis_age", "missing_policy"): "BREAK",
+    ("ts_hysteresis_state", "missing_policy"): "BREAK",
+    ("ts_state_entry_strength", "missing_policy"): "BREAK",
+    ("ts_state_integral", "missing_policy"): "BREAK",
+    ("ts_lempel_ziv_complexity", "bins"): 3,
+    ("ts_ordinal_irreversibility", "window"): 40,
+    ("ts_rolling_sr_gaussian_mean_shift_score", "side"): "up",
+    ("ts_transfer_entropy_peak_excess", "bins"): 3,
 }
 _SPECIAL_POSITIONAL = {
     "cs_multi_resid": ("target", "exposure", "control"),
@@ -726,11 +788,16 @@ _SPECIAL_POSITIONAL = {
     # positional ``relations`` slot (R11 unusable-operators sweep).
     "relation_distribution_skew": ("s1", "s2", "s3", "s4"),
     "relation_distribution_kurtosis": ("s1", "s2", "s3", "s4", "s5"),
+    "relation_distribution_excess_kurtosis": ("s1", "s2", "s3", "s4", "s5"),
+    "relation_distribution_pearson_kurtosis": ("s1", "s2", "s3", "s4", "s5"),
 }
 _SPECIAL_KWARGS = {
     "cs_multi_resid": {"add_intercept": True, "min_obs": 8},
     "cs_neutralize": {"add_intercept": True, "min_obs": 8},
-    "fin_component_score": {"component_directions": "up", "weights": None},
+    # R11 unusable-operators sweep: ``fin_component_score`` rejects undeclared
+    # keyword parameters (``component_directions``/``weights`` are not in its
+    # declared ``param_names``) — drop them so the call uses declared params only.
+    "fin_component_score": {},
 }
 _SPECIAL_POSITIONAL = {
     **_SPECIAL_POSITIONAL,
@@ -1097,6 +1164,18 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
         index=dates,
         columns=assets,
     )
+    # R11 unusable-operators sweep: typed fixture panels.  ``state`` must be a
+    # signed-state indicator in {-1, 0, +1} (state_episode / episode-excursion
+    # family); ``set_/reset_/update_condition`` must be ConditionBool ({0, 1}
+    # with NaN missing), not a continuous price panel.
+    panels["state"] = pd.DataFrame(
+        np.where(close.to_numpy() > 53.0, 1.0,
+                 np.where(close.to_numpy() < 51.0, -1.0, 0.0)),
+        index=dates,
+        columns=assets,
+    )
+    for _cond_name in ("set_condition", "reset_condition", "update_condition"):
+        panels[_cond_name] = condition.astype(float)
     for name in sorted(_PANEL_PARAMETERS):
         if name in panels:
             continue
@@ -1135,11 +1214,25 @@ def _declared_default(operator: Any, key: str) -> Any:
     return param.default
 
 
+# R11 unusable-operators sweep: per-op PANEL overrides — the operator's typed
+# input contract requires a specific series KIND that the generic ``x`` panel
+# (a price level) would violate.  ``ts_return_spectral_entropy`` and its legacy
+# spelling ``ts_spectral_entropy`` accept return-typed input only (review #27,
+# fail-closed on a nonstationary price level).
+_PANEL_SPECIAL: dict[tuple[str, str], str] = {
+    ("ts_return_spectral_entropy", "x"): "returns",
+    ("ts_spectral_entropy", "x"): "returns",
+}
+
+
 def _value(canonical: str, name: str, panels: dict[str, pd.DataFrame], *, operator: Any = None) -> Any:
     key = str(name)
     special = _SPECIAL_SCALARS.get((canonical, key))
     if special is not None:
         return special
+    override = _PANEL_SPECIAL.get((canonical, key))
+    if override is not None:
+        return panels[override]
     if _minute_source(canonical):
         if key in _MINUTE_PANEL_PARAMS:
             return panels[_MINUTE_PANEL_PARAMS[key]]

@@ -30,7 +30,11 @@ Engineering contract (per the 2026-08-08 review):
 * the time axis is never compressed — only the longest trailing contiguous
   finite run is used and NaN fail-closes the window;
 * the graph is built once per window and all five statistics are derived from
-  that single structure.
+  that single structure;
+* R14 P1/P2 (graph-size coverage floor): a window that leaves a tiny surviving
+  graph (fewer than ``min_nodes`` finite nodes) or covers less than
+  ``min_coverage_fraction`` of the nominal window is not a comparable HVG
+  reading — the statistic fails closed to NaN.
 """
 from __future__ import annotations
 
@@ -39,7 +43,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec
+from cleaned_operators.base import ParamSpec, ParamRole
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -50,16 +54,23 @@ from cleaned_operators.gemini_v2_common import (
 _EPS = 1e-12
 
 # R5 P1-01: authoritative per-parameter contracts (no silent 5.9 -> 5).
+# R14 P1/P2: a tiny surviving graph (few finite nodes after NaN drop) or a
+# window that is mostly missing yields a statistic that is not a comparable HVG
+# reading of the window — gate on a minimum effective graph size and coverage.
 _HVG_PARAM_SPECS = {
     "window": ParamSpec(dtype=int, min=4, searchable=True),
-    "min_periods": ParamSpec(dtype=int, min=4, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=4, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "min_nodes": ParamSpec(dtype=int, min=4, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "min_coverage_fraction": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 # R6-159: motif entropy enumerates C(n,3) triples per window (O(n³)) — at
 # window=252 that is ~2.6M triples per row per stock.  Cap the window for the
 # motif operator so search cannot generate an exploding-cost parameter.
 _HVG_MOTIF_PARAM_SPECS = {
     "window": ParamSpec(dtype=int, min=4, max=80, searchable=True),
-    "min_periods": ParamSpec(dtype=int, min=4, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=4, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "min_nodes": ParamSpec(dtype=int, min=4, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "min_coverage_fraction": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 
 
@@ -272,17 +283,34 @@ def _hvg_stats(v: np.ndarray) -> dict[str, float]:
     }
 
 
-def _hvg_series(x2d: np.ndarray, window: int, min_periods: int, key: str) -> np.ndarray:
+def _hvg_series(
+    x2d: np.ndarray,
+    window: int,
+    min_periods: int,
+    min_nodes: int,
+    min_coverage_fraction: float,
+    key: str,
+) -> np.ndarray:
     rows, cols = x2d.shape
     w = max(4, int(window))
     mp = max(4, int(min_periods))
+    mn = max(4, int(min_nodes))
+    mcf = float(min_coverage_fraction)
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
             lo = max(0, r - w + 1)
-            v = trailing_contiguous_finite(col[lo : r + 1])
-            if v.size < mp:
+            chunk = col[lo : r + 1]
+            v = trailing_contiguous_finite(chunk)
+            if v.size < mp or v.size < mn:
+                continue
+            # R14 P1/P2 (graph-size coverage floor): the surviving graph must
+            # cover a meaningful fraction of the nominal window.  A window that
+            # is mostly NaN leaves a tiny residual graph whose statistic is not
+            # a fair HVG reading of the window — fail closed to NaN instead of
+            # emitting a number from a degenerate graph.
+            if chunk.shape[0] == 0 or v.size / chunk.shape[0] < mcf:
                 continue
             stats = _hvg_stats(v)
             val = stats.get(key, np.nan)
@@ -294,45 +322,90 @@ def _hvg_series(x2d: np.ndarray, window: int, min_periods: int, key: str) -> np.
 # ---------------------------------------------------------------------------
 # kernels
 # ---------------------------------------------------------------------------
-def _hvg_check_params(window: int, min_periods: int, canonical: str) -> tuple[int, int]:
+def _hvg_check_params(
+    window: int,
+    min_periods: int,
+    min_nodes: int,
+    min_coverage_fraction: float,
+    canonical: str,
+) -> tuple[int, int, int, float]:
     w = int(window)
     mp = int(min_periods)
+    mn = int(min_nodes)
+    mcf = float(min_coverage_fraction)
     if w < 4:
         raise ValueError(f"{canonical} requires window >= 4")
     if mp < 4:
         raise ValueError(f"{canonical} requires min_periods >= 4")
     if mp > w:
         raise ValueError(f"{canonical} requires min_periods <= window (got {mp} > {w})")
-    return w, mp
+    if mn < 4:
+        raise ValueError(f"{canonical} requires min_nodes >= 4 (a graph with fewer "
+                         "than 4 nodes cannot produce a comparable HVG statistic)")
+    if not np.isfinite(mcf) or not (0.0 <= mcf <= 1.0):
+        raise ValueError(
+            f"{canonical} requires 0 <= min_coverage_fraction <= 1 (got {mcf})"
+        )
+    return w, mp, mn, mcf
 
 
-def _ts_hvg_degree_entropy(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
-    w, mp = _hvg_check_params(window, min_periods, "ts_hvg_degree_entropy")
-    out = _hvg_series(x.to_numpy(dtype=float), w, mp, "degree_entropy")
+def _ts_hvg_degree_entropy(
+    x: pd.DataFrame,
+    window: int = 60,
+    min_periods: int = 8,
+    min_nodes: int = 10,
+    min_coverage_fraction: float = 0.5,
+) -> pd.DataFrame:
+    w, mp, mn, mcf = _hvg_check_params(window, min_periods, min_nodes, min_coverage_fraction, "ts_hvg_degree_entropy")
+    out = _hvg_series(x.to_numpy(dtype=float), w, mp, mn, mcf, "degree_entropy")
     return frame_like(x, out)
 
 
-def _ts_hvg_forward_backward_asymmetry(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
-    w, mp = _hvg_check_params(window, min_periods, "ts_hvg_forward_backward_asymmetry")
-    out = _hvg_series(x.to_numpy(dtype=float), w, mp, "asymmetry")
+def _ts_hvg_forward_backward_asymmetry(
+    x: pd.DataFrame,
+    window: int = 60,
+    min_periods: int = 8,
+    min_nodes: int = 10,
+    min_coverage_fraction: float = 0.5,
+) -> pd.DataFrame:
+    w, mp, mn, mcf = _hvg_check_params(window, min_periods, min_nodes, min_coverage_fraction, "ts_hvg_forward_backward_asymmetry")
+    out = _hvg_series(x.to_numpy(dtype=float), w, mp, mn, mcf, "asymmetry")
     return frame_like(x, out)
 
 
-def _ts_hvg_clustering_coefficient(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
-    w, mp = _hvg_check_params(window, min_periods, "ts_hvg_clustering_coefficient")
-    out = _hvg_series(x.to_numpy(dtype=float), w, mp, "clustering")
+def _ts_hvg_clustering_coefficient(
+    x: pd.DataFrame,
+    window: int = 60,
+    min_periods: int = 8,
+    min_nodes: int = 10,
+    min_coverage_fraction: float = 0.5,
+) -> pd.DataFrame:
+    w, mp, mn, mcf = _hvg_check_params(window, min_periods, min_nodes, min_coverage_fraction, "ts_hvg_clustering_coefficient")
+    out = _hvg_series(x.to_numpy(dtype=float), w, mp, mn, mcf, "clustering")
     return frame_like(x, out)
 
 
-def _ts_hvg_assortativity(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
-    w, mp = _hvg_check_params(window, min_periods, "ts_hvg_assortativity")
-    out = _hvg_series(x.to_numpy(dtype=float), w, mp, "assortativity")
+def _ts_hvg_assortativity(
+    x: pd.DataFrame,
+    window: int = 60,
+    min_periods: int = 8,
+    min_nodes: int = 10,
+    min_coverage_fraction: float = 0.5,
+) -> pd.DataFrame:
+    w, mp, mn, mcf = _hvg_check_params(window, min_periods, min_nodes, min_coverage_fraction, "ts_hvg_assortativity")
+    out = _hvg_series(x.to_numpy(dtype=float), w, mp, mn, mcf, "assortativity")
     return frame_like(x, out)
 
 
-def _ts_hvg_motif_entropy(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
-    w, mp = _hvg_check_params(window, min_periods, "ts_hvg_motif_entropy")
-    out = _hvg_series(x.to_numpy(dtype=float), w, mp, "motif_entropy")
+def _ts_hvg_motif_entropy(
+    x: pd.DataFrame,
+    window: int = 60,
+    min_periods: int = 8,
+    min_nodes: int = 10,
+    min_coverage_fraction: float = 0.5,
+) -> pd.DataFrame:
+    w, mp, mn, mcf = _hvg_check_params(window, min_periods, min_nodes, min_coverage_fraction, "ts_hvg_motif_entropy")
+    out = _hvg_series(x.to_numpy(dtype=float), w, mp, mn, mcf, "motif_entropy")
     return frame_like(x, out)
 
 
@@ -342,7 +415,7 @@ def _ts_hvg_motif_entropy(x: pd.DataFrame, window: int = 60, min_periods: int = 
 _SPECS: dict[str, dict[str, Any]] = {
     "ts_hvg_degree_entropy": {
         "fn": _ts_hvg_degree_entropy,
-        "params": ["x", "window", "min_periods"],
+        "params": ["x", "window", "min_periods", "min_nodes", "min_coverage_fraction"],
         "category": "time_series_network",
         "domain": "path_geometry",
         "unit": "entropy",
@@ -352,7 +425,7 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
     "ts_hvg_forward_backward_asymmetry": {
         "fn": _ts_hvg_forward_backward_asymmetry,
-        "params": ["x", "window", "min_periods"],
+        "params": ["x", "window", "min_periods", "min_nodes", "min_coverage_fraction"],
         "category": "time_series_network",
         "domain": "path_geometry",
         "unit": "entropy",
@@ -362,7 +435,7 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
     "ts_hvg_clustering_coefficient": {
         "fn": _ts_hvg_clustering_coefficient,
-        "params": ["x", "window", "min_periods"],
+        "params": ["x", "window", "min_periods", "min_nodes", "min_coverage_fraction"],
         "category": "time_series_network",
         "domain": "path_geometry",
         "unit": "ratio",
@@ -372,7 +445,7 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
     "ts_hvg_assortativity": {
         "fn": _ts_hvg_assortativity,
-        "params": ["x", "window", "min_periods"],
+        "params": ["x", "window", "min_periods", "min_nodes", "min_coverage_fraction"],
         "category": "time_series_network",
         "domain": "path_geometry",
         "unit": "ratio",
@@ -382,7 +455,7 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
     "ts_hvg_motif_entropy": {
         "fn": _ts_hvg_motif_entropy,
-        "params": ["x", "window", "min_periods"],
+        "params": ["x", "window", "min_periods", "min_nodes", "min_coverage_fraction"],
         "category": "time_series_network",
         "domain": "path_geometry",
         "unit": "entropy",

@@ -231,14 +231,29 @@ def ts_current_drawdown_duration(x, window, **kwargs):
             start = max(0, t - w + 1)
             chunk = arr[start : t + 1]
             valid_mask = np.isfinite(chunk)
-            if not valid_mask.any():
+            # R5 P1-36(a): the *current* observation is missing — the "current"
+            # drawdown duration is unknowable.  Fail-close to NaN instead of
+            # silently reporting the stale duration from the older peers.
+            if not valid_mask.any() or not valid_mask[-1]:
                 continue
-            running_peak = np.maximum.accumulate(np.where(valid_mask, chunk, -np.inf))
+            # P1-07 / R11 #160: the running peak must NOT carry across a missing
+            # row — a value after a NaN gap is compared only against the post-gap
+            # segment (mirrors the pandas kernel).
+            running_peak = np.full(len(chunk), np.nan)
+            peak = -np.inf
+            for k in range(len(chunk)):
+                if not valid_mask[k]:
+                    peak = -np.inf
+                    continue
+                if chunk[k] > peak:
+                    peak = chunk[k]
+                running_peak[k] = peak
             streak = 0
             for back in range(len(chunk) - 1, -1, -1):
                 if not valid_mask[back]:
-                    streak = 0
-                    continue
+                    # NaN is a hard episode boundary: the streak must never
+                    # re-link across the gap (P0).
+                    break
                 if chunk[back] < running_peak[back]:
                     streak += 1
                 else:
@@ -258,16 +273,34 @@ def ts_time_under_water(x, window, **kwargs):
             start = max(0, t - w + 1)
             chunk = arr[start : t + 1]
             valid = chunk[np.isfinite(chunk)]
-            if valid.size == 0:
+            # R5 P1-36(b): a missing *current* observation must fail-close to NaN
+            # rather than emitting the historical under-water ratio.
+            if valid.size == 0 or not np.isfinite(chunk[-1]):
                 continue
-            running_peak = np.maximum.accumulate(np.where(np.isnan(chunk), -np.inf, chunk))
+            # R11 #160: the running peak must NOT carry across a missing row —
+            # reset the peak at every gap so the next valid observation starts a
+            # fresh reference (mirrors the pandas kernel).
+            running_peak = np.full(len(chunk), np.nan)
+            peak = -np.inf
+            for k in range(len(chunk)):
+                if not np.isfinite(chunk[k]):
+                    peak = -np.inf
+                    continue
+                if chunk[k] > peak:
+                    peak = chunk[k]
+                running_peak[k] = peak
             under = np.sum((chunk < running_peak) & np.isfinite(chunk))
             out[t, i] = float(under) / float(valid.size)
     return _make(x, cols, out)
 
 
-def _best_lag_corr(xv, yv, row, window, max_lag):
-    best = 0.0
+def _best_lag_corr_raw(xv, yv, row, window, max_lag):
+    """Clean primitive (polars twin of ``downside_risk._best_lag_corr_raw``).
+
+    Max over lags 0..max_lag of |Pearson corr(y[t], x[t-lag])|, NO multiple-lag
+    selection correction.  NaN = no lag computable; a finite 0.0 survives.
+    """
+    best = -1.0
     for lag in range(0, max_lag + 1):
         end = row + 1 - lag
         start = max(0, end - window)
@@ -281,20 +314,89 @@ def _best_lag_corr(xv, yv, row, window, max_lag):
         if np.std(xs[valid]) > 0 and np.std(ys[valid]) > 0:
             value = abs(float(np.corrcoef(xs[valid], ys[valid])[0, 1]))
             best = max(best, value)
-    return best
+    if best < 0:
+        return np.nan
+    return float(best)
 
 
-def ts_best_lag_corr(y, x, window, max_lag=5):
-    w = _pi(window, "window")
+def _circular_block_permute(arr, block, rng):
+    """Deterministic circular block permutation (polars twin of the pandas one)."""
+    n = len(arr)
+    if n <= 1:
+        return arr.copy()
+    b = max(1, min(int(block), n))
+    off = int(rng.integers(0, n))
+    rotated = np.concatenate([arr[off:], arr[:off]])
+    blocks = [rotated[i * b : (i + 1) * b] for i in range(int(np.ceil(n / b)))]
+    order = list(range(len(blocks)))
+    rng.shuffle(order)
+    return np.concatenate([blocks[i] for i in order])[:n]
+
+
+def _best_lag_corr_excess(xv, yv, row, window, max_lag, n_surrogates=20, seed=42, block_frac=0.1):
+    """max_real - E[max_surrogate] under a circular-block-permutation null."""
+    real = _best_lag_corr_raw(xv, yv, row, window, max_lag)
+    if not np.isfinite(real):
+        return np.nan
+    src_lo = max(0, row + 1 - max_lag - window)
+    x_source = xv[src_lo : row + 1]
+    n = len(x_source)
+    block = max(1, int(np.ceil(block_frac * n)))
+    rng = np.random.default_rng(seed + row)
+    surr_maxes = np.empty(n_surrogates, dtype=float)
+    for j in range(n_surrogates):
+        surr = _circular_block_permute(x_source, block, rng)
+        best = -1.0
+        for lag in range(0, max_lag + 1):
+            end = row + 1 - lag
+            start = max(0, end - window)
+            if end - start < 2:
+                continue
+            offset = start - src_lo
+            length = end - start
+            xs = surr[offset : offset + length]
+            ys = yv[start + lag : row + 1]
+            valid = np.isfinite(xs) & np.isfinite(ys)
+            if valid.sum() < 2:
+                continue
+            if np.std(xs[valid]) > 0 and np.std(ys[valid]) > 0:
+                value = abs(float(np.corrcoef(xs[valid], ys[valid])[0, 1]))
+                if value > best:
+                    best = value
+        surr_maxes[j] = best if best >= 0 else np.nan
+    finite = surr_maxes[np.isfinite(surr_maxes)]
+    if finite.size == 0:
+        return np.nan
+    return real - float(np.mean(finite))
+
+
+def ts_best_lag_corr_raw(y, x, window, max_lag=5):
+    w = _pi(window, "window", 2)
     ml = max(0, int(max_lag))
+    if ml >= w:
+        raise ValueError("max_lag must be < window")
     cols = _cols(x, y)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         xv, yv = _arr(x, c), _arr(y, c)
         for t in range(rows):
-            value = _best_lag_corr(xv, yv, t, w, ml)
-            out[t, i] = value if value > 0 else np.nan
+            out[t, i] = _best_lag_corr_raw(xv, yv, t, w, ml)
+    return _make(y, cols, out)
+
+
+def ts_best_lag_corr_excess(y, x, window, max_lag=5):
+    w = _pi(window, "window", 2)
+    ml = max(0, int(max_lag))
+    if ml >= w:
+        raise ValueError("max_lag must be < window")
+    cols = _cols(x, y)
+    rows = x.height
+    out = np.full((rows, len(cols)), np.nan, dtype=float)
+    for i, c in enumerate(cols):
+        xv, yv = _arr(x, c), _arr(y, c)
+        for t in range(rows):
+            out[t, i] = _best_lag_corr_excess(xv, yv, t, w, ml)
     return _make(y, cols, out)
 
 
@@ -346,7 +448,12 @@ def _price_delay_model(stock, bench, end, window, max_lag, min_periods):
     X_full = np.column_stack([np.ones(len(ts)), lagged])
     X_restricted = np.column_stack([np.ones(len(ts)), bench_values])
     valid = np.isfinite(y) & np.all(np.isfinite(X_full), axis=1)
-    required = max(int(min_periods), max_lag + 2)
+    # R11 #162: the full model has ~max_lag+2 parameters; with N ~ P the
+    # in-sample R2 is mechanically inflated.  Require a real DOF margin (at least
+    # 2x the parameter count), mirroring the pandas twin — otherwise warmup rows
+    # emit a spurious 0.0 where pandas fails closed to NaN.
+    n_params = max_lag + 2
+    required = max(int(min_periods), 2 * n_params)
     if valid.sum() < required:
         return np.nan
     yv = y[valid]
@@ -605,7 +712,8 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("ts_upside_deviation", ("x", "window", "target", "min_periods"), ts_upside_deviation, "Upside deviation."),
     ("ts_current_drawdown_duration", ("x", "window"), ts_current_drawdown_duration, "Bars since the running peak."),
     ("ts_time_under_water", ("x", "window"), ts_time_under_water, "Bars below the running peak in the window."),
-    ("ts_best_lag_corr", ("y", "x", "window", "max_lag"), ts_best_lag_corr, "Best absolute lagged correlation."),
+    ("ts_best_lag_corr_raw", ("y", "x", "window", "max_lag"), ts_best_lag_corr_raw, "Best absolute lagged correlation (raw max |corr|, no selection correction)."),
+    ("ts_best_lag_corr_excess", ("y", "x", "window", "max_lag"), ts_best_lag_corr_excess, "Best absolute lagged correlation minus circular-block-permutation null."),
     ("ts_price_delay", ("stock_return", "benchmark_return", "window", "max_lag", "min_periods"), ts_price_delay, "Hou-Moskowitz style price-delay proxy."),
     ("ts_max_if", ("x", "condition", "window", "min_periods"), ts_max_if, "Rolling max where condition holds."),
     ("ts_min_if", ("x", "condition", "window", "min_periods"), ts_min_if, "Rolling min where condition holds."),
@@ -650,3 +758,29 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
 
 for _name, _params, _function, _description in _SPECS:
     _register(_name, _params, _function, _description)
+
+
+def _register_best_lag_corr_split() -> None:
+    """R11 round-2 (polars twin): keep the historical ``ts_best_lag_corr``
+    resolvable as a deprecated alias of ``ts_best_lag_corr_raw`` and add the
+    ``ts_best_lag_corr_excess`` canonical.  Idempotent across both backends.
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    if "ts_best_lag_corr" in OperatorRegistry._operators:
+        OperatorRegistry.rename_canonical("ts_best_lag_corr", "ts_best_lag_corr_raw")
+    elif "ts_best_lag_corr_raw" in OperatorRegistry._operators:
+        OperatorRegistry.register_alias("ts_best_lag_corr", "ts_best_lag_corr_raw")
+    try:
+        from cleaned_operators.operator_surface import (
+            extend_extended_only,
+            retract_extended_only,
+        )
+
+        extend_extended_only(["ts_best_lag_corr_raw", "ts_best_lag_corr_excess"])
+        retract_extended_only(["ts_best_lag_corr"])
+    except ImportError:  # pragma: no cover - surface module always present in-tree
+        pass
+
+
+_register_best_lag_corr_split()

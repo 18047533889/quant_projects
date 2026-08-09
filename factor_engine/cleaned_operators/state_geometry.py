@@ -124,9 +124,15 @@ def _column_map(xv: np.ndarray, fn) -> np.ndarray:
 def _state_density_series(series: np.ndarray, window: int, bandwidth: float, min_periods: int) -> np.ndarray:
     n = series.shape[0]
     w = max(2, int(window))
-    bw = max(1e-6, float(bandwidth))
+    bw = float(bandwidth)
     mp = max(1, int(min_periods))
     out = np.full(n, np.nan)
+    # R14 P2 (reject-not-clamp): a degenerate bandwidth — zero, negative or
+    # non-finite — is not a usable density scale.  The old ``max(1e-6, ...)``
+    # clamped it to a tiny epsilon and emitted a meaningless number; a degenerate
+    # state density is not a usable factor, so fail the whole series closed.
+    if not np.isfinite(bw) or bw <= 0.0:
+        return out
     for t in range(n):
         lo = max(0, t - w)
         past = series[lo:t]                       # strictly past [t-W, t-1]
@@ -137,10 +143,12 @@ def _state_density_series(series: np.ndarray, window: int, bandwidth: float, min
         med = float(np.median(finite))
         mad = 1.4826 * float(np.median(np.abs(finite - med)))
         scale = mad if mad > _EPS else float(np.std(finite))
-        if scale <= _EPS:
-            # Degenerate history: a point mass has no kernel density — the
-            # previous arbitrary 1.0 was discontinuous with the kernel's peak
-            # (P1-05).  Fail closed to NaN instead.
+        # R14 P2 (reject-not-clamp): the kernel's own bandwidth h = bandwidth*s
+        # must be a strictly positive finite number.  An all-identical / point-mass
+        # history (zero spread) or a non-finite spread estimate has no kernel
+        # density — the old arbitrary 1.0 was discontinuous with the kernel's peak
+        # (P1-05).  Fail closed to NaN instead of clamping to an epsilon.
+        if not np.isfinite(scale) or scale <= _EPS:
             out[t] = np.nan
             continue
         h = bw * scale
@@ -154,7 +162,7 @@ def _state_density_series(series: np.ndarray, window: int, bandwidth: float, min
         # by the past robust scale to make the mining-facing output a
         # standardized, dimensionless local density — density in MAD units,
         # f̂(x)·s = mean(K)/bw (h = bw·s).
-        out[t] = float(np.mean(kern)) / max(bw, _EPS)
+        out[t] = float(np.mean(kern)) / bw
     return out
 
 

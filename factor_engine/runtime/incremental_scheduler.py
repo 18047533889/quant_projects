@@ -90,6 +90,11 @@ class DataEvent:
     event_id: str | None = None
     sequence: int | None = None
     status: str | None = None
+    #: R14 #5 P1 lease：持有 pending 预留的 worker 标识 / 尝试号。``owner`` 建议用
+    #: ``(hostname, pid)``；``attempt_id`` 每次 begin 取号。lease 过期后其他 worker
+    #: 才能 takeover（否则 ``in_flight`` 永久卡死）。
+    owner: str | None = None
+    attempt_id: str | None = None
 
     @property
     def field(self) -> str:
@@ -862,14 +867,25 @@ def record_factor_dependency_from_analysis(
 
 
 def factor_from_catalog_info(info: dict) -> Any:
-    """catalog 行 → ``Factor``（需含 ``expression``；R10 支持 surface/dialect/universe）。"""
+    """catalog 行 → ``Factor``（需含 ``expression``；R10 支持 surface/dialect/universe）。
+
+    R14 #4：除 ``parse_factor`` 的基本元数据外，还要从 full definition 恢复
+    **canonical execution scope**（``FactorExecutionScopeHint``：market /
+    universe_id / frequency / calendar_id / decision_time_policy）——否则事件增量
+    rebuild 后 ``_scope_from_factor`` 只剩 ``factor.freq``/``factor.universe`` 兜底，
+    ``decision_time_policy=eod`` / market=A / calendar=SSE 全部丢失，重建出的因子
+    与落库时的执行语义分裂。
+    """
+    import dataclasses
+
     from api.dsl_parser import parse_factor
+    from api.factor import FactorExecutionScopeHint
 
     expression = info.get("expression")
     if not expression or not str(expression).strip():
         raise ValueError(f"因子 {info.get('factor_id')!r} 缺少 expression，无法重建")
     factor_id = str(info.get("factor_id") or info.get("name") or "unknown")
-    return parse_factor(
+    factor = parse_factor(
         str(expression),
         name=factor_id,
         freq=str(info.get("frequency") or "1d"),
@@ -879,6 +895,23 @@ def factor_from_catalog_info(info: dict) -> Any:
         dialect=str(info.get("dialect") or "native"),
         dialect_version=info.get("dialect_version"),
     )
+    scope_fields = {
+        "market": info.get("market"),
+        "universe_id": info.get("universe") or info.get("universe_id"),
+        "frequency": info.get("frequency") or info.get("freq"),
+        "calendar_id": info.get("calendar") or info.get("calendar_id"),
+        "decision_time_policy": info.get("decision_policy")
+        or info.get("decision_time_policy"),
+    }
+    if any(v is not None and str(v) != "" for v in scope_fields.values()):
+        hint = FactorExecutionScopeHint(
+            **{
+                k: (str(v) if v is not None else None)
+                for k, v in scope_fields.items()
+            }
+        )
+        factor = dataclasses.replace(factor, semantic_identity=hint)
+    return factor
 
 
 # ---------------------------------------------------------------------------
@@ -938,6 +971,22 @@ def _build_engine_for_factor(
     )
 
 
+def _factor_scope_field(factor: Any, hint_attr: str, direct_attr: str) -> str:
+    """从 factor 读取 scope 字段：优先 ``semantic_identity`` 提示，回退因子级属性。
+
+    R14 #4：rebuild 后 canonical scope 挂在 ``factor.semantic_identity``（
+    ``FactorExecutionScopeHint``）。``Factor`` dataclass 本身没有
+    decision_time_policy 等字段，只读因子级属性会让 declared 有值、actual 恒空。
+    """
+    hint = getattr(factor, "semantic_identity", None)
+    if hint is not None:
+        v = getattr(hint, hint_attr, None)
+        if v is not None and str(v) != "":
+            return str(v)
+    v = getattr(factor, direct_attr, None)
+    return str(v) if v is not None and str(v) != "" else ""
+
+
 def _verify_factor_semantic_identity(
     factor: Any,
     full_def: dict[str, Any],
@@ -969,7 +1018,14 @@ def _verify_factor_semantic_identity(
         from storage.catalog import compute_ir_hash
 
         try:
-            actual_hash = compute_ir_hash(factor.expr)
+            # R14 #4：rebuild 的 factor 是 Expr，materialize 落库的 ast_hash 来自
+            # ``compute_ir_hash(analysis.ir)``（IRNode）。直接对 Expr 哈希会拿不到
+            # ``.attrs`` 报错——必须先按与执行同源的路径 lower 成 IR 再哈希，否则
+            # production 事件（full_def 含 ast_hash）永远无法证明 identity。
+            from ir.analyzer import Analyzer
+
+            ir_node = Analyzer(production=production).lower(factor.expr).ir
+            actual_hash = compute_ir_hash(ir_node)
         except Exception as exc:  # Expr is not always a serializable IR node
             if production:
                 raise FactorSemanticIdentityMismatch(
@@ -981,21 +1037,57 @@ def _verify_factor_semantic_identity(
             actual_hash is not None
             and str(actual_hash) != str(ast_hash).strip()
         ):
-            raise FactorSemanticIdentityMismatch(
-                f"因子 {fid!r} IR hash 与 catalog 不一致: "
-                f"{str(actual_hash)[:12]} != {str(ast_hash)[:12]}"
+            if production:
+                raise FactorSemanticIdentityMismatch(
+                    f"因子 {fid!r} IR hash 与 catalog 不一致: "
+                    f"{str(actual_hash)[:12]} != {str(ast_hash)[:12]}"
+                )
+            # research：记录但不 fail——research 允许覆盖/旧数据，只有 production 才
+            # 是 identity 的权威门（R14 #4 修 Expr→IR hash 后，以前 compute 永远
+            # 报错 → 这里实际从不触发；现在真能算，research 保持历史宽容）。
+            logger.warning(
+                "因子 %s 重建 IR hash 与 catalog 不一致（research 容忍）: %s != %s",
+                fid,
+                str(actual_hash)[:12],
+                str(ast_hash)[:12],
             )
     for key, getter in (
         ("surface", lambda f: str(getattr(f, "surface", None) or "")),
         ("dialect", lambda f: str(getattr(f, "dialect", None) or "")),
         ("dialect_version", lambda f: str(getattr(f, "dialect_version", None) or "")),
-        ("decision_policy", lambda f: str(getattr(f, "decision_time_policy", None) or "")),
+        # R14 #4：decision_policy / market / universe / frequency / calendar 从
+        # ``factor.semantic_identity``（rebuild 时恢复的 FactorExecutionScopeHint）
+        # 优先读取，回退到因子级属性——``Factor`` 没有 decision_time_policy 字段，
+        # 旧实现 getattr 恒为空，导致 declared=eod、rebuilt="" 静默通过（fail-open）。
+        (
+            "decision_policy",
+            lambda f: _factor_scope_field(f, "decision_time_policy", "decision_time_policy"),
+        ),
+        ("market", lambda f: _factor_scope_field(f, "market", "market")),
+        (
+            "universe",
+            lambda f: _factor_scope_field(f, "universe_id", "universe"),
+        ),
+        ("frequency", lambda f: _factor_scope_field(f, "frequency", "freq")),
+        (
+            "calendar",
+            lambda f: _factor_scope_field(f, "calendar_id", "calendar_id"),
+        ),
     ):
         declared = full_def.get(key)
         if not declared:
             continue
         actual = getter(factor)
-        if actual and actual != str(declared):
+        if not actual:
+            # R14 #4 fail-closed：declared 有值 + 重建 actual 缺失 = 无法证明
+            # identity（旧实现只检查「actual 非空时不同」，丢失的决策策略被放过）。
+            if production:
+                raise FactorSemanticIdentityMismatch(
+                    f"因子 {fid!r} 重建 {key} 缺失（catalog 声明 {declared!r}，"
+                    f"重建后为空）—— P0-17 fail-closed：无法证明 identity"
+                )
+            continue
+        if actual != str(declared):
             raise FactorSemanticIdentityMismatch(
                 f"因子 {fid!r} 重建 {key} 与 catalog 不一致: {actual!r} != {declared!r}"
             )
@@ -1040,6 +1132,53 @@ def _ledger_lock(lock_path: Path):
             fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
         finally:
             fh.close()
+
+
+# ---------------------------------------------------------------------------
+# R14 #5 P1：pending 预留的 lease（worker crash 后可由其他 worker takeover）
+# ---------------------------------------------------------------------------
+
+#: pending 预留的默认 lease 时长（秒）。worker 在 begin 后 crash、超过该时长
+#: 未 commit/reject → 其他 worker 可 takeover（旧实现 ``pending`` 永久 → 事件
+#: 永远 ``in_flight``，卡死）。可用 ``DATA_EVENT_LEDGER_LEASE_SECONDS`` 覆盖。
+_LEDGER_LEASE_SECONDS = max(
+    60, int(os.environ.get("DATA_EVENT_LEDGER_LEASE_SECONDS", "3600"))
+)
+
+
+def _ledger_now_iso() -> str:
+    """UTC ISO 时间戳（含 tz，供 lease 过期判定）。"""
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _ledger_reserved_at_seconds(reserved_at: Any) -> float | None:
+    """解析 ``reserved_at`` 为 epoch 秒；非法返回 None（保守不 takeover）。"""
+    from datetime import datetime, timezone
+
+    if reserved_at is None:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(reserved_at))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+def _ledger_pending_is_stale(rec: dict[str, Any]) -> bool:
+    """pending 记录是否 lease 过期。无 ``reserved_at`` 的 legacy 记录保守不 takeover。"""
+    reserved = rec.get("reserved_at")
+    if not reserved:
+        return False
+    ts = _ledger_reserved_at_seconds(reserved)
+    if ts is None:
+        return False
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).timestamp() - ts > _LEDGER_LEASE_SECONDS
 
 
 class DataEventLedger:
@@ -1173,10 +1312,16 @@ class DataEventLedger:
             return "ok"
         with _ledger_lock(self._lock_path):
             self._reload()
-            status = self._records.get(str(event.event_id), {}).get("status")
+            rec = self._records.get(str(event.event_id)) or {}
+            status = rec.get("status")
             if status == "committed":
                 return "duplicate"
             if status == "pending":
+                # R14 #5 P1 lease：pending 预留 lease 过期 → 其他 worker 可
+                # takeover（worker 在 begin 后 crash 不再永久 ``in_flight``）。
+                if _ledger_pending_is_stale(rec):
+                    self._append_unlocked(self._pending_record(event))
+                    return "ok"
                 return "in_flight"
             if event.snapshot_before is not None:
                 last, _seq = self._last_committed_unlocked(event.dataset, event.field)
@@ -1211,6 +1356,11 @@ class DataEventLedger:
             "snapshot_before": event.snapshot_before,
             "snapshot_after": None,
             "received_at": event.updated_date,
+            # R14 #5 P1 lease：owner / attempt_id / reserved_at 使 stale pending 可被
+            # 其他 worker takeover（worker 在 begin 后 crash 不再永久卡死）。
+            "owner": event.owner,
+            "attempt_id": event.attempt_id,
+            "reserved_at": _ledger_now_iso(),
         }
 
     def commit(self, event: DataEvent) -> None:
@@ -1300,14 +1450,16 @@ def execute_incremental_updates_from_event(
     ledger_status = ledger.begin(event) if event.event_id else "ok"
     if ledger_status in ("duplicate", "in_flight"):
         # Idempotent retry of an already-committed event, or another worker's
-        # in-flight reservation (R14 #5): nothing to do.
+        # in-flight reservation (R14 #5): nothing to do.  Distinguish the two in
+        # ``ledger_status`` — old code collapsed both to "duplicate", hiding the
+        # concurrent-reservation state.
         return {
             "event": event.to_dict(),
             "plans": [],
             "factor_count": 0,
             "dry_run": dry_run,
             "materializations": {},
-            "ledger_status": "duplicate",
+            "ledger_status": ledger_status,
             "succeeded": 0,
             "failed": 0,
         }
@@ -1339,6 +1491,14 @@ def execute_incremental_updates_from_event(
     mat_kwargs.setdefault("lake_root", lake_root)
     mat_kwargs.setdefault("lookback_extra", lookback_extra)
     mat_kwargs.setdefault("market", market)
+    # R14 #5a：production 事件 = 两阶段原子发布。先把**所有**因子写到 staging
+    # （``materialize`` 对 production+local 直接拒绝；staging 只落暂存区、权威
+    # 水位线 defer），**全部 stage 成功后才逐因子 publish**（staging→published +
+    # 推进水位线）。任一 stage 失败 → 直接 reject，published 因子湖完全没动——
+    # **绝无 mixed generation**。调用方显式传了 write_target 则尊重（如
+    # staging_clickhouse）。
+    if production:
+        mat_kwargs.setdefault("write_target", "staging")
 
     failures: list[dict[str, str]] = []
     for plan in plans:
@@ -1405,7 +1565,52 @@ def execute_incremental_updates_from_event(
                 f"{len(failures)} failed downstream factor(s): "
                 + "; ".join(f"{f['factor_id']}: {f['error']}" for f in failures[:5])
             )
-    elif event.event_id:
+        out["succeeded"] = len(out["materializations"])
+        out["failed"] = len(failures)
+        return out
+
+    # R14 #5a：production 事件 = 两阶段原子发布。所有因子 **stage 成功** 后才
+    # 逐因子 publish（staging → published 因子湖 + 推进权威水位线）；任一 stage
+    # 失败在上面直接 reject，published 湖完全没动 —— 绝无 mixed generation。
+    # publish 本身失败同样 fail-closed：事件保持 rejected/pending，重跑同一
+    # event_id 幂等收敛，最终只 commit 一次。
+    published: list[str] = []
+    if production and not dry_run:
+        from storage.materialize.lake_publish import publish_factor_lake
+
+        publish_failures: list[dict[str, str]] = []
+        for plan in plans:
+            try:
+                publish_factor_lake(
+                    factor_id=plan.factor_id,
+                    lake_root=lake_root,
+                    approve=True,
+                    sync_from_local=False,
+                    reconcile=False,
+                )
+                published.append(plan.factor_id)
+            except Exception as exc:
+                publish_failures.append(
+                    {"factor_id": plan.factor_id, "error": str(exc)}
+                )
+        if publish_failures:
+            out["failures"] = publish_failures
+            out["published"] = published
+            if event.event_id:
+                ledger.reject(
+                    event, f"{len(publish_failures)} factor(s) publish failed"
+                )
+                out["ledger_status"] = "failed"
+            raise PartialIncrementalFailureError(
+                f"production: event {event.event_id or event.updated_date!r} publish "
+                f"failed for {len(publish_failures)} factor(s): "
+                + "; ".join(
+                    f"{f['factor_id']}: {f['error']}" for f in publish_failures[:5]
+                )
+            )
+        out["published"] = published
+
+    if event.event_id:
         ledger.commit(event)
         out["ledger_status"] = "committed"
     out["succeeded"] = len(out["materializations"])

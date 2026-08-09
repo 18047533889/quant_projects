@@ -21,6 +21,13 @@ From ``R`` four statistics are derived:
   proxy, cheaper and more stable than a local Lyapunov exponent).
 
 All operators are trailing-window, prefix-causal and deterministic.
+
+R11 round-3 #67: the line-structure statistics (diagonal entropy, trapping
+time, divergence) are strongly sample-size dependent — the recurrence matrix
+size changes the operator.  In production their effective length (longest
+trailing contiguous finite run) must cover at least ``0.8 * window``; below
+that the reading is NaN, so a gap is never followed by a short-sample recompute
+that is a different operator than a full-window reading.
 """
 from __future__ import annotations
 
@@ -176,10 +183,17 @@ def _recurrence_series(
     min_line: int,
     min_periods: int,
     which: int,
+    min_effective_fraction: float = 0.0,
 ) -> np.ndarray:
     rows, cols = values.shape
     w = max(2, int(window))
     mp = max(4, int(min_periods))
+    # R11 round-3 #67: line-structure statistics (diagonal entropy / trapping
+    # time / divergence) are strongly sample-size dependent — the recurrence
+    # matrix size changes the operator.  Require the effective length (longest
+    # trailing contiguous finite run) to cover at least ``min_effective_fraction``
+    # of the window (production: 0.8) before emitting a value; below that -> NaN.
+    min_eff = max(mp, int(np.ceil(float(min_effective_fraction) * w)))
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         for r in range(rows):
@@ -190,7 +204,7 @@ def _recurrence_series(
             # longest trailing contiguous finite run keeps the time structure and
             # never re-connects data across a gap.
             v = _trailing_contiguous_finite(chunk)
-            if v.size < mp:
+            if v.size < min_eff:
                 continue
             stats = _recurrence_stats_window(v, dim, delay, eps_fraction, min_line)
             if stats is None:
@@ -285,7 +299,10 @@ class TsRecurrenceDiagonalEntropy(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         w, d, dl, eq, ml = _check_params(window, dim, delay, eps_fraction, 2)
-        out = _recurrence_series(x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 1)
+        out = _recurrence_series(
+            x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 1,
+            min_effective_fraction=0.8,
+        )
         return frame_like(x, out)
 
 
@@ -323,7 +340,10 @@ class TsRecurrenceTrappingTime(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         w, d, dl, eq, ml = _check_params(window, dim, delay, eps_fraction, 2)
-        out = _recurrence_series(x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 2)
+        out = _recurrence_series(
+            x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 2,
+            min_effective_fraction=0.8,
+        )
         return frame_like(x, out)
 
 
@@ -362,7 +382,10 @@ class TsRecurrenceDivergence(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         w, d, dl, eq, ml = _check_params(window, dim, delay, eps_fraction, 2)
-        out = _recurrence_series(x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 3)
+        out = _recurrence_series(
+            x.to_numpy(dtype=float), w, d, dl, eq, ml, min_periods, 3,
+            min_effective_fraction=0.8,
+        )
         return frame_like(x, out)
 
 

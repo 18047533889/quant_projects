@@ -102,16 +102,24 @@ def _parts(o: pl.Expr, h: pl.Expr, l: pl.Expr, c: pl.Expr):
     return body, abs_body, rng, upper, lower
 
 
-def _z_expr(expr: pl.Expr, frame: pl.DataFrame, column: str, window: int) -> pl.Series:
-    """(x - shift(1).rolling_mean(w)) / shift(1).rolling_std(w), 0-std -> null."""
+def _z_expr(expr: pl.Expr, frame: pl.DataFrame, column: str, window: int, valid: pl.Expr | None = None) -> pl.Series:
+    """(x - shift(1).rolling_mean(w)) / shift(1).rolling_std(w), 0-std -> null.
+
+    ``valid`` (optional): a boolean OHLC-validity expr; rows where it is False
+    emit null (round-3 audit item 15 — invalid bars never produce a shadow
+    z-score built from a negative shadow length).
+    """
     w = _pi(window, "window", 2)
     shifted = expr.shift(1)
     mean = shifted.rolling_mean(w, min_samples=w)
     std = shifted.rolling_std(w, min_samples=w)
-    return _one(frame, column, _safe_div(expr - mean, std))
+    z = _safe_div(expr - mean, std)
+    if valid is not None:
+        z = pl.when(valid).then(z).otherwise(None)
+    return _one(frame, column, z)
 
 
-def _pct_rank_expr(expr: pl.Expr, frame: pl.DataFrame, column: str, window: int) -> pl.Series:
+def _pct_rank_expr(expr: pl.Expr, frame: pl.DataFrame, column: str, window: int, valid: pl.Expr | None = None) -> pl.Series:
     w = _pi(window, "window", 2)
 
     def _rank_fn(window_arr) -> float:
@@ -124,7 +132,10 @@ def _pct_rank_expr(expr: pl.Expr, frame: pl.DataFrame, column: str, window: int)
         # numpy 中 NaN<x 与 NaN==x 均 False，与 pandas 布尔语义一致
         return float((np.sum(prev < cur) + 0.5 * np.sum(prev == cur)) / max(1, n - 1))
 
-    return _one(frame, column, expr.rolling_map(_rank_fn, window_size=w, min_samples=w))
+    rank = expr.rolling_map(_rank_fn, window_size=w, min_samples=w)
+    if valid is not None:
+        rank = pl.when(valid).then(rank).otherwise(None)
+    return _one(frame, column, rank)
 
 
 def _true_range(h: pl.Expr, l: pl.Expr, c: pl.Expr) -> pl.Expr:
@@ -143,6 +154,43 @@ def _tr_propagate(h: pl.Expr, l: pl.Expr, c: pl.Expr) -> pl.Expr:
     hc = (h - previous).abs()
     lc = (l - previous).abs()
     return _max_pair(_max_pair(hl, hc), lc)
+
+
+def _validate_ohlc(o=None, h=None, l=None, c=None) -> pl.Expr:
+    """Unified OHLC structural-validity mask (round-3 audit item 15).
+
+    Mirrors the pandas ``_validate_ohlc`` in ``candle_geometry_v2``: returns a
+    non-null boolean expr, True where every provided OHLC field is strictly
+    positive and the bar satisfies
+    ``High >= max(Open, Close) >= min(Open, Close) >= Low``.  Omitted fields
+    are not checked (subset operators keep their own axis contract); any
+    null/NaN field fails closed to False.  Callers wrap the output with
+    ``pl.when(valid).then(...).otherwise(None)`` so an invalid bar emits null
+    instead of a negative shadow / out-of-range strength / fabricated pattern.
+    """
+    conds: list[pl.Expr] = []
+    if o is not None:
+        conds.append((o > 0).fill_null(False))
+    if h is not None:
+        conds.append((h > 0).fill_null(False))
+    if l is not None:
+        conds.append((l > 0).fill_null(False))
+    if c is not None:
+        conds.append((c > 0).fill_null(False))
+    if h is not None and l is not None:
+        conds.append((h >= l).fill_null(False))
+    if o is not None and c is not None and h is not None:
+        conds.append((h >= _max_pair(o, c)).fill_null(False))
+    if o is not None and c is not None and l is not None:
+        conds.append((l <= _min_pair(o, c)).fill_null(False))
+    # subset operators without ``open`` (e.g. candle_close_strength) must not
+    # emit close-strength outside [-1,1]: close must sit inside the range.
+    if o is None and h is not None and l is not None and c is not None:
+        conds.append(((c >= l) & (c <= h)).fill_null(False))
+    valid = conds[0]
+    for cond in conds[1:]:
+        valid = valid & cond
+    return valid
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +368,9 @@ def cdl_hammer(open_, high, low, close):
         pattern = flag & downtrend.fill_null(False)
         out = _flag(pattern)
         # 与 pandas ``out.where(downtrend.notna())``：基线不可得 → NaN。
-        values[c] = _one(frame, c, pl.when(downtrend.is_not_null()).then(out).otherwise(None))
+        # round-3 audit item 15: 结构非法 / 非正价格 bar 也不判定为 pattern。
+        valid = _validate_ohlc(o, h, l, cl)
+        values[c] = _one(frame, c, pl.when(downtrend.is_not_null() & valid).then(out).otherwise(None))
     return _result(close, values)
 
 
@@ -398,7 +448,8 @@ def candle_body_zscore(open_, close, window):
     values = {}
     for c in _cols(open_, close):
         frame = _frame(open_, None, None, close, c)
-        values[c] = _z_expr((pl.col("close") - pl.col("open")).abs(), frame, c, window)
+        valid = _validate_ohlc(pl.col("open"), None, None, pl.col("close"))
+        values[c] = _z_expr((pl.col("close") - pl.col("open")).abs(), frame, c, window, valid)
     return _result(close, values)
 
 
@@ -406,7 +457,8 @@ def candle_range_zscore(high, low, window):
     values = {}
     for c in _cols(high, low):
         frame = _frame(None, high, low, None, c)
-        values[c] = _z_expr(pl.col("high") - pl.col("low"), frame, c, window)
+        valid = _validate_ohlc(None, pl.col("high"), pl.col("low"), None)
+        values[c] = _z_expr(pl.col("high") - pl.col("low"), frame, c, window, valid)
     return _result(high, values)
 
 
@@ -415,7 +467,8 @@ def candle_upper_shadow_zscore(open_, high, close, window):
     for c in _cols(open_, high, close):
         frame = _frame(open_, high, None, close, c)
         upper = pl.col("high") - _max_pair(pl.col("open"), pl.col("close"))
-        values[c] = _z_expr(upper, frame, c, window)
+        valid = _validate_ohlc(pl.col("open"), pl.col("high"), None, pl.col("close"))
+        values[c] = _z_expr(upper, frame, c, window, valid)
     return _result(close, values)
 
 
@@ -424,7 +477,8 @@ def candle_lower_shadow_zscore(open_, low, close, window):
     for c in _cols(open_, low, close):
         frame = _frame(open_, None, low, close, c)
         lower = _min_pair(pl.col("open"), pl.col("close")) - pl.col("low")
-        values[c] = _z_expr(lower, frame, c, window)
+        valid = _validate_ohlc(pl.col("open"), None, pl.col("low"), pl.col("close"))
+        values[c] = _z_expr(lower, frame, c, window, valid)
     return _result(close, values)
 
 
@@ -432,7 +486,8 @@ def candle_body_percentile(open_, close, window):
     values = {}
     for c in _cols(open_, close):
         frame = _frame(open_, None, None, close, c)
-        values[c] = _pct_rank_expr((pl.col("close") - pl.col("open")).abs(), frame, c, window)
+        valid = _validate_ohlc(pl.col("open"), None, None, pl.col("close"))
+        values[c] = _pct_rank_expr((pl.col("close") - pl.col("open")).abs(), frame, c, window, valid)
     return _result(close, values)
 
 
@@ -440,7 +495,8 @@ def candle_range_percentile(high, low, window):
     values = {}
     for c in _cols(high, low):
         frame = _frame(None, high, low, None, c)
-        values[c] = _pct_rank_expr(pl.col("high") - pl.col("low"), frame, c, window)
+        valid = _validate_ohlc(None, pl.col("high"), pl.col("low"), None)
+        values[c] = _pct_rank_expr(pl.col("high") - pl.col("low"), frame, c, window, valid)
     return _result(high, values)
 
 
@@ -454,8 +510,17 @@ def candle_gap_atr(open_, high, low, close, atr_window):
         # ``ewm(alpha=1/w, adjust=False, min_periods=w).mean()``), NOT a plain
         # rolling mean — one ATR object across the engine.
         atr = tr.ewm_mean(alpha=1.0 / w, adjust=False, min_samples=w)
+        # round-3 audit item 16: the denominator must be ATR AS OF t-1 (excludes
+        # today's High/Low/Close), so today's late-session range does not
+        # retroactively weaken the morning gap.  pandas ``ewm`` carries the
+        # recursive state forward over NaN TR bars (the ATR value stays put);
+        # polars ``ewm_mean`` (ignore_nulls=False) emits null at those bars, so
+        # forward-fill the shifted ATR to reproduce the pandas reference.
+        atr_prev = atr.shift(1).fill_null(strategy="forward")
         gap = pl.col("open") - pl.col("close").shift(1)
-        values[c] = _one(frame, c, _safe_div(gap, atr))
+        valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
+        valid = valid & valid.shift(1)
+        values[c] = _one(frame, c, pl.when(valid).then(_safe_div(gap, atr_prev)).otherwise(None))
     return _result(close, values)
 
 
@@ -464,7 +529,9 @@ def candle_body_position(open_, high, low, close):
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         midpoint = (pl.col("open") + pl.col("close")) / 2.0
-        values[c] = _one(frame, c, _safe_div(midpoint - pl.col("low"), pl.col("high") - pl.col("low")))
+        valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
+        out = _safe_div(midpoint - pl.col("low"), pl.col("high") - pl.col("low"))
+        values[c] = _one(frame, c, pl.when(valid).then(out).otherwise(None))
     return _result(close, values)
 
 
@@ -475,7 +542,8 @@ def candle_overlap_ratio(high, low):
         h, l = pl.col("high"), pl.col("low")
         overlap = (_min_pair(h, h.shift(1)) - _max_pair(l, l.shift(1))).clip(lower_bound=0.0)
         union = _max_pair(h, h.shift(1)) - _min_pair(l, l.shift(1))
-        values[c] = _one(frame, c, _safe_div(overlap, union))
+        valid = _validate_ohlc(None, h, l, None) & _validate_ohlc(None, h, l, None).shift(1)
+        values[c] = _one(frame, c, pl.when(valid).then(_safe_div(overlap, union)).otherwise(None))
     return _result(high, values)
 
 
@@ -496,7 +564,8 @@ def candle_inside_ratio(high, low):
         out_v = pl.when(outside & ~inside).then(1.0 + prev / current).otherwise(None)
         result = in_v.fill_null(out_v)
         keep = prev.is_not_null() & current.is_not_null() & (inside | outside)
-        values[c] = _one(frame, c, pl.when(keep).then(result).otherwise(None))
+        valid = _validate_ohlc(None, h, l, None) & _validate_ohlc(None, h, l, None).shift(1)
+        values[c] = _one(frame, c, pl.when(keep & valid).then(result).otherwise(None))
     return _result(high, values)
 
 
@@ -504,7 +573,9 @@ def candle_close_strength(high, low, close):
     values = {}
     for c in _cols(high, low, close):
         frame = _frame(None, high, low, close, c)
-        values[c] = _one(frame, c, 2.0 * _safe_div(pl.col("close") - pl.col("low"), pl.col("high") - pl.col("low")) - 1.0)
+        valid = _validate_ohlc(None, pl.col("high"), pl.col("low"), pl.col("close"))
+        out = 2.0 * _safe_div(pl.col("close") - pl.col("low"), pl.col("high") - pl.col("low")) - 1.0
+        values[c] = _one(frame, c, pl.when(valid).then(out).otherwise(None))
     return _result(close, values)
 
 
@@ -513,7 +584,8 @@ def candle_rejection_upper(open_, high, low, close):
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         _, _, rng, upper, _ = _parts(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
-        values[c] = _one(frame, c, _safe_div(upper, rng))
+        valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
+        values[c] = _one(frame, c, pl.when(valid).then(_safe_div(upper, rng)).otherwise(None))
     return _result(close, values)
 
 
@@ -522,7 +594,8 @@ def candle_rejection_lower(open_, high, low, close):
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         _, _, rng, _, lower = _parts(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
-        values[c] = _one(frame, c, _safe_div(lower, rng))
+        valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
+        values[c] = _one(frame, c, pl.when(valid).then(_safe_div(lower, rng)).otherwise(None))
     return _result(close, values)
 
 
@@ -536,8 +609,9 @@ def cdl_dragonfly_doji(open_, high, low, close):
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         _, body, rng, upper, lower = _parts(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
-        flag = (body <= 0.10 * rng) & (lower >= 0.60 * rng) & (upper <= 0.10 * rng)
-        values[c] = _one(frame, c, _flag(flag))
+        flag = _flag((body <= 0.10 * rng) & (lower >= 0.60 * rng) & (upper <= 0.10 * rng))
+        valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
+        values[c] = _one(frame, c, pl.when(valid).then(flag).otherwise(None))
     return _result(close, values)
 
 
@@ -546,8 +620,9 @@ def cdl_gravestone_doji(open_, high, low, close):
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         _, body, rng, upper, lower = _parts(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
-        flag = (body <= 0.10 * rng) & (upper >= 0.60 * rng) & (lower <= 0.10 * rng)
-        values[c] = _one(frame, c, _flag(flag))
+        flag = _flag((body <= 0.10 * rng) & (upper >= 0.60 * rng) & (lower <= 0.10 * rng))
+        valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
+        values[c] = _one(frame, c, pl.when(valid).then(flag).otherwise(None))
     return _result(close, values)
 
 
@@ -561,7 +636,8 @@ def cdl_hanging_man(open_, high, low, close):
         uptrend = _prior_trend_expr(cl, up=True)
         pattern = flag & uptrend.fill_null(False)
         out = -_flag(pattern)
-        values[c] = _one(frame, c, pl.when(uptrend.is_not_null()).then(out).otherwise(None))
+        valid = _validate_ohlc(o, h, l, cl)
+        values[c] = _one(frame, c, pl.when(uptrend.is_not_null() & valid).then(out).otherwise(None))
     return _result(close, values)
 
 
@@ -578,7 +654,9 @@ def _cdl_harami(open_, high, low, close):
         inside = (cur_hi < prev_hi) & (cur_lo > prev_lo)
         bullish = inside & (prev_c < prev_o) & (cl > o)
         bearish = inside & (prev_c > prev_o) & (cl < o)
-        values[c] = _one(frame, c, _flag(bullish) - _flag(bearish))
+        valid = _validate_ohlc(o, h, l, cl) & _validate_ohlc(o, h, l, cl).shift(1)
+        out = _flag(bullish) - _flag(bearish)
+        values[c] = _one(frame, c, pl.when(valid).then(out).otherwise(None))
     return _result(close, values)
 
 
@@ -599,8 +677,10 @@ def cdl_piercing(open_, high, low, close):
         o, cl = pl.col("open"), pl.col("close")
         prev_o, prev_c = o.shift(1), cl.shift(1)
         midpoint = (prev_o + prev_c) / 2.0
-        flag = (prev_c < prev_o) & (cl > o) & (o <= prev_c) & (cl > midpoint) & (cl < prev_o)
-        values[c] = _one(frame, c, _flag(flag))
+        flag = _flag((prev_c < prev_o) & (cl > o) & (o <= prev_c) & (cl > midpoint) & (cl < prev_o))
+        valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
+        valid = valid & valid.shift(1)
+        values[c] = _one(frame, c, pl.when(valid).then(flag).otherwise(None))
     return _result(close, values)
 
 
@@ -611,8 +691,10 @@ def cdl_dark_cloud_cover(open_, high, low, close):
         o, cl = pl.col("open"), pl.col("close")
         prev_o, prev_c = o.shift(1), cl.shift(1)
         midpoint = (prev_o + prev_c) / 2.0
-        flag = (prev_c > prev_o) & (cl < o) & (o >= prev_c) & (cl < midpoint) & (cl > prev_o)
-        values[c] = _one(frame, c, -_flag(flag))
+        flag = -_flag((prev_c > prev_o) & (cl < o) & (o >= prev_c) & (cl < midpoint) & (cl > prev_o))
+        valid = _validate_ohlc(pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close"))
+        valid = valid & valid.shift(1)
+        values[c] = _one(frame, c, pl.when(valid).then(flag).otherwise(None))
     return _result(close, values)
 
 
@@ -628,8 +710,10 @@ def cdl_morning_star(open_, high, low, close):
         range2 = pl.when((h.shift(2) - l.shift(2)) != 0).then(h.shift(2) - l.shift(2)).otherwise(None)
         range1 = pl.when((h.shift(1) - l.shift(1)) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
         midpoint2 = (o2 + c2) / 2.0
-        flag = (c2 < o2) & (body2 >= 0.50 * range2) & (body1 <= 0.35 * range1) & (cl > o) & (cl > midpoint2)
-        values[c] = _one(frame, c, _flag(flag))
+        flag = _flag((c2 < o2) & (body2 >= 0.50 * range2) & (body1 <= 0.35 * range1) & (cl > o) & (cl > midpoint2))
+        valid = _validate_ohlc(o, h, l, cl)
+        valid = valid & valid.shift(1) & valid.shift(2)
+        values[c] = _one(frame, c, pl.when(valid).then(flag).otherwise(None))
     return _result(close, values)
 
 
@@ -645,8 +729,10 @@ def cdl_evening_star(open_, high, low, close):
         range2 = pl.when((h.shift(2) - l.shift(2)) != 0).then(h.shift(2) - l.shift(2)).otherwise(None)
         range1 = pl.when((h.shift(1) - l.shift(1)) != 0).then(h.shift(1) - l.shift(1)).otherwise(None)
         midpoint2 = (o2 + c2) / 2.0
-        flag = (c2 > o2) & (body2 >= 0.50 * range2) & (body1 <= 0.35 * range1) & (cl < o) & (cl < midpoint2)
-        values[c] = _one(frame, c, -_flag(flag))
+        flag = -_flag((c2 > o2) & (body2 >= 0.50 * range2) & (body1 <= 0.35 * range1) & (cl < o) & (cl < midpoint2))
+        valid = _validate_ohlc(o, h, l, cl)
+        valid = valid & valid.shift(1) & valid.shift(2)
+        values[c] = _one(frame, c, pl.when(valid).then(flag).otherwise(None))
     return _result(close, values)
 
 
@@ -684,7 +770,10 @@ def cdl_three_white_soldiers(open_, high, low, close):
             & _short_shadows_expr(o.shift(1), pl.col("high").shift(1), pl.col("low").shift(1), cl.shift(1))
             & _short_shadows_expr(o.shift(2), pl.col("high").shift(2), pl.col("low").shift(2), cl.shift(2))
         )
-        values[c] = _one(frame, c, _flag(bull0 & bull1 & bull2 & rising & opens_inside & long_b & short_sh))
+        valid = _validate_ohlc(o, pl.col("high"), pl.col("low"), cl)
+        valid = valid & valid.shift(1) & valid.shift(2)
+        out = _flag(bull0 & bull1 & bull2 & rising & opens_inside & long_b & short_sh)
+        values[c] = _one(frame, c, pl.when(valid).then(out).otherwise(None))
     return _result(close, values)
 
 
@@ -710,7 +799,10 @@ def cdl_three_black_crows(open_, high, low, close):
             & _short_shadows_expr(o.shift(1), pl.col("high").shift(1), pl.col("low").shift(1), cl.shift(1))
             & _short_shadows_expr(o.shift(2), pl.col("high").shift(2), pl.col("low").shift(2), cl.shift(2))
         )
-        values[c] = _one(frame, c, -_flag(bear0 & bear1 & bear2 & falling & opens_inside & long_b & short_sh))
+        valid = _validate_ohlc(o, pl.col("high"), pl.col("low"), cl)
+        valid = valid & valid.shift(1) & valid.shift(2)
+        out = -_flag(bear0 & bear1 & bear2 & falling & opens_inside & long_b & short_sh)
+        values[c] = _one(frame, c, pl.when(valid).then(out).otherwise(None))
     return _result(close, values)
 
 
@@ -730,15 +822,16 @@ def _cdl_tweezer(open_, high, low, close, *, top: bool) -> pl.DataFrame:
     for c in _cols(open_, high, low, close):
         frame = _frame(open_, high, low, close, c)
         o, h, l, cl = pl.col("open"), pl.col("high"), pl.col("low"), pl.col("close")
+        valid = _validate_ohlc(o, h, l, cl) & _validate_ohlc(o, h, l, cl).shift(1)
         # audit item 6: tick-aware 容差（_TICK_K=2），非旧的 1e-4*price 相对带。
         if top:
             same = (h - h.shift(1)).abs() <= _tick_size_expr(h) * 2.0
             reversal = (cl.shift(1) > o.shift(1)) & (cl < o)
-            values[c] = _one(frame, c, -_flag(same & reversal))
+            values[c] = _one(frame, c, pl.when(valid).then(-_flag(same & reversal)).otherwise(None))
         else:
             same = (l - l.shift(1)).abs() <= _tick_size_expr(l) * 2.0
             reversal = (cl.shift(1) < o.shift(1)) & (cl > o)
-            values[c] = _one(frame, c, _flag(same & reversal))
+            values[c] = _one(frame, c, pl.when(valid).then(_flag(same & reversal)).otherwise(None))
     return _result(close, values)
 
 

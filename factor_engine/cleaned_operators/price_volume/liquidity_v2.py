@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Iterable
 import numpy as np
 import pandas as pd
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, RelationalParamSpec, SeriesOperator, register_operator
 from cleaned_operators.registry import OperatorRegistry
 
 _EPS=1e-12
@@ -15,14 +15,35 @@ def _pi(v,name,minimum=1):
     if v<minimum: raise ValueError(f"{name} must be >= {minimum}")
     return v
 
-def _register(name,params,fn,desc):
+def _register(name,params,fn,desc,*,param_specs=None,relational_specs=None,input_units=None,output_unit=None,window_semantics=None,extra_tags=()):
     # ChaikinOscillator / ForceIndex smooth via ``ewm(adjust=False)`` (infinite
     # recursion) and therefore require full-history replay — review P0-05.
     _tags=("stateful","full_replay") if name in {"ChaikinOscillator","ForceIndex"} else ()
-    meta=OperatorMetadata(name=name,category="price_volume_extension",description=desc,param_names=list(params),return_type="series",tags=["pit_safe","causal","bounded_history","production_extension",*_tags])
+    meta=OperatorMetadata(name=name,category="price_volume_extension",description=desc,param_names=list(params),return_type="series",tags=["pit_safe","causal","bounded_history","production_extension",*_tags,*extra_tags])
+    if param_specs: meta.param_specs=dict(param_specs)
+    if relational_specs: meta.relational_specs=list(relational_specs)
+    if input_units: meta.input_units=dict(input_units)
+    if output_unit: meta.output_unit=output_unit
+    if window_semantics: meta.window_semantics=window_semantics
     def _calculate_series(self,*args,**kwargs): return fn(*args,**kwargs)
     cls=type(f"LiquidityV2_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})
     register_operator(name=name,category="price_volume_extension",business_category="price_volume",canonical=name,source="liquidity_v2",backend="pandas_numpy",status="production")(cls)
+
+def _check_volume_nonneg(volume, name="volume"):
+    # R11 round-3 #19: volume is a non-negative count/amount.  A negative finite
+    # value is an INVALID state (never ``abs()`` the denominator and then allow
+    # a negative numerator) -> fail loudly at the call boundary.
+    bad=(volume<0)&volume.notna()
+    if bool(bad.any().any()):
+        raise ValueError(f"{name} must be non-negative (input_units='non_negative_volume'); found a negative value")
+
+def _volume_growth(v):
+    # R11 round-3 #18: a raw ``pct_change`` on a 0 prior base blows up to +-inf
+    # (e.g. volume jumps from 0 to 100 => ``inf``).  Guard the divide-by-zero and
+    # emit NaN on a 0 base.  This mirrors the SQL backend's ``NULLIF(v,0)`` so
+    # pandas / polars / SQL stay in parity; a log1p-growth variant was NOT
+    # adopted here because it would deviate from the SQL twin on clean data.
+    return v / v.shift(1).replace(0.0, np.nan) - 1.0
 
 def average_volume(volume,window):
     w=_pi(window,"window"); return volume.rolling(w,min_periods=w).mean()
@@ -33,9 +54,14 @@ def abnormal_volume(volume,window):
     base=volume.shift(1).rolling(_pi(window,"window"),min_periods=_pi(window,"window")).mean(); return volume/base.replace(0,np.nan)-1.0
 def abnormal_turnover(turnover,window): return abnormal_volume(turnover,window)
 def volume_volatility(volume,window):
-    w=_pi(window,"window",2); return volume.pct_change(fill_method=None).rolling(w,min_periods=w).std()
+    w=_pi(window,"window",2); return _volume_growth(volume).rolling(w,min_periods=w).std()
 def turnover_volatility(turnover,window): return volume_volatility(turnover,window)
 def volume_autocorr(volume,window,lag):
+    # R11 round-3 #17: ``window`` counts the ALIGNED PAIRS actually used in the
+    # autocorrelation; the raw lookback is ``window + lag`` prior bars (first
+    # output appears at raw index ``window + lag - 1``) so the lag term has
+    # genuine history.  ``lag >= window`` would leave fewer than ``window``
+    # aligned pairs -> declared infeasible via RelationalParamSpec("lag < window").
     w=_pi(window,"window",3); l=_pi(lag,"lag"); return volume.rolling(w,min_periods=w).corr(volume.shift(l))
 def turnover_autocorr(turnover,window,lag): return volume_autocorr(turnover,window,lag)
 def amihud_illiquidity(ret,close,volume,window):
@@ -54,6 +80,7 @@ def volume_acceleration(volume,short_window,long_window):
 def turnover_acceleration(turnover,short_window,long_window): return volume_acceleration(turnover,short_window,long_window)
 def up_volume_ratio(ret,volume,window):
     w=_pi(window,"window")
+    _check_volume_nonneg(volume)
     # A bar whose return is missing/unknown must NOT be counted as "not up"
     # volume: the old ``where(ret>0, 0.0)`` mapped ``NaN -> False -> 0.0``,
     # silently deflating the up share (unknown != zero volume / zero direction).
@@ -61,39 +88,52 @@ def up_volume_ratio(ret,volume,window):
     # NaN, and only a fully-known window with zero up-volume emits 0 — R4-29.
     valid=ret.notna()&volume.notna()
     up=volume.where((ret>0)&valid,0.0).where(valid)
-    total=volume.abs().where(valid)
+    total=volume.where(valid)  # non-negative by contract (#19): no abs() needed
     return up.rolling(w,min_periods=w).sum()/total.rolling(w,min_periods=w).sum().replace(0,np.nan)
 def down_volume_ratio(ret,volume,window):
     w=_pi(window,"window")
+    _check_volume_nonneg(volume)
     # Same unknown != zero discipline as up_volume_ratio (R4-29).
     valid=ret.notna()&volume.notna()
     dn=volume.where((ret<0)&valid,0.0).where(valid)
-    total=volume.abs().where(valid)
+    total=volume.where(valid)  # non-negative by contract (#19)
     return dn.rolling(w,min_periods=w).sum()/total.rolling(w,min_periods=w).sum().replace(0,np.nan)
 def signed_volume_imbalance(ret,volume,window): return up_volume_ratio(ret,volume,window)-down_volume_ratio(ret,volume,window)
 def up_down_volume_ratio(ret,volume,window): return up_volume_ratio(ret,volume,window)/down_volume_ratio(ret,volume,window).replace(0,np.nan)
 def volume_weighted_return(ret,volume,window):
     w=_pi(window,"window")
+    _check_volume_nonneg(volume)
     # Cohort-consistent numerator/denominator: a bar missing either input must
     # not enter one side and not the other (a missing ``ret`` with a valid
     # ``volume`` previously diluted the mean toward 0) — review §4 / P1.
     valid=ret.notna()&volume.notna(); rv=ret.where(valid); vv=volume.where(valid)
-    num=(rv*vv).rolling(w,min_periods=w).sum(); den=vv.abs().rolling(w,min_periods=w).sum()
+    num=(rv*vv).rolling(w,min_periods=w).sum(); den=vv.rolling(w,min_periods=w).sum()  # non-negative (#19)
     return num/den.replace(0,np.nan)
 def volume_weighted_momentum(close,volume,window): return volume_weighted_return(close.pct_change(fill_method=None),volume,window)
 def price_volume_divergence(close,volume,price_window,volume_window):
     pw,vw=_pi(price_window,"price_window"),_pi(volume_window,"volume_window"); pr=close/close.shift(pw)-1.0; vr=volume/volume.shift(vw).replace(0,np.nan)-1.0; return pr-vr
 def price_turnover_divergence(close,turnover,price_window,turnover_window): return price_volume_divergence(close,turnover,price_window,turnover_window)
 def return_volume_beta(ret,volume,window):
-    w=_pi(window,"window",3); vc=volume.pct_change(fill_method=None); cov=ret.rolling(w,min_periods=w).cov(vc); var=vc.rolling(w,min_periods=w).var(); return cov/var.replace(0,np.nan)
+    w=_pi(window,"window",3); _check_volume_nonneg(volume); vc=_volume_growth(volume); cov=ret.rolling(w,min_periods=w).cov(vc); var=vc.rolling(w,min_periods=w).var(); return cov/var.replace(0,np.nan)
 def return_turnover_beta(ret,turnover,window): return return_volume_beta(ret,turnover,window)
 def _mf_multiplier(high,low,close): return ((close-low)-(high-close))/(high-low).replace(0,np.nan)
-def ADL(high,low,close,volume,window):
+def rolling_adl_flow(high,low,close,volume,window):
+    # R11 round-3 #20: this is a BOUNDED ROLLING money-flow sum over an explicit
+    # window (``rolling(window).sum()`` of Chaikin money-flow volume) — NOT the
+    # classic cumulative Accumulation/Distribution Line (which integrates the
+    # full history with a running total).  No truly cumulative/stateful ADL
+    # operator exists in the catalog; the name says what this computes so the
+    # two semantics are not conflated.
     w=_pi(window,"window"); flow=_mf_multiplier(high,low,close)*volume; return flow.rolling(w,min_periods=w).sum()
+# Legacy in-module alias for the renamed rolling-flow operator (registry alias
+# ``ADL -> rolling_adl_flow`` is registered below).
+ADL=rolling_adl_flow
 def ChaikinOscillator(high,low,close,volume,fast_window,slow_window,adl_window):
     f,s=_pi(fast_window,"fast_window"),_pi(slow_window,"slow_window");
     if f>=s: raise ValueError("fast_window must be < slow_window")
-    adl=ADL(high,low,close,volume,_pi(adl_window,"adl_window")); return adl.ewm(span=f,adjust=False,min_periods=f).mean()-adl.ewm(span=s,adjust=False,min_periods=s).mean()
+    # Built on the BOUNDED ROLLING ADL flow (rolling_adl_flow), NOT the classic
+    # cumulative ADL — the two are deliberately kept distinct (round-3 #20).
+    adl=rolling_adl_flow(high,low,close,volume,_pi(adl_window,"adl_window")); return adl.ewm(span=f,adjust=False,min_periods=f).mean()-adl.ewm(span=s,adjust=False,min_periods=s).mean()
 def ForceIndex(close,volume,window):
     w=_pi(window,"window"); raw=close.diff()*volume; return raw.ewm(span=w,adjust=False,min_periods=w).mean()
 def EaseOfMovement(high,low,volume,window,volume_scale=1.0):
@@ -134,32 +174,95 @@ def high_low_spread_proxy(high,low,window):
     w=_pi(window,"window"); return np.log(high/low.replace(0,np.nan)).rolling(w,min_periods=w).mean()
 def turnover_adjusted_volatility(ret,turnover,window):
     w=_pi(window,"window",2); vol=ret.rolling(w,min_periods=w).std(); act=turnover.rolling(w,min_periods=w).mean(); return vol/act.replace(0,np.nan)
-def volume_to_range(volume,high,low,window):
-    w=_pi(window,"window"); raw=volume/(high-low).replace(0,np.nan); return raw.rolling(w,min_periods=w).mean()
+def volume_price_range_density(volume,high,low,window):
+    w=_pi(window,"window")
+    # R11 round-3 #21: Volume/(High-Low) is a strongly unit-dependent "volume per
+    # unit price range" density.  The canonical name now says what it measures
+    # (stated output unit: ``volume_per_price_range``) instead of implying a
+    # normalized range.  A non-positive range (== 0, or High<Low) -> NaN so the
+    # density cannot explode as range -> 0.
+    rng=high-low
+    raw=volume/rng.where(rng>0)
+    return raw.rolling(w,min_periods=w).mean()
+# Legacy in-module alias for the renamed density op (registry alias
+# ``volume_to_range -> volume_price_range_density`` is registered below).
+volume_to_range=volume_price_range_density
 
 _SPECS=[
 ("average_volume",["volume","window"],average_volume,"Rolling average volume."),("average_turnover",["turnover","window"],average_turnover,"Rolling average turnover/activity."),("adv",["close","volume","window"],adv,"Average dollar volume."),
-("abnormal_volume",["volume","window"],abnormal_volume,"Current volume versus prior rolling mean."),("abnormal_turnover",["turnover","window"],abnormal_turnover,"Current turnover versus prior rolling mean."),("volume_volatility",["volume","window"],volume_volatility,"Volatility of volume growth."),("turnover_volatility",["turnover","window"],turnover_volatility,"Volatility of turnover growth."),
-("volume_autocorr",["volume","window","lag"],volume_autocorr,"Rolling volume autocorrelation."),("turnover_autocorr",["turnover","window","lag"],turnover_autocorr,"Rolling turnover autocorrelation."),("amihud_illiquidity",["ret","close","volume","window"],amihud_illiquidity,"Rolling Amihud illiquidity proxy."),("price_impact",["ret","dollar_volume","window"],price_impact,"Absolute return per dollar-volume price-impact proxy."),("return_per_turnover",["ret","turnover"],return_per_turnover,"Return per unit turnover."),
+("abnormal_volume",["volume","window"],abnormal_volume,"Current volume versus prior rolling mean."),("abnormal_turnover",["turnover","window"],abnormal_turnover,"Current turnover versus prior rolling mean."),("volume_volatility",["volume","window"],volume_volatility,"Volatility of volume growth (zero-base guarded)."),("turnover_volatility",["turnover","window"],turnover_volatility,"Volatility of turnover growth (zero-base guarded)."),
+("volume_autocorr",["volume","window","lag"],volume_autocorr,"Rolling volume autocorrelation (raw lookback = window + lag)."),("turnover_autocorr",["turnover","window","lag"],turnover_autocorr,"Rolling turnover autocorrelation (raw lookback = window + lag)."),("amihud_illiquidity",["ret","close","volume","window"],amihud_illiquidity,"Rolling Amihud illiquidity proxy."),("price_impact",["ret","dollar_volume","window"],price_impact,"Absolute return per dollar-volume price-impact proxy."),("return_per_turnover",["ret","turnover"],return_per_turnover,"Return per unit turnover."),
 ("volume_shock",["volume","window"],volume_shock,"Prior-window volume z-score."),("turnover_shock",["turnover","window"],turnover_shock,"Prior-window turnover z-score."),("volume_acceleration",["volume","short_window","long_window"],volume_acceleration,"Short/long average volume acceleration."),("turnover_acceleration",["turnover","short_window","long_window"],turnover_acceleration,"Short/long turnover acceleration."),
 ("up_volume_ratio",["ret","volume","window"],up_volume_ratio,"Share of recent volume occurring on positive-return bars."),("down_volume_ratio",["ret","volume","window"],down_volume_ratio,"Share of recent volume occurring on negative-return bars."),("signed_volume_imbalance",["ret","volume","window"],signed_volume_imbalance,"Up-volume share minus down-volume share."),("up_down_volume_ratio",["ret","volume","window"],up_down_volume_ratio,"Up-volume to down-volume ratio."),("volume_weighted_return",["ret","volume","window"],volume_weighted_return,"Rolling volume-weighted return."),("volume_weighted_momentum",["close","volume","window"],volume_weighted_momentum,"Rolling volume-weighted close return."),
 ("price_volume_divergence",["close","volume","price_window","volume_window"],price_volume_divergence,"Price momentum minus volume momentum."),("price_turnover_divergence",["close","turnover","price_window","turnover_window"],price_turnover_divergence,"Price momentum minus turnover momentum."),("return_volume_beta",["ret","volume","window"],return_volume_beta,"Rolling beta of return to volume growth."),("return_turnover_beta",["ret","turnover","window"],return_turnover_beta,"Rolling beta of return to turnover growth."),
-("ADL",["high","low","close","volume","window"],ADL,"Bounded accumulation/distribution flow over an explicit window."),("ChaikinOscillator",["high","low","close","volume","fast_window","slow_window","adl_window"],ChaikinOscillator,"Chaikin oscillator over bounded ADL."),("ForceIndex",["close","volume","window"],ForceIndex,"EMA-smoothed price-change times volume."),("EaseOfMovement",["high","low","volume","window","volume_scale"],EaseOfMovement,"Ease-of-Movement with explicit smoothing and volume scale."),("bounded_nvi",["close","volume","window"],bounded_nvi,"Bounded Negative Volume Index return over explicit history."),("bounded_pvi",["close","volume","window"],bounded_pvi,"Bounded Positive Volume Index return over explicit history."),
-("zero_return_ratio",["ret","window","epsilon"],zero_return_ratio,"Fraction of near-zero returns in recent window."),("roll_spread_proxy",["ret","window"],roll_spread_proxy,"Roll implied-spread proxy from negative first-order return covariance."),("corwin_schultz_spread",["high","low","window"],corwin_schultz_spread,"Corwin-Schultz high-low spread proxy."),("high_low_spread_proxy",["high","low","window"],high_low_spread_proxy,"Rolling log high-low spread proxy."),("turnover_adjusted_volatility",["ret","turnover","window"],turnover_adjusted_volatility,"Return volatility scaled by trading activity."),("volume_to_range",["volume","high","low","window"],volume_to_range,"Rolling volume per unit intraday range."),
+("rolling_adl_flow",["high","low","close","volume","window"],rolling_adl_flow,"Bounded rolling accumulation/distribution money-flow over an explicit window (NOT the cumulative ADL)."),("ChaikinOscillator",["high","low","close","volume","fast_window","slow_window","adl_window"],ChaikinOscillator,"Chaikin oscillator over the bounded rolling ADL flow (NOT cumulative ADL)."),("ForceIndex",["close","volume","window"],ForceIndex,"EMA-smoothed price-change times volume."),("EaseOfMovement",["high","low","volume","window","volume_scale"],EaseOfMovement,"Ease-of-Movement with explicit smoothing and volume scale."),("bounded_nvi",["close","volume","window"],bounded_nvi,"Bounded Negative Volume Index return over explicit history."),("bounded_pvi",["close","volume","window"],bounded_pvi,"Bounded Positive Volume Index return over explicit history."),
+("zero_return_ratio",["ret","window","epsilon"],zero_return_ratio,"Fraction of near-zero returns in recent window."),("roll_spread_proxy",["ret","window"],roll_spread_proxy,"Roll implied-spread proxy from negative first-order return covariance."),("corwin_schultz_spread",["high","low","window"],corwin_schultz_spread,"Corwin-Schultz high-low spread proxy."),("high_low_spread_proxy",["high","low","window"],high_low_spread_proxy,"Rolling log high-low spread proxy."),("turnover_adjusted_volatility",["ret","turnover","window"],turnover_adjusted_volatility,"Return volatility scaled by trading activity."),("volume_price_range_density",["volume","high","low","window"],volume_price_range_density,"Rolling volume per unit intraday range (Volume/(High-Low); unit: volume per price range)."),
 ]
-for _name,_params,_fn,_desc in _SPECS:_register(_name,_params,_fn,_desc)
 
-# P1-86 / R5-34: EaseOfMovement's ``volume_scale`` is a pure unit-conversion
-# constant — it multiplies the whole output uniformly and leaves cross-sectional
-# ordering invariant, so treating it as an alpha-search dimension only
-# manufactures linearly-scaled duplicates.  Tag it ``unit_conversion_only`` AND
-# declare ``ParamSpec(searchable=False)`` so it is excluded from the mining
-# grammar, not just exempted from a dead-parameter audit.
-_em_op = OperatorRegistry.get("EaseOfMovement", "pandas_numpy")
-if _em_op is not None and "unit_conversion_only" not in (_em_op.metadata.tags or ()):
-    _em_op.metadata.tags = [*(_em_op.metadata.tags or ()), "unit_conversion_only"]
-if _em_op is not None:
-    _em_op.metadata.param_specs = {
-        "volume_scale": ParamSpec(dtype=float, searchable=False),
-        **_em_op.metadata.param_specs,
-    }
+# R11 round-3: per-operator metadata contracts — relational feasibility, per-
+# parameter history semantics, and typed input-unit declarations.
+_AUTOCORR_REL = [
+    RelationalParamSpec(
+        "lag < window",
+        message="lag must be < window (window counts aligned pairs; raw history = window + lag)",
+    ),
+]
+_AUTOCORR_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=3, history_formula="window + lag"),
+    "lag": ParamSpec(dtype=int, min=1, history_semantics="exact_rows"),
+}
+_EXTRA: dict[str, dict] = {
+    "volume_autocorr": {"param_specs": dict(_AUTOCORR_PARAM_SPECS), "relational_specs": list(_AUTOCORR_REL)},
+    "turnover_autocorr": {"param_specs": dict(_AUTOCORR_PARAM_SPECS), "relational_specs": list(_AUTOCORR_REL)},
+    "volume_volatility": {"input_units": {"volume": "non_negative_volume"}},
+    "turnover_volatility": {"input_units": {"turnover": "non_negative_volume"}},
+    "price_volume_divergence": {"input_units": {"volume": "non_negative_volume"}},
+    "price_turnover_divergence": {"input_units": {"turnover": "non_negative_volume"}},
+    "return_volume_beta": {"input_units": {"volume": "non_negative_volume"}},
+    "return_turnover_beta": {"input_units": {"turnover": "non_negative_volume"}},
+    "up_volume_ratio": {"input_units": {"volume": "non_negative_volume"}},
+    "down_volume_ratio": {"input_units": {"volume": "non_negative_volume"}},
+    "volume_weighted_return": {"input_units": {"volume": "non_negative_volume"}},
+    "volume_weighted_momentum": {"input_units": {"volume": "non_negative_volume"}},
+    "rolling_adl_flow": {"input_units": {"volume": "non_negative_volume"}},
+    "volume_price_range_density": {
+        "input_units": {"volume": "non_negative_volume", "high": "price", "low": "price"},
+        "output_unit": "volume_per_price_range",
+    },
+    # R11 round-3 cross-cutting: ``epsilon`` is a numerical near-zero tolerance
+    # (never an economic search dimension).
+    "zero_return_ratio": {
+        "param_specs": {"epsilon": ParamSpec(dtype=float, min=0.0, searchable=False, param_role=ParamRole.NUMERICAL)},
+    },
+    # P1-86 / R5-34: EaseOfMovement's ``volume_scale`` is a pure unit-conversion
+    # constant — it multiplies the whole output uniformly and leaves cross-sectional
+    # ordering invariant, so it is not an alpha-search dimension.
+    "EaseOfMovement": {
+        "extra_tags": ("unit_conversion_only",),
+        "param_specs": {"volume_scale": ParamSpec(dtype=float, searchable=False)},
+    },
+}
+
+for _name,_params,_fn,_desc in _SPECS:
+    _ext = _EXTRA.get(_name, {})
+    _register(_name,_params,_fn,_desc,**_ext)
+
+# R11 round-3 #20 / #21: honest renames.
+#   * ``ADL`` was a bounded ROLLING money-flow sum, not the classic cumulative
+#     Accumulation/Distribution Line -> canonical ``rolling_adl_flow``.
+#   * ``volume_to_range`` = Volume/(High-Low) is a unit-dependent density ->
+#     canonical ``volume_price_range_density`` (stated unit).
+# The old names remain resolving aliases so existing recipes keep loading
+# (renames are never routed through _aliases.py per round-3 conventions).
+_RENAMES = {"ADL": "rolling_adl_flow", "volume_to_range": "volume_price_range_density"}
+for _old, _new in _RENAMES.items():
+    try:
+        OperatorRegistry.register_alias(_old, _new)
+    except (KeyError, ValueError):
+        pass
+import cleaned_operators.operator_surface as _surface
+# Keep the live extended surface in sync with the rename: the OLD names leave
+# the static partition (they are now resolving aliases) and the NEW canonicals
+# enter it, so finalize_layer_governance's exact-partition check stays green.
+_surface.extend_extended_only(set(_RENAMES.values()))
+_surface.retract_extended_only(set(_RENAMES.keys()))

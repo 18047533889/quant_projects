@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Regression tests for the 2026-08 stateful rule/episode/rotation pack (21 ops).
+"""Regression tests for the 2026-08 stateful rule/episode/rotation pack (20 ops).
+
+``state_since_reduce`` was retired into ``state_since_sum`` / ``state_since_mean`` /
+``state_since_count`` / ``state_since_last`` (round-2); those four split canonicals
+are covered by ``test_r11_round2_state_condition.py``.
 
 Covers:
 - Registration: every stateful-pack canonical has a pandas_numpy runtime.
@@ -32,7 +36,10 @@ STATEFUL_PACK = frozenset({
     # sequential / conditional memory
     "ts_cusum_pressure", "ts_rank_if", "state_ewm_if", "ts_lag_of_peak_corr",
     # dynamic episode / directional change
-    "state_since_reduce", "directional_change_state", "directional_change_extent",
+    # (``state_since_reduce`` was retired into state_since_sum/mean/count/last,
+    # which the round-2 condition tests cover; the four split canonicals are
+    # extended-surface, not daily-migrated.)
+    "directional_change_state", "directional_change_extent",
     "state_since_trend_tstat",
     # state survival / maturity
     "ts_state_age_percentile", "ts_state_exit_hazard", "ts_state_residual_life",
@@ -46,7 +53,7 @@ EXPECTED_SCOPE = {
     "state_latch": "ts", "state_hold": "ts", "state_slew_limit": "ts",
     "state_deadband": "ts", "event_refractory": "ts", "cross_event": "ts",
     "ts_cusum_pressure": "ts", "ts_rank_if": "ts", "state_ewm_if": "ts",
-    "ts_lag_of_peak_corr": "ts", "state_since_reduce": "ts",
+    "ts_lag_of_peak_corr": "ts",
     "directional_change_state": "ts", "directional_change_extent": "ts",
     "state_since_trend_tstat": "ts", "ts_state_age_percentile": "ts",
     "ts_state_exit_hazard": "ts", "ts_state_residual_life": "ts",
@@ -104,7 +111,6 @@ def test_stateful_pack_deterministic_and_axes(canonical):
         "ts_rank_if": (close, cond),
         "state_ewm_if": (close, cond),
         "ts_lag_of_peak_corr": (close, ret),
-        "state_since_reduce": (ret, cond),
         "directional_change_state": (close,),
         "directional_change_extent": (close,),
         "state_since_trend_tstat": (ret, cond),
@@ -122,7 +128,6 @@ def test_stateful_pack_deterministic_and_axes(canonical):
         "ts_rank_if": {"window": 20, "min_periods": 5},
         "state_ewm_if": {"half_life": 10},
         "ts_lag_of_peak_corr": {"window": 20, "max_lag": 5},
-        "state_since_reduce": {"mode": "sum", "min_episode": 2},
         "state_since_trend_tstat": {"min_obs": 5},
         "ts_state_age_percentile": {"history_window": 60, "min_completed_runs": 3},
         "ts_state_exit_hazard": {"history_window": 60, "min_completed_runs": 3, "alpha": 1.0},
@@ -180,13 +185,15 @@ def test_event_refractory_cooldown():
     assert v[0] == 1.0 and v[1] == 0.0 and v[2] == 0.0 and v[5] == 1.0 and v[9] == 1.0
 
 
-def test_state_since_reduce_episode_accumulates():
+def test_state_since_sum_episode_accumulates():
     n = 8
     dates = pd.bdate_range("2024-01-02", periods=n)
     cols = ["A"]
     x = pd.DataFrame([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], index=dates, columns=cols)
     reset = pd.DataFrame([1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], index=dates, columns=cols)
-    out = OperatorRegistry.get("state_since_reduce", "pandas_numpy").calculate(x, reset, mode="sum", min_episode=1)
+    # ``state_since_reduce`` was split into four honest canonicals; the sum mode
+    # lives on ``state_since_sum``.
+    out = OperatorRegistry.get("state_since_sum", "pandas_numpy").calculate(x, reset, min_episode=1)
     v = out["A"].tolist()
     # row0 reset -> NaN; row1-2 sum 2, 5; row3 reset -> NaN; rows4-7 5,11,18,26
     assert np.isnan(v[0]) and v[1] == 2.0 and v[2] == 5.0

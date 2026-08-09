@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 """Dynamic-episode / intrinsic-time primitives (2026-08 CTA pack).
 
-* ``state_since_reduce``       — reduce ``x`` over the current episode
+* ``state_since_sum``         — sum of ``x`` over the current episode
   ``[tau, t]`` where ``tau`` is the last reset (dynamic episode window, unlike
-  a fixed rolling window).
+  a fixed rolling window).  ``state_since_mean`` / ``state_since_count`` /
+  ``state_since_last`` are the mean / count / last-value variants.  These four
+  replace the retired ``state_since_reduce(mode=...)`` so each mode is an
+  honest canonical with a fixed output unit (sum/mean/last carry ``x``'s unit,
+  count is ``count``) and the mode-enum search dimension is gone.
 * ``directional_change_state`` — binary/ternary Directional-Change event state:
   +1 while an up event is running, -1 while a down event runs, 0 before the
   first event confirms.
@@ -11,10 +15,12 @@
   (signed by direction; magnitude = number of ``threshold`` moves since the
   event's origin, i.e. overshoot accumulates from the event start).
 * ``state_since_trend_tstat``  — OLS slope t-statistic of ``x`` over the
-  current episode since the last reset.
+  current episode since the last reset (dimensionless).
 
 All are forward per-column recursions (prefix-causal, PIT).  A NaN input emits
-NaN and re-baselines the recursion state (``missing_policy="break"``).
+NaN and re-baselines the recursion state (``missing_policy="break"``).  Every
+``reset_condition`` slot is a ConditionBool: finite values must be exactly
+0/1 (anything else raises), NaN is an unknown reset that re-baselines.
 """
 from __future__ import annotations
 
@@ -25,91 +31,212 @@ import pandas as pd
 
 from cleaned_operators.base import SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like
-from cleaned_operators.stateful._common import metadata
+from cleaned_operators.stateful._common import assert_condition_bool, metadata
 
 _EPS = 1e-12
 
 
+def _state_since_kernel(
+    x: pd.DataFrame,
+    reset_condition: pd.DataFrame,
+    min_episode: int,
+    mode: str,
+) -> pd.DataFrame:
+    """Shared episode-reduce kernel over ``[tau, t]`` since the last reset.
+
+    ``mode`` is one of ``{"sum", "mean", "count", "last"}`` (callers pre-validate
+    ``reset_condition`` as a ConditionBool).  Reset rows (``reset_condition == 1``,
+    and NaN reset input) emit NaN and start a new episode; a NaN ``x`` emits NaN
+    that day but does not break the episode accumulation (the day exists, the
+    value is missing).  Output is NaN until the episode has ``min_episode``
+    valid rows.
+    """
+    xv = x.to_numpy(dtype=float)
+    rv = reset_condition.to_numpy(dtype=float)
+    min_e = max(1, int(min_episode))
+    rows, cols = xv.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for col in range(cols):
+        acc = 0.0
+        cnt = 0
+        last = np.nan
+        for row in range(rows):
+            if not np.isfinite(rv[row, col]):
+                out[row, col] = np.nan
+                acc = 0.0
+                cnt = 0
+                last = np.nan
+                continue
+            if bool(rv[row, col] != 0.0):
+                out[row, col] = np.nan
+                acc = 0.0
+                cnt = 0
+                last = np.nan
+                continue
+            xt = xv[row, col]
+            if not np.isfinite(xt):
+                # P1-73: a missing x emits NaN that day (the docstring
+                # contract) instead of continuing to print the old episode
+                # statistics.  The episode accumulation itself is not
+                # broken — acc/cnt/last are carried forward unchanged.
+                out[row, col] = np.nan
+                continue
+            acc = acc + float(xt)
+            cnt = cnt + 1
+            last = float(xt)
+            if cnt < min_e:
+                out[row, col] = np.nan
+                continue
+            if mode == "sum":
+                out[row, col] = acc
+            elif mode == "mean":
+                out[row, col] = acc / float(cnt)
+            elif mode == "count":
+                out[row, col] = float(cnt)
+            else:  # last
+                out[row, col] = last
+    return frame_like(x, out)
+
+
 @register_operator(
-    name="state_since_reduce",
+    name="state_since_sum",
     category="time_series_state",
     business_category="time_series_state",
-    canonical="state_since_reduce",
+    canonical="state_since_sum",
     source="stateful.episode",
 )
-class StateSinceReduce(SeriesOperator):
-    """Reduce ``x`` over the current episode since the last reset.
+class StateSinceSum(SeriesOperator):
+    """Sum of ``x`` over the current episode since the last reset.
 
-    ``mode`` in {"sum", "mean", "count", "last"}.  Reset rows (and NaN reset
-    input) emit NaN and start a new episode; a NaN ``x`` emits NaN that day but
-    does not break the episode accumulation (the day exists, the value is
-    missing).  Output is NaN until the episode has ``min_episode`` valid rows.
+    Split from the retired ``state_since_reduce(mode="sum")``: the output unit
+    is ``same_as:x`` (a sum of ``x`` carries ``x``'s unit), never a fixed
+    ``level``.  ``reset_condition`` is a ConditionBool: finite values must be
+    exactly 0/1 (anything else raises), NaN = unknown (re-baselines).
     """
 
     metadata = metadata(
-        "state_since_reduce",
-        "自上次 reset 以来的 episode 内 x 的累计/均值/计数/末值。mode 单位: sum/mean/last=level, count=count。",
-        ["x", "reset_condition", "mode", "min_episode"],
+        "state_since_sum",
+        "自上次 reset 以来的 episode 内 x 的累计和(单位继承 x)。",
+        ["x", "reset_condition", "min_episode"],
         domain="price_volume",
-        unit="level",
+        unit="same_as:x",
     )
+    metadata.output_unit = "same_as:x"
 
     def _calculate_series(
         self,
         x: pd.DataFrame,
         reset_condition: pd.DataFrame,
-        mode: str = "sum",
         min_episode: int = 2,
         **_: Any,
     ) -> pd.DataFrame:
-        xv = x.to_numpy(dtype=float)
-        rv = reset_condition.to_numpy(dtype=float)
-        m = str(mode).lower()
-        if m not in {"sum", "mean", "count", "last"}:
-            raise ValueError(f"mode must be one of sum/mean/count/last, got {mode!r}")
-        min_e = max(1, int(min_episode))
-        rows, cols = xv.shape
-        out = np.full((rows, cols), np.nan, dtype=float)
-        for col in range(cols):
-            acc = 0.0
-            cnt = 0
-            last = np.nan
-            for row in range(rows):
-                if not np.isfinite(rv[row, col]):
-                    out[row, col] = np.nan
-                    acc = 0.0
-                    cnt = 0
-                    last = np.nan
-                    continue
-                if bool(rv[row, col] != 0.0):
-                    out[row, col] = np.nan
-                    acc = 0.0
-                    cnt = 0
-                    last = np.nan
-                    continue
-                xt = xv[row, col]
-                if not np.isfinite(xt):
-                    # P1-73: a missing x emits NaN that day (the docstring
-                    # contract) instead of continuing to print the old episode
-                    # statistics.  The episode accumulation itself is not
-                    # broken — acc/cnt/last are carried forward unchanged.
-                    out[row, col] = np.nan
-                    continue
-                acc = acc + float(xt)
-                cnt = cnt + 1
-                last = float(xt)
-                if cnt < min_e:
-                    out[row, col] = np.nan
-                    continue
-                if m == "sum":
-                    out[row, col] = acc
-                elif m == "mean":
-                    out[row, col] = acc / float(cnt)
-                elif m == "count":
-                    out[row, col] = float(cnt)
-                else:  # last
-                    out[row, col] = last
-        return frame_like(x, out)
+        assert_condition_bool(reset_condition, name="reset_condition")
+        return _state_since_kernel(x, reset_condition, int(min_episode), "sum")
+
+
+@register_operator(
+    name="state_since_mean",
+    category="time_series_state",
+    business_category="time_series_state",
+    canonical="state_since_mean",
+    source="stateful.episode",
+)
+class StateSinceMean(SeriesOperator):
+    """Mean of ``x`` over the current episode since the last reset.
+
+    Split from the retired ``state_since_reduce(mode="mean")``: the output unit
+    is ``same_as:x`` (a mean of ``x`` carries ``x``'s unit), never a fixed
+    ``level``.  ``reset_condition`` is a ConditionBool (see ``state_since_sum``).
+    """
+
+    metadata = metadata(
+        "state_since_mean",
+        "自上次 reset 以来的 episode 内 x 的均值(单位继承 x)。",
+        ["x", "reset_condition", "min_episode"],
+        domain="price_volume",
+        unit="same_as:x",
+    )
+    metadata.output_unit = "same_as:x"
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        reset_condition: pd.DataFrame,
+        min_episode: int = 2,
+        **_: Any,
+    ) -> pd.DataFrame:
+        assert_condition_bool(reset_condition, name="reset_condition")
+        return _state_since_kernel(x, reset_condition, int(min_episode), "mean")
+
+
+@register_operator(
+    name="state_since_count",
+    category="time_series_state",
+    business_category="time_series_state",
+    canonical="state_since_count",
+    source="stateful.episode",
+)
+class StateSinceCount(SeriesOperator):
+    """Count of valid ``x`` rows over the current episode since the last reset.
+
+    Split from the retired ``state_since_reduce(mode="count")``: the output unit
+    is ``count`` (the old metadata's fixed ``level`` was wrong).  ``reset_condition``
+    is a ConditionBool (see ``state_since_sum``).
+    """
+
+    metadata = metadata(
+        "state_since_count",
+        "自上次 reset 以来的 episode 内有效 x 的计数。",
+        ["x", "reset_condition", "min_episode"],
+        domain="price_volume",
+        unit="count",
+    )
+    metadata.output_unit = "count"
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        reset_condition: pd.DataFrame,
+        min_episode: int = 2,
+        **_: Any,
+    ) -> pd.DataFrame:
+        assert_condition_bool(reset_condition, name="reset_condition")
+        return _state_since_kernel(x, reset_condition, int(min_episode), "count")
+
+
+@register_operator(
+    name="state_since_last",
+    category="time_series_state",
+    business_category="time_series_state",
+    canonical="state_since_last",
+    source="stateful.episode",
+)
+class StateSinceLast(SeriesOperator):
+    """Most recent valid ``x`` over the current episode since the last reset.
+
+    Split from the retired ``state_since_reduce(mode="last")``: the output unit
+    is ``same_as:x`` (the last value of ``x`` carries ``x``'s unit).  ``reset_condition``
+    is a ConditionBool (see ``state_since_sum``).
+    """
+
+    metadata = metadata(
+        "state_since_last",
+        "自上次 reset 以来的 episode 内 x 的最新值(单位继承 x)。",
+        ["x", "reset_condition", "min_episode"],
+        domain="price_volume",
+        unit="same_as:x",
+    )
+    metadata.output_unit = "same_as:x"
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        reset_condition: pd.DataFrame,
+        min_episode: int = 2,
+        **_: Any,
+    ) -> pd.DataFrame:
+        assert_condition_bool(reset_condition, name="reset_condition")
+        return _state_since_kernel(x, reset_condition, int(min_episode), "last")
 
 
 def _dc_states_and_extents(price: np.ndarray, threshold: float) -> tuple[np.ndarray, np.ndarray]:
@@ -276,12 +403,13 @@ class StateSinceTrendTstat(SeriesOperator):
 
     metadata = metadata(
         "state_since_trend_tstat",
-        "episode 内 OLS 斜率 t 统计(事件以来趋势强度)。",
+        "episode 内 OLS 斜率 t 统计(事件以来趋势强度, 无量纲)。",
         ["x", "reset_condition", "min_obs", "max_age"],
         domain="price_volume",
-        unit="level",
+        unit="dimensionless",
         category="time_series_regression",
     )
+    metadata.output_unit = "dimensionless"
 
     def _calculate_series(
         self,
@@ -291,6 +419,7 @@ class StateSinceTrendTstat(SeriesOperator):
         max_age: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
+        assert_condition_bool(reset_condition, name="reset_condition")
         xv = x.to_numpy(dtype=float)
         rv = reset_condition.to_numpy(dtype=float)
         min_o = max(3, int(min_obs))
@@ -368,14 +497,48 @@ class StateSinceTrendTstat(SeriesOperator):
 
 
 def _register_surface() -> None:
+    from cleaned_operators.registry import OperatorRegistry
     from cleaned_operators.stateful._common import register_stateful_surface
 
     register_stateful_surface(
         [
-            "state_since_reduce", "directional_change_state",
-            "directional_change_extent", "state_since_trend_tstat",
+            "state_since_sum", "state_since_mean", "state_since_count",
+            "state_since_last",
+            "directional_change_state", "directional_change_extent",
+            "state_since_trend_tstat",
         ]
     )
+    # TASK 2: ``state_since_reduce`` is retired — the mode-enum dimension and
+    # the dynamic output unit are gone.  The old name resolves to the sum
+    # canonical (its default mode) so existing recipes that used the default
+    # keep loading; mode-specific calls must migrate to the split canonicals.
+    try:
+        OperatorRegistry.register_alias("state_since_reduce", "state_since_sum")
+    except (KeyError, ValueError):
+        pass  # already registered
+    # state_since_reduce is now a deprecated alias, not an active canonical —
+    # retract it from the extended surface or finalize_layer_governance reports
+    # an inactive static-surface entry.
+    try:
+        import cleaned_operators.operator_surface as _surface
+
+        _surface.retract_extended_only({"state_since_reduce"})
+    except ImportError:  # pragma: no cover - surface always present in-tree
+        pass
 
 
 _register_surface()
+
+
+# Round-11 #12: the split episode-reduce canonicals are forward per-column
+# recursions — a segmented checkpoint restore would restart the accumulator
+# mid-episode.  Declare recursive / required_full_history (honest fail-closed).
+from runtime.execution_contract import declare_stateful  # noqa: E402
+
+for _episode_canon in (
+    "state_since_sum",
+    "state_since_mean",
+    "state_since_count",
+    "state_since_last",
+):
+    declare_stateful(_episode_canon, state_model="recursive", chunking="required_full_history")

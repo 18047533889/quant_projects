@@ -359,22 +359,24 @@ class LogReturnsPolars(SeriesOperator):
 
 @register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="factor_dsl_polars")
 class TSArgmaxPolars(SeriesOperator):
-    """Polars 滚动窗口最大值位置算子。"""
+    """Polars 滚动窗口最大值位置算子（canonical 参数 ``window``，``d`` 为别名）。"""
 
     metadata = OperatorMetadata(
         name="ts_argmax", category="time_series", description="窗口内最大值偏移",
-        examples=["ts_argmax(close, 20)"], param_names=["x", "d"], return_type="series", tags=["time_series", "polars"],
+        examples=["ts_argmax(close, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
+        param_aliases={"d": "window"},
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         from cleaned_operators.common.gtja_compat import _rolling_days_since_extreme_1d
 
-        window = int(kwargs.get("window", d))
+        # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
+        w = int(kwargs.get("d", window))
         return panel_pandas_bridge(
             x,
             lambda pdf: pdf.apply(
                 lambda s: _rolling_days_since_extreme_1d(
-                    s.to_numpy(), window, maximum=True
+                    s.to_numpy(), w, maximum=True
                 )
             ),
         )
@@ -382,22 +384,24 @@ class TSArgmaxPolars(SeriesOperator):
 
 @register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="factor_dsl_polars")
 class TSArgminPolars(SeriesOperator):
-    """Polars 滚动窗口最小值位置算子。"""
+    """Polars 滚动窗口最小值位置算子（canonical 参数 ``window``，``d`` 为别名）。"""
 
     metadata = OperatorMetadata(
         name="ts_argmin", category="time_series", description="窗口内最小值偏移",
-        examples=["ts_argmin(close, 20)"], param_names=["x", "d"], return_type="series", tags=["time_series", "polars"],
+        examples=["ts_argmin(close, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
+        param_aliases={"d": "window"},
     )
 
-    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         from cleaned_operators.common.gtja_compat import _rolling_days_since_extreme_1d
 
-        window = int(kwargs.get("window", d))
+        # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
+        w = int(kwargs.get("d", window))
         return panel_pandas_bridge(
             x,
             lambda pdf: pdf.apply(
                 lambda s: _rolling_days_since_extreme_1d(
-                    s.to_numpy(), window, maximum=False
+                    s.to_numpy(), w, maximum=False
                 )
             ),
         )

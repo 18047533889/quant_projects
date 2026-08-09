@@ -70,7 +70,7 @@ def _bounded_last(frame, left_window, right_window, history_window, *, high, out
     return pd.DataFrame(out, index=frame.index, columns=frame.columns)
 
 
-def _bounded_line(frame, left_window, right_window, history_window, points, *, high, output):
+def _bounded_line(frame, left_window, right_window, history_window, points, *, high, output, log=False):
     history = _positive(history_window, "history_window")
     k = _positive(points, "points", minimum=2)
     prices, positions = _events(frame, left_window, right_window, high=high)
@@ -89,6 +89,8 @@ def _bounded_line(frame, left_window, right_window, history_window, points, *, h
             selected = list(active)[-k:]
             xs = np.asarray([row[1] for row in selected], dtype=float)
             ys = np.asarray([row[2] for row in selected], dtype=float)
+            if log:
+                ys = np.log(ys)
             xbar, ybar = xs.mean(), ys.mean()
             denom = float(np.dot(xs-xbar, xs-xbar))
             if denom <= 0:
@@ -151,6 +153,12 @@ def _break_res(close,high,left_window,right_window,history_window,points):
     return _dist_res(close,high,left_window,right_window,history_window,points).clip(lower=0.0)
 def _break_sup(close,low,left_window,right_window,history_window,points):
     return (-_dist_sup(close,low,left_window,right_window,history_window,points)).clip(lower=0.0)
+def _res_log_slope(high,left_window,right_window,history_window,points):
+    # Log-price slope: fit the line on ln(pivot price) vs pivot bar, making the
+    # slope a per-bar log return comparable across price levels (audit 13).
+    return _bounded_line(high,left_window,right_window,history_window,points,high=True,output="slope",log=True)
+def _sup_log_slope(low,left_window,right_window,history_window,points):
+    return _bounded_line(low,left_window,right_window,history_window,points,high=False,output="slope",log=True)
 
 _register("ts_last_pivot_high",["high","left_window","right_window","history_window"],_last_high,"Latest confirmed pivot high inside bounded confirmation history.")
 _register("ts_last_pivot_low",["low","left_window","right_window","history_window"],_last_low,"Latest confirmed pivot low inside bounded confirmation history.")
@@ -164,3 +172,12 @@ _register("ts_distance_to_resistance",["close","high","left_window","right_windo
 _register("ts_distance_to_support",["close","low","left_window","right_window","history_window","points"],_dist_sup,"Signed close-to-support distance.")
 _register("ts_resistance_break",["close","high","left_window","right_window","history_window","points"],_break_res,"Positive breakout magnitude above bounded resistance line.")
 _register("ts_support_break",["close","low","left_window","right_window","history_window","points"],_break_sup,"Positive breakdown magnitude below bounded support line.")
+_register("ts_resistance_log_slope",["high","left_window","right_window","history_window","points"],_res_log_slope,"Log-price slope of the bounded resistance line fitted to confirmed pivot highs.")
+_register("ts_support_log_slope",["low","left_window","right_window","history_window","points"],_sup_log_slope,"Log-price slope of the bounded support line fitted to confirmed pivot lows.")
+
+# New split canonicals live on the same extended surface as the rest of the
+# structure pack.  The raw ts_resistance_slope / ts_support_slope remain as the
+# price-level raw variants (extended/research); these log-price variants are the
+# preferred canonical form.
+import cleaned_operators.operator_surface as _surface
+_surface.extend_extended_only({"ts_resistance_log_slope", "ts_support_log_slope"})

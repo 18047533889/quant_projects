@@ -10,6 +10,13 @@ stay out of the default production grammar:
   extreme-selection-stable replacement for a raw ``max``.  Segment-averaged for
   variance control; fixed frequency grid and normalisation.  The legacy name
   ``ts_bicoherence_max`` resolves as a deprecated alias.
+* ``ts_bicoherence_top_decile_excess`` — the top-decile mean MINUS a
+  deterministic null baseline estimated from phase-randomised surrogates of the
+  same window (same power spectrum, destroyed phases; fixed seed).  Under pure
+  white noise the null subtraction drives the excess toward 0 regardless of
+  ``window``/``n_segments``/``max_freq``, so a searchable config cannot chase
+  the estimator's finite-sample bias; genuine quadratic phase coupling yields a
+  positive excess.
 * ``ts_kernel_granger_score`` — kernel-ridge predictive improvement of ``x``
   for ``y`` under *blocked* out-of-sample evaluation: ``ln(MSE_restricted /
   MSE_full)``.  Fixed RBF kernel / ridge; no training-residual cheating.
@@ -36,7 +43,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec, RelationalParamSpec
+from cleaned_operators.base import ParamSpec, RelationalParamSpec, ParamRole
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -50,14 +57,22 @@ _EPS = 1e-12
 # R5 P1-01: research-surface ints/floats are validated (n_segments=2.9, lag=1.9,
 # embedding_dim=2.9, baseline_window=3.9 are all rejected, never truncated).
 _BICOH_SPEC = {
-    "window": ParamSpec(dtype=int, min=16),
-    "n_segments": ParamSpec(dtype=int, min=2),
+    # Audit #59: bicoherence is a peak-CONCENTRATION statistic in the frequency
+    # triangle — max_freq (and therefore the number of (f1, f2) pairs) grows with
+    # window, so under pure noise the top-decile mean has a mechanical N
+    # dependence.  window is an estimator-resolution knob (coarse grid only),
+    # not a free economic parameter.
+    "window": ParamSpec(dtype=int, min=16, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "n_segments": ParamSpec(dtype=int, min=2, param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 _GRANGER_SPEC = {
     "window": ParamSpec(dtype=int, min=30),
     "lag": ParamSpec(dtype=int, min=1),
 }
-_HSIC_SPEC = {"window": ParamSpec(dtype=int, min=24)}
+_HSIC_SPEC = {
+    "window": ParamSpec(dtype=int, min=24),
+    "purge_gap": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+}
 # R6-211: BDS with embedding_dim == 1 is degenerate (C_m == C_1 makes the
 # asymptotic variance collapse to 0) — the search space must start at dim >= 2.
 # R6-212: distance_multiplier == 0 gives eps == 0, which the kernel rejects at
@@ -65,14 +80,14 @@ _HSIC_SPEC = {"window": ParamSpec(dtype=int, min=24)}
 _BDS_SPEC = {
     "window": ParamSpec(dtype=int, min=30),
     "embedding_dim": ParamSpec(dtype=int, min=2),
-    "distance_multiplier": ParamSpec(dtype=float, choices=(0.5, 1.0, 1.5, 2.0)),
+    "distance_multiplier": ParamSpec(dtype=float, choices=(0.5, 1.0, 1.5, 2.0), param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 # R6-217: shift_sigma == 0 makes log_lambda = 0 for every t (no evidence), and
 # the kernel explicitly rejects shift <= 0 at runtime.  Search must not offer 0.
 _SR_SPEC = {
     "window": ParamSpec(dtype=int, min=20),
-    "shift_sigma": ParamSpec(dtype=float, min=0.01),
-    "baseline_window": ParamSpec(dtype=int, min=4),
+    "shift_sigma": ParamSpec(dtype=float, min=0.01, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "baseline_window": ParamSpec(dtype=int, min=4, param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 # R6-24 cross-parameter feasibility relations (declared so search prunes the
 # guaranteed-NaN region before runtime):
@@ -118,12 +133,17 @@ def _rbf(a: np.ndarray, b: np.ndarray, sigma: float) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # bicoherence
 # ---------------------------------------------------------------------------
-def _bicoherence_top_decile_mean(v: np.ndarray, n_segments: int) -> float:
+def _bicoherence_values(v: np.ndarray, n_segments: int) -> list[float]:
+    """Squared-bicoherence values over the whole positive-frequency triangle.
+
+    Shared by the top-decile-mean canonical, the legacy ``_bicoherence_max``
+    compat helper and the phase-surrogate null of ``_bicoherence_top_decile_excess``.
+    """
     n = v.shape[0]
     ns = max(2, int(n_segments))
     seg = n // ns
     if seg < 8:
-        return np.nan
+        return []
     # R6-204: RIGHT-ALIGN the segments.  ``v[s*seg:(s+1)*seg]`` drops the
     # trailing ``n % ns`` samples — the NEWEST data.  Use the last ns*seg
     # samples so the window's latest information is never discarded.
@@ -140,7 +160,7 @@ def _bicoherence_top_decile_mean(v: np.ndarray, n_segments: int) -> float:
     for s in range(ns):
         chunk = v[s * seg : (s + 1) * seg]
         if not np.all(np.isfinite(chunk)):
-            return np.nan
+            return []
         t = np.arange(seg, dtype=float)
         chunk = chunk - np.polyval(np.polyfit(t, chunk, 1), t)
         hann = 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (seg - 1.0))) if seg > 1 else np.ones(seg)
@@ -163,6 +183,11 @@ def _bicoherence_top_decile_mean(v: np.ndarray, n_segments: int) -> float:
             b2 = abs(B_sum[f1 - 1, f2 - 1]) ** 2 / denom
             if np.isfinite(b2):
                 vals.append(float(b2))
+    return vals
+
+
+def _bicoherence_top_decile_mean(v: np.ndarray, n_segments: int) -> float:
+    vals = _bicoherence_values(v, n_segments)
     if not vals:
         return np.nan
     # R6-205: ``max bicoherence`` over all (f1,f2) is extreme-selection biased —
@@ -177,6 +202,17 @@ def _bicoherence_top_decile_mean(v: np.ndarray, n_segments: int) -> float:
     return float(vals_sorted[-k:].mean())
 
 
+def _bicoherence_max(v: np.ndarray, n_segments: int) -> float:
+    """Legacy private helper: the raw maximum squared bicoherence.
+
+    NOT the registered statistic (the canonical ``ts_bicoherence_max`` resolves
+    to the top-decile mean per R9-OP-028).  Kept only so the stale round-5 audit
+    test that imports ``_bicoherence_max`` keeps resolving; bounded in [0, 1].
+    """
+    vals = _bicoherence_values(v, n_segments)
+    return float(max(vals)) if vals else np.nan
+
+
 def _ts_bicoherence_top_decile_mean(x: pd.DataFrame, window: int = 120, n_segments: int = 4) -> pd.DataFrame:
     if int(window) < 16:
         raise ValueError("ts_bicoherence_top_decile_mean requires window >= 16")
@@ -189,9 +225,78 @@ def _ts_bicoherence_top_decile_mean(x: pd.DataFrame, window: int = 120, n_segmen
         for r in range(rows):
             lo = max(0, r - w + 1)
             v = trailing_contiguous_finite(col[lo : r + 1])
-            if v.size < 16:
+            # Audit #58: no partial warmup — the front of a windowed bicoherence
+            # must not be a shorter-segment spectrum.  Require the FULL window
+            # (contiguous finite) or NaN.
+            if v.size < w:
                 continue
             val = _bicoherence_top_decile_mean(v, int(n_segments))
+            if np.isfinite(val):
+                out[r, c] = val
+    return frame_like(x, out)
+
+
+def _phase_surrogate(v: np.ndarray, seed: int) -> np.ndarray:
+    """Phase-randomised surrogate of ``v`` (same power spectrum, destroyed phases).
+
+    The magnitude spectrum is kept identical and the phases are randomised
+    (preserving conjugate symmetry so the inverse FFT is real) — the standard
+    Fourier surrogate that removes any quadratic phase coupling while keeping
+    the linear autocorrelation.  Deterministic for a given ``seed``.
+    """
+    n = v.shape[0]
+    X = np.fft.rfft(v)
+    ph = np.random.default_rng(seed).uniform(0.0, 2.0 * np.pi, size=X.shape)
+    ph[0] = 0.0  # DC bin stays real
+    if n % 2 == 0:
+        ph[-1] = 0.0  # Nyquist bin stays real for even n
+    return np.fft.irfft(X * np.exp(1j * ph), n)
+
+
+def _bicoherence_top_decile_excess(v: np.ndarray, n_segments: int, n_surrogates: int = 5) -> float:
+    """Top-decile bicoherence MINUS a deterministic phase-surrogate null.
+
+    The raw top-decile mean is biased under pure noise and the bias grows with
+    ``window``/``n_segments``/``max_freq`` (P2-34), so a searchable config can
+    chase the estimator's own bias.  Here the same statistic is evaluated on
+    phase-randomised surrogates of the SAME window and the mean of those nulls
+    is subtracted: under white noise the excess hovers near 0 for any parameter
+    choice, while genuine quadratic phase coupling survives the phase scramble
+    and gives a positive excess.
+    """
+    real = _bicoherence_top_decile_mean(v, n_segments)
+    if not np.isfinite(real):
+        return np.nan
+    nulls: list[float] = []
+    for s in range(max(1, int(n_surrogates))):
+        surr = _phase_surrogate(v, seed=20260809 + s)
+        nb = _bicoherence_top_decile_mean(surr, n_segments)
+        if np.isfinite(nb):
+            nulls.append(nb)
+    if not nulls:
+        return np.nan
+    return float(real - float(np.mean(nulls)))
+
+
+def _ts_bicoherence_top_decile_excess(
+    x: pd.DataFrame, window: int = 120, n_segments: int = 4, n_surrogates: int = 5
+) -> pd.DataFrame:
+    if int(window) < 16:
+        raise ValueError("ts_bicoherence_top_decile_excess requires window >= 16")
+    rows, cols = x.shape
+    w = int(window)
+    arr = x.to_numpy(dtype=float)
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        col = arr[:, c]
+        for r in range(rows):
+            lo = max(0, r - w + 1)
+            v = trailing_contiguous_finite(col[lo : r + 1])
+            # Audit #58: no partial warmup (same contract as the top-decile-mean
+            # canonical).
+            if v.size < w:
+                continue
+            val = _bicoherence_top_decile_excess(v, int(n_segments), int(n_surrogates))
             if np.isfinite(val):
                 out[r, c] = val
     return frame_like(x, out)
@@ -234,14 +339,30 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
     # old ``_kridge`` recomputed ``lam = 1e-3·trace(K)/n`` *inside* each call —
     # restricted used K=Kr but full used K=Kr+0.5·Kx, so lambda_r != lambda_f
     # and ``MSE_R/MSE_F`` absorbed a regularisation change on top of "adding X".
-    # R6-207 (model fairness): the restricted and full models MUST also share the
-    # same Y-lag RBF bandwidth, so log(MSE_R/MSE_F) measures "how much
-    # predictive information X adds" and nothing else.  Nested kernel:
-    #   K_F = K_Y + eta·K_X   (restricted = K_Y), with the SAME sigma_Y, same
-    # ridge, and eta a fixed small weight — "adding X" is the only change.
-    sigma_y = float(np.median(np.sqrt(np.sum((Yl_tr[:, None, :] - Yl_tr[None, :, :]) ** 2, axis=2))))
-    if not np.isfinite(sigma_y) or sigma_y <= _EPS:
-        sigma_y = 1.0
+    # R6-207 (model fairness): the restricted and full models share the same
+    # Y-lag RBF bandwidth, so log(MSE_R/MSE_F) measures "how much predictive
+    # information X adds" and nothing else.  P1-11/P1-12 refine the full kernel:
+    # the X kernel uses X's OWN bandwidth (P1-11) and the sum is trace-normalised
+    # by (1+eta) so trace(K_F) == trace(K_R) (P1-12) — "adding X" (with a fair
+    # kernel and fair regularisation) is the only change.
+    def _median_bandwidth(tr: np.ndarray) -> float:
+        # median pairwise distance over the TRAINING block only (never the
+        # test block, so no OOS contamination).
+        d2 = (
+            np.sum(tr[:, None, :] ** 2, axis=2)
+            + np.sum(tr[None, :, :] ** 2, axis=2)
+            - 2.0 * tr @ tr.T
+        )
+        sigma = float(np.median(np.sqrt(np.maximum(d2, 0.0))))
+        if not np.isfinite(sigma) or sigma <= _EPS:
+            sigma = 1.0
+        return sigma
+
+    # P1-11 (fairness): the X kernel's smoothness is set by X's OWN distance
+    # geometry.  The old code reused ``sigma_y`` for Kx, so X's kernel width
+    # depended on Y's scale/structure even though X is separately standardised.
+    sigma_y = _median_bandwidth(Yl_tr)
+    sigma_x = _median_bandwidth(Xl_tr)
 
     Kr = _rbf(Yl_tr, Yl_tr, sigma_y)
     ntr = Kr.shape[0]
@@ -255,13 +376,22 @@ def _kernel_granger_score(y: np.ndarray, x: np.ndarray, lag: int) -> float:
     pred_r = _kridge(Kr, Ytr, Kte_r, lambda_shared)
     mse_r = float(np.mean((Yte - pred_r) ** 2))
 
-    # Full model: K_F = K_Y + eta·K_X evaluated with the SAME Y bandwidth and
-    # the SAME shared ridge ``lambda_shared``.
-    Kx_tr = _rbf(Xl_tr, Xl_tr, sigma_y)
-    Kte_x = _rbf(Xl_te, Xl_tr, sigma_y)
+    # Full model: K_F = (K_Y + eta·K_X)/(1+eta) evaluated with X's OWN
+    # bandwidth ``sigma_x`` and the SAME shared ridge ``lambda_shared``.
+    # P1-12 (fairness): an RBF Gram matrix has all diagonal entries 1, so
+    # ``trace(K_Y) = trace(K_X) = ntr`` and the old ``K_F = K_Y + eta·K_X`` had
+    # ``trace(K_F) = (1+eta)·trace(K_R)`` — the full model was regularised ~1.5x
+    # weaker relative to its own kernel magnitude, so ``log(MSE_R/MSE_F)`` mixed
+    # in a regularisation change on top of "adding X".  Normalising the SUM by
+    # ``(1+eta)`` makes ``trace(K_F) == trace(K_R)`` exactly, so the shared
+    # ridge regularises both models equally and the score measures "how much
+    # predictive information X adds" and nothing else.
+    Kx_tr = _rbf(Xl_tr, Xl_tr, sigma_x)
+    Kte_x = _rbf(Xl_te, Xl_tr, sigma_x)
     eta = 0.5
-    Kf = Kr + eta * Kx_tr
-    Kte_f = Kte_r + eta * Kte_x
+    scale = 1.0 + eta
+    Kf = (Kr + eta * Kx_tr) / scale
+    Kte_f = (Kte_r + eta * Kte_x) / scale
     pred_f = _kridge(Kf, Ytr, Kte_f, lambda_shared)
     mse_f = float(np.mean((Yte - pred_f) ** 2))
 
@@ -295,22 +425,34 @@ def _ts_kernel_granger_score(y: pd.DataFrame, x: pd.DataFrame, window: int = 120
 # ---------------------------------------------------------------------------
 # residualised HSIC
 # ---------------------------------------------------------------------------
-def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float:
+def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray, purge_gap: int = 3) -> float:
     n = x.shape[0]
     if n < 24:
         return np.nan
-    # R6-209 (blocked cross-fitting): the old code fit the kernel smoother
-    # x~z and y~z on the FULL window and measured HSIC on the SAME residuals —
-    # a flexible kernel regression has in-sample bias that inflates the
-    # "residual independence".  Split the window into two interleaved halves;
-    # the smoother is fit on one half and the residuals of the OTHER half are
-    # used for HSIC, so the dependence measure never sees its own fit.
-    halves = np.arange(n) % 2
+    purge = max(1, int(purge_gap))
+    # R6-209 (blocked cross-fitting) + P1-13 (purged CONTIGUOUS blocks): the
+    # original code fit the kernel smoother x~z and y~z on the FULL window and
+    # measured HSIC on the SAME residuals — a flexible kernel regression has
+    # in-sample bias that inflates the "residual independence".  It then moved
+    # to an INTERLEAVED even/odd split (train = 0,2,4…; test = 1,3,5…), but that
+    # is NOT blocked time-series cross-fitting: every test point still has
+    # immediate neighbours in the training set, so the conditional smoother
+    # overfits the temporal neighbourhood.  Use contiguous blocks instead: the
+    # window is split into a contiguous train block / purge gap / test block and
+    # the cross-fit runs BOTH directions (early block -> late block and late
+    # block -> early block).  The purge gap guarantees test points have no
+    # immediate neighbours in the training set; HSIC is measured on residuals
+    # the smoother never saw.
+    split = n // 2
+    fwd_tr = np.arange(0, split)
+    fwd_te = np.arange(split + purge, n)
+    bwd_tr = np.arange(split, n)
+    bwd_te = np.arange(0, split - purge)
+    if split < 12 or fwd_te.size < 6 or bwd_te.size < 6:
+        return np.nan
     rx_all = np.full(n, np.nan)
     ry_all = np.full(n, np.nan)
-    for half in (0, 1):
-        tr_idx = np.flatnonzero(halves == half)
-        te_idx = np.flatnonzero(halves != half)
+    for tr_idx, te_idx in ((fwd_tr, fwd_te), (bwd_tr, bwd_te)):
         ztr = z[tr_idx].reshape(-1, 1)
         zte = z[te_idx].reshape(-1, 1)
         sigma = float(np.median(np.abs(z[tr_idx][:, None] - z[tr_idx][None, :])))
@@ -358,7 +500,9 @@ def _residualized_hsic(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> float:
     return hsic if np.isfinite(hsic) else np.nan
 
 
-def _ts_residualized_hsic(x: pd.DataFrame, y: pd.DataFrame, z: pd.DataFrame, window: int = 120) -> pd.DataFrame:
+def _ts_residualized_hsic(
+    x: pd.DataFrame, y: pd.DataFrame, z: pd.DataFrame, window: int = 120, purge_gap: int = 3
+) -> pd.DataFrame:
     if int(window) < 24:
         raise ValueError("ts_residualized_hsic requires window >= 24")
     rows, cols = x.shape
@@ -375,7 +519,7 @@ def _ts_residualized_hsic(x: pd.DataFrame, y: pd.DataFrame, z: pd.DataFrame, win
                 continue
             if run[0].shape[0] < 24:
                 continue
-            val = _residualized_hsic(run[0], run[1], run[2])
+            val = _residualized_hsic(run[0], run[1], run[2], int(purge_gap))
             if np.isfinite(val):
                 out[r, c] = val
     return frame_like(x, out)
@@ -541,6 +685,20 @@ _SPECS: dict[str, dict[str, Any]] = {
         "param_specs": _BICOH_SPEC,
         "relational_specs": _BICOH_RELATIONAL_SPECS,
     },
+    "ts_bicoherence_top_decile_excess": {
+        "fn": _ts_bicoherence_top_decile_excess,
+        "params": ["x", "window", "n_segments", "n_surrogates"],
+        "category": "research_spectral",
+        "domain": "cross_spectral",
+        "unit": "ratio",
+        "cost": 8,
+        "tags_extra": [],
+        "output_unit": "ratio",
+        "param_specs": dict(
+            _BICOH_SPEC, n_surrogates=ParamSpec(dtype=int, min=1)
+        ),
+        "relational_specs": _BICOH_RELATIONAL_SPECS,
+    },
     "ts_kernel_granger_score": {
         "fn": _ts_kernel_granger_score,
         "params": ["y", "x", "window", "lag"],
@@ -555,7 +713,7 @@ _SPECS: dict[str, dict[str, Any]] = {
     },
     "ts_residualized_hsic": {
         "fn": _ts_residualized_hsic,
-        "params": ["x", "y", "z", "window"],
+        "params": ["x", "y", "z", "window", "purge_gap"],
         "category": "research_nonlinear",
         "domain": "dependence",
         "unit": "level",

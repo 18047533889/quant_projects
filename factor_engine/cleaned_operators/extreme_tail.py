@@ -165,13 +165,15 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
         valid = chunk[np.isfinite(chunk)]
         if valid.size < mtc:
             continue
-        if side == "upper":
-            u = float(np.quantile(valid, 1.0 - frac))
-            exc = valid[valid > u]
-        else:
-            # Mirror: lower tail of x == upper tail of -x, threshold Q(x, frac).
-            u = float(np.quantile(valid, frac))
-            exc = valid[valid < u]
+        # ONE kernel for both sides: upper operates on x, lower on the mirrored
+        # series z = -x.  HillLower(x) == HillUpper(-x) exactly — there is no
+        # separate lower-tail code path to drift.  The ``u <= 0`` guard applies
+        # to the (mirrored) upper-tail threshold, which for a signed centred
+        # series is positive (Q(-x, 1-frac) = -Q(x, frac) > 0), so the lower
+        # tail is NOT spuriously NaN'd by the old guard on Q(x, frac) < 0.
+        z = valid if side == "upper" else -valid
+        u = float(np.quantile(z, 1.0 - frac))
+        exc = z[z > u]
         if not np.isfinite(u) or u <= 0.0:
             continue  # log-ratio is undefined for a non-positive threshold
         if exc.size < mtc:

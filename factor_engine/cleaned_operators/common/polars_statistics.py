@@ -16,6 +16,7 @@ try:
 except ImportError:
     pl = None  # type: ignore
 
+from cleaned_operators.base import ParamRole, ParamSpec
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 
 _SKIP = frozenset({"date", "stock_code"})
@@ -30,6 +31,26 @@ def _align_cols(*dfs: pl.DataFrame) -> list[str]:
     for df in dfs[1:]:
         cols = [c for c in cols if c in df.columns]
     return cols
+
+
+def _mean_abs_dev_1d(arr) -> float:
+    """单窗口平均绝对离差：``mean(|x_i - mean(window)|)``（单一中心=窗口均值）。"""
+    a = np.asarray(arr, dtype=np.float64)
+    a = a[np.isfinite(a)]
+    if a.size == 0:
+        return np.nan
+    mu = float(a.mean())
+    return float(np.mean(np.abs(a - mu)))
+
+
+def _median_abs_dev_1d(arr) -> float:
+    """单窗口中位数绝对离差：``median(|x_i - median(window)|)``（单一中心=窗口中位数）。"""
+    a = np.asarray(arr, dtype=np.float64)
+    a = a[np.isfinite(a)]
+    if a.size == 0:
+        return np.nan
+    med = float(np.median(a))
+    return float(np.median(np.abs(a - med)))
 
 
 def _time_slope_col(col: pl.Expr, window: int) -> pl.Expr:
@@ -307,45 +328,65 @@ class RSquaredPolars(SeriesOperator):
 
 @register_operator(name="residual", category="statistics", business_category="statistics_regression", canonical="residual", source="factor_dsl_polars")
 class ResidualPolars(SeriesOperator):
-    """Polars 滚动回归残差均值"""
+    """Polars 滚动回归残差**均值**。
+
+    语义（round-3 audit）：输出 = 滚动窗口内**样本内当前残差**的窗口均值
+    （residual_mean），与 pandas ``residual``/``Residual`` 一致——先计算
+    ``y_t - ŷ_t``（用当前窗口 OLS 拟合），再对残差序列取滚动均值。**不是**
+    原始残差序列，**不是** out-of-sample 预测误差。
+    """
     metadata = OperatorMetadata(
-        name="residual", category="statistics", description="滚动回归残差均值",
+        name="residual", category="statistics",
+        description="滚动回归残差均值（样本内当前残差的滚动均值）",
         param_names=["y", "x", "window"], return_type="series", tags=["statistics", "polars"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        },
     )
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        w = max(int(kwargs.get("d", window)), 3)
+        from cleaned_operators._rolling_fast import rolling_regression
+
+        w = max(int(kwargs.get("d", window)), 2)
         cols = _align_cols(y, x)
-        exprs = []
-        for c in cols:
-            cov = pl.rolling_cov(y[c], x[c], window_size=w, min_samples=3)
-            var_x = x[c].rolling_var(window_size=w, min_samples=3)
-            slope = cov / var_x
-            mean_y = y[c].rolling_mean(window_size=w, min_samples=3)
-            mean_x = x[c].rolling_mean(window_size=w, min_samples=3)
-            intercept = mean_y - slope * mean_x
-            resid = y[c] - (slope * x[c] + intercept)
-            exprs.append(resid.rolling_mean(window_size=w, min_samples=3).alias(c))
-        return y.with_columns(exprs)
+        py = y.select(cols).to_pandas()
+        px = x.select(cols).to_pandas()
+        out = rolling_regression(py, px, window=w, min_periods=2, retval="residual")
+        return y.with_columns([
+            pl.Series(name=c, values=np.asarray(out[c], dtype=np.float64)) for c in cols
+        ])
 
 
 @register_operator(name="Mode", category="statistics", business_category="statistics_regression", canonical="Mode", source="factor_dsl_polars")
 class ModePolars(SeriesOperator):
-    """Polars 滚动众数"""
+    """Polars 滚动众数。
+
+    语义（round-3 audit）：仅当最高频次 >= 2 时输出众数；全不同值窗口返回
+    ``NaN``（不退化为一期 min）；众数并列时返回众数集合的**中位数**。
+    """
     metadata = OperatorMetadata(
-        name="Mode", category="statistics", description="滚动众数",
+        name="Mode", category="statistics",
+        description="滚动众数（频次>=2 才输出，并列取中位数，全不同值→NaN）",
         param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
         w = max(int(kwargs.get("d", window)), 1)
 
         def _mode(arr: np.ndarray) -> float:
-            valid = arr[~np.isnan(arr)]
+            a = np.asarray(arr, dtype=np.float64)
+            valid = a[np.isfinite(a)]
             if len(valid) == 0:
                 return np.nan
             vals, counts = np.unique(valid, return_counts=True)
-            return float(vals[int(np.argmax(counts))])
+            max_freq = int(counts.max())
+            if max_freq < 2:
+                return np.nan
+            modes = vals[counts == max_freq]
+            return float(np.median(modes))
 
         cols = _numeric_cols(x)
         return x.with_columns([
@@ -355,14 +396,22 @@ class ModePolars(SeriesOperator):
 
 @register_operator(name="autocorr", category="statistics", business_category="statistics_regression", canonical="autocorr", source="factor_dsl_polars")
 class AutocorrPolars(SeriesOperator):
-    """Polars 自相关系数"""
+    """Polars 自相关系数。
+
+    语义（round-3 audit）：与 pandas ``autocorr`` 一致——``lag==0`` 时
+    ``corr(x, x) = 1.0``（不再被静默改写成 lag=1）；短样本 / 常数序列 /
+    不可行 lag 时 ``rolling_corr`` 返回 null（NaN），不伪造 0。
+    """
     metadata = OperatorMetadata(
         name="autocorr", category="statistics", description="自相关系数",
         param_names=["x", "lag"], return_type="series", tags=["statistics", "polars"],
+        param_specs={
+            "lag": ParamSpec(dtype=int, min=0, param_role=ParamRole.HORIZON),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, lag: int = 1, **kwargs) -> pl.DataFrame:
-        l = max(int(kwargs.get("d", lag)), 1)
+        l = max(int(kwargs.get("d", lag)), 0)
         w = max(l + 2, 5)
         cols = _numeric_cols(x)
         return x.with_columns([
@@ -421,3 +470,61 @@ class DurbinWatsonTestPolars(SeriesOperator):
         pdf = residuals.select(cols).to_pandas()
         out = expanding_univariate(pdf, durbin_watson, min_periods=2)
         return residuals.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
+
+
+@register_operator(name="ts_mean_abs_deviation", category="statistics", business_category="statistics_regression", canonical="ts_mean_abs_deviation", source="factor_dsl_polars")
+class MeanAbsDeviationPolars(SeriesOperator):
+    """Polars 滚动平均绝对离差：``mean(|x_i - mean(window)|)``。
+
+    语义（round-3 audit）：单一中心=窗口均值，一个窗口输出一个值；与 pandas
+    ``ts_mean_abs_deviation`` 同义（非 ``ts_mad`` 的双重滚动近似）。
+    """
+    metadata = OperatorMetadata(
+        name="ts_mean_abs_deviation", category="statistics",
+        description="平均绝对离差（围绕窗口均值的单一中心）",
+        param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+        w = max(int(kwargs.get("d", window)), 1)
+        cols = _numeric_cols(x)
+        return x.with_columns([
+            pl.col(c).rolling_map(_mean_abs_dev_1d, window_size=w, min_samples=1).alias(c) for c in cols
+        ])
+
+
+@register_operator(name="ts_median_abs_deviation", category="statistics", business_category="statistics_regression", canonical="ts_median_abs_deviation", source="factor_dsl_polars")
+class MedianAbsDeviationPolars(SeriesOperator):
+    """Polars 滚动中位数绝对离差（标准 MAD）：``median(|x_i - median(window)|)``。
+
+    语义（round-3 audit）：单一中心=窗口中位数，一个窗口输出一个值；与 pandas
+    ``ts_median_abs_deviation`` 同义（非 ``ts_mad`` 的双重滚动近似，不带
+    1.4826 比例因子）。
+    """
+    metadata = OperatorMetadata(
+        name="ts_median_abs_deviation", category="statistics",
+        description="中位数绝对离差（围绕窗口中位数的单一中心）",
+        param_names=["x", "window"], return_type="series", tags=["statistics", "polars"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+        w = max(int(kwargs.get("d", window)), 1)
+        cols = _numeric_cols(x)
+        return x.with_columns([
+            pl.col(c).rolling_map(_median_abs_dev_1d, window_size=w, min_samples=1).alias(c) for c in cols
+        ])
+
+
+# ---------------------------------------------------------------------------
+# in-module aliases（round-3 audit）：长拼写 -> 短 canonical（与 statistics.py 一致）。
+# ---------------------------------------------------------------------------
+from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+
+OperatorRegistry.register_alias("ts_mean_absolute_deviation", "ts_mean_abs_deviation")
+OperatorRegistry.register_alias("ts_median_absolute_deviation", "ts_median_abs_deviation")

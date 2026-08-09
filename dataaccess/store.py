@@ -4659,12 +4659,25 @@ class DataAccessStore:
             query_budget=query_budget,
             **matrix_params,
         )
+        # R14 #1：把当前 generation 纳入 lineage 参数——reader 只读了 manifest
+        # 指向那一代，generation id 必须可审计，否则无法追溯「读的是哪个发布代」。
+        try:
+            gen = matrix.current_generation(
+                universe=universe, frequency=frequency, **params
+            )
+        except Exception:
+            gen = None
         audit.record(
             op="read",
             dataset="factor_matrix",
             ok=True,
             rows=handle.rows,
-            params={"universe": universe, "frequency": frequency, "factors": fids},
+            params={
+                "universe": universe,
+                "frequency": frequency,
+                "factors": fids,
+                "generation": gen,
+            },
             elapsed_ms=0.0,
             extra={"engine": "matrix", "multi_factor": True},
         )
@@ -4675,14 +4688,24 @@ class DataAccessStore:
     ) -> list[str] | None:
         """#P0-24 factor_matrix 的可用列名。
 
-        优先用 registry 声明的 schema；否则 DESCRIBE（limit=1 探针，DuckDB 下推）。
-        返回 None 表示无法确定（调用方跳过精确投影校验）。
+        优先用 registry 声明的 schema + manifest 声明的动态因子列；否则 DESCRIBE
+        （limit=1 探针，DuckDB 下推）。返回 None 表示无法确定（调用方跳过精确投影
+        校验）。
+
+        R14 #1：动态因子列从 ``manifest.json["factors"]`` 读取（不依赖 registry
+        schema）——否则 schema 只声明 datetime/asset 时，任何因子请求都判
+        ``MatrixCoverageMiss``，矩阵路由永远 fallback 到 factor-major。
         """
         try:
             ds = self._registry.get("factor_matrix")
         except Exception:
             return None
         schema = dict(getattr(ds, "schema", None) or {})
+        manifest_cols = self._matrix_manifest_factor_columns(
+            ds, universe=universe, frequency=frequency, **params
+        )
+        if manifest_cols:
+            return sorted(set(schema) | set(manifest_cols))
         if schema:
             return sorted(schema)
         try:
@@ -4699,6 +4722,42 @@ class DataAccessStore:
         if probe is None or probe.num_columns == 0:
             return None
         return list(probe.column_names)
+
+    def _matrix_manifest_factor_columns(
+        self,
+        ds: Any,
+        *,
+        universe: str,
+        frequency: str,
+        **params: Any,
+    ) -> list[str] | None:
+        """R14 #1：从 ``manifest.json["factors"]`` 派生 factor_matrix 的动态因子列。
+
+        FactorEngine 在矩阵根写 ``manifest.json``（``{"universe","frequency",
+        "factors": {fid -> {...}}, "generation": gid}``）。因子列 = base
+        (datetime/asset) + ``factors.keys()``。manifest 缺失/无 factors → None
+        （回退 registry schema / DESCRIBE）。
+        """
+        resolve_root = getattr(ds, "resolve_root", None)
+        if not callable(resolve_root):
+            return None
+        import json
+
+        try:
+            root = Path(resolve_root(universe=universe, frequency=frequency, **dict(params)))
+        except Exception:
+            return None
+        mpath = root / "manifest.json"
+        if not mpath.exists():
+            return None
+        try:
+            data = json.loads(mpath.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        factors = data.get("factors")
+        if not isinstance(factors, dict) or not factors:
+            return None
+        return ["datetime", "asset", *sorted(str(k) for k in factors.keys())]
 
     def get_factor_catalog(
         self,

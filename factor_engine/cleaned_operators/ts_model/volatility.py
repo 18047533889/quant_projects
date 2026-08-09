@@ -4,6 +4,19 @@
 GARCH parameters are estimated per window by quasi-maximum likelihood
 (variance targeting with a small numeric optimisation over alpha/beta).  These
 are high-cost operators and must not enter default random factor search.
+
+Typed input semantics (audit round-3, item 33): GARCH / GJR / HAR-from-return
+operators require a RETURN / stationary series — fitting a non-stationary raw
+price level is statistically wrong (variance-targeting on a price level is
+meaningless and the conditional-variance recursion explodes).  Their metadata
+declares ``input_units={"x": "return"}`` and the kernels reject a clearly
+non-stationary price-level input (sd(level)/sd(diff) >> 1) at runtime.
+
+HAR naming (audit round-3, item 34): the HAR kernel predicts the next-period
+*realized variance* (RV).  The sqrt-canonical is a volatility forecast and is
+named ``*_vol_forecast``; the raw-RV canonical is ``*_var_forecast``.  The two
+are distinct, honestly named canonicals rather than one name claiming the
+other's statistic.
 """
 from __future__ import annotations
 
@@ -24,7 +37,45 @@ except Exception:  # pragma: no cover
     _minimize = None
 
 
-def _register(name: str, description: str, params: list[str], unit: str, fn):
+# Audit round-3 (item 33): a raw nonstationary price level is statistically
+# indistinguishable from a "constant + trend" path — sd(level)/sd(diff) >> 1.
+# Returns / stationary series are centred and take both signs, so the ratio is
+# O(1).  The threshold mirrors the repo-wide price-vs-return heuristic
+# (cf. spectral_ext._looks_like_price_level / extreme_tail._reject_price_level).
+_PRICE_LEVEL_RATIO_THRESHOLD = 5.0
+_MIN_JUDGE_ROWS = 8
+_EPS = 1e-12
+
+
+def _looks_like_price_level(vals: np.ndarray) -> bool:
+    finite = vals[np.isfinite(vals)]
+    if finite.size < _MIN_JUDGE_ROWS:
+        return False  # too short to judge; the kernel's min-window fails closed
+    sd_level = float(np.std(finite))
+    if not np.isfinite(sd_level) or sd_level <= _EPS:
+        return False  # constant / degenerate -> not a level path
+    sd_diff = float(np.std(np.diff(finite)))
+    return sd_level / max(sd_diff, _EPS) > _PRICE_LEVEL_RATIO_THRESHOLD
+
+
+def _reject_price_level(x: pd.DataFrame, canonical: str) -> None:
+    for col in x.columns:
+        if _looks_like_price_level(x[col].to_numpy(dtype=float)):
+            raise ValueError(
+                f"{canonical} requires a return / stationary series; received "
+                "a clearly non-stationary raw price level "
+                f"(sd(level)/sd(diff) > {_PRICE_LEVEL_RATIO_THRESHOLD}).  "
+                "Convert prices to returns (pct_change / log-diff) before "
+                "feeding a GARCH / HAR-from-return operator "
+                "(typed input_units=return contract, audit round-3 item 33, "
+                "fail-closed)"
+            )
+
+
+def _register(name: str, description: str, params: list[str], unit: str, fn,
+              *, input_units: dict[str, str] | None = None,
+              output_unit: str | None = None,
+              reject_price_level: bool = False):
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -35,9 +86,12 @@ def _register(name: str, description: str, params: list[str], unit: str, fn):
         status="experimental",
     )
     class _VolOp(SeriesOperator):
-        metadata = metadata(name, description, params, unit=unit, cost=8)
+        metadata = metadata(name, description, params, unit=unit, cost=8,
+                            input_units=input_units, output_unit=output_unit)
 
         def _calculate_series(self, *args, **kwargs):
+            if reject_price_level and args:
+                _reject_price_level(args[0], name)
             return fn(*args, **kwargs)
 
     _CANONICALS.append(name)
@@ -213,14 +267,19 @@ def _apply(x: pd.DataFrame, fn) -> pd.DataFrame:
     return frame_like(x, out)
 
 
+_RETURN_INPUT = {"x": "return"}
 _register("ts_garch_next_vol_forecast", "GARCH(1,1) 下一期条件波动率（观测最后收益之后）。", ["x", "window"], "volatility",
-           lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", False, 0.0)))
+           lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", False, 0.0)),
+           input_units=_RETURN_INPUT, output_unit="volatility", reject_price_level=True)
 _register("ts_garch_vol_surprise", "GARCH 波动率意外：最近收益平方 / 条件方差 - 1。", ["x", "window"], "level",
-           lambda x, window=120: _apply(x, lambda v: _garch_vol_surprise(v, int(window))))
+           lambda x, window=120: _apply(x, lambda v: _garch_vol_surprise(v, int(window))),
+           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
 _register("ts_garch_persistence", "GARCH(1,1) 波动持续 alpha+beta。", ["x", "window"], "level",
-           lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "persistence", False, 0.0)))
+           lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "persistence", False, 0.0)),
+           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
 _register("ts_garch_standardized_shock", "GARCH 标准化冲击 return/条件波动率（参数于 t-1 及以前拟合）。", ["x", "window"], "level",
-           lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "shock", False, 0.0)))
+           lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "shock", False, 0.0)),
+           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
 # Deprecated alias for the next-period forecast: a registry compatibility
 # alias, NOT a separate canonical — mining must not double-search the same
 # kernel under two independent research candidates.
@@ -232,9 +291,11 @@ OperatorRegistry.register_compat_alias(
     removal_version="1.0",
 )
 _register("ts_gjr_garch_vol_forecast", "GJR-GARCH 波动预测（杠杆效应）。", ["x", "window"], "volatility",
-           lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", True, 0.0)))
+           lambda x, window=120: _apply(x, lambda v: _garch_path(v, int(window), "forecast", True, 0.0)),
+           input_units=_RETURN_INPUT, output_unit="volatility", reject_price_level=True)
 _register("ts_gjr_leverage", "GJR 负收益冲击系数。", ["x", "window"], "level",
-           lambda x, window=120: _apply(x, lambda v: _gjr_leverage(v, int(window))))
+           lambda x, window=120: _apply(x, lambda v: _gjr_leverage(v, int(window))),
+           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
 
 
 def _garch_vol_surprise(vals: np.ndarray, window: int) -> float:
@@ -287,7 +348,7 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     monthly = pd.Series(seg).rolling(22).mean().to_numpy()
     X = np.column_stack([np.ones(n), daily, weekly, monthly])
     valid = np.all(np.isfinite(X), axis=1) & np.isfinite(seg)
-    if stat == "forecast":
+    if stat in ("forecast", "var_forecast"):
         # Next-period forecast RV_{t+1}: target = next RV, features today.
         target = np.concatenate([seg[1:], [np.nan]])
         valid_t = np.isfinite(target) & valid
@@ -300,7 +361,13 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
         if beta is None:
             return np.nan
         pred = float(np.dot(X[-1], beta))
-        return float(np.sqrt(max(pred, 0.0)))
+        # Audit round-3 (item 34): the HAR model predicts the next-period
+        # *realized variance* (the model is linear in RV components).  The
+        # sqrt-canonical is honestly named a volatility forecast; the raw-RV
+        # canonical keeps the variance scale.
+        if stat == "forecast":
+            return float(np.sqrt(max(pred, 0.0)))
+        return float(max(pred, 0.0))
     # Current-period surprise RV_t - forecast(RV_t | t-1).  P0-039: the
     # training window is capped strictly before the last observation (feature
     # rows 0..n-3, targets rv[1..n-2]), and the forecast is made from the
@@ -329,18 +396,35 @@ def _har_from_return(rets: np.ndarray, window: int, stat: str) -> float:
 
 
 # The historic operators accept a realized-variance panel (parameter named
-# ``rv``); they no longer square it a second time.
-_register("ts_har_rv_next_forecast", "HAR-RV 下一期已实现方差预测（平方根，输入已实现方差）。", ["rv", "window"], "volatility",
-           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "forecast")))
+# ``rv``); they no longer square it a second time.  Audit round-3 (item 34):
+# the kernel predicts the next-period realized VARIANCE; the sqrt output is a
+# volatility forecast and is named ``ts_har_rv_next_vol_forecast``, while the
+# raw-RV forecast is the distinct ``ts_har_rv_next_var_forecast`` canonical.
+_register("ts_har_rv_next_vol_forecast", "HAR-RV 下一期已实现波动率预测（对下一期 RV 预测取平方根，输入已实现方差）。", ["rv", "window"], "volatility",
+           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "forecast")),
+           input_units={"rv": "realized_variance"}, output_unit="volatility")
+OperatorRegistry.register_compat_alias(
+    "ts_har_rv_next_forecast",
+    "ts_har_rv_next_vol_forecast",
+    migration_reason="legacy name claimed a realized-VARIANCE forecast but the kernel returns sqrt(RV) — a volatility forecast; renamed honestly",
+    deprecated_since="2026-08",
+    removal_version="1.0",
+)
+_register("ts_har_rv_next_var_forecast", "HAR-RV 下一期已实现方差预测（不取平方根，输入已实现方差）。", ["rv", "window"], "variance",
+           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "var_forecast")),
+           input_units={"rv": "realized_variance"}, output_unit="variance")
 _register("ts_har_rv_forecast_error_z", "RV 相对 HAR 预测的标准化偏差（输入已实现方差）。", ["rv", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "innovation_z")))
 # The from-return variants square the daily return panel internally.
 _register("ts_har_from_return_next_vol", "HAR 基于日收益的下一期波动预测（内部平方为 RV）。", ["ret", "window"], "volatility",
-           lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "forecast")))
+           lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "forecast")),
+           input_units=_RETURN_INPUT, output_unit="volatility", reject_price_level=True)
 _register("ts_har_from_return_forecast_error_z", "日收益平方 RV 相对 HAR 预测的标准化偏差。", ["ret", "window"], "level",
-           lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "innovation_z")))
-# Deprecated aliases (kept registered); use the *_next_forecast names.
-_register("ts_har_rv_forecast", "HAR-RV 已实现方差预测（平方根，deprecated 别名）。", ["rv", "window"], "volatility",
-           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "forecast")))
+           lambda x, window=120: _apply(x, lambda v: _har_from_return(v, int(window), "innovation_z")),
+           input_units=_RETURN_INPUT, output_unit="level", reject_price_level=True)
+# Deprecated aliases (kept registered); use the *_next_vol_forecast names.
+_register("ts_har_rv_forecast", "HAR-RV 下一期已实现波动率预测（平方根，deprecated 别名；与 ts_har_rv_next_vol_forecast 同核）。", ["rv", "window"], "volatility",
+           lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "forecast")),
+           input_units={"rv": "realized_variance"}, output_unit="volatility")
 _register("ts_har_rv_innovation_z", "RV 相对 HAR 预测的标准化偏差（deprecated 别名）。", ["rv", "window"], "level",
            lambda x, window=120: _apply(x, lambda v: _har_rv(v, int(window), "innovation_z")))

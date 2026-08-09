@@ -17,6 +17,8 @@ import pandas as pd
 from cleaned_operators.base import (
     Operator,
     OperatorMetadata,
+    ParamRole,
+    ParamSpec,
     SeriesOperator,
     ScalarOperator,
     TwoVarOperator,
@@ -65,10 +67,57 @@ def _broadcast_column_stat(x: pd.DataFrame, stat: pd.Series) -> pd.DataFrame:
         columns=x.columns,
     )
 
+
+def _mean_abs_dev_1d(arr) -> float:
+    """单窗口平均绝对离差：``mean(|x_i - mean(window)|)``（单一中心=窗口均值）。"""
+    a = np.asarray(arr, dtype=float)
+    a = a[np.isfinite(a)]
+    if a.size == 0:
+        return np.nan
+    mu = float(a.mean())
+    return float(np.mean(np.abs(a - mu)))
+
+
+def _median_abs_dev_1d(arr) -> float:
+    """单窗口中位数绝对离差：``median(|x_i - median(window)|)``（单一中心=窗口中位数）。"""
+    a = np.asarray(arr, dtype=float)
+    a = a[np.isfinite(a)]
+    if a.size == 0:
+        return np.nan
+    med = float(np.median(a))
+    return float(np.median(np.abs(a - med)))
+
+
+def _mode_1d(arr):
+    """单窗口众数。
+
+    语义（round-3 audit）：仅当最高频次 >= 2 时输出众数；全不同值窗口返回
+    ``NaN``（此时任何「第一个」值都是任意选择，退化为 min）；众数并列时返回
+    众数集合的**中位数**，绝不返回最小众数。
+    """
+    a = np.asarray(arr, dtype=float)
+    a = a[np.isfinite(a)]
+    if a.size == 0:
+        return np.nan
+    vals, counts = np.unique(a, return_counts=True)
+    max_freq = int(counts.max())
+    if max_freq < 2:
+        return np.nan
+    modes = vals[counts == max_freq]
+    return float(np.median(modes))
+
 # canonical=ACF backend=pandas_numpy selected=ACF source=statistics/basic_stats.py
 @register_operator(name="ACF", category="statistics", business_category="statistics_regression", canonical="ACF", source="factor_dsl_np")
 class ACF(SeriesOperator):
-    """自相关系数"""
+    """自相关系数。
+
+    语义（round-3 audit）：``ACF(lag) = sum_t (x_t-mean)(x_{t+lag}-mean) /
+    sum_t (x_t-mean)^2``，窗口内均值为**单一中心**（当前窗口的样本均值）。
+    生产语法强制 ``lag >= 1``（``ParamSpec.min=1``，见 ``metadata.param_specs``）；
+    防御性支持 ``lag==0`` 返回 ``1.0``。无法估计的情形——有效样本不足
+    （``n <= lag``）、窗口为常数（方差≈0）——一律返回 ``NaN``，绝不返回 0
+    （0 会被误读为「无自相关」）。
+    """
 
     metadata = OperatorMetadata(
         name="ACF",
@@ -77,7 +126,11 @@ class ACF(SeriesOperator):
         examples=["ACF(returns, 20, 5)"],
         param_names=["x", "window", "lag"],
         return_type="series",
-        tags=["statistics", "autocorrelation"]
+        tags=["statistics", "autocorrelation"],
+        param_specs={
+            "lag": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, lag: int = 1, **kwargs) -> pd.DataFrame:
@@ -88,13 +141,17 @@ class ACF(SeriesOperator):
             raise FutureReferenceError(f"negative lag {lag} references future data")
 
         def acf_func(s, lag):
+            s = np.asarray(s, dtype=float)
+            s = s[np.isfinite(s)]
             n = len(s)
-            if n < max(lag, 2):
-                return 0
+            if lag == 0:
+                return 1.0
+            if n <= lag:
+                return np.nan
             mean = s.mean()
             var = ((s - mean) ** 2).sum()
-            if var == 0:
-                return 0
+            if var == 0 or not np.isfinite(var):
+                return np.nan
             return ((s[:-lag] - mean) * (s[lag:] - mean)).sum() / var
 
         return x.rolling(window=window, min_periods=1).apply(acf_func, raw=True, args=(lag,))
@@ -220,23 +277,91 @@ class Kurt(SeriesOperator):
 # canonical=Mad backend=pandas_numpy selected=Mad source=statistics/basic_stats.py
 @register_operator(name="Mad", category="statistics", business_category="statistics_regression", canonical="Mad", source="factor_dsl_np")
 class Mad(SeriesOperator):
-    """平均绝对离差"""
+    """平均绝对离差（Mean Absolute Deviation，单一中心=窗口均值）。
+
+    语义（round-3 audit）：``mean(|x_i - mean(window)|)``，窗口内所有离差
+    相对**同一个**窗口均值计算——不再是「rolling median_t -> |x_t-median_t|
+    -> rolling mean」的双重滚动近似（那会在第二个窗口混入不同 per-point
+    中心）。标准的中位数绝对离差（MAD，``median(|x_i - median(window)|)``）
+    见新 canonical ``ts_median_abs_deviation``；本算子与 ``ts_mean_abs_deviation``
+    同义。注：去重层（``_dedupe.py``）将 ``Mad``/``mad`` 别名至 ``ts_mad``
+    （非标准双重滚动实现，research-only），本实现保持源码语义正确。
+    """
 
     metadata = OperatorMetadata(
         name="Mad",
         category="statistics",
-        description="平均绝对离差",
+        description="平均绝对离差（围绕窗口均值的平均绝对离差）",
         examples=["Mad(returns, 20)"],
         param_names=["x", "window"],
         return_type="series",
-        tags=["statistics", "mad", "deviation"]
+        tags=["statistics", "mad", "deviation"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        median = x.rolling(window=window, min_periods=1).median()
-        return (x - median).abs().rolling(window=window, min_periods=1).mean()
+        w = int(window)
+        return x.rolling(window=w, min_periods=1).apply(_mean_abs_dev_1d, raw=True)
 
 # aliases: mad
+
+
+# canonical=ts_mean_abs_deviation backend=pandas_numpy selected=ts_mean_abs_deviation source=statistics/basic_stats.py
+@register_operator(name="ts_mean_abs_deviation", category="statistics", business_category="statistics_regression", canonical="ts_mean_abs_deviation", source="factor_dsl_np")
+class MeanAbsoluteDeviation(SeriesOperator):
+    """滚动平均绝对离差：``mean(|x_i - mean(window)|)``。
+
+    语义（round-3 audit）：单一中心=窗口均值，一个窗口输出一个值；
+    不是 ``ts_mad`` 那种「rolling median -> abs -> rolling mean」的双重滚动
+    近似。pandas 别名：``ts_mean_absolute_deviation``。
+    """
+
+    metadata = OperatorMetadata(
+        name="ts_mean_abs_deviation",
+        category="statistics",
+        description="平均绝对离差（围绕窗口均值的单一中心）",
+        examples=["ts_mean_abs_deviation(returns, 20)"],
+        param_names=["x", "window"],
+        return_type="series",
+        tags=["statistics", "mad", "deviation", "mean"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+        w = int(window)
+        return x.rolling(window=w, min_periods=1).apply(_mean_abs_dev_1d, raw=True)
+
+
+# canonical=ts_median_abs_deviation backend=pandas_numpy selected=ts_median_abs_deviation source=statistics/basic_stats.py
+@register_operator(name="ts_median_abs_deviation", category="statistics", business_category="statistics_regression", canonical="ts_median_abs_deviation", source="factor_dsl_np")
+class MedianAbsoluteDeviation(SeriesOperator):
+    """滚动中位数绝对离差（标准 MAD）：``median(|x_i - median(window)|)``。
+
+    语义（round-3 audit）：单一中心=窗口中位数，一个窗口输出一个值；
+    非 ``ts_mad`` 的双重滚动近似。不带 1.4826 比例因子（原始 MAD，非 robust
+    scale）。pandas 别名：``ts_median_absolute_deviation``。
+    """
+
+    metadata = OperatorMetadata(
+        name="ts_median_abs_deviation",
+        category="statistics",
+        description="中位数绝对离差（围绕窗口中位数的单一中心）",
+        examples=["ts_median_abs_deviation(returns, 20)"],
+        param_names=["x", "window"],
+        return_type="series",
+        tags=["statistics", "mad", "deviation", "median"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+        w = int(window)
+        return x.rolling(window=w, min_periods=1).apply(_median_abs_dev_1d, raw=True)
 
 
 
@@ -265,20 +390,29 @@ class Median(SeriesOperator):
 # canonical=Mode backend=pandas_numpy selected=Mode source=statistics/basic_stats.py
 @register_operator(name="Mode", category="statistics", business_category="statistics_regression", canonical="Mode", source="factor_dsl_np")
 class Mode(SeriesOperator):
-    """众数"""
+    """众数。
+
+    语义（round-3 audit）：仅当窗口内最高频次 >= 2 时输出众数；全不同值窗口
+    返回 ``NaN``（绝不退化为排序首值 ≈ 滚动 min）；众数并列时取众数集合的
+    中位数（绝不取最小众数）。
+    """
 
     metadata = OperatorMetadata(
         name="Mode",
         category="statistics",
-        description="众数",
+        description="众数（频次>=2 才输出，并列取中位数，全不同值→NaN）",
         examples=["Mode(close, 20)"],
         param_names=["x", "window"],
         return_type="series",
-        tags=["statistics", "mode"]
+        tags=["statistics", "mode"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return x.rolling(window=window, min_periods=1).apply(lambda s: s.mode().iloc[0] if len(s.mode()) > 0 else s.iloc[-1], raw=False)
+        w = int(window)
+        return x.rolling(window=w, min_periods=1).apply(_mode_1d, raw=True)
 
 # aliases: mode
 
@@ -325,13 +459,24 @@ class R2(SeriesOperator):
 # canonical=Residual backend=pandas_numpy selected=Residual source=statistics/regression.py
 @register_operator(name="Residual", category="statistics", business_category="statistics_regression", canonical="Residual", source="factor_dsl_np")
 class Residual(SeriesOperator):
-    """回归残差均值"""
+    """回归残差**均值**。
+
+    语义（round-3 audit）：输出 = 滚动窗口内**样本内当前残差**的窗口均值
+    （``residual_mean``）——即 ``rolling_regression(retval="residual")``：
+    每个时点先用该点滚动窗口的 OLS 拟合得到残差 ``y_t - ŷ_t``，再对残差序列
+    取滚动平均。**不是**原始残差序列，**不是** out-of-sample 预测误差
+    （后者见 ``ts_regression_forecast_error``）。原始残差序列见 central
+    ``ts_regression_resid``。canonical ``residual``（小写）即本语义。
+    """
     metadata = OperatorMetadata(
         name="Residual", category="statistics",
-        description="回归残差均值",
+        description="回归残差均值（样本内当前残差的滚动均值）",
         examples=["Residual(close, market, 20)"],
         param_names=["y", "x", "window"], return_type="series",
-        tags=["statistics", "regression", "residual"]
+        tags=["statistics", "regression", "residual"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        },
     )
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         return rolling_regression(y, x, window=window, min_periods=2, retval="residual")
@@ -457,13 +602,22 @@ class at_imin(SeriesOperator):
 # canonical=autocorr backend=pandas_numpy selected=autocorr source=statistics/aggregate_ops.py
 @register_operator(name="autocorr", category="statistics", business_category="statistics_regression", canonical="autocorr", source="factor_dsl_np")
 class autocorr(SeriesOperator):
-    """自相关系数"""
+    """自相关系数（扩展窗口）。
+
+    语义（round-3 audit）：委托 ``pandas.Series.autocorr``，即窗口内
+    ``corr(x_t, x_{t+lag})``。``lag==0`` 返回 1.0（自身相关）；短样本 /
+    常数序列 / 不可行 lag 时 pandas 返回 ``NaN``（未定义≠0），语义与
+    ``ACF`` 一致——不伪造 0。
+    """
     metadata = OperatorMetadata(
         name="autocorr", category="statistics",
         description="自相关系数",
         examples=["autocorr(returns, 5)"],
         param_names=["x", "lag"], return_type="series",
-        tags=["statistics", "aggregate", "autocorrelation"]
+        tags=["statistics", "aggregate", "autocorrelation"],
+        param_specs={
+            "lag": ParamSpec(dtype=int, min=0, param_role=ParamRole.HORIZON),
+        },
     )
     def _calculate_series(self, x: pd.DataFrame, lag: int = 1, **kwargs) -> pd.DataFrame:
         lag = int(lag)
@@ -1172,13 +1326,28 @@ class r_squared(SeriesOperator):
 # canonical=regress backend=pandas_numpy selected=regress source=statistics/regression_ex.py
 @register_operator(name="regress", category="statistics", business_category="statistics_regression", canonical="regress", source="factor_dsl_np")
 class regress(SeriesOperator):
-    """通用回归接口，支持指定返回值类型(slope/intercept/r_squared/residual)"""
+    """通用回归接口，支持指定返回值类型(slope/intercept/r_squared/residual)。
+
+    语义（round-3 audit）：``retval="residual"`` 返回滚动窗口内**样本内当前
+    残差的窗口均值**（residual_mean），与 ``residual``/``Residual`` 一致；
+    ``retval="slope"/"intercept"/"r_squared"`` 分别为滚动 OLS 的斜率 / 截距 /
+    决定系数。``retval`` 为策略选择器（非搜索维度）。
+    """
     metadata = OperatorMetadata(
         name="regress", category="statistics",
         description="通用回归接口，支持指定返回值类型(slope/intercept/r_squared/residual)",
         examples=["regress(close, market, 252, 'slope')"],
         param_names=["y", "x", "window", "retval"], return_type="series",
-        tags=["statistics", "regression"]
+        tags=["statistics", "regression"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+            "retval": ParamSpec(
+                dtype=str,
+                choices=("slope", "intercept", "r_squared", "residual"),
+                searchable=False,
+                param_role=ParamRole.POLICY,
+            ),
+        },
     )
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 252,
                           retval: str = 'slope', **kwargs) -> pd.DataFrame:
@@ -1190,13 +1359,24 @@ class regress(SeriesOperator):
 # canonical=residual backend=pandas_numpy selected=residual source=statistics/regression_ex.py
 @register_operator(name="residual", category="statistics", business_category="statistics_regression", canonical="residual", source="factor_dsl_np")
 class residual(SeriesOperator):
-    """小写residual回归残差均值"""
+    """回归残差**均值**（与 ``Residual`` 同义）。
+
+    语义（round-3 audit）：输出 = 滚动窗口内**样本内当前残差**的窗口均值
+    （``residual_mean``），即 ``rolling_regression(retval="residual")``。
+    **不是**原始残差序列（见 central ``ts_regression_resid``），**不是**
+    out-of-sample 预测误差（``ts_regression_forecast_error``）。canonical 名
+    保留 ``residual``（被 ``_dedupe.py`` 的 ``Residual -> residual`` 引用，
+    无法在模块内重命名而不破坏中央去重层）；语义已在 metadata 显式声明。
+    """
     metadata = OperatorMetadata(
         name="residual", category="statistics",
-        description="小写residual回归残差均值",
+        description="回归残差均值（样本内当前残差的滚动均值）",
         examples=["residual(close, market, 20)"],
         param_names=["y", "x", "window"], return_type="series",
-        tags=["statistics", "regression", "residual"]
+        tags=["statistics", "regression", "residual"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        },
     )
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         return rolling_regression(y, x, window=window, min_periods=2, retval="residual")
@@ -1526,3 +1706,26 @@ class wsum(SeriesOperator):
                 lambda x_w: _wsum(x_w, w_col.loc[x_w.index].values), raw=False
             )
         return result
+
+
+# ---------------------------------------------------------------------------
+# in-module aliases（round-3 audit）：长拼写 -> 短 canonical。
+# canonical 名取后端统一短名（``ts_mean_abs_deviation``/``ts_median_abs_deviation``，
+# 与 backend/polars_expr_emitter、polars_long_policy 一致），review 指定的长拼写
+# ``ts_mean_absolute_deviation`` / ``ts_median_absolute_deviation`` 作为 DSL 别名。
+# 绝不改 _aliases.py（中央文件，他人所有）。
+# ---------------------------------------------------------------------------
+from cleaned_operators.registry import OperatorRegistry  # noqa: E402
+
+OperatorRegistry.register_alias("ts_mean_absolute_deviation", "ts_mean_abs_deviation")
+OperatorRegistry.register_alias("ts_median_absolute_deviation", "ts_median_abs_deviation")
+
+# New canonicals must enter the static surface partition (extended) so
+# ``finalize_layer_governance``'s exact-classification check stays green
+# (same in-module convention as downside_risk / liquidity_v2).
+try:
+    from cleaned_operators.operator_surface import extend_extended_only
+
+    extend_extended_only(["ts_mean_abs_deviation", "ts_median_abs_deviation"])
+except ImportError:  # pragma: no cover - surface always present in-tree
+    pass

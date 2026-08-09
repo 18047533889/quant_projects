@@ -238,8 +238,11 @@ class TsCurrentDrawdownDuration(SeriesOperator):
                 streak = 0
                 for back in range(len(chunk) - 1, -1, -1):
                     if not valid_mask[back]:
-                        streak = 0
-                        continue
+                        # NaN is a hard episode boundary: the streak must never
+                        # re-link across the gap.  Stop counting instead of
+                        # resetting-and-scanning so bars on the far side of a NaN
+                        # never count toward the trailing episode (P0).
+                        break
                     if chunk[back] < running_peak[back]:
                         streak += 1
                     else:
@@ -302,12 +305,22 @@ class TsTimeUnderWater(SeriesOperator):
         return _frame_like(x, out)
 
 
-def _best_lag_corr(x: np.ndarray, y: np.ndarray, row: int, window: int, max_lag: int) -> float:
-    # NaN means "no lag was computable"; a *finite* 0.0 is a legitimate result
-    # (all valid-lag correlations were exactly zero) and must survive as 0.0,
-    # not be coerced to NaN — P0-30.
-    best = np.nan
-    n_best = 0
+def _best_lag_corr_raw(x: np.ndarray, y: np.ndarray, row: int, window: int, max_lag: int) -> float:
+    """Clean primitive: max over lags 0..max_lag of |Pearson corr(y[t], x[t-lag])|.
+
+    No multiple-lag selection correction (R11 round-2): the Fisher-z heuristic
+    that subtracted ~sqrt(2 ln(2K))/sqrt(n-3) treated the K lag-correlations as
+    independent tests, which they are not (highly correlated lags).  The clean
+    math primitive is just the peak magnitude.
+
+    NaN means "no lag was computable"; a *finite* 0.0 is a legitimate result
+    (all valid-lag correlations were exactly zero) and must survive as 0.0, not
+    be coerced to NaN — P0-30.  The argmax lag is tracked internally; the peak
+    magnitude is the operator output (the lag is exposed by
+    ``ts_lag_of_peak_corr``).
+    """
+    best = -1.0
+    best_lag = -1
     for lag in range(0, max_lag + 1):
         end = row + 1 - lag
         start = max(0, end - window)
@@ -320,55 +333,129 @@ def _best_lag_corr(x: np.ndarray, y: np.ndarray, row: int, window: int, max_lag:
             continue
         if np.std(xs[valid]) > 0 and np.std(ys[valid]) > 0:
             value = abs(float(np.corrcoef(xs[valid], ys[valid])[0, 1]))
-            n = int(valid.sum())
-            if not np.isfinite(best) or value > best:
+            if value > best:
                 best = value
-                n_best = n
-    if not np.isfinite(best):
+                best_lag = lag
+    if best_lag < 0:
         return np.nan
-    # R11 #161: the raw max over lag=0..K is upward-biased by multiple-lag
-    # selection (max |corr| grows with K).  As an alpha primitive this must be
-    # null-adjusted: under the null each sample |r| has standard error
-    # ~1/sqrt(n-3) in Fisher-z space, and the expected maximum of K |Z| values
-    # is ~sqrt(2 ln(2K)).  Subtract that selection bias (in z space) so a wider
-    # lag search cannot mechanically inflate the peak; a single lag (K=1) keeps
-    # the raw |r|.
-    K = int(max_lag) + 1
-    if K <= 1:
-        return float(best)
-    n_eff = max(n_best - 3, 1)
-    z = float(np.arctanh(min(max(best, -0.999999999), 0.999999999)))
-    null_bias = math.sqrt(2.0 * math.log(2.0 * K)) / math.sqrt(n_eff)
-    adjusted = max(z - null_bias, 0.0)
-    return float(np.tanh(adjusted))
+    return float(best)
+
+
+# Backward-compatible helper name: the historical ``_best_lag_corr`` now carries
+# the RAW (uncorrected) semantics — the multiple-lag selection correction was
+# split out of the canonical into ``ts_best_lag_corr_excess``.
+_best_lag_corr = _best_lag_corr_raw
+
+
+def _circular_block_permute(arr: np.ndarray, block: int, rng: np.random.Generator) -> np.ndarray:
+    """Deterministic circular block permutation (permutation null).
+
+    Rotates ``arr`` by a random offset, splits the rotated sequence into
+    contiguous blocks of size ``block`` (last block partial) and shuffles the
+    block order.  The result is a genuine permutation of ``arr`` (multiset
+    preserved) whose short-range autocorrelation is largely retained — a block-
+    permutation null for the source series.
+    """
+    n = len(arr)
+    if n <= 1:
+        return arr.copy()
+    b = max(1, min(int(block), n))
+    off = int(rng.integers(0, n))
+    rotated = np.concatenate([arr[off:], arr[:off]])
+    blocks = [rotated[i * b : (i + 1) * b] for i in range(int(np.ceil(n / b)))]
+    order = list(range(len(blocks)))
+    rng.shuffle(order)
+    return np.concatenate([blocks[i] for i in order])[:n]
+
+
+def _best_lag_corr_excess(
+    x: np.ndarray,
+    y: np.ndarray,
+    row: int,
+    window: int,
+    max_lag: int,
+    *,
+    n_surrogates: int = 20,
+    seed: int = 42,
+    block_frac: float = 0.1,
+) -> float:
+    """max_real - E[max_surrogate] under a circular-block-permutation null.
+
+    ``x`` is the leading/source series, ``y`` the trailing/target series.  The
+    surrogate source is the longest trailing window of ``x`` any lag touches
+    (``max_lag + window`` bars); each surrogate is a deterministic circular
+    block permutation of it (``block = ceil(0.1 * n)``, ``n_surrogates=20``,
+    per-row ``seed``).  Independent x,y -> excess ~ 0; a true lag dependence ->
+    the real peak survives the permutation while surrogate peaks do not ->
+    excess > 0.
+    """
+    real = _best_lag_corr_raw(x, y, row, window, max_lag)
+    if not np.isfinite(real):
+        return np.nan
+    src_lo = max(0, row + 1 - max_lag - window)
+    x_source = x[src_lo : row + 1]
+    n = len(x_source)
+    block = max(1, int(math.ceil(block_frac * n)))
+    rng = np.random.default_rng(seed + row)
+    surr_maxes = np.empty(n_surrogates, dtype=float)
+    for j in range(n_surrogates):
+        surr = _circular_block_permute(x_source, block, rng)
+        best = -1.0
+        for lag in range(0, max_lag + 1):
+            end = row + 1 - lag
+            start = max(0, end - window)
+            if end - start < 2:
+                continue
+            offset = start - src_lo
+            length = end - start
+            xs = surr[offset : offset + length]
+            ys = y[start + lag : row + 1]
+            valid = np.isfinite(xs) & np.isfinite(ys)
+            if valid.sum() < 2:
+                continue
+            if np.std(xs[valid]) > 0 and np.std(ys[valid]) > 0:
+                value = abs(float(np.corrcoef(xs[valid], ys[valid])[0, 1]))
+                if value > best:
+                    best = value
+        surr_maxes[j] = best if best >= 0 else np.nan
+    finite = surr_maxes[np.isfinite(surr_maxes)]
+    if finite.size == 0:
+        return np.nan
+    return real - float(np.mean(finite))
 
 
 @register_operator(
-    name="ts_best_lag_corr",
+    name="ts_best_lag_corr_raw",
     category="time_series_risk",
     business_category="time_series_risk",
-    canonical="ts_best_lag_corr",
+    canonical="ts_best_lag_corr_raw",
     source="downside_risk",
     status="experimental",
 )
-class TsBestLagCorr(SeriesOperator):
-    """source x 领先 target y 的绝对相关强度。
+class TsBestLagCorrRaw(SeriesOperator):
+    """source x 领先 target y 的绝对相关强度（原始峰值，无选择校正）。
 
     方向约定 (R5 P1-36(d))：计算 ``corr(y[t], x[t-lag])`` 在 lag=0..max_lag 上的
     最大绝对值，即 ``x``（source/领先序列）过去的值对 ``y``（target/跟随序列）
     当前的预测能力。x 领先 y，方向是 source -> target。
+
+    R11 round-2 (命名诚实)：这是干净数学原语 —— max over lags of |Pearson corr|，
+    不施加任何多重滞后选择校正。历史上 ``ts_best_lag_corr`` 的 Fisher-z 校正
+    假定 K 个滞后相关是独立检验，实际上它们高度相关，故拆分为
+    ``ts_best_lag_corr_excess``（置换零模型）。历史拼写 ``ts_best_lag_corr``
+    保留为本算子的废弃别名。
     """
 
     metadata = _metadata(
-        "ts_best_lag_corr",
-        "source x 领先 target y：max_lag 内 |corr(y[t], x[t-lag])| 的最大值。",
+        "ts_best_lag_corr_raw",
+        "source x 领先 target y：max_lag 内 |corr(y[t], x[t-lag])| 的最大值（原始原语，无选择校正）。",
         ["y", "x", "window", "max_lag"],
         domain="price_volume",
         unit="ratio",
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, max_lag: int = 5, **_: Any) -> pd.DataFrame:
-        # R11 #159: strict integer + domain validation.
+        # R11 #159: strict integer + domain validation (``max_lag < window``).
         w = _check_int(window, "window", 2)
         ml = _check_int(max_lag, "max_lag", 0)
         if ml >= w:
@@ -379,9 +466,49 @@ class TsBestLagCorr(SeriesOperator):
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
-                value = _best_lag_corr(xv[:, col], yv[:, col], row, w, ml)
+                value = _best_lag_corr_raw(xv[:, col], yv[:, col], row, w, ml)
                 # NaN (no computable lag) propagates; a genuine 0.0 stays 0.0.
                 out[row, col] = value
+        return _frame_like(y, out)
+
+
+@register_operator(
+    name="ts_best_lag_corr_excess",
+    category="time_series_risk",
+    business_category="time_series_risk",
+    canonical="ts_best_lag_corr_excess",
+    source="downside_risk",
+    status="experimental",
+)
+class TsBestLagCorrExcess(SeriesOperator):
+    """source x 领先 target y：原始峰值减去循环块置换零模型期望。
+
+    ``excess = max_real - E[max_surrogate]``，其中零模型由对 source 序列 x 做
+    循环块置换（固定 seed=42，n_surrogates=20，block=ceil(0.1*n)）估计。
+    独立 x,y -> excess ≈ 0；真实单滞后依赖 -> excess > 0。
+    """
+
+    metadata = _metadata(
+        "ts_best_lag_corr_excess",
+        "source x 领先 target y：|corr| 峰值减去循环块置换零模型 E[max_surrogate]（seed=42, n_surrogates=20, block=ceil(0.1n)）。",
+        ["y", "x", "window", "max_lag"],
+        domain="price_volume",
+        unit="ratio",
+    )
+
+    def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, max_lag: int = 5, **_: Any) -> pd.DataFrame:
+        # R11 #159: strict integer + domain validation (``max_lag < window``).
+        w = _check_int(window, "window", 2)
+        ml = _check_int(max_lag, "max_lag", 0)
+        if ml >= w:
+            raise ValueError("max_lag must be < window")
+        xv = x.to_numpy(dtype=float)
+        yv = y.to_numpy(dtype=float)
+        rows, cols = xv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for col in range(cols):
+            for row in range(rows):
+                out[row, col] = _best_lag_corr_excess(xv[:, col], yv[:, col], row, w, ml)
         return _frame_like(y, out)
 
 
@@ -491,3 +618,38 @@ class TsPriceDelay(SeriesOperator):
             for row in range(rows):
                 out[row, col] = _price_delay_model(sv[:, col], bv[:, col], row, w, ml, mp)
         return _frame_like(stock_return, out)
+
+
+def _register_best_lag_corr_split() -> None:
+    """R11 round-2: split the corrected ``ts_best_lag_corr`` into two honest
+    canonicals.
+
+    ``ts_best_lag_corr_raw`` is the clean primitive (max |corr| over lags, no
+    heuristic correction); ``ts_best_lag_corr_excess`` subtracts a circular-
+    block-permutation null.  The historical spelling ``ts_best_lag_corr``
+    becomes a deprecated alias of the raw version.
+    ``rename_canonical``/``register_alias`` preserve the old DSL name.  The
+    static surface partition is updated in sync (new canonicals -> extended,
+    retired spelling -> removed) so ``layer_governance``'s exact-classification
+    check still holds at finalize.
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    if "ts_best_lag_corr" in OperatorRegistry._operators:
+        # A backend registered the historical spelling directly; migrate it.
+        OperatorRegistry.rename_canonical("ts_best_lag_corr", "ts_best_lag_corr_raw")
+    elif "ts_best_lag_corr_raw" in OperatorRegistry._operators:
+        OperatorRegistry.register_alias("ts_best_lag_corr", "ts_best_lag_corr_raw")
+    try:
+        from cleaned_operators.operator_surface import (
+            extend_extended_only,
+            retract_extended_only,
+        )
+
+        extend_extended_only(["ts_best_lag_corr_raw", "ts_best_lag_corr_excess"])
+        retract_extended_only(["ts_best_lag_corr"])
+    except ImportError:  # pragma: no cover - surface module always present in-tree
+        pass
+
+
+_register_best_lag_corr_split()

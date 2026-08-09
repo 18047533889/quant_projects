@@ -114,7 +114,7 @@ FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
     "directional_change_state",
     "directional_change_extent",
     "state_since_trend_tstat",
-    "ts_cusum_break_score",
+    "ts_cumulative_deviation_score",
     # review #4 R4-05/06/07: recursive-state operators that were still running
     # as if they were bounded-window.  threshold_cycle inherits U/L across bars
     # (infinite-history state); state_episode_* track entry/direction/mfe/mae/

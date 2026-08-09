@@ -164,23 +164,57 @@ def ts_pivot_high_spacing(high,left_window,right_window,history_window): return 
 def ts_pivot_low_spacing(low,left_window,right_window,history_window): return _spacing(low,left_window,right_window,history_window,False)
 
 
+def _swing_segment(high, low, left_window, right_window, history_window):
+    """Most recent real swing as ``(amplitude, duration, velocity)``.
+
+    A swing is defined by the most recent *adjacent opposite-sign* pivot pair in
+    the chronological merged pivot stream (audits 22/23).  Taking the latest high
+    and the latest low independently can pair pivots that are not adjacent (e.g.
+    low -> high1 -> high2: latest high is high2 but the most recent real swing is
+    low -> high1).  All three swing canonicals consume this single kernel so they
+    can never disagree about the underlying event.
+    """
+    stream = _pivot_stream(high, low, left_window, right_window, history_window)
+    rows, cols = high.shape
+    amp = np.full((rows, cols), np.nan, dtype=float)
+    dur = np.full((rows, cols), np.nan, dtype=float)
+    for t in range(rows):
+        for c in range(cols):
+            ev = stream[t][c]
+            for i in range(len(ev) - 2, -1, -1):
+                p0, s0, px0 = ev[i]
+                p1, s1, px1 = ev[i + 1]
+                if s0 != s1:
+                    if s0:  # high then low
+                        h_px, l_px = px0, px1
+                    else:   # low then high
+                        h_px, l_px = px1, px0
+                    amp[t, c] = abs(float(h_px) - float(l_px))
+                    dur[t, c] = abs(int(p0) - int(p1))
+                    break
+    vel = amp / np.where(dur == 0, np.nan, dur)
+    idx, cols_df = high.index, high.columns
+    return (
+        pd.DataFrame(amp, index=idx, columns=cols_df),
+        pd.DataFrame(dur, index=idx, columns=cols_df),
+        pd.DataFrame(vel, index=idx, columns=cols_df),
+    )
+
+
 def ts_swing_amplitude(high,low,left_window,right_window,history_window):
-    h=ts_nth_pivot_high(high,left_window,right_window,history_window,1)
-    l=ts_nth_pivot_low(low,left_window,right_window,history_window,1)
-    return (h-l).abs()
+    amp, _, _ = _swing_segment(high,low,left_window,right_window,history_window)
+    return amp
 
 def ts_swing_amplitude_pct(high,low,close,left_window,right_window,history_window):
     return ts_swing_amplitude(high,low,left_window,right_window,history_window)/close.abs().replace(0,np.nan)
 
 def ts_swing_duration(high,low,left_window,right_window,history_window):
-    ha=ts_nth_pivot_high_age(high,left_window,right_window,history_window,1)
-    la=ts_nth_pivot_low_age(low,left_window,right_window,history_window,1)
-    return (ha-la).abs()
+    _, dur, _ = _swing_segment(high,low,left_window,right_window,history_window)
+    return dur
 
 def ts_swing_velocity(high,low,left_window,right_window,history_window):
-    amp=ts_swing_amplitude(high,low,left_window,right_window,history_window)
-    dur=ts_swing_duration(high,low,left_window,right_window,history_window)
-    return amp/dur.replace(0,np.nan)
+    _, _, vel = _swing_segment(high,low,left_window,right_window,history_window)
+    return vel
 
 
 def _true_range(high,low,close):
@@ -215,13 +249,18 @@ def ts_line_convergence(high,low,left_window,right_window,history_window,points)
     return ss-rs
 
 def ts_line_parallelism(high,low,left_window,right_window,history_window,points):
-    rs=_bounded_line(high,left_window,right_window,history_window,points,high=True,output="slope")
-    ss=_bounded_line(low,left_window,right_window,history_window,points,high=False,output="slope")
+    # Normalized (log-price) slopes so parallelism is price-level independent
+    # (audit 25): raw Δprice/Δbar makes a 100-yuan and a 10-yuan stock
+    # incomparable.
+    rs=_bounded_line(high,left_window,right_window,history_window,points,high=True,output="slope",log=True)
+    ss=_bounded_line(low,left_window,right_window,history_window,points,high=False,output="slope",log=True)
     return -(rs-ss).abs()
 
 
 def _fit_r2(frame,left,right,history,points,high):
-    k=_pi(points,"points",2); events=_recent_events(frame,left,right,history,high=high); arr=np.full(frame.shape,np.nan,float)
+    # R^2 on a 2-point fit is a mathematical necessity (always 1.0), so it is
+    # meaningless; require at least 3 fitted points (audit 24).
+    k=_pi(points,"points",3); events=_recent_events(frame,left,right,history,high=high); arr=np.full(frame.shape,np.nan,float)
     for t,row in enumerate(events):
         for c,ev in enumerate(row):
             if len(ev)<k: continue
@@ -246,7 +285,13 @@ def ts_pattern_symmetry(high,low,left_window,right_window,history_window):
 
 def ts_impulse_return(close,window): return close/close.shift(_pi(window,"window"))-1.0
 def ts_impulse_strength(close,window,vol_window):
-    ret=ts_impulse_return(close,window); rv=close.pct_change(fill_method=None).rolling(_pi(vol_window,"vol_window",2),min_periods=_pi(vol_window,"vol_window",2)).std()
+    ret=ts_impulse_return(close,window)
+    # Audit 26: the impulse must not inflate its own denominator.  Scale on the
+    # realized volatility estimated EXCLUDING the current bar — ``volatility_{t-1}``
+    # (rolling std of daily returns up to t-1 via ``.shift(1)``), not the trailing
+    # vol that includes the current impulse bar.  Matches the polars twin
+    # (``rolling_std(vol_window).shift(1)``) exactly.
+    rv=close.pct_change(fill_method=None).rolling(_pi(vol_window,"vol_window",2),min_periods=_pi(vol_window,"vol_window",2)).std().shift(1)
     return ret/(rv*np.sqrt(_pi(window,"window"))).replace(0,np.nan)
 def ts_impulse_volume(volume,window,baseline_window):
     w=_pi(window,"window"); b=_pi(baseline_window,"baseline_window")

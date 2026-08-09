@@ -230,7 +230,9 @@ def _series(*vals: float) -> pd.DataFrame:
 
 def test_dc_online_clock_uses_per_bar_historical_scale():
     # A monotone series never completes a DC leg -> overshoot ratio is NaN.
-    x = _series(0.0, 1.0, 2.0, 3.0, 4.0, 5.0)
+    # +1 shift: the DC family enforces strictly-positive price (round-2 §24);
+    # increments are preserved so the DC path shape is unchanged.
+    x = _series(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
     s = _series(1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
     out = _get("ts_dc_overshoot_ratio").calculate(x, s, threshold=1.0, window=10)
     assert np.isnan(out.iloc[-1, 0])
@@ -238,38 +240,36 @@ def test_dc_online_clock_uses_per_bar_historical_scale():
     # Sawtooth: events confirm against the scale available *at that bar*, not
     # today's end-of-window scale.  With per-bar scale 0.5 in the middle the
     # clock confirms tighter, then re-freezes.
-    x2 = _series(0.0, 2.0, 4.0, 1.0, 3.0, 5.0, 2.0, 4.0, 6.0)
+    x2 = _series(1.0, 3.0, 5.0, 2.0, 4.0, 6.0, 3.0, 5.0, 7.0)
     s2 = _series(1.0, 1.0, 1.0, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0)
     rate = _get("ts_dc_event_rate").calculate(x2, s2, threshold=1.0, window=10)
-    # Hand-traced online events at bars 3,4,6,7 -> 4/9.
-    assert rate.iloc[-1, 0] == pytest.approx(4.0 / 9.0)
+    # 5/9 under round-2 §24 pre-confirmation running-extrema seeding
+    # (values +1-shifted to a strictly-positive price; increments preserved).
+    assert rate.iloc[-1, 0] == pytest.approx(5.0 / 9.0)
 
 
-def test_kama_missing_state_default_interrupts():
+def test_kama_missing_state_break_rewarm():
     from cleaned_operators.technical.indicators_v2 import KAMA
 
-    x = _series(1.0, 2.0, np.nan, 3.0, 4.0)
+    x = _series(1.0, 2.0, np.nan, 3.0, 4.0, 5.0)
     out = KAMA(x, 3, 2, 5)
-    # Default interrupt: the missing bar emits NaN and the recursion re-seeds at
-    # the next finite bar (3.0) instead of bridging the suspension.
-    assert np.isnan(out.iloc[2, 0])
-    assert out.iloc[3, 0] == pytest.approx(3.0)
+    # Round-2 review: the SINGLE production missing policy is ``break + rewarm``
+    # (no carry / max_gap knobs).  The missing bar emits NaN and the recursion
+    # does NOT re-seed at the first finite bar — KAMA stays NaN until
+    # er_window=3 consecutive finite bars re-accumulate.
+    assert np.isnan(out.iloc[2, 0])   # the gap bar
+    assert np.isnan(out.iloc[3, 0])   # 1 finite bar < er_window=3
+    assert np.isnan(out.iloc[4, 0])   # 2 finite bars < er_window=3
 
 
-def test_kama_missing_state_carry_bridges_bounded_gap():
+def test_kama_hidden_missing_policy_knobs_removed():
     from cleaned_operators.technical.indicators_v2 import KAMA
 
     x = _series(1.0, 2.0, np.nan, 3.0, 4.0)
-    carry = KAMA(x, 3, 2, 5, missing_policy="carry", max_gap=1)
-    # carry bridges the single missing bar with the last finite value.
-    assert carry.iloc[2, 0] == pytest.approx(carry.iloc[1, 0])
-
-    # Two consecutive missing bars exceed max_gap=1 -> the second bar interrupts.
-    x2 = _series(1.0, 2.0, np.nan, np.nan, 4.0)
-    out2 = KAMA(x2, 3, 2, 5, missing_policy="carry", max_gap=1)
-    assert np.isnan(out2.iloc[3, 0])
-    # First missing bar still bridged.
-    assert out2.iloc[2, 0] == pytest.approx(out2.iloc[1, 0])
+    # The hidden missing_policy / max_gap knobs are gone (round-2 review §7):
+    # passing them must be rejected at the call boundary, never silently ignored.
+    with pytest.raises(Exception):
+        KAMA(x, 3, 2, 5, missing_policy="carry", max_gap=1)
 
 
 def test_supertrend_and_psar_missing_state_interrupt():

@@ -16,6 +16,10 @@ returned:
   form equals ``arg(Σ_f S_xy)``.  With ``S_xy = X·conj(Y)`` a POSITIVE phase
   means ``x`` LEADS ``y``.  R5 P1-08: when the band coherence drops below
   ``min_coherence`` the phase is NaN (a random angle carries no signal).
+  P1-14: the DEFAULT gate is a non-trivial ``min_coherence=0.2`` (was ``0.0``)
+  — below it the coherence is statistically indistinguishable from noise and
+  the phase is a random angle, so gating to NaN is the honest default; callers
+  who explicitly want every finite spectrum's angle can pass ``0.0``.
 
 Both are strict-PIT, deterministic, and NaN fail-closed: a NaN in either
 series invalidates the window (the time axis is never compressed), and the
@@ -29,7 +33,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec
+from cleaned_operators.base import ParamSpec, ParamRole
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -48,7 +52,7 @@ _CROSS_SPEC = {
 _PHASE_SPEC = {
     "window": ParamSpec(dtype=int, min=24),
     "band": ParamSpec(dtype=str, choices=("all", "long", "medium", "short"), searchable=False),
-    "min_coherence": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=False),
+    "min_coherence": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 
 # Discrete reviewed frequency bands (R5 P1-09): a *fixed* partition of the
@@ -133,8 +137,11 @@ def _cross_spectrum_window(
     mean_coh = num_coh / den_coh if den_coh > _EPS else np.nan
     if not np.isfinite(mean_coh):
         mean_coh = np.nan
-    # R5 P1-08: at (near-)zero coherence the phase is a random angle — gate it
-    # to NaN below ``min_coherence`` instead of emitting noise.
+    # R5 P1-08 / P1-14: at (near-)zero coherence the phase is a random angle —
+    # gate it to NaN below ``min_coherence`` instead of emitting noise.  The
+    # public phase operator now defaults to ``min_coherence=0.2`` so the gate
+    # is on by default (a coherence too close to noise yields NaN, not a
+    # spurious angle).
     if mean_coh < float(min_coherence):
         total_phase = np.nan
     else:
@@ -179,7 +186,7 @@ def _ts_cross_spectral_coherence(
 
 def _ts_cross_spectral_phase(
     x: pd.DataFrame, y: pd.DataFrame, window: int = 60, band: str = "all",
-    min_coherence: float = 0.0,
+    min_coherence: float = 0.2,
 ) -> pd.DataFrame:
     if int(window) < 24:
         raise ValueError("ts_cross_spectral_phase requires window >= 24")

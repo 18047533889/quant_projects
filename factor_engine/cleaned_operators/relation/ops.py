@@ -18,7 +18,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 
 
 def _metadata(
@@ -31,6 +37,7 @@ def _metadata(
     unit: str,
     output_unit: str | None = None,
     param_specs: dict[str, ParamSpec] | None = None,
+    relational_specs: list[RelationalParamSpec] | None = None,
     extra_tags: tuple[str, ...] = (),
 ) -> OperatorMetadata:
     metadata = OperatorMetadata(
@@ -46,6 +53,7 @@ def _metadata(
         ],
         output_unit=output_unit,
         param_specs=dict(param_specs or {}),
+        relational_specs=list(relational_specs or []),
     )
     return metadata
 
@@ -499,6 +507,9 @@ class IndexWeightChange(SeriesOperator):
         category="index",
         domain="index",
         unit="ratio",
+        # review §17: strict-integer ``window`` — 5.1 must be rejected, never
+        # silently ``int(window)``-truncated to 5.
+        param_specs={"window": ParamSpec(dtype=int, min=1)},
     )
 
     def _calculate_series(self, weight: pd.DataFrame, window: int = 20, **_: Any) -> pd.DataFrame:
@@ -574,6 +585,10 @@ class IndexMembershipAge(SeriesOperator):
         category="index",
         domain="index",
         unit="count",
+        # review §17: ``max_lookback`` is a strict-integer row cap — 5.1 must be
+        # rejected, never ``int(max_lookback)``-truncated.  ``None`` (the
+        # declared default) means uncapped.
+        param_specs={"max_lookback": ParamSpec(dtype=int, min=1, default=None)},
     )
 
     def _calculate_series(self, member: pd.DataFrame, max_lookback: Any = None, **_: Any) -> pd.DataFrame:
@@ -606,6 +621,20 @@ class IndexMembershipAge(SeriesOperator):
 # Event / timing operators
 # ---------------------------------------------------------------------------
 
+# review §17: every event operator's ``window`` / ``event_effective_lag`` are
+# strict-integer row counts — 5.1 is rejected, never ``int(...)``-truncated.
+# ``event_effective_lag`` is non-negative and must stay inside the accumulation
+# window (a lag at or past the window degenerates the "since event" window).
+_EVENT_WINDOW_PARAMS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=1),
+    "event_effective_lag": ParamSpec(dtype=int, min=0),
+}
+_EVENT_WINDOW_RELATION = RelationalParamSpec(
+    "event_effective_lag < window",
+    "event operators require event_effective_lag < window "
+    "(window={window}, event_effective_lag={event_effective_lag})",
+)
+
 
 @register_operator(
     name="event_cumulative_return_past",
@@ -625,6 +654,8 @@ class EventCumulativeReturnPast(SeriesOperator):
         category="event",
         domain="event",
         unit="return",
+        param_specs=_EVENT_WINDOW_PARAMS,
+        relational_specs=[_EVENT_WINDOW_RELATION],
     )
 
     def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
@@ -667,6 +698,8 @@ class EventAbnormalReturnPast(SeriesOperator):
         category="event",
         domain="event",
         unit="return",
+        param_specs=_EVENT_WINDOW_PARAMS,
+        relational_specs=[_EVENT_WINDOW_RELATION],
     )
 
     def _calculate_series(self, ret: pd.DataFrame, benchmark_ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
@@ -760,6 +793,8 @@ class EventReturnSinceLast(SeriesOperator):
         category="event",
         domain="event",
         unit="return",
+        param_specs=_EVENT_WINDOW_PARAMS,
+        relational_specs=[_EVENT_WINDOW_RELATION],
     )
 
     def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
@@ -784,6 +819,8 @@ class EventArithmeticReturnSum(SeriesOperator):
         category="event",
         domain="event",
         unit="return",
+        param_specs=_EVENT_WINDOW_PARAMS,
+        relational_specs=[_EVENT_WINDOW_RELATION],
     )
 
     def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
@@ -808,6 +845,8 @@ class EventLogReturnSum(SeriesOperator):
         category="event",
         domain="event",
         unit="return",
+        param_specs=_EVENT_WINDOW_PARAMS,
+        relational_specs=[_EVENT_WINDOW_RELATION],
     )
 
     def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
@@ -832,6 +871,8 @@ class EventActiveCount(SeriesOperator):
         category="event",
         domain="event",
         unit="count",
+        param_specs=_EVENT_WINDOW_PARAMS,
+        relational_specs=[_EVENT_WINDOW_RELATION],
     )
 
     def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:

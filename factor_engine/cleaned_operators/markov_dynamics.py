@@ -20,6 +20,24 @@ The strictly-past window ``[t-W, t-1]`` builds every statistic; the current
 value ``x_t`` only selects a state / observed transition, never enters the
 historical estimates.  Missing values fail closed (NaN) rather than being read
 as a state.  All kernels are deterministic and prefix-causal.
+
+R11 round-2 P0 degenerate-state contract (shared with the Polars twin):
+
+* Transition rows are estimated ONLY from ``>= min_count`` observed lagged
+  transitions.  A state that appears in the window but has no observed outgoing
+  transitions gets an all-NaN row — never a 0/1 row or a uniform-prior row
+  presented as a confident estimate.  ``min_count`` is enforced as a relational
+  feasibility ``min_count <= window - lag`` at the call boundary and in the
+  kernel, so a guaranteed-NaN combination is rejected before rolling.
+* The only prior is the Jeffreys (+0.5 per-cell) pseudo-count, applied to the
+  observed-support counts.  A destination with zero observed incoming
+  transitions therefore keeps at most a small prior-only contribution; consumers
+  gate on observed incoming support (``N_obs``) so such a cell is never
+  *presented* as a confident estimate (reverse direction of the prior-only rule).
+* A window that observed only a single state has no estimated transition
+  distribution: persistence, state entropy, transition/stationary surprisal,
+  committor, MFPT, spectral gap and entropy production all fail closed to NaN
+  instead of reporting a degenerate ~1 / ~0 / trivial value.
 """
 from __future__ import annotations
 
@@ -28,20 +46,49 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, RelationalParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
 _LN2 = float(np.log(2.0))
 
+# R11 round-2 P0: ``min_count`` / ``min_periods`` are *relational* feasibility
+# gates — a window ``[t-W, t-1]`` holds at most ``window - lag`` lagged
+# transitions, so a minimum above that is guaranteed-NaN for every window and is
+# rejected at the call boundary (binding) before the kernel rolls.  At runtime a
+# window with fewer than the minimum *observed* valid transitions emits NaN.
+_MIN_COUNT_RELATIONAL = [
+    RelationalParamSpec(
+        "min_count <= window - lag",
+        "min_count must not exceed available transitions (window - lag); "
+        "got min_count={min_count}, window={window}, lag={lag}",
+    )
+]
+_MIN_PERIODS_RELATIONAL = [
+    RelationalParamSpec(
+        "min_periods <= window - lag",
+        "min_periods must not exceed available transitions (window - lag); "
+        "got min_periods={min_periods}, window={window}, lag={lag}",
+    )
+]
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    cost: int,
+    relational_specs: list[RelationalParamSpec] | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="state_dynamics",
         description=description,
         param_names=params,
         return_type="series",
+        relational_specs=list(relational_specs) if relational_specs else [],
         tags=[
             "state_dynamics", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
@@ -202,11 +249,23 @@ def _state_dynamics_series(
                D1 = mean(Δx)/lag, D2 = mean(Δx²)/(2·lag))
       centers— (n, B) bin centers (conditional empirical median per bin)
       total_trans — number of lagged transitions in the window
+      n_states_obs — distinct states observed in the window (degenerate single-
+               state window -> < 2, used to fail closed on no-estimate outputs)
     """
     n = series.shape[0]
     B = int(bins)
     lg = int(lag)
     mc = max(1, int(min_count))
+    w = int(window)
+    # R11 round-2 P0 (TASK 3): ``min_count`` is a relational feasibility gate —
+    # the window ``[t-W, t-1]`` holds at most ``window - lag`` lagged pairs, so a
+    # minimum above that is guaranteed-NaN and rejected at binding even when this
+    # kernel is reached directly (e.g. the Polars twin bypasses ``_run_kernel``).
+    if mc > w - lg:
+        raise ValueError(
+            f"min_count must not exceed available transitions (window - lag = {w - lg}); "
+            f"got min_count={mc}"
+        )
     state = np.full(n, np.nan)
     edges_out = np.full((n, B + 1), np.nan)
     P = np.full((n, B, B), np.nan)
@@ -218,6 +277,7 @@ def _state_dynamics_series(
     D2 = np.full((n, B), np.nan)
     centers = np.full((n, B), np.nan)
     total_trans = np.full(n, np.nan)
+    n_states_obs = np.full(n, np.nan)
 
     for t in range(n):
         lo = max(0, t - window)
@@ -240,6 +300,7 @@ def _state_dynamics_series(
         counts[t] = np.bincount(states_past[valid_states], minlength=B).astype(float)
         total = float(int(valid_states.sum()))
         pi_empirical[t] = counts[t] / max(total, 1.0)
+        n_states_obs[t] = float(int(np.count_nonzero(counts[t])))
 
         d1_row = np.full(B, np.nan)
         d2_row = np.full(B, np.nan)
@@ -271,10 +332,29 @@ def _state_dynamics_series(
         D1[t] = d1_row
         D2[t] = d2_row
         total_trans[t] = float(n_trans)
-        if n_trans > 0:
-            P[t] = (N + 0.5) / (N.sum(axis=1, keepdims=True) + 0.5 * B)
+        # R11 round-2 P0 (TASK 1 + TASK 3): estimate the transition matrix ONLY
+        # from at least ``min_count`` observed transitions, and fail closed on
+        # prior-only rows:
+        #   * a source state that APPEARS in the window (count > 0) but has no
+        #     observed outgoing transitions gets an all-NaN row — never a
+        #     uniform Jeffreys row presented as a confident estimate.
+        #   * a destination with zero observed incoming transitions keeps only
+        #     its documented Jeffreys prior (+0.5 pseudo-count); consumers gate
+        #     on observed incoming support (``N_obs``) so such a cell is never
+        #     *presented* as a confident estimate (reverse direction, TASK 1).
+        # Jeffreys (+0.5) smoothing is applied to every observed-support cell so
+        # a single observed transition does not read as probability 1.  Rows of
+        # bins that never appear (count 0) are never read by any consumer and
+        # keep the prior row, which keeps P finite for the linear-solve /
+        # spectral consumers (committor, MFPT, spectral gap, entropy production).
+        if n_trans >= mc:
+            row_sum = N.sum(axis=1)
+            P_smooth = (N + 0.5) / (row_sum[:, None] + 0.5 * B)
+            P_smooth[(counts[t] > 0) & (row_sum == 0), :] = np.nan
+            P[t] = P_smooth
             # audit P0: stationary measure as the left eigenvector of the
-            # *smoothed* P (πP = π), not the empirical frequency.
+            # *smoothed* P (πP = π), not the empirical frequency.  A P with any
+            # fail-closed NaN row propagates NaN through eig -> pi stays NaN.
             pi_s = _stationary_distribution(P[t])
             if pi_s is not None:
                 pi[t] = pi_s
@@ -290,6 +370,7 @@ def _state_dynamics_series(
         "D2": D2,
         "centers": centers,
         "total_trans": total_trans,
+        "n_states_obs": n_states_obs,
     }
 
 
@@ -306,6 +387,13 @@ def _run_kernel(
     mc = max(1, int(min_count))
     if w <= lg:
         raise ValueError("window must exceed lag")
+    # R11 round-2 P0 (TASK 3): relational feasibility at binding — a window
+    # holds at most ``window - lag`` lagged transitions.
+    if mc > w - lg:
+        raise ValueError(
+            f"min_count must not exceed available transitions (window - lag = {w - lg}); "
+            f"got min_count={mc}"
+        )
     # P1-011: the Markov/KM parameter grid is bounded (anti parameter-explosion in
     # the search grammar): bins ∈ {3,5,8}, lag ∈ {1,2,3}.
     if int(bins) not in _KM_BINS_GRID:
@@ -313,7 +401,7 @@ def _run_kernel(
     if int(lag) not in _KM_LAG_GRID:
         raise ValueError(f"lag must be in {_KM_LAG_GRID}, got {lag!r}")
     cols = x.shape[1]
-    keys = ["state", "P", "counts", "pi", "pi_empirical", "N_obs", "D1", "D2", "centers", "total_trans", "edges"]
+    keys = ["state", "P", "counts", "pi", "pi_empirical", "N_obs", "D1", "D2", "centers", "total_trans", "edges", "n_states_obs"]
     gathered: dict[str, list[np.ndarray]] = {k: [] for k in keys}
     xv = x.to_numpy(dtype=float)
     for c in range(cols):
@@ -344,7 +432,17 @@ def _persistence_series(series: np.ndarray, res: dict[str, np.ndarray], col: int
         if not np.isfinite(k):
             continue
         k = int(k)
+        # R11 round-2 P0 (TASK 2): a window that observed only a single state has
+        # no estimated transition distribution — P_kk there is a degenerate ~1,
+        # not evidence of persistence.  Fail closed to NaN.
+        if res["n_states_obs"][t, col] < 2:
+            continue
         if res["counts"][t, col, k] < min_count:
+            continue
+        # R11 round-2 P0 (TASK 1, reverse): a state that was never *entered*
+        # (zero observed incoming transitions) has no persistence to report —
+        # P_kk there is only the documented Jeffreys prior.  Fail closed.
+        if res["N_obs"][t, col, :, k].sum() <= 0:
             continue
         p = res["P"][t, col, k, k]
         if np.isfinite(p):
@@ -373,6 +471,7 @@ class TsMarkovPersistence(SeriesOperator):
         ["x", "window", "bins", "lag", "min_count"],
         unit="probability",
         cost=4,
+        relational_specs=_MIN_COUNT_RELATIONAL,
     )
 
     def _calculate_series(
@@ -399,12 +498,27 @@ def _state_entropy_series(series: np.ndarray, res: dict[str, np.ndarray], col: i
         if not np.isfinite(k):
             continue
         k = int(k)
+        # R11 round-2 P0 (TASK 2): a single-state window has no estimated
+        # transition distribution — entropy there is a degenerate ~0, never a
+        # confident value.  Fail closed to NaN.
+        if res["n_states_obs"][t, col] < 2:
+            continue
         if res["counts"][t, col, k] < min_count:
             continue
         row = res["P"][t, col, k]
-        if not np.all(np.isfinite(row)):
+        # TASK 1 reverse: only destinations with observed incoming transitions
+        # are real outcomes; a never-entered destination keeps only the
+        # documented Jeffreys prior and must not inflate/deflate the entropy.
+        col_support = res["N_obs"][t, col].sum(axis=0) > 0
+        row = row[np.isfinite(row) & col_support]
+        # A row with fewer than two estimable destinations has no genuine
+        # distribution to measure -> NaN (also catches all-NaN fail-closed rows).
+        if row.size < 2:
             continue
-        row = row[row > 0.0]
+        s = float(row.sum())
+        if not np.isfinite(s) or s <= _EPS:
+            continue
+        row = row / s
         h = -float(np.sum(row * np.log(row)))
         out[t] = float(h / log_b)
     return out
@@ -431,6 +545,7 @@ class TsMarkovStateEntropy(SeriesOperator):
         ["x", "window", "bins", "lag", "min_count"],
         unit="entropy",
         cost=4,
+        relational_specs=_MIN_COUNT_RELATIONAL,
     )
 
     def _calculate_series(
@@ -468,6 +583,10 @@ def _surprisal_series(series: np.ndarray, res: dict[str, np.ndarray], col: int, 
         if not np.isfinite(i_val):
             continue
         i = int(_bin(np.asarray([i_val]), edges)[0])
+        # R11 round-2 P0 (TASK 2): in a single-state window every observed jump
+        # is trivially s->s, so -log P_ss is a degenerate ~0 — not a rare event.
+        if res["n_states_obs"][t, col] < 2:
+            continue
         if res["counts"][t, col, i] < min_count:
             continue
         p = res["P"][t, col, i, j]
@@ -497,6 +616,7 @@ class TsMarkovTransitionSurprisal(SeriesOperator):
         ["x", "window", "bins", "lag", "min_count"],
         unit="nats",
         cost=4,
+        relational_specs=_MIN_COUNT_RELATIONAL,
     )
 
     def _calculate_series(
@@ -519,6 +639,11 @@ def _entropy_production_series(res: dict[str, np.ndarray], col: int, min_periods
     n = res["P"].shape[0]
     out = np.full(n, np.nan)
     for t in range(n):
+        # R11 round-2 P0 (TASK 2): a single-state window is time-reversible by
+        # construction (only s->s) — σ there would be a degenerate 0, not an
+        # estimated entropy-production rate.
+        if res["n_states_obs"][t, col] < 2:
+            continue
         if res["total_trans"][t, col] < min_periods:
             continue
         P = res["P"][t, col]
@@ -574,6 +699,7 @@ class TsMarkovEntropyProduction(SeriesOperator):
         ["x", "window", "bins", "lag", "min_periods"],
         unit="nats",
         cost=5,
+        relational_specs=_MIN_PERIODS_RELATIONAL,
     )
 
     def _calculate_series(
@@ -639,6 +765,7 @@ class TsKramersMoyalLocalStability(SeriesOperator):
         ["x", "window", "bins", "lag", "min_count"],
         unit="ratio",
         cost=5,
+        relational_specs=_MIN_COUNT_RELATIONAL,
     )
 
     def _calculate_series(
@@ -766,6 +893,10 @@ def _committor_series(res: dict[str, np.ndarray], col: int, min_count: int) -> n
         if not np.isfinite(k):
             continue
         k = int(k)
+        # R11 round-2 P0 (TASK 2): no transition structure in a single-state
+        # window — the committor would be trivially 0/1, not an estimate.
+        if res["n_states_obs"][t, col] < 2:
+            continue
         if res["counts"][t, col, k] < min_count:
             continue
         P = res["P"][t, col]
@@ -828,6 +959,7 @@ class TsMarkovCommittor(SeriesOperator):
         ["x", "window", "bins", "lag", "min_count"],
         unit="probability",
         cost=5,
+        relational_specs=_MIN_COUNT_RELATIONAL,
     )
 
     def _calculate_series(
@@ -859,6 +991,10 @@ def _mfpt_series(res: dict[str, np.ndarray], col: int, min_count: int, target: s
         if not np.isfinite(k):
             continue
         k = int(k)
+        # R11 round-2 P0 (TASK 2): no transition structure in a single-state
+        # window — MFPT would be a degenerate 0/1, not an estimate.
+        if res["n_states_obs"][t, col] < 2:
+            continue
         if res["counts"][t, col, k] < min_count:
             continue
         P = res["P"][t, col]
@@ -924,6 +1060,7 @@ class TsMarkovMeanFirstPassageTime(SeriesOperator):
         ["x", "window", "bins", "lag", "min_count", "target"],
         unit="days",
         cost=5,
+        relational_specs=_MIN_COUNT_RELATIONAL,
     )
 
     def _calculate_series(
@@ -949,6 +1086,10 @@ def _spectral_gap_series(res: dict[str, np.ndarray], col: int, min_periods: int)
     n = res["P"].shape[0]
     out = np.full(n, np.nan)
     for t in range(n):
+        # R11 round-2 P0 (TASK 2): a single-state window has a trivial 1x1
+        # "chain" — the spectral gap is a degenerate 0, not a mixing estimate.
+        if res["n_states_obs"][t, col] < 2:
+            continue
         if res["total_trans"][t, col] < min_periods:
             continue
         P = res["P"][t, col]
@@ -988,6 +1129,7 @@ class TsMarkovSpectralGap(SeriesOperator):
         ["x", "window", "bins", "lag", "min_periods"],
         unit="ratio",
         cost=5,
+        relational_specs=_MIN_PERIODS_RELATIONAL,
     )
 
     def _calculate_series(
@@ -1012,7 +1154,17 @@ def _stationary_surprisal_series(res: dict[str, np.ndarray], col: int, min_count
         if not np.isfinite(k):
             continue
         k = int(k)
+        # R11 round-2 P0 (TASK 2): a single-state window has stationary mass 1 on
+        # the one observed state — -log π_k is a degenerate 0, not "long-run
+        # rarity".
+        if res["n_states_obs"][t, col] < 2:
+            continue
         if res["counts"][t, col, k] < min_count:
+            continue
+        # TASK 1 reverse: a state that was never entered has no stationary
+        # occupancy — -log π_k would be the Jeffreys prior, not a rare-state
+        # signal.  Fail closed.
+        if res["N_obs"][t, col, :, k].sum() <= 0:
             continue
         pi = res["pi"][t, col]
         if not np.all(np.isfinite(pi)):
@@ -1044,6 +1196,7 @@ class TsMarkovStationarySurprisal(SeriesOperator):
         ["x", "window", "bins", "lag", "min_count"],
         unit="nats",
         cost=4,
+        relational_specs=_MIN_COUNT_RELATIONAL,
     )
 
     def _calculate_series(
@@ -1136,6 +1289,7 @@ class TsKmEquilibriumDistance(SeriesOperator):
         ["x", "window", "bins", "lag", "min_count"],
         unit="zscore",
         cost=5,
+        relational_specs=_MIN_COUNT_RELATIONAL,
     )
 
     def _calculate_series(
@@ -1205,6 +1359,7 @@ class TsKmDiffusionGradient(SeriesOperator):
         ["x", "window", "bins", "lag", "min_count"],
         unit="diffusion",
         cost=5,
+        relational_specs=_MIN_COUNT_RELATIONAL,
     )
 
     def _calculate_series(
@@ -1297,6 +1452,7 @@ class TsKmQuasipotentialDepth(SeriesOperator):
         ["x", "window", "bins", "lag", "min_count"],
         unit="potential",
         cost=6,
+        relational_specs=_MIN_COUNT_RELATIONAL,
     )
 
     def _calculate_series(

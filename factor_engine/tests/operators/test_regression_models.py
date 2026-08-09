@@ -12,9 +12,9 @@ from cleaned_operators.registry import OperatorRegistry
 ensure_cleaned_loaded()
 
 P2_CANONICALS = frozenset(
-    """ts_huber_regression_resid ts_ridge_regression_resid
-    ts_quantile_regression_slope ts_ar_coefficient ts_variance_ratio
-    ts_cusum_break_score ts_level_shift_score ts_vol_shift_score
+    """ts_huber_regression_in_sample_resid ts_ridge_regression_in_sample_resid
+    ts_quantile_regression_slope ts_ar_coefficient ts_variance_ratio_proxy
+    ts_cumulative_deviation_score ts_level_shift_score ts_vol_shift_score
     """.split()
 )
 

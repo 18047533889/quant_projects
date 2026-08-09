@@ -175,12 +175,13 @@ def test_p0_22_corrupt_parquet_quarantine_hard_fail(tmp_path):
     with pytest.raises(FactorMatrixReadError, match="quarantine"):
         m.materialize({"g": _ser({(d2, "A"): 9.0})}, universe="u")
 
-    # 原文件已进 quarantine，正式 data.parquet 已不存在
+    # R14 #2：已发布 generation immutable——坏文件只**复制**到 quarantine 留证，
+    # 不移动原文件（manifest 仍引用该代，在途 reader 可能正读它）。
     qdir = target.parent / ".quarantine"
     assert list(qdir.glob("*-data.parquet"))
-    assert not target.exists()
-    # load_matrix 应看不到 quarantine 文件
-    with pytest.raises(FileNotFoundError):
+    assert target.exists()  # 原文件仍在（immutable），只留证副本
+    # load_matrix 读当前 generation → 坏文件 fail loud（不再静默 FileNotFound）
+    with pytest.raises(FactorMatrixReadError):
         FactorMatrixMaterializer.load_matrix(tmp_path / "matrix", universe="u")
 
 

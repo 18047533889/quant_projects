@@ -3,7 +3,7 @@
 from __future__ import annotations
 import numpy as np
 import pandas as pd
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.price_volume.candle_pattern_engine_v2 import (
     _engine as _base_engine,
     _pi,
@@ -11,6 +11,7 @@ from cleaned_operators.price_volume.candle_pattern_engine_v2 import (
     _CANDLE_SHADOW_ACTIVE,
     _CANDLE_PENETRATION_ACTIVE,
 )
+from cleaned_operators.price_volume.candle_geometry_v2 import _validate_ohlc
 
 
 def _engine(o,h,l,c,pattern,body_window,shadow_window,penetration):
@@ -25,8 +26,12 @@ def _engine(o,h,l,c,pattern,body_window,shadow_window,penetration):
     # Audit item 4 (A-share critical): a zero-amplitude 一字板 bar (O=H=L=C)
     # must never be classified as any pattern — gate it out (emit NaN).
     cur=cur&((h-l).abs()>1e-6*c.abs())
-    prev1=po.notna()&pc.notna()&ph.notna()&pl.notna()
-    prev2=prev1&o2.notna()&c2.notna()&h2.notna()&l2.notna()
+    # round-3 audit item 15: unified OHLC structural invariant — invalid /
+    # non-positive bars (and their history) are never classified as a pattern.
+    valid=_validate_ohlc(o,h,l,c)
+    cur=cur&valid
+    prev1=po.notna()&pc.notna()&ph.notna()&pl.notna()&valid.shift(1)
+    prev2=prev1&o2.notna()&c2.notna()&h2.notna()&l2.notna()&valid.shift(2)
     if p=="2_crows":
         mask=bull2&pbear&bear&(pl>h2)&(o>po)&(c<c2)&(c>o2)
         valid=cur&prev1&prev2
@@ -36,6 +41,6 @@ def _engine(o,h,l,c,pattern,body_window,shadow_window,penetration):
     return pd.DataFrame(np.where(mask,-1.0,np.nan),index=o.index,columns=o.columns).where(valid)
 
 class CandlestickPatternEngineV2(SeriesOperator):
-    metadata=OperatorMetadata(name="candlestick_pattern",category="candle_pattern",description="Adaptive bounded Japanese-candlestick pattern engine.",param_names=["open","high","low","close","pattern","body_window","shadow_window","penetration"],return_type="series",tags=["pit_safe","causal","bounded_history","production_repair","semantic_family:adaptive_custom"],param_specs={"pattern":ParamSpec(dtype=str,searchable=True),"body_window":ParamSpec(dtype=int,min=2,active_when=("pattern",_CANDLE_BODY_ACTIVE)),"shadow_window":ParamSpec(dtype=int,min=2,active_when=("pattern",_CANDLE_SHADOW_ACTIVE)),"penetration":ParamSpec(dtype=float,min=0.0,max=1.0,active_when=("pattern",_CANDLE_PENETRATION_ACTIVE))})
+    metadata=OperatorMetadata(name="candlestick_pattern",category="candle_pattern",description="Adaptive bounded Japanese-candlestick pattern engine.",param_names=["open","high","low","close","pattern","body_window","shadow_window","penetration"],return_type="series",tags=["pit_safe","causal","bounded_history","production_repair","semantic_family:adaptive_custom"],param_specs={"pattern":ParamSpec(dtype=str,searchable=True),"body_window":ParamSpec(dtype=int,min=2,active_when=("pattern",_CANDLE_BODY_ACTIVE),param_role=ParamRole.HORIZON),"shadow_window":ParamSpec(dtype=int,min=2,active_when=("pattern",_CANDLE_SHADOW_ACTIVE),param_role=ParamRole.HORIZON),"penetration":ParamSpec(dtype=float,min=0.0,max=1.0,active_when=("pattern",_CANDLE_PENETRATION_ACTIVE))})
     def _calculate_series(self,open,high,low,close,pattern,body_window=10,shadow_window=10,penetration=0.3,**kwargs):return _engine(open,high,low,close,pattern,body_window,shadow_window,penetration)
 register_operator(name="candlestick_pattern",category="candle_pattern",business_category="technical_extension",canonical="candlestick_pattern",source="candle_pattern_engine_repairs_v2",backend="pandas_numpy",status="production")(CandlestickPatternEngineV2)

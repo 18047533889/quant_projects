@@ -22,14 +22,22 @@ confirmation) **and** the rally from the most recent confirmed trough exceeds
 directly (it establishes the reference; without it the alternating chain can
 never start).  A pivot becomes usable only once its confirmation window has
 passed: pivot at bar ``k`` is used from row ``k+confirmation`` onward, with
-``age = row - (k+confirmation)``.  A future more-extreme same-side candidate
+``age = row - (k+confirmation)``.  ``max_pivot_age`` caps that usable age: once
+a pivot is older than the cap it stops contributing, and if no active pivot
+remains within the cap the level reading is NaN (R11 round-3 #14 — a stale
+pivot from months ago must not keep being forward-filled).  A future more-extreme same-side candidate
 *supplements* the ledger with a ``PivotSuperseded`` record — the already
 published pivot is never deleted from history, and the supersession only affects
 rows from the new pivot's confirmation row onward.  The *output* at row ``t``
 only ever consumes data up to row ``t`` — prefix-causal and PIT-safe.
 
 All operators are trailing-window per-column, deterministic, NaN-safe
-(all-NaN / degenerate window -> NaN), and reject invalid parameters.
+(all-NaN / degenerate window -> NaN), and reject invalid parameters.  R14 P2:
+each operator also applies a scale-coverage gate — a trailing window with fewer
+than ``min_periods`` finite observations or covering less than
+``min_coverage_fraction`` of the nominal window yields NaN (the level structure
+is not comparable).  ``ts_structural_level_strength`` exposes the proximity
+bandwidth as an explicit ``cutoff`` parameter (R14 P2 hidden-constant fix).
 """
 from __future__ import annotations
 
@@ -39,14 +47,59 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.common._pivot_ledger import confirmed_pivot_events
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
 
+# R11 round-3 #14: a confirmed pivot must not be forward-filled indefinitely.
+# A pivot is usable from its confirmation row (``pivot_at + confirmation``) with
+# ``age = t - (pivot_at + confirmation)``; once ``age > max_pivot_age`` it stops
+# contributing and, when no active pivot remains within the age cap, the level
+# reading becomes NaN (fail-closed) instead of broadcasting a stale six-month-old
+# level.  ``None`` means "no explicit cap" — the trailing ``window`` bound alone
+# applies (backward compatible).  This is a governance staleness knob, not a
+# search dimension.
+_MAX_PIVOT_AGE_SPEC = ParamSpec(
+    dtype=int,
+    min=1,
+    default=None,
+    param_role=ParamRole.POLICY,
+    searchable=False,
+)
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+
+def _active_pivots_within_age(
+    active: tuple, t: int, conf: int, max_pivot_age: int | None
+) -> tuple:
+    """Filter confirmed pivots to those still within the staleness cap.
+
+    ``max_pivot_age is None`` keeps the trailing-window behaviour unchanged
+    (the ``window`` bound alone applies).  Otherwise a pivot whose usable age
+    ``t - (pivot_at + confirmation)`` exceeds ``max_pivot_age`` is dropped —
+    an old pivot must not keep being broadcast when no newer pivot exists.
+    """
+    if max_pivot_age is None:
+        return active
+    return tuple(ev for ev in active if (t - ev.pivot_at - conf) <= max_pivot_age)
+
+
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    cost: int,
+    param_specs: dict[str, ParamSpec] | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="structural_levels",
@@ -59,6 +112,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:price_geometry",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        param_specs=param_specs or {},
     )
 
 
@@ -81,12 +135,53 @@ def _check_positive_float(value: Any, name: str) -> float:
     return fv
 
 
-def _density_series(price2d: np.ndarray, window: int, prominence: float, confirmation: int, bandwidth: float) -> np.ndarray:
+def _check_coverage_fraction(value: Any, name: str = "min_coverage_fraction") -> float:
+    fv = float(value)
+    if not np.isfinite(fv) or not (0.0 <= fv <= 1.0):
+        raise ValueError(f"{name} must be in [0, 1]")
+    return fv
+
+
+def _window_covered(
+    x: np.ndarray,
+    t: int,
+    window: int,
+    min_periods: int,
+    min_coverage_fraction: float,
+) -> bool:
+    """R14 P2 scale-coverage gate for structural levels.
+
+    A structural-level reading is only comparable when the trailing price window
+    that defines the neighbourhood contains enough finite observations
+    (``min_periods``) covering a minimum fraction of the nominal window
+    (``min_coverage_fraction``).  With few finite observations the level
+    structure is not a fair reading of the window — the output must be NaN.
+    """
+    lo = max(0, t - window + 1)
+    chunk = x[lo : t + 1]
+    eff = int(np.isfinite(chunk).sum())
+    if eff < int(min_periods):
+        return False
+    return eff / chunk.shape[0] >= float(min_coverage_fraction)
+
+
+def _density_series(
+    price2d: np.ndarray,
+    window: int,
+    prominence: float,
+    confirmation: int,
+    bandwidth: float,
+    min_periods: int,
+    min_coverage_fraction: float,
+    max_pivot_age: int | None = None,
+) -> np.ndarray:
     rows, cols = price2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     conf = int(confirmation)
     bw = float(bandwidth)
     w = int(window)
+    mp = int(min_periods)
+    mcf = float(min_coverage_fraction)
     for c in range(cols):
         x = price2d[:, c]
         ledger = confirmed_pivot_events(x, conf, float(prominence), positive_only=True)
@@ -94,8 +189,12 @@ def _density_series(price2d: np.ndarray, window: int, prominence: float, confirm
             xt = x[t]
             if not np.isfinite(xt) or xt <= 0.0:
                 continue
+            if not _window_covered(x, t, w, mp, mcf):
+                continue
             pt = float(xt)
-            active = ledger.active_at(t, window=w)
+            active = _active_pivots_within_age(
+                ledger.active_at(t, window=w), t, conf, max_pivot_age
+            )
             ds = [math.log(pt / ev.value) for ev in active if ev.value > 0.0]
             if not ds:
                 continue
@@ -108,12 +207,21 @@ def _density_series(price2d: np.ndarray, window: int, prominence: float, confirm
 
 
 def _nearest_distance_series(
-    price2d: np.ndarray, window: int, prominence: float, confirmation: int, direction: str
+    price2d: np.ndarray,
+    window: int,
+    prominence: float,
+    confirmation: int,
+    direction: str,
+    min_periods: int,
+    min_coverage_fraction: float,
+    max_pivot_age: int | None = None,
 ) -> np.ndarray:
     rows, cols = price2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     conf = int(confirmation)
     w = int(window)
+    mp = int(min_periods)
+    mcf = float(min_coverage_fraction)
     for c in range(cols):
         x = price2d[:, c]
         ledger = confirmed_pivot_events(x, conf, float(prominence), positive_only=True)
@@ -133,9 +241,13 @@ def _nearest_distance_series(
             xt = x[t]
             if not np.isfinite(xt) or xt <= 0.0 or not np.isfinite(scale[t]):
                 continue
+            if not _window_covered(x, t, w, mp, mcf):
+                continue
             pt = float(xt)
             best = np.inf
-            for ev in ledger.active_at(t, window=w):
+            for ev in _active_pivots_within_age(
+                ledger.active_at(t, window=w), t, conf, max_pivot_age
+            ):
                 p = ev.value
                 if p <= 0.0:
                     continue
@@ -157,13 +269,24 @@ def _nearest_distance_series(
 
 
 def _strength_series(
-    price2d: np.ndarray, window: int, prominence: float, confirmation: int, decay: float
+    price2d: np.ndarray,
+    window: int,
+    prominence: float,
+    confirmation: int,
+    decay: float,
+    cutoff: float,
+    min_periods: int,
+    min_coverage_fraction: float,
+    max_pivot_age: int | None = None,
 ) -> np.ndarray:
     rows, cols = price2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     conf = int(confirmation)
     w = int(window)
     dec = float(decay)
+    cut = float(cutoff)
+    mp = int(min_periods)
+    mcf = float(min_coverage_fraction)
     for c in range(cols):
         x = price2d[:, c]
         ledger = confirmed_pivot_events(x, conf, float(prominence), positive_only=True)
@@ -171,25 +294,28 @@ def _strength_series(
             xt = x[t]
             if not np.isfinite(xt) or xt <= 0.0:
                 continue
+            if not _window_covered(x, t, w, mp, mcf):
+                continue
             pt = float(xt)
-            active = ledger.active_at(t, window=w)
+            active = _active_pivots_within_age(
+                ledger.active_at(t, window=w), t, conf, max_pivot_age
+            )
             if not active:
                 continue
             total = 0.0
-            cutoff = 0.05
             for ev in active:
                 p = ev.value
                 if p <= 0.0:
                     continue
                 di = math.log(pt / p)
                 adi = abs(di)
-                if adi > cutoff:
+                if adi > cut:
                     continue
                 age = float(t - ev.pivot_at - conf)
                 # R4-19: proximity weight must PEAK on the level (distance 0)
                 # and decay with distance, not the reverse.  Old code used
                 # |log(P/L)| so being exactly on a level contributed 0.
-                total += math.exp(-dec * age) * (1.0 - adi / cutoff)
+                total += math.exp(-dec * age) * (1.0 - adi / cut)
             out[t, c] = total
     return out
 
@@ -214,9 +340,11 @@ class TsStructuralLevelDensity(SeriesOperator):
     metadata = _metadata(
         "ts_structural_level_density",
         "结构价位密度（exp(-0.5*(log-dist/bandwidth)^2) 时间归一和 /window，绝对密度）。",
-        ["price", "window", "prominence", "confirmation", "bandwidth"],
+        ["price", "window", "prominence", "confirmation", "bandwidth",
+         "min_periods", "min_coverage_fraction", "max_pivot_age"],
         unit="ratio",
         cost=5,
+        param_specs={"max_pivot_age": _MAX_PIVOT_AGE_SPEC},
     )
 
     def _calculate_series(
@@ -226,15 +354,21 @@ class TsStructuralLevelDensity(SeriesOperator):
         prominence: float = 0.02,
         confirmation: int = 3,
         bandwidth: float = 0.03,
+        min_periods: int = 20,
+        min_coverage_fraction: float = 0.5,
+        max_pivot_age: int | None = None,
         **_: Any,
     ) -> pd.DataFrame:
         w = _check_int(window, "window", 2)
         prom = _check_positive_float(prominence, "prominence")
         conf = _check_int(confirmation, "confirmation", 1)
         bw = _check_positive_float(bandwidth, "bandwidth")
+        mp = _check_int(min_periods, "min_periods", 1)
+        mcf = _check_coverage_fraction(min_coverage_fraction)
+        m_age = w if max_pivot_age is None else _check_int(max_pivot_age, "max_pivot_age", 1)
         return frame_like(
             price,
-            _density_series(price.to_numpy(dtype=float), w, prom, conf, bw),
+            _density_series(price.to_numpy(dtype=float), w, prom, conf, bw, mp, mcf, m_age),
         )
 
 
@@ -255,9 +389,11 @@ class TsNearestStructuralLevelDistance(SeriesOperator):
     metadata = _metadata(
         "ts_nearest_structural_level_distance",
         "最近结构价位距离（按对数收益波动归一），支持上方/下方方向过滤。",
-        ["price", "window", "prominence", "confirmation", "direction"],
+        ["price", "window", "prominence", "confirmation", "direction",
+         "min_periods", "min_coverage_fraction", "max_pivot_age"],
         unit="ratio",
         cost=5,
+        param_specs={"max_pivot_age": _MAX_PIVOT_AGE_SPEC},
     )
 
     def _calculate_series(
@@ -267,6 +403,9 @@ class TsNearestStructuralLevelDistance(SeriesOperator):
         prominence: float = 0.02,
         confirmation: int = 3,
         direction: str = "any",
+        min_periods: int = 20,
+        min_coverage_fraction: float = 0.5,
+        max_pivot_age: int | None = None,
         **_: Any,
     ) -> pd.DataFrame:
         w = _check_int(window, "window", 2)
@@ -274,9 +413,14 @@ class TsNearestStructuralLevelDistance(SeriesOperator):
         conf = _check_int(confirmation, "confirmation", 1)
         if direction not in ("any", "above", "below"):
             raise ValueError("direction must be 'any', 'above' or 'below'")
+        mp = _check_int(min_periods, "min_periods", 1)
+        mcf = _check_coverage_fraction(min_coverage_fraction)
+        m_age = w if max_pivot_age is None else _check_int(max_pivot_age, "max_pivot_age", 1)
         return frame_like(
             price,
-            _nearest_distance_series(price.to_numpy(dtype=float), w, prom, conf, direction),
+            _nearest_distance_series(
+                price.to_numpy(dtype=float), w, prom, conf, direction, mp, mcf, m_age
+            ),
         )
 
 
@@ -288,18 +432,27 @@ class TsNearestStructuralLevelDistance(SeriesOperator):
     source="structural_levels",
 )
 class TsStructuralLevelStrength(SeriesOperator):
-    """近旁结构价位的按年龄衰减反应强度（距离核 (1-|log-dist|/0.05)+ 的加权和）。
+    """近旁结构价位的按年龄衰减反应强度（距离核 (1-|log-dist|/cutoff)+ 的加权和）。
 
-    权重在价位上（距离 0）最大，随距离线性衰减到 cutoff（R4-19）。高 → 现价贴近
-    多个较新确认价位（潜在反应区）。P1。
+    权重在价位上（距离 0）最大，随距离线性衰减到 cutoff（R4-19）。cutoff 是
+    "什么算近旁价位"的经济阈值（对数距离带宽），已作为显式参数暴露在契约中。
+    高 → 现价贴近多个较新确认价位（潜在反应区）。P1。
     """
 
     metadata = _metadata(
         "ts_structural_level_strength",
-        "近旁结构价位加权反应：Σ exp(-decay*age)*(1-|log-dist|/0.05)，距离越近权重越大。",
-        ["price", "window", "prominence", "confirmation", "decay"],
+        "近旁结构价位加权反应：Σ exp(-decay*age)*(1-|log-dist|/cutoff)，距离越近权重越大。",
+        ["price", "window", "prominence", "confirmation", "decay", "cutoff",
+         "min_periods", "min_coverage_fraction", "max_pivot_age"],
         unit="strength",
         cost=5,
+        # ``cutoff`` is a float proximity bandwidth (log-distance).  Declaring
+        # the ParamSpec overrides the legacy name whitelist that would otherwise
+        # force ``cutoff`` to an integer (R14 P2 hidden-constant fix).
+        param_specs={
+            "cutoff": ParamSpec(dtype=float, min=0.0),
+            "max_pivot_age": _MAX_PIVOT_AGE_SPEC,
+        },
     )
 
     def _calculate_series(
@@ -309,6 +462,10 @@ class TsStructuralLevelStrength(SeriesOperator):
         prominence: float = 0.02,
         confirmation: int = 3,
         decay: float = 0.05,
+        cutoff: float = 0.05,
+        min_periods: int = 20,
+        min_coverage_fraction: float = 0.5,
+        max_pivot_age: int | None = None,
         **_: Any,
     ) -> pd.DataFrame:
         w = _check_int(window, "window", 2)
@@ -317,9 +474,13 @@ class TsStructuralLevelStrength(SeriesOperator):
         dec = float(decay)
         if not np.isfinite(dec) or dec < 0.0:
             raise ValueError("decay must be a finite non-negative number")
+        cut = _check_positive_float(cutoff, "cutoff")
+        mp = _check_int(min_periods, "min_periods", 1)
+        mcf = _check_coverage_fraction(min_coverage_fraction)
+        m_age = w if max_pivot_age is None else _check_int(max_pivot_age, "max_pivot_age", 1)
         return frame_like(
             price,
-            _strength_series(price.to_numpy(dtype=float), w, prom, conf, dec),
+            _strength_series(price.to_numpy(dtype=float), w, prom, conf, dec, cut, mp, mcf, m_age),
         )
 
 

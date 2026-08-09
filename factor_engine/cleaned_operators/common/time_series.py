@@ -94,21 +94,37 @@ class WMA(SeriesOperator):
 
 
 
+_AGGR_TOP_N_FUNCS = frozenset({"sum", "avg", "mean", "max", "min", "std", "count"})
+
+
 # canonical=aggr_top_n backend=pandas_numpy selected=aggr_top_n source=time_series/topn_ops.py
-@register_operator(name="aggr_top_n", category="time_series", business_category="time_series", canonical="aggr_top_n", source="factor_dsl_np")
+@register_operator(name="aggr_top_n", category="cross_sectional", business_category="cross_sectional_routing", canonical="aggr_top_n", source="factor_dsl_np")
 class AggrTopN(SeriesOperator):
-    """自定义 Top-N 截面聚合算子（按排序列选取前 N 标的聚合）。"""
+    """自定义 Top-N **跨截面路由**聚合（按排序列选取前 N 标的聚合）。
+
+    Routing 状态：**全局 per-day**——每个交易日把当日全截面（所有标的）按
+    ``sort_col`` 排序取前 ``top`` 名，再对选中标的的 ``x`` 做 ``aggr_func``
+    聚合，并把聚合结果广播回被选中的位置（未选中的标的位置为 NaN）。不是
+    逐标的时序窗口，也不是按组路由。支持 ``aggr_func``：
+    ``sum`` / ``avg`` / ``mean`` / ``max`` / ``min`` / ``std`` / ``count``。
+    未知 ``aggr_func`` 直接抛 ``ValueError``（绝不静默回退到 ``sum``）。"""
 
     metadata = OperatorMetadata(
-        name="aggr_top_n", category="time_series",
-        description="自定义Top-N聚合",
+        name="aggr_top_n", category="cross_sectional",
+        description="自定义Top-N跨截面路由聚合（按 sort_col 取前 N 标的聚合，结果广播回选中位置）",
         examples=["aggr_top_n('sum', close, volume, 10, True)"],
         param_names=["aggr_func", "x", "sort_col", "top", "asc"], return_type="series",
-        tags=["time_series", "top_n", "aggregate"]
+        tags=["cross_sectional", "routing", "top_n", "aggregate"]
     )
     def _calculate_series(self, aggr_func: str = "sum", x: pd.DataFrame = None,
                           sort_col: pd.DataFrame = None, top: int = 10,
                           asc: bool = True, **kwargs) -> pd.DataFrame:
+        aggr = str(aggr_func).lower()
+        if aggr not in _AGGR_TOP_N_FUNCS:
+            raise ValueError(
+                f"aggr_top_n: unsupported aggr_func={aggr_func!r}; supported "
+                f"{sorted(_AGGR_TOP_N_FUNCS)}"
+            )
         if x is None:
             return pd.DataFrame()
         if sort_col is None:
@@ -124,20 +140,18 @@ class AggrTopN(SeriesOperator):
             valid_sort = row_sort[valid_mask]
             sorted_cols = valid_sort.sort_values(ascending=asc).index[:top]
             selected = valid_x[sorted_cols]
-            if aggr_func == "sum":
+            if aggr == "sum":
                 result.loc[idx, sorted_cols] = selected.sum()
-            elif aggr_func == "avg" or aggr_func == "mean":
+            elif aggr == "avg" or aggr == "mean":
                 result.loc[idx, sorted_cols] = selected.mean()
-            elif aggr_func == "max":
+            elif aggr == "max":
                 result.loc[idx, sorted_cols] = selected.max()
-            elif aggr_func == "min":
+            elif aggr == "min":
                 result.loc[idx, sorted_cols] = selected.min()
-            elif aggr_func == "std":
+            elif aggr == "std":
                 result.loc[idx, sorted_cols] = selected.std()
-            elif aggr_func == "count":
+            else:  # "count"
                 result.loc[idx, sorted_cols] = selected.count()
-            else:
-                result.loc[idx, sorted_cols] = selected.sum()
         return result
 
 
@@ -218,46 +232,56 @@ class EMA(SeriesOperator):
 # canonical=ts_argmax backend=pandas_numpy selected=ts_argmax source=time_series/m_ops.py
 @register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="factor_dsl_np")
 class TSArgmax(SeriesOperator):
-    """滚动窗口内最大值位置（0=窗口内最新 bar）。"""
+    """滚动窗口内最大值位置（0=窗口内最新 bar）。
+
+    唯一 canonical 参数为 ``window``；``d`` 是解析层别名（``param_aliases``），
+    映射到 ``window``，不再存在隐藏参数。"""
 
     metadata = OperatorMetadata(
         name="ts_argmax",
         category="time_series",
         description="返回窗口内最大值的位置",
         examples=["ts_argmax(close, 20)"],
-        param_names=["x", "d"],
+        param_names=["x", "window"],
         return_type="series",
-        tags=["time_series", "argmax"]
+        tags=["time_series", "argmax"],
+        param_aliases={"d": "window"},
     )
 
-    def _calculate_series(self, x: pd.DataFrame, d: int = 20, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         from cleaned_operators._rolling_fast import rolling_argmax
 
-        window = int(kwargs.get("window", d))
-        return rolling_argmax(x, window)
+        # ``d`` is a declared parser-level alias for ``window`` (param_aliases);
+        # the central gate passes the alias kwarg through under its own key, so
+        # the kernel maps it here.
+        return rolling_argmax(x, int(kwargs.get("d", window)))
 
 
 
 # canonical=ts_argmin backend=pandas_numpy selected=ts_argmin source=time_series/m_ops.py
 @register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="factor_dsl_np")
 class TSArgmin(SeriesOperator):
-    """滚动窗口内最小值位置（0=窗口内最新 bar）。"""
+    """滚动窗口内最小值位置（0=窗口内最新 bar）。
+
+    唯一 canonical 参数为 ``window``；``d`` 是解析层别名（``param_aliases``），
+    映射到 ``window``，不再存在隐藏参数。"""
 
     metadata = OperatorMetadata(
         name="ts_argmin",
         category="time_series",
         description="返回窗口内最小值的位置",
         examples=["ts_argmin(close, 20)"],
-        param_names=["x", "d"],
+        param_names=["x", "window"],
         return_type="series",
-        tags=["time_series", "argmin"]
+        tags=["time_series", "argmin"],
+        param_aliases={"d": "window"},
     )
 
-    def _calculate_series(self, x: pd.DataFrame, d: int = 20, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         from cleaned_operators._rolling_fast import rolling_argmin
 
-        window = int(kwargs.get("window", d))
-        return rolling_argmin(x, window)
+        # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
+        return rolling_argmin(x, int(kwargs.get("d", window)))
 
 
 

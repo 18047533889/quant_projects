@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import (
     aligned_pairs,
     check_window,
@@ -111,6 +111,31 @@ def _binned_medians(yv: np.ndarray, xv: np.ndarray, bins: int) -> tuple[np.ndarr
     return medians, counts
 
 
+def _binned_empirical_medians(yv: np.ndarray, xv: np.ndarray, bins: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per-bin y-medians, EMPIRICAL percentile centres of x, and counts.
+
+    Quantile cuts can produce duplicate edges / empty or huge groups when ``x``
+    is heavily tied (A-share zero returns, limit-up prices, integer metrics).
+    Each group's x-coordinate is therefore the median of the AVERAGE-RANK
+    percentiles of the samples actually in that bin (``rank / N``), never the
+    nominal ``(i + 0.5) / bins`` grid (P1-18) — a bin whose members sit far
+    from its nominal centre would otherwise corrupt the curvature fit.
+    """
+    b = _quantile_groups(xv, bins)
+    ranks = _rankdata(xv)          # 1-based average ranks; ties share the mean
+    pct = ranks / xv.size          # empirical percentile within the window
+    medians = np.full(bins, np.nan, dtype=float)
+    centers = np.full(bins, np.nan, dtype=float)
+    counts = np.zeros(bins, dtype=float)
+    for g in range(bins):
+        sel = b == g
+        if sel.sum() > 0:
+            counts[g] = float(sel.sum())
+            medians[g] = float(np.median(yv[sel]))
+            centers[g] = float(np.median(pct[sel]))
+    return medians, centers, counts
+
+
 def _monotonicity_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int, min_per_bin: int = 3) -> np.ndarray:
     rows, cols = y2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -144,12 +169,22 @@ def _curvature_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int, 
             # R4-47: same per-bin sample floor as monotonicity.
             if yv.size < b * mpb:
                 continue
-            medians, counts = _binned_medians(yv, xv, b)
+            medians, centers, counts = _binned_empirical_medians(yv, xv, b)
             usable = counts >= mpb
             if int(usable.sum()) < 3:
                 continue
-            q = (np.arange(b) + 0.5) / b
-            qq, mm = q[usable], medians[usable]
+            # P1-18: fit curvature against the groups' EMPIRICAL percentile
+            # centres (where the samples actually are), not nominal quantile
+            # centres that are wrong under heavy ties.
+            qq, mm = centers[usable], medians[usable]
+            # Master-Audit item: a quadratic fit through 3 points is EXACT
+            # interpolation (3 parameters, zero residual DOF) — require >= 4
+            # distinct empirical centres so the curvature has residual support.
+            # Heavy ties can collapse several usable groups onto the SAME
+            # empirical percentile — a quadratic through duplicated x is
+            # degenerate; fail closed.
+            if not np.all(np.isfinite(qq)) or np.unique(qq).size < 4:
+                continue
             X = np.column_stack([np.ones_like(qq), qq, qq ** 2])
             coeff, *_ = np.linalg.lstsq(X, mm, rcond=None)
             sd = float(np.std(mm))
@@ -168,6 +203,26 @@ def _ols_beta(xv: np.ndarray, yv: np.ndarray) -> float:
     return float(np.dot(xv - xm, yv - ym) / sxx)
 
 
+def _balanced_quantile_split(xv: np.ndarray, qq: float) -> tuple[np.ndarray, np.ndarray]:
+    """Tie-balanced lo/hi split at rank percentile ``qq``.
+
+    A raw value threshold ``xv <= thr`` pushes EVERY tie at the threshold into
+    the low cohort (P1-19): with many repeated values (e.g. A-share zero
+    returns) the low/high cohorts become severely imbalanced and the slope
+    asymmetry turns into a cohort-size artifact.  Splitting by RANK POSITION
+    instead — boundary ties distributed by their stable-sort rank order — keeps
+    the two cohorts at balanced size ``round(qq·N)`` / ``N - round(qq·N)`` and
+    crosses the split at the intended quantile.  Returns (lo, hi) boolean masks.
+    """
+    n = xv.size
+    order = np.argsort(xv, kind="stable")
+    k = int(np.floor(qq * n + 0.5))          # round-half-up rank position
+    k = int(np.clip(k, 1, n - 1))
+    lo = np.zeros(n, dtype=bool)
+    lo[order[:k]] = True
+    return lo, ~lo
+
+
 def _slope_asymmetry_series(y2d: np.ndarray, x2d: np.ndarray, window: int, split_quantile: float) -> np.ndarray:
     rows, cols = y2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -179,9 +234,10 @@ def _slope_asymmetry_series(y2d: np.ndarray, x2d: np.ndarray, window: int, split
             yv, xv = aligned_pairs(y2d[i0 : r + 1, c], x2d[i0 : r + 1, c])
             if yv.size < 4:
                 continue
-            thr = float(np.quantile(xv, qq))
-            lo = xv <= thr
-            hi = ~lo
+            # P1-19: rank-percentile split with boundary ties distributed by
+            # rank — a raw ``xv <= thr`` would dump every threshold tie into the
+            # low side and turn asymmetry into a cohort-size artifact.
+            lo, hi = _balanced_quantile_split(xv, qq)
             if lo.sum() < 2 or hi.sum() < 2:
                 continue
             bL = _ols_beta(xv[lo], yv[lo])
@@ -231,8 +287,8 @@ class TsBinnedResponseMonotonicity(SeriesOperator):
         # changes economic scale, plug-in bias and finite-sample variance together.
         # Only a small verified grid {3, 5} is allowed.
         param_specs={
-            "bins": ParamSpec(dtype=int, min=3, choices=(3, 5)),
-            "min_per_bin": ParamSpec(dtype=int, min=3),
+            "bins": ParamSpec(dtype=int, min=3, choices=(3, 5), param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_per_bin": ParamSpec(dtype=int, min=3, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
@@ -271,9 +327,11 @@ class TsBinnedResponseCurvature(SeriesOperator):
         unit="ratio",
         cost=4,
         # R4-93: bins is a small verified estimator-resolution grid, not searchable.
+        # Master-Audit item (P1): a quadratic fit has 3 parameters, so 3 bins is
+        # EXACT interpolation (zero residual DOF) — the grid must start at 4.
         param_specs={
-            "bins": ParamSpec(dtype=int, min=3, choices=(3, 5)),
-            "min_per_bin": ParamSpec(dtype=int, min=3),
+            "bins": ParamSpec(dtype=int, min=4, choices=(4, 5), param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_per_bin": ParamSpec(dtype=int, min=3, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
@@ -282,8 +340,8 @@ class TsBinnedResponseCurvature(SeriesOperator):
     ) -> pd.DataFrame:
         w = check_window(window)
         b = int(bins)
-        if b < 3:
-            raise ValueError("bins must be >= 3 for a quadratic fit")
+        if b < 4:
+            raise ValueError("bins must be >= 4 for a non-degenerate quadratic fit (>= 4 empirical points)")
         mpb = int(min_per_bin)
         if mpb < 3:
             raise ValueError("min_per_bin must be >= 3")

@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.stateful._common import assert_condition_bool
 
 
 def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str) -> OperatorMetadata:
@@ -86,6 +87,7 @@ class TsTransitionCount(SeriesOperator):
     )
 
     def _calculate_series(self, condition: pd.DataFrame, window: int = 20, missing_policy: str = "break", **_: Any) -> pd.DataFrame:
+        assert_condition_bool(condition, name="condition")
         w = int(window)
         cv = condition.to_numpy()
         valid = np.isfinite(cv)
@@ -155,6 +157,7 @@ class TsTimeSinceChange(SeriesOperator):
         initial_semantics: str = "since_transition",
         **_: Any,
     ) -> pd.DataFrame:
+        assert_condition_bool(condition, name="condition")
         limit = None if max_lookback is None else int(max_lookback)
         cv = condition.to_numpy()
         valid = np.isfinite(cv)
@@ -230,6 +233,7 @@ class TsEventSpacingMean(SeriesOperator):
     )
 
     def _calculate_series(self, condition: pd.DataFrame, window: int = 60, min_events: int = 2, **_: Any) -> pd.DataFrame:
+        assert_condition_bool(condition, name="condition")
         w = int(window)
         min_e = max(2, int(min_events))
         cv = condition.to_numpy()
@@ -276,6 +280,7 @@ class TsEventSpacingCv(SeriesOperator):
     )
 
     def _calculate_series(self, condition: pd.DataFrame, window: int = 60, min_events: int = 3, **_: Any) -> pd.DataFrame:
+        assert_condition_bool(condition, name="condition")
         w = int(window)
         min_e = max(3, int(min_events))
         cv = condition.to_numpy()
@@ -342,6 +347,11 @@ class EventDecayAsOf(SeriesOperator):
         kind = str(event_kind).lower()
         if kind not in {"bool", "marked"}:
             raise ValueError("event_kind must be 'bool' or 'marked'")
+        if kind == "bool":
+            # #148: an EventBool input is a ConditionBool — a finite value outside
+            # {0, 1} is neither "no event" nor "one event" and must not be read as
+            # a truthy count (fail closed).  MarkedEvent keeps its magnitude.
+            assert_condition_bool(event, name="event")
         weight = 0.5 ** (1.0 / hl)
         arr = event.to_numpy(dtype=float)
         out = np.full(arr.shape, np.nan)

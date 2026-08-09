@@ -47,10 +47,10 @@ def test_s2_experimental_registered_ops_not_promoted():
     # variants.  The certification INVARIANT that holds regardless of surface is:
     # a fail-closed op is never production-certified and never PIT-safe.  The
     # residual status=production / pit_safe=False surface contradiction for
-    # ts_huber_regression_resid / ts_expectile_regression_resid is a
+    # ts_huber_regression_in_sample_resid / ts_expectile_regression_resid is a
     # concurrent-owner item for the P0-04 gate to resolve.
     for name in ("ts_garch_vol_surprise", "ts_ar_forecast",
-                 "ts_huber_regression_resid", "ts_expectile_regression_resid"):
+                 "ts_huber_regression_in_sample_resid", "ts_expectile_regression_resid"):
         assert should_fail_closed(name), name
         catalog = OperatorRegistry._catalog.get(name, {})
         assert catalog.get("production_certified") is not True, name

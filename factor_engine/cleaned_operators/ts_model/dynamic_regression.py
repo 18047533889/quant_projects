@@ -1,9 +1,21 @@
 # -*- coding: utf-8 -*-
 """Rolling multi-variable / robust / quantile regression operators (P0).
 
-Daily panels in, daily panels out.  Each kernel is a causal rolling regression
-per (instrument, date): the current row's statistic uses only the window ending
-at that row.  All fits degrade to NaN rather than fabricate values.
+Daily panels in, daily panels out.  Each kernel is a rolling regression per
+(instrument, date).  Timing is controlled by ``fit_lag``:
+
+* ``fit_lag=0`` (the legacy ``*_coeff`` / ``*_resid`` family) trains each window
+  on the rows *including* the current row and reports the in-sample coefficient
+  / residual.  This is a descriptive self-fit (no future data is used), NOT a
+  causal "current slot" — the current observation is a member of the training
+  set.  These operators are stamped ``diagnostic_only`` / in-sample and hidden
+  from default mining; the causal counterparts below are the advertised
+  replacement.
+* ``fit_lag>=1`` (the ``*_prior`` / ``*_forecast_error`` family) trains strictly
+  on rows before the current one (``<= t-1``) and reports the out-of-sample
+  coefficient / forecast error at the current row — a genuinely causal slot.
+
+All fits degrade to NaN rather than fabricate values.
 """
 from __future__ import annotations
 
@@ -253,32 +265,32 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
 
 
 _register_multi(
-    "ts_multi_regression_coeff", "多变量滚动回归指定系数。",
-    ols_fit, None, "coeff", "level",
+    "ts_multi_regression_coeff", "多变量滚动回归指定系数（in-sample，训练窗口含当前观测；因果 t-1 版本用 ts_multi_regression_coeff_prior）。",
+    ols_fit, None, "coeff", "level", diagnostic_only=True,
 )
 _register_multi(
-    "ts_multi_regression_resid", "多变量滚动回归当前残差。",
+    "ts_multi_regression_resid", "多变量滚动回归当前残差（in-sample，训练窗口含当前观测）。",
     ols_fit, None, "resid", "level", diagnostic_only=True,
 )
 _register_multi(
-    "ts_multi_regression_resid_z", "多变量滚动回归标准化残差。",
+    "ts_multi_regression_resid_z", "多变量滚动回归标准化残差（in-sample）。",
     ols_fit, None, "resid_z", "level", diagnostic_only=True,
 )
 _register_multi(
-    "ts_multi_regression_r2", "多变量滚动回归 R²。",
+    "ts_multi_regression_r2", "多变量滚动回归 R²（in-sample）。",
     ols_fit, None, "r2", "r2", diagnostic_only=True,
 )
 _register_multi(
-    "ts_huber_regression_coeff", "Huber 稳健回归斜率。",
-    huber_fit, None, "coeff", "level",
+    "ts_huber_regression_coeff", "Huber 稳健回归斜率（in-sample，训练窗口含当前观测；因果 t-1 版本用 ts_huber_regression_coeff_prior）。",
+    huber_fit, None, "coeff", "level", diagnostic_only=True,
 )
 _register_multi(
-    "ts_huber_regression_resid_z", "Huber 稳健回归标准化残差。",
+    "ts_huber_regression_resid_z", "Huber 稳健回归标准化残差（in-sample）。",
     huber_fit, None, "resid_z", "level", diagnostic_only=True,
 )
 _register_multi(
-    "ts_ridge_regression_coeff", "岭回归系数。",
-    ridge_fit, 0.1, "coeff", "level",
+    "ts_ridge_regression_coeff", "岭回归系数（in-sample，训练窗口含当前观测；因果 t-1 版本用 ts_ridge_regression_coeff_prior）。",
+    ridge_fit, 0.1, "coeff", "level", diagnostic_only=True,
 )
 _register_multi(
     "ts_ridge_regression_resid_z", "岭回归标准化残差。",
@@ -397,8 +409,8 @@ def _expectile_op(name: str, description: str, stat: str, *, fit_lag: int = 0, d
     return _ExpectileOp
 
 
-_expectile_op("ts_expectile_regression_coeff", "expectile 回归斜率（IRLS 非对称加权最小二乘）。", "coeff")
-_expectile_op("ts_expectile_regression_resid", "expectile 回归当前残差。", "resid", diagnostic_only=True)
+_expectile_op("ts_expectile_regression_coeff", "expectile 回归斜率（IRLS 非对称加权最小二乘；in-sample，训练窗口含当前观测，因果 t-1 版本用 ts_expectile_regression_coeff_prior）。", "coeff", diagnostic_only=True)
+_expectile_op("ts_expectile_regression_resid", "expectile 回归当前残差（in-sample）。", "resid", diagnostic_only=True)
 _expectile_op("ts_expectile_regression_coeff_prior", "expectile 回归斜率（截至 t-1 训练）。", "coeff", fit_lag=1)
 _expectile_op("ts_expectile_regression_forecast_error", "expectile 回归预测误差（截至 t-1 训练）。", "resid", fit_lag=1)
 
@@ -443,10 +455,47 @@ class TsExpectileBetaSpread(SeriesOperator):
     status="experimental",
 )
 class TsQuantileRegressionCoeff(SeriesOperator):
-    """条件分位数回归斜率（pinball-loss LP，Koenker–Bassett）。"""
+    """条件分位数回归斜率（pinball-loss LP，Koenker–Bassett）。
+
+    In-sample: the training window includes the current observation.  The causal
+    t-1 slot is ``ts_quantile_regression_coeff_prior``.
+    """
 
     metadata = metadata(
-        "ts_quantile_regression_coeff", "分位数回归斜率（pinball LP）。",
+        "ts_quantile_regression_coeff", "分位数回归斜率（pinball LP；in-sample，训练窗口含当前观测，因果 t-1 版本用 ts_quantile_regression_coeff_prior）。",
+        ["y", "x", "window", "q", "min_periods"], unit="level",
+        input_units={"y": "target", "x": "predictor"},
+        output_unit="unit(y)/unit(x) (intercept: unit(y))",
+        diagnostic_only=True,
+    )
+
+    def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
+        quantile = float(q)
+        if not (0.0 < quantile < 1.0):
+            raise ValueError("q must be in (0, 1)")
+        return _single_regression(y, x, int(window), int(min_periods), True,
+                                  pinball_quantile_fit, quantile, "coeff", quantile, 1)
+
+
+@register_operator(
+    name="ts_quantile_regression_coeff_prior",
+    category="time_series_regression",
+    business_category="time_series_regression",
+    canonical="ts_quantile_regression_coeff_prior",
+    source="ts_model.dynamic_regression",
+    backend="pandas_numpy",
+    status="experimental",
+)
+class TsQuantileRegressionCoeffPrior(SeriesOperator):
+    """条件分位数回归斜率，截至 t-1 训练（pinball-loss LP，因果槽位）。
+
+    Each window trains strictly on rows before the current one and reports the
+    coefficient at the current row, so the output is the causal out-of-sample
+    beta — the in-sample variant is ``ts_quantile_regression_coeff``.
+    """
+
+    metadata = metadata(
+        "ts_quantile_regression_coeff_prior", "分位数回归斜率（pinball LP，截至 t-1 训练）。",
         ["y", "x", "window", "q", "min_periods"], unit="level",
         input_units={"y": "target", "x": "predictor"},
         output_unit="unit(y)/unit(x) (intercept: unit(y))",
@@ -457,7 +506,8 @@ class TsQuantileRegressionCoeff(SeriesOperator):
         if not (0.0 < quantile < 1.0):
             raise ValueError("q must be in (0, 1)")
         return _single_regression(y, x, int(window), int(min_periods), True,
-                                  pinball_quantile_fit, quantile, "coeff", quantile, 1)
+                                  pinball_quantile_fit, quantile, "coeff", quantile, 1,
+                                  fit_lag=1)
 
 
 @register_operator(
@@ -529,6 +579,7 @@ _CANONICALS.extend(
         "ts_ridge_regression_coeff",
         "ts_ridge_regression_resid_z",
         "ts_quantile_regression_coeff",
+        "ts_quantile_regression_coeff_prior",
         "ts_quantile_regression_resid",
         "ts_quantile_beta_spread",
         "ts_multi_regression_coeff_prior",

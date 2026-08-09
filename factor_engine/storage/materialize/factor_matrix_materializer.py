@@ -312,12 +312,20 @@ class FactorMatrixMaterializer:
         os.replace(str(tmp), str(path))
 
     @staticmethod
-    def _read_existing_or_quarantine(parquet_path: Path) -> pd.DataFrame:
-        """P0-22: 旧分区读失败 → 移动 quarantine + 抛 ``FactorMatrixReadError``。
+    def _read_existing_or_quarantine(
+        parquet_path: Path, *, immutable: bool = False
+    ) -> pd.DataFrame:
+        """P0-22: 旧分区读失败 → 隔离 quarantine + 抛 ``FactorMatrixReadError``。
 
         绝不把损坏 / IO 抖动 / 权限问题当作空分区继续覆盖——那会把一整月历史
         在增量运行时无声丢掉。原文件先移入 ``<part_dir>/.quarantine/<ts>-data.parquet``
         再 hard fail，数据保留待人工恢复。
+
+        R14 #2：``immutable=True`` 时读的是**已发布 generation** 里的文件——该代
+        由 ``manifest.generation`` 引用，在途 reader 可能正在读它。此时**只复制**
+        到 quarantine 留证、绝不 ``os.replace`` 原文件（把 active generation 文件
+        移走会让在途 reader 读到半套、且新 generation 构造失败后 manifest 仍指向
+        这个残缺旧代），直接把该 generation 判 corrupt + hard fail。
         """
         try:
             return pd.read_parquet(parquet_path)
@@ -327,12 +335,17 @@ class FactorMatrixMaterializer:
             ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
             qpath = qdir / f"{ts}-{uuid.uuid4().hex[:8]}-data.parquet"
             try:
-                os.replace(str(parquet_path), str(qpath))
+                if immutable:
+                    # 已发布 generation immutable：留证副本，不动原文件。
+                    shutil.copy2(str(parquet_path), str(qpath))
+                else:
+                    os.replace(str(parquet_path), str(qpath))
             except Exception:
                 qpath = parquet_path
+            tag = "（已发布 generation，immutable：仅留证副本，原文件未移动）" if immutable else ""
             raise FactorMatrixReadError(
-                f"factor_matrix 分区读取失败 {parquet_path}，已隔离至 quarantine="
-                f"{qpath}，拒绝继续 publish（历史可能丢失）: "
+                f"factor_matrix 分区读取失败 {parquet_path}{tag}，已隔离至 "
+                f"quarantine={qpath}，拒绝继续 publish（历史可能丢失）: "
                 f"{type(exc).__name__}: {exc}"
             ) from exc
 
@@ -604,8 +617,15 @@ class FactorMatrixMaterializer:
             manifest = _read_manifest(base)
             old_gid = (manifest or {}).get("generation")
             old_gen_dir = base / "generation" / old_gid if old_gid else None
-            if old_gen_dir is not None and not old_gen_dir.is_dir():
-                old_gen_dir = None
+            # R14 #2 fail-closed：manifest 声明了 generation 但目录缺失 = 当前发布代
+            # 损坏。绝不能静默当「无旧代」从零重建——read-merge-write 会丢掉全部未触达
+            # 分区的历史。
+            if old_gid and old_gen_dir is not None and not old_gen_dir.is_dir():
+                raise FactorMatrixCorruptionError(
+                    f"manifest.generation={old_gid!r} 指向的目录缺失（{old_gen_dir}），"
+                    f"当前发布代损坏。拒绝增量 publish（会静默丢历史），请人工恢复该代"
+                    f"或清除 manifest 后全量重建。"
+                )
 
             new_gid = uuid.uuid4().hex
             new_gen_dir = base / "generation" / new_gid
@@ -629,7 +649,11 @@ class FactorMatrixMaterializer:
                     new_path.parent.mkdir(parents=True, exist_ok=True)
                     old_path = old_gen_dir / rel if old_gen_dir is not None else None
                     if old_path is not None and old_path.exists():
-                        existing = self._read_existing_or_quarantine(old_path)
+                        # R14 #2：读已发布 generation 文件 → immutable，损坏只留证
+                        # 副本并 hard fail，不移动被 manifest 引用的原文件。
+                        existing = self._read_existing_or_quarantine(
+                            old_path, immutable=True
+                        )
                         merged_out = _merge_matrix_frames(
                             existing, out_df, value_dtype=value_dtype
                         )
@@ -759,12 +783,28 @@ class FactorMatrixMaterializer:
                     continue
                 if pq.name.startswith("."):
                     continue
-                frames.append(pd.read_parquet(pq))
+                try:
+                    frames.append(pd.read_parquet(pq))
+                except Exception as exc:
+                    # R14 #2：当前 generation 内文件损坏 = 发布代损坏，fail loud（
+                    # 绝不当作空分区静默跳过——那会把一整月历史在读取侧无声丢掉）。
+                    raise FactorMatrixReadError(
+                        f"factor_matrix 分区读取失败 {pq}（当前 generation 损坏，"
+                        f"拒绝继续）: {type(exc).__name__}: {exc}"
+                    ) from exc
             return frames
 
         manifest = _read_manifest(base)
         gen_id = (manifest or {}).get("generation")
         gen_dir = base / "generation" / gen_id if gen_id else None
+        if gen_id and (gen_dir is None or not gen_dir.is_dir()):
+            # R14 #2 fail-closed：manifest 声明了 generation 但目录缺失 = 当前发布代
+            # 损坏。绝不 legacy fallback——那会 glob 到 previous generation / 孤儿
+            # generation / legacy 数据，把损坏掩盖成「可读」。
+            raise FactorMatrixCorruptionError(
+                f"manifest.generation={gen_id!r} 指向的目录缺失（{gen_dir}），当前"
+                f"发布代损坏。拒绝读取——修复该代或清除 manifest 后全量重建。"
+            )
         if gen_dir is not None and gen_dir.is_dir():
             frames = _frames_from(gen_dir)
         else:

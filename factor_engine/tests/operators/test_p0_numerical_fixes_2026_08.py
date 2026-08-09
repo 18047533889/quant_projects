@@ -84,11 +84,18 @@ def test_diagram_w1_no_illegal_zero_edges() -> None:
     from cleaned_operators.advanced_topology import _diagram_w1
 
     # A=[(1,3)], B=[(1,3),(10,20)]. True W1: A matches B1 at cost 0, B2 matches
-    # the diagonal at (20-10)/2=5 -> total 5, /max(1,2) = 2.5.  The old
+    # the diagonal at (20-10)/2=5 -> total 5.0 (TOTAL assignment cost, not the
+    # old /max(m1,m2)=2.5 mean; R6-120 removed that division).  The old
     # construction resolved B1->B2-diagonal (0) + B2->A-diagonal (0) at cost 0.
-    assert _diagram_w1([(1.0, 3.0)], [(1.0, 3.0), (10.0, 20.0)]) == pytest.approx(2.5)
+    assert _diagram_w1([(1.0, 3.0)], [(1.0, 3.0), (10.0, 20.0)]) == pytest.approx(5.0)
     # identical diagrams -> exactly 0
     assert _diagram_w1([(1.0, 2.0)], [(1.0, 2.0)]) == pytest.approx(0.0)
+    # empty-vs-nonempty is the SUM of the non-empty diagram's diagonal distances
+    # (diag costs 1.0 + 5.0 = 6.0), symmetric, and identical to the general-case
+    # total scale — never a mean (would depend on diagram size and break the metric).
+    assert _diagram_w1([], [(1.0, 3.0), (10.0, 20.0)]) == pytest.approx(6.0)
+    assert _diagram_w1([(1.0, 3.0), (10.0, 20.0)], []) == pytest.approx(6.0)
+    assert _diagram_w1([], []) == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------

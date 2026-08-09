@@ -11,7 +11,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.price_volume.candle_geometry_v2 import _validate_ohlc
 
 
 def _pi(v, name, minimum=1):
@@ -153,13 +154,19 @@ def _engine(o, h, l, c, pattern, body_window, shadow_window, penetration):
     # Gate it out of every pattern (emit NaN "cannot judge") on a tiny relative
     # tick so a zero-range bar is never classified as any pattern.
     cur = cur & (rng > 1e-6 * c.abs())
-    prev1 = po.notna() & pc.notna() & ph.notna() & pl.notna()
+    # round-3 audit item 15: unified OHLC structural invariant — a bar whose
+    # High < max(O,C) / Low > min(O,C) / High < Low, or with a non-positive
+    # price, cannot be classified as ANY pattern (fail closed to NaN).  Applied
+    # to the current bar and every history bar each pattern reads.
+    valid = _validate_ohlc(o, h, l, c)
+    cur = cur & valid
+    prev1 = po.notna() & pc.notna() & ph.notna() & pl.notna() & valid.shift(1)
     o2, c2, h2, l2 = _shift(o, 2), _shift(c, 2), _shift(h, 2), _shift(l, 2)
     o3, c3, h3, l3 = _shift(o, 3), _shift(c, 3), _shift(h, 3), _shift(l, 3)
     o4, c4, h4, l4 = _shift(o, 4), _shift(c, 4), _shift(h, 4), _shift(l, 4)
-    prev2 = prev1 & o2.notna() & c2.notna() & h2.notna() & l2.notna()
-    prev3 = prev2 & o3.notna() & c3.notna() & h3.notna() & l3.notna()
-    prev4 = prev3 & o4.notna() & c4.notna() & h4.notna() & l4.notna()
+    prev2 = prev1 & o2.notna() & c2.notna() & h2.notna() & l2.notna() & valid.shift(2)
+    prev3 = prev2 & o3.notna() & c3.notna() & h3.notna() & l3.notna() & valid.shift(3)
+    prev4 = prev3 & o4.notna() & c4.notna() & h4.notna() & l4.notna() & valid.shift(4)
     has_b = bavg.notna()
     has_r = ravg.notna()
     has_b1 = bavg.shift(1).notna()
@@ -368,8 +375,10 @@ class CandlestickPatternEngine(SeriesOperator):
             # R4-91: each window/penetration knob only enters the search/GP
             # grammar for the patterns that actually read it (dead knobs are
             # excluded via active_when).
-            "body_window": ParamSpec(dtype=int, min=2, active_when=("pattern", _CANDLE_BODY_ACTIVE)),
-            "shadow_window": ParamSpec(dtype=int, min=2, active_when=("pattern", _CANDLE_SHADOW_ACTIVE)),
+            # round-3 cross-cutting: body/shadow windows are lookback-horizon
+            # scale dimensions (engine convention: window -> HORIZON, full search).
+            "body_window": ParamSpec(dtype=int, min=2, active_when=("pattern", _CANDLE_BODY_ACTIVE), param_role=ParamRole.HORIZON),
+            "shadow_window": ParamSpec(dtype=int, min=2, active_when=("pattern", _CANDLE_SHADOW_ACTIVE), param_role=ParamRole.HORIZON),
             "penetration": ParamSpec(dtype=float, min=0.0, max=1.0, active_when=("pattern", _CANDLE_PENETRATION_ACTIVE)),
         },
     )

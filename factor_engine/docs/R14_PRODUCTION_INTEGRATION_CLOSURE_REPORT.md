@@ -68,3 +68,48 @@ DataAccess 接入可作独立后续。
   跨 factor parquet 全量回滚不在本批，记录在案）。
 
 全部通过后即可宣布 **DATAACCESS CORE FREEZE + FACTORENGINE INTEGRATION FREEZE**。
+
+---
+
+# 附录 F：第二轮（外部 AI 复查 HEAD 64ad308）4 P0 + 1 条件 P0 + 1 P1 收口
+
+第二轮复查结论：**DATAACCESS CORE FREEZE 继续成立**；Integration Freeze 还差
+4 个确定性 integration correctness + 1 个条件 P0（DataEvent 原子性）+ 1 个 P1
+（pending lease）。本轮全部收口，**本轮修改了 dataaccess/ 读侧**（matrix 接
+generation 指针）。
+
+| # | 项 | 状态 | 修复 |
+|---|---|---|---|
+| 1 | DataAccess factor_matrix 不跟随 FE generation 指针 | **fixed** | `ParametricDataset.generation_pointer` + `current_generation()`：`resolve_paths` 只解析 `manifest.json` 的 `generation` 指向那一代（`generation/<gid>/<glob>`），**绝不 `generation/*` 通配**（混读 current+previous）；manifest 指向缺失目录 → `DataError` fail-closed（不 legacy fallback 捞 previous/orphan）；`_matrix_available_columns` 并入 `manifest["factors"].keys()`（动态因子列不靠 registry schema → 不再永远 MatrixCoverageMiss fallback）；generation 进 audit params。factor_matrix 显式 `authorized_root: ${FACTOR_MATRIX_ROOT}`（组件级 `path_is_under` 过不了 `universe=` 静态前缀）。`dataaccess/registry/loader.py` / `dataaccess/store.py` / `dataaccess/config/datasets.yaml` |
+| 2 | `load_matrix` 对缺失 generation 目录 fail-open | **fixed** | manifest 有 generation 但目录缺失 → 抛 `FactorMatrixCorruptionError`（不再 legacy glob）；materialize 对旧代缺失同样 hard fail（否则 read-merge-write 静默丢历史）；`_read_existing_or_quarantine(immutable=True)` 对已发布 generation 文件损坏只**复制**到 quarantine 留证、不移动原文件；`load_matrix` 对当前代内坏文件 fail loud（`FactorMatrixReadError`）。`storage/materialize/factor_matrix_materializer.py` |
+| 3 | MaterializationDelta 未接进 CH 主链 | **fixed** | `execute_materialize` 构造**唯一** `MaterializationDelta`（upserts + tombstones=deleted_keys + full semantic_identity_digest + data_snapshot_id），CH 从 delta 派生 16 位版本并 `_series_with_tombstones` 把删除键写 NaN（与 Parquet 同构）。源行删除 → Parquet 与 CH 同键一致。`runtime/materialize_service.py` |
+| 4 | event rebuild 丢 canonical scope | **fixed** | `factor_from_catalog_info` 恢复 `FactorExecutionScopeHint`（market/universe/frequency/calendar/decision_policy 取 full definition）；`_verify_factor_semantic_identity` 对 5 个 scope 字段 fail-closed（declared 有值 + actual 缺失 → production 拒绝）。**修真 bug**：verify 里 `compute_ir_hash(factor.expr)` 对 Expr 报 `.attrs` 错 → 先 `Analyzer().lower(expr).ir` 再 hash（否则任何 full_def 含 ast_hash 的 production event 无法证明 identity）；hash 不一致只在 production fail-closed（research 容忍）。`runtime/incremental_scheduler.py` |
+| 5a | DataEvent 多 factor 原子发布 | **fixed（条件 P0 收口）** | production 事件全因子先 `write_target="staging"`（权威水位线 defer）→ **全部 stage 成功才**逐因子 `publish_factor_lake(approve=True, sync_from_local=False, reconcile=False)`；任一 stage/publish 失败 → reject + `PartialIncrementalFailureError`，published 湖零 mixed；同 event_id 重试幂等收敛、只 commit 一次。`runtime/incremental_scheduler.py` |
+| 5b | pending 无 lease | **fixed（P1）** | `DataEvent.owner/attempt_id`；pending 记录带 `reserved_at`；`begin` 对 lease 过期（`DATA_EVENT_LEDGER_LEASE_SECONDS`，默认 3600s）的 pending 直接 takeover（worker crash 不再永久 `in_flight`）；无 `reserved_at` 的 legacy pending 保守不 takeover；`in_flight` 不再塌缩成 `"duplicate"`。`runtime/incremental_scheduler.py` |
+
+**新增测试**（R14 第二轮）：`tests/storage/test_r14_matrix_generation_failclosed_2026_08.py`（4）、
+`tests/runtime/test_r14_materialize_delta_ch_2026_08.py`（2）、
+`tests/runtime/test_r14_event_rebuild_scope_2026_08.py`（5）、
+`tests/runtime/test_r14_ledger_lease_2026_08.py`（5）、
+`tests/runtime/test_r14_event_atomic_publish_2026_08.py`（4）；
+dataaccess `tests/unit/test_r14_matrix_generation_resolver.py`（5）。共 25 条。
+
+**存量回归**：matrix governance 17、r11 orchestration 15、round13 incremental 10、
+r10 data event scheduler、r14 ledger/dualwrite/atomic/failclosed、dataaccess matrix
+既有测试全绿。`test_p0_22_corrupt_parquet_quarantine_hard_fail` 按 R14 #2 新契约
+对齐（已发布 generation immutable：原文件保留、只留证副本、load fail loud）。
+
+**协调注记**：并发会话 cleaned_operators governance 间歇性 flaky（`load_all` 报
+`ts_mean_abs_deviation/ts_median_abs_deviation` 未分类或 `ts_bicoherence_max`
+inactive），会让含 `parse_factor` / import `incremental_scheduler` 的测试在 import
+阶段失败；等树稳定后重跑即绿。未触碰 cleaned_operators/ir/scripts。
+
+**destructive gate 覆盖**：FE gen A → DA 读 A；publish gen B → DA 只读 B；
+current+previous 并存 → DA 只读 current；orphan generation → DA 不可见；
+manifest.generation 指向缺失目录 → hard fail（DataAccess DataError + FE
+FactorMatrixCorruptionError）；incremental deleted_key → Parquet 与 CH 同键
+tombstone；decision_time_policy=eod → rebuild → scope 仍 eod（缺失 production
+reject）；event f1 ok / f2 fail → published 零 mixed + 同 event 重试只 commit 一次；
+worker crash after begin → lease 过期 takeover。
+
+此轮通过后即可宣布 **DATAACCESS CORE FREEZE + FACTORENGINE INTEGRATION FREEZE**。

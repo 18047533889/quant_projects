@@ -9,7 +9,11 @@ based, so repeated evaluation is bit-identical (the audit's determinism gate).
 * ``ts_transfer_entropy``            — directional conditional information
   ``I(X_{s+lag}; Y_s | X_s)`` in nats (P1).
 * ``ts_effective_transfer_entropy``  — TE minus the mean over deterministic
-  circular-shift surrogates; the negative side measures spurious coupling (P2).
+  structure-matched circular-shift surrogates; the negative side measures
+  spurious coupling (P2).  Each surrogate circular-shifts the source on the
+  ORIGINAL timeline, then rebuilds the transition triples and re-applies the
+  valid mask, so the null shares the real estimate's missing-gap topology
+  (review item #19).
 * ``ts_score_rank_weighted_mean``    — exponential-rank (salience) weighted mean
   of a target, weighting the highest-``score`` observations most (P1).
 * ``report_benford_js_divergence``   — first-digit distribution JS divergence
@@ -23,9 +27,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, SeriesOperator, register_operator
 
 _ALPHA = 0.5          # Jeffreys smoothing, fixed (not a search parameter).
+# Deterministic circular-shift offsets for the effective-TE surrogate null.
+# Each offset is the rotation amount (block length) of a circular block-shift
+# of the SOURCE series on the ORIGINAL timeline; for the default window (60)
+# these are on the order of ``ceil(0.1 * n) = 6`` and are fixed, so repeated
+# evaluation is bit-identical (the audit's determinism gate).
 _SURROGATE_OFFSETS = (7, 11, 17, 23, 31)
 _EPS = 1e-12
 
@@ -256,9 +265,9 @@ class TsTransferEntropy(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
-        "bins": ParamSpec(dtype=int, min=2, max=8),
+        "bins": ParamSpec(dtype=int, min=2, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         "lag": ParamSpec(dtype=int, min=1),
-        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
     def _calculate_series(
@@ -325,6 +334,14 @@ def _effective_transfer_entropy_window(
     Shares the plain kernel's causality contract (audit #24) and effective-
     state-space gate (audit #20): the real TE and every surrogate go through
     ``_te_from_transitions`` with the same ``min_cells_ratio``.
+
+    Surrogate null (review item #19): every surrogate circular-shifts the
+    SOURCE series on the ORIGINAL timeline, rebuilds the ``(x_lead, y_lag)``
+    transition triples on the shifted timeline, and THEN re-applies the valid
+    mask (drops missing AFTER the shift).  The null therefore shares the exact
+    same physical-time missing-gap topology as the real estimate — a NaN gap in
+    the source stays a NaN gap in the surrogate — so ``E[TE_surrogate]`` is
+    computed over structure-matched nulls.
     """
     n = tw.shape[0]
     if n < lag + 2:
@@ -343,20 +360,40 @@ def _effective_transfer_entropy_window(
     real = _te_from_transitions(xs, ys, xn, bins, min_cells_ratio=min_cells_ratio)
     if not np.isfinite(real):
         return np.nan
-    # Deterministic circular shift of the *source transition* series; the
-    # offset must be smaller than the number of transitions.
-    w_eff = ys.shape[0]
+    # Structure-matched surrogate null (review item #19).
+    #
+    # The plain TE path applies the raw time lag on the ORIGINAL timeline and
+    # only THEN masks missing values, so the real estimate's transitions live on
+    # the original physical-time grid (a NaN gap never redefines the lag).  The
+    # old effective-TE surrogate instead COMPRESSED the source series (dropped
+    # the NaN rows) and circularly shifted the compressed series — that erased
+    # the physical-time missing-gap structure from the null, so a gap that
+    # separates two dependent segments no longer blocked dependence in the
+    # surrogate and the null expectation no longer matched the real TE's bias.
+    #
+    # Fix: circular/block-shift the SOURCE series on the ORIGINAL timeline
+    # (``_SURROGATE_OFFSETS`` deterministic offsets, block length = shift
+    # amount, on the order of ``ceil(0.1 * n)``), THEN rebuild the
+    # ``(x_lead, y_lag)`` triples on the shifted timeline, THEN drop missing.
     surr: list[float] = []
     for off in _SURROGATE_OFFSETS:
-        if off <= lag or off >= w_eff:
+        if off <= lag or off >= n:
             continue
-        ys_shift = np.empty_like(ys)
-        ys_shift[: w_eff - off] = ys[off:]
-        ys_shift[w_eff - off :] = ys[:off]
-        # P0-66: use the same MASKED future axis as the real TE path — ``xs`` /
-        # ``ys_shift`` are already ``mask``-compacted, so the unmasked ``x_next``
-        # misaligns when any NaN gap exists inside the window.
-        te_s = _te_from_transitions(xs, ys_shift, xn, bins, min_cells_ratio=min_cells_ratio)
+        y_shifted = np.empty_like(sw)
+        y_shifted[: n - off] = sw[off:]
+        y_shifted[n - off :] = sw[:off]
+        # Reconstruct (x_lead, y_lag) on the shifted timeline, then re-apply the
+        # same valid mask (drop missing AFTER the shift).
+        y_t_s = y_shifted[:-lag]
+        mask_s = np.isfinite(x_t) & np.isfinite(y_t_s) & np.isfinite(x_next)
+        if int(mask_s.sum()) < max(lag + 2, min_transitions):
+            continue
+        xs_s = x_t[mask_s]
+        ys_s = y_t_s[mask_s]
+        xn_s = x_next[mask_s]
+        if np.unique(xs_s).size < 2 or np.unique(ys_s).size < 2:
+            continue
+        te_s = _te_from_transitions(xs_s, ys_s, xn_s, bins, min_cells_ratio=min_cells_ratio)
         if np.isfinite(te_s):
             surr.append(te_s)
     if not surr:
@@ -373,11 +410,14 @@ def _effective_transfer_entropy_window(
     status="experimental",
 )
 class TsEffectiveTransferEntropy(SeriesOperator):
-    """有效传递熵：TE 减去确定性 circular-shift surrogate 均值。
+    """有效传递熵：TE 减去确定性 structure-matched surrogate 均值。
 
-    surrogate 用固定偏移 ``[7,11,17,23,31]`` 做确定性循环平移（绝不随机
-    shuffle），因此同一输入每次输出逐位一致。ETE 可为负（真实耦合弱于
-    surrogate），不 clip。P2 / Research。
+    surrogate 用固定偏移 ``[7,11,17,23,31]`` 在**原始时间轴**上对 source 做
+    确定性循环平移（绝不随机 shuffle），再在平移后的时间轴上重建
+    ``(x_lead, y_lag)`` 三元组并重新施加有效掩码（shift 之后才 drop missing），
+    因此 null 与真实估计共享完全相同的缺失 gap 拓扑（review #19）。同一输入
+    每次输出逐位一致。ETE 可为负（真实耦合弱于 surrogate），不 clip。
+    P2 / Research。
     """
 
     metadata = _metadata(
@@ -390,9 +430,9 @@ class TsEffectiveTransferEntropy(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
-        "bins": ParamSpec(dtype=int, min=2, max=8),
+        "bins": ParamSpec(dtype=int, min=2, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         "lag": ParamSpec(dtype=int, min=1),
-        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
     def _calculate_series(
@@ -763,8 +803,8 @@ class TsTransferEntropyPeakStrength(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
-        "bins": ParamSpec(dtype=int, min=2, max=8),
-        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
+        "bins": ParamSpec(dtype=int, min=2, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
     def _calculate_series(
@@ -830,8 +870,8 @@ class TsTransferEntropyPeakLag(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
-        "bins": ParamSpec(dtype=int, min=2, max=8),
-        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
+        "bins": ParamSpec(dtype=int, min=2, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     }
 
     def _calculate_series(
@@ -902,10 +942,10 @@ class TsTransferEntropyPeakExcess(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=2),
-        "bins": ParamSpec(dtype=int, min=2, max=8),
-        "min_cells_ratio": ParamSpec(dtype=float, min=0.0),
-        "n_surrogates": ParamSpec(dtype=int, min=1, default=20, searchable=False),
-        "seed": ParamSpec(dtype=int, default=0, searchable=False),
+        "bins": ParamSpec(dtype=int, min=2, max=8, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "min_cells_ratio": ParamSpec(dtype=float, min=0.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "n_surrogates": ParamSpec(dtype=int, min=1, default=20, searchable=False, param_role=ParamRole.NUMERICAL),
+        "seed": ParamSpec(dtype=int, default=0, searchable=False, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(

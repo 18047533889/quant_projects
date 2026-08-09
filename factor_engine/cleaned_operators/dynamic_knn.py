@@ -29,6 +29,11 @@ _EPS = 1e-12
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+    # R11 §37-D unit-algebra honesty: algebraic units (``same_as:`` /
+    # ``unit(...)`` / ``dimensionless``) are propagated to ``output_unit`` so
+    # the catalog / typed search see the real output dimension instead of an
+    # opaque ``ratio`` tag (mirrors conditional_ext / group_ext / relation).
+    output_unit = unit if (unit.startswith("same_as:") or unit.startswith("unit(") or unit == "dimensionless") else None
     return OperatorMetadata(
         name=name,
         category="cross_sectional",
@@ -41,6 +46,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        output_unit=output_unit,
     )
 
 
@@ -138,14 +144,18 @@ class CsKnnPeerMeanExSelf(SeriesOperator):
     特征（市值/换手/波动/动量等 2..4 个）逐日截面秩标准化后取 L2 距离，最近
     ``k`` 个同行（排除自己）的 ``target`` 均匀均值。``target - peer_mean``
     可作 Recipe：动态同行残差。同行组每天内生改变，区别于固定行业/relation。
-    P1。
+
+    输出是 ``target`` 的无权均值，单位与 ``target`` 相同（``same_as:target``）——
+    不是无量纲的 ratio；把它标成 ratio 会让 typed algebra 把同单位均值当作
+    无量纲（typed-factor-composition 污染）。P1。
     """
 
     metadata = _metadata(
         "cs_knn_peer_mean_ex_self",
-        "动态 k-NN 同行均值（风格相似股，排除自身；kth-radius tie-inclusive，可>k）。",
+        "动态 k-NN 同行均值（风格相似股，排除自身；kth-radius tie-inclusive，可>k）。"
+        "输出单位 same_as:target（同行 target 的均值，非 ratio）。",
         ["target", "f1", "f2", "f3", "k"],
-        unit="ratio",
+        unit="same_as:target",
         cost=7,
     )
 
@@ -258,13 +268,18 @@ class CsKnnGraphDirichletEnergy(SeriesOperator):
     每个节点相对其同行的均方差。低 = 相似股票确实一起走（因子在图上平滑）；
     高 = 风格相似与实际行为发生解耦（regime 切换 / 分化）。对 regime 检测和
     "同行 residual" 配方都有用。PIT 安全（当天截面，无前视）。
+
+    输出是 ``(target 差)²`` 的均值，维度为 ``unit(target)²``。tag 代数不直接
+    表达上标平方，使用等价的乘积形式 ``unit(target)*unit(target)``（与 relation
+    加权输出的 ``unit(value)*unit(weight)`` 同一套乘积语法）；这不是 ratio。
     """
 
     metadata = _metadata(
         "cs_knn_graph_dirichlet_energy",
-        "目标在风格 kNN 图上的 Dirichlet energy（低=平滑；kth-radius tie-inclusive）。",
+        "目标在风格 kNN 图上的 Dirichlet energy（低=平滑；kth-radius tie-inclusive）。"
+        "输出单位 unit(target)*unit(target)（即 unit(target)²，非 ratio）。",
         ["target", "f1", "f2", "f3", "k"],
-        unit="ratio",
+        unit="unit(target)*unit(target)",
         cost=7,
     )
 

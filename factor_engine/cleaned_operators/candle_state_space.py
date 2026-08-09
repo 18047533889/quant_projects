@@ -83,8 +83,8 @@ def _mahalanobis_series(
                 continue  # current state vector must be complete
             finite = np.all(np.isfinite(hist), axis=1)
             valid = hist[finite].astype(float)
-            if valid.shape[0] < 3:
-                continue  # need at least three history rows for a covariance
+            if valid.shape[0] == 0:
+                continue
             z = cur.astype(float)
             # R6-147: a feature constant over the history has zero variance and
             # a meaningless covariance column — standardising it with sd=1 makes
@@ -93,9 +93,21 @@ def _mahalanobis_series(
             keep_cols = np.where(np.std(valid, axis=0) > _EPS)[0]
             if keep_cols.size == 0:
                 continue
+            # R11 round-3 #66: high-dimensional sample floor.  Estimating a
+            # p x p covariance (then pseudo-inverting it) from only a handful of
+            # observations is meaningless; require N >= 5p effective observations
+            # after dropping constant dimensions.
+            if valid.shape[0] < 5 * keep_cols.size:
+                continue
             valid = valid[:, keep_cols]
             z = z[keep_cols]
-            mu = np.median(valid, axis=0)
+            # R11 round-3 #65: estimator consistency — a Mahalanobis distance
+            # must pair ONE estimator family.  The old code centred with the
+            # robust median but used the classical covariance (a half-robust /
+            # half-classical mix that is inconsistent).  Use the classical
+            # mean + ordinary covariance pair (a full robust centre + MCD
+            # covariance is out of scope here).
+            mu = valid.mean(axis=0)
             cov = np.atleast_2d(np.cov(valid, rowvar=False, ddof=1))
             cov = np.nan_to_num(cov, nan=0.0, posinf=0.0, neginf=0.0)
             shrunk = (1.0 - lam) * cov + lam * np.diag(np.diag(cov))
@@ -140,6 +152,12 @@ def _local_density_series(
             keep_cols = np.where(np.std(valid, axis=0) > _EPS)[0]
             if keep_cols.size == 0:
                 continue
+            # R11 round-3 #66: high-dimensional sample floor for the KNN read.
+            # A k-th-nearest distance in a p-dimensional feature space from too
+            # few points is not a comparable density; require N >= 5p effective
+            # observations after dropping constant dimensions.
+            if valid.shape[0] < 5 * keep_cols.size:
+                continue
             valid = valid[:, keep_cols]
             curv = cur[keep_cols]
             mu = valid.mean(axis=0)
@@ -162,7 +180,12 @@ def _z_normalize(sub: np.ndarray) -> np.ndarray:
     mu = sub.mean()
     sd = sub.std()
     if sd <= _EPS:
-        return np.zeros_like(sub, dtype=float)
+        # R11 round-3 #64: a constant subsequence z-normalises to all zeros
+        # regardless of its level, so [10,10,10,10] and [100,100,100,100] would
+        # collide into an identical "flat" pattern.  For shape-motif semantics a
+        # constant pattern has NO defined shape — return NaN so the caller skips
+        # it instead of matching flat segments of different levels to each other.
+        return np.full_like(sub, np.nan, dtype=float)
     return (sub - mu) / sd
 
 
@@ -214,6 +237,11 @@ def _matrix_profile_series(
             if s0 > s1:
                 continue
             zz = _z_normalize(z)
+            if not np.all(np.isfinite(zz)):
+                # R11 round-3 #64: the current subsequence is constant -> its
+                # z-normalised shape is degenerate (all zeros) and no defined
+                # shape distance exists -> NaN for this row.
+                continue
             best_d = np.inf
             best_s = -1
             dists: list[float] = []
@@ -227,6 +255,10 @@ def _matrix_profile_series(
                 if not np.all(np.isfinite(cand)):
                     continue
                 cz = _z_normalize(cand)
+                if not np.all(np.isfinite(cz)):
+                    # R11 round-3 #64: a constant historical candidate has no
+                    # shape; it must not match the current pattern.
+                    continue
                 d = float(np.linalg.norm(zz - cz) * inv_sqrt_L)
                 dists.append(d)
                 if d < best_d:
@@ -235,7 +267,12 @@ def _matrix_profile_series(
             if not dists:
                 continue
             novelty[r, c] = best_d
-            age[r, c] = (r - best_s) / float(h)
+            # R11 round-3 #63: the age of the motif is the START-to-START age.
+            # The current subsequence starts at ``r - L + 1`` (its end is ``r``),
+            # and ``best_s`` is the historical best-match START.  The old
+            # ``r - best_s`` counted end-to-start, systematically L-1 bars too
+            # old.  True age = (r - L + 1) - best_s.
+            age[r, c] = (r - L + 1 - best_s) / float(h)
             if len(dists) >= 3:
                 thr = float(np.median(dists)) * 0.5
                 frequency[r, c] = (
@@ -258,8 +295,9 @@ def _matrix_profile_series(
 class TsVectorStateMahalanobis(SeriesOperator):
     """状态向量马氏距离：今天的蜡烛对象相对自身历史协方差的异常度。
 
-    ``z_t=(f1..f4)_t`` 对比窗口内逐特征中位数 μ 与收缩协方差
-    ``(1-λ)Σ+λ·diag(Σ)``；距离越大 → 今天蜡烛相对自身历史越异常。P1。
+    ``z_t=(f1..f4)_t`` 对比窗口内逐特征均值 μ 与收缩协方差
+    ``(1-λ)Σ+λ·diag(Σ)``（R11 round-3 #65：均值+普通协方差，经典估计量一致配对）；
+    ``N >= 5p`` 样本地板（R11 round-3 #66）。距离越大 → 今天蜡烛相对自身历史越异常。P1。
     """
 
     metadata = _metadata(
@@ -365,7 +403,9 @@ class TsMatrixProfileMotifAge(SeriesOperator):
     """矩阵轮廓模式年龄：最近历史匹配起点距今的归一化年龄。
 
     与新颖度共享同一矩阵轮廓核；``s*`` 为最近匹配的前序子序列起点，
-    ``age = t - s*``，输出 ``age/history``（∈(0,1]）。P1。
+    当前子序列起点为 ``t - L + 1``，**起点到起点** 的年龄为
+    ``age = (t - L + 1) - s*``（R11 round-3 #63：旧式 ``t - s*`` 系统性偏大
+    L-1 根 bar），输出 ``age/history``。P1。
     """
 
     metadata = _metadata(

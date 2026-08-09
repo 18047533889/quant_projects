@@ -27,6 +27,40 @@ _EPS = 1e-12
 # Round-11 #51: expected reporting-flow grain per operator, surfaced as a
 # ``flow_type:*`` metadata tag on the contract.  The runtime ``flow_type``
 # parameter additionally fails closed on a mismatched declaration.
+# Round-3 item 30: input-semantic declaration for the fundamental period-change
+# family.  These operators measure period-over-period change / growth / spread —
+# a value that is a Return/Rate (ROE, ROA, margin, revenue growth), NOT a raw
+# Price/Volume.  ``> 0`` on a rate is a meaningful signal; ``> 0`` on a raw
+# price/volume is almost always True.  Exposed as ``input_units`` metadata so a
+# semantic-input-type audit can reject raw price/volume misuse at the binding
+# layer, and as ``input_semantics:*`` tags for catalog readers.
+_INPUT_UNITS: dict[str, dict[str, str]] = {
+    "fin_lag": {"x": "same_as:output", "period_id": "fiscal_period"},
+    "fin_diff": {"x": "same_as:output", "period_id": "fiscal_period"},
+    "fin_pct_change": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_log_change": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_qoq": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_yoy": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_ttm": {"x": "flow", "period_id": "fiscal_period"},
+    "fin_average_balance": {"x": "stock", "period_id": "fiscal_period"},
+    "fin_growth": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_cagr": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_growth_acceleration": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_growth_change": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_growth_volatility": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_growth_stability": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_growth_persistence": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_positive_streak": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_negative_streak": {"x": "rate", "period_id": "fiscal_period"},
+    "fin_sign_change_count": {"x": "rate", "period_id": "fiscal_period"},
+}
+_INPUT_SEMANTICS_RATE = frozenset({
+    "fin_pct_change", "fin_log_change", "fin_qoq", "fin_yoy", "fin_growth",
+    "fin_cagr", "fin_growth_acceleration", "fin_growth_change",
+    "fin_growth_volatility", "fin_growth_stability", "fin_growth_persistence",
+    "fin_positive_streak", "fin_negative_streak", "fin_sign_change_count",
+})
+
 _FLOW_TYPE_TAGS = {
     "fin_pct_change": "flow_type:SinglePeriodFlow",
     "fin_log_change": "flow_type:SinglePeriodFlow",
@@ -353,6 +387,12 @@ def _register(name: str, params: Iterable[str], fn, description: str, *, tags=()
     flow_tag = _FLOW_TYPE_TAGS.get(name)
     if flow_tag is not None and flow_tag not in metadata.tags:
         metadata.tags = list(metadata.tags) + [flow_tag]
+    # Round-3 item 30: declare the input semantics (Return/Rate vs raw price/volume).
+    if name in _INPUT_SEMANTICS_RATE:
+        metadata.tags = list(metadata.tags) + ["input_semantics:rate"]
+    units = _INPUT_UNITS.get(name)
+    if units is not None:
+        metadata.input_units = dict(units)
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -798,3 +838,7 @@ _surface._FUNDAMENTAL_V2_CANONICALS = frozenset(
     set(_surface._FUNDAMENTAL_V2_CANONICALS) | _NEW_V2_CANONICALS
 )
 _surface.extend_extended_only(set(_NEW_V2_CANONICALS))
+
+# Round-3 item 27: the per-period fundamental revision ledger (release +
+# supersede/revision timestamps per period, PIT ``value_as_of`` lookup).
+from cleaned_operators.fundamental import ledger as _fundamental_revision_ledger  # noqa: E402,F401

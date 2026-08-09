@@ -164,6 +164,7 @@ class OperatingMarginOp(TwoVarOperator):
         param_names=["operating_income", "revenue"],
         return_type="series",
         tags=["fundamental", "ratio", "pit_safe"],
+        input_units={"operating_income": "flow", "revenue": "flow"},
     )
 
     def _calculate_series(self, operating_income: pd.DataFrame, revenue: pd.DataFrame, **kwargs) -> pd.DataFrame:
@@ -189,6 +190,7 @@ class CurrentRatioOp(TwoVarOperator):
         param_names=["current_assets", "current_liabilities"],
         return_type="series",
         tags=["fundamental", "ratio", "pit_safe"],
+        input_units={"current_assets": "stock", "current_liabilities": "stock"},
     )
 
     def _calculate_series(
@@ -220,6 +222,11 @@ class QuickRatioOp(SeriesOperator):
         param_names=["current_assets", "inventory", "current_liabilities"],
         return_type="series",
         tags=["fundamental", "ratio", "pit_safe"],
+        input_units={
+            "current_assets": "stock",
+            "inventory": "stock",
+            "current_liabilities": "stock",
+        },
     )
 
     def _calculate_series(
@@ -256,6 +263,7 @@ class DebtToEquityOp(TwoVarOperator):
         param_names=["total_debt", "total_equity"],
         return_type="series",
         tags=["fundamental", "ratio", "pit_safe"],
+        input_units={"total_debt": "stock", "total_equity": "stock"},
     )
 
     def _calculate_series(

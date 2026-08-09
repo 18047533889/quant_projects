@@ -41,6 +41,22 @@ Missing prices censor/break the clock (R5 P1-41(a)); a missing / non-positive
 scale bar BREAKS the ongoing episode rather than skipping it (review #34) — a
 DC event must never straddle a scale gap.  Durations / event rates are
 measured on the same *observed-time* clock (finite bars).
+
+Typed contract (P0, round 11): the DC family measures excursions of a *price*
+level (``p / origin - 1`` and ``origin * (1 ± theta)``), so the input panel is
+declared ``input_units={"x": "price"}`` and the kernel FAILS CLOSED on any
+non-positive price (``<= 0``) instead of silently computing garbage from an
+arbitrary signed numeric field (returns, spreads).
+
+Initial-extrema seeding (review "Directional Change initial extrema"): the
+undecided state (before the first confirmation) tracks the pre-confirmation
+running HIGH and LOW SEPARATELY.  The first DC event fires when price moves
+``theta`` away from the pre-confirmation running extremum (the max/min of the
+path accumulated before the first confirmation) — never from the arbitrary
+first bar.  A single shared ``extreme`` would be dragged by whichever side last
+updated (e.g. a monotone decline never confirms a down event because the
+running low keeps up with price); the dual-track fix makes the first state's
+extreme reflect the actual excursion.  Deterministic and prefix-causal.
 """
 from __future__ import annotations
 
@@ -77,6 +93,12 @@ def _metadata(
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        # P0 round-11: the DC family is defined on a strictly-positive price
+        # level (``p/origin - 1``, ``origin*(1±theta)``).  A signed numeric field
+        # (returns, spreads) silently produces garbage; the typed grammar sees
+        # this declaration and the kernel fails closed on any price <= 0.
+        input_units={"x": "price"},
+        compatible_units={"x": ("price",)},
     )
 
 
@@ -114,8 +136,36 @@ def _dc_column(
     * every completed leg's overshoot is normalised by the threshold that was
       in force when THAT leg started (``leg_start_threshold``), never by the
       opposite-side threshold at the leg's end (review #33).
+
+    Typed contract (P0): ``x`` is a strictly-positive PRICE level.  Any finite
+    ``x <= 0`` FAILS CLOSED (ValueError) — never silently computed, because the
+    family measures ``p/origin - 1`` / ``origin*(1±theta)`` which is undefined
+    for a non-positive price.
+
+    Initial-extrema seeding (review "Directional Change initial extrema"):
+    before the first confirmation the undecided state tracks the pre-confirmation
+    running HIGH and LOW SEPARATELY (``run_high`` / ``run_low``); the first
+    event fires when price moves ``theta`` away from that running extremum (the
+    max/min accumulated before the first confirmation), so the first state's
+    extreme reflects the actual excursion rather than the arbitrary first bar.
+    A single shared ``extreme`` would be dragged by whichever side last updated
+    (a monotone decline would never confirm a down event because the running low
+    keeps up with price).  After the first confirmation the new leg's extreme is
+    seeded from the confirmation price (which, for the FIRST event, equals the
+    pre-confirmation running extremum on the confirming side: ``p == run_high``
+    at an up confirmation, ``p == run_low`` at a down confirmation).
     """
     n = x.shape[0]
+    # P0: fail closed on any non-positive price in the panel.  The typed layer
+    # already declares input_units='price'; this runtime gate is the kernel's
+    # own enforcement so the raw kernel (and any direct caller) never silently
+    # computes garbage from a signed field.
+    _finite = np.isfinite(x)
+    if np.any((x <= 0.0) & _finite):
+        raise ValueError(
+            "directional-change requires strictly positive price input "
+            "(input_units='price'); found a price <= 0 in the series"
+        )
     osr = np.full(n, np.nan, dtype=float)
     evr = np.full(n, np.nan, dtype=float)
     duram = np.full(n, np.nan, dtype=float)
@@ -133,11 +183,24 @@ def _dc_column(
 
     # --- streaming checkpoint ---
     direction = 0  # +1 up, -1 down, 0 undecided
-    extreme = np.nan
-    fixed_anchor = np.nan  # fixed_absolute: pinned once at stream init (#32)
+    extreme = np.nan            # running extremum of the CURRENT leg (direction != 0)
+    run_high = np.nan           # pre-confirmation running HIGH (direction == 0)
+    run_low = np.nan            # pre-confirmation running LOW  (direction == 0)
+    fixed_anchor = np.nan       # fixed_absolute: pinned once at stream init (#32)
     leg_kind: str | None = None
     leg_start = -1
     leg_thr = np.nan
+
+    def _break() -> None:
+        """Reset the clock to the undecided state (missing price / scale gap)."""
+        nonlocal direction, extreme, run_high, run_low, leg_kind, leg_start, leg_thr
+        direction = 0
+        extreme = np.nan
+        run_high = np.nan
+        run_low = np.nan
+        leg_kind = None
+        leg_start = -1
+        leg_thr = np.nan
 
     for i in range(n):
         fin_pref[i + 1] = fin_pref[i] + (1.0 if np.isfinite(x[i]) else 0.0)
@@ -146,11 +209,7 @@ def _dc_column(
         p = float(x[i])
         if not np.isfinite(p):
             # missing price censors/breaks the clock.
-            direction = 0
-            extreme = np.nan
-            leg_kind = None
-            leg_start = -1
-            leg_thr = np.nan
+            _break()
             continue
 
         if threshold_mode == "fixed_absolute":
@@ -160,62 +219,83 @@ def _dc_column(
                     fixed_anchor = s
                 else:
                     # no anchor yet and scale unavailable -> break.
-                    direction = 0
-                    extreme = np.nan
-                    leg_kind = None
-                    leg_start = -1
-                    leg_thr = np.nan
+                    _break()
                     continue
             thr = theta * fixed_anchor
         else:  # adaptive
             s = float(scale[i]) if i < scale.shape[0] else np.nan
             if not np.isfinite(s) or s <= 0.0:
                 # #34: scale-missing BREAKS the episode (not a skip).
-                direction = 0
-                extreme = np.nan
-                leg_kind = None
-                leg_start = -1
-                leg_thr = np.nan
+                _break()
                 continue
             thr = theta * s
 
-        if not np.isfinite(extreme):
-            extreme = p
-            continue
-
-        confirmed: str | None = None
-        if direction != -1:
-            if p > extreme:
-                extreme = p
-            if extreme - p >= thr:
+        if direction == 0:
+            # --- undecided: track the pre-confirmation running extrema.
+            # A single shared ``extreme`` would be dragged by whichever side last
+            # updated, so the first confirmation is measured from the TRUE
+            # pre-confirmation running high/low (initial-extrema seeding).
+            if not np.isfinite(run_high):
+                run_high = p
+                run_low = p
+                continue
+            if p > run_high:
+                run_high = p
+            if p < run_low:
+                run_low = p
+            confirmed: str | None = None
+            if run_high - p >= thr:
                 confirmed = "down"
-        if direction != 1 and confirmed is None:
-            if p < extreme:
-                extreme = p
-            if p - extreme >= thr:
+            elif p - run_low >= thr:
                 confirmed = "up"
-
-        if confirmed is not None:
-            # complete the previous leg (if any) with its OWN start threshold.
-            if leg_kind is not None and leg_start >= 0:
-                if leg_kind == "up":
-                    os_m = float(np.max(x[leg_start:i])) - float(x[leg_start])
-                else:
-                    os_m = float(x[leg_start]) - float(np.min(x[leg_start:i]))
-                dur = float(np.isfinite(x[leg_start:i]).sum())
-                ratio = (os_m / leg_thr) if np.isfinite(leg_thr) and leg_thr > 0.0 else np.nan
-                legs_start.append(leg_start)
-                legs_end.append(i)
-                legs_kind.append(leg_kind)
-                legs_dur.append(dur)
-                legs_os.append(os_m)
-                legs_ratio.append(ratio)
-            ev_pref[i + 1] += 1.0
-            direction = 1 if confirmed == "up" else -1
-            extreme = p
-            leg_kind = confirmed
-            leg_start = i
-            leg_thr = thr
+            if confirmed is not None:
+                # first confirmation: no prior leg to complete.  Seed the new
+                # leg's running extremum from the confirmation price p, which
+                # for the FIRST event equals the pre-confirmation running
+                # extremum on the confirming side (p == run_high at an up,
+                # p == run_low at a down).
+                ev_pref[i + 1] += 1.0
+                direction = 1 if confirmed == "up" else -1
+                extreme = p
+                leg_kind = confirmed
+                leg_start = i
+                leg_thr = thr
+                run_high = np.nan
+                run_low = np.nan
+        else:
+            # --- established leg: track the running extremum on the leg's side.
+            confirmed = None
+            if direction == 1:  # up leg: running HIGH, next confirmation is down
+                if p > extreme:
+                    extreme = p
+                if extreme - p >= thr:
+                    confirmed = "down"
+            else:  # down leg: running LOW, next confirmation is up
+                if p < extreme:
+                    extreme = p
+                if p - extreme >= thr:
+                    confirmed = "up"
+            if confirmed is not None:
+                # complete the previous leg (if any) with its OWN start threshold.
+                if leg_kind is not None and leg_start >= 0:
+                    if leg_kind == "up":
+                        os_m = float(np.max(x[leg_start:i])) - float(x[leg_start])
+                    else:
+                        os_m = float(x[leg_start]) - float(np.min(x[leg_start:i]))
+                    dur = float(np.isfinite(x[leg_start:i]).sum())
+                    ratio = (os_m / leg_thr) if np.isfinite(leg_thr) and leg_thr > 0.0 else np.nan
+                    legs_start.append(leg_start)
+                    legs_end.append(i)
+                    legs_kind.append(leg_kind)
+                    legs_dur.append(dur)
+                    legs_os.append(os_m)
+                    legs_ratio.append(ratio)
+                ev_pref[i + 1] += 1.0
+                direction = 1 if confirmed == "up" else -1
+                extreme = p
+                leg_kind = confirmed
+                leg_start = i
+                leg_thr = thr
 
         lo = max(0, i - w + 1)
         n_fin = fin_pref[i + 1] - fin_pref[lo]
@@ -274,6 +354,16 @@ def _make_dc_op(canonical: str, description: str, unit: str, cost: int, out_key:
             )
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
+        # P0: fail closed on any non-positive price — the typed contract declares
+        # ``input_units='price'`` and the kernel never silently computes from a
+        # signed field.  Checking here gives the caller the operator name; the
+        # column kernel re-checks as its own runtime gate.
+        _fin = np.isfinite(xv)
+        if np.any((xv <= 0.0) & _fin):
+            raise ValueError(
+                f"{canonical} requires strictly positive price input "
+                "(input_units='price'); found a price <= 0 in the panel"
+            )
         rows, cols = xv.shape
         cols_out = []
         for c in range(cols):

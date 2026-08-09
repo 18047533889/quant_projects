@@ -34,14 +34,24 @@ from cleaned_operators.intraday._core import (
 _CANONICALS: list[str] = []
 
 
-def _aligned_market(close: pd.DataFrame, weights: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    """Return (per-stock minute returns, value-weighted market minute return).
+def _aligned_market(
+    close: pd.DataFrame, weights: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.DataFrame]:
+    """Return (per-stock minute returns, value-weighted market minute return,
+    validated per-stock weight panel, returns-masked weight panel).
 
     P1-104: the cap weights must be FINITE and POSITIVE — a negative / zero /
     NaN capitalisation would poison the value-weighted market return.  The
     weights panel is a *daily* capitalisation that the data layer must provide
     already lagged as-of (previous-day cap), so the day's weights are known at
-    the day's open.
+    the day's open.  The validated ``w_bc`` / ``w_ret`` panels are returned
+    once and reused by every realized-beta series (including the ex-self path)
+    so an invalid cap can never sneak back into a leave-one-out market return.
+
+    P0: minute log-returns are computed per trading session.  The first minute
+    of every calendar-day session is NaN (its return is undefined within the
+    session), so an overnight gap never leaks into the intraday market return
+    or any realized beta / correlation / semibeta / market-model estimate.
     """
     close = as_panel(close)
     weights = as_panel(weights)
@@ -49,6 +59,13 @@ def _aligned_market(close: pd.DataFrame, weights: pd.DataFrame) -> tuple[pd.Data
     with np_errstate():
         logr = np.full_like(raw, np.nan, dtype=float)
         logr[1:, :] = np.log(raw[1:, :] / raw[:-1, :])
+        # P0: hard-break at calendar-day boundaries only; the am/pm lunch-break
+        # policy stays governed by the session contract (no invented break).
+        days = close.index.normalize().to_numpy()
+        day_change = np.zeros(len(days), dtype=bool)
+        if len(days) > 1:
+            day_change[1:] = days[1:] != days[:-1]
+        logr[day_change, :] = np.nan
     rets = pd.DataFrame(logr, index=close.index, columns=close.columns)
     w_bc = broadcast_daily_panel(close, weights)
     w_bc = w_bc.where(np.isfinite(w_bc) & (w_bc > 0.0))  # P1-104: invalid cap -> excluded
@@ -61,7 +78,7 @@ def _aligned_market(close: pd.DataFrame, weights: pd.DataFrame) -> tuple[pd.Data
             index=close.index,
             dtype=float,
         )
-    return rets, mkt
+    return rets, mkt, w_bc, w_ret
 
 
 def _market_return_ex_self(rets: pd.DataFrame, w_bc: pd.DataFrame, w_ret: pd.DataFrame, inst: str) -> pd.Series:
@@ -84,9 +101,11 @@ def _market_return_ex_self(rets: pd.DataFrame, w_bc: pd.DataFrame, w_ret: pd.Dat
 
 
 def _beta_daily(close: pd.DataFrame, weights: pd.DataFrame, fn: Callable[[np.ndarray, np.ndarray], float], *, ex_self: bool = False) -> pd.DataFrame:
-    rets, mkt = _aligned_market(close, weights)
-    w_bc = broadcast_daily_panel(close, weights)
-    w_ret = w_bc.where(rets.notna())
+    rets, mkt, w_bc, w_ret = _aligned_market(close, weights)
+    # P0: reuse the ONE validated market-weight panel built by ``_aligned_market``
+    # (finite-and-positive caps only).  Re-broadcasting weights from scratch here
+    # would let NaN/0/negative caps that were excluded from the full-market return
+    # re-enter the leave-one-out (ex-self) market return.
     # P0-08: the concat+dropna below would silently compress a mismatched
     # session grid; require the same grid first (once — every per-stock market
     # return shares the minute index of ``rets``), then keep the dropna (it
@@ -162,16 +181,26 @@ def _up_down(r: np.ndarray, m: np.ndarray) -> float:
 
 
 def _market_model(r: np.ndarray, m: np.ndarray) -> tuple[float, float, np.ndarray] | None:
-    """Fit r = a + b*m; return (a, b, residuals) or None if degenerate."""
+    """Fit r = a + b*m; return (a, b, residuals) or None if degenerate.
+
+    P0: ``np.cov`` defaults to ddof=1 (divide by n-1) while ``np.var`` defaults
+    to ddof=0 (divide by n); mixing them scaled beta by (n-1)/n and polluted
+    every derived market-model quantity (idiosyncratic variance / skewness /
+    kurtosis and market R²).  Unify on population moments — the OLS slope — so
+    every downstream consumer inherits the corrected value.
+    """
     valid = np.isfinite(r) & np.isfinite(m)
     r, m = r[valid], m[valid]
     if len(r) < 3:
         return None
-    var_m = float(np.var(m))
+    rbar = float(np.mean(r))
+    mbar = float(np.mean(m))
+    var_m = float(np.mean((m - mbar) ** 2))
     if var_m <= _EPS:
         return None
-    b = float(np.cov(r, m)[0, 1] / var_m)
-    a = float(np.mean(r) - b * np.mean(m))
+    cov = float(np.mean((r - rbar) * (m - mbar)))
+    b = cov / var_m
+    a = rbar - b * mbar
     with np_errstate():
         e = r - (a + b * m)
     return a, b, e

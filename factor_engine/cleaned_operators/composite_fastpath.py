@@ -456,35 +456,28 @@ def pl_obv(price, volume, **_):
     )
 
 
-def _kama_numpy(values: np.ndarray, smoothing: np.ndarray, missing_policy: str = "interrupt", max_gap: int = 0) -> np.ndarray:
+def _kama_numpy(values: np.ndarray, smoothing: np.ndarray) -> np.ndarray:
     out = values.astype(float, copy=True)
     if out.shape[0] == 0:
         return out
-    gap_max = max(int(max_gap), 0)
-    gap = 0
     for row in range(1, out.shape[0]):
         current = values[row]
         previous = out[row - 1]
         if not np.isfinite(current):
-            # Audit 13.6 unified missing-state policy: a missing price must not
-            # silently bridge a suspension / data gap.  ``interrupt`` (default)
-            # -> NaN and break the recursion (next finite bar re-seeds);
-            # ``carry`` bridges at most ``max_gap`` bars with the last finite
-            # value, then interrupts.
-            gap += 1
-            if missing_policy == "carry" and gap <= gap_max and np.isfinite(previous):
-                out[row] = previous
-            else:
-                out[row] = np.nan
+            # Round-2 review §technical/stateful: the SINGLE production missing
+            # policy is ``break + rewarm`` — a missing price breaks the recursion
+            # (NaN); the smoothing series (ER) is NaN until ``er_window``
+            # consecutive finite bars re-accumulate, so ``candidate`` below stays
+            # NaN through the re-warm and KAMA never emits a frozen first-price.
+            out[row] = np.nan
             continue
-        gap = 0
         fallback = np.where(np.isfinite(previous), previous, current)
         candidate = fallback + smoothing[row] * (current - fallback)
         out[row] = candidate
     return out
 
 
-def pd_kama(close, er_window=10, fast_window=2, slow_window=30, missing_policy="interrupt", max_gap=0, **_):
+def pd_kama(close, er_window=10, fast_window=2, slow_window=30, **_):
     # R4-100: aligned to the canonical ``(close, er_window, fast_window,
     # slow_window)`` contract (technical.indicators_v2.KAMA is the pandas
     # reference).  The old fast-path signature ``(close, window)`` accepted a
@@ -502,13 +495,13 @@ def pd_kama(close, er_window=10, fast_window=2, slow_window=30, missing_policy="
     slow_sc = 2.0 / (slow + 1.0)
     smoothing = (efficiency * (fast_sc - slow_sc) + slow_sc).pow(2)
     return pd.DataFrame(
-        _kama_numpy(close.to_numpy(dtype=float), smoothing.to_numpy(dtype=float), missing_policy, max_gap),
+        _kama_numpy(close.to_numpy(dtype=float), smoothing.to_numpy(dtype=float)),
         index=close.index,
         columns=close.columns,
     )
 
 
-def pl_kama(close, er_window=10, fast_window=2, slow_window=30, missing_policy="interrupt", max_gap=0, **_):
+def pl_kama(close, er_window=10, fast_window=2, slow_window=30, **_):
     w = positive_int(er_window, "er_window")
     fast = positive_int(fast_window, "fast_window")
     slow = positive_int(slow_window, "slow_window")
@@ -533,7 +526,7 @@ def pl_kama(close, er_window=10, fast_window=2, slow_window=30, missing_policy="
         ]
     )
     values = close.select(cols).to_numpy()
-    out = _kama_numpy(values, smoothing.to_numpy(), missing_policy, max_gap)
+    out = _kama_numpy(values, smoothing.to_numpy())
     return close.with_columns([pl.Series(c, out[:, idx]) for idx, c in enumerate(cols)])
 
 

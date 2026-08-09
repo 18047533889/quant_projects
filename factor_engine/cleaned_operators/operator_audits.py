@@ -1189,6 +1189,22 @@ def audit_searchable_params(op: Any, *panels: pd.DataFrame) -> list[AuditResult]
                             "searchable_params", ">= 1 declared",
                             "none declared")]
     import inspect
+    # P2-35: report the role-aware search grade of each searchable parameter.
+    # Estimator knobs must be declared ``ESTIMATOR_RESOLUTION`` so a role-aware
+    # grammar searches them only on small reviewed grids; an undeclared
+    # searchable parameter defaults to full-resolution ECONOMIC.
+    try:  # lazy import to avoid module-level circular import with base.py
+        from cleaned_operators.base import ParamRole, effective_param_role
+    except Exception:  # pragma: no cover - defensive
+        ParamRole, effective_param_role = None, None
+    for name, spec in specs.items():
+        if getattr(spec, "searchable", True) is False:
+            continue
+        if ParamRole is not None:
+            results.append(AuditResult(
+                "info", "audit_searchable_params", canon, f"{name}.search_role",
+                "role-aware search grade",
+                f"{effective_param_role(spec).value}"))
 
     sig = inspect.signature(getattr(op, "calculate", None))
     default_params = {p: (sig.parameters[p].default if sig.parameters[p].default is not inspect.Parameter.empty else None)

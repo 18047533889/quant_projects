@@ -56,8 +56,9 @@ def _meta(
     *,
     extra_tags: Iterable[str] = (),
     unit: str = "ratio",
+    input_units: dict[str, str] | None = None,
 ) -> OperatorMetadata:
-    return OperatorMetadata(
+    metadata = OperatorMetadata(
         name=name,
         category="fundamental_period",
         description=description,
@@ -69,6 +70,12 @@ def _meta(
             f"unit:{unit}", "cost:3", *extra_tags,
         ],
     )
+    # Round-3 item 30: declare the accepted input semantics (Return/Rate/flow/
+    # stock vs raw price/volume) so threshold-relative score operators are not
+    # misused with raw Price/Volume (``> 0`` on a price is almost always True).
+    if input_units:
+        metadata.input_units = dict(input_units)
+    return metadata
 
 
 def _mk(
@@ -76,6 +83,7 @@ def _mk(
     *,
     extra_tags: Iterable[str] = (),
     unit: str = "ratio",
+    input_units: dict[str, str] | None = None,
 ):
     # R6 P0-03: these financial kernels accept ``period_id`` (signature
     # compatibility / quarter-alignment) even when it does not enter the math;
@@ -85,7 +93,7 @@ def _mk(
     declared = list(params)
     if "period_id" not in declared:
         declared = declared + ["period_id"]
-    metadata = _meta(name, description, declared, extra_tags=extra_tags, unit=unit)
+    metadata = _meta(name, description, declared, extra_tags=extra_tags, unit=unit, input_units=input_units)
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)

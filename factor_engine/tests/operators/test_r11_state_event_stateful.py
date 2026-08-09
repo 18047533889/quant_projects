@@ -262,10 +262,13 @@ def test_time_since_change_max_lookback_exclusive_boundary():
 
 def test_event_decay_asof_event_vs_marked():
     dates = _bdate(4)
+    # MarkedEvent keeps a magnitude; EventBool is a ConditionBool (R11 round-2:
+    # a finite value outside {0, 1} fails closed, so the bool case uses 0/1).
     ev = pd.DataFrame([0.0, 2.0, 0.0, 0.0], index=dates, columns=["A"])
+    evb = pd.DataFrame([0.0, 1.0, 0.0, 0.0], index=dates, columns=["A"])
     op = OperatorRegistry.get("event_decay_asof", "pandas_numpy")
     marked = op.calculate(ev, half_life=10.0, event_kind="marked")
-    eb = op.calculate(ev, half_life=10.0, event_kind="bool")
+    eb = op.calculate(evb, half_life=10.0, event_kind="bool")
     # MarkedEvent: magnitude 2.0 preserved and decays
     assert marked["A"].iloc[1] == pytest.approx(2.0)
     assert marked["A"].iloc[3] == pytest.approx(2.0 * (0.5 ** (2.0 / 10.0)))

@@ -5,6 +5,21 @@ Deterministic initialisation (first finite observation), explicit noise
 parameters, and a causal one-pass filter so segmented / full-history execution
 agree.  Outputs are the filtered level / trend / beta state, standardised
 innovations and state uncertainty.
+
+Scale contract (audit round-3, item 32):
+* The noise/variance scale is EXPLICIT and fixed — the user-supplied ``q`` /
+  ``r`` (process / observation variance) are never re-estimated from the data,
+  so a gap of missing observations can never silently re-scale the filter on
+  its edges as if the observations were contiguous.
+* A missing observation is a pure predict step: the state is propagated and the
+  covariance is advanced by the process noise (``P += Q``) for EVERY missing
+  row, so a K-row gap correctly accumulates ``K*Q`` of extra uncertainty.  The
+  first observation after the gap is then processed with that grown covariance
+  (a correctly-scaled innovation), not with a stale pre-gap scale.
+* Fail closed on unknown scale: non-finite / non-positive noise parameters are
+  rejected before any recursion, and the filter emits NaN until the first finite
+  observation establishes a real scale (a leading gap or an all-missing series
+  stays NaN rather than fabricating a filtered value).
 """
 from __future__ import annotations
 
@@ -43,11 +58,12 @@ def _register(name: str, description: str, params: list[str], unit: str, fn):
 
 
 def _kalman_level(vals: np.ndarray, q: float, r: float, out_stat: str) -> np.ndarray:
-    # P0-15: the noise parameters must be well-typed — a negative process-noise
-    # would shrink uncertainty, a non-positive observation-noise breaks the
-    # Kalman update.  Fail fast instead of silently producing nonsense.
-    if not (q >= 0.0 and r > 0.0):
-        raise ValueError("q must be >= 0 and r must be > 0")
+    # P0-15 / audit round-3 (item 32): the noise parameters must be well-typed —
+    # a negative process-noise would shrink uncertainty, a non-positive or
+    # non-finite observation-noise breaks the Kalman update.  Fail fast instead
+    # of silently producing nonsense (a non-finite scale is an *unknown* scale).
+    if not (np.isfinite(q) and np.isfinite(r) and q >= 0.0 and r > 0.0):
+        raise ValueError("q must be finite and >= 0; r must be finite and > 0")
     n = len(vals)
     mu = np.full(n, np.nan, dtype=float)
     p = np.full(n, np.nan, dtype=float)
@@ -102,8 +118,9 @@ _register("ts_kalman_beta_uncertainty", "Beta 状态滤波协方差 P(标准误�
 
 def _kalman_trend_slope(vals: np.ndarray, q_level: float, q_trend: float, r: float) -> np.ndarray:
     """Local linear trend: level and slope states."""
-    if not (q_level >= 0.0 and q_trend >= 0.0 and r > 0.0):
-        raise ValueError("q_level/q_trend must be >= 0 and r must be > 0")
+    if not (np.isfinite(q_level) and np.isfinite(q_trend) and np.isfinite(r)
+            and q_level >= 0.0 and q_trend >= 0.0 and r > 0.0):
+        raise ValueError("q_level/q_trend must be finite and >= 0; r must be finite and > 0")
     n = len(vals)
     slope = np.full(n, np.nan, dtype=float)
     level = np.nan
@@ -155,8 +172,8 @@ _BETA_WARMUP = 5
 
 
 def _kalman_beta(y: np.ndarray, x: np.ndarray, q: float, r: float, out_stat: str) -> np.ndarray:
-    if not (q >= 0.0 and r > 0.0):
-        raise ValueError("q must be >= 0 and r must be > 0")
+    if not (np.isfinite(q) and np.isfinite(r) and q >= 0.0 and r > 0.0):
+        raise ValueError("q must be finite and >= 0; r must be finite and > 0")
     n = len(y)
     beta = np.full(n, np.nan, dtype=float)
     change = np.full(n, np.nan, dtype=float)

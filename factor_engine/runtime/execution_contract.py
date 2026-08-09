@@ -232,7 +232,10 @@ def declare_stateful(
     ``chunking`` is ``checkpoint`` / ``required_full_history``.  ``history_kind``
     is ``full_history`` (default) or an event-clock kind (``event_count`` /
     ``report_count`` / ``session_count``) for operators whose history is measured
-    in observations, not bars; ``history_count`` is the declared count.
+    in observations, not bars; ``history_count`` is the declared count — a static
+    int, or a callable ``fn(canonical, params) -> int | None`` for an event-clock
+    operator whose required count depends on a runtime parameter (Round-14 P0-10,
+    e.g. the update-clock ``n_updates``).
 
     Re-declaring a canonical is an error (a second declaration is a drift, not a
     refinement) — use ``execution_contract_overrides()`` to inspect.
@@ -1167,6 +1170,28 @@ def _minimum_warmup_rows(
     return max(2, min_rows, declared), False
 
 
+def _resolve_history_count(
+    declared: Mapping[str, Any], canonical: str, params: Mapping[str, Any] | None
+) -> int | None:
+    """Resolve a declared event/report/session ``history_count``.
+
+    Round-14 P0-10: an event-clock operator whose required observation count
+    depends on a runtime parameter (e.g. the update-clock ``n_updates``) must
+    report an HONEST, parameter-derived count instead of a stale constant.
+    ``history_count`` may therefore be a static ``int`` (legacy) or a callable
+    ``fn(canonical, params) -> int | None``; a callable is invoked with the
+    resolved canonical and the bound params.  A callable that raises degrades
+    conservatively to ``None`` (unknown count).
+    """
+    hc = declared.get("history_count")
+    if not callable(hc):
+        return hc
+    try:
+        return hc(canonical, dict(params) if params else {})
+    except Exception:
+        return None
+
+
 def history_requirement(
     canonical: str,
     params: Mapping[str, Any] | None = None,
@@ -1198,10 +1223,13 @@ def history_requirement(
         # observations (updates / reports / sessions), not trading bars — a
         # bar-window warmup cannot derive it.  Conservative full-history, with
         # the observation count exposed for the planner to reason about.
+        # Round-14 P0-10: the count may be a function of the bound params
+        # (e.g. the update-clock ``n_updates``), resolved via
+        # ``_resolve_history_count``.
         return HistoryRequirement(
             kind=declared["history_kind"],
             rows=max(rows, int(declared.get("minimum_history") or 0)),
-            count=declared.get("history_count"),
+            count=_resolve_history_count(declared, resolved, params),
         )
     if contract.requires_full_history or unknown:
         if (
@@ -1240,7 +1268,7 @@ def _own_history_requirement(canonical: str, params: Mapping[str, Any]) -> Histo
             return HistoryRequirement(
                 kind=declared["history_kind"],
                 rows=rows,
-                count=declared.get("history_count"),
+                count=_resolve_history_count(declared, resolved, params),
             )
         return HistoryRequirement(kind="full_history", rows=rows)
     extension = _own_history_extension(resolved, params or {})

@@ -274,7 +274,7 @@ def choppiness_index(high, low, close, window):
 # ---------------------------------------------------------------------------
 
 
-def _supertrend_1d(high, low, close, atr, mult, missing_policy="interrupt", max_gap=0):
+def _supertrend_1d(high, low, close, atr, mult):
     n = len(close)
     out = np.full(n, np.nan, dtype=float)
     basic_u = (high + low) / 2.0 + mult * atr
@@ -282,24 +282,16 @@ def _supertrend_1d(high, low, close, atr, mult, missing_policy="interrupt", max_
     final_u = basic_u.copy()
     final_l = basic_l.copy()
     trend = np.ones(n, dtype=int)
-    gap_max = max(int(max_gap), 0)
-    gap = 0
     for t in range(1, n):
-        if not np.isfinite(close[t]):
-            # Unified missing-state policy (audit 13.6): a missing close must
-            # not silently bridge a suspension / data gap.  ``interrupt``
-            # (default) -> NaN and break the recursion (next finite bar
-            # re-seeds); ``carry`` bridges at most ``max_gap`` bars with the
-            # previous finite level, then interrupts.
-            gap += 1
-            if missing_policy == "carry" and gap <= gap_max and np.isfinite(out[t - 1]):
-                out[t] = out[t - 1]
-            else:
-                trend[t] = 0  # sentinel: state broken, next finite bar re-seeds
+        # break + rewarm: a bar is state-valid only when high/low/close AND the
+        # derived ATR-based bands are ALL finite — otherwise the recursion breaks
+        # and re-warms over the next contiguous valid segment (round-11 P0).
+        if not (np.isfinite(high[t]) and np.isfinite(low[t]) and np.isfinite(close[t])
+                and np.isfinite(basic_u[t]) and np.isfinite(basic_l[t])):
+            trend[t] = 0  # sentinel: state broken, next valid bar re-seeds
             continue
-        gap = 0
         if trend[t - 1] == 0:
-            # Re-seed after a gap: restart bands from the current bar.
+            # Re-seed after a gap from the current bar's own valid bands.
             trend[t] = 1
             final_u[t] = basic_u[t]
             final_l[t] = basic_l[t]
@@ -319,9 +311,11 @@ def _supertrend_1d(high, low, close, atr, mult, missing_policy="interrupt", max_
     return out
 
 
-def Supertrend(high, low, close, atr_window, multiplier, missing_policy="interrupt", max_gap=0):
+def Supertrend(high, low, close, atr_window, multiplier):
     w = _pi(atr_window, "atr_window", 2)
     mult = _pf(multiplier, "multiplier", 0)
+    if mult <= 0:
+        raise ValueError("multiplier must be > 0 (Supertrend multiplier=0 collapses upper/lower to the midpoint)")
     cols = _cols(high, low, close)
     rows = close.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -330,12 +324,12 @@ def Supertrend(high, low, close, atr_window, multiplier, missing_policy="interru
         frame = pl.DataFrame({"high": high[c], "low": low[c], "close": close[c]})
         # Wilder ATR via the polars ewm path (proven to match pandas ewm NaN semantics)
         atr = frame.select(_wilder(_tr_propagate(pl.col("high"), pl.col("low"), pl.col("close")), w).alias("atr"))["atr"].to_numpy()
-        out[:, i] = _supertrend_1d(h, l, cl, atr, mult, missing_policy, max_gap)
+        out[:, i] = _supertrend_1d(h, l, cl, atr, mult)
     return _make(close, cols, out)
 
 
-def SupertrendDirection(high, low, close, atr_window, multiplier, missing_policy="interrupt", max_gap=0):
-    st = Supertrend(high, low, close, atr_window, multiplier, missing_policy, max_gap)
+def SupertrendDirection(high, low, close, atr_window, multiplier):
+    st = Supertrend(high, low, close, atr_window, multiplier)
     cols = _cols(st)
     rows = close.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -348,32 +342,22 @@ def SupertrendDirection(high, low, close, atr_window, multiplier, missing_policy
     return _make(close, cols, out)
 
 
-def _psar_1d(high, low, af0, afmax, missing_policy="interrupt", max_gap=0):
+def _psar_1d(high, low, af0, afmax):
     n = len(high)
     out = np.full(n, np.nan, dtype=float)
     if n < 2:
         return out
-    gap_max = max(int(max_gap), 0)
     bull = True
     sar = low[0]
     ep = high[0]
     af = af0
     live = True
-    gap = 0
     for t in range(1, n):
         if not (np.isfinite(high[t]) and np.isfinite(low[t])):
-            # Unified missing-state policy (audit 13.6): a missing bar must not
-            # silently bridge a suspension / data gap.  ``interrupt`` (default)
-            # -> NaN and break the recursion (next finite bar re-seeds);
-            # ``carry`` bridges at most ``max_gap`` bars with the previous
-            # finite SAR, then interrupts.
-            gap += 1
-            if missing_policy == "carry" and gap <= gap_max and live:
-                out[t] = sar
-            else:
-                live = False
+            # break + rewarm: a missing bar invalidates the state; the next
+            # jointly-valid bar re-seeds from its own range (round-11 P0).
+            live = False
             continue
-        gap = 0
         if not live:
             # Re-seed after a gap from the current bar's own range.
             bull = True
@@ -414,7 +398,7 @@ def _psar_1d(high, low, af0, afmax, missing_policy="interrupt", max_gap=0):
     return out
 
 
-def PSAR(high, low, acceleration, maximum, missing_policy="interrupt", max_gap=0):
+def PSAR(high, low, acceleration, maximum):
     af0 = _pf(acceleration, "acceleration", 0)
     afmax = _pf(maximum, "maximum", 0)
     if af0 <= 0 or afmax < af0:
@@ -423,7 +407,7 @@ def PSAR(high, low, acceleration, maximum, missing_policy="interrupt", max_gap=0
     rows = high.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        out[:, i] = _psar_1d(high[c].to_numpy(), low[c].to_numpy(), af0, afmax, missing_policy, max_gap)
+        out[:, i] = _psar_1d(high[c].to_numpy(), low[c].to_numpy(), af0, afmax)
     return _make(high, cols, out)
 
 

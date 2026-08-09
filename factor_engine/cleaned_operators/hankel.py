@@ -14,6 +14,10 @@ SVD → singular values ``σ``.  The family then reads the singular spectrum:
 * R4-67: linear interpolation across a gap (``missing_mode="interpolate"``) is
   research-only and requires explicit opt-in; the production default is
   ``strict_contiguous``.
+* P0-5: the CURRENT row is always required.  When the current observation is
+  NaN the row emits NaN even if a finite trailing contiguous run would cover
+  the window — the operator must never fall back to yesterday's run and emit a
+  stale-history factor.
 
 * ``ts_hankel_effective_rank``       — exponential of the entropy of the
   normalized squared-singular-value distribution, normalized by ``min(H.shape)``.
@@ -52,7 +56,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         return_type="series",
         tags=[
             "hankel", "daily", "pit_safe", "causal", "typed_v2",
-            "deterministic",
+            "deterministic", "current_row_required",
             f"signature:{','.join(params)}->series", "domain:ts_structure",
             f"unit:{unit}", f"cost:{cost}",
         ],
@@ -76,8 +80,20 @@ def _fill_window(
     the window (default 0.8), otherwise ``None`` is returned so the row emits
     NaN.  Without this gate the same operator would alternate between an
     18-point and a 60-point Hankel matrix from day to day.
+
+    P0-5: the current row is part of the contract.  In ``strict_contiguous``
+    mode a NaN current observation returns ``None`` immediately (the row emits
+    NaN) — the trailing run is never allowed to shift backwards past a missing
+    current value and emit a stale-history factor.
     """
     if chunk.size == 0:
+        return None
+    # P0-5: the CURRENT row is required.  A NaN current observation must not
+    # fall back to yesterday's contiguous finite run and emit a stale-history
+    # Hankel/SSA factor (the old walk-back produced exactly that).  In strict
+    # contiguous mode (the production default) a missing current row emits NaN;
+    # only the research-only ``interpolate`` mode may reconstruct it.
+    if missing_mode == "strict_contiguous" and not np.isfinite(chunk[-1]):
         return None
     finite = np.isfinite(chunk)
     n_fin = int(np.count_nonzero(finite))

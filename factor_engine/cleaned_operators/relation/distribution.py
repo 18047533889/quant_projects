@@ -21,7 +21,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import check_window, frame_like, register_polars_bridge
 
 
@@ -34,6 +40,7 @@ def _metadata(
     unit: str,
     output_unit: str | None = None,
     param_specs: dict[str, Any] | None = None,
+    relational_specs: list[RelationalParamSpec] | None = None,
 ) -> OperatorMetadata:
     metadata = OperatorMetadata(
         name=name,
@@ -48,6 +55,7 @@ def _metadata(
         ],
         output_unit=output_unit,
         param_specs=dict(param_specs or {}),
+        relational_specs=list(relational_specs or []),
     )
     return metadata
 
@@ -160,6 +168,9 @@ class RelationTopkConcentration(SeriesOperator):
         ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "k"],
         category="relation",
         unit="ratio",
+        # review §17: ``k`` is a strict-integer count of rank slots — 5.1 must be
+        # rejected, never silently ``int(k)``-truncated to 5.
+        param_specs={"k": ParamSpec(dtype=int, min=1)},
     )
 
     def _calculate_series(
@@ -269,19 +280,30 @@ class RelationDistributionSkew(SeriesOperator):
         return frame_like(base, out)
 
 
+def _pearson_kurtosis(values: np.ndarray) -> float:
+    """Pearson kurtosis ``E[(X-μ)⁴]/σ⁴`` — ≈3 for a normal sample.
+
+    Review §16: the historical ``relation_distribution_kurtosis`` name implied
+    excess kurtosis (normal ≈ 0) while the formula was the fourth standardized
+    moment (normal ≈ 3).  The canonical spelling now says exactly what it
+    computes.
+    """
+    return _kurtosis(values)
+
+
 @register_operator(
-    name="relation_distribution_kurtosis",
+    name="relation_distribution_pearson_kurtosis",
     category="relation",
     business_category="relation",
-    canonical="relation_distribution_kurtosis",
+    canonical="relation_distribution_pearson_kurtosis",
     source="relation.distribution",
 )
-class RelationDistributionKurtosis(SeriesOperator):
-    """名次面板截面峰度。"""
+class RelationDistributionPearsonKurtosis(SeriesOperator):
+    """名次面板截面峰度（Pearson：E[(X-μ)⁴]/σ⁴，正态≈3）。"""
 
     metadata = _metadata(
-        "relation_distribution_kurtosis",
-        "名次面板截面峰度（variadic：接收 4 个及以上关系面板列数组）。",
+        "relation_distribution_pearson_kurtosis",
+        "名次面板截面峰度（Pearson：E[(X-μ)⁴]/σ⁴，正态≈3；variadic：接收 4 个及以上关系面板列数组）。",
         ["relations"],
         category="relation",
         # R11 #123: kurtosis is a standardized fourth moment — dimensionless.
@@ -293,14 +315,50 @@ class RelationDistributionKurtosis(SeriesOperator):
 
     def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
         if len(args) < 4:
-            raise ValueError("relation_distribution_kurtosis requires at least four ranked panels")
+            raise ValueError("relation_distribution_pearson_kurtosis requires at least four ranked panels")
         base = args[0]
         stacked = _stack_panels(*args)
         rows, cols = stacked.shape[1], stacked.shape[2]
         out = np.full((rows, cols), np.nan, dtype=float)
         for r in range(rows):
             for c in range(cols):
-                out[r, c] = _kurtosis(stacked[:, r, c])
+                out[r, c] = _pearson_kurtosis(stacked[:, r, c])
+        return frame_like(base, out)
+
+
+@register_operator(
+    name="relation_distribution_excess_kurtosis",
+    category="relation",
+    business_category="relation",
+    canonical="relation_distribution_excess_kurtosis",
+    source="relation.distribution",
+)
+class RelationDistributionExcessKurtosis(SeriesOperator):
+    """名次面板截面超额峰度 = Pearson 峰度 − 3（正态≈0）。"""
+
+    metadata = _metadata(
+        "relation_distribution_excess_kurtosis",
+        "名次面板截面超额峰度 = Pearson 峰度 − 3（正态≈0；variadic：接收 4 个及以上关系面板列数组）。",
+        ["relations"],
+        category="relation",
+        # R11 #123: kurtosis is a standardized fourth moment — dimensionless.
+        unit="dimensionless",
+        output_unit="dimensionless",
+    )
+    # R5-06: genuinely variadic (4+ ranked panels in one positional slot).
+    metadata.tags = list(metadata.tags) + ["variadic"]
+
+    def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
+        if len(args) < 4:
+            raise ValueError("relation_distribution_excess_kurtosis requires at least four ranked panels")
+        base = args[0]
+        stacked = _stack_panels(*args)
+        rows, cols = stacked.shape[1], stacked.shape[2]
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for r in range(rows):
+            for c in range(cols):
+                kurt = _pearson_kurtosis(stacked[:, r, c])
+                out[r, c] = kurt - 3.0 if np.isfinite(kurt) else np.nan
         return frame_like(base, out)
 
 
@@ -333,6 +391,10 @@ class RelationHhiChange(SeriesOperator):
         ["hhi", "window"],
         category="relation",
         unit="ratio",
+        # review §17: ``window`` is a strict-integer span — 5.1 must be rejected,
+        # never silently ``int(window)``-truncated.  A change over a single bar
+        # collides with the plain delta family, so the window spans >= 2 points.
+        param_specs={"window": ParamSpec(dtype=int, min=2)},
     )
 
     def _calculate_series(self, hhi: pd.DataFrame, window: int = 5, **_: Any) -> pd.DataFrame:
@@ -358,6 +420,10 @@ class RelationEntropyChange(SeriesOperator):
         ["entropy", "window"],
         category="relation",
         unit="level",
+        # review §17: strict-integer ``window`` — 5.1 is rejected, not truncated.
+        # A change over a single bar collides with the plain delta family, so the
+        # window spans >= 2 points.
+        param_specs={"window": ParamSpec(dtype=int, min=2)},
     )
 
     def _calculate_series(self, entropy: pd.DataFrame, window: int = 5, **_: Any) -> pd.DataFrame:
@@ -387,9 +453,12 @@ class RelationConcentrationAcceleration(SeriesOperator):
         # needs 2*window prior rows; declared as a compound history formula so
         # the history planner never under-provisions warm-up.
         param_specs={
+            # review §17: strict-integer ``window`` — 5.1 is rejected, never
+            # ``int(window)``-truncated.  A second difference needs at least two
+            # bars apart, so the window spans >= 2 points.
             "window": ParamSpec(
                 dtype=int,
-                min=1,
+                min=2,
                 history_formula="2 * window",
             ),
         },
@@ -571,6 +640,9 @@ class RelationShareMobility(SeriesOperator):
         # shares, not a ratio between unrelated quantities.
         unit="same_as:share",
         output_unit="same_as:share",
+        # review §17: strict-integer ``window`` — 5.1 must be rejected, never
+        # silently ``int(window)``-truncated to 5.
+        param_specs={"window": ParamSpec(dtype=int, min=1)},
     )
 
     def _calculate_series(
@@ -746,19 +818,30 @@ class GroupTailRatio(SeriesOperator):
 
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
+    from cleaned_operators.registry import OperatorRegistry
 
     _surface.extend_extended_only({
             "relation_topk_concentration", "relation_distribution_skew",
-            "relation_distribution_kurtosis", "relation_hhi_change",
+            "relation_distribution_pearson_kurtosis",
+            "relation_distribution_excess_kurtosis",
+            "relation_hhi_change",
             "relation_entropy_change", "relation_concentration_acceleration",
             "relation_rank_mobility", "relation_rank_entity_mobility",
             "relation_share_mobility",
             "group_skewness", "group_kurtosis", "group_quantile_spread",
             "group_tail_ratio",
         })
+    # Review §16 honest rename: the old ``relation_distribution_kurtosis``
+    # spelling is now a DEPRECATED ALIAS of the Pearson canonical (normal ≈ 3).
+    # It is no longer an active canonical, so it must leave the extended
+    # partition — otherwise layer_governance's exact-classification check counts
+    # an inactive name (the alias) against the static surface.
+    _surface.retract_extended_only({"relation_distribution_kurtosis"})
     for _canon in (
         "relation_topk_concentration", "relation_distribution_skew",
-        "relation_distribution_kurtosis", "relation_hhi_change",
+        "relation_distribution_pearson_kurtosis",
+        "relation_distribution_excess_kurtosis",
+        "relation_hhi_change",
         "relation_entropy_change", "relation_concentration_acceleration",
         "relation_rank_mobility", "relation_rank_entity_mobility",
         "relation_share_mobility",
@@ -766,6 +849,25 @@ def _register_surface() -> None:
         "group_tail_ratio",
     ):
         register_polars_bridge(_canon)
+
+    # Review §16: old spelling -> deprecated alias of the honest Pearson
+    # canonical.  Prefer rename_canonical (migrates first-registered identity /
+    # governance) when another layer already registered the historical spelling;
+    # otherwise register the alias directly.
+    if "relation_distribution_kurtosis" in OperatorRegistry._operators:
+        OperatorRegistry.rename_canonical(
+            "relation_distribution_kurtosis",
+            "relation_distribution_pearson_kurtosis",
+        )
+    elif "relation_distribution_pearson_kurtosis" in OperatorRegistry._operators:
+        OperatorRegistry.register_alias(
+            "relation_distribution_kurtosis",
+            "relation_distribution_pearson_kurtosis",
+            replacement_reason="review §16 renamed: the formula is Pearson "
+            "kurtosis E[(X-mu)^4]/sigma^4 (normal ~ 3), not excess kurtosis "
+            "(normal ~ 0); see relation_distribution_pearson_kurtosis / "
+            "relation_distribution_excess_kurtosis",
+        )
 
 
 _register_surface()

@@ -45,7 +45,8 @@ FINAL_PACK = frozenset({
     "ashare_limit_open_down_streak", "ashare_limit_up_volume_ratio",
     "ashare_limit_down_volume_ratio",
     # group 5 — relation / group distribution
-    "relation_topk_concentration", "relation_distribution_skew", "relation_distribution_kurtosis",
+    "relation_topk_concentration", "relation_distribution_skew",
+    "relation_distribution_pearson_kurtosis", "relation_distribution_excess_kurtosis",
     "relation_hhi_change", "relation_entropy_change", "relation_concentration_acceleration",
     "relation_rank_mobility", "relation_share_mobility", "group_skewness", "group_kurtosis",
     "group_quantile_spread", "group_tail_ratio",
@@ -67,6 +68,8 @@ FINAL_PACK = frozenset({
 RENAMED_TO_EXTENDED = frozenset({
     "ts_upper_tail_coexceedance_probability",
     "ts_lower_tail_coexceedance_probability",
+    "relation_distribution_pearson_kurtosis",
+    "relation_distribution_excess_kurtosis",
 })
 
 EXPECTED_SCOPE = {
@@ -89,7 +92,8 @@ EXPECTED_SCOPE = {
     "ashare_limit_open_up_streak": "ts", "ashare_limit_open_down_streak": "ts",
     "ashare_limit_up_volume_ratio": "ts", "ashare_limit_down_volume_ratio": "ts",
     "relation_topk_concentration": "cs", "relation_distribution_skew": "cs",
-    "relation_distribution_kurtosis": "cs", "relation_hhi_change": "cs",
+    "relation_distribution_pearson_kurtosis": "cs", "relation_distribution_excess_kurtosis": "cs",
+    "relation_hhi_change": "cs",
     "relation_entropy_change": "cs", "relation_concentration_acceleration": "cs",
     "relation_rank_mobility": "cs", "relation_share_mobility": "cs",
     "group_skewness": "group", "group_kurtosis": "group",
@@ -234,7 +238,7 @@ def test_final_pack_deterministic_and_axes(canonical):
         elif canonical == "relation_distribution_skew":
             panels = tuple(close for _ in range(3))
             kw = {}
-        elif canonical == "relation_distribution_kurtosis":
+        elif canonical in ("relation_distribution_pearson_kurtosis", "relation_distribution_excess_kurtosis"):
             panels = tuple(close for _ in range(4))
             kw = {}
         elif canonical == "relation_topk_concentration":

@@ -469,8 +469,11 @@ def test_kramers_moyal_min_bin_count_fails_closed():
     t = np.arange(80.0)[:, None]
     x = _frame(t, "2024-01-01")
     op = OperatorRegistry.get("ts_kramers_moyal_drift", "pandas_numpy")
-    out = op.calculate(x, window=6, bins=4, min_bin_count=10)
-    assert np.isnan(out.to_numpy(dtype=float)).all()  # few transitions -> NaN
+    # round-2 §Markov (TASK 3): min_count is a relational feasibility gate —
+    # window [t-W, t-1] holds at most window-lag lagged pairs, so a minimum above
+    # that is guaranteed-NaN and must be REJECTED at binding (fail-closed).
+    with pytest.raises(ValueError):
+        op.calculate(x, window=6, bins=4, min_bin_count=10)
 
 
 def test_copula_column_permutation_invariant():

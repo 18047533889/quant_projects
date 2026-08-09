@@ -427,6 +427,27 @@ def execute_materialize(
             if semantic_identity is not None
             else ast_hash[:16]
         )
+        # R14 #3：**一个** ``MaterializationDelta`` 是全部 sink 的唯一构造点。
+        # ``deleted_keys``（上游 ``materialize_incremental`` 传入的 tombstone 键）
+        # 必须同时到达 Parquet 与 ClickHouse——Parquet 已把它写为 NaN/deleted，
+        # 这里把同一份 tombstone 传进 CH（``_series_with_tombstones`` 转成 NaN 行
+        # 覆盖旧有限值，与 Parquet 同构）。全量 digest / generation /
+        # transaction_id 也由 delta 统一携带，杜绝各 sink 各自重新拼状态。
+        snapshot_id = lineage_service.resolve_data_snapshot_id(
+            engine.data_source, effective_data_source_config
+        )
+        from runtime.dual_write_service import MaterializationDelta
+
+        delta = MaterializationDelta(
+            upserts=output["result"],
+            tombstones=tuple(deleted_keys or ()),
+            semantic_identity_digest=(
+                semantic_identity.identity_digest()
+                if semantic_identity is not None
+                else None
+            ),
+            data_snapshot_id=snapshot_id,
+        )
         summary = dual_write_service.dual_write_clickhouse(
             materializer,
             summary,
@@ -435,9 +456,7 @@ def execute_materialize(
             ast_hash=ast_hash,
             factor_version=canonical_factor_version,
             write_target=target,
-            data_snapshot_id=lineage_service.resolve_data_snapshot_id(
-            engine.data_source, effective_data_source_config
-        ),
+            data_snapshot_id=snapshot_id,
             clickhouse_table=clickhouse_table,
             preserve_invalid_rows=preserve_invalid_rows,
             value_dtype=value_dtype,
@@ -452,6 +471,7 @@ def execute_materialize(
             ch_username=ch_username,
             ch_password=ch_password,
             ch_secure=ch_secure,
+            delta=delta,
         )
 
     output["materialization"] = {

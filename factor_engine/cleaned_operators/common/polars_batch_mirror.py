@@ -179,9 +179,55 @@ for _canon in (
     "tm_top_n_sum",
     "ts_bottom_n_avg",
     "ts_bottom_n_sum",
-    "aggr_top_n",
 ):
     _register_bridge(_canon, category="time_series", business_category="time_series")
+
+# aggr_top_n 是跨截面路由算子（非 time_series）：按 sort_col 取当日全截面前 N
+# 标的再聚合（routing 状态为全局 per-day）。通用 ``_register_bridge`` 的
+# ``_calculate_series(x, *args)`` 契约与 aggr_top_n 的字符串首参（aggr_func）
+# 不兼容，故用专用 polars 后端（复用 pandas_numpy 内核，无效 aggr_func 由
+# pandas 内核抛 ValueError —— 两条后端路径一致）。
+@register_operator(
+    name="aggr_top_n",
+    category="cross_sectional",
+    business_category="cross_sectional_routing",
+    canonical="aggr_top_n",
+    source="factor_dsl_polars_bridge",
+    backend="polars",
+)
+class AggrTopNPolars(SeriesOperator):
+    """Polars 跨截面 Top-N 路由聚合（pandas 内核 parity）。"""
+
+    metadata = OperatorMetadata(
+        name="aggr_top_n",
+        category="cross_sectional",
+        description="跨截面 Top-N 路由聚合（pandas 内核 parity）",
+        param_names=["aggr_func", "x", "sort_col", "top", "asc"],
+        return_type="series",
+        tags=["cross_sectional", "routing", "top_n", "polars"],
+    )
+
+    def _calculate_series(
+        self,
+        aggr_func: str = "sum",
+        x: pl.DataFrame | None = None,
+        sort_col: pl.DataFrame | None = None,
+        top: int = 10,
+        asc: bool = True,
+        **kwargs,
+    ) -> pl.DataFrame:
+        from cleaned_operators.common._polars_bridge import bridge_pandas
+
+        if x is None:
+            raise ValueError("aggr_top_n requires an x panel")
+        op = OperatorRegistry.get("aggr_top_n", backend="pandas_numpy")
+
+        # bridge_pandas calls compute(pdf, *pargs); pargs = (aggr_func, sort_col,
+        # top, asc) and pdf is the x panel.
+        def _compute(pdf, aggr_func, sort_col, top, asc, **kwargs):
+            return op.calculate(aggr_func, pdf, sort_col, top, asc, **kwargs)
+
+        return bridge_pandas(x, _compute, aggr_func, sort_col, top, asc, **kwargs)
 
 # 统计 / 回归 / 假设检验（桥接，生产仍推荐 Tier-1 算子）
 for _canon in (

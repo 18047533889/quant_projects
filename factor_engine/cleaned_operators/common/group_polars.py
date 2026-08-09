@@ -16,6 +16,7 @@ try:
 except ImportError:
     pl = None  # type: ignore
 
+from cleaned_operators.base import ParamRole, ParamSpec
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 
 _SKIP = frozenset({"date", "stock_code"})
@@ -381,11 +382,32 @@ class GroupPercentilePolars(SeriesOperator):
         return _group_rowwise(x, group, _pct)
 
 
-def _decay_linear_row(row_x: np.ndarray, row_g: np.ndarray | None) -> np.ndarray:
-    """组内线性衰减：按值 rank 升序赋权 1..n 归一化，大值权重更高。
+def _average_ranks_1d(vals: np.ndarray) -> np.ndarray:
+    """平均排名（等价 pandas ``rank(method='average')``）。
 
-    与 ``group.py`` 中 ``GroupDecayLinear`` 一致：``rank(method='first')`` 后
-    将线性权重 ``w_j ∝ j`` 映射到排序后的元素，再 ``x * decay_weights``。
+    并列值取平均名次 —— 保证同一组内相同数值获得相同权重（audit item 7），
+    不依赖列位置。返回值总和恒为 ``n(n+1)/2``。
+    """
+    order = np.argsort(vals, kind="mergesort")
+    n = len(vals)
+    ranks = np.empty(n, dtype=float)
+    i = 0
+    while i < n:
+        j = i
+        while j + 1 < n and vals[order[j + 1]] == vals[order[i]]:
+            j += 1
+        avg = 0.5 * (i + j) + 1.0
+        ranks[order[i : j + 1]] = avg
+        i = j + 1
+    return ranks
+
+
+def _decay_linear_row(row_x: np.ndarray, row_g: np.ndarray | None) -> np.ndarray:
+    """组内按**平均排名**线性加权（CS rank-weighted value）。
+
+    与 ``group.py`` 中 ``GroupRankWeightedValue`` 一致：``rank(method='average')``
+    后权重 ∝ 平均排名、组内归一化，再 ``x * weight``；并列值得到相同权重
+    （不依赖列位置）。``window`` 参数不参与计算。时间衰减见 ``group_ts_decay_linear``。
     """
     out = np.full_like(row_x, np.nan, dtype=float)
     mask = ~np.isnan(row_x)
@@ -393,15 +415,9 @@ def _decay_linear_row(row_x: np.ndarray, row_g: np.ndarray | None) -> np.ndarray
         return out
 
     def _apply(vals: np.ndarray) -> np.ndarray:
-        n = len(vals)
-        # 稳定排序得到 1..n 名次（等价 pandas rank method='first'）
-        ranked = np.argsort(np.argsort(vals, kind="mergesort"), kind="mergesort") + 1.0
-        w = np.arange(1, n + 1, dtype=float)
-        w = w / w.sum()
-        sorted_idx = np.argsort(ranked, kind="mergesort")
-        decay = np.zeros(n, dtype=float)
-        decay[sorted_idx] = w[:n]
-        return vals * decay
+        ranks = _average_ranks_1d(vals)
+        w = ranks / ranks.sum()
+        return vals * w
 
     if row_g is None or np.all(np.isnan(row_g)):
         out[mask] = _apply(row_x[mask])
@@ -414,6 +430,30 @@ def _decay_linear_row(row_x: np.ndarray, row_g: np.ndarray | None) -> np.ndarray
 
 
 @register_operator(
+    name="group_rank_weighted_value",
+    category="cross_sectional",
+    business_category="group_neutralization",
+    canonical="group_rank_weighted_value",
+    source="factor_dsl_polars",
+)
+class GroupRankWeightedValuePolars(SeriesOperator):
+    """Polars 组内平均排名线性加权（CS rank-weighted value）"""
+    metadata = OperatorMetadata(
+        name="group_rank_weighted_value",
+        category="cross_sectional",
+        description="组内平均排名线性加权（CS rank-weighted value；非时间衰减）",
+        param_names=["x", "group"],
+        return_type="series",
+        tags=["cross_sectional", "polars"],
+    )
+
+    def _calculate_series(
+        self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs
+    ) -> pl.DataFrame:
+        return _group_rowwise(x, group, _decay_linear_row)
+
+
+@register_operator(
     name="group_decay_linear",
     category="cross_sectional",
     business_category="group_neutralization",
@@ -421,14 +461,15 @@ def _decay_linear_row(row_x: np.ndarray, row_g: np.ndarray | None) -> np.ndarray
     source="factor_dsl_polars",
 )
 class GroupDecayLinearPolars(SeriesOperator):
-    """Polars 组内线性衰减加权"""
+    """Polars 组内按排名线性加权（兼容名；window 不参与计算）"""
     metadata = OperatorMetadata(
         name="group_decay_linear",
         category="cross_sectional",
-        description="组内线性衰减加权",
+        description="组内按排名线性加权（兼容名；window 不参与计算，诚实名称 group_rank_weighted_value）",
         param_names=["x", "group", "window"],
         return_type="series",
         tags=["cross_sectional", "polars"],
+        param_specs={"window": ParamSpec(dtype=int, searchable=False, param_role=ParamRole.POLICY)},
     )
 
     def _calculate_series(

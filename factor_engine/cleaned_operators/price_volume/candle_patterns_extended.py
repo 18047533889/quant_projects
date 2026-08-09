@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.price_volume.candle_geometry_v2 import _validate_ohlc
 
 _EPS = 1e-12
 
@@ -116,12 +117,14 @@ def _doji_mask(open_, high, low, close):
 
 def dragonfly_doji(open_, high, low, close):
     _, body, rng, upper, lower, _, _ = _parts(open_, high, low, close)
-    return ((body <= 0.10*rng) & (lower >= 0.60*rng) & (upper <= 0.10*rng) & (rng > _min_tick(close))).astype(float)
+    out = ((body <= 0.10*rng) & (lower >= 0.60*rng) & (upper <= 0.10*rng) & (rng > _min_tick(close))).astype(float)
+    return out.where(_validate_ohlc(open_, high, low, close))
 
 
 def gravestone_doji(open_, high, low, close):
     _, body, rng, upper, lower, _, _ = _parts(open_, high, low, close)
-    return ((body <= 0.10*rng) & (upper >= 0.60*rng) & (lower <= 0.10*rng) & (rng > _min_tick(close))).astype(float)
+    out = ((body <= 0.10*rng) & (upper >= 0.60*rng) & (lower <= 0.10*rng) & (rng > _min_tick(close))).astype(float)
+    return out.where(_validate_ohlc(open_, high, low, close))
 
 
 def hammer(open_, high, low, close):
@@ -131,7 +134,7 @@ def hammer(open_, high, low, close):
     downtrend = _prior_trend(close, up=False)
     pattern = flag & downtrend.fillna(False)
     out = pattern.astype(float)
-    return out.where(downtrend.notna())
+    return out.where(downtrend.notna()).where(_validate_ohlc(open_, high, low, close))
 
 
 def hanging_man(open_, high, low, close):
@@ -143,7 +146,7 @@ def hanging_man(open_, high, low, close):
     uptrend = _prior_trend(close, up=True)
     pattern = flag & uptrend.fillna(False)
     out = -pattern.astype(float)
-    return out.where(uptrend.notna())
+    return out.where(uptrend.notna()).where(_validate_ohlc(open_, high, low, close))
 
 
 def harami(open_, high, low, close):
@@ -155,7 +158,9 @@ def harami(open_, high, low, close):
     inside = (cur_hi < prev_hi) & (cur_lo > prev_lo)
     bullish = inside & (prev_close < prev_open) & (close > open_)
     bearish = inside & (prev_close > prev_open) & (close < open_)
-    return bullish.astype(float) - bearish.astype(float)
+    out = bullish.astype(float) - bearish.astype(float)
+    valid = _validate_ohlc(open_, high, low, close) & _validate_ohlc(open_, high, low, close).shift(1)
+    return out.where(valid)
 
 
 def harami_cross(open_, high, low, close):
@@ -170,7 +175,8 @@ def piercing(open_, high, low, close):
         (prev_close < prev_open) & (close > open_) &
         (open_ <= prev_close) & (close > midpoint) & (close < prev_open)
     )
-    return flag.astype(float)
+    valid = _validate_ohlc(open_, high, low, close) & _validate_ohlc(open_, high, low, close).shift(1)
+    return flag.astype(float).where(valid)
 
 
 def dark_cloud(open_, high, low, close):
@@ -180,7 +186,8 @@ def dark_cloud(open_, high, low, close):
         (prev_close > prev_open) & (close < open_) &
         (open_ >= prev_close) & (close < midpoint) & (close > prev_open)
     )
-    return -flag.astype(float)
+    valid = _validate_ohlc(open_, high, low, close) & _validate_ohlc(open_, high, low, close).shift(1)
+    return (-flag.astype(float)).where(valid)
 
 
 def morning_star(open_, high, low, close):
@@ -195,7 +202,12 @@ def morning_star(open_, high, low, close):
         (body1 <= 0.35*range1) &
         (close > open_) & (close > midpoint2)
     )
-    return flag.astype(float)
+    valid = (
+        _validate_ohlc(open_, high, low, close)
+        & _validate_ohlc(open_, high, low, close).shift(1)
+        & _validate_ohlc(open_, high, low, close).shift(2)
+    )
+    return flag.astype(float).where(valid)
 
 
 def evening_star(open_, high, low, close):
@@ -210,7 +222,12 @@ def evening_star(open_, high, low, close):
         (body1 <= 0.35*range1) &
         (close < open_) & (close < midpoint2)
     )
-    return -flag.astype(float)
+    valid = (
+        _validate_ohlc(open_, high, low, close)
+        & _validate_ohlc(open_, high, low, close).shift(1)
+        & _validate_ohlc(open_, high, low, close).shift(2)
+    )
+    return (-flag.astype(float)).where(valid)
 
 
 def three_white_soldiers(open_, high, low, close):
@@ -232,7 +249,13 @@ def three_white_soldiers(open_, high, low, close):
         & _short_shadows(open_.shift(1), high.shift(1), low.shift(1), close.shift(1))
         & _short_shadows(open_.shift(2), high.shift(2), low.shift(2), close.shift(2))
     )
-    return (bull0 & bull1 & bull2 & rising & opens_inside & long_b & short_sh).astype(float)
+    out = (bull0 & bull1 & bull2 & rising & opens_inside & long_b & short_sh).astype(float)
+    valid = (
+        _validate_ohlc(open_, high, low, close)
+        & _validate_ohlc(open_, high, low, close).shift(1)
+        & _validate_ohlc(open_, high, low, close).shift(2)
+    )
+    return out.where(valid)
 
 
 def three_black_crows(open_, high, low, close):
@@ -254,7 +277,13 @@ def three_black_crows(open_, high, low, close):
         & _short_shadows(open_.shift(1), high.shift(1), low.shift(1), close.shift(1))
         & _short_shadows(open_.shift(2), high.shift(2), low.shift(2), close.shift(2))
     )
-    return -(bear0 & bear1 & bear2 & falling & opens_inside & long_b & short_sh).astype(float)
+    out = -(bear0 & bear1 & bear2 & falling & opens_inside & long_b & short_sh).astype(float)
+    valid = (
+        _validate_ohlc(open_, high, low, close)
+        & _validate_ohlc(open_, high, low, close).shift(1)
+        & _validate_ohlc(open_, high, low, close).shift(2)
+    )
+    return out.where(valid)
 
 
 _TICK_K = 2  # tweezer "equal high/low" tolerance in ticks (audit item 6)
@@ -266,13 +295,17 @@ def tweezer_top(open_, high, low, close):
     # are "equal" when within ``_TICK_K`` A-share ticks of each other.
     same_high = (high - high.shift(1)).abs() <= _tick_size(high) * _TICK_K
     reversal = (close.shift(1) > open_.shift(1)) & (close < open_)
-    return -(same_high & reversal).astype(float)
+    out = -(same_high & reversal).astype(float)
+    valid = _validate_ohlc(open_, high, low, close) & _validate_ohlc(open_, high, low, close).shift(1)
+    return out.where(valid)
 
 
 def tweezer_bottom(open_, high, low, close):
     same_low = (low - low.shift(1)).abs() <= _tick_size(low) * _TICK_K
     reversal = (close.shift(1) < open_.shift(1)) & (close > open_)
-    return (same_low & reversal).astype(float)
+    out = (same_low & reversal).astype(float)
+    valid = _validate_ohlc(open_, high, low, close) & _validate_ohlc(open_, high, low, close).shift(1)
+    return out.where(valid)
 
 
 for _name, _fn, _desc, _bars, _replace_source, _reason in [

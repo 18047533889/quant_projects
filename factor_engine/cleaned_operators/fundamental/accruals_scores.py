@@ -29,6 +29,47 @@ _CANONICALS: list[str] = []
 # (a stock with 3/8 fields must not be scored against one with 8/8).
 MIN_FUNDAMENTAL_COMPONENTS = 6
 
+# Round-3 item 30: input-semantic declarations for threshold-relative score
+# operators.  Each signal tests ``field > 0`` / ``field_delta > 0`` — meaningful
+# only for a Return/Rate/flow field, never a raw Price/Volume (``Price > 0`` /
+# ``Volume > 0`` are almost always True).  Exposed as ``input_units`` metadata.
+_PIOTROSKI_INPUT_UNITS = {
+    "roa": "rate",
+    "ocf": "rate",
+    "net_profit": "rate",
+    "leverage": "rate",
+    "current_ratio": "rate",
+    "total_capital": "stock",
+    "gross_margin": "rate",
+    "asset_turnover": "rate",
+    "period_id": "fiscal_period",
+}
+_ALTZMI_INPUT_UNITS = {
+    "working_capital": "stock",
+    "retained_earnings": "stock",
+    "operating_profit": "flow",
+    "total_assets": "stock",
+    "market_cap": "stock",
+    "total_liabilities": "stock",
+    "revenue": "flow",
+    "net_profit": "flow",
+    "current_assets": "stock",
+    "current_liabilities": "stock",
+    "period_id": "fiscal_period",
+}
+_STRENGTH_INPUT_UNITS = {
+    "roa": "rate",
+    "ocf": "rate",
+    "gross_margin": "rate",
+    "asset_turnover": "rate",
+    "leverage": "rate",
+    "receivable_turnover": "rate",
+    "inventory_turnover": "rate",
+    "avg_assets": "stock",
+    "revenue_growth": "rate",
+    "period_id": "fiscal_period",
+}
+
 
 def _growth(x: pd.DataFrame, period_id: pd.DataFrame, periods: int = 1, flow_type=None) -> pd.DataFrame:
     # Finding #52: growth over a cumulative-YTD input is not a period growth
@@ -311,15 +352,34 @@ _mk(
 def _masked(score: pd.DataFrame, mask: pd.DataFrame | None) -> pd.DataFrame:
     if mask is None:
         return score
-    # An *unknown* applicability (NaN) must stay NaN — never coerce to truthy.
-    # ``NaN.astype(bool)`` is True in NumPy/Pandas, which silently kept unknown
-    # names in the factor — 3rd-round audit P0-09.
-    valid_mask = mask.notna() & mask.ne(0)
-    return score.where(valid_mask, np.nan)
+    # ApplicabilityBool contract (R11 round-2, review section 十五): an
+    # applicability mask is a STRICT boolean panel — the only valid cell values
+    # are {0, 1, NaN}.  A finite value that is neither 0 nor 1 is a contract
+    # violation and fails closed (raises).  NaN and 0 both mean "not applicable"
+    # (masked out); 1 means "applicable".  The old ``mask.notna() & mask.ne(0)``
+    # treated -1/0.4/2 all as "applicable", silently scoring names the caller
+    # never meant to include.  An *unknown* applicability (NaN) must stay NaN —
+    # never coerce to truthy: ``NaN.astype(bool)`` is True in NumPy/Pandas, which
+    # silently kept unknown names in the factor (3rd-round audit P0-09).
+    m = mask.reindex(index=score.index, columns=score.columns)
+    try:
+        arr = m.to_numpy(dtype=float)
+    except (TypeError, ValueError):  # object / non-numeric mask — coerce leniently
+        arr = m.apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+    finite = np.isfinite(arr)
+    invalid = finite & (arr != 0.0) & (arr != 1.0)
+    if invalid.any():
+        bad = np.unique(arr[invalid])
+        raise ValueError(
+            "applicability mask must be bool-valued: only 0/1/NaN are valid; "
+            f"got finite value(s) {bad.tolist()!r}"
+        )
+    applicable = pd.DataFrame(arr == 1.0, index=score.index, columns=score.columns)
+    return score.where(applicable, np.nan)
 
 
 def _piotroski_components(roa, ocf, net_profit, leverage, current_ratio, total_capital,
-                          gross_margin, asset_turnover, period_id):
+                          gross_margin, asset_turnover, period_id, issuance_threshold=0.05):
     """Return ``(passed, observed, normalized_partial)`` for the 9 F-score signals.
 
     Finding #50: a NaN comparison must never be silently converted to a "failed
@@ -328,6 +388,13 @@ def _piotroski_components(roa, ocf, net_profit, leverage, current_ratio, total_c
     signals among the OBSERVED components, the observed count is exposed for
     callers that need completeness, and ``normalized_partial`` maps the partial
     score to [0, 1] (NaN when nothing is observed).
+
+    ``issuance_threshold`` is the maximum share-capital + capital-reserve growth
+    (``cap_g``) at which the equity-issuance signal still passes.  R11 round-2
+    split: the strict full score passes ``issuance_threshold=0.0`` (no issuance
+    at all), while the tolerant canonical and the partial / observed-count paths
+    retain the historical ``0.05`` (5%) tolerance.  The observed count is
+    threshold-independent.
     """
     # Period-over-period comparisons must use fiscal ordinals, never trading-day
     # shifts: with daily PubDate as-of ffill, ``roa.shift(1)`` is almost always
@@ -348,7 +415,7 @@ def _piotroski_components(roa, ocf, net_profit, leverage, current_ratio, total_c
         + ((ocf > net_profit) & ocf.notna() & net_profit.notna()).astype(float)
         + ((lev_d < 0) & lev_d.notna()).astype(float)
         + ((cr_d > 0) & cr_d.notna()).astype(float)
-        + ((cap_g <= 0.05) & cap_g.notna()).astype(float)
+        + ((cap_g <= issuance_threshold) & cap_g.notna()).astype(float)
         + ((gm_d > 0) & gm_d.notna()).astype(float)
         + ((at_d > 0) & at_d.notna()).astype(float)
     )
@@ -386,12 +453,34 @@ def _piotroski_normalized_partial_score(roa, ocf, net_profit, leverage, current_
 
 def _fin_piotroski_f_score(roa, ocf, net_profit, leverage, current_ratio, total_capital,
                            gross_margin, asset_turnover, period_id, mask=None):
-    """Genuine full F-score: the passed count only when all 9 signals are observed."""
+    """Strict genuine full F-score: the passed count only when all 9 signals are observed.
+
+    R11 round-2 definition split (P0, review section 十四): the strict
+    ``piotroski_f_score`` uses the original no-share-issuance criterion — the
+    equity-issuance signal passes ONLY when share capital + capital reserve did
+    not grow at all (``cap_g <= 0``; a buyback / return of capital also passes).
+    Any positive share-capital growth fails the signal.  The 5%-tolerant proxy
+    is the separate ``piotroski_f_score_tolerant`` canonical (cap_g <= 5%).
+    """
     passed, observed, _ = _piotroski_components(roa, ocf, net_profit, leverage, current_ratio,
-                                                total_capital, gross_margin, asset_turnover, period_id)
+                                                total_capital, gross_margin, asset_turnover,
+                                                period_id, issuance_threshold=0.0)
     # R11 completeness: a partial F-score (observed < 9) is NOT comparable with a
     # genuine full F-score — fail closed to NaN instead of under-reporting (a
     # "4 of 4 observed, all passed -> 4" row must not equal "9 of 9, 4 passed").
+    full = passed.where(observed == 9)
+    return _masked(full, mask)
+
+
+def _fin_piotroski_f_score_tolerant(roa, ocf, net_profit, leverage, current_ratio, total_capital,
+                                    gross_margin, asset_turnover, period_id, mask=None):
+    """5%-tolerant full F-score: same 9-component completeness as ``piotroski_f_score``,
+    but the equity-issuance signal passes under the relaxed ``cap_g <= 5%`` tolerance
+    (the historical ``piotroski_f_score`` behavior kept as its own economic definition).
+    """
+    passed, observed, _ = _piotroski_components(roa, ocf, net_profit, leverage, current_ratio,
+                                                total_capital, gross_margin, asset_turnover,
+                                                period_id, issuance_threshold=0.05)
     full = passed.where(observed == 9)
     return _masked(full, mask)
 
@@ -412,29 +501,57 @@ def _fin_piotroski_observed_count(roa, ocf, net_profit, leverage, current_ratio,
     return _masked(observed, mask)
 
 
+# R11 round-2 definition split (P0, review section 十四): the old
+# ``piotroski_f_score`` branded itself a "genuine full F-score" while its
+# equity-issuance signal passed at cap_g <= 5% — a tolerant proxy, not the strict
+# "no share issuance" criterion.  Split into two genuinely different economic
+# definitions (not a parameter tweak):
+#   * ``piotroski_f_score``           — strict: issuance passes only at cap_g <= 0.
+#   * ``piotroski_f_score_tolerant``  — 5% tolerance (cap_g <= 0.05).
+# The strict canonical keeps the historical ``piotroski_f_score`` spelling, so
+# the old name resolves to the strict definition (no rename/alias migration is
+# required — the canonical key itself is unchanged).
 _mk(
     "piotroski_f_score",
-    "Piotroski F-score：仅当 9 项信号全部观测到时返回通过数（0..9），否则 NaN（#50）。",
+    "Piotroski F-score（严格股权发行判定）：仅当 9 项信号全部观测到时返回通过数（0..9），"
+    "否则 NaN（#50）。股权发行信号仅在股本+资本公积无增长（cap_g<=0）时通过（R11 round-2 拆分）。"
+    "输入语义=Return/Rate 型财务字段，非原始价格/成交量（round-3 item 30）。",
     ["roa", "ocf", "net_profit", "leverage", "current_ratio", "total_capital",
      "gross_margin", "asset_turnover", "period_id", "mask"],
     _fin_piotroski_f_score,
-    extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial"],
+    extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial", "input_semantics:rate"],
+    input_units=_PIOTROSKI_INPUT_UNITS,
+)
+_mk(
+    "piotroski_f_score_tolerant",
+    "Piotroski F-score（5% 股权发行容忍）：与 piotroski_f_score 同构（9 项全观测才打分），"
+    "仅股权发行信号放宽为 cap_g<=5%（历史 piotroski_f_score 行为的独立经济定义）。"
+    "输入语义=Return/Rate 型财务字段（round-3 item 30）。",
+    ["roa", "ocf", "net_profit", "leverage", "current_ratio", "total_capital",
+     "gross_margin", "asset_turnover", "period_id", "mask"],
+    _fin_piotroski_f_score_tolerant,
+    extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial", "input_semantics:rate"],
+    input_units=_PIOTROSKI_INPUT_UNITS,
 )
 _mk(
     "piotroski_partial_score",
-    "Piotroski 部分得分：passed / observed ∈ [0,1]，observed==0 时为 NaN（#50）。",
+    "Piotroski 部分得分：passed / observed ∈ [0,1]，observed==0 时为 NaN（#50）。"
+    "输入语义=Return/Rate 型财务字段（round-3 item 30）。",
     ["roa", "ocf", "net_profit", "leverage", "current_ratio", "total_capital",
      "gross_margin", "asset_turnover", "period_id", "mask"],
     _fin_piotroski_partial_score,
-    extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial"],
+    extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial", "input_semantics:rate"],
+    input_units=_PIOTROSKI_INPUT_UNITS,
 )
 _mk(
     "piotroski_observed_count",
-    "Piotroski 观测分量数（0..9），用于完整度诊断（#50）。",
+    "Piotroski 观测分量数（0..9），用于完整度诊断（#50）。"
+    "输入语义=Return/Rate 型财务字段（round-3 item 30）。",
     ["roa", "ocf", "net_profit", "leverage", "current_ratio", "total_capital",
      "gross_margin", "asset_turnover", "period_id", "mask"],
     _fin_piotroski_observed_count,
-    extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial"],
+    extra_tags=["flow_type:SinglePeriodFlow", "applicable_universe:non_financial", "input_semantics:rate"],
+    input_units=_PIOTROSKI_INPUT_UNITS,
 )
 
 
@@ -468,11 +585,13 @@ def _fin_altman_z_score(working_capital, retained_earnings, operating_profit, to
 
 _mk(
     "altman_z_score",
-    "Altman Z-score（非金融企业版；适用域=非金融，适用性掩码为必填，#55）。",
+    "Altman Z-score（非金融企业版；适用域=非金融，适用性掩码为必填，#55）。"
+    "输入=资产负债表存量/损益流量字段（round-3 item 30）。",
     ["working_capital", "retained_earnings", "operating_profit", "total_assets",
      "market_cap", "total_liabilities", "revenue", "period_id", "mask"],
     _fin_altman_z_score,
     extra_tags=[_APPLICABLE_TAG],
+    input_units=_ALTZMI_INPUT_UNITS,
 )
 
 
@@ -494,10 +613,12 @@ def _fin_zmijewski_score(net_profit, total_assets, total_liabilities, current_as
 
 _mk(
     "zmijewski_score",
-    "Zmijewski 破产概率得分（适用域=非金融，适用性掩码为必填，#55）。",
+    "Zmijewski 破产概率得分（适用域=非金融，适用性掩码为必填，#55）。"
+    "输入=资产负债表存量/损益流量字段（round-3 item 30）。",
     ["net_profit", "total_assets", "total_liabilities", "current_assets", "current_liabilities", "period_id", "mask"],
     _fin_zmijewski_score,
     extra_tags=[_APPLICABLE_TAG],
+    input_units=_ALTZMI_INPUT_UNITS,
 )
 
 
@@ -574,19 +695,23 @@ def _fin_fundamental_strength_coverage(roa, ocf, gross_margin, asset_turnover, l
 
 _mk(
     "fin_fundamental_strength_score",
-    "基本面强度：多分量截面 rank 标准化后对观测分量取均值；<6 个观测分量为 NaN（#54，#50）。",
+    "基本面强度：多分量截面 rank 标准化后对观测分量取均值；<6 个观测分量为 NaN（#54，#50）。"
+    "分量输入语义=Return/Rate 型财务字段（round-3 item 30）。",
     ["roa", "ocf", "gross_margin", "asset_turnover", "leverage",
      "receivable_turnover", "inventory_turnover", "avg_assets", "revenue_growth", "period_id", "mask"],
     _fin_fundamental_strength_score,
-    extra_tags=["flow_type:SinglePeriodFlow"],
+    extra_tags=["flow_type:SinglePeriodFlow", "input_semantics:rate"],
+    input_units=_STRENGTH_INPUT_UNITS,
 )
 _mk(
     "fin_fundamental_strength_coverage",
-    "基本面强度覆盖度：观测到的分量数（0..8），用于覆盖度诊断。",
+    "基本面强度覆盖度：观测到的分量数（0..8），用于覆盖度诊断。"
+    "分量输入语义=Return/Rate 型财务字段（round-3 item 30）。",
     ["roa", "ocf", "gross_margin", "asset_turnover", "leverage",
      "receivable_turnover", "inventory_turnover", "avg_assets", "revenue_growth", "period_id", "mask"],
     _fin_fundamental_strength_coverage,
-    extra_tags=["flow_type:SinglePeriodFlow"],
+    extra_tags=["flow_type:SinglePeriodFlow", "input_semantics:rate"],
+    input_units=_STRENGTH_INPUT_UNITS,
 )
 
 import cleaned_operators.operator_surface as _surface  # noqa: E402

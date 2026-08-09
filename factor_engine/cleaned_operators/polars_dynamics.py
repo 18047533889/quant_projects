@@ -19,7 +19,12 @@ import numpy as np
 import polars as pl
 
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
-from cleaned_operators.markov_dynamics import _state_dynamics_series, _observed_reachable
+from cleaned_operators.markov_dynamics import (
+    _state_dynamics_series,
+    _observed_reachable,
+    _MIN_COUNT_RELATIONAL,
+    _MIN_PERIODS_RELATIONAL,
+)
 from cleaned_operators.state_geometry import (
     _state_density_series,
     _irreversibility_series,
@@ -98,17 +103,34 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
             continue
         k = int(k)
         if kind in {"persistence", "state_entropy"}:
+            # R11 round-2 P0 (TASK 2, mirrors markov_dynamics): a window that
+            # observed only a single state has no estimated transition
+            # distribution — persistence ~1 / entropy ~0 there are degenerate.
+            if res["n_states_obs"][t] < 2:
+                continue
             if res["counts"][t, k] < min_count:
                 continue
             if kind == "persistence":
+                # TASK 1 reverse: never-entered state -> no persistence to report.
+                if res["N_obs"][t, :, k].sum() <= 0:
+                    continue
                 p = res["P"][t, k, k]
                 if np.isfinite(p):
                     out[t] = float(p)
             else:
                 row = res["P"][t, k]
-                if not np.all(np.isfinite(row)):
+                # TASK 1 reverse: only destinations with observed incoming
+                # transitions are real outcomes (mirrors markov_dynamics).
+                col_support = res["N_obs"][t].sum(axis=0) > 0
+                row = row[np.isfinite(row) & col_support]
+                # Renormalise over the observed support and require at least two
+                # estimable destinations before calling it a distribution.
+                if row.size < 2:
                     continue
-                row = row[row > 0.0]
+                s = float(row.sum())
+                if not np.isfinite(s) or s <= _EPS:
+                    continue
+                row = row / s
                 h = -float(np.sum(row * np.log(row)))
                 out[t] = float(h / log_b)
         elif kind == "surprisal":
@@ -119,6 +141,9 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
             if not np.isfinite(i_val):
                 continue
             i = int(np.clip(np.searchsorted(edges, i_val, side="left") - 1, 0, B - 1))
+            # R11 round-2 P0 (TASK 2, mirrors markov_dynamics).
+            if res["n_states_obs"][t] < 2:
+                continue
             if res["counts"][t, i] < min_count:
                 continue
             p = res["P"][t, i, k]
@@ -141,6 +166,9 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
                 continue
             out[t] = float(-(d1[k + 1] - d1[k - 1]) / denom)
         elif kind == "committor":
+            # R11 round-2 P0 (TASK 2, mirrors markov_dynamics).
+            if res["n_states_obs"][t] < 2:
+                continue
             if res["counts"][t, k] < min_count:
                 continue
             P = res["P"][t]
@@ -176,6 +204,9 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
             else:
                 out[t] = float(np.clip(q[k - 1], 0.0, 1.0))
         elif kind == "mfpt":
+            # R11 round-2 P0 (TASK 2, mirrors markov_dynamics).
+            if res["n_states_obs"][t] < 2:
+                continue
             if res["counts"][t, k] < min_count:
                 continue
             P = res["P"][t]
@@ -214,6 +245,9 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
                 continue
             out[t] = float(max(m[nonA.index(k)], 0.0)) * lag
         elif kind == "spectral_gap":
+            # R11 round-2 P0 (TASK 2, mirrors markov_dynamics).
+            if res["n_states_obs"][t] < 2:
+                continue
             if res["total_trans"][t] < min_count:
                 continue
             P = res["P"][t]
@@ -230,7 +264,12 @@ def _markov_series(series: np.ndarray, window: int, bins: int, lag: int, min_cou
             second = float(mag[order[1]]) if ev.size >= 2 else 0.0
             out[t] = float(np.clip(1.0 - second, 0.0, 1.0))
         elif kind == "stationary_surprisal":
+            # R11 round-2 P0 (TASK 2 + TASK 1 reverse, mirrors markov_dynamics).
+            if res["n_states_obs"][t] < 2:
+                continue
             if res["counts"][t, k] < min_count:
+                continue
+            if res["N_obs"][t, :, k].sum() <= 0:
                 continue
             pi = res["pi"][t]
             if not np.all(np.isfinite(pi)):
@@ -341,12 +380,15 @@ for _name, _desc, _kind, _bins in (
     ("ts_markov_transition_surprisal", "当前状态跳变罕见度 -log P_ij（Polars）。", "surprisal", 3),
     ("ts_kramers_moyal_local_stability", "当前状态局部稳定性 -D'(x_k)（Polars）。", "local_stability", 5),
 ):
-    _mk(
+    _cls = _mk(
         _name, _desc, ["x", "window", "bins", "lag", "min_count"],
         lambda frame, window=60, bins=_bins, lag=1, min_count=3, _kind=_kind: _markov_family(
             frame, window, bins, lag, min_count, _kind
         ),
     )
+    # R11 round-2 P0 (TASK 3): binding-time relational feasibility mirror of the
+    # pandas metadata (min_count <= window - lag).
+    _cls.metadata.relational_specs = list(_MIN_COUNT_RELATIONAL)
 
 for _name, _desc, _kind, _bins in (
     ("ts_markov_committor", "当前状态先达上边界概率 q_k（Polars）。", "committor", 3),
@@ -358,36 +400,40 @@ for _name, _desc, _kind, _bins in (
     ("ts_km_quasipotential_depth", "当前状态势阱深度（Polars）。", "quasipotential", 5),
 ):
     if _kind == "mfpt":
-        _mk(
+        _cls = _mk(
             _name, _desc, ["x", "window", "bins", "lag", "min_count", "target"],
             lambda frame, window=60, bins=_bins, lag=1, min_count=3, target="upper": _markov_family(
                 frame, window, bins, lag, min_count, "mfpt", target
             ),
         )
+        _cls.metadata.relational_specs = list(_MIN_COUNT_RELATIONAL)
     elif _kind == "spectral_gap":
         # Pandas ts_markov_spectral_gap guards on min_periods (default 5), not
         # min_count; keep the Polars parameter parity exact.
-        _mk(
+        _cls = _mk(
             _name, _desc, ["x", "window", "bins", "lag", "min_periods"],
             lambda frame, window=120, bins=_bins, lag=1, min_periods=5: _markov_family(
                 frame, window, bins, lag, min_periods, "spectral_gap"
             ),
         )
+        _cls.metadata.relational_specs = list(_MIN_PERIODS_RELATIONAL)
     elif _kind == "quasipotential":
         # Pandas ts_km_quasipotential_depth defaults to window=120.
-        _mk(
+        _cls = _mk(
             _name, _desc, ["x", "window", "bins", "lag", "min_count"],
             lambda frame, window=120, bins=_bins, lag=1, min_count=3: _markov_family(
                 frame, window, bins, lag, min_count, "quasipotential"
             ),
         )
+        _cls.metadata.relational_specs = list(_MIN_COUNT_RELATIONAL)
     else:
-        _mk(
+        _cls = _mk(
             _name, _desc, ["x", "window", "bins", "lag", "min_count"],
             lambda frame, window=60, bins=_bins, lag=1, min_count=3, _kind=_kind: _markov_family(
                 frame, window, bins, lag, min_count, _kind
             ),
         )
+        _cls.metadata.relational_specs = list(_MIN_COUNT_RELATIONAL)
 
 
 # ---------------------------------------------------------------------------

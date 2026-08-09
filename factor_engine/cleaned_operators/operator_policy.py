@@ -958,6 +958,9 @@ _EXPLICIT_POLICIES.update({
     # ts_model / state-space / GARCH / HAR / wavelet / complexity families
     "ts_kalman_level": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_kalman_innovation_z": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # round-3: MAD split (one common center per window) — reviewed statistics
+    "ts_mean_abs_deviation": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_median_abs_deviation": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_kalman_beta_uncertainty": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_kalman_trend": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_kalman_beta": {"scope": "ts", "pit_safe": True, "min_periods": 1},
@@ -1077,6 +1080,8 @@ _FINAL_PACK_POLICIES = {
     "relation_topk_concentration": {"scope": "cs", "pit_safe": True},
     "relation_distribution_skew": {"scope": "cs", "pit_safe": True},
     "relation_distribution_kurtosis": {"scope": "cs", "pit_safe": True},
+    "relation_distribution_pearson_kurtosis": {"scope": "cs", "pit_safe": True},
+    "relation_distribution_excess_kurtosis": {"scope": "cs", "pit_safe": True},
     "relation_hhi_change": {"scope": "cs", "pit_safe": True},
     "relation_entropy_change": {"scope": "cs", "pit_safe": True},
     "relation_concentration_acceleration": {"scope": "cs", "pit_safe": True},

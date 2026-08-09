@@ -68,6 +68,7 @@ _GEOMETRY_MATH_CANONICALS: tuple[str, ...] = (
     "event_interval_memory", "event_local_variation", "event_fano_factor",
     # string / ordinal complexity
     "ts_lempel_ziv_complexity", "ts_forbidden_ordinal_pattern_ratio",
+    "ts_forbidden_ordinal_pattern_excess", "ts_forbidden_ordinal_pattern_signed_excess",
     # spectral shape
     "ts_spectral_centroid", "ts_spectral_flatness",
     "ts_spectral_peak_concentration", "ts_spectral_quality_factor",
@@ -75,8 +76,8 @@ _GEOMETRY_MATH_CANONICALS: tuple[str, ...] = (
     "ts_hankel_effective_rank", "ts_hankel_singular_gap",
     "ts_ssa_reconstruction_residual",
     # multifractal
-    "ts_generalized_hurst_exponent", "ts_multifractal_width",
-    "ts_multifractal_curvature",
+    "ts_generalized_hurst_exponent", "ts_generalized_hurst_spread_q1_q4",
+    "ts_multifractal_spectrum_width", "ts_multifractal_curvature",
     # serial-dependence memory
     "ts_autocorrelation_time", "ts_fractional_difference",
     # L-moments / Hartigan dip / intrinsic dimension / persistence entropy

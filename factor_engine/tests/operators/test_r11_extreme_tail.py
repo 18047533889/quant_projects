@@ -96,17 +96,23 @@ def test_hill_default_parameters_finite_rate():
 
 def test_hill_upper_lower_negation_mirror():
     """Negating a centred heavy-tailed series mirrors its tails: the upper tail
-    of x must be close to the upper tail of -x (== the lower tail of x).  With
-    the R11 ``u > 0`` threshold guard the raw ``side='lower'`` call is NaN for a
-    centred series (Q(x, frac) < 0), so the mirror is asserted through the
-    negation, which is the identity the operator implements."""
+    of x must be close to the upper tail of -x (== the lower tail of x).  The
+    lower tail is ONE kernel on the mirrored series ``z = -x``, so
+    ``HillLower(x) == HillUpper(-x)`` directly (no separate lower code path, no
+    ``u<=0`` guard that NaN's the lower side of a centred signed series)."""
     rng = np.random.default_rng(55)
     x = rng.standard_t(df=4, size=4000)
     up_x = _hill_series(x, window=x.size, side="upper", tail_fraction=0.2, min_tail_count=10)[-1]
     up_nx = _hill_series(-x, window=x.size, side="upper", tail_fraction=0.2, min_tail_count=10)[-1]
+    lo_x = _hill_series(x, window=x.size, side="lower", tail_fraction=0.2, min_tail_count=10)[-1]
     assert np.isfinite(up_x)
     assert np.isfinite(up_nx)
     assert abs(float(up_x) - float(up_nx)) < 0.1
+    # The direct invariant the Master-Audit item requires: HillLower(x) equals
+    # HillUpper(-x) exactly (finite for a centred signed series — the raw
+    # side='lower' call is no longer NaN'd by a negative quantile threshold).
+    assert np.isfinite(lo_x)
+    assert abs(float(lo_x) - float(up_nx)) < 1e-9
     # A positive-magnitude series keeps a well-defined lower tail (threshold
     # Q(x, frac) > 0) and both sides stay finite.
     mag = np.abs(rng.standard_t(df=3, size=4000)) + 0.05

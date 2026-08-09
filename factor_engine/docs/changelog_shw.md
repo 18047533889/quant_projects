@@ -4,6 +4,44 @@
 
 ---
 
+## 2026-08-09 FactorEngine R14 第二轮 production integration 收口（第 35 版）
+
+**内容**：外部 AI 复查最新 main@64ad308 确认 DataAccess Core Freeze 继续成立；
+Integration Freeze 还需 4 P0 + 1 条件 P0 + 1 P1，全部收口（详见
+`docs/R14_PRODUCTION_INTEGRATION_CLOSURE_REPORT.md` §F）：
+
+- **#1 DataAccess factor_matrix 跟随 generation 指针**：`ParametricDataset`
+  新增 `generation_pointer` + `current_generation()`；`resolve_paths` 只解析
+  `manifest.json` 的 `generation` 指向那一代（绝不 `generation/*` 通配混读
+  current+previous）；manifest 指向缺失目录 → `DataError` fail-closed；动态因子列
+  从 `manifest["factors"]` 取（`_matrix_available_columns`，不再永远
+  MatrixCoverageMiss fallback）；generation 进 audit。factor_matrix 显式声明
+  `authorized_root: ${FACTOR_MATRIX_ROOT}`（组件级 `path_is_under` 过不了
+  `universe=` 前缀）。
+- **#2 matrix generation fail-closed**：`load_matrix` 对「manifest 有 generation
+  但目录缺失」抛 `FactorMatrixCorruptionError`（不再 legacy fallback 捞
+  previous/orphan）；materialize 对旧代缺失同样 hard fail；已发布 generation 文件
+  损坏 → 只复制到 quarantine 留证、**不移动**原文件（immutable，在途 reader）。
+- **#3 MaterializationDelta 进入 ClickHouse 主链**：`execute_materialize` 构造唯一
+  delta（upserts + tombstones=deleted_keys + full semantic digest + snapshot），CH
+  经 `_series_with_tombstones` 把删除键写 NaN——源行删除后 Parquet 与 CH 同键一致。
+- **#4 event rebuild 恢复 canonical scope**：`factor_from_catalog_info` 挂
+  `FactorExecutionScopeHint`（market/universe/frequency/calendar/decision_policy）；
+  `_verify_factor_semantic_identity` 对 scope 字段 fail-closed（declared 有值 +
+  actual 缺失 → production 拒绝）；**修真 bug**：Expr 直接 `compute_ir_hash` 报
+  `.attrs` 错 → 先 `Analyzer().lower()` 再 hash（否则含 ast_hash 的 production
+  event 无法证明 identity）。
+- **#5 DataEvent 两阶段原子发布 + lease**：production 事件全因子先写
+  `write_target="staging"`，全部 stage 成功才逐因子 `publish_factor_lake`；任一失败
+  reject + `PartialIncrementalFailureError`，published 湖零 mixed，同 event 重试幂等
+  收敛只 commit 一次。`pending` 预留带 `owner/attempt_id/reserved_at` + lease 过期
+  takeover（`DATA_EVENT_LEDGER_LEASE_SECONDS`）；`in_flight` 不再塌缩成
+  "duplicate"。
+
+新增测试：R14 第二轮 5 个文件 21 条（storage failclosed 4 / delta→CH 2 / event
+rebuild scope 5 / ledger lease 5 / event atomic publish 4）+ dataaccess 侧 5 条
+（generation resolver）。存量回归全绿（见 §F）。
+
 ## 2026-08-09 FactorEngine R14 production integration 收官（第 34 版）
 
 **内容**：外部 AI 复查确认 **DATAACCESS CORE FREEZE** 成立，但

@@ -321,24 +321,51 @@ _register_surface()
 # Audit #7: update-clock operators are EVENT-HISTORY state — each output searches
 # back for the most recent ``n_updates`` REAL update events with no fixed bar
 # lookback.  A bar-window warmup must NOT take over, so the declared history is
-# ``event_count`` (observations, not trading bars).  The default ``n_updates`` is
-# 5; the operators have no segmented restore, so chunking is an honest
-# full-history replay.
+# ``event_count`` (observations, not trading bars).  The operators have no
+# segmented restore, so chunking is an honest full-history replay.
+#
+# P0-10: the event-count history must DERIVE from the ``n_updates`` parameter,
+# not a stale constant.  ``n_updates`` is a public knob (default 5) and may be
+# set to 10; a declared ``history_count=5`` would under-declare the required
+# event nodes.  ``history_count`` is therefore a callable ``(canonical, params)
+# -> int`` (Round-14 dynamic HistoryRequirement) that resolves ``n_updates`` and
+# floors it at the kernel's ``min_updates`` — the same floor ``_update_kernel``
+# enforces at runtime.
+_MIN_UPDATES = {
+    "update_path_efficiency": 3,
+    "update_acceleration": 4,
+    "update_surprise": 5,
+    "update_direction_persistence": 3,
+}
+_DEFAULT_N_UPDATES = 5
+
+
+def _update_clock_history_count(min_updates: int):
+    """HistoryRequirement count = max(n_updates, min_updates) for a canonical."""
+
+    def _fn(canonical: str, params: Any) -> int:
+        n = (params or {}).get("n_updates")
+        if n is None:
+            n = _DEFAULT_N_UPDATES
+        try:
+            n = int(n)
+        except (TypeError, ValueError):
+            n = _DEFAULT_N_UPDATES
+        return max(n, min_updates)
+
+    return _fn
+
+
 def _declare_stateful_contracts() -> None:
     from runtime.execution_contract import declare_stateful
 
-    for _canon in (
-        "update_path_efficiency",
-        "update_acceleration",
-        "update_surprise",
-        "update_direction_persistence",
-    ):
+    for _canon, _min in _MIN_UPDATES.items():
         declare_stateful(
             _canon,
             state_model="recursive",
             chunking="required_full_history",
             history_kind="event_count",
-            history_count=5,
+            history_count=_update_clock_history_count(_min),
         )
 
 

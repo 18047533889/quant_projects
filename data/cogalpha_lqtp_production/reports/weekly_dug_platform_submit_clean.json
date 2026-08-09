@@ -1,0 +1,481 @@
+{
+  "generated_at": "2026-08-09T09:26:23.614315+00:00",
+  "deprecated": [
+    "evoalpha_20260701141121_1aecc16d",
+    "evoalpha_20260701141121_36be5f53"
+  ],
+  "counts": {
+    "already_registered": 68,
+    "blocked_dup_of": 10
+  },
+  "results": [
+    {
+      "factor_id": "alpha_20260701_5d58bc15",
+      "platform_name": "alpha_20260701_5d58bc15",
+      "action": "already_registered",
+      "definition_id": "120ad3d8-a290-4c34-8106-86aaa77b1dce"
+    },
+    {
+      "factor_id": "alpha_20260701_e885c4b1",
+      "platform_name": "alpha_20260701_e885c4b1",
+      "action": "already_registered",
+      "definition_id": "4b085d6b-2bd3-421e-8433-de779213677a"
+    },
+    {
+      "factor_id": "ext_20260630113105_c66aad59",
+      "platform_name": "ext_20260630113105_c66aad59",
+      "action": "already_registered",
+      "definition_id": "5de07993-045d-48aa-9412-3ca8ae54b714"
+    },
+    {
+      "factor_id": "alpha_20260701_bb4a002c",
+      "platform_name": "alpha_20260701_bb4a002c",
+      "action": "already_registered",
+      "definition_id": "5e3c4811-a9b2-4103-af4a-da6292d1d406"
+    },
+    {
+      "factor_id": "alpha_20260702_1281ccaa",
+      "platform_name": "alpha_20260702_1281ccaa",
+      "action": "already_registered",
+      "definition_id": "aaf2c0db-4f22-4316-893d-d9e90af92fc4"
+    },
+    {
+      "factor_id": "alpha_20260702_55152d82",
+      "platform_name": "alpha_20260702_55152d82",
+      "action": "already_registered",
+      "definition_id": "3ebc39b8-3d76-4835-be2f-bf5bf1379517"
+    },
+    {
+      "factor_id": "alpha_20260702_86a7e37a",
+      "platform_name": "alpha_20260702_86a7e37a",
+      "action": "already_registered",
+      "definition_id": "9283ee8c-4d99-4b9b-b4ac-848e6a046b44"
+    },
+    {
+      "factor_id": "alpha_20260702_afd40784",
+      "platform_name": "alpha_20260702_afd40784",
+      "action": "already_registered",
+      "definition_id": "a9ef7465-f67c-4a12-bb94-5fc3d35e1593"
+    },
+    {
+      "factor_id": "alpha_20260702_caa184c6",
+      "platform_name": "alpha_20260702_caa184c6",
+      "action": "already_registered",
+      "definition_id": "6dd6903e-96aa-4bc4-b578-d0683acbbaa0"
+    },
+    {
+      "factor_id": "ext_20260703011536_b84c1c2c",
+      "platform_name": "ext_20260703011536_b84c1c2c",
+      "action": "already_registered",
+      "definition_id": "3a9c5cc2-7d8f-4085-abc5-f25427469071"
+    },
+    {
+      "factor_id": "ext_20260629194635_53ed651c",
+      "platform_name": "ext_20260629194635_53ed651c",
+      "action": "already_registered",
+      "definition_id": "175cebaa-340f-4521-b565-cf15c3538ea2"
+    },
+    {
+      "factor_id": "alpha_20260702_16104691",
+      "platform_name": "alpha_20260702_16104691",
+      "action": "already_registered",
+      "definition_id": "4aa8b650-e07a-419f-b250-2ac6977b0f6e"
+    },
+    {
+      "factor_id": "ext_20260630113105_190822fa",
+      "platform_name": "ext_20260630113105_190822fa",
+      "action": "already_registered",
+      "definition_id": "91449448-1d07-46dc-b9ba-4118d2d9ba07"
+    },
+    {
+      "factor_id": "alpha_20260701_66ea5325",
+      "platform_name": "alpha_20260701_66ea5325",
+      "action": "already_registered",
+      "definition_id": "12e1761c-1709-466c-9b1b-45b29b7150ab"
+    },
+    {
+      "factor_id": "alpha_20260703_f609ea4d",
+      "platform_name": "alpha_20260703_f609ea4d",
+      "action": "blocked_dup_of",
+      "duplicate_of": "ext_20260703011536_b84c1c2c"
+    },
+    {
+      "factor_id": "alpha_20260701_549b43e6",
+      "platform_name": "alpha_20260701_549b43e6",
+      "action": "already_registered",
+      "definition_id": "a6de8de9-83ee-481a-b900-81ee8cf57744"
+    },
+    {
+      "factor_id": "alpha_20260702_4e49a3f5",
+      "platform_name": "alpha_20260702_4e49a3f5",
+      "action": "already_registered",
+      "definition_id": "fed5f5af-9ea0-4683-ad97-a8641e92e978"
+    },
+    {
+      "factor_id": "alpha_20260701_30e468c0",
+      "platform_name": "alpha_20260701_30e468c0",
+      "action": "blocked_dup_of",
+      "duplicate_of": "ext_20260629194635_53ed651c"
+    },
+    {
+      "factor_id": "alpha_20260702_873469e0",
+      "platform_name": "alpha_20260702_873469e0",
+      "action": "already_registered",
+      "definition_id": "c858611e-5c64-4d30-b091-fdc432ca6f0a"
+    },
+    {
+      "factor_id": "alpha_20260703_d485a3b3",
+      "platform_name": "alpha_20260703_d485a3b3",
+      "action": "already_registered",
+      "definition_id": "243b72a4-1be9-4a00-88b2-6503744f484e"
+    },
+    {
+      "factor_id": "alpha_20260703_9e3b2920",
+      "platform_name": "alpha_20260703_9e3b2920",
+      "action": "already_registered",
+      "definition_id": "69988fd7-259a-4edd-b2b6-9720b91a1754"
+    },
+    {
+      "factor_id": "alpha_20260703_99eb3d11",
+      "platform_name": "alpha_20260703_99eb3d11",
+      "action": "already_registered",
+      "definition_id": "2a0597c8-060d-47f2-be38-d95d35c4517c"
+    },
+    {
+      "factor_id": "ext_20260630113105_d17d6ed7",
+      "platform_name": "ext_20260630113105_d17d6ed7",
+      "action": "already_registered",
+      "definition_id": "d69a3b39-4544-428d-93c4-14ceef68a065"
+    },
+    {
+      "factor_id": "alpha_20260702_68529a49",
+      "platform_name": "alpha_20260702_68529a49",
+      "action": "already_registered",
+      "definition_id": "0877d77a-ed29-474b-b8df-d60b04a8c31b"
+    },
+    {
+      "factor_id": "alpha_20260701_f487f8ba",
+      "platform_name": "alpha_20260701_f487f8ba",
+      "action": "already_registered",
+      "definition_id": "033c7805-bfdb-406f-a435-1f3e105745e1"
+    },
+    {
+      "factor_id": "alpha_20260702_57dd1981",
+      "platform_name": "alpha_20260702_57dd1981",
+      "action": "already_registered",
+      "definition_id": "7ff7f5df-b60a-41d0-bc6f-eb26a5de2f35"
+    },
+    {
+      "factor_id": "alpha_20260703_ef5302fe",
+      "platform_name": "alpha_20260703_ef5302fe",
+      "action": "already_registered",
+      "definition_id": "4f6c6319-af06-4484-bc7f-5821ecd1110a"
+    },
+    {
+      "factor_id": "alpha_20260703_42cca713",
+      "platform_name": "alpha_20260703_42cca713",
+      "action": "already_registered",
+      "definition_id": "82f65d86-cb64-4e44-bda8-b9d77a2bae28"
+    },
+    {
+      "factor_id": "ext_20260701141641_cff71dce",
+      "platform_name": "ext_20260701141641_cff71dce",
+      "action": "already_registered",
+      "definition_id": "fb544bb8-3ea9-4941-a3b7-620546388e4a"
+    },
+    {
+      "factor_id": "alpha_20260701_61d3d4de",
+      "platform_name": "alpha_20260701_61d3d4de",
+      "action": "blocked_dup_of",
+      "duplicate_of": "evoalpha_20260701141121_36be5f53"
+    },
+    {
+      "factor_id": "alpha_20260703_c6169b2e",
+      "platform_name": "alpha_20260703_c6169b2e",
+      "action": "already_registered",
+      "definition_id": "88d67262-f757-45c1-b910-90035028b2af"
+    },
+    {
+      "factor_id": "alpha_20260703_6c174054",
+      "platform_name": "alpha_20260703_6c174054",
+      "action": "already_registered",
+      "definition_id": "8c12e3a6-28ac-4745-929c-b702d4ead4c9"
+    },
+    {
+      "factor_id": "alpha_20260701_149b529b",
+      "platform_name": "alpha_20260701_149b529b",
+      "action": "blocked_dup_of",
+      "duplicate_of": "evoalpha_20260701141121_1aecc16d"
+    },
+    {
+      "factor_id": "alpha_20260702_393d28b7",
+      "platform_name": "alpha_20260702_393d28b7",
+      "action": "already_registered",
+      "definition_id": "9946ab59-9863-4581-9e24-29467fda4a09"
+    },
+    {
+      "factor_id": "ext_20260701222951_b6074f02",
+      "platform_name": "ext_20260701222951_b6074f02",
+      "action": "already_registered",
+      "definition_id": "dc621f81-f311-4916-9f00-64c405c77774"
+    },
+    {
+      "factor_id": "alpha_20260701_741a044f",
+      "platform_name": "alpha_20260701_741a044f",
+      "action": "blocked_dup_of",
+      "duplicate_of": "ext_20260701141641_cff71dce"
+    },
+    {
+      "factor_id": "alpha_20260702_b37f3fb9",
+      "platform_name": "alpha_20260702_b37f3fb9",
+      "action": "already_registered",
+      "definition_id": "558e895e-01bb-466b-9669-15c27e7d1e48"
+    },
+    {
+      "factor_id": "alpha_20260702_576e0a0b",
+      "platform_name": "alpha_20260702_576e0a0b",
+      "action": "already_registered",
+      "definition_id": "ac1df0e9-e973-434c-b7e5-f7b0615db7f9"
+    },
+    {
+      "factor_id": "alpha_20260702_a1c128d5",
+      "platform_name": "alpha_20260702_a1c128d5",
+      "action": "already_registered",
+      "definition_id": "516ec13c-a7d0-40c8-894e-7e11638092d8"
+    },
+    {
+      "factor_id": "alpha_20260701_cf427acf",
+      "platform_name": "alpha_20260701_cf427acf",
+      "action": "already_registered",
+      "definition_id": "45cca113-e18a-4801-9558-ba1e06080d66"
+    },
+    {
+      "factor_id": "alpha_20260702_40002fd7",
+      "platform_name": "alpha_20260702_40002fd7",
+      "action": "blocked_dup_of",
+      "duplicate_of": "Tak_FTB_D2_003"
+    },
+    {
+      "factor_id": "alpha_20260702_efd125a8",
+      "platform_name": "alpha_20260702_efd125a8",
+      "action": "already_registered",
+      "definition_id": "f58e6ad0-00ca-4315-9eb0-6299c6dc76ef"
+    },
+    {
+      "factor_id": "alpha_20260701_1958c186",
+      "platform_name": "alpha_20260701_1958c186",
+      "action": "already_registered",
+      "definition_id": "a74f68e9-b251-4849-a50a-bdb3a10491d2"
+    },
+    {
+      "factor_id": "alpha_20260701_673406ba",
+      "platform_name": "alpha_20260701_673406ba",
+      "action": "blocked_dup_of",
+      "duplicate_of": "ext_20260629194635_4451e8dc"
+    },
+    {
+      "factor_id": "ext_20260629194635_4451e8dc",
+      "platform_name": "ext_20260629194635_4451e8dc",
+      "action": "already_registered",
+      "definition_id": "95236783-9f5c-4e9b-a987-5d71d6fcba05"
+    },
+    {
+      "factor_id": "ext_20260701221018_2b6cff9a",
+      "platform_name": "ext_20260701221018_2b6cff9a",
+      "action": "already_registered",
+      "definition_id": "a1941d4a-1035-4ca2-976c-50dbfb3a5eb3"
+    },
+    {
+      "factor_id": "alpha_20260701_75f1066f",
+      "platform_name": "alpha_20260701_75f1066f",
+      "action": "already_registered",
+      "definition_id": "76ad08d5-cbd6-423e-99b0-abfdd18097d5"
+    },
+    {
+      "factor_id": "alpha_20260702_844ceabc",
+      "platform_name": "alpha_20260702_844ceabc",
+      "action": "already_registered",
+      "definition_id": "90b09c5d-8b98-48a8-a6bc-8125825d984b"
+    },
+    {
+      "factor_id": "alpha_20260701_57e30cff",
+      "platform_name": "alpha_20260701_57e30cff",
+      "action": "already_registered",
+      "definition_id": "871277d4-8177-45fe-9847-7e740d8202f0"
+    },
+    {
+      "factor_id": "alpha_20260702_581774bc",
+      "platform_name": "alpha_20260702_581774bc",
+      "action": "blocked_dup_of",
+      "duplicate_of": "ext_20260701222951_b6074f02"
+    },
+    {
+      "factor_id": "alpha_20260702_6d5f848e",
+      "platform_name": "alpha_20260702_6d5f848e",
+      "action": "already_registered",
+      "definition_id": "f7598724-b645-424d-ace0-58967b3b8247"
+    },
+    {
+      "factor_id": "alpha_20260701_726efa4d",
+      "platform_name": "alpha_20260701_726efa4d",
+      "action": "already_registered",
+      "definition_id": "3a5bbc8c-3db4-4e93-9386-6e5c0da33795"
+    },
+    {
+      "factor_id": "alpha_20260703_3962e26e",
+      "platform_name": "alpha_20260703_3962e26e",
+      "action": "already_registered",
+      "definition_id": "f06e45aa-c1a9-45ee-8013-a3dd2acccf4d"
+    },
+    {
+      "factor_id": "alpha_20260702_1f8103b7",
+      "platform_name": "alpha_20260702_1f8103b7",
+      "action": "blocked_dup_of",
+      "duplicate_of": "ext_20260701221018_2b6cff9a"
+    },
+    {
+      "factor_id": "alpha_20260702_f50c69da",
+      "platform_name": "alpha_20260702_f50c69da",
+      "action": "blocked_dup_of",
+      "duplicate_of": "ext_20260629194635_4451e8dc"
+    },
+    {
+      "factor_id": "alpha_20260701_5685f3e9",
+      "platform_name": "alpha_20260701_5685f3e9",
+      "action": "already_registered",
+      "definition_id": "02104be2-8660-4f64-8da2-4e7185dd621d"
+    },
+    {
+      "factor_id": "alpha_20260701_5f690b22",
+      "platform_name": "alpha_20260701_5f690b22",
+      "action": "already_registered",
+      "definition_id": "1a2086af-1939-4038-b99c-6b1ee6eae64f"
+    },
+    {
+      "factor_id": "alpha_20260702_9443699f",
+      "platform_name": "alpha_20260702_9443699f",
+      "action": "already_registered",
+      "definition_id": "d4235686-7377-4914-aea1-a5c304da4499"
+    },
+    {
+      "factor_id": "alpha_20260702_89d0956b",
+      "platform_name": "alpha_20260702_89d0956b",
+      "action": "already_registered",
+      "definition_id": "68443100-5e5a-480e-a8d4-93f059f5f823"
+    },
+    {
+      "factor_id": "alpha_20260702_f0fd9be3",
+      "platform_name": "alpha_20260702_f0fd9be3",
+      "action": "already_registered",
+      "definition_id": "410efd94-3370-49dd-965b-4221f3122963"
+    },
+    {
+      "factor_id": "alpha_20260701_2f5c25fe",
+      "platform_name": "alpha_20260701_2f5c25fe",
+      "action": "already_registered",
+      "definition_id": "7e9259f8-529a-46a8-9aad-c10ac10d821e"
+    },
+    {
+      "factor_id": "alpha_20260701_463d42d0",
+      "platform_name": "alpha_20260701_463d42d0",
+      "action": "already_registered",
+      "definition_id": "7197725d-db91-4a39-9087-e3769b3cc506"
+    },
+    {
+      "factor_id": "alpha_20260701_abf0beb7",
+      "platform_name": "alpha_20260701_abf0beb7",
+      "action": "already_registered",
+      "definition_id": "47e9bf15-8a91-406f-b16c-40cb204bad95"
+    },
+    {
+      "factor_id": "ext_20260701175237_59269c2f",
+      "platform_name": "ext_20260701175237_59269c2f",
+      "action": "already_registered",
+      "definition_id": "5193382c-715e-4589-bdfd-17c8ac29ac7d"
+    },
+    {
+      "factor_id": "ext_20260701221018_3622e083",
+      "platform_name": "ext_20260701221018_3622e083",
+      "action": "already_registered",
+      "definition_id": "d043ae7d-8d1f-465e-8d92-c0caf4bad522"
+    },
+    {
+      "factor_id": "alpha_20260701_d332134b",
+      "platform_name": "alpha_20260701_d332134b",
+      "action": "already_registered",
+      "definition_id": "bbdfa2d5-d78d-4b43-9bd5-41b7c1e72daa"
+    },
+    {
+      "factor_id": "alpha_20260702_21fb502a",
+      "platform_name": "alpha_20260702_21fb502a",
+      "action": "already_registered",
+      "definition_id": "37f3dd72-c1d4-4c85-8cad-06d7e93cac67"
+    },
+    {
+      "factor_id": "alpha_20260702_66b498d6",
+      "platform_name": "alpha_20260702_66b498d6",
+      "action": "already_registered",
+      "definition_id": "54dc1073-e004-4aeb-8556-c92be7b7bd71"
+    },
+    {
+      "factor_id": "alpha_20260702_f5562d5a",
+      "platform_name": "alpha_20260702_f5562d5a",
+      "action": "already_registered",
+      "definition_id": "73515d03-b49b-4fee-8d57-ed3525f5a89f"
+    },
+    {
+      "factor_id": "alpha_20260701_77eb1727",
+      "platform_name": "alpha_20260701_77eb1727",
+      "action": "already_registered",
+      "definition_id": "e62ea892-8f99-4d12-afa9-5359b560bbbc"
+    },
+    {
+      "factor_id": "alpha_20260702_98ed259d",
+      "platform_name": "alpha_20260702_98ed259d",
+      "action": "already_registered",
+      "definition_id": "2ed32831-be7f-4c83-bdce-4abe76bdfc3f"
+    },
+    {
+      "factor_id": "alpha_20260701_75057f17",
+      "platform_name": "alpha_20260701_75057f17",
+      "action": "already_registered",
+      "definition_id": "899f1e44-cf03-4a5b-9564-5a9a311597d8"
+    },
+    {
+      "factor_id": "alpha_20260703_454725cc",
+      "platform_name": "alpha_20260703_454725cc",
+      "action": "already_registered",
+      "definition_id": "6090cac0-3f9c-40e3-bb70-2e69ee194af5"
+    },
+    {
+      "factor_id": "alpha_20260702_6ce5f556",
+      "platform_name": "alpha_20260702_6ce5f556",
+      "action": "already_registered",
+      "definition_id": "35fb69fe-97e5-4d6a-ad33-54aa1306333a"
+    },
+    {
+      "factor_id": "alpha_20260702_153d5b20",
+      "platform_name": "alpha_20260702_153d5b20",
+      "action": "already_registered",
+      "definition_id": "a7c6dc41-6c3c-48e9-8959-d34d60d43e24"
+    },
+    {
+      "factor_id": "alpha_20260702_f204de74",
+      "platform_name": "alpha_20260702_f204de74",
+      "action": "already_registered",
+      "definition_id": "b38b3f9b-c9d4-434f-b9da-7e0b11edd70e"
+    },
+    {
+      "factor_id": "alpha_20260702_2e48ae98",
+      "platform_name": "alpha_20260702_2e48ae98",
+      "action": "already_registered",
+      "definition_id": "c1c9390e-5205-4ea1-a461-ac06516cdf0d"
+    },
+    {
+      "factor_id": "alpha_20260702_80bca4fc",
+      "platform_name": "alpha_20260702_80bca4fc",
+      "action": "already_registered",
+      "definition_id": "d2c38f3a-07c3-4fb1-bfae-52ba605625af"
+    }
+  ]
+}

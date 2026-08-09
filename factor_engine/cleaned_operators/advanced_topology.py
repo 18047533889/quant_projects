@@ -227,10 +227,16 @@ def _diagram_w1(pairs_a: list[tuple[float, float]], pairs_b: list[tuple[float, f
     m1, m2 = len(pairs_a), len(pairs_b)
     if m1 == 0 and m2 == 0:
         return 0.0
+    # Empty-vs-nonempty is the same metric as the general case: every point of
+    # the non-empty diagram matches to the diagonal, each contributing its
+    # diagonal distance.  Summing (not averaging) keeps W1(empty, B) on the
+    # same total-cost scale as the assignment branch below — a mean here would
+    # make an empty diagram look closer for larger diagrams, breaking the
+    # metric (and the total-vs-mean choice made in the R6-120 fix).
     if m1 == 0:
-        return float(np.mean([_diag_dist(p) for p in pairs_b]))
+        return float(sum(_diag_dist(p) for p in pairs_b))
     if m2 == 0:
-        return float(np.mean([_diag_dist(p) for p in pairs_a]))
+        return float(sum(_diag_dist(p) for p in pairs_a))
     from scipy.optimize import linear_sum_assignment
 
     # Standard extended-diagram construction.  A point may match a point of the

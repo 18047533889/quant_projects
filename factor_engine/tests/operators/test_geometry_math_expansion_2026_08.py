@@ -75,8 +75,8 @@ NEW_CANONICALS: frozenset[str] = frozenset({
     "ts_hankel_effective_rank", "ts_hankel_singular_gap",
     "ts_ssa_reconstruction_residual",
     # multifractal
-    "ts_generalized_hurst_exponent", "ts_multifractal_width",
-    "ts_multifractal_curvature",
+    "ts_generalized_hurst_exponent", "ts_generalized_hurst_spread_q1_q4",
+    "ts_multifractal_spectrum_width", "ts_multifractal_curvature",
     # serial-dependence memory
     "ts_autocorrelation_time", "ts_fractional_difference",
     # L-moments / Hartigan dip / intrinsic dimension / persistence entropy
@@ -215,7 +215,8 @@ CALLS: dict[str, tuple[tuple[str, ...], dict]] = {
     "ts_hankel_singular_gap": (("close",), {"window": 40, "embedding_dim": 10}),
     "ts_ssa_reconstruction_residual": (("close",), {"window": 40, "embedding_dim": 10, "n_components": 3}),
     "ts_generalized_hurst_exponent": (("close",), {"window": 60, "q": 2.0}),
-    "ts_multifractal_width": (("close",), {"window": 60}),
+    "ts_generalized_hurst_spread_q1_q4": (("close",), {"window": 60}),
+    "ts_multifractal_spectrum_width": (("close",), {"window": 60}),
     "ts_multifractal_curvature": (("close",), {"window": 60}),
     "ts_autocorrelation_time": (("close",), {"window": 60, "max_lag": 10}),
     "ts_fractional_difference": (("close",), {"fd": 0.4, "cutoff": 20}),

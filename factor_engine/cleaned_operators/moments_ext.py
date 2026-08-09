@@ -24,6 +24,16 @@
 
 All operators are trailing-window, prefix-causal and deterministic.  Degenerate
 windows (too few points, constant values) emit NaN.
+
+R14-P1 statistical-usability gates ("不要把数学上可算当成统计上可用"): dropping
+NaN and computing on whatever remains turns a ``window=120`` with only 4-10 real
+observations into a number that is not comparable across stocks/time.  Each
+operator therefore exposes ``min_periods`` (minimum number of finite values
+actually used after dropping NaN) and ``min_coverage_fraction`` (that effective
+count divided by the nominal length of the *current* trailing window, i.e.
+``min(r+1, window)``).  A window below either gate emits NaN.  L-moments default
+to ``min_periods=20`` / ``min_coverage_fraction=0.5``; the Hartigan dip to
+``min_periods=20`` / ``min_coverage_fraction=0.8``.
 """
 from __future__ import annotations
 
@@ -79,15 +89,34 @@ def _l_moments(vals: np.ndarray) -> tuple[float, float, float, float]:
     return l1, l2, l3, l4
 
 
-def _l_ratio_series(x2d: np.ndarray, window: int, ratio: str) -> np.ndarray:
+def _l_ratio_series(
+    x2d: np.ndarray,
+    window: int,
+    ratio: str,
+    min_periods: int = 20,
+    min_coverage_fraction: float = 0.5,
+) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
+    mp = max(1, int(min_periods))
+    mcf = float(min_coverage_fraction)
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
             i0 = max(0, r - w + 1)
-            _l1, l2, l3, l4 = _l_moments(col[i0 : r + 1])
+            chunk = col[i0 : r + 1]
+            valid = chunk[np.isfinite(chunk)]
+            # R14-P1: statistical-usability gate — effective n after dropping
+            # NaN, plus the fraction the finite values cover of the NOMINAL
+            # length of this trailing window (``min(r+1, window)``).  A
+            # ``window=120`` with only a handful of real observations must emit
+            # NaN, not a number that is not comparable across stocks/time.
+            if valid.size < mp:
+                continue
+            if valid.size / float(chunk.size) < mcf:
+                continue
+            _l1, l2, l3, l4 = _l_moments(valid)
             if not np.isfinite(l2) or abs(l2) <= 1e-12:
                 continue
             if ratio == "skew":
@@ -253,17 +282,30 @@ def _hartigan_dip(x_sorted: np.ndarray) -> float:
     return dip / (2.0 * n)
 
 
-def _dip_series(x2d: np.ndarray, window: int) -> np.ndarray:
+def _dip_series(
+    x2d: np.ndarray,
+    window: int,
+    min_periods: int = 20,
+    min_coverage_fraction: float = 0.8,
+) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
+    mp = max(1, int(min_periods))
+    mcf = float(min_coverage_fraction)
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
             i0 = max(0, r - w + 1)
             chunk = col[i0 : r + 1]
             valid = chunk[np.isfinite(chunk)]
-            if valid.size < 4:
+            # R14-P1: statistical-usability gate — same effective-n / coverage
+            # contract as the L-moments; the dip needs a higher coverage default
+            # (0.8) because the empirical-CDF geometry is sensitive to sparse
+            # windows.
+            if valid.size < mp:
+                continue
+            if valid.size / float(chunk.size) < mcf:
                 continue
             if float(valid.min()) == float(valid.max()):
                 continue  # degenerate constant window -> NaN (never fabricate 0)
@@ -282,19 +324,34 @@ class TsLSkewness(SeriesOperator):
     """L 偏度 tau_3 = lambda_3 / lambda_2（Hosking PWM 估计量）。
 
     有界、对极端值稳健，|tau_3| < 1。0 -> 对称，正 -> 右尾重。P1。
+    R14-P1: ``min_periods``（有效有限样本数）与 ``min_coverage_fraction``
+    （有效样本/当前滚动窗名义长度）双重门控，样本不足或覆盖率过低 -> NaN。
     """
 
     metadata = _metadata(
         "ts_l_skewness",
         "L 偏度 tau_3 = lambda_3/lambda_2（有界稳健）。",
-        ["x", "window"],
+        ["x", "window", "min_periods", "min_coverage_fraction"],
         unit="ratio",
         cost=3,
     )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        window: int = 60,
+        min_periods: int = 20,
+        min_coverage_fraction: float = 0.5,
+        **_: Any,
+    ) -> pd.DataFrame:
         w = _check_window(window)
-        return frame_like(x, _l_ratio_series(x.to_numpy(dtype=float), w, "skew"))
+        return frame_like(
+            x,
+            _l_ratio_series(
+                x.to_numpy(dtype=float), w, "skew",
+                min_periods=min_periods, min_coverage_fraction=min_coverage_fraction,
+            ),
+        )
 
 
 @register_operator(
@@ -308,19 +365,33 @@ class TsLKurtosis(SeriesOperator):
     """L 峰度 tau_4 = lambda_4 / lambda_2（Hosking PWM 估计量）。
 
     有界 tau_4 < 1；均匀分布约 0，正态约 0.123，尖峰厚尾更大。P1。
+    R14-P1: ``min_periods`` / ``min_coverage_fraction`` 门控同上。
     """
 
     metadata = _metadata(
         "ts_l_kurtosis",
         "L 峰度 tau_4 = lambda_4/lambda_2（有界稳健）。",
-        ["x", "window"],
+        ["x", "window", "min_periods", "min_coverage_fraction"],
         unit="ratio",
         cost=3,
     )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        window: int = 60,
+        min_periods: int = 20,
+        min_coverage_fraction: float = 0.5,
+        **_: Any,
+    ) -> pd.DataFrame:
         w = _check_window(window)
-        return frame_like(x, _l_ratio_series(x.to_numpy(dtype=float), w, "kurt"))
+        return frame_like(
+            x,
+            _l_ratio_series(
+                x.to_numpy(dtype=float), w, "kurt",
+                min_periods=min_periods, min_coverage_fraction=min_coverage_fraction,
+            ),
+        )
 
 
 @register_operator(
@@ -335,19 +406,34 @@ class TsHartiganDip(SeriesOperator):
 
     AS 217 S-version（GCM/LCM 迭代）。小 -> 单峰；大 -> 多峰。范围 [0, 0.25]。
     与普通偏度/峰度互补，直接度量模态结构。P1。
+    R14-P1: ``min_periods``（默认 20）与 ``min_coverage_fraction``（默认 0.8）
+    门控；经验 CDF 几何对稀疏窗敏感，覆盖率要求高于 L 矩。
     """
 
     metadata = _metadata(
         "ts_hartigan_dip",
         "Hartigan dip 统计量（最近单峰拟合的最大距离，S-version）。",
-        ["x", "window"],
+        ["x", "window", "min_periods", "min_coverage_fraction"],
         unit="ratio",
         cost=7,
     )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 120, **_: Any) -> pd.DataFrame:
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        window: int = 120,
+        min_periods: int = 20,
+        min_coverage_fraction: float = 0.8,
+        **_: Any,
+    ) -> pd.DataFrame:
         w = _check_window(window)
-        return frame_like(x, _dip_series(x.to_numpy(dtype=float), w))
+        return frame_like(
+            x,
+            _dip_series(
+                x.to_numpy(dtype=float), w,
+                min_periods=min_periods, min_coverage_fraction=min_coverage_fraction,
+            ),
+        )
 
 
 _NEW_CANONICALS = (

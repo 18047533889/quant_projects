@@ -17,6 +17,8 @@ from cleaned_operators._causal import causal_lag
 from cleaned_operators.base import (
     Operator,
     OperatorMetadata,
+    ParamRole,
+    ParamSpec,
     SeriesOperator,
     ScalarOperator,
     TwoVarOperator,
@@ -42,73 +44,109 @@ class Deltas(SeriesOperator):
 
 
 
+def _group_rank_weighted_value_panel(
+    x: pd.DataFrame,
+    group: pd.DataFrame | None,
+    fallback_policy: str = "nan",
+) -> pd.DataFrame:
+    """组内按**平均排名**线性加权（CS rank-weighted value）。
+
+    每个交易日按 ``group`` 分组，对组内 ``x`` 取平均排名（并列同权重，等价
+    ``rank(method='average')``），权重 ∝ 平均排名并在组内归一化，输出
+    ``x * weight``。时间维度不参与；真实时间衰减见 ``group_ts_decay_linear``。
+    整列分组缺失时按 ``fallback_policy``（PIT 生产默认 nan）。``window``
+    不存在于此签名 —— 兼容算子 ``group_decay_linear`` 的 ``window`` 不参与计算。
+    """
+    result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
+
+    for date in x.index:
+        x_slice = x.loc[date]
+
+        if group is not None and date in group.index:
+            group_slice = group.loc[date]
+        else:
+            group_slice = None
+
+        if group_slice is None or group_slice.isna().all():
+            # 整列 group 缺失：按 fallback_policy 决定行为。PIT 生产默认 nan
+            # （与 SQL/Polars 路径一致，未知分组不参与计算）。
+            if fallback_policy == "nan":
+                continue
+            if fallback_policy == "keep_original":
+                result.loc[date] = x_slice
+                continue
+            valid_mask = x_slice.notna()
+            if valid_mask.sum() > 0:
+                data = x_slice[valid_mask]
+                ranks = data.rank(method="average")
+                w = ranks / ranks.sum()
+                result.loc[date, valid_mask] = data * w
+            continue
+
+        for group_val in group_slice.dropna().unique():
+            mask = (group_slice == group_val) & x_slice.notna()
+            if mask.sum() > 0:
+                group_data = x_slice[mask]
+                ranks = group_data.rank(method="average")
+                w = ranks / ranks.sum()
+                result.loc[date, group_data.index] = group_data * w
+
+    return result
+
+
+# canonical=group_rank_weighted_value backend=pandas_numpy selected=group_rank_weighted_value source=cross_sectional/group_ops.py
+@register_operator(name="group_rank_weighted_value", category="cross_sectional", business_category="group_neutralization", canonical="group_rank_weighted_value", source="factor_dsl_np")
+class GroupRankWeightedValue(SeriesOperator):
+    """组内按**平均排名**线性加权（跨截面 rank weighting，非时间衰减）。
+
+    每个交易日按 ``group`` 分组，对组内 ``x`` 取平均排名（并列同权重），权重
+    ∝ 平均排名并在组内归一化，输出 ``x * weight``。时间维度不参与；真实时间
+    衰减见 ``group_ts_decay_linear``。兼容旧名 ``group_decay_linear``（其
+    ``window`` 参数不参与计算）。"""
+
+    metadata = OperatorMetadata(
+        name="group_rank_weighted_value",
+        category="cross_sectional",
+        description="组内按平均排名线性加权（CS rank-weighted value；非时间衰减）",
+        examples=[
+            "group_rank_weighted_value(ROE, industry_code)",
+            "group_rank_weighted_value(returns, get('industry_sw'))"
+        ],
+        param_names=["x", "group"],
+        return_type="series",
+        tags=["cross_sectional", "rank_weighted", "group", "linear"]
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        return _group_rank_weighted_value_panel(x, group, fallback_policy=fallback_policy)
+
+
 # canonical=group_decay_linear backend=pandas_numpy selected=group_decay_linear source=cross_sectional/group_ops.py
 @register_operator(name="group_decay_linear", category="cross_sectional", business_category="group_neutralization", canonical="group_decay_linear", source="factor_dsl_np")
 class GroupDecayLinear(SeriesOperator):
-    """在指定分组内按**排名**赋予线性递减权重（非时间衰减）。
+    """兼容名：组内按排名线性加权（诚实名称 ``group_rank_weighted_value``）。
 
-    ``window`` 参数仅为兼容保留、不参与计算；真实时间衰减见
-    ``group_ts_decay_linear``。组内第 j 小值权重 ∝ j。"""
+    ``window`` 参数仅为兼容保留、**不参与计算**：
+    ``group_decay_linear(x,g,5)==group_decay_linear(x,g,10)==
+    group_decay_linear(x,g,60)``。声明为 ``searchable=False / ParamRole.POLICY``
+    （校验但不作搜索维度）。真实时间衰减见 ``group_ts_decay_linear``。"""
 
     metadata = OperatorMetadata(
         name="group_decay_linear",
         category="cross_sectional",
-        description="组内按排名线性加权（窗口参数仅为兼容保留；真实时间衰减用 group_ts_decay_linear）",
+        description="组内按排名线性加权（兼容名；window 不参与计算，诚实名称 group_rank_weighted_value）",
         examples=[
-            "group_decay_linear(ROE, industry_code, 5)",
-            "group_decay_linear(returns, get('industry_sw'), 10)"
+            "group_decay_linear(ROE, industry_code)",
+            "group_decay_linear(returns, get('industry_sw'), 5)"
         ],
         param_names=["x", "group", "window"],
         return_type="series",
-        tags=["cross_sectional", "decay", "linear", "group", "rank_weighted"]
+        tags=["cross_sectional", "decay", "linear", "group", "rank_weighted", "compat_alias"],
+        param_specs={"window": ParamSpec(dtype=int, searchable=False, param_role=ParamRole.POLICY)},
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, window: int = 5, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
-        result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
-
-        for date in x.index:
-            x_slice = x.loc[date]
-
-            if group is not None and date in group.index:
-                group_slice = group.loc[date]
-            else:
-                group_slice = None
-
-            if group_slice is None or group_slice.isna().all():
-                # 整列 group 缺失：按 fallback_policy 决定行为。PIT 生产默认 nan
-                # （与 SQL/Polars 路径一致，未知分组不参与计算）。
-                if fallback_policy == "nan":
-                    continue
-                if fallback_policy == "keep_original":
-                    result.loc[date] = x_slice
-                    continue
-                valid_mask = x_slice.notna()
-                if valid_mask.sum() > 0:
-                    data = x_slice[valid_mask]
-                    ranked = data.rank(method='first')
-                    n = len(data)
-                    w = np.arange(1, n + 1, dtype=float)
-                    w = w / w.sum()
-                    sorted_idx = ranked.argsort()
-                    decay_vals = pd.Series(0.0, index=data.index)
-                    decay_vals.iloc[sorted_idx] = w[:n]
-                    result.loc[date, valid_mask] = data * decay_vals
-                continue
-
-            for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
-                if mask.sum() > 0:
-                    group_data = x_slice[mask]
-                    ranked = group_data.rank(method='first')
-                    n = len(group_data)
-                    w = np.arange(1, n + 1, dtype=float)
-                    w = w / w.sum()
-                    sorted_idx = ranked.argsort()
-                    decay_vals = pd.Series(0.0, index=group_data.index)
-                    decay_vals.iloc[sorted_idx] = w[:n]
-                    result.loc[date, group_data.index] = group_data * decay_vals
-
-        return result
+        return _group_rank_weighted_value_panel(x, group, fallback_policy=fallback_policy)
 
 
 
@@ -998,3 +1036,8 @@ class IndustrySizeNeutralize(SeriesOperator):
 # 加权）的诚实名称；``group_ts_decay_linear`` 才是真实时间衰减。
 from cleaned_operators.registry import OperatorRegistry as _group_registry  # noqa: E402
 _group_registry.register_alias("group_rank_linear_weighted_value", "group_decay_linear")
+
+# 本轮 audit item 6/8：``group_rank_weighted_value`` 是诚实 canonical（无 window
+# 参数），登记到 extended 表面使 layer_governance 的静态分区检查通过。
+from cleaned_operators.operator_surface import extend_extended_only  # noqa: E402
+extend_extended_only(["group_rank_weighted_value"])

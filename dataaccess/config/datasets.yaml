@@ -885,6 +885,7 @@ factor_matrix:
   access_mode: published
   layout: hive
   root_template: ${FACTOR_MATRIX_ROOT:-/home/shw/quant_projects/data/factors/matrix}/universe={universe}/freq={frequency}
+  authorized_root: ${FACTOR_MATRIX_ROOT:-/home/shw/quant_projects/data/factors/matrix}
   glob_template: "year=*/month=*/data.parquet"
   partition_columns: [year, month]
   storage_format: long
@@ -898,6 +899,10 @@ factor_matrix:
   schema:
     datetime: timestamp
     asset: string
+  # R14 #1：FactorEngine 以 generation 布局发布（manifest.json 的 generation
+  # 指针 + generation/<gid>/...）。读路径经 current_generation 只解析 manifest
+  # 指向那一代；动态因子列由 manifest["factors"] 提供（不依赖 registry schema）。
+  generation_pointer: true
   # 宽矩阵：datetime + asset + factor_* 列，schema 随因子动态扩展
 
 

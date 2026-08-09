@@ -22,7 +22,9 @@ raises ``RuntimeError`` (production unsupported) instead of quietly switching
 homology degree.
 
 Both operators are trailing-window, prefix-causal and deterministic.  A window
-that yields no persistence pairs emits NaN.
+that yields no persistence pairs emits NaN.  The CURRENT bar is always required
+(P0-7): a missing current observation emits NaN — the persistence diagram must
+never be built from the finite past alone and emit a stale-history factor.
 """
 from __future__ import annotations
 
@@ -55,7 +57,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         return_type="series",
         tags=[
             "topology", "daily", "pit_safe", "causal", "typed_v2",
-            "deterministic",
+            "deterministic", "current_row_required",
             f"signature:{','.join(params)}->series", "domain:topology",
             f"unit:{unit}", f"cost:{cost}",
         ],
@@ -176,6 +178,11 @@ def _persistence_entropy_series(x2d: np.ndarray, window: int, tau: int, dim: int
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
+            # P0-7: the CURRENT observation is required.  A missing current bar
+            # must not let the Takens embedding consume the finite past and emit
+            # a stale persistence-entropy factor — output NaN instead.
+            if not np.isfinite(col[r]):
+                continue
             i0 = max(0, r - w + 1)
             pairs = _persistence_pairs(col[i0 : r + 1], tau, dim, h0)
             out[r, c] = _persistence_entropy(pairs)

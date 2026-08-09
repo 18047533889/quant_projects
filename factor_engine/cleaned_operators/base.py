@@ -12,6 +12,7 @@ Runtime contracts are enforced centrally:
 from __future__ import annotations
 
 import ast
+import enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List
@@ -40,6 +41,113 @@ class _MissingDefaultType:
 # ``spec.default is MISSING``, never ``spec.default is None`` (an explicit None
 # default is a legitimate contract, e.g. ``center=None`` in a z-score).
 MISSING = _MissingDefaultType()
+
+
+class ParamRole(str, enum.Enum):
+    """Machine-readable ROLE of a scalar parameter (P2-35).
+
+    The audit finding: kernels mix genuine economic dimensions (lag, horizon,
+    threshold — what alpha search is FOR) with pure estimator tuning
+    (``bins``, ``n_segments``, kernel-bandwidth method, Theiler window,
+    BDS epsilon multiplier, embedding resolution, …).  If all of them feed the
+    AlphaProbe/GP grammar at the same resolution, the search optimizes for
+    "which estimator bias fits this sample best" rather than "which real
+    economic regularity exists".  Declaring a role per parameter lets a
+    role-aware search grammar search ECONOMIC/HORIZON at full resolution and
+    estimator knobs only on small reviewed grids.
+
+    Unlike the legacy name whitelist this is an EXPLICIT per-parameter
+    declaration: ``ParamRole`` is never inferred from a parameter's name.
+    """
+
+    # Real economic dimension: the thing alpha search is meant to discover
+    # (lag, horizon, threshold, scale that changes the trading rule).
+    ECONOMIC = "economic"
+    # Lookback / forecasting-horizon dimension, distinct from a rule knob.
+    HORIZON = "horizon"
+    # A real threshold / trigger on a state variable (e.g. the level above
+    # which a regime flips, the coverage below which a factor is invalid).
+    # Distinct from a pure estimator knob: it changes the trading rule, so it
+    # may be searched — but at a coarser reviewed grid than ECONOMIC/HORIZON
+    # when it interacts with an estimator (review §二 round-3: thresholds are
+    # searched, but never at the resolution of estimator epsilon).
+    STATE_THRESHOLD = "state_threshold"
+    # Estimator tuning knob: changes variance/bias of the estimator, not the
+    # economic rule.  Only small reviewed grids should ever be searched.
+    ESTIMATOR_RESOLUTION = "estimator_resolution"
+    # Numerical epsilon / tolerance: affects only numerical stability.
+    # Never a search dimension.
+    NUMERICAL = "numerical"
+    # Governance / policy switch (seed, side, band, method selector): not a
+    # continuous search dimension.
+    POLICY = "policy"
+
+
+# Roles searched at FULL resolution by default.
+FULL_SEARCH_ROLES = (ParamRole.ECONOMIC, ParamRole.HORIZON,
+                     ParamRole.STATE_THRESHOLD)
+# Roles searched ONLY on small reviewed grids.
+COARSE_SEARCH_ROLES = (ParamRole.ESTIMATOR_RESOLUTION,)
+# Roles never entered into the alpha search grammar.
+NON_SEARCH_ROLES = (ParamRole.NUMERICAL, ParamRole.POLICY)
+
+
+def effective_param_role(spec: "ParamSpec | None") -> ParamRole:
+    """Resolve the effective role of a parameter.
+
+    ``None`` (undeclared) resolves to ``ECONOMIC`` for a searchable parameter
+    (backwards-compatible: the existing default search space is unchanged) and
+    ``POLICY`` for a non-searchable one (a governance knob is never a search
+    dimension).  Declared roles are authoritative.
+    """
+    if spec is None:
+        return ParamRole.ECONOMIC
+    if spec.param_role is not None:
+        return spec.param_role
+    return ParamRole.ECONOMIC if spec.searchable else ParamRole.POLICY
+
+
+def param_search_grade(spec: "ParamSpec | None") -> str:
+    """Return the search-grade a role-aware grammar should apply: ``"full"``,
+    ``"coarse"`` or ``"excluded"``.  ``searchable=False`` always excludes
+    regardless of role; roles are never inferred from names."""
+    if spec is None or spec.searchable:
+        role = effective_param_role(spec)
+    else:
+        return "excluded"
+    if role in FULL_SEARCH_ROLES:
+        return "full"
+    if role in COARSE_SEARCH_ROLES:
+        return "coarse"
+    return "excluded"
+
+
+def searchable_param_names(metadata: "OperatorMetadata | None") -> dict[str, list[str]]:
+    """Split a canonical's scalar parameters by role-aware search grade.
+
+    Returns ``{"full": [...], "coarse": [...], "excluded": [...]}`` — the single
+    authority a role-aware AlphaProbe/AlphaMiner grammar should consume instead
+    of naively treating every ``searchable=True`` parameter as a full-resolution
+    dimension.  A parameter is *excluded* when ``searchable=False`` OR its
+    declared role is ``NUMERICAL``/``POLICY``; it is *coarse* when its role is
+    ``ESTIMATOR_RESOLUTION``; everything else is *full*.  Roles are never
+    inferred from parameter names (review §二).
+    """
+    full: list[str] = []
+    coarse: list[str] = []
+    excluded: list[str] = []
+    if metadata is None:
+        return {"full": full, "coarse": coarse, "excluded": excluded}
+    specs = getattr(metadata, "param_specs", None) or {}
+    for name, spec in specs.items():
+        grade = param_search_grade(spec)
+        if grade == "full":
+            full.append(name)
+        elif grade == "coarse":
+            coarse.append(name)
+        else:
+            excluded.append(name)
+    return {"full": full, "coarse": coarse, "excluded": excluded}
 
 
 _INTEGER_PARAM_NAMES = frozenset(
@@ -146,6 +254,15 @@ class ParamSpec:
     # is NEVER inferred from the parameter name — ``*_weight`` / ``weights`` is
     # not, by itself, proof of scale invariance.
     equivalence: str | None = None
+    # P2-35: machine-readable search ROLE of this parameter (see ``ParamRole``).
+    # ``None`` = undeclared -> resolved by :func:`effective_param_role`
+    # (ECONOMIC for searchable, POLICY for non-searchable).  Never inferred
+    # from the parameter NAME — estimator knobs (``bins``, ``n_segments``,
+    # kernel bandwidth method, Theiler window, epsilon multiplier) must be
+    # declared ``ParamRole.ESTIMATOR_RESOLUTION`` explicitly so a role-aware
+    # search grammar restricts them to small reviewed grids instead of letting
+    # the optimizer chase estimator bias.
+    param_role: ParamRole | None = None
 
 
 # R6-24 (RelationalParamSpec): cross-parameter feasibility constraints that

@@ -13,7 +13,10 @@
   tail used for each estimate must be positive (a signed return series with a
   few opposite-direction values no longer fails the whole window), and the
   output is monotone-increasing in stability (1 = perfectly stable tail,
-  → 0 = fragile / regime-mixed).  Never a p-value.
+  → 0 = fragile / regime-mixed).  Never a p-value.  R14-P1-22: the declared
+  relational contract is ``window >= 2*k_max + 2`` — identical to the runtime
+  guard — so a parameter region that is guaranteed all-NaN at runtime is never
+  declared legal.
 * ``event_allan_factor`` — the true Allan factor of a daily 0/1 event series
   at a single scale: ``AF(τ) = E[(N_{k+1} − N_k)²] / (2·E[N_k])`` over adjacent
   blocks of length ``τ`` (≈ 1 for a Poisson process, > 1 for clustered events,
@@ -35,7 +38,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec, RelationalParamSpec
+from cleaned_operators.base import ParamSpec, RelationalParamSpec, ParamRole
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -51,7 +54,7 @@ _LN2 = np.log(2.0)
 _SIDE_SPEC = ParamSpec(dtype=str, choices=("upper", "lower"), searchable=True)
 _PICKANDS_SPEC = {
     "window": ParamSpec(dtype=int, min=6),
-    "k": ParamSpec(dtype=int, min=1),
+    "k": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     "side": _SIDE_SPEC,
 }
 # R6-167: Pickands requires window >= 4k + 1 (the kernel uses order stats
@@ -66,17 +69,21 @@ _PICKANDS_RELATIONAL_SPECS = [
 _EVT_SPEC = {
     "window": ParamSpec(dtype=int, min=10),
     "k_min": ParamSpec(dtype=int, min=2),
-    "k_max": ParamSpec(dtype=int, min=2),
+    "k_max": ParamSpec(dtype=int, min=2, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     "side": _SIDE_SPEC,
 }
-# R6-168: threshold stability needs a window of Hill estimates across
-# k_min..k_max, each requiring window >= k + 2 order statistics.  k_max must
-# stay below window (Hill uses X_(n-1-k)), and k_max > k_min for >1 threshold.
+# R6-168 + R14-P1-22 (feasibility unification): threshold stability needs a
+# window of Hill estimates across k_min..k_max.  The RUNTIME guard requires
+# ``v.size >= 2*k_max + 2`` (so the full k_min..k_max Hill ladder resolves
+# instead of being truncated by the n//2 cap), so the DECLARED contract must
+# express the same region — ``window >= 2*k_max + 2`` — or search would treat
+# window=30 / k_max=20 as "legal" while every runtime call is guaranteed
+# all-NaN.  ``k_min < k_max`` keeps more than one distinct threshold.
 _EVT_RELATIONAL_SPECS = [
     RelationalParamSpec(
-        "k_max <= window - 2",
-        "EVT threshold stability requires k_max <= window - 2 "
-        "(k_max={k_max}, window={window})",
+        "window >= 2 * k_max + 2",
+        "EVT threshold stability requires window >= 2*k_max + 2 "
+        "(window={window}, k_max={k_max})",
     ),
     RelationalParamSpec(
         "k_min < k_max",
@@ -93,11 +100,11 @@ _EVT_RELATIONAL_SPECS = [
 # contract and the runtime guard.
 _ALLAN_FACTOR_SPEC = {
     "window": ParamSpec(dtype=int, min=8),
-    "scale": ParamSpec(dtype=int, min=1),
+    "scale": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 _ALLAN_SCALING_SPEC = {
     "window": ParamSpec(dtype=int, min=12),
-    "max_scale": ParamSpec(dtype=int, min=4),
+    "max_scale": ParamSpec(dtype=int, min=4, param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 _ALLAN_FACTOR_RELATIONAL_SPECS = [
     RelationalParamSpec(

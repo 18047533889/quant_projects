@@ -85,7 +85,23 @@ def _period_insert(order: list, key) -> None:
     order.append(key)
 
 
-def _values(order: list, visible: OrderedDict, current, count: int | None = None):
+def _window_keys(
+    order: list,
+    visible: OrderedDict,
+    current,
+    count: int | None = None,
+    require_consecutive: bool = False,
+):
+    """Keys of the most recent ``count`` visible report periods ending at
+    ``current``.
+
+    Round-3 item 29: ``require_consecutive=True`` fails closed on a skipped
+    fiscal period — the selected ordinals must be contiguous (each adjacent pair
+    differs by exactly one fiscal period).  A ``consecutive`` pair must be two
+    DISTINCT periods with a known prior value, never two revisions of the same
+    period (each period key appears once in ``order``).  Mirrors the pandas
+    ``_window_keys``.
+    """
     try:
         pos = order.index(current)
     except ValueError:
@@ -93,6 +109,24 @@ def _values(order: list, visible: OrderedDict, current, count: int | None = None
     keys = order[: pos + 1]
     if count is not None:
         keys = keys[-int(count):]
+    if require_consecutive and len(keys) > 1:
+        ords = [period_ordinal(k) for k in keys]
+        if any(o is None for o in ords):
+            return []
+        for prev_o, o in zip(ords, ords[1:]):
+            if o != prev_o + 1:
+                return []
+    return list(keys)
+
+
+def _values(
+    order: list,
+    visible: OrderedDict,
+    current,
+    count: int | None = None,
+    require_consecutive: bool = False,
+):
+    keys = _window_keys(order, visible, current, count, require_consecutive)
     return [float(visible[k]) for k in keys if k in visible and np.isfinite(visible[k])]
 
 
@@ -208,12 +242,12 @@ def _lag_walk_1d(xv, pv, periods):
     return _walk_1d(xv, pv, lambda o, v, c: _lag_value(o, v, c, p))
 
 
-def _rolling_stat_1d(xv, pv, periods, reducer):
+def _rolling_stat_1d(xv, pv, periods, reducer, require_consecutive=False):
     n = _pi(periods, "periods", 2)
     return _walk_1d(
         xv, pv,
-        lambda o, v, c: float(reducer(np.asarray(_values(o, v, c, n), dtype=float)))
-        if len(_values(o, v, c, n)) == n else np.nan,
+        lambda o, v, c: float(reducer(np.asarray(_values(o, v, c, n, require_consecutive=require_consecutive), dtype=float)))
+        if len(_values(o, v, c, n, require_consecutive=require_consecutive)) == n else np.nan,
     )
 
 
@@ -276,7 +310,8 @@ def fin_ttm(x, period_id, periods_per_year=4, flow_type=None):
         xv, pv = _xv_of(x, c), _pv_of(period_id, c)
         out[:, i] = _walk_1d(
             xv, pv,
-            lambda o, v, cc: float(np.sum(_values(o, v, cc, n))) if len(_values(o, v, cc, n)) == n else np.nan,
+            lambda o, v, cc: float(np.sum(_values(o, v, cc, n, require_consecutive=True)))
+            if len(_values(o, v, cc, n, require_consecutive=True)) == n else np.nan,
         )
     return _make(x, cols, out)
 
@@ -290,7 +325,8 @@ def fin_average_balance(x, period_id, periods=2):
         xv, pv = _xv_of(x, c), _pv_of(period_id, c)
         out[:, i] = _walk_1d(
             xv, pv,
-            lambda o, v, cc: float(np.mean(_values(o, v, cc, n))) if len(_values(o, v, cc, n)) == n else np.nan,
+            lambda o, v, cc: float(np.mean(_values(o, v, cc, n, require_consecutive=True)))
+            if len(_values(o, v, cc, n, require_consecutive=True)) == n else np.nan,
         )
     return _make(x, cols, out)
 
@@ -427,7 +463,7 @@ def fin_percentile_history(x, period_id, periods=8):
 def _trend_stat_1d(xv, pv, periods, which):
     n = _pi(periods, "periods", 3)
     def calc(o, v, cc):
-        y = np.asarray(_values(o, v, cc, n), dtype=float)
+        y = np.asarray(_values(o, v, cc, n, require_consecutive=True), dtype=float)
         if len(y) != n:
             return np.nan
         xx = np.arange(n, dtype=float)
@@ -502,7 +538,7 @@ def fin_monotonicity(x, period_id, periods=8):
     for i, c in enumerate(cols):
         xv, pv = _xv_of(x, c), _pv_of(period_id, c)
         def calc(o, v, cc):
-            vals = np.asarray(_values(o, v, cc, n), dtype=float)
+            vals = np.asarray(_values(o, v, cc, n, require_consecutive=True), dtype=float)
             if len(vals) != n:
                 return np.nan
             d = np.diff(vals)
@@ -511,20 +547,96 @@ def fin_monotonicity(x, period_id, periods=8):
     return _make(x, cols, out)
 
 
-def _streak_1d(xv, pv, positive):
-    def calc(o, v, cc):
-        vals = np.asarray(_values(o, v, cc, None), dtype=float)
+def _streak_span_1d(order, visible, current, *, positive, max_periods=None):
+    """Consecutive report-to-report CHANGES with the given sign.
+
+    Round-3 item 29: each counted step must be between *adjacent* fiscal
+    periods — a skipped report (missing Q2 between Q1 and Q3) ends the streak
+    instead of bridging two non-adjacent quarters.  Mirrors the pandas
+    ``_streak_span``.
+    """
+    try:
+        pos = order.index(current)
+    except ValueError:
+        return 0.0
+    cur_ord = period_ordinal(current)
+    if cur_ord is None:
+        start = max(0, pos - max_periods + 1) if max_periods else 0
+        vals = [float(visible[order[i]]) for i in range(start, pos + 1)]
         if len(vals) < 2:
             return 0.0
-        d = np.diff(vals)
         count = 0
-        for z in d[::-1]:
+        for z in np.diff(vals)[::-1]:
             if (z > 0) if positive else (z < 0):
                 count += 1
             else:
                 break
         return float(count)
-    return _walk_1d(xv, pv, calc)
+    start = max(0, pos - max_periods + 1) if max_periods else 0
+    count = 0
+    prev_key = current
+    for key in reversed(order[start:pos]):
+        key_ord = period_ordinal(key)
+        if key_ord is None or cur_ord - key_ord != 1:
+            break
+        delta = float(visible[prev_key]) - float(visible[key])
+        if (delta > 0) if positive else (delta < 0):
+            count += 1
+        else:
+            break
+        prev_key = key
+        cur_ord = key_ord
+    return float(count)
+
+
+def _value_streak_span_1d(order, visible, current, *, positive, max_periods=None):
+    """Consecutive visible report periods whose VALUE has the given sign.
+
+    Round-3 item 29: the walk breaks at a skipped fiscal period.  Mirrors the
+    pandas ``_value_streak_span`` (used by beat/miss surprise streaks).
+    """
+    try:
+        pos = order.index(current)
+    except ValueError:
+        return 0.0
+    cur_ord = period_ordinal(current)
+    if cur_ord is None:
+        start = max(0, pos - max_periods + 1) if max_periods else 0
+        vals = [float(visible[order[i]]) for i in range(start, pos + 1)]
+        streak = 0
+        for value in vals[::-1]:
+            if (value > 0) if positive else (value < 0):
+                streak += 1
+            else:
+                break
+        return float(streak)
+    cur_val = float(visible[current])
+    if (cur_val > 0) if positive else (cur_val < 0):
+        streak = 1
+    else:
+        return 0.0
+    prev_ord = cur_ord
+    walked = 0
+    for key in reversed(order[:pos]):
+        if max_periods is not None and walked >= max_periods - 1:
+            break
+        key_ord = period_ordinal(key)
+        if key_ord is None or prev_ord - key_ord != 1:
+            break
+        val = float(visible[key])
+        if (val > 0) if positive else (val < 0):
+            streak += 1
+            walked += 1
+            prev_ord = key_ord
+        else:
+            break
+    return float(streak)
+
+
+def _streak_1d(xv, pv, positive):
+    return _walk_1d(
+        xv, pv, lambda o, v, c: _streak_span_1d(o, v, c, positive=positive)
+    )
 
 
 def fin_positive_streak(x, period_id, max_periods=8):
@@ -534,18 +646,10 @@ def fin_positive_streak(x, period_id, max_periods=8):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         xv, pv = _xv_of(x, c), _pv_of(period_id, c)
-        def calc(o, v, cc):
-            vals = np.asarray(_values(o, v, cc, n), dtype=float)
-            if len(vals) < 2:
-                return 0.0
-            count = 0
-            for z in np.diff(vals)[::-1]:
-                if z > 0:
-                    count += 1
-                else:
-                    break
-            return float(count)
-        out[:, i] = _walk_1d(xv, pv, calc)
+        out[:, i] = _walk_1d(
+            xv, pv,
+            lambda o, v, cc: _streak_span_1d(o, v, cc, positive=True, max_periods=n),
+        )
     return _make(x, cols, out)
 
 
@@ -556,18 +660,10 @@ def fin_negative_streak(x, period_id, max_periods=8):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         xv, pv = _xv_of(x, c), _pv_of(period_id, c)
-        def calc(o, v, cc):
-            vals = np.asarray(_values(o, v, cc, n), dtype=float)
-            if len(vals) < 2:
-                return 0.0
-            count = 0
-            for z in np.diff(vals)[::-1]:
-                if z < 0:
-                    count += 1
-                else:
-                    break
-            return float(count)
-        out[:, i] = _walk_1d(xv, pv, calc)
+        out[:, i] = _walk_1d(
+            xv, pv,
+            lambda o, v, cc: _streak_span_1d(o, v, cc, positive=False, max_periods=n),
+        )
     return _make(x, cols, out)
 
 
@@ -579,7 +675,7 @@ def fin_sign_change_count(x, period_id, periods=8):
     for i, c in enumerate(cols):
         xv, pv = _xv_of(x, c), _pv_of(period_id, c)
         def calc(o, v, cc):
-            vals = np.asarray(_values(o, v, cc, n), dtype=float)
+            vals = np.asarray(_values(o, v, cc, n, require_consecutive=True), dtype=float)
             if len(vals) != n:
                 return np.nan
             signs = np.sign(np.diff(vals))
@@ -592,7 +688,17 @@ def fin_sign_change_count(x, period_id, periods=8):
 def fin_growth_volatility(x, period_id, growth_periods=1, window_periods=8, flow_type=None):
     reject_ytd_growth("fin_growth_volatility", flow_type)
     g = fin_pct_change(x, period_id, _pi(growth_periods, "growth_periods"), flow_type)
-    return fin_std(g, period_id, _pi(window_periods, "window_periods", 2))
+    cols = _cols(g, period_id)
+    rows = x.height
+    out = np.full((rows, len(cols)), np.nan, dtype=float)
+    for i, c in enumerate(cols):
+        out[:, i] = _rolling_stat_1d(
+            g[c].to_numpy(), _pv_of(period_id, c),
+            _pi(window_periods, "window_periods", 2),
+            lambda a: np.std(a, ddof=1),
+            require_consecutive=True,
+        )
+    return _make(g, cols, out)
 
 
 def fin_growth_stability(x, period_id, growth_periods=1, window_periods=8, flow_type=None):
@@ -609,14 +715,14 @@ def fin_growth_persistence(x, period_id, growth_periods=1, window_periods=8, flo
     reject_ytd_growth("fin_growth_persistence", flow_type)
     g = fin_pct_change(x, period_id, _pi(growth_periods, "growth_periods"), flow_type)
     n = _pi(window_periods, "window_periods", 2)
-    cols = _cols(x, period_id)
+    cols = _cols(g, period_id)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         out[:, i] = _walk_1d(
             g[c].to_numpy(), _pv_of(period_id, c),
-            lambda o, v, cc: float(np.mean(np.asarray(_values(o, v, cc, n), dtype=float) > 0))
-            if len(_values(o, v, cc, n)) == n else np.nan,
+            lambda o, v, cc: float(np.mean(np.asarray(_values(o, v, cc, n, require_consecutive=True), dtype=float) > 0))
+            if len(_values(o, v, cc, n, require_consecutive=True)) == n else np.nan,
         )
     return _make(x, cols, out)
 
@@ -924,7 +1030,7 @@ def fin_expectation_dispersion(expected_std, expected_mean):
 
 def _beat_miss_streak_1d(diff_arr, pv, count, beat):
     def calc(o, v, cc):
-        values = _values(o, v, cc, count)
+        values = _values(o, v, cc, count, require_consecutive=True)
         streak = 0
         for value in values[::-1]:
             condition = value > 0 if beat else value < 0

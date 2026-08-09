@@ -34,8 +34,15 @@ _EPS = 1e-12
 _CANONICALS: list[str] = []
 
 
-def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio") -> OperatorMetadata:
-    return OperatorMetadata(
+def _meta(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str = "ratio",
+    input_units: dict[str, str] | None = None,
+) -> OperatorMetadata:
+    metadata = OperatorMetadata(
         name=name,
         category="shareholder",
         description=description,
@@ -47,6 +54,10 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio"
             f"unit:{unit}", "cost:1",
         ],
     )
+    # Round-3 item 30: declare the input semantics for ratio/level operators.
+    if input_units:
+        metadata.input_units = dict(input_units)
+    return metadata
 
 
 def _stack(panels: list[pd.DataFrame]) -> np.ndarray:
@@ -228,8 +239,16 @@ def _safe_div(num, den):
     return out.replace([np.inf, -np.inf], np.nan)
 
 
-def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "ratio"):
-    metadata = _meta(name, description, params, unit=unit)
+def _mk(
+    name: str,
+    description: str,
+    params: list[str],
+    fn,
+    *,
+    unit: str = "ratio",
+    input_units: dict[str, str] | None = None,
+):
+    metadata = _meta(name, description, params, unit=unit, input_units=input_units)
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -381,6 +400,7 @@ _mk(
     "股东质押股数合计 / 总股本（质押股数>=0、总股本>0、比率<=1，越界→NaN）。",
     ["pledge_shares", "total_capital"],
     _pledge_ratio,
+    input_units={"pledge_shares": "shares", "total_capital": "shares"},
 )
 
 
@@ -393,6 +413,7 @@ _mk(
     "股东冻结股数合计 / 总股本（冻结股数>=0、总股本>0、比率<=1，越界→NaN）。",
     ["freeze_shares", "total_capital"],
     _freeze_ratio,
+    input_units={"freeze_shares": "shares", "total_capital": "shares"},
 )
 
 
@@ -493,6 +514,7 @@ _mk(
     "限售/受限股份占比（限售股数>=0、总股本>0、比率<=1，越界→NaN）。",
     ["locked_shares", "total_capital"],
     _locked_share_ratio,
+    input_units={"locked_shares": "shares", "total_capital": "shares"},
 )
 
 
@@ -801,4 +823,69 @@ _mk_id(
     "holder_share_weighted_rank_migration",
     "以 min(两期持股比例) 加权的股东排名位移均值（top-K 披露集合内共同股东）。",
     "rank_migration",
+)
+
+
+# ---------------------------------------------------------------------------
+# Round-3 item 28 — holder/ownership coverage.
+#
+# Every entry/exit/churn metric above is a top-K DISCLOSED holder-set metric.  A
+# sparse disclosure (e.g. only 2 of the top-10 slots populated) is NOT a strong
+# signal: a churn of 0 on an empty disclosure must not read as "stable".  These
+# operators expose the effective coverage — how many holders are observed and
+# how much of the equity they cover — so an alpha search can gate on coverage
+# instead of treating a sparse report as strong.  A snapshot with an unknown
+# ratio or an ambiguous duplicate fails closed to NaN (audit §6.3/6.4).
+# ---------------------------------------------------------------------------
+
+def _disclosure_metrics(*args):
+    """Current-snapshot coverage: (count, coverage, share_sum) per (row, col).
+
+    ``args`` = s1..s10 ratio panels + sid1..sid10 ID panels.
+    """
+    cur_r = _stack(list(args[:_ID_SLOTS]))
+    cur_id = _stack_ids(list(args[_ID_SLOTS : 2 * _ID_SLOTS]))
+    _, rows, cols = cur_r.shape
+    count = np.full((rows, cols), np.nan, dtype=float)
+    coverage = np.full((rows, cols), np.nan, dtype=float)
+    share_sum = np.full((rows, cols), np.nan, dtype=float)
+    for row in range(rows):
+        for col in range(cols):
+            holders, ok = _ratio_map(cur_r, cur_id, row, col)
+            if not ok:
+                # Unknown ratio / ambiguous duplicate: fail closed to NaN — an
+                # unknown holding is not a confirmed 0% (audit §6.3/6.4).
+                continue
+            if not holders:
+                count[row, col] = 0.0
+                coverage[row, col] = 0.0
+                share_sum[row, col] = 0.0
+            else:
+                count[row, col] = float(len(holders))
+                coverage[row, col] = float(len(holders)) / float(_ID_SLOTS)
+                share_sum[row, col] = float(sum(holders.values()))
+    return count, coverage, share_sum
+
+
+_mk(
+    "holder_disclosure_count",
+    "当前快照披露的 distinct ShareholderId 数量（top-K 披露集合口径；0=无披露；"
+    "任一已披露股东持股比例缺失或歧义→NaN，round-3 item 28）。",
+    _ID_PARAMS[:20],
+    lambda *args: _frame_like(args[0], _disclosure_metrics(*args)[0]),
+    unit="count",
+)
+_mk(
+    "holder_disclosure_coverage",
+    "当前快照 top-K 披露集合的观测覆盖度：distinct 股东数 / K（K=10），[0,1]。"
+    "稀疏披露（覆盖度低）不可作为强信号（round-3 item 28）。",
+    _ID_PARAMS[:20],
+    lambda *args: _frame_like(args[0], _disclosure_metrics(*args)[1]),
+)
+_mk(
+    "holder_topk_share_sum",
+    "当前快照已披露 top-K 股东的持股比例合计（按 distinct ID 去重，同 ID 重复取一致比例）。"
+    "衡量披露覆盖的股权总量；稀疏披露下该和不可视为集中度（round-3 item 28）。",
+    _ID_PARAMS[:20],
+    lambda *args: _frame_like(args[0], _disclosure_metrics(*args)[2]),
 )

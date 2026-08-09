@@ -6,13 +6,13 @@ probabilities.  All are experimental high-cost operators.
 """
 from __future__ import annotations
 
-from itertools import permutations
+import math
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import SeriesOperator, register_operator
+from cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.ts_model._rolling_core import (
     frame_like,
     metadata,
@@ -22,7 +22,7 @@ from cleaned_operators.ts_model._rolling_core import (
 _CANONICALS: list[str] = []
 
 
-def _register(name: str, description: str, params: list[str], unit: str, fn, cost: int = 8):
+def _register(name: str, description: str, params: list[str], unit: str, fn, cost: int = 8, param_specs=None):
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -34,6 +34,8 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
     )
     class _ComplexityOp(SeriesOperator):
         metadata = metadata(name, description, params, unit=unit, cost=cost)
+        if param_specs:
+            metadata.param_specs = dict(param_specs)
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)
@@ -55,26 +57,22 @@ def _apply(x: pd.DataFrame, fn) -> pd.DataFrame:
     return frame_like(x, out)
 
 
-def _average_tie_rank(block: np.ndarray) -> tuple[float, ...]:
-    """Ordinal-pattern rank with average-tie handling.
+def _ordinal_pattern_code(block: np.ndarray) -> tuple[int, ...] | None:
+    """Stable ordinal pattern of ``block`` or ``None`` when a tie is present.
 
-    P1-91: ``np.argsort(np.argsort(block))`` arbitrarily breaks ties by index
-    order, turning an exact-tie block into a spurious distinct pattern.  Equal
-    values instead share the average of the ranks they would jointly occupy
-    (mean-rank convention), so ties are not manufactured into patterns.
+    Review round-3 #44: ordinal ties DROP the embedding.  A window whose
+    ordinal pattern contains any tie (0-return days, limit bars, discrete
+    financials) is excluded from the permutation-count state space — average
+    tie ranks would create a continuum of states that ``log(order!)`` cannot
+    normalize (the state space would no longer be permutations).  ``None``
+    means "exclude this embedding".
     """
+    u = np.unique(block)
+    if u.size != block.size:
+        return None
     order = np.argsort(block, kind="stable")
-    n = block.shape[0]
-    ranks = np.empty(n, dtype=float)
-    i = 0
-    while i < n:
-        j = i
-        while j + 1 < n and block[order[j + 1]] == block[order[i]]:
-            j += 1
-        avg = (i + j) / 2.0 + 1.0  # 1-based mean rank over the tied run
-        ranks[order[i : j + 1]] = avg
-        i = j + 1
-    return tuple(float(r) for r in ranks)
+    pattern = np.argsort(order, kind="stable")
+    return tuple(int(x) for x in pattern)
 
 
 def _permutation_entropy(vals: np.ndarray, order: int, window: int) -> float:
@@ -85,16 +83,20 @@ def _permutation_entropy(vals: np.ndarray, order: int, window: int) -> float:
     if len(finite) < order + 1:
         return np.nan
     n = len(finite)
-    counts: dict[tuple[float, ...], int] = {}
+    counts: dict[tuple[int, ...], int] = {}
     for i in range(n - order + 1):
         block = finite[i : i + order]
-        rank = _average_tie_rank(block)
-        counts[rank] = counts.get(rank, 0) + 1
+        code = _ordinal_pattern_code(block)
+        if code is None:
+            continue  # review round-3 #44: ordinal tie -> drop the embedding
+        counts[code] = counts.get(code, 0) + 1
     total = sum(counts.values())
     if total <= 1:
         return np.nan
     h = -sum(c / total * np.log(c / total) for c in counts.values())
-    return float(h / np.log(len(list(permutations(range(order)))))) if order > 1 else 0.0
+    # Every counted state is now a genuine length-``order`` permutation, so
+    # normalization by log(order!) is consistent (review round-3 #44).
+    return float(h / np.log(math.factorial(order))) if order > 1 else 0.0
 
 
 _register("ts_permutation_entropy", "序模式排列熵（归一化）。", ["x", "order", "window"], "level",
@@ -126,11 +128,52 @@ def _sample_entropy(vals: np.ndarray, m: int, r_scale: float, window: int) -> fl
     a = _count(m + 1)
     if b == 0:
         return np.nan
-    return float(-np.log(a / b)) if a > 0 else float(np.log(b))
+    # Review round-3 #45: standard SampEn = -ln(A/B); when A == 0 the value is
+    # NOT -ln(0/B)=log(B) — it is infinity/undefined.  Fail closed to NaN.  The
+    # old ``float(np.log(b))`` emitted a finite "pseudocount"-style value that
+    # pretended a zero-match sample carries entropy information.
+    if a <= 0:
+        return np.nan
+    return float(-np.log(a / b))
 
 
 _register("ts_sample_entropy", "样本熵（相似子序列继续保持相似的概率）。", ["x", "m", "r", "window"], "level",
            lambda x, m=2, r=0.2, window=200: _apply(x, lambda v: _sample_entropy(v, int(m), float(r), int(window))), cost=9)
+
+
+def _pseudocount_sample_entropy(vals: np.ndarray, m: int, r_scale: float, window: int) -> float:
+    seg = vals[-int(window):]
+    # P1-91: physical time axis only — the embedding never bridges a gap.
+    finite = trailing_contiguous_finite(seg)
+    if len(finite) < m + 2:
+        return np.nan
+    r = float(r_scale) * float(np.std(finite))
+    if r <= 0:
+        return np.nan
+    n = len(finite)
+
+    def _count(pattern_len: int) -> int:
+        count = 0
+        for i in range(n - pattern_len):
+            for j in range(i + 1, n - pattern_len + 1):
+                d = np.max(np.abs(finite[i : i + pattern_len] - finite[j : j + pattern_len]))
+                if d < r:
+                    count += 1
+        return count
+
+    b = _count(m)
+    a = _count(m + 1)
+    if b == 0:
+        return np.nan
+    # Review round-3 #45: pseudocount variant — A' = A+1, B' = B+1 keeps the
+    # estimator finite when A == 0 (SampEn = -ln((A+1)/(B+1)) = ln(B+1) at A=0),
+    # as an explicitly-named alternative to the NaN fail-closed ``ts_sample_entropy``.
+    return float(-np.log((a + 1) / (b + 1)))
+
+
+_register("ts_pseudocount_sample_entropy", "伪计数样本熵（A=0 时用 +1 伪计数保持有限，明确替代 ts_sample_entropy 的 NaN）。",
+           ["x", "m", "r", "window"], "level",
+           lambda x, m=2, r=0.2, window=200: _apply(x, lambda v: _pseudocount_sample_entropy(v, int(m), float(r), int(window))), cost=9)
 
 
 def _lz_complexity(vals: np.ndarray, window: int, bins: int) -> float:
@@ -186,16 +229,23 @@ def _multiscale_entropy_slope(vals: np.ndarray, max_scale: int, window: int) -> 
     for s in range(1, max(2, int(max_scale)) + 1):
         if len(finite) < s * 3:
             continue
-        coarse = finite[: len(finite) // s * s].reshape(-1, s).mean(axis=1)
+        # Review round-3 #46: coarse-graining must be RIGHT-ALIGNED.  When the
+        # window is not divisible by ``s`` the OLDEST remainder is dropped —
+        # never the newest bars (the newest bar is the current decision row).
+        # The old ``finite[: n//s*s]`` dropped the newest remainder.
+        coarse = finite[len(finite) % s:].reshape(-1, s).mean(axis=1)
         e = _permutation_entropy(coarse, 3, len(coarse))
         if np.isfinite(e):
             scales.append(float(s))
             ents.append(e)
     if len(scales) < 2:
         return np.nan
-    # P1-91: centered dot product (ddof-consistent) instead of the
-    # cov(ddof=1)/var(ddof=0) mix that biased the slope by n/(n-1).
-    sx = np.asarray(scales, dtype=float) - float(np.mean(scales))
+    # Review round-3 #47: the slope is in LOG scale — Entropy(s) ~ a + b·log s.
+    # The old regression on raw ``s`` measured entropy-vs-scale directly, which
+    # is inconsistent with the log-log convention of DFA/spectral slopes and
+    # makes the coefficient depend on the arbitrary scale unit.
+    log_s = np.log(np.asarray(scales, dtype=float))
+    sx = log_s - float(np.mean(log_s))
     sy = np.asarray(ents, dtype=float) - float(np.mean(ents))
     denom = float(np.dot(sx, sx))
     if denom <= 0.0:
@@ -203,7 +253,8 @@ def _multiscale_entropy_slope(vals: np.ndarray, max_scale: int, window: int) -> 
     return float(np.dot(sx, sy) / denom)
 
 
-_register("ts_multiscale_entropy_slope", "多尺度熵相对尺度的斜率。", ["x", "max_scale", "window"], "level",
+_register("ts_multiscale_entropy_slope", "多尺度熵对 log(scale) 的斜率（Entropy(s) ~ a + b·log s，右对齐粗粒化）。",
+           ["x", "max_scale", "window"], "level",
            lambda x, max_scale=5, window=300: _apply(x, lambda v: _multiscale_entropy_slope(v, int(max_scale), int(window))), cost=9)
 
 
@@ -288,27 +339,45 @@ _register("ts_cusum_vol_break_score", "平方收益 CUSUM 波动突变得分。"
            lambda x, window=60, min_periods=10: _apply(x, lambda v: _cusum_vol_break(v, int(window), int(min_periods))), cost=3)
 
 
-def _regime_filter(vals: np.ndarray, window: int, stat: str) -> float:
+def _regime_filter(vals: np.ndarray, window: int, stat: str, transition_prob: float = 0.05) -> float:
     seg = vals[-int(window):]
     # P1-91: physical time axis only — the filter recursion never bridges a gap.
     finite = trailing_contiguous_finite(seg)
     if len(finite) < 10:
         return np.nan
-    # P1-91: heuristic two-state Gaussian FILTER on volatility (high/low) with a
-    # deterministic grid — NOT a full two-state HMM: there is no transition
-    # matrix, no Baum-Welch parameter learning and no Viterbi decoding.  The
-    # "prob" stat is a filtered posterior for a fixed (not fitted) state grid.
+    # Two-state Gaussian FILTER on volatility (high/low) with a deterministic
+    # grid and a fixed two-state Markov transition matrix.  Review round-3 #48:
+    # the old recursion was posterior_{t-1} x likelihood_t -> posterior_t with
+    # NO transition matrix — cumulative Bayes evidence, not a regime-switching
+    # filter.  The prediction step is now pi_{t|t-1} = P^T · pi_{t-1|t-1} before
+    # the likelihood update, so "prob" is a genuine regime-switching filtered
+    # posterior.  There is still no Baum-Welch parameter learning and no
+    # Viterbi decoding: the state grid and transition matrix are fixed inputs.
     r = np.array(finite, dtype=float)
     var_all = float(np.var(r))
     sigma_hi = np.sqrt(max(var_all * 2.0, 1e-12))
     sigma_lo = np.sqrt(max(var_all * 0.5, 1e-12))
-    p_hi = 0.5
+    p_switch = float(transition_prob)
+    p_switch = min(max(p_switch, 1e-6), 1.0 - 1e-6)
+    # P[s, s'] = P(S_t = s' | S_{t-1} = s),  s in {0 = low-vol, 1 = high-vol}.
+    P = np.array(
+        [[1.0 - p_switch, p_switch], [p_switch, 1.0 - p_switch]],
+        dtype=float,
+    )
+    p_hi = 0.5  # stationary of the symmetric P
     p_hi_hist: list[float] = []
     for x in r:
         like_hi = np.exp(-0.5 * (x / sigma_hi) ** 2) / sigma_hi
         like_lo = np.exp(-0.5 * (x / sigma_lo) ** 2) / sigma_lo
-        p_hi = (like_hi * p_hi) / max(like_hi * p_hi + like_lo * (1 - p_hi), 1e-300)
-        p_hi = min(max(p_hi, 1e-6), 1.0 - 1e-6)
+        p_lo = 1.0 - p_hi
+        # prediction: pi_{t|t-1} = P^T · pi_{t-1|t-1}
+        pred_lo = P[0, 0] * p_lo + P[1, 0] * p_hi
+        pred_hi = P[0, 1] * p_lo + P[1, 1] * p_hi
+        # update: pi_t proportional to likelihood_t ⊙ pi_{t|t-1}
+        post_lo = like_lo * pred_lo
+        post_hi = like_hi * pred_hi
+        z = post_lo + post_hi
+        p_hi = min(max(post_hi / max(z, 1e-300), 1e-6), 1.0 - 1e-6)
         p_hi_hist.append(p_hi)
     if stat == "prob":
         return float(p_hi_hist[-1])
@@ -332,9 +401,20 @@ def _regime_filter(vals: np.ndarray, window: int, stat: str) -> float:
     return float(abs(np.mean(recent) - np.mean(older)))
 
 
-_register("ts_two_state_regime_probability", "两状态高波动过滤概率（heuristic 滤波：无转移矩阵、非完整 HMM）。", ["x", "window"], "level",
-           lambda x, window=120: _apply(x, lambda v: _regime_filter(v, int(window), "prob")), cost=5)
-_register("ts_regime_duration", "当前状态持续期（过滤概率>0.5 的连续长度）。", ["x", "window"], "count",
-           lambda x, window=120: _apply(x, lambda v: _regime_filter(v, int(window), "duration")), cost=5)
-_register("ts_change_point_probability", "在线后验状态近突变启发式得分（heuristic shift，非真正变点概率）。", ["x", "window"], "level",
-           lambda x, window=120: _apply(x, lambda v: _regime_filter(v, int(window), "changepoint")), cost=5)
+_REGIME_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=2),
+    "transition_prob": ParamSpec(
+        dtype=float, min=0.0, max=1.0,
+        param_role=ParamRole.POLICY, searchable=False,
+    ),
+}
+
+_register("ts_two_state_regime_probability", "两状态高波动 Markov 滤波概率（固定转移矩阵；无 Baum-Welch/Viterbi）。", ["x", "window", "transition_prob"], "level",
+           lambda x, window=120, transition_prob=0.05: _apply(x, lambda v: _regime_filter(v, int(window), "prob", float(transition_prob))),
+           cost=5, param_specs=_REGIME_PARAM_SPECS)
+_register("ts_regime_duration", "当前状态持续期（Markov 滤波概率>0.5 的连续长度）。", ["x", "window", "transition_prob"], "count",
+           lambda x, window=120, transition_prob=0.05: _apply(x, lambda v: _regime_filter(v, int(window), "duration", float(transition_prob))),
+           cost=5, param_specs=_REGIME_PARAM_SPECS)
+_register("ts_change_point_probability", "在线后验状态近突变启发式得分（heuristic shift，非真正变点概率）。", ["x", "window", "transition_prob"], "level",
+           lambda x, window=120, transition_prob=0.05: _apply(x, lambda v: _regime_filter(v, int(window), "changepoint", float(transition_prob))),
+           cost=5, param_specs=_REGIME_PARAM_SPECS)

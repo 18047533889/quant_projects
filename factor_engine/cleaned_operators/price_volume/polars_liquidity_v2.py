@@ -20,9 +20,21 @@ import numpy as np
 import polars as pl
 
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
-from cleaned_operators.base import ParamSpec
+from cleaned_operators.base import ParamSpec, ParamRole, RelationalParamSpec
+from cleaned_operators.registry import OperatorRegistry
 
 _SKIP = frozenset({"date", "stock_code"})
+
+
+def _check_nonneg(frame: "pl.DataFrame", name: str) -> None:
+    """Fail loudly when a finite volume/turnover input is negative (#19)."""
+    for c in _cols(frame):
+        v = frame[c].to_numpy()
+        if np.any((v < 0.0) & np.isfinite(v)):
+            raise ValueError(
+                f"{name} must be non-negative (input_units='non_negative_volume'); "
+                f"found a negative value in {c!r}"
+            )
 
 
 def _pi(value, name: str, minimum: int = 1) -> int:
@@ -130,12 +142,18 @@ def abnormal_volume(volume, window):
 
 def volume_volatility(volume, window):
     w = _pi(window, "window", 2)
+    # R11 round-3 #18: guarded growth (0 base -> null) mirrors the pandas twin /
+    # SQL ``NULLIF(v,0)``; a raw pct_change would blow up to inf at a 0 base.
     return _result(volume, {
-        c: _one(volume, c, _pct_change(pl.col(c)).rolling_std(w, min_samples=w)) for c in _cols(volume)
+        c: _one(volume, c, (_safe_div(pl.col(c), pl.col(c).shift(1)) - 1.0).rolling_std(w, min_samples=w)) for c in _cols(volume)
     })
 
 
 def volume_autocorr(volume, window, lag):
+    # R11 round-3 #17: ``window`` counts ALIGNED PAIRS; the raw lookback is
+    # ``window + lag`` prior bars (first output at raw index ``window + lag - 1``)
+    # so the lag term has genuine history.  ``lag < window`` is a declared
+    # RelationalParamSpec (mirror of the pandas twin).
     w = _pi(window, "window", 3)
     lag = _pi(lag, "lag")
     values = {}
@@ -202,6 +220,7 @@ def volume_acceleration(volume, short_window, long_window):
 
 def _up_ratio(ret, volume, window, *, positive):
     w = _pi(window, "window")
+    _check_nonneg(volume, "volume")
     values = {}
     for c in _cols(ret, volume):
         frame = pl.DataFrame({"ret": ret[c], "volume": volume[c]})
@@ -215,7 +234,8 @@ def _up_ratio(ret, volume, window, *, positive):
         cond = retf > 0 if positive else retf < 0
         contrib = pl.when(valid & cond).then(pl.col("volume")).otherwise(0.0)
         up = pl.when(valid).then(contrib).otherwise(None).rolling_sum(w, min_samples=w)
-        total = voln.abs().rolling_sum(w, min_samples=w)
+        # #19: volume is non-negative by contract — no abs() on the denominator.
+        total = voln.rolling_sum(w, min_samples=w)
         values[c] = _one(frame, c, _safe_div(up, total))
     return _result(ret, values)
 
@@ -230,11 +250,13 @@ def down_volume_ratio(ret, volume, window):
 
 def volume_weighted_return(ret, volume, window):
     w = _pi(window, "window")
+    _check_nonneg(volume, "volume")
     values = {}
     for c in _cols(ret, volume):
         frame = pl.DataFrame({"ret": ret[c], "volume": volume[c]})
         num = (pl.col("ret") * pl.col("volume")).rolling_sum(w, min_samples=w)
-        den = pl.col("volume").abs().rolling_sum(w, min_samples=w)
+        # #19: volume is non-negative by contract — no abs() on the denominator.
+        den = pl.col("volume").rolling_sum(w, min_samples=w)
         values[c] = _one(frame, c, _safe_div(num, den))
     return _result(ret, values)
 
@@ -255,12 +277,14 @@ def up_down_volume_ratio(ret, volume, window):
 
 def volume_weighted_momentum(close, volume, window):
     w = _pi(window, "window")
+    _check_nonneg(volume, "volume")
     values = {}
     for c in _cols(close, volume):
         frame = pl.DataFrame({"close": close[c], "volume": volume[c]})
         ret = _pct_change(pl.col("close"))
         num = (ret * pl.col("volume")).rolling_sum(w, min_samples=w)
-        den = pl.col("volume").abs().rolling_sum(w, min_samples=w)
+        # #19: volume is non-negative by contract — no abs() on the denominator.
+        den = pl.col("volume").rolling_sum(w, min_samples=w)
         values[c] = _one(frame, c, _safe_div(num, den))
     return _result(close, values)
 
@@ -279,10 +303,12 @@ def price_volume_divergence(close, volume, price_window, volume_window):
 
 def return_volume_beta(ret, volume, window):
     w = _pi(window, "window", 3)
+    _check_nonneg(volume, "volume")
     values = {}
     for c in _cols(ret, volume):
         x = ret[c].to_numpy()
-        vc = _pct_change(pl.col(c))
+        # R11 round-3 #18: guarded growth (0 base -> null) mirrors the pandas twin.
+        vc = _safe_div(pl.col(c), pl.col(c).shift(1)) - 1.0
         y = volume.select(vc.alias("vc"))["vc"].to_numpy()
         cov = _pair_rolling(x, y, w, "cov")
         # rolling var (ddof=1) via numpy to keep paired-sample semantics
@@ -306,7 +332,11 @@ def _mf_multiplier(high, low, close):
     ).otherwise(None)
 
 
-def ADL(high, low, close, volume, window):
+def rolling_adl_flow(high, low, close, volume, window):
+    # R11 round-3 #20: BOUNDED ROLLING money-flow sum over an explicit window —
+    # NOT the classic cumulative Accumulation/Distribution Line (which integrates
+    # the full history with a running total).  No truly cumulative/stateful ADL
+    # exists in the catalog; the name says what this computes.
     w = _pi(window, "window")
     values = {}
     for c in _cols(high, low, close, volume):
@@ -316,6 +346,10 @@ def ADL(high, low, close, volume, window):
         flow = _mf_multiplier(pl.col("high"), pl.col("low"), pl.col("close")) * pl.col("volume")
         values[c] = _one(frame, c, flow.rolling_sum(w, min_samples=w))
     return _result(close, values)
+
+
+# Legacy in-module alias for the renamed rolling-flow operator.
+ADL = rolling_adl_flow
 
 
 def ChaikinOscillator(high, low, close, volume, fast_window, slow_window, adl_window):
@@ -329,6 +363,7 @@ def ChaikinOscillator(high, low, close, volume, fast_window, slow_window, adl_wi
             "high": high[c], "low": low[c], "close": close[c], "volume": volume[c],
         })
         flow = _mf_multiplier(pl.col("high"), pl.col("low"), pl.col("close")) * pl.col("volume")
+        # #20: built on the BOUNDED ROLLING ADL flow, NOT the cumulative ADL.
         adl = flow.rolling_sum(_pi(adl_window, "adl_window"), min_samples=_pi(adl_window, "adl_window"))
         fast = _ewm_span(adl, f)
         slow = _ewm_span(adl, s)
@@ -459,14 +494,23 @@ def turnover_adjusted_volatility(ret, turnover, window):
     return _result(ret, values)
 
 
-def volume_to_range(volume, high, low, window):
+def volume_price_range_density(volume, high, low, window):
+    # R11 round-3 #21: Volume/(High-Low) is a unit-dependent "volume per unit
+    # price range" density.  The canonical name states the semantic (output unit:
+    # ``volume_per_price_range``).  A non-positive range (== 0 or High<Low) ->
+    # null so the density cannot explode as range -> 0.
     w = _pi(window, "window")
     values = {}
     for c in _cols(volume, high, low):
         frame = pl.DataFrame({"volume": volume[c], "high": high[c], "low": low[c]})
-        raw = _safe_div(pl.col("volume"), pl.col("high") - pl.col("low"))
+        rng = pl.col("high") - pl.col("low")
+        raw = pl.when(rng > 0).then(pl.col("volume") / rng).otherwise(None)
         values[c] = _one(frame, c, raw.rolling_mean(w, min_samples=w))
     return _result(volume, values)
+
+
+# Legacy in-module alias for the renamed density op.
+volume_to_range = volume_price_range_density
 
 
 # ---------------------------------------------------------------------------
@@ -596,12 +640,16 @@ def ts_impulse_return(close, window):
 
 
 def ts_impulse_strength(close, window, vol_window):
+    # R11 round-3 #26: the scale must be volatility_{t-1} — estimated on PRIOR
+    # data, excluding the current impulse.  ``rolling_std(...).shift(1)`` makes
+    # the denominator use rows [t-vol_window, t-1] so the impulse return cannot
+    # inflate its own volatility denominator.
     w = _pi(window, "window")
     vw = _pi(vol_window, "vol_window", 2)
     values = {}
     for c in _cols(close):
         ret = _safe_div(pl.col(c), pl.col(c).shift(w)) - 1.0
-        rv = _pct_change(pl.col(c)).rolling_std(vw, min_samples=vw)
+        rv = _pct_change(pl.col(c)).rolling_std(vw, min_samples=vw).shift(1)
         values[c] = _one(close, c, _safe_div(ret, rv * np.sqrt(float(w))))
     return _result(close, values)
 
@@ -690,8 +738,8 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("price_turnover_divergence", ("close", "turnover", "price_window", "turnover_window"), price_turnover_divergence, "Price momentum minus turnover momentum."),
     ("return_volume_beta", ("ret", "volume", "window"), return_volume_beta, "Rolling beta of return to volume growth."),
     ("return_turnover_beta", ("ret", "turnover", "window"), return_volume_beta, "Rolling beta of return to turnover growth."),
-    ("ADL", ("high", "low", "close", "volume", "window"), ADL, "Bounded accumulation/distribution flow over an explicit window."),
-    ("ChaikinOscillator", ("high", "low", "close", "volume", "fast_window", "slow_window", "adl_window"), ChaikinOscillator, "Chaikin oscillator over bounded ADL."),
+    ("rolling_adl_flow", ("high", "low", "close", "volume", "window"), rolling_adl_flow, "Bounded rolling accumulation/distribution money-flow over an explicit window (NOT the cumulative ADL)."),
+    ("ChaikinOscillator", ("high", "low", "close", "volume", "fast_window", "slow_window", "adl_window"), ChaikinOscillator, "Chaikin oscillator over the bounded rolling ADL flow (NOT cumulative ADL)."),
     ("ForceIndex", ("close", "volume", "window"), ForceIndex, "EMA-smoothed price-change times volume."),
     ("EaseOfMovement", ("high", "low", "volume", "window", "volume_scale"), EaseOfMovement, "Ease-of-Movement with explicit smoothing and volume scale."),
     ("bounded_nvi", ("close", "volume", "window"), bounded_nvi, "Bounded Negative Volume Index return."),
@@ -701,7 +749,7 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("corwin_schultz_spread", ("high", "low", "window"), corwin_schultz_spread, "Corwin-Schultz high-low spread proxy."),
     ("high_low_spread_proxy", ("high", "low", "window"), high_low_spread_proxy, "Rolling log high-low spread proxy."),
     ("turnover_adjusted_volatility", ("ret", "turnover", "window"), turnover_adjusted_volatility, "Return volatility scaled by trading activity."),
-    ("volume_to_range", ("volume", "high", "low", "window"), volume_to_range, "Rolling volume per unit intraday range."),
+    ("volume_price_range_density", ("volume", "high", "low", "window"), volume_price_range_density, "Rolling volume per unit intraday range (Volume/(High-Low); unit: volume per price range)."),
     ("rolling_vwap", ("price", "volume", "window"), rolling_vwap, "Rolling VWAP."),
     ("vwap_deviation", ("price", "volume", "window"), vwap_deviation, "Price relative to rolling VWAP."),
     ("relative_volume", ("volume", "window"), relative_volume, "Current volume relative to prior baseline."),
@@ -727,7 +775,43 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
 )
 
 
-def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
+# R11 round-3: per-operator metadata contracts (mirror of the pandas module) —
+# relational feasibility, per-parameter history semantics and typed input units.
+_AUTOCORR_REL = [
+    RelationalParamSpec(
+        "lag < window",
+        message="lag must be < window (window counts aligned pairs; raw history = window + lag)",
+    ),
+]
+_AUTOCORR_PARAM_SPECS = {
+    "window": ParamSpec(dtype=int, min=3, history_formula="window + lag"),
+    "lag": ParamSpec(dtype=int, min=1, history_semantics="exact_rows"),
+}
+_EXTRA: dict[str, dict] = {
+    "volume_autocorr": {"param_specs": dict(_AUTOCORR_PARAM_SPECS), "relational_specs": list(_AUTOCORR_REL)},
+    "turnover_autocorr": {"param_specs": dict(_AUTOCORR_PARAM_SPECS), "relational_specs": list(_AUTOCORR_REL)},
+    "volume_volatility": {"input_units": {"volume": "non_negative_volume"}},
+    "turnover_volatility": {"input_units": {"turnover": "non_negative_volume"}},
+    "price_volume_divergence": {"input_units": {"volume": "non_negative_volume"}},
+    "price_turnover_divergence": {"input_units": {"turnover": "non_negative_volume"}},
+    "return_volume_beta": {"input_units": {"volume": "non_negative_volume"}},
+    "return_turnover_beta": {"input_units": {"turnover": "non_negative_volume"}},
+    "up_volume_ratio": {"input_units": {"volume": "non_negative_volume"}},
+    "down_volume_ratio": {"input_units": {"volume": "non_negative_volume"}},
+    "volume_weighted_return": {"input_units": {"volume": "non_negative_volume"}},
+    "volume_weighted_momentum": {"input_units": {"volume": "non_negative_volume"}},
+    "rolling_adl_flow": {"input_units": {"volume": "non_negative_volume"}},
+    "volume_price_range_density": {
+        "input_units": {"volume": "non_negative_volume", "high": "price", "low": "price"},
+        "output_unit": "volume_per_price_range",
+    },
+    "zero_return_ratio": {
+        "param_specs": {"epsilon": ParamSpec(dtype=float, min=0.0, searchable=False, param_role=ParamRole.NUMERICAL)},
+    },
+}
+
+
+def _register(name: str, params: tuple[str, ...], function: Callable, description: str, *, extra: dict | None = None) -> None:
     metadata = OperatorMetadata(
         name=name,
         category="price_volume_extension",
@@ -743,6 +827,20 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         # not be an alpha-search dimension.
         metadata.param_specs = {"volume_scale": ParamSpec(dtype=float, searchable=False)}
         metadata.tags = [*(metadata.tags or ()), "unit_conversion_only"]
+    if extra:
+        if extra.get("param_specs"):
+            _specs = dict(getattr(metadata, "param_specs", None) or {})
+            _specs.update(extra["param_specs"])
+            metadata.param_specs = _specs
+        # base_polars.OperatorMetadata has no declared relational_specs/input_units
+        # fields; setattr is the duck-typed mirror so validate_operator_call and
+        # the semantic audit read the SAME contracts as the pandas twin.
+        if extra.get("relational_specs"):
+            metadata.relational_specs = list(extra["relational_specs"])
+        if extra.get("input_units"):
+            metadata.input_units = dict(extra["input_units"])
+        if extra.get("output_unit"):
+            metadata.output_unit = extra["output_unit"]
 
     def _calculate_series(self, *args, **kwargs):
         return function(*args, **kwargs)
@@ -764,4 +862,18 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
 
 
 for _name, _params, _function, _description in _SPECS:
-    _register(_name, _params, _function, _description)
+    _register(_name, _params, _function, _description, extra=_EXTRA.get(_name))
+
+# R11 round-3 #20 / #21: honest renames (mirror of the pandas module).  The old
+# names stay as resolving aliases so existing recipes keep loading.
+_RENAMES = {"ADL": "rolling_adl_flow", "volume_to_range": "volume_price_range_density"}
+for _old, _new in _RENAMES.items():
+    try:
+        OperatorRegistry.register_alias(_old, _new)
+    except (KeyError, ValueError):
+        pass
+import cleaned_operators.operator_surface as _surface
+# Keep the live extended surface in sync with the rename (mirror of the pandas
+# module): old names leave the static partition, new canonicals enter it.
+_surface.extend_extended_only(set(_RENAMES.values()))
+_surface.retract_extended_only(set(_RENAMES.keys()))

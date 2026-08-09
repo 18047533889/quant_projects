@@ -46,28 +46,68 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
     )
 
 
-def _delay_points(chunk: np.ndarray, dim: int, delay: int) -> np.ndarray | None:
+def _delay_points(chunk: np.ndarray, dim: int, delay: int) -> tuple[np.ndarray, np.ndarray] | None:
+    """Delay-embed ``chunk`` and return ``(points, original_time_index)``.
+
+    ``points`` are the Takens embedding vectors that survive NaN removal and
+    ``original_time_index`` is the integer time position (index into ``chunk``)
+    of each surviving vector's *latest* coordinate.  Keeping the original time
+    positions is essential: the Theiler temporal-exclusion window must be
+    evaluated on real time, not on the compressed post-NaN ordinal, otherwise a
+    gap in the data makes two far-apart points look like temporal neighbours.
+    """
     n = int(chunk.shape[0])
     lag = delay * (dim - 1)
     if n < lag + 1:
         return None
     pts = np.stack([chunk[s - lag : s + 1 : delay] for s in range(lag, n)], axis=0)
-    pts = pts[np.isfinite(pts).all(axis=1)]
+    orig_time = np.arange(lag, n, dtype=np.int64)
+    finite = np.isfinite(pts).all(axis=1)
+    pts = pts[finite]
+    orig_time = orig_time[finite]
     if pts.shape[0] < 2:
         return None
-    return pts
+    return pts, orig_time
+
+
+def _distinct_count_scale_robust(pts: np.ndarray, rel_tol: float = 1e-8) -> int:
+    """Number of genuinely distinct embedding points, robust to overall scale.
+
+    The historic ``np.unique(pts.round(10), axis=0)`` merged points at a fixed
+    absolute decimal precision, so ``x``, ``1000*x`` and ``1e-6*x`` reported
+    different duplicate counts (which corrupts the ``n_unique >= k+1`` gate and
+    the intrinsic-dimension estimate).  Here every embedding dimension is first
+    normalised by its robust per-dimension scale (median absolute deviation,
+    with a standard-deviation fallback for near-constant dimensions) and points
+    are then considered duplicates when their MAD-normalised co-ordinates agree
+    to a relative tolerance ``rel_tol``.  Because MAD (and the fallback)
+    rescale linearly, the count is invariant to a global rescaling of the
+    series.
+    """
+    if pts.shape[0] == 0:
+        return 0
+    med = np.median(pts, axis=0)
+    mad = np.median(np.abs(pts - med), axis=0)
+    scale = np.where(mad > 0.0, mad, pts.std(axis=0))
+    scale = np.where(scale > 0.0, scale, 1.0)
+    norm = (pts - med) / scale
+    grid = np.rint(norm / rel_tol)
+    return int(np.unique(grid, axis=0).shape[0])
 
 
 def _delay_intrinsic_dim(chunk: np.ndarray, dim: int, k: int, delay: int, theiler_window: int) -> float:
-    pts = _delay_points(chunk, dim, delay)
-    if pts is None:
+    res = _delay_points(chunk, dim, delay)
+    if res is None:
         return np.nan
+    pts, orig_time = res
     n_pts = int(pts.shape[0])
     # Round-7 P0 (review §30): require *genuinely distinct* embedding points.
     # Duplicate vectors (identical values at different times) share a zero
     # nearest-neighbour distance; demanding ``n_unique >= k+1`` before the KNN
-    # prevents a near-empty point cloud from manufacturing a dimension.
-    if np.unique(pts.round(10), axis=0).shape[0] < k + 1:
+    # prevents a near-empty point cloud from manufacturing a dimension.  The
+    # duplicate definition is scale-robust (per-dimension MAD normalisation), so
+    # f(x), f(1000x) and f(1e-6x) all count the same distinct points.
+    if _distinct_count_scale_robust(pts) < k + 1:
         return np.nan
     if n_pts < k + 1:
         return np.nan
@@ -77,11 +117,13 @@ def _delay_intrinsic_dim(chunk: np.ndarray, dim: int, k: int, delay: int, theile
     # close in *time* share most coordinates and are artificially-near nearest
     # neighbours; they must not count as state-space neighbours or the local
     # dimension is biased downward.  Exclude ``|i - j| <= theiler_window`` from
-    # each point's neighbour set.  Default (``embedding_dim * delay``) is the
-    # embedding span recommended by the review.
+    # each point's neighbour set.  The exclusion uses the *original* time
+    # coordinates of the surviving vectors (not the compressed post-NaN
+    # ordinal), so real-time distance is the sole criterion.  Default
+    # (``embedding_dim * delay``) is the embedding span recommended by the
+    # review.
     if theiler_window > 0:
-        idx = np.arange(n_pts)
-        temporal = np.abs(idx[:, None] - idx[None, :]) <= theiler_window
+        temporal = np.abs(orig_time[:, None] - orig_time[None, :]) <= theiler_window
         np.fill_diagonal(temporal, False)
         d[temporal] = np.inf
     d_sorted = np.sort(d, axis=1)[:, :k]          # T_1..T_k per point, ascending

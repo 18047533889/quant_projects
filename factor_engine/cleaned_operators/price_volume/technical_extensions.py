@@ -165,10 +165,14 @@ def _ts_channel_position(x, window):
 def _ts_days_since_extreme(x: pd.DataFrame, window: int, *, high: bool) -> pd.DataFrame:
     w = _w(window)
     shifted = x.shift(1)
+    # Ties must reference the LATEST occurrence: a flat top/bottom (10,12,12,11)
+    # should measure "days since" from the second 12.  ``np.nanargmax(a)`` picks
+    # the FIRST of a tie, so scan the reversed window where the first max/min in
+    # reversed order is the last occurrence in chronological order (audit 12).
     fn = (
-        (lambda a: float(len(a) - 1 - int(np.nanargmax(a))))
+        (lambda a: float(int(np.nanargmax(a[::-1]))))
         if high
-        else (lambda a: float(len(a) - 1 - int(np.nanargmin(a))))
+        else (lambda a: float(int(np.nanargmin(a[::-1]))))
     )
     return shifted.rolling(w, min_periods=w).apply(fn, raw=True)
 

@@ -168,7 +168,7 @@ def _bounded_last_1d(series, left, right, history, high, output) -> np.ndarray:
     return out
 
 
-def _bounded_line_1d(series, left, right, history, points, high, output) -> np.ndarray:
+def _bounded_line_1d(series, left, right, history, points, high, output, log=False) -> np.ndarray:
     n = len(series)
     prices, positions = _events_1d(series, left, right, high)
     out = np.full(n, np.nan, dtype=float)
@@ -184,6 +184,8 @@ def _bounded_line_1d(series, left, right, history, points, high, output) -> np.n
         selected = list(active)[-points:]
         xs = np.asarray([e[1] for e in selected], dtype=float)
         ys = np.asarray([e[2] for e in selected], dtype=float)
+        if log:
+            ys = np.log(ys)
         xbar, ybar = xs.mean(), ys.mean()
         denom = float(np.dot(xs - xbar, xs - xbar))
         if denom <= 0:
@@ -462,6 +464,28 @@ def ts_support_slope(low, left_window, right_window, history_window, points):
     return _make(low, cols, out)
 
 
+def ts_resistance_log_slope(high, left_window, right_window, history_window, points):
+    # Log-price slope (audit 13): comparable across price levels.
+    lw, rw, hw, k = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window"), _pi(points, "points", 2)
+    cols = _cols(high)
+    rows = high.height
+    out = np.full((rows, len(cols)), np.nan, dtype=float)
+    for i, c in enumerate(cols):
+        out[:, i] = _bounded_line_1d(high[c].to_numpy(), lw, rw, hw, k, True, "slope", log=True)
+    return _make(high, cols, out)
+
+
+def ts_support_log_slope(low, left_window, right_window, history_window, points):
+    # Log-price slope (audit 13): comparable across price levels.
+    lw, rw, hw, k = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window"), _pi(points, "points", 2)
+    cols = _cols(low)
+    rows = low.height
+    out = np.full((rows, len(cols)), np.nan, dtype=float)
+    for i, c in enumerate(cols):
+        out[:, i] = _bounded_line_1d(low[c].to_numpy(), lw, rw, hw, k, False, "slope", log=True)
+    return _make(low, cols, out)
+
+
 def _dist_line(close, line, up: bool) -> pl.DataFrame:
     cols = _cols(close)
     rows = close.height
@@ -513,7 +537,8 @@ def ts_support_break(close, low, left_window, right_window, history_window, poin
 
 
 def ts_resistance_fit_r2(high, left_window, right_window, history_window, points):
-    lw, rw, hw, k = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window"), _pi(points, "points", 2)
+    # R^2 on a 2-point fit is meaningless (always 1.0); require >= 3 points (audit 24).
+    lw, rw, hw, k = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window"), _pi(points, "points", 3)
     cols = _cols(high)
     rows = high.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -523,7 +548,8 @@ def ts_resistance_fit_r2(high, left_window, right_window, history_window, points
 
 
 def ts_support_fit_r2(low, left_window, right_window, history_window, points):
-    lw, rw, hw, k = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window"), _pi(points, "points", 2)
+    # R^2 on a 2-point fit is meaningless (always 1.0); require >= 3 points (audit 24).
+    lw, rw, hw, k = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window"), _pi(points, "points", 3)
     cols = _cols(low)
     rows = low.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -532,10 +558,45 @@ def ts_support_fit_r2(low, left_window, right_window, history_window, points):
     return _make(low, cols, out)
 
 
+def _swing_segment_1d(high, low, left, right, history):
+    """Single-column swing kernel: most recent adjacent opposite-sign pivot pair.
+
+    Returns ``(amplitude, duration, velocity)`` arrays (audits 22/23).  The
+    merged chronological pivot stream is scanned from the newest end for the last
+    high->low or low->high adjacent pair, so amplitude/duration/velocity can never
+    disagree about the underlying swing event.
+    """
+    h_events = _recent_events_1d(high, left, right, history, True)
+    l_events = _recent_events_1d(low, left, right, history, False)
+    n = len(high)
+    amp = np.full(n, np.nan, dtype=float)
+    dur = np.full(n, np.nan, dtype=float)
+    for t in range(n):
+        merged = [
+            (int(pos), True, float(px)) for _, pos, px in h_events[t]
+        ] + [
+            (int(pos), False, float(px)) for _, pos, px in l_events[t]
+        ]
+        if len(merged) > 1:
+            merged.sort(key=lambda e: e[0])
+        for i in range(len(merged) - 2, -1, -1):
+            p0, s0, px0 = merged[i]
+            p1, s1, px1 = merged[i + 1]
+            if s0 != s1:
+                if s0:  # high then low
+                    h_px, l_px = px0, px1
+                else:   # low then high
+                    h_px, l_px = px1, px0
+                amp[t] = abs(float(h_px) - float(l_px))
+                dur[t] = abs(int(p0) - int(p1))
+                break
+    vel = _sdiv(amp, np.where(dur == 0, np.nan, dur))
+    return amp, dur, vel
+
+
 def _swing_amplitude_1d(high, low, left, right, history):
-    h1 = _event_stat_1d(high, left, right, history, 1, True, "price")
-    l1 = _event_stat_1d(low, left, right, history, 1, False, "price")
-    return np.abs(h1 - l1)
+    amp, _, _ = _swing_segment_1d(high, low, left, right, history)
+    return amp
 
 
 def ts_swing_amplitude(high, low, left_window, right_window, history_window):
@@ -565,9 +626,8 @@ def ts_swing_duration(high, low, left_window, right_window, history_window):
     rows = high.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        ha = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 1, True, "pivot_age")
-        la = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 1, False, "pivot_age")
-        out[:, i] = np.abs(ha - la)
+        _, dur, _ = _swing_segment_1d(high[c].to_numpy(), low[c].to_numpy(), lw, rw, hw)
+        out[:, i] = dur
     return _make(high, cols, out)
 
 
@@ -577,11 +637,8 @@ def ts_swing_velocity(high, low, left_window, right_window, history_window):
     rows = high.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        amp = _swing_amplitude_1d(high[c].to_numpy(), low[c].to_numpy(), lw, rw, hw)
-        ha = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 1, True, "pivot_age")
-        la = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 1, False, "pivot_age")
-        dur = np.abs(ha - la)
-        out[:, i] = _sdiv(amp, dur)
+        _, _, vel = _swing_segment_1d(high[c].to_numpy(), low[c].to_numpy(), lw, rw, hw)
+        out[:, i] = vel
     return _make(high, cols, out)
 
 
@@ -671,7 +728,9 @@ def ts_line_parallelism(high, low, left_window, right_window, history_window, po
     rows = high.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
-        rs, ss = _slopes_1d(high[c].to_numpy(), low[c].to_numpy(), lw, rw, hw, k)
+        # Normalized log-price slopes so parallelism is price-level independent (audit 25).
+        rs = _bounded_line_1d(high[c].to_numpy(), lw, rw, hw, k, True, "slope", log=True)
+        ss = _bounded_line_1d(low[c].to_numpy(), lw, rw, hw, k, False, "slope", log=True)
         out[:, i] = -np.abs(rs - ss)
     return _make(high, cols, out)
 
@@ -1217,6 +1276,8 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("ts_support_level", ("low", "left_window", "right_window", "history_window", "points"), ts_support_level, "Projected support line from recent confirmed pivot lows."),
     ("ts_resistance_slope", ("high", "left_window", "right_window", "history_window", "points"), ts_resistance_slope, "Slope of bounded resistance line."),
     ("ts_support_slope", ("low", "left_window", "right_window", "history_window", "points"), ts_support_slope, "Slope of bounded support line."),
+    ("ts_resistance_log_slope", ("high", "left_window", "right_window", "history_window", "points"), ts_resistance_log_slope, "Log-price slope of bounded resistance line."),
+    ("ts_support_log_slope", ("low", "left_window", "right_window", "history_window", "points"), ts_support_log_slope, "Log-price slope of bounded support line."),
     ("ts_distance_to_resistance", ("close", "high", "left_window", "right_window", "history_window", "points"), ts_distance_to_resistance, "Signed close-to-resistance distance."),
     ("ts_distance_to_support", ("close", "low", "left_window", "right_window", "history_window", "points"), ts_distance_to_support, "Signed close-to-support distance."),
     ("ts_resistance_break", ("close", "high", "left_window", "right_window", "history_window", "points"), ts_resistance_break, "Positive breakout magnitude above resistance."),

@@ -22,7 +22,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import (
     check_window,
     frame_like,
@@ -32,8 +38,8 @@ from cleaned_operators.rolling_pack import (
 )
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
-    return OperatorMetadata(
+def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int, param_specs: dict[str, Any] | None = None) -> OperatorMetadata:
+    meta = OperatorMetadata(
         name=name,
         category="complexity",
         description=description,
@@ -45,6 +51,23 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"unit:{unit}", f"cost:{cost}",
         ],
     )
+    if param_specs:
+        meta.param_specs = dict(param_specs)
+    return meta
+
+
+# Round-3 cross-cutting: estimator-resolution knobs (order / delay) are never
+# an economic search dimension — declaring them ESTIMATOR_RESOLUTION and
+# searchable=False keeps the mining grammar from optimizing over the embedding
+# resolution instead of a real economic regularity.
+_ORDINAL_KNOB_SPECS = {
+    "order": ParamSpec(
+        dtype=int, min=2, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False
+    ),
+    "delay": ParamSpec(
+        dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False
+    ),
+}
 
 
 def _trailing_finite_suffix(chunk: np.ndarray) -> np.ndarray:
@@ -65,28 +88,23 @@ def _trailing_finite_suffix(chunk: np.ndarray) -> np.ndarray:
     return chunk[i:j].astype(float)
 
 
-def _permutation_pattern(values: np.ndarray) -> tuple[float, ...]:
-    """Average-tie-rank ordinal pattern of a finite embedding.
+def _permutation_pattern(values: np.ndarray) -> tuple[int, ...] | None:
+    """Ordinal pattern of a no-tie embedding, or ``None`` when a tie exists.
 
-    Tied values share the mean rank (review R4-65): a double stable argsort
-    would give tied values *distinct* ranks in arrival order, so the
-    permutation entropy of a heavily tied window would measure the tie-break
-    rule rather than complexity.  Average ranks canonicalise ties; the
-    ``has_ties`` ratio fail-closed (P1-14) still reports windows where ties
-    dominate.
+    Review round-3 #44: ordinal ties DROP the embedding from the
+    permutation-count state space.  Average-tie-rank patterns (e.g. (1.5, 1.5,
+    3)) are a continuum, NOT a permutation state space, so normalizing by
+    log(order!) would be mathematically inconsistent.  A block with any tie is
+    excluded entirely.  (The ``tie_fraction`` fail-closed guard in the caller
+    still reports windows where ties dominate, so a sparse no-tie sample is
+    not silently measured.)
     """
     n = len(values)
+    if np.unique(values).size < n:
+        return None
     order = np.argsort(values, kind="mergesort")
-    s = values[order]
-    avg = np.empty(n, dtype=float)
-    i = 0
-    while i < n:
-        j = i
-        while j + 1 < n and s[j + 1] == s[i]:
-            j += 1
-        avg[order[i : j + 1]] = 0.5 * (i + j)
-        i = j + 1
-    return tuple(avg)
+    pattern = np.argsort(order, kind="mergesort")
+    return tuple(int(x) for x in pattern)
 
 
 # P1-14: stable-index tie-breaking manufactures an artificial ordering for tied
@@ -96,26 +114,38 @@ def _permutation_pattern(values: np.ndarray) -> tuple[float, ...]:
 _TIE_RATIO_FAIL_CLOSED = 0.5
 
 
-def _permutation_codes(chunk: np.ndarray, order: int, delay: int) -> list[tuple[tuple[float, ...], int, bool]]:
-    """Valid permutation (pattern_key, start_index, has_ties) over the raw window.
+def _permutation_codes(
+    chunk: np.ndarray, order: int, delay: int
+) -> tuple[list[tuple[tuple[int, ...], int]], float]:
+    """Valid no-tie (pattern_key, start_index) embeddings + the tie-drop fraction.
 
     NaN embeddings are dropped, but the original start index is kept so a
     transition can only be formed between *genuinely adjacent* embeddings
     (audit R02): after an invalid embedding is removed, ``zip(codes[1:])`` must
-    not bridge the gap into a transition.  ``has_ties`` reports whether the
-    embedding contained repeated values (review P1-14).  The pattern key is the
-    average-tie-rank vector (review R4-65).
+    not bridge the gap into a transition.  Review round-3 #44: an embedding
+    whose ordinal pattern contains a tie is DROPPED (the state space must stay
+    a genuine permutation space).  ``tie_fraction`` is the share of all
+    non-NaN embeddings dropped for a tie — the fail-closed guard (P1-14) uses
+    it so a heavily tied window does not report a sparse no-tie sample.
     """
-    codes: list[tuple[tuple[float, ...], int, bool]] = []
+    codes: list[tuple[tuple[int, ...], int]] = []
     embed_len = (order - 1) * delay + 1
     n = len(chunk)
+    n_total = 0
+    n_tied = 0
     for i in range(n - embed_len + 1):
         idx = [i + d * delay for d in range(order)]
         vals = chunk[idx]
-        if np.isfinite(vals).all():
-            has_ties = np.unique(vals).size < vals.size
-            codes.append((_permutation_pattern(vals), i, has_ties))
-    return codes
+        if not np.isfinite(vals).all():
+            continue
+        n_total += 1
+        pattern = _permutation_pattern(vals)
+        if pattern is None:
+            n_tied += 1
+            continue
+        codes.append((pattern, i))
+    tie_fraction = (n_tied / n_total) if n_total > 0 else 1.0
+    return codes, tie_fraction
 
 
 def _entropy_from_counts(counts: list[int], total: int, normalize: int | None) -> float:
@@ -148,6 +178,7 @@ class TsPermutationEntropy(SeriesOperator):
         ["x", "window", "order", "delay", "normalize", "min_patterns"],
         unit="level",
         cost=5,
+        param_specs=_ORDINAL_KNOB_SPECS,
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, order: int = 3, delay: int = 1, normalize: bool = True, min_patterns: Any = None, **_: Any) -> pd.DataFrame:
@@ -162,13 +193,13 @@ class TsPermutationEntropy(SeriesOperator):
         min_p = 2 if min_patterns is None else max(2, int(min_patterns))
 
         def _fn(chunk: np.ndarray) -> float:
-            coded = _permutation_codes(chunk, ord_, dl)
+            coded, tie_frac = _permutation_codes(chunk, ord_, dl)
             if len(coded) < min_p:
                 return np.nan
-            if sum(1 for _, _, ties in coded if ties) / len(coded) > _TIE_RATIO_FAIL_CLOSED:
-                return np.nan  # P1-14: windows whose embeddings are mostly tied
-            counts: dict[tuple[float, ...], int] = {}
-            for c, _, _ in coded:
+            if tie_frac > _TIE_RATIO_FAIL_CLOSED:
+                return np.nan  # P1-14: ties dominate -> sparse no-tie sample
+            counts: dict[tuple[int, ...], int] = {}
+            for c, _ in coded:
                 counts[c] = counts.get(c, 0) + 1
             return _entropy_from_counts(list(counts.values()), len(coded), math.factorial(ord_) if norm else None)
 
@@ -199,6 +230,7 @@ class TsWeightedPermutationEntropy(SeriesOperator):
         ["x", "window", "order", "delay", "weight", "normalize"],
         unit="level",
         cost=5,
+        param_specs=_ORDINAL_KNOB_SPECS,
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, order: int = 3, delay: int = 1, weight: str = "variance", normalize: bool = True, **_: Any) -> pd.DataFrame:
@@ -218,25 +250,30 @@ class TsWeightedPermutationEntropy(SeriesOperator):
             embed_len = (ord_ - 1) * dl + 1
             n = len(chunk)
             weights: list[float] = []
-            codes: list[tuple[float, ...]] = []
+            codes: list[tuple[int, ...]] = []
+            n_total = 0
             n_tied = 0
             for i in range(n - embed_len + 1):
                 idx = [i + d * dl for d in range(ord_)]
                 vals = chunk[idx]
                 if not np.isfinite(vals).all():
                     continue
-                codes.append(_permutation_pattern(vals))
-                if np.unique(vals).size < vals.size:
+                n_total += 1
+                pattern = _permutation_pattern(vals)
+                if pattern is None:
                     n_tied += 1
+                    continue  # review round-3 #44: ordinal tie -> drop embedding
+                codes.append(pattern)
                 weights.append(_embedding_variance(vals) if weight_kind == "variance" else _embedding_range(vals))
+            tie_frac = (n_tied / n_total) if n_total > 0 else 1.0
             if len(codes) < 2:
                 return np.nan
-            if n_tied / len(codes) > _TIE_RATIO_FAIL_CLOSED:
-                return np.nan  # P1-14: tied values -> artificial ordering
+            if tie_frac > _TIE_RATIO_FAIL_CLOSED:
+                return np.nan  # P1-14: tied values -> sparse no-tie sample
             total_weight = float(sum(weights))
             if total_weight <= 0.0:
                 return np.nan
-            pattern_weight: dict[tuple[float, ...], float] = {}
+            pattern_weight: dict[tuple[int, ...], float] = {}
             for code, wgt in zip(codes, weights):
                 pattern_weight[code] = pattern_weight.get(code, 0.0) + wgt
             value = 0.0
@@ -267,6 +304,7 @@ class TsPermutationTransitionEntropy(SeriesOperator):
         ["x", "window", "order", "delay", "normalize"],
         unit="level",
         cost=5,
+        param_specs=_ORDINAL_KNOB_SPECS,
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, order: int = 3, delay: int = 1, normalize: bool = True, **_: Any) -> pd.DataFrame:
@@ -280,26 +318,27 @@ class TsPermutationTransitionEntropy(SeriesOperator):
         norm = bool(normalize)
 
         def _fn(chunk: np.ndarray) -> float:
-            coded = _permutation_codes(chunk, ord_, dl)
+            coded, tie_frac = _permutation_codes(chunk, ord_, dl)
             if len(coded) < 3:
                 return np.nan
-            if sum(1 for _, _, ties in coded if ties) / len(coded) > _TIE_RATIO_FAIL_CLOSED:
-                return np.nan  # P1-14: tied values -> artificial ordering
-            states = sorted({c for c, _, _ in coded})
+            if tie_frac > _TIE_RATIO_FAIL_CLOSED:
+                return np.nan  # P1-14: tied values -> sparse no-tie sample
+            states = sorted({c for c, _ in coded})
             if len(states) < 2:
                 return np.nan
             state_index = {state: i for i, state in enumerate(states)}
             transitions = [[0.0] * len(states) for _ in range(len(states))]
             n_trans = 0
-            for (prev, start, _), (cur, start_next, _) in zip(coded, coded[1:]):
+            for (prev, start), (cur, start_next) in zip(coded, coded[1:]):
                 # Only genuinely adjacent embeddings form a transition (audit
-                # R02): a dropped NaN embedding must not turn two non-adjacent
-                # patterns into a fake next-pattern link.  Embeddings are the
-                # sliding windows starting at i, i+1, ... — adjacency is start
-                # index + 1 regardless of the *intra-embedding* delay.  Requiring
-                # ``start_next == start + dl`` rejected every transition for
-                # delay > 1 (a delay-spaced walk skips embeddings), so those
-                # parameter combinations returned all-NaN (review P0-11).
+                # R02): a dropped NaN/tie embedding must not turn two
+                # non-adjacent patterns into a fake next-pattern link.
+                # Embeddings are the sliding windows starting at i, i+1, ... —
+                # adjacency is start index + 1 regardless of the
+                # *intra-embedding* delay.  Requiring ``start_next == start +
+                # dl`` rejected every transition for delay > 1 (a delay-spaced
+                # walk skips embeddings), so those parameter combinations
+                # returned all-NaN (review P0-11).
                 if start_next != start + 1:
                     continue
                 transitions[state_index[prev]][state_index[cur]] += 1.0

@@ -1061,16 +1061,25 @@ _mk("intra_jump_clustering", "跳跃间隔 CV（Polars）。", ["close", "thresh
 
 def _beta_frame(close: pl.DataFrame, free_market_cap: pl.DataFrame) -> pl.DataFrame:
     long = _with_date(_melt(close, "close"))
-    # The pandas reference computes log returns over the full per-instrument
-    # series (overnight returns included), so do NOT partition by date here.
+    # Round-2 review §intraday/realized_beta: each trading session is an
+    # independent return process — the FIRST minute of every session is NaN
+    # (its log-return would otherwise pair yesterday's last minute with
+    # today's first minute = an overnight jump).  The pandas reference
+    # (_aligned_market) breaks at the calendar-day boundary the same way.
     long = long.sort(["instrument", "ts"]).with_columns(
-        (pl.col("close") / pl.col("close").shift(1).over(["instrument"])).log().alias("r")
+        pl.when(pl.col("date") == pl.col("date").shift(1).over(["instrument"]))
+        .then((pl.col("close") / pl.col("close").shift(1).over(["instrument"])).log())
+        .otherwise(None)
+        .alias("r")
     )
     w = _melt_daily(free_market_cap, "w")
     long = long.join(w, on=["date", "instrument"], how="left")
+    # weight must be finite AND strictly positive (a NaN/0/negative market cap is
+    # excluded from the market return, matching the pandas validated-weight panel)
+    wv = pl.col("w").is_finite() & (pl.col("w") > 0)
     mkt = long.group_by(["date", "ts"]).agg(
-        pl.when(pl.col("r").is_finite() & pl.col("w").is_finite()).then(pl.col("r") * pl.col("w")).otherwise(None).sum().alias("num"),
-        pl.when(pl.col("r").is_finite() & pl.col("w").is_finite()).then(pl.col("w")).otherwise(None).sum().alias("den"),
+        pl.when(pl.col("r").is_finite() & wv).then(pl.col("r") * pl.col("w")).otherwise(None).sum().alias("num"),
+        pl.when(pl.col("r").is_finite() & wv).then(pl.col("w")).otherwise(None).sum().alias("den"),
     ).with_columns(
         pl.when(pl.col("den").abs() > _EPS).then(pl.col("num") / pl.col("den")).otherwise(None).alias("m")
     )
@@ -1145,11 +1154,13 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
             .alias("v")
         )
         return _pivot(out, "v")
-    # market model fit b (with np.cov ddof=1 / np.var ddof=0 factor)
+    # market model fit b — population moments (round-2 review: the pandas
+    # reference now uses cov = mean((r-rbar)(m-mbar)) / var = mean((m-mbar)^2),
+    # i.e. NO np.cov-ddof-1 / np.var-ddof-0 factor; the old nf/(nf-1) term is gone)
     g = g.with_columns(
         pl.when(
             (pl.col("n") >= 3) & (pl.col("var_m_num") / pl.col("nf") > _EPS)
-        ).then(pl.col("cov_num") / pl.col("var_m_num") * pl.col("nf") / (pl.col("nf") - 1.0)).otherwise(None).alias("b")
+        ).then(pl.col("cov_num") / pl.col("var_m_num")).otherwise(None).alias("b")
     ).with_columns(
         pl.when(pl.col("b").is_not_null())
         .then((pl.col("sr") / pl.col("nf")) - pl.col("b") * (pl.col("sm") / pl.col("nf")))

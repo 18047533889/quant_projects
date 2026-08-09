@@ -338,18 +338,21 @@ def ts_channel_position(x, window):
 
 def _days_since(x, window, high):
     w = _pi(window, "window")
+    # Ties must reference the LATEST occurrence (audit 12).  ``np.nanargmax``
+    # picks the FIRST of a tie; the first max/min in the reversed window is the
+    # last occurrence in chronological order, and equals the "bars since" count.
     if high:
         def fn(window_arr) -> float:
             a = np.asarray(window_arr, dtype=float)
             if not np.isfinite(a).any():
                 return np.nan
-            return float(len(a) - 1 - int(np.nanargmax(a)))
+            return float(int(np.nanargmax(a[::-1])))
     else:
         def fn(window_arr) -> float:
             a = np.asarray(window_arr, dtype=float)
             if not np.isfinite(a).any():
                 return np.nan
-            return float(len(a) - 1 - int(np.nanargmin(a)))
+            return float(int(np.nanargmin(a[::-1])))
     values = {}
     for c in _cols(x):
         # normalize NaN -> null so rolling_map min_samples counts match pandas

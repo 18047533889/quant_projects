@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
-from data_access.core.exceptions import ValidationError
+from data_access.core.exceptions import DataError, ValidationError
 from .yaml_loader import strict_yaml_load
 from .layout_policy import LayoutPolicy, parse_layout_policy
 from .params_validation import ParamSpec, parse_params_schema, validate_params
@@ -49,6 +49,9 @@ _COMMON_DATASET_KEYS = frozenset({
     "semantic", "engine", "schema", "query_policy", "partition_columns",
     "storage_format", "layout_policy", "schema_version", "authorized_root",
     "specialized_only", "specialized_only_reason",
+    # R14 #1：factor_matrix 走 generation 指针（manifest.json 的 ``generation``
+    # 指向当前不可变代；reader 只读该代，绝不 glob generation/* 混入 previous）。
+    "generation_pointer",
 })
 _STATIC_DATASET_KEYS = _COMMON_DATASET_KEYS | frozenset({"root", "glob"})
 _PARAMETRIC_DATASET_KEYS = _COMMON_DATASET_KEYS | frozenset({
@@ -151,13 +154,58 @@ class ParametricDataset(DatasetBase):
     engine: dict[str, Any] | None = None                          # 优先/兜底执行引擎
     schema_version: str | None = None                             # #36 schema 版本号
     authorized_root: Path | None = None                           # #P0-49 显式授权根
+    # R14 #1：factor_matrix 走 generation 指针。读路径只解析
+    # ``manifest.json`` 的 ``generation`` 指向那一代；缺该指针才 legacy glob。
+    generation_pointer: bool = False
 
     @property
     def kind(self) -> str:
         return "parametric"
 
+    def resolve_root(self, **params: Any) -> str:
+        """填模板返回数据集根目录（不含 glob / generation 段）。"""
+        specs = self.param_specs or {
+            k: ParamSpec(name=k, type=t) for k, t in self.params_schema.items()
+        }
+        validated = validate_params(self.name, specs, params)
+        root_tpl = resolve_namespace_path(self.root_template)
+        try:
+            return str(Path(root_tpl.format(**validated)))
+        except KeyError as exc:
+            raise ValidationError(f"模板变量缺失：{exc}") from exc
+
+    def current_generation(self, **params: Any) -> str | None:
+        """读 ``root/manifest.json`` 的 ``generation`` 指针；无 manifest/无指针 → None。
+
+        R14 #1：只解析 manifest 指向的当前代。**绝不用 ``generation/*`` 通配**——
+        那会把 current + previous generations 一起读进来，比不解析更危险。
+        """
+        if not self.generation_pointer:
+            return None
+        root = Path(self.resolve_root(**params))
+        manifest_path = root / "manifest.json"
+        if not manifest_path.exists():
+            return None
+        try:
+            import json
+
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise DataError(
+                f"{self.name} manifest.json 不可读（{manifest_path}）: {exc}"
+            ) from exc
+        gid = manifest.get("generation")
+        return str(gid) if gid else None
+
     def resolve_paths(self, **params: Any) -> list[str]:
-        """用 params 填模板，返回给 DuckDB 的 glob 表达式。"""
+        """用 params 填模板，返回给 DuckDB 的 glob 表达式。
+
+        R14 #1：``generation_pointer`` 数据集（factor_matrix）先读 manifest 的
+        ``generation`` 指针，只解析 ``generation/<gid>/<glob>`` 那一代——
+        * manifest 有 ``generation`` 但目录缺失 = 当前发布代损坏 → ``DataError``
+          （**fail-closed**，绝不 legacy fallback 把 previous/orphan 数据捞出来）；
+        * manifest 无 ``generation`` / 无 manifest = legacy 布局 → 原样 glob。
+        """
         specs = self.param_specs or {
             k: ParamSpec(name=k, type=t) for k, t in self.params_schema.items()
         }
@@ -172,6 +220,26 @@ class ParametricDataset(DatasetBase):
             glob_part = glob_tpl.format(**validated)
         except KeyError as exc:
             raise ValidationError(f"模板变量缺失：{exc}") from exc
+        if self.generation_pointer:
+            manifest = Path(root) / "manifest.json"
+            if manifest.exists():
+                import json
+
+                try:
+                    data = json.loads(manifest.read_text(encoding="utf-8"))
+                except (OSError, ValueError) as exc:
+                    raise DataError(
+                        f"{self.name} manifest.json 不可读（{manifest}）: {exc}"
+                    ) from exc
+                gid = data.get("generation")
+                if gid:
+                    gen_dir = Path(root) / "generation" / str(gid)
+                    if not gen_dir.is_dir():
+                        raise DataError(
+                            f"{self.name} manifest.generation={gid!r} 指向的目录缺失"
+                            f"（{gen_dir}）——当前发布代损坏，拒绝读取（fail-closed）"
+                        )
+                    return [str(gen_dir / glob_part)]
         return [str(Path(root) / glob_part)]
 
 
@@ -407,6 +475,13 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
     specialized_only = _strict_bool(
         raw.get("specialized_only", False), key="specialized_only", context=context
     )
+    # R14 #1：generation 指针数据集（factor_matrix）——读路径只解析 manifest
+    # 的 ``generation`` 指向那一代（见 ``current_generation`` / ``resolve_paths``）。
+    generation_pointer = _strict_bool(
+        raw.get("generation_pointer", False),
+        key="generation_pointer",
+        context=context,
+    )
     specialized_reason = raw.get("specialized_only_reason")
     if specialized_reason is not None and not isinstance(specialized_reason, str):
         raise ValidationError(
@@ -521,6 +596,7 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         layout_policy=layout_policy,
         specialized_only=specialized_only,
         specialized_only_reason=specialized_reason,
+        generation_pointer=generation_pointer,
     )
 
 

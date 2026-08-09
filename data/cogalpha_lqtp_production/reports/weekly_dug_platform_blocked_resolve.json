@@ -1,0 +1,60 @@
+{
+  "results": [
+    {
+      "factor_id": "alpha_20260703_f609ea4d",
+      "action": "covered_by_clean_dup",
+      "duplicate_of": "ext_20260703011536_b84c1c2c"
+    },
+    {
+      "factor_id": "alpha_20260701_30e468c0",
+      "action": "covered_by_clean_dup",
+      "duplicate_of": "ext_20260629194635_53ed651c"
+    },
+    {
+      "factor_id": "alpha_20260701_61d3d4de",
+      "platform_name": "alpha_20260701_61d3d4de",
+      "formula": "(0 + (low / (close + 0.001)))",
+      "error": "",
+      "action": "submitted",
+      "definition_id": "a9d54271-b6cd-4c64-a31b-238140c80342"
+    },
+    {
+      "factor_id": "alpha_20260701_149b529b",
+      "platform_name": "alpha_20260701_149b529b",
+      "formula": "(0 + (rank(close / (low + 0.001)) * (0 - 1) * rank(ts_std(ts_delta(close, 5), 20))))",
+      "error": "",
+      "action": "submitted",
+      "definition_id": "16849d6a-fa42-448d-9a20-83330485865a"
+    },
+    {
+      "factor_id": "alpha_20260701_741a044f",
+      "action": "covered_by_clean_dup",
+      "duplicate_of": "ext_20260701141641_cff71dce"
+    },
+    {
+      "factor_id": "alpha_20260702_40002fd7",
+      "action": "covered_by_clean_dup",
+      "duplicate_of": "Tak_FTB_D2_003"
+    },
+    {
+      "factor_id": "alpha_20260701_673406ba",
+      "action": "covered_by_clean_dup",
+      "duplicate_of": "ext_20260629194635_4451e8dc"
+    },
+    {
+      "factor_id": "alpha_20260702_581774bc",
+      "action": "covered_by_clean_dup",
+      "duplicate_of": "ext_20260701222951_b6074f02"
+    },
+    {
+      "factor_id": "alpha_20260702_1f8103b7",
+      "action": "covered_by_clean_dup",
+      "duplicate_of": "ext_20260701221018_2b6cff9a"
+    },
+    {
+      "factor_id": "alpha_20260702_f50c69da",
+      "action": "covered_by_clean_dup",
+      "duplicate_of": "ext_20260629194635_4451e8dc"
+    }
+  ]
+}
