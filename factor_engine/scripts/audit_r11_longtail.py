@@ -444,10 +444,15 @@ def audit_default_parameter_history(
 
 def _window_like(name: str) -> bool:
     lowered = str(name).lower()
+    # ``n_`` matches only as a standalone prefix (``n_bars``/``n_periods``),
+    # NEVER mid-word — ``ann_factor`` contains ``n_`` ("a*nn_*factor") but is a
+    # scaling constant, not a warmup window.
+    if lowered.startswith("n_") or "_n_" in lowered:
+        return True
     return any(
         token in lowered
         for token in (
-            "window", "span", "lag", "lookback", "period", "_days", "n_",
+            "window", "span", "lag", "lookback", "period", "_days",
             "block", "cutoff", "max_run", "history",
         )
     )
