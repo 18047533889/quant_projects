@@ -126,6 +126,7 @@ def align_panel_inputs(
     *frames: pd.DataFrame,
     strict_axes: bool = True,
     names: Sequence[str] | None = None,
+    alignment_plan: AlignmentPlan | None = None,
 ) -> tuple[pd.DataFrame, ...]:
     """Return all panels with a guaranteed-common axis.
 
@@ -133,9 +134,13 @@ def align_panel_inputs(
       :class:`PanelAxisMismatch` on any index/column mismatch.  This is the
       P0-25 fail-closed contract: a missing symbol, a duplicate date or a
       permuted column set is an error, not a NaN.
-    * ``strict_axes=False`` — explicit research opt-out: panels are reindexed
-      onto the first panel's axes.  Never default production callers to this;
-      an explicit ``AlignmentPlan`` is required to justify the reindex.
+    * ``strict_axes=False`` (research only) — panels are reindexed onto the
+      first panel's axes.  R11 P1-11: this is NOT a bare boolean escape hatch.
+      Every non-strict call must pass an explicit :class:`AlignmentPlan` naming
+      the join / time direction / instrument policy / missing policy /
+      availability policy and a written reason; without one the call raises.
+      The plan exists so a silent ``reindex`` can never hide a date/stock
+      mismatch behind NaN.
 
     Returns the same frame objects (identical axes are a no-op).
     """
@@ -144,6 +149,13 @@ def align_panel_inputs(
     if strict_axes:
         assert_axes_aligned(*frames, names=names)
         return frames
+    if alignment_plan is None:
+        raise PanelAxisMismatch(
+            "align_panel_inputs(strict_axes=False) requires an explicit "
+            "AlignmentPlan (join/time_direction/instrument_policy/"
+            "missing_policy/availability_policy/reason) — a bare boolean opt-out "
+            "would silently reindex mismatched axes (R11 P1-11 fail-closed)"
+        )
     base = frames[0]
     aligned = []
     labels = list(names) if names else [""] * len(frames)
@@ -273,6 +285,7 @@ def _broadcast_scalar_shape_gate(
 
 
 __all__ = [
+    "AlignmentPlan",
     "PanelAxisMismatch",
     "align_panel_inputs",
     "align_panels_and_groups",
