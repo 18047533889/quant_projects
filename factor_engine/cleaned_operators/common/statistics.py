@@ -141,20 +141,37 @@ class ACF(SeriesOperator):
             raise FutureReferenceError(f"negative lag {lag} references future data")
 
         def acf_func(s, lag):
+            # NEW-029: NO dropfinite-reconnect.  A real sequence
+            # ``t, missing, t+2`` must NOT be re-paired as adjacent samples.
+            # Only physical lag pairs ``(i, i+lag)`` where BOTH are finite
+            # enter the numerator; the mean + variance use ALL finite values in
+            # the window (the standard sample-ACF convention, so a complete
+            # series reproduces the textbook value).
             s = np.asarray(s, dtype=float)
-            s = s[np.isfinite(s)]
             n = len(s)
             if lag == 0:
                 return 1.0
-            if n <= lag:
+            finite_mask = np.isfinite(s)
+            if int(finite_mask.sum()) <= lag:
                 return np.nan
-            mean = s.mean()
-            var = ((s - mean) ** 2).sum()
-            if var == 0 or not np.isfinite(var):
+            mean = float(s[finite_mask].mean())
+            var = float(((s[finite_mask] - mean) ** 2).sum())
+            if var <= 0 or not np.isfinite(var):
                 return np.nan
-            return ((s[:-lag] - mean) * (s[lag:] - mean)).sum() / var
+            a = s[:-lag]
+            b = s[lag:]
+            paired = np.isfinite(a) & np.isfinite(b)
+            if int(paired.sum()) <= lag:  # NEW-030: at least lag+1 valid pairs
+                return np.nan
+            cov = float(((a[paired] - mean) * (b[paired] - mean)).sum())
+            return cov / var
 
-        return x.rolling(window=window, min_periods=1).apply(acf_func, raw=True, args=(lag,))
+        # NEW-030: min_periods must be at least lag+1 (a fixed-window ACF
+        # cannot be a "statistic" when N grows 2->W while the window is fixed).
+        # Clamp to the window so ``window=1, lag=1`` yields NaN instead of a
+        # pandas "min_periods must be <= window" ValueError.
+        mp = min(max(1, int(window)), lag + 1)
+        return x.rolling(window=window, min_periods=mp).apply(acf_func, raw=True, args=(lag,))
 
 # aliases: acf
 

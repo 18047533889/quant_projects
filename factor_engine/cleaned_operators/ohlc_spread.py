@@ -51,8 +51,6 @@ from cleaned_operators.gemini_v2_common import (
     union_extended,
 )
 
-_EPS = 1e-12
-
 _EDGE_SPECS = {
     "window": ParamSpec(dtype=int, min=3),
     # P0-M-71: valid-pair coverage gates.  Even with every row finite, many OHLC

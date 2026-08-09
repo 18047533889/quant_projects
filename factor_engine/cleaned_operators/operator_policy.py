@@ -545,6 +545,16 @@ GRAIN_CHANGING_CANONICALS: frozenset[str] = frozenset(
         "intra_vwap_path_curvature_pct", "intra_vwap_path_slope",
         "intra_vwap_path_slope_pct", "intra_vwap_reversion_speed",
         "intraday_rv_signature_slope",
+        # R11 unusable-operators sweep: concurrent minute-source additions that
+        # carry the ``minute`` tag (minute -> daily aggregation) but were not yet
+        # classified grain-changing, so their policy wrongly said shape-preserving.
+        "intraday_bvc_imbalance",
+        "intraday_impact_asymmetry",
+        "intraday_impact_beta",
+        "intraday_return_wasserstein_shift",
+        "intraday_volume_clock_path_efficiency",
+        "intraday_volume_clock_roughness",
+        "session_event_recovery_score",
     }
 )
 
@@ -1117,6 +1127,9 @@ _EXPLICIT_POLICIES.update(_FINAL_PACK_POLICIES)
 # the certifier bootstrap (review §2.4).  Applied unconditionally, like
 # ``_FINAL_PACK_POLICIES`` above.
 _R11_UNUSABLE_SWEEP_POLICIES = {
+    "ts_abs_entropy_nats": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_abs_entropy_normalized": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "ts_effective_turning_rate": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_argmax_age": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_argmin_age": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "ts_argmax_index_from_oldest": {"scope": "ts", "pit_safe": True, "min_periods": 1},

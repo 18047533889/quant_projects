@@ -71,10 +71,13 @@ def aligned_pairs(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]
 
 
 def check_window(window: int, name: str = "window") -> int:
-    w = int(window)
-    if w < 2:
-        raise ValueError(f"{name} must be >= 2")
-    return w
+    # NEW-004: ``int(20.9) -> 20`` is silent coercion that manufactures a false
+    # search space (window=20.9 and window=20 compile to the same formula).
+    # Route through the shared strict-int gate; a fractional / NaN / Inf /
+    # non-numeric value is rejected, never truncated.
+    from cleaned_operators.base import strict_int_param
+
+    return strict_int_param(window, name, lower=2)
 
 
 # ---------------------------------------------------------------------------

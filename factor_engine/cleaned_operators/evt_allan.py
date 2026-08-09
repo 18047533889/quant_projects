@@ -39,6 +39,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import ParamSpec, RelationalParamSpec, ParamRole
+from cleaned_operators.closure.strict_scalar import strict_int, strict_float
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -254,7 +255,7 @@ def _check_event_binary(v: np.ndarray) -> bool:
 def _allan_factor_single(v: np.ndarray, scale: int) -> float:
     """True Allan factor at one scale: AF(τ) = E[(N_{k+1}−N_k)²]/(2·E[N_k])."""
     n = v.shape[0]
-    m = max(1, int(scale))
+    m = strict_int(scale, "scale", lower=1)  # A-5: scale=0/-1 is a contract violation, never clamped
     if n < 3 * m:
         return np.nan
     n_blocks = n // m

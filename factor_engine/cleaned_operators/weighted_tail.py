@@ -7,13 +7,23 @@ sorter-parameterised primitives that AlphaMiner / AlphaProbe / GP can recombine:
 * ``ts_stratified_mean_spread``      — mean of ``target`` on the high-sorter tail
   minus the mean on the low-sorter tail inside a trailing window (``quantile``
   must be ``<= 0.5`` so the two strata never overlap; ``target`` / ``sorter``
-  are parameters, so ``return x volume`` is just one recipe).
-* ``ts_weighted_semivariance``       — sqrt of the weight-normalised mean of
-  squared downside deviations below a target (weights default to turnover).
+  are parameters, so ``return x volume`` is just one recipe).  Cutoff sorter
+  ties enter with FRACTIONAL participation (R3-116).
+* ``ts_weighted_semivariance``       — weight-normalised mean of squared
+  downside deviations below a target (NO sqrt — the honest semivariance).
+* ``ts_weighted_downside_deviation`` — sqrt of the weight-normalised mean of
+  squared downside deviations (the historical "semivariance" formula, renamed
+  honestly; R3-113).
 * ``ts_weighted_expected_shortfall`` — weight-normalised mean of the tail beyond
-  a weighted quantile.
+  a weighted ECDF-inverse quantile (no interpolation; R3-115).
 * ``ts_weighted_drawdown_area``      — weight-normalised integral of drawdown
   depth from the running peak.
+
+R3-113 naming: ``sqrt(sum w (target-x)_+^2 / sum w)`` is the weighted DOWNside
+DEVIATION, not the semivariance.  The semivariance keeps the square;
+``ts_weighted_semivariance`` is the no-sqrt name, the sqrt variant lives at
+``ts_weighted_downside_deviation`` (back-compat alias
+``ts_weighted_semivariance_sqrt`` preserves the old sqrt behaviour).
 
 Every operator is prefix-causal: the window only ever reads rows ``<= t``, and
 missing values use aligned-pair / drop-valid policy inside the window.  The
@@ -35,13 +45,18 @@ _EPS = 1e-12
 def _weighted_quantile(
     values: np.ndarray, weights: np.ndarray, quantile: float
 ) -> float:
-    """Linear-interpolated weighted quantile over (value, weight) pairs.
+    """Weighted ECDF-inverse quantile — an OBSERVED value, never a fabricated
+    interpolated threshold (R3-115).
 
-    ``q <= cdf[0]`` clamps to ``cs[0]`` and ``q >= cdf[-1]`` clamps to ``cs[-1]``
-    (P0-17: the old index-clamp-to-1 extrapolated below the first value).
+    ``q`` maps to the smallest observed value whose cumulative weight reaches
+    ``q`` (``np.searchsorted(cdf, q, side="left")``).  With
+    ``10@w0.4, 20@w0.6`` the q=0.5 quantile is ``20`` — NOT the made-up ``14.7``
+    linear interpolation previously emitted.  ``q <= cdf[0]`` clamps to
+    ``cs[0]`` and ``q >= cdf[-1]`` clamps to ``cs[-1]`` (P0-17 / P0-16: no
+    below-first-value extrapolation).
     """
     qq = float(quantile)
-    order = np.argsort(values)
+    order = np.argsort(values, kind="stable")
     cs = values[order]
     cw = weights[order]
     cdf = np.cumsum(cw)
@@ -54,12 +69,82 @@ def _weighted_quantile(
     if qq >= float(cdf[-1]):
         return float(cs[-1])
     idx = int(np.searchsorted(cdf, qq, side="left"))
-    idx = min(max(idx, 1), cs.shape[0] - 1)
-    span = float(cdf[idx] - cdf[idx - 1])
-    if span <= _EPS:
-        return float(cs[idx])
-    frac = (qq - float(cdf[idx - 1])) / span
-    return float(cs[idx - 1] + frac * (cs[idx] - cs[idx - 1]))
+    idx = min(max(idx, 0), cs.shape[0] - 1)
+    return float(cs[idx])
+
+
+def _weighted_es_tail(
+    values: np.ndarray,
+    weights: np.ndarray,
+    quantile: float,
+    side: str,
+    min_tail: int,
+) -> float:
+    """Weighted mean of the tail beyond a weighted ECDF quantile (R3-115).
+
+    The boundary is an OBSERVED value (weighted ECDF inverse — no linear
+    interpolation).  When the cutoff lands inside a group of identical values,
+    the tied group enters with FRACTIONAL weight so the tail holds exactly the
+    requested mass fraction (mirrors ``group_topk_mean``).  Returns NaN when the
+    effective tail has fewer than ``min_tail`` members.
+    """
+    qq = float(quantile)
+    order = np.argsort(values, kind="stable")
+    sv = values[order]
+    sw = weights[order]
+    total = float(sw.sum())
+    if total <= _EPS:
+        return np.nan
+    cdf = np.cumsum(sw)
+    if side == "lower":
+        target = qq * total
+        idx = int(np.searchsorted(cdf, target, side="left"))
+        idx = min(idx, sv.size - 1)
+        vstar = sv[idx]
+        keep_mask = sv < vstar
+        need = target - float(sw[keep_mask].sum())
+    else:
+        target = (1.0 - qq) * total
+        idx = int(np.searchsorted(cdf, target, side="left"))
+        idx = min(idx, sv.size - 1)
+        vstar = sv[idx]
+        keep_mask = sv > vstar
+        need = qq * total - float(sw[keep_mask].sum())
+    tie_mask = sv == vstar
+    w_tie = float(sw[tie_mask].sum())
+    frac = (need / w_tie) if w_tie > _EPS else 0.0
+    frac = min(max(frac, 0.0), 1.0)
+    n_eff = float(keep_mask.sum()) + frac * float(tie_mask.sum())
+    if n_eff < min_tail:
+        return np.nan
+    num = float(np.sum(sw[keep_mask] * sv[keep_mask])) + frac * float(np.sum(sw[tie_mask] * sv[tie_mask]))
+    den = float(sw[keep_mask].sum()) + frac * w_tie
+    if den <= _EPS:
+        return np.nan
+    return num / den
+
+
+def _stratified_stratum_mean(xs: np.ndarray, ss: np.ndarray, n_take: int, *, top: bool) -> float:
+    """Mean of ``xs`` over the top/bottom ``n_take`` members ranked by ``ss``.
+
+    R3-116: a cutoff that lands inside a group of identical sorter values is
+    resolved with FRACTIONAL participation — the tied group enters with weight
+    ``(n_take - n_strict) / n_tie`` (mirrors ``group_topk_mean``), never by
+    ``argsort`` position, so a column/row permutation cannot change the spread.
+    """
+    n = xs.size
+    if top:
+        kth = ss[n - n_take]
+        strict = ss > kth
+    else:
+        kth = ss[n_take - 1]
+        strict = ss < kth
+    tie = ss == kth
+    n_strict = int(strict.sum())
+    n_tie = int(tie.sum())
+    n_take_tie = min(max(n_take - n_strict, 0), n_tie)
+    frac = (n_take_tie / n_tie) if n_tie > 0 else 0.0
+    return float((np.sum(xs[strict]) + frac * np.sum(xs[tie])) / n_take)
 
 
 def _validate_nonneg_weight(weight: pd.DataFrame, name: str) -> None:
@@ -76,9 +161,17 @@ def _validate_nonneg_weight(weight: pd.DataFrame, name: str) -> None:
         raise ValueError(f"{name}: weights must be non-negative (got a negative weight)")
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str) -> Any:
+def _metadata(
+    name: str, description: str, params: list[str], *, unit: str, output_unit: str | None = None
+) -> Any:
     from cleaned_operators.base import OperatorMetadata
 
+    if output_unit is None:
+        # R11 §37-D unit-algebra honesty: algebraic units (``same_as:`` /
+        # ``unit(...)``) are propagated to the ``output_unit`` field; a fixed
+        # "ratio"/"level" label is a declared dimensionless-ish fixed unit and
+        # is left unset.
+        output_unit = unit if (unit.startswith("same_as:") or unit.startswith("unit(")) else None
     return OperatorMetadata(
         name=name,
         category="time_series_risk",
@@ -89,6 +182,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> A
             "time_series_risk", "daily", "pit_safe", "causal", "typed_v2",
             f"signature:{','.join(params)}->series", f"unit:{unit}", "cost:1",
         ],
+        output_unit=output_unit,
     )
 
 
@@ -106,7 +200,11 @@ class TsStratifiedMeanSpread(SeriesOperator):
     sorted by ``sorter``; the result is the mean of ``target`` over the top
     ``quantile`` fraction minus the mean over the bottom ``quantile`` fraction.
     ``quantile`` must be ``<= 0.5`` so the top and bottom strata stay disjoint
-    (P1-83).  ``target = return, sorter = volume`` reproduces the
+    (P1-83).  When the cutoff lands inside a group of identical ``sorter``
+    values the tied group participates FRACTIONALLY (R3-116, mirrors
+    ``group_topk_mean``) — never by ``argsort`` position, so a column
+    permutation cannot change the spread.  The output carries the unit of
+    ``target`` (R3-117).  ``target = return, sorter = volume`` reproduces the
     volume-stratified return spread, but the primitive is generic: ``return x
     amount``, ``return x turnover``, ``fundamental_change x turnover`` etc. are
     all the same call.
@@ -114,9 +212,9 @@ class TsStratifiedMeanSpread(SeriesOperator):
 
     metadata = _metadata(
         "ts_stratified_mean_spread",
-        "按 sorter 分层的 target 高低尾均值差。",
+        "按 sorter 分层的 target 高低尾均值差（分位数边界并列按比例计入）。",
         ["target", "sorter", "window", "quantile", "min_periods"],
-        unit="level",
+        unit="same_as:target",
     )
 
     def _calculate_series(
@@ -141,11 +239,16 @@ class TsStratifiedMeanSpread(SeriesOperator):
             x, s = aligned_pairs(a, b)
             if x.size < mp:
                 return np.nan
-            order = np.argsort(s)
+            order = np.argsort(s, kind="stable")
             xs = x[order]
+            ss = s[order]
             k = max(1, int(round(q * x.size)))
             k = min(k, x.size - 1)
-            return float(np.mean(xs[-k:]) - np.mean(xs[:k]))
+            top = _stratified_stratum_mean(xs, ss, k, top=True)
+            bot = _stratified_stratum_mean(xs, ss, k, top=False)
+            if not np.isfinite(top) or not np.isfinite(bot):
+                return np.nan
+            return float(top - bot)
 
         return frame_like(
             target,
@@ -161,19 +264,22 @@ class TsStratifiedMeanSpread(SeriesOperator):
     source="weighted_tail",
 )
 class TsWeightedSemivariance(SeriesOperator):
-    """Weight-normalised downside deviation below ``target``.
+    """Weight-normalised SEMIvariance below ``target`` (NO sqrt; R3-113).
 
-    ``sqrt( sum w * max(target - x, 0)^2 / sum w )`` over aligned (``x``,
-    ``weight``) pairs in the trailing window.  With ``weight = turnover`` this is
-    the turnover-weighted analogue of ``ts_downside_deviation``; the weight is a
-    free parameter, so volume / amount / 1 are all searchable.
+    ``sum w * max(target - x, 0)^2 / sum w`` over aligned (``x``, ``weight``)
+    pairs in the trailing window.  The name is honest: this is the variance of
+    the downside deviations, carrying ``unit(x)^2``.  With ``weight = turnover``
+    this is the turnover-weighted analogue of the semivariance; the weight is a
+    free parameter, so volume / amount / 1 are all searchable.  For the sqrt'd
+    variant (the historical "semivariance" formula, which is really the
+    downside DEVIATION) use ``ts_weighted_downside_deviation``.
     """
 
     metadata = _metadata(
         "ts_weighted_semivariance",
-        "加权下半方差 sqrt(sum w*max(target-x,0)^2 / sum w)。",
+        "加权下半方差 sum w*max(target-x,0)^2 / sum w（无 sqrt）。",
         ["x", "weight", "window", "target", "min_periods"],
-        unit="ratio",
+        unit="unit(x)^2",
     )
 
     def _calculate_series(
@@ -203,6 +309,65 @@ class TsWeightedSemivariance(SeriesOperator):
             if total <= _EPS:
                 return np.nan
             below = np.maximum(tgt - xv, 0.0)
+            return float(np.sum(wv * below * below) / total)
+
+        return frame_like(
+            x,
+            map_pair_rolling(x.to_numpy(dtype=float), weight.to_numpy(dtype=float), w, _fn),
+        )
+
+
+@register_operator(
+    name="ts_weighted_downside_deviation",
+    category="time_series_risk",
+    business_category="time_series_risk",
+    canonical="ts_weighted_downside_deviation",
+    source="weighted_tail",
+)
+class TsWeightedDownsideDeviation(SeriesOperator):
+    """Weight-normalised DOWNside DEVIATION below ``target`` (sqrt; R3-113).
+
+    ``sqrt( sum w * max(target - x, 0)^2 / sum w )`` over aligned (``x``,
+    ``weight``) pairs in the trailing window.  This is the formula the
+    historical ``ts_weighted_semivariance`` computed under a misnomer; the
+    honest name is downside deviation and the output carries the unit of ``x``
+    (``same_as:x``, R3-114).  The no-sqrt variant (true semivariance) is
+    ``ts_weighted_semivariance``; back-compat alias
+    ``ts_weighted_semivariance_sqrt`` also resolves here.
+    """
+
+    metadata = _metadata(
+        "ts_weighted_downside_deviation",
+        "加权下行偏离 sqrt(sum w*max(target-x,0)^2 / sum w)，输出同 x 单位。",
+        ["x", "weight", "window", "target", "min_periods"],
+        unit="same_as:x",
+    )
+
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        weight: pd.DataFrame,
+        window: int = 20,
+        target: float = 0.0,
+        min_periods: Any = None,
+        **_: Any,
+    ) -> pd.DataFrame:
+        w = max(2, int(window))
+        tgt = float(target)
+        mp = int(min_periods) if min_periods is not None else 2
+        mp = max(2, mp)
+
+        def _fn(a: np.ndarray, b: np.ndarray) -> float:
+            xv, wv = aligned_pairs(a, b)
+            # Per-window (prefix-safe) non-negativity; see round-7 P0.
+            if np.any(wv < 0.0):
+                return np.nan
+            if xv.size < mp:
+                return np.nan
+            total = float(wv.sum())
+            if total <= _EPS:
+                return np.nan
+            below = np.maximum(tgt - xv, 0.0)
             return float(np.sqrt(np.sum(wv * below * below) / total))
 
         return frame_like(
@@ -221,9 +386,11 @@ class TsWeightedSemivariance(SeriesOperator):
 class TsWeightedExpectedShortfall(SeriesOperator):
     """Weight-normalised mean of the tail beyond a weighted quantile.
 
-    For ``side='lower'`` the tail is ``{x <= Q_q}`` for the weighted quantile
-    ``Q_q``; the result is ``sum(w*x) / sum(w)`` over that tail.  ``side='upper'``
-    mirrors at ``Q_{1-q}``.  This answers "how severe is the volume that actually
+    For ``side='lower'`` the tail is the ``q`` mass fraction of the smallest
+    ``x``; the boundary is a weighted ECDF inverse (an OBSERVED value — no
+    interpolation, R3-115) and a cutoff that lands inside a group of identical
+    values enters with FRACTIONAL weight.  ``side='upper'`` mirrors at the top
+    ``q`` fraction.  This answers "how severe is the volume that actually
     participated in the extreme move" and is distinct from the equal-weighted
     ``ts_expected_shortfall``.
     """
@@ -269,21 +436,7 @@ class TsWeightedExpectedShortfall(SeriesOperator):
                 return np.nan
             if xv.size < max(min_tail, 3):
                 return np.nan
-            total = float(wv.sum())
-            if total <= _EPS:
-                return np.nan
-            thr = _weighted_quantile(xv, wv, q if kind == "lower" else 1.0 - q)
-            if not np.isfinite(thr):
-                return np.nan
-            if kind == "lower":
-                tail = xv <= thr
-            else:
-                tail = xv >= thr
-            w_tail = wv[tail]
-            x_tail = xv[tail]
-            if w_tail.size < min_tail or float(w_tail.sum()) <= _EPS:
-                return np.nan
-            return float(np.sum(w_tail * x_tail) / np.sum(w_tail))
+            return _weighted_es_tail(xv, wv, q, kind, min_tail)
 
         return frame_like(
             x,
@@ -370,6 +523,7 @@ def _register_surface() -> None:
     _surface.extend_extended_only({
             "ts_stratified_mean_spread",
             "ts_weighted_semivariance",
+            "ts_weighted_downside_deviation",
             "ts_weighted_expected_shortfall",
             "ts_weighted_drawdown_area",
         })
@@ -378,10 +532,28 @@ def _register_surface() -> None:
     for _canon in (
         "ts_stratified_mean_spread",
         "ts_weighted_semivariance",
+        "ts_weighted_downside_deviation",
         "ts_weighted_expected_shortfall",
         "ts_weighted_drawdown_area",
     ):
         register_polars_bridge(_canon)
+
+    # R3-113 back-compat: the historical sqrt'd "semivariance" behaviour now
+    # lives at ``ts_weighted_downside_deviation``; keep it resolvable under a
+    # legacy spelling so old recipes/strategies can opt back in explicitly.
+    from cleaned_operators.registry import OperatorRegistry
+
+    OperatorRegistry.register_compat_alias(
+        "ts_weighted_semivariance_sqrt",
+        "ts_weighted_downside_deviation",
+        migration_reason=(
+            "R3-113 naming split: the sqrt of the weight-normalised squared "
+            "downside deviation is the weighted downside deviation; the honest "
+            "semivariance (no sqrt) keeps the name ts_weighted_semivariance"
+        ),
+        deprecated_since="0.11.0",
+        removal_version="0.13.0",
+    )
 
 
 _register_surface()

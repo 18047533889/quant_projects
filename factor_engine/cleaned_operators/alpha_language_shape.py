@@ -36,7 +36,14 @@ from cleaned_operators.rolling_pack import (
 _EPS = 1e-12
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    extra_tags: tuple[str, ...] = (),
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="time_series_shape",
@@ -47,6 +54,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
             "time_series_shape", "daily", "pit_safe", "causal", "typed_v2",
             f"signature:{','.join(params)}->series", "domain:path_geometry",
             f"unit:{unit}", "cost:1",
+            *extra_tags,
         ],
     )
 
@@ -159,16 +167,22 @@ class TsMonotonicity(SeriesOperator):
     source="alpha_language_shape",
 )
 class TsTurningRate(SeriesOperator):
-    """转向率: 窗口内相邻 delta 符号翻转数 / 有效相邻 delta 对数, 范围 [0,1]。
+    """转向率 (Definition A): 窗口内相邻 delta 符号翻转数 / 全部相邻 delta 对数, 范围 [0,1]。
 
+    Definition A 的分母是**所有**相邻 delta 对, 包括 0 delta (平台段) —— 因此
+    (+ ,0,0,0,-) 这类含平台段的序列会被人为拉低转向率 (0 翻转 / 4 对 = 0)。
     sign_eps(d): |d|>epsilon 才计入符号; epsilon 用于滤除噪声。高 = 高频折返。
+
+    R11 round-3 P1-I-127：需要忽略平台段稀释的度量使用 Definition B ——
+    ``ts_effective_turning_rate``（分母只计两 delta 均非零的相邻对）。
     """
 
     metadata = _metadata(
         "ts_turning_rate",
-        "delta 符号翻转比例。",
+        "delta 符号翻转比例 (Definition A: 分母=全部相邻 delta 对数)。",
         ["x", "window", "epsilon", "min_periods"],
         unit="ratio",
+        extra_tags=("definition:a",),
     )
 
     def _calculate_series(
@@ -207,6 +221,67 @@ class TsTurningRate(SeriesOperator):
 
 
 @register_operator(
+    name="ts_effective_turning_rate",
+    category="time_series_shape",
+    business_category="time_series_shape",
+    canonical="ts_effective_turning_rate",
+    source="alpha_language_shape",
+)
+class TsEffectiveTurningRate(SeriesOperator):
+    """有效转向率 (Definition B): 相邻 delta 对中, 两 delta 均有效(非零)的对里
+    符号翻转的比例, 范围 [0,1]。
+
+    Definition B 的分母只计 **两 delta 均非零** 的相邻对 —— 平台段 (0 delta) 不
+    稀释分母, 与 ``ts_turning_rate`` (Definition A, 分母=全部相邻对) 区分。
+    (+ ,0,0,0,-) 在 Definition B 下无任何"两 delta 均有效"的相邻对 -> NaN。
+    """
+
+    metadata = _metadata(
+        "ts_effective_turning_rate",
+        "有效转向率 (Definition B: 分母=两 delta 均非零的相邻对数)。",
+        ["x", "window", "epsilon", "min_periods"],
+        unit="ratio",
+        extra_tags=("definition:b",),
+    )
+
+    def _calculate_series(
+        self, x: pd.DataFrame, window: int = 20, epsilon: float = 0.0, min_periods: int = 2, **_: Any
+    ) -> pd.DataFrame:
+        w = check_window(window)
+        eps = float(epsilon)
+        mp = max(2, int(min_periods))
+        xv = x.to_numpy(dtype=float)
+
+        def _sign(d: float) -> int:
+            if d > eps:
+                return 1
+            if d < -eps:
+                return -1
+            return 0
+
+        def _fn(chunk: np.ndarray) -> float:
+            v = _trailing_contiguous(chunk)
+            if v.size < mp + 1:
+                return np.nan
+            d = np.diff(v)
+            flips = 0
+            active_pairs = 0
+            for i in range(1, d.size):
+                s0 = _sign(float(d[i - 1]))
+                s1 = _sign(float(d[i]))
+                if s0 == 0 or s1 == 0:
+                    continue  # platform segment (0 delta) is not an active pair
+                active_pairs += 1
+                if s0 != s1:
+                    flips += 1
+            if active_pairs == 0:
+                return np.nan
+            return float(flips / active_pairs)
+
+        return frame_like(x, map_rolling(xv, w, _fn))
+
+
+@register_operator(
     name="ts_turning_intensity",
     category="time_series_shape",
     business_category="time_series_shape",
@@ -214,9 +289,11 @@ class TsTurningRate(SeriesOperator):
     source="alpha_language_shape",
 )
 class TsTurningIntensity(SeriesOperator):
-    """转向猛烈度: 仅转向点上的 |Δ²x| 均值 / (窗口内 Δx 的 MAD + eps)。
+    """转向猛烈度: 仅转向点上的 |Δ²x| 均值 / 窗口内 Δx 的 MAD。
 
     不是数转向次数, 而是衡量每次转向有多猛烈。
+    R11 round-3 P1-I-128: MAD(delta)=0 (|Δx| 恒定) 时比率退化 —— 返回 NaN,
+    绝不除以 eps 制造 1e12 的爆炸值。
     """
 
     metadata = _metadata(
@@ -247,7 +324,12 @@ class TsTurningIntensity(SeriesOperator):
                     mags.append(abs(d[i] - d[i - 1]))
             if not mags:
                 return np.nan
-            return float(np.mean(mags)) / (mad_d + _EPS)
+            # R11 round-3 P1-I-128: MAD(delta)=0 (constant |delta|) makes the
+            # ratio 4e12 via the eps guard — an EPS explosion.  Return NaN, never
+            # divide by _EPS.
+            if mad_d == 0.0:
+                return np.nan
+            return float(np.mean(mags)) / mad_d
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -260,16 +342,20 @@ class TsTurningIntensity(SeriesOperator):
     source="alpha_language_shape",
 )
 class TsPathEfficiency(SeriesOperator):
-    """路径效率: |x_t - x_{窗口首}| / (窗口内 |Δx| 之和 + eps), 范围 [0,1]。
+    """路径效率: |x_t - x_{窗口首}| / 窗口内 |Δx| 之和, 范围 [0,1]。
 
     1 = 近乎直线; 0 = 大量折返。与 Kaufman efficiency ratio 同族的日频版本。
+    常量路径 (net=0, path=0) 的 0/0 不是 0 —— 本算子显式声明
+    ``constant_path_policy=ZERO``: 直接返回 0.0, 而非 0/(0+eps) 的数值事故
+    (R11 round-3 P1-I-129)。
     """
 
     metadata = _metadata(
         "ts_path_efficiency",
-        "净位移 / 路径长度。",
+        "净位移 / 路径长度 (常量路径 constant_path_policy=ZERO)。",
         ["x", "window", "min_periods"],
         unit="ratio",
+        extra_tags=("constant_path_policy:zero",),
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 2, **_: Any) -> pd.DataFrame:
@@ -283,7 +369,11 @@ class TsPathEfficiency(SeriesOperator):
                 return np.nan
             net = abs(float(v[-1]) - float(v[0]))
             path = float(np.sum(np.abs(np.diff(v))))
-            return net / (path + _EPS)
+            if path == 0.0:
+                # constant_path_policy=ZERO (declared): 0/0 is deliberately 0.0,
+                # not an _EPS accident.
+                return 0.0
+            return net / path
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -370,7 +460,16 @@ class TsTrendBreakScore(SeriesOperator):
             if not (np.isfinite(b_old) and np.isfinite(b_recent)):
                 return np.nan
             _, _, sigma = _ols_fit(v[old_len:])
-            return (b_recent - b_old) / (sigma + _EPS)
+            # R11 round-3 P1-I-130: recent residual std == 0 (perfectly linear
+            # recent segment) made the ratio explode via the _EPS guard when the
+            # two slopes differ.  Degenerate scale -> NaN, unless the two slopes
+            # are also identical (0/0 -> policy 0.0, preserving the linear-window
+            # semantics).
+            if sigma < _EPS:
+                if abs(b_recent - b_old) < _EPS:
+                    return 0.0
+                return np.nan
+            return (b_recent - b_old) / sigma
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -428,16 +527,22 @@ class TsWeightedTimeCentroid(SeriesOperator):
     source="alpha_language_shape",
 )
 class TsEndpointDeviation(SeriesOperator):
-    """端点偏离: (x_t - OLS 预测_x_t) / (残差 std + eps)。
+    """端点偏离: (x_t - OLS 预测_x_t) / 残差 std。
 
     历史窗口形状描述(非预测), 因此允许包含 t; 完美线性窗口 -> 0。
+
+    R11 round-3 P1-I-131: 这是路径/趋势几何 —— 使用 trailing-contiguous 尾部连续
+    段, **不做** drop-finite 压缩。旧实现 ``chunk[np.isfinite(chunk)]`` 把
+    (day1, day2, NaN, day10) 压成连续 3 点, OLS 的 x 轴重置为 0,1,2, 把跨缺口的
+    点当作相邻。缺口后只保留真正相邻的尾部连续段。
     """
 
     metadata = _metadata(
         "ts_endpoint_deviation",
-        "末端点相对自身 OLS 拟合的偏离(按残差 std 归一)。",
+        "末端点相对自身 OLS 拟合的偏离(按残差 std 归一; 尾部连续段, 不压缩缺口)。",
         ["x", "window", "min_periods"],
         unit="ratio",
+        extra_tags=("gap_policy:trailing_contiguous",),
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 3, **_: Any) -> pd.DataFrame:
@@ -446,7 +551,7 @@ class TsEndpointDeviation(SeriesOperator):
         xv = x.to_numpy(dtype=float)
 
         def _fn(chunk: np.ndarray) -> float:
-            v = chunk[np.isfinite(chunk)]
+            v = _trailing_contiguous(chunk)
             n = v.size
             if n < mp:
                 return np.nan
@@ -455,7 +560,7 @@ class TsEndpointDeviation(SeriesOperator):
             num = float(v[-1]) - x_hat_last
             if sigma < _EPS:
                 return 0.0 if abs(num) < _EPS else np.nan
-            return num / (sigma + _EPS)
+            return num / sigma
 
         return frame_like(x, map_rolling(xv, w, _fn))
 
@@ -595,6 +700,7 @@ class TsMaxChordExcursion(SeriesOperator):
 _NEW_CANONICALS = (
     "ts_monotonicity",
     "ts_turning_rate",
+    "ts_effective_turning_rate",
     "ts_turning_intensity",
     "ts_path_efficiency",
     "ts_roughness",

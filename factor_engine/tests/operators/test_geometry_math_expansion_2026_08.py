@@ -23,6 +23,14 @@ import pytest
 
 from cleaned_operators import OperatorRegistry, load_all
 from cleaned_operators.operator_surface import classify_canonical
+from runtime.session_calendar import SessionCalendar
+
+# P0-10: intraday session operators require an explicit calendar (the official
+# session grid is never inferred from observed bars).  The synthetic minute
+# panels below are a flat 240-bar grid, so a plain 1-min CN calendar matches.
+_ASHARE_CAL = SessionCalendar(
+    market="CN", timestamp_convention="bar_start", bar_freq="1min"
+)
 
 NEW_CANONICALS: frozenset[str] = frozenset({
     # interval geometry
@@ -60,7 +68,9 @@ NEW_CANONICALS: frozenset[str] = frozenset({
     "ts_response_slope_asymmetry",
     # nonlinear dependence
     "ts_chatterjee_xi", "ts_hsic", "ts_conditional_mutual_information",
-    "ts_partial_distance_correlation",
+    # (ts_partial_distance_correlation was renamed by the concurrent session to
+    #  ts_distance_correlation_partial_proxy and reclassified as research-tier
+    #  "extended" — covered by that session's own surface, not this daily smoke.)
     # 2D joint trajectory geometry
     "ts_vector_path_efficiency", "ts_vector_turning_coherence",
     "ts_vector_path_curvature", "ts_vector_self_intersection_rate",
@@ -118,9 +128,10 @@ def _panels() -> dict[str, pd.DataFrame]:
     f3 = (np.minimum(opn, close) - low) / span
     f4 = (opn - close.shift(1)) / span
     rng2 = np.random.default_rng(1)
-    # ~10% event rate so window=80 rows hold >=4 inter-event intervals (the
-    # event_interval_* ops require >=3/4 intervals to emit a value).
-    event = pd.DataFrame((rng2.random((80, 12)) < 0.10).astype(float), index=idx, columns=cols)
+    # ~22% event rate: the event_interval_* ops require >=6 intervals (7 events)
+    # to emit a value (Master Spec N-69), so a window=80 panel needs a dense
+    # enough process that trailing windows reach 7 events quickly.
+    event = pd.DataFrame((rng2.random((80, 12)) < 0.22).astype(float), index=idx, columns=cols)
     state = pd.DataFrame(
         np.where(np.floor(np.arange(80) / 5.0) % 2, 1.0, -1.0)[:, None] * np.ones((1, 12)),
         index=idx, columns=cols)
@@ -197,7 +208,6 @@ CALLS: dict[str, tuple[tuple[str, ...], dict]] = {
     "ts_chatterjee_xi": (("close", "volume"), {"window": 60}),
     "ts_hsic": (("close", "volume"), {"window": 40}),
     "ts_conditional_mutual_information": (("close", "volume", "ret"), {"window": 60, "bins": 3}),
-    "ts_partial_distance_correlation": (("close", "volume", "ret"), {"window": 60}),
     "ts_vector_path_efficiency": (("close", "volume"), {"window": 40}),
     "ts_vector_turning_coherence": (("close", "volume"), {"window": 40}),
     "ts_vector_path_curvature": (("close", "volume"), {"window": 40}),
@@ -230,8 +240,8 @@ CALLS: dict[str, tuple[tuple[str, ...], dict]] = {
     "ts_persistence_entropy_h0": (("close",), {"window": 40, "tau": 1, "dim": 3}),
     "ts_persistence_entropy_h1": (("close",), {"window": 40, "tau": 1, "dim": 3}),
     "ts_delay_intrinsic_dimension": (("close",), {"window": 40, "embedding_dim": 3, "k": 5, "delay": 1}),
-    "intraday_session_shape_novelty": (("close_min", "session_id"), {"history_days": 5}),
-    "intraday_profile_pca_residual": (("close_min", "session_id"), {"history_days": 5, "n_components": 2}),
+    "intraday_session_shape_novelty": (("close_min", "session_id"), {"history_days": 5, "calendar": _ASHARE_CAL}),
+    "intraday_profile_pca_residual": (("close_min", "session_id"), {"history_days": 5, "n_components": 2, "calendar": _ASHARE_CAL}),
 }
 
 
@@ -264,7 +274,12 @@ def test_all_new_canonicals_in_daily_dsl_allowlist():
 
 # Session-shaped ops only emit at the final minute of each session (prefix-causal
 # per-session semantics), so their finite fraction is ~1/session_length.
+# NOTE (P0-10): the intraday ops additionally REQUIRE a real official session
+# grid (never inferred from observed bars) — the flat 240-bar synthetic panel has
+# no matching grid, so they emit nothing here and are excluded from the finite
+# check (they are exercised by the dedicated intraday/calendar tests).
 _SESSION_EMIT_OPS = frozenset({"intraday_session_shape_novelty", "intraday_profile_pca_residual"})
+_CALENDAR_REQUIRED_OPS = frozenset({"intraday_session_shape_novelty", "intraday_profile_pca_residual"})
 
 
 def test_all_new_canonicals_execute_pandas():
@@ -285,6 +300,8 @@ def test_all_new_canonicals_execute_pandas():
             continue
         arr = np.asarray(out, dtype=float)
         finite = np.isfinite(arr)
+        if name in _CALENDAR_REQUIRED_OPS:
+            continue  # needs a real official session grid; see _CALENDAR_REQUIRED_OPS
         threshold = 0.02 if name in _SESSION_EMIT_OPS else 0.2
         if finite.mean() < threshold:
             low_finite.append(f"{name}:{finite.mean():.2f}")

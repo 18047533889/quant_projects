@@ -148,15 +148,22 @@ PRODUCTION_DENIED_CANONICALS: frozenset[str] = frozenset(
 def is_production_denied(canon: str) -> bool:
     """判断 canonical 是否禁止用于 production 投递。
 
+    NEW-012: a ``micro_*`` PREFIX is no longer a production denial.  A name
+    cannot represent safety — eligibility is decided per canonical by its
+    source contract, grain contract, surface classification, six-gate evidence
+    and ``production_certified`` (see :func:`_compute_allow_in_production`,
+    which requires the canonical to classify as ``daily``/``extended`` and carry
+    full evidence before it can be production-eligible).  The legacy blanket
+    prefix deny silently blocked any genuinely production-usable minute-derived
+    daily factor that happened to be named ``micro_*``; it is removed.
+
     参数:
         canon: canonical 算子名。
 
     返回:
-        禁止返回 ``True``（含 ``micro_*`` 前缀算子）。
+        禁止返回 ``True``（仅显式列出的 denied canonical）。
     """
     if canon in PRODUCTION_DENIED_CANONICALS:
-        return True
-    if str(canon).startswith("micro_"):
         return True
     return False
 
@@ -328,7 +335,21 @@ def _compute_allow_in_production(
     if status in ("experimental", "deprecated", "stub", "doc_only"):
         return False
     if not shape_preserving:
-        return False
+        # NEW-013: a legit grain transform (minute -> daily, snapshot -> daily,
+        # event table -> entity-date panel) is naturally shape-changing and must
+        # NOT be rejected by the old blanket ``shape_preserving=True`` rule.
+        # The operator is admissible when it DECLARES the frequency change via
+        # its metadata grain contract (``input_grain``/``output_grain``) so the
+        # shape change is a provable, intended transform — not a silent reshape.
+        catalog = OperatorRegistry._catalog.get(resolved, {})
+        declared_grain = bool(
+            catalog.get("input_grain") and catalog.get("output_grain")
+            and catalog.get("input_grain") != catalog.get("output_grain")
+        )
+        if not declared_grain:
+            return False
+        # fall through: a declared grain transform passes the shape gate; the
+        # remaining surface/evidence gates below still apply.
     catalog = OperatorRegistry._catalog.get(resolved, {})
     if any(
         catalog.get(flag)

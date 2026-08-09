@@ -24,13 +24,23 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(
+    name: str, description: str, params: list[str], *, unit: str, cost: int,
+    extra_tags: tuple[str, ...] = (),
+    param_specs: dict | None = None,
+) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="distribution_shift",
@@ -39,10 +49,11 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         return_type="series",
         tags=[
             "distribution_shift", "daily", "pit_safe", "causal", "typed_v2",
-            "deterministic",
+            "deterministic", *extra_tags,
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        param_specs=dict(param_specs) if param_specs else {},
     )
 
 
@@ -63,15 +74,26 @@ def _euclidean_pairs(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def _energy_distance(X: np.ndarray, Y: np.ndarray) -> float:
+    """U-stat energy distance between two multivariate samples (R3-139).
+
+    The classical V-statistic ``2 E|X-Y| - E|X-X'| - E|Y-Y'|`` includes the
+    diagonal zeros and divides the within-sample terms by ``m^2`` / ``n^2``, so
+    its finite-N bias differs between the two sides whenever ``recent_window !=
+    prior_window`` — a purely mechanical bias that changes the baseline.  This
+    implementation uses the UNBIASED U-stat form: the within-sample terms
+    exclude the diagonal and divide by ``m*(m-1)`` / ``n*(n-1)``, so the
+    estimator is unbiased at every finite sample size on both sides.
+    """
     m, n = X.shape[0], Y.shape[0]
-    if m < 1 or n < 1:
+    if m < 2 or n < 2:
         return np.nan
     dxy = _euclidean_pairs(X, Y)
     dxx = _euclidean_pairs(X, X)
     dyy = _euclidean_pairs(Y, Y)
     first = float(np.sum(dxy)) / (m * n)
-    second = float(np.sum(dxx)) / (m * m)
-    third = float(np.sum(dyy)) / (n * n)
+    # U-stat: exclude the diagonal (self-distances); denominator m*(m-1).
+    second = float(np.sum(dxx) - np.trace(dxx)) / (m * (m - 1))
+    third = float(np.sum(dyy) - np.trace(dyy)) / (n * (n - 1))
     ed = 2.0 * first - second - third
     return float(max(ed, 0.0))
 
@@ -159,14 +181,21 @@ class TsJointEnergyShift(SeriesOperator):
     prior 窗口的 median/MAD 做稳健标准化，然后计算 recent 与 prior 之间的
     energy distance（omnibus 全分布距离，clip≥0）。可发现单变量都变化不大、
     corr 也不明显但联合分布改变的情形。PIT 安全（两个窗口都止于 t-1）。
+
+    R3-140 (pre-t state): the value emitted at time ``t`` is computed ONLY from
+    rows ``[t-recent-prior, t-1]`` — the current row ``t`` is the query point
+    and never enters either block.  The output is therefore an
+    ``asof_previous_observation`` pre-t state: it is known at the START of
+    period ``t`` and can be used in a same-day decision without look-ahead.
     """
 
     metadata = _metadata(
         "ts_joint_energy_shift",
-        "多变量 Energy distance 联合分布漂移（recent vs prior，固定 3-feature）。",
+        "多变量 Energy distance 联合分布漂移（recent vs prior，固定 3-feature；asof t-1）。",
         ["f1", "f2", "f3", "recent_window", "prior_window"],
         unit="distance",
         cost=6,
+        extra_tags=("asof_previous_observation",),
     )
 
     def _calculate_series(
@@ -197,14 +226,20 @@ class TsEnergyBreakScore(SeriesOperator):
     先算每期的 joint energy shift（与 ``ts_joint_energy_shift`` 同核），再对
     过去 ``window`` 期的 shift 序列做 robust z：高值 = 当前联合分布位移在自身
     历史上极不寻常（状态切换/崩坍）。PIT 安全、确定性。
+
+    R3-140 (pre-t state): like ``ts_joint_energy_shift`` the per-period shift
+    uses only rows up to ``t-1``, so the break score at ``t`` is an
+    ``asof_previous_observation`` pre-t state usable same-day without
+    look-ahead.
     """
 
     metadata = _metadata(
         "ts_energy_break_score",
-        "联合分布 break 得分（energy shift 的稳健 z）。",
+        "联合分布 break 得分（energy shift 的稳健 z；asof t-1）。",
         ["f1", "f2", "f3", "window", "recent_window", "prior_window"],
         unit="zscore",
         cost=6,
+        extra_tags=("asof_previous_observation",),
     )
 
     def _calculate_series(
@@ -309,14 +344,28 @@ class TsCopulaCentralAsymmetry(SeriesOperator):
 
     不是简单的 upper/lower 尾依赖差，而是比较整个联合 dependence structure
     正负方向是否不对称（downturn 中尤其值得关注）。P2 / Research。
+
+    R3-141 (null calibration): this RAW statistic has an N/grid-dependent
+    baseline — the empirical copula's deviation from central symmetry is
+    mechanically inflated by small sample sizes (``window``), a coarse grid, and
+    tie density, independent of any real asymmetric dependence.  It is therefore
+    a RESEARCH statistic only: interpret it against a matched permutation / IID
+    null at the SAME ``(window, grid)`` before calling a value "asymmetric".
+    The nuisance parameters ``window`` and ``grid`` are declared
+    ``ESTIMATOR_RESOLUTION`` + ``searchable=False`` so a role-aware search
+    grammar cannot optimise the raw baseline itself (R3-141).
     """
 
     metadata = _metadata(
         "ts_copula_central_asymmetry",
-        "经验 copula 中心非对称度（联合依赖方向不对称性）。",
+        "经验 copula 中心非对称度（联合依赖方向不对称性；raw，需 N/grid null 校准）。",
         ["x", "y", "window", "grid"],
         unit="distance",
         cost=7,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=4, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+            "grid": ParamSpec(dtype=int, min=4, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+        },
     )
 
     def _calculate_series(

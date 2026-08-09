@@ -212,7 +212,9 @@ def pl_adx(high, low, close, window=14, **_):
 
 def register() -> None:
     register_specs({
-        "MACD_line": Spec("technical_signal", ["x", "fast", "slow"], "快慢 EMA 之差；复用 ts_ema 与 subtract", pd_macd_line, pl_macd_line),
+        # NEW-040: ``signal`` is a declared non-searchable compatibility knob
+        # (the historical MACD(x,fast,slow,signal) call aliases to MACD_line).
+        "MACD_line": Spec("technical_signal", ["x", "fast", "slow", "signal"], "快慢 EMA 之差；复用 ts_ema 与 subtract（signal 为兼容 no-op）", pd_macd_line, pl_macd_line),
         "MACD_signal": Spec("technical_signal", ["x", "fast", "slow", "signal"], "MACD 信号线；复用 ts_ema", pd_macd_signal, pl_macd_signal),
         "MACD_hist": Spec("technical_signal", ["x", "fast", "slow", "signal"], "MACD 柱；复用已有基础算子", pd_macd_hist, pl_macd_hist),
         "AROON": Spec("technical_signal", ["close", "window"], "Aroon Up-Down，并列极值取最近一次", pd_aroon, pl_aroon),

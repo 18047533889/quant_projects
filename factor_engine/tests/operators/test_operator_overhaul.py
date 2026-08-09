@@ -63,9 +63,18 @@ def test_cs_bucket_uses_full_bucket_range() -> None:
 
 def test_conditional_operators_reject_infinite_values() -> None:
     x = pd.DataFrame({"A": [1.0, np.inf, 3.0, 4.0]})
+    # NEW-047/253: the legal ConditionBool set is strictly {0, 1, NaN}.  An Inf
+    # in the CONDITION is a contract violation and must raise — it must NOT be
+    # silently treated as True by one family and False by another.
     condition = pd.DataFrame({"A": [1.0, 1.0, np.inf, 1.0]})
-    result = OperatorRegistry.get("ts_sum_if").calculate(x, condition, 4, 1)
-    assert result["A"].tolist() == [1.0, 1.0, 1.0, 5.0]
+    with pytest.raises(ValueError):
+        OperatorRegistry.get("ts_sum_if").calculate(x, condition, 4, 1)
+    # An Inf in the DATA (not the condition) is a missing observation: excluded
+    # from the selection, never counted toward a sum.
+    condition_ok = pd.DataFrame({"A": [1.0, 1.0, 1.0, 1.0]})
+    result = OperatorRegistry.get("ts_sum_if").calculate(x, condition_ok, 4, 1)
+    # row windows: [1] -> 1; [1,inf] -> 1; [1,inf,3] -> 1+3; [1,inf,3,4] -> 1+3+4
+    assert result["A"].tolist() == [1.0, 1.0, 4.0, 8.0]
 
 
 def test_argmax_argmin_are_distance_to_most_recent_tie() -> None:

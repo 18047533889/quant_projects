@@ -182,6 +182,11 @@ def run_semantic_closure_audit(
 
         load_all()
         catalog = dict(OperatorRegistry.catalog())
+    # Ensure the round-14 statistical-family declarations are present so the
+    # UNDECLARED_* invariants reflect the committed contracts.
+    from cleaned_operators.closure.declared_policies import declare_all
+
+    declare_all()
     from cleaned_operators import operator_surface as _surface
     from mining import operator_catalog as _mining
 
@@ -287,14 +292,26 @@ def run_semantic_closure_audit(
         if _multi_input(entry) and not has_axis_contract(canonical):
             inv_axis.violations.append(canonical)
 
-        # global-state as alpha terminal
+        # global-state as alpha terminal: the mining layer is the authority on
+        # terminal-ness.  A metadata ``role=global_state`` is only a violation if
+        # mining ALSO assigns it a terminal role — if mining assigns
+        # GLOBAL_STATE (regime/condition only) the invariant is satisfied.
         role_field = entry.get("role")
         if role_field == "global_state":
-            # terminal_allowed is not a first-class catalog field yet; any
-            # global-state operator is only legitimate as regime/condition.
-            inv_gs.violations.append(
-                f"{canonical} (role=global_state must not be an alpha terminal)"
-            )
+            try:
+                mining_role = _mining.assign_mining_role(canonical, entry)
+                mining_role_value = (
+                    mining_role.value
+                    if hasattr(mining_role, "value")
+                    else str(mining_role)
+                )
+            except Exception:  # pragma: no cover
+                mining_role_value = None
+            if mining_role_value in ("alpha", "intraday_eod"):
+                inv_gs.violations.append(
+                    f"{canonical} (metadata role=global_state but mining role "
+                    f"{mining_role_value} is a terminal alpha slot)"
+                )
 
         # minute -> daily session contract
         g_in, g_out = entry.get("input_grain"), entry.get("output_grain")

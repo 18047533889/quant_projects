@@ -64,8 +64,9 @@ def test_r14_chain_head_is_latest_committed(tmp_path):
     e2 = _ev("e2", snapshot_before="s1", snapshot_after="s2", sequence=2)
     e3 = _ev("e3", snapshot_before="s2", snapshot_after="s3", sequence=3)
     for e in (e1, e2, e3):
-        assert ledger.begin(e) == "ok"
-        ledger.commit(e)
+        status, token = ledger.begin(e)
+        assert status == "ok"
+        ledger.commit(e, token)
     assert ledger.last_committed_snapshot("d", "c") == "s3"
 
 
@@ -73,20 +74,23 @@ def test_r14_chain_head_selected_by_sequence(tmp_path):
     """chain head 取 sequence 最大者，而不是第一个/最后插入者。"""
     ledger = DataEventLedger(lake_root=str(tmp_path / "lake"))
     e_early = _ev("e_early", snapshot_before="s0", snapshot_after="s1", sequence=5)
-    assert ledger.begin(e_early) == "ok"
-    ledger.commit(e_early)
+    status, token = ledger.begin(e_early)
+    assert status == "ok"
+    ledger.commit(e_early, token)
     # 同一链上 sequence 更大但先被处理的保留先提交 —— head 必须是 sequence 大的
     e_late = _ev("e_late", snapshot_before="s1", snapshot_after="s2", sequence=9)
-    assert ledger.begin(e_late) == "ok"
-    ledger.commit(e_late)
+    status, token = ledger.begin(e_late)
+    assert status == "ok"
+    ledger.commit(e_late, token)
     assert ledger.last_committed_snapshot("d", "c") == "s2"
 
 
 def test_r14_out_of_order_sequence_rejected(tmp_path):
     ledger = DataEventLedger(lake_root=str(tmp_path / "lake"))
     e1 = _ev("e1", snapshot_before="s0", snapshot_after="s1", sequence=10)
-    assert ledger.begin(e1) == "ok"
-    ledger.commit(e1)
+    status, token = ledger.begin(e1)
+    assert status == "ok"
+    ledger.commit(e1, token)
     # sequence 不大于 chain head → 乱序
     with pytest.raises(DataEventStaleError, match="sequence"):
         ledger.begin(_ev("e2", snapshot_before="s1", snapshot_after="s2", sequence=10))
@@ -99,11 +103,14 @@ def test_r14_two_workers_same_event_cas(tmp_path):
     ledger_a = DataEventLedger(lake_root=str(tmp_path / "lake"))
     ledger_b = DataEventLedger(lake_root=str(tmp_path / "lake"))
     ev = _ev("e1", snapshot_before="s0", snapshot_after="s1")
-    assert ledger_a.begin(ev) == "ok"  # worker A 拿到预留
-    assert ledger_b.begin(ev) == "in_flight"  # worker B 被 CAS 拒绝
-    ledger_a.commit(ev)
+    status_a, token_a = ledger_a.begin(ev)
+    assert status_a == "ok"  # worker A 拿到预留
+    status_b, _ = ledger_b.begin(ev)
+    assert status_b == "in_flight"  # worker B 被 CAS 拒绝
+    ledger_a.commit(ev, token_a)
     # 已提交后再来 → duplicate（幂等重试跳过）
-    assert ledger_b.begin(ev) == "duplicate"
+    status_dup, _ = ledger_b.begin(ev)
+    assert status_dup == "duplicate"
 
 
 def test_r14_mid_file_corruption_fails_loud(tmp_path):
@@ -111,8 +118,8 @@ def test_r14_mid_file_corruption_fails_loud(tmp_path):
     path.mkdir(parents=True)
     ledger = DataEventLedger(lake_root=str(path))
     e1 = _ev("e1", snapshot_before="s0", snapshot_after="s1")
-    ledger.begin(e1)
-    ledger.commit(e1)
+    _, token = ledger.begin(e1)
+    ledger.commit(e1, token)
     # 中段插入一行坏 JSON（后面还有合法行）→ 重新加载必须 fail loud，
     # 绝不静默跳过。坏行若是**最后**一行，会被当作崩溃残留截断——所以这里
     # 再追加一行合法记录，让坏行落在中间。
@@ -129,8 +136,8 @@ def test_r14_trailing_partial_line_truncated(tmp_path):
     path.mkdir(parents=True)
     ledger = DataEventLedger(lake_root=str(path))
     e1 = _ev("e1", snapshot_before="s0", snapshot_after="s1")
-    ledger.begin(e1)
-    ledger.commit(e1)
+    _, token = ledger.begin(e1)
+    ledger.commit(e1, token)
     # 尾部半行（无 \n，模拟崩溃中断写）
     with open(path / ".event_ledger.jsonl", "ab") as fh:
         fh.write(b'{"event_id": "e_partial", "status": "committ')
@@ -142,31 +149,37 @@ def test_r14_trailing_partial_line_truncated(tmp_path):
     assert raw.rstrip(b"\n").endswith(b"}")
     # 恢复后仍可正常提交
     e2 = _ev("e2", snapshot_before="s1", snapshot_after="s2")
-    assert ledger2.begin(e2) == "ok"
+    status, _ = ledger2.begin(e2)
+    assert status == "ok"
 
 
-def test_r14_append_failure_propagates(tmp_path):
+def test_r14_append_failure_propagates(tmp_path, monkeypatch):
     """append OSError 不再被吞：落盘失败必须上抛，绝不静默继续。"""
     lake = tmp_path / "lake"
     lake.mkdir(parents=True)
     ledger = DataEventLedger(lake_root=str(lake))
-    # 把 ledger 路径指向一个「其父级是文件」的路径 → append 必然失败
-    blocker = tmp_path / "blocker"
-    blocker.write_text("x")
-    ledger._path = blocker / ".event_ledger.jsonl"
-    ledger._lock_path = blocker / ".event_ledger.jsonl.lock"
-    with pytest.raises(OSError):
-        ledger.commit(_ev("e1", snapshot_before="s0", snapshot_after="s1"))
+    ev = _ev("e1", snapshot_before="s0", snapshot_after="s1")
+    status, token = ledger.begin(ev)
+    assert status == "ok"
+
+    def _boom(self, rec):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(DataEventLedger, "_append_unlocked", _boom)
+    with pytest.raises(OSError, match="disk full"):
+        ledger.commit(ev, token)
 
 
 def test_r14_rejected_event_retry_allowed(tmp_path):
     """partial failure → reject；重跑同一 event 允许重新 begin（幂等收敛）。"""
     ledger = DataEventLedger(lake_root=str(tmp_path / "lake"))
     ev = _ev("e1", snapshot_before="s0", snapshot_after="s1")
-    assert ledger.begin(ev) == "ok"
-    ledger.reject(ev, "2 downstream factor(s) failed")
+    status, token = ledger.begin(ev)
+    assert status == "ok"
+    ledger.reject(ev, "2 downstream factor(s) failed", token=token)
     assert not ledger.is_committed("e1")
     # 重试：重新 begin（pending 覆盖旧的 rejected），允许再次处理
-    assert ledger.begin(ev) == "ok"
-    ledger.commit(ev)
+    status2, token2 = ledger.begin(ev)
+    assert status2 == "ok"
+    ledger.commit(ev, token2)
     assert ledger.is_committed("e1")

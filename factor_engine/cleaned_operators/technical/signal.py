@@ -47,6 +47,8 @@ import pandas as pd
 from cleaned_operators.base import (
     Operator,
     OperatorMetadata,
+    ParamRole,
+    ParamSpec,
     SeriesOperator,
     ScalarOperator,
     TwoVarOperator,
@@ -486,12 +488,27 @@ class MACDLine(SeriesOperator):
         category="financial",
         description="MACD线（快线EMA - 慢线EMA）",
         examples=["MACD_line(close, 12, 26)"],
-        param_names=["price", "fast", "slow"],
+        param_names=["price", "fast", "slow", "signal"],
         return_type="series",
-        tags=["financial", "technical", "MACD"]
+        tags=["financial", "technical", "MACD"],
+        # NEW-040/042: the historical ``MACD(price, fast, slow, signal)`` call
+        # form is an ALIAS of this canonical (the kernel computes fast-slow only;
+        # ``signal`` is a dead knob of the old composite MACD).  It is declared
+        # here as a non-searchable compatibility parameter so historical 4-arg
+        # calls bind + validate instead of being silently dropped, and the
+        # search grammar never treats it as an alpha dimension.
+        param_specs={
+            "signal": ParamSpec(
+                dtype=int, min=1, searchable=False,
+                param_role=ParamRole.POLICY, default=9,
+            ),
+        },
     )
 
-    def _calculate_series(self, price: pd.DataFrame, fast: int = 12, slow: int = 26, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, price: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9, **kwargs) -> pd.DataFrame:
+        # ``signal`` is a declared compatibility no-op (NEW-040): the MACD LINE
+        # is fast-EMA minus slow-EMA; the signal line is a separate output
+        # (``MACD_signal``).  Historical ``MACD(x,12,26,9)`` factors alias here.
         ema_fast = price.ewm(span=fast, adjust=False).mean()
         ema_slow = price.ewm(span=slow, adjust=False).mean()
         return ema_fast - ema_slow

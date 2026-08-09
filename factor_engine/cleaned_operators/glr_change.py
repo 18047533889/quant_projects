@@ -6,11 +6,13 @@ for the best breakpoint ``τ`` (``min_segment ≤ τ ≤ n - min_segment``) usin
 Gaussian profile-likelihood or rank statistic, and returns a *signed* score
 (never a p-value — financial series are serially correlated and the
 independence assumptions behind change-point p-values do not hold).
-The GLR scores are ``sign · sqrt(max_LLR)`` — NOT bounded (P1-29: a change of
-arbitrary size yields an arbitrarily large score); only the rank-based Pettitt
-score is normalised into [-1, 1].  ``window >= 2·min_segment + 2`` is required
-for any breakpoint to exist — smaller windows are rejected up front instead of
-silently returning all-NaN.
+The GLR scores are ``sign · sqrt(calibrated_LLR)`` — bounded by a documented
+cap (P0-L-69: the strongest possible change saturates at ``sqrt(40) ≈ 6.32``,
+never a program-constant-dominated value), and null-calibrated against the
+number of scanned breakpoints (P0-L-70).  Only the rank-based Pettitt score is
+normalised into [-1, 1].  ``window >= 2·min_segment + 2`` is required for any
+breakpoint to exist — smaller windows are rejected up front instead of silently
+returning all-NaN.
 
 * ``ts_glr_mean_shift_score``      — generalised likelihood ratio for a mean
   shift: ``LLR_τ = (n/2)·ln(σ̂² / σ̂_w²)``, output ``sign(μ_post - μ_pre) ·

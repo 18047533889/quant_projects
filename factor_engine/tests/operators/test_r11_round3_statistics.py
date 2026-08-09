@@ -166,10 +166,14 @@ def test_acf_known_value():
 
 
 def test_acf_nan_in_window_ignored():
-    # [1, NaN, 3, 4, 5] -> finite [1,3,4,5]; ACF(1) = 1.6875 / 8.75
+    # NEW-029: NO dropfinite-reconnect.  The old value 1.6875/8.75 came from
+    # treating the finite subset [1,3,4,5] as ADJACENT (pairing (1,3) ACROSS the
+    # NaN gap).  A real sequence ``t, missing, t+2`` must never be re-paired.
+    # Correct physical-pair ACF: mean over finite = 3.25, var = 8.75; only the
+    # physical lag-1 pairs (3,4) and (4,5) contribute -> cov = 1.125.
     x = pd.DataFrame({"A": [1.0, np.nan, 3.0, 4.0, 5.0]})
     out = ACF().calculate(x, window=5, lag=1)
-    assert out.iloc[-1, 0] == pytest.approx(1.6875 / 8.75)
+    assert out.iloc[-1, 0] == pytest.approx(1.125 / 8.75)
 
 
 def test_autocorr_lag_zero_is_one():
@@ -218,23 +222,26 @@ def test_mode_pandas_polars_parity():
 # ---------------------------------------------------------------------------
 
 
-def test_residual_is_residual_mean_not_raw_series():
+def test_residual_is_current_in_sample_residual_not_rolling_mean():
+    # NEW-022: the "residual" mixed object (current in-sample residual then a
+    # SECOND rolling mean of those residuals) is removed.  ``rolling_regression
+    # (retval="residual")`` now returns the current in-sample residual on the
+    # SAME paired cohort; the residual-mean semantic lives ONLY in the dedicated
+    # ``ts_regression_resid_mean`` canonical.
     y = pd.DataFrame({"A": [1.0, 2.0, 3.0, 100.0]})
     x = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0]})
     out = residual().calculate(y, x, 3)
     # Last window rows [2,3,4] x [2,3,100]: OLS slope=49, intercept=-112, so the
-    # current residual at the last point is 100-(49*4-112)=16; the window's
-    # current residuals are [0,0,16] -> MEAN = 16/3 (not 16, not the raw series).
-    assert out.iloc[-1, 0] == pytest.approx(16.0 / 3.0)
-    assert out.iloc[-1, 0] != pytest.approx(16.0)
+    # current in-sample residual at the last point is 100-(49*4-112)=16 — NOT
+    # the old mean-of-residuals 16/3.
+    assert out.iloc[-1, 0] == pytest.approx(16.0)
+    assert out.iloc[-1, 0] != pytest.approx(16.0 / 3.0)
 
 
-def test_residual_matches_central_ts_regression_resid_mean():
-    ts = OperatorRegistry.get("ts_regression_resid_mean")
+def test_residual_matches_central_ts_regression_resid():
+    ts = OperatorRegistry.get("ts_regression_resid")
     if ts is None:
-        pytest.skip("central ts_regression_resid_mean not registered (load_all incomplete)")
-    # Longer panel so the last window has a fully-valid residual-mean for both
-    # the local ``residual`` (min_periods=2) and the central op (min_periods=3).
+        pytest.skip("central ts_regression_resid not registered (load_all incomplete)")
     y = pd.DataFrame({"A": [3.0, 1.0, 4.0, 2.0, 5.0, 100.0, 7.0, 8.0]})
     x = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]})
     a = residual().calculate(y, x, 3)
@@ -248,16 +255,16 @@ def test_residual_matches_central_ts_regression_resid_mean():
     np.testing.assert_allclose(a_arr[mask], b_arr[mask], equal_nan=True)
 
 
-def test_regress_retval_residual_is_residual_mean():
+def test_regress_retval_residual_is_current_in_sample_residual():
     from cleaned_operators.common.statistics import regress
 
     y = pd.DataFrame({"A": [3.0, 1.0, 4.0, 2.0, 5.0, 100.0, 7.0, 8.0]})
     x = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]})
     out = regress().calculate(y, x, 3, "residual")
-    # regress uses min_periods=3; the last window is fully valid, so the output
-    # is the residual MEAN (-1/9) and NOT the raw current residual (≈15.67).
-    assert out.iloc[-1, 0] == pytest.approx(-1.0 / 9.0)
-    assert out.iloc[-1, 0] != pytest.approx(15.67)
+    # NEW-022: current in-sample residual of the last window's OLS — the old
+    # residual-mean (-1/9) is gone; the raw current residual ≈15.67 is returned.
+    assert out.iloc[-1, 0] == pytest.approx(15.67, abs=0.01)
+    assert out.iloc[-1, 0] != pytest.approx(-1.0 / 9.0)
 
 
 def test_residual_polars_matches_pandas():

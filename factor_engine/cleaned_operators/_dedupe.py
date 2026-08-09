@@ -90,14 +90,20 @@ DEDUPE_ALIASES: dict[str, str] = {
     "ratios": "ts_ratio",
     # --- 回归统计量 ---
     "Var": "ts_var",
-    "Mad": "ts_mad",
+    # NEW-037: an alias is only legal when the maths is EQUIVALENT.  ``Mad`` /
+    # ``mad`` are the single-centre mean-absolute-deviation (``mean(|x-mean|)``);
+    # ``ts_mad`` is a DIFFERENT legacy double-rolling estimator (rolling median
+    # -> abs -> rolling mean).  Aliasing Mad->ts_mad silently redefined the
+    # statistic, so the alias now points at the mathematically equal
+    # ``ts_mean_abs_deviation``.
+    "Mad": "ts_mean_abs_deviation",
     "Median": "ts_median",
     "Beta": "beta",
     "Intercept": "intercept",
     "Residual": "residual",
     "R2": "r_squared",
     "var": "ts_var",
-    "mad": "ts_mad",
+    "mad": "ts_mean_abs_deviation",
     "median": "ts_median",
     "corr": "ts_corr",
     "cov": "ts_cov",

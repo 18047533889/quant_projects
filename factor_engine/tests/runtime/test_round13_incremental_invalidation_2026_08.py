@@ -239,14 +239,16 @@ def test_ledger_idempotent_and_stale(tmp_path):
         dataset="d", column="c", updated_date="2026-08-01", event_id="e1",
         snapshot_before="s0", snapshot_after="s1",
     )
-    assert ledger.begin(ev1) == "ok"
-    ledger.commit(ev1)
+    status, token = ledger.begin(ev1)
+    assert status == "ok"
+    ledger.commit(ev1, token)
     # duplicate retry is skipped
     dup = DataEvent(
         dataset="d", column="c", updated_date="2026-08-01", event_id="e1",
         snapshot_before="s0", snapshot_after="s1",
     )
-    assert ledger.begin(dup) == "duplicate"
+    status_dup, _ = ledger.begin(dup)
+    assert status_dup == "duplicate"
     # stale: next event must chain from the committed snapshot s1, not s0
     stale = DataEvent(
         dataset="d", column="c", updated_date="2026-08-02", event_id="e2",
@@ -259,7 +261,8 @@ def test_ledger_idempotent_and_stale(tmp_path):
         dataset="d", column="c", updated_date="2026-08-02", event_id="e2",
         snapshot_before="s1", snapshot_after="s2",
     )
-    assert ledger.begin(good) == "ok"
+    status_good, _ = ledger.begin(good)
+    assert status_good == "ok"
 
 
 def test_execute_event_rejects_stale_in_production(tmp_path):
@@ -275,8 +278,9 @@ def test_execute_event_rejects_stale_in_production(tmp_path):
         field_id="close", event_id="e1",
         snapshot_before="s0", snapshot_after="s1",
     )
-    assert ledger.begin(first) == "ok"
-    ledger.commit(first)
+    status, token = ledger.begin(first)
+    assert status == "ok"
+    ledger.commit(first, token)
     # out-of-order event arriving late is rejected by the ledger check.
     stale = DataEvent(
         dataset="ds_x", column="close", updated_date="2026-08-02",

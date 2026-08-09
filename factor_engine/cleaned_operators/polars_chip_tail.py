@@ -23,9 +23,11 @@ from cleaned_operators.turnover_survival import (
     _default_min_periods,
 )
 from cleaned_operators.weighted_tail import (
-    _weighted_quantile,
+    _stratified_stratum_mean,
+    _weighted_es_tail,
 )
 from cleaned_operators.prospect_theory import (
+    _MIN_COVERAGE,
     _PRESETS,
     _column_cpt,
 )
@@ -152,6 +154,18 @@ _mk(
     ["price", "turnover", "window"],
     lambda price, turnover, window=60: _survival_family(price, turnover, window, 0.05, 0.75, 0.25, "age_disp"),
 )
+_mk(
+    "ts_turnover_old_mass",
+    "窗口外残留浮筹质量 M_old（诊断输出，Polars）。",
+    ["price", "turnover", "window"],
+    lambda price, turnover, window=60: _survival_family(price, turnover, window, 0.05, 0.75, 0.25, "old_mass"),
+)
+_mk(
+    "ts_turnover_cost_entropy_vol_scaled",
+    "波动率标度筹码成本熵（log(P/RP)/disp 分箱，Polars）。",
+    ["price", "turnover", "window"],
+    lambda price, turnover, window=60: _survival_family(price, turnover, window, 0.05, 0.75, 0.25, "cost_ent_v"),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -161,8 +175,8 @@ _mk(
 def _stratified_mean_spread(target, sorter, window, quantile, min_periods):
     w = max(2, int(window))
     q = float(quantile)
-    if not 0.0 < q < 1.0:
-        raise ValueError("quantile must be in (0, 1)")
+    if not 0.0 < q <= 0.5:
+        raise ValueError("quantile must be in (0, 0.5] so the top and bottom strata are disjoint")
     mp = int(min_periods) if min_periods is not None else max(5, w // 4)
     mp = max(2, mp)
     cols = _cols(target)
@@ -181,10 +195,15 @@ def _stratified_mean_spread(target, sorter, window, quantile, min_periods):
                 continue
             xs = xv[finite]
             ss = sv[finite]
-            order = np.argsort(ss)
+            order = np.argsort(ss, kind="stable")
             xs = xs[order]
+            ss = ss[order]
             k = max(1, min(int(round(q * xs.size)), xs.size - 1))
-            res[t] = float(np.mean(xs[-k:]) - np.mean(xs[:k]))
+            top = _stratified_stratum_mean(xs, ss, k, top=True)
+            bot = _stratified_stratum_mean(xs, ss, k, top=False)
+            if not np.isfinite(top) or not np.isfinite(bot):
+                continue
+            res[t] = float(top - bot)
         out[c] = res
     return _rebuild(target, out)
 
@@ -223,6 +242,11 @@ def _pair_window_kernel(x_frame, w_frame, window, target, min_periods, kind):
             if total <= _EPS:
                 continue
             if kind == "semivar":
+                # R3-113: true semivariance keeps the square (NO sqrt).
+                below = np.maximum(target - xv, 0.0)
+                res[t] = float(np.sum(wv * below * below) / total)
+            elif kind == "downside":
+                # R3-113: sqrt'd variant = weighted downside deviation.
                 below = np.maximum(target - xv, 0.0)
                 res[t] = float(np.sqrt(np.sum(wv * below * below) / total))
             elif kind == "drawdown":
@@ -243,10 +267,18 @@ def _pair_window_kernel(x_frame, w_frame, window, target, min_periods, kind):
 
 _mk(
     "ts_weighted_semivariance",
-    "加权下半方差 sqrt(sum w*max(target-x,0)^2 / sum w)（Polars）。",
+    "加权下半方差 sum w*max(target-x,0)^2 / sum w（无 sqrt，Polars）。",
     ["x", "weight", "window", "target", "min_periods"],
     lambda x, weight, window=20, target=0.0, min_periods=None: _pair_window_kernel(
         x, weight, window, float(target), min_periods, "semivar"
+    ),
+)
+_mk(
+    "ts_weighted_downside_deviation",
+    "加权下行偏离 sqrt(sum w*max(target-x,0)^2 / sum w)（Polars）。",
+    ["x", "weight", "window", "target", "min_periods"],
+    lambda x, weight, window=20, target=0.0, min_periods=None: _pair_window_kernel(
+        x, weight, window, float(target), min_periods, "downside"
     ),
 )
 _mk(
@@ -262,8 +294,8 @@ _mk(
 def _weighted_es(x_frame, w_frame, window, quantile, side, min_tail_count):
     w = max(2, int(window))
     q = float(quantile)
-    if not 0.0 < q < 1.0:
-        raise ValueError("quantile must be in (0, 1)")
+    if not 0.0 < q <= 0.5:
+        raise ValueError("quantile must be in (0, 0.5] for expected-shortfall tail semantics")
     kind = str(side).lower()
     if kind not in {"lower", "upper"}:
         raise ValueError("side must be 'lower' or 'upper'")
@@ -287,18 +319,7 @@ def _weighted_es(x_frame, w_frame, window, quantile, side, min_tail_count):
             wv = wv[finite]
             if xv.size < max(min_tail, 3):
                 continue
-            total = float(wv.sum())
-            if total <= _EPS:
-                continue
-            thr = _weighted_quantile(xv, wv, q if kind == "lower" else 1.0 - q)
-            if not np.isfinite(thr):
-                continue
-            tail = xv <= thr if kind == "lower" else xv >= thr
-            w_tail = wv[tail]
-            x_tail = xv[tail]
-            if w_tail.size < min_tail or float(w_tail.sum()) <= _EPS:
-                continue
-            res[t] = float(np.sum(w_tail * x_tail) / np.sum(w_tail))
+            res[t] = _weighted_es_tail(xv, wv, q, kind, min_tail)
         out[c] = res
     return _rebuild(x_frame, out)
 
@@ -317,7 +338,7 @@ _mk(
 # CPT value (shared kernel).
 # ---------------------------------------------------------------------------
 
-def _cpt(returns, window, preset):
+def _cpt(returns, window, preset, min_coverage=_MIN_COVERAGE):
     w = max(2, int(window))
     key = str(preset).lower()
     if key not in _PRESETS:
@@ -327,13 +348,15 @@ def _cpt(returns, window, preset):
     cols = _cols(returns)
     out: dict[str, np.ndarray] = {}
     for c in cols:
-        out[c] = _column_cpt(_col(returns, c), w, params, min_periods)
+        out[c] = _column_cpt(_col(returns, c), w, params, min_periods, min_coverage=float(min_coverage))
     return _rebuild(returns, out)
 
 
 _mk(
     "ts_cpt_value",
     "累积前景理论价值(固定 bmw2016 参数集)（Polars）。",
-    ["returns", "window", "preset"],
-    lambda returns, window=60, preset="bmw2016": _cpt(returns, window, preset),
+    ["returns", "window", "preset", "min_coverage"],
+    lambda returns, window=60, preset="bmw2016", min_coverage=_MIN_COVERAGE: _cpt(
+        returns, window, preset, min_coverage
+    ),
 )

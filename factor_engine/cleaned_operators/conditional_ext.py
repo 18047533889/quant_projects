@@ -43,21 +43,26 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
 
 
 def _assert_condition_bool(condition: pd.DataFrame, name: str = "condition") -> None:
-    """R11 #144: the condition input must be a ConditionBool.
+    """R11 #144 + NEW-047/253/049: the condition input must be a strict ConditionBool.
 
     Accepted values: {0, 1} (or boolean True/False); NaN = missing and is
-    excluded from the selection.  Any other finite numeric value (e.g. 5.0,
-    -3.0) is neither a probability nor a boolean — silently treating it as
-    "truthy" is a hidden semantic the operator contract forbids.  Fail the
-    call (raise) instead of guessing.
+    excluded from the selection.  ANY other value — including ±Inf — is a
+    contract violation.  The old check used ``np.isfinite`` as the "needs
+    validation" premise, so ±Inf slipped past; this is the NEW-049 single
+    canonical validator (mirrors ``overhaul.daily`` / ``common.daily_panel``),
+    not a third drifting copy.
     """
     cv = condition.to_numpy()
-    finite = np.isfinite(cv)
-    bad = finite & (cv != 0.0) & (cv != 1.0)
+    missing = pd.isna(cv)
+    valid = (cv == 0.0) | (cv == 1.0)
+    bad = ~missing & ~valid
     if np.any(bad):
+        bad_values = sorted({str(v) for v in np.unique(cv[bad]).tolist()})[:10]
         raise ValueError(
             f"{name} must be a ConditionBool (values in {{0, 1}} with NaN as "
-            f"missing); found {int(bad.sum())} finite value(s) outside {{0, 1}}"
+            f"missing); found {int(bad.sum())} value(s) outside {{0, 1}}: "
+            f"{bad_values} (this includes ±Inf, which the previous validator "
+            "silently passed)"
         )
 
 

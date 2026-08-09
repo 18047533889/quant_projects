@@ -195,9 +195,13 @@ def test_novelty_distance_is_rmse_not_raw_euclidean():
 
     exp, close_mod, slots = _official_grid(_ASHARE_CAL)
     n_nodes = max(2, exp)
-    # day0/day1 share one shape; day2 uses a distinct linear shape.
+    # day0/day1 share a linear shape; day2 uses a QUADRATIC shape.  An affine
+    # transform would normalise to the identical shape, so the quadratic makes
+    # the RMSE genuinely positive (the guard below needs a nonzero distance).
     def shape_of(m, d):
-        return 100.0 + 0.01 * m + d if d < 2 else 200.0 + 0.1 * m + d
+        if d < 2:
+            return 100.0 + 0.01 * m + d
+        return 200.0 + 0.002 * (m - 570) ** 2 + d
 
     x, sid = _session_panel(
         [_ASHARE_FULL_MODS, _ASHARE_FULL_MODS, _ASHARE_FULL_MODS], value_fn=shape_of

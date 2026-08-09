@@ -134,7 +134,7 @@ def _union_coverage_series(lo2d: np.ndarray, hi2d: np.ndarray, window: int) -> n
             if env <= 0:
                 continue
             u = _union_length(l, h)
-            out[r, c] = u / (env + _EPS)
+            out[r, c] = u / env  # no EPS floor; env > 0 guaranteed above
     return out
 
 
@@ -239,7 +239,7 @@ def _exploration_efficiency_series(hi2d: np.ndarray, lo2d: np.ndarray, cl2d: np.
             travel = float(np.nansum(ctr))
             if not np.isfinite(travel) or travel <= 0:
                 continue
-            out[r, c] = span / (travel + _EPS)
+            out[r, c] = span / travel  # no EPS floor; travel > 0 guaranteed
     return out
 
 
@@ -380,7 +380,7 @@ class TsIntervalOccupancyModeDistance(SeriesOperator):
                 modal = int(np.argmax(p))
                 centre = (edges[modal] + edges[modal + 1]) / 2.0
                 span = edges[-1] - edges[0]
-                out[r, c] = (x2[r, c] - centre) / (span + _EPS)
+                out[r, c] = (x2[r, c] - centre) / span  # no EPS floor; span > 0
         return frame_like(x, out)
 
 

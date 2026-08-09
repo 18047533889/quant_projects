@@ -125,6 +125,15 @@ def rolling_regression(
 
 返回:
     指定回归统计量的 panel。
+
+NEW-021: 每个窗口内所有统计量（cov/var/mean）必须基于**同一 paired
+cohort** —— 先取 ``mask = finite(x) & finite(y)``，再把 x/y 同时 mask 后滚动。
+否则 x/y 缺失位置不同时，``Cov(y,x)`` 用 paired support，而 ``Var(x)``/均值
+用各自完整 support，得到的 beta/intercept 不是同一批样本上的 OLS。
+
+NEW-023: 未知 ``retval`` 直接 ``ValueError``，绝不静默回退到 ``slope``。
+NEW-022: ``residual`` 保留为"当前窗口同 cohort 样本内残差的滚动均值"仅作
+诊断用；生产 alpha 请用 ``ts_regression_forecast_error``（拟合严格截止 t-1）。
 """
     if lag < 0:
         from backend.operator_errors import FutureReferenceError
@@ -132,12 +141,16 @@ def rolling_regression(
         raise FutureReferenceError(f"rolling_regression: negative lag {lag} references future data")
     if lag > 0:
         x = x.shift(lag)
-    r_cov = y.rolling(window=window, min_periods=min_periods).cov(x)
-    r_var_x = x.rolling(window=window, min_periods=min_periods).var()
-    r_mean_y = y.rolling(window=window, min_periods=min_periods).mean()
-    r_mean_x = x.rolling(window=window, min_periods=min_periods).mean()
+    # NEW-021: single paired cohort for ALL statistics.
+    valid = y.notna() & x.notna()
+    y_m = y.where(valid)
+    x_m = x.where(valid)
+    r_cov = y_m.rolling(window=window, min_periods=min_periods).cov(x_m)
+    r_var_x = x_m.rolling(window=window, min_periods=min_periods).var()
+    r_mean_y = y_m.rolling(window=window, min_periods=min_periods).mean()
+    r_mean_x = x_m.rolling(window=window, min_periods=min_periods).mean()
 
-    slope = r_cov / r_var_x
+    slope = r_cov / r_var_x.replace(0, np.nan)
     if retval == "slope":
         return slope
 
@@ -146,58 +159,65 @@ def rolling_regression(
         return intercept
 
     if retval == "r_squared":
-        corr = x.rolling(window=window, min_periods=min_periods).corr(y)
+        # Same-cohort correlation on the paired mask.
+        corr = y_m.rolling(window=window, min_periods=min_periods).corr(x_m)
         return corr * corr
 
     if retval == "residual":
+        # NEW-022: current in-sample residual on the SAME paired cohort (not a
+        # second rolling mean of a mixed sequence).
         resid = y - (slope * x + intercept)
-        return resid.rolling(window=window, min_periods=min_periods).mean()
+        return resid.where(valid)
 
-    return slope
+    raise ValueError(
+        f"rolling_regression: unknown retval {retval!r} (expected one of "
+        "'slope', 'intercept', 'r_squared', 'residual')"
+    )
 
 
-def rolling_time_slope(x: pd.DataFrame, window: int) -> pd.DataFrame:
+def rolling_time_slope(x: pd.DataFrame, window: int, min_periods: int = 2) -> pd.DataFrame:
     """滚动对时间索引的 OLS 斜率（``Slope(close, n)`` 语义）。
+
+NEW-020: 对每个窗口，用**有效样本的实际物理行偏移**做 OLS：
+``t_valid = actual row offsets of finite values``，绝不用 ``0,1,2,...`` 的
+假连续时间，也绝不删掉 NaN 后把前后两段重新当作相邻样本。
 
 参数:
     x: 输入宽表 panel。
     window: 滚动窗口长度。
+    min_periods: 最少有效样本数（OLS 至少 2）。
 
 返回:
     时间趋势斜率 panel。
 """
-    t = np.arange(window, dtype=np.float64)
-    t = t - t.mean()
-    denom = float(np.dot(t, t))
-    if denom == 0.0:
-        return pd.DataFrame(np.nan, index=x.index, columns=x.columns)
-    weights = t / denom
-    fn = _linear_weighted_1d_jit or _linear_weighted_1d_numpy
-
-    def _weighted_dot(arr: np.ndarray, w: np.ndarray) -> np.ndarray:
-        n = arr.shape[0]
-        wlen = len(w)
-        out = np.empty(n, dtype=np.float64)
-        for i in range(n):
-            start = max(0, i - wlen + 1)
-            seg = arr[start : i + 1]
-            ww = w[-len(seg) :]
-            mask = np.isfinite(seg)
-            if not mask.any():
-                out[i] = np.nan
-            else:
-                out[i] = np.dot(seg[mask], ww[mask])
-        return out
-
+    w = max(2, int(window))
+    mp = max(2, int(min_periods))
     arr = x.to_numpy(dtype=np.float64, copy=False)
-    out = np.empty_like(arr, dtype=np.float64)
-    for j in range(arr.shape[1]):
-        out[:, j] = _weighted_dot(arr[:, j], weights)
+    n, m = arr.shape
+    out = np.full((n, m), np.nan, dtype=np.float64)
+    for j in range(m):
+        col = arr[:, j]
+        for i in range(n):
+            start = max(0, i - w + 1)
+            seg = col[start : i + 1]
+            valid = np.isfinite(seg)
+            if int(valid.sum()) < mp:
+                continue
+            t = np.arange(start, i + 1, dtype=np.float64)[valid]
+            v = seg[valid]
+            tc = t - t.mean()
+            denom = float(np.dot(tc, tc))
+            if denom > 0.0:
+                out[i, j] = float(np.dot(tc, v - v.mean()) / denom)
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
 def rolling_argmax(x: pd.DataFrame, window: int) -> pd.DataFrame:
-    """滚动窗口内最大值的位置（0-based，窗口内相对下标）。
+    """滚动窗口内最大值的位置（0-based，窗口内相对下标，0=窗口最旧 bar）。
+
+NEW-018: 全窗口无有限值时输出 ``NaN``（Unknown 不能伪装成合法极值位置）。
+NEW-019: 目标极值只在 ``np.isfinite`` 的样本上求，``+Inf`` 既不作 target 也不
+作 hits —— ``[finite, +Inf]`` 时不再出现 target/hits 不一致。
 
 参数:
     x: 输入宽表 panel。
@@ -208,21 +228,26 @@ def rolling_argmax(x: pd.DataFrame, window: int) -> pd.DataFrame:
 """
     arr = x.to_numpy(dtype=np.float64, copy=False)
     n, m = arr.shape
-    out = np.empty((n, m), dtype=np.float64)
+    out = np.full((n, m), np.nan, dtype=np.float64)
     for j in range(m):
         col = arr[:, j]
         for i in range(n):
             start = max(0, i - window + 1)
             seg = col[start : i + 1]
-            if seg.size == 0 or not np.isfinite(seg).any():
-                out[i, j] = 0.0
-            else:
-                out[i, j] = float(np.nanargmax(seg))
+            valid = np.isfinite(seg)
+            if not valid.any():
+                continue
+            extreme = float(np.max(seg[valid]))
+            hits = np.flatnonzero(valid & (seg == extreme))
+            out[i, j] = float(hits[-1])
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
 def rolling_argmin(x: pd.DataFrame, window: int) -> pd.DataFrame:
-    """滚动窗口内最小值的位置（0-based，窗口内相对下标）。
+    """滚动窗口内最小值的位置（0-based，窗口内相对下标，0=窗口最旧 bar）。
+
+NEW-018/019: 同 :func:`rolling_argmax` —— 全 NaN 窗口输出 NaN；极值只在
+有限样本上求。
 
 参数:
     x: 输入宽表 panel。
@@ -233,16 +258,18 @@ def rolling_argmin(x: pd.DataFrame, window: int) -> pd.DataFrame:
 """
     arr = x.to_numpy(dtype=np.float64, copy=False)
     n, m = arr.shape
-    out = np.empty((n, m), dtype=np.float64)
+    out = np.full((n, m), np.nan, dtype=np.float64)
     for j in range(m):
         col = arr[:, j]
         for i in range(n):
             start = max(0, i - window + 1)
             seg = col[start : i + 1]
-            if seg.size == 0 or not np.isfinite(seg).any():
-                out[i, j] = 0.0
-            else:
-                out[i, j] = float(np.nanargmin(seg))
+            valid = np.isfinite(seg)
+            if not valid.any():
+                continue
+            extreme = float(np.min(seg[valid]))
+            hits = np.flatnonzero(valid & (seg == extreme))
+            out[i, j] = float(hits[-1])
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
@@ -251,15 +278,16 @@ def rolling_beta(
     x: pd.DataFrame,
     *,
     window: int,
-    min_periods: int = 2,
+    min_periods: int = 5,
 ) -> pd.DataFrame:
     """滚动 Beta：``Cov(y,x) / Var(x)``。
 
+NEW-024: 生产默认 ``min_periods=5`` —— 2 个点的斜率在统计上没有意义。
 参数:
     y: 因变量宽表 panel。
     x: 自变量宽表 panel。
     window: 滚动窗口长度。
-    min_periods: 最少有效样本数，默认 2。
+    min_periods: 最少有效配对样本数，默认 5。
 
 返回:
     Beta 系数 panel。
@@ -298,12 +326,13 @@ def _rolling_top_bottom_1d_numpy(
         start = max(0, i - window + 1)
         seg = arr[start : i + 1]
         valid = seg[np.isfinite(seg)]
-        if valid.size == 0:
+        # NEW-025: valid < k -> NaN (Unknown, not "the best few we happen to
+        # have").  Same topk_5 must mean top-5 everywhere, never top-2/3.
+        if valid.size < k or k < 1:
             out[i] = np.nan
             continue
-        take = min(k, valid.size)
         ordered = np.sort(valid)
-        picked = ordered[-take:] if top else ordered[:take]
+        picked = ordered[-k:] if top else ordered[:k]
         if stat == "mean":
             out[i] = picked.mean()
         elif stat == "sum":

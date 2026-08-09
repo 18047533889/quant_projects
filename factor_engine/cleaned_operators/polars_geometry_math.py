@@ -23,7 +23,8 @@ except Exception:  # pragma: no cover - optional backend
 
 _SKIP_PANEL = frozenset({"date", "stock_code"})
 
-# All 79 canonicals of the 2026-08 geometry/math expansion.
+# All canonicals of the 2026-08 geometry/math expansion that have a surviving
+# polars delegation backend here (delegates to the pandas_numpy reference).
 _GEOMETRY_MATH_CANONICALS: tuple[str, ...] = (
     # interval geometry
     "ts_interval_union_coverage", "ts_interval_occupancy_entropy",

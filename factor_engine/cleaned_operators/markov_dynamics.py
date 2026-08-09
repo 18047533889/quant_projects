@@ -47,6 +47,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, RelationalParamSpec, SeriesOperator, register_operator
+from cleaned_operators.closure.strict_scalar import strict_int, strict_float
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -784,9 +785,11 @@ class TsKramersMoyalLocalStability(SeriesOperator):
 
 def _ais_series(series: np.ndarray, window: int, bins: int, history_length: int) -> np.ndarray:
     n = series.shape[0]
-    B = max(2, int(bins))
-    k = max(1, int(history_length))
-    w = max(2, int(window))
+    # Master Spec A-4/5: bins/history_length/window are user parameters — invalid
+    # values raise (never silently clamped into a false search space).
+    B = strict_int(bins, "bins", lower=2)
+    k = strict_int(history_length, "history_length", lower=1)
+    w = strict_int(window, "window", lower=2)
     out = np.full(n, np.nan)
     for t in range(n):
         lo = max(0, t - w)

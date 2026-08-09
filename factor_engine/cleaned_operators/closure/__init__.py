@@ -37,6 +37,7 @@ from cleaned_operators.closure.window_semantics import (
     semantics_value,
     window_semantics_for,
 )
+from cleaned_operators.closure.declared_policies import declare_all as declare_round14_policies  # noqa: E402
 
 __all__ = [
     "SameAxisError",

@@ -15,10 +15,14 @@ envelope:
   near/at the bands (``|p_j| >= quantile``).
 
 Shared kernel — *normalised envelope position* ``p_j = 2*(x_j - lower_j) /
-(upper_j - lower_j + eps) - 1``.  A row with a *degenerate* zero-width or
-inverted envelope (``upper_j - lower_j <= 0``) is handled with a clip to [-1, 1]
-(so it cannot blow up the denominator) and, if the *current* row is degenerate,
-the operator emits NaN for that row.
+(upper_j - lower_j) - 1`` (already price-level independent: a dimensionless
+position inside the band, not an absolute width).  A *degenerate* zero-width or
+inverted envelope (``upper_j - lower_j <= 0``) is NaN — no ``+ eps`` denominator,
+no clip to [-1, 1] — so a constant/zero-width envelope fails closed instead of
+blowing up (2026-08 round-3).  The compression width ratio is
+``(upper-lower)/|mid|``: a %-based, price-level normalised width, so a 100-yuan
+stock and a 10-yuan stock with the same *relative* envelope produce the same
+value (comparable across price levels).
 
 All operators are trailing-window per-column, prefix-causal, deterministic,
 NaN-safe and reject invalid parameters.
@@ -32,8 +36,6 @@ import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
-
-_EPS = 1e-12
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
@@ -52,16 +54,16 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
     )
 
 
-def _clip(x: float) -> float:
-    return -1.0 if x < -1.0 else (1.0 if x > 1.0 else x)
-
-
 def _normalised_position(x: float, upper: float, lower: float) -> float:
-    """p_j for one row; degenerate width is clipped to [-1, 1]."""
+    """p_j for one row; a degenerate (zero-width/inverted) envelope is NaN.
+
+    No ``+ eps`` floor on the width denominator and no clip: a constant
+    envelope fails closed rather than producing a fabricated ±1.
+    """
     wd = upper - lower
     if wd <= 0.0:
-        return _clip(2.0 * (x - lower) / _EPS - 1.0)
-    return 2.0 * (x - lower) / (wd + _EPS) - 1.0
+        return np.nan
+    return 2.0 * (x - lower) / wd - 1.0
 
 
 def _valid_triple(x: float, upper: float, lower: float) -> bool:
@@ -78,9 +80,10 @@ def _compression_series(upper2d: np.ndarray, lower2d: np.ndarray, mid2d: np.ndar
         for t in range(rows):
             if (
                 np.isfinite(u[t]) and np.isfinite(l[t]) and np.isfinite(m[t])
-                and u[t] - l[t] > 0.0
+                and u[t] - l[t] > 0.0 and m[t] != 0.0
             ):
-                width[t] = (u[t] - l[t]) / (abs(m[t]) + _EPS)
+                # %-based width: price-level normalised by |mid| (no EPS floor).
+                width[t] = (u[t] - l[t]) / abs(m[t])
         for t in range(rows):
             if not np.isfinite(width[t]):
                 continue
@@ -110,6 +113,8 @@ def _pressure_series(x2d: np.ndarray, upper2d: np.ndarray, lower2d: np.ndarray, 
                 if not _valid_triple(x[j], u[j], l[j]):
                     continue
                 pj = _normalised_position(x[j], u[j], l[j])
+                if not np.isfinite(pj):
+                    continue  # degenerate past envelope -> skip, never clip
                 wj = float(j - i0 + 1)
                 num += wj * pj
                 den += wj
@@ -138,6 +143,8 @@ def _boundary_dwell_series(
                 if not _valid_triple(x[j], u[j], l[j]):
                     continue
                 pj = _normalised_position(x[j], u[j], l[j])
+                if not np.isfinite(pj):
+                    continue  # degenerate past envelope -> skip, never clip
                 total += 1
                 if abs(pj) >= q:
                     near += 1

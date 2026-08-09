@@ -132,6 +132,15 @@ TARGETS = [
     'ts_rqa_laminarity_fixed_rr',
     'ts_structural_level_density',
     'ts_structural_level_strength',
+    'intraday_volume_clock_path_efficiency',
+    'intraday_volume_clock_roughness',
+    'ts_edge_effective_spread',
+'ts_dmd_level_dominant_frequency',
+'ts_dmd_level_dominant_growth_rate',
+'ts_dmd_level_mode_concentration',
+'ts_dmd_return_dominant_frequency',
+'ts_dmd_return_dominant_growth_rate',
+'ts_dmd_return_mode_concentration',
 ]
 
 

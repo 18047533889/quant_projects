@@ -95,6 +95,11 @@ class DataEvent:
     #: 才能 takeover（否则 ``in_flight`` 永久卡死）。
     owner: str | None = None
     attempt_id: str | None = None
+    #: R14 复查 P0-2：fencing epoch。``DataEventLedger.begin`` 每次预留/接管单调
+    #: 递增该值；ledger 的 commit/reject/renew 用 ``(owner, attempt_id,
+    #: fencing_epoch)`` 三元组做 fencing token 校验——stale worker（lease 已被接管）
+    #: 的 token 永远对不上，绝不允许再提交。
+    fencing_epoch: int | None = None
 
     @property
     def field(self) -> str:
@@ -116,6 +121,9 @@ class DataEvent:
             "event_id": self.event_id,
             "sequence": self.sequence,
             "status": self.status,
+            "owner": self.owner,
+            "attempt_id": self.attempt_id,
+            "fencing_epoch": self.fencing_epoch,
         }
 
 
@@ -174,6 +182,9 @@ def normalize_data_event(event: DataEvent | dict[str, Any]) -> DataEvent:
         event_id=str(raw["event_id"]) if raw.get("event_id") else None,
         sequence=_strict_int(raw.get("sequence"), "sequence"),
         status=str(raw["status"]) if raw.get("status") else None,
+        owner=str(raw["owner"]) if raw.get("owner") else None,
+        attempt_id=str(raw["attempt_id"]) if raw.get("attempt_id") else None,
+        fencing_epoch=_strict_int(raw.get("fencing_epoch"), "fencing_epoch"),
     )
 
 
@@ -1098,6 +1109,26 @@ class DataEventStaleError(ValueError):
     snapshot for its (dataset, field) chain — stale / out-of-order (P0-18)."""
 
 
+class DataEventLeaseLostError(ValueError):
+    """当前 worker 的 pending 预留已被接管（lease 过期 / 被其他 worker takeover）。
+
+    R14 复查 P0-2 fencing：``commit``/``reject``/``renew`` 在 ledger 锁内校验当前
+    pending 记录的 ``(owner, attempt_id, fencing_epoch)`` 必须与 ``ReservationToken``
+    完全一致——stale worker（被 takeover 后仍继续跑）绝不能 publish/commit/reject。
+    校验失败即抛本异常，由调度器中止（不产生任何发布副作用）。
+    """
+
+
+class ProductionEventAutoPublishDisabled(RuntimeError):
+    """production DataEvent 自动 stage+publish 被 feature gate 关闭（R14 复查 P0-1）。
+
+    方案 A：逐 factor ``publish_factor_lake`` 不是 visibility transaction——f1
+    成功、f2 失败会产生 mixed published state。生产默认不自动发布（
+    ``DATA_EVENT_PRODUCTION_AUTO_PUBLISH`` 未设置 → 直接拒绝事件、不落任何
+    staging/published）；显式启用仍属实验性，真正 event transaction 留待后续。
+    """
+
+
 class DataEventLedgerCorruptionError(ValueError):
     """Ledger 文件损坏且不是可恢复的尾部半行（崩溃残留）时抛出（R14 #5）。
 
@@ -1116,6 +1147,11 @@ class PartialIncrementalFailureError(RuntimeError):
     parquet 全量回滚不现实）；事件保持 ``rejected``/``pending``，重跑同一
     ``event_id`` 幂等收敛（成功过的因子由 checkpoint 跳过，失败的重试）——
     决不允许把 partial 结果当成功 publish。
+
+    R14 复查 P0-1：stage 阶段失败 → publish 阶段根本不进入 → published 湖零 mixed
+    （这是成立的）。**publish 阶段**失败则是 opt-in（``DATA_EVENT_PRODUCTION_AUTO_
+    PUBLISH=1`）下的已知限制——已发布因子可见、事件 rejected，真正的 visibility
+    transaction 留待后续；生产默认关闭自动发布即是为了杜绝该 mixed state。
     """
 
 
@@ -1153,6 +1189,15 @@ def _ledger_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _ledger_lease_expiry_iso() -> str:
+    """``reserved_at`` + lease 时长的 expiry（仅供 ReservationToken 展示）。"""
+    from datetime import datetime, timedelta, timezone
+
+    return (
+        datetime.now(timezone.utc) + timedelta(seconds=_LEDGER_LEASE_SECONDS)
+    ).isoformat(timespec="seconds")
+
+
 def _ledger_reserved_at_seconds(reserved_at: Any) -> float | None:
     """解析 ``reserved_at`` 为 epoch 秒；非法返回 None（保守不 takeover）。"""
     from datetime import datetime, timezone
@@ -1179,6 +1224,41 @@ def _ledger_pending_is_stale(rec: dict[str, Any]) -> bool:
     from datetime import datetime, timezone
 
     return datetime.now(timezone.utc).timestamp() - ts > _LEDGER_LEASE_SECONDS
+
+
+@dataclass(frozen=True)
+class ReservationToken:
+    """DataEvent pending 预留的 fencing token（R14 复查 P0-2）。
+
+    ``DataEventLedger.begin`` 每次预留/接管产生一个；``commit``/``reject``/
+    ``renew`` 必须在 ledger 锁内校验当前 pending 记录的 ``(owner, attempt_id,
+    fencing_epoch)`` 与该 token 完全一致，否则抛 ``DataEventLeaseLostError``——
+    stale worker（lease 已被 takeover）绝不允许继续 publish/commit/reject。
+    ``expires_at`` 为展示用（``reserved_at`` + lease），真正判定以
+    ``_ledger_pending_is_stale`` 为准。
+    """
+
+    event_id: str
+    attempt_id: str
+    fencing_epoch: int
+    owner: str
+    expires_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "attempt_id": self.attempt_id,
+            "fencing_epoch": self.fencing_epoch,
+            "owner": self.owner,
+            "expires_at": self.expires_at,
+        }
+
+
+def _default_worker_owner() -> str:
+    """默认 worker 标识 ``(hostname, pid)``，供 pending 预留 owner。"""
+    import socket
+
+    return f"{socket.gethostname()}:{os.getpid()}"
 
 
 class DataEventLedger:
@@ -1299,30 +1379,63 @@ class DataEventLedger:
         snap, _seq = self._last_committed_unlocked(dataset, field)
         return snap
 
-    def begin(self, event: DataEvent) -> str:
-        """Validate ordering / idempotency; mark ``pending``.  Returns
-        ``"duplicate"`` when already committed, ``"in_flight"`` when another
-        worker holds a pending reservation, ``"ok"`` otherwise."""
+    def begin(self, event: DataEvent) -> tuple[str, ReservationToken | None]:
+        """Validate ordering / idempotency; mark ``pending``.
+
+        Returns ``(status, token)``: ``status`` is ``"duplicate"`` (already
+        committed), ``"in_flight"`` (another worker holds a fresh reservation),
+        or ``"ok"`` with the ``ReservationToken`` the caller must hold for
+        ``commit`` / ``reject`` / ``renew`` (R14 复查 P0-2 fencing).
+        """
         if not event.event_id:
-            return "ok"
+            return "ok", None
         if self._path is None:
             if self.is_committed(event.event_id):
-                return "duplicate"
-            self._append_unlocked(self._pending_record(event))
-            return "ok"
+                return "duplicate", None
+            token, rec = self._reserve(event, fence=1)
+            self._append_unlocked(rec)
+            return "ok", token
         with _ledger_lock(self._lock_path):
             self._reload()
             rec = self._records.get(str(event.event_id)) or {}
             status = rec.get("status")
             if status == "committed":
-                return "duplicate"
+                return "duplicate", None
             if status == "pending":
                 # R14 #5 P1 lease：pending 预留 lease 过期 → 其他 worker 可
                 # takeover（worker 在 begin 后 crash 不再永久 ``in_flight``）。
                 if _ledger_pending_is_stale(rec):
-                    self._append_unlocked(self._pending_record(event))
-                    return "ok"
-                return "in_flight"
+                    prev_fence = rec.get("fencing_epoch")
+                    fence = (
+                        int(prev_fence) + 1
+                        if isinstance(prev_fence, int)
+                        and not isinstance(prev_fence, bool)
+                        else 1
+                    )
+                    token, nrec = self._reserve(event, fence=fence)
+                    self._append_unlocked(nrec)
+                    return "ok", token
+                if event.attempt_id is not None and str(
+                    rec.get("attempt_id") or ""
+                ) == str(event.attempt_id):
+                    # 同一 worker 同一 attempt 重入：幂等续租（保留原 attempt 与
+                    # fence，刷新 reserved_at）。换 attempt 的同 worker 或异 worker
+                    # 仍视为 in_flight（等待 lease 过期或原 worker reject）。
+                    token = ReservationToken(
+                        event_id=event.event_id,
+                        attempt_id=event.attempt_id,
+                        fencing_epoch=(
+                            int(rec.get("fencing_epoch"))
+                            if isinstance(rec.get("fencing_epoch"), int)
+                            and not isinstance(rec.get("fencing_epoch"), bool)
+                            else 1
+                        ),
+                        owner=str(rec.get("owner") or _default_worker_owner()),
+                        expires_at=_ledger_lease_expiry_iso(),
+                    )
+                    self._append_unlocked(self._pending_record(event, token))
+                    return "ok", token
+                return "in_flight", None
             if event.snapshot_before is not None:
                 last, _seq = self._last_committed_unlocked(event.dataset, event.field)
                 if last is not None and str(last) != str(event.snapshot_before):
@@ -1342,11 +1455,27 @@ class DataEventLedger:
                         f"chain head sequence {last_seq} for "
                         f"({event.dataset}, {event.field}) — 乱序 / 重复事件"
                     )
-            self._append_unlocked(self._pending_record(event))
-            return "ok"
+            token, nrec = self._reserve(event, fence=1)
+            self._append_unlocked(nrec)
+            return "ok", token
+
+    def _reserve(
+        self, event: DataEvent, *, fence: int
+    ) -> tuple[ReservationToken, dict[str, Any]]:
+        """构造新的 pending 预留（fencing token + 记录）。"""
+        owner = event.owner or _default_worker_owner()
+        attempt = event.attempt_id or f"{owner}:{fence}"
+        token = ReservationToken(
+            event_id=event.event_id,
+            attempt_id=attempt,
+            fencing_epoch=fence,
+            owner=owner,
+            expires_at=_ledger_lease_expiry_iso(),
+        )
+        return token, self._pending_record(event, token)
 
     @staticmethod
-    def _pending_record(event: DataEvent) -> dict[str, Any]:
+    def _pending_record(event: DataEvent, token: ReservationToken) -> dict[str, Any]:
         return {
             "event_id": event.event_id,
             "dataset": event.dataset,
@@ -1356,16 +1485,57 @@ class DataEventLedger:
             "snapshot_before": event.snapshot_before,
             "snapshot_after": None,
             "received_at": event.updated_date,
-            # R14 #5 P1 lease：owner / attempt_id / reserved_at 使 stale pending 可被
-            # 其他 worker takeover（worker 在 begin 后 crash 不再永久卡死）。
-            "owner": event.owner,
-            "attempt_id": event.attempt_id,
+            # R14 #5 P1 lease + 复查 P0-2 fencing：owner / attempt_id / reserved_at
+            # 使 stale pending 可被 takeover（crash 不再永久卡死）；fencing_epoch
+            # 单调递增，供 commit/reject/renew 的 fencing token 校验。
+            "owner": token.owner,
+            "attempt_id": token.attempt_id,
+            "fencing_epoch": token.fencing_epoch,
             "reserved_at": _ledger_now_iso(),
         }
 
-    def commit(self, event: DataEvent) -> None:
-        if not event.event_id:
-            return
+    @staticmethod
+    def _validate_lease(
+        rec: dict[str, Any],
+        token: ReservationToken | None,
+        *,
+        op: str,
+    ) -> None:
+        """在 ledger 锁内校验当前 pending 是否仍归 ``token`` 持有（fencing）。
+
+        R14 复查 P0-2：``(owner, attempt_id, fencing_epoch)`` 三元组必须完全
+        一致才允许继续；被 takeover / record 缺失（stale）→ 抛
+        ``DataEventLeaseLostError``，调度器中止、不产生任何发布副作用。
+        """
+        if token is None:
+            raise DataEventLeaseLostError(
+                f"{op}: 无 fencing token —— 未持有该事件预留（fail-closed）"
+            )
+        cur_status = rec.get("status")
+        cur_owner = rec.get("owner")
+        cur_attempt = rec.get("attempt_id")
+        cur_fence = rec.get("fencing_epoch")
+        if (
+            cur_status != "pending"
+            or cur_owner is None
+            or cur_attempt is None
+            or cur_fence is None
+            or str(cur_owner) != token.owner
+            or str(cur_attempt) != token.attempt_id
+            or int(cur_fence) != token.fencing_epoch
+        ):
+            raise DataEventLeaseLostError(
+                f"{op}: 事件 {token.event_id!r} 的 pending 预留已被接管或失效"
+                f"（当前 status={cur_status!r} owner={cur_owner!r} "
+                f"attempt={cur_attempt!r} fence={cur_fence!r}；token "
+                f"owner={token.owner!r} attempt={token.attempt_id!r} "
+                f"fence={token.fencing_epoch!r}）—— stale worker 不得 {op}"
+            )
+
+    @staticmethod
+    def _committed_record(
+        event: DataEvent, token: ReservationToken | None
+    ) -> dict[str, Any]:
         rec = {
             "event_id": event.event_id,
             "dataset": event.dataset,
@@ -1376,14 +1546,51 @@ class DataEventLedger:
             "snapshot_after": event.snapshot_after,
             "received_at": event.updated_date,
         }
+        if token is not None:
+            rec["owner"] = token.owner
+            rec["attempt_id"] = token.attempt_id
+            rec["fencing_epoch"] = token.fencing_epoch
+        else:
+            rec["owner"] = event.owner
+            rec["attempt_id"] = event.attempt_id
+            rec["fencing_epoch"] = event.fencing_epoch
+        return rec
+
+    def commit(
+        self, event: DataEvent, token: ReservationToken | None = None
+    ) -> None:
+        """在 ledger 锁内校验 fencing token 后写 committed 记录（P0-2）。
+
+        幂等：事件已 committed（重试）直接返回；当前 pending 与 ``token`` 不匹配
+        （被接管 / lease 丢失）→ 抛 ``DataEventLeaseLostError``。
+        """
+        if not event.event_id:
+            return
         if self._path is None:
-            self._append_unlocked(rec)
+            rec = self._records.get(str(event.event_id)) or {}
+            if rec.get("status") != "committed":
+                self._validate_lease(rec, token, op="commit")
+            self._append_unlocked(self._committed_record(event, token))
             return
         with _ledger_lock(self._lock_path):
             self._reload()
-            self._append_unlocked(rec)
+            rec = self._records.get(str(event.event_id)) or {}
+            if rec.get("status") == "committed":
+                return  # 幂等：已提交的重试直接跳过
+            self._validate_lease(rec, token, op="commit")
+            self._append_unlocked(self._committed_record(event, token))
 
-    def reject(self, event: DataEvent, reason: str) -> None:
+    def reject(
+        self,
+        event: DataEvent,
+        reason: str = "",
+        token: ReservationToken | None = None,
+    ) -> None:
+        """在 ledger 锁内校验 fencing token 后写 rejected 记录（P0-2）。
+
+        ``token`` 为关键字参数以兼容旧的 ``reject(event, reason)`` 调用点；无
+        token（或 token 已被接管）→ 抛 ``DataEventLeaseLostError``。
+        """
         if not event.event_id:
             return
         rec = {
@@ -1395,12 +1602,42 @@ class DataEventLedger:
             "reason": reason,
             "received_at": event.updated_date,
         }
+        if token is not None:
+            rec["owner"] = token.owner
+            rec["attempt_id"] = token.attempt_id
+            rec["fencing_epoch"] = token.fencing_epoch
         if self._path is None:
+            cur = self._records.get(str(event.event_id)) or {}
+            if cur.get("status") != "rejected":
+                self._validate_lease(cur, token, op="reject")
             self._append_unlocked(rec)
             return
         with _ledger_lock(self._lock_path):
             self._reload()
+            cur = self._records.get(str(event.event_id)) or {}
+            if cur.get("status") == "rejected":
+                return  # 幂等：已 rejected 的重试直接跳过
+            self._validate_lease(cur, token, op="reject")
             self._append_unlocked(rec)
+
+    def renew(self, token: ReservationToken) -> None:
+        """heartbeat：刷新当前 worker 的 lease（保留 fence），并做 fencing 校验。
+
+        R14 复查 P0-2：长计算超过 lease 会被误 takeover——stage/publish 间隙周期
+        调用续租；若预留已被接管 → 抛 ``DataEventLeaseLostError``，调度器在
+        publish 前中止（避免 stale worker 先 publish、commit 才发现失败）。
+        """
+        if token is None or not token.event_id or self._path is None:
+            return
+        with _ledger_lock(self._lock_path):
+            self._reload()
+            rec = self._records.get(str(token.event_id)) or {}
+            if rec.get("status") == "committed":
+                return  # 已提交，无需续租
+            self._validate_lease(rec, token, op="renew")
+            refreshed = dict(rec)
+            refreshed["reserved_at"] = _ledger_now_iso()
+            self._append_unlocked(refreshed)
 
 
 def _is_production_run(event: DataEvent) -> bool:
@@ -1446,8 +1683,38 @@ def execute_incremental_updates_from_event(
 
     event = normalize_data_event(event)
     production = _is_production_run(event)
+    # R14 复查 P0-1（方案 A）：production DataEvent 自动 stage+publish **默认关闭**。
+    # 逐 factor ``publish_factor_lake`` 不是 visibility transaction——f1 成功、f2
+    # 失败会产生 mixed published state。生产默认直接拒绝（不落任何 staging/published）；
+    # 显式 ``DATA_EVENT_PRODUCTION_AUTO_PUBLISH=1`` 才启用（实验性，真正 event
+    # transaction 留待后续）。research 事件不受影响。
+    if production:
+        from runtime.production_policy import (
+            production_data_event_auto_publish_enabled,
+        )
+
+        if not production_data_event_auto_publish_enabled():
+            if event.event_id:
+                _ledger = DataEventLedger(lake_root=lake_root)
+                _st, _tk = _ledger.begin(event)
+                if _st == "ok":
+                    _ledger.reject(
+                        event,
+                        "production event auto-publish disabled "
+                        "(DATA_EVENT_PRODUCTION_AUTO_PUBLISH not enabled)",
+                        token=_tk,
+                    )
+            raise ProductionEventAutoPublishDisabled(
+                f"production DataEvent 自动发布已禁用（R14 P0-1 方案 A）：事件 "
+                f"{event.event_id or event.updated_date!r} 不会自动 stage/publish。"
+                "production DataEvent 自动发布默认关闭——逐 factor publish 不是 "
+                "visibility transaction，可能产生 mixed published state。显式设置 "
+                "DATA_EVENT_PRODUCTION_AUTO_PUBLISH=1 才允许（实验性）。"
+            )
     ledger = DataEventLedger(lake_root=lake_root)
-    ledger_status = ledger.begin(event) if event.event_id else "ok"
+    ledger_status, token = (
+        ledger.begin(event) if event.event_id else ("ok", None)
+    )
     if ledger_status in ("duplicate", "in_flight"):
         # Idempotent retry of an already-committed event, or another worker's
         # in-flight reservation (R14 #5): nothing to do.  Distinguish the two in
@@ -1483,7 +1750,7 @@ def execute_incremental_updates_from_event(
     }
     if dry_run or not plans:
         if event.event_id:
-            ledger.reject(event, "dry_run_or_no_plans")
+            ledger.reject(event, "dry_run_or_no_plans", token=token)
             out["ledger_status"] = "rejected"
         return out
 
@@ -1491,14 +1758,17 @@ def execute_incremental_updates_from_event(
     mat_kwargs.setdefault("lake_root", lake_root)
     mat_kwargs.setdefault("lookback_extra", lookback_extra)
     mat_kwargs.setdefault("market", market)
-    # R14 #5a：production 事件 = 两阶段原子发布。先把**所有**因子写到 staging
+    # R14 #5a：production 事件 = 两阶段发布。先把**所有**因子写到 staging
     # （``materialize`` 对 production+local 直接拒绝；staging 只落暂存区、权威
     # 水位线 defer），**全部 stage 成功后才逐因子 publish**（staging→published +
     # 推进水位线）。任一 stage 失败 → 直接 reject，published 因子湖完全没动——
-    # **绝无 mixed generation**。调用方显式传了 write_target 则尊重（如
-    # staging_clickhouse）。
+    # stage 阶段**零 mixed generation**。
     if production:
-        mat_kwargs.setdefault("write_target", "staging")
+        # R14 复查 P0-1：production 事件一律**强制** staging——绝不尊重调用方
+        # write_target 覆盖（``staging_clickhouse``/``clickhouse`` 会在 stage-all
+        # 阶段就产生 published / ClickHouse side effect → 后续 factor 失败 → CH
+        # mixed）。research 仍尊重调用方覆盖。
+        mat_kwargs["write_target"] = "staging"
 
     failures: list[dict[str, str]] = []
     for plan in plans:
@@ -1549,12 +1819,20 @@ def execute_incremental_updates_from_event(
             )
         except Exception as exc:
             failures.append({"factor_id": plan.factor_id, "error": str(exc)})
+            continue
+        # R14 复查 P0-2：长计算 heartbeat——逐 factor 成功后续租并校验 fencing；
+        # lease 已被接管 → renew 抛 ``DataEventLeaseLostError``，**中止整个事件**
+        # （不进入 publish，避免 stale worker 先 publish、commit 才发现失败）。
+        if token is not None:
+            ledger.renew(token)
 
     if failures:
         out["failures"] = failures
         if event.event_id:
             ledger.reject(
-                event, f"{len(failures)} downstream factor(s) failed"
+                event,
+                f"{len(failures)} downstream factor(s) failed",
+                token=token,
             )
             out["ledger_status"] = "failed"
         if production:
@@ -1578,6 +1856,10 @@ def execute_incremental_updates_from_event(
     if production and not dry_run:
         from storage.materialize.lake_publish import publish_factor_lake
 
+        # R14 复查 P0-2：publish 前再做一次 fencing 校验（renew = 续租 + 断言
+        # 所有权）——lease 已被接管的 stale worker 不得 publish。
+        if token is not None:
+            ledger.renew(token)
         publish_failures: list[dict[str, str]] = []
         for plan in plans:
             try:
@@ -1598,7 +1880,9 @@ def execute_incremental_updates_from_event(
             out["published"] = published
             if event.event_id:
                 ledger.reject(
-                    event, f"{len(publish_failures)} factor(s) publish failed"
+                    event,
+                    f"{len(publish_failures)} factor(s) publish failed",
+                    token=token,
                 )
                 out["ledger_status"] = "failed"
             raise PartialIncrementalFailureError(
@@ -1611,7 +1895,7 @@ def execute_incremental_updates_from_event(
         out["published"] = published
 
     if event.event_id:
-        ledger.commit(event)
+        ledger.commit(event, token)
         out["ledger_status"] = "committed"
     out["succeeded"] = len(out["materializations"])
     out["failed"] = len(failures)

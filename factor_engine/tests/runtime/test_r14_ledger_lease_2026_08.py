@@ -71,20 +71,42 @@ def _append_raw_pending(ledger: DataEventLedger, event: DataEvent, reserved_at: 
 def test_r14_pending_carries_lease_fields(tmp_path):
     ledger = DataEventLedger(lake_root=str(tmp_path / "lake"))
     ev = _ev("e1", owner="w1", attempt_id="a1")
-    assert ledger.begin(ev) == "ok"
+    status, token = ledger.begin(ev)
+    assert status == "ok"
+    assert token is not None
+    assert token.owner == "w1"
+    assert token.attempt_id == "a1"
+    assert token.fencing_epoch == 1
+    assert token.expires_at, "token 必须带 expires_at"
     rec = ledger._records["e1"]
     assert rec["status"] == "pending"
     assert rec["owner"] == "w1"
     assert rec["attempt_id"] == "a1"
+    assert rec["fencing_epoch"] == 1, "pending 必须带 fencing_epoch（fencing 校验）"
     assert rec["reserved_at"], "pending 必须带 reserved_at（lease 过期判定）"
 
 
 def test_r14_fresh_pending_returns_in_flight(tmp_path):
     ledger = DataEventLedger(lake_root=str(tmp_path / "lake"))
     ev = _ev("e2", owner="w1", attempt_id="a1")
-    assert ledger.begin(ev) == "ok"
-    # 同一 worker 重复 begin（尚未 crash）→ 仍在预留期内 → in_flight
-    assert ledger.begin(_ev("e2", owner="w1", attempt_id="a2")) == "in_flight"
+    status, _ = ledger.begin(ev)
+    assert status == "ok"
+    # 同一 worker 换 attempt 重复 begin（尚未 crash）→ 仍在预留期内 → in_flight
+    status2, token2 = ledger.begin(_ev("e2", owner="w1", attempt_id="a2"))
+    assert status2 == "in_flight"
+    assert token2 is None
+
+
+def test_r14_same_attempt_rebegin_refreshes_lease(tmp_path):
+    """同一 worker 同一 attempt 重入 → 幂等续租（返回原 attempt/fence，非 in_flight）。"""
+    ledger = DataEventLedger(lake_root=str(tmp_path / "lake"))
+    ev = _ev("e2", owner="w1", attempt_id="a1")
+    status, token = ledger.begin(ev)
+    assert status == "ok"
+    status2, token2 = ledger.begin(_ev("e2", owner="w1", attempt_id="a1"))
+    assert status2 == "ok"
+    assert token2.attempt_id == "a1"
+    assert token2.fencing_epoch == token.fencing_epoch
 
 
 def test_r14_stale_pending_taken_over(tmp_path):
@@ -93,11 +115,15 @@ def test_r14_stale_pending_taken_over(tmp_path):
     # 旧 worker 在 begin 后 crash：预留 2 小时前（远大于默认 3600s lease）
     _append_raw_pending(ledger, ev, reserved_at="2026-08-01T00:00:00+00:00")
     # 新 worker 现在（2026-08-09）begin → lease 过期 → takeover
-    status = ledger.begin(_ev("e3", owner="w2", attempt_id="b1"))
+    status, token = ledger.begin(_ev("e3", owner="w2", attempt_id="b1"))
     assert status == "ok"
+    assert token is not None
+    assert token.attempt_id == "b1"
+    assert token.fencing_epoch == 1  # legacy pending 无 fence → 接管从 1 起
     rec = ledger._records["e3"]
     assert rec["owner"] == "w2"
     assert rec["attempt_id"] == "b1"
+    assert rec["fencing_epoch"] == 1
 
 
 def test_r14_legacy_pending_without_reserved_at_not_taken_over(tmp_path):
@@ -106,7 +132,9 @@ def test_r14_legacy_pending_without_reserved_at_not_taken_over(tmp_path):
     _append_raw_pending(ledger, ev, reserved_at="")
     ledger._reload()
     assert _ledger_pending_is_stale(ledger._records["e4"]) is False
-    assert ledger.begin(_ev("e4")) == "in_flight"
+    status, token = ledger.begin(_ev("e4"))
+    assert status == "in_flight"
+    assert token is None
 
 
 def test_r14_execute_flow_reports_in_flight_not_duplicate(tmp_path):

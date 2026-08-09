@@ -249,12 +249,12 @@ def _period_revision_age_1d(
 
 
 def _pos_int(value, name: str, minimum: int = 1) -> int:
-    if isinstance(value, bool):
-        raise ValueError(f"{name} must be an integer")
-    value = int(value)
-    if value < minimum:
-        raise ValueError(f"{name} must be >= {minimum}")
-    return value
+    # NEW-088: strict gate — ``int(3.7) -> 3`` truncation and ``True -> 1``
+    # are contract violations, not coercions.  Same single authority as the
+    # rest of the fundamental family (NEW-005/006).
+    from cleaned_operators.common.strict_params import strict_int
+
+    return strict_int(value, name, minimum=minimum)
 
 
 def _register(

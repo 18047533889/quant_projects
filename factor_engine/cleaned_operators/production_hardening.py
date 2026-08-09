@@ -108,7 +108,10 @@ FULL_HISTORY_REPLAY_CANONICALS: frozenset[str] = frozenset({
     "state_slew_limit",
     "state_deadband",
     "state_ewm_if",
-    "state_since_reduce",
+    # NEW-008/115: ``state_since_reduce`` was retired (split into
+    # state_since_sum/mean/count/last); a retired name must not appear in the
+    # full-history-replay seed.  The split canonicals declare their own
+    # execution contract.
     "event_refractory",
     "cross_event",
     "directional_change_state",
@@ -244,7 +247,7 @@ _SCOPE_OVERRIDES: dict[str, str] = {
     "event_refractory": "ts",
     "cross_event": "ts",
     "state_ewm_if": "ts",
-    "state_since_reduce": "ts",
+    # NEW-008/115: state_since_reduce retired -> split canonicals self-declare.
     "directional_change_state": "ts",
     "directional_change_extent": "ts",
     "state_since_trend_tstat": "ts",

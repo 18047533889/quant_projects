@@ -45,12 +45,20 @@ def _assert_condition_bool(condition: Any, name: str = "condition") -> None:
         cv = np.column_stack(
             [condition[col].cast(pl.Float64, strict=False).to_numpy() for col in columns]
         )
-    finite = np.isfinite(cv)
-    bad = finite & (cv != 0.0) & (cv != 1.0)
+    # NEW-047/253: legal set is strictly {0, 1, NaN}.  The old check used
+    # ``np.isfinite`` as the "needs validation" premise, so ±Inf slipped past
+    # and different families read it differently (True vs False).  Any value
+    # outside {0,1,NaN} — including ±Inf — is now rejected.
+    missing = pd.isna(cv)
+    valid = (cv == 0.0) | (cv == 1.0)
+    bad = ~missing & ~valid
     if np.any(bad):
+        bad_values = sorted({str(v) for v in np.unique(cv[bad]).tolist()})[:10]
         raise ValueError(
             f"{name} must be a ConditionBool (values in {{0, 1}} with NaN as "
-            f"missing); found {int(bad.sum())} finite value(s) outside {{0, 1}}"
+            f"missing); found {int(bad.sum())} value(s) outside {{0, 1}}: "
+            f"{bad_values} (this includes ±Inf, which the previous validator "
+            "silently passed)"
         )
 
 

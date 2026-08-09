@@ -1,16 +1,23 @@
 # -*- coding: utf-8 -*-
-"""R14 #5a：production DataEvent 两阶段原子发布（stage all → publish all）。
+"""R14 #5a：production DataEvent 两阶段发布（stage all → publish all）+ R14 复查
+P0-1 方案 A feature gate。
 
 外部 AI 复查 P0：逐 factor 物化时 factor1 成功、factor2 失败 → published 因子湖
-出现「6 新 + 4 旧」的 mixed generation；且跨 factor 不整体 rollback。
+出现「6 新 + 4 旧」的 mixed generation；且跨 factor 不整体 rollback。上一轮
+「stage all → publish all」只解决了 stage 阶段——**publish 阶段仍是逐 factor**：
+f1 成功、f2 失败 → f1 已可见、事件 rejected（mixed published state）。
 
-R14 #5a 修复（production 事件）：
-  * **强制两阶段**：所有因子先 ``write_target="staging"`` 写暂存区（权威水位线
-    defer，published 湖完全不动）；
-  * 任一 stage 失败 → 直接 reject + ``PartialIncrementalFailureError``，
-    **publish 阶段根本不进入** → published 湖零 mixed；
-  * 全部 stage 成功 → 逐因子 ``publish_factor_lake``（staging→published + 推进
-    水位线）；publish 失败同样 fail-closed（事件保持 rejected/pending）；
+R14 复查 P0-1（方案 A）修复：
+  * **production DataEvent 自动发布默认关闭**（``DATA_EVENT_PRODUCTION_AUTO_PUBLISH``
+    未设置）→ production 事件直接拒绝（``ProductionEventAutoPublishDisabled``），
+    不落任何 staging/published → published 湖零 mixed（读者看不到任何新因子）；
+  * production 一律**强制** ``write_target="staging"``——不尊重调用方覆盖
+    （``staging_clickhouse``/``clickhouse`` 会在 stage-all 阶段产生 published/CH
+    side effect → CH mixed）；
+  * 显式 ``DATA_EVENT_PRODUCTION_AUTO_PUBLISH=1`` 启用两阶段（实验性）：
+    任一 stage 失败 → publish 阶段不进入 → 零 mixed；全部 stage 成功 → 逐因子
+    publish；**publish 阶段**失败仍是已知限制（已发布因子可见、事件 rejected，
+    真正 visibility transaction 留待后续）；
   * 同 ``event_id`` 重试幂等收敛，最终只 commit 一次。
 """
 
@@ -26,6 +33,7 @@ from runtime.dependency_catalog import DependencyCatalog, FactorDependencyEdge
 from runtime.incremental_scheduler import (
     DataEvent,
     PartialIncrementalFailureError,
+    ProductionEventAutoPublishDisabled,
     execute_incremental_updates_from_event,
 )
 from storage.materializer import ParquetMaterializer
@@ -150,8 +158,14 @@ def _force_production(monkeypatch) -> None:
     )
 
 
+def _enable_auto_publish(monkeypatch) -> None:
+    """显式开启 production DataEvent 自动发布（R14 复查 P0-1 方案 A opt-in）。"""
+    monkeypatch.setenv("DATA_EVENT_PRODUCTION_AUTO_PUBLISH", "1")
+
+
 def test_r14_production_event_stage_all_then_publish_all(tmp_path, monkeypatch):
     _force_production(monkeypatch)
+    _enable_auto_publish(monkeypatch)
     lake, control, factory = _setup_lake(tmp_path)
     store = _FakeStore()
     monkeypatch.setattr("data_access.get_store", lambda: store)
@@ -170,6 +184,7 @@ def test_r14_production_event_stage_all_then_publish_all(tmp_path, monkeypatch):
 def test_r14_production_event_stage_failure_no_publish(tmp_path, monkeypatch):
     """factor2 stage 失败 → 直接 reject，publish 阶段不进入，published 湖零 mixed。"""
     _force_production(monkeypatch)
+    _enable_auto_publish(monkeypatch)
     lake, control, factory = _setup_lake(tmp_path, fail_stage_on="f_b")
     store = _FakeStore()
     monkeypatch.setattr("data_access.get_store", lambda: store)
@@ -189,6 +204,7 @@ def test_r14_production_event_stage_failure_no_publish(tmp_path, monkeypatch):
 def test_r14_production_event_retry_converges_once(tmp_path, monkeypatch):
     """失败后重跑同一 event_id → 幂等收敛，最终只 commit 一次。"""
     _force_production(monkeypatch)
+    _enable_auto_publish(monkeypatch)
     lake, control, factory = _setup_lake(tmp_path, fail_stage_on="f_b")
     store = _FakeStore()
     monkeypatch.setattr("data_access.get_store", lambda: store)
@@ -210,9 +226,15 @@ def test_r14_production_event_retry_converges_once(tmp_path, monkeypatch):
     assert len(records) == 1
 
 
-def test_r14_production_event_publish_failure_fails_closed(tmp_path, monkeypatch):
-    """全部 stage 成功但 f_b publish 失败 → fail-closed（rejected + raise）。"""
+def test_r14_production_optin_publish_failure_rejects_and_raises(tmp_path, monkeypatch):
+    """opt-in 下全部 stage 成功但 f_b publish 失败 → rejected + raise。
+
+    R14 复查 P0-1：这是 opt-in 路径的**已知限制**——f_a 已发布但事件整体
+    rejected（mixed published state），正是生产默认关闭自动发布的原因。真正的
+    visibility transaction 留待后续；此测试只验证 fail-closed 拒绝 + 重试收敛。
+    """
     _force_production(monkeypatch)
+    _enable_auto_publish(monkeypatch)
     lake, control, factory = _setup_lake(tmp_path)
     store = _FakeStore(fail_publish_on="f_b")
     monkeypatch.setattr("data_access.get_store", lambda: store)
@@ -221,7 +243,7 @@ def test_r14_production_event_publish_failure_fails_closed(tmp_path, monkeypatch
         execute_incremental_updates_from_event(
             None, _prod_event(), lake_root=lake, engine_factory=factory
         )
-    # f_a 已发布但事件整体 rejected → 重试按同一 event_id 收敛
+    # f_a 已发布但事件整体 rejected（opt-in 已知限制）→ 重试按同一 event_id 收敛
     assert "f_a" in store.published
     assert "f_b" not in store.published
     # 重跑（修复 publish）→ 收敛、只 commit 一次
@@ -231,3 +253,65 @@ def test_r14_production_event_publish_failure_fails_closed(tmp_path, monkeypatch
         None, _prod_event(), lake_root=lake, engine_factory=factory
     )
     assert out["ledger_status"] == "committed"
+
+
+def test_r14_production_disabled_by_default_rejects_no_publish(tmp_path, monkeypatch):
+    """production 事件**默认**（无 ``DATA_EVENT_PRODUCTION_AUTO_PUBLISH``）直接拒绝。
+
+    R14 复查 P0-1（方案 A）：逐 factor publish 不是 visibility transaction——生产
+    默认不自动发布，不 stage、不 publish → 读者看到 ZERO 新因子（destructive gate
+    #1/#2 的生产路径）。
+    """
+    _force_production(monkeypatch)
+    lake, control, factory = _setup_lake(tmp_path)
+    store = _FakeStore()
+    monkeypatch.setattr("data_access.get_store", lambda: store)
+
+    with pytest.raises(ProductionEventAutoPublishDisabled):
+        execute_incremental_updates_from_event(
+            None, _prod_event(), lake_root=lake, engine_factory=factory
+        )
+    assert control["staged"] == []  # 未 stage
+    assert store.staged == []
+    assert store.published == []  # 未 publish → published 湖零 mixed
+    # ledger 记录 rejected（audit trail）
+    raw = (lake / ".event_ledger.jsonl").read_text()
+    assert "ev_atomic" in raw and "rejected" in raw
+
+
+def test_r14_production_gate_applies_without_event_id(tmp_path, monkeypatch):
+    """production 事件即便没有 event_id 也不得自动发布（gate 不依赖 ledger）。"""
+    _force_production(monkeypatch)
+    ev = DataEvent(
+        dataset="shared_ds",
+        column="close",
+        updated_date="2026-08-09",
+        field_id="close",
+        revision_kind="update",
+    )
+    with pytest.raises(ProductionEventAutoPublishDisabled):
+        execute_incremental_updates_from_event(
+            None, ev, lake_root=str(tmp_path / "lake")
+        )
+
+
+def test_r14_production_forces_staging_target(tmp_path, monkeypatch):
+    """opt-in 下 production 事件强制 ``write_target=staging``——调用方无法覆盖成
+    ``staging_clickhouse``/``clickhouse``（stage-all 阶段产生 published/CH side
+    effect → 后续 factor 失败 → CH mixed）。"""
+    _force_production(monkeypatch)
+    _enable_auto_publish(monkeypatch)
+    lake, control, factory = _setup_lake(tmp_path)
+    store = _FakeStore()
+    monkeypatch.setattr("data_access.get_store", lambda: store)
+
+    out = execute_incremental_updates_from_event(
+        None,
+        _prod_event(),
+        lake_root=lake,
+        engine_factory=factory,
+        materialize_kwargs={"write_target": "clickhouse"},
+    )
+    # fake engine 的 _mi 已断言收到 write_target == "staging"（否则本测试即失败）
+    assert out["ledger_status"] == "committed"
+    assert sorted(store.published) == ["f_a", "f_b"]

@@ -328,7 +328,7 @@ _CLASS_OVERRIDES: list[tuple[str, ComplexityClass]] = [
     ("ts_kernel_granger_score", ComplexityClass.KERNEL_GRAM),
     ("ts_residualized_hsic", ComplexityClass.KERNEL_GRAM),
     ("ts_hsic", ComplexityClass.KERNEL_GRAM),
-    ("ts_partial_distance_correlation", ComplexityClass.KERNEL_GRAM),
+    ("ts_distance_correlation_partial_proxy", ComplexityClass.KERNEL_GRAM),
     ("ts_distance_corr", ComplexityClass.KERNEL_GRAM),
     ("ts_distance_cov", ComplexityClass.KERNEL_GRAM),
     ("ts_mmd_rbf_shift", ComplexityClass.KERNEL_GRAM),

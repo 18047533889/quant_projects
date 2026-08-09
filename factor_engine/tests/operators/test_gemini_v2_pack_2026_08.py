@@ -72,7 +72,7 @@ _RESEARCH_OPS = [
     "ts_dmd_dominant_growth_rate",
     "ts_dmd_dominant_frequency",
     "ts_dmd_mode_concentration",
-    "ts_bicoherence_max",
+    "ts_bicoherence_top_decile_mean",
     "ts_kernel_granger_score",
     "ts_residualized_hsic",
     "ts_bds_statistic",
@@ -174,7 +174,7 @@ _TS_SPECS: dict[str, tuple[list[str], dict]] = {
     "ts_dmd_dominant_growth_rate": (["ret"], {"window": 60, "rank": 3, "dim": 3}),
     "ts_dmd_dominant_frequency": (["ret"], {"window": 60, "rank": 3, "dim": 3}),
     "ts_dmd_mode_concentration": (["ret"], {"window": 60, "rank": 3, "dim": 3, "top_k": 2}),
-    "ts_bicoherence_max": (["ret"], {"window": 48, "n_segments": 2}),
+    "ts_bicoherence_top_decile_mean": (["ret"], {"window": 48, "n_segments": 2}),
     "ts_kernel_granger_score": (["ret", "vol"], {"window": 48, "lag": 2}),
     "ts_residualized_hsic": (["ret", "vol", "amt"], {"window": 48}),
     "ts_bds_statistic": (["ret"], {"window": 60, "embedding_dim": 2, "distance_multiplier": 1.5}),
@@ -341,17 +341,28 @@ def test_composition_rejects_nonpositive(_loaded):
 
 
 def test_abdi_ranaldo_matches_reference_formula(_loaded):
-    # hand-computed monthly Abdi-Ranaldo on a tiny clean series
-    close = pd.DataFrame({"a": [10.0, 10.5, 11.0, 10.8, 11.2]})
+    # hand-computed monthly Abdi-Ranaldo on a tiny clean series with a
+    # WELL-DEFINED (positive) squared-spread estimate: close hugs the low every
+    # bar so (c_{t-1}-eta_{t-1})(c_{t-1}-eta_t) > 0.
+    close = pd.DataFrame({"a": [10.0, 10.4, 10.9, 11.3, 11.8]})
     high = close * 1.03
-    low = close * 0.97
+    low = close.copy()
     op = OperatorRegistry.get("ts_abdi_ranaldo_spread", "pandas_numpy")
     out = op.calculate(close, high, low, window=5).to_numpy()[-1, 0]
     c = np.log(close["a"].to_numpy())
     eta = (np.log(high["a"].to_numpy()) + np.log(low["a"].to_numpy())) / 2.0
     terms = (c[:-1] - eta[:-1]) * (c[:-1] - eta[1:])
-    expected = np.sqrt(max(4.0 * np.mean(terms), 0.0))
-    assert abs(out - expected) < 1e-12
+    s2 = 4.0 * np.mean(terms)
+    assert s2 > 0.0  # precondition: the reference is a positive squared spread
+    assert abs(out - np.sqrt(s2)) < 1e-12
+
+    # audit #72: an UNRELIABLE (negative) variance estimate must fail closed to
+    # NaN, never clip to 0 (which would read as "true spread = 0").
+    neg_close = pd.DataFrame({"a": [10.0, 10.5, 11.0, 10.8, 11.2]})
+    neg_high = neg_close * 1.03
+    neg_low = neg_close * 0.97
+    neg_out = op.calculate(neg_close, neg_high, neg_low, window=5).to_numpy()[-1, 0]
+    assert np.isnan(neg_out)
 
 
 def test_cross_spectral_phase_known_shift(_loaded):

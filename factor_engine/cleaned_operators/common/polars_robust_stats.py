@@ -66,6 +66,14 @@ def _rolling_1d(x: np.ndarray, w: int, fn, mp: int = 1) -> np.ndarray:
     return out
 
 
+def _auto_min_periods(window: int, min_periods: int | None) -> int:
+    """R11 round-3 #123 (polars twin): default ``max(5, 0.5*window)`` finite
+    observations instead of the old permissive ``1``."""
+    if min_periods is not None:
+        return max(1, int(min_periods))
+    return max(5, int(0.5 * window))
+
+
 def _quantile_range_fn(chunk, mp, lo, hi):
     valid = chunk[np.isfinite(chunk)]
     if valid.size < mp:
@@ -73,13 +81,13 @@ def _quantile_range_fn(chunk, mp, lo, hi):
     return float(np.quantile(valid, hi) - np.quantile(valid, lo))
 
 
-def ts_quantile_range(x, window, q_low=0.25, q_high=0.75, min_periods=1):
+def ts_quantile_range(x, window, q_low=0.25, q_high=0.75, min_periods=None):
     w = _pi(window, "window")
     lo = _pf(q_low, "q_low")
     hi = _pf(q_high, "q_high")
     if not (0.0 < lo < hi < 1.0):
         raise ValueError("ts_quantile_range requires 0 < q_low < q_high < 1")
-    mp = max(1, int(min_periods))
+    mp = _auto_min_periods(w, min_periods)
     cols = _cols(x)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -118,6 +126,40 @@ def ts_robust_zscore(x, window, center="median", scale="mad", clip=None):
     return _make(x, cols, out)
 
 
+def ts_robust_zscore_prior(x, window, center="median", scale="mad", clip=None, min_periods=None):
+    """R11 round-3 #122 (polars twin): baseline estimated on ``[t-W, t-1]`` only,
+    so an extreme ``x_t`` cannot contaminate its own median/MAD score."""
+    w = _pi(window, "window")
+    center_name = str(center or "median").lower()
+    scale_name = str(scale or "mad").lower()
+    mp = _auto_min_periods(w, min_periods)
+    cols = _cols(x)
+    rows = x.height
+    out = np.full((rows, len(cols)), np.nan, dtype=float)
+    bound = float(clip) if clip is not None else None
+    for i, c in enumerate(cols):
+        arr = _arr(x, c)
+        for t in range(rows):
+            lo = max(0, t - w + 1)
+            prior = arr[lo:t]
+            x_t = arr[t]
+            valid = prior[np.isfinite(prior)]
+            if valid.size < mp:
+                continue
+            center_value = float(np.median(valid)) if center_name == "median" else float(np.mean(valid))
+            if scale_name == "std":
+                spread = float(np.std(valid))
+            else:
+                spread = float(np.median(np.abs(valid - center_value))) * 1.4826
+            if not np.isfinite(spread) or spread <= 0.0:
+                continue
+            value = (float(x_t) - center_value) / spread if np.isfinite(x_t) else np.nan
+            if bound is not None and np.isfinite(value):
+                value = max(-bound, min(bound, value))
+            out[t, i] = value
+    return _make(x, cols, out)
+
+
 def _trimmed_mean_fn(chunk, mp, trim):
     valid = chunk[np.isfinite(chunk)]
     if valid.size < mp:
@@ -129,12 +171,12 @@ def _trimmed_mean_fn(chunk, mp, trim):
     return float(np.mean(ordered[cut : ordered.size - cut]))
 
 
-def ts_trimmed_mean(x, window, trim_ratio=0.1, min_periods=1):
+def ts_trimmed_mean(x, window, trim_ratio=0.1, min_periods=None):
     w = _pi(window, "window")
     trim = _pf(trim_ratio, "trim_ratio")
     if not (0.0 <= trim < 0.5):
         raise ValueError("ts_trimmed_mean requires 0 <= trim_ratio < 0.5")
-    mp = max(1, int(min_periods))
+    mp = _auto_min_periods(w, min_periods)
     cols = _cols(x)
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -704,7 +746,8 @@ def lqtp_historical_cvar(x, window, q=0.05):
 
 _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
     ("ts_quantile_range", ("x", "window", "q_low", "q_high", "min_periods"), ts_quantile_range, "Rolling quantile range."),
-    ("ts_robust_zscore", ("x", "window", "center", "scale", "clip"), ts_robust_zscore, "Robust z-score with median/MAD center and scale."),
+    ("ts_robust_zscore_inclusive", ("x", "window", "center", "scale", "clip"), ts_robust_zscore, "Robust z-score with median/MAD center and scale (inclusive baseline)."),
+    ("ts_robust_zscore_prior", ("x", "window", "center", "scale", "clip", "min_periods"), ts_robust_zscore_prior, "Robust z-score scored against a [t-W, t-1] prior-only baseline."),
     ("ts_trimmed_mean", ("x", "window", "trim_ratio", "min_periods"), ts_trimmed_mean, "Rolling trimmed mean."),
     ("ts_abs_concentration", ("x", "window", "min_periods"), ts_abs_concentration, "Rolling absolute-value concentration."),
     ("ts_abs_entropy", ("x", "window", "normalize", "min_periods"), ts_abs_entropy, "Rolling absolute-value entropy."),

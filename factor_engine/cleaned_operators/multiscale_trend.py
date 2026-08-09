@@ -14,13 +14,20 @@ different slopes, and the *term structure* of those slopes is informative.
 
 Shared kernel — *per-scale trend statistic*.  For scale ``s``, OLS slope ``b_s``
 is fit over the last ``s`` rows and normalised by the residual scale:
-``rs_s = sqrt(mean squared OLS residual)`` and ``T_s = b_s / (rs_s + eps)``.  A
-scale requires all ``s`` rows to be finite (the trailing window is never time-
-compressed); otherwise ``T_s`` is NaN for that row.
+``rs_s = sqrt(mean squared OLS residual)`` and ``T_s = b_s / rs_s`` (a t-stat-like
+measure).  A scale requires all ``s`` rows to be finite (the trailing window is
+never time-compressed); a zero residual scale (``rs_s == 0``) is degenerate and
+fails closed.
+
+*All-scales contract* — a row is emitted only when EVERY declared scale is
+present (contiguous-finite, ``rs_s > 0``).  When the data is shorter than the
+largest scale, or any one scale is non-finite/degenerate, the row is NaN — the
+operator never silently recomputes on a subset of the declared scales.
 
 All operators are trailing-window per-column, prefix-causal, deterministic,
-NaN-safe and reject invalid parameters (``window``, each scale >= 2 and
-``scale <= window``).
+NaN-safe and reject invalid parameters (each scale >= 2, ``scale <= window``).
+The ``window`` parameter does not participate in the computation (declared
+POLICY / non-searchable); the effective warm-up is ``max(scales)`` rows.
 """
 from __future__ import annotations
 
@@ -29,10 +36,20 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
-_EPS = 1e-12
+# The ``window`` parameter does NOT participate in the computation: the per-scale
+# OLS windows ARE the scales (each scale s fits over the last s rows).  It is
+# kept in the signature only for back-compat with early recipes and declared
+# POLICY / non-searchable (same treatment as ``group_decay_linear``), so a
+# search/GP grammar never treats it as an alpha dimension.
+_DEAD_WINDOW_SPEC = ParamSpec(
+    dtype=int,
+    min=2,
+    searchable=False,
+    param_role=ParamRole.POLICY,
+)
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
@@ -48,6 +65,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:trend",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        param_specs={"window": _DEAD_WINDOW_SPEC},
     )
 
 
@@ -94,38 +112,45 @@ def _scale_trend(chunk: np.ndarray, s: int) -> tuple[float, float]:
 
 
 def _trend_pairs(x: np.ndarray, t: int, scales: list[int]) -> list[tuple[int, float]]:
-    """``(scale, T_s)`` pairs valid at row ``t`` (NaN-invalid ones dropped)."""
+    """``(scale, T_s)`` pairs valid at row ``t``.
+
+    All-scales contract: returns the FULL pair set only when every declared scale
+    is present (enough rows, contiguous-finite, non-degenerate residual scale);
+    returns ``[]`` otherwise so the caller emits NaN.  No partial-scale recompute
+    and no ``+ eps`` floor on the residual-scale denominator.
+    """
     pairs: list[tuple[int, float]] = []
     for s in scales:
         if t + 1 < s:
-            continue
+            return []  # data shorter than this scale -> whole row NaN
         slope, rs = _scale_trend(x[t - s + 1 : t + 1], s)
-        if np.isfinite(slope) and np.isfinite(rs):
-            pairs.append((s, slope / (rs + _EPS)))
+        if not (np.isfinite(slope) and np.isfinite(rs)) or rs <= 0.0:
+            return []  # non-finite / degenerate residual -> whole row NaN
+        pairs.append((s, slope / rs))
     return pairs
 
 
-def _consensus_series(x2d: np.ndarray, window: int, scales: list[int]) -> np.ndarray:
+def _consensus_series(x2d: np.ndarray, scales: list[int]) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         x = x2d[:, c]
         for t in range(rows):
             pairs = _trend_pairs(x, t, scales)
-            if not pairs:
+            if len(pairs) != len(scales):
                 continue
             out[t, c] = float(np.mean(np.sign([T for _s, T in pairs])))
     return out
 
 
-def _dispersion_series(x2d: np.ndarray, window: int, scales: list[int]) -> np.ndarray:
+def _dispersion_series(x2d: np.ndarray, scales: list[int]) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         x = x2d[:, c]
         for t in range(rows):
             pairs = _trend_pairs(x, t, scales)
-            if len(pairs) < 2:
+            if len(pairs) != len(scales) or len(pairs) < 2:
                 continue
             ts = np.asarray([T for _s, T in pairs], dtype=float)
             med = float(np.median(ts))
@@ -133,14 +158,14 @@ def _dispersion_series(x2d: np.ndarray, window: int, scales: list[int]) -> np.nd
     return out
 
 
-def _curvature_series(x2d: np.ndarray, window: int, scales: list[int]) -> np.ndarray:
+def _curvature_series(x2d: np.ndarray, scales: list[int]) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         x = x2d[:, c]
         for t in range(rows):
             pairs = _trend_pairs(x, t, scales)
-            if len(pairs) < 3:
+            if len(pairs) != len(scales) or len(pairs) < 3:
                 continue
             ls = np.asarray([np.log(float(s)) for s, _T in pairs], dtype=float)
             y = np.asarray([T for _s, T in pairs], dtype=float)
@@ -168,7 +193,8 @@ class TsMultiscaleTrendConsensus(SeriesOperator):
     """多尺度趋势方向一致性：各尺度 T_s 符号均值 ∈ [-1,1]。
 
     接近 +1 → 所有短/中/长尺度一致上行；接近 -1 → 一致下行；接近 0 →
-    尺度间方向分歧。P1。
+    尺度间方向分歧。所有声明尺度必须齐全（contiguous-finite）才输出，
+    否则 NaN（无部分尺度重算）；预热 = max(scales)。P1。
     """
 
     metadata = _metadata(
@@ -182,6 +208,8 @@ class TsMultiscaleTrendConsensus(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 60, scales: tuple[int, ...] = (5, 10, 20, 40), **_: Any
     ) -> pd.DataFrame:
+        # ``window`` is a POLICY back-compat knob that does not participate in the
+        # computation (the scales ARE the windows); it only bounds the scales.
         w = int(window)
         if w < 2:
             raise ValueError("window must be >= 2")
@@ -189,7 +217,7 @@ class TsMultiscaleTrendConsensus(SeriesOperator):
         for s in ss:
             if s > w:
                 raise ValueError("each scale must be <= window")
-        return frame_like(x, _consensus_series(x.to_numpy(dtype=float), w, ss))
+        return frame_like(x, _consensus_series(x.to_numpy(dtype=float), ss))
 
 
 @register_operator(
@@ -202,7 +230,8 @@ class TsMultiscaleTrendConsensus(SeriesOperator):
 class TsMultiscaleTrendDispersion(SeriesOperator):
     """多尺度趋势分散度：{T_s} 的 MAD。
 
-    高 → 短中长期趋势强度/方向差异大（regime 切换、尺度间背离）。P1。
+    高 → 短中长期趋势强度/方向差异大（regime 切换、尺度间背离）。所有声明
+    尺度必须齐全才输出，否则 NaN；预热 = max(scales)。P1。
     """
 
     metadata = _metadata(
@@ -216,6 +245,8 @@ class TsMultiscaleTrendDispersion(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 60, scales: tuple[int, ...] = (5, 10, 20, 40), **_: Any
     ) -> pd.DataFrame:
+        # ``window`` is a POLICY back-compat knob that does not participate in the
+        # computation (the scales ARE the windows); it only bounds the scales.
         w = int(window)
         if w < 2:
             raise ValueError("window must be >= 2")
@@ -223,7 +254,7 @@ class TsMultiscaleTrendDispersion(SeriesOperator):
         for s in ss:
             if s > w:
                 raise ValueError("each scale must be <= window")
-        return frame_like(x, _dispersion_series(x.to_numpy(dtype=float), w, ss))
+        return frame_like(x, _dispersion_series(x.to_numpy(dtype=float), ss))
 
 
 @register_operator(
@@ -236,8 +267,8 @@ class TsMultiscaleTrendDispersion(SeriesOperator):
 class TsMultiscaleTrendCurvature(SeriesOperator):
     """多尺度趋势曲率：T_s ~ a + b*log(s) + c*log(s)^2 的二次项系数 c。
 
-    c>0 → 趋势随尺度加速（越长越强）；c<0 → 长尺度衰减。需要 >= 3 个尺度，
-    否则输出 NaN。P2。
+    c>0 → 趋势随尺度加速（越长越强）；c<0 → 长尺度衰减。需要 >= 3 个声明
+    尺度，且所有声明尺度必须齐全才输出，否则 NaN；预热 = max(scales)。P2。
     """
 
     metadata = _metadata(
@@ -251,6 +282,8 @@ class TsMultiscaleTrendCurvature(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 60, scales: tuple[int, ...] = (5, 10, 20, 40), **_: Any
     ) -> pd.DataFrame:
+        # ``window`` is a POLICY back-compat knob that does not participate in the
+        # computation (the scales ARE the windows); it only bounds the scales.
         w = int(window)
         if w < 2:
             raise ValueError("window must be >= 2")
@@ -258,7 +291,7 @@ class TsMultiscaleTrendCurvature(SeriesOperator):
         for s in ss:
             if s > w:
                 raise ValueError("each scale must be <= window")
-        return frame_like(x, _curvature_series(x.to_numpy(dtype=float), w, ss))
+        return frame_like(x, _curvature_series(x.to_numpy(dtype=float), ss))
 
 
 _NEW_CANONICALS = (

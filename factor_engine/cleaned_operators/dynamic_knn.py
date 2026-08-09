@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.closure.strict_scalar import strict_int, strict_float
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -92,7 +93,7 @@ def _neighbors(U: np.ndarray, valid: np.ndarray, k: int, i: int) -> np.ndarray:
     dist = np.where(valid, dist, np.inf)
     dist[i] = np.inf
     count = int(valid.sum())
-    k = max(1, int(k))
+    k = strict_int(k, "k", lower=1)  # A-5: k=0/-1 is a contract violation, never clamped
     if count - 1 < k:
         # Fail-closed (audit F03): never silently average fewer than k genuine
         # neighbors and call it kNN-k.

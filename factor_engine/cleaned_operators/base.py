@@ -81,30 +81,85 @@ class ParamRole(str, enum.Enum):
     # Governance / policy switch (seed, side, band, method selector): not a
     # continuous search dimension.
     POLICY = "policy"
+    # NEW-002/258: model order / embedding dimension (AR order, ``dim``,
+    # embedding lag, ``n_components``).  Distinct from ECONOMIC (a real
+    # trading-rule dimension) AND from ESTIMATOR_RESOLUTION (bins/n_segments):
+    # model order changes the model's parameterisation but is not itself an
+    # economic rule.  Searchable on a small reviewed grid.
+    MODEL_ORDER = "model_order"
+    # NEW-002/258: missing-value policy (ffill gap, carry, drop, coverage
+    # floor).  Never a search dimension — a data-quality policy is not an alpha.
+    MISSING_POLICY = "missing_policy"
+    # NEW-002/258: market policy (board/ST/IPO/session rule selection).  Never
+    # a search dimension.
+    MARKET_POLICY = "market_policy"
+    # NEW-002/258: statistical-support policy (min_periods / min_group_size /
+    # min_count / minimum tail / N_eff floor).  A support floor is not an alpha
+    # parameter — it changes estimator reliability, never the economic rule.
+    SUPPORT_POLICY = "support_policy"
+    # NEW-002/258: data-source policy (which provider / vintage / field family
+    # is used).  Never a search dimension.
+    SOURCE_POLICY = "source_policy"
+    # NEW-002/258: session policy (which session segment / calendar rule).
+    # Never a search dimension.
+    SESSION_POLICY = "session_policy"
 
 
 # Roles searched at FULL resolution by default.
 FULL_SEARCH_ROLES = (ParamRole.ECONOMIC, ParamRole.HORIZON,
                      ParamRole.STATE_THRESHOLD)
 # Roles searched ONLY on small reviewed grids.
-COARSE_SEARCH_ROLES = (ParamRole.ESTIMATOR_RESOLUTION,)
+COARSE_SEARCH_ROLES = (ParamRole.ESTIMATOR_RESOLUTION, ParamRole.MODEL_ORDER)
 # Roles never entered into the alpha search grammar.
-NON_SEARCH_ROLES = (ParamRole.NUMERICAL, ParamRole.POLICY)
+NON_SEARCH_ROLES = (
+    ParamRole.NUMERICAL,
+    ParamRole.POLICY,
+    ParamRole.MISSING_POLICY,
+    ParamRole.MARKET_POLICY,
+    ParamRole.SUPPORT_POLICY,
+    ParamRole.SOURCE_POLICY,
+    ParamRole.SESSION_POLICY,
+)
 
 
 def effective_param_role(spec: "ParamSpec | None") -> ParamRole:
     """Resolve the effective role of a parameter.
 
-    ``None`` (undeclared) resolves to ``ECONOMIC`` for a searchable parameter
-    (backwards-compatible: the existing default search space is unchanged) and
-    ``POLICY`` for a non-searchable one (a governance knob is never a search
-    dimension).  Declared roles are authoritative.
+    Declared roles are authoritative.  ``spec is None`` (undeclared) or a
+    declared-but-unroled ``searchable`` parameter resolves to ``ECONOMIC`` ONLY
+    for legacy / compatibility / research surfaces — the same default search
+    space the engine historically exposed.  NEW-001/259: production/mining
+    admission must NOT rely on this fallback; certification runs
+    :func:`param_role_declared` per production scalar and FAILS when the fallback
+    would have manufactured ``ECONOMIC``.  ``searchable=False`` with no declared
+    role resolves to ``POLICY`` (a governance knob is never a search dimension).
     """
     if spec is None:
         return ParamRole.ECONOMIC
     if spec.param_role is not None:
         return spec.param_role
     return ParamRole.ECONOMIC if spec.searchable else ParamRole.POLICY
+
+
+def param_role_declared(spec: "ParamSpec | None") -> bool:
+    """NEW-001/259: was an explicit ``ParamRole`` declared for this parameter?
+
+    ``False`` for ``spec is None`` OR ``spec.param_role is None`` — i.e. when
+    :func:`effective_param_role` would have to *infer* a role.  Production
+    certification must reject an undeclared role rather than let the inference
+    silently put the parameter into the default mining search space.
+    """
+    return spec is not None and spec.param_role is not None
+
+
+def missing_role_defaults_to_searchable(spec: "ParamSpec | None") -> bool:
+    """NEW-001/259: does an unroled parameter resolve to a SEARCHED role?
+
+    The fail-open danger is exactly "no ParamSpec / no ParamRole -> ECONOMIC
+    (searchable)".  Returns True for that case so certification/audit can flag
+    it as a search-space pollution source.
+    """
+    return effective_param_role(spec) in FULL_SEARCH_ROLES and not param_role_declared(spec)
 
 
 def param_search_grade(spec: "ParamSpec | None") -> str:

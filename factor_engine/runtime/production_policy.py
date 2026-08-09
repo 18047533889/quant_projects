@@ -30,6 +30,17 @@ def is_production_mode(mode: str | None = None) -> bool:
     return resolve_run_mode(mode) == PRODUCTION_MODE
 
 
+def production_data_event_auto_publish_enabled() -> bool:
+    """production DataEvent 自动 stage+publish 是否启用（R14 复查 P0-1 方案 A）。
+
+    默认**关闭**：逐 factor ``publish_factor_lake`` 不是 visibility transaction——
+    f1 成功、f2 失败会产生 mixed published state。生产事件默认直接拒绝（不落任何
+    staging/published）；显式 ``DATA_EVENT_PRODUCTION_AUTO_PUBLISH=1`` 才启用
+    （实验性，真正 event transaction 留待后续）。research 事件不受此门影响。
+    """
+    return _truthy_env("DATA_EVENT_PRODUCTION_AUTO_PUBLISH")
+
+
 def assert_columns_explicit(
     columns: Iterable[str] | None,
     *,

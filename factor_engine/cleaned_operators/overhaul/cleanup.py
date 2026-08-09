@@ -17,7 +17,13 @@ DEDUPE = {
     "fmax": "maximum",
     "fmin": "minimum",
     "sqr": "square",
-    "MACD": "MACD_line",
+    # NEW-042: ``MACD`` -> ``MACD_line`` is a MATHEMATICALLY EQUIVALENT alias
+    # (both compute fast-EMA minus slow-EMA; the historical ``MACD(x, fast,
+    # slow, signal)`` never used ``signal`` — it is a dead parameter).  The
+    # alias is retained, and ``MACD_line`` now DECLARES the dead ``signal``
+    # parameter explicitly as a non-searchable compatibility knob (NEW-040), so
+    # historical ``MACD(x,12,26,9)`` calls bind and validate instead of being
+    # silently dropped or rejected.
     "Slope": "ts_time_slope",
     "slope": "ts_time_slope",
     "beta": "ts_beta",

@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import re
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 import numpy as np
@@ -161,6 +161,11 @@ class OperatorSample:
     frames: list[pd.DataFrame]
     kwargs: dict[str, Any] = field(default_factory=dict)
     note: str = ""
+    # NEW-001/259: True when this audit run is for a production / mining-
+    # admissible candidate.  Only those are held to the strict
+    # "every searchable scalar declares a ParamRole" contract; legacy /
+    # research / experimental surfaces may keep the historical inference.
+    production_candidate: bool = False
 
 
 SAMPLE: dict[str, Callable[[], OperatorSample]] = {
@@ -444,6 +449,59 @@ def _parameter_injectivity(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
             "parameter_injectivity", op.metadata.name, "error",
             f"int param {int_param}: {broken} silently accepted (truncated to "
             f"{int(broken)}), corrupting the search space",
+        ))
+    return findings
+
+
+@_rule("param_role_declared", category="parameter", description="production searchable scalars must declare ParamRole (NEW-001/259)")
+def _param_role_declared(op: Any, ctx: dict[str, Any]) -> list[AuditFinding]:
+    """NEW-001/259: a searchable scalar whose role is NOT explicitly declared
+    falls back to ``ECONOMIC`` via :func:`effective_param_role` — silently
+    placing it in the default full-resolution mining search space.  For
+    production/admissible candidates this is a certification FAIL; only legacy
+    / compatibility / research surfaces may rely on the fallback."""
+    from cleaned_operators.base import (
+        FULL_SEARCH_ROLES,
+        ParamRole,
+        effective_param_role,
+        param_role_declared,
+    )
+
+    sample = ctx["sample"]
+    meta = op.metadata
+    # Only production/admissible candidates are held to the strict contract;
+    # research/experimental surfaces may keep the legacy inference.
+    if not getattr(sample, "production_candidate", False):
+        return []
+    specs = getattr(meta, "param_specs", None) or {}
+    names = list(getattr(meta, "param_names", None) or [])
+    findings: list[AuditFinding] = []
+    for n in names:
+        spec = specs.get(n)
+        if spec is None:
+            # No ParamSpec at all: the parameter's type is inferred by the
+            # legacy ``_INTEGER_PARAM_NAMES`` whitelist (NEW-003/260).  For a
+            # production candidate this is exactly the fail-open the audit
+            # forbids.
+            findings.append(AuditFinding(
+                "param_role_declared", meta.name, "error",
+                f"searchable scalar {n!r} has NO ParamSpec: type + role are "
+                "inferred by the legacy name whitelist (NEW-003/260) — declare "
+                "ParamSpec + ParamRole or the parameter silently joins the "
+                "default mining search space",
+            ))
+            continue
+        if not getattr(spec, "searchable", True):
+            continue
+        if param_role_declared(spec):
+            continue
+        inferred = effective_param_role(spec)
+        findings.append(AuditFinding(
+            "param_role_declared", meta.name, "error",
+            f"searchable scalar {n!r} has no declared ParamRole; effective role "
+            f"falls back to {inferred.value!r} — a production candidate must "
+            "declare its role explicitly (NEW-001/259), never rely on the "
+            "ECONOMIC fallback",
         ))
     return findings
 
@@ -1152,6 +1210,9 @@ def audit_all(*, rule_names: tuple[str, ...] | None = None, sample_limit: int | 
                 f"{canonical}: no runnable contract fixture (required panels/units undeterminable)",
             )
             continue
+        # NEW-001/259: production targets are held to the strict contract —
+        # every searchable scalar must declare ParamSpec + ParamRole.
+        fixture = replace(fixture, production_candidate=True)
         _run_rule_sweep(report, op, fixture, rules)
         # R13 NEW-P0-71: a per-canonical evidence record binds the audited
         # implementation hash + fixture source + rule family, so a production

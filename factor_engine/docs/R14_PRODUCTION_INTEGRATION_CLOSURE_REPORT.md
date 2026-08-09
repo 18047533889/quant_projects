@@ -113,3 +113,100 @@ reject）；event f1 ok / f2 fail → published 零 mixed + 同 event 重试只 
 worker crash after begin → lease 过期 takeover。
 
 此轮通过后即可宣布 **DATAACCESS CORE FREEZE + FACTORENGINE INTEGRATION FREEZE**。
+
+---
+
+# 附录 G：第三轮（外部 AI 复查 HEAD 44b2946）production DataEvent 2 P0 收口
+
+第三轮复查结论：**DATAACCESS CORE FREEZE = YES**；**普通 FactorEngine ↔ DataAccess
+integration FREEZE = YES**（普通 read / PIT / Composite / materialize / matrix /
+snapshot / version / tombstone / ClickHouse parity / rebuild scope 未再发现新
+P0）。剩余 blocker 只在 **production DataEvent pipeline**，本轮收口。
+
+## G.1 诚实纠偏：上一轮「publish 阶段零 mixed」不成立
+
+§F #5a 声称「任一 stage/publish 失败 → published 湖零 mixed」只对 **stage** 阶段
+成立。**publish 阶段**仍是逐 factor `publish_factor_lake`（单 factor
+`publish_from_staging()`，无跨 factor transaction）：f1 成功、f2 失败 →
+f1=NEW / f2=OLD / event=rejected = mixed published state。上一轮自己的测试
+`test_r14_production_event_publish_failure_fails_closed` 已证明
+`f_a in store.published`。同样地 `mat_kwargs.setdefault("write_target", "staging")`
+尊重调用方覆盖——`staging_clickhouse` 会在 stage-all 阶段就写 CH（published side
+effect）→ CH mixed。**此为本轮两个 P0 的根因。**
+
+## G.2 P0-1（方案 A）：production DataEvent 自动发布默认关闭
+
+逐 factor publish 无法做成原子 visibility transaction（多目录不可能一次原子切换）；
+真正的修复是 matrix 式 generation/transaction 指针 + reader 只读 committed txn +
+CH `event_txn_id`/commit marker——留待后续。本轮按复查认可的最简方案 **方案 A**
+feature gate：
+
+- `runtime/production_policy.production_data_event_auto_publish_enabled()`：
+  `DATA_EVENT_PRODUCTION_AUTO_PUBLISH` 为真才启用，**默认关闭**。
+- `execute_incremental_updates_from_event`：production 且未启用 → begin（若带
+  event_id）+ reject + 抛 `ProductionEventAutoPublishDisabled`，**在任何 stage 前**
+  ——不落任何 staging/published → 读者看到 ZERO 新因子（destructive gate #1/#2
+  的生产路径）。research 事件不受影响。
+- production 一律**强制** `mat_kwargs["write_target"]="staging"`（不再 `setdefault`）
+  ——调用方无法覆盖成 `staging_clickhouse`/`clickhouse`（stage-all 阶段无 published/
+  CH side effect）。research 仍尊重调用方覆盖。
+- 显式 `DATA_EVENT_PRODUCTION_AUTO_PUBLISH=1` 保留两阶段路径（实验性）：stage 阶段
+  零 mixed；publish 阶段失败仍是已知限制（已发布因子可见、事件 rejected），真正的
+  event transaction 放后续。
+
+## G.3 P0-2：ledger lease 补 fencing token
+
+lease TTL 解决「crash 永久 in_flight」，但没有 fencing：`commit()` 不校验
+owner/attempt → 被接管的 stale worker 醒来仍可 publish+commit（双写）；
+`normalize_data_event(dict)` / `to_dict()` 丢 `owner`/`attempt_id`。本轮：
+
+- `ReservationToken{event_id, attempt_id, fencing_epoch, owner, expires_at}`；
+  `begin()` 返回 `(status, token)`；takeover 单调递增 fence（1→2→3）；
+  同 worker 同 attempt 重入幂等续租（返回原 attempt/fence，刷新 reserved_at）。
+- `commit`/`reject`/`renew` 在 `_ledger_lock` 内 reload 后校验当前 pending 的
+  `(owner, attempt_id, fencing_epoch)` 与 token 完全一致，否则抛
+  `DataEventLeaseLostError`。`commit` 已 committed 幂等返回；无 token 一律 fail-closed。
+- `DataEvent` 新增 `fencing_epoch`，`to_dict`/`normalize_data_event` 携带
+  owner/attempt/fence（dict/API round-trip 保留）。
+- 调度器：逐 factor stage 成功后 `ledger.renew(token)` 心跳（**移到逐 factor
+  try/except 之外**——lease 丢失 = 事件级中止，不是 factor 失败）；publish 循环前
+  `renew` 做 fencing 门（stale worker 的发布被拒、不可见）；commit/reject 带 token。
+
+## G.4 新增测试与验证
+
+- `tests/runtime/test_r14_event_fencing_2026_08.py`（9）：stale owner
+  commit/reject/renew 全部 `DataEventLeaseLostError`；takeover fence 单调递增；
+  无 token commit fail-closed；renew 心跳不过期；dict round-trip 保留
+  owner/attempt/fence + token 序列化；**scheduler 级** stale worker publish 门
+  （计算中被接管 → stage 后 renew 抛错 → 零 publish，`store.published == []`）。
+- `tests/runtime/test_r14_event_atomic_publish_2026_08.py`（现 7）：新增 production
+  默认禁用 → `ProductionEventAutoPublishDisabled` 且 `staged==[]`/`published==[]` +
+  ledger rejected；无 event_id 也禁；opt-in 下强制 staging target（fake engine 断言
+  收到 `write_target="staging"` 而非调用方 `clickhouse`）。
+- 存量对齐：`test_r14_data_event_ledger` / `test_r14_ledger_lease` /
+  `test_round13_incremental_invalidation` 的 `begin`→`(status, token)` +
+  `commit/reject` 带 token；`test_r14_append_failure_propagates` 改 monkeypatch
+  `_append_unlocked` 抛 OSError（fencing 后旧路径占位法不再可达）。
+- **destructive gate**：production 默认 → ZERO stage/publish；opt-in stage 失败 →
+  零 publish；`staging_clickhouse` 调用方覆盖被强制 staging；A begin fence=1 → lease
+  过期 → B takeover fence=2 → A commit/reject/renew 全拒；A lease 丢失 → publish 门
+  （renew）抛错、零 publish；B commit → 可见恰好一次（committed 记录 1 条）；
+  dict round-trip 保留 owner/attempt/fence。
+- 回归：29（fencing/ledger/atomic）+ 19（r10/phase23/round13）+ 67（R14 存储/
+  matrix/dualwrite/version/delta/rebuild/DA resolver）+ 11（phase21/23）全绿。
+- 未触碰 cleaned_operators/ir/scripts。并发会话 coordination 保持（runtime/
+  incremental_scheduler.py 本轮改动已独立测试通过）。
+
+## G.5 遗留（非 Freeze blocker）
+
+- **P1**：DA `_read_factor_matrix` 读取结束后重算 `current_generation()` 写 audit；
+  读取期间 generation 翻转可能 audit 记录 B 而实际读 A（底层 `DataSnapshot` 仍绑定
+  实际文件，不造成错误计算）。后续小修为一次性 `MatrixResolvedSnapshot`
+  （resolve generation + paths 一次，coverage/read/snapshot/audit 消费同一 resolved
+  generation）。
+- **方案 B 真正的 event visibility transaction**（generation/transaction 指针 +
+  reader 只读 committed txn + CH `event_txn_id`/commit marker）留待后续，与 §G.2 的
+  opt-in 路径衔接。
+
+此轮通过后正式宣布 **DATAACCESS CORE FREEZE + FACTORENGINE/DATAACCESS INTEGRATION
+FREEZE 收官**。

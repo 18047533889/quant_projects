@@ -321,3 +321,59 @@ layer_governance/catalog docs）。
   group_rank_weighted_value 加入 extended/daily。测试 23 passed。
 
 **Wave-1 合并验证：11 个 test_r11_round3_*.py 226 passed**；load_all 1409 canonicals 全绿。
+
+### Wave-2 执行结果（第二批 实盘统计稳定性，5 agent 全部完成）
+- **dependence**（conditional TE/pdCor/HSIC/CMI）：6/6 FIXED。CTE 去 jitter（ties→categorical state）、
+  tensor 用 effective bins、默认 bins 3→2 可行；ts_partial_distance_correlation→ts_distance_correlation_partial_proxy
+  （诚实改名，alias 保留）；HSIC bandwidth=median(positive)；CMI 用 effective_bins 归一化。
+  **本会话** operator_surface _DAILY_GEOMETRY_MATH + operator_cost_model 旧名→新 canonical；
+  test_r11_te_spectral_gates 2 个过期测试按 #49/#50 新语义重写（identity no-op / binary conditioning finite）。
+  测试 23 passed。
+- **geometry**（knn_local_moran/isotonic/KNN DOF/gradient_norm/tangent PCA + 49-54 polars twins）：5/5 FIXED。
+  标准 Local Moran I（row-standardized + m2 归一）；cs_isotonic_residual_lagged_direction 新 canonical；
+  KNN DOF k≥max(10,5(d+1))；local_gradient_norm unit=same_as:target；tangent PCA s2/s1≥0.05 gate；
+  polars_geometry_math 同步 pdCor 新名。测试 21 passed。
+- **glr_spread**（GLR/EDGE/Abdi/PS）：5/5 FIXED。GLR perfect-split 用测量噪声 floor + 文档化 cap 40、
+  scan 惩罚 ln(m) 去窗口偏倚；EDGE min_valid_pairs/min_valid_ratio gate；Abdi 负 s²→NaN；PS 显式
+  flow_scale（不再硬写 1e6）。**本会话** test_gemini_v2_pack Abdi 测试改为正 s² 参考 + 负 s²→NaN。
+  测试 14 passed。
+- **composition_clock**（CompositionSchema/activity clock/volume clock）：4/4 FIXED。Composition 白名单
+  schema（同单位/正/同一整体/PartId）+ 17 个误分类字段（EPS/market_cap/turnover/volume/OHLC）gate；
+  activity_clock._align 抛 SameAxisError；ts_activity_clock_lagged_value_prior 新 canonical；
+  volume clock activity=0 价格一致性 + session_open Q=0 锚定；buckets∈{8,16,32} 非搜索。测试 49 passed。
+- **intraday**（session grid/bar width/history_days/novelty/时区/recovery/wasserstein）：8/8 FIXED。
+  slot_set==official_set；bar 宽来自 calendar.bar_freq；history_days 收满 N completed sessions；
+  novelty RMSE 归一；时区显式（拒绝 UTC 猜 Asia/Shanghai）；min_events gate；residual_fraction
+  RelationalParamSpec 一致；baseline_scaled_wasserstein_distance 新 canonical（旧名保留 canonical）。
+  测试 15 passed。
+
+**Wave-2 合并验证：5 个 test_r11_round3_*.py 122 passed**；load_all 继续全绿。
+
+### Wave-3 执行结果（第三批 清搜索空间/P1，5 agent 全部完成）
+- **tail_turnover**（weighted semivariance/ES/stratified/energy dist/turnover survival）：15/15 FIXED。
+  ts_weighted_semivariance 去 sqrt + ts_weighted_downside_deviation 新 canonical；weighted ECDF inverse
+  （不插值制造成本）；stratified boundary ties fractional；energy distance→U-stat；ts_joint_energy_shift
+  asof_previous；负 turnover fail-closed；price missing+turnover→NaN 全分布；old_mass 诊断输出 +
+  ts_turnover_old_mass 新 canonical + _MAX_OLD_MASS 0.30→0.10 versioned；ts_turnover_cost_entropy_vol_scaled
+  新 canonical。**本会话** test_audit_p0_fixes 2 个旧阈值测试改为 turnover=0.15（old_mass<0.10）。
+  测试 17 passed。
+- **prospect_robust**（CPT/robust stats）：6/6 FIXED。CPT min_coverage≥0.8 gate + behavioral_score 单位；
+  quantile_range/trimmed_mean unit=same_as:x；ts_robust_zscore 拆 inclusive/prior（alias→inclusive）；
+  min_periods≥max(5,0.5·window) 自动。**本会话** operator_surface ts_robust_zscore→两个新 canonical
+  （_OPERATOR_EXPANSION + _DAILY_PROMOTED_EXPERIMENTAL）。测试 22 passed。
+- **concentration_path**（threshold-relative/abs_entropy/HHI/turning_rate/path 族）：8/8 FIXED。
+  threshold-relative input_semantics 元数据；ts_abs_entropy 拆 nats/normalized；raw HHI 降 extended；
+  ts_effective_turning_rate 新 canonical（Definition B 有效方向翻转）；turning_intensity MAD=0→NaN；
+  path_efficiency constant_path_policy=ZERO；trend_break EPS guard；endpoint_deviation trailing-contiguous。
+  **本会话** operator_policy 补 ts_effective_turning_rate。测试 14 passed。
+- **grpspec_dmd**（group spectrum/DMD）：7/7 FIXED。group_state role 标记；breadth key=(schema_version,
+  label)；重复 feature 表达式拒绝；eigen_gap 显式 ParamSpec；DMD log-space energy+logsumexp；
+  ts_dmd_level_*/ts_dmd_return_* 6 个新 canonical（typed input）；dominant oscillatory frequency 从虚部
+  模式选最大能量。测试 37 passed。
+- **multiscale**（multiscale_trend/crossing/envelope/interval_geometry）：FIXED。window dead param→POLICY
+  非搜索；all-scales 强制（任一 scale 缺失→NaN）；无 EPS 分母（rs=0→NaN）；crossing 无 EPS floor +
+  NaN fail-closed；envelope 常量零宽→NaN + %-归一；interval_geometry 去 EPS 分母。测试 21 passed。
+
+**Wave-3 合并验证：5 个 test_r11_round3_*.py 111 passed**。
+**三轮合计：16 个 test_r11_round3_*.py + test_round14_paramrole = 459+16 passed**（另含既有回归
+  调和批次独立跑绿）。

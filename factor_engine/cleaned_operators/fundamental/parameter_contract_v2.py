@@ -1,42 +1,52 @@
 # -*- coding: utf-8 -*-
-"""Repair the shared positive-integer validator calling convention.
+"""Fundamental strict-parameter contract (NEW-006).
 
-Historical code declared ``_pos_int(value, minimum, name)`` while the reviewed
-fundamental-v2 family consistently calls ``_pos_int(value, name, minimum)``.
-This compatibility shim accepts both conventions and is installed immediately
-after ``transforms_v2`` and before dependent modules import the helper.
+Historical design: ``transforms_v2._pos_int`` was a truncating ``int(value)``
+validator, and this module monkey-patched ``transforms_v2._pos_int`` AFTER
+``expectation_v2``/``flow_semantics_v2`` had already done
+``from transforms_v2 import _pos_int`` — so the same process ran BOTH a strict
+and a truncating validator depending on which module had been imported first.
+The patch also silently coerced ``periods=3.7 -> 3`` and ``True -> 1``.
+
+Fix: the monkey patch is removed entirely.  ``transforms_v2._pos_int`` now
+delegates to ``common.strict_params`` (the single authority), so every module
+that imports it gets the SAME strict function object regardless of import order.
+This module remains importable (it is listed in the loader) but performs no
+mutation: it re-exports the strict gates for callers that historically imported
+from here.
 """
 from __future__ import annotations
 
-from typing import Any
+from cleaned_operators.common.strict_params import (
+    strict_bool,
+    strict_condition_bool,
+    strict_enum,
+    strict_event_bool,
+    strict_float,
+    strict_int,
+    strict_nonnegative_int,
+    strict_positive_int,
+    strict_probability,
+    strict_signed_event,
+    strict_universe_bool,
+)
 
-from cleaned_operators.fundamental import transforms_v2
+# Retained for backward compatibility with callers that imported ``_pos_int``
+# from this module: it is now the STRICT positive-int gate (``3.7`` rejected,
+# never truncated to ``3``).
+_pos_int = strict_positive_int
 
-
-def _pos_int(
-    value: Any,
-    name_or_minimum: str | int = "window",
-    minimum_or_name: int | str = 1,
-) -> int:
-    if isinstance(name_or_minimum, str):
-        name = name_or_minimum
-        minimum = int(minimum_or_name)
-    else:
-        minimum = int(name_or_minimum)
-        name = (
-            str(minimum_or_name)
-            if isinstance(minimum_or_name, str)
-            else "window"
-        )
-    if isinstance(value, bool):
-        raise ValueError(f"{name} must be integer >= {minimum}")
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError) as error:
-        raise ValueError(f"{name} must be integer >= {minimum}") from error
-    if parsed != value or parsed < minimum:
-        raise ValueError(f"{name} must be integer >= {minimum}")
-    return parsed
-
-
-transforms_v2._pos_int = _pos_int
+__all__ = [
+    "strict_int",
+    "strict_nonnegative_int",
+    "strict_positive_int",
+    "strict_float",
+    "strict_probability",
+    "strict_bool",
+    "strict_enum",
+    "strict_condition_bool",
+    "strict_event_bool",
+    "strict_signed_event",
+    "strict_universe_bool",
+    "_pos_int",
+]

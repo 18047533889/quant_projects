@@ -199,7 +199,10 @@ def test_cs_rank_churn_group_vintage_excludes_rotated_stock():
 def test_turnover_missing_turnover_is_unknown_not_zero():
     dates = _dates(60)
     close = pd.DataFrame(np.linspace(10.0, 20.0, 60), index=dates, columns=["A"])
-    turnover = pd.DataFrame(0.05, index=dates, columns=["A"])
+    # R3-144: old-mass fail threshold tightened 0.30 -> 0.10, so use a daily
+    # turnover high enough that (1-t)^window stays under 0.10 ((0.85)^30≈0.008)
+    # and the reference price is well-defined.
+    turnover = pd.DataFrame(0.15, index=dates, columns=["A"])
     turnover.iloc[20, 0] = np.nan
     out = _get("ts_turnover_reference_price").calculate(close, turnover, window=30)
     # Rows whose trailing window contains the missing turnover are UNKNOWN -> NaN.
@@ -211,8 +214,15 @@ def test_turnover_missing_turnover_is_unknown_not_zero():
 def test_turnover_qdist_ignores_missing_prices():
     dates = _dates(60)
     close = pd.DataFrame(np.linspace(10.0, 20.0, 60), index=dates, columns=["A"])
-    turnover = pd.DataFrame(0.05, index=dates, columns=["A"])
+    # R3-144: old-mass threshold 0.30 -> 0.10; turnover 0.15/day over a 40-day
+    # window keeps old_mass ≈ (0.85)^40 ≈ 0.002 below the gate.
+    turnover = pd.DataFrame(0.15, index=dates, columns=["A"])
     close.iloc[30, 0] = np.nan   # missing price at a lag
+    turnover.iloc[30, 0] = 0.0   # R3-143: a genuine 0-turnover day is a
+                                 # zero-weight row; a KNOWN positive turnover
+                                 # with a missing price is data-inconsistent
+                                 # (chips traded at unknown cost) and would
+                                 # fail the whole day closed.
     out = _get("ts_turnover_cost_quantile_distance").calculate(close, turnover, window=40)
     vals = out["A"].iloc[50:].to_numpy()
     # The weighted quantile must not be polluted into NaN by the zero-weight row.

@@ -146,7 +146,7 @@ class MACDLinePolars(MACDPolars):
     """Polars MACD 线"""
     metadata = OperatorMetadata(
         name="MACD_line", category="financial", description="MACD 线",
-        param_names=["price", "fast", "slow"], return_type="series", tags=["financial", "polars"],
+        param_names=["price", "fast", "slow", "signal"], return_type="series", tags=["financial", "polars"],
     )
 
 

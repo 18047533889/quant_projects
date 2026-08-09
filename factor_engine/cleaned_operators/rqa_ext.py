@@ -43,6 +43,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import ParamRole, ParamSpec, RelationalParamSpec
+from cleaned_operators.closure.strict_scalar import strict_int, strict_float
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -316,16 +317,21 @@ def _rqa_stats_window(
 def _check_params(
     window: int, dim: int, delay: int, eps_fraction: float, min_line: int, theiler: int | None = None
 ) -> tuple[int, int, int, float, int, int]:
-    w = max(2, int(window))
-    d = max(1, int(dim))
-    dl = max(1, int(delay))
-    ef = float(eps_fraction)
+    # Master Spec A-4/5: window/dim/delay/min_line are user parameters — a
+    # ``dim=0`` or ``window=1.5`` must RAISE (contract violation), never be
+    # silently clamped to a legal value (false AST).
+    w = strict_int(window, "window", lower=2)
+    d = strict_int(dim, "dim", lower=1)
+    dl = strict_int(delay, "delay", lower=1)
+    ef = strict_float(eps_fraction, "eps_fraction")
     if not 0.0 < ef < 1.0:
         raise ValueError("eps_fraction must be in (0, 1)")
     if d * dl > 4:
         raise ValueError("dimension*delay must be <= 4 (embedding support)")
-    ml = max(2, int(min_line))
-    th = max(0, (d - 1) * dl if theiler is None else int(theiler))
+    ml = strict_int(min_line, "min_line", lower=2)
+    # ``theiler=None`` -> auto-derived from the embedding (not a user clamp);
+    # an explicit theiler is validated as a non-negative int.
+    th = max(0, (d - 1) * dl) if theiler is None else strict_int(theiler, "theiler", lower=0)
     return w, d, dl, ef, ml, th
 
 

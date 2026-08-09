@@ -30,6 +30,9 @@ def test_paramrole_members():
     assert {r.value for r in ParamRole} == {
         "economic", "horizon", "state_threshold", "estimator_resolution",
         "numerical", "policy",
+        # R14 concurrent-session additions (round-3 session coordination):
+        "model_order", "missing_policy", "market_policy",
+        "support_policy", "source_policy", "session_policy",
     }
 
 

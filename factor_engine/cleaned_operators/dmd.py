@@ -9,8 +9,12 @@ Koopman-style propagator ``Ã = U_r^T Y V_r Σ_r^{-1}`` from a rank-``r`` SVD of
 frequency ``f = arg(λ)/(2π·Δt)``; the *exact* DMD modes are
 ``Φ = Y V Σ^{-1} W`` (``W`` = eigenvectors of ``Ã``) and the amplitudes are the
 pseudoinverse solution ``b = Φ† x_1``.  Mode energy is the finite-horizon sum
-``E_j = Σ_{t=0}^{K-1} |b_j λ_j^t|²`` — never a closed-form geometric-series
-with a denominator clamp (that formula went unstable when ``|λ| > 1``).
+``E_j = Σ_{t=0}^{K-1} |b_j λ_j^t|²``.  P1-L: energy is carried in LOG space
+throughout — ``log E_j = log|b_j|² + log Σ ρ_j^t`` (``ρ_j = |λ_j|²``) with the
+geometric log-sum computed in a cancellation-free closed form, so a growing
+mode (``|λ| > 1``) can never overflow or need an ``exp(700)`` clamp that would
+distort relative mode energy.  Concentration is then ``exp(logsumexp(top_k) -
+logsumexp(all))``, a stable log-ratio.
 
 All three operators are Research-surface: SVD/eigen decomposition is
 numerically delicate, so they are excluded from the default mining grammar
@@ -20,20 +24,29 @@ condition number is degenerate.
 * ``ts_dmd_dominant_growth_rate``  (``log|λ|`` per bar — unit
   ``log_growth_per_bar``)
 * ``ts_dmd_dominant_frequency``   (``|arg λ|/(2π)`` cycles per bar — unit
-  ``cycles_per_bar``; NaN when the dominant mode has no imaginary component)
+  ``cycles_per_bar``).  P1-L: the dominant OSCILLATORY frequency — the max
+  energy mode among the imaginary modes (a max-energy mode that is real is
+  level persistence, not oscillation); NaN only when NO mode is imaginary.
 * ``ts_dmd_mode_concentration``   (top-``top_k`` mode energy share; ``top_k``
   exceeding the number of *physical* (conjugate-merged) modes fails closed)
+
+P1-L (price-level vs return semantics): raw level series have ``λ ≈ 1`` as
+their dominant mode (level persistence), which is a different dynamics from a
+return series.  The variants make the input semantic explicit:
+``ts_dmd_level_*`` declares ``x`` a price level (``price_level`` /
+``log_price_level``) and ``ts_dmd_return_*`` declares ``x`` a return.  The
+legacy unconstrained ``ts_dmd_*`` names remain for compatibility.
 
 Deterministic (no randomized SVD / subsampling), strict-PIT, NaN fail-closed.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import ParamSpec, RelationalParamSpec
+from cleaned_operators.base import ParamRole, ParamSpec, RelationalParamSpec
 from cleaned_operators.gemini_v2_common import (
     frame_like,
     register_dual,
@@ -45,12 +58,16 @@ _EPS = 1e-12
 
 # R5 P1-01/P1-02: ``rank``/``dim``/``delay`` are validated ints (a fractional
 # value is rejected, never silently truncated).
+#
+# Cross-cutting P1-L: DMD embedding knobs are ESTIMATOR_RESOLUTION (only small
+# reviewed search grids, never full resolution — they change estimator bias, not
+# the trading rule); ``window`` is the HORIZON dimension.
 _DMD_PARAM_SPECS = {
-    "window": ParamSpec(dtype=int, min=10),
-    "rank": ParamSpec(dtype=int, min=1),
-    "dim": ParamSpec(dtype=int, min=2),
-    "delay": ParamSpec(dtype=int, min=1),
-    "top_k": ParamSpec(dtype=int, min=1),
+    "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
+    "rank": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "dim": ParamSpec(dtype=int, min=2, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "delay": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    "top_k": ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 # R6-157: ``keys(param_specs) ⊆ param_names`` is a registry invariant.  The
 # dominant-growth/frequency canonicals take ``window/rank/dim/delay`` only —
@@ -104,6 +121,41 @@ def dmd_feasibility(*, window: int, rank: int, dim: int, delay: int, top_k: int 
     return True
 
 
+def _logsumexp(xs: Sequence[float]) -> float:
+    """Stable log-sum-exp: ``log( sum exp(x_i) )`` with the max pulled out."""
+    m = float(max(xs))
+    return m + float(np.log(np.sum(np.exp(np.asarray(xs, dtype=float) - m))))
+
+
+def _log_finite_horizon_sum(rho: float, K: int) -> float:
+    """``log( sum_{t=0}^{K-1} rho^t )`` in a cancellation-free closed form.
+
+    P1-L (#136): the finite-horizon energy sum ``Σ |λ|^{2t}`` is evaluated in
+    LOG space.  For ``rho`` far from 1 the geometric-series closed form is used
+    in a way that never computes ``rho^K`` (which overflows for ``rho > 1``);
+    near ``rho == 1`` the direct finite sum is used so ``rho - 1`` never cancels
+    catastrophically.  The result is finite for any ``rho >= 0`` and ``K``.
+    """
+    r = float(rho)
+    if r < 0.0 or not np.isfinite(r):
+        return float("-inf")
+    if r == 0.0:
+        # only the t=0 term survives (0^0 == 1): sum == 1, log == 0.
+        return 0.0
+    if abs(r - 1.0) < 1e-6:
+        return float(np.log(np.sum(r ** np.arange(K, dtype=float))))
+    if r > 1.0:
+        K_log_r = K * float(np.log(r))
+        # log((r^K - 1)/(r - 1)) = K log r + log(1 - r^{-K}) - log(r - 1)
+        return (
+            K_log_r
+            + float(np.log1p(-np.exp(-K_log_r)))
+            - float(np.log(r - 1.0))
+        )
+    # r < 1: log((1 - r^K)/(1 - r)) = log1p(-r^K) - log1p(-r)
+    return float(np.log1p(-np.exp(K * float(np.log(r))))) - float(np.log1p(-r))
+
+
 def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any] | None:
     n = v.shape[0]
     L = max(2, int(dim))
@@ -147,22 +199,23 @@ def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any
     Phi = Y @ (Vr / S[:r]) @ W          # (L, r) exact modes
     x1 = X[:, 0]
     b = np.linalg.pinv(Phi) @ x1        # (r,) mode amplitudes
-    # finite-horizon energy E_j = sum_{t=0}^{K-1} |b_j lam_j^t|^2 — a direct
-    # K-term sum (stable), never the closed-form-with-clamp.
+    # P1-L (#136): mode energy carried in LOG space throughout.  With
+    # ``rho = |lam|^2``,  log E_j = log|b_j|^2 + log( sum_{t=0}^{K-1} rho_j^t ).
+    # The geometric log-sum is a cancellation-free closed form (near ``rho == 1``
+    # the direct finite sum is used so ``rho - 1`` never cancels catastrophically),
+    # so a growing mode (``rho > 1``) can never overflow and no ``exp(700)``
+    # clamp is needed — concentration is a stable log-ratio downstream.
     rho = np.abs(eig_vals) ** 2
-    tgrid = np.arange(K, dtype=float)
-    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-        powers = rho[:, None] ** tgrid          # (r, K)
-        e_sum = np.sum(powers, axis=1)
-    for j in range(eig_vals.size):
-        if not np.isfinite(e_sum[j]) and rho[j] > 1.0:
-            # last-term-dominated stable form (avoids overflow of rho^K)
-            e_sum[j] = np.exp(min((K - 1) * np.log(rho[j]), 700.0)) * (rho[j] / (rho[j] - 1.0))
-    energies = (np.abs(b) ** 2) * e_sum
-    order = np.argsort(-energies)
+    log_sum = np.array(
+        [_log_finite_horizon_sum(float(rho[j]), int(K)) for j in range(eig_vals.size)],
+        dtype=float,
+    )
+    log_b2 = np.log(np.abs(b) ** 2 + _EPS)
+    log_energy = log_b2 + log_sum
+    order = np.argsort(-log_energy)
     return {
         "eig": eig_vals[order],
-        "energy": energies[order],
+        "log_energy": log_energy[order],
     }
 
 
@@ -188,7 +241,17 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
             if which == "growth":
                 val = float(np.log(max(abs(lam0), _EPS)))
             elif which == "frequency":
-                if abs(lam0.imag) < 1e-9:
+                # P1-L (#138): the useful metric is the dominant OSCILLATORY
+                # frequency — the max-energy mode among the IMAGINARY modes.  A
+                # real max-energy mode (λ ≈ 1) is level persistence, not an
+                # oscillation, so it must NOT suppress the frequency to NaN.
+                # NaN only when NO mode is imaginary.
+                dom = None
+                for lam in np.asarray(res["eig"]):  # already energy-descending
+                    if abs(lam.imag) >= 1e-9:
+                        dom = lam
+                        break
+                if dom is None:
                     continue
                 # R6-202: for a real-valued time series the eigenvalues come in
                 # conjugate pairs (λ, conj(λ)) with near-identical energies.  The
@@ -196,7 +259,7 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                 # though both signs describe the SAME oscillation.  Canonical
                 # frequency uses |arg λ|/(2π) so the dominant frequency is stable
                 # and unambiguous for a real series.
-                val = float(abs(np.angle(lam0)) / (2.0 * np.pi))
+                val = float(abs(np.angle(dom)) / (2.0 * np.pi))
             else:
                 # R6-200: top_k > rank is rejected, never silently clipped —
                 # rank=3 with top_k=3,4,10 must not compile to the same factor.
@@ -207,16 +270,20 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                 # a real oscillation splits its energy between the +f and -f
                 # modes, so top_k=1 on the split spectrum understates the mode's
                 # concentration.  Merge conjugate pairs (equal |λ| and equal
-                # |arg λ|, distinct values) and sum the pair energies before
-                # ranking.
+                # |arg λ|, distinct values).
+                #
+                # P1-L (#136): energies are LOG energies; a conjugate pair's
+                # combined energy is logsumexp(pair_log, mate_log), and the final
+                # concentration is exp(logsumexp(top_k) - logsumexp(all)) — a
+                # stable log-ratio that never overflows even when |λ| ≫ 1.
                 eig = np.asarray(res["eig"])
-                energy = np.asarray(res["energy"], dtype=float)
-                merged_e: list[float] = []
+                log_energy = np.asarray(res["log_energy"], dtype=float)
+                merged_log: list[float] = []
                 used = np.zeros(eig.shape[0], dtype=bool)
                 for i in range(eig.shape[0]):
                     if used[i]:
                         continue
-                    pair_e = float(energy[i])
+                    pair_log = float(log_energy[i])
                     for j in range(i + 1, eig.shape[0]):
                         if used[j]:
                             continue
@@ -226,11 +293,14 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                             and abs(abs(np.angle(eig[i])) - abs(np.angle(eig[j]))) < 1e-6
                         )
                         if is_conj:
-                            pair_e += float(energy[j])
+                            m = max(pair_log, float(log_energy[j]))
+                            pair_log = m + float(
+                                np.log1p(np.exp(-abs(pair_log - float(log_energy[j]))))
+                            )
                             used[j] = True
                             break
-                    merged_e.append(pair_e)
-                merged_e.sort(reverse=True)
+                    merged_log.append(pair_log)
+                merged_log.sort(reverse=True)
                 # R9-OP-004 (dead-parameter region): ``top_k > rank`` is already
                 # rejected by the declared relational spec, but the *physical*
                 # mode count can still be smaller than rank after conjugate-pair
@@ -239,12 +309,13 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                 # space.  Never ``min``-clip: exceeding the physical mode count
                 # is a data-dependent infeasibility, so the canonical fails
                 # closed (NaN) instead of silently collapsing to fewer modes.
-                if tk > len(merged_e):
+                if tk > len(merged_log):
                     continue
-                total = float(sum(merged_e))
-                if total <= _EPS:
+                total_log = _logsumexp(merged_log)
+                if not np.isfinite(total_log) or total_log <= float(np.log(_EPS)):
                     continue
-                val = float(sum(merged_e[:tk]) / total)
+                top_log = _logsumexp(merged_log[:tk])
+                val = float(np.exp(top_log - total_log))
             if np.isfinite(val):
                 out[r, c] = val
     return out
@@ -269,6 +340,39 @@ def _ts_dmd_mode_concentration(x: pd.DataFrame, window: int = 120, rank: int = 4
         raise ValueError("ts_dmd_mode_concentration requires window >= 10")
     out = _dmd_series(x.to_numpy(dtype=float), int(window), int(rank), int(dim), int(delay), "concentration", int(top_k))
     return frame_like(x, out)
+
+
+def _dmd_variant_spec(
+    canonical: str,
+    fn: Any,
+    params: list[str],
+    *,
+    unit: str,
+    input_units: dict[str, str],
+    input_semantic: str,
+) -> dict[str, Any]:
+    """Build a P1-L level/return variant spec.
+
+    Identical kernel, but the declared INPUT SEMANTIC differs: ``level``
+    variants take a price level (``price_level`` / ``log_price_level``), return
+    variants take a return.  This makes the level-vs-return dynamics explicit in
+    the definition metadata so a search cannot silently mix a raw price level
+    into an operator that means return dynamics (or vice versa).
+    """
+    is_conc = canonical.endswith("mode_concentration")
+    return {
+        "fn": fn,
+        "params": params,
+        "category": "dynamic_mode",
+        "domain": "dynamical_systems",
+        "unit": unit,
+        "cost": 8,
+        "tags_extra": [f"input_semantic:{input_semantic}"],
+        "output_unit": unit,
+        "param_specs": _DMD_CONCENTRATION_SPEC if is_conc else _DMD_BASE_SPEC,
+        "relational_specs": _DMD_CONCENTRATION_RELATIONAL_SPECS if is_conc else _DMD_RELATIONAL_SPECS,
+        "input_units": input_units,
+    }
 
 
 _SPECS: dict[str, dict[str, Any]] = {
@@ -312,6 +416,58 @@ _SPECS: dict[str, dict[str, Any]] = {
         "param_specs": _DMD_CONCENTRATION_SPEC,
         "relational_specs": _DMD_CONCENTRATION_RELATIONAL_SPECS,
     },
+    # P1-L (#137): explicit price-level vs return semantics.  The kernel is the
+    # same DMD; the DIFFERENCE is the declared input contract — raw levels have
+    # λ ≈ 1 as their dominant mode (level persistence), returns show oscillatory
+    # dynamics, and a search must not mix the two.
+    "ts_dmd_level_dominant_growth_rate": _dmd_variant_spec(
+        "ts_dmd_level_dominant_growth_rate",
+        _ts_dmd_dominant_growth_rate,
+        ["x", "window", "rank", "dim", "delay"],
+        unit="log_growth_per_bar",
+        input_units={"x": "price_level"},
+        input_semantic="level",
+    ),
+    "ts_dmd_level_dominant_frequency": _dmd_variant_spec(
+        "ts_dmd_level_dominant_frequency",
+        _ts_dmd_dominant_frequency,
+        ["x", "window", "rank", "dim", "delay"],
+        unit="cycles_per_bar",
+        input_units={"x": "price_level"},
+        input_semantic="level",
+    ),
+    "ts_dmd_level_mode_concentration": _dmd_variant_spec(
+        "ts_dmd_level_mode_concentration",
+        _ts_dmd_mode_concentration,
+        ["x", "window", "rank", "dim", "delay", "top_k"],
+        unit="ratio",
+        input_units={"x": "price_level"},
+        input_semantic="level",
+    ),
+    "ts_dmd_return_dominant_growth_rate": _dmd_variant_spec(
+        "ts_dmd_return_dominant_growth_rate",
+        _ts_dmd_dominant_growth_rate,
+        ["x", "window", "rank", "dim", "delay"],
+        unit="log_growth_per_bar",
+        input_units={"x": "return"},
+        input_semantic="return",
+    ),
+    "ts_dmd_return_dominant_frequency": _dmd_variant_spec(
+        "ts_dmd_return_dominant_frequency",
+        _ts_dmd_dominant_frequency,
+        ["x", "window", "rank", "dim", "delay"],
+        unit="cycles_per_bar",
+        input_units={"x": "return"},
+        input_semantic="return",
+    ),
+    "ts_dmd_return_mode_concentration": _dmd_variant_spec(
+        "ts_dmd_return_mode_concentration",
+        _ts_dmd_mode_concentration,
+        ["x", "window", "rank", "dim", "delay", "top_k"],
+        unit="ratio",
+        input_units={"x": "return"},
+        input_semantic="return",
+    ),
 }
 
 
@@ -330,6 +486,7 @@ def _register() -> None:
             output_unit=spec.get("output_unit"),
             param_specs=spec.get("param_specs"),
             relational_specs=spec.get("relational_specs"),
+            input_units=spec.get("input_units"),
         )
     union_research(*_SPECS.keys())
 

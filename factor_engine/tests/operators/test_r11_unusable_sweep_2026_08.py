@@ -30,7 +30,6 @@ from cleaned_operators.operator_policy import (
 )
 from cleaned_operators.registry import OperatorRegistry
 from cleaned_operators.semantic_certification import should_fail_closed
-from scripts.audit_all_factor_production import _build_call, _panels
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -92,6 +91,8 @@ def test_minute_source_family_is_pit_safe_but_shape_changing() -> None:
 
 
 def test_audit_fixture_resolves_every_target_parameter() -> None:
+    from scripts.audit_all_factor_production import _build_call, _panels
+
     panels = _panels()
     unresolved: list[str] = []
     for canonical in sorted(factor_production_targets()):

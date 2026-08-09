@@ -4,6 +4,42 @@
 
 ---
 
+## 2026-08-09 FactorEngine R14 第三轮 production DataEvent 收口（第 36 版）
+
+**内容**：外部 AI 复查最新 main@44b2946 确认 **DataAccess Core Freeze + 普通
+FE↔DA Integration Freeze 正式成立**；production DataEvent 链还差 2 个 P0，本轮
+全部收口（详见 `docs/R14_PRODUCTION_INTEGRATION_CLOSURE_REPORT.md` §G）：
+
+- **P0-1（方案 A feature gate）production DataEvent 自动发布默认关闭**：逐 factor
+  `publish_factor_lake` 不是 visibility transaction——f1 成功、f2 失败会产生 mixed
+  published state（上一轮测试已自己暴露：f_a 已发布、f_b 未发布、event rejected）。
+  新增 `runtime/production_policy.production_data_event_auto_publish_enabled()`
+  （`DATA_EVENT_PRODUCTION_AUTO_PUBLISH`，默认 off）：production 事件直接拒绝 +
+  `ProductionEventAutoPublishDisabled`（begin→reject→raise，不落任何
+  staging/published → published 湖零 mixed）；production 一律**强制**
+  `write_target="staging"`——不再 `setdefault`，调用方无法覆盖成
+  `staging_clickhouse`/`clickhouse`（stage-all 阶段产生 published/CH side effect）。
+  显式启用仅实验性，真正 event visibility transaction 留待后续。research 不变。
+- **P0-2 DataEventLedger fencing token**：`begin()` 返回 `(status, ReservationToken)`
+  ——`{event_id, attempt_id, fencing_epoch, owner, expires_at}`；takeover 单调递增
+  fence；同 worker 同 attempt 重入幂等续租。`commit`/`reject`/`renew` 在锁内校验
+  `(owner, attempt_id, fencing_epoch)` 三元组，不匹配 → `DataEventLeaseLostError`
+  （stale worker 绝不能再 publish/commit/reject）。`owner`/`attempt_id`/
+  `fencing_epoch` 进 `DataEvent.to_dict()` + `normalize_data_event`（dict/API
+  round-trip 不再丢）。调度器 stage 后逐 factor `renew` 心跳（长计算 > lease 不被误
+  takeover）、publish 前 `renew` 做 fencing 门、commit/reject 带 token；renew 移到
+  逐 factor try 外（lease 丢失 = 事件级中止，不算 factor 失败）。
+- **P1（非 blocker，deferred）**：DA `_read_factor_matrix` 读取后重算
+  `current_generation()` 写 audit，读取期间 generation 翻转可能 audit 失真；后续小修
+  成一次性 `MatrixResolvedSnapshot`。
+
+**新增测试**：`test_r14_event_fencing_2026_08.py`（9：stale commit/reject/renew 被拒、
+takeover fence 单调、无 token fail-closed、renew 心跳、dict round-trip、
+scheduler 级 stale publish 门零 publish）+ `test_r14_event_atomic_publish` 新增 3
+（production 默认禁用零 mixed、无 event_id 也禁、强制 staging target）。存量对齐：
+data_event_ledger / ledger_lease / round13 incremental 的 begin→(status,token) +
+commit/reject 带 token、append 失败测试改 monkeypatch。回归全绿。
+
 ## 2026-08-09 FactorEngine R14 第二轮 production integration 收口（第 35 版）
 
 **内容**：外部 AI 复查最新 main@64ad308 确认 DataAccess Core Freeze 继续成立；

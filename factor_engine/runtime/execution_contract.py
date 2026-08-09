@@ -82,7 +82,11 @@ _STATEFUL_CANONICALS: frozenset[str] = frozenset({
     "state_slew_limit",
     "state_deadband",
     "state_ewm_if",
-    "state_since_reduce",
+    # NEW-008/115: ``state_since_reduce`` was retired (split into
+    # state_since_sum/mean/count/last) and is now only an alias to
+    # ``state_since_sum`` — a retired name must not linger in the legacy
+    # stateful seed.  The split canonicals declare statefulness via
+    # ``declare_execution_contract``.
     "event_refractory",
     "directional_change_state",
     "directional_change_extent",

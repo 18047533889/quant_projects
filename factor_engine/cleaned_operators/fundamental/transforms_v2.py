@@ -81,12 +81,17 @@ _FLOW_TYPE_TAGS = {
 
 
 def _pos_int(value, name: str, minimum: int = 1) -> int:
-    if isinstance(value, bool):
-        raise ValueError(f"{name} must be an integer")
-    value = int(value)
-    if value < minimum:
-        raise ValueError(f"{name} must be >= {minimum}")
-    return value
+    # NEW-005/006/088: THE single strict integer gate.  The old body was
+    # ``int(value)`` — it silently truncated ``periods=3.7`` to ``3`` and
+    # accepted ``True`` as ``1``.  It now delegates to
+    # ``common.strict_params`` (which routes through ``base.strict_int_param``):
+    # fractional / NaN / Inf / bool values are REJECTED, never coerced.  The
+    # legacy ``parameter_contract_v2`` monkey-patch is removed; every module
+    # (``expectation_v2`` / ``flow_semantics_v2`` / ``quality_v2``) imports this
+    # same strict function object, so there is exactly one validator per process.
+    from cleaned_operators.common.strict_params import strict_int
+
+    return strict_int(value, name, minimum=minimum)
 
 
 def _safe_div(a: float, b: float) -> float:

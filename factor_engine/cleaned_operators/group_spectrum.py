@@ -25,7 +25,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -49,31 +55,84 @@ _REL_GAP_THRESHOLD = 0.10
 _BREADTH_STABILITY_WINDOW = 60
 _BREADTH_RATIO_THRESHOLD = 0.5
 
+# P1-L #133: breadth-history keys must be (GroupSchemaVersion, GroupId), never a
+# bare label — "电子" under industry-taxonomy v2 is a DIFFERENT group from "电子"
+# under v1, and a label-only key would merge two taxonomy versions' membership
+# histories.  ``group_schema_version`` is a governance input (POLICY, never a
+# search dimension) that names the taxonomy definition the ``group`` panel was
+# built from; the kernel keys its per-group trailing breadth history by
+# ``(group_schema_version, label)``.
+_GROUP_SCHEMA_VERSION_DEFAULT = "v1"
+_GROUP_SCHEMA_VERSION_SPEC = ParamSpec(
+    dtype=str,
+    default=_GROUP_SCHEMA_VERSION_DEFAULT,
+    searchable=False,
+    param_role=ParamRole.POLICY,
+)
+
+# P1-L #135: the 0.10 eigen-gap is an ESTIMATOR constant (when the two leading
+# singular values fall within this RELATIVE gap the leading singular vector is
+# unstable and the mode-localization readout is NaN).  It is declared in the
+# operator definition metadata — param_specs, param_role=ESTIMATOR_RESOLUTION,
+# searchable=False — instead of being a hidden number in the kernel.  The
+# default stays ``_REL_GAP_THRESHOLD`` so behaviour is unchanged.
+_EIGEN_GAP_SPEC = ParamSpec(
+    dtype=float,
+    min=0.0,
+    max=1.0,
+    default=_REL_GAP_THRESHOLD,
+    searchable=False,
+    param_role=ParamRole.ESTIMATOR_RESOLUTION,
+)
+
 
 def _min_members(d: int) -> int:
     """Minimum valid-member count for a trustworthy spectrum of ``d`` features."""
     return max(_MIN_MEMBER_BASE, 2 * int(d) + _MIN_MEMBER_PER_FEATURE)
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    unit: str,
+    cost: int,
+    role: str | None = None,
+    param_specs: dict[str, ParamSpec] | None = None,
+    extra_tags: tuple[str, ...] = (),
+) -> OperatorMetadata:
+    tags = [
+        "group_structure", "daily", "pit_safe", "causal", "typed_v2",
+        "deterministic",
+        f"signature:{','.join(params)}->series", "domain:price_volume",
+        f"unit:{unit}", f"cost:{cost}",
+        *extra_tags,
+    ]
     return OperatorMetadata(
         name=name,
         category="group_structure",
         description=description,
         param_names=params,
         return_type="series",
-        tags=[
-            "group_structure", "daily", "pit_safe", "causal", "typed_v2",
-            "deterministic",
-            f"signature:{','.join(params)}->series", "domain:price_volume",
-            f"unit:{unit}", f"cost:{cost}",
-        ],
+        tags=tags,
+        role=role,
+        param_specs=dict(param_specs) if param_specs else None,
     )
 
 
-def _spectrum_stats(Z: np.ndarray) -> tuple[float, float, float, float, float] | None:
+def _spectrum_stats(
+    Z: np.ndarray, eigen_gap: float = _REL_GAP_THRESHOLD
+) -> tuple[float, float, float, float, float] | None:
     """SVD spectrum -> (mode_share, effective_rank, mode_localization,
-    spectral_gap, second_mode_localization)."""
+    spectral_gap, second_mode_localization).
+
+    ``eigen_gap`` is the estimator constant (P1-L #135) gating the two
+    localization readouts: when the top-two singular values are within this
+    relative gap the leading vectors are unstable and the readouts are NaN.
+    Declared on the localization operators' metadata (param_specs,
+    ESTIMATOR_RESOLUTION, searchable=False), never a hidden kernel number.
+    """
     n, d = Z.shape
     # P0 (round 7): a 2..3 member group's standardized matrix is mechanically
     # low-rank; the spectrum is a math artifact, not crowding.  Gate on the
@@ -111,7 +170,7 @@ def _spectrum_stats(Z: np.ndarray) -> tuple[float, float, float, float, float] |
         localization = (n_members * ipr1 - 1.0) / (n_members - 1.0)
     else:
         localization = np.nan
-    if rel_gap < _REL_GAP_THRESHOLD:
+    if rel_gap < eigen_gap:
         localization = np.nan
     u2 = U[:, 1]
     ipr2 = float(np.sum(u2 * u2 * u2 * u2))
@@ -119,18 +178,54 @@ def _spectrum_stats(Z: np.ndarray) -> tuple[float, float, float, float, float] |
         second_loc = (n_members * ipr2 - 1.0) / (n_members - 1.0)
     else:
         second_loc = np.nan
-    if rel_gap < _REL_GAP_THRESHOLD:
+    if rel_gap < eigen_gap:
         second_loc = np.nan
     return mode_share, eff_rank, localization, spectral_gap, second_loc
 
 
-def _group_spectrum_series(feats: np.ndarray, group: np.ndarray, which: str) -> np.ndarray:
+def _reject_duplicate_feature_panels(feats: np.ndarray) -> None:
+    """Reject exact duplicate feature panels at the op boundary (P1-L #134).
+
+    ``group_feature_mode_share(f1=turnover, f2=turnover, f3=momentum)`` is a
+    grammar/expression-duplication bug, not market structure: two identical
+    feature columns mechanically deflate the SVD effective rank (the second
+    identical column adds zero information, so the standardized matrix is
+    artificially low-rank).  The op boundary is the last place a generated
+    expression and a real panel meet, so any pair of feature panels that are
+    bitwise-identical (NaN positions included) is rejected with a hard error.
+    """
+    d = feats.shape[2]
+    for i in range(d):
+        for j in range(i + 1, d):
+            if np.array_equal(feats[..., i], feats[..., j], equal_nan=True):
+                raise ValueError(
+                    "group spectrum: feature panel f%d is an exact duplicate of "
+                    "f%d — duplicate feature expressions mechanically lower the "
+                    "SVD effective rank (expression duplication, not market "
+                    "structure); provide distinct features" % (i + 1, j + 1)
+                )
+
+
+def _group_spectrum_series(
+    feats: np.ndarray,
+    group: np.ndarray,
+    which: str,
+    *,
+    group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
+    eigen_gap: float = _REL_GAP_THRESHOLD,
+) -> np.ndarray:
     rows, cols, d = feats.shape
     min_members = _min_members(d)
     out = np.full((rows, cols), np.nan, dtype=float)
+    # P1-L #134: reject exact-duplicate feature panels before any SVD work.
+    _reject_duplicate_feature_panels(feats)
     # P1 (round 7): per-group trailing history of valid-member counts so extreme
     # membership swings (30 members today, 7 tomorrow) are treated as coverage
     # noise instead of economic change.
+    #
+    # P1-L #133: the history key is (GroupSchemaVersion, GroupId), never the
+    # bare label — the same label string under a different taxonomy version is
+    # a DIFFERENT group and must not share a membership history.
     breadth_history: dict[Any, deque] = {}
     for t in range(rows):
         row = feats[t]
@@ -152,7 +247,8 @@ def _group_spectrum_series(feats: np.ndarray, group: np.ndarray, which: str) -> 
             # P1 (round 7): breadth-stability gate — when the current valid
             # member count collapses below 0.5 of the trailing median, the
             # spectral change is coverage noise; fail closed to NaN.
-            hist = breadth_history.setdefault(label, deque(maxlen=_BREADTH_STABILITY_WINDOW))
+            key = (str(group_schema_version), label)
+            hist = breadth_history.setdefault(key, deque(maxlen=_BREADTH_STABILITY_WINDOW))
             if len(hist) >= 3:
                 trailing_median = float(np.median(list(hist)))
                 if trailing_median > 0.0 and Zv.shape[0] < _BREADTH_RATIO_THRESHOLD * trailing_median:
@@ -165,7 +261,7 @@ def _group_spectrum_series(feats: np.ndarray, group: np.ndarray, which: str) -> 
             if np.any(~np.isfinite(scale)) or np.any(scale <= _EPS):
                 continue
             Zv = (Zv - med) / scale
-            stats = _spectrum_stats(Zv)
+            stats = _spectrum_stats(Zv, eigen_gap=eigen_gap)
             if stats is None:
                 continue
             if which == "mode_share":
@@ -232,6 +328,10 @@ class GroupFeatureValidMemberCount(SeriesOperator):
         ["f1", "f2", "f3", "group"],
         unit="count",
         cost=2,
+        # P1-L #132: every member of a group receives the SAME value that day —
+        # a GROUP state, never a standalone stock-level cross-sectional alpha.
+        role="group_state",
+        extra_tags=("group_state",),
     )
 
     def _calculate_series(
@@ -263,6 +363,9 @@ class GroupFeatureCoverageRatio(SeriesOperator):
         ["f1", "f2", "f3", "group"],
         unit="ratio",
         cost=2,
+        # P1-L #132: a per-group broadcast value — a GROUP state, not stock alpha.
+        role="group_state",
+        extra_tags=("group_state",),
     )
 
     def _calculate_series(
@@ -291,16 +394,34 @@ class GroupFeatureModeShare(SeriesOperator):
     metadata = _metadata(
         "group_feature_mode_share",
         "组内特征谱 top-mode 占比 σ1²/Σσ²（拥挤/同步化）。",
-        ["f1", "f2", "f3", "group"],
+        ["f1", "f2", "f3", "group", "group_schema_version"],
         unit="ratio",
         cost=4,
+        # P1-L #132: every member of a group gets the same value that day — a
+        # GROUP state (regime/condition input), never a stock-level alpha
+        # terminal (CS IC on a broadcast constant cross-section is meaningless).
+        role="group_state",
+        param_specs={"group_schema_version": _GROUP_SCHEMA_VERSION_SPEC},
+        extra_tags=("group_state",),
     )
 
     def _calculate_series(
-        self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, group: pd.DataFrame, **_: Any
+        self,
+        f1: pd.DataFrame,
+        f2: pd.DataFrame,
+        f3: pd.DataFrame,
+        group: pd.DataFrame,
+        group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
+        **_: Any,
     ) -> pd.DataFrame:
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
-        return frame_like(f1, _group_spectrum_series(feats, group.to_numpy(), "mode_share"))
+        return frame_like(
+            f1,
+            _group_spectrum_series(
+                feats, group.to_numpy(), "mode_share",
+                group_schema_version=group_schema_version,
+            ),
+        )
 
 
 @register_operator(
@@ -321,16 +442,32 @@ class GroupFeatureEffectiveRank(SeriesOperator):
     metadata = _metadata(
         "group_feature_effective_rank",
         "组内特征谱有效秩 exp(-Σp log p)。",
-        ["f1", "f2", "f3", "group"],
+        ["f1", "f2", "f3", "group", "group_schema_version"],
         unit="count",
         cost=4,
+        # P1-L #132: per-group broadcast — a GROUP state, not stock-level alpha.
+        role="group_state",
+        param_specs={"group_schema_version": _GROUP_SCHEMA_VERSION_SPEC},
+        extra_tags=("group_state",),
     )
 
     def _calculate_series(
-        self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, group: pd.DataFrame, **_: Any
+        self,
+        f1: pd.DataFrame,
+        f2: pd.DataFrame,
+        f3: pd.DataFrame,
+        group: pd.DataFrame,
+        group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
+        **_: Any,
     ) -> pd.DataFrame:
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
-        return frame_like(f1, _group_spectrum_series(feats, group.to_numpy(), "effective_rank"))
+        return frame_like(
+            f1,
+            _group_spectrum_series(
+                feats, group.to_numpy(), "effective_rank",
+                group_schema_version=group_schema_version,
+            ),
+        )
 
 
 @register_operator(
@@ -352,16 +489,40 @@ class GroupFeatureModeLocalization(SeriesOperator):
     metadata = _metadata(
         "group_feature_mode_localization",
         "组内 top-mode 局域化 (N·Σu1⁴-1)/(N-1)（[0,1]，谱隙门槛）。",
-        ["f1", "f2", "f3", "group"],
+        ["f1", "f2", "f3", "group", "group_schema_version", "eigen_gap"],
         unit="ratio",
         cost=4,
+        # P1-L #132: per-group broadcast — a GROUP state, not stock-level alpha.
+        # P1-L #135: the eigen-gap gate is a declared ESTIMATOR_RESOLUTION knob
+        # (searchable=False), surfaced in metadata instead of a hidden kernel
+        # constant.
+        role="group_state",
+        param_specs={
+            "group_schema_version": _GROUP_SCHEMA_VERSION_SPEC,
+            "eigen_gap": _EIGEN_GAP_SPEC,
+        },
+        extra_tags=("group_state", f"eigen_gap:{_REL_GAP_THRESHOLD}"),
     )
 
     def _calculate_series(
-        self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, group: pd.DataFrame, **_: Any
+        self,
+        f1: pd.DataFrame,
+        f2: pd.DataFrame,
+        f3: pd.DataFrame,
+        group: pd.DataFrame,
+        group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
+        eigen_gap: float = _REL_GAP_THRESHOLD,
+        **_: Any,
     ) -> pd.DataFrame:
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
-        return frame_like(f1, _group_spectrum_series(feats, group.to_numpy(), "localization"))
+        return frame_like(
+            f1,
+            _group_spectrum_series(
+                feats, group.to_numpy(), "localization",
+                group_schema_version=group_schema_version,
+                eigen_gap=eigen_gap,
+            ),
+        )
 
 
 @register_operator(
@@ -382,16 +543,32 @@ class GroupFeatureSpectralGap(SeriesOperator):
     metadata = _metadata(
         "group_feature_spectral_gap",
         "组内谱隙 (σ1²-σ2²)/Σσ²（单主题 vs 双主题竞争）。",
-        ["f1", "f2", "f3", "group"],
+        ["f1", "f2", "f3", "group", "group_schema_version"],
         unit="ratio",
         cost=4,
+        # P1-L #132: per-group broadcast — a GROUP state, not stock-level alpha.
+        role="group_state",
+        param_specs={"group_schema_version": _GROUP_SCHEMA_VERSION_SPEC},
+        extra_tags=("group_state",),
     )
 
     def _calculate_series(
-        self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, group: pd.DataFrame, **_: Any
+        self,
+        f1: pd.DataFrame,
+        f2: pd.DataFrame,
+        f3: pd.DataFrame,
+        group: pd.DataFrame,
+        group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
+        **_: Any,
     ) -> pd.DataFrame:
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
-        return frame_like(f1, _group_spectrum_series(feats, group.to_numpy(), "spectral_gap"))
+        return frame_like(
+            f1,
+            _group_spectrum_series(
+                feats, group.to_numpy(), "spectral_gap",
+                group_schema_version=group_schema_version,
+            ),
+        )
 
 
 @register_operator(
@@ -412,16 +589,38 @@ class GroupFeatureSecondModeLocalization(SeriesOperator):
     metadata = _metadata(
         "group_feature_second_mode_localization",
         "组内第二模式局域化 (N·Σu2⁴-1)/(N-1)。",
-        ["f1", "f2", "f3", "group"],
+        ["f1", "f2", "f3", "group", "group_schema_version", "eigen_gap"],
         unit="ratio",
         cost=4,
+        # P1-L #132: per-group broadcast — a GROUP state, not stock-level alpha.
+        # P1-L #135: eigen-gap gate declared as an ESTIMATOR_RESOLUTION knob.
+        role="group_state",
+        param_specs={
+            "group_schema_version": _GROUP_SCHEMA_VERSION_SPEC,
+            "eigen_gap": _EIGEN_GAP_SPEC,
+        },
+        extra_tags=("group_state", f"eigen_gap:{_REL_GAP_THRESHOLD}"),
     )
 
     def _calculate_series(
-        self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, group: pd.DataFrame, **_: Any
+        self,
+        f1: pd.DataFrame,
+        f2: pd.DataFrame,
+        f3: pd.DataFrame,
+        group: pd.DataFrame,
+        group_schema_version: str = _GROUP_SCHEMA_VERSION_DEFAULT,
+        eigen_gap: float = _REL_GAP_THRESHOLD,
+        **_: Any,
     ) -> pd.DataFrame:
         feats = np.stack([f.to_numpy(dtype=float) for f in (f1, f2, f3)], axis=2)
-        return frame_like(f1, _group_spectrum_series(feats, group.to_numpy(), "second_mode_localization"))
+        return frame_like(
+            f1,
+            _group_spectrum_series(
+                feats, group.to_numpy(), "second_mode_localization",
+                group_schema_version=group_schema_version,
+                eigen_gap=eigen_gap,
+            ),
+        )
 
 
 def _register_surface() -> None:

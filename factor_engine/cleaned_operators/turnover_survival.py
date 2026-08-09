@@ -33,6 +33,26 @@ Missing-value policy (production contract)
 
 All operators are prefix-causal, trailing-window, and return the same panel
 axes as their inputs.
+
+Model parameters (versioned logical-definition metadata)
+    * ``_MAX_OLD_MASS = 0.10`` (v3, R3-144): the maximum tolerated residual
+      pre-window float mass ``M_old = prod_j exp(-u_j)`` (the Poisson-hazard
+      survival of any pre-window holding through the window).  Above this the
+      windowed weights describe only a CONDITIONAL distribution of recently
+      traded chips, not the full holding distribution — renormalising to 1
+      silently erases a large part of the float.  v1 (R6-138) used 0.30; the
+      audit found 29% of unknown old chips still dropped+renormalised was a
+      strong model assumption, so v2/v3 (R3-144) tightened it to 0.10 and
+      exposed ``ts_turnover_old_mass`` as a diagnostic output.  Use a longer
+      ``window`` (or the recursive stateful holder-age machine tracked for the
+      future) to bring ``M_old`` under the threshold.
+    * Negative turnover (``u < 0``) is a DATA ERROR, not a no-churn
+      suspension (R3-142): it fails closed (whole row NaN) instead of being
+      clamped to 0.
+    * A day with POSITIVE turnover but a missing price (R3-143) is "chips
+      traded but at an unknown cost": the whole chip distribution that day
+      emits NaN rather than dropping that mass and renormalising the rest to
+      100%.
 """
 from __future__ import annotations
 
@@ -56,15 +76,19 @@ def _default_min_periods(window: int) -> int:
     return max(5, window // 10)
 
 
-# R6-138: a finite window discards every chip acquired BEFORE [t-W, t-1].  The
-# fraction of the current float that predates the window is the survival
-# product over the window ``M_old = prod_j exp(-u_j)`` (the Poisson-hazard
-# survival of any pre-window holding through the window).  When that residual
-# old mass is large, the window estimate is a CONDITIONAL distribution of
-# recently-traded chips, not the full holding distribution — renormalising to 1
-# silently erases a large part of the float.  Above this threshold the estimate
-# is reported as NaN (fail-closed) instead of a mislabelled conditional value.
-_MAX_OLD_MASS = 0.3
+# R6-138 / R3-144: a finite window discards every chip acquired BEFORE
+# [t-W, t-1].  The fraction of the current float that predates the window is
+# the survival product over the window ``M_old = prod_j exp(-u_j)`` (the
+# Poisson-hazard survival of any pre-window holding through the window).  When
+# that residual old mass is large, the window estimate is a CONDITIONAL
+# distribution of recently-traded chips, not the full holding distribution —
+# renormalising to 1 silently erases a large part of the float.  Above this
+# threshold the estimate is reported as NaN (fail-closed) instead of a
+# mislabelled conditional value.  v1 = 0.30 (R6-138) was audited as still too
+# loose (29% of unknown old chips were dropped and the rest renormalised);
+# tightened to 0.10 in R3-144, with ``ts_turnover_old_mass`` exposing the
+# diagnostic.  This is a MODEL PARAMETER (see module docstring, item 145).
+_MAX_OLD_MASS = 0.10
 
 
 def _column_stats(
@@ -93,6 +117,8 @@ def _column_stats(
     mode_d = np.full(rows, np.nan)
     cost_sk = np.full(rows, np.nan)
     age_disp = np.full(rows, np.nan)
+    old_mass = np.full(rows, np.nan)
+    cost_ent_v = np.full(rows, np.nan)
 
     for t in range(rows):
         lo = max(0, t - window)
@@ -115,12 +141,24 @@ def _column_stats(
         # emit NaN rather than read the gap as "no churn".
         if not np.all(np.isfinite(turns)):
             continue
+        # R3-142: negative turnover is a DATA ERROR, never a no-churn
+        # suspension.  ``maximum(turnover, 0)`` read -0.2 as a no-churn day and
+        # silently inverted a data error into a bullish signal; fail closed
+        # (whole row NaN) instead of clamping.
+        if np.any(turns < 0.0):
+            continue
+        # R3-143: a day with POSITIVE turnover but a missing price means chips
+        # changed hands at an UNKNOWN cost.  Dropping that mass and
+        # renormalising the rest to 100% fabricates a full-cost distribution, so
+        # the whole chip distribution that day fails closed.
+        if np.any((turns > 0.0) & (~price_ok)):
+            continue
         # P0-034: Poisson replacement hazard.  A-share turnover routinely
         # exceeds 100% (one float can change hands several times a day);
         # hard-clipping to [0, 1-eps] made any >100% turnover erase every old
         # chip in a single day.  With a Poisson hazard the per-day survival
         # factor is exp(-u): u=1 -> 36.8% survive, u=2 -> 13.5%, u=3 -> 5.0%.
-        u = np.maximum(turns, 0.0)
+        u = turns
         surv = np.exp(-u)
 
         # suffix survival: suf[k] = prod_{m=k}^{L-1} exp(-u[m]); suf[L] = 1.
@@ -135,10 +173,14 @@ def _column_stats(
         total = float(w.sum())
         if not np.isfinite(total) or total <= _EPS:
             continue
-        # R6-138: residual old mass = survival of ANY pre-window holding through
-        # the window = suf[0].  If a large fraction of the float predates the
-        # window, the normalised weights below describe only the recent
-        # conditional distribution — fail closed instead of mislabelling it.
+        # R6-138 / R3-144: residual old mass = survival of ANY pre-window
+        # holding through the window = suf[0].  If a large fraction of the float
+        # predates the window, the normalised weights below describe only the
+        # recent conditional distribution — fail closed instead of mislabelling
+        # it.  The raw old mass is ALWAYS recorded as a diagnostic (even when
+        # the fail-closed threshold trips) so callers can see how much of the
+        # float was window-truncated.
+        old_mass[t] = float(suf[0])
         if float(suf[0]) > _MAX_OLD_MASS:
             continue
         wn = w / total
@@ -192,6 +234,29 @@ def _column_stats(
                 )
                 if np.isfinite(pmode) and pmode > 0.0:
                     mode_d[t] = float(np.log(current / pmode))
+        # R3-147: volatility-scaled chip-cost entropy — bin on log(P/RP)/sigma
+        # with sigma = weighted cost dispersion.  The fixed ±2/5/10/20% bins of
+        # the raw ``cost_ent`` are not comparable across differently-volatile
+        # stocks (the same absolute log-distance is "tight" for a low-vol name
+        # and "wide" for a high-vol name); standardising by the distribution's
+        # own dispersion makes the entropy a scale-free shape measure.
+        sigma = disp[t]
+        if np.isfinite(sigma) and sigma > _EPS:
+            z_std = z_cur / sigma
+            bins_v = np.digitize(z_std, _COST_LOG_EDGES)
+            mass_v = np.zeros(nb)
+            for bb in range(nb):
+                mass_v[bb] = float(np.sum(wn[bins_v == bb]))
+            mtot_v = float(mass_v.sum())
+            if mtot_v > _EPS:
+                pv = mass_v / mtot_v
+                pv = pv[pv > 0.0]
+                cost_ent_v[t] = -float(np.sum(pv * np.log(pv))) / np.log(nb)
+            else:
+                cost_ent_v[t] = 0.0
+        else:
+            # degenerate cost distribution (every cost == RP): entropy is 0.
+            cost_ent_v[t] = 0.0
         # weighted cost skew: third moment of z = log(P/RP) over normalised mass.
         m2 = float(np.sum(wn * log_dist * log_dist))
         m3 = float(np.sum(wn * log_dist * log_dist * log_dist))
@@ -234,20 +299,22 @@ def _column_stats(
         "mode_d": mode_d,
         "cost_sk": cost_sk,
         "age_disp": age_disp,
+        "old_mass": old_mass,
+        "cost_ent_v": cost_ent_v,
     }
 
 
 def _weighted_quantile(
     values: np.ndarray, cdf: np.ndarray, quantiles: tuple[float, ...]
 ) -> np.ndarray:
-    """Linear-interpolated weighted quantiles from a sorted (value, cdf) pair.
+    """Weighted ECDF-inverse quantiles from a sorted (value, cdf) pair (R3-146).
 
     ``cdf`` is the cumulative weight (already normalised to end at ~1).  A
-    quantile ``q`` maps to the value where the ECDF crosses ``q``; endpoints
-    clamp to ``values[0]`` / ``values[-1]`` — in particular ``q <= cdf[0]`` maps
-    to ``values[0]`` and ``q >= cdf[-1]`` maps to ``values[-1]`` (P0-16: the old
-    code clamped the index to 1 and linearly extrapolated below the first
-    value, fabricating chip costs below the observed minimum).
+    quantile ``q`` maps to the FIRST OBSERVED value whose cumulative weight
+    reaches ``q`` — never a linearly interpolated cost that no chip was actually
+    acquired at.  Endpoints clamp to ``values[0]`` / ``values[-1]``: ``q <=
+    cdf[0]`` maps to ``values[0]`` and ``q >= cdf[-1]`` maps to ``values[-1]``
+    (P0-16 / P0-17: no below-first-value extrapolation, no fabricated cost).
     """
     out = np.empty(len(quantiles))
     for i, qq in enumerate(quantiles):
@@ -258,15 +325,8 @@ def _weighted_quantile(
             out[i] = float(values[-1])
         else:
             idx = int(np.searchsorted(cdf, qq, side="left"))
-            idx = min(max(idx, 1), values.shape[0] - 1)
-            hi_cdf = float(cdf[idx])
-            lo_cdf = float(cdf[idx - 1])
-            span = hi_cdf - lo_cdf
-            if span <= _EPS:
-                out[i] = float(values[idx])
-            else:
-                frac = (qq - lo_cdf) / span
-                out[i] = float(values[idx - 1] + frac * (values[idx] - values[idx - 1]))
+            idx = min(max(idx, 0), values.shape[0] - 1)
+            out[i] = float(values[idx])
     return out
 
 
@@ -293,6 +353,7 @@ def _run_all(
     out: dict[str, list[np.ndarray]] = {
         "ref": [], "disp": [], "profit": [], "age": [], "near": [], "qdist": [],
         "cost_ent": [], "mode_d": [], "cost_sk": [], "age_disp": [],
+        "old_mass": [], "cost_ent_v": [],
     }
     for c in range(cols):
         stats = _column_stats(pv[:, c], tv[:, c], w, mp, band, qh, ql)
@@ -620,6 +681,67 @@ class TsTurnoverAgeDispersion(SeriesOperator):
         return _run_all(price, turnover, window, 0.05, 0.75, 0.25)["age_disp"]
 
 
+@register_operator(
+    name="ts_turnover_old_mass",
+    category="time_series_chip_cost",
+    business_category="time_series_chip_cost",
+    canonical="ts_turnover_old_mass",
+    source="turnover_survival",
+)
+class TsTurnoverOldMass(SeriesOperator):
+    """Residual pre-window float mass ``M_old = prod_j exp(-u_j)`` (diagnostic).
+
+    A finite ``window`` discards every acquisition before ``[t-W, t-1]``; the
+    fraction of the current float that predates the window is the Poisson-hazard
+    survival of any pre-window holding through the window.  When ``M_old`` is
+    large the windowed estimates are CONDITIONAL on recently-traded chips, not
+    the full holding distribution — ``_MAX_OLD_MASS`` (model parameter, R3-145)
+    fail-closes them.  This operator exposes ``M_old`` itself so a caller can
+    see exactly how much of the float was window-truncated instead of guessing.
+    """
+
+    metadata = _metadata(
+        "ts_turnover_old_mass",
+        "窗口外残留浮筹质量 M_old = prod exp(-u)（诊断输出）。",
+        ["price", "turnover", "window"],
+        unit="ratio",
+    )
+
+    def _calculate_series(self, price: pd.DataFrame, turnover: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
+        return _run_all(price, turnover, window, 0.05, 0.75, 0.25)["old_mass"]
+
+
+@register_operator(
+    name="ts_turnover_cost_entropy_vol_scaled",
+    category="time_series_chip_cost",
+    business_category="time_series_chip_cost",
+    canonical="ts_turnover_cost_entropy_vol_scaled",
+    source="turnover_survival",
+)
+class TsTurnoverCostEntropyVolScaled(SeriesOperator):
+    """波动率标度的筹码成本熵（按 log(P/RP)/sigma 分箱，R3-147）。
+
+    The raw ``ts_turnover_cost_entropy`` bins on the ABSOLUTE log-price distance
+    (fixed ±2/5/10/20% edges), so the same absolute distance is "tight" for a
+    low-volatility name and "wide" for a high-volatility one — the fixed bins
+    are incomparable across differently-volatile stocks.  This variant
+    standardises ``z = log(P/RP)`` by the weighted cost dispersion
+    ``sigma = sqrt(sum wn * z^2)`` (the distribution's own scale) and bins on
+    ``z/sigma``, making the entropy a scale-free shape measure.  A degenerate
+    cost distribution (``sigma ~ 0``, every cost == RP) has entropy exactly 0.
+    """
+
+    metadata = _metadata(
+        "ts_turnover_cost_entropy_vol_scaled",
+        "波动率标度筹码成本熵（log(P/RP)/disp 分箱，跨波动率可比）。",
+        ["price", "turnover", "window"],
+        unit="entropy",
+    )
+
+    def _calculate_series(self, price: pd.DataFrame, turnover: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
+        return _run_all(price, turnover, window, 0.05, 0.75, 0.25)["cost_ent_v"]
+
+
 def _register_surface() -> None:
     import cleaned_operators.operator_surface as _surface
 
@@ -634,6 +756,8 @@ def _register_surface() -> None:
             "ts_turnover_cost_mode_distance",
             "ts_turnover_cost_skew",
             "ts_turnover_age_dispersion",
+            "ts_turnover_old_mass",
+            "ts_turnover_cost_entropy_vol_scaled",
         })
     from cleaned_operators.rolling_pack import register_polars_bridge
 
@@ -648,6 +772,8 @@ def _register_surface() -> None:
         "ts_turnover_cost_mode_distance",
         "ts_turnover_cost_skew",
         "ts_turnover_age_dispersion",
+        "ts_turnover_old_mass",
+        "ts_turnover_cost_entropy_vol_scaled",
     ):
         register_polars_bridge(_canon)
 

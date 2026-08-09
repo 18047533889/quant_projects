@@ -134,22 +134,19 @@ def test_te_operator_rejects_infeasible_cells_ratio():
 # ---------------------------------------------------------------------------
 # #21 — conditional TE ties do not collapse bins
 # ---------------------------------------------------------------------------
-def test_break_ties_deterministic_separates_ties_only():
+def test_break_ties_deterministic_is_identity_noop():
+    # Audit #49 removes the deterministic tie jitter: exact ties (0-return days /
+    # limit bars / discrete financials) must NOT be perturbed into artificial
+    # micro-differences that manufacture a spurious conditional TE.  The
+    # function is kept only as a documented identity no-op.
     v = np.where(np.arange(120) % 2 == 0, 1.0, 0.0)
     jt = _break_ties_deterministic(v)
-    # deterministic: bit-identical across calls
+    # identity: ties are NOT separated
+    assert np.array_equal(jt, v)
+    assert np.unique(jt).size == np.unique(v).size
+    # bit-identical across calls (deterministic)
     assert np.array_equal(jt, _break_ties_deterministic(v))
-    # exact ties are separated (distinct values now), so quantile binning gets
-    # distinct edges instead of silently collapsing a bin
-    assert np.unique(jt).size > np.unique(v).size
-    # the perturbation is tiny relative to the value range (<= _TIE_JITTER, with
-    # a little float slack)
-    assert float(np.max(np.abs(jt - v))) <= 2e-9
-    # sorted-by-value order is preserved: jt is a monotone transform of v
-    order = np.argsort(v, kind="mergesort")
-    assert np.all(np.diff(jt[order]) >= 0.0)
-    # a fully-degenerate (constant) series is left untouched so the kernel's
-    # ``< 2 distinct states`` check still fails closed
+    # constant series untouched
     const = np.ones(50)
     assert np.array_equal(_break_ties_deterministic(const), const)
 
@@ -174,17 +171,19 @@ def test_conditional_te_collapsed_conditioning_bin_nan(monkeypatch):
     n = 300
     tw = rng.normal(size=n)
     sw = rng.normal(size=n)
-    cw = np.array([0.0] * 200 + [1.0] * 100)  # collapses to one effective bin
-    # Reproduce the pre-fix behaviour: without tie-breaking the quantile edges
-    # collapse, leaving a conditioning bin with ZERO samples.
+    # Binary conditioning: audit #49/#50 treat ties as a categorical STATE, so
+    # the quantile edges fall back to 2 effective cells and the joint tensor is
+    # built at effective dimensions — a genuine finite CTE, never a jitter-
+    # manufactured one and never a collapsed-bin NaN.
+    cw_binary = np.array([0.0] * 200 + [1.0] * 100)
     monkeypatch.setattr(
         "cleaned_operators.conditional_dependence._break_ties_deterministic",
         lambda v: np.asarray(v, dtype=float),
     )
-    collapsed = _conditional_te_window(tw, sw, cw, 3, 1, 50, 1.0)
-    assert math.isnan(collapsed)  # fail closed, never a spurious smoothed 0
+    with_binary = _conditional_te_window(tw, sw, cw_binary, 3, 1, 50, 1.0)
+    assert np.isfinite(with_binary)
 
-    # A truly constant conditioning state also fails closed.
+    # A truly constant conditioning state (one effective cell) still fails closed.
     assert math.isnan(_conditional_te_window(tw, sw, np.ones(n), 3, 1, 50, 1.0))
 
 

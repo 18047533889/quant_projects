@@ -167,10 +167,19 @@ class ProductionTSRegressionSlope(SeriesOperator):
             "Pairwise-finite rolling OLS. The canonical keeps the historical "
             "ts_regression(y, x, window, lag, retval, min_periods=...) contract."
         ),
+        # NEW-039/040: the logical contract must record EVERY scalar position the
+        # kernel/compat actually accepts.  The kernel reads ``lag``/``retval``/
+        # ``min_periods``/``add_intercept`` positionally through ``*legacy_args``
+        # (see ``_calculate_series`` and ``overhaul.compat.ts_regression_compat``);
+        # declaring only 4 names made the central gate reject the documented
+        # historical ``(y, x, window, lag, retval)`` call form.
         param_names=[
             "y",
             "x",
             "window",
+            "lag",
+            "retval",
+            "min_periods",
             "add_intercept",
         ],
         tags=["pit_safe", "causal", "rolling_regression", "production_repair"],

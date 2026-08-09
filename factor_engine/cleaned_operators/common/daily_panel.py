@@ -58,25 +58,32 @@ def _aligned(*frames: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
 
 
 def _assert_condition_bool(condition: pd.DataFrame, name: str = "condition") -> None:
-    """R11 #144: the condition input must be a ConditionBool.
+    """R11 #144 + NEW-047/253: the condition input must be a strict ConditionBool.
 
     Accepted values: {0, 1} (or boolean True/False); NaN = missing and is
-    excluded from the selection.  Any other finite numeric value (e.g. 5.0,
-    -3.0) is neither a probability nor a boolean — silently treating it as
-    "truthy" is a hidden semantic the operator contract forbids.  Fail the
-    call (raise) instead of guessing.
+    excluded from the selection.  ANY other value — including ±Inf — is a
+    contract violation.  The audit bug: the old check used ``finite =
+    np.isfinite(cv)`` as the "needs validation" premise, so ±Inf was not finite
+    and slipped past the validator, then downstream ``.ne(0)`` treated it as
+    True while other families read it as False — an Inf condition behaved
+    differently across the codebase.  The legal set is strictly {0, 1, NaN};
+    anything else must raise.
 
     Mirrors ``cleaned_operators.conditional_ext._assert_condition_bool``.  The
     validator is duplicated here rather than imported because ``conditional_ext``
     imports ``_aligned`` from this module (importing back would be circular).
     """
     cv = condition.to_numpy()
-    finite = np.isfinite(cv)
-    bad = finite & (cv != 0.0) & (cv != 1.0)
+    missing = pd.isna(cv)
+    valid = (cv == 0.0) | (cv == 1.0)
+    bad = ~missing & ~valid
     if np.any(bad):
+        bad_values = set(np.unique(cv[bad]).tolist())
         raise ValueError(
             f"{name} must be a ConditionBool (values in {{0, 1}} with NaN as "
-            f"missing); found {int(bad.sum())} finite value(s) outside {{0, 1}}"
+            f"missing); found {int(bad.sum())} value(s) outside {{0, 1}}: "
+            f"{sorted(str(v) for v in bad_values)[:10]} (this includes ±Inf, "
+            "which the previous validator silently passed)"
         )
 
 
