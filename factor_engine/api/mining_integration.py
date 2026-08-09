@@ -1249,7 +1249,7 @@ def default_typed_mining_search_space_config(
         scope = str(policy.get("scope") or entry.get("scope") or "unknown")
         frequency = "minute" if scope == "session_intraday" else "daily"
         cardinality = "group" if scope in {"group", "cross_sectional"} else "panel"
-        signatures.append({
+        signature_entry = {
             "name": canonical,
             "inputs": params,
             "panel_inputs": panel_inputs,
@@ -1262,7 +1262,19 @@ def default_typed_mining_search_space_config(
             "cardinality": cardinality,
             "unit": output_unit,
             "cost": cost,
-        })
+        }
+        try:
+            from mining.operator_catalog import _ROLE_AST_POSITIONS, assign_mining_role
+
+            role = assign_mining_role(canonical, entry)
+            signature_entry["mining_role"] = role.value
+            signature_entry["allowed_ast_positions"] = list(_ROLE_AST_POSITIONS.get(role, ()))
+            signature_entry["terminal_allowed"] = role.value not in {
+                "state", "condition", "event", "group_state", "global_state",
+            }
+        except Exception:
+            pass
+        signatures.append(signature_entry)
 
     return {
         "schema_version": "factor_engine.mining_search_space.v2",
