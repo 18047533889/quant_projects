@@ -386,15 +386,37 @@ def ts_price_delay(stock_return, benchmark_return, window, max_lag=5, min_period
 # ---------------------------------------------------------------------------
 
 
+def _assert_condition_bool(condition_frame: pl.DataFrame) -> None:
+    """R11 #144: the condition input must be a ConditionBool.
+
+    Mirrors ``conditional_ext._assert_condition_bool``: finite values outside
+    {0, 1} are neither a probability nor a boolean — reject the call instead of
+    silently treating them as "truthy".
+    """
+    for c in condition_frame.columns:
+        if c in _SKIP:
+            continue
+        cv = condition_frame[c].to_numpy()
+        finite = np.isfinite(cv)
+        bad = finite & (cv != 0.0) & (cv != 1.0)
+        if np.any(bad):
+            raise ValueError(
+                f"condition must be a ConditionBool (values in {{0, 1}} with NaN "
+                f"as missing); found {int(bad.sum())} finite value(s) outside "
+                "{{0, 1}} in column " + str(c)
+            )
+
+
 def _selected_mask(condition_frame: pl.DataFrame, c: str, *value_frames) -> np.ndarray:
     cv = condition_frame[c].to_numpy()
-    mask = np.isfinite(cv) & (cv != 0)
+    mask = np.isfinite(cv) & (cv == 1.0)
     for frame in value_frames:
         mask = mask & np.isfinite(frame[c].to_numpy())
     return mask
 
 
 def _min_max_if(x, condition, window, min_periods, op):
+    _assert_condition_bool(condition)
     w = _pi(window, "window")
     mp = max(1, int(min_periods))
     cols = _cols(x, condition)

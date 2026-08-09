@@ -67,20 +67,25 @@ def _validate_event_bool(ev: np.ndarray, operator: str) -> None:
         )
 
 
-def _event_marks(evc: np.ndarray, mkc: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Indices and marks of events (event = strictly 1.0; 0 and NaN are non-events)."""
+def _event_states(evc: np.ndarray, mkc: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Classify event bars (``evc == 1``) by mark availability (review #43).
+
+    Returns ``(idx, marks, has_mark)``.  ``has_mark`` is True for an event with
+    a finite mark ("event occurred, mark available") and False for an event
+    whose mark is NaN ("event occurred, mark unavailable").  This is
+    deliberately distinct from "event did not occur" (``evc == 0``) and "event
+    observation unknown" (``evc == NaN``), which are never returned as events.
+    """
     idx = np.flatnonzero(evc == 1.0)
     marks = np.asarray([mkc[i] for i in idx], dtype=float)
-    return idx, marks
+    has_mark = np.isfinite(marks)
+    return idx, marks, has_mark
 
 
-def _mark_autocorr_chunk(evc: np.ndarray, mkc: np.ndarray, event_lag: int) -> float:
-    _, marks = _event_marks(evc, mkc)
+def _mark_autocorr_1d(marks: np.ndarray, event_lag: int) -> float:
+    """Corr(m_j, m_{j-lag}) over a contiguous, fully-available mark array."""
     n = marks.shape[0]
     if n <= event_lag + 3:
-        return np.nan
-    fin = np.isfinite(marks)
-    if int(fin.sum()) <= event_lag + 3:
         return np.nan
     a = marks[event_lag:]
     b = marks[: n - event_lag]
@@ -94,6 +99,35 @@ def _mark_autocorr_chunk(evc: np.ndarray, mkc: np.ndarray, event_lag: int) -> fl
     if va <= _EPS or vb <= _EPS:
         return np.nan
     return float(np.corrcoef(aa, bb)[0, 1])
+
+
+def _mark_autocorr_chunk(evc: np.ndarray, mkc: np.ndarray, event_lag: int, mark_missing_policy: str = "censor") -> float:
+    _, marks, has_mark = _event_states(evc, mkc)
+    n = marks.shape[0]
+    if n <= event_lag + 3:
+        return np.nan
+    if mark_missing_policy == "censor":
+        # #43 censor: an event that occurred but whose mark is unavailable is a
+        # *break* in the event-index sequence — magnitude memory across the gap
+        # is unknown, so autocorrelation is computed within the longest
+        # contiguous segment of available marks and events on either side of
+        # the missing-mark event are never paired.
+        best = np.nan
+        best_size = -1
+        seg_start = 0
+        for j in range(n + 1):
+            if j < n and has_mark[j]:
+                continue
+            seg = marks[seg_start:j]
+            if seg.size >= 2:
+                c = _mark_autocorr_1d(seg, event_lag)
+                if np.isfinite(c) and seg.size > best_size:
+                    best = c
+                    best_size = seg.size
+            seg_start = j + 1
+        return best
+    # drop: drop unavailable-mark events and re-index the survivors.
+    return _mark_autocorr_1d(marks[has_mark], event_lag)
 
 
 @register_operator(
@@ -114,7 +148,7 @@ class EventMarkAutocorr(SeriesOperator):
     metadata = _metadata(
         "event_mark_autocorr",
         "事件 mark 序列自相关（事件强度记忆）。",
-        ["event", "mark", "history_window", "event_lag"],
+        ["event", "mark", "history_window", "event_lag", "mark_missing_policy"],
         unit="corr",
         cost=4,
     )
@@ -125,6 +159,7 @@ class EventMarkAutocorr(SeriesOperator):
         mark: pd.DataFrame,
         history_window: int = 252,
         event_lag: int = 1,
+        mark_missing_policy: str = "censor",
         **_: Any,
     ) -> pd.DataFrame:
         w = int(history_window)
@@ -133,6 +168,8 @@ class EventMarkAutocorr(SeriesOperator):
             raise ValueError("event_mark_autocorr requires event_lag >= 1")
         if w < el + 5:
             raise ValueError("event_mark_autocorr requires history_window >= event_lag + 5")
+        if mark_missing_policy not in ("censor", "drop"):
+            raise ValueError("event_mark_autocorr mark_missing_policy must be 'censor' or 'drop'")
 
         evv = event.to_numpy(dtype=float)
         _validate_event_bool(evv, "event_mark_autocorr")
@@ -142,7 +179,9 @@ class EventMarkAutocorr(SeriesOperator):
         for c in range(cols):
             for r in range(rows):
                 lo = max(0, r - w + 1)
-                out[r, c] = _mark_autocorr_chunk(evv[lo : r + 1, c], mkv[lo : r + 1, c], el)
+                out[r, c] = _mark_autocorr_chunk(
+                    evv[lo : r + 1, c], mkv[lo : r + 1, c], el, mark_missing_policy
+                )
         return frame_like(event, out)
 
 
