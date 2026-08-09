@@ -982,14 +982,18 @@ def _validate_param_spec(
             raise OperatorParameterError(f"{name} must be >= {lower}")
         if upper is not None and numeric > upper:
             raise OperatorParameterError(f"{name} must be <= {upper}")
-        if choices is not None and numeric not in choices:
+        if choices is not None and not _choices_contains(choices, numeric, name):
             raise OperatorParameterError(
                 f"{name}={numeric} is not an allowed choice {list(choices)}"
             )
-        return value
+        # R16-049: return the canonicalized float.  A float ParamSpec accepts an
+        # integral value (``p=1``) but must bind it as ``1.0`` so the two
+        # representations never coexist in the AST/hash (a false search-space
+        # duplicate).  Raw ``1`` and ``1.0`` must hash identically.
+        return numeric
     # No recognized dtype: if choices are declared, require exact membership.
     if choices is not None:
-        if value not in choices:
+        if not _choices_contains(choices, value, name):
             raise OperatorParameterError(
                 f"{name}={value!r} is not an allowed choice {list(choices)}"
             )
@@ -1130,6 +1134,28 @@ def _active_allows(allowed: Any, ctrl_val: Any) -> bool:
     return ctrl_val == allowed
 
 
+def _choices_contains(choices: Sequence[Any], value: Any, name: str) -> bool:
+    """Type-aware membership for a declared choices set (R16-053).
+
+    Python cross-type equality (``True == 1``, ``1 == 1.0``) must not admit a
+    value the contract did not list.  A bool is never accepted for non-bool
+    choices; within the numeric family an equal value is accepted.
+    """
+    if isinstance(value, (bool, np.bool_)) and not any(
+        isinstance(c, (bool, np.bool_)) for c in choices
+    ):
+        return False
+    for choice in choices:
+        if type(value) is type(choice) and value == choice:
+            return True
+        if isinstance(value, (int, float, np.integer, np.floating)) and isinstance(
+            choice, (int, float, np.integer, np.floating)
+        ):
+            if float(value) == float(choice):
+                return True
+    return False
+
+
 def _enforce_active_when(
     metadata: OperatorMetadata,
     args: tuple[Any, ...],
@@ -1164,10 +1190,16 @@ def _enforce_active_when(
         if spec is None or spec.active_when is None:
             continue
         controller, allowed = spec.active_when
-        ctrl_val = bound.get(controller)
-        if ctrl_val is None:
+        # R16-050: distinguish "unbound" from "explicitly None".  A caller that
+        # passes ``controller=None`` (``bound`` contains the key) has supplied a
+        # real explicit value and must be judged against the allowed set with
+        # ``None`` — never silently re-resolved to the default, which would let
+        # ``op(x, ctrl=None)`` and ``op(x)`` manufacture two ASTs with identical
+        # activation semantics.  Only an ABSENT controller resolves to default.
+        if controller not in bound:
             # P0-05: resolve the controller through its canonical default and
             # still enforce.  No resolution -> contract bug -> fail closed.
+            ctrl_val = None
             if controller in defaults:
                 ctrl_val = defaults[controller]
             else:
@@ -1181,6 +1213,10 @@ def _enforce_active_when(
                         "cannot judge active/inactive (fail-closed; declare a "
                         "kernel/ParamSpec default for the controller)"
                     )
+        else:
+            # Explicitly provided — including an explicit ``None`` — is the real
+            # controller value, judged directly against the allowed set.
+            ctrl_val = bound[controller]
         if _active_allows(allowed, ctrl_val):
             continue  # active
         # INACTIVE: only tolerate unprovided, or equal to the canonical default.

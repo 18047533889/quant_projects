@@ -81,11 +81,9 @@ DEDUPE_ALIASES: dict[str, str] = {
     "cum_standardize": "expanding_zscore",
     "DECAY_LINEAR": "ts_decay_linear",
     "TS_DECAY_LINEAR": "ts_decay_linear",
-    "ts_decay_linear": "ts_decay_linear",
     "decay_linear": "ts_decay_linear",
     "EMA": "ts_ema",
     "ema": "ts_ema",
-    "ts_ema": "ts_ema",
     "ewm_mean": "ts_ema",
     "ratios": "ts_ratio",
     # --- 回归统计量 ---
@@ -126,10 +124,8 @@ DEDUPE_ALIASES: dict[str, str] = {
     "clamp": "clip",
     "cap": "clip",
     "CLIP": "clip",
-    "clip": "clip",
     "dft": "fft",
     "idft": "ifft",
-    "safe_div_null": "safe_div_null",
     "safe_div": "safe_div_null",
     # --- delay ---
     "DELAY": "ts_delay",
@@ -138,7 +134,6 @@ DEDUPE_ALIASES: dict[str, str] = {
     "delay": "ts_delay",
     "m_delay": "ts_delay",
     "shift": "ts_delay",
-    "ts_delay": "ts_delay",
     # --- 截面 / 分组 ---
     "standardize": "zscore",
     "panel_rank": "rank",
@@ -306,6 +301,11 @@ def apply_operator_deduplication() -> None:
         OperatorRegistry.unregister(name)
 
     for alias, canonical in DEDUPE_ALIASES.items():
+        if alias == canonical:
+            raise RuntimeError(
+                f"dedupe self-loop: {alias!r} aliases itself (R16-075 — a "
+                "canonical->canonical edge has no value and pollutes the alias graph)"
+            )
         if canonical not in OperatorRegistry._operators:
             raise RuntimeError(f"dedupe target missing: {canonical!r} (alias {alias!r})")
         OperatorRegistry.register_alias(alias, canonical)

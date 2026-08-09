@@ -70,19 +70,34 @@ def strict_float(value: Any, name: str, *, minimum: float | None = None,
         raise OperatorParameterError(f"{name} must be >= {minimum}, got {numeric}")
     if maximum is not None and numeric > maximum:
         raise OperatorParameterError(f"{name} must be <= {maximum}, got {numeric}")
-    return value
+    # R16-051: return the canonicalized float, never the raw int/str value —
+    # otherwise ``1`` and ``1.0`` coexist as two AST representations of the
+    # same parameter (a false search-space duplicate).
+    return numeric
 
 
 def strict_probability(value: Any, name: str) -> float:
-    """Finite value in [0, 1] (a probability / ratio / quantile domain)."""
+    """Finite value in [0, 1] (a probability / ratio / quantile domain).
+
+    R16-052: a numeric string (``"0.5"``) is rejected — the strict gate must
+    never smuggle a string into a kernel as a probability.
+    """
     if isinstance(value, (bool, np.bool_)):
         raise OperatorParameterError(f"{name} must be a probability, not bool")
+    if isinstance(value, str):
+        raise OperatorParameterError(
+            f"{name} must be a real number, not a string ({value!r})"
+        )
+    if not isinstance(value, (int, float, np.integer, np.floating)):
+        raise OperatorParameterError(
+            f"{name} must be a real number, not {type(value).__name__} ({value!r})"
+        )
     numeric = float(value)
     if not np.isfinite(numeric):
         raise OperatorParameterError(f"{name} must be finite, got {value!r}")
     if not 0.0 <= numeric <= 1.0:
         raise OperatorParameterError(f"{name} must be in [0, 1], got {numeric}")
-    return value
+    return numeric
 
 
 def strict_bool(value: Any, name: str) -> bool:
@@ -90,12 +105,31 @@ def strict_bool(value: Any, name: str) -> bool:
 
 
 def strict_enum(value: Any, name: str, choices: Sequence[Any]) -> Any:
-    """Exact membership in an allowed set (string enums, reviewed grids)."""
-    if value not in choices:
+    """Exact membership in an allowed set (string enums, reviewed grids).
+
+    R16-053: membership is type-aware.  Python cross-type equality
+    (``True == 1``, ``1 == 1.0``) must not smuggle a value past the gate — a
+    bool is never accepted for numeric choices.  Within the numeric family an
+    equivalent value is canonicalized to the DECLARED choice so ``1`` and ``1.0``
+    cannot coexist as two representations of one parameter.
+    """
+    if isinstance(value, (bool, np.bool_)) and not any(
+        isinstance(c, (bool, np.bool_)) for c in choices
+    ):
         raise OperatorParameterError(
-            f"{name}={value!r} is not an allowed choice {list(choices)}"
+            f"{name} must be an allowed choice, not bool ({value!r})"
         )
-    return value
+    for choice in choices:
+        if type(value) is type(choice) and value == choice:
+            return value
+        if isinstance(value, (int, float, np.integer, np.floating)) and isinstance(
+            choice, (int, float, np.integer, np.floating)
+        ):
+            if float(value) == float(choice):
+                return choice
+    raise OperatorParameterError(
+        f"{name}={value!r} is not an allowed choice {list(choices)}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +137,41 @@ def strict_enum(value: Any, name: str, choices: Sequence[Any]) -> Any:
 # These operate on the raw numpy array of a condition/event/member/state input.
 # Legal set: {0, 1, NaN}; SignedEvent adds -1.  ±Inf is always an error.
 # ---------------------------------------------------------------------------
+
+
+def _coerce_numeric_panel(panel: Any, name: str) -> np.ndarray:
+    """Convert a panel input to a float ndarray WITHOUT string coercion.
+
+    R16-054: the operator semantic boundary must not turn a string column
+    (``'0'``/``'1'``) into a legal condition — string coercion may only happen
+    in a SourceAdapter with lineage.  Object arrays whose elements are real
+    scalars / NaN / None (e.g. a plain Python list) are accepted; any string
+    element is a hard error.
+    """
+    raw = panel.to_numpy() if hasattr(panel, "to_numpy") else np.asarray(panel)
+    if raw.dtype.kind in "SU":
+        raise OperatorParameterError(
+            f"{name} must be a numeric bool panel, not string values (dtype {raw.dtype})"
+        )
+    if raw.dtype.kind == "O":  # object: only real scalars / NaN / None allowed
+        for v in raw.ravel():
+            if v is None:
+                continue
+            if isinstance(v, str):
+                raise OperatorParameterError(
+                    f"{name} must be a numeric bool panel, found string element {v!r}"
+                )
+            if not isinstance(v, (int, float, np.integer, np.floating)):
+                raise OperatorParameterError(
+                    f"{name} must be a numeric bool panel, found "
+                    f"{type(v).__name__} element {v!r}"
+                )
+    try:
+        return raw.astype(float)
+    except (TypeError, ValueError) as exc:
+        raise OperatorParameterError(
+            f"{name} must be convertible to numeric for semantic-bool validation"
+        ) from exc
 
 
 def _validate_bool_panel_array(cv: np.ndarray, name: str, *, allow_negative_one: bool) -> None:
@@ -124,23 +193,23 @@ def _validate_bool_panel_array(cv: np.ndarray, name: str, *, allow_negative_one:
 
 def strict_condition_bool(condition: Any, name: str = "condition") -> None:
     """Validate a ConditionBool panel input: legal set {0, 1, NaN}."""
-    cv = np.asarray(condition.to_numpy(), dtype=float) if hasattr(condition, "to_numpy") else np.asarray(condition, dtype=float)
+    cv = _coerce_numeric_panel(condition, name)
     _validate_bool_panel_array(cv, name, allow_negative_one=False)
 
 
 def strict_event_bool(event: Any, name: str = "event") -> None:
     """Validate an EventBool panel input: legal set {0, 1, NaN}."""
-    cv = np.asarray(event.to_numpy(), dtype=float) if hasattr(event, "to_numpy") else np.asarray(event, dtype=float)
+    cv = _coerce_numeric_panel(event, name)
     _validate_bool_panel_array(cv, name, allow_negative_one=False)
 
 
 def strict_signed_event(event: Any, name: str = "event") -> None:
     """Validate a SignedEvent panel input: legal set {-1, 0, 1, NaN}."""
-    cv = np.asarray(event.to_numpy(), dtype=float) if hasattr(event, "to_numpy") else np.asarray(event, dtype=float)
+    cv = _coerce_numeric_panel(event, name)
     _validate_bool_panel_array(cv, name, allow_negative_one=True)
 
 
 def strict_universe_bool(mask: Any, name: str = "universe_mask") -> None:
     """Validate a UniverseBool panel input: legal set {0, 1, NaN}."""
-    cv = np.asarray(mask.to_numpy(), dtype=float) if hasattr(mask, "to_numpy") else np.asarray(mask, dtype=float)
+    cv = _coerce_numeric_panel(mask, name)
     _validate_bool_panel_array(cv, name, allow_negative_one=False)

@@ -7,15 +7,47 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from backend.operator_errors import OperatorParameterError
 
 _NUMBA_DISABLED = os.environ.get("FACTOR_ENGINE_DISABLE_NUMBA", "").lower() in (
     "1",
     "true",
     "yes",
 )
+
+
+def _strict_window_int(value: Any, name: str) -> int:
+    """Strict integer gate for shared rolling kernels (R16-067).
+
+    A shared kernel must receive only binder-validated integers — never silent
+    ``int(x)`` truncation or ``max(2, ...)`` clamping, which let ``20.9`` and
+    ``20`` manufacture two ASTs with identical output.  A bool / string /
+    non-integral value is a contract violation and raises.
+    """
+    from cleaned_operators.base import strict_int_param
+
+    return strict_int_param(value, name)
+
+
+def _finite_pair_mask(y: pd.DataFrame, x: pd.DataFrame) -> pd.DataFrame:
+    """Paired finite mask for y/x (R16-068).
+
+    ``notna()`` treats ±Inf as an observed value, which corrupts paired stats
+    (a window "full" of Inf pairs passes the min_periods gate and yields a
+    garbage beta/correlation).  All paired statistics must use the finite
+    mask so Inf is never counted as a valid observation.
+    """
+    return pd.DataFrame(
+        np.isfinite(y.to_numpy(dtype=np.float64, copy=False))
+        & np.isfinite(x.to_numpy(dtype=np.float64, copy=False)),
+        index=y.index,
+        columns=y.columns,
+    )
 
 
 def _get_linear_weighted_1d():
@@ -58,6 +90,15 @@ def _get_linear_weighted_1d():
 _linear_weighted_1d_jit = _get_linear_weighted_1d()
 
 
+# R16-070: the WMA partial-warmup identity is an explicit, versioned policy.
+# A partial window of length L < W uses the L NEWEST age slots (weights
+# ``W-L+1 .. W``) renormalized to unit mass — ``RenormalizedPartialWMA``.  The
+# JIT and numpy fallback below implement exactly this, so the two backends
+# cannot drift.  A ``FixedAgeWMA`` variant (full W-weights, unrenormalized)
+# would be a DIFFERENT definition and must be its own canonical if ever wanted.
+WMA_PARTIAL_POLICY = "RenormalizedPartialWMA_age_slot_anchored"
+
+
 def _linear_weighted_1d_numpy(arr: np.ndarray, weights: np.ndarray) -> np.ndarray:
     """纯 numpy 实现的线性加权滚动均值（Numba 回退）。
 
@@ -67,6 +108,9 @@ def _linear_weighted_1d_numpy(arr: np.ndarray, weights: np.ndarray) -> np.ndarra
 
 返回:
     与 ``arr`` 等长的一维加权均值数组。
+
+策略 (R16-070): 与 Numba 内核完全一致 —— partial 窗口（长度 L < W）
+使用最近 L 个 age slot 的权重（``weights[-L:]``，即 W-L+1 .. W）并归一化。
 """
     n = arr.shape[0]
     wlen = len(weights)
@@ -94,6 +138,10 @@ def rolling_linear_weighted(x: pd.DataFrame, window: int) -> pd.DataFrame:
 
 返回:
     线性加权均值 panel。
+
+R16-070: partial-warmup 身份已显式化 —— ``WMA_PARTIAL_POLICY =
+"RenormalizedPartialWMA_age_slot_anchored"``：partial 窗口用最近 L 个 age
+slot 权重并归一化，Numba 与 numpy 回退完全一致（identity 不再模糊）。
 """
     weights = np.arange(1, window + 1, dtype=np.float64)
     fn = _linear_weighted_1d_jit or _linear_weighted_1d_numpy
@@ -142,7 +190,8 @@ NEW-022: ``residual`` 保留为"当前窗口同 cohort 样本内残差的滚动�
     if lag > 0:
         x = x.shift(lag)
     # NEW-021: single paired cohort for ALL statistics.
-    valid = y.notna() & x.notna()
+    # R16-068: finite mask — ±Inf is not a valid paired observation.
+    valid = _finite_pair_mask(y, x)
     y_m = y.where(valid)
     x_m = x.where(valid)
     r_cov = y_m.rolling(window=window, min_periods=min_periods).cov(x_m)
@@ -190,8 +239,11 @@ NEW-020: 对每个窗口，用**有效样本的实际物理行偏移**做 OLS：
 返回:
     时间趋势斜率 panel。
 """
-    w = max(2, int(window))
-    mp = max(2, int(min_periods))
+    # R16-067: strict binder-validated ints — never ``max(2, int(...))`` silent
+    # cast/clamp.  A sub-2 window/min_periods naturally fails closed (no window
+    # reaches the OLS minimum), which is the correct contract.
+    w = _strict_window_int(window, "window")
+    mp = _strict_window_int(min_periods, "min_periods")
     arr = x.to_numpy(dtype=np.float64, copy=False)
     n, m = arr.shape
     out = np.full((n, m), np.nan, dtype=np.float64)
@@ -292,7 +344,8 @@ NEW-024: 生产默认 ``min_periods=5`` —— 2 个点的斜率在统计上没�
 返回:
     Beta 系数 panel。
 """
-    valid = y.notna() & x.notna()
+    # R16-068: finite mask — ±Inf is not a valid paired observation.
+    valid = _finite_pair_mask(y, x)
     y_m = y.where(valid)
     x_m = x.where(valid)
     cov = y_m.rolling(window=window, min_periods=min_periods).cov(x_m)
@@ -367,12 +420,16 @@ def _cum_top_bottom_1d_numpy(
     for i in range(n):
         seg = arr[: i + 1]
         valid = seg[np.isfinite(seg)]
-        if valid.size == 0:
+        # R16-069: fixed-k support, consistent with the rolling top/bottom-k
+        # NEW-025 fail-closed policy.  ``take = min(k, valid.size)`` silently
+        # downgraded ``top5`` to ``top2`` when only 2 samples were available —
+        # top-5 must mean top-5 everywhere, never "the best few we happen to
+        # have".  If available < k the output is NaN (Unknown).
+        if valid.size < k or k < 1:
             out[i] = np.nan
             continue
-        take = min(k, valid.size)
         ordered = np.sort(valid)
-        picked = ordered[-take:] if top else ordered[:take]
+        picked = ordered[-k:] if top else ordered[:k]
         out[i] = picked.mean() if stat == "mean" else picked.sum()
     return out
 

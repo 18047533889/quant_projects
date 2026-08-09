@@ -116,7 +116,10 @@ def _seed_duckdb_panel(root, mem: InMemorySeriesSource) -> None:
 
 
 def _v(x):
-    return None if (x is None or (isinstance(x, float) and (np.isnan(x) or np.isinf(x)))) else float(x)
+    # Preserve inf exactly (parquet float can hold it); only NaN becomes SQL NULL.
+    if x is None or (isinstance(x, float) and np.isnan(x)):
+        return None
+    return float(x)
 
 
 def _col(name: str):
@@ -160,20 +163,28 @@ def _run(source, expr, backend_name: str):
 
 def _compare(a: pd.Series, b: pd.Series, name: str, backend: str) -> None:
     both = pd.concat([a.rename("a"), b.rename("b")], axis=1, join="outer").sort_index()
-    # NaN must align to NaN; inf must align to inf.
+    # NaN must align to NaN; inf must align to inf (same sign).
     na_a = both["a"].isna()
     na_b = both["b"].isna()
     assert na_a.equals(na_b), f"{name} [{backend}]: NaN pattern differs:\n{both[na_a != na_b].head(10)}"
-    finite = both["a"].notna() & both["b"].notna()
+    va = both["a"].to_numpy(dtype=float)
+    vb = both["b"].to_numpy(dtype=float)
+    a_inf = np.isposinf(va) if va.dtype == np.float64 else np.zeros(len(va), bool)
+    b_inf = np.isposinf(vb) if vb.dtype == np.float64 else np.zeros(len(vb), bool)
+    a_ninf = np.isneginf(va) if va.dtype == np.float64 else np.zeros(len(va), bool)
+    b_ninf = np.isneginf(vb) if vb.dtype == np.float64 else np.zeros(len(vb), bool)
+    inf_ok = (a_inf & b_inf) | (a_ninf & b_ninf)
+    inf_bad = ((a_inf | a_ninf) | (b_inf | b_ninf)) & ~inf_ok
+    both = both.assign(_inf_bad=inf_bad)
+    finite = both["a"].notna() & both["b"].notna() & ~(a_inf | a_ninf | b_inf | b_ninf)
     diff = (both["a"] - both["b"]).abs()
     denom = both["a"].abs()
-    rel = diff / denom.where(denom > 0, 1.0)
-    bad = finite & ~(diff <= 1e-5 + 1e-5 * denom)
+    bad = (finite & ~(diff <= 1e-5 + 1e-5 * denom)) | both["_inf_bad"]
     n_bad = int(bad.sum())
     assert n_bad == 0, (
         f"{name} [{backend}]: {n_bad} mismatched cells; max_abs_diff="
         f"{float(diff[finite].max()) if finite.any() else 0}\n"
-        f"{both[bad].head(5)}"
+        f"{both[bad].head(6)}"
     )
 
 

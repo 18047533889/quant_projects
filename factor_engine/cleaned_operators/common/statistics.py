@@ -43,8 +43,16 @@ except ImportError:
 
 
 def _aligned_pair(x_col: pd.Series, y_col: pd.Series) -> tuple[pd.Series, pd.Series]:
-    """按 index 对齐后 dropna，避免分别 dropna 再 iloc 配对错位。"""
-    paired = pd.concat([x_col.rename("x"), y_col.rename("y")], axis=1).dropna()
+    """按 index 对齐后剔除无效对，避免分别 dropna 再 iloc 配对错位。
+
+    R16-073: ``dropna()`` does NOT filter ±Inf — an Inf pair would be treated
+    as a valid aligned observation and corrupt the statistic.  Only rows where
+    BOTH values are finite are kept.
+    """
+    paired = pd.concat([x_col.rename("x"), y_col.rename("y")], axis=1)
+    finite = np.isfinite(paired.to_numpy(dtype=float))
+    keep = finite.all(axis=1)
+    paired = paired[keep]
     return paired["x"], paired["y"]
 
 
@@ -189,7 +197,11 @@ class Beta(SeriesOperator):
         tags=["statistics", "regression", "beta"]
     )
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return rolling_beta(y, x, window=window, min_periods=2)
+        # R16-071: do NOT override the shared kernel's reviewed min_periods
+        # floor (default 5).  The wrapper pinning ``min_periods=2`` silently
+        # downgraded the estimator support — 2-point betas must not produce
+        # production output.
+        return rolling_beta(y, x, window=window)
 
 
 
@@ -209,7 +221,11 @@ class Corr(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return x.rolling(window=window, min_periods=1).corr(y)
+        # R16-072: reviewed minimum coverage (2 pairs) — a correlation of a
+        # single pair is NaN anyway, so this is numerically identical while
+        # making the estimator-support floor explicit rather than an incidental
+        # ``min_periods=1``.
+        return x.rolling(window=window, min_periods=2).corr(y)
 
 # aliases: corr
 
@@ -231,7 +247,11 @@ class Cov(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return x.rolling(window=window, min_periods=1).cov(y)
+        # R16-072: reviewed minimum coverage (2 pairs) — a covariance of a
+        # single pair is NaN anyway, so this is numerically identical while
+        # making the estimator-support floor explicit rather than an incidental
+        # ``min_periods=1``.
+        return x.rolling(window=window, min_periods=2).cov(y)
 
 # aliases: cov
 
@@ -249,7 +269,11 @@ class Covariance(SeriesOperator):
         tags=["statistics", "covariance"]
     )
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return x.rolling(window=window, min_periods=1).cov(y)
+        # R16-072: reviewed minimum coverage (2 pairs) — a covariance of a
+        # single pair is NaN anyway, so this is numerically identical while
+        # making the estimator-support floor explicit rather than an incidental
+        # ``min_periods=1``.
+        return x.rolling(window=window, min_periods=2).cov(y)
 
 
 
@@ -265,7 +289,9 @@ class Intercept(SeriesOperator):
         tags=["statistics", "regression", "intercept"]
     )
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return rolling_regression(y, x, window=window, min_periods=2, retval="intercept")
+        # R16-071: use the shared kernel's reviewed min_periods default (3) —
+        # never pin ``min_periods=2`` and downgrade the estimator support.
+        return rolling_regression(y, x, window=window, retval="intercept")
 
 
 
@@ -699,7 +725,11 @@ class beta(SeriesOperator):
         tags=["statistics", "regression", "beta"]
     )
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return rolling_beta(y, x, window=window, min_periods=2)
+        # R16-071: do NOT override the shared kernel's reviewed min_periods
+        # floor (default 5).  The wrapper pinning ``min_periods=2`` silently
+        # downgraded the estimator support — 2-point betas must not produce
+        # production output.
+        return rolling_beta(y, x, window=window)
 
 
 
@@ -916,7 +946,9 @@ class intercept(SeriesOperator):
         tags=["statistics", "regression", "intercept"]
     )
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        return rolling_regression(y, x, window=window, min_periods=2, retval="intercept")
+        # R16-071: use the shared kernel's reviewed min_periods default (3) —
+        # never pin ``min_periods=2`` and downgrade the estimator support.
+        return rolling_regression(y, x, window=window, retval="intercept")
 
 
 

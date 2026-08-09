@@ -154,10 +154,14 @@ def detect_semantic_duplicate_candidates(
 ) -> list[dict[str, Any]]:
     """R15-INC-049/262: candidate duplicate public canonicals.
 
-    A real detector combines (a) the alias graph, (b) canonical-name families
-    (``MACD`` vs ``MACD_line``) and (c) identical param/unit contracts on
-    otherwise-distinct names.  Candidates require human confirmation — the
-    detector never silently deletes.
+    A real detector combines (a) the alias graph and (b) canonical-name
+    families (``MACD`` vs ``MACD_line``).  R16-010: an identical
+    ``(param_names, output_unit, input_grain)`` contract is NO LONGER treated as
+    a duplicate — ``ts_mean`` and ``ts_std`` share the exact same interface yet
+    are mathematically different.  Identical interface is only candidate material;
+    a true duplicate requires implementation/AST fingerprint + golden behavioural
+    + metamorphic equivalence (the machine-audit layer, R16-225).  Candidates
+    require human confirmation — the detector never silently deletes.
     """
     candidates: list[dict[str, Any]] = []
     from cleaned_operators.operator_surface import classify_canonical
@@ -197,102 +201,117 @@ def detect_semantic_duplicate_candidates(
                     {"left": a, "right": b, "reason": "name_family", "confidence": "candidate"}
                 )
                 continue
-            # identical (canonical, param contract) on distinct names
-            ca, cb = catalog[a], catalog[b]
-            if (
-                ca.get("param_names") and ca.get("param_names") == cb.get("param_names")
-                and ca.get("output_unit") and ca.get("output_unit") == cb.get("output_unit")
-                and ca.get("input_grain") == cb.get("input_grain")
-            ):
-                seen.add(key)
-                candidates.append(
-                    {"left": a, "right": b, "reason": "identical_contract", "confidence": "candidate"}
-                )
     return candidates
 
 
-def detect_dead_searchable_params(
-    catalog: dict[str, Any],
-    *,
-    max_canonicals: int = 60,
-) -> tuple[list[dict[str, Any]], int, int]:
-    """R15-INC-050/263: bounded parameter-injectivity probe.
+def _panel_arg_names(operator: Any) -> list[str]:
+    """Typed panel-parameter names for a kernel (R16-005).
 
-    For a sampled subset of ALPHA/factor operators with searchable params,
-    run the pandas kernel on a fixed synthetic panel and change ONE searchable
-    parameter across two legal values; if the full output is byte-identical the
-    parameter is a dead candidate.  Returns (dead_candidates, sampled, total).
-    A canonical that was NOT sampled is reported as ``UNKNOWN`` coverage, never
-    silently PASS.
+    The dead-param runner must bind the FULL declared panel inputs through the
+    typed contract — never ``calculate(panel['x'], ...)`` for a binary/ternary/
+    variadic operator (which throws, gets swallowed, and the operator silently
+    leaves the audit).  ``metadata.panel_params`` is authoritative; a signature
+    heuristic (leading no-default positional params, excluding declared scalars)
+    covers operators that declare panels only in the kernel.
     """
-    dead: list[dict[str, Any]] = []
-    sampled = 0
-    total = 0
-    try:
-        from cleaned_operators.base import searchable_param_names
-        from cleaned_operators.registry import OperatorRegistry
-    except Exception:
-        return dead, sampled, total
+    md = getattr(operator, "metadata", None)
+    pp = getattr(md, "panel_params", None)
+    if pp:
+        return [p for p in pp if p not in ("", "_fn")]
+    scalar_names = set(getattr(md, "scalar_params", None) or ())
+    fn = getattr(operator, "_calculate_series", None) or getattr(operator, "calculate", None)
+    if fn is not None:
+        import inspect
 
-    rng = None
-    for canonical in sorted(catalog):
-        entry = catalog[canonical]
-        if entry.get("compatibility_only") or entry.get("diagnostic_only"):
-            continue
-        if assign_mining_role(canonical, entry) not in (
-            MiningRole.ALPHA, MiningRole.ALPHA_HIGH_COST,
-            MiningRole.FUNDAMENTAL_PIT, MiningRole.INTRADAY_EOD,
-        ):
-            continue
         try:
-            operator = OperatorRegistry.get(canonical, "pandas_numpy")
-            grades = searchable_param_names(getattr(operator, "metadata", None))
-        except Exception:
-            continue
-        searchable = sorted(set(grades.get("full", ())) | set(grades.get("coarse", ())))
-        if not searchable:
-            continue
-        total += 1
-        if total > max_canonicals:
-            continue
-        sampled += 1
-        try:
-            panel = _synthetic_panel(operator)
-            base = _run_op_hash(operator, panel, searchable)
-            for name in searchable:
-                alt = _run_op_hash(operator, panel, searchable, override={name: None})
-                if base is not None and alt == base and alt is not None:
-                    dead.append(
-                        {"canonical": canonical, "param": name, "evidence": "injectivity"}
-                    )
-        except Exception:
-            continue
-    return dead, sampled, total
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            sig = None
+        if sig is not None:
+            panels: list[str] = []
+            for name, param in sig.parameters.items():
+                if name in ("self", "_fn", "kwargs") or param.kind in (
+                    inspect.Parameter.VAR_POSITIONAL,
+                    inspect.Parameter.VAR_KEYWORD,
+                ):
+                    continue
+                if name in scalar_names:
+                    continue
+                if param.default is not inspect.Parameter.empty:
+                    # first defaulted param ends the positional panel prefix
+                    break
+                panels.append(name)
+            if panels:
+                return panels
+    return ["x"]
 
 
-def _synthetic_panel(operator: Any) -> dict[str, Any]:
+def _synthetic_panels(operator: Any) -> dict[str, Any]:
+    """Deterministic synthetic panels keyed by panel-param name (R16-005).
+
+    Every declared panel slot gets its OWN data so a parameter that changes
+    behavior only through a second/third input is not masked by feeding the
+    same array everywhere.
+    """
     import numpy as np
     import pandas as pd
 
     rng = np.random.default_rng(7)
     rows, cols = 80, 5
     idx = pd.date_range("2026-01-01", periods=rows, freq="B")
-    cols_l = [f"s{i}" for i in range(cols)]
-    panel = pd.DataFrame(rng.normal(size=(rows, cols)), index=idx, columns=cols_l)
-    return {"x": panel, "y": panel.roll(1) if hasattr(panel, "roll") else panel}
+    columns = [f"s{i}" for i in range(cols)]
+    panels: dict[str, Any] = {}
+    for name in _panel_arg_names(operator):
+        panels[name] = pd.DataFrame(rng.normal(size=(rows, cols)), index=idx, columns=columns)
+    if not panels:
+        panels["x"] = pd.DataFrame(rng.normal(size=(rows, cols)), index=idx, columns=columns)
+    return panels
+
+
+def _behavior_fingerprint(out: Any) -> str:
+    """Full behavioral fingerprint (R16-006).
+
+    Comparing only finite values let two different missing-masks hash equal — a
+    parameter whose change only altered missingness was misjudged equivalent.
+    The fingerprint hashes shape / index / columns / raw values / NaN mask /
+    ±Inf mask, so ANY behavioral difference (including NaN topology) changes it.
+    """
+    import hashlib
+    import json
+
+    import numpy as np
+
+    h = hashlib.sha256()
+    h.update(f"{out.shape[0]}x{out.shape[1]}".encode("utf-8"))
+    idx_head = [str(i) for i in (out.index[:40] if len(out.index) > 40 else out.index)]
+    h.update(json.dumps(idx_head, ensure_ascii=False).encode("utf-8"))
+    col_head = [str(c) for c in (out.columns[:40] if len(out.columns) > 40 else out.columns)]
+    h.update(json.dumps(col_head, ensure_ascii=False).encode("utf-8"))
+    arr = np.asarray(out, dtype=np.float64)
+    h.update(arr.tobytes())
+    h.update(np.isnan(arr).tobytes())
+    h.update(np.isposinf(arr).tobytes())
+    h.update(np.isneginf(arr).tobytes())
+    return h.hexdigest()[:16]
 
 
 def _run_op_hash(
     operator: Any,
-    panel: dict[str, Any],
+    panels: dict[str, Any],
     searchable: list[str],
     *,
     override: dict[str, Any] | None = None,
-) -> str | None:
-    """Run the kernel and hash the output; ``override`` picks an alternative
-    legal value for a parameter (the 'different value' side of injectivity)."""
-    import hashlib
+) -> tuple[str | None, str | None]:
+    """Run the kernel on the full panel binding and fingerprint the output.
 
+    Returns ``(fingerprint, error_summary)``.  ``override`` picks an alternative
+    legal value for a parameter (the 'different value' side of injectivity).
+    R16-007: an exception is NEVER silently skipped — it is returned as the
+    ``error_summary`` so the caller records an AUDIT_ERROR for the canonical.
+    """
+    import numpy as np
+
+    error: str | None = None
     try:
         kwargs: dict[str, Any] = {}
         for name in searchable:
@@ -303,7 +322,7 @@ def _run_op_hash(
                 spec = None
             if name in (override or ()):
                 if spec is None:
-                    return None  # no alternative known
+                    return None, "no ParamSpec for overridden searchable param"
                 lo = spec.min if spec.min is not None else 1
                 hi = spec.max if spec.max is not None else lo + 2
                 kwargs[name] = hi if spec.choices else (lo + 1)
@@ -321,35 +340,104 @@ def _run_op_hash(
                     kwargs[name] = 0.5
                 else:
                     kwargs[name] = 10
-        out = operator.calculate(panel["x"], **kwargs)
-        values = out.to_numpy(dtype=float)
-        values = values[np.isfinite(values)]
-        if values.size == 0:
-            return None
-        return hashlib.sha256(values.tobytes()).hexdigest()[:16]
-    except Exception:
-        return None
+        # R16-005: bind the FULL declared panel inputs, in declared order.
+        panel_names = _panel_arg_names(operator)
+        missing = [p for p in panel_names if p not in panels]
+        if missing:
+            return None, f"missing synthetic panels for {missing}"
+        args = [panels[p] for p in panel_names]
+        out = operator.calculate(*args, **kwargs)
+        if out is None:
+            return None, "kernel returned None"
+        return _behavior_fingerprint(out), None
+    except Exception as exc:  # noqa: BLE001 — the error becomes an AUDIT_ERROR
+        error = f"{type(exc).__name__}: {exc}"
+    return None, error
+
+
+def detect_dead_searchable_params(
+    catalog: dict[str, Any],
+) -> tuple[list[dict[str, Any]], int, int, list[dict[str, Any]]]:
+    """R16-004: FULL parameter-injectivity probe — no sampling.
+
+    EVERY ALPHA/factor operator with a searchable param gets a machine outcome:
+    run the kernel on a fixed synthetic panel (full typed panel binding, R16-005)
+    and change ONE searchable parameter across two legal values; identical full
+    behavior fingerprint (incl. NaN topology, R16-006) => dead candidate.
+    Returns ``(dead, audited, total, audit_errors)``.  An operator that could
+    not be constructed/executed is reported as AUDIT_ERROR (R16-007), never
+    silently dropped.
+    """
+    dead: list[dict[str, Any]] = []
+    audit_errors: list[dict[str, Any]] = []
+    audited = 0
+    total = 0
+    try:
+        from cleaned_operators.base import searchable_param_names
+        from cleaned_operators.registry import OperatorRegistry
+    except Exception as exc:
+        audit_errors.append({"canonical": "<import>", "param": "*", "error": str(exc)})
+        return dead, audited, total, audit_errors
+
+    for canonical in sorted(catalog):
+        entry = catalog[canonical]
+        if entry.get("compatibility_only") or entry.get("diagnostic_only"):
+            continue
+        if assign_mining_role(canonical, entry) not in (
+            MiningRole.ALPHA, MiningRole.ALPHA_HIGH_COST,
+            MiningRole.FUNDAMENTAL_PIT, MiningRole.INTRADAY_EOD,
+        ):
+            continue
+        try:
+            operator = OperatorRegistry.get(canonical, "pandas_numpy")
+            grades = searchable_param_names(getattr(operator, "metadata", None))
+        except Exception as exc:
+            audit_errors.append({"canonical": canonical, "param": "*", "error": str(exc)})
+            continue
+        searchable = sorted(set(grades.get("full", ())) | set(grades.get("coarse", ())))
+        if not searchable:
+            continue
+        total += 1
+        panels = _synthetic_panels(operator)
+        base, base_err = _run_op_hash(operator, panels, searchable)
+        if base_err is not None:
+            audit_errors.append({"canonical": canonical, "param": "*", "error": base_err})
+            continue
+        audited += 1
+        for name in searchable:
+            alt, alt_err = _run_op_hash(operator, panels, searchable, override={name: None})
+            if alt_err is not None:
+                audit_errors.append({"canonical": canonical, "param": name, "error": alt_err})
+                continue
+            if base is not None and alt is not None and alt == base:
+                dead.append({"canonical": canonical, "param": name, "evidence": "injectivity"})
+    return dead, audited, total, audit_errors
 
 
 def detect_manifest_gap(catalog: dict[str, Any]) -> list[str]:
     """R15-INC-043/051: CERTIFIED_FACTOR_NOT_IN_MINING_MANIFEST.
 
     Every production-certified factor operator must be reachable in the
-    current-context mining manifest (role-admissible AND the manifest's
-    eligible/pending sets).  Real set difference — never a hardcoded [].
+    current-context ELIGIBLE mining manifest (role-admissible AND runtime-
+    eligible).  R16-009: comparing against ``admission="all"`` was self-
+    validating — ``all`` is nearly the whole registry, so it could never prove
+    the ELIGIBLE runtime manifest actually contains every certified mineable
+    factor.  The eligible-only set is the real runtime contract.
     """
     try:
         from mining.operator_catalog import get_mining_operators
-    except Exception:
-        return []
-    manifest_all = {op.canonical for op in get_mining_operators(admission="all")}
+    except Exception as exc:
+        # A detector that cannot run must not claim PASS with [] — the caller
+        # records this as AUDIT_ERROR coverage.
+        raise RuntimeError(f"detect_manifest_gap: mining catalog unavailable: {exc}") from exc
+    manifest_eligible = {op.canonical for op in get_mining_operators(admission="eligible")}
     missing: list[str] = []
     for canonical, entry in sorted(catalog.items()):
         if entry.get("production_certified"):
             role = assign_mining_role(canonical, entry)
             if role in (MiningRole.ALPHA, MiningRole.ALPHA_HIGH_COST,
                         MiningRole.INTRADAY_EOD, MiningRole.FUNDAMENTAL_PIT):
-                if canonical not in manifest_all:
+                if canonical not in manifest_eligible:
                     missing.append(canonical)
     return missing
 
@@ -432,9 +520,9 @@ def audit_all_registered_operators() -> dict[str, Any]:
     # real detectors (never hardcoded [])
     manifest_gap = detect_manifest_gap(catalog)
     duplicate_candidates = detect_semantic_duplicate_candidates(catalog)
-    dead_params, dead_sampled, dead_total = detect_dead_searchable_params(catalog)
+    dead_params, dead_audited, dead_total, dead_audit_errors = detect_dead_searchable_params(catalog)
     dead_coverage = (
-        f"sampled={dead_sampled}/{dead_total}"
+        f"audited={dead_audited}/{dead_total}"
         if dead_total else "no searchable-param factor operators"
     )
 
@@ -462,20 +550,36 @@ def audit_all_registered_operators() -> dict[str, Any]:
             for d in dead_params
         ],
     }
+    # R16-008: release-critical invariants are EXPLICITLY marked
+    # ``release_blocking``.  ``COMPAT_ALIAS_AS_CANONICAL`` is advisory (an
+    # alias-only compat surface is informational, not a release gate).
+    release_blocking = {
+        "UNCLASSIFIED_FACTOR_CANONICALS",
+        "MINING_ROLE_UNRESOLVED",
+        "UNUSED_PUBLIC_CANONICALS",
+        "FACTOR_SHAPED_RESEARCH_ONLY",
+        "MINING_ELIGIBLE_WITHOUT_CERTIFICATION",
+        "PERMANENTLY_FORBIDDEN_IN_PUBLIC_REGISTRY",
+        "CERTIFIED_FACTOR_NOT_IN_MINING_MANIFEST",
+        "SEMANTIC_DUPLICATE_CANONICALS",
+        "DEAD_SEARCHABLE_PARAMS",
+    }
     # R15-INC-264: detectors that did not run are reported as UNKNOWN coverage,
-    # never silently PASS.
+    # never silently PASS.  R16-004: dead-param coverage is FULL (no sampling);
+    # any AUDIT_ERROR on a dead-param probe is itself a release blocker.
     detector_coverage = {
         "CERTIFIED_FACTOR_NOT_IN_MINING_MANIFEST": {
-            "ran": True, "coverage": "all certified factor operators",
+            "ran": True, "coverage": "all certified factor operators (eligible-only manifest)",
         },
         "SEMANTIC_DUPLICATE_CANONICALS": {
             "ran": True,
-            "coverage": f"{len(duplicate_candidates)} candidate pairs (alias+name+contract)",
+            "coverage": f"{len(duplicate_candidates)} candidate pairs (alias+name-family)",
         },
         "DEAD_SEARCHABLE_PARAMS": {
             "ran": dead_total > 0,
             "coverage": dead_coverage,
-            "unsampled": dead_total - dead_sampled if dead_total else 0,
+            "audit_errors": dead_audit_errors,
+            "unrun": dead_total - dead_audited if dead_total else 0,
         },
     }
 
@@ -507,6 +611,7 @@ def audit_all_registered_operators() -> dict[str, Any]:
         "verdicts": [v.__dict__ for v in verdicts],
         "buckets": {k: list(v) for k, v in buckets.items()},
         "invariants": invariants,
+        "release_blocking": sorted(release_blocking),
         "detector_coverage": detector_coverage,
         "counts": counts,
     }
