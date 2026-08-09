@@ -17,6 +17,11 @@ from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, regi
 
 _SKIP = frozenset({"date", "stock_code"})
 
+# R11 #137: cross-section minimum breadth (mirrors group_ext._MIN_BREADTH /
+# _BREADTH_PARAM_RATIO so the pandas and polars twins share the same gate).
+_MIN_BREADTH = 10
+_BREADTH_PARAM_RATIO = 5.0
+
 
 def _pf(value, name: str, minimum: float | None = None) -> float:
     value = float(value)
@@ -137,6 +142,8 @@ def cs_robust_resid(y, x, trim_ratio=0.1, add_intercept=True):
     fits an ordinary least-squares line.  It is *trimmed OLS*, not a true robust
     regression (no Huber / LAD weighting).  The name and signature are kept for
     compatibility with the pandas twin (``group_ext.CsRobustResid``).
+    R11 #137: a cross-section minimum-breadth gate matches the pandas twin —
+    3 stocks must not drive the regression.
     """
     trim = _pf(trim_ratio, "trim_ratio")
     if not (0.0 <= trim < 0.5):
@@ -146,9 +153,11 @@ def cs_robust_resid(y, x, trim_ratio=0.1, add_intercept=True):
     yv = np.stack([y[c].to_numpy() for c in cols], axis=1)
     xv = np.stack([x[c].to_numpy() for c in cols], axis=1)
     out = np.full((rows, len(cols)), np.nan, dtype=float)
+    # R11 #137: cross-section minimum breadth (mirror of group_ext).
+    min_breadth = max(_MIN_BREADTH, int(_BREADTH_PARAM_RATIO * (2 if add_intercept else 1)))
     for t in range(rows):
         valid = np.isfinite(xv[t]) & np.isfinite(yv[t])
-        if valid.sum() < 3:
+        if valid.sum() < min_breadth:
             continue
         xs = xv[t][valid]
         ys = yv[t][valid]
@@ -159,7 +168,7 @@ def cs_robust_resid(y, x, trim_ratio=0.1, add_intercept=True):
             keep[np.argsort(xs)[-cut:]] = False
             xs = xs[keep]
             ys = ys[keep]
-        if xs.size < 2 or np.std(xs) == 0:
+        if xs.size < (2 if add_intercept else 1) + 1 or np.std(xs) == 0:
             continue
         if add_intercept:
             coeffs = np.polyfit(xs, ys, 1)
