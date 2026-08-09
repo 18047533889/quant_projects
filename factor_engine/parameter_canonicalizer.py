@@ -395,6 +395,7 @@ def sensitivity_verified(
     probes: int = 3,
     param_specs: dict[str, Any] | None = None,
     relational_specs: list[Any] | None = None,
+    sensitivity_mode: str = "compositional",
 ) -> bool:
     """CI gate ``parameter_sensitivity_verified``.
 
@@ -408,7 +409,26 @@ def sensitivity_verified(
     alternatives (``param_specs`` dtype/choices/min/max/active_when plus
     ``relational_specs``).  A probe index that has no legal alternative is
     skipped rather than evaluated with an illegal value.
+
+    R10 #20: ``sensitivity_mode`` distinguishes the two sensitivity policies.
+
+    * ``"compositional"`` (default): the signature binds structural identity,
+      finite-mask, cross-sectional rank AND raw-value behavior — a pure scale
+      (``f -> 2f``) or additive shift (``f -> f+1``) feeding into
+      add/subtract/divide/threshold/where/interaction is NOT judged insensitive.
+    * ``"terminal_rank_equivalence"``: only the terminal cross-sectional rank /
+      normalized-value pattern matters — a pure scale feeding only into a
+      terminal rank is correctly judged insensitive.
+
+    R10 #30: a relational predicate that RAISES while probing is a
+    :class:`ParameterContractError` — never silently downgraded to a
+    NOT_APPLICABLE combination.
     """
+    if sensitivity_mode not in ("compositional", "terminal_rank_equivalence"):
+        raise ValueError(
+            f"unknown sensitivity_mode {sensitivity_mode!r}; expected "
+            "'compositional' or 'terminal_rank_equivalence'"
+        )
     searchable = searchable or {name: True for name in param_names}
     for name in param_names:
         if not searchable.get(name, True):
@@ -418,12 +438,20 @@ def sensitivity_verified(
         for probe in range(probes):
             params = dict(fixture_values)
             current = params.get(name, _default_for(spec))
-            value = _probe_value(name, probe, current, params, spec, relational_specs)
+            value = _probe_value(
+                name, probe, current, params, spec, relational_specs, param_specs
+            )
             if value is _PROBE_NOT_APPLICABLE:
                 continue
+            if value is CONTRACT_ERROR:
+                raise ParameterContractError(
+                    f"{canonical}: relational-predicate execution error while "
+                    f"probing parameter {name!r} (R10 #30 — a raising relation "
+                    "is a CONTRACT_ERROR, not a NOT_APPLICABLE combination)"
+                )
             params[name] = value
             out = evaluate(params)
-            outputs.add(_output_signature(out))
+            outputs.add(_output_signature(out, sensitivity_mode=sensitivity_mode))
         if len(outputs) < 2:
             return False  # parameter {name} has <2 distinct outputs
     return True
@@ -473,6 +501,7 @@ def _probe_value(
     params: dict[str, Any],
     spec: Any | None = None,
     relational_specs: list[Any] | None = None,
+    param_specs: dict[str, Any] | None = None,
 ) -> Any:
     """Legal probe value for ``probe`` index (R9-P1-040).
 
@@ -483,11 +512,16 @@ def _probe_value(
     boolean; an inactive (``active_when``) or un-probeable parameter yields only
     its current value.  When no LEGAL alternative exists for the probe index the
     result is :data:`_PROBE_NOT_APPLICABLE`, never an illegal value.
+
+    R10 #18: ``active_when`` is decidable WITHOUT the controller being
+    explicitly provided — the controller's ``ParamSpec.default`` is consulted
+    (via ``param_specs``).  R10 #30: a relational predicate that RAISES returns
+    :data:`CONTRACT_ERROR`, never ``_PROBE_NOT_APPLICABLE``.
     """
     if spec is None:
         value = _legacy_probe_value(name, probe, current)
     else:
-        value = _spec_probe_value(name, probe, current, params, spec)
+        value = _spec_probe_value(name, probe, current, params, spec, param_specs)
     if value is _PROBE_NOT_APPLICABLE:
         return _PROBE_NOT_APPLICABLE
     return _check_relational_specs(value, name, params, relational_specs)
@@ -509,11 +543,20 @@ def _legacy_probe_value(name: str, probe: int, current: Any) -> Any:
 
 
 def _spec_probe_value(
-    name: str, probe: int, current: Any, params: dict[str, Any], spec: Any
+    name: str,
+    probe: int,
+    current: Any,
+    params: dict[str, Any],
+    spec: Any,
+    param_specs: dict[str, Any] | None = None,
 ) -> Any:
     if getattr(spec, "active_when", None) is not None:
         controller, allowed = spec.active_when
         ctrl = params.get(controller)
+        if ctrl is None:
+            # R10 #18: decidable WITHOUT the controller being explicitly
+            # provided — read the controller parameter's ParamSpec.default.
+            ctrl = _resolve_controller_default(controller, param_specs)
         if ctrl is not None and not _active_allows(allowed, ctrl):
             # Inactive (dead) knob: probing it is a no-op; keep only the current
             # (default) value so the gate sees no sensitivity from a dead knob.
@@ -660,9 +703,15 @@ def _check_relational_specs(
         if check is None:
             continue
         try:
-            if not check(bound):
-                return _PROBE_NOT_APPLICABLE
+            satisfied = check(bound)
         except Exception:
+            # R10 #30: a relational predicate that RAISES is a CONTRACT_ERROR (a
+            # broken / unsupported relation), NEVER a "nonexistent parameter
+            # combination".  Undecidable relations are already converted to
+            # ``False`` inside ``RelationalParamSpec.check``; an exception that
+            # escapes is a genuine contract violation.
+            return CONTRACT_ERROR
+        if not satisfied:
             return _PROBE_NOT_APPLICABLE
     return value
 
