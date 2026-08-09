@@ -848,11 +848,24 @@ def get_best_backend(
     if use_cost and len(candidates) > 1:
         chosen = min(candidates, key=lambda item: (item[1], item[0]))[0]
     else:
-        chosen = (
-            "polars"
-            if any(candidate == "polars" for candidate, _ in candidates)
-            else candidates[0][0]
-        )
+        # R11 P1-06: research auto must NOT prefer a polars backend that is only
+        # a python bridge (pl -> pandas -> pandas kernel -> pl).  That path adds
+        # a materialisation + round-trip and is slower, not faster, than the
+        # pandas reference.  Prefer polars ONLY when it is a real fast path
+        # (native expressions / per-column numpy UDF without a full-frame pandas
+        # round-trip); a ``pandas_materialization_fallback`` stays behind the
+        # certified pandas reference unless benchmark evidence says otherwise.
+        if any(candidate == "polars" for candidate, _ in candidates):
+            pl_op = OperatorRegistry.get(canonical, "polars")
+            from polars_backend_kind import polars_backend_kind
+
+            kind = polars_backend_kind(pl_op)
+            if kind != "pandas_materialization_fallback":
+                chosen = "polars"
+            else:
+                chosen = "pandas_numpy"
+        else:
+            chosen = candidates[0][0]
 
     op = OperatorRegistry.get(canonical, chosen)
     if op is None:
