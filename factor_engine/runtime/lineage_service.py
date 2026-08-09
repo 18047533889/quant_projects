@@ -21,6 +21,20 @@ def resolve_lineage_expression(factor: Factor, expression: str | None) -> str | 
     return getattr(factor, "source_expr", None) or None
 
 
+def _universe_mask_failure_must_raise(production: bool | None) -> bool:
+    """Production must reject materialization when universe-mask application fails.
+
+    ``production`` is an explicit override (used by tests and by callers that
+    know their run mode); when ``None`` the mode is resolved from the engine
+    run-mode environment so existing callers keep their current behaviour.
+    """
+    if production is not None:
+        return bool(production)
+    from runtime.production_policy import is_production_mode
+
+    return is_production_mode()
+
+
 def composite_lineage_from_source(data_source: Any) -> dict[str, Any]:
     if not isinstance(data_source, CompositeDataSource):
         return {}
@@ -144,6 +158,11 @@ def build_materialize_lineage(
     universe_mask: dict[str, Any] | Any | None = None,
     coverage_ratio: float | None = None,
     drop_reason: str | None = None,
+    # R10 #54: a universe-mask failure must REJECT materialization in
+    # production instead of being swallowed into a drop_reason.  ``production``
+    # is an explicit override; ``None`` resolves from the engine run-mode env so
+    # existing callers keep current behavior.
+    production: bool | None = None,
 ):
     from backend.cleaned_bridge import ensure_cleaned_loaded
 
@@ -247,7 +266,12 @@ def build_materialize_lineage(
                     "coverage_ratio": float(_cov),
                     "shape": list(_np.asarray(result).shape),
                 }
-        except Exception as exc:  # pragma: no cover - defensive
+        except Exception as exc:
+            # R10 #54: production must fail the materialization, not record a
+            # drop_reason and continue.  Research keeps the historical
+            # drop_reason path.
+            if _universe_mask_failure_must_raise(production):
+                raise
             if drop_reason is None:
                 drop_reason = f"universe_mask application failed: {exc}"
 

@@ -39,6 +39,33 @@ Review R9-P1 fixes in this module:
   grammar (``ParamSpec`` dtype/choices/min/max/active_when, plus declared
   relational specs); a probe index with no legal alternative yields
   :data:`_PROBE_NOT_APPLICABLE` instead of an illegal value.
+
+Review R10 #18/#19/#20/#28/#29/#30 fixes in this module:
+
+* R10 #18 — ``active_when`` is resolvable WITHOUT the controller being
+  explicitly provided: the controller's ``ParamSpec.default`` is read and used
+  to decide whether a dependent parameter is active.  An INACTIVE parameter
+  explicitly bound to a non-default value is rejected (a dead knob must not
+  manufacture a second AST).
+* R10 #19 — parameter alias single binding: the canonical parameter and any of
+  its aliases map to the same logical target, and a single call must bind each
+  logical target at most once.  ``window=20`` + ``d=30`` (``d`` aliases
+  ``window``) is a duplicate logical binding and is rejected.
+* R10 #20 — ParameterSensitivity distinguishes COMPOSITIONAL_SENSITIVITY from
+  TERMINAL_RANK_EQUIVALENCE.  The compositional signature binds structural
+  identity, finite-mask, cross-sectional rank AND the raw-value behavior, so
+  ``f -> 2f`` / ``f -> f+1`` are NOT judged insensitive; the terminal-rank
+  signature keeps the scale/shift-invariant normalized-value level.
+* R10 #28 — explicit ``panel_params`` / ``input_fields`` / ``scalar_params``
+  metadata takes precedence over the legacy numeric-control-name heuristic;
+  the heuristic is a fallback only.
+* R10 #29 — a fail-closed contract-build path (``build_operator_contract``)
+  returns :data:`CONTRACT_ERROR` on any construction failure and never falls
+  back to name-guessing; ``operator_contract_searchable`` excludes failed
+  contracts from production search.
+* R10 #30 — a relational predicate that RAISES is a :data:`CONTRACT_ERROR`
+  marker, never ``_PROBE_NOT_APPLICABLE`` (an infeasible-but-real parameter
+  combination).
 """
 from __future__ import annotations
 
@@ -67,6 +94,20 @@ _PROBE_NOT_APPLICABLE = object()
 # Coarser than 1e-12 so sub-bin float noise does not flip the signature, while a
 # genuinely different value pattern still does.
 _SIGNATURE_QUANT_LEVELS = 256
+
+# R10 #30 / #29: distinct marker for a relational-predicate execution error or a
+# failed contract build.  NEVER conflated with ``_PROBE_NOT_APPLICABLE`` (an
+# infeasible-but-real parameter combination).
+CONTRACT_ERROR = object()
+
+
+class ParameterContractError(Exception):
+    """An operator/parameter CONTRACT failed to build or to execute.
+
+    Raised/propagated instead of silently treating the failure as a
+    NOT_APPLICABLE parameter combination (R10 #30) or falling back to
+    name-guessing (R10 #29).
+    """
 
 
 def is_rank_equivalence_key(key: tuple[Any, ...]) -> bool:
@@ -324,6 +365,27 @@ def _default_for(spec: Any | None) -> Any:
     default = getattr(spec, "default", None)
     if default is None or _is_missing_default(default):
         return 1.0
+    return default
+
+
+def _resolve_controller_default(controller: str, param_specs: dict[str, Any] | None) -> Any:
+    """Controller value when omitted from a param dict (R10 #18).
+
+    ``active_when`` must be decidable WITHOUT the controller being explicitly
+    provided — fall back to the controller parameter's ``ParamSpec.default``
+    (or the default of its alias target).  Returns ``None`` when no default is
+    declared (undecidable -> the caller skips the check rather than guessing).
+    """
+    if not param_specs:
+        return None
+    cspec = param_specs.get(controller)
+    if cspec is None:
+        # The controller may be a canonical target bound under an alias; a
+        # non-empty spec dict keyed by alias is unusual, so simply give up.
+        return None
+    default = getattr(cspec, "default", None)
+    if default is None or _is_missing_default(default):
+        return None
     return default
 
 

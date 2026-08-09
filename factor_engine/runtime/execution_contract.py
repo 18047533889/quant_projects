@@ -273,7 +273,18 @@ def execution_contract(canonical: str, *, production: bool = False) -> Execution
     ``requires_full_history`` treats that as full-history (conservative).
     """
     resolved = _resolve(canonical, strict=production)
-    spec = _checkpoint_spec(resolved, strict=production)
+    lookup_failed = False
+    try:
+        from stateful_contract import StatefulCheckpointRegistry
+
+        spec = StatefulCheckpointRegistry.get(resolved)
+    except Exception as exc:
+        if production:
+            raise ExecutionContractResolutionError(
+                f"production: checkpoint-contract lookup failed for {resolved!r}: {exc}"
+            ) from exc
+        spec = None
+        lookup_failed = True  # research: remember it was an ERROR, not a miss
     if spec is not None:
         if spec.segmented_execution_supported:
             return ExecutionContract(
@@ -291,6 +302,16 @@ def execution_contract(canonical: str, *, production: bool = False) -> Execution
             state_model="recursive",
             chunking="required_full_history",
             checkpoint_schema=None,
+        )
+    if lookup_failed:
+        # R10 #4: research falls back, but explicitly marked — never silently
+        # stateless/independent on an internal registry error.  chunking=unknown
+        # makes ``requires_full_history`` True (fail-closed full recompute).
+        return ExecutionContract(
+            state_model="unknown",
+            chunking="unknown",
+            checkpoint_schema=None,
+            resolution_error="UNKNOWN_EXECUTION_CONTRACT",
         )
     return ExecutionContract(state_model="stateless", chunking="independent")
 

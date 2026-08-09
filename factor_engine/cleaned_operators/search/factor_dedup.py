@@ -1077,48 +1077,89 @@ def are_rank_duplicates(
     policy: DedupPolicy = DedupPolicy(sign_invariant=False),
     min_regime_agreement: float = 0.66,
     regimes: tuple[str, ...] | None = None,
+    factor_kind: str = FactorKind.ALPHA,
+    overlap_threshold: float = 0.9,
+    min_duplicate_day_ratio: float = 0.9,
 ) -> bool:
     """Multi-regime, per-date dedup decision for a pair of factor computes.
 
-    Ranks are computed **cross-sectionally** (``rank(axis=1)`` — rank each
-    row's columns, i.e. across instruments per day), the A-share convention
-    (review #300).
+    R10-P0-022/023 + R10 #21/#22: the default spans the typed market regimes
+    (gaussian / heavy-tail / trend / mean-revert / ties / gaps / positive-only /
+    event-bool / event-signed-intensity / group / OHLC / A-share) and requires a
+    supermajority of regimes to agree PER DATE — never a single flattened
+    correlation on one Gaussian panel.  ``x`` vs ``-x`` remains NOT a duplicate
+    under ``sign_invariant=False`` and IS one under ``sign_invariant=True``
+    (review #306).
 
-    R10-P0-022/023: the default spans the typed market regimes and requires a
-    supermajority of regimes to agree PER DATE (never a single flattened
-    correlation on one Gaussian panel).  ``x`` vs ``-x`` remains NOT a
-    duplicate under ``sign_invariant=False`` and IS one under
-    ``sign_invariant=True`` (review #306).
+    ``factor_kind`` (R10 #22) selects the equivalence semantics: ALPHA compares
+    cross-sectional rank per day, GLOBAL_STATE compares time-series rank,
+    CONDITION / EVENT compare state labels (R10 #23).  Different kinds never
+    share a dedup group (see :func:`dedup_bucket`).
+
+    ``policy.rank_equivalence=False`` (compositional) requires identical output
+    VALUES, so ``x`` and ``2*x`` are kept distinct (R10 #21).
 
     An explicit ``panel`` scopes the decision to that single regime.
     """
-    if panel is not None:
-        probes = (("gaussian", panel),)
-    else:
-        fixtures = build_typed_fixtures()
-        probes = tuple(
-            (name, fixtures[name])
-            for name in (regimes or _DEFAULT_MULTI_REGIMES)
-            if name in fixtures
-        )
-    votes = 0
-    total = 0
-    for _name, probe in probes:
-        total += 1
-        ra = fa(probe).rank(axis=1, method="average").to_numpy(dtype=float)
-        rb = fb(probe).rank(axis=1, method="average").to_numpy(dtype=float)
-        min_peers = min(20, ra.shape[1])
-        dup = _per_date_duplicates(ra, rb, rho_threshold=rho_threshold, min_peers=min_peers)
-        if not dup and policy.sign_invariant:
-            rb_neg = (-fb(probe)).rank(axis=1, method="average").to_numpy(dtype=float)
-            dup = _per_date_duplicates(
-                ra, rb_neg, rho_threshold=rho_threshold, min_peers=min_peers
-            )
-        if dup:
-            votes += 1
-    if total == 0:
-        return False
-    return (votes / total) >= min_regime_agreement
+    dup, _ = multi_regime_duplicate_decision(
+        fa,
+        fb,
+        factor_kind=factor_kind,
+        panel=panel,
+        regimes=regimes,
+        policy=policy,
+        min_regime_agreement=min_regime_agreement,
+        rho_threshold=rho_threshold,
+        overlap_threshold=overlap_threshold,
+        min_duplicate_day_ratio=min_duplicate_day_ratio,
+    )
+    return dup
+
+
+# --------------------------------------------------------------------------- #
+# R10 #23: transition / state-label signatures for signed & categorical factors
+# --------------------------------------------------------------------------- #
+def transition_signature(
+    compute: Callable[[pd.DataFrame], pd.DataFrame],
+    *,
+    panel: pd.DataFrame | None = None,
+    scheme: str = "boolean",
+) -> str:
+    """Transition-signature for signed / categorical state factors (R10 #23).
+
+    Value correlation alone cannot tell two state factors apart when they visit
+    the same states but at different times or with different transition rates.
+    This signature hashes the per-instrument state SEQUENCE plus the aggregate
+    state-transition counts (e.g. 0->1, 1->0), so transition TIMING and RATES
+    both matter.
+    """
+    probe = probe_panel() if panel is None else panel
+    labels = _state_labels(compute(probe).to_numpy(dtype=float), scheme=scheme)
+    h = hashlib.sha256()
+    h.update(_matrix_bytes(labels.astype(np.int8)))
+    diffs = np.diff(labels, axis=0)
+    for delta in sorted(set(np.unique(diffs))):
+        h.update(f"{int(delta)}:{int((diffs == delta).sum())}".encode("utf-8"))
+    return h.hexdigest()[:20]
+
+
+def state_label_signature(
+    compute: Callable[[pd.DataFrame], pd.DataFrame],
+    *,
+    panel: pd.DataFrame | None = None,
+    scheme: str = "categorical",
+) -> str:
+    """State-label signature for categorical state factors (R10 #23).
+
+    Hashes the discretised state LABEL per cell (not the continuous value): two
+    factors that round to the same categorical labels are equivalent even when
+    their exact values differ.
+    """
+    probe = probe_panel() if panel is None else panel
+    labels = _state_labels(compute(probe).to_numpy(dtype=float), scheme=scheme)
+    h = hashlib.sha256()
+    h.update(_matrix_bytes(labels.astype(np.int8)))
+    return h.hexdigest()[:20]
 
 
 # Backward-compatible import surface.

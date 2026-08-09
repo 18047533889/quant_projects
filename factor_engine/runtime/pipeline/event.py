@@ -28,6 +28,15 @@ def run_data_event(
     config_path: str | Path | None = None,
     output_root: str | Path | None = None,
     write_target: str | None = None,
+    # R10 #53: extended revision fields — all optional, passed straight through
+    # to the DataEvent so the scheduler sees the full revision context.
+    field_id: str | None = None,
+    affected_start: str | None = None,
+    affected_end: str | None = None,
+    snapshot_before: Any = None,
+    snapshot_after: Any = None,
+    revision_kind: str | None = None,
+    deleted_keys: list[str] | tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """``DataEvent`` 驱动增量物化；可选 YAML 提供 data_source / materialize 默认。"""
     lake = Path(lake_root or default_factor_lake_root())
@@ -75,7 +84,18 @@ def run_data_event(
             data_source=_MinimalEventSource(dataset=dataset),
         )
 
-    event = DataEvent(dataset=dataset, column=column, updated_date=updated_date)
+    event = DataEvent(
+        dataset=dataset,
+        column=column,
+        updated_date=updated_date,
+        field_id=field_id,
+        affected_start=affected_start,
+        affected_end=affected_end,
+        snapshot_before=snapshot_before,
+        snapshot_after=snapshot_after,
+        revision_kind=revision_kind,
+        deleted_keys=tuple(deleted_keys) if deleted_keys else None,
+    )
     out = engine.materialize_incremental_from_event(
         event,
         lake_root=str(lake),
