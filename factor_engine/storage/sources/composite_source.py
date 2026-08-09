@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import time
 import warnings
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from logging_utils import get_logger
@@ -36,6 +37,25 @@ class SnapshotVerificationError(RuntimeError):
     Production fail-closed: old composite cache must never stay trusted when
     the underlying snapshot cannot be confirmed.
     """
+
+
+@dataclass(frozen=True)
+class SnapshotState:
+    """A child source's snapshot observation in the composite manifest (P0-29).
+
+    ``version`` is the child's snapshot token (``None`` when the child exposes
+    no token, or when its refresh/read failed).  ``verified`` records whether
+    the snapshot was CONFIRMED during this observation: ``False`` (a failed
+    refresh or an unreadable token) means the snapshot is UNUSABLE and must
+    NEVER be treated as "no update" — a ``None==None`` comparison must not
+    silently reuse a stale cache.  ``observed_at`` is a monotonic timestamp
+    taken at construction (informational; never part of equality across
+    barriers — the barrier compares ``version`` + ``verified`` only).
+    """
+
+    version: str | None
+    verified: bool = True
+    observed_at: float = field(default_factory=time.monotonic)
 
 
 class CompositeSnapshotVerificationError(RuntimeError):
@@ -139,18 +159,22 @@ class CompositeSnapshotBarrier:
 
     def __init__(self, source: "CompositeDataSource") -> None:
         self._source = source
-        self._before: tuple[tuple[str, str | None], ...] | None = None
+        self._before: tuple[tuple[str, SnapshotState], ...] | None = None
 
     def begin(self) -> None:
         """读前捕获所有 child 的当前 snapshot token（不刷新，只读 token）。"""
         self._before = self._source._child_snapshot_manifest(refresh=False)
 
     def revalidate(self) -> None:
-        """读后 revalidate：token 变化 → 清缓存并抛验证错误（fail-closed）。"""
+        """读后 revalidate：token 变化 → 清缓存并抛验证错误（fail-closed）。
+
+        比较 ``version`` + ``verified``（忽略 ``observed_at``；P0-29 下任一侧
+        ``verified=False`` 也视为「变化」——不确认的 snapshot 不得当「无更新」）。
+        """
         if self._before is None:
             return
         after = self._source._child_snapshot_manifest(refresh=False)
-        if after != self._before:
+        if self._source._snapshot_manifest_changed(self._before, after):
             self._source._clear_caches()
             self._source._snapshot_manifest = after
             raise CompositeSnapshotVerificationError(
@@ -236,7 +260,7 @@ class CompositeDataSource(DataSource):
         #: R10 #44: combined child snapshot manifest.  ``None`` until the first
         #: load records a baseline; afterwards a change in any child snapshot id
         #: invalidates ``_column_cache`` / ``_anchor_index_cache``.
-        self._snapshot_manifest: tuple[tuple[str, str | None], ...] | None = None
+        self._snapshot_manifest: tuple[tuple[str, SnapshotState], ...] | None = None
         self._validate_join_policy()
 
     def execution_spec(self) -> dict[str, Any]:
@@ -437,8 +461,8 @@ class CompositeDataSource(DataSource):
         self,
         *,
         refresh: bool = True,
-    ) -> tuple[tuple[str, str | None], ...]:
-        """组合子源快照清单（R10 #44 + #收官轮 P0 Integration + P1-06/P1-08）。
+    ) -> tuple[tuple[str, SnapshotState], ...]:
+        """组合子源快照清单（R10 #44 + #收官轮 P0 Integration + P1-06/P1-08 + P0-29）。
 
         ``refresh=True``：**先调用每个子源的 ``refresh_snapshot()``**（proactive
         刷新，TTL 内短路；DataAccessSource 的廉价路径走 manifest token），再读
@@ -447,14 +471,19 @@ class CompositeDataSource(DataSource):
         dataset A→B 后仍命中自己的旧缓存（cache-of-cache coherence bug）。
         ``refresh=False``：只读当前 token，不推进刷新（P1-07 读前后 revalidate 用）。
 
+        每个子源产出 ``SnapshotState``：``version`` 是 token（可 None），
+        ``verified=False`` 表示本次观测无法确认（refresh 抛错 / token 读取失败）。
         refresh 失败（P1-06）：production 直接抛 ``SnapshotVerificationError``
         （fail-closed —— 两次失败 manifest 相同会让旧 cache 继续被信任，必须拒绝）；
-        research 清缓存 + warning，旧 cache 不再被信任。没有 ``refresh_snapshot``
+        research 清缓存 + warning，并记录 ``verified=False`` —— P0-29 保证
+        ``None==None`` 永不等于「无更新」（``_invalidate_if_snapshot_changed``
+        对 ``verified=False`` 一律判「已变化 / 不可用」）。没有 ``refresh_snapshot``
         的子源退化为只读 ``data_snapshot_id``（None）。
         """
         production = self._effective_production
-        manifest: list[tuple[str, str | None]] = []
+        manifest: list[tuple[str, SnapshotState]] = []
         for name, source in self.sources.items():
+            verified = True
             if refresh:
                 refresher = getattr(source, "refresh_snapshot", None)
                 if callable(refresher):
@@ -477,6 +506,7 @@ class CompositeDataSource(DataSource):
                             exc,
                         )
                         self._clear_caches()
+                        verified = False
             snapshot = getattr(source, "snapshot_token", None)
             if snapshot is None:
                 snapshot = getattr(source, "data_snapshot_id", None)
@@ -484,21 +514,55 @@ class CompositeDataSource(DataSource):
                 try:
                     snapshot = snapshot()
                 except Exception:  # best-effort manifest: a child that cannot
-                    # report a snapshot is treated as unknown (None).
+                    # report a snapshot is unverifiable (unusable), never
+                    # "confirmed None".
                     snapshot = None
-            manifest.append((name, snapshot))
+                    verified = False
+            manifest.append((name, SnapshotState(version=snapshot, verified=verified)))
         return tuple(manifest)
 
+    @staticmethod
+    def _snapshot_manifest_changed(
+        old: tuple[tuple[str, SnapshotState], ...],
+        current: tuple[tuple[str, SnapshotState], ...],
+    ) -> bool:
+        """True when the composite snapshot barrier must invalidate / retry.
+
+        Compares only ``version`` + ``verified`` — never ``observed_at`` (each
+        observation carries a fresh monotonic timestamp, so raw tuple equality
+        would falsely report a drift on every call).
+
+        P0-29: a ``verified=False`` on EITHER side — or in the new snapshot — is
+        always "changed/unusable".  A child whose refresh failed exposes
+        ``version=None``; treating ``None==None`` as "no update" would silently
+        reuse a stale cache, so any unverified observation forces invalidation.
+        """
+        if len(old) != len(current):
+            return True
+        old_by_name = dict(old)
+        for name, new_state in current:
+            old_state = old_by_name.get(name)
+            if old_state is None:
+                return True
+            if not old_state.verified or not new_state.verified:
+                return True
+            if old_state.version != new_state.version:
+                return True
+        return False
+
     def _invalidate_if_snapshot_changed(self) -> None:
-        """子源快照版本变化时清除列/锚点缓存（R10 #44 + #收官轮 P0）。
+        """子源快照版本变化时清除列/锚点缓存（R10 #44 + #收官轮 P0 + P0-29）。
 
         在公共 load 方法顶部调用：**主动 refresh 每个子源** 后比较最新
-        snapshot_token 清单；任一子源 token 变化（或 production 下 refresh
-        无法确认）→ 旧列缓存与锚点索引缓存全部失效，下次读取强制重建——
-        Composite 自己的缓存不能比底层数据更长寿。
+        snapshot_token 清单；任一子源 token 变化（或任何一侧 ``verified=False``，
+        P0-29 —— 包括 refresh 失败 / token 读取失败）→ 旧列缓存与锚点索引缓存
+        全部失效，下次读取强制重建——Composite 自己的缓存不能比底层数据更长寿，
+        ``None==None`` 也绝不等于「无更新」。
         """
         current = self._child_snapshot_manifest()
-        if self._snapshot_manifest is not None and current != self._snapshot_manifest:
+        if self._snapshot_manifest is not None and self._snapshot_manifest_changed(
+            self._snapshot_manifest, current
+        ):
             logger.info(
                 "组合源子源快照变化，清除列/锚点缓存 old=%s new=%s",
                 self._snapshot_manifest,

@@ -189,7 +189,7 @@ def audit_prefix_invariance(
         skip = _warmup_rows(canonical)
         try:
             full_args, full_kwargs = _build_call(canonical, operator, panels)
-            full = operator.calculate(*full_args, **full_kwargs)
+            full = _to_frame(operator.calculate(*full_args, **full_kwargs), panels["x"])
         except Exception:
             # operators that raise on this fixture are not auditable here — a
             # production candidate must fail closed rather than pass silently.
@@ -293,7 +293,11 @@ def audit_stateful_contract_discovery(
         if full_tail.shape != second_half.shape:
             continue
         contract = execution_contract(canonical)
-        identical = _compare_region(full_tail, second_half, 0)
+        # Compare beyond the slice-local warmup: a causal rolling operator run on
+        # the trailing half alone has no lookback rows at the chunk boundary, so
+        # the first ``warmup`` rows legitimately differ from the full run.  Only a
+        # genuine state machine continues to differ beyond warmup (P0-06 note).
+        identical = _compare_region(full_tail, second_half, _warmup_rows(canonical))
         if contract.state_model == "stateless" and not identical:
             errors.append(
                 f"B stateful-drift: {canonical} contract says stateless but the "

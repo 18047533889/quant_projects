@@ -53,6 +53,30 @@ class CatalogResolutionError(DataAccessColumnPreflightError):
     """SemanticFieldCatalog resolution failed with an unexpected error."""
 
 
+class UnknownField(DataAccessColumnPreflightError):
+    """The field is genuinely not present in the FE field registry (P0-31).
+
+    Raised by ``_field_spec`` in production (fail-closed) instead of returning
+    ``None`` and silently falling back to a generic untyped column.
+    """
+
+
+class FieldRegistryUnavailable(DataAccessColumnPreflightError):
+    """The FE field registry could not be loaded / queried (P0-31).
+
+    An infrastructure failure (import error, registry lookup exception) is
+    distinct from a genuinely missing field: it must not be treated as
+    "no contract" in production.
+    """
+
+
+class FieldSpecInvalid(DataAccessColumnPreflightError):
+    """A field spec is present but malformed (P0-31).
+
+    Raised in production when a resolved spec cannot be used as a contract.
+    """
+
+
 class CatalogCorrupt(DataAccessColumnPreflightError):
     """SemanticFieldCatalog data is corrupt or unreadable."""
 
@@ -832,14 +856,66 @@ class DataAccessSource(DataSource):
             raise catalog_exc from exc
         logger.warning("%s (research fallback) dataset=%s: %s", context, self.dataset, exc)
 
-    def _field_spec(self, name: str) -> Any:
-        """Look up a registered FE ``FieldSpec`` for this dataset (registry)."""
+    def _field_spec(self, name: str, *, production: bool = False) -> Any:
+        """Look up a registered FE ``FieldSpec`` for this dataset (registry).
+
+        P0-31: failure classes are distinguished instead of a blanket
+        ``except Exception: return None``:
+
+        * ``UnknownField`` — the field is genuinely not in the registry;
+        * ``FieldRegistryUnavailable`` — the registry itself could not be
+          loaded / queried (infrastructure failure);
+        * ``FieldSpecInvalid`` — a spec exists but is malformed.
+
+        In production (``production=True``) these are RAISED (fail-closed) so a
+        missing/invalid spec is never silently downgraded to an untyped column;
+        in research mode they fall back to ``None`` (fail-open, raw columns
+        allowed).
+        """
         try:
             from fields import FIELD_REGISTRY
-
-            return FIELD_REGISTRY.get(name, table=self.dataset)
-        except Exception:
+            from fields.registry import (
+                AmbiguousField,
+                ResolvedField,
+                UnknownField as UnknownFieldResult,
+            )
+        except Exception as exc:
+            if production:
+                raise FieldRegistryUnavailable(
+                    f"field registry unavailable for {name!r} dataset={self.dataset!r}: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
             return None
+        try:
+            resolved = FIELD_REGISTRY.resolve_field(name, table=self.dataset)
+        except Exception as exc:
+            if production:
+                raise FieldRegistryUnavailable(
+                    f"field registry lookup failed for {name!r} dataset={self.dataset!r}: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+            return None
+        if isinstance(resolved, UnknownFieldResult):
+            if production:
+                raise UnknownField(
+                    f"unknown field {name!r} in dataset {self.dataset!r}"
+                )
+            return None
+        if isinstance(resolved, AmbiguousField):
+            if production:
+                raise UnknownField(
+                    f"ambiguous field {name!r} in dataset {self.dataset!r} "
+                    f"(candidates: {', '.join(resolved.candidates)})"
+                )
+            return None
+        spec = resolved.spec
+        if spec is None:
+            if production:
+                raise FieldSpecInvalid(
+                    f"field {name!r} in dataset {self.dataset!r} resolved to a null spec"
+                )
+            return None
+        return spec
 
     def _build_field_plans(self, names: list[str]) -> dict[str, NormalizedFieldPlan]:
         """Build unified field plans (P0-11): catalog first, then FE registry.
@@ -857,7 +933,7 @@ class DataAccessSource(DataSource):
             if f is not None:
                 plans[name] = plan_from_catalog_field(name, f)
                 continue
-            spec = self._field_spec(name)
+            spec = self._field_spec(name, production=self.strict_unknown_fields)
             if spec is not None:
                 plans[name] = plan_from_field_spec(name, spec)
                 continue
