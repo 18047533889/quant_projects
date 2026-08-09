@@ -18,6 +18,7 @@ factors; it is no longer the authority for anything.  ``warmup_service``,
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -83,7 +84,6 @@ _STATEFUL_CANONICALS: frozenset[str] = frozenset({
     "state_ewm_if",
     "state_since_reduce",
     "event_refractory",
-    "cross_event",
     "directional_change_state",
     "directional_change_extent",
     "state_since_trend_tstat",
@@ -165,16 +165,101 @@ class HistoryRequirement:
     """Machine-readable lookback requirement (WS-D #257).
 
     ``kind`` is one of ``finite`` / ``full_history`` / ``fiscal_period`` /
-    ``session``; ``rows`` is the minimum warm-up rows required before the first
-    meaningful output (never the 1e9 sentinel).
+    ``session`` / ``event_count`` / ``report_count`` / ``session_count``; ``rows``
+    is the minimum warm-up rows required before the first meaningful output
+    (never the 1e9 sentinel).
+
+    Event-clock kinds (``event_count`` / ``report_count`` / ``session_count``)
+    count OBSERVATIONS of an event/report/session, NOT trading bars — a bar-window
+    warmup cannot derive them, so ``history_requirement`` reports them as
+    ``full_history`` (conservative) unless a declared ``rows`` floor exists.
+    ``count`` records the declared event/report/session count when known.
     """
 
-    kind: str = "finite"  # finite | full_history | fiscal_period | session
+    kind: str = "finite"  # finite | full_history | fiscal_period | session |
+    #                       # event_count | report_count | session_count
     rows: int = 2
+    count: int | None = None  # event/report/session observation count (event-clock kinds)
 
     @property
     def is_full_history(self) -> bool:
-        return self.kind == "full_history"
+        # Event-clock kinds (event_count / report_count / session_count) are
+        # measured in observations, not bars — a bar-window warmup cannot derive
+        # them, so they behave as full-history for DAG composition (conservative).
+        return self.kind in {
+            "full_history", "event_count", "report_count", "session_count",
+        }
+
+    @property
+    def is_event_clock(self) -> bool:
+        return self.kind in {"event_count", "report_count", "session_count"}
+
+
+# Round-11 #12: per-operator execution-contract declaration.  Operators declare
+# their OWN statefulness / chunking / history-clock instead of being patched into
+# the hand-maintained ``_STATEFUL_CANONICALS`` name set.  ``execution_contract()``
+# resolves in order: checkpoint registry -> declared contract -> legacy seed.
+# ``_STATEFUL_CANONICALS`` is kept ONLY as the legacy fallback for operators not
+# yet migrated to a declared contract; new stateful operators must declare.
+_DECLARED_STATEFUL: dict[str, dict[str, Any]] = {}
+
+
+def declare_stateful(
+    canonical: str,
+    *,
+    state_model: str,
+    chunking: str,
+    checkpoint_schema: str | None = None,
+    minimum_history: int = 0,
+    history_kind: str = "full_history",
+    history_count: int | None = None,
+) -> None:
+    """Declare an operator's execution contract at its own module.
+
+    Round-11 #12: this is the ONLY way new stateful operators enter the runtime —
+    never via an edited ``_STATEFUL_CANONICALS`` list.  ``state_model`` is
+    ``recursive`` / ``episode`` / ``session_state`` (never ``stateless`` here);
+    ``chunking`` is ``checkpoint`` / ``required_full_history``.  ``history_kind``
+    is ``full_history`` (default) or an event-clock kind (``event_count`` /
+    ``report_count`` / ``session_count``) for operators whose history is measured
+    in observations, not bars; ``history_count`` is the declared count.
+
+    Re-declaring a canonical is an error (a second declaration is a drift, not a
+    refinement) — use ``execution_contract_overrides()`` to inspect.
+    """
+    if canonical in _DECLARED_STATEFUL:
+        raise ExecutionContractResolutionError(
+            f"duplicate declare_stateful for {canonical!r} — a canonical may "
+            "declare its execution contract exactly once"
+        )
+    if state_model == "stateless":
+        raise ExecutionContractResolutionError(
+            f"declare_stateful called for {canonical!r} with stateless; "
+            "stateless operators declare nothing (remove the legacy seed entry)"
+        )
+    if chunking not in {"checkpoint", "required_full_history"}:
+        raise ExecutionContractResolutionError(
+            f"declare_stateful for {canonical!r}: chunking must be checkpoint or "
+            f"required_full_history, got {chunking!r}"
+        )
+    _DECLARED_STATEFUL[canonical] = {
+        "state_model": state_model,
+        "chunking": chunking,
+        "checkpoint_schema": checkpoint_schema,
+        "minimum_history": int(minimum_history or 0),
+        "history_kind": history_kind,
+        "history_count": history_count,
+    }
+
+
+def declared_stateful_canonicals() -> frozenset[str]:
+    """All canonicals with an operator-declared execution contract."""
+    return frozenset(_DECLARED_STATEFUL)
+
+
+def execution_contract_overrides() -> dict[str, dict[str, Any]]:
+    """Snapshot of operator-declared execution contracts (for audits / CI)."""
+    return {k: dict(v) for k, v in _DECLARED_STATEFUL.items()}
 
 
 # R9-P0-004: sentinel for "a bound parameter exists but its value is not an
@@ -296,6 +381,16 @@ def execution_contract(canonical: str, *, production: bool = False) -> Execution
             state_model="recursive",
             chunking="required_full_history",
             checkpoint_schema=spec.state_schema_version,
+        )
+    if resolved in _DECLARED_STATEFUL:
+        # Round-11 #12: the operator's own declaration is authoritative — it
+        # carries the REAL state_model (episode / recursive / session_state) and
+        # chunking instead of a generic recursive/full-history fallback.
+        declared = _DECLARED_STATEFUL[resolved]
+        return ExecutionContract(
+            state_model=declared["state_model"],
+            chunking=declared["chunking"],
+            checkpoint_schema=declared["checkpoint_schema"],
         )
     if resolved in _STATEFUL_CANONICALS:
         return ExecutionContract(
@@ -587,6 +682,10 @@ for _canon in ("MOM", "ROC"):
     _HISTORY_TRANSFORMS[_canon] = _lag_transform("window", "d", "n")
 for _canon in ("prev", "ts_ratio"):
     _HISTORY_TRANSFORMS[_canon] = HistoryTransform(kind="lag", fixed=1)
+# Round-11 #11: cross_event is a pure lag-1 crossing detector (x_t vs x_{t-1}
+# and y_t vs y_{t-1}) — STATELESS, needs exactly 1 prior bar, and was wrongly
+# listed in the stateful seed.  A finite lag transform gives it its 1-row warmup.
+_HISTORY_TRANSFORMS["cross_event"] = HistoryTransform(kind="lag", fixed=1)
 
 # Window + lag kernels.
 for _canon in ("volume_autocorr", "turnover_autocorr", "ts_autocorr"):
@@ -704,19 +803,111 @@ def _default_window_extension(canonical: str, params: Mapping[str, Any]) -> int 
     return rows
 
 
+def _declared_history_extension(
+    canonical: str, params: Mapping[str, Any]
+) -> int | object | None:
+    """Round-11 #13/#14: declared ``ParamSpec.history_semantics`` / ``history_formula``.
+
+    The machine-readable replacement for the ``window/span/lookback`` name
+    guessing: a parameter declares how it contributes history.  Returns:
+      * ``int``  — declared compound/row history (authoritative).
+      * ``_UNKNOWN`` — a declared event-clock semantics (report_events /
+        session_slots / event_count / report_count / session_count) that a
+        bar-window warmup cannot derive, or a formula that references an
+        unresolvable bound value (conservative full history).
+      * ``None`` — no declared history contract; caller falls back.
+    """
+    meta = _metadata(canonical)
+    if meta is None:
+        return None
+    specs = getattr(meta, "param_specs", None) or {}
+    param_names = tuple(getattr(meta, "param_names", None) or ())
+    formulas: list[tuple[str, str]] = []
+    event_clock = False
+    semantics_rows = 0
+    semantics_known = False
+    for name in param_names:
+        spec = specs.get(name)
+        if spec is None:
+            continue
+        formula = getattr(spec, "history_formula", None)
+        if formula:
+            formulas.append((name, str(formula)))
+            continue
+        sem = getattr(spec, "history_semantics", None)
+        if not sem:
+            continue
+        semantics_known = True
+        if sem in {
+            "report_events", "session_slots",
+            "event_count", "report_count", "session_count",
+        }:
+            event_clock = True
+            continue
+        if sem not in {"exact_rows", "max_rows", "finite_observations", "trailing_contiguous"}:
+            continue
+        value = _bound_param(params, name, specs)
+        if value is _UNKNOWN:
+            return _UNKNOWN
+        if value is None:
+            continue
+        rows = int(value) if sem in {"exact_rows", "finite_observations", "trailing_contiguous"} \
+            else max(0, int(value) - 1)
+        semantics_rows = max(semantics_rows, rows)
+    if not formulas and not semantics_known:
+        return None
+    if formulas:
+        from cleaned_operators.base import _eval_rel_ast, parse_relational_expression
+
+        best = 0
+        for _name, formula in formulas:
+            try:
+                tree, referenced = parse_relational_expression(formula)
+            except ValueError:
+                return _UNKNOWN
+            ns: dict[str, Any] = {}
+            for pname in referenced:
+                if pname not in param_names:
+                    return _UNKNOWN  # formula references an undeclared param
+                value = _bound_param(params, pname, specs)
+                if value is _UNKNOWN or value is None:
+                    return _UNKNOWN
+                ns[pname] = value
+            try:
+                result = _eval_rel_ast(tree, ns)
+            except Exception:
+                return _UNKNOWN
+            if isinstance(result, bool) or not isinstance(result, (int, float)):
+                return _UNKNOWN
+            if not math.isfinite(float(result)):
+                return _UNKNOWN
+            best = max(best, max(0, int(result)))
+        if event_clock:
+            return _UNKNOWN
+        return best
+    if event_clock:
+        return _UNKNOWN
+    return semantics_rows
+
+
 def _own_history_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     """The operator's OWN prior-bar extension beyond its children's max history.
 
     R9-P0-005/P0-006: an explicit per-operator ``HistoryTransform`` is
-    authoritative; the conservative default fallback scans declared window-like
-    params with ``value - 1``.  Returns ``_UNKNOWN`` for an un-resolvable
-    (fractional) bound window value.
+    authoritative; round-11 #13/#14 declared ``ParamSpec`` history semantics /
+    formulas come next (machine-readable, no name guessing); the conservative
+    default fallback scans declared window-like params with ``value - 1``.
+    Returns ``_UNKNOWN`` for an un-resolvable (fractional) bound window value or
+    an event-clock history.
     """
     transform = _HISTORY_TRANSFORMS.get(canonical)
     if transform is not None:
         return _apply_transform(transform, canonical, params)
     if canonical.startswith("ichimoku_"):
         return _ichimoku_extension(canonical, params)
+    declared = _declared_history_extension(canonical, params)
+    if declared is not None:
+        return declared
     return _default_window_extension(canonical, params)
 
 
@@ -761,6 +952,19 @@ def history_requirement(
     resolved = _resolve(canonical, strict=production)
     contract = execution_contract(resolved, production=production)
     rows, unknown = _minimum_warmup_rows(resolved, params, production=production)
+    declared = _DECLARED_STATEFUL.get(resolved)
+    if declared is not None and declared.get("history_kind") in {
+        "event_count", "report_count", "session_count",
+    }:
+        # Round-11 #7/#8/#71: an event-clock operator's history is measured in
+        # observations (updates / reports / sessions), not trading bars — a
+        # bar-window warmup cannot derive it.  Conservative full-history, with
+        # the observation count exposed for the planner to reason about.
+        return HistoryRequirement(
+            kind=declared["history_kind"],
+            rows=max(rows, int(declared.get("minimum_history") or 0)),
+            count=declared.get("history_count"),
+        )
     if contract.requires_full_history or unknown:
         return HistoryRequirement(kind="full_history", rows=rows)
     return HistoryRequirement(kind="finite", rows=rows)
@@ -778,6 +982,15 @@ def _own_history_requirement(canonical: str, params: Mapping[str, Any]) -> Histo
     contract = execution_contract(resolved)
     if contract.requires_full_history:
         rows, _ = _minimum_warmup_rows(resolved, params)
+        declared = _DECLARED_STATEFUL.get(resolved)
+        if declared is not None and declared.get("history_kind") in {
+            "event_count", "report_count", "session_count",
+        }:
+            return HistoryRequirement(
+                kind=declared["history_kind"],
+                rows=rows,
+                count=declared.get("history_count"),
+            )
         return HistoryRequirement(kind="full_history", rows=rows)
     extension = _own_history_extension(resolved, params or {})
     if extension is _UNKNOWN:
@@ -858,7 +1071,10 @@ __all__ = [
     "ExecutionContract",
     "HistoryRequirement",
     "FULL_HISTORY_LOOKBACK_SENTINEL",
+    "declared_stateful_canonicals",
+    "declare_stateful",
     "execution_contract",
+    "execution_contract_overrides",
     "factor_history_requirement",
     "history_requirement",
     "is_full_history_lookback",

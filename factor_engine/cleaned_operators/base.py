@@ -118,8 +118,20 @@ class ParamSpec:
     choices: tuple | None = None          # EnumSpec: canonical allowed values
     searchable: bool = True               # False -> excluded from AlphaProbe/GP grammar
     active_when: tuple | None = None      # (param_name, allowed_values): conditional activation
-    history_semantics: str | None = None  # exact_rows/max_rows/finite_observations/
-    #                                      # trailing_contiguous/report_events/session_slots
+    # round-11 #13: machine-readable HISTORY semantics replace the name-guessing
+    # window/span/lookback whitelist.  ``history_semantics`` classifies THIS
+    # parameter's history kind: exact_rows (lag: value IS the row count),
+    # max_rows (trailing window re-read: value - 1), finite_observations /
+    # trailing_contiguous (need N finite/contiguous bars: value), or an
+    # event-clock kind — report_events / session_slots / event_count /
+    # report_count / session_count — which a bar-window warmup cannot derive.
+    history_semantics: str | None = None
+    # round-11 #14: COMPOUND history as a machine-readable formula over declared
+    # parameter names (e.g. ``"outer_window + inner_window"``, ``"2 * window"``,
+    # ``"window + max_pre_window_age"``).  Evaluated by the restricted arithmetic
+    # interpreter against bound+default values; an unresolvable value makes the
+    # operator's history UNKNOWN (conservative full history, never truncated).
+    history_formula: str | None = None
     # round-7: the canonical default value.  Required for ``active_when`` runtime
     # enforcement — an INACTIVE parameter (its controller is not in the allowed
     # values) must be unprovided or exactly equal to this default, otherwise the
@@ -692,6 +704,55 @@ _LEGACY_KERNEL_ALIASES: dict[str, tuple[str, ...]] = {
 }
 
 
+def _coerce_declared_numeric_string(
+    value: Any,
+    name: str,
+    declared_type: type | None = None,
+    spec: ParamSpec | None = None,
+) -> Any:
+    """Controlled numeric-string coercion for a declared NUMERIC parameter.
+
+    Round-11 #16: the DSL parser no longer converts numeric-looking strings
+    (``"000001"`` must stay a string for a string/code parameter).  A STRING
+    literal reaching the binder is coerced to ``int``/``float`` ONLY when the
+    parameter's declared contract is numeric (``ParamSpec(dtype=int|float)`` or a
+    numeric ``param_types`` entry).  A string parameter — or a parameter with no
+    numeric contract — keeps the exact string.  An unparseable string for a
+    numeric contract is a hard error, never a silent pass-through.
+    """
+    if not isinstance(value, str):
+        return value
+    if spec is not None:
+        dtype = spec.dtype
+    else:
+        dtype = declared_type
+    if dtype in (str, bool) or dtype is None:
+        # String-contract (or undeclared) parameters never convert: ``"000001"``
+        # stays ``"000001"``, a category ID stays its string.
+        return value
+    try:
+        numeric_dtype = dtype in (int, np.integer)
+    except TypeError:  # dtype may be a non-type (unlikely) — be safe
+        return value
+    if not numeric_dtype and dtype not in (float, np.floating):
+        return value
+    stripped = value.strip()
+    if not stripped:
+        raise OperatorParameterError(
+            f"{name}: empty numeric string cannot be bound to a numeric parameter"
+        )
+    try:
+        parsed = int(stripped) if numeric_dtype else float(stripped)
+    except ValueError as exc:
+        raise OperatorParameterError(
+            f"{name}: numeric string {value!r} cannot be converted to "
+            f"{dtype.__name__ if isinstance(dtype, type) else 'numeric'}"
+        ) from exc
+    if not np.isfinite(float(parsed)):
+        raise OperatorParameterError(f"{name}: numeric string {value!r} is non-finite")
+    return parsed
+
+
 def _kernel_param_defaults(operator: Any) -> dict[str, Any]:
     """Canonical default values from the operator kernel signature.
 
@@ -852,7 +913,12 @@ def _normalise_call(
             )
     processed_args = [
         _normalise_integer(
-            value,
+            _coerce_declared_numeric_string(
+                value,
+                names[index] if index < len(names) else "",
+                types.get(names[index]) if index < len(names) else None,
+                specs.get(names[index]) if index < len(names) else None,
+            ),
             names[index] if index < len(names) else "",
             types.get(names[index]) if index < len(names) else None,
             specs.get(names[index]) if index < len(names) else None,
@@ -886,29 +952,44 @@ def _normalise_call(
                 alias_target[key] = matched[0]
     processed_kwargs: dict[str, Any] = {}
     for key, value in kwargs.items():
+        # Round-11 #16: controlled numeric-string coercion against the declared
+        # contract happens once per kwarg, before any alias resolution — the
+        # canonical target's spec (via alias_target) is the authority below.
         if key in names:
-            processed_kwargs[key] = _normalise_integer(
+            coerced = _coerce_declared_numeric_string(
                 value, key, types.get(key), specs.get(key)
+            )
+            processed_kwargs[key] = _normalise_integer(
+                coerced, key, types.get(key), specs.get(key)
             )
             continue
         if key in alias_target:
             # R7-223: validate against the canonical target's contract.
             canon = alias_target[key]
-            processed_kwargs[key] = _normalise_integer(
+            coerced = _coerce_declared_numeric_string(
                 value, canon, types.get(canon), specs.get(canon)
+            )
+            processed_kwargs[key] = _normalise_integer(
+                coerced, canon, types.get(canon), specs.get(canon)
             )
             continue
         if key in aliases:
             # Legacy alias declared without a param_aliases entry but present in
             # the alias set: keep the alias spelling as the kwarg key but validate
             # against the (empty) alias slot — accepted for backward compat.
-            processed_kwargs[key] = _normalise_integer(
+            coerced = _coerce_declared_numeric_string(
                 value, key, types.get(key), specs.get(key)
+            )
+            processed_kwargs[key] = _normalise_integer(
+                coerced, key, types.get(key), specs.get(key)
             )
             continue
         if variadic:
-            processed_kwargs[key] = _normalise_integer(
+            coerced = _coerce_declared_numeric_string(
                 value, key, types.get(key), specs.get(key)
+            )
+            processed_kwargs[key] = _normalise_integer(
+                coerced, key, types.get(key), specs.get(key)
             )
             continue
         raise OperatorParameterError(

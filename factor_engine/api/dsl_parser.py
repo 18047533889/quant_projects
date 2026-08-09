@@ -1,6 +1,19 @@
-"""Restricted factor DSL parser with orthogonal surface and dialect controls."""
+"""Restricted factor DSL parser with orthogonal surface and dialect controls.
+
+Round-11 long-tail: the parser is STRICTLY a syntax layer.
+  * #16 — string literals are never coerced at parse time (``"000001"`` stays
+    ``"000001"``); controlled numeric-string conversion happens against a
+    declared numeric ``ParamSpec`` at the operator call site / runtime binder.
+  * #17 — non-finite numeric literals (``1e309`` -> inf, ``-inf``, ``nan``) are
+    rejected at the DSL boundary.
+  * #18 — a configurable :class:`ComplexityBudget` bounds AST size / depth /
+    call arity / literal magnitude so GP/LLM-generated pathological formulas
+    fail at parse, not at compute time.
+"""
 from __future__ import annotations
 import ast
+import math
+from dataclasses import dataclass
 from typing import Any
 from api.columns import field
 from api.factor import Factor
@@ -9,11 +22,45 @@ from expr.base import Expr
 
 class DSLParseError(ValueError): pass
 
+
+@dataclass(frozen=True)
+class ComplexityBudget:
+    """Round-11 #18: parse-time bounds on expression size/complexity.
+
+    Guards the automatic mining / LLM path against pathological formulas
+    (10k-node trees, huge variadic nodes, absurd literals) before they burn
+    compute budget.
+    """
+    max_ast_nodes: int = 256
+    max_depth: int = 32
+    max_call_arity: int = 12
+    max_literal_magnitude: float = 1e9
+    max_variadic_inputs: int = 32
+
+
 class _ExprBuilder:
-    def __init__(self,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->None:
+    def __init__(self,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None,
+                 budget:ComplexityBudget|None=None)->None:
         if surface=="lqtp" and dialect=="native":dialect="lqtp"
         self._surface=str(surface or "daily");self._dialect=str(dialect or "native").lower();self._dialect_version=dialect_version
         self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+        self._budget=budget or ComplexityBudget()
+        self._nodes=0
+        self._depth=0
+    def _enter(self,node:ast.AST)->None:
+        self._nodes+=1
+        if self._nodes>self._budget.max_ast_nodes:
+            raise DSLParseError(
+                f"expression exceeds ComplexityBudget.max_ast_nodes={self._budget.max_ast_nodes}"
+            )
+        self._depth+=1
+        if self._depth>self._budget.max_depth:
+            self._depth-=1
+            raise DSLParseError(
+                f"expression exceeds ComplexityBudget.max_depth={self._budget.max_depth}"
+            )
+    def _exit(self)->None:
+        self._depth-=1
     def build(self,text:str)->Expr:
         normalized=str(text)
         if self._dialect=="lqtp" or self._surface=="lqtp":
@@ -26,6 +73,12 @@ class _ExprBuilder:
         if not isinstance(expr,Expr):raise DSLParseError("Expression must evaluate to an Expr object.")
         return expr
     def _visit(self,node:ast.AST)->Any:
+        self._enter(node)
+        try:
+            return self._dispatch(node)
+        finally:
+            self._exit()
+    def _dispatch(self,node:ast.AST)->Any:
         if isinstance(node,ast.Call):return self._visit_call(node)
         if isinstance(node,ast.Compare):return self._visit_compare(node)
         if isinstance(node,ast.BinOp):return self._visit_binop(node)
@@ -38,13 +91,25 @@ class _ExprBuilder:
             from api.cleaned_ops import make_cleaned_call_factory
             return make_cleaned_call_factory("not_")(self._visit(node.operand))
         if isinstance(node,ast.Constant):
-            if isinstance(node.value,(str,int,float,bool)) or node.value is None:
-                # round-7 P0: numeric STRING literals ("5", "0.05") are converted
-                # to numbers AT THE PARSER.  The runtime parameter validator never
-                # guesses ("window=\"20\"" must not reach a kernel as a string).
-                if isinstance(node.value,str):
-                    coerced=_coerce_numeric_string(node.value)
-                    return coerced if coerced is not None else node.value
+            if node.value is None or isinstance(node.value,bool):
+                return node.value
+            if isinstance(node.value,(int,float)) and not isinstance(node.value,bool):
+                # Round-11 #17: non-finite numeric literals are rejected at the
+                # DSL boundary (``1e309`` parses to ``inf``; NaN/±Inf never enter
+                # a factor expression).
+                if isinstance(node.value,float) and not math.isfinite(node.value):
+                    raise DSLParseError(f"Non-finite numeric literal is not allowed: {node.value!r}")
+                if not isinstance(node.value,bool) and abs(float(node.value))>self._budget.max_literal_magnitude:
+                    raise DSLParseError(
+                        f"literal magnitude {node.value!r} exceeds ComplexityBudget."
+                        f"max_literal_magnitude={self._budget.max_literal_magnitude}"
+                    )
+                return node.value
+            if isinstance(node.value,str):
+                # Round-11 #16: strings are NEVER coerced at the parser.  A
+                # numeric-looking string is a string (``"000001"``, ``"2024Q1"``,
+                # a category/version/security code); a declared numeric ParamSpec
+                # does the controlled conversion at the operator call site.
                 return node.value
             raise DSLParseError(f"Unsupported literal: {node.value!r}")
         if isinstance(node,ast.Name):
@@ -54,6 +119,18 @@ class _ExprBuilder:
         if isinstance(node,ast.Attribute):raise DSLParseError("Unsupported data-source attribute. Under dialect='lqtp', only registered DataTable.Field or parameterized DataTable(...).Field references are accepted.")
         raise DSLParseError(f"Unsupported syntax node: {type(node).__name__}")
     def _visit_call(self,node:ast.Call)->Any:
+        # Round-11 #18: arity budget at the AST boundary (before recursion) so a
+        # giant variadic call is rejected without visiting every argument node.
+        if len(node.args)>self._budget.max_variadic_inputs:
+            raise DSLParseError(
+                f"call arity {len(node.args)} exceeds ComplexityBudget."
+                f"max_variadic_inputs={self._budget.max_variadic_inputs}"
+            )
+        if len(node.args)+len(node.keywords)>self._budget.max_call_arity:
+            raise DSLParseError(
+                f"call arity {len(node.args)+len(node.keywords)} exceeds "
+                f"ComplexityBudget.max_call_arity={self._budget.max_call_arity}"
+            )
         if isinstance(node.func,ast.Name):
             name=node.func.id
             if name not in self._allowed:raise DSLParseError(f"Unsupported function: {name}")
@@ -64,6 +141,12 @@ class _ExprBuilder:
             if kw.arg is None:raise DSLParseError("Keyword-only **kwargs are not supported.")
             kwargs[kw.arg]=self._visit(kw.value)
         if not callable(func):raise DSLParseError("Call target is not callable.")
+        if isinstance(node.func,ast.Name):
+            # Round-11 #16: controlled numeric-string conversion against the
+            # operator's DECLARED ParamSpec.  String parameters (codes, category
+            # ids, version ids) keep exact strings; numeric parameters coerce
+            # "20" -> 20 at the binder, never the parser.
+            args,kwargs=_coerce_call_literals(name,args,kwargs)
         try:return func(*args,**kwargs)
         except (ValueError,TypeError) as exc:raise DSLParseError(str(exc)) from exc
     def _visit_compare(self,node:ast.Compare)->Expr:
@@ -93,25 +176,56 @@ class _ExprBuilder:
             return make_cleaned_call_factory("or_")(left,right)
         raise DSLParseError(f"Unsupported binary operator: {type(node.op).__name__}")
 
-def _coerce_numeric_string(value:str):
-    """Convert a numeric string literal to int/float; None if not numeric.
+def _coerce_call_literals(name:str,args:tuple,kwargs:dict):
+    """Round-11 #16: contract-driven numeric-string conversion at a call site.
 
-    ``"20"`` -> 20, ``"0.05"`` -> 0.05, ``"-3"`` -> -3.  Non-numeric strings
-    (enum choices like ``"doji"`` / ``"upper"`` / ``"zero"``) are returned as
-    None so the caller keeps them as strings.
+    A string literal is coerced to ``int``/``float`` ONLY when the named
+    operator's declared contract says the target parameter is numeric
+    (``ParamSpec(dtype=int|float)`` or a numeric ``param_types`` entry).  String
+    parameters — category/version/security codes, enum choices — keep the exact
+    string.  Operators without a resolvable metadata (not yet loaded) are left
+    untouched: the runtime binder applies the identical rule.
     """
-    stripped=value.strip()
-    if not stripped:
-        return None
+    str_args=[isinstance(a,str) for a in args]
+    str_kwargs={k:(isinstance(v,str)) for k,v in kwargs.items()}
+    if not any(str_args) and not any(str_kwargs.values()):
+        return args,kwargs
     try:
-        if stripped.lstrip("+-").isdigit():
-            return int(stripped)
-        float(stripped)
-        return float(stripped)
-    except ValueError:
-        return None
+        from cleaned_operators.base import _coerce_declared_numeric_string
+        from cleaned_operators.registry import OperatorRegistry
+    except Exception:
+        return args,kwargs
+    op=None
+    try:
+        op=OperatorRegistry.get(name)
+    except Exception:
+        op=None
+    if op is None:
+        try:
+            canon=OperatorRegistry.resolve_canonical(name)
+            if canon!=name:op=OperatorRegistry.get(canon)
+        except Exception:
+            op=None
+    if op is None:
+        return args,kwargs
+    meta=getattr(op,"metadata",None)
+    if meta is None:
+        return args,kwargs
+    names=list(getattr(meta,"param_names",None) or ())
+    specs=getattr(meta,"param_specs",None) or {}
+    types=getattr(meta,"param_types",None) or {}
+    new_args=list(args)
+    for i,a in enumerate(args):
+        if isinstance(a,str):
+            pname=names[i] if i<len(names) else ""
+            new_args[i]=_coerce_declared_numeric_string(a,pname,types.get(pname),specs.get(pname))
+    new_kwargs=dict(kwargs)
+    for k,v in kwargs.items():
+        if isinstance(v,str):
+            new_kwargs[k]=_coerce_declared_numeric_string(v,k,types.get(k),specs.get(k))
+    return tuple(new_args),new_kwargs
 
 
 def _is_field_identifier(name:str)->bool:return bool(name) and not name[0].isdigit() and all(c.isalnum() or c=="_" for c in name)
-def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version).build(text)
-def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version),freq=freq,universe=universe,description=description,source_expr=text)
+def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None,budget:ComplexityBudget|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version,budget=budget).build(text)
+def parse_factor(text:str,*,name:str="factor",freq:str="1d",universe:str|None=None,description:str|None=None,surface:str="daily",dialect:str="native",dialect_version:str|None=None,budget:ComplexityBudget|None=None)->Factor:return Factor(name=name,expr=parse_expr(text,surface=surface,dialect=dialect,dialect_version=dialect_version,budget=budget),freq=freq,universe=universe,description=description,source_expr=text)

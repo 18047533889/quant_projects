@@ -123,6 +123,27 @@ def _correct_policy_metadata() -> None:
         )
 
 
+def _declared_stateful_contract(canonical: str) -> dict[str, Any] | None:
+    """Operator-declared stateful contract (round-11 #12), if any."""
+    from runtime.execution_contract import execution_contract_overrides
+
+    declared = execution_contract_overrides().get(canonical)
+    if declared is None:
+        return None
+    return {
+        "kind": "recursive_state",
+        "parameters": [
+            name for name in _LOOKBACK_PARAM_PRIORITY
+            if name in (catalog.get("param_names") or ())
+        ],
+        "state_model": declared.get("state_model"),
+        "chunking": declared.get("chunking"),
+        "history_kind": declared.get("history_kind"),
+        "requires_checkpoint_for_segments": declared.get("chunking") == "checkpoint",
+        "finite_warmup_is_approximation": True,
+    }
+
+
 def _lookback_contract(canonical: str, catalog: dict[str, Any]) -> dict[str, Any]:
     params = tuple(catalog.get("param_names") or ())
     scope = str(catalog.get("scope") or "unknown")
@@ -133,6 +154,9 @@ def _lookback_contract(canonical: str, catalog: dict[str, Any]) -> dict[str, Any
             "requires_period_id": True,
             "revision_aware": True,
         }
+    declared = _declared_stateful_contract(canonical)
+    if declared is not None:
+        return declared
     if canonical in _STATEFUL_CANONICALS:
         controlling = [name for name in _LOOKBACK_PARAM_PRIORITY if name in params]
         return {
@@ -196,7 +220,12 @@ def _derive_contracts() -> None:
         # Certification fields are immutable here: never overwrite the value
         # converged by ``reconcile_operator_certification`` (review §2.7).
         catalog.setdefault("pit_safe", bool(policy.pit_safe))
-        catalog["stateful"] = bool(catalog.get("stateful")) or canonical in _STATEFUL_CANONICALS
+        # Round-11 #12: statefulness comes from the operator's declared contract
+        # (or its checkpoint spec), NOT the hand-maintained name set alone.
+        catalog["stateful"] = bool(catalog.get("stateful")) or (
+            canonical in _STATEFUL_CANONICALS
+            or _declared_stateful_contract(canonical) is not None
+        )
         lookback = _lookback_contract(canonical, catalog)
         catalog["lookback_contract"] = lookback
         catalog["lookback_param_names"] = list(lookback.get("parameters") or ())
