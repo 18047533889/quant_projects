@@ -91,10 +91,24 @@ def group_ex_self_weighted_mean(x, weight, group):
     return _make(x, cols, out)
 
 
-def _demean_row(values: np.ndarray, labels: np.ndarray) -> np.ndarray:
+def _demean_composite_row(values: np.ndarray, group_labels: np.ndarray, subgroup_labels: np.ndarray) -> np.ndarray:
+    """Demean by the composite ``(group, subgroup)`` key (R11 #134).
+
+    Mirrors ``group_ext.HierarchicalGroupNeutralize._demean_composite_row``: a
+    bare subgroup label that repeats across parent groups must NOT be merged;
+    the composite key keeps subgroup means within their own parent group.
+    """
     out = values.copy()
-    for label in np.unique(labels):
-        idx = np.flatnonzero(labels == label)
+    n = len(values)
+    keys = [None] * n
+    for i in range(n):
+        keys[i] = (group_labels[i], subgroup_labels[i])
+    seen: list[tuple] = []
+    for key in keys:
+        if key not in seen:
+            seen.append(key)
+    for key in seen:
+        idx = np.flatnonzero(np.fromiter((k == key for k in keys), dtype=bool, count=n))
         group_values = values[idx]
         finite = group_values[np.isfinite(group_values)]
         if finite.size == 0:
@@ -112,8 +126,7 @@ def hierarchical_group_neutralize(x, group, subgroup):
     sv = np.stack([subgroup[c].to_numpy() for c in cols], axis=1)
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for t in range(rows):
-        stage1 = _demean_row(xv[t].copy(), sv[t])
-        out[t] = _demean_row(stage1, gv[t])
+        out[t] = _demean_composite_row(xv[t].copy(), gv[t], sv[t])
     return _make(x, cols, out)
 
 
