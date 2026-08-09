@@ -603,6 +603,45 @@ def _price_basis_of_field(name: str) -> str | None:
     return None
 
 
+def _resolve_operator_price_basis(
+    canonical: str,
+    implementation: Any,
+    visited_inputs: list[tuple[Any, int]],
+) -> str | None:
+    """P0-60: resolve the single authoritative ``price_basis`` for a
+    return-decomposition operator, or ``None`` when it cannot be positively
+    established.
+
+    The operator's ``input_units`` declares which positional params are prices;
+    each price input's basis comes from its TYPED child (semantic ``price_basis``
+    or field-concept resolution) — never from runtime instrument-column names,
+    which are unverifiable in a cross-sectional panel and would fail the
+    runtime gate on every call.  A basis is returned only when EVERY price input
+    resolves to the SAME basis; a raw-open / adjusted-close mix (or an
+    unresolvable price input) stays ``None`` so the runtime
+    ``_assert_shared_price_basis`` gate fails closed as designed.
+    """
+    meta = getattr(implementation, "metadata", None)
+    if getattr(meta, "category", None) != "return_decomposition":
+        return None
+    units = getattr(meta, "input_units", None) or {}
+    price_params = {p for p, u in units.items() if u == "price"}
+    if not price_params:
+        return None
+    param_names = list(getattr(meta, "param_names", None) or ())
+    bases: set[str] = set()
+    for index, (child, _lookback) in enumerate(visited_inputs):
+        if index >= len(param_names) or param_names[index] not in price_params:
+            continue
+        basis = (child.semantic_attrs or {}).get("price_basis")
+        if basis is None and str(child.op) == "column":
+            basis = _price_basis_of_field(str(child.attrs.get("name", "")))
+        if basis is None:
+            return None  # a price input without a resolvable basis -> fail closed
+        bases.add(basis)
+    return bases.pop() if len(bases) == 1 else None
+
+
 def _flow_semantics_of_field(name: str) -> str | None:
     """Resolve a leaf field's reporting-flow semantics from its ``FieldSpec``."""
     from fields import resolve_field
@@ -1203,6 +1242,18 @@ class Analyzer:
                     attrs["dtype"] = "string"
                 elif signature.output.value == "Series[Datetime]":
                     attrs["dtype"] = "datetime64[ns]"
+
+            # P0-60: return-decomposition operators carry the authoritative
+            # shared ``price_basis`` on attrs so the runtime kernel forwards it
+            # (kw = node.attrs).  Without this stamp the basis is re-derived at
+            # runtime from panel column names — instrument codes in a
+            # cross-sectional panel — which the fail-closed gate rejects.
+            if "price_basis" not in attrs:
+                _op_price_basis = _resolve_operator_price_basis(
+                    canonical, implementation, visited_inputs
+                )
+                if _op_price_basis:
+                    attrs["price_basis"] = _op_price_basis
 
             # Round-7 WS-C (#265-#268): propagate field-catalog metadata into
             # semantic_attrs via the SEMANTIC LATTICE join across ALL inputs

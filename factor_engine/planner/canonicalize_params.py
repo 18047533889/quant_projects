@@ -99,6 +99,18 @@ def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode
         if not param_names:
             return
         attrs = normalize_parameter_aliases(canonical, dict(node.attrs))
+        # Positionally-passed scalar parameters appear as ``literal`` child
+        # inputs, NOT ``node.attrs`` (the runtime binds every evaluated input in
+        # child order — panels and literals mixed — to the kernel signature, so
+        # the index-into-param_names mapping is the same one the analyzer's
+        # ``_operator_param_values`` uses).  Validating on ``attrs`` alone would
+        # skip these params entirely (and run relational specs on an empty
+        # bound, raising a misleading "fast < slow" error for a valid call).
+        for _idx, _child in enumerate(node.inputs):
+            if _idx >= len(param_names):
+                break
+            if str(getattr(_child, "op", "")) == "literal" and _child.attrs.get("value") is not None:
+                attrs.setdefault(param_names[_idx], _child.attrs["value"])
         defaults = _kernel_param_defaults(operator) or {}
 
         # per-param scalar validation (dtype / min / max / choices / finite).
