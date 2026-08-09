@@ -264,6 +264,8 @@ def test_typed_fixtures_shapes_and_regimes():
     expected = {
         "gaussian", "heavy_tail", "trend", "mean_revert", "ties", "gaps",
         "positive_only", "event_mask", "group", "ohlc",
+        # R10-P0-033: typed event fixtures
+        "event_bool", "event_signed_intensity", "event_positive_intensity",
     }
     assert set(fixtures) == expected
     for name, df in fixtures.items():
@@ -315,10 +317,19 @@ def test_condition_and_event_signatures_differ_on_state_vs_timing():
 # --------------------------------------------------------------------------- #
 def test_no_algebraic_canonical_claim():
     f = lambda _f: _f
-    sigs = factor_signatures(f)
+    sigs = factor_signatures(f, ast_hash="abc123")
     assert "algebraic_canonical" not in sigs
     assert {"ast_hash", "numeric_signature", "rank_signature"} <= set(sigs)
-    assert sigs["ast_hash"] == ""
+    # R10-P0-028: ast_hash is required and preserved verbatim, never "".
+    assert sigs["ast_hash"] == "abc123"
+
+
+def test_factor_signatures_rejects_empty_ast_hash():
+    f = lambda _f: _f
+    with pytest.raises(ValueError, match="non-empty ast_hash"):
+        factor_signatures(f, ast_hash="")
+    with pytest.raises(ValueError, match="non-empty ast_hash"):
+        factor_signatures(f, ast_hash="   ")
 
 
 # --------------------------------------------------------------------------- #

@@ -34,9 +34,11 @@ import pandas as pd
 class AuditResult:
     """Structured result of a single audit check.
 
-    ``status`` is one of ``"pass"`` | ``"fail"`` | ``"info"``.  ``metric`` names
-    the observable measured, ``expected`` states the contract value and
-    ``observed`` records what the operator actually produced.
+    ``status`` is one of ``"pass"`` | ``"fail"`` | ``"info"`` |
+    ``"inconclusive"`` (R10 #42: an audit that cannot be assessed — e.g. no
+    comparable cells — is never ``"pass"``).  ``metric`` names the observable
+    measured, ``expected`` states the contract value and ``observed`` records
+    what the operator actually produced.
     """
 
     status: str
@@ -66,6 +68,194 @@ def _canonical(op: Any) -> str:
 
 def _first_key(panel_keys: str | list[str]) -> str:
     return panel_keys[0] if isinstance(panel_keys, (list, tuple)) else panel_keys
+
+
+# ---------------------------------------------------------------------------
+# Declared-contract helpers (R10 #36-#42)
+#
+# The audits below must consume machine-readable contracts instead of assuming
+# a single semantic for every operator.  The declared fields live on the
+# operator's ``OperatorMetadata``, as direct attributes on the operator, or as
+# ``name:value`` tags, so a real operator declares them in its metadata and a
+# synthetic test operator declares them on the class.  Integration of the new
+# fields into ``base.OperatorMetadata`` is deferred (R10 #40 note); every helper
+# uses ``getattr`` so it works with or without the metadata fields present.
+# ---------------------------------------------------------------------------
+
+# R10 #40: declared metamorphic contract (scale / translation / sign / none).
+class MetamorphicContract:
+    """Machine-readable metamorphic-test contract an operator declares.
+
+    ``scale_invariant``        output unchanged under x10 input scaling
+    ``translation_invariant``  output unchanged under +C input shift
+    ``sign_equivariant``       out(-x) == -out(x)
+    ``unit_covariant``         output scales by the SAME factor as the input
+    ``none``                   no metamorphic property asserted (the scale
+                               audit must NOT assert scale invariance)
+    """
+
+    SCALE_INVARIANT = "scale_invariant"
+    TRANSLATION_INVARIANT = "translation_invariant"
+    SIGN_EQUIVARIANT = "sign_equivariant"
+    UNIT_COVARIANT = "unit_covariant"
+    NONE = "none"
+
+
+# canonical -> declared metamorphic contract.  Seeded conservatively; the
+# authoritative declaration is the operator's own metadata / attribute / tag,
+# so this registry is only a fallback.  ``base.OperatorMetadata`` integration
+# (a ``metamorphic_contract`` field) is deferred and tracked separately.
+_METAMORPHIC_CONTRACTS: dict[str, str] = {
+    # e.g. "cs_rank": MetamorphicContract.SCALE_INVARIANT,
+}
+
+
+def metamorphic_contract(canonical: str) -> str:
+    """Declared metamorphic contract for ``canonical``, or ``"none"`` by
+    default.  Consumers should prefer the operator's own metadata/attribute
+    declaration and use this registry only as a fallback."""
+    return _METAMORPHIC_CONTRACTS.get(canonical, MetamorphicContract.NONE)
+
+
+def _declared_metamorphic(op: Any) -> tuple[bool, str]:
+    """``(declared, contract)`` for an operator.
+
+    ``declared=False`` means the operator carries NO contract — the scale audit
+    keeps its historical scale-invariance assertion (backward compatible).
+    ``declared=True`` with ``contract='none'`` means scale invariance must NOT
+    be asserted.
+    """
+    direct = getattr(op, "metamorphic_contract", None)
+    md = getattr(op, "metadata", None)
+    if direct is None and md is not None:
+        direct = getattr(md, "metamorphic_contract", None)
+    if direct is not None:
+        return True, str(direct).strip().lower()
+    tags = list(getattr(md, "tags", None) or [])
+    for t in tags:
+        t = str(t)
+        if t.startswith("metamorphic:"):
+            return True, t.split(":", 1)[1].strip().lower()
+    canon = _canonical(op)
+    registered = _METAMORPHIC_CONTRACTS.get(canon)
+    if registered is not None:
+        return True, registered
+    return False, MetamorphicContract.NONE
+
+
+# R10 #37: group-membership-semantics contract.
+_MEMBERSHIP_CURRENT = "current_members_retrospective"
+_MEMBERSHIP_HISTORICAL = "historical_membership"
+
+
+def _membership_semantics(op: Any) -> str | None:
+    """Declared group-membership semantics, or ``None`` when undeclared.
+
+    ``"current_members_retrospective"`` — today's labels only; historical
+    membership changes must NOT affect today's group output.
+    ``"historical_membership"`` — the operator is *supposed* to reflect
+    historical membership; a reclassified history SHOULD change the output.
+    """
+    direct = getattr(op, "membership_semantics", None)
+    md = getattr(op, "metadata", None)
+    if direct is None and md is not None:
+        direct = getattr(md, "membership_semantics", None)
+    if direct is not None:
+        s = str(direct).strip().lower()
+        if s in ("current_members_retrospective", "current", "current_members"):
+            return _MEMBERSHIP_CURRENT
+        if s in ("historical_membership", "historical", "historical_members"):
+            return _MEMBERSHIP_HISTORICAL
+    tags = list(getattr(md, "tags", None) or [])
+    for t in tags:
+        t = str(t)
+        low = t.strip().lower()
+        if "current_members_retrospective" in low or low == "current_members":
+            return _MEMBERSHIP_CURRENT
+        if "historical_membership" in low or low == "historical_members":
+            return _MEMBERSHIP_HISTORICAL
+        if low.startswith("membership:"):
+            val = t.split(":", 1)[1].strip().lower()
+            if "current" in val:
+                return _MEMBERSHIP_CURRENT
+            if "historical" in val:
+                return _MEMBERSHIP_HISTORICAL
+    return None
+
+
+# R10 #38: missing-data policy contract.
+def _missing_policy(op: Any, kwargs: dict[str, Any]) -> str | None:
+    """Declared missing-data policy (``"carry"`` / ``"break"`` / ...), or
+    ``None`` when the operator declares none.  ``"carry"`` means a missing input
+    carries the previous state instead of producing NaN, so a temporal-exclusion
+    audit must NOT require NaN in a missing-input region for such an operator."""
+    if "missing_policy" in kwargs:
+        return str(kwargs["missing_policy"]).strip().lower()
+    direct = getattr(op, "missing_policy", None)
+    md = getattr(op, "metadata", None)
+    if direct is None and md is not None:
+        direct = getattr(md, "missing_policy", None)
+    if direct is not None:
+        return str(direct).strip().lower()
+    import inspect
+
+    sig = inspect.signature(getattr(op, "calculate", None))
+    p = sig.parameters.get("missing_policy")
+    if p is not None and p.default is not inspect.Parameter.empty:
+        return str(p.default).strip().lower()
+    tags = list(getattr(md, "tags", None) or [])
+    for t in tags:
+        t = str(t)
+        if t.startswith("missing_policy:"):
+            return t.split(":", 1)[1].strip().lower()
+    return None
+
+
+# R10 #39: effective-sample (DOF) contract.
+def _dof_contract(op: Any) -> tuple[int | None, int | None]:
+    """``(required_n, estimator_dof)`` declared by the operator, or ``None``s.
+
+    ``required_n`` — the minimum number of observations needed before an
+    estimate may be emitted.  ``estimator_dof`` — degrees of freedom consumed by
+    the estimator (an estimate is only valid once ``effective_n > estimator_dof``).
+    """
+    md = getattr(op, "metadata", None)
+    required_n = getattr(op, "required_n", None)
+    if required_n is None and md is not None:
+        required_n = getattr(md, "required_n", None)
+    estimator_dof = getattr(op, "estimator_dof", None)
+    if estimator_dof is None and md is not None:
+        estimator_dof = getattr(md, "estimator_dof", None)
+    tags = list(getattr(md, "tags", None) or [])
+    for t in tags:
+        t = str(t)
+        if t.startswith("required_n:"):
+            try:
+                required_n = int(t.split(":", 1)[1])
+            except (TypeError, ValueError):
+                pass
+        if t.startswith("estimator_dof:"):
+            try:
+                estimator_dof = int(t.split(":", 1)[1])
+            except (TypeError, ValueError):
+                pass
+    return required_n, estimator_dof
+
+
+# R10 #41: declared complexity class.
+def _complexity_class(op: Any) -> str | None:
+    md = getattr(op, "metadata", None)
+    cls = getattr(op, "complexity", None)
+    if cls is None and md is not None:
+        cls = getattr(md, "complexity", None)
+    if cls is not None:
+        return str(cls).strip().lower()
+    tags = list(getattr(md, "tags", None) or [])
+    for t in tags:
+        t = str(t)
+        if t.startswith("complexity:"):
+            return t.split(":", 1)[1].strip().lower()
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -277,11 +467,18 @@ def audit_column_permutation(op: Any, panel_keys: list[str],
         return [AuditResult(
             "fail", "audit_column_permutation", canon, "run",
             "finite output", f"{type(exc).__name__}: {exc}")]
-    rev = np.argsort(order)
+    # R10 #36: the inverse permutation must restore the ORIGINAL column order,
+    # NOT ``np.argsort(order)``.  ``order`` is a permutation of column LABELS;
+    # argsorting labels sorts them lexicographically, which is the correct
+    # inverse only when the original columns were already sorted.  For
+    # arbitrary unordered labels (e.g. ['ZZZ','AAA','MNO']) it silently produces
+    # a wrong alignment and can mask a real permutation-sensitivity bug.
+    original_columns = list(orig[panel_keys[0]].columns)
     if isinstance(out, pd.DataFrame):
-        out_re = out.iloc[:, rev]
+        out_re = out.reindex(columns=original_columns)
     else:
-        out_re = np.asarray(out)[:, rev]
+        rev_pos = [list(order).index(c) for c in original_columns]
+        out_re = np.asarray(out)[:, rev_pos]
     a = np.asarray(base, dtype=float)
     b = np.asarray(out_re, dtype=float)
     both = ~np.isnan(a) & ~np.isnan(b)
@@ -361,6 +558,25 @@ def audit_group_membership_vintage(op: Any, panel_keys: list[str],
     scale = float(np.nanmax(np.abs(out_base[both])))
     diff = float(np.nanmax(np.abs(out_base[both] - out_chg[both])))
     tol = max(1e-8, 1e-6 * scale)
+    # R10 #37: the audit must respect the operator's declared membership
+    # semantics.  ``current_members_retrospective`` (today's labels only) is the
+    # default assumption: reclassifying HISTORY must not change today's output
+    # (a leak is a fail).  ``historical_membership`` is the OPPOSITE contract:
+    # the operator is SUPPOSED to reflect historical membership, so a
+    # reclassified history SHOULD change the output — the audit must NOT flag
+    # that behavior; it flags only an operator that ignores its own declared
+    # historical-membership contract (output unchanged).
+    semantics = _membership_semantics(op)
+    if semantics == _MEMBERSHIP_HISTORICAL:
+        if diff <= tol:
+            return [AuditResult(
+                "fail", "audit_group_membership_vintage", canon,
+                "historical_membership_honored", f"reclassified history changes "
+                f"output (declared {_MEMBERSHIP_HISTORICAL})", diff)]
+        return [AuditResult(
+            "pass", "audit_group_membership_vintage", canon,
+            "max_abs_diff_uniform_vs_reclassified_hist",
+            f"> 0.0 (declared {_MEMBERSHIP_HISTORICAL})", diff)]
     return [AuditResult(
         "pass" if diff <= tol else "fail",
         "audit_group_membership_vintage", canon,
@@ -380,7 +596,13 @@ def audit_temporal_exclusion(op: Any, panel_keys: str | list[str],
     NaN (a missing-history warmup region); a proper temporal-exclusion /
     fail-closed operator keeps that region NaN in its output.  A finite value
     in the forced-NaN region means the operator re-paired or fabricated data
-    across the gap (no exclusion zone / no warmup handling)."""
+    across the gap (no exclusion zone / no warmup handling).
+
+    R10 #38: the audit honours the operator's declared MissingPolicy.  For a
+    stateful operator whose policy is ``carry`` (missing input => carry previous
+    state), a missing input after valid observations must NOT be audited as
+    "should output NaN".  The leading warmup (no prior state) is still asserted
+    NaN; an interior gap is reported as info — never as a fail."""
     canon = _canonical(op)
     key = _first_key(panel_keys)
     n = len(panels[key])
@@ -389,10 +611,14 @@ def audit_temporal_exclusion(op: Any, panel_keys: str | list[str],
             "info", "audit_temporal_exclusion", canon, "panel_length",
             ">= 4 rows", f"{n}")]
     k = max(1, n // 6)
+    keys = [key] if isinstance(panel_keys, str) else list(panel_keys)
+    carry = (_missing_policy(op, kwargs) == "carry")
+
+    # Leading warmup: force the head k rows NaN.  There is no prior state before
+    # the head, so even a carry-state operator must keep this region NaN.
     pw = panels[key].copy()
     pw.iloc[:k, :] = np.nan
     local = {k_: (pw if k_ == key else panels[k_]) for k_ in panels}
-    keys = [key] if isinstance(panel_keys, str) else list(panel_keys)
     try:
         out = np.asarray(_call(op, *[local[k_] for k_ in keys], **kwargs),
                          dtype=float)
@@ -401,10 +627,36 @@ def audit_temporal_exclusion(op: Any, panel_keys: str | list[str],
             "fail", "audit_temporal_exclusion", canon, "run",
             "finite output", f"{type(exc).__name__}: {exc}")]
     cov = float(np.isnan(out[:k, :]).mean())
-    return [AuditResult(
+    results = [AuditResult(
         "pass" if cov >= 1.0 - 1e-9 else "fail",
         "audit_temporal_exclusion", canon,
         "warmup_missing_region_nan_coverage", 1.0, cov)]
+
+    if carry:
+        # Interior gap AFTER valid observations: a carry-state operator bridges
+        # it with the last carried state, which is legitimate — report, don't
+        # flag.  Only the leading warmup is fail-closed.
+        stable = np.where(np.isfinite(out).all(axis=1))[0]
+        base = int(stable[0]) if stable.size else k
+        base = max(base, n // 2)
+        gap = 2
+        if 0 < base + gap <= n:
+            pg = panels[key].copy()
+            pg.iloc[base:base + gap, :] = np.nan
+            local_g = {k_: (pg if k_ == key else panels[k_]) for k_ in panels}
+            try:
+                out_g = np.asarray(
+                    _call(op, *[local_g[k_] for k_ in keys], **kwargs), dtype=float)
+            except Exception as exc:  # noqa: BLE001
+                return results + [AuditResult(
+                    "fail", "audit_temporal_exclusion", canon, "run",
+                    "finite output", f"{type(exc).__name__}: {exc}")]
+            cov_g = float(np.isnan(out_g[base:base + gap, :]).mean())
+            results.append(AuditResult(
+                "info", "audit_temporal_exclusion", canon,
+                "interior_gap_nan_coverage_carry_policy",
+                "carry bridges the gap (NaN not required)", cov_g))
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -449,11 +701,36 @@ def audit_effective_sample_size(op: Any, panel_keys: str | list[str],
         return [AuditResult(
             "info", "audit_effective_sample_size", canon, "full_panel_finite",
             "> 0", "0 — cannot assess the gate")]
-    status = "pass" if short_fin < full_fin else "fail"
-    return [AuditResult(
-        status, "audit_effective_sample_size", canon,
+    results = [AuditResult(
+        "pass" if short_fin < full_fin else "fail",
+        "audit_effective_sample_size", canon,
         "short_panel_finite_fraction",
         f"< {full_fin:.3f} (full-panel finite fraction)", short_fin)]
+    # R10 #39: the finite-ratio check alone lets a short panel pass "just via
+    # warmup" — an operator with a tiny warmup on a short panel has a high
+    # finite ratio.  A DOF-aware gate is added whenever the operator declares an
+    # effective-sample contract (``required_n`` / ``estimator_dof``): when the
+    # short panel's effective sample falls below the declared requirement the
+    # operator MUST NOT emit a finite estimate (fail-closed).
+    required_n, estimator_dof = _dof_contract(op)
+    if required_n is None and estimator_dof is None:
+        return results
+    eff = np.asarray(short_panels[key], dtype=float)
+    effective_n = int(np.nanmin(np.isfinite(eff).sum(axis=0)))
+    below = (required_n is not None and effective_n < required_n) or \
+            (estimator_dof is not None and effective_n <= estimator_dof)
+    if below:
+        expected = "no finite output (effective sample below declared requirement)"
+    else:
+        expected = "finite output permitted (effective sample meets requirement)"
+    dof_status = "fail" if (below and short_fin > 0.0) else "pass"
+    results.append(AuditResult(
+        dof_status, "audit_effective_sample_size", canon,
+        "short_panel_dof_gate",
+        f"effective_n={effective_n} required_n={required_n} "
+        f"estimator_dof={estimator_dof} — {expected}",
+        f"short_fin={short_fin:.3f}"))
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -510,13 +787,92 @@ def audit_scale_invariance(op: Any, panel_key: str,
                            kwargs: dict[str, Any]) -> list[AuditResult]:
     """A theoretically scale-invariant operator must be invariant to input
     scaling (x10).  Scale-sensitive operators (e.g. level-preserving ones) are
-    expected to change — the audit reports the output-scale ratio and marks the
-    operator fail when the output scales with the input.
+    expected to change — the audit reports the output-scale ratio.
+
+    R10 #40: the audit MUST NOT assume every operator is scale-invariant.  It
+    reads the operator's declared :class:`MetamorphicContract`
+    (``scale_invariant`` | ``translation_invariant`` | ``sign_equivariant`` |
+    ``unit_covariant`` | ``none``).  For a declared ``none`` contract the audit
+    does not assert scale invariance at all.  Undeclared operators keep the
+    historical scale-invariance assertion (backward compatible).
 
     Behavior-based (R9-P0-030): ``input*10 -> output unchanged`` means the ratio
     of output scales is ~1 (scale-invariant).  A linear operator has ratio ~10
-    (NOT invariant) and is flagged."""
+    (NOT invariant) and is flagged unless it declares ``unit_covariant``."""
     canon = _canonical(op)
+    declared, contract = _declared_metamorphic(op)
+
+    if declared and contract == MetamorphicContract.NONE:
+        return [AuditResult(
+            "info", "audit_scale_invariance", canon,
+            "metamorphic_contract",
+            "none — scale invariance NOT asserted", "skipped")]
+
+    # --- translation-invariant contract -------------------------------
+    if declared and contract == MetamorphicContract.TRANSLATION_INVARIANT:
+        try:
+            base = np.asarray(_call(op, panels[panel_key], **kwargs), dtype=float)
+            shifted = panels[panel_key] + 100.0
+            out_t = np.asarray(_call(op, shifted, **kwargs), dtype=float)
+        except Exception as exc:  # noqa: BLE001
+            return [AuditResult(
+                "fail", "audit_scale_invariance", canon, "run",
+                "finite output", f"{type(exc).__name__}: {exc}")]
+        both = np.isfinite(base) & np.isfinite(out_t)
+        if not both.any():
+            return [AuditResult(
+                "info", "audit_scale_invariance", canon, "finite_cells",
+                ">= 1 finite cell", "none")]
+        diff = float(np.nanmax(np.abs(base[both] - out_t[both])))
+        return [AuditResult(
+            "pass" if diff <= 1e-8 else "fail",
+            "audit_scale_invariance", canon,
+            "max_abs_diff_after_translation", "~0.0 (translation-invariant)", diff)]
+
+    # --- sign-equivariant contract ------------------------------------
+    if declared and contract == MetamorphicContract.SIGN_EQUIVARIANT:
+        try:
+            out_pos = np.asarray(_call(op, panels[panel_key], **kwargs), dtype=float)
+            out_neg = np.asarray(_call(op, -panels[panel_key], **kwargs), dtype=float)
+        except Exception as exc:  # noqa: BLE001
+            return [AuditResult(
+                "fail", "audit_scale_invariance", canon, "run",
+                "finite output", f"{type(exc).__name__}: {exc}")]
+        both = np.isfinite(out_pos) & np.isfinite(out_neg)
+        if not both.any():
+            return [AuditResult(
+                "info", "audit_scale_invariance", canon, "finite_cells",
+                ">= 1 finite cell", "none")]
+        err = float(np.nanmax(np.abs(out_pos[both] + out_neg[both])))
+        return [AuditResult(
+            "pass" if err <= 1e-8 else "fail",
+            "audit_scale_invariance", canon,
+            "sign_equivariance_error", "~0.0 (out(-x) == -out(x))", err)]
+
+    # --- unit-covariant contract --------------------------------------
+    if declared and contract == MetamorphicContract.UNIT_COVARIANT:
+        try:
+            base = np.asarray(_call(op, panels[panel_key], **kwargs), dtype=float)
+            out10 = np.asarray(_call(op, panels[panel_key] * 10.0, **kwargs),
+                               dtype=float)
+        except Exception as exc:  # noqa: BLE001
+            return [AuditResult(
+                "fail", "audit_scale_invariance", canon, "run",
+                "finite output", f"{type(exc).__name__}: {exc}")]
+        a = np.abs(base)
+        b = np.abs(out10)
+        both = np.isfinite(base) & np.isfinite(out10) & (a > 1e-12)
+        if not both.any():
+            return [AuditResult(
+                "info", "audit_scale_invariance", canon, "finite_scale_cells",
+                ">= 1 finite cell", "none")]
+        ratio = float(np.nanmedian(b[both] / a[both]))
+        return [AuditResult(
+            "pass" if abs(ratio - 10.0) <= 2.5 else "fail",
+            "audit_scale_invariance", canon,
+            "output_scale_ratio_under_x10", "~10.0 (unit-covariant)", ratio)]
+
+    # --- scale-invariant contract (declared or undeclared legacy) -----
     try:
         base = np.asarray(_call(op, panels[panel_key], **kwargs), dtype=float)
         p10 = panels[panel_key] * 10.0
@@ -548,31 +904,115 @@ def audit_scale_invariance(op: Any, panel_key: str,
 # 11. Complexity-vs-Param Audit
 # ---------------------------------------------------------------------------
 def audit_complexity_vs_param(op: Any, *panels: pd.DataFrame,
-                              param_name: str, values: list[Any]) -> list[AuditResult]:
-    """Runtime cost must stay within the declared budget as a parameter grows.
-    Heuristic: time N evaluations at the smallest and largest value; flag if
-    the growth exceeds the declared asymptotic class."""
+                              param_name: str, values: list[Any],
+                              budget_multiplier: float | None = None) -> list[AuditResult]:
+    """(a) DETERMINISTIC complexity-model audit (R10 #41).
+
+    Runtime cost is NOT gated on a single wall-clock with a fixed multiplier.
+    Instead the audit uses the operator's DECLARED cost contract — its own
+    ``metadata.cost_model`` (R9-P1-047) or the deterministic
+    ``operator_cost_model.runtime_cost`` prefix table — to compute the
+    theoretical cost growth between the smallest and largest parameter values.
+    When a complexity class is declared (``linear``/``quadratic``/``cubic``) the
+    growth must match it; without a declared class the ratio is reported as
+    info (no assertion).  ``budget_multiplier``, when passed explicitly, is the
+    only hard ceiling used."""
+    canon = _canonical(op)
+    md = getattr(op, "metadata", None)
+    declared_cm = getattr(md, "cost_model", None) if md is not None else None
+    complexity = _complexity_class(op)
+    shape = (len(panels[0]), len(panels[0].columns)) if panels else None
+
+    def _theoretical_cost(params: dict[str, Any]) -> float | None:
+        if callable(declared_cm):
+            try:
+                rt, _mem = declared_cm(params, shape)
+                return max(1.0, float(rt))
+            except Exception:  # noqa: BLE001
+                return None
+        try:
+            import cleaned_operators.operator_cost_model as _ocm
+            return max(1.0, float(_ocm.runtime_cost(canon, params)))
+        except Exception:  # noqa: BLE001
+            return None
+
+    small_cost = _theoretical_cost({param_name: values[0]})
+    large_cost = _theoretical_cost({param_name: values[-1]})
+    if small_cost is None or large_cost is None or small_cost <= 0:
+        return [AuditResult(
+            "info", "audit_complexity_vs_param", canon, "cost_model",
+            "deterministic cost model available", "unavailable")]
+    ratio = large_cost / small_cost
+    param_growth = float(values[-1] / values[0]) if values[0] else 1.0
+    if complexity is None and budget_multiplier is None:
+        return [AuditResult(
+            "info", "audit_complexity_vs_param", canon,
+            f"deterministic_cost_growth({values[0]}->{values[-1]})",
+            "declared complexity class", f"{ratio:.2f}x")]
+    if complexity is not None:
+        exponent = {"linear": 1, "quadratic": 2, "cubic": 3}.get(complexity, 1)
+        expected = (param_growth ** exponent) if param_growth >= 1 else 1.0
+        bound = expected * 1.5  # 50% slack on the declared class
+        expected_txt = f"<= {expected:.2f}x ({complexity})"
+    else:
+        bound = float(budget_multiplier)
+        expected_txt = f"<= {bound:.0f}x (explicit budget)"
+    return [AuditResult(
+        "pass" if ratio <= bound else "fail",
+        "audit_complexity_vs_param", canon,
+        f"deterministic_cost_growth({values[0]}->{values[-1]})",
+        expected_txt, f"{ratio:.2f}x")]
+
+
+def audit_performance_benchmark(op: Any, *panels: pd.DataFrame,
+                                params: dict[str, Any] | None = None,
+                                max_seconds: float | None = None,
+                                repeat: int = 3) -> list[AuditResult]:
+    """(b) Wall-clock performance benchmark (R10 #41).
+
+    Separate from the deterministic complexity-model audit.  Reports the best
+    observed wall-clock time; flags ONLY when an explicit ``max_seconds`` budget
+    is exceeded (passed in, or declared as ``op.max_benchmark_seconds`` /
+    ``metadata`` field / ``benchmark_max_seconds:`` tag).  There is NO fixed
+    multiplier gate: a single noisy wall-clock reading never decides pass/fail.
+    """
     import time
 
     canon = _canonical(op)
-
-    def _t(params: dict[str, Any]) -> float:
+    params = params or {}
+    md = getattr(op, "metadata", None)
+    budget = max_seconds
+    if budget is None:
+        budget = getattr(op, "max_benchmark_seconds", None)
+        if budget is None and md is not None:
+            budget = getattr(md, "max_benchmark_seconds", None)
+        tags = list(getattr(md, "tags", None) or [])
+        for t in tags:
+            if str(t).startswith("benchmark_max_seconds:"):
+                try:
+                    budget = float(str(t).split(":", 1)[1])
+                except (TypeError, ValueError):
+                    pass
+                break
+    times: list[float] = []
+    for _ in range(max(1, repeat)):
         t0 = time.perf_counter()
-        _call(op, *panels, **params)
-        return time.perf_counter() - t0
-
-    small = {param_name: values[0]}
-    large = {param_name: values[-1]}
-    ts, tl = _t(small), _t(large)
-    if ts > 0 and (tl / ts) > 50.0:
+        try:
+            _call(op, *panels, **params)
+        except Exception as exc:  # noqa: BLE001
+            return [AuditResult(
+                "fail", "audit_performance_benchmark", canon, "run",
+                "finite output", f"{type(exc).__name__}: {exc}")]
+        times.append(time.perf_counter() - t0)
+    best = float(min(times))
+    if budget is None:
         return [AuditResult(
-            "fail", "audit_complexity_vs_param", canon,
-            f"cost_growth({values[0]}->{values[-1]})", "<= 50x",
-            f"{tl / ts:.0f}x")]
-    growth = f"{tl / ts:.0f}x" if ts > 0 else "n/a"
+            "info", "audit_performance_benchmark", canon,
+            "wall_clock_seconds", "<= declared budget", f"{best:.4f}s")]
     return [AuditResult(
-        "pass", "audit_complexity_vs_param", canon,
-        f"cost_growth({values[0]}->{values[-1]})", "<= 50x", growth)]
+        "pass" if best <= budget else "fail",
+        "audit_performance_benchmark", canon,
+        "wall_clock_seconds", f"<= {budget:.3f}s", f"{best:.4f}s")]
 
 
 # ---------------------------------------------------------------------------
@@ -599,8 +1039,16 @@ def audit_golden_reference(op: Any, panel_key: str,
             "fail", "audit_golden_reference", canon, "run",
             "finite output", f"{type(exc).__name__}: {exc}")]
     both = ~np.isnan(ours) & ~np.isnan(gold)
-    diff = float(np.nanmax(np.abs(ours[both] - gold[both]))) if both.any() else 0.0
-    if both.any() and not np.allclose(ours[both], gold[both], rtol=1e-6, atol=1e-9):
+    n_cmp = int(both.sum())
+    if n_cmp == 0:
+        # R10 #42: with zero comparable cells (no finite overlap between the
+        # computed output and the golden reference) the result must be FAIL or
+        # INCONCLUSIVE — NEVER PASS.  We have no evidence the operator is right.
+        return [AuditResult(
+            "inconclusive", "audit_golden_reference", canon,
+            "comparable_cells", ">= 1 finite overlap", "0 — inconclusive")]
+    diff = float(np.nanmax(np.abs(ours[both] - gold[both])))
+    if not np.allclose(ours[both], gold[both], rtol=1e-6, atol=1e-9):
         return [AuditResult(
             "fail", "audit_golden_reference", canon,
             "max_abs_diff_vs_reference", 0.0, diff)]
@@ -789,20 +1237,22 @@ _ALL_AUDITS = [
     audit_column_permutation, audit_group_membership_vintage,
     audit_temporal_exclusion, audit_effective_sample_size,
     audit_zero_missing_invalid, audit_scale_invariance,
-    audit_complexity_vs_param, audit_golden_reference,
-    audit_cache_invalidation, audit_surface_duplication,
-    audit_searchable_params,
+    audit_complexity_vs_param, audit_performance_benchmark,
+    audit_golden_reference, audit_cache_invalidation,
+    audit_surface_duplication, audit_searchable_params,
 ]
 
 __all__ = [
     "AuditResult",
+    "MetamorphicContract",
+    "metamorphic_contract",
     "audit_equivalent_parameters", "audit_relational_parameters",
     "audit_self_contamination", "audit_cohort_consistency",
     "audit_column_permutation", "audit_group_membership_vintage",
     "audit_temporal_exclusion", "audit_effective_sample_size",
     "audit_zero_missing_invalid", "audit_scale_invariance",
-    "audit_complexity_vs_param", "audit_golden_reference",
-    "audit_cache_invalidation", "audit_surface_duplication",
-    "audit_searchable_params",
+    "audit_complexity_vs_param", "audit_performance_benchmark",
+    "audit_golden_reference", "audit_cache_invalidation",
+    "audit_surface_duplication", "audit_searchable_params",
     "_ALL_AUDITS",
 ]

@@ -2094,7 +2094,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_5d58bc15/values.parquet"
       },
-      "mem_available_gb": 24.49
+      "mem_available_gb": 24.49,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_e885c4b1",
@@ -2165,7 +2168,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_e885c4b1/values.parquet"
       },
-      "mem_available_gb": 24.41
+      "mem_available_gb": 24.41,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_bb4a002c",
@@ -2236,7 +2242,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_bb4a002c/values.parquet"
       },
-      "mem_available_gb": 24.1
+      "mem_available_gb": 24.1,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_1281ccaa",
@@ -2307,7 +2316,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_1281ccaa/values.parquet"
       },
-      "mem_available_gb": 24.39
+      "mem_available_gb": 24.39,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_55152d82",
@@ -2378,7 +2390,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_55152d82/values.parquet"
       },
-      "mem_available_gb": 24.54
+      "mem_available_gb": 24.54,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_86a7e37a",
@@ -2449,7 +2464,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_86a7e37a/values.parquet"
       },
-      "mem_available_gb": 24.3
+      "mem_available_gb": 24.3,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_afd40784",
@@ -2520,7 +2538,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_afd40784/values.parquet"
       },
-      "mem_available_gb": 24.0
+      "mem_available_gb": 24.0,
+      "dsl": "ts_corr(close, volume, 10) * (0 - 1) * ts_std(returns, 20)",
+      "fe_formula": "ts_corr(close, volume, 10) * (0 - 1) * ts_std(returns, 20)",
+      "lqtp_formula": "ts_corr(close, volume, 10) * (0 - 1) * ts_std(ret, 20)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_caa184c6",
@@ -2591,7 +2616,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_caa184c6/values.parquet"
       },
-      "mem_available_gb": 24.33
+      "mem_available_gb": 24.33,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_16104691",
@@ -2662,7 +2690,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_16104691/values.parquet"
       },
-      "mem_available_gb": 24.08
+      "mem_available_gb": 24.08,
+      "dsl": "rank((0 - 1) * ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
+      "fe_formula": "rank((0 - 1) * ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
+      "lqtp_formula": "rank((0 - 1) * ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_66ea5325",
@@ -2733,7 +2768,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_66ea5325/values.parquet"
       },
-      "mem_available_gb": 24.14
+      "mem_available_gb": 24.14,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260703_f609ea4d",
@@ -2804,7 +2842,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_f609ea4d/values.parquet"
       },
-      "mem_available_gb": 24.02
+      "mem_available_gb": 24.02,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_549b43e6",
@@ -2875,7 +2916,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_549b43e6/values.parquet"
       },
-      "mem_available_gb": 24.3
+      "mem_available_gb": 24.3,
+      "dsl": "ts_rank(ts_delta(close, 5), 20) * ts_std(returns, 20)",
+      "fe_formula": "ts_rank(ts_delta(close, 5), 20) * ts_std(returns, 20)",
+      "lqtp_formula": "ts_rank(ts_delta(close, 5), 20) * ts_std(ret, 20)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_4e49a3f5",
@@ -2946,7 +2994,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_4e49a3f5/values.parquet"
       },
-      "mem_available_gb": 24.26
+      "mem_available_gb": 24.26,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_30e468c0",
@@ -3017,7 +3068,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_30e468c0/values.parquet"
       },
-      "mem_available_gb": 24.26
+      "mem_available_gb": 24.26,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_873469e0",
@@ -3088,7 +3142,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_873469e0/values.parquet"
       },
-      "mem_available_gb": 24.5
+      "mem_available_gb": 24.5,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260703_d485a3b3",
@@ -3159,7 +3216,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_d485a3b3/values.parquet"
       },
-      "mem_available_gb": 24.75
+      "mem_available_gb": 24.75,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260703_9e3b2920",
@@ -3230,7 +3290,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_9e3b2920/values.parquet"
       },
-      "mem_available_gb": 24.44
+      "mem_available_gb": 24.44,
+      "dsl": "((0 - 1) * rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
+      "fe_formula": "((0 - 1) * rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
+      "lqtp_formula": "((0 - 1) * rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260703_99eb3d11",
@@ -3301,7 +3368,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_99eb3d11/values.parquet"
       },
-      "mem_available_gb": 24.27
+      "mem_available_gb": 24.27,
+      "dsl": "(0 - 1) * rank(ts_std(high, 10)) * ts_corr(high, volume, 10)",
+      "fe_formula": "(0 - 1) * rank(ts_std(high, 10)) * ts_corr(high, volume, 10)",
+      "lqtp_formula": "(0 - 1) * rank(ts_std(high, 10)) * ts_corr(high, volume, 10)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_68529a49",
@@ -3372,7 +3446,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_68529a49/values.parquet"
       },
-      "mem_available_gb": 24.55
+      "mem_available_gb": 24.55,
+      "dsl": "rank(ts_delta(close, 20)) * (0 - 1) * ts_std(returns, 20)",
+      "fe_formula": "rank(ts_delta(close, 20)) * (0 - 1) * ts_std(returns, 20)",
+      "lqtp_formula": "rank(ts_delta(close, 20)) * (0 - 1) * ts_std(ret, 20)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_f487f8ba",
@@ -3443,7 +3524,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_f487f8ba/values.parquet"
       },
-      "mem_available_gb": 24.49
+      "mem_available_gb": 24.49,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_57dd1981",
@@ -3514,7 +3598,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_57dd1981/values.parquet"
       },
-      "mem_available_gb": 24.71
+      "mem_available_gb": 24.71,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260703_ef5302fe",
@@ -3585,7 +3672,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_ef5302fe/values.parquet"
       },
-      "mem_available_gb": 24.48
+      "mem_available_gb": 24.48,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260703_42cca713",
@@ -3656,7 +3746,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_42cca713/values.parquet"
       },
-      "mem_available_gb": 24.42
+      "mem_available_gb": 24.42,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_61d3d4de",
@@ -3727,7 +3820,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_61d3d4de/values.parquet"
       },
-      "mem_available_gb": 24.28
+      "mem_available_gb": 24.28,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260703_c6169b2e",
@@ -3798,7 +3894,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_c6169b2e/values.parquet"
       },
-      "mem_available_gb": 24.32
+      "mem_available_gb": 24.32,
+      "dsl": "close / (low + 0.001)",
+      "fe_formula": "close / (low + 0.001)",
+      "lqtp_formula": "close / (low + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260703_6c174054",
@@ -3869,7 +3972,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_6c174054/values.parquet"
       },
-      "mem_available_gb": 24.45
+      "mem_available_gb": 24.45,
+      "dsl": "(high - open) / (open + 0.001)",
+      "fe_formula": "(high - open) / (open + 0.001)",
+      "lqtp_formula": "(high - open) / (open + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_149b529b",
@@ -3940,7 +4050,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_149b529b/values.parquet"
       },
-      "mem_available_gb": 24.32
+      "mem_available_gb": 24.32,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_393d28b7",
@@ -4011,7 +4124,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_393d28b7/values.parquet"
       },
-      "mem_available_gb": 24.22
+      "mem_available_gb": 24.22,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_741a044f",
@@ -4082,7 +4198,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_741a044f/values.parquet"
       },
-      "mem_available_gb": 24.2
+      "mem_available_gb": 24.2,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_b37f3fb9",
@@ -4153,7 +4272,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_b37f3fb9/values.parquet"
       },
-      "mem_available_gb": 24.23
+      "mem_available_gb": 24.23,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_576e0a0b",
@@ -4224,7 +4346,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_576e0a0b/values.parquet"
       },
-      "mem_available_gb": 24.5
+      "mem_available_gb": 24.5,
+      "dsl": "(close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001)",
+      "fe_formula": "(close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001)",
+      "lqtp_formula": "(close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_a1c128d5",
@@ -4295,7 +4424,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_a1c128d5/values.parquet"
       },
-      "mem_available_gb": 24.24
+      "mem_available_gb": 24.24,
+      "dsl": "rank((0 - 1) * ts_corr(close, volume, 20))",
+      "fe_formula": "rank((0 - 1) * ts_corr(close, volume, 20))",
+      "lqtp_formula": "rank((0 - 1) * ts_corr(close, volume, 20))",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_cf427acf",
@@ -4366,7 +4502,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_cf427acf/values.parquet"
       },
-      "mem_available_gb": 24.48
+      "mem_available_gb": 24.48,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_40002fd7",
@@ -4437,7 +4576,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_40002fd7/values.parquet"
       },
-      "mem_available_gb": 24.14
+      "mem_available_gb": 24.14,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_efd125a8",
@@ -4508,7 +4650,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_efd125a8/values.parquet"
       },
-      "mem_available_gb": 24.07
+      "mem_available_gb": 24.07,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_1958c186",
@@ -4579,7 +4724,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_1958c186/values.parquet"
       },
-      "mem_available_gb": 24.1
+      "mem_available_gb": 24.1,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_673406ba",
@@ -4650,7 +4798,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_673406ba/values.parquet"
       },
-      "mem_available_gb": 24.36
+      "mem_available_gb": 24.36,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_75f1066f",
@@ -4721,7 +4872,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_75f1066f/values.parquet"
       },
-      "mem_available_gb": 24.18
+      "mem_available_gb": 24.18,
+      "dsl": "rank(ts_delta(volume, 5)) * (0 - 1) * ts_std(returns, 10)",
+      "fe_formula": "rank(ts_delta(volume, 5)) * (0 - 1) * ts_std(returns, 10)",
+      "lqtp_formula": "rank(ts_delta(volume, 5)) * (0 - 1) * ts_std(ret, 10)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_844ceabc",
@@ -4792,7 +4950,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_844ceabc/values.parquet"
       },
-      "mem_available_gb": 24.32
+      "mem_available_gb": 24.32,
+      "dsl": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "fe_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "lqtp_formula": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max((0 - 1) * ts_delta(close, 1), 0), 60) + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_57e30cff",
@@ -4863,7 +5028,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_57e30cff/values.parquet"
       },
-      "mem_available_gb": 24.21
+      "mem_available_gb": 24.21,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_581774bc",
@@ -4934,7 +5102,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_581774bc/values.parquet"
       },
-      "mem_available_gb": 24.45
+      "mem_available_gb": 24.45,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_6d5f848e",
@@ -5005,7 +5176,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_6d5f848e/values.parquet"
       },
-      "mem_available_gb": 24.09
+      "mem_available_gb": 24.09,
+      "dsl": "rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5))",
+      "fe_formula": "rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5))",
+      "lqtp_formula": "rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5))",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_726efa4d",
@@ -5076,7 +5254,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_726efa4d/values.parquet"
       },
-      "mem_available_gb": 24.04
+      "mem_available_gb": 24.04,
+      "dsl": "(close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001)",
+      "fe_formula": "(close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001)",
+      "lqtp_formula": "(close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260703_3962e26e",
@@ -5147,7 +5332,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_3962e26e/values.parquet"
       },
-      "mem_available_gb": 24.25
+      "mem_available_gb": 24.25,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_1f8103b7",
@@ -5218,7 +5406,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_1f8103b7/values.parquet"
       },
-      "mem_available_gb": 24.48
+      "mem_available_gb": 24.48,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_f50c69da",
@@ -5289,7 +5480,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f50c69da/values.parquet"
       },
-      "mem_available_gb": 24.56
+      "mem_available_gb": 24.56,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_5685f3e9",
@@ -5360,7 +5554,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_5685f3e9/values.parquet"
       },
-      "mem_available_gb": 24.44
+      "mem_available_gb": 24.44,
+      "dsl": "rank((0 - 1) * ts_std(returns, 10)) * rank(ts_sum(returns, 6))",
+      "fe_formula": "rank((0 - 1) * ts_std(returns, 10)) * rank(ts_sum(returns, 6))",
+      "lqtp_formula": "rank((0 - 1) * ts_std(ret, 10)) * rank(ts_sum(ret, 6))",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_5f690b22",
@@ -5431,7 +5632,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_5f690b22/values.parquet"
       },
-      "mem_available_gb": 24.25
+      "mem_available_gb": 24.25,
+      "dsl": "ts_delta(close, 10) / (delay(close, 10) + 0.001)",
+      "fe_formula": "ts_delta(close, 10) / (delay(close, 10) + 0.001)",
+      "lqtp_formula": "ts_delta(close, 10) / (delay(close, 10) + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_9443699f",
@@ -5502,7 +5710,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_9443699f/values.parquet"
       },
-      "mem_available_gb": 24.34
+      "mem_available_gb": 24.34,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_89d0956b",
@@ -5573,7 +5784,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_89d0956b/values.parquet"
       },
-      "mem_available_gb": 24.27
+      "mem_available_gb": 24.27,
+      "dsl": "ts_mean(close, 60) / (delay(close, 1) + 0.001)",
+      "fe_formula": "ts_mean(close, 60) / (delay(close, 1) + 0.001)",
+      "lqtp_formula": "ts_mean(close, 60) / (delay(close, 1) + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_f0fd9be3",
@@ -5644,7 +5862,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f0fd9be3/values.parquet"
       },
-      "mem_available_gb": 24.23
+      "mem_available_gb": 24.23,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_2f5c25fe",
@@ -5715,7 +5936,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_2f5c25fe/values.parquet"
       },
-      "mem_available_gb": 24.14
+      "mem_available_gb": 24.14,
+      "dsl": "rank((0 - 1) * ts_std(returns, 20)) * ts_rank(ts_delta(close, 5), 20)",
+      "fe_formula": "rank((0 - 1) * ts_std(returns, 20)) * ts_rank(ts_delta(close, 5), 20)",
+      "lqtp_formula": "rank((0 - 1) * ts_std(ret, 20)) * ts_rank(ts_delta(close, 5), 20)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_463d42d0",
@@ -5786,7 +6014,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_463d42d0/values.parquet"
       },
-      "mem_available_gb": 24.24
+      "mem_available_gb": 24.24,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_abf0beb7",
@@ -5857,7 +6088,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_abf0beb7/values.parquet"
       },
-      "mem_available_gb": 24.36
+      "mem_available_gb": 24.36,
+      "dsl": "ts_delta(close, 5) / (delay(close, 5) + 0.001)",
+      "fe_formula": "ts_delta(close, 5) / (delay(close, 5) + 0.001)",
+      "lqtp_formula": "ts_delta(close, 5) / (delay(close, 5) + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_d332134b",
@@ -5928,7 +6166,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_d332134b/values.parquet"
       },
-      "mem_available_gb": 24.32
+      "mem_available_gb": 24.32,
+      "dsl": "ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001)",
+      "fe_formula": "ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001)",
+      "lqtp_formula": "ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_21fb502a",
@@ -5999,7 +6244,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_21fb502a/values.parquet"
       },
-      "mem_available_gb": 24.38
+      "mem_available_gb": 24.38,
+      "dsl": "(close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001)",
+      "fe_formula": "(close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001)",
+      "lqtp_formula": "(close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_66b498d6",
@@ -6070,7 +6322,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_66b498d6/values.parquet"
       },
-      "mem_available_gb": 24.47
+      "mem_available_gb": 24.47,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_f5562d5a",
@@ -6141,7 +6396,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f5562d5a/values.parquet"
       },
-      "mem_available_gb": 24.35
+      "mem_available_gb": 24.35,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260701_77eb1727",
@@ -6212,7 +6470,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_77eb1727/values.parquet"
       },
-      "mem_available_gb": 24.43
+      "mem_available_gb": 24.43,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_98ed259d",
@@ -6283,7 +6544,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_98ed259d/values.parquet"
       },
-      "mem_available_gb": 24.52
+      "mem_available_gb": 24.52,
+      "dsl": "rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10)",
+      "fe_formula": "rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10)",
+      "lqtp_formula": "rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260701_75057f17",
@@ -6354,7 +6622,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260701_75057f17/values.parquet"
       },
-      "mem_available_gb": 24.24
+      "mem_available_gb": 24.24,
+      "dsl": "ts_std(returns, 60) * (0 - 1) * sign(ts_delta(close, 5))",
+      "fe_formula": "ts_std(returns, 60) * (0 - 1) * sign(ts_delta(close, 5))",
+      "lqtp_formula": "ts_std(ret, 60) * (0 - 1) * sign(ts_delta(close, 5))",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260703_454725cc",
@@ -6425,7 +6700,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260703_454725cc/values.parquet"
       },
-      "mem_available_gb": 24.06
+      "mem_available_gb": 24.06,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_6ce5f556",
@@ -6496,7 +6774,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_6ce5f556/values.parquet"
       },
-      "mem_available_gb": 24.37
+      "mem_available_gb": 24.37,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_153d5b20",
@@ -6567,7 +6848,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_153d5b20/values.parquet"
       },
-      "mem_available_gb": 24.47
+      "mem_available_gb": 24.47,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     },
     {
       "factor_id": "alpha_20260702_f204de74",
@@ -6638,7 +6922,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_f204de74/values.parquet"
       },
-      "mem_available_gb": 24.08
+      "mem_available_gb": 24.08,
+      "dsl": "(close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001)",
+      "fe_formula": "(close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001)",
+      "lqtp_formula": "(close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_2e48ae98",
@@ -6709,7 +7000,14 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_2e48ae98/values.parquet"
       },
-      "mem_available_gb": 24.34
+      "mem_available_gb": 24.34,
+      "dsl": "(close - open) / (open + 0.001)",
+      "fe_formula": "(close - open) / (open + 0.001)",
+      "lqtp_formula": "(close - open) / (open + 0.001)",
+      "lqtp_status": "ready",
+      "lqtp_native": true,
+      "has_formula": true,
+      "platform_field_ok": true
     },
     {
       "factor_id": "alpha_20260702_80bca4fc",
@@ -6780,7 +7078,10 @@
         ],
         "path": "/home/shw/quant_projects/data/cogalpha_lqtp_production/factor_lake/alpha_20260702_80bca4fc/values.parquet"
       },
-      "mem_available_gb": 24.28
+      "mem_available_gb": 24.28,
+      "has_formula": false,
+      "dsl": "",
+      "lqtp_formula": ""
     }
   ],
   "all_results": [
@@ -13952,6 +14253,11 @@
   ],
   "n_degenerate_filtered": 11,
   "selection_note": "Excluded near-constant / all-zero panels that can fabricate RankIC via ties.",
-  "platform_note": "无公式交付，无法提交平台；已全部走本地面板回测。",
-  "backtested_at": "2026-08-09T00:40:45.637524"
+  "platform_note": "已附 DSL 25/67；可转平台 25 个将提交平台；无公式 42 个继续本地面板回测。",
+  "backtested_at": "2026-08-09T00:40:45.637524",
+  "formula_attach": {
+    "n_with_dsl": 25,
+    "n_without_dsl": 42,
+    "note": "DSL 来自外部交付包；无公式者仅保留本地面板回测。"
+  }
 }

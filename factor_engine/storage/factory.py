@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from .composite_source import CompositeDataSource
@@ -8,6 +9,53 @@ from .data_access_source import DataAccessSource
 from .kline_parquet_source import KlineParquetSource
 from .parquet_source import ParquetSource
 from workspace_paths import resolve_path
+
+
+@dataclass(frozen=True)
+class DataSourceBuildContext:
+    """Production policy injected from the engine's run config into every source.
+
+    Built by ``FactorEngine.from_loaded_config`` / the pipeline layer from the
+    parsed ``RunConfig`` and threaded recursively through Composite /
+    LongTable / Intraday children, so a production run constructs
+    ``DataAccessSource`` with the hard gates ON *without* the YAML author having
+    to remember them per-source (R10 #1).  Research runs simply leave the gates
+    off; a research build is never upgraded to production here.
+
+    Per-source options in the source spec (``run_mode`` / ``production`` /
+    ``strict_unknown_fields`` / ``enforce_mining_gate`` /
+    ``snapshot_now_only`` / ``mining_coverage_threshold``) are allowed and take
+    precedence for that source — but a *production* context is a floor: the
+    source constructor itself refuses ``strict_unknown_fields=False`` under a
+    production run (R10 #3).
+    """
+
+    run_mode: str | None = None
+    market: str | None = None
+    calendar_id: str | None = None
+    timezone: str | None = None
+    pit_enforce: bool = False
+    enforce_mining_gate: bool = False
+    #: ``"snapshot_now_only"`` maps to ``snapshot_now_only=True`` on the source.
+    snapshot_policy: str | None = None
+    #: maps to ``mining_coverage_threshold`` on the source.
+    coverage_policy: float | None = None
+
+    @property
+    def production(self) -> bool:
+        if self.run_mode:
+            from runtime.production_policy import is_production_mode
+
+            return bool(is_production_mode(self.run_mode))
+        return False
+
+    @property
+    def snapshot_now_only(self) -> bool:
+        return self.snapshot_policy == "snapshot_now_only"
+
+
+def _ctx_default(ctx: DataSourceBuildContext | None) -> DataSourceBuildContext:
+    return ctx if ctx is not None else DataSourceBuildContext()
 
 
 def _extract_source_spec(config: Any) -> tuple[str, dict[str, Any]]:
@@ -155,17 +203,21 @@ def _apply_date_range_to_source_config(
     return cfg
 
 
-def build_data_source(config: Any):
+def build_data_source(config: Any, *, build_context: DataSourceBuildContext | None = None):
     """根据运行时配置构造数据源或组合数据源实例。
-    
+
     参数:
         config: 数据源或运行时配置
-    
+        build_context: 引擎级 DataSourceBuildContext（R10 #1）；把 run_mode /
+            production / mining 门禁递归注入所有子 source。None 时不注入，
+            保持旧的纯 research 行为。
+
     返回:
-        无
+        DataSource 实例
     """
 
     # YAML 可为 dict 或已解析的 dataclass；统一成 (type, options) 再分支
+    ctx = _ctx_default(build_context)
     source_type, options = _extract_source_spec(config)
     if source_type == "composite":
         anchor_source = _pop_option(options, "anchor", "anchor_source", required=True)
@@ -188,7 +240,8 @@ def build_data_source(config: Any):
                     source_config,
                     start_date=start_date,
                     end_date=end_date,
-                )
+                ),
+                build_context=ctx,
             )
             for name, source_config in raw_sources.items()
         }
@@ -213,7 +266,7 @@ def build_data_source(config: Any):
     if source_type == "long_table":
         inner = _pop_option(options, "inner", "source", required=True)
         _ensure_no_extra_options(source_type, options)
-        return _wrap_long_table(build_data_source(inner), long_table=True)
+        return _wrap_long_table(build_data_source(inner, build_context=ctx), long_table=True)
 
     if source_type == "data_access":
         dataset = _pop_option(options, "dataset", required=True)
@@ -230,6 +283,32 @@ def build_data_source(config: Any):
             merged["kind"] = str(kind)
             params = merged
         _pop_option(options, "root", default=None)  # 忽略旧配置残留
+        # R10 #1: production policy comes from the engine build context; the
+        # source spec may still override per-source.  These options are popped
+        # (not left for _ensure_no_extra_options to reject).
+        run_mode = _pop_option(options, "run_mode", default=None)
+        production = _pop_option(options, "production", default=None)
+        strict_unknown_fields = _pop_option(
+            options, "strict_unknown_fields", default=None
+        )
+        enforce_mining_gate = _pop_option(options, "enforce_mining_gate", default=None)
+        snapshot_now_only = _pop_option(options, "snapshot_now_only", default=None)
+        mining_coverage_threshold = _pop_option(
+            options, "mining_coverage_threshold", default=None
+        )
+        # run_mode: context default, source override wins.  The constructor
+        # derives ``production``/``strict_unknown_fields`` from the resolved
+        # run_mode (R10 #3 makes production a floor the source cannot lower),
+        # so the factory only propagates the mining/snapshot gates that have no
+        # run_mode-derivable default.
+        if run_mode is None:
+            run_mode = ctx.run_mode
+        if enforce_mining_gate is None:
+            enforce_mining_gate = ctx.enforce_mining_gate
+        if snapshot_now_only is None:
+            snapshot_now_only = ctx.snapshot_now_only
+        if mining_coverage_threshold is None:
+            mining_coverage_threshold = ctx.coverage_policy
         source = DataAccessSource(
             dataset=str(dataset),
             fields=fields,
@@ -242,6 +321,12 @@ def build_data_source(config: Any):
             params=params,
             semantic_filters=semantic_filters,
             read_mode=str(read_mode),
+            run_mode=run_mode,
+            production=production,
+            strict_unknown_fields=strict_unknown_fields,
+            enforce_mining_gate=bool(enforce_mining_gate),
+            snapshot_now_only=bool(snapshot_now_only),
+            mining_coverage_threshold=mining_coverage_threshold,
         )
         _ensure_no_extra_options(source_type, options)
         return _wrap_long_table(_attach_bar_freq(source, bar_freq), long_table=long_table)
@@ -321,7 +406,7 @@ def build_data_source(config: Any):
             default=("last_close", "sum_volume", "vwap"),
         )
         features = tuple(str(x) for x in raw_features)
-        inner = build_data_source(inner_cfg)
+        inner = build_data_source(inner_cfg, build_context=ctx)
         from runtime.intraday_aggregator import IntradayAggregatedDataSource
 
         source = IntradayAggregatedDataSource(inner=inner, features=features)

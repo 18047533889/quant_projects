@@ -13,11 +13,43 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.ts_model._rolling_core import fit_linear_model_checked
 
 _EPS = 1e-12
+# R10-P0-007: a stock is ACTIVE for the PCA fit only when it has at least
+# ``min_obs`` finite observations inside the training window, where
+# ``min_obs = max(_ABSOLUTE_MIN_OBS, ceil(window * _MIN_COVERAGE_RATIO))``.
+# A stock with 2 days of data in a 120-day window used to enter the fit with
+# 118 mean-imputed days and distort the covariance — far too loose.
+_ABSOLUTE_MIN_OBS = 2
+_MIN_COVERAGE_RATIO = 0.7
 _CANONICALS: list[str] = []
+
+
+# R10-P0-009: panel-model integer knobs must declare ``ParamSpec(dtype=int)``.
+# ``component`` / ``label_horizon`` / ``n_regimes`` / ``n_experts`` are NOT in
+# the central legacy integer whitelist (``_INTEGER_PARAM_NAMES``), so without
+# a spec a fractional search candidate (``n_experts=3.9``) silently truncated
+# to ``int(3.9) == 3`` inside the kernel.  A declared spec makes the strict
+# call gate reject the fractional value at the boundary instead.
+_INT_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2),
+    "n_components": ParamSpec(dtype=int, min=1),
+    "component": ParamSpec(dtype=int, min=0),
+    "label_horizon": ParamSpec(dtype=int, min=1),
+    "n_regimes": ParamSpec(dtype=int, min=2),
+    "n_experts": ParamSpec(dtype=int, min=2),
+}
+_FLOAT_PARAM_SPECS: dict[str, ParamSpec] = {
+    "alpha": ParamSpec(dtype=float, min=1e-8),
+    "l1_ratio": ParamSpec(dtype=float, min=0.0, max=1.0),
+}
 
 
 def _meta(name: str, description: str, params: list[str], *, unit: str = "level", pit_safe: bool = True) -> OperatorMetadata:
@@ -34,6 +66,18 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "level"
         # point-in-time safe for default mining.
         tags.append("supervised_model")
         tags.append("not_pit_certified")
+    param_specs = {
+        name: _INT_PARAM_SPECS[name]
+        for name in params
+        if name in _INT_PARAM_SPECS
+    }
+    param_specs.update(
+        {
+            name: _FLOAT_PARAM_SPECS[name]
+            for name in params
+            if name in _FLOAT_PARAM_SPECS
+        }
+    )
     return OperatorMetadata(
         name=name,
         category="panel_model",
@@ -41,6 +85,7 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "level"
         param_names=params,
         return_type="series",
         tags=tags,
+        param_specs=param_specs,
     )
 
 
@@ -97,8 +142,14 @@ def _pca_svd(X: np.ndarray, n_components: int):
     scores / reconstruction of every other stock.
     """
     n, d = X.shape
+    window = max(1, int(n))
     finite_count = np.sum(np.isfinite(X), axis=0)
-    active = finite_count >= 2
+    # R10-P0-007: coverage-gated active set.  A stock whose finite coverage
+    # inside the window falls below the ratio is INACTIVE — it no longer
+    # dilutes the covariance with mean-imputed rows.  Fail-closed: an inactive
+    # stock's output cell stays NaN (never imputed into the projection).
+    min_obs = max(_ABSOLUTE_MIN_OBS, int(np.ceil(window * _MIN_COVERAGE_RATIO)))
+    active = finite_count >= min_obs
     n_active = int(active.sum())
     if n_active < 2:
         return None
@@ -114,6 +165,9 @@ def _pca_svd(X: np.ndarray, n_components: int):
     U, s, Vt = np.linalg.svd(Xs, full_matrices=False)
     total_var = float(np.sum(s * s))
     explained = s[:k] ** 2 / max(total_var, _EPS)
+    # R10-P0-007 telemetry: breadth + per-active-stock coverage percentiles,
+    # for the validity gate / search pruning to consume.
+    coverage = finite_count[active].astype(float) / float(window)
     return {
         "active": active,
         "k": k,
@@ -121,13 +175,23 @@ def _pca_svd(X: np.ndarray, n_components: int):
         "sd": sd_sub,
         "loadings": Vt[:k],
         "explained": explained,
+        "active_breadth": int(n_active),
+        "median_coverage": float(np.median(coverage)),
+        "min_coverage": float(coverage.min()),
     }
 
 
 def _pca_transform(pca, row: np.ndarray) -> np.ndarray:
-    """Project ``row`` (full universe) onto the active sub-space's components."""
+    """Project ``row`` (full universe) onto the active sub-space's components.
+
+    R10-P0-006: a stock that is missing TODAY must not poison the common
+    component scores of every other stock.  Its standardized value is pinned
+    to the training mean (``0.0``) so the shared ``loadings @ z`` stays finite;
+    the missing stock's OWN output cell is written as NaN by the caller.
+    """
     row_active = row[pca["active"]]
-    z = (row_active - pca["mu"]) / pca["sd"]
+    current_valid = np.isfinite(row_active)
+    z = np.where(current_valid, (row_active - pca["mu"]) / pca["sd"], 0.0)
     return pca["loadings"] @ z
 
 
@@ -153,9 +217,7 @@ def _rolling_pca(ret: pd.DataFrame, window: int, fn, *, fit_lag: int = 1) -> pd.
     return _frame_like(ret, out)
 
 
-def _pca_loading(
-    X: np.ndarray, cur: np.ndarray, component: int, prev: np.ndarray | None
-) -> np.ndarray:
+def _pca_loading(X: np.ndarray, cur: np.ndarray, component: int) -> np.ndarray:
     pca = _pca_svd(X, component + 1)
     if pca is None or component >= pca["k"]:
         return np.full(len(cur), np.nan)
@@ -163,35 +225,27 @@ def _pca_loading(
     # universe, leaving inactive columns NaN (fail-closed).
     loading = np.full(len(cur), np.nan)
     loading[pca["active"]] = pca["loadings"][component]
-    # Audit M02: the eigenvector sign is arbitrary per SVD; align each window's
-    # loading to the previous window's loading so the loading factor has no
-    # pure-numerical sign flip between consecutive windows.
-    if prev is not None and np.isfinite(prev).any() and np.isfinite(loading).any():
-        m = np.isfinite(loading) & np.isfinite(prev)
-        if np.dot(loading[m], prev[m]) < 0.0:
-            loading = -loading
-    else:
-        # No usable previous window: fall back to per-window sign-normalisation
-        # on the largest |loading| (finite entries only).
-        fin = np.flatnonzero(np.isfinite(loading))
-        if fin.size == 0:
-            return loading
-        k = fin[int(np.argmax(np.abs(loading[fin])))]
-        if loading[k] < 0:
-            loading = -loading
+    # R10-P0-005: STATELESS sign orientation.  The SVD eigenvector sign is
+    # arbitrary per window; aligning to the PREVIOUS window's loading made this
+    # a hidden stateful operator — full-run, chunked-run and mid-series starts
+    # could yield opposite signs for the same window.  Instead each window is
+    # normalised deterministically on its own: the largest |loading| position
+    # is forced positive (ties broken by first index, i.e. the panel's
+    # instrument order, which is fixed).  No memory, so
+    # ``full == chunk == incremental`` exactly.
+    fin = np.flatnonzero(np.isfinite(loading))
+    if fin.size == 0:
+        return loading
+    k = fin[int(np.argmax(np.abs(loading[fin])))]
+    if loading[k] < 0:
+        loading = -loading
     return loading
 
 
 def _pca_loading_series(ret: pd.DataFrame, window: int, component: int) -> pd.DataFrame:
-    prev: np.ndarray | None = None
-
-    def _fn(X: np.ndarray, cur: np.ndarray) -> np.ndarray:
-        nonlocal prev
-        loading = _pca_loading(X, cur, int(component), prev)
-        prev = loading.copy()
-        return loading
-
-    return _rolling_pca(ret, int(window), _fn)
+    return _rolling_pca(
+        ret, int(window), lambda X, cur: _pca_loading(X, cur, int(component))
+    )
 
 
 _mk(
@@ -207,9 +261,14 @@ def _pca_resid(X: np.ndarray, cur: np.ndarray, n_components: int) -> np.ndarray:
     pca = _pca_svd(X, min(int(n_components), X.shape[1]))
     if pca is None:
         return np.full(len(cur), np.nan)
+    # R10-P0-006: ``score`` is computed with the current row's missing stocks
+    # pinned to the training mean (0 standardized), so the shared components and
+    # the reconstructed values stay FINITE for every active stock.  A stock that
+    # is missing TODAY gets its own residual NaN (``cur_active`` is NaN there),
+    # while its peers keep a valid residual — one halted stock no longer blanks
+    # the whole cross-section.
     score = _pca_transform(pca, cur)
     cur_active = cur[pca["active"]]
-    z = (cur_active - pca["mu"]) / pca["sd"]
     recon = pca["mu"] + pca["sd"] * (pca["loadings"].T @ score)
     out = np.full(len(cur), np.nan)
     # P0-14: write residuals only for the active sub-space; inactive stocks stay
@@ -237,10 +296,15 @@ def _pca_commonality(X: np.ndarray, cur: np.ndarray, n_components: int) -> np.nd
     if pca is None:
         return np.full(len(cur), np.nan)
     # P0-14: work only in the active sub-space so an inactive column's NaN never
-    # leaks into the shared variance decomposition.
+    # leaks into the shared variance decomposition.  R10-P0-006 (same class):
+    # a single stock with a missing training row must not NaN the shared
+    # components — its training gap is imputed with its own training mean
+    # (``z -> 0``) before the matrix product; the residual for that cell stays
+    # NaN and its column's variance uses only its finite rows (``nanvar``).
     Xa = X[:, pca["active"]]
-    z = (Xa - pca["mu"]) / pca["sd"]           # (n_rows, n_active)
-    score = pca["loadings"] @ z.T              # (k, n_rows)
+    Xa_imp = np.where(np.isfinite(Xa), Xa, pca["mu"][None, :])
+    z = (Xa_imp - pca["mu"]) / pca["sd"]      # (n_rows, n_active)
+    score = pca["loadings"] @ z.T             # (k, n_rows)
     recon = (pca["mu"][:, None] + pca["sd"][:, None] * (pca["loadings"].T @ score)).T  # (n_rows, n_active)
     resid = Xa - recon
     var_resid = np.nanvar(resid, axis=0)
@@ -280,6 +344,9 @@ def _industry_pca_loading(ret, group, window, component):
             # even when the industry's columns are not contiguous in the panel.
             local = int(np.where(members == col)[0][0])
             X = rv[start : fit_end + 1][:, members]
+            # R10-P0-004: the loading kernel is STATELESS (3 args) — the old
+            # call omitted the fourth ``prev`` argument and crashed with a
+            # TypeError as soon as any industry had >= 4 members.
             loading = _pca_loading(X, rv[row][members], int(component))
             out[row, col] = loading[local] if np.isfinite(loading).any() else np.nan
     return _frame_like(ret, out)
@@ -588,7 +655,14 @@ def _moe_forecast(y, feats, market_state, window, n_experts, label_horizon=1):
             # places itself into an expert bin).  Round-6 P0-40: training rows
             # stop at ``hi = row - label_horizon`` so un-matured forward-H
             # labels never fit the experts.
-            centers = np.quantile(win_ms[win_valid], np.linspace(0, 1, ne + 1)[1:-1])
+            raw_edges = np.quantile(win_ms[win_valid], np.linspace(0, 1, ne + 1)[1:-1])
+            centers = np.unique(raw_edges)
+            # R10-P0-030: a degenerate market_state (heavy ties / near-constant)
+            # can collapse several requested expert bins into one — ``n_experts``
+            # would silently become a smaller, nearly-identical model.  Fail
+            # closed (NaN cell) instead of running with fewer real experts.
+            if len(centers) + 1 < ne:
+                continue
             win_ms_tr = win_ms[: hi - start]
             win_valid_tr = win_valid[: hi - start]
             Xc = np.column_stack([f[start:hi, col] for f in collected])
@@ -677,8 +751,17 @@ def _autoencoder_error(feats, window, n_components: int = 2):
     must not inject NaN into the shared decomposition).
     """
     collected = [f.to_numpy(dtype=float) for f in feats if f is not None]
-    if not collected:
-        raise ValueError("at least one feature panel is required")
+    # R10-P0-029: the operator is only meaningful with >= 2 features.  With a
+    # single feature ``p=1`` the reconstruction is trivially perfect (rank
+    # forced to 0 -> every output NaN), so a ``n_features == 1`` call was a
+    # legal-but-always-NaN search dead end.  Fail closed at the call boundary
+    # instead of emitting a full-NaN panel.
+    if len(collected) < 2:
+        raise ValueError(
+            "ts_feature_pca_reconstruction_error requires at least 2 feature "
+            f"panels (got {len(collected)}); a single feature cannot be "
+            "low-rank compressed"
+        )
     n_features = len(collected)
     rank = max(1, min(int(n_components), n_features - 1))
     n_rows, n_cols = collected[0].shape

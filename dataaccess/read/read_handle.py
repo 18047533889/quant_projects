@@ -39,6 +39,7 @@ class ReadHandle:
         batch_size: int = 100_000,
         budget: Any = None,
         govern_lazy: bool = False,
+        normalize: Any = None,
     ) -> None:
         self.snapshot = snapshot
         self.stats = stats
@@ -48,6 +49,12 @@ class ReadHandle:
         # 预算/deadline 治理；``to_lazy()`` 在 governed 时拒绝裸 LazyFrame。
         self._budget = budget
         self._govern_lazy = bool(govern_lazy)
+        # #收官轮 P0：lazy 结果形态的输出层单位归一化钩子。``normalize_units=True``
+        # 在 eager table 路径由调用方直接做；lazy/polars result 走统一物化终点
+        # （``_materialize_arrow``），必须在这里补上——否则 ``engine='auto'`` 路由
+        # 到 polars+lazy 时 ``normalize_units=True`` 静默失效，A股 Return 保持 raw
+        # BP（该值与 eager 路径不一致）。
+        self._normalize = normalize if callable(normalize) else None
         self._polars_df: Any = None
         self._pandas_df: Any = None
         # #P1-9 / #P0-C4 stream 消费状态：one-shot 流一旦开始消费，任何第二终点
@@ -118,6 +125,10 @@ class ReadHandle:
                 table = self._collect_lazy_arrow()
             else:
                 table = self._source.collect().to_arrow()
+            if self._normalize is not None:
+                # 收官轮 P0：lazy 结果形态补输出层单位归一化（normalize_units=True
+                # 与 eager table 路径一致）。
+                table = self._normalize(table)
             self._source = table
             self._kind = "table"
             return table
@@ -127,6 +138,9 @@ class ReadHandle:
             self._source = (
                 pa.Table.from_batches(batches) if batches else pa.table({})
             )
+            if self._normalize is not None:
+                # 收官轮 P0：stream 结果形态同样补输出层单位归一化。
+                self._source = self._normalize(self._source)
             self._kind = "table"
             self._stream_completed = True
             return self._source

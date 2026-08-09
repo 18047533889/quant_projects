@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import base64
 import json
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Mapping
 
 from api.columns import col
@@ -23,21 +23,20 @@ class SourceRefSpec:
     transform_params: tuple[tuple[str, Any], ...] = ()
     dialect: str = "lqtp"
     dialect_version: str = "2026-07-19"
+    #: R10 #56: construction-time strictness gate.  Deliberately excluded from
+    #: ``to_payload`` (identity) and from equality comparison so the same logical
+    #: source ref encodes identically in research and production.
+    production: bool = field(compare=False, repr=False, default=False)
 
     def params_dict(self) -> dict[str, Any]: return dict(self.params)
     def transform_params_dict(self) -> dict[str, Any]: return dict(self.transform_params)
     def with_transform(self, transform: str, **params: Any) -> "SourceRefSpec":
-        spec = _TRANSFORM_PARAM_SPECS.get(str(transform).strip())
-        if spec is not None:
-            unknown = sorted(set(params) - spec)
-            if unknown:
-                raise ValueError(
-                    f"source transform {transform!r} does not consume parameter(s): "
-                    f"{', '.join(unknown)} (allowed: {', '.join(sorted(spec))})"
-                )
+        normalized = str(transform).strip()
+        _assert_declared_transform(normalized, production=self.production)
+        _validate_transform_params(normalized, params)
         return replace(
             self,
-            transform=str(transform),
+            transform=normalized,
             transform_params=tuple(
                 sorted((str(k), _scalar(v)) for k, v in params.items())
             ),
@@ -63,6 +62,88 @@ def _scalar(value: Any) -> Any:
     raise TypeError(f"source parameters must be scalar literals, got {type(value).__name__}")
 
 
+def _dtype_label(dtype: Any) -> str:
+    """Human-readable dtype label for ``SourceTransformParamSpec`` errors."""
+    if isinstance(dtype, tuple):
+        return " or ".join(_dtype_label(d) for d in dtype)
+    if dtype is int:
+        return "an integer"
+    if dtype is float:
+        return "a float"
+    if dtype is str:
+        return "a string"
+    return getattr(dtype, "__name__", str(dtype))
+
+
+@dataclass(frozen=True)
+class SourceTransformParamSpec:
+    """SourceRef 变换参数的 dtype/范围/choices 契约（R10 #55）。
+
+    每个 ``_TRANSFORM_PARAM_SPECS`` 条目用该规格声明一个可消费参数的
+    字面量类型、上下界与可选白名单。构造 SourceRef 时逐参数校验，防止
+    非法字面量进入可复现身份。
+
+    属性:
+        dtype: 期望类型（int/str/float 或类型元组）
+        min: 数值下界（含），None 表示不限
+        max: 数值上界（含），None 表示不限
+        choices: 允许的字面量白名单；提供后优先于 dtype/min/max 判定
+    """
+    dtype: Any = int
+    min: float | int | None = None
+    max: float | int | None = None
+    choices: tuple[Any, ...] | None = None
+
+    def validate(self, name: str, value: Any) -> None:
+        """校验单个变换参数，违规抛 ``ValueError``。
+
+        参数:
+            name: 参数名（用于报错信息）
+            value: 已过 ``_scalar`` 标量编码的字面量
+        """
+        if self.choices is not None:
+            if value not in self.choices:
+                allowed = ", ".join(repr(c) for c in self.choices)
+                raise ValueError(
+                    f"source transform parameter {name!r} must be one of "
+                    f"({allowed}), got {value!r}"
+                )
+            return
+        if not self._dtype_ok(value):
+            raise ValueError(
+                f"source transform parameter {name!r} must be {_dtype_label(self.dtype)}, "
+                f"got {type(value).__name__} {value!r}"
+            )
+        if self.min is not None and value < self.min:
+            raise ValueError(
+                f"source transform parameter {name!r} must be >= {self.min}, got {value!r}"
+            )
+        if self.max is not None and value > self.max:
+            raise ValueError(
+                f"source transform parameter {name!r} must be <= {self.max}, got {value!r}"
+            )
+
+    def _dtype_ok(self, value: Any) -> bool:
+        if self.dtype is int:
+            # Review-8 #469 spirit: bool is not a real integer literal.
+            if isinstance(value, bool):
+                return False
+            if isinstance(value, int):
+                return True
+            if isinstance(value, float):
+                return (
+                    value == value
+                    and value not in (float("inf"), float("-inf"))
+                    and value.is_integer()
+                )
+            return False
+        if self.dtype is float:
+            return isinstance(value, (int, float)) and not isinstance(value, bool)
+        if self.dtype is str:
+            return isinstance(value, str)
+        return isinstance(value, self.dtype)
+
+
 def _strict_int(value: Any, *, name: str = "parameter") -> int:
     """Strict integer validation for SourceRef integer params (Review-8 #469).
 
@@ -86,37 +167,93 @@ def _strict_int(value: Any, *, name: str = "parameter") -> int:
     )
 
 
-# Review-8 #470: typed parameter allow-lists for known transforms.  A transform
-# with a spec here rejects unused/unconsumed parameters instead of silently
-# ignoring them.  Unknown transforms are not validated (opt-in strictness).
-_TRANSFORM_PARAM_SPECS: dict[str, frozenset[str]] = {
-    "financial_lag": frozenset({"quarters"}),
-    "minute_bar": frozenset({"period", "index"}),
-    "minute_resample": frozenset({"period"}),
-    "minute_at": frozenset({"period", "index"}),
-    "minute_range": frozenset({"start", "end"}),
+# Review-8 #470 / R10 #55: typed parameter contracts for known transforms.  A
+# transform with a spec here rejects unused/unconsumed parameters instead of
+# silently ignoring them, and validates each consumed parameter's dtype / range /
+# choices.  Unknown transforms are not validated (opt-in strictness in research;
+# production rejects them outright — R10 #56).
+_TRANSFORM_PARAM_SPECS: dict[str, dict[str, SourceTransformParamSpec]] = {
+    "financial_lag": {
+        # Consumer requires quarters >= 1 (lqtp_logical_source financial_lag).
+        "quarters": SourceTransformParamSpec(dtype=int, min=1),
+    },
+    "minute_bar": {
+        "period": SourceTransformParamSpec(dtype=int, min=1),
+        "index": SourceTransformParamSpec(dtype=int, min=0),
+    },
+    "minute_resample": {
+        "period": SourceTransformParamSpec(dtype=int, min=1),
+    },
+    # Consumer reads params["hhmm"] (e.g. "09:30"), not period/index.
+    "minute_at": {
+        "hhmm": SourceTransformParamSpec(dtype=str),
+    },
+    # Consumer compares HHMM strings lexicographically: str(params["start"]).
+    "minute_range": {
+        "start": SourceTransformParamSpec(dtype=str),
+        "end": SourceTransformParamSpec(dtype=str),
+    },
 }
+
+
+def _assert_declared_transform(transform: str, *, production: bool) -> None:
+    """R10 #56: production rejects unknown/undeclared transforms.
+
+    Research / compat keeps the opt-in strictness of the past: an unknown
+    transform is constructible (only its params, if a spec exists, are checked).
+    In production a transform that has no declared contract fails loudly rather
+    than silently producing an identity no downstream executor can honor.
+    """
+    if not production:
+        return
+    normalized = str(transform).strip()
+    if normalized not in _TRANSFORM_PARAM_SPECS:
+        declared = ", ".join(sorted(_TRANSFORM_PARAM_SPECS))
+        raise ValueError(
+            f"source transform {transform!r} is not a declared production "
+            f"transform (declared: {declared})"
+        )
+
+
+def _validate_transform_params(transform: str, params: Mapping[str, Any]) -> None:
+    """R10 #55: validate a transform's parameters against its contract.
+
+    Enforces both the allowed-name gate (an unknown parameter is rejected —
+    Review-8 #470) and the per-parameter dtype / range / choices contract.  Each
+    value is scalar-encoded first so non-finite floats are rejected with the
+    canonical "finite" message (#468) before the type/range checks run.
+    """
+    spec = _TRANSFORM_PARAM_SPECS.get(str(transform).strip())
+    if spec is None:
+        return
+    known = set(spec)
+    provided = set(str(k) for k in params)
+    unknown = sorted(provided - known)
+    if unknown:
+        raise ValueError(
+            f"source transform {transform!r} does not consume parameter(s): "
+            f"{', '.join(unknown)} (allowed: {', '.join(sorted(known))})"
+        )
+    for key, value in params.items():
+        spec[str(key)].validate(str(key), _scalar(value))
 
 def make_source_ref(table: str, field: str, *, params: Mapping[str, Any] | None = None,
                     transform: str | None = None, transform_params: Mapping[str, Any] | None = None,
-                    dialect: str = "lqtp", dialect_version: str = "2026-07-19") -> SourceRefSpec:
+                    dialect: str = "lqtp", dialect_version: str = "2026-07-19",
+                    production: bool = False) -> SourceRefSpec:
     table, field = str(table).strip(), str(field).strip()
     if not table or not field: raise ValueError("source table and field must be non-empty")
     tparams = dict(transform_params or {})
     if transform:
-        spec = _TRANSFORM_PARAM_SPECS.get(str(transform).strip())
-        if spec is not None:
-            unknown = sorted(set(tparams) - spec)
-            if unknown:
-                raise ValueError(
-                    f"source transform {transform!r} does not consume parameter(s): "
-                    f"{', '.join(unknown)} (allowed: {', '.join(sorted(spec))})"
-                )
+        normalized = str(transform).strip()
+        _assert_declared_transform(normalized, production=production)
+        _validate_transform_params(normalized, tparams)
     return SourceRefSpec(table=table, field=field,
         params=tuple(sorted((str(k),_scalar(v)) for k,v in dict(params or {}).items())),
         transform=transform,
         transform_params=tuple(sorted((str(k),_scalar(v)) for k,v in tparams.items())),
-        dialect=str(dialect), dialect_version=str(dialect_version))
+        dialect=str(dialect), dialect_version=str(dialect_version),
+        production=bool(production))
 
 def encode_source_ref(spec: SourceRefSpec) -> str:
     raw=json.dumps(spec.to_payload(),sort_keys=True,separators=(",",":"),ensure_ascii=True)
@@ -190,18 +327,36 @@ def source_col(table: str, field: str, *param_items: Any, dialect: str = "lqtp",
         params[key] = param_items[i + 1]
     return col(encode_source_ref(make_source_ref(table,field,params=params,dialect=dialect,dialect_version=dialect_version)))
 
-def transform_source_col(value: Any, transform: str, **params: Any):
+def transform_source_col(value: Any, transform: str, *, strict: bool = False,
+                         production: bool = False, **params: Any):
     name=getattr(value,"name",None)
     spec=decode_source_ref(name) if isinstance(name,str) else None
     # Legacy LQTP formula packs commonly write minute_bar(close, 5, 0)
-    # instead of minute_bar(StockMinuteBar.Close, 5, 0).  This is the only
+    # instead of minute_bar(StockMinuteBar.Close, 5, 0).  This is the ONLY
     # implicit source inference permitted here because the manual defines these
     # minute helpers specifically over StockMinuteBar fields.
+    # R10-P0-024: in the PRODUCTION typed DSL a bare ``close`` must NOT silently
+    # change source from DailyBar to StockMinuteBar depending on which helper
+    # wraps it — that would make ``ts_mean(close, 20)`` daily and
+    # ``minute_bar(close, 5, 0)`` minute for the same name.  Production callers
+    # pass ``strict=True`` and must spell the minute source explicitly
+    # (``field("StockMinuteBar", "Close")`` or ``MinuteSeries[Close]``); the
+    # implicit inference is retained ONLY on the compat surface (strict=False).
     if spec is None and str(transform).startswith("minute_") and isinstance(name,str):
+        if strict:
+            raise ValueError(
+                f"{transform}(): a bare {name!r} cannot be implicitly read from "
+                "StockMinuteBar in the strict (production) surface; spell the "
+                "minute source explicitly, e.g. field(\"StockMinuteBar\", \"Close\")"
+            )
         field=_MINUTE_FIELDS.get(name.lower())
         if field is not None:
             spec=make_source_ref("StockMinuteBar",field)
     if spec is None: raise ValueError(f"{transform}() requires a logical DataTable field")
+    # R10 #56: a decoded spec defaults to research; upgrade it when the caller
+    # explicitly asks for production so unknown transforms fail loudly.
+    if production and not spec.production:
+        spec = replace(spec, production=True)
     return col(encode_source_ref(spec.with_transform(transform,**params)))
 
 def intermediate_col(name: str, version: int):

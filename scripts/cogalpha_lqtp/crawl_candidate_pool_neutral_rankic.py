@@ -507,8 +507,22 @@ def _weekly_section_html(payload: dict[str, Any], *, threshold: float) -> str:
             if href
             else f"<code>{fid}</code>"
         )
-        plat = "本地" if str(r.get("platform_submit") or "").startswith("skipped") else (
-            "平台" if r.get("platform_submit") else "—"
+        plat_raw = str(r.get("platform_submit") or "")
+        if plat_raw in {"submitted", "already_registered", "platform"}:
+            plat = "平台"
+        elif r.get("lqtp_native"):
+            plat = "可转平台"
+        elif r.get("has_formula") or r.get("dsl"):
+            plat = "本地(有DSL)"
+        elif plat_raw.startswith("skipped"):
+            plat = "本地(无公式)"
+        else:
+            plat = "本地"
+        dsl = str(r.get("lqtp_formula") or r.get("dsl") or "").strip()
+        dsl_cell = (
+            f"<code style='font-size:12px;word-break:break-all'>{html_lib.escape(dsl)}</code>"
+            if dsl
+            else "<span class='muted'>—</span>"
         )
         rows.append(
             "<tr>"
@@ -521,6 +535,7 @@ def _weekly_section_html(payload: dict[str, Any], *, threshold: float) -> str:
             f"<td>{sh_s}</td>"
             f"<td>{flip}</td>"
             f"<td>{plat}</td>"
+            f"<td>{dsl_cell}</td>"
             "</tr>"
         )
         toc_name = (
@@ -551,11 +566,11 @@ def _weekly_section_html(payload: dict[str, Any], *, threshold: float) -> str:
     <thead>
       <tr>
         <th>#</th><th>因子</th><th>来源</th><th>Mean RankIC</th><th>RankICIR</th>
-        <th>日覆盖率</th><th>多空Sharpe</th><th>取负显示</th><th>回测</th>
+        <th>日覆盖率</th><th>多空Sharpe</th><th>取负显示</th><th>回测</th><th>DSL / LQTP</th>
       </tr>
     </thead>
     <tbody>
-      {''.join(rows) if rows else '<tr><td colspan="9" class="muted">无 |RankIC|&gt;阈值 的因子</td></tr>'}
+      {''.join(rows) if rows else '<tr><td colspan="10" class="muted">无 |RankIC|&gt;阈值 的因子</td></tr>'}
     </tbody>
   </table>
 </section>

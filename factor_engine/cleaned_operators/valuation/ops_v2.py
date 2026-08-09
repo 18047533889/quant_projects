@@ -11,13 +11,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
 
 _EPS = 1e-12
 _CANONICALS: list[str] = []
 
 
-def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio") -> OperatorMetadata:
+def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio", param_specs: dict | None = None) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="valuation",
@@ -29,6 +29,7 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio"
             f"signature:{','.join(params)}->series", "domain:valuation",
             f"unit:{unit}", "cost:1",
         ],
+        param_specs=dict(param_specs or {}),
     )
 
 
@@ -37,8 +38,8 @@ def _safe_div(num, den):
     return out.replace([np.inf, -np.inf], np.nan)
 
 
-def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "ratio"):
-    metadata = _meta(name, description, params, unit=unit)
+def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "ratio", param_specs: dict | None = None):
+    metadata = _meta(name, description, params, unit=unit, param_specs=param_specs)
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -234,9 +235,10 @@ def _growth_mismatch(ey, g, scale=1.0):
 _mk(
     "valuation_growth_mismatch",
     "盈利收益率 - 利润增长（输入须为小数比率，字段层 /100；scale 已从搜索面移除，仅向后兼容 1.0）。",
-    ["earnings_yield", "profit_growth"],
+    ["earnings_yield", "profit_growth", "scale"],
     _growth_mismatch,
     unit="level",
+    param_specs={"scale": ParamSpec(dtype=float, default=1.0, searchable=False, min=1e-6)},
 )
 
 

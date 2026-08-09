@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from runtime.config import FactorEngineConfig, MaterializationConfig
@@ -31,7 +31,14 @@ def _effective_bool(
 
 @dataclass(frozen=True)
 class ResolvedRunKwargs:
-    """解析后的 ``FactorEngine.run`` / ``run_many`` 运行参数。"""
+    """解析后的 ``FactorEngine.run`` / ``run_many`` 运行参数。
+
+    R10-P0-025: ``market`` is the resolved MarketID (``ashare`` / ``us``);
+    ``calendar_id`` is the trading-calendar identity (``SSE`` / ``SZSE`` /
+    ``NYSE`` / ``NASDAQ`` / ...).  The old code stored ``config.run.calendar``
+    into the ``market`` field — two different concepts sharing one variable, so
+    a warmup / universe / market-specific semantic could not tell them apart.
+    """
 
     auto_warmup: bool
     trim_warmup: bool
@@ -41,6 +48,7 @@ class ResolvedRunKwargs:
     input_dq_thresholds: Any
     pit_enforce: bool
     pit_forbid_forward_fill: bool
+    calendar_id: str | None = None
 
     def to_run_kwargs(self) -> dict[str, Any]:
         """``FactorEngine.run`` / ``run_many`` 参数字典。"""
@@ -54,6 +62,10 @@ class ResolvedRunKwargs:
             "pit_enforce": self.pit_enforce,
             "pit_forbid_forward_fill": self.pit_forbid_forward_fill,
         }
+
+    def with_calendar_id(self, calendar_id: str | None) -> "ResolvedRunKwargs":
+        """Attach the resolved calendar identity (distinct from ``market``)."""
+        return replace(self, calendar_id=calendar_id)
 
 
 @dataclass(frozen=True)
@@ -259,9 +271,14 @@ def build_data_source_config(config: FactorEngineConfig) -> dict[str, Any]:
 def config_data_scope_key(config: FactorEngineConfig) -> str:
     """配置对应的数据源作用域键（run_many 分组用）。"""
     from storage.data_scope import compute_data_scope
-    from storage.factory import build_data_source
+    from storage.factory import DataSourceBuildContext, build_data_source
 
-    ds = build_data_source(config.data_source)
+    build_context = DataSourceBuildContext(
+        run_mode=getattr(config.run, "mode", None),
+        market=getattr(config.run, "market", None),
+        calendar_id=getattr(config.run, "calendar", None),
+    )
+    ds = build_data_source(config.data_source, build_context=build_context)
     return compute_data_scope(ds)
 
 
@@ -276,6 +293,7 @@ def config_run_batch_key(
         opts.auto_warmup,
         opts.trim_warmup,
         opts.market,
+        opts.calendar_id,  # R10-P0-025: market and calendar are separate keys
         opts.input_dq_check,
         opts.input_dq_strict,
         _input_dq_thresholds_key(opts.input_dq_thresholds),
@@ -325,6 +343,26 @@ def production_run_flags_equal(a: FactorEngineConfig, b: FactorEngineConfig) -> 
     return config_run_batch_key(a) == config_run_batch_key(b)
 
 
+def _resolve_market(config: FactorEngineConfig) -> tuple[str | None, str | None]:
+    """Resolve ``(market_id, calendar_id)`` — R10-P0-025.
+
+    ``market`` is a MarketID (``ashare`` / ``us``), ``calendar_id`` is the
+    trading-calendar identity (``SSE`` / ``SZSE`` / ``NYSE`` / ``NASDAQ``).
+    When only a calendar is configured the MarketID is inferred from it, so the
+    two concepts are never conflated in one variable.
+    """
+    explicit = str(getattr(config.run, "market", None) or "").strip()
+    calendar_id = str(config.run.calendar or "").strip() or None
+    if explicit:
+        return explicit, calendar_id
+    cal = (calendar_id or "").lower()
+    if cal in {"ashare", "a_share", "cn", "china", "sse", "szse"}:
+        return "ashare", calendar_id
+    if cal in {"us", "usa", "nyse", "nasdaq"}:
+        return "us", calendar_id
+    return None, calendar_id
+
+
 def resolve_run_kwargs(
     config: FactorEngineConfig,
     *,
@@ -344,6 +382,7 @@ def resolve_run_kwargs(
         if cli_input_dq_strict is not None
         else config.dq.input_strict
     )
+    market_id, calendar_id = _resolve_market(config)
     return ResolvedRunKwargs(
         auto_warmup=_effective_bool(
             config,
@@ -352,12 +391,13 @@ def resolve_run_kwargs(
             production_default=True,
         ),
         trim_warmup=config.run.trim_warmup,
-        market=config.run.calendar,
+        market=market_id,
         input_dq_check=input_dq_check,
         input_dq_strict=input_dq_strict,
         input_dq_thresholds=resolve_input_dq_thresholds(config.dq.profile),
         pit_enforce=config.pit.enforce,
         pit_forbid_forward_fill=config.pit.forbid_forward_fill,
+        calendar_id=calendar_id,
     )
 
 

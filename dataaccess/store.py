@@ -3936,7 +3936,10 @@ class DataAccessStore:
             }
         if instruments:
             members &= set(instruments)
-        return sorted(members) if members else None
+        # #收官轮：空 universe → 空股票池 `[]`（0 行 typed result），**绝不能**返回
+        # None —— None 会被调用方当成「无约束 = 全市场」。universe 解析成空集时
+        # 本意就是"该窗口内没有任何成分"，不是"不限股票"。
+        return sorted(members)
 
     def _read_handle(
         self,
@@ -4046,6 +4049,13 @@ class DataAccessStore:
             if result in {"lazy", "polars"}:
                 # #P0-21 production/strict 不暴露 raw LazyFrame：governed 句柄
                 # 的 to_arrow/to_polars/stream 全部走 collect_polars_with_budget。
+                # 收官轮 P0：lazy 结果形态同样带 normalize 钩子（normalize_units=True
+                # 在统一物化终点应用，不再静默失效）。
+                normalize_fn = None
+                if normalize_units and columns:
+                    normalize_fn = lambda tbl: self._maybe_normalize_units(  # noqa: E731
+                        tbl, dataset=dataset, columns=columns
+                    )
                 return ReadHandle(
                     lazy=lf,
                     snapshot=snapshot,
@@ -4053,6 +4063,7 @@ class DataAccessStore:
                     batch_size=batch_size,
                     budget=budget,
                     govern_lazy=is_strict_semantics(),
+                    normalize=normalize_fn,
                 )
             table = collect_polars_with_budget(lf, query_budget=budget)
             if normalize_units and columns:
@@ -4111,11 +4122,17 @@ class DataAccessStore:
                 instrument_filter=tuple(instrument_filter) if instrument_filter else (),
                 params=params,
             )
+            stream_normalize = None
+            if normalize_units and columns:
+                stream_normalize = lambda tbl: self._maybe_normalize_units(  # noqa: E731
+                    tbl, dataset=dataset, columns=columns
+                )
             return ReadHandle(
                 stream=stream,
                 snapshot=stream_snapshot,
                 lineage=stream_lineage,
                 batch_size=batch_size,
+                normalize=stream_normalize,
             )
 
         # duckdb：走标准 read 路径（含 budget/audit/snapshot）
@@ -4171,11 +4188,9 @@ class DataAccessStore:
             filters=filters,
             params=params,
         )
-        import pyarrow.dataset as pa_ds
-
         from data_access.read.formats import pyarrow_engine_read
         from data_access.read.manifest import manifest_root_for_paths
-        from data_access.read.predicate_ast import compile_filter_arrow, parse_filters
+        from data_access.read.predicate_ast import parse_filters
         from data_access.read.read_handle import ReadHandle
 
         budget = self._resolve_read_budget(ds, query_budget)
@@ -4202,35 +4217,25 @@ class DataAccessStore:
         self._enforce_scan_files(budget, paths, files=files)
 
         # #P0-22 扫描阶段下推：filter + projection 进 Scanner，不再先物化全表。
-        # time_range / instrument_filter / filters 编译成 dataset expression。
-        exprs: list[Any] = []
-        if time_range is not None:
-            if ds.time_column is None:
-                raise ValidationError(
-                    f"'{dataset}' 未声明 time_column，无法应用 time_range"
-                )
-            start_v, end_v = time_range
-            if start_v is not None:
-                exprs.append(pa_ds.field(ds.time_column) >= start_v)
-            if end_v is not None:
-                exprs.append(pa_ds.field(ds.time_column) <= end_v)
-        if instrument_filter:
-            if ds.instrument_column is None:
-                raise ValidationError(
-                    f"'{dataset}' 未声明 instrument_column，无法应用 instrument_filter"
-                )
-            exprs.append(
-                pa_ds.field(ds.instrument_column).isin(list(instrument_filter))
-            )
-        if filters is not None:
-            expr = compile_filter_arrow(parse_filters(filters))
-            if expr is not None:
-                exprs.append(expr)
-        combined_expr = None
-        if exprs:
-            combined_expr = exprs[0]
-            for e in exprs[1:]:
-                combined_expr = combined_expr & e
+        # time_range / instrument_filter / filters 编译成 dataset expression——
+        # 与 DuckDB / Polars 共用 ``compile_predicate_arrow``（同一 Predicate 语义：
+        # date-only end 含完整一天、空股票池 → 假表达式 0 行）。真 PyArrow backend
+        # 不再手写第二套 bound/filter 规则（收官轮 parity）。
+        from data_access.read.predicate import Predicate, compile_predicate_arrow
+
+        time_col_type = str((ds.schema or {}).get(ds.time_column or "", "")).lower()
+        combined_expr = compile_predicate_arrow(
+            Predicate(
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                filters=parse_filters(filters),
+                time_column_is_timestamp=(
+                    "timestamp" in time_col_type or "datetime" in time_col_type
+                ),
+            ),
+            time_column=ds.time_column,
+            instrument_column=ds.instrument_column,
+        )
 
         start = time.perf_counter()
         table = pyarrow_engine_read(

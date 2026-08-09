@@ -759,6 +759,94 @@ def _ts_pct_rank_sql(
     return f"SELECT b.ts, b.inst, {rank_expr} AS _v FROM ({numbered}) b"
 
 
+def _zscore_prev_window_expr(
+    *,
+    value_col: str,
+    window: int,
+    min_periods: int,
+    dialect: SqlDialect,
+) -> str:
+    """``x.shift(1).rolling(w, min_periods=w)`` 型 z-score：当前值相对前一 w 根
+    bar 的均值/样本 std（pandas ``rolling.std`` ddof=1）；std=0 → NULL（对齐
+    ``s.replace(0, np.nan)``，区别于 ts_zscore 的 std=0→0）。"""
+    std_fn = _dialect_fn(dialect, "stddev")
+    over = (
+        f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {window} PRECEDING AND 1 PRECEDING"
+    )
+    cnt = f"COUNT({value_col}) OVER ({over})"
+    m = f"AVG({value_col}) OVER ({over})"
+    s = f"{std_fn}({value_col}) OVER ({over})"
+    return (
+        f"CASE WHEN {value_col} IS NULL THEN NULL "
+        f"WHEN {cnt} < {min_periods} THEN NULL "
+        f"WHEN {s} IS NULL OR {s} = 0 THEN NULL "
+        f"ELSE ({value_col} - {m}) / {s} END"
+    )
+
+
+def _pct_rank_window_sql(
+    inner_sql: str,
+    *,
+    window: int,
+    dialect: SqlDialect,
+) -> str:
+    """``x.rolling(w, min_periods=w).apply`` 型百分位 rank（窗口含当前行）：
+    ``(cnt_lt + 0.5 * cnt_eq) / (cnt_full - 1)``，对齐 ``_pct_rank``。"""
+    w = max(int(window), 2)
+    numbered = (
+        f"SELECT ts, inst, _v, ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS rn "
+        f"FROM ({inner_sql}) t0"
+    )
+    rank_expr = (
+        f"CASE WHEN b._v IS NULL THEN NULL "
+        f"WHEN s.full_cnt < {w} THEN NULL "
+        f"ELSE (s.lt + 0.5 * s.eq) / (s.full_cnt - 1) END"
+    )
+    return (
+        f"SELECT b.ts, b.inst, {rank_expr} AS _v FROM ({numbered}) b "
+        f"JOIN LATERAL ("
+        f"SELECT "
+        f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p.rn BETWEEN b.rn - {w - 1} AND b.rn) AS full_cnt, "
+        f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p._v < b._v AND p.rn BETWEEN b.rn - {w - 1} AND b.rn - 1) AS lt, "
+        f"COUNT(*) FILTER (WHERE p._v IS NOT NULL AND p._v = b._v AND p.rn BETWEEN b.rn - {w - 1} AND b.rn - 1) AS eq "
+        f"FROM ({numbered}) p WHERE p.inst = b.inst"
+        f") s"
+    )
+
+
+def _ts_expanding_rank_sql(
+    inner_sql: str,
+    *,
+    dialect: SqlDialect,
+) -> str:
+    """``x.expanding(min_periods=1).rank(pct=True)``：从头到当前行的平均百分位
+    rank（与 ``_ts_pct_rank_sql`` 同款相关子查询，frame 换成 ``rn <= b.rn``）。"""
+    from backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
+
+    valid = stat_valid_sql("p._v", dialect=dialect, exclude_nan=True)
+    invalid_row = row_stat_invalid_sql("b._v", dialect=dialect, exclude_nan=True)
+    numbered = (
+        f"SELECT ts, inst, _v, ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS rn "
+        f"FROM ({inner_sql}) t0"
+    )
+    rank_expr = (
+        f"CASE WHEN {invalid_row} THEN NULL ELSE ("
+        f"SELECT CASE "
+        f"WHEN s.cnt = 0 THEN NULL "
+        f"WHEN s.cnt <= 1 THEN 1.0 "
+        f"ELSE (s.cnt_le - (s.cnt_eq - 1) / 2.0) / s.cnt END "
+        f"FROM ("
+        f"SELECT "
+        f"COUNT(*) FILTER (WHERE {valid}) AS cnt, "
+        f"COUNT(*) FILTER (WHERE {valid} AND p._v <= b._v) AS cnt_le, "
+        f"COUNT(*) FILTER (WHERE {valid} AND p._v = b._v) AS cnt_eq "
+        f"FROM ({numbered}) p WHERE p.inst = b.inst AND p.rn <= b.rn"
+        f") s"
+        f") END"
+    )
+    return f"SELECT b.ts, b.inst, {rank_expr} AS _v FROM ({numbered}) b"
+
+
 def _rolling_corr_pandas_compat_expr(
     *,
     corr_col: str,
@@ -1546,6 +1634,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         val = node.attrs.get("value")
         lit = _sql_literal(val)
         return _Layer(f"SELECT ts, inst, {lit} AS _v FROM base")
+
+    if op == "identity":
+        inner = _compile_layer(node.inputs[0], dialect=dialect) if node.inputs else None
+        if inner is None:
+            return None
+        return _Layer(
+            inner.sql,
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=inner.has_ts_partition,
+        )
 
     if op in {"add", "subtract", "multiply", "divide", "maximum", "minimum"}:
         if len(node.inputs) != 2:
@@ -2620,6 +2718,26 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=True,
         )
 
+    if op == "unitize":
+        # pandas：按行（截面）max(|x|) 归一化；max(|x|)=0 → NaN；clip(-1,1)。
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        abs_fn = _dialect_fn(dialect, "abs")
+        m = f"MAX({abs_fn}(_v)) OVER (PARTITION BY ts)"
+        lo = _dialect_fn(dialect, "least")
+        hi = _dialect_fn(dialect, "greatest")
+        expr = (
+            f"CASE WHEN _v IS NULL THEN NULL "
+            f"WHEN {m} IS NULL OR {m} = 0 THEN NULL "
+            f"ELSE {hi}(-1.0, {lo}(1.0, _v / {m})) END"
+        )
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
     if op == "index_weight":
         # Index constituent weight; normalize=True divides by the cross-section
         # total within each date (nansum semantics; SQL SUM ignores NULLs).
@@ -2858,6 +2976,27 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"SELECT l.ts, l.inst, "
             f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
             f"ELSE {corr_fn}(l._v, r._v) OVER ({over}) END AS _v "
+            f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "abs_return_volume_corr":
+        if len(node.inputs) < 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        w = _window_int(node)
+        over = (
+            f"PARTITION BY l.inst ORDER BY l.ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        corr_fn = "corr" if dialect == SqlDialect.DUCKDB else "corrStable"
+        abs_fn = _dialect_fn(dialect, "abs")
+        return _Layer(
+            f"SELECT l.ts, l.inst, "
+            f"CASE WHEN l._v IS NULL OR r._v IS NULL THEN NULL "
+            f"ELSE {corr_fn}({abs_fn}(l._v), r._v) OVER ({over}) END AS _v "
             f"FROM ({left.sql}) l LEFT JOIN ({right.sql}) r USING (ts, inst)",
             has_inst_window=True,
         )
@@ -3604,6 +3743,58 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"FROM ({layers[first_alias].sql}) {first_alias} {join_sql}",
             has_inst_window=has_win,
             has_ts_partition=has_ts,
+        )
+
+    if op in {"candle_body_zscore", "candle_range_zscore",
+              "candle_upper_shadow_zscore", "candle_lower_shadow_zscore",
+              "candle_body_percentile", "candle_range_percentile"}:
+        col_names = {
+            "candle_body_zscore": ("open", "close"),
+            "candle_range_zscore": ("high", "low"),
+            "candle_upper_shadow_zscore": ("open", "high", "close"),
+            "candle_lower_shadow_zscore": ("open", "low", "close"),
+            "candle_body_percentile": ("open", "close"),
+            "candle_range_percentile": ("high", "low"),
+        }[op]
+        if len(node.inputs) < len(col_names):
+            return None
+        w = _window_int(node)
+        layers: dict[str, _Layer] = {}
+        for name, input_node in zip(col_names, node.inputs):
+            layer = _compile_layer(input_node, dialect=dialect)
+            if layer is None:
+                return None
+            layers[name] = layer
+        first_alias, join_sql = _row_join_candle(layers)
+        o = f"{'open._v' if 'open' in layers else 'NULL'}"
+        h = f"{'high._v' if 'high' in layers else 'NULL'}"
+        l = f"{'low._v' if 'low' in layers else 'NULL'}"
+        c = f"{'close._v' if 'close' in layers else 'NULL'}"
+        if op in {"candle_body_zscore", "candle_body_percentile"}:
+            mid = f"{_abs_fn}({c} - {o})"
+        elif op in {"candle_range_zscore", "candle_range_percentile"}:
+            mid = f"({h} - {l})"
+        elif op == "candle_upper_shadow_zscore":
+            mid = f"{h} - {_g}({o}, {c})"
+        else:  # candle_lower_shadow_zscore
+            mid = f"{_l_fn}({o}, {c}) - {l}"
+        intermediate = _Layer(
+            f"SELECT {first_alias}.ts, {first_alias}.inst, {mid} AS _v "
+            f"FROM ({layers[first_alias].sql}) {first_alias} {join_sql}",
+            has_inst_window=any(layer.has_inst_window for layer in layers.values()),
+            has_ts_partition=any(layer.has_ts_partition for layer in layers.values()),
+        )
+        if op.endswith("_zscore"):
+            body = _zscore_prev_window_expr(
+                value_col="_v", window=w, min_periods=w, dialect=dialect,
+            )
+            return _Layer(
+                f"SELECT ts, inst, {body} AS _v FROM ({intermediate.sql}) t",
+                has_inst_window=True,
+            )
+        return _Layer(
+            _pct_rank_window_sql(intermediate.sql, window=w, dialect=dialect),
+            has_inst_window=True,
         )
 
     if op in {"candle_gap", "candle_gap_pct"}:
@@ -5468,6 +5659,102 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=True,
         )
 
+    if op in {"group_skewness", "group_kurtosis"}:
+        # 组内截面偏度/峰度：population std（ddof=0），赋值给组内全部成员
+        # （含 NaN 成员，对齐 _group_shape 的 result.iloc[mask]=value）。
+        if len(node.inputs) < 2:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        grp = _compile_layer(node.inputs[1], dialect=dialect)
+        if grp is None:
+            return None
+        part = "PARTITION BY x.ts, g._v"
+        join = f"FROM ({inner.sql}) x LEFT JOIN ({grp.sql}) g USING (ts, inst)"
+        std_pop = _dialect_fn(dialect, "stddev_pop")
+        need = 3 if op == "group_skewness" else 4
+        order = 3 if op == "group_skewness" else 4
+        base = (
+            f"SELECT x.ts, x.inst, x._v, g._v AS _grp, "
+            f"AVG(x._v) OVER ({part}) AS _m, "
+            f"COUNT(x._v) OVER ({part}) AS _cnt, "
+            f"{std_pop}(x._v) OVER ({part}) AS _std "
+            f"{join}"
+        )
+        part2 = "PARTITION BY ts, _grp"
+        expr = (
+            f"CASE WHEN _cnt < {need} THEN NULL "
+            f"WHEN _std IS NULL OR _std < 1e-12 THEN NULL "
+            f"ELSE AVG(POWER(_v - _m, {order})) OVER ({part2}) / POWER(_std, {order}) END"
+        )
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({base}) m",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "group_quantile_spread":
+        # 组内 (Q_high - Q_low)，线性插值分位数（np.quantile），赋值给全部成员。
+        if len(node.inputs) < 2:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        grp = _compile_layer(node.inputs[1], dialect=dialect)
+        if grp is None:
+            return None
+        ql = _float_attr(node, "q_low", default=0.25)
+        qh = _float_attr(node, "q_high", default=0.75)
+        if not 0.0 < ql < qh < 1.0:
+            return None
+        part = "PARTITION BY x.ts, g._v"
+        join = f"FROM ({inner.sql}) x LEFT JOIN ({grp.sql}) g USING (ts, inst)"
+        std_pop = _dialect_fn(dialect, "stddev_pop")
+        base = (
+            f"SELECT x.ts, x.inst, x._v, "
+            f"COUNT(x._v) OVER ({part}) AS _cnt, "
+            f"{std_pop}(x._v) OVER ({part}) AS _std, "
+            f"quantile_cont(x._v, {ql}) OVER ({part}) AS _qlo, "
+            f"quantile_cont(x._v, {qh}) OVER ({part}) AS _qhi "
+            f"{join}"
+        )
+        expr = (
+            f"CASE WHEN _cnt < 3 THEN NULL "
+            f"WHEN _std IS NULL OR _std < 1e-12 THEN NULL "
+            f"ELSE _qhi - _qlo END"
+        )
+        return _Layer(
+            f"SELECT ts, inst, {expr} AS _v FROM ({base}) m",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
+    if op == "group_ex_self_mean":
+        # leave-one-out peer mean：仅有限成员有值；(total - x)/(count - 1)。
+        if len(node.inputs) < 2:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        grp = _compile_layer(node.inputs[1], dialect=dialect)
+        if grp is None:
+            return None
+        part = "PARTITION BY x.ts, g._v"
+        join = f"FROM ({inner.sql}) x LEFT JOIN ({grp.sql}) g USING (ts, inst)"
+        total = f"SUM(x._v) OVER ({part})"
+        cnt = f"COUNT(x._v) OVER ({part})"
+        expr = (
+            f"CASE WHEN x._v IS NULL THEN NULL "
+            f"WHEN {cnt} <= 1 THEN NULL "
+            f"ELSE ({total} - x._v) / ({cnt} - 1) END"
+        )
+        return _Layer(
+            f"SELECT x.ts, x.inst, {expr} AS _v {join}",
+            has_inst_window=inner.has_inst_window,
+            has_ts_partition=True,
+        )
+
     if op == "group_decay_linear":
         if not node.inputs:
             return None
@@ -6050,6 +6337,15 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return None
         return _Layer(
             _inst_cum_agg("SUM", inner.sql, sum_skip_null=True),
+            has_inst_window=True,
+        )
+
+    if op == "expanding_rank":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        return _Layer(
+            _ts_expanding_rank_sql(inner.sql, dialect=dialect),
             has_inst_window=True,
         )
 

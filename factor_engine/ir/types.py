@@ -306,11 +306,20 @@ def lattice_join_semantic_attrs(
     elif len(distinct_kinds) > 1:
         result["semantic_kind"] = MIXED
         result["mixed_semantic_kind"] = tuple(distinct_kinds)
-    # pit_safe: AND across children (any non-pit-safe input makes the root unsafe).
+    # pit_safe: tri-state (True / False / None=UNKNOWN), R10 #6.  AND across
+    # children: any PROVEN-unsafe input makes the root unsafe; a child with NO
+    # PIT declaration makes the root UNKNOWN — never silently safe.  The
+    # production four-layer PIT gate treats UNKNOWN as reject; research warns
+    # and downgrades.  ``all(child.get("pit_safe", True) ...)`` was fail-open:
+    # a missing declaration (None) coerced to safe.
     if children:
-        result["pit_safe"] = all(
-            child.get("pit_safe", True) for child in children
-        )
+        pit_vals = [child.get("pit_safe") for child in children]
+        if any(v is False for v in pit_vals):
+            result["pit_safe"] = False
+        elif all(v is True for v in pit_vals):
+            result["pit_safe"] = True
+        else:
+            result["pit_safe"] = None
     return result
 
 

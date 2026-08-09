@@ -37,6 +37,7 @@ downstream fitness may still prefer one over the other (complexity, tradability)
 from __future__ import annotations
 
 import hashlib
+import json
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -109,14 +110,28 @@ def build_typed_fixtures(
 
     gaps = rng.normal(size=(rows, cols))
     gaps[rng.random(size=(rows, cols)) < 0.10] = np.nan
+    # R10 #21: "gaps" also models MISSING ROWS — whole no-trading days (suspension /
+    # limit-across-the-board), so the per-date path must SKIP them, never invent data.
+    if rows > 3:
+        gaps[2, :] = np.nan
+        gaps[rows - 2, :] = np.nan
     fixtures["gaps"] = frame(gaps)
 
     fixtures["positive_only"] = frame(np.abs(rng.normal(size=(rows, cols))) + 1e-3)
 
-    ev_mask = rng.random(size=(rows, cols)) < 0.02
-    ev = np.zeros((rows, cols))
-    ev[ev_mask] = rng.normal(size=int(ev_mask.sum()))
-    fixtures["event_mask"] = frame(ev)
+    # R10-P0-033: an event fixture is NOT a single semantics.  Split it into
+    # (a) a boolean event mask, (b) signed event intensity and (c) positive
+    # event intensity — an EventBool consumer must not misinterpret Gaussian
+    # magnitudes as 0/1, and a signed-intensity consumer must not see only 0/1.
+    ev_bool = (rng.random(size=(rows, cols)) < 0.02).astype(float)
+    fixtures["event_mask"] = frame(ev_bool)
+    fixtures["event_bool"] = frame(ev_bool.copy())
+    ev_signed = np.zeros((rows, cols))
+    ev_signed[ev_bool == 1.0] = rng.standard_normal(size=int(ev_bool.sum()))
+    fixtures["event_signed_intensity"] = frame(ev_signed)
+    ev_pos = np.zeros((rows, cols))
+    ev_pos[ev_bool == 1.0] = rng.uniform(0.5, 2.0, size=int(ev_bool.sum()))
+    fixtures["event_positive_intensity"] = frame(ev_pos)
 
     fixtures["group"] = frame(np.tile(np.arange(cols) % 10, (rows, 1)).astype(float))
 
@@ -125,13 +140,29 @@ def build_typed_fixtures(
     open_ = np.vstack([close[0:1] * 0.99, close[:-1]])
     high = np.maximum(open_, close) * (1.0 + rng.uniform(0.0, 0.01, size=(rows, n_blocks)))
     low = np.minimum(open_, close) * (1.0 - rng.uniform(0.0, 0.01, size=(rows, n_blocks)))
-    ohlc = np.empty((rows, cols))
+    # R10-P0-032: initialize with NaN, never np.empty — when ``cols % 4 != 0``
+    # the leftover columns used to hold uninitialized garbage.
+    ohlc = np.full((rows, cols), np.nan)
     for b in range(n_blocks):
         ohlc[:, 4 * b] = open_[:, b]
         ohlc[:, 4 * b + 1] = high[:, b]
         ohlc[:, 4 * b + 2] = low[:, b]
         ohlc[:, 4 * b + 3] = close[:, b]
     fixtures["ohlc"] = frame(ohlc)
+
+    # R10 #21: A-share realistic trading fixture — random walk with jumps and
+    # vol clustering (GARCH(1,1)-style).  Jump-heavy / high-vol days stress the
+    # extreme-day behavior that a flattened Gaussian rho hides entirely.
+    returns = np.zeros((rows, cols))
+    vol = np.full((1, cols), 0.01)
+    for i in range(1, rows):
+        vol = 0.94 * vol + 0.06 * 0.01 * np.abs(rng.normal(size=(1, cols)))
+        shocks = rng.normal(size=(1, cols)) * vol
+        jumps = rng.random(size=(1, cols)) < 0.012
+        shocks += jumps * rng.standard_normal(size=(1, cols)) * 0.06
+        returns[i] = shocks
+    price = np.exp(np.cumsum(returns, axis=0))
+    fixtures["ashare"] = frame(price)
 
     return fixtures
 
@@ -346,9 +377,17 @@ class DedupPolicy:
     ``sign_invariant=True`` treats ``x`` and ``-x`` as the same search factor
     (they land in the same dedup bucket); ``False`` (the default) keeps them in
     different buckets.
+
+    ``rank_equivalence=True`` (default) is the *terminal-rank-equivalence*
+    policy: two factors are duplicates when they order instruments identically
+    each day, so ``x`` and ``2*x`` (identical cross-sectional ranks) MERGE.
+    ``rank_equivalence=False`` is the *compositional* policy: duplicates must
+    emit the same output VALUES, so ``x`` and ``2*x`` are KEPT DISTINCT
+    (R10 #21).
     """
 
     sign_invariant: bool = False
+    rank_equivalence: bool = True
 
     def in_sign_bucket(
         self,
@@ -373,53 +412,179 @@ class DedupPolicy:
 # --------------------------------------------------------------------------- #
 # Public entry points
 # --------------------------------------------------------------------------- #
-def factor_signatures(compute: Callable[[pd.DataFrame], pd.DataFrame]) -> dict[str, str]:
+def factor_signatures(
+    compute: Callable[[pd.DataFrame], pd.DataFrame],
+    *,
+    ast_hash: str,
+) -> dict[str, str]:
     """Numeric + rank signatures for one factor compute function.
 
     The algebraic-canonical layer is intentionally ABSENT (review #304): there
     is no proven algebraic-equivalence canonicalization here, so the dedup
     contract is conservative and relies on the numeric and rank layers.
-    ``ast_hash`` is left to the caller (it needs the expression AST).
+
+    R10-P0-028: ``ast_hash`` is a REQUIRED, non-empty argument.  The old API
+    returned ``"ast_hash": ""`` and expected the caller to fill it in later —
+    a caller holding that dict carried an incomplete signature.  An empty or
+    missing hash fails at the call boundary instead.
     """
+    if not isinstance(ast_hash, str) or not ast_hash.strip():
+        raise ValueError(
+            "factor_signatures requires a non-empty ast_hash (the caller owns "
+            "the expression AST)"
+        )
     return {
-        "ast_hash": "",
+        "ast_hash": ast_hash,
         "numeric_signature": numeric_signature(compute),
         "rank_signature": rank_signature(compute),
     }
 
 
 def dedup_bucket(
-    compute: Callable[[pd.DataFrame], pd.DataFrame], *, panel: pd.DataFrame | None = None
+    compute: Callable[[pd.DataFrame], pd.DataFrame],
+    *,
+    factor_kind: str,
+    panel: pd.DataFrame | None = None,
 ) -> str:
-    """Primary dedup key for search: the cross-sectional rank signature.
+    """Primary dedup key for search.
 
-    Two factors landing in the same bucket are indistinguishable by
-    cross-sectional ordering on the probe panel — treating them as separate
-    alpha hypotheses only wastes search budget on identical hypotheses.
+    R10-P0-031: ``factor_kind`` is MANDATORY — ALPHA / CONDITION / EVENT /
+    GLOBAL_STATE have different equivalence semantics and must never be deduped
+    through a single cross-sectional rank signature.
+
+    R10-P0-022: without an explicit ``panel`` the fingerprint spans MULTIPLE
+    market regimes (``FactorBehaviorSignature``), so two factors that collide
+    on a Gaussian probe but diverge in trend / heavy-tail / ties / missing
+    states do NOT share a bucket.  A caller that explicitly pins a ``panel``
+    scopes the signature to that single regime.
     """
-    return rank_signature(compute, panel=panel)
+    if panel is not None:
+        key = signature_for(factor_kind, compute, panel=panel)
+    else:
+        sig = multi_regime_signature(compute, kind=factor_kind)
+        payload = json.dumps(sig.to_dict(), sort_keys=True, separators=(",", ":"))
+        key = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:20]
+    # R10 #22: the KIND is part of the dedup GROUP identity.  ALPHA / CONDITION /
+    # EVENT / GLOBAL_STATE have different equivalence semantics and must NEVER
+    # share a bucket, even when two signatures happen to collide.
+    return f"{factor_kind}:{key}"
 
 
-def _rank_corr(
-    fa: Callable[[pd.DataFrame], pd.DataFrame],
-    fb: Callable[[pd.DataFrame], pd.DataFrame],
-    probe: pd.DataFrame,
+#: regimes used by the multi-regime fingerprint (R10-P0-022) and the default
+#: multi-regime duplicate decision.  ``positive_only`` is excluded by default:
+#: it is domain-restricted (log / ratio transforms) and would bias every ALPHA
+#: factor to collide on it.
+_DEFAULT_MULTI_REGIMES = ("gaussian", "heavy_tail", "trend", "mean_revert", "ties", "gaps")
+
+#: R10 #21: the full multi-regime DUPLICATE DECISION spans every typed fixture —
+#: including the domain-restricted (positive_only), event (bool / signed
+#: intensity), group / categorical, OHLC and A-share trading regimes — so a pair
+#: must agree on the vast majority of regimes (AND days) before being merged.
+_RICH_MULTI_REGIMES = (
+    "gaussian", "heavy_tail", "trend", "mean_revert", "ties", "gaps",
+    "positive_only", "event_bool", "event_signed_intensity", "group", "ohlc",
+    "ashare",
+)
+
+
+@dataclass(frozen=True)
+class FactorBehaviorSignature:
+    """Structured multi-regime dedup fingerprint (R10-P0-022).
+
+    Each field is the per-kind signature of ``compute`` on that typed regime.
+    Two factors are dedup candidates only when MOST regimes agree — a pair that
+    is indistinguishable under a Gaussian draw but reacts differently to an
+    extreme / trend / missing-data regime is genuinely different.
+    """
+
+    gaussian: str = ""
+    heavy_tail: str = ""
+    trend: str = ""
+    mean_revert: str = ""
+    ties: str = ""
+    gaps: str = ""
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "gaussian": self.gaussian,
+            "heavy_tail": self.heavy_tail,
+            "trend": self.trend,
+            "mean_revert": self.mean_revert,
+            "ties": self.ties,
+            "gaps": self.gaps,
+        }
+
+    def matched_regimes(self, other: "FactorBehaviorSignature") -> tuple[int, int]:
+        """Count of regimes whose per-kind signature equals ``other``'s."""
+        mine = self.to_dict()
+        theirs = other.to_dict()
+        matched = sum(1 for key in mine if mine[key] and mine[key] == theirs[key])
+        return matched, len([k for k in mine if mine[k]])
+
+
+def multi_regime_signature(
+    compute: Callable[[pd.DataFrame], pd.DataFrame],
+    *,
+    kind: str = FactorKind.ALPHA,
+) -> FactorBehaviorSignature:
+    """Build the multi-regime :class:`FactorBehaviorSignature` for ``compute``."""
+    fixtures = build_typed_fixtures()
+    return FactorBehaviorSignature(
+        gaussian=signature_for(kind, compute, panel=fixtures["gaussian"]),
+        heavy_tail=signature_for(kind, compute, panel=fixtures["heavy_tail"]),
+        trend=signature_for(kind, compute, panel=fixtures["trend"]),
+        mean_revert=signature_for(kind, compute, panel=fixtures["mean_revert"]),
+        ties=signature_for(kind, compute, panel=fixtures["ties"]),
+        gaps=signature_for(kind, compute, panel=fixtures["gaps"]),
+    )
+
+
+def _date_rhos(ra: np.ndarray, rb: np.ndarray, *, min_peers: int) -> list[float]:
+    """Per-date Spearman (rank) correlations, NOT one flattened correlation.
+
+    R10-P0-023: flattening every date×stock pair into one rho hides a regime
+    where 90% of dates are identical and 10% (the alpha-bearing ones) are the
+    opposite.  Returning a per-date series lets the caller require that
+    essentially EVERY date be equivalent before deleting a factor.
+    """
+    rhos: list[float] = []
+    for t in range(ra.shape[0]):
+        a, b = ra[t], rb[t]
+        mask = np.isfinite(a) & np.isfinite(b)
+        if int(mask.sum()) < min_peers:
+            continue
+        r = np.corrcoef(a[mask], b[mask])[0, 1]
+        if np.isfinite(r):
+            rhos.append(float(r))
+    return rhos
+
+
+def _per_date_duplicates(
+    ra: np.ndarray,
+    rb: np.ndarray,
+    *,
     rho_threshold: float,
+    min_peers: int,
 ) -> bool:
-    """True when the cross-sectional ranks of ``fa``/``fb`` correlate >= threshold.
+    """True only when essentially EVERY date ranks the two factors identically.
 
-    Only **positive** correlation counts (``r >= threshold``): a perfect
-    anti-correlation (``r == -1``, e.g. ``x`` vs ``-x``) is NOT a duplicate
-    under the default sign-sensitive policy.  Sign-invariant dedup is handled
-    by :func:`are_rank_duplicates` re-checking the negated pair.
+    The review's criterion: median rho must be near-exact, the bottom-decile
+    rho must still be highly similar, and the large majority of dates must be
+    at ``rho > 0.999``.  A pair that is identical on 90% of dates but opposite
+    on the 10% extreme dates fails the bottom-decile / near-exact-fraction
+    conditions — that 10% is precisely the alpha a cold-start library must keep.
     """
-    ra = fa(probe).rank(axis=1, method="average").to_numpy(dtype=float)
-    rb = fb(probe).rank(axis=1, method="average").to_numpy(dtype=float)
-    common = np.isfinite(ra) & np.isfinite(rb)
-    if int(common.sum()) < 50:
+    rhos = _date_rhos(ra, rb, min_peers=min_peers)
+    if not rhos:
         return False
-    r = np.corrcoef(ra[common], rb[common])[0, 1]
-    return bool(np.isfinite(r) and r >= rho_threshold)
+    arr = np.asarray(rhos, dtype=float)
+    if float(np.median(arr)) < rho_threshold:
+        return False
+    if float(np.percentile(arr, 10)) < 0.9:
+        return False
+    if float((arr > 0.999).mean()) < 0.9:
+        return False
+    return True
 
 
 def are_rank_duplicates(
@@ -429,28 +594,50 @@ def are_rank_duplicates(
     panel: pd.DataFrame | None = None,
     rho_threshold: float = 0.99999,
     policy: DedupPolicy = DedupPolicy(sign_invariant=False),
+    min_regime_agreement: float = 0.66,
+    regimes: tuple[str, ...] | None = None,
 ) -> bool:
-    """High-rank-correlation dedup decision for a pair of factor computes.
+    """Multi-regime, per-date dedup decision for a pair of factor computes.
 
     Ranks are computed **cross-sectionally** (``rank(axis=1)`` — rank each
     row's columns, i.e. across instruments per day), the A-share convention
     (review #300).
 
-    With ``policy.sign_invariant=True``, ``x`` and ``-x`` are considered
-    duplicates; with the default ``DedupPolicy(sign_invariant=False)`` they
-    are not (review #306).
+    R10-P0-022/023: the default spans the typed market regimes and requires a
+    supermajority of regimes to agree PER DATE (never a single flattened
+    correlation on one Gaussian panel).  ``x`` vs ``-x`` remains NOT a
+    duplicate under ``sign_invariant=False`` and IS one under
+    ``sign_invariant=True`` (review #306).
+
+    An explicit ``panel`` scopes the decision to that single regime.
     """
-    probe = probe_panel() if panel is None else panel
-    if policy.sign_invariant:
-        return any(
-            _rank_corr(ga, gb, probe, rho_threshold)
-            for ga, gb in (
-                (fa, fb),
-                (fa, lambda p: -fb(p)),
-                (lambda p: -fa(p), fb),
-            )
+    if panel is not None:
+        probes = (("gaussian", panel),)
+    else:
+        fixtures = build_typed_fixtures()
+        probes = tuple(
+            (name, fixtures[name])
+            for name in (regimes or _DEFAULT_MULTI_REGIMES)
+            if name in fixtures
         )
-    return _rank_corr(fa, fb, probe, rho_threshold)
+    votes = 0
+    total = 0
+    for _name, probe in probes:
+        total += 1
+        ra = fa(probe).rank(axis=1, method="average").to_numpy(dtype=float)
+        rb = fb(probe).rank(axis=1, method="average").to_numpy(dtype=float)
+        min_peers = min(20, ra.shape[1])
+        dup = _per_date_duplicates(ra, rb, rho_threshold=rho_threshold, min_peers=min_peers)
+        if not dup and policy.sign_invariant:
+            rb_neg = (-fb(probe)).rank(axis=1, method="average").to_numpy(dtype=float)
+            dup = _per_date_duplicates(
+                ra, rb_neg, rho_threshold=rho_threshold, min_peers=min_peers
+            )
+        if dup:
+            votes += 1
+    if total == 0:
+        return False
+    return (votes / total) >= min_regime_agreement
 
 
 # Backward-compatible import surface.

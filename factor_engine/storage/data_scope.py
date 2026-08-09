@@ -33,6 +33,79 @@ class DataExecutionScope:
     decision_time_policy: str = ""
 
 
+@dataclass(frozen=True)
+class ExecutionCacheNamespace:
+    """The full cache namespace for ONE factor execution (R10-P0-001).
+
+    The old ``_build_cache`` derived the scope from the anchor data source at
+    ENGINE-CONSTRUCTION time — before the factor was compiled, so the secondary
+    SourceRef dependencies, the execution scope and the operator evidence
+    version were NOT in the key.  Two factors sharing an anchor source but
+    differing in secondary deps / execution semantics / evidence could
+    therefore land in the same namespace and reuse each other's cached subtrees.
+
+    This namespace is built AFTER compile (that is when the source-dependency
+    manifest is known) and re-scopes the plan cache for the run.  ``to_scope_key``
+    folds it into the same 24-hex prefix ``compute_data_scope`` uses.
+    """
+
+    anchor_snapshot_hash: str = ""
+    secondary_dependency_hash: str = ""
+    execution_scope_hash: str = ""
+    operator_evidence_hash: str = ""
+    field_contract_hash: str = ""
+    universe_hash: str = ""
+
+    def to_scope_key(self) -> str:
+        payload = json.dumps(
+            asdict(self),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+
+def compute_execution_cache_scope(
+    data_source: Any,
+    *,
+    execution: DataExecutionScope | None = None,
+    source_dependencies: tuple[str, ...] | None = None,
+    evidence_version: str = "",
+    field_catalog_hash: str = "",
+    universe_hash: str = "",
+) -> str:
+    """Build the execution cache namespace for one compiled factor (R10-P0-001).
+
+    ``source_dependencies`` is the plan's source-dependency manifest hash
+    (``planner.source_dependencies.source_dependency_hash``) — only known after
+    compile, which is why the construction-time ``_build_cache`` scope is no
+    longer sufficient.
+    """
+    ns = ExecutionCacheNamespace(
+        anchor_snapshot_hash=compute_data_scope(
+            data_source,
+            execution=execution,
+            source_dependencies=source_dependencies,
+        ),
+        secondary_dependency_hash=json.dumps(
+            sorted(source_dependencies or ()),
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+        execution_scope_hash=(
+            json.dumps(asdict(execution), sort_keys=True, separators=(",", ":"))
+            if execution is not None
+            else ""
+        ),
+        operator_evidence_hash=str(evidence_version or ""),
+        field_contract_hash=str(field_catalog_hash or ""),
+        universe_hash=str(universe_hash or ""),
+    )
+    return ns.to_scope_key()
+
+
 def _jsonable(value: Any) -> Any:
     """将常见配置值转为跨进程稳定的 JSON 结构。
 
@@ -91,6 +164,16 @@ def compute_data_scope(
         "read_auto",
         "lazy_scan",
         "data_snapshot_id",
+        # R10-P0-002: these DataAccess source options change the ACTUAL read
+        # result or PIT semantics, so they must be part of the scope — two
+        # sources identical except ``semantic_filters`` / ``read_mode`` /
+        # ``snapshot_now_only`` must NOT share a cache namespace.
+        "semantic_filters",
+        "read_mode",
+        "snapshot_now_only",
+        "mining_coverage_threshold",
+        "enforce_mining_gate",
+        "strict_unknown_fields",
     ):
         val = getattr(data_source, attr, None)
         if val is not None and (not isinstance(val, str) or val.strip()):

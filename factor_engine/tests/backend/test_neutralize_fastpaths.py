@@ -45,6 +45,8 @@ def test_size_neutralize_sql_emitter() -> None:
 
 
 def test_industry_size_neutralize_sql_emitter() -> None:
+    # industry_size_neutralize 在 SQL 回退清单（暖启动/NaN 缺口语义无法精确复刻），
+    # 走 polars 回退 → emitter 不产出 SQL。
     from backend.sql_pushdown.emitter import compile_plan_to_sql
 
     plan = PlanNode(
@@ -54,11 +56,7 @@ def test_industry_size_neutralize_sql_emitter() -> None:
     compiled = compile_plan_to_sql(
         plan, dataset="d", time_column="t", instrument_column="i"
     )
-    assert compiled is not None
-    assert "PARTITION BY x.ts, g._v" in compiled.query
-    q = compiled.query.lower()
-    assert "ln(" in q or "log(" in q
-    assert "greatest" in q
+    assert compiled is None
 
 
 def test_size_neutralize_polars_matches_pandas() -> None:

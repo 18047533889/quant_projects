@@ -124,14 +124,20 @@ class ExecutionContract:
     """Three-axis execution contract for one canonical (WS-D #256).
 
     Attributes:
-        state_model: ``stateless`` | ``recursive`` | ``episode`` | ``session_state``.
-        chunking: ``independent`` | ``checkpoint`` | ``required_full_history``.
+        state_model: ``stateless`` | ``recursive`` | ``episode`` | ``session_state``
+            | ``unknown``.
+        chunking: ``independent`` | ``checkpoint`` | ``required_full_history`` |
+            ``unknown``.
         checkpoint_schema: opaque schema id (``None`` when no checkpoint exists).
+        resolution_error: set to ``"UNKNOWN_EXECUTION_CONTRACT"`` (R10 #4) when a
+            contract lookup failed and research fell back — NEVER silently
+            ``stateless``/``independent`` on an internal registry error.
     """
 
     state_model: str = "stateless"
     chunking: str = "independent"
     checkpoint_schema: str | None = None
+    resolution_error: str | None = None
 
     @property
     def is_stateful(self) -> bool:
@@ -139,7 +145,19 @@ class ExecutionContract:
 
     @property
     def requires_full_history(self) -> bool:
-        return self.chunking == "required_full_history"
+        # R10 #4: UNKNOWN chunking is fail-closed (treated as full-history
+        # recompute), never a finite window and never a silent stateless skip.
+        return self.chunking in {"required_full_history", "unknown"}
+
+
+class ExecutionContractResolutionError(RuntimeError):
+    """Raised in production when an execution contract cannot be resolved.
+
+    An internal registry / checkpoint-contract lookup failure must NEVER fall a
+    stateful operator back to ``stateless``/``independent`` (R10 #4).  Production
+    hard-fails instead; only research falls back, and only with the explicit
+    ``UNKNOWN_EXECUTION_CONTRACT`` marker.
+    """
 
 
 @dataclass(frozen=True)
@@ -193,46 +211,69 @@ class HistoryTransform:
     fn: Any = None
 
 
-def _resolve(canonical: str) -> str:
-    """Resolve DSL alias -> canonical (lazy; safe before the registry is built)."""
+def _resolve(canonical: str, *, strict: bool = False) -> str:
+    """Resolve DSL alias -> canonical (lazy; safe before the registry is built).
+
+    R10 #4: when ``strict`` (production) and the registry itself errors, raise
+    instead of silently returning the unresolved name — alias resolution failure
+    can mask a stateful operator as a different one.
+    """
     if not canonical:
         return canonical
     try:
         from cleaned_operators.registry import OperatorRegistry
 
         return OperatorRegistry.resolve_canonical(canonical)
-    except Exception:
+    except Exception as exc:
+        if strict:
+            raise ExecutionContractResolutionError(
+                f"production: alias resolution failed for {canonical!r}: {exc}"
+            ) from exc
         return canonical
 
 
-def _metadata(canonical: str) -> Any | None:
+def _metadata(canonical: str, *, strict: bool = False) -> Any | None:
     try:
         from cleaned_operators.registry import OperatorRegistry
 
         op = OperatorRegistry.get(canonical)
         return getattr(op, "metadata", None)
-    except Exception:
+    except Exception as exc:
+        if strict:
+            raise ExecutionContractResolutionError(
+                f"production: operator metadata lookup failed for {canonical!r}: {exc}"
+            ) from exc
         return None
 
 
-def _checkpoint_spec(canonical: str) -> Any | None:
+def _checkpoint_spec(canonical: str, *, strict: bool = False) -> Any | None:
     try:
         from stateful_contract import StatefulCheckpointRegistry
 
         return StatefulCheckpointRegistry.get(canonical)
-    except Exception:
+    except Exception as exc:
+        if strict:
+            raise ExecutionContractResolutionError(
+                f"production: checkpoint-contract lookup failed for {canonical!r}: {exc}"
+            ) from exc
         return None
 
 
-def execution_contract(canonical: str) -> ExecutionContract:
+def execution_contract(canonical: str, *, production: bool = False) -> ExecutionContract:
     """Return the single authority execution contract for ``canonical``.
 
     Resolution order: the checkpoint registry decides ``checkpoint`` vs
     ``required_full_history``; the stateful seed covers operators without a
     checkpoint spec; everything else is stateless/independent.
+
+    R10 #4 (fail-closed): an *internal* lookup failure (registry / checkpoint
+    registry raising) is NOT a resolution to stateless.  Production raises
+    :class:`ExecutionContractResolutionError`; research falls back with the
+    explicit ``resolution_error="UNKNOWN_EXECUTION_CONTRACT"`` marker, and
+    ``requires_full_history`` treats that as full-history (conservative).
     """
-    resolved = _resolve(canonical)
-    spec = _checkpoint_spec(resolved)
+    resolved = _resolve(canonical, strict=production)
+    spec = _checkpoint_spec(resolved, strict=production)
     if spec is not None:
         if spec.segmented_execution_supported:
             return ExecutionContract(
@@ -562,6 +603,26 @@ _HISTORY_TRANSFORMS["ts_channel_width_slope"] = _compound_transform(
 )
 
 
+def _nested_pca_resid_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
+    """R10-P0-008: ``panel_rolling_pca_resid_vol`` / ``_momentum`` are TWO
+    stacked rolling windows — a rolling PCA of ``window`` rows followed by a
+    rolling ``window`` std/sum of the residuals.  The maturity history is
+    ~``2 * (window - 1)`` bars, not ``window``.  A generic parser reading one
+    ``window`` param would underestimate the warm-up by half.
+    """
+    specs = _specs(canonical)
+    w = _bound_param(params, "window", specs)
+    if w is _UNKNOWN:
+        return _UNKNOWN
+    if w is None:
+        w = 120
+    return max(2, 2 * (w - 1))
+
+
+for _canon in ("panel_rolling_pca_resid_vol", "panel_rolling_pca_resid_momentum"):
+    _HISTORY_TRANSFORMS[_canon] = _compound_transform(_nested_pca_resid_extension)
+
+
 def _apply_transform(
     transform: HistoryTransform,
     canonical: str,
@@ -639,7 +700,7 @@ def _own_history_extension(canonical: str, params: Mapping[str, Any]) -> int | o
 
 
 def _minimum_warmup_rows(
-    canonical: str, params: Mapping[str, Any] | None
+    canonical: str, params: Mapping[str, Any] | None, *, production: bool = False
 ) -> tuple[int, bool]:
     """Return ``(rows, unknown)`` for a single operator.
 
@@ -648,7 +709,7 @@ def _minimum_warmup_rows(
     window param had an un-resolvable fractional value and the operator's
     history must be treated as UNKNOWN (conservative full history).
     """
-    spec = _checkpoint_spec(canonical)
+    spec = _checkpoint_spec(canonical, strict=production)
     min_rows = int(getattr(spec, "minimum_history", 0) or 0) if spec is not None else 0
     declared = _own_history_extension(canonical, params or {})
     if declared is _UNKNOWN:
@@ -659,6 +720,8 @@ def _minimum_warmup_rows(
 def history_requirement(
     canonical: str,
     params: Mapping[str, Any] | None = None,
+    *,
+    production: bool = False,
 ) -> HistoryRequirement:
     """THE one lookback authority for a single operator.
 
@@ -669,10 +732,14 @@ def history_requirement(
     (conservative, never truncated).  Everything else reports a finite row count
     derived from the operator's declared history contract (safe default: finite,
     2 rows).
+
+    R10 #4: when ``production``, an internal contract lookup failure raises
+    :class:`ExecutionContractResolutionError` instead of silently resolving to a
+    finite/stateless contract.
     """
-    resolved = _resolve(canonical)
-    contract = execution_contract(resolved)
-    rows, unknown = _minimum_warmup_rows(resolved, params)
+    resolved = _resolve(canonical, strict=production)
+    contract = execution_contract(resolved, production=production)
+    rows, unknown = _minimum_warmup_rows(resolved, params, production=production)
     if contract.requires_full_history or unknown:
         return HistoryRequirement(kind="full_history", rows=rows)
     return HistoryRequirement(kind="finite", rows=rows)

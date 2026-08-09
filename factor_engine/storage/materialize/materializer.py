@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import contextlib
 import getpass
+import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,6 +43,16 @@ import numpy as np
 import pandas as pd
 
 from workspace_paths import default_factor_lake_root
+
+from runtime.factor_identity import (
+    NO_FACTOR_IDENTITY,
+    FactorIdentityMismatch,
+    FactorSemanticIdentity,
+    checkpoint_fingerprint,
+    checkpoint_fingerprint_matches,
+    compute_identity_from_materialize_ctx,
+    partition_input_fingerprint,
+)
 
 from ..catalog import FactorCatalog, compute_ir_hash
 from ..exceptions import FactorNotFoundError, MaterializePartitionError
@@ -191,6 +202,10 @@ class ParquetMaterializer:
         storage_format: str = "long",
         null_overwrite: bool = False,
         deleted_keys: list[tuple] | None = None,
+        production: bool | None = None,
+        run_generation: str | None = None,
+        force_tombstones: bool | None = None,
+        semantic_identity: FactorSemanticIdentity | None = None,
     ) -> dict:
         """将因子计算结果落盘为分区 Parquet。
         
@@ -230,7 +245,47 @@ class ParquetMaterializer:
             if ir_node is not None:
                 ast_hash = compute_ir_hash(ir_node)
             else:
-                ast_hash = "__no_hash_provided__"
+                ast_hash = NO_FACTOR_IDENTITY
+
+        # R10 #17: production 物化必须提供真实因子身份（AST Hash / IR）。
+        # 缺省从运行模式推断；显式传入覆盖推断。
+        production = self._resolve_production(production)
+        if production and ast_hash == NO_FACTOR_IDENTITY:
+            raise FactorIdentityMismatch(
+                f"production materialize of factor '{factor_id}' requires a "
+                f"factor identity; got sentinel {NO_FACTOR_IDENTITY!r}. "
+                f"Pass ast_hash or ir_node."
+            )
+
+        # R10 #47: 断点续写必须绑定身份 —— 在分区循环前算好身份级指纹组件，
+        # 分区级输入指纹在循环内逐分区计算。
+        checkpoint_identity = semantic_identity
+        if checkpoint_identity is None:
+            try:
+                checkpoint_identity = compute_identity_from_materialize_ctx(
+                    ir_node=ir_node,
+                    ast_hash=ast_hash,
+                    data_source_config=data_source_config,
+                    run_lineage=run_lineage,
+                )
+            except Exception:  # pragma: no cover - 身份不可得 → 无指纹 → production 重算
+                logger.debug(
+                    "checkpoint 身份计算失败 factor=%s, 降级为无指纹",
+                    factor_id,
+                    exc_info=True,
+                )
+                checkpoint_identity = None
+        identity_digest = (
+            checkpoint_identity.identity_digest()
+            if checkpoint_identity is not None
+            else None
+        )
+        lineage_extra = (run_lineage or {}).get("extra") or {}
+        source_snapshot = data_snapshot_id or lineage_extra.get("data_snapshot_id")
+        source_dep_hash = lineage_extra.get("source_dependency_hash")
+        if source_dep_hash is None and checkpoint_identity is not None:
+            source_dep_hash = checkpoint_identity.source_dependency_hash
+        generation = str(run_generation or "0")
 
         # --- 0. 可选 DQ 门禁（在清洗前检查原始 result）---
         dq_report = None
@@ -271,14 +326,24 @@ class ParquetMaterializer:
         )
 
         # R9-P0-027: NaN rows are kept as explicit tombstones (is_valid=0), so a
-        # clean result is no longer empty just because every value is NaN.  Only
-        # short-circuit when there is genuinely nothing to write: an empty frame,
-        # or a run whose values are ALL invalid with no explicit tombstone intent
-        # (null_overwrite / deleted_keys).  This preserves the historical
-        # "all-NaN -> skip" behavior while still allowing valid->NaN revisions to
-        # overwrite stale finite values.
+        # clean result is no longer empty just because every value is NaN.
+        #
+        # R10 #48: production incremental must distinguish:
+        #   * "no computation"  -> genuinely empty frame (no rows) -> skip;
+        #   * "computed invalid" -> rows exist but ALL values are NaN/Inf and this
+        #     is a production incremental recompute -> write tombstones
+        #     (is_valid=0) so stale finite values in the partition are CLEARED,
+        #     without requiring the caller to pass null_overwrite=True;
+        #   * "deleted" -> explicit deleted_keys (already flips null_overwrite).
+        # Research / plain materialize keeps the historical "all-NaN -> skip"
+        # short-circuit for backward compatibility.
         has_valid_value = bool(df["value"].notna().any())
-        if df.empty or (not has_valid_value and not null_overwrite):
+        force_tombstones = self._resolve_force_tombstones(
+            force_tombstones, production, run_lineage
+        )
+        if df.empty or (
+            not has_valid_value and not null_overwrite and not force_tombstones
+        ):
             logger.warning("因子 '%s' 清洗后无有效数据，跳过落盘。", factor_id)
             return {
                 "factor_id": factor_id,
@@ -286,6 +351,9 @@ class ParquetMaterializer:
                 "partitions": [],
                 "watermark": None,
                 "write_target": write_target,
+                "force_tombstones": force_tombstones,
+                "identity_digest": identity_digest,
+                "run_generation": generation,
             }
 
         target = str(write_target or "local").lower()
@@ -352,6 +420,19 @@ class ParquetMaterializer:
             for part_values, partition_df in iter_partition_groups(work_df, policy):
                 pkey = partition_key(part_values)
                 ck_year = checkpoint_year(part_values)
+                # R10 #47: 分区级身份指纹 —— 在 resume 判定与成功写入后都要用。
+                partition_dir = factor_dir / partition_path_segments(
+                    part_values, column_order=policy.columns
+                )
+                fp = checkpoint_fingerprint(
+                    identity_digest=identity_digest,
+                    source_snapshot=source_snapshot,
+                    source_dependency_hash=source_dep_hash,
+                    partition_input_fingerprint=partition_input_fingerprint(
+                        partition_df
+                    ),
+                    run_generation=generation,
+                )
                 if resume:
                     checkpoint = self._catalog.get_partition_checkpoint_by_key(
                         factor_id, pkey
@@ -360,7 +441,12 @@ class ParquetMaterializer:
                         checkpoint = self._catalog.get_partition_checkpoint(
                             factor_id, ck_year
                         )
-                    if checkpoint and checkpoint["status"] == "success":
+                    if self._checkpoint_skippable(
+                        checkpoint,
+                        fp,
+                        production=production,
+                        partition_dir=partition_dir,
+                    ):
                         partitions_skipped.append(ck_year)
                         partition_keys_skipped.append(pkey)
                         progress.advance(detail=f"{pkey}, resume_skip")
@@ -380,6 +466,7 @@ class ParquetMaterializer:
                         run_id=checkpoint_run_id,
                         status="success",
                     )
+                    self._write_checkpoint_fingerprint_file(partition_dir, fp)
                     partitions_written.append(ck_year)
                     partition_keys_written.append(pkey)
                     progress.advance(detail=f"{pkey}, rows={len(partition_df)}")
@@ -515,10 +602,11 @@ class ParquetMaterializer:
         # rows in each partition include is_valid=0 tombstones.  `rows_written`
         # keeps the historical meaning: valid rows for the default path (matching
         # the old dropna behavior), total rows when the caller asked to keep
-        # invalid rows explicitly.
+        # invalid rows explicitly, or when a production-incremental all-NaN run
+        # wrote tombstones (R10 #48).
         rows_written = (
             len(df)
-            if (preserve_invalid_rows or null_overwrite)
+            if (preserve_invalid_rows or null_overwrite or force_tombstones)
             else int(df["value"].notna().sum())
         )
 
@@ -553,6 +641,9 @@ class ParquetMaterializer:
             "watermark_deferred": watermark_deferred,
             "storage_format": policy.storage_format,
             "partition_columns": list(policy.columns),
+            "force_tombstones": force_tombstones,
+            "identity_digest": identity_digest,
+            "run_generation": generation,
         }
         if pending_watermark is not None and watermark_deferred:
             summary["pending_watermark"] = pending_watermark
@@ -739,6 +830,95 @@ class ParquetMaterializer:
         df.loc[invalid, "is_valid"] = 0
         df.loc[invalid, "invalid_reason"] = "inf_or_nan"
         return df.reset_index(drop=True)
+
+    # ------------------------------------------------------------------
+    # R10 #16/#17/#47/#48：production 判定 + checkpoint 身份指纹
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_production(production: bool | None) -> bool:
+        """解析 production 标志：显式值优先，否则从运行模式推断。"""
+        if production is not None:
+            return bool(production)
+        from runtime.production_policy import is_production_mode
+
+        return is_production_mode()
+
+    @staticmethod
+    def _resolve_force_tombstones(
+        force_tombstones: bool | None,
+        production: bool,
+        run_lineage: dict | None,
+    ) -> bool:
+        """解析是否对全 NaN 结果写 tombstone（R10 #48）。
+
+        显式 ``force_tombstones`` 优先；否则 production incremental
+        （``run_lineage.extra.mode == "incremental"``）自动写 tombstone。
+        """
+        if force_tombstones is not None:
+            return bool(force_tombstones)
+        lineage_extra = (run_lineage or {}).get("extra") or {}
+        return bool(production) and lineage_extra.get("mode") == "incremental"
+
+    @staticmethod
+    def _checkpoint_skippable(
+        checkpoint: dict | None,
+        fingerprint: dict[str, str],
+        *,
+        production: bool,
+        partition_dir: Path,
+    ) -> bool:
+        """R10 #47: resume 时判定是否可跳过该分区。
+
+        - ``status != success`` → 不可跳过（重算）；
+        - 有指纹文件且全部组件匹配 → 可跳过；
+        - 无指纹文件（旧 checkpoint）→ production 必须重算；research 保留旧行为
+          （``status == success`` 即跳过）。
+        """
+        if not checkpoint or checkpoint.get("status") != "success":
+            return False
+        stored = ParquetMaterializer._read_checkpoint_fingerprint_file(partition_dir)
+        if stored is None:
+            return not production
+        return checkpoint_fingerprint_matches(stored, fingerprint)
+
+    @staticmethod
+    def _checkpoint_fingerprint_path(partition_dir: Path) -> Path:
+        return Path(partition_dir) / ".identity.json"
+
+    @staticmethod
+    def _write_checkpoint_fingerprint_file(
+        partition_dir: Path, fingerprint: dict[str, str]
+    ) -> None:
+        """原子写入分区身份指纹 sidecar（``.identity.json``）。
+
+        tmp 文件名以 ``.tmp`` 结尾，若崩溃残留会被 ``_cleanup_orphan_tmp_files``
+        在下一次 reconcile 时清理。
+        """
+        try:
+            path = ParquetMaterializer._checkpoint_fingerprint_path(partition_dir)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+            with open(str(tmp), "w", encoding="utf-8") as fh:
+                json.dump(fingerprint, fh, sort_keys=True, separators=(",", ":"))
+            os.replace(str(tmp), str(path))
+        except OSError:  # pragma: no cover - 指纹写入失败不阻塞落盘
+            logger.debug(
+                "写入 checkpoint 指纹失败 partition_dir=%s", partition_dir, exc_info=True
+            )
+
+    @staticmethod
+    def _read_checkpoint_fingerprint_file(partition_dir: Path) -> dict | None:
+        """读取分区身份指纹；缺失/损坏返回 None（视为旧 checkpoint）。"""
+        path = ParquetMaterializer._checkpoint_fingerprint_path(partition_dir)
+        try:
+            if not path.exists():
+                return None
+            with open(str(path), "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            return data if isinstance(data, dict) else None
+        except (OSError, ValueError):
+            return None
 
     @staticmethod
     def _append_tombstones(

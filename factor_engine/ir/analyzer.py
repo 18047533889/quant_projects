@@ -1051,8 +1051,16 @@ def validate_fundamental_period_contracts(referenced_fields: dict[str, Any]) -> 
     for name, spec in referenced_fields.items():
         # Structural metadata columns (pub_date / update_time / report_period_end_date
         # are reused by name across all four statements) carry no period-selection
-        # semantics and are exempt, exactly as in the contract registry.
-        if not getattr(spec, "mining_allowed", True):
+        # semantics and are exempt, exactly as in the contract registry.  The
+        # exemption keys on the STRUCTURAL ROLE, not on ``mining_allowed``
+        # (R10-P0-014): a fundamental field whose mining eligibility is UNKNOWN
+        # must still fail closed on a missing period contract — the old guard
+        # ``if not mining_allowed`` silently exempted every None-declared field.
+        role = str(getattr(spec, "role", "") or "").lower()
+        if role in {
+            "time", "instrument", "identifier", "label", "group_key",
+            "knowledge_time", "effective_time", "period_id", "ingestion_time",
+        }:
             continue
         table = str(getattr(spec, "table", "") or "")
         contract = logical_table_contract(table) if table else None
@@ -1359,7 +1367,10 @@ class Analyzer:
                             if attr_val is not None:
                                 view[key] = attr_val
                     if "pit_safe" not in view:
-                        view["pit_safe"] = True
+                        # R10 #6: a node with NO PIT declaration is UNKNOWN
+                        # (None), not safe.  The lattice join propagates UNKNOWN
+                        # upward; the production four-layer PIT gate rejects it.
+                        view["pit_safe"] = None
                     child_views.append(view)
                 semantic = lattice_join_semantic_attrs(child_views)
                 # knowledge_model / fiscal_grain / universe_id are PIT

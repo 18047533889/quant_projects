@@ -214,8 +214,15 @@ def build_lazy_column_bundle(
     normalize_timestamp: bool,
     timestamp_unit: str | None,
     params: dict[str, Any] | None,
+    mode: str = "auto",
+    filters: Any = None,
 ) -> LazyColumnBundle:
-    """构建 LazyFrame bundle（不 collect）。"""
+    """构建 LazyFrame bundle（不 collect）。
+
+    ``mode``/``filters``（#收官轮 P0）：FE 的 ``read_mode`` 与 ``semantic_filters``
+    贯穿到 DataAccess ``scan``——语义模式（panel/event/pit）与行级过滤不再在
+    lazy 路径丢失。
+    """
     all_cols = list(
         dict.fromkeys([time_column, instrument_column, *physical_columns])
     )
@@ -226,6 +233,9 @@ def build_lazy_column_bundle(
     }
     if params:
         read_kwargs.update(params)
+    read_kwargs["mode"] = mode
+    if filters is not None:
+        read_kwargs["filters"] = filters
     scan_obj = _store_scan(store, dataset, read_kwargs)
     return LazyColumnBundle(
         lf=scan_obj,
@@ -253,8 +263,14 @@ def scan_dataset_columns(
     timestamp_unit: str | None,
     params: dict[str, Any] | None,
     bundle: LazyColumnBundle | None = None,
+    mode: str = "auto",
+    filters: Any = None,
 ) -> dict[str, Any]:
-    """``store.scan_polars`` 读列并转为逻辑列名 → MultiIndex Series。"""
+    """``store.scan_polars`` 读列并转为逻辑列名 → MultiIndex Series。
+
+    ``mode``/``filters``（#收官轮 P0）：同 ``build_lazy_column_bundle``——
+    FE read_mode / semantic_filters 贯穿到 DataAccess scan。
+    """
     if bundle is not None:
         missing = bundle.missing_physical(list(physical_columns))
         if missing:
@@ -278,6 +294,9 @@ def scan_dataset_columns(
     }
     if params:
         read_kwargs.update(params)
+    read_kwargs["mode"] = mode
+    if filters is not None:
+        read_kwargs["filters"] = filters
 
     scan_obj = _store_scan(store, dataset, read_kwargs)
     table = _collect_arrow_table(scan_obj, select_cols=all_cols)
@@ -313,6 +332,8 @@ def build_scan_polars_long(
     params: dict[str, Any] | None = None,
     frequency: str | None = None,
     session_column: str | None = None,
+    mode: str = "auto",
+    filters: Any = None,
 ) -> Any:
     """``store.scan_polars`` → long LazyFrame（``ts / inst / <logical cols>``），无 pandas 往返。
 
@@ -320,6 +341,9 @@ def build_scan_polars_long(
     ``(instrument, time)`` — ``(instrument, time, session)`` for minute data when
     ``session_column`` is provided.  ``frequency`` is detected by the caller from
     the source's grain metadata; ``None`` defaults to the daily contract.
+
+    ``mode``/``filters``（#收官轮 P0）：FE read_mode / semantic_filters 贯穿到
+    DataAccess scan_polars。
     """
     all_cols = list(dict.fromkeys([time_column, instrument_column, *physical_columns]))
     if frequency == "minute" and session_column and session_column not in all_cols:
@@ -331,6 +355,9 @@ def build_scan_polars_long(
     }
     if params:
         read_kwargs.update(params)
+    read_kwargs["mode"] = mode
+    if filters is not None:
+        read_kwargs["filters"] = filters
     lf = _store_scan_polars_native(store, dataset, read_kwargs)
     lf = enforce_source_ordering(
         lf,
@@ -360,6 +387,8 @@ def build_scan_index_long(
     time_range: tuple[Any, Any] | None,
     instrument_filter: list[str] | None,
     params: dict[str, Any] | None = None,
+    mode: str = "auto",
+    filters: Any = None,
 ) -> Any:
     """仅 scan ts / inst 轴（universe 对齐，不读因子列）。"""
     read_kwargs: dict[str, Any] = {
@@ -369,6 +398,9 @@ def build_scan_index_long(
     }
     if params:
         read_kwargs.update(params)
+    read_kwargs["mode"] = mode
+    if filters is not None:
+        read_kwargs["filters"] = filters
     lf = _store_scan_polars_native(store, dataset, read_kwargs)
     rename = {time_column: "ts", instrument_column: "inst"}
     return lf.rename(rename).select(["ts", "inst"]).unique()

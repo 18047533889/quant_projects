@@ -21,7 +21,16 @@ _SOURCE_REF_PREFIX = "__fe_source_ref_v1__"
 
 
 def _ref_canonical(spec: SourceRefSpec) -> str:
-    """把 SourceRefSpec 折叠为规范 JSON 字符串（字段排序、键排序）。"""
+    """把 SourceRefSpec 折叠为规范 JSON 字符串（字段排序、键排序）。
+
+    R10-P0-018: the canonical payload includes ``dialect`` /
+    ``dialect_version`` — two tables with the same columns but different
+    semantic dialect versions must NOT share a source-dependency hash.  The
+    field's *contract* identity (PIT policy, unit, role) is keyed by
+    ``(table, field)`` inside the field catalog and is covered by the field
+    name itself; the per-field catalog hash is intentionally NOT duplicated
+    here (no parallel contract truth source).
+    """
     return json.dumps(
         {
             "table": spec.table,
@@ -29,6 +38,8 @@ def _ref_canonical(spec: SourceRefSpec) -> str:
             "params": dict(sorted(spec.params, key=lambda kv: kv[0])),
             "transform": spec.transform,
             "transform_params": dict(sorted(spec.transform_params, key=lambda kv: kv[0])),
+            "dialect": spec.dialect,
+            "dialect_version": spec.dialect_version,
         },
         sort_keys=True,
         separators=(",", ":"),

@@ -133,6 +133,10 @@ class CompositeDataSource(DataSource):
         self._column_cache: dict[str, Any] = {}
         self._anchor_index_cache = None
         self._join_reports: list[CompositeJoinReport] = []
+        #: R10 #44: combined child snapshot manifest.  ``None`` until the first
+        #: load records a baseline; afterwards a change in any child snapshot id
+        #: invalidates ``_column_cache`` / ``_anchor_index_cache``.
+        self._snapshot_manifest: tuple[tuple[str, str | None], ...] | None = None
 
     @staticmethod
     def _normalize_aliases(aliases: Mapping[str, str]) -> dict[str, str]:
@@ -249,10 +253,10 @@ class CompositeDataSource(DataSource):
 
     def collect_join_reports(self, *, clear: bool = True) -> list[dict[str, Any]]:
         """返回组合 join 统计（可选写入 lineage.extra）。
-        
+
         参数:
             clear: 见函数签名（可选）
-        
+
         返回:
             list[dict[str, Any]]
         """
@@ -260,6 +264,51 @@ class CompositeDataSource(DataSource):
         if clear:
             self._join_reports.clear()
         return reports
+
+    def _child_snapshot_manifest(self) -> tuple[tuple[str, str | None], ...]:
+        """组合子源快照清单（R10 #44）。
+
+        每个子源（``DataAccessSource``）暴露只读 ``data_snapshot_id``；没有该
+        属性的子源报告 ``None`` —— 稳定 token，子源后来具备快照身份时仍能
+        触发缓存失效。
+        """
+        manifest: list[tuple[str, str | None]] = []
+        for name, source in self.sources.items():
+            snapshot = getattr(source, "data_snapshot_id", None)
+            if callable(snapshot):
+                try:
+                    snapshot = snapshot()
+                except Exception:  # best-effort manifest: a child that cannot
+                    # report a snapshot is treated as unknown (None).
+                    snapshot = None
+            manifest.append((name, snapshot))
+        return tuple(manifest)
+
+    def _invalidate_if_snapshot_changed(self) -> None:
+        """子源快照版本变化时清除列/锚点缓存（R10 #44）。
+
+        在公共 load 方法顶部调用：若任一子源快照 id 与上次记录不同，旧列缓存
+        与锚点索引缓存全部失效，下次读取强制重建。
+        """
+        current = self._child_snapshot_manifest()
+        if self._snapshot_manifest is not None and current != self._snapshot_manifest:
+            logger.info(
+                "组合源子源快照变化，清除列/锚点缓存 old=%s new=%s",
+                self._snapshot_manifest,
+                current,
+            )
+            self._column_cache.clear()
+            self._anchor_index_cache = None
+        self._snapshot_manifest = current
+
+    def _record_snapshot_manifest(self) -> None:
+        """load 完成后记录最新快照清单。
+
+        子源首次读取后快照 id 从 ``None`` 变为真实值 —— 这是本组合源自己触发
+        的读取，不是外部快照变化，必须在 load 末尾刷新清单，否则下一次 load
+        会误判为变化而每次清空缓存。
+        """
+        self._snapshot_manifest = self._child_snapshot_manifest()
 
     def _expand_alias(self, name: str) -> str:
         """_expand_alias。
@@ -341,6 +390,7 @@ class CompositeDataSource(DataSource):
         """
         import pandas as pd
 
+        self._invalidate_if_snapshot_changed()
         if self._anchor_index_cache is not None:
             return self._anchor_index_cache
 
@@ -522,9 +572,11 @@ class CompositeDataSource(DataSource):
         anchor_index = self._get_anchor_index()
         key_matched_rows: int
         if join_spec.method == "exact":
-            # reindex 恒命中每个 anchor key；是否有效由值 null 判定。
+            # R10 #43: reindex 把每个 anchor key 都对齐（未命中者置 NaN），但
+            # key 命中数必须按「anchor key 在源索引中真实存在」计数，而不是
+            # anchor 全长 —— 源里根本没有的 key 不能算 key-matched。
             aligned = self._align_exact(anchor_index, series)
-            key_matched_rows = len(anchor_index)
+            key_matched_rows = len(anchor_index.intersection(series.index))
         elif join_spec.method in {"asof_backward", "forward_fill"}:
             aligned, key_matched_rows = self._align_asof_backward(
                 anchor_index, series, tolerance=join_spec.tolerance
@@ -550,6 +602,7 @@ class CompositeDataSource(DataSource):
         返回:
             无
         """
+        self._invalidate_if_snapshot_changed()
         if name in self._column_cache:
             logger.debug("命中组合列缓存: %s", name)
             return self._column_cache[name]
@@ -582,6 +635,7 @@ class CompositeDataSource(DataSource):
         self._column_cache[name] = series
         if source_name == self.anchor_source and self.allow_unqualified_anchor_columns:
             self._column_cache.setdefault(column_name, series)
+        self._record_snapshot_manifest()
         return series
 
     def load_columns(self, names: list[str]) -> dict[str, Any]:
@@ -595,6 +649,7 @@ class CompositeDataSource(DataSource):
         返回:
             dict[str, Any]
         """
+        self._invalidate_if_snapshot_changed()
         out: dict[str, Any] = {}
         missing: list[str] = []
         for name in names:
@@ -648,6 +703,7 @@ class CompositeDataSource(DataSource):
                 if is_anchor and self.allow_unqualified_anchor_columns:
                     self._column_cache.setdefault(column_name, series)
                 out[name] = series
+        self._record_snapshot_manifest()
         return out
 
     def _load_batch(self, source_name: str, columns: list[str]) -> dict[str, Any]:

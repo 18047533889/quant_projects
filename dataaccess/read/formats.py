@@ -654,28 +654,30 @@ def pyarrow_engine_read(
     filters: Any = None,
     batch_size: int = 100_000,
 ) -> Any:
-    """PyArrow 引擎读取（arrow/feather/ipc）。返回 pyarrow.Table。
+    """PyArrow 引擎读取（parquet/arrow/feather/ipc）。返回 pyarrow.Table。
 
     ``filters`` 支持 pyarrow.dataset expression（如 ds.field('a') > 1）。
     #P0-22：改用 ``pyarrow.dataset.Scanner``——filter / projection 在扫描阶段
     下推（按行组过滤、只读请求列），不再「先物化全表再 pc.filter」。大文件
     （几十 GB）也不至于先把整张表 load 进内存。
+    #收官轮 P0：支持 parquet——``pa_ds.dataset`` 按文件扩展名自动检测格式，
+    真 PyArrow backend 不再只认 arrow/feather（旧代码硬编码 format="ipc"，
+    对 parquet 数据集直接 ValidationError）。
     """
     import pyarrow as pa
     import pyarrow.dataset as pa_ds
 
     fmt = normalize_format_name(fmt)
-    if fmt not in {"arrow", "feather", "ipc"}:
-        raise ValidationError(
-            f"pyarrow_engine_read 只支持 arrow/feather，收到 {fmt!r}"
-        )
     if not paths:
         return pa.table({})
     try:
-        dataset = pa_ds.dataset(list(paths), format="ipc")
+        dataset = pa_ds.dataset(list(paths))
     except Exception:
-        # 兼容：部分文件无法被 dataset 识别时回退逐文件读
-        return _pyarrow_read_all_fallback(paths, fmt=fmt, columns=columns)
+        try:
+            dataset = pa_ds.dataset(list(paths), format="ipc")
+        except Exception:
+            # 兼容：部分文件无法被 dataset 识别时回退逐文件读
+            return _pyarrow_read_all_fallback(paths, fmt=fmt, columns=columns)
     scanner = dataset.scanner(
         columns=list(columns) if columns else None,
         filter=filters if filters is not None else None,
@@ -693,7 +695,12 @@ def _pyarrow_read_all_fallback(paths: list[str], *, fmt: str, columns: list[str]
     import pyarrow as pa
 
     tables: list[pa.Table] = []
-    if fmt == "feather":
+    if fmt in {"parquet", "pq"}:
+        import pyarrow.parquet as pa_pq
+
+        for p in paths:
+            tables.append(pa_pq.read_table(p, columns=columns or None))
+    elif fmt == "feather":
         import pyarrow.feather as pa_feather
 
         for p in paths:

@@ -477,6 +477,26 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "ts_abdi_ranaldo_spread",
 })
 
+# 2026-08-09 三后端一致性轮：新增可下推的简单/窗口/分组算子（emitter 分支见
+# backend/sql_pushdown/emitter.py，含 candle 滚动 zscore/percentile、组内矩、
+# leave-one-out 均值、截面 max-abs 归一化、展开 rank、abs-return 滚动 corr）。
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "identity",
+    "unitize",
+    "candle_body_zscore",
+    "candle_range_zscore",
+    "candle_upper_shadow_zscore",
+    "candle_lower_shadow_zscore",
+    "candle_body_percentile",
+    "candle_range_percentile",
+    "group_skewness",
+    "group_kurtosis",
+    "group_quantile_spread",
+    "group_ex_self_mean",
+    "abs_return_volume_corr",
+    "expanding_rank",
+})
+
 # EWMA/Wilder 平滑族（RSI/ATR/DMI/DX/ADX/MACD/DEMA/TEMA/PPO/PVO/TSI/Keltner/
 # ADL/CMF/ChaikinOscillator/ForceIndex）：pandas ewm(adjust=False) 的 NaN 缺口
 # 语义（绝对位置衰减 + 有效观测重新归一化）无法在 SQL 中精确复刻，emitter 返回

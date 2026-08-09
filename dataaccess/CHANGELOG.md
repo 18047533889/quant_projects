@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.9.8 — FE 集成复查收官：FactorEngine→DataAccess adapter + 真 PyArrow parity
+
+沿「FactorEngine → DataAccess → factor lake」链路复查的 13 项（8 项 Freeze
+blocker + 5 项顺手收口）全部修复。DataAccess 内核未再扩展；改动集中在 FE
+adapter / 真 PyArrow backend / 统一 predicate。
+
+**DataAccess 侧**
+- **真 PyArrow backend 三引擎 parity**（P0-2）：`_read_pyarrow` 不再手写第二套
+  bound/filter 规则，改消费与 DuckDB/Polars 共用同一 `Predicate` 的
+  `compile_predicate_arrow`——date-only end 含完整一天（`expand_end_bound`）、
+  `instrument_filter=[]` → 恒假表达式 0 行（非全市场）。同时 `pyarrow_engine_read`
+  支持 **parquet**（`pa_ds.dataset` 自动检测格式；旧代码硬编码 IPC，`engine=
+  "pyarrow"` 对 parquet 直接报错）。`engine=duckdb/polars/pyarrow` 三引擎真实 parity
+  测试通过（此前只测了 `mode="arrow"`=DuckDB→Arrow，不是真 PyArrow 引擎）。
+- **`normalize_units=True` 在 stream/lazy result 形态静默失效**（P0-5 根因）：auto
+  路由到 `result=stream`/`lazy` 时输出层单位归一化被跳过（A股 Return 保持 raw BP）。
+  `ReadHandle` 增加 normalize 钩子，统一物化终点（`_materialize_arrow`）在 lazy/stream
+  都应用 `_maybe_normalize_units`。`engine='auto' + normalize_units=True` 现已正确
+  归一化，与 duckdb 显式引擎一致。
+- **DataRequest 静态 universe 空集 → `[]`**（item 9）：`_resolve_universe_instruments`
+  空成员返回空列表（0 行），不再 `None`=全市场。
+- **read_factors date-only end 含完整最后一天**（item 10）：`build_factor_union_sql`
+  复用 `expand_end_bound`（factor lake datetime=timestamp；expand 值转 ISO 字符串
+  绑定，VARCHAR 测试 fixture 也正确）。
+
+**FactorEngine adapter 侧**（`factor_engine/storage/sources/data_access_source.py`）
+- **`instrument_filter=[]` 不再折叠成全市场**（P0-1）：None 保持 None、`[]` 保持
+  `[]`（eager / lazy / scan_polars_long / Composite 全 0 行）。
+- **`read_mode` 贯穿到 DataAccess `mode=`**（P0-3）：eager `store.read` 与 lazy
+  scan / scan_polars_long / scan_index_long 全部传 `mode=self.read_mode`（panel/
+  event/pit 不再分层漂移）。
+- **`semantic_filters` 真正变成 `filters=` 行过滤**（P0-4）：不再塞进 `params`
+  （StaticDataset 拒绝多余 params）；read/scan 以 `filters=` 落到物理 WHERE
+  （US 财务 timeframe / IndexSymbol 真正限制行）。conflict 检测无条件运行。
+- **A股 Return eager 无二次 scale**（P0-5）：catalog 覆盖字段一律 `normalized.add`
+  （禁入 COS compatibility scale fallback）。
+- **polars-long 受控 collect 终端**（P0-6）：`execute_polars_long_plan` 终端 collect
+  前做数据源快照 revalidation（`revalidate_for_long_collect`，production fail-closed：
+  scan→collect 间源被替换 = 执行内容 ≠ 计划快照），collect 后强制 QueryBudget。
+- **Four-layer PIT gate UNKNOWN fail-closed**（P0-7/8）：`_dataset_pit_allowed` /
+  `_table_pit_allowed` 三态（True/False/None=UNKNOWN）；production 下 UNKNOWN 拒绝，
+  research 告警降级。cleaned `fundamentals_*`/`financials_ratios`（period_end 无知识
+  时钟）列入 `_NO_KNOWLEDGE_TIME_FUNDAMENTALS` deny-list，PIT 禁用并提示改用
+  `us_stock_*`（filing_date 为 availability）。
+- **production 禁止 direct-local factor lake 写**（item 13）：`LocalParquetWriteTarget`
+  production 直接拒绝，强制走 staging + `publish_factor_lake` 原子发布。
+
+**新增回归测试**：`dataaccess/tests/unit/test_final_closure_round11.py`（三引擎
+parity / DataRequest 空 universe / read_factors date-only end / factor 元数据
+roundtrip）；`factor_engine/tests/integration/test_final_closure_fe_integration.py`
+（空股票池 / read_mode 贯穿 / semantic_filters 落 WHERE / PIT UNKNOWN fail-closed /
+catalog 无二次 scale / long collect revalidate / 真实 A股 eager==lazy==raw×1e-4）。
+
 ## 0.9.7 — 收官轮：真实数据 + 运行时 + 破坏性修复（Core Freeze 定版）
 
 0.9.6 之后的**最后一轮**（真实 A股/美股 数据 + 并发/crash/破坏性测试驱动）修复：

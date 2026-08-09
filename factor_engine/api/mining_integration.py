@@ -251,9 +251,17 @@ def export_dsl_allowlist_json(
         "us": "afv_us_pv_daily",
         "usa": "afv_us_pv_daily",
     }
+    # R10-P0-026: an unknown / misspelt market (``ahsare``) must NOT silently
+    # fall back to the US policy — that would certify the wrong operator
+    # surface for an A-share campaign.  Fail closed.
+    if mkt not in policy_by_market:
+        raise ValueError(
+            f"unknown market {market!r}; expected one of "
+            f"{sorted(policy_by_market)}"
+        )
     return {
         "schema_version": "factor_engine.dsl_allowlist.v1",
-        "operator_policy": policy_by_market.get(mkt, "afv_us_pv_daily"),
+        "operator_policy": policy_by_market[mkt],
         "market": mkt,
         "dsl_surface": surf,
         "operators": names,

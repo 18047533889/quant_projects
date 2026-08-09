@@ -102,7 +102,11 @@ def test_pcr_forecast_shape() -> None:
 
 
 def test_autoencoder_error_nonneg() -> None:
+    # R10-P0-029: the autoencoder is a low-rank compression and needs >= 2
+    # feature panels — the legacy 1-panel call was a legal-but-always-NaN dead
+    # end and now fails closed at the call boundary.
     x = _panel(seed=7, cols=8)
-    out = OperatorRegistry.get("cs_autoencoder_reconstruction_error").calculate(x, window=40)
+    y = _panel(seed=8, cols=8)
+    out = OperatorRegistry.get("cs_autoencoder_reconstruction_error").calculate(x, y, window=40)
     valid = out.dropna().to_numpy()
     assert (valid >= 0).all()

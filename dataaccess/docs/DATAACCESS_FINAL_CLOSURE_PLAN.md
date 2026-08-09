@@ -45,6 +45,37 @@ factor_engine，标记 BLOCKED，待并发会话/用户授权后由 owner 修复
 | 34 | RelationHandle | SQL 只能 FROM _sub | 本地 | FIXED | 仅查「SQL 含 FROM _sub」挡不住 JOIN 其它表 | assert_sql_from_scope parser 级 | round10 | FIXED |
 | 35 | coverage | remote-only 不永久 unavailable | 本地/s3:// | FIXED | 无 manifest 直接 unavailable | partial + authority=declared_remote | round10 | FIXED |
 
+## 收官轮第 2 批 closure ledger（0.9.8，FE 集成复查，2026-08-09）
+
+沿「FactorEngine → DataAccess → factor lake」链路复查的 13 项。8 项 Freeze
+blocker + 5 项顺手收口全落地。改动：`dataaccess/`（真 PyArrow backend / 统一
+predicate / normalize_units 一致性 / 空 universe / read_factors bound）+
+`factor_engine/` adapter（空股票池 / read_mode / semantic_filters / 二次 scale /
+governed collect / PIT UNKNOWN fail-closed / 禁直写 factor lake）。
+
+| ID | Area | Test | Backend | Result | Bug root cause | Fix | Regression test | Status |
+|----|------|------|---------|--------|----------------|-----|-----------------|--------|
+| FE-1 | FE adapter | instrument_filter=[] → 0 行（非全市场） | eager/lazy/long | FIXED | `list(x) if x else None` 把 `[]` 折叠成 None | None 保持 None、`[]` 保持 `[]` | FE integration | FIXED |
+| FE-2 | PyArrow | 真 `engine="pyarrow"` 三引擎 parity | duckdb/polars/pyarrow | FIXED | `_read_pyarrow` 手写 bound/filter；`pyarrow_engine_read` 硬编码 IPC 连 parquet 都读不了；pyarrow 不做 string→time cast | 共用 `compile_predicate_arrow`（expand_end_bound + 空集恒假 + datetime bound）；`pa_ds.dataset` 自动检测格式 | round11 | FIXED |
+| FE-3 | FE adapter | read_mode 贯穿到 DA mode= | eager/lazy/scan | FIXED | `store.read` 未传 mode → FE 声明 pit、DA 落 mode=auto 分层漂移 | 全部入口传 `mode=self.read_mode` | FE integration | FIXED |
+| FE-4 | FE adapter | semantic_filters 真过滤 | 物理 WHERE | FIXED | filters 塞进 `params`（StaticDataset 拒绝多余 params → 只过门禁不过滤） | `filters=self.semantic_filters` 落到 SQL；conflict 检测无条件 | FE integration | FIXED |
+| FE-5 | scale | A股 Return eager 无二次 scale / 且真归一化 | eager/lazy | FIXED | ①catalog eager 未 `normalized.add` → COS fallback 二次乘 return_scale；②更隐蔽：`normalize_units=True` 在 auto→stream/lazy result 静默失效 → eager 返回 raw BP | ①catalog 覆盖字段禁入 COS fallback；②ReadHandle lazy/stream 物化终点补 normalize 钩子 | FE integration + round11 | FIXED |
+| FE-6 | governed terminal | polars-long collect 前 revalidation | 真实A股 | FIXED | 裸 `scan_polars()` LazyFrame 绕过 ScanHandle revalidate/budget/audit | `execute_polars_long_plan` 终端 collect 前 `revalidate_for_long_collect`（production fail-closed）+ budget | FE integration | FIXED |
+| FE-7 | PIT | cleaned fundamentals PIT 禁用 | production | FIXED | `fundamentals_*`/`financials_ratios` period_end 无知识时钟，asof 前视 | `_NO_KNOWLEDGE_TIME_FUNDAMENTALS` deny-list + PIT gate 拒绝 | FE integration | FIXED |
+| FE-8 | PIT | Four-layer gate UNKNOWN fail-closed | production | FIXED | contract/TableSpec None→True（「不知道」=「安全」） | `_dataset_pit_allowed`/`_table_pit_allowed` 三态；UNKNOWN production 拒绝、research 告警降级 | FE integration | FIXED |
+| FE-9 | DataRequest | 静态 universe 空集 → 0 行 | duckdb | FIXED | `sorted(members) if members else None` → 空成分=全市场 | 返回 `[]`（空股票池） | round11 | FIXED |
+| FE-10 | read_factors | date-only end 含最后一天 | duckdb | FIXED | `t_col <= ?` 丢 timestamp 最后一天白天 | 复用 `expand_end_bound` + ISO 字符串绑定 | round11 | FIXED |
+| FE-11 | FactorCatalog | FE/DA catalog 统一 | — | 收口 | 双 catalog 语义未全对齐 | 列为 integration closure（本轮无 correctness 复现），factor lake 元数据 universe/frequency/snapshot roundtrip 已测 | round11 | INTEGRATION_CLOSURE |
+| FE-12 | metadata | universe/frequency/snapshot 贯穿 | factor lake | PASS | — | factor meta `_factor_meta.json` → catalog → 读结果 snapshot 列贯穿 | round11 | FIXED |
+| FE-13 | write | production 禁 direct-local factor lake 写 | production | FIXED | `LocalParquetWriteTarget` 直写绕过 staging→publish 原子发布 | production 拒绝 direct-local，强制 staging + `publish_factor_lake` | materialize tests | FIXED |
+
+**本批验收**：三引擎真实 parity（`engine=duckdb/polars/pyarrow`，date-only end /
+datetime end / 空股票池 / 单标的 4 组全等）；A股真实 eager==lazy==raw×1e-4；
+`engine='auto'+normalize_units=True` 归一化与显式 duckdb 一致；read_mode/semantic_filters
+经 spy 验证到达 `mode=`/`filters=`；PIT UNKNOWN production 构造即拒；polars-long
+collect 前源替换 production reject；DataRequest 静态空 universe 0 行；read_factors
+date-only end 含最后一天。
+
 **真实数据验收**（A股 `ashare_stock_daily` 1815 文件 / 美股）：
 - 三后端（DuckDB/Arrow/Polars）差分一致（88 行全等）。
 - PIT no-lookahead property：04-20 见修订前 val=100、06-01 见修订后 95、Q2 不泄漏。

@@ -294,6 +294,131 @@ def compile_predicate(
     return CompiledPredicate(where_sql=where_sql, params=params)
 
 
+def _arrow_bound_value(value: Any) -> Any:
+    """pyarrow 需要**类型化** bound：str → python datetime。
+
+    DuckDB 会对 VARCHAR 字面量隐式 cast 到 date/timestamp；pyarrow 的 dataset
+    expression 不会（`timestamp[us] >= string` 直接
+    ``ArrowNotImplementedError``）。转成 ``datetime.datetime`` 后 date32 与
+    timestamp 列的比较 kernel 都能接受。
+    """
+    if isinstance(value, str):
+        try:
+            return pd.Timestamp(value).to_pydatetime()
+        except (ValueError, TypeError):
+            return value
+    to_py = getattr(value, "to_pydatetime", None)
+    if callable(to_py):  # pandas.Timestamp / np.datetime64 兼容
+        return to_py()
+    return value
+
+
+def compile_predicate_arrow(
+    predicate: Predicate,
+    *,
+    time_column: str,
+    instrument_column: str,
+    pc: Any = None,
+):
+    """把结构化谓词编译成 pyarrow.compute 表达式（真 PyArrow backend parity）。
+
+    与 ``compile_predicate``（DuckDB SQL）共用**同一份**语义，三 backend 结果必须
+    一致：
+
+    * ``time_range`` 的 end 走 ``expand_end_bound``——timestamp 列上 date-only
+      end 变成 ``< next_day``（完整一天），不再 ``<= end 00:00`` 丢最后一天白天；
+    * ``instrument_filter=[]`` → 假表达式（空股票池 → 0 行），**绝不**等于全市场；
+    * ``hive_filters`` 空集同理 → 假表达式。
+
+    返回 pyarrow 表达式，或 ``None``（无任何谓词）。``pc`` 不传时惰性 import。
+    """
+    if predicate.is_empty():
+        return None
+    if pc is None:
+        import pyarrow.compute as _pc
+
+        pc = _pc
+
+    import pyarrow.dataset as pa_ds
+
+    def _false_expr() -> Any:
+        # 空集合恒假谓词：``col != col`` → 对每行都 false（null 行被 scanner 按
+        # keep-null 语义丢弃）→ 0 行，且类型无关（``isin([])`` 在 string 列会报
+        # "values set: null"）。pyarrow 没有列无关的常量 Expression（scalar 比较
+        # 返回 BooleanScalar 不是 Expression，scanner 拒绝）。空股票池/空 hive
+        # filter 在 DuckDB 是 ``1=0``，这里等价为恒假表达式。
+        col = instrument_column or time_column
+        if not col:
+            raise ValidationError(
+                "空集合过滤（instrument_filter=[] / 空 hive filter）需要数据集声明 "
+                "instrument_column/time_column 之一来构造恒假谓词"
+            )
+        return pc.not_equal(pc.field(col), pc.field(col))
+
+    exprs: list[Any] = []
+
+    if predicate.time_range is not None:
+        if not time_column:
+            raise ValidationError(
+                "该数据集未声明 time_column，无法应用 time_range 过滤"
+            )
+        start, end = predicate.time_range
+        if start is not None:
+            exprs.append(
+                pa_ds.field(time_column) >= _arrow_bound_value(start)
+            )
+        if end is not None:
+            end_value, hi_op = expand_end_bound(
+                end, time_column_is_timestamp=predicate.time_column_is_timestamp
+            )
+            end_value = _arrow_bound_value(end_value)
+            if hi_op == "<":
+                exprs.append(pa_ds.field(time_column) < end_value)
+            else:
+                exprs.append(pa_ds.field(time_column) <= end_value)
+
+    # #P0-2 空股票池（[]）→ 假表达式，绝不能等价于全市场。
+    if predicate.instrument_filter is not None:
+        if len(predicate.instrument_filter) == 0:
+            return _false_expr()
+        if not instrument_column:
+            raise ValidationError(
+                "该数据集未声明 instrument_column，无法应用 instrument_filter 过滤"
+            )
+        exprs.append(
+            pa_ds.field(instrument_column).isin(list(predicate.instrument_filter))
+        )
+
+    if predicate.hive_filters:
+        for col_name in sorted(predicate.hive_filters.keys()):
+            values = predicate.hive_filters[col_name]
+            if values is None:
+                continue
+            values = list(values)
+            # #P0-3 空 hive filter → 假表达式（不是跳过 = 全量扫描）。
+            if len(values) == 0:
+                return _false_expr()
+            exprs.append(pa_ds.field(col_name).isin(values))
+
+    if predicate.filters is not None:
+        from data_access.read.predicate_ast import compile_filter_arrow
+
+        expr = compile_filter_arrow(predicate.filters, pc=pc)
+        if expr is not None:
+            exprs.append(expr)
+
+    if predicate.extra:
+        raise ValidationError(
+            "predicate.extra 未启用；请使用 filters= 通用过滤表达式"
+        )
+    if not exprs:
+        return None
+    combined = exprs[0]
+    for e in exprs[1:]:
+        combined = combined & e
+    return combined
+
+
 def _quote_ident(name: str) -> str:
     """DuckDB 标识符引用：用双引号包起来，内部双引号转义。
 

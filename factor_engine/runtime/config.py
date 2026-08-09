@@ -38,6 +38,11 @@ class RunConfig:
     mode: str = "research"
     auto_warmup: bool = False
     trim_warmup: bool = True
+    # R10-P0-025: ``market`` is the MarketID (ashare/us); ``calendar`` is the
+    # trading-calendar identity (SSE/SZSE/NYSE/NASDAQ).  They are resolved
+    # separately (``runtime.config_runtime._resolve_market``) and never merged
+    # into one variable.
+    market: str | None = None
     calendar: str | None = None
 
 @dataclass(frozen=True)
@@ -169,6 +174,6 @@ def load_config(path: str|Path, *, profile: str|None=None) -> FactorEngineConfig
             incremental=IncrementalConfig(since=inc.get("since"),end_date=inc.get("end_date"),lookback_extra=int(inc.get("lookback_extra",5)),recompute_tail_bars=inc.get("recompute_tail_bars")) if isinstance(inc,dict) else None,
             clickhouse_table=mp.get("clickhouse_table"),clickhouse_host=mp.get("clickhouse_host"),clickhouse_port=mp.get("clickhouse_port"),clickhouse_database=mp.get("clickhouse_database"),clickhouse_username=mp.get("clickhouse_username"),clickhouse_password=mp.get("clickhouse_password"),clickhouse_secure=mp.get("clickhouse_secure"),staging_dataset=str(mp.get("staging_dataset","factor_lake_staging")),storage_format=str(mp.get("storage_format","long")),partition_columns=_parse_partition_columns(mp.get("partition_columns")))
     return FactorEngineConfig(factor=factor_config,data_source=data_source_config,backend=backend_config,engine=engine_config,materialization=materialization_config,
-        run=RunConfig(mode=str(rp.get("mode","research")),auto_warmup=bool(rp.get("auto_warmup",False)),trim_warmup=bool(rp.get("trim_warmup",True)),calendar=rp.get("calendar")),
+        run=RunConfig(mode=str(rp.get("mode","research")),auto_warmup=bool(rp.get("auto_warmup",False)),trim_warmup=bool(rp.get("trim_warmup",True)),market=rp.get("market"),calendar=rp.get("calendar")),
         dq=DQConfig(profile=dqp.get("profile"),strict=bool(dqp.get("strict",False)),input_strict=bool(dqp.get("input_strict",True))),
         pit=PITConfig(enforce=bool(pp.get("enforce",False)),forbid_forward_fill=bool(pp.get("forbid_forward_fill",False))),pipeline=PipelineConfig(batched_engine=bool(pipe.get("batched_engine",False))))

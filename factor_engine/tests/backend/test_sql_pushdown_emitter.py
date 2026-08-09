@@ -69,9 +69,9 @@ def test_rank_ts_mean_sql():
 
 
 def test_macd_not_sql_capable():
-    # MACD resolves to the SQL-capable MACD_line lowering added for DuckDB.
+    # EWMA/Wilder 平滑族（MACD 解析到 MACD_line）已在 SQL 回退清单，走 polars。
     plan = PlanNode(op="MACD", inputs=[_col("close")], attrs={"window": 12})
-    assert plan_is_sql_capable(plan)
+    assert not plan_is_sql_capable(plan)
 
 
 def test_ts_rank_sql():
@@ -527,7 +527,8 @@ def test_is_nan_sql():
     )
     assert compiled is not None
     assert "isnan(_v)" in compiled.query
-    assert "IS NULL THEN 0.0" in compiled.query
+    # data 层把 NaN 清洗成 NULL，is_nan(NULL)=1（is_nan_sql 语义，见 logical_semantics）。
+    assert "IS NULL THEN 1.0" in compiled.query
 
 
 def test_is_null_sql():

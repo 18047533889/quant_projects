@@ -11,13 +11,14 @@ from typing import Any
 import numpy as np
 import polars as pl
 
+from cleaned_operators.base import ParamSpec
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from cleaned_operators.common._polars_bridge import align_cols, numeric_cols
 
 _CANONICALS: list[str] = []
 
 
-def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio") -> OperatorMetadata:
+def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio", param_specs: dict | None = None) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="valuation",
@@ -25,10 +26,11 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "ratio"
         param_names=params,
         return_type="series",
         tags=["valuation", "polars", "typed_v2", f"signature:{','.join(params)}->series", f"unit:{unit}"],
+        param_specs=dict(param_specs or {}),
     )
 
 
-def _register(name: str, description: str, params: list[str], fn, *, unit: str = "ratio"):
+def _register(name: str, description: str, params: list[str], fn, *, unit: str = "ratio", param_specs: dict | None = None):
     @register_operator(
         name=name,
         category="valuation",
@@ -37,7 +39,7 @@ def _register(name: str, description: str, params: list[str], fn, *, unit: str =
         source="valuation.polars_ops_v2",
     )
     class _ValuationPolars(SeriesOperator):
-        metadata = _meta(name, description, params, unit=unit)
+        metadata = _meta(name, description, params, unit=unit, param_specs=param_specs)
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)
@@ -145,9 +147,10 @@ def _growth_mismatch(ey, g, scale=1.0):
 
 _register(
     "valuation_growth_mismatch", "盈利收益率 - 利润增长（输入须为小数比率，字段层 /100；scale 已从搜索面移除，仅向后兼容 1.0）。",
-    ["earnings_yield", "profit_growth"],
+    ["earnings_yield", "profit_growth", "scale"],
     lambda ey, g, scale=1.0: _growth_mismatch(ey, g, scale),
     unit="level",
+    param_specs={"scale": ParamSpec(dtype=float, default=1.0, searchable=False, min=1e-6)},
 )
 _register(
     "capital_change_magnitude", "TotalCapital / 上期 - 1。", ["total_capital"],

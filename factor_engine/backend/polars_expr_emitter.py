@@ -3035,14 +3035,32 @@ def execute_polars_long_plan(
     compiled = compile_polars_long_lazy(
         plan, ctx, base_lf=base_lf, lazy_cache_key=lazy_cache_key
     )
-    frame = (
-        compiled.frame.sort([compiled.ts_col, compiled.inst_col])
-        .select(
-            pl.col(compiled.ts_col).alias(ctx.timestamp_col),
-            pl.col(compiled.inst_col).alias(ctx.instrument_col),
-            pl.col(compiled.value_col).alias("value"),
-        )
-        .collect()
+    lf = compiled.frame.sort([compiled.ts_col, compiled.inst_col]).select(
+        pl.col(compiled.ts_col).alias(ctx.timestamp_col),
+        pl.col(compiled.inst_col).alias(ctx.instrument_col),
+        pl.col(compiled.value_col).alias("value"),
+    )
+    # #收官轮 P0：polars-long 快路径的**受控 collect 终端**——不再裸 ``.collect()``
+    # 绕过 DataAccess 的 governed terminal。collect 前对数据源做快照 revalidation
+    # （production fail-closed：plan→collect 之间源数据被替换 = 执行内容 ≠ 计划
+    # 快照），collect 后强制 QueryBudget（deadline/rows）。
+    ds = getattr(ctx, "data_source", None)
+    revalidate = getattr(ds, "revalidate_for_long_collect", None)
+    if callable(revalidate):
+        revalidate()
+    from data_access.read.query_budget import (
+        enforce_arrow_budget,
+        resolve_query_budget,
+    )
+    import time as _t
+
+    _budget = resolve_query_budget(None)
+    _start = _t.perf_counter()
+    frame = lf.collect()
+    enforce_arrow_budget(
+        _budget,
+        frame.to_arrow(),
+        elapsed_ms=(_t.perf_counter() - _start) * 1000,
     )
     return polars_long_to_multiindex_series(
         frame,

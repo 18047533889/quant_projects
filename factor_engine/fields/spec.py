@@ -48,12 +48,17 @@ class FieldSpec:
     source_unit: str | None = None
     canonical_unit: str | None = None
     scale_to_canonical: float | None = None
-    strict_pit_allowed: bool = True
+    # R10-P0-014: the safe default is UNKNOWN (None), not "allowed".  A field
+    # whose PIT / mining eligibility was never declared must NOT silently be
+    # PIT-safe / mineable as hundreds of fields are added; production gates
+    # treat ``None`` as fail-closed.  The catalog helpers (``_f`` / ``_table``)
+    # still pass their explicit True/False, so catalog semantics are unchanged.
+    strict_pit_allowed: bool | None = None
     null_policy: str = "preserve"
     required_filters: tuple[str, ...] = ()
     applicability: tuple[str, ...] = ()
     allowed_operator_families: tuple[str, ...] = ()
-    mining_allowed: bool = True
+    mining_allowed: bool | None = None
     # Round-7 WS-C (#269-#273): the *declared* typed-IR semantic kind.  When set,
     # it is authoritative — callers MUST NOT guess from the field name (review
     # #269).  ``None`` means "not declared"; the mapping helper
@@ -108,6 +113,11 @@ class FieldSpec:
         if self.role in {
             "time", "instrument", "label", "identifier", "group_key",
             "knowledge_time", "effective_time", "period_id", "ingestion_time",
+            # R10-P0-015: a STATUS role is a categorical market-state descriptor
+            # (listing_status / ST_status / trade_status).  It is a condition /
+            # mask / group / state-transition input, never a mined numeric
+            # feature — ``ts_mean(status)`` / ``rank(status)`` are meaningless.
+            "status",
         }:
             object.__setattr__(self, "mining_allowed", False)
 
@@ -160,7 +170,9 @@ class TableSpec:
     revision_order: tuple[str, ...] = ()
     current_snapshot_only: bool = False
     cardinality: str = "many_to_one"
-    strict_pit_allowed: bool = True
+    # R10-P0-014: UNKNOWN (None) by default — production PIT gates fail closed
+    # unless the table explicitly declares PIT eligibility.
+    strict_pit_allowed: bool | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict, compare=False, hash=False)
 
     def __post_init__(self) -> None:

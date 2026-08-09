@@ -328,8 +328,21 @@ def build_factor_union_sql(
             conds.append(f"{t_col} >= ?")
             params.append(start)
         if end is not None:
-            conds.append(f"{t_col} <= ?")
-            params.append(end)
+            # #收官轮 parity：factor lake 的 datetime 是 timestamp 列——date-only
+            # end（如 "2024-01-10"）必须 ``< next_day`` 包含完整一天，否则最后
+            # 一天的白天行被 ``<= 00:00`` 丢掉。与 DuckDB/Polars 主读链同一语义。
+            # expand 后的值转 ISO 字符串再绑定：timestamp 列由 DuckDB 隐式 cast，
+            # VARCHAR 列（测试 fixture）按 ISO 字典序比较也正确——避免 Timestamp
+            # 参数与 VARCHAR 列比较的类型错误。
+            from data_access.read.predicate import expand_end_bound
+
+            end_value, hi_op = expand_end_bound(
+                end, time_column_is_timestamp=True
+            )
+            if hasattr(end_value, "isoformat"):
+                end_value = end_value.isoformat()
+            conds.append(f"{t_col} {hi_op} ?")
+            params.append(end_value)
         if conds:
             sql = f"SELECT * FROM ({sql}) AS __factors WHERE {' AND '.join(conds)}"
     if limit is not None:

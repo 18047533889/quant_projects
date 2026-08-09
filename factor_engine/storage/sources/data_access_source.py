@@ -363,6 +363,20 @@ def _catalog_resolution_error_kind(exc: Exception) -> type[DataAccessColumnPrefl
     return CatalogResolutionError
 
 
+#: #收官轮 P0：无知识时钟的「cleaned」财务数据集。``fundamentals_*`` 的
+#: time_column=period_end、``financials_ratios`` 的 date 语义未证明是 knowledge/
+#: availability 日期——asof 拼接有真实前视风险（Q1 period_end=03-31 实际
+#: filing=05-05，04-01 的模型就「看到」了 Q1 财报）。production PIT 禁止；正确
+#: 源是 us_stock_balance/income/cashflow（E2，filing_date 为 availability_column，
+#: period_end 为 period_column）。
+_NO_KNOWLEDGE_TIME_FUNDAMENTALS = frozenset({
+    "fundamentals_balance_sheet",
+    "fundamentals_income_statement",
+    "fundamentals_cash_flow_statement",
+    "financials_ratios",
+})
+
+
 class DataAccessSource(DataSource):
     """FactorEngine DataAccess source with snapshot-bound caches and preflight."""
 
@@ -398,14 +412,23 @@ class DataAccessSource(DataSource):
         # stored on ``self.run_mode`` / ``self.production`` so wrapper sources
         # that build child ``DataAccessSource`` instances can propagate it.
         self.run_mode = str(run_mode).lower() if run_mode else None
-        if strict_unknown_fields is not None:
-            production = bool(strict_unknown_fields)
-        elif production is None and self.run_mode is not None:
+        if production is None and self.run_mode is not None:
             from runtime.production_policy import is_production_mode
 
             production = bool(is_production_mode(self.run_mode))
         self.production = bool(production)
-        self.strict_unknown_fields = self.production
+        # R10 #3: production is a FLOOR.  ``strict_unknown_fields`` remains the
+        # most direct gate and an explicit True may make a research run stricter,
+        # but an explicit ``strict_unknown_fields=False`` must NEVER downgrade a
+        # production run back to fail-open.  (The old ``production =
+        # bool(strict_unknown_fields)`` branch let the caller switch production
+        # semantics off by passing False explicitly.)
+        if self.production:
+            self.strict_unknown_fields = True
+        elif strict_unknown_fields is not None:
+            self.strict_unknown_fields = bool(strict_unknown_fields)
+        else:
+            self.strict_unknown_fields = False
         # Round-7 WS-E #279/#280: opt-in production hard gates for mining/backfill
         # field contracts.  Default OFF so legitimate reads of structural columns
         # (e.g. a one_to_many weight that a factor aggregates before mining) keep
@@ -425,7 +448,12 @@ class DataAccessSource(DataSource):
             self.mining_coverage_threshold = None
         self.start_date = start_date
         self.end_date = end_date
-        self.instrument_filter = list(instrument_filter) if instrument_filter else None
+        # #收官轮 P0：``[]`` 是**空股票池**（0 行），绝不能折叠成 ``None``——
+        # DataAccess 本体已经修过 ``None != []``（[]→WHERE FALSE），这里不能再
+        # 用 ``if instrument_filter else None`` 把它变回全市场。
+        self.instrument_filter = (
+            None if instrument_filter is None else list(instrument_filter)
+        )
         self.normalize_timestamp = normalize_timestamp
         self.timestamp_unit = timestamp_unit
         self.params = dict(params or {})
@@ -467,7 +495,14 @@ class DataAccessSource(DataSource):
         self._closed = False
 
     def _validate_semantic_contract(self) -> None:
-        """Apply COS panel/event and required-filter policy at construction."""
+        """Apply COS panel/event and required-filter policy at construction.
+
+        ``semantic_filters``（美股财务 timeframe=quarterly、指数 IndexSymbol 等）
+        是**行级过滤**——这里只做 contract 校验，真正的过滤由 read/scan 以
+        ``filters=self.semantic_filters`` 传给 DataAccess，落到物理 WHERE。绝不
+        塞进 ``params``（那是 ParametricDataset 路径参数）：StaticDataset 会把
+        多余的 params 当调用方错误拒绝，导致 filter「过了门禁却从不真正过滤」。
+        """
         try:
             _ensure_data_access_importable()
             from data_access.cos_contract import (
@@ -479,28 +514,45 @@ class DataAccessSource(DataSource):
         except ImportError:
             return
         contract = get_cos_contract(self.dataset)
-        if contract is None:
-            return
-        if self.read_mode == "panel":
-            validate_panel_request(
-                self.dataset,
-                semantic_filters=self.semantic_filters,
-            )
-        elif self.read_mode in {"event", "pit"}:
-            resolve_event_clock(
-                self.dataset,
-                allow_effective_time=self.read_mode == "event",
-            )
-            validate_event_filters(contract, self.semantic_filters)
-        else:
-            raise ValueError("read_mode must be panel, event, or pit")
+        # semantic_filters 是行级过滤，不塞进 params（路径参数）。冲突检测无条件
+        # 运行——params 里同名但不同值 = 调用方自相矛盾（不能因为无契约就跳过）。
         for name, value in self.semantic_filters.items():
             existing = self.params.get(name)
             if existing is not None and existing != value:
                 raise ValueError(
                     f"conflicting semantic filter {name}: params={existing!r} filter={value!r}"
                 )
-            self.params[name] = value
+        if self.read_mode in {"event", "pit"}:
+            if contract is None:
+                # 收官轮 P0：PIT/事件读取必须有 COS 契约证明公告/可知时钟——
+                # 「无法证明」≠「安全」。production fail-closed；research 告警放行。
+                if self.strict_unknown_fields:
+                    raise FourLayerPITError(
+                        f"dataset={self.dataset!r} 没有 COS 契约，无法证明 PIT/事件"
+                        "知识时钟（filing_date/knowledge_time/availability_column）；"
+                        "production 拒绝 PIT 读取。"
+                    )
+                logger.warning(
+                    "dataset=%s 无 COS 契约，read_mode=%s 的知识时钟无法证明"
+                    "（research 放行）",
+                    self.dataset,
+                    self.read_mode,
+                )
+                return
+            resolve_event_clock(
+                self.dataset,
+                allow_effective_time=self.read_mode == "event",
+            )
+            validate_event_filters(contract, self.semantic_filters)
+        elif self.read_mode == "panel":
+            if contract is None:
+                return
+            validate_panel_request(
+                self.dataset,
+                semantic_filters=self.semantic_filters,
+            )
+        else:
+            raise ValueError("read_mode must be panel, event, or pit")
 
     @property
     def data_snapshot_id(self) -> str | None:
@@ -817,14 +869,19 @@ class DataAccessSource(DataSource):
         dataset_pit_allowed ∧ operator_pit_allowed``.
 
         * ``field_pit_allowed`` — the field's ``strict_pit_allowed`` contract.
-        * ``table_pit_allowed`` — the owning table's ``strict_pit_allowed``.
+        * ``table_pit_allowed`` — the owning table's ``strict_pit_allowed``
+          (tri-state: None = UNKNOWN, no TableSpec).
         * ``dataset_pit_allowed`` — the DataAccess COS contract's ``pit_policy``
-          is strict (or the dataset supports PIT reads).
+          is strict (or the dataset supports PIT reads); tri-state, None =
+          UNKNOWN (no COS contract / no knowledge-time cleaned fundamental).
         * ``operator_pit_allowed`` — caller-supplied operator-level flag.
+
+        #收官轮 P0：UNKNOWN（无法证明）≠ 安全。``strict_unknown_fields``
+        (production) 下任何 UNKNOWN 层直接拒绝；research 告警后降级 True 继续。
 
         Returns the (resolved) plans so callers can chain.  Raises
         :class:`FourLayerPITError` on the first field whose combined eligibility
-        is false.
+        is false (including production-UNKNOWN).
         """
         if names is not None:
             names_list = list(names)
@@ -840,10 +897,40 @@ class DataAccessSource(DataSource):
                 continue
             field_pit_allowed = bool(getattr(plan, "strict_pit_allowed", True))
             table_pit_allowed = self._table_pit_allowed(plan)
+            # #收官轮 P0：table/dataset 层引入三态（True/False/None=UNKNOWN）。
+            # UNKNOWN（无 COS 契约 / 无 TableSpec / 异常 / 已知无知识时钟的 cleaned
+            # 财务源）在 production 下**视为拒绝**——「我不知道」绝不是「我证明
+            # 安全了」；research 告警后降级为 True 继续。
+            unknown_layers: list[str] = []
+            if table_pit_allowed is None:
+                unknown_layers.append("table_pit_allowed")
+            if dataset_pit_allowed is None:
+                unknown_layers.append("dataset_pit_allowed")
+            if unknown_layers:
+                if self.strict_unknown_fields:
+                    raise FourLayerPITError(
+                        f"field {name!r} PIT eligibility cannot be proven at "
+                        f"layer(s): {', '.join(unknown_layers)} — no COS/TableSpec "
+                        "contract proving PIT-safe. production fail-closed "
+                        "(UNKNOWN == reject)."
+                    )
+                logger.warning(
+                    "field %r PIT eligibility UNKNOWN at layer(s) %s dataset=%s "
+                    "(research downgrade to allowed)",
+                    name,
+                    ", ".join(unknown_layers),
+                    self.dataset,
+                )
+                # research 降级：UNKNOWN → True（无法证明 ≠ 拒绝，告警已发出；
+                # 不降级的话 bool(None)=False 会让下方 conjunction 误判失败）。
+                if table_pit_allowed is None:
+                    table_pit_allowed = True
+                if dataset_pit_allowed is None:
+                    dataset_pit_allowed = True
             combined, layers = four_layer_pit_allowed(
                 field_pit_allowed=field_pit_allowed,
-                table_pit_allowed=table_pit_allowed,
-                dataset_pit_allowed=dataset_pit_allowed,
+                table_pit_allowed=bool(table_pit_allowed),
+                dataset_pit_allowed=bool(dataset_pit_allowed),
                 operator_pit_allowed=bool(operator_pit_allowed),
             )
             if not combined:
@@ -854,25 +941,36 @@ class DataAccessSource(DataSource):
                 )
         return plans
 
-    def _dataset_pit_allowed(self) -> bool:
-        """Dataset-layer PIT eligibility from the DataAccess COS contract.
+    def _dataset_pit_allowed(self) -> bool | None:
+        """Dataset-layer PIT eligibility（三态：True / False / None=UNKNOWN）。
 
-        * ``pit_policy == "strict"`` (event datasets with an availability column)
-          is explicitly PIT-capable.
-        * A dense / state-ready / minute panel with ``pit_policy`` in
-          ``not_applicable`` / ``unsupported`` is inherently PIT-safe because the
-          exact equi-read on (TradeDate, Symbol) is point-in-time.
-        * ``effective_time_only`` / sparse / forbidden panels are NOT PIT-eligible
-          (the value only exists at an effective date, not an announcement time).
+        * ``True``  — 已证明 PIT safe：``pit_policy=="strict"``（事件表带
+          availability_column），或 dense/state_ready/minute panel 的精确
+          equi-read（点即时）。
+        * ``False`` — 已证明不安全：``effective_time_only`` / sparse / forbidden。
+        * ``None``  — **无法证明**：无 COS 契约 / 异常 / 已知无知识时钟的 cleaned
+          财务源（``_NO_KNOWLEDGE_TIME_FUNDAMENTALS``）。
+
+        #收官轮 P0：旧代码在 contract 缺失/异常时返回 ``True``——「我不知道」
+        被当成「我证明安全了」，把 fundamentals_*（period_end 无 filing_date）的
+        前视风险掩盖掉。production 下 UNKNOWN 由 ``assert_four_layer_pit`` 拒绝。
         """
+        if self.dataset in _NO_KNOWLEDGE_TIME_FUNDAMENTALS:
+            logger.warning(
+                "dataset=%s time_column 无知识时钟（period_end/date 语义未证明是 "
+                "knowledge/availability 日期），不能证明 PIT safe；生产请改用 "
+                "us_stock_balance/income/cashflow（filing_date 为 availability）",
+                self.dataset,
+            )
+            return None
         try:
             from data_access.cos_contract import get_cos_contract
 
             contract = get_cos_contract(self.dataset)
         except Exception:
-            return True
+            return None
         if contract is None:
-            return True
+            return None
         pit = str(getattr(contract, "pit_policy", "not_applicable") or "")
         panel = str(getattr(contract, "panel_policy", "") or "")
         if pit == "strict":
@@ -883,19 +981,19 @@ class DataAccessSource(DataSource):
             return True
         return False
 
-    def _table_pit_allowed(self, plan: NormalizedFieldPlan) -> bool:
-        """Table-layer PIT eligibility from the FE FIELD_REGISTRY TableSpec."""
+    def _table_pit_allowed(self, plan: NormalizedFieldPlan) -> bool | None:
+        """Table-layer PIT eligibility（三态；None=无法证明，无 TableSpec/异常）。"""
         if not plan.physical_dataset:
-            return True
+            return None
         try:
             from fields import FIELD_REGISTRY
 
             table_spec = FIELD_REGISTRY.resolve_table(str(plan.physical_dataset))
             if table_spec is None:
-                return True
+                return None
             return bool(getattr(table_spec, "strict_pit_allowed", True))
         except Exception:
-            return True
+            return None
 
     def source_dependency_hash(self) -> str:
         """Deterministic hash over this source's field-plan contracts + snapshot.
@@ -1078,6 +1176,50 @@ class DataAccessSource(DataSource):
         self._snapshot_checked_at = now
         return self._data_snapshot_id
 
+    def revalidate_for_long_collect(self) -> None:
+        """#收官轮 P0：polars-long 受控 collect 前的快照 revalidation。
+
+        ``execute_polars_long_plan`` 在终端 collect 前调用（governed terminal）。
+        manifest token / snapshot_id 在「scan 构建 LF」与「collect 执行」之间变化
+        时，production fail-closed（执行内容 ≠ 计划快照）；research 清缓存后继续
+        （lineage 不撒谎：新读会拿到新快照）。
+        """
+        self._assert_open()
+        store = _get_store()
+        token = self._query_scoped_snapshot_token(store)
+        if token is not None:
+            if self._manifest_token is not None and token != self._manifest_token:
+                if self.strict_unknown_fields:
+                    raise DataAccessColumnPreflightError(
+                        f"dataset={self.dataset!r} 的 manifest 在扫描与 collect 之间"
+                        "变化；production fail-closed（polars-long 执行内容 ≠ 计划快照）。"
+                    )
+                logger.warning(
+                    "dataset=%s manifest 在 collect 前变化（research 清缓存继续）",
+                    self.dataset,
+                )
+                self.clear_cache(reset_snapshot=False)
+            self._manifest_token = token
+            return
+        # 无 manifest：回退 describe 快照 id（无法探测时不误伤——scan 边界已记录快照）
+        try:
+            snapshot = store.describe_dataset(
+                self.dataset,
+                params=dict(self.params),
+                instrument_filter=self.instrument_filter,
+            )
+        except Exception:
+            return
+        current = snapshot.snapshot_id
+        if self._data_snapshot_id and current != self._data_snapshot_id:
+            if self.strict_unknown_fields:
+                raise DataAccessColumnPreflightError(
+                    f"dataset={self.dataset!r} 的 snapshot 在扫描与 collect 之间"
+                    "变化；production fail-closed。"
+                )
+            self.clear_cache(reset_snapshot=False)
+        self._data_snapshot_id = current
+
     def clear_cache(self, *, reset_snapshot: bool = True) -> None:
         # Round-7 P0: the field-plan cache is versioned by the semantic catalog and
         # must be dropped too, otherwise a catalog change (scale/mapping) keeps
@@ -1195,6 +1337,9 @@ class DataAccessSource(DataSource):
                 timestamp_unit=unit,
                 params=dict(self.params),
                 bundle=self._lazy_bundle,
+                # #收官轮 P0：read_mode / semantic_filters 贯穿到 DataAccess scan。
+                mode=self.read_mode,
+                filters=self.semantic_filters or None,
             )
             if self._lazy_bundle is not None:
                 self._record_read_snapshot(self._lazy_bundle.snapshot_id)
@@ -1210,6 +1355,12 @@ class DataAccessSource(DataSource):
                 columns=all_columns,
                 time_range=self._time_range(),
                 instrument_filter=self.instrument_filter,
+                # #收官轮 P0：read_mode 真正贯穿到 DataAccess ``mode=``（FE 声明的
+                # panel/event/pit 语义不能让 DA 侧落成 mode="auto" 造成分层漂移）；
+                # semantic_filters 以 ``filters=`` 落到物理 WHERE（不再是「过了门禁
+                # 却没过滤」）。
+                mode=self.read_mode,
+                filters=self.semantic_filters or None,
                 normalize_units=True,
                 **self.params,
             )
@@ -1260,7 +1411,12 @@ class DataAccessSource(DataSource):
                     # unit normalization, so apply the catalog scale here.
                     if self._lazy_scan and plan.is_scale_applicable:
                         fetched[name] = fetched[name] * float(plan.scale)
-                        normalized.add(name)
+                    # #收官轮 P0：catalog 覆盖的字段一律进 ``normalized``。否则下方
+                    # COS compatibility fallback 会把 A股 Return 再乘一次
+                    # ``return_scale``，eager 路径变成 vendor BP × 0.0001(DA) ×
+                    # 0.0001(FE) = 10000× 二次缩放。catalog 已覆盖的字段完全禁止
+                    # 再进 COS scale fallback。
+                    normalized.add(name)
                     continue
                 if plan is not None and plan.source == "registry":
                     if name not in fetched or (
@@ -1355,6 +1511,9 @@ class DataAccessSource(DataSource):
             normalize_timestamp=normalize,
             timestamp_unit=unit,
             params=dict(self.params),
+            # #收官轮 P0：read_mode / semantic_filters 贯穿到 DataAccess scan。
+            mode=self.read_mode,
+            filters=self.semantic_filters or None,
         )
         self._record_read_snapshot(self._lazy_bundle.snapshot_id)
         fetched = self._lazy_bundle.materialize_columns(
@@ -1419,6 +1578,9 @@ class DataAccessSource(DataSource):
             instrument_filter=self.instrument_filter,
             params=dict(self.params),
             frequency=frequency,
+            # #收官轮 P0：read_mode / semantic_filters 贯穿到 DataAccess scan_polars。
+            mode=self.read_mode,
+            filters=self.semantic_filters or None,
         )
         # scale normalization reads from the same plan object (P0-11)
         plans = self._ensure_field_plans(columns)
@@ -1459,4 +1621,7 @@ class DataAccessSource(DataSource):
             time_range=self._time_range(),
             instrument_filter=self.instrument_filter,
             params=dict(self.params),
+            # #收官轮 P0：read_mode / semantic_filters 贯穿到 DataAccess scan。
+            mode=self.read_mode,
+            filters=self.semantic_filters or None,
         )

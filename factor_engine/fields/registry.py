@@ -4,8 +4,30 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from .spec import FIELD_CATALOG_SCHEMA_VERSION, FieldSpec, TableSpec
+
+
+# R10-P0-017: tri-state field resolution.  ``get(..., strict=False)`` used to
+# collapse "does not exist" and "ambiguous alias" into the same ``None`` — but
+# their production meaning is opposite: an UNKNOWN field may be allowed as a
+# raw column, an AMBIGUOUS alias must ALWAYS be rejected.  ``resolve_field``
+# returns one of these instead of a bare ``None``.
+@dataclass(frozen=True)
+class ResolvedField:
+    spec: FieldSpec
+
+
+@dataclass(frozen=True)
+class UnknownField:
+    name: str
+
+
+@dataclass(frozen=True)
+class AmbiguousField:
+    name: str
+    candidates: tuple[str, ...]
 
 
 class FieldRegistry:
@@ -25,11 +47,35 @@ class FieldRegistry:
     def _key(value: str) -> str:
         return str(value).strip().lower()
 
-    def register_table(self, spec: TableSpec, *, replace: bool = False) -> TableSpec:
+    def register_table(
+        self,
+        spec: TableSpec,
+        *,
+        replace: bool = False,
+        expected_old_identity: str | None = None,
+    ) -> TableSpec:
         self._validate_table(spec)
         key = self._key(spec.name)
         if key in self._tables and not replace:
             raise ValueError(f"table already registered: {spec.name}")
+        aliases = (spec.name, spec.dataset, *spec.aliases)
+        # R10-P0-016: ``replace=True`` must NOT silently take over an alias that
+        # belongs to a DIFFERENT table identity.  The caller has to name the
+        # expected old owner; otherwise the third-party alias is stolen and every
+        # existing reference silently repoints at the new table.
+        expected = self._key(expected_old_identity) if expected_old_identity else None
+        for alias in aliases:
+            alias_key = self._key(alias)
+            owner = self._table_aliases.get(alias_key)
+            if owner is not None and owner != key:
+                if not replace:
+                    raise ValueError(f"table alias already registered: {alias}")
+                if expected is None or expected != owner:
+                    raise ValueError(
+                        f"table alias {alias!r} belongs to table {owner!r}; "
+                        f"replace=True cannot take it over without "
+                        f"expected_old_identity={owner!r}"
+                    )
         # Round-7 WS-E #283: on replace, drop the aliases owned by the OLD table
         # identity so a renamed source/dataset cannot leave stale aliases pointing
         # at the new table.
@@ -39,12 +85,6 @@ class FieldRegistry:
                 alias_key = self._key(alias)
                 if self._table_aliases.get(alias_key) == key:
                     del self._table_aliases[alias_key]
-        aliases = (spec.name, spec.dataset, *spec.aliases)
-        for alias in aliases:
-            alias_key = self._key(alias)
-            owner = self._table_aliases.get(alias_key)
-            if owner is not None and owner != key and not replace:
-                raise ValueError(f"table alias already registered: {alias}")
         self._tables[key] = spec
         for alias in aliases:
             self._table_aliases[self._key(alias)] = key
@@ -61,11 +101,30 @@ class FieldRegistry:
             aliases.update({f"{spec.dataset}.{spec.name}", f"{spec.dataset}.{spec.source_name}"})
         return {str(item) for item in aliases if item}
 
-    def register(self, spec: FieldSpec, *, replace: bool = False) -> FieldSpec:
+    def register(
+        self,
+        spec: FieldSpec,
+        *,
+        replace: bool = False,
+        expected_old_identity: str | None = None,
+    ) -> FieldSpec:
         self._validate_field(spec)
         identity = self._identity(spec.table, spec.name)
         if identity in self._fields and not replace:
             raise ValueError(f"field already registered: {spec.table}.{spec.name}")
+        # R10-P0-016: a field-level replace must not steal an alias owned by a
+        # third-party field identity (mirrors the table-level rule).
+        if replace:
+            expected = self._key(expected_old_identity) if expected_old_identity else None
+            for alias in self._field_alias_set(spec):
+                owners = set(self._field_aliases.get(self._key(alias), set()))
+                third = {o for o in owners if o != identity}
+                if third and not (expected and expected in third):
+                    raise ValueError(
+                        f"field alias {alias!r} belongs to "
+                        f"{sorted(third)}; replace=True cannot take it over "
+                        f"without expected_old_identity={sorted(third)}"
+                    )
         # Round-7 WS-E #283: on replace, remove every alias owned by the OLD
         # identity (old source_name / aliases / dataset-qualified spellings)
         # before registering the new spec's aliases.  Shared aliases keep the
@@ -118,7 +177,8 @@ class FieldRegistry:
         key = self._table_aliases.get(self._key(name), self._key(name))
         return self._tables.get(key)
 
-    def get(self, name: str, *, table: str | None = None, strict: bool = False) -> FieldSpec | None:
+    def _resolve_candidates(self, name: str, *, table: str | None = None) -> set[str]:
+        """Candidate field identities matching ``name`` under ``table``."""
         candidates: set[str]
         if table is not None:
             table_spec = self.resolve_table(table)
@@ -137,17 +197,44 @@ class FieldRegistry:
                 direct = self._fields.get(self._identity(maybe_table, maybe_field))
                 if direct is not None:
                     candidates.add(self._identity(direct.table, direct.name))
+        return candidates
+
+    def resolve_field(
+        self,
+        name: str,
+        *,
+        table: str | None = None,
+    ) -> ResolvedField | UnknownField | AmbiguousField:
+        """Tri-state resolution (R10-P0-017).
+
+        Production callers distinguish the three outcomes instead of receiving a
+        bare ``None``: an UNKNOWN field may be accepted as a raw column when
+        explicitly allowed, an AMBIGUOUS alias is ALWAYS rejected (its identity
+        is unknowable without the table qualifier).
+        """
+        candidates = self._resolve_candidates(name, table=table)
         specs = {self._fields[item] for item in candidates if item in self._fields}
         if len(specs) == 1:
-            return next(iter(specs))
+            return ResolvedField(spec=next(iter(specs)))
         if not specs:
-            if strict:
+            return UnknownField(name=name)
+        return AmbiguousField(
+            name=name,
+            candidates=tuple(sorted(spec.qualified_name for spec in specs)),
+        )
+
+    def get(self, name: str, *, table: str | None = None, strict: bool = False) -> FieldSpec | None:
+        resolved = self.resolve_field(name, table=table)
+        if isinstance(resolved, ResolvedField):
+            return resolved.spec
+        if strict:
+            if isinstance(resolved, UnknownField):
                 qualifier = f" in table {table!r}" if table else ""
                 raise KeyError(f"unknown field {name!r}{qualifier}")
-            return None
-        names = ", ".join(sorted(spec.qualified_name for spec in specs))
-        if strict:
-            raise KeyError(f"ambiguous field {name!r}; candidates: {names}")
+            raise KeyError(
+                f"ambiguous field {name!r}; candidates: "
+                f"{', '.join(resolved.candidates)}"
+            )
         return None
 
     resolve = get
@@ -183,4 +270,9 @@ class FieldRegistry:
         return hashlib.sha256(payload).hexdigest()
 
 
-__all__ = ["FieldRegistry"]
+__all__ = [
+    "AmbiguousField",
+    "FieldRegistry",
+    "ResolvedField",
+    "UnknownField",
+]

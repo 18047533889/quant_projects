@@ -46,6 +46,15 @@ def _minimal_plan_raw(op: str) -> PlanNode:
         return PlanNode(op=op, inputs=[high, low, close], attrs={})
     if op.startswith("cdl_"):
         return PlanNode(op=op, inputs=[open_, high, low, close], attrs={})
+    if op in {"candle_body_zscore", "candle_body_percentile"}:
+        return PlanNode(op=op, inputs=[open_, close, literal(10.0)], attrs={"window": 10})
+    if op in {"candle_range_zscore", "candle_range_percentile"}:
+        return PlanNode(op=op, inputs=[high, low, literal(10.0)], attrs={"window": 10})
+    if op in {"candle_upper_shadow_zscore", "candle_lower_shadow_zscore"}:
+        cols = [open_, high, close] if op == "candle_upper_shadow_zscore" else [open_, low, close]
+        return PlanNode(op=op, inputs=cols + [literal(10.0)], attrs={"window": 10})
+    if op == "abs_return_volume_corr":
+        return PlanNode(op=op, inputs=[close, volume, literal(20.0)], attrs={"window": 20})
     if op == "ichimoku_tenkan":
         return PlanNode(op=op, inputs=[high, low, literal(9.0)], attrs={"tenkan_window": 9})
     if op == "ichimoku_kijun":

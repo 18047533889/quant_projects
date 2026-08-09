@@ -84,16 +84,34 @@ class LocalParquetWriteTarget:
         **params: Any,
     ) -> dict[str, Any]:
         """write_factor_frame。
-        
+
         参数:
             factor_id: 因子唯一标识
             frame: 长表 DataFrame
             upsert_on: 见函数签名（可选）
             partition_by: 见函数签名（可选）
-        
+
         返回:
             dict[str, Any]
+
+        #收官轮 P0：production 禁止 direct-local 因子湖直写——绕过 DataAccess
+        staging→publish 的原子发布/journal/快照 manifest，直写文件时崩溃/半写
+        无恢复。production 必须走 ``staging`` 写目标 + ``publish_factor_lake``
+        审批发布。research 保留（legacy 快速落盘路径）。
         """
+        try:
+            from runtime.production_policy import is_production_mode
+
+            if is_production_mode():
+                raise ValueError(
+                    f"factor_id={factor_id!r}: production 禁止 direct-local "
+                    "factor-lake write（绕过 DataAccess staging→publish 原子发布/"
+                    "snapshot manifest）。请用 staging 写目标 + publish_factor_lake。"
+                )
+        except ValueError:
+            raise
+        except Exception:
+            pass
         del upsert_on, params
         from storage.partition_policy import PartitionPolicy, attach_partition_columns, iter_partition_groups
 

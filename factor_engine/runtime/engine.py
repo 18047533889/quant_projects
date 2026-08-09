@@ -140,6 +140,42 @@ _CROSS_SECTIONAL_OPS = frozenset(
 )
 
 
+def _assert_production_plan_gates(
+    plan: Any,
+    analysis: Any,
+    *,
+    run_mode: str,
+    context: str,
+    pit_forbid_forward_fill: bool = False,
+) -> None:
+    """Re-run the production compile gates on an ALREADY-PROVIDED plan.
+
+    R10-P0-003: ``engine.run(factor, plan=..., analysis=...)`` skips
+    ``compile()``, and the PIT / production-operator / fast-path gates all live
+    in ``compile()``.  A plan compiled under a research policy — or under an
+    older registry/evidence — must not execute in production just because it
+    was handed in precompiled.  This helper applies exactly the gates
+    ``compile()`` applies, so a precompiled plan gets the same certification.
+    """
+    from runtime.pit_audit import assert_pit_safe
+    from runtime.production_policy import (
+        assert_no_unapproved_map_groups_in_production,
+        assert_no_stub_operators,
+        assert_production_fastpath_plan,
+        assert_production_plan_ops,
+    )
+
+    assert_production_plan_ops(plan, mode=run_mode, context=context)
+    assert_no_unapproved_map_groups_in_production(plan, mode=run_mode, context=context)
+    assert_production_fastpath_plan(plan, mode=run_mode, context=context)
+    assert_no_stub_operators(plan, mode=run_mode)
+    assert_pit_safe(
+        analysis.ir,
+        enforce=True,
+        forbid_forward_fill=pit_forbid_forward_fill,
+    )
+
+
 def _plan_has_cross_sectional_ops(plan: Any) -> bool:
     """递归检测逻辑计划是否含截面算子（rank/zscore/neutralize/group/CS/kNN）。
 
@@ -557,7 +593,23 @@ class FactorEngine:
             ``(engine, factor)`` 元组。
         """
         backend = build_backend(config.backend.type)
-        data_source = build_data_source(config.data_source)
+        # R10 #1: build the data sources under the engine's run-config context so
+        # a production run automatically constructs DataAccessSource with the hard
+        # gates ON (strict fields / mining / PIT), instead of relying on the YAML
+        # author to remember them per-source.  ``config.run.market/calendar`` are
+        # already resolved separately (R10-P0-025); research runs stay research.
+        from storage.factory import DataSourceBuildContext
+
+        build_context = DataSourceBuildContext(
+            run_mode=config.run.mode,
+            market=getattr(config.run, "market", None),
+            calendar_id=getattr(config.run, "calendar", None),
+            pit_enforce=bool(getattr(config.pit, "enforce", False)),
+            enforce_mining_gate=bool(
+                getattr(getattr(config, "dq", None), "strict", False)
+            ),
+        )
+        data_source = build_data_source(config.data_source, build_context=build_context)
         cache = cls._build_cache(config, data_source)
         factor = parse_factor(
             config.factor.expr,
@@ -1443,8 +1495,15 @@ class FactorEngine:
         *,
         shared_result_cache: dict[str, Any] | None = None,
         perf: PerfConfig | None = None,
+        cache_scope: str | None = None,
     ) -> ExecutionContext:
-        """构造单次执行上下文，注入缓存会话与 query budget。"""
+        """构造单次执行上下文，注入缓存会话与 query budget。
+
+        ``cache_scope`` (R10-P0-001): the execution cache namespace for THIS
+        run, built after compile (secondary SourceRef deps + execution scope).
+        When provided the plan cache is re-scoped so different secondary
+        dependencies / execution semantics never share cached subtrees.
+        """
         from cache.session import ExecutionCacheSession
         from storage.long_table_source import LongTableDataSource
 
@@ -1457,12 +1516,20 @@ class FactorEngine:
             evidence_version = compute_payload_hash((evidence or {}).get("provenance") or {})
         except (FileNotFoundError, ValueError, TypeError, OSError):
             evidence_version = ""
+        # R10-P0-001: a per-run execution cache scope re-scopes the plan cache
+        # so two factors with different secondary SourceRef dependencies /
+        # execution semantics never share cached subtrees.
+        plan_cache = self.cache
+        if cache_scope is not None and plan_cache is not None:
+            with_scope = getattr(plan_cache, "with_scope", None)
+            if callable(with_scope):
+                plan_cache = with_scope(cache_scope)
         base = ExecutionContext(
             data_source=self.data_source,
             run_mode=self.run_mode,
             registry_version=OperatorRegistry.version(),
             evidence_version=evidence_version,
-            cache=self.cache,
+            cache=plan_cache,
             shared_result_cache=shared_result_cache,
             shared_long_lazy_cache={},
             panel_cache={},
@@ -1489,7 +1556,7 @@ class FactorEngine:
             cse_budget_bytes = None
             panel_budget_bytes = None
         session = ExecutionCacheSession(
-            plan_cache=self.cache,
+            plan_cache=plan_cache,
             shared_result_cache=shared_result_cache,
             panel_cache={},
             cse_budget_bytes=cse_budget_bytes,
@@ -1663,6 +1730,18 @@ class FactorEngine:
                 pit_enforce=pit_enforce,
                 pit_forbid_forward_fill=pit_forbid_forward_fill,
             )
+        elif is_production_mode(self.run_mode):
+            # R10-P0-003: a PRE-COMPILED plan bypasses ``compile()`` — but the
+            # PIT / production-operator / fast-path gates all live there.  In
+            # production a research-compiled (or registry-stale) plan must be
+            # re-certified, never executed because it was handed in precompiled.
+            _assert_production_plan_gates(
+                plan,
+                analysis,
+                run_mode=self.run_mode,
+                context=f"run:{factor.name} (precompiled)",
+                pit_forbid_forward_fill=pit_forbid_forward_fill,
+            )
         # R9-P0-011: execution-contract gate —— 单因子执行路径与批跑同门，
         # scoped-universe 因子不得在全源上算截面。
         assert_execution_scope_contract(
@@ -1724,7 +1803,32 @@ class FactorEngine:
                 "因子 '%s' 跳过列 prefetch（fully_sql 或 prefers_native_scan）",
                 factor.name,
             )
-        ctx = engine_to_use._make_context()
+        # R10-P0-001: the execution cache namespace is built AFTER compile —
+        # the secondary SourceRef dependency manifest only exists once the plan
+        # is lowered.  Two factors sharing an anchor source but with different
+        # secondary deps / execution semantics get different cache scopes.
+        cache_scope = None
+        if engine_to_use.cache is not None:
+            try:
+                from planner.source_dependencies import source_dependency_hash
+                from storage.data_scope import (
+                    DataExecutionScope,
+                    compute_execution_cache_scope,
+                )
+
+                scope = _scope_from_factor(factor)
+                cache_scope = compute_execution_cache_scope(
+                    engine_to_use.data_source,
+                    execution=DataExecutionScope(
+                        frequency=scope.frequency,
+                        decision_time_policy=scope.decision_time_policy,
+                    ),
+                    source_dependencies=(source_dependency_hash(plan),),
+                )
+            except Exception:  # pragma: no cover - scope failure must not block
+                logger.debug("execution cache scope construction failed; using base scope", exc_info=True)
+                cache_scope = None
+        ctx = engine_to_use._make_context(cache_scope=cache_scope)
         from runtime.production_policy import record_production_fastpath_check
         from runtime.resource_telemetry import record_resource_telemetry
 
