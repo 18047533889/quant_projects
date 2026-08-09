@@ -28,6 +28,7 @@ every legacy ``_aligned()`` helper fail closed instead of silently reindexing.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
 import numpy as np
@@ -36,6 +37,37 @@ import pandas as pd
 
 class PanelAxisMismatch(ValueError):
     """Raised when two input panels do not share the same time/instrument axes."""
+
+
+@dataclass(frozen=True)
+class AlignmentPlan:
+    """Explicit justification for a non-strict alignment (R11 P1-11).
+
+    ``strict_axes=False`` (research only) is no longer a bare boolean escape
+    hatch — every reindex must carry a plan naming WHY it is safe: the join
+    direction, the time alignment (backward = last-observed / exact), the
+    instrument policy, the missing-value policy and an availability policy.
+    Production callers are forbidden from bypassing strict alignment entirely.
+    """
+
+    join: str = "left"                 # left / inner / asof
+    time_direction: str = "backward"   # backward / exact
+    instrument_policy: str = "exact"   # exact / subset
+    missing_policy: str = "nan"        # nan / error
+    availability_policy: str = "no_lookahead"
+    reason: str = ""
+
+    def __post_init__(self) -> None:
+        if self.join not in {"left", "inner", "asof"}:
+            raise ValueError(f"AlignmentPlan.join={self.join!r} is unknown")
+        if self.time_direction not in {"backward", "exact"}:
+            raise ValueError(f"AlignmentPlan.time_direction={self.time_direction!r} is unknown")
+        if self.instrument_policy not in {"exact", "subset"}:
+            raise ValueError(f"AlignmentPlan.instrument_policy={self.instrument_policy!r} is unknown")
+        if self.missing_policy not in {"nan", "error"}:
+            raise ValueError(f"AlignmentPlan.missing_policy={self.missing_policy!r} is unknown")
+        if not self.reason.strip():
+            raise ValueError("AlignmentPlan.reason is required (document WHY the reindex is safe)")
 
 
 def _describe(frame: Any) -> str:

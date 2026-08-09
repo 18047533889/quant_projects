@@ -285,17 +285,24 @@ class EventIntervalMarkCoupling(SeriesOperator):
     metadata = _metadata(
         "event_interval_mark_coupling",
         "事件间隔与事件强度相关 Corr(τ_j, m_j)。",
-        ["event", "mark", "window"],
+        ["event", "mark", "window", "mark_missing_policy"],
         unit="corr",
         cost=4,
     )
 
     def _calculate_series(
-        self, event: pd.DataFrame, mark: pd.DataFrame, window: int = 252, **_: Any
+        self,
+        event: pd.DataFrame,
+        mark: pd.DataFrame,
+        window: int = 252,
+        mark_missing_policy: str = "censor",
+        **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
         if w < 6:
             raise ValueError("event_interval_mark_coupling requires window >= 6")
+        if mark_missing_policy not in ("censor", "drop"):
+            raise ValueError("event_interval_mark_coupling mark_missing_policy must be 'censor' or 'drop'")
 
         evv = event.to_numpy(dtype=float)
         _validate_event_bool(evv, "event_interval_mark_coupling")
@@ -310,7 +317,7 @@ class EventIntervalMarkCoupling(SeriesOperator):
                 end_pos = int(np.searchsorted(all_idx, r + 1, side="left"))
                 in_idx = all_idx[start_pos:end_pos]
                 prev_idx = int(all_idx[start_pos - 1]) if start_pos > 0 else None
-                out[r, c] = _interval_mark_chunk(in_idx, prev_idx, mkv[:, c])
+                out[r, c] = _interval_mark_chunk(evv[:, c], in_idx, prev_idx, mkv[:, c], mark_missing_policy)
         return frame_like(event, out)
 
 

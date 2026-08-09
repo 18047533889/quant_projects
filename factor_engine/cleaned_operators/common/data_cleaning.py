@@ -310,19 +310,35 @@ class ExpandingSum(SeriesOperator):
 # canonical=ffill backend=pandas_numpy selected=ffill source=data_handling/missing_values.py
 @register_operator(name="ffill", category="data_handling", business_category="data_cleaning", canonical="ffill", source="factor_dsl_np")
 class FillForward(SeriesOperator):
-    """前向填充"""
+    """前向填充（受字段前向填充许可门控）"""
 
     metadata = OperatorMetadata(
         name="ffill",
         category="data_handling",
-        description="前向填充（用前值填充NaN）",
+        description="前向填充（用前值填充NaN）；forward_fill_allowed=False 的字段（returns/events/revisions）拒绝填充，max_ffill_gap 限制最大跨 bar 数",
         examples=["ffill(close)"],
-        param_names=["x"],
+        param_names=["x", "forward_fill_allowed", "max_ffill_gap"],
+        param_types={"forward_fill_allowed": bool, "max_ffill_gap": int},
         return_type="series",
-        tags=["data_handling", "missing", "forward"]
+        tags=["data_handling", "missing", "forward", "gated"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        forward_fill_allowed: bool = True,
+        max_ffill_gap: int = 0,
+        **kwargs,
+    ) -> pd.DataFrame:
+        # R11 #179: the forward-fill allowance is part of the operator contract,
+        # so a field provider can declare returns / events / revisions as
+        # non-ffillable.  ``forward_fill_allowed=False`` fails closed (missing
+        # stays missing) instead of manufacturing a stale value.
+        if not bool(forward_fill_allowed):
+            return x.copy()
+        gap = int(max_ffill_gap)
+        if gap > 0:
+            return x.ffill(limit=gap)
         return x.ffill()
 
 # aliases: FillForward, fillna_forward
