@@ -587,6 +587,487 @@ def _per_date_duplicates(
     return True
 
 
+# --------------------------------------------------------------------------- #
+# R10 #21: per-day metrics + regime-specific similarity
+# --------------------------------------------------------------------------- #
+def _state_labels(out: np.ndarray, *, scheme: str) -> np.ndarray:
+    """Discretise an output panel into state labels for CONDITION / EVENT kinds.
+
+    * ``boolean``     — ``(finite & > 0)`` active mask (0/1);
+    * ``sign``        — per-cell sign ``{-1, 0, 1}`` (signed event intensity);
+    * ``categorical`` — nearest-integer label (discrete / group state factors).
+    """
+    out = np.asarray(out, dtype=float)
+    if scheme == "boolean":
+        return (np.isfinite(out) & (out > 0)).astype(np.int8)
+    if scheme == "sign":
+        return np.where(np.isnan(out), 0, np.sign(out)).astype(np.int8)
+    if scheme == "categorical":
+        return np.where(np.isnan(out), 0, np.rint(out)).astype(np.int8)
+    raise ValueError(f"unknown state-label scheme: {scheme!r}")
+
+
+def _position_bucket(v: np.ndarray, k: int) -> np.ndarray:
+    """Map a 1-D value vector into ``k`` ordinal position buckets (0..k-1)."""
+    order = np.argsort(np.argsort(v, kind="stable"), kind="stable")
+    return (order * k // len(v)).astype(int)
+
+
+def _state_agreement_day(av: np.ndarray, bv: np.ndarray) -> float:
+    """Jaccard-style state-label agreement for one day (R10 #23).
+
+    The plain per-cell equality rate is dominated by the ubiquitous 0/0 cells
+    (an event factor fires on ~2% of cells), so two factors firing on entirely
+    different instruments would still report ~98% agreement.  Restricting to the
+    union of ACTIVE cells — and requiring equal labels there — scores disjoint
+    event sets 0 and identical sets 1.
+    """
+    active_a = av != 0
+    active_b = bv != 0
+    union = active_a | active_b
+    if not union.any():
+        return 1.0
+    inter = active_a & active_b
+    jac = float(inter.sum()) / float(union.sum())
+    if jac == 0.0:
+        return 0.0
+    agree = float((av[inter] == bv[inter]).mean())
+    return float(jac * agree)
+
+
+@dataclass(frozen=True)
+class PerDateMetrics:
+    """Per-day similarity of two factor outputs on a single regime.
+
+    * ``spearman``              — Spearman_t: rank correlation across
+                                  instruments on that date;
+    * ``top_decile_overlap``    — fraction of top-decile members shared;
+    * ``bottom_decile_overlap`` — fraction of bottom-decile members shared;
+    * ``position_overlap``      — fraction of instruments in the same position
+                                  decile bucket;
+    * ``state_agreement``       — Jaccard-style state-label agreement (only for
+                                  CONDITION / EVENT kinds).
+    """
+
+    spearman: float | None
+    top_decile_overlap: float
+    bottom_decile_overlap: float
+    position_overlap: float
+    state_agreement: float | None
+
+
+def per_date_metrics(
+    ra: np.ndarray,
+    rb: np.ndarray,
+    *,
+    min_peers: int,
+    decile: float = 0.1,
+    state_labels: bool = False,
+) -> list[PerDateMetrics]:
+    """PER-DAY similarity metrics between two output matrices (R10 #21).
+
+    ``ra`` / ``rb`` are date x instrument matrices (ranks for ALPHA /
+    GLOBAL_STATE, state labels for CONDITION / EVENT).  One
+    :class:`PerDateMetrics` is emitted per day (row); days with fewer than
+    ``min_peers`` finite peers are skipped.
+    """
+    out: list[PerDateMetrics] = []
+    for t in range(ra.shape[0]):
+        a = np.asarray(ra[t], dtype=float)
+        b = np.asarray(rb[t], dtype=float)
+        mask = np.isfinite(a) & np.isfinite(b)
+        n = int(mask.sum())
+        if n < min_peers:
+            continue
+        av = a[mask]
+        bv = b[mask]
+        state = _state_agreement_day(av, bv) if state_labels else None
+        if len(av) > 1:
+            sp = float(np.corrcoef(av, bv)[0, 1])
+        else:
+            sp = 1.0
+        if not np.isfinite(sp):
+            # constant rows (all-flat / ties days): fall back to equality rate.
+            sp = float((av == bv).mean())
+        n_top = max(1, int(np.ceil(decile * n)))
+        a_top = set(np.argpartition(av, -n_top)[-n_top:].tolist())
+        b_top = set(np.argpartition(bv, -n_top)[-n_top:].tolist())
+        top_ov = float(len(a_top & b_top) / n_top)
+        a_bot = set(np.argpartition(av, n_top)[:n_top].tolist())
+        b_bot = set(np.argpartition(bv, n_top)[:n_top].tolist())
+        bot_ov = float(len(a_bot & b_bot) / n_top)
+        k = max(2, int(round(1.0 / decile)))
+        pos_ov = float((_position_bucket(av, k) == _position_bucket(bv, k)).mean())
+        out.append(
+            PerDateMetrics(
+                spearman=sp,
+                top_decile_overlap=top_ov,
+                bottom_decile_overlap=bot_ov,
+                position_overlap=pos_ov,
+                state_agreement=state,
+            )
+        )
+    return out
+
+
+def day_is_duplicate(
+    m: PerDateMetrics,
+    *,
+    rho_threshold: float,
+    overlap_threshold: float,
+    require_state: bool = False,
+) -> bool:
+    """Whether a single day's metrics count as a *duplicate day*.
+
+    Rank kinds (ALPHA / GLOBAL_STATE) require near-exact rank correlation AND
+    top/bottom/position overlap.  State kinds (CONDITION / EVENT) are gated by
+    state-label agreement — value correlation is NOT the deciding signal
+    (R10 #23).
+    """
+    if require_state:
+        if m.state_agreement is None or m.state_agreement < overlap_threshold:
+            return False
+        return True
+    if m.spearman is None or m.spearman < rho_threshold:
+        return False
+    if m.top_decile_overlap < overlap_threshold:
+        return False
+    if m.bottom_decile_overlap < overlap_threshold:
+        return False
+    if m.position_overlap < overlap_threshold:
+        return False
+    return True
+
+
+@dataclass(frozen=True)
+class DayMetricsSummary:
+    """Aggregated per-day metrics across one regime.
+
+    Reports median / p10 / p90 Spearman, median overlaps, the duplicate-day
+    RATIO and — for state kinds — worst-day state agreement.  The ratio is the
+    headline signal: it replaces the old single flattened date×stock rho.
+    """
+
+    n_days: int
+    n_duplicate_days: int
+    duplicate_day_ratio: float
+    spearman_median: float | None
+    spearman_p10: float | None
+    spearman_p90: float | None
+    spearman_min: float | None
+    top_decile_overlap_median: float
+    bottom_decile_overlap_median: float
+    position_overlap_median: float
+    state_agreement_median: float | None
+    state_agreement_min: float | None
+
+    def to_dict(self) -> dict:
+        return {
+            "n_days": self.n_days,
+            "n_duplicate_days": self.n_duplicate_days,
+            "duplicate_day_ratio": self.duplicate_day_ratio,
+            "spearman_median": self.spearman_median,
+            "spearman_p10": self.spearman_p10,
+            "spearman_p90": self.spearman_p90,
+            "spearman_min": self.spearman_min,
+            "top_decile_overlap_median": self.top_decile_overlap_median,
+            "bottom_decile_overlap_median": self.bottom_decile_overlap_median,
+            "position_overlap_median": self.position_overlap_median,
+            "state_agreement_median": self.state_agreement_median,
+            "state_agreement_min": self.state_agreement_min,
+        }
+
+
+def aggregate_day_metrics(
+    metrics: list[PerDateMetrics],
+    *,
+    rho_threshold: float,
+    overlap_threshold: float,
+    require_state: bool = False,
+) -> DayMetricsSummary:
+    """Aggregate :func:`per_date_metrics` into a :class:`DayMetricsSummary`."""
+    n_days = len(metrics)
+    if n_days == 0:
+        return DayMetricsSummary(
+            n_days=0, n_duplicate_days=0, duplicate_day_ratio=0.0,
+            spearman_median=None, spearman_p10=None, spearman_p90=None,
+            spearman_min=None,
+            top_decile_overlap_median=float("nan"),
+            bottom_decile_overlap_median=float("nan"),
+            position_overlap_median=float("nan"),
+            state_agreement_median=None, state_agreement_min=None,
+        )
+    dup = sum(
+        1
+        for m in metrics
+        if day_is_duplicate(
+            m, rho_threshold=rho_threshold, overlap_threshold=overlap_threshold,
+            require_state=require_state,
+        )
+    )
+    sp = [m.spearman for m in metrics if m.spearman is not None]
+    state = [m.state_agreement for m in metrics if m.state_agreement is not None]
+
+    def med(v):
+        return float(np.median(v)) if v else None
+
+    def pctl(v, q):
+        return float(np.percentile(v, q)) if v else None
+
+    return DayMetricsSummary(
+        n_days=n_days,
+        n_duplicate_days=dup,
+        duplicate_day_ratio=dup / n_days,
+        spearman_median=med(sp),
+        spearman_p10=pctl(sp, 10),
+        spearman_p90=pctl(sp, 90),
+        spearman_min=float(np.min(sp)) if sp else None,
+        top_decile_overlap_median=med([m.top_decile_overlap for m in metrics]),
+        bottom_decile_overlap_median=med([m.bottom_decile_overlap for m in metrics]),
+        position_overlap_median=med([m.position_overlap for m in metrics]),
+        state_agreement_median=med(state),
+        state_agreement_min=float(np.min(state)) if state else None,
+    )
+
+
+def _exact_value_days(ra: np.ndarray, rb: np.ndarray, *, min_peers: int) -> float:
+    """Fraction of days whose raw OUTPUTS are bit-identical (compositional policy).
+
+    Both the NaN placement and every finite value must match exactly — the
+    compositional policy's definition of "same factor".
+    """
+    n = 0
+    match = 0
+    for t in range(ra.shape[0]):
+        a = np.asarray(ra[t], dtype=float)
+        b = np.asarray(rb[t], dtype=float)
+        mask = np.isfinite(a) & np.isfinite(b)
+        if int(mask.sum()) < min_peers:
+            continue
+        n += 1
+        if bool((np.isnan(a) == np.isnan(b)).all()) and np.array_equal(a[mask], b[mask]):
+            match += 1
+    return float(match / n) if n else 0.0
+
+
+def _rich_per_date_duplicate(
+    ra: np.ndarray,
+    rb: np.ndarray,
+    *,
+    rho_threshold: float,
+    overlap_threshold: float,
+    min_duplicate_day_ratio: float,
+    min_peers: int,
+    require_state: bool,
+) -> bool:
+    """Per-date duplicate decision for one regime (R10 #21).
+
+    Duplicate only when (a) the vast majority of days are duplicate days AND
+    (b) the WORST day is still near-identical.  Criterion (b) is what rejects a
+    pair that is 99% identical on normal days but opposite on the 1% extreme
+    days — the flattened rho would pass, the worst-day check does not.
+    """
+    metrics = per_date_metrics(
+        ra, rb, min_peers=min_peers, state_labels=require_state
+    )
+    summary = aggregate_day_metrics(
+        metrics, rho_threshold=rho_threshold, overlap_threshold=overlap_threshold,
+        require_state=require_state,
+    )
+    if summary.n_days == 0:
+        return False
+    if summary.duplicate_day_ratio < min_duplicate_day_ratio:
+        return False
+    if require_state:
+        if summary.state_agreement_min is None or summary.state_agreement_min < overlap_threshold:
+            return False
+    else:
+        if summary.spearman_min is None or summary.spearman_min < overlap_threshold:
+            return False
+    return True
+
+
+#: kinds whose equivalence is defined by STATE labels (R10 #22 / #23).
+_STATE_KINDS = frozenset({FactorKind.CONDITION, FactorKind.EVENT})
+
+
+def _compare_matrix(
+    compute: Callable[[pd.DataFrame], pd.DataFrame],
+    probe: pd.DataFrame,
+    *,
+    factor_kind: str,
+    rank: bool,
+) -> np.ndarray:
+    """Matrix compared per-date for one factor kind (R10 #22).
+
+    * ALPHA        → cross-sectional rank (axis=1, dates x instruments);
+    * GLOBAL_STATE → time-series rank, transposed (instruments x dates);
+    * CONDITION    → boolean state labels;
+    * EVENT        → sign state labels.
+    """
+    out = np.asarray(compute(probe).to_numpy(dtype=float))
+    if factor_kind == FactorKind.GLOBAL_STATE:
+        if rank:
+            return pd.DataFrame(out).rank(axis=0, method="average").to_numpy(dtype=float).T
+        return out.T
+    if factor_kind == FactorKind.CONDITION:
+        return _state_labels(out, scheme="boolean")
+    if factor_kind == FactorKind.EVENT:
+        return _state_labels(out, scheme="sign")
+    if rank:
+        return pd.DataFrame(out).rank(axis=1, method="average").to_numpy(dtype=float)
+    return out
+
+
+def _regime_duplicate(
+    fa: Callable[[pd.DataFrame], pd.DataFrame],
+    fb: Callable[[pd.DataFrame], pd.DataFrame],
+    probe: pd.DataFrame,
+    *,
+    factor_kind: str,
+    rho_threshold: float,
+    overlap_threshold: float,
+    min_duplicate_day_ratio: float,
+    policy: DedupPolicy,
+) -> bool:
+    require_state = factor_kind in _STATE_KINDS
+    if policy.rank_equivalence:
+        ra = _compare_matrix(fa, probe, factor_kind=factor_kind, rank=True)
+        rb = _compare_matrix(fb, probe, factor_kind=factor_kind, rank=True)
+        min_peers = min(20, ra.shape[1])
+        dup = _rich_per_date_duplicate(
+            ra, rb, rho_threshold=rho_threshold, overlap_threshold=overlap_threshold,
+            min_duplicate_day_ratio=min_duplicate_day_ratio, min_peers=min_peers,
+            require_state=require_state,
+        )
+        if not dup and policy.sign_invariant and factor_kind not in _STATE_KINDS:
+            rb_neg = _compare_matrix(
+                lambda p: -fb(p), probe, factor_kind=factor_kind, rank=True
+            )
+            dup = _rich_per_date_duplicate(
+                ra, rb_neg, rho_threshold=rho_threshold,
+                overlap_threshold=overlap_threshold,
+                min_duplicate_day_ratio=min_duplicate_day_ratio,
+                min_peers=min_peers, require_state=require_state,
+            )
+        return dup
+    # Compositional policy (R10 #21): same output VALUES, not just same ranks.
+    ra = _compare_matrix(fa, probe, factor_kind=factor_kind, rank=False)
+    rb = _compare_matrix(fb, probe, factor_kind=factor_kind, rank=False)
+    min_peers = min(20, ra.shape[1])
+    exact = _exact_value_days(ra, rb, min_peers=min_peers)
+    if exact < min_duplicate_day_ratio and policy.sign_invariant and factor_kind not in _STATE_KINDS:
+        exact = max(exact, _exact_value_days(ra, -rb, min_peers=min_peers))
+    return exact >= min_duplicate_day_ratio
+
+
+def _regime_summary(
+    fa: Callable[[pd.DataFrame], pd.DataFrame],
+    fb: Callable[[pd.DataFrame], pd.DataFrame],
+    probe: pd.DataFrame,
+    *,
+    factor_kind: str,
+    policy: DedupPolicy,
+    rho_threshold: float,
+    overlap_threshold: float,
+    decile: float,
+) -> DayMetricsSummary:
+    require_state = factor_kind in _STATE_KINDS
+    if policy.rank_equivalence:
+        ra = _compare_matrix(fa, probe, factor_kind=factor_kind, rank=True)
+        rb = _compare_matrix(fb, probe, factor_kind=factor_kind, rank=True)
+    else:
+        ra = _compare_matrix(fa, probe, factor_kind=factor_kind, rank=False)
+        rb = _compare_matrix(fb, probe, factor_kind=factor_kind, rank=False)
+    min_peers = min(20, ra.shape[1])
+    metrics = per_date_metrics(
+        ra, rb, min_peers=min_peers, decile=decile, state_labels=require_state
+    )
+    return aggregate_day_metrics(
+        metrics, rho_threshold=rho_threshold, overlap_threshold=overlap_threshold,
+        require_state=require_state,
+    )
+
+
+def regime_similarity_report(
+    fa: Callable[[pd.DataFrame], pd.DataFrame],
+    fb: Callable[[pd.DataFrame], pd.DataFrame],
+    *,
+    factor_kind: str = FactorKind.ALPHA,
+    regimes: tuple[str, ...] | None = None,
+    policy: DedupPolicy = DedupPolicy(),
+    rho_threshold: float = 0.99999,
+    overlap_threshold: float = 0.9,
+    decile: float = 0.1,
+) -> dict[str, DayMetricsSummary]:
+    """Regime-specific per-day similarity for a factor pair (R10 #21).
+
+    Returns ``regime -> DayMetricsSummary`` for every fixture regime, so the
+    caller sees WHERE the pair diverges (heavy-tail? gaps? events?) instead of a
+    single flattened rho.
+    """
+    fixtures = build_typed_fixtures()
+    return {
+        name: _regime_summary(
+            fa, fb, fixtures[name], factor_kind=factor_kind, policy=policy,
+            rho_threshold=rho_threshold, overlap_threshold=overlap_threshold,
+            decile=decile,
+        )
+        for name in (regimes or _RICH_MULTI_REGIMES)
+        if name in fixtures
+    }
+
+
+def multi_regime_duplicate_decision(
+    fa: Callable[[pd.DataFrame], pd.DataFrame],
+    fb: Callable[[pd.DataFrame], pd.DataFrame],
+    *,
+    factor_kind: str = FactorKind.ALPHA,
+    panel: pd.DataFrame | None = None,
+    regimes: tuple[str, ...] | None = None,
+    policy: DedupPolicy = DedupPolicy(sign_invariant=False),
+    min_regime_agreement: float = 0.66,
+    rho_threshold: float = 0.99999,
+    overlap_threshold: float = 0.9,
+    min_duplicate_day_ratio: float = 0.9,
+) -> tuple[bool, dict[str, DayMetricsSummary]]:
+    """Multi-regime duplicate decision with a human-readable report (R10 #21).
+
+    The pair is declared a duplicate only when a supermajority of regimes each
+    declare it a duplicate under :func:`_rich_per_date_duplicate` (majority of
+    DAYS AND worst-day still near-identical).  Returns ``(is_duplicate, report)``.
+    """
+    if panel is not None:
+        probes = (("gaussian", panel),)
+    else:
+        fixtures = build_typed_fixtures()
+        probes = tuple(
+            (name, fixtures[name])
+            for name in (regimes or _RICH_MULTI_REGIMES)
+            if name in fixtures
+        )
+    votes = 0
+    total = 0
+    report: dict[str, DayMetricsSummary] = {}
+    for name, probe in probes:
+        total += 1
+        dup = _regime_duplicate(
+            fa, fb, probe, factor_kind=factor_kind, rho_threshold=rho_threshold,
+            overlap_threshold=overlap_threshold,
+            min_duplicate_day_ratio=min_duplicate_day_ratio, policy=policy,
+        )
+        if dup:
+            votes += 1
+        report[name] = _regime_summary(
+            fa, fb, probe, factor_kind=factor_kind, policy=policy,
+            rho_threshold=rho_threshold, overlap_threshold=overlap_threshold,
+            decile=0.1,
+        )
+    if total == 0:
+        return False, report
+    return (votes / total) >= min_regime_agreement, report
+
+
 def are_rank_duplicates(
     fa: Callable[[pd.DataFrame], pd.DataFrame],
     fb: Callable[[pd.DataFrame], pd.DataFrame],
