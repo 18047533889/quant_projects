@@ -190,6 +190,20 @@ def _same_composition(parts: Sequence[pd.DataFrame], composition_id: str | None 
             )
         family = _COMPOSITION_SCHEMA_FIELDS.get(key)
         if family is None:
+            # R15-INC-203: a named part that claims an EXPLICIT schema family
+            # (``composition_id``) but is not a known member of it is a schema
+            # lie — fail closed.  Without a schema (``composition_id=None``) the
+            # part is checked positionally and passes (backward compat).  The
+            # caller who wants a custom part (e.g. ``share_of_volume_bucket_1``)
+            # must supply an explicit CompositionSchema object; the operator
+            # never guesses that an unknown name belongs to a declared family.
+            if composition_id is not None:
+                raise ValueError(
+                    f"composition part {field!r} is not a known member of "
+                    f"family {composition_id!r}; supply an explicit "
+                    "CompositionSchema declaring it, or omit composition_id for "
+                    "positional pairing (R15-INC-203)"
+                )
             continue
         seen.add(family)
         if composition_id is not None and family != composition_id:

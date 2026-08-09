@@ -377,3 +377,22 @@ layer_governance/catalog docs）。
 **Wave-3 合并验证：5 个 test_r11_round3_*.py 111 passed**。
 **三轮合计：16 个 test_r11_round3_*.py + test_round14_paramrole = 459+16 passed**（另含既有回归
   调和批次独立跑绿）。
+
+### 最终合并验证（第三轮收口）
+- 三轮 20 agent 全部完成：Wave-1 226 + Wave-2 122 + Wave-3 111 + test_round14_paramrole 16 =
+  **475 passed**（16 个 test_r11_round3_*.py + paramrole）。
+- 最终合并批（20 个 round-3 文件 + paramrole + audit_p0_fixes + gemini_v2_pack + te_spectral_gates +
+  geometry_math_expansion）：**594 passed, 2 skipped**（load_all 1427 canonicals 全绿）。
+- 中央：closure_audit 4 新类目（semantic_input_type/null_calibration/practical_usability/
+  param_search_grade）+ ParamRole.STATE_THRESHOLD + searchable_param_names —— closure_audit_ext
+  13 测试全绿。
+- 既有回归调和（本会话）：te_spectral_gates×2（#49 去 jitter 后新语义）、gemini_v2_pack Abdi
+  （负 s²→NaN）+ bicoherence（alias→live canonical）、audit_p0_fixes×2（_MAX_OLD_MASS 0.10 阈值 +
+  R3-143 契约）、paramrole members（并发会话新增 6 角色）、robust_zscore surface（拆 inclusive/prior）。
+- 诚实剩余：`test_strict_unknown_fields_fail_closed_in_production`（storage/sources data_access
+  字段解析，与算子语义无关，多轮复现确认既有）；并发会话 R14 期间 surface/statistics 瞬时修改导致
+  执行期 load_all 多次瞬时断（MACD 等 canonical 未分类 → 本会话 surface 协调补上后恢复，1427 全绿）。
+- 延后（记录在案）：backend/sql_pushdown/emitter.py ts_days_since_high/low（first-hit）+
+  ts_impulse_strength（vol 含当前 bar）SQL 语义未同步（tie-free 数据下 SQL parity 测试仍过）；
+  docs/operators_catalog.json 需再生成；ts_bicoherence_max/ts_robust_zscore alias 的 classify 残留；
+  common/polars_state_event.py polars 侧 ConditionBool 校验（round-2 已记录）。

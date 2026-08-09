@@ -16,7 +16,10 @@ from cleaned_operators import load_all
 from cleaned_operators.registry import OperatorRegistry
 from mining.operator_catalog import (
     MiningRole,
+    RoleSource,
+    _TERMINAL_ROLES,
     assign_mining_role,
+    assign_mining_role_ex,
     get_mining_operators,
     mining_eligible,
     mining_role_manifest,
@@ -105,19 +108,178 @@ def test_get_mining_operators_filters() -> None:
     assert all(op.cost_tier <= 1 for op in cheap)
 
 
-def test_non_terminal_roles_never_terminal() -> None:
+def test_terminal_allowlist_exact() -> None:
+    """R15-INC-221: only the factor-value roles (ALPHA / ALPHA_HIGH_COST /
+    INTRADAY_EOD / FUNDAMENTAL_PIT) may be terminal.  INTERNAL / DIAGNOSTIC /
+    RESEARCH / LEGACY / DENIED must be False — the pre-R15 exclusion list let
+    them fall through as terminal.  Supporting roles also have EMPTY positions."""
     for op in get_mining_operators(admission="all"):
+        expected = op.role in _TERMINAL_ROLES
+        assert op.terminal_allowed is expected, (
+            f"{op.canonical}: terminal_allowed={op.terminal_allowed} "
+            f"role={op.role} but expected {expected}"
+        )
+        if not expected:
+            assert "terminal" not in op.allowed_ast_positions, op.canonical
         if op.role in (
-            MiningRole.STATE,
-            MiningRole.CONDITION,
-            MiningRole.EVENT,
-            MiningRole.GROUP_STATE,
-            MiningRole.GLOBAL_STATE,
+            MiningRole.RECIPE_INTERNAL,
+            MiningRole.SOURCE_TRANSFORM,
+            MiningRole.INTERNAL,
+            MiningRole.DIAGNOSTIC,
+            MiningRole.RESEARCH,
+            MiningRole.LEGACY,
+            MiningRole.DENIED,
+            MiningRole.UNRESOLVED,
         ):
-            assert op.terminal_allowed is False
-            assert "terminal" not in op.allowed_ast_positions
+            assert op.allowed_ast_positions == (), op.canonical
+
+
+def test_no_fallback_role_sources() -> None:
+    """R15-INC-222: a role produced by the FALLBACK catch-all is banned in the
+    final registry.  Every canonical has an explicit or verified-rule role."""
+    for canonical in OperatorRegistry._catalog:
+        catalog = OperatorRegistry._catalog[canonical]
+        _role, source = assign_mining_role_ex(canonical, catalog)
+        assert source is not RoleSource.FALLBACK, canonical
+
+
+def test_continuous_event_statistics_not_event_mask() -> None:
+    """R15-INC-015/224: ``event_interval_memory`` / ``event_fano_factor`` /
+    ``event_local_variation`` are continuous statistics, not EventBool masks —
+    they must be mineable numeric roles, not EVENT."""
+    for canonical in (
+        "event_interval_memory",
+        "event_local_variation",
+        "event_fano_factor",
+        "event_fano_excess",
+        "event_cumulative_return_past",
+    ):
+        if canonical not in OperatorRegistry._catalog:
+            continue
+        role = assign_mining_role(canonical, OperatorRegistry._catalog[canonical])
+        assert role is not MiningRole.EVENT, canonical
+        assert role in (
+            MiningRole.ALPHA,
+            MiningRole.ALPHA_HIGH_COST,
+            MiningRole.STATE,
+        ), canonical
+
+
+def test_continuous_state_statistics_not_state_slot() -> None:
+    """R15-INC-014: ``state_episode_mfe`` / ``threshold_cycle_period`` /
+    ``candle_gap_atr`` are continuous measures, not discrete Bool state slots —
+    they must stay terminal-eligible, not STATE."""
+    for canonical in (
+        "state_episode_mfe",
+        "state_episode_mae",
+        "state_episode_efficiency",
+        "ts_threshold_cycle_period",
+        "ts_threshold_cycle_asymmetry",
+        "candle_gap_atr",
+    ):
+        if canonical not in OperatorRegistry._catalog:
+            continue
+        role = assign_mining_role(canonical, OperatorRegistry._catalog[canonical])
+        assert role not in (MiningRole.STATE, MiningRole.EVENT), canonical
+        assert role in (
+            MiningRole.ALPHA,
+            MiningRole.ALPHA_HIGH_COST,
+            MiningRole.CONDITION,
+        ), canonical
+
+
+def test_market_filter_fail_closed() -> None:
+    """R15-INC-002/223: A-share-only operators must not appear in a US context,
+    and an unknown market is rejected (not silently ignored)."""
+    from mining.operator_catalog import validate_market, market_support
+
+    with pytest.raises(ValueError, match="unknown market"):
+        get_mining_operators(market="cn", admission="all")
+    us = {op.canonical for op in get_mining_operators(market="us", admission="all")}
+    ashare = {op.canonical for op in get_mining_operators(market="ashare", admission="all")}
+    # every operator valid in US is a subset of the both-market pool
+    assert us <= ashare
+    # a pure A-share state-machine op never appears in the US pool
+    for canonical in ("ashare_limit_up_streak", "ashare_days_since_limit_up"):
+        if canonical not in OperatorRegistry._catalog:
+            continue
+        assert canonical not in us, canonical
+        assert canonical in ashare, canonical
+    assert market_support("ashare_limit_up_streak") == ("ashare",)
+
+
+def test_target_frequency_matches_output_grain() -> None:
+    """R15-INC-003/223: INTRADAY_EOD is minute input / DAILY output — it must be
+    eligible for target=daily (with minute source), never for target=minute."""
+    from mining.operator_catalog import mining_eligible
+
+    intraday = [
+        op for op in get_mining_operators(
+            roles=["intraday_eod"], admission="all"
+        )
+        if op.canonical in OperatorRegistry._catalog
+        and op.canonical not in {"intraday_wasserstein_pair_distance"}
+    ]
+    assert intraday
+    for op in intraday:
+        assert op.output_grain == "daily", op.canonical
+    # Deterministic gate test on a certified local copy (the live catalog is
+    # evidence-stale → 0 certified, so eligibility cannot be asserted directly).
+    candidate = intraday[0].canonical
+    catalog = dict(OperatorRegistry._catalog[candidate])
+    catalog["production_certified"] = True
+    catalog["tags"] = list(catalog.get("tags") or ()) + ["cost:5"]
+    assert mining_eligible(
+        candidate, catalog=catalog, role=MiningRole.INTRADAY_EOD,
+        available_sources=["minute_bar"], target_frequency="daily",
+    )
+    assert not mining_eligible(
+        candidate, catalog=catalog, role=MiningRole.INTRADAY_EOD,
+        available_sources=["minute_bar"], target_frequency="minute",
+    )
+
+
+def test_source_context_unknown_is_fail_closed() -> None:
+    """R15-INC-004: an omitted source context is UNKNOWN capability, never
+    "everything available".  Explicit empty set and explicit set differ."""
+    from mining.operator_catalog import source_status
+
+    catalog = OperatorRegistry._catalog["ts_mean"]
+    unk = source_status("ts_mean", catalog, None)
+    empty = source_status("ts_mean", catalog, ())
+    full = source_status("ts_mean", catalog, ["daily_bar"])
+    assert unk.unknown is True
+    assert empty.unknown is False and empty.missing == ("daily_bar",)
+    assert full.missing == () and full.satisfied == ("daily_bar",)
+
+
+def test_unresolved_role_never_mines() -> None:
+    """R15-INC-001: a registered canonical that matches no verified rule is
+    UNRESOLVED and never eligible — it is never silently promoted to ALPHA."""
+    from mining.operator_catalog import MiningOperator
+
+    # register a throwaway canonical with a bare surface (no family rule, no
+    # daily/extended surface mapping can fire for 'zz_unresolved_probe_*')
+    registered = "zz_unresolved_probe_never_exists"
+    catalog = OperatorRegistry._catalog
+    old = catalog.get(registered)
+    catalog[registered] = {
+        "surface": "unclassified",
+        "param_names": ["x"],
+        "input_grain": "daily",
+        "tags": ["cost:1"],
+        "production_certified": True,
+    }
+    try:
+        role, source = assign_mining_role_ex(registered, catalog[registered])
+        assert role is MiningRole.UNRESOLVED
+        assert source is RoleSource.FALLBACK
+        assert not mining_eligible(registered, catalog=catalog[registered], role=role)
+    finally:
+        if old is None:
+            catalog.pop(registered, None)
         else:
-            assert op.terminal_allowed is True
+            catalog[registered] = old
 
 
 def test_admission_matrix_no_vague_answers() -> None:

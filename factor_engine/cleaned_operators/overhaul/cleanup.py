@@ -24,6 +24,7 @@ DEDUPE = {
     # parameter explicitly as a non-searchable compatibility knob (NEW-040), so
     # historical ``MACD(x,12,26,9)`` calls bind and validate instead of being
     # silently dropped or rejected.
+    "MACD": "MACD_line",
     "Slope": "ts_time_slope",
     "slope": "ts_time_slope",
     "beta": "ts_beta",

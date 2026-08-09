@@ -245,6 +245,7 @@ def _session_runs(
     expected_slots: int,
     official_close_mod: int | None,
     official_slot_set: set[int] | None = None,
+    on_grid: np.ndarray | None = None,
 ) -> list[dict]:
     """Split one symbol's minute column into session candidates.
 
@@ -293,15 +294,24 @@ def _session_runs(
             rows.extend(range(bs, be + 1))
         start, end = rows[0], rows[-1]
         vals = np.asarray([x_col[r] for r in rows], dtype=float)
-        obs_slots = {int(mods[r]) for r in rows}
-        # P0-83: completeness compares the OBSERVED minute-of-day set against the
-        # OFFICIAL set — a missing 09:45 plus a stray 09:46:30 has the same count
-        # but a different set and must never certify as complete.  The official
-        # close check is kept as an extra belt (redundant once the sets match).
+        obs_slot_list = [int(mods[r]) for r in rows]
+        obs_slots = set(obs_slot_list)
+        # R15-INC-123/124: completeness is a MULTISET + grid-cleanliness check,
+        # not a bare set equality.  A duplicate bar (two rows at 09:45) has the
+        # same SET as a complete session but a different COUNT — require the
+        # observed bar count to equal the official slot count so duplicates fail.
+        # A timestamp that does not sit exactly on the calendar grid (a stray
+        # 09:46:30 floor-mapped to 09:46) also must never certify a session.
+        grid_clean = (
+            on_grid is None
+            or bool(np.all(on_grid[rows]))
+        )
         completed = (
             expected_slots > 0
             and official_slot_set is not None
+            and len(obs_slot_list) == expected_slots
             and obs_slots == official_slot_set
+            and grid_clean
             and (official_close_mod is None or int(mods[end]) == official_close_mod)
         )
         out.append(
@@ -362,6 +372,7 @@ def _shape_novelty_series(
     expected_slots: int,
     official_close_mod: int | None,
     official_slot_set: set[int] | None = None,
+    on_grid: np.ndarray | None = None,
 ) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -369,7 +380,7 @@ def _shape_novelty_series(
     mhs = max(1, int(min_history_sessions))
     for c in range(cols):
         n_nodes = max(2, expected_slots)
-        runs = _session_runs(x2d[:, c], sid2d[:, c], dates, mods, expected_slots, official_close_mod, official_slot_set)
+        runs = _session_runs(x2d[:, c], sid2d[:, c], dates, mods, expected_slots, official_close_mod, official_slot_set, on_grid)
         for i, run in enumerate(runs):
             if not run["completed"]:
                 continue  # partial session never emits a full-session factor (R11 #68)
@@ -413,6 +424,7 @@ def _pca_residual_series(
     expected_slots: int,
     official_close_mod: int | None,
     official_slot_set: set[int] | None = None,
+    on_grid: np.ndarray | None = None,
 ) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
@@ -421,7 +433,7 @@ def _pca_residual_series(
     mhs = max(1, int(min_history_sessions))
     for c in range(cols):
         n_nodes = max(2, expected_slots)
-        runs = _session_runs(x2d[:, c], sid2d[:, c], dates, mods, expected_slots, official_close_mod, official_slot_set)
+        runs = _session_runs(x2d[:, c], sid2d[:, c], dates, mods, expected_slots, official_close_mod, official_slot_set, on_grid)
         for i, run in enumerate(runs):
             if not run["completed"]:
                 continue
@@ -510,12 +522,18 @@ class IntradaySessionShapeNovelty(SeriesOperator):
         index_ns = x.index.to_numpy(dtype="datetime64[ns]")
         dates = index_ns.astype("datetime64[D]").astype("int64")
         mods = _minute_of_day(index_ns)
+        # R15-INC-124: a timestamp that does not sit exactly on a minute grid
+        # (stray seconds/microseconds) is an invalid slot — it must never certify
+        # a session as complete.
+        on_grid = (
+            index_ns.astype("datetime64[ns]").astype("int64") % 60_000_000_000 == 0
+        )
         # P0-10/P0-84: official grid from the explicit exchange calendar (bar
         # width included), never from a modal of the observed minutes.
         expected, close_mod, slot_set = _resolve_official_grid(calendar)
         arr = _shape_novelty_series(
             x.to_numpy(dtype=float), sid_arr, dates, mods, history_days, min_history_sessions,
-            expected, close_mod, slot_set,
+            expected, close_mod, slot_set, on_grid,
         )
         return frame_like(x, arr)
 
@@ -566,13 +584,19 @@ class IntradayProfilePcaResidual(SeriesOperator):
         index_ns = x.index.to_numpy(dtype="datetime64[ns]")
         dates = index_ns.astype("datetime64[D]").astype("int64")
         mods = _minute_of_day(index_ns)
+        # R15-INC-124: a timestamp that does not sit exactly on a minute grid
+        # (stray seconds/microseconds) is an invalid slot — it must never certify
+        # a session as complete.
+        on_grid = (
+            index_ns.astype("datetime64[ns]").astype("int64") % 60_000_000_000 == 0
+        )
         # P0-10/P0-84: official grid from the explicit exchange calendar (bar
         # width included), never from a modal of the observed minutes.
         expected, close_mod, slot_set = _resolve_official_grid(calendar)
         arr = _pca_residual_series(
             x.to_numpy(dtype=float), sid_arr, dates, mods,
             history_days, n_components, min_history_sessions,
-            expected, close_mod, slot_set,
+            expected, close_mod, slot_set, on_grid,
         )
         return frame_like(x, arr)
 

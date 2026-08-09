@@ -26,7 +26,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
 _EPS = 1e-12
@@ -35,6 +41,21 @@ _ALPHA = 0.5  # Jeffreys smoothing for copula histograms (deterministic).
 # principal direction.  When s2/s1 < this ratio the "plane" is one dominant
 # direction padded with numerical noise -> fail closed to NaN.
 _TANGENT_MIN_S2_S1 = 0.05
+
+# R15-INC-171/172: declared local-fit support policy.  A local regression on
+# ``d`` features + intercept is near-interpolation below
+# ``max(floor, 5*(d+1))`` peers; the effective neighbourhood is ALWAYS
+# ``max(min_neigh, k)`` (no silent k degradation).  Visible as a named constant
+# so the DOF multiplier is a reviewed policy, not a magic number inside the
+# kernels.
+_MIN_NEIGH_FLOOR = 10
+_MIN_NEIGH_DOF_MULTIPLIER = 5
+# These cross-section-local operators ALWAYS take exactly 3 features (f1/f2/f3),
+# so the DOF floor for their local regression is a FIXED value
+# ``max(floor, 5*(3+1)) == 20``.  The searchable ``k`` range starts there —
+# any k below the floor would silently map to the same effective neighbourhood
+# (a dead-parameter region, R15-INC-263).
+_KNN_MIN_K = max(_MIN_NEIGH_FLOOR, _MIN_NEIGH_DOF_MULTIPLIER * 4)
 
 
 def _metadata(
@@ -45,6 +66,7 @@ def _metadata(
     unit: str,
     cost: int,
     extra_tags: tuple[str, ...] = (),
+    param_specs: dict | None = None,
 ) -> OperatorMetadata:
     # R11 §37-D unit-algebra honesty: algebraic units (``same_as:`` /
     # ``unit(...)`` / ``dimensionless``) propagate to ``output_unit`` so typed
@@ -64,6 +86,7 @@ def _metadata(
             f"unit:{unit}", f"cost:{cost}",
         ],
         output_unit=output_unit,
+        param_specs=dict(param_specs) if param_specs else {},
     )
 
 
@@ -136,7 +159,13 @@ def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: f
     # Enforce a minimum effective neighbourhood = max(10, 5*(d+1)); below the
     # DOF floor the fit is near-interpolation and emits NaN (fail-closed, never
     # a spurious z-score).
-    min_neigh = max(10, 5 * (d + 1))
+    # R15-INC-171/172: the neighbourhood target is the EXPLICIT
+    # ``max(min_neigh, k)`` — a ``k`` smaller than the DOF floor is never a
+    # silent degradation into a smaller fit; the kernel fits on the true
+    # effective neighbourhood.  The DOF multiplier ``5`` is the declared
+    # ``_MIN_NEIGH_DOF_MULTIPLIER`` support policy, visible in metadata.
+    min_neigh = max(_MIN_NEIGH_FLOOR, _MIN_NEIGH_DOF_MULTIPLIER * (d + 1))
+    target_k = max(min_neigh, int(k))
     for t in range(rows):
         U, valid = _rank_features(feats, t)
         y_t = target[t]
@@ -152,17 +181,17 @@ def _local_linear_series(target: np.ndarray, feats: np.ndarray, k: int, ridge: f
             y_i = y_t[i]
             if not np.isfinite(y_i):
                 continue
-            nbrs = _neighbors(U, valid, k, i, peer_mask)
+            nbrs = _neighbors(U, valid, target_k, i, peer_mask)
             # P1-45(a): fail-close when fewer than the requested k peers exist —
             # a k=10 request must not silently degrade into a 4-peer fit.  The
             # round-3 DOF floor is applied on top of the requested k.
-            if nbrs.size < max(min_neigh, k):
+            if nbrs.size < target_k:
                 continue
             Z = U[nbrs]
             y = y_t[nbrs]
             # all neighbours are target-finite by construction; keep the guard.
             fin = np.isfinite(y)
-            if int(fin.sum()) < max(min_neigh, k):
+            if int(fin.sum()) < target_k:
                 continue
             Z = Z[fin]
             y = y[fin]
@@ -200,7 +229,10 @@ def _local_gradient_series(target: np.ndarray, feats: np.ndarray, k: int, ridge:
     # R11 round-3 P1-A (item 93): same DOF floor as the linear residual — a
     # 4-parameter fit needs max(10, 5*(d+1)) neighbours to be more than
     # interpolation; below the floor -> NaN.
-    min_neigh = max(10, 5 * (d + 1))
+    # R15-INC-171/172: explicit ``target_k = max(min_neigh, k)`` (see the linear
+    # kernel); the DOF multiplier is the shared declared support policy.
+    min_neigh = max(_MIN_NEIGH_FLOOR, _MIN_NEIGH_DOF_MULTIPLIER * (d + 1))
+    target_k = max(min_neigh, int(k))
     for t in range(rows):
         U, valid = _rank_features(feats, t)
         y_t = target[t]
@@ -210,14 +242,14 @@ def _local_gradient_series(target: np.ndarray, feats: np.ndarray, k: int, ridge:
         for i in range(n):
             if not valid[i]:
                 continue
-            nbrs = _neighbors(U, valid, k, i, peer_mask)
+            nbrs = _neighbors(U, valid, target_k, i, peer_mask)
             # P1-45(a): fail-close when fewer than the requested k peers exist.
-            if nbrs.size < max(min_neigh, k):
+            if nbrs.size < target_k:
                 continue
             Z = U[nbrs]
             y = y_t[nbrs]
             fin = np.isfinite(y)
-            if int(fin.sum()) < max(min_neigh, k):
+            if int(fin.sum()) < target_k:
                 continue
             Z = Z[fin]
             y = y[fin]
@@ -242,9 +274,13 @@ def _tangent_series(feats: np.ndarray, k: int) -> np.ndarray:
         for i in range(n):
             if not valid[i]:
                 continue
-            nbrs = _neighbors(U, valid, k, i)
+            # R15-INC-171: same explicit effective-neighbourhood contract as the
+            # regression kernels — the tangent plane also needs the DOF floor,
+            # never a silent smaller-k fit.
+            target_k = max(_MIN_NEIGH_FLOOR, int(k))
+            nbrs = _neighbors(U, valid, target_k, i)
             # P1-45(a): fail-close when fewer than the requested k peers exist.
-            if nbrs.size < max(4, k):
+            if nbrs.size < target_k:
                 continue
             cloud = U[nbrs]
             mu = cloud.mean(axis=0)
@@ -281,13 +317,13 @@ def _register_knn_op(canonical: str, description: str, unit: str, cost: int, fn)
         f1: pd.DataFrame,
         f2: pd.DataFrame,
         f3: pd.DataFrame,
-        k: int = 10,
+        k: int = 20,
         ridge: float = 1e-3,
         **_: Any,
     ) -> pd.DataFrame:
         kk = int(k)
-        if kk < 4:
-            raise ValueError(f"{canonical} requires k >= 4")
+        if kk < _KNN_MIN_K:
+            raise ValueError(f"{canonical} requires k >= {_KNN_MIN_K}")
         rg = float(ridge)
         if rg < 0.0:
             raise ValueError(f"{canonical} requires ridge >= 0")
@@ -296,7 +332,25 @@ def _register_knn_op(canonical: str, description: str, unit: str, cost: int, fn)
             fn(target.to_numpy(dtype=float), _stack_feats(f1, f2, f3), kk, rg),
         )
 
-    metadata = _metadata(canonical, description, ["target", "f1", "f2", "f3", "k", "ridge"], unit=unit, cost=cost)
+    metadata = _metadata(
+        canonical, description,
+        ["target", "f1", "f2", "f3", "k", "ridge"],
+        unit=unit, cost=cost,
+        # R15-INC-171/173: the default ``k`` is raised to the DOF floor
+        # (max(10, 5*(d+1)) == 20 for the 3-feature default) so the default is
+        # not a guaranteed-NaN dead region.  ``k`` and ``ridge`` are estimator
+        # resolution knobs, never freely-searchable economic alphas.
+        param_specs={
+            "k": ParamSpec(
+                dtype=int, min=_KNN_MIN_K,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, default=20,
+            ),
+            "ridge": ParamSpec(
+                dtype=float, min=0.0,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, default=1e-3,
+            ),
+        },
+    )
     return register_operator(
         name=canonical,
         category="cross_sectional",
@@ -356,14 +410,21 @@ class CsKnnTangentResidual(SeriesOperator):
         ["f1", "f2", "f3", "k"],
         unit="distance",
         cost=8,
+        # R15-INC-171: default k raised to the DOF floor; estimator resolution.
+        param_specs={
+            "k": ParamSpec(
+                dtype=int, min=_KNN_MIN_K,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION, default=20,
+            ),
+        },
     )
 
     def _calculate_series(
-        self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 10, **_: Any
+        self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 20, **_: Any
     ) -> pd.DataFrame:
         kk = int(k)
-        if kk < 4:
-            raise ValueError("cs_knn_tangent_residual requires k >= 4")
+        if kk < _KNN_MIN_K:
+            raise ValueError(f"cs_knn_tangent_residual requires k >= {_KNN_MIN_K}")
         return frame_like(f1, _tangent_series(_stack_feats(f1, f2, f3), kk))
 
 
@@ -423,8 +484,19 @@ def _copula_cross_series(a: np.ndarray, b: np.ndarray, grid: int, entropy: bool)
                     if p <= _EPS or denom <= _EPS:
                         continue
                     mi += p * np.log(p / denom)
-            # Miller-Madow MI bias correction (P1-21).
-            mi = mi + float(k_xy - k_u - k_v + 1) / (2.0 * N)
+            # Miller-Madow MI bias correction (P1-21 / R15-INC-174).
+            #
+            # Derivation: I = H_X + H_Y - H_XY.  With the standard entropy
+            # correction H_MM = H_ML + (K-1)/(2N) applied to each term,
+            #
+            #   I_MM = I_ML + [(k_u-1) + (k_v-1) - (k_xy-1)] / (2N)
+            #        = I_ML + (k_u + k_v - k_xy - 1) / (2N).
+            #
+            # For near-independent variables k_xy ≈ k_u·k_v is large, so this is
+            # negative and DAMPENS the upward plug-in MI bias toward 0.  The
+            # pre-R15 code added ``(k_xy - k_u - k_v + 1)`` — the exact negative —
+            # which INFLATED MI on independent data (a false positive control).
+            mi = mi + float(k_u + k_v - k_xy - 1) / (2.0 * N)
             out[t, :] = float(mi)
     return out
 

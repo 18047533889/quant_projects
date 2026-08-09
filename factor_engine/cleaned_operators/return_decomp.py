@@ -14,7 +14,7 @@ import pandas as pd
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
 
 
-def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str, price_params: tuple[str, ...]) -> OperatorMetadata:
+def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str, price_params: tuple[str, ...], available_at: str = "session_close", same_session_usable: bool = False) -> OperatorMetadata:
     # R11 P0-60: ``price_basis`` is a declared keyword-only scalar — the typed-IR
     # / caller asserts the price basis (RAW vs CONTINUOUS vs ...) from semantic
     # metadata; the runtime gate verifies it against concept columns.  Appended
@@ -37,6 +37,13 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
         # adjusted (continuous) close can never be combined into a return.
         input_units={p: "price" for p in price_params},
         compatible_units={p: ("price",) for p in price_params},
+        # NEW-158: machine-readable availability.  overnight_return is usable as
+        # soon as the open is known (after open); open_to_vwap (full-day VWAP),
+        # open_close_return and vwap_to_close_return are all session-close.
+        # ``same_session_usable=False`` tells the execution layer these outputs
+        # must never feed an intra-session decision.
+        available_at=available_at,
+        same_session_usable=same_session_usable,
     )
 
 
@@ -208,6 +215,9 @@ class OvernightReturn(SeriesOperator):
         domain="return",
         unit="return",
         price_params=("open", "pre_close"),
+        # NEW-158: known as soon as the opening price prints (not session close).
+        available_at="after_open",
+        same_session_usable=False,
     )
 
     def _calculate_series(self, open_px: pd.DataFrame, pre_close: pd.DataFrame, price_basis: str | None = None, **_: Any) -> pd.DataFrame:

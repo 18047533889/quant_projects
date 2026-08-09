@@ -389,15 +389,18 @@ def test_cs_knn_local_residual_deterministic():
     # Rank-quantised features can create exact distance ties, broken by stable
     # argsort (the documented convention shared with cs_knn_peer_mean_ex_self),
     # so the contract is determinism, not column-permutation invariance.
+    # R15-INC-171: ``k`` is floored at the DOF minimum (20 for 3 features), so
+    # the determinism run uses k=20 with a cross-section wide enough to hold a
+    # 20-peer neighbourhood (n >= 21 valid names).
     rng = np.random.default_rng(12)
-    rows, n = 60, 8
+    rows, n = 60, 30
     f1 = _frame(rng.normal(0.0, 1.0, (rows, n)))
     f2 = _frame(rng.normal(0.0, 1.0, (rows, n)))
     f3 = _frame(rng.normal(0.0, 1.0, (rows, n)))
     tgt = _frame(rng.normal(0.0, 1.0, (rows, n)))
     op = OperatorRegistry.get("cs_knn_local_linear_residual", "pandas_numpy")
-    a = op.calculate(tgt, f1, f2, f3, k=5, ridge=1e-3)
-    b = op.calculate(tgt, f1, f2, f3, k=5, ridge=1e-3)
+    a = op.calculate(tgt, f1, f2, f3, k=20, ridge=1e-3)
+    b = op.calculate(tgt, f1, f2, f3, k=20, ridge=1e-3)
     assert np.allclose(a.to_numpy(dtype=float), b.to_numpy(dtype=float), equal_nan=True)
 
 

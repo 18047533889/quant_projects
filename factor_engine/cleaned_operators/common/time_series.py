@@ -432,8 +432,16 @@ class TSLogReturn(SeriesOperator):
 
         n = strict_integer(d, "d", minimum=1)
         prev = x.shift(n)
-        ratio = x / prev.replace(0, np.nan)
-        return np.log(ratio.replace([np.inf, -np.inf], np.nan))
+        # NEW-200: a log return requires CURRENT and PREVIOUS prices both STRICTLY
+        # > 0.  The old code only replaced ``prev == 0`` — a negative price pair
+        # (negative/negative -> positive ratio) then produced a legal ``log``
+        # value from an invalid price, and 0/negative pairs silently became NaN
+        # with no data-quality signal.  Price <= 0 is not a missing value; it is
+        # invalid input, censored to NaN (PositivePrice domain).
+        valid = (x > 0) & (prev > 0)
+        ratio = x / prev
+        result = np.log(ratio.where(valid & np.isfinite(ratio)))
+        return result.replace([np.inf, -np.inf], np.nan)
 
 
 

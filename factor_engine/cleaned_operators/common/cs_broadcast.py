@@ -21,11 +21,25 @@ def broadcast_row_stat_all_null_null(x: pd.DataFrame, values: pd.Series) -> pd.D
     return broadcast_row_stat(x, row)
 
 
+def _finite_mask(x: pd.DataFrame) -> pd.DataFrame:
+    """NEW-255: a production numeric factor's statistical sample is ``np.isfinite``
+    — a ±Inf cell is as unusable as NaN and must never count toward the
+    cross-sectional rank base (a ``notna``/``count`` mask would treat Inf as a
+    valid extreme member and skew the rank)."""
+    arr = x.to_numpy(dtype=float, copy=False)
+    return pd.DataFrame(np.isfinite(arr), index=x.index, columns=x.columns)
+
+
 def cs_rank_01(x: pd.DataFrame) -> pd.DataFrame:
-    """截面 0-1 排名：单有效值 → 0.5；缺失/NaN 行保持 NULL。"""
-    valid = x.notna()
-    r = x.rank(axis=1, method="average")
-    n = x.count(axis=1)
+    """截面 0-1 排名：单有效值 → 0.5；缺失/Inf 行保持 NULL。
+
+    NEW-255: validity is ``np.isfinite`` — ±Inf is not a rankable extreme, so
+    it is excluded from the cross-sectional base and its cell stays NULL.
+    """
+    valid = _finite_mask(x)
+    masked = x.where(valid)
+    r = masked.rank(axis=1, method="average")
+    n = valid.sum(axis=1)
     denom = (n - 1).replace(0, np.nan)
     out = r.sub(1, axis=0).div(denom, axis=0)
     singleton = valid & np.broadcast_to((n <= 1).to_numpy()[:, None], out.shape)
@@ -34,5 +48,10 @@ def cs_rank_01(x: pd.DataFrame) -> pd.DataFrame:
 
 
 def cs_rank_pct(x: pd.DataFrame) -> pd.DataFrame:
-    """截面 pandas 百分位排名（``rank_pct`` / ``cs_pct_rank``）。"""
-    return x.rank(pct=True, axis=1)
+    """截面 pandas 百分位排名（``rank_pct`` / ``cs_pct_rank``）。
+
+    NEW-255: rank on the finite-masked panel so ±Inf does not participate in
+    the percentile base; its cell stays NULL.
+    """
+    valid = _finite_mask(x)
+    return x.where(valid).rank(pct=True, axis=1).where(valid, np.nan)

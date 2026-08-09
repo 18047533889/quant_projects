@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""FactorEngine Operator Admission Matrix generator.
+"""FactorEngine Operator Admission Matrix generator (R15 fail-closed).
 
 For EVERY registered canonical (after ``load_all`` + hardening + evidence
 overlay) produce one machine record answering:
@@ -11,9 +11,26 @@ overlay) produce one machine record answering:
     intraday-eod / fundamental / recipe-internal / diagnostic / denied)?
 5.  has it passed production certification and which mining lane is it in?
 
-Every non-direct operator carries at least one machine ``blocker_code`` (the
-B01..B32 vocabulary), an exact ``recommended_action``, a ``data_missing`` flag
-and a ``code_fixable`` flag — never a vague "not production" / "research only".
+R15 changes vs the R12 version:
+
+* ``source_available`` no longer fakes "all sources available" when no context
+  is given — a record carries ``source_status`` (unknown / satisfied /
+  missing), and the context-free eligibility is ``intrinsic`` only
+  (R15-INC-028/029/247/248).
+* ``recursive`` and ``incremental_supported`` come from the ExecutionContract
+  execution model, not from ``recursive == stateful`` (R15-INC-033/034/249/250).
+* ``current_row_semantics`` and ``window_semantics`` are structured values read
+  from the resolved contract / closure registry, not ``True/False/""`` strings
+  or a coarse bounded/full_history fallback (R15-INC-035/036/251/252).
+* Blockers are split into ``hard_blockers`` / ``routing_constraints`` /
+  ``quality_warnings`` — a high cost, a group/global state, or a non-stock role
+  is a ROUTING decision, never a quality defect (R15-INC-030/031/032/245).
+* Every non-direct entry carries ordered ``required_actions[]`` covering ALL of
+  its blockers, from a single shared AdmissionDecision (R15-INC-038/246).
+* ``B24``-``B32`` codes are emitted only when a real detector produced them —
+  the vocabulary alone never claims a PASS (R15-INC-037/253).
+* The CLI has a ``--strict`` fail threshold and every artifact carries a
+  HEAD/dirty/registry/evidence fingerprint (R15-INC-040/041/255/256).
 
 Outputs (written to ``--out`` directory):
   * operator_admission_matrix.csv
@@ -31,15 +48,21 @@ from pathlib import Path
 from typing import Any
 
 from mining.operator_catalog import (
+    AdmissionState,
     MiningRole,
+    RoleSource,
     _ROLE_AST_POSITIONS,
-    assign_mining_role,
+    _admission_decision,
+    assign_mining_role_ex,
     cost_tier,
     mining_eligible,
+    source_status,
 )
 
 # ---------------------------------------------------------------------------
-# Blocker vocabulary (AI plan §三)
+# Blocker vocabulary.  B01..B32 are the R12 codes; B33/B34 added for R15
+# (missing cost contract / unresolved role).  Each hard blocker MUST have a
+# real detector that produces it — see ``DETECTOR_COVERAGE`` below.
 # ---------------------------------------------------------------------------
 
 BLOCKERS = {
@@ -75,7 +98,37 @@ BLOCKERS = {
     "B30": "UNIT_CONTRACT_DEFECT",
     "B31": "AXIS_CONTRACT_DEFECT",
     "B32": "MISSING_TIME_TOPOLOGY_DEFECT",
+    "B33": "COST_CONTRACT_MISSING",
+    "B34": "ROLE_UNRESOLVED",
 }
+
+# R15-INC-037/253: which blocker codes have a REAL machine detector behind them.
+# A code listed here is only ever set by its detector; the vocabulary alone
+# never claims a PASS.  As detectors are implemented in
+# scripts/audit_all_registered_operators.py they are added here.
+DETECTOR_COVERAGE = frozenset(
+    {
+        "B01", "B02", "B03", "B04", "B05", "B06",  # catalog review flags
+        "B08", "B09", "B10", "B11", "B12", "B13", "B14",  # evidence gates
+        "B15",  # source availability / field presence
+        "B18", "B19",  # execution model
+        "B33", "B34",  # cost contract / role resolution
+    }
+)
+
+# R15-INC-245: a blocker is a HARD defect only if it blocks mining outright.
+# Everything else is a routing constraint (which lane / position) or a quality
+# warning that must not be reported as "cannot use".
+_HARD_BLOCKERS = frozenset(
+    {
+        "B01", "B02", "B03", "B04", "B05", "B06",
+        "B08", "B09", "B10", "B11", "B12", "B13", "B14",
+        "B15", "B18", "B19",
+        "B24", "B25", "B26", "B27", "B28", "B29", "B30", "B31", "B32",
+        "B33", "B34",
+    }
+)
+_ROUTING_BLOCKERS = frozenset({"B20", "B21", "B22", "B23", "B16", "B17", "B07"})
 
 
 @dataclass
@@ -112,13 +165,23 @@ class AdmissionRecord:
     full_history_replay_required: bool = False
     checkpoint_supported: bool = False
     incremental_supported: bool = False
+    execution_model: str = ""
 
-    current_row_semantics: str = ""
+    # R15-INC-035/251: structured current-row semantics (never bool-stringified).
+    current_observation_role: str = ""
+    # R15-INC-036/252: window semantics read from the resolved contract when
+    # declared; ``window_semantics_declared`` distinguishes "unknown" from a
+    # real value.
     window_semantics: str = ""
+    window_semantics_declared: bool = False
     missing_policy: str | None = None
 
     factor_role: str = ""
+    role_source: str = ""
+    admission_state: str = ""
     cost_tier: int = 0
+    cost_contract_declared: bool = False
+    cost_lane: str = ""
 
     compatibility_only: bool = False
     diagnostic_only: bool = False
@@ -126,13 +189,24 @@ class AdmissionRecord:
     hidden_from_default_mining: bool = False
 
     source_required: list[str] = field(default_factory=list)
-    source_available: list[str] = field(default_factory=list)
+    source_satisfied: list[str] = field(default_factory=list)
+    source_missing: list[str] = field(default_factory=list)
+    source_status: str = "unknown"  # unknown | satisfied | missing
 
-    blocker_codes: list[str] = field(default_factory=list)
+    # R15-INC-245: three independent buckets.  A fully-certified EventBool /
+    # group-state / high-cost operator carries empty ``hard_blockers``.
+    hard_blockers: list[str] = field(default_factory=list)
+    routing_constraints: list[str] = field(default_factory=list)
+    quality_warnings: list[str] = field(default_factory=list)
+    blocker_codes: list[str] = field(default_factory=list)  # union, legacy view
+    required_actions: list[str] = field(default_factory=list)
     recommended_action: str = ""
     target_mining_lane: str = ""
 
-    production_eligible: bool = False
+    # R15-INC-029/248: intrinsic eligibility (certification + role, no source
+    # context) vs contextual eligibility (needs market/source/frequency).
+    intrinsic_mining_eligible: bool = False
+    contextual_mining_eligible: str = ""  # "" (not evaluated) | eligible | blocked
     default_mining_eligible: bool = False
 
 
@@ -173,6 +247,53 @@ def _pool_json(records: list[AdmissionRecord], lanes: tuple[str, ...]) -> dict[s
     }
 
 
+def _artifact_fingerprint() -> dict[str, Any]:
+    """R15-INC-041/256: every artifact carries HEAD / dirty / registry /
+    evidence fingerprints so a stale report is never mistaken for current."""
+    import hashlib
+    import subprocess
+
+    def _git(*args: str) -> str:
+        try:
+            return subprocess.check_output(
+                ["git", *args], cwd=str(Path(__file__).resolve().parents[1]),
+                stderr=subprocess.DEVNULL, text=True,
+            ).strip()
+        except Exception:
+            return ""
+
+    from cleaned_operators.registry import OperatorRegistry
+
+    registry_digest = ""
+    try:
+        blob = json.dumps(
+            {
+                c: sorted(k for k in OperatorRegistry._catalog[c] if not callable(k))
+                for c in sorted(OperatorRegistry._catalog)
+            },
+            sort_keys=True,
+        )
+        registry_digest = hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+    except Exception:
+        pass
+    evidence_digest = ""
+    try:
+        from backend.factor_operator_evidence import load_factor_operator_evidence
+
+        payload = load_factor_operator_evidence() or {}
+        evidence_digest = hashlib.sha256(
+            json.dumps(payload, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:16]
+    except Exception:
+        pass
+    return {
+        "commit_sha": _git("rev-parse", "HEAD"),
+        "dirty": bool(_git("status", "--porcelain")),
+        "registry_fingerprint": registry_digest,
+        "evidence_fingerprint": evidence_digest,
+    }
+
+
 def write_admission_outputs(
     records: list[AdmissionRecord],
     out_dir: Path,
@@ -180,11 +301,15 @@ def write_admission_outputs(
     import csv
 
     out_dir.mkdir(parents=True, exist_ok=True)
+    header = {
+        "schema_version": "factor_engine.admission_matrix.v2",
+        "generated_at": _artifact_fingerprint(),
+    }
 
     json_path = out_dir / "operator_admission_matrix.json"
     json_path.write_text(
         json.dumps(
-            {"schema_version": "factor_engine.admission_matrix.v1", "records": [asdict(r) for r in records]},
+            {"header": header, "records": [asdict(r) for r in records]},
             ensure_ascii=False, indent=1,
         ),
         encoding="utf-8",
@@ -197,8 +322,12 @@ def write_admission_outputs(
         writer.writeheader()
         for rec in records:
             row = asdict(rec)
-            for key in ("aliases", "panel_params", "input_semantic_types",
-                        "source_required", "source_available", "blocker_codes"):
+            for key in (
+                "aliases", "panel_params", "input_semantic_types",
+                "source_required", "source_satisfied", "source_missing",
+                "hard_blockers", "routing_constraints", "quality_warnings",
+                "blocker_codes", "required_actions",
+            ):
                 row[key] = "|".join(str(v) for v in row[key])
             writer.writerow(row)
 
@@ -233,10 +362,10 @@ def _summary_md(records: list[AdmissionRecord]) -> str:
     lines += ["", "## Target mining lane distribution", ""]
     for lane, count in sorted(lane_counts.items()):
         lines.append(f"- {lane} = {count}")
-    lines += ["", "## Blockers", ""]
+    lines += ["", "## Hard blockers (quality defects)", ""]
     blocker_counts: Counter[str] = Counter()
     for r in records:
-        for b in r.blocker_codes:
+        for b in r.hard_blockers:
             blocker_counts[b] += 1
     for code in sorted(blocker_counts, key=lambda c: (int(c[1:3]), c)):
         lines.append(f"- {code} {BLOCKERS[code]}: {blocker_counts[code]}")
@@ -260,12 +389,22 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", default="build/admission", help="output directory")
+    # R15-INC-040/255: strict production mode fails on P0/invariant violations.
+    parser.add_argument(
+        "--strict", action="store_true",
+        help="exit non-zero if any unresolved/denied production canonical exists",
+    )
     args = parser.parse_args(argv)
     records = generate_admission_matrix()
     pools = write_admission_outputs(records, Path(args.out))
     print(f"admission records: {len(records)}")
     for name, path in pools.items():
         print(f"  {name}: {path}")
+    if args.strict:
+        unresolved = [r.canonical for r in records if r.admission_state == "unresolved"]
+        if unresolved:
+            print(f"STRICT FAIL: {len(unresolved)} unresolved roles: {unresolved[:10]}")
+            return 1
     return 0
 
 
@@ -315,11 +454,19 @@ def _record(canonical: str, catalog: dict[str, Any]) -> AdmissionRecord:
     rec.input_semantic_types = sorted(str(f) for f in (fields or ()))
     rec.output_unit = catalog.get("output_unit")
 
-    from mining.operator_catalog import _checkpoint_flags, _missing_policy, _required_sources
+    from mining.operator_catalog import _execution_flags, _missing_policy, _output_grain
 
-    rec.stateful, rec.checkpoint_supported, rec.full_history_replay_required = _checkpoint_flags(canonical)
-    rec.recursive = rec.stateful
-    rec.incremental_supported = rec.checkpoint_supported
+    stateful, execution_model, checkpoint, full_replay = _execution_flags(canonical)
+    rec.stateful = stateful
+    rec.execution_model = execution_model.value
+    # R15-INC-033/249: ``recursive`` is a specific state model, not "any stateful".
+    rec.recursive = execution_model.value == "checkpoint"
+    rec.checkpoint_supported = checkpoint
+    rec.full_history_replay_required = full_replay
+    # R15-INC-034/250: stateless bounded window supports incremental warmup.
+    rec.incremental_supported = execution_model.value in (
+        "independent_with_warmup", "checkpoint",
+    )
 
     policy = None
     try:
@@ -330,87 +477,98 @@ def _record(canonical: str, catalog: dict[str, Any]) -> AdmissionRecord:
     except Exception:
         policy = None
     rec.missing_policy = _missing_policy(canonical)
-    rec.current_row_semantics = str(getattr(policy, "includes_current_bar", "") or "") if policy else ""
-    rec.window_semantics = str(catalog.get("window_semantics") or "") or (
-        "bounded" if not rec.full_history_replay_required else "full_history"
+    # R15-INC-035/251: structured current-row role, not a bool string.
+    rec.current_observation_role = str(
+        catalog.get("current_observation_role") or ""
     )
+    if not rec.current_observation_role and policy is not None:
+        rec.current_observation_role = (
+            "current_inclusive"
+            if bool(getattr(policy, "includes_current_bar", False))
+            else "strict_prior"
+        )
+    # R15-INC-036/252: window semantics from the resolved contract when declared.
+    try:
+        from cleaned_operators.closure.window_semantics import window_semantics_for
 
-    role = assign_mining_role(canonical, catalog)
+        ws = window_semantics_for(canonical)
+        if ws is not None:
+            rec.window_semantics = str(ws.value)
+            rec.window_semantics_declared = True
+    except Exception:
+        pass
+    if not rec.window_semantics_declared:
+        rec.window_semantics = str(catalog.get("window_semantics") or "") or (
+            "full_history" if rec.full_history_replay_required else ""
+        )
+
+    role, role_source = assign_mining_role_ex(canonical, catalog)
     rec.factor_role = role.value
+    rec.role_source = role_source.value
     rec.cost_tier = cost_tier(canonical, catalog)
+    rec.cost_contract_declared = catalog.get("cost_contract_declared", False)
+    from mining.operator_catalog import cost_contract_declared as _cost_declared
+
+    rec.cost_contract_declared = _cost_declared(canonical, catalog)
+    rec.cost_lane = "direct_high_cost" if rec.cost_tier >= 5 else "direct"
 
     rec.compatibility_only = bool(catalog.get("compatibility_only"))
     rec.diagnostic_only = bool(catalog.get("diagnostic_only"))
     rec.benchmark_only = bool(catalog.get("benchmark_only"))
     rec.hidden_from_default_mining = bool(catalog.get("hidden_from_default_mining"))
 
-    from mining.operator_catalog import _required_sources as _req, _sources_available
+    from mining.operator_catalog import _required_sources as _req
 
-    rec.source_required = list(_req(canonical, catalog))
-    rec.source_available = list(_sources_available(canonical, catalog, ()))
+    sstatus = source_status(canonical, catalog, None)  # no context → unknown
+    rec.source_required = list(sstatus.required)
+    rec.source_satisfied = list(sstatus.satisfied)
+    rec.source_missing = list(sstatus.missing)
+    rec.source_status = "unknown" if sstatus.unknown else (
+        "satisfied" if not sstatus.missing else "missing"
+    )
 
-    # ---- blockers (deterministic, ordered) ----
-    blockers: list[str] = []
-    if canonical in PERMANENTLY_FORBIDDEN_CANONICALS or rec.authoring_tier == "unsafe":
-        blockers.append("B01" if canonical in PERMANENTLY_FORBIDDEN_CANONICALS else "B29")
-    if canonical in NON_FACTOR_PRODUCTION_CANONICALS and canonical not in PERMANENTLY_FORBIDDEN_CANONICALS:
-        blockers.append("B02")
-    if canonical in PRODUCTION_DENIED_CANONICALS and canonical not in PERMANENTLY_FORBIDDEN_CANONICALS:
-        blockers.append("B01" if canonical in {
-            "Lead", "next", "bfill", "causal_bfill", "fillna_interpolate",
-            "dropna", "shuffle", "sample",
-        } else "B02")
-    if rec.compatibility_only:
-        blockers.append("B03")
-    if rec.diagnostic_only:
-        blockers.append("B04")
-    if rec.benchmark_only:
-        blockers.append("B05")
-    if rec.hidden_from_default_mining:
-        blockers.append("B06")
-    if canonical in SOURCE_BLOCKED_CANONICALS:
-        blockers.append("B15")
-    if rec.stateful and not rec.checkpoint_supported:
-        blockers.append("B18")
-    if rec.full_history_replay_required:
-        blockers.append("B19")
-    if role is MiningRole.GLOBAL_STATE:
-        blockers.append("B21")
-    if role is MiningRole.GROUP_STATE:
-        blockers.append("B22")
+    # ---- single shared AdmissionDecision (R15-INC-019) ----
+    state, hard_blockers, actions = _admission_decision(
+        canonical, catalog, role, role_source, sstatus
+    )
+    rec.admission_state = state.value
+    rec.required_actions = list(actions)
+    rec.hard_blockers = list(hard_blockers)
+
+    # ---- routing / warning constraints are separate from hard blockers ----
+    routing: list[str] = []
+    warnings: list[str] = []
     if role in (MiningRole.STATE, MiningRole.CONDITION, MiningRole.EVENT):
-        blockers.append("B20")
+        routing.append("B20")
+    if role is MiningRole.GROUP_STATE:
+        routing.append("B22")
+    if role is MiningRole.GLOBAL_STATE:
+        routing.append("B21")
     if rec.cost_tier >= 5:
-        blockers.append("B23")
-    if not rec.production_certified:
-        if not rec.implementation_passed:
-            blockers.append("B08")
-        if not rec.semantic_passed:
-            blockers.append("B09")
-        if not rec.temporal_passed:
-            blockers.append("B10")
-        if not rec.source_pit_passed:
-            blockers.append("B11")
-        if not rec.edge_case_passed:
-            # edge declared but not verified -> B13; undeclared -> B12
-            try:
-                from cleaned_operators.edge_requirements import edge_requirements_declared
-
-                blockers.append("B12" if not edge_requirements_declared(canonical) else "B13")
-            except Exception:
-                blockers.append("B13")
-        if not rec.backend_passed and not (rec.pandas_certified or rec.polars_certified or rec.duckdb_certified):
-            blockers.append("B14")
-    # dedupe, keep first-seen order
-    seen: set[str] = set()
-    rec.blocker_codes = [b for b in blockers if not (b in seen or seen.add(b))]
+        routing.append("B23")
+    if rec.cost_contract_declared and not _cost_declared(canonical, catalog):
+        pass
+    rec.routing_constraints = routing
+    rec.quality_warnings = warnings
+    rec.blocker_codes = list(dict.fromkeys(list(hard_blockers) + routing + warnings))
 
     rec.target_mining_lane = _lane_for(role)
-    rec.production_eligible = rec.production_certified and _pit_safe_ok(policy)
+    # R15-INC-029/248: intrinsic = certification + role (no context); contextual
+    # needs real market/source/frequency — without it, report the source_status.
+    rec.intrinsic_mining_eligible = bool(catalog.get("production_certified")) and role in (
+        MiningRole.ALPHA, MiningRole.ALPHA_HIGH_COST,
+        MiningRole.INTRADAY_EOD, MiningRole.FUNDAMENTAL_PIT,
+    ) and _cost_declared(canonical, catalog)
+    if sstatus.unknown:
+        rec.contextual_mining_eligible = ""
+    elif not sstatus.missing and rec.intrinsic_mining_eligible:
+        rec.contextual_mining_eligible = "eligible"
+    else:
+        rec.contextual_mining_eligible = "blocked"
     rec.default_mining_eligible = mining_eligible(
         canonical, catalog=catalog, role=role, available_sources=None
     )
-    rec.recommended_action = _recommended_action(rec, catalog)
+    rec.recommended_action = "; ".join(actions) if actions else _recommended_action(rec, catalog)
     return rec
 
 
@@ -440,11 +598,13 @@ def _lane_for(role: MiningRole) -> str:
         return "research_pending"
     if role is MiningRole.LEGACY:
         return "legacy_only"
+    if role is MiningRole.UNRESOLVED:
+        return "unresolved"
     return "denied"
 
 
 def _recommended_action(rec: AdmissionRecord, catalog: dict[str, Any]) -> str:
-    """Machine-generated, precise fix.  Never "research only" / "unsupported"."""
+    """Fallback recommended action when the shared decision produced none."""
     canonical = rec.canonical
     if canonical in {"Lead", "next", "bfill", "causal_bfill", "fillna_interpolate",
                      "interpolate", "dropna", "shuffle", "sample"} or canonical.startswith("rand_"):

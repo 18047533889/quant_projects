@@ -136,29 +136,107 @@ _CLAMP_RE = re.compile(
 )
 
 
-def _scan_source_files() -> dict[str, list[tuple[int, str]]]:
-    """Scan operator .py files for suspected clamp / int-truncation lines."""
+# R15-INC-063: source-scan invariant over shared helper modules too.  The
+# recursive sweep below covers every ``.py`` under ``cleaned_operators/`` —
+# helper modules carry the same clamp / int-truncation risk as operator bodies,
+# so a scan limited to top-level ``cleaned_operators/*.py`` was a blind spot.
+_SKIP_SOURCE_FILES = frozenset(
+    {
+        "base.py", "base_polars.py", "registry.py", "operator_audits.py",
+        "closure_audit.py", "semantic_audit.py", "operator_spec.py",
+        "operator_surface.py", "operator_cost_model.py",
+        "parameter_validation.py", "safe_ops.py",
+    }
+)
+
+
+@dataclass
+class SourceScan:
+    """R15-INC-062: recursive source scan with full coverage accounting."""
+
+    scanned_files: list[str]
+    skipped_files: list[str]
+    scanned_canonicals: set[str]
+    clamp: list[str]
+    int_trunc: list[str]
+
+
+def _canonical_module_file(canonical: str) -> str | None:
+    """Real canonical → implementation file (relative to cleaned_operators).
+
+    Uses the pandas backend operator class's ``__module__``/``__file__`` — the
+    mapping R15-INC-062 demands (registry canonical → source file), never a
+    filename or regex guess.  Returns ``None`` when the implementation does not
+    live inside the tree (external tool, dynamically constructed class, test
+    fixture).
+    """
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        operator = OperatorRegistry._operators.get(canonical, {}).get("pandas_numpy")
+        if operator is None:
+            return None
+        module_name = type(operator).__module__
+        import sys
+
+        module = sys.modules.get(module_name)
+        if module is None:
+            return None
+        file_path = getattr(module, "__file__", None)
+        if not file_path:
+            return None
+        root = Path(__file__).resolve().parent.parent
+        path = Path(file_path).resolve()
+        try:
+            return str(path.relative_to(root))
+        except ValueError:
+            return None
+    except Exception:
+        return None
+
+
+def _scan_source_files() -> SourceScan:
+    """Recursively scan every operator/helper .py for suspected clamp /
+    int-truncation lines and record which registered canonicals the scanned
+    files actually declare (R15-INC-062: a registry-wide audit must prove it
+    scanned the whole tree, not just the top-level files)."""
     root = Path(__file__).resolve().parent.parent
-    results: dict[str, list[tuple[int, str]]] = {"clamp": [], "int_trunc": []}
-    for path in sorted(root.glob("*.py")):
+    scanned: list[str] = []
+    skipped: list[str] = []
+    scanned_canonicals: set[str] = set()
+    clamp: list[str] = []
+    int_trunc: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        rel = str(path.relative_to(root))
         if path.name.startswith("_"):
+            skipped.append(rel)
             continue
-        if path.name in {
-            "base.py", "registry.py", "operator_audits.py", "closure_audit.py",
-            "semantic_audit.py", "operator_spec.py", "operator_surface.py",
-            "operator_cost_model.py", "parameter_validation.py", "safe_ops.py",
-        }:
+        if path.name in _SKIP_SOURCE_FILES:
+            skipped.append(rel)
             continue
         try:
             text = path.read_text(encoding="utf-8")
         except OSError:
+            skipped.append(rel)
             continue
+        for m in re.finditer(
+            r'@register_operator\s*\(\s*(?:name\s*=\s*)?["\']([^"\']+)["\']',
+            text,
+        ):
+            scanned_canonicals.add(m.group(1))
         for lineno, line in enumerate(text.splitlines(), 1):
             if _CLAMP_RE.search(line):
-                results["clamp"].append((f"{path.name}:{lineno}", line.strip()[:140]))
+                clamp.append(f"{rel}:{lineno}: {line.strip()[:140]}")
             if _INT_TRUNC_RE.search(line):
-                results["int_trunc"].append((f"{path.name}:{lineno}", line.strip()[:140]))
-    return results
+                int_trunc.append(f"{rel}:{lineno}: {line.strip()[:140]}")
+        scanned.append(rel)
+    return SourceScan(
+        scanned_files=scanned,
+        skipped_files=skipped,
+        scanned_canonicals=scanned_canonicals,
+        clamp=clamp,
+        int_trunc=int_trunc,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +252,11 @@ def run_semantic_closure_audit(
 
     ``catalog`` may be passed pre-loaded (e.g. a filtered subset for testing);
     when ``None`` the full loaded catalog is used.
+
+    ``include_behavioral`` (R15-INC-071) is NOT a dead option: when False the
+    expensive recursive source-scan invariants (int-trunc / clamp / unscanned-
+    canonical) are skipped — a caller that only wants the contract invariants
+    pays none of the source-scan cost.
     """
     from cleaned_operators.registry import OperatorRegistry
 
@@ -231,6 +314,12 @@ def run_semantic_closure_audit(
     report.add(
         "OPERATOR_WITH_RUNTIME_INT_TRUNCATION",
         "int(<param>) candidate — silent float truncation (Part A-4)",
+    )
+    report.add(
+        "UNSCANNED_REGISTERED_CANONICALS",
+        "R15-INC-062: a registered canonical whose implementation file was not "
+        "covered by the recursive source scan (a registry-wide audit must prove "
+        "full-tree coverage; == ∅ is a release gate)",
     )
 
     inv_und_class = report.invariants["UNCLASSIFIED_PUBLIC_OPERATOR"]
@@ -320,14 +409,26 @@ def run_semantic_closure_audit(
                 f"{canonical} ({g_in}->{g_out}, same_session_usable unset)"
             )
 
-    # source-scan invariants
-    scan = _scan_source_files()
-    inv_clamp = report.invariants["OPERATOR_WITH_SILENT_PARAM_CLAMP"]
-    inv_int = report.invariants["OPERATOR_WITH_RUNTIME_INT_TRUNCATION"]
-    for loc, line in scan["clamp"]:
-        inv_clamp.violations.append(f"{loc}: {line}")
-    for loc, line in scan["int_trunc"]:
-        inv_int.violations.append(f"{loc}: {line}")
+    # source-scan invariants (recursive; skipped when include_behavioral=False)
+    if include_behavioral:
+        scan = _scan_source_files()
+        inv_clamp = report.invariants["OPERATOR_WITH_SILENT_PARAM_CLAMP"]
+        inv_int = report.invariants["OPERATOR_WITH_RUNTIME_INT_TRUNCATION"]
+        inv_unscanned = report.invariants["UNSCANNED_REGISTERED_CANONICALS"]
+        for loc in scan.clamp:
+            inv_clamp.violations.append(loc)
+        for loc in scan.int_trunc:
+            inv_int.violations.append(loc)
+        # R15-INC-062: build the REAL canonical → implementation-file map (from
+        # the operator class's module) instead of guessing by filename or a
+        # name-extraction regex.  A canonical whose implementation file resolves
+        # inside the tree but was NOT scanned is a hard violation.
+        for canonical in sorted(catalog):
+            file = _canonical_module_file(canonical)
+            if file is None:
+                continue  # no in-tree implementation file (external/dynamic)
+            if file not in scan.scanned_files and file not in scan.skipped_files:
+                inv_unscanned.violations.append(f"{canonical} ({file})")
 
     return report
 

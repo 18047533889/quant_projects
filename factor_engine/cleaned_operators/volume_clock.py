@@ -182,7 +182,12 @@ def _volume_clock_daily_agg(
     out: dict[str, pd.Series] = {}
     for inst in pa.columns:
         a, b = pa[inst], act[inst]
-        joined = pd.concat([a, b], axis=1, keys=["p", "a"]).dropna(subset=["p", "a"])
+        # R15-INC-186: NO ``dropna`` — dropping the missing bars would compress
+        # the physical session axis and silently connect gaps into the volume-
+        # clock path.  NaN positions are preserved and a required field missing
+        # ANYWHERE inside the day fails the whole day (paired-censor with time
+        # position retained, never time-axis compression).
+        joined = pd.concat([a, b], axis=1, keys=["p", "a"])
         if opn is not None and inst in opn.columns:
             joined["o"] = opn[inst]
         else:
@@ -193,7 +198,7 @@ def _volume_clock_daily_agg(
             vals_p = np.asarray(group["p"], dtype=float)
             vals_a = np.asarray(group["a"], dtype=float)
             vals_o = np.asarray(group["o"], dtype=float)
-            if not np.any(np.isfinite(vals_p)) or not np.any(np.isfinite(vals_a)):
+            if not np.all(np.isfinite(vals_p)) or not np.all(np.isfinite(vals_a)):
                 per_day[day] = np.nan
                 continue
             try:

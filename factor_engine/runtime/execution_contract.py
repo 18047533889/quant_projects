@@ -689,6 +689,25 @@ def _channel_width_slope_extension(canonical: str, params: Mapping[str, Any]) ->
     return h + left + right + w
 
 
+def _structural_level_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
+    """NEW-009/116: bounded structural pivot family (``ts_resistance_level`` /
+    ``ts_support_level`` / ``ts_resistance_slope`` / ``ts_swing_*`` / pivot
+    age/last/spacing).  A pivot at t must be confirmed over ``left + right``
+    bars and the operator re-reads a bounded ``history_window`` of confirmed
+    pivots, so the causal lookback is ``history_window + left_window +
+    right_window`` (+ 1 confirmation bar).  The old name-based default only
+    recognised ``window`` and under-allocated (6 instead of 65) — the analyzer
+    then planned a lookback that could not actually warm the kernel up.
+    """
+    specs = _specs(canonical)
+    h = _w1(params, specs, "history_window", canonical=canonical)
+    left = _w0(params, specs, "left_window", canonical=canonical)
+    right = _w0(params, specs, "right_window", canonical=canonical)
+    if _UNKNOWN in (h, left, right):
+        return _UNKNOWN
+    return h + left + right + 1
+
+
 def _window_transform(*params: str) -> HistoryTransform:
     return HistoryTransform(kind="window", params=params)
 
@@ -769,6 +788,29 @@ _HISTORY_TRANSFORMS["ts_impulse_volume"] = _compound_transform(_impulse_volume_e
 _HISTORY_TRANSFORMS["ts_channel_width_slope"] = _compound_transform(
     _channel_width_slope_extension
 )
+# NEW-009/116: bounded structural pivot family — lookback is the bounded
+# history window over confirmed pivots plus the left/right confirmation bars.
+# NOTE: plain-window ops (ts_prev_high, ts_breakout_high, ts_distance_to_high,
+# …) are intentionally NOT here — they take a single ``window`` and are handled
+# by the generic window transform; the structural formula needs
+# ``left_window``/``right_window``/``history_window``.
+for _canon in (
+    "ts_resistance_level", "ts_support_level",
+    "ts_resistance_slope", "ts_support_slope",
+    "ts_resistance_log_slope", "ts_support_log_slope",
+    "ts_resistance_fit_r2", "ts_support_fit_r2",
+    "ts_distance_to_resistance", "ts_distance_to_support",
+    "ts_resistance_break", "ts_support_break",
+    "ts_swing_amplitude", "ts_swing_amplitude_pct", "ts_swing_duration",
+    "ts_swing_velocity", "ts_pivot_high_age", "ts_pivot_low_age",
+    "ts_last_pivot_high", "ts_last_pivot_low",
+    "ts_confirmed_pivot_high", "ts_confirmed_pivot_low",
+    "ts_pivot_high_count", "ts_pivot_low_count",
+    "ts_pivot_high_spacing", "ts_pivot_low_spacing",
+    "ts_nth_pivot_high", "ts_nth_pivot_low",
+    "ts_nth_pivot_high_age", "ts_nth_pivot_low_age",
+):
+    _HISTORY_TRANSFORMS[_canon] = _compound_transform(_structural_level_extension)
 
 
 def _nested_pca_resid_extension(canonical: str, params: Mapping[str, Any]) -> int | object:

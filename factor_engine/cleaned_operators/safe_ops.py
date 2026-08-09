@@ -395,7 +395,12 @@ def _pd_argext(x, window, pick, min_periods):
             valid = np.isfinite(seg)
             if valid.sum() < int(min_periods):
                 continue
-            target = np.nanmax(seg) if pick == "max" else np.nanmin(seg)
+            # NEW-074: the target extreme is computed ONLY on the finite subset.
+            # ``np.nanmax(seg)`` still sees +Inf (it is not NaN), so a window
+            # with both finite and +Inf would make target=Inf, ``valid &
+            # (seg == target)`` empty, and ``hits[-1]`` IndexError.  An Inf is
+            # never a valid extreme position.
+            target = float(np.max(seg[valid])) if pick == "max" else float(np.min(seg[valid]))
             hits = np.flatnonzero(valid & (seg == target))
             age = (seg.size - 1) - hits[-1]          # ties -> most recent
             out[row, col] = float(age)

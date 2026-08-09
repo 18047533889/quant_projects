@@ -61,3 +61,30 @@ def test_ashare_lowerings_registered():
     assert lowered_primitives("benchmark_excess_return") == ("subtract",)
     assert lowered_primitives("limit_up_state") == ("ge", "subtract")
     assert lowered_primitives("limit_up_close") == ("ge", "subtract")
+
+
+def test_valid_trade_is_strict_tradable_bool() -> None:
+    # NEW-050: valid_trade must be a TradableBool {0, 1, NaN}.  A 0.2 / -1 / 2
+    # flag was previously read as "tradeable" (finite & != 0); it is now a
+    # data-quality error, never silently true/false.
+    from cleaned_operators.ashare.state_machine import _tradeable
+
+    assert _tradeable(np.array([[1.0]]), 0, 0) is True
+    assert _tradeable(np.array([[0.0]]), 0, 0) is False
+    assert _tradeable(np.array([[np.nan]]), 0, 0) is False
+    for bad in (0.2, -1.0, 2.0):
+        with pytest.raises(ValueError):
+            _tradeable(np.array([[bad]]), 0, 0)
+
+
+def test_limit_up_streak_rejects_non_bool_valid_trade() -> None:
+    # NEW-050/051 end-to-end: a non-bool valid_trade flag (0.2) must fail the
+    # state machine loudly instead of being silently treated as tradeable.
+    from cleaned_operators.registry import OperatorRegistry
+
+    op = OperatorRegistry.get("ashare_limit_up_streak")
+    close = _panel([[10.0, 10.0], [10.0, 10.0]])
+    high_limit = _panel([[10.0, 10.0], [10.0, 10.0]])
+    bad_trade = _panel([[0.2, 1.0], [1.0, 1.0]])
+    with pytest.raises(ValueError):
+        op.calculate(close, high_limit, bad_trade)

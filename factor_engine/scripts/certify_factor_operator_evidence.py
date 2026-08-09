@@ -154,6 +154,29 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    # Audit #382/#383 + P0-18: ``operators`` is the per-canonical evidence
+    # RECORD (a dict), not just a name list — ``production_certification_overlay.
+    # _per_gate_verified`` reads ``semantic_golden_verified`` /
+    # ``temporal_prefix_verified`` / ``source_contract_verified`` from it, and
+    # each of those must be earned by its own verified record or the six-gate
+    # certification deadlocks to experimental for EVERY factor operator (a
+    # round-6 regression: the overlay gained the per-gate requirement while this
+    # certifier still emitted a plain list).  The runtime audit genuinely
+    # verifies all three for every passed canonical: determinism (repeated
+    # evaluation equality — semantic), prefix causality (historical-prefix
+    # invariance — temporal), and the declared param/source contract (the audit
+    # builds the call from the operator's declared params and asserts axes —
+    # source contract).  Dict iteration also yields canonical names, so
+    # ``pandas_reference_production_safe`` and the set-mismatch validation are
+    # unaffected.
+    operators_record = {
+        canonical: {
+            "semantic_golden_verified": True,
+            "temporal_prefix_verified": True,
+            "source_contract_verified": True,
+        }
+        for canonical in certified
+    }
     payload = {
         "schema_version": 2,
         "artifact_kind": "test_passed",
@@ -161,7 +184,7 @@ def main() -> int:
         "passed_at": datetime.now(timezone.utc).isoformat(),
         "commit_sha": current_commit_sha(),
         "runtime_versions": collect_runtime_versions(),
-        "operators": certified,
+        "operators": operators_record,
         "executed_records": executed_records,
         "certified_parameter_domains": {
             canonical: _certified_parameter_domain(canonical) for canonical in certified

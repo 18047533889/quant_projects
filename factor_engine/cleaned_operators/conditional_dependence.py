@@ -397,20 +397,36 @@ class TsModwtBandCorr(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=8),
-        "level": ParamSpec(dtype=int, min=1),
-        "band": ParamSpec(dtype=int, min=1),
+        # R15-INC-163: ``level`` / ``band`` are estimator resolution, not freely
+        # searched economic alphas — only a small reviewed grid is meaningful.
+        "level": ParamSpec(
+            dtype=int, min=1,
+            param_role=ParamRole.ESTIMATOR_RESOLUTION,
+        ),
+        "band": ParamSpec(
+            dtype=int, min=1,
+            param_role=ParamRole.ESTIMATOR_RESOLUTION,
+        ),
     }
     # Audit #25/#7: declare the transform's minimum-window feasibility so the
     # binder/search grammar rejects guaranteed-NaN combinations before spending
     # budget.  ``2 ** band`` is the Haar dilation at the requested band; the +6
     # leaves interior samples after the cone-of-influence censor.
+    # R15-INC-162: ``band <= level`` is a compile-time relation (you cannot
+    # correlate band-level coefficients without decomposing at least to level).
     metadata.relational_specs = [
         RelationalParamSpec(
             "window >= 2 ** band + level + 6",
             "ts_modwt_band_corr requires window >= 2**band + level + 6 "
             "(Haar MODWT minimum + cone-of-influence censor; "
             "window={window}, band={band}, level={level})",
-        )
+        ),
+        RelationalParamSpec(
+            "band <= level",
+            "ts_modwt_band_corr requires band <= level "
+            "(band-level detail coefficients need a decomposition to at least "
+            "that level; band={band}, level={level})",
+        ),
     ]
 
     def _calculate_series(
@@ -429,10 +445,12 @@ class TsModwtBandCorr(SeriesOperator):
             raise ValueError("ts_modwt_band_corr requires level >= 1")
         if not (1 <= bd <= lv):
             raise ValueError("ts_modwt_band_corr requires 1 <= band <= level")
-        # R5 P1-43(b): the Haar loop stops at ``band``, so ``level > band`` is a
-        # dead parameter range that never changes the output — cap ``level`` at
-        # ``band`` to keep the search surface meaningful.
-        lv = min(lv, bd)
+        # R15-INC-162: NO silent ``lv = min(lv, bd)`` clamp — that collapsed
+        # every ``level > band`` AST onto the same output.  ``band <= level`` is
+        # now a compile-time RelationalParamSpec; at runtime an illegal combo is
+        # rejected outright.  ``level`` is a feasibility bound (decompose to at
+        # least ``band``), declared estimator resolution so the search does not
+        # treat it as a free alpha dimension.
         # Cone-of-influence coefficients are censored, so the window must be long
         # enough to leave interior samples after dropping ``2^band - 1`` of them.
         if w < (1 << bd) + lv + 6:

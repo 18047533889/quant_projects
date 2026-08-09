@@ -86,6 +86,23 @@ def test_argmax_argmin_are_distance_to_most_recent_tie() -> None:
     assert argmin["A"].iloc[-1] == 0.0
 
 
+def test_log_return_requires_positive_prices() -> None:
+    # NEW-200: ln(x_t / x_{t-1}) needs BOTH prices strictly > 0.  The old code
+    # only replaced ``prev == 0`` — a negative/negative pair produced a legal
+    # log of a positive ratio (a fake return from invalid prices), and
+    # 0/negative pairs silently became NaN with no data-quality signal.
+    x = pd.DataFrame({"A": [2.0, 4.0, -2.0, -4.0, 0.0, 8.0]})
+    out = OperatorRegistry.get("ts_log_return").calculate(x, 1)
+    # row1: ln(4/2) = ln2
+    assert out.iloc[1, 0] == pytest.approx(np.log(2.0))
+    # row3 (-4/-2): positive ratio but NEGATIVE prices -> NaN, not ln(2)
+    assert np.isnan(out.iloc[3, 0])
+    # row4 (0/4): zero current price -> NaN
+    assert np.isnan(out.iloc[4, 0])
+    # row5 (8/0): zero previous price -> NaN
+    assert np.isnan(out.iloc[5, 0])
+
+
 def test_time_slope_recomputes_window_time_coordinates() -> None:
     x = pd.DataFrame({"A": [1.0, np.nan, 5.0, 7.0]})
     result = OperatorRegistry.get("ts_time_slope").calculate(x, 4, 2)

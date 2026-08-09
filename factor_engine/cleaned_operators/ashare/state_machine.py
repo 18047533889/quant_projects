@@ -49,8 +49,23 @@ def _tolerance(value: Any) -> float:
 
 
 def _tradeable(valid_trade: np.ndarray, r: int, c: int) -> bool:
+    # NEW-050: TradableBool is strictly {0, 1, NaN}.  NaN = unknown -> not
+    # tradeable (break); 1 = tradeable; 0 = not tradeable.  The old
+    # ``finite and value != 0`` accepted 0.2/-1/2 as "tradeable" — a 0.2 float
+    # condition is neither a boolean nor a probability the state machine is
+    # allowed to interpret.  Any value outside {0, 1, NaN} is a data-quality
+    # error (never silently true/false).
     value = valid_trade[r, c]
-    return bool(np.isfinite(value) and value != 0)
+    if value != value:  # NaN
+        return False
+    if value == 1.0:
+        return True
+    if value == 0.0:
+        return False
+    raise ValueError(
+        f"valid_trade must be a TradableBool ({{0, 1, NaN}}); got {value!r} at "
+        "row/col ({r},{c}) — a 0.2 / -1 / 2 value is not a tradeable flag"
+    )
 
 
 def _break_mask(row: int, col: int, arrays: list[np.ndarray]) -> bool:
@@ -495,16 +510,25 @@ class AshareSuspensionEpisodeLength(SeriesOperator):
         for r in range(rows):
             for c in range(cols):
                 value = sv[r, c]
-                if not np.isfinite(value):
+                # NEW-051: is_suspend is a strict EventBool {0, 1, NaN}.  NaN =
+                # unknown (break); 1 = suspended; 0 = not suspended.  The old
+                # ``value != 0`` counted 0.2/-1/2 as "suspended" — a non-boolean
+                # flag is a data-quality error, never a suspend state.
+                if value != value:  # NaN
                     out[r, c] = np.nan
                     run[c] = 0
                     continue
-                if value != 0:
+                if value == 1.0:
                     run[c] += 1
                     out[r, c] = float(run[c])
-                else:
+                elif value == 0.0:
                     run[c] = 0
                     out[r, c] = 0.0
+                else:
+                    raise ValueError(
+                        f"is_suspend must be an EventBool ({{0, 1, NaN}}); got "
+                        f"{value!r} at row/col ({r},{c})"
+                    )
         return frame_like(is_suspend, out)
 
 
