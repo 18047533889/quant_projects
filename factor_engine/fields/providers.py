@@ -591,7 +591,7 @@ _b(
 )
 _b(
     "market_cap_local", "us", "us_market_cap_shares_snapshot",
-    dataset="us_stock_shares_snapshot",
+    dataset="us_ticker_shares_snapshot",  # R17-018: DataAccess registry name
     physical=("TickerSharesSnapshot.weighted_shares_outstanding", "StockDailyBar.Close"),
     quality=_DERIVED, coverage=CoverageClass.PARTIAL, source_unit=USD, canonical_unit=USD,
     transform=_mul_two("TickerSharesSnapshot.weighted_shares_outstanding", "StockDailyBar.Close"),

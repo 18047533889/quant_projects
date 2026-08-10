@@ -897,13 +897,13 @@ class DataAccessSource(DataSource):
             return None
         if isinstance(resolved, UnknownFieldResult):
             if production:
-                raise UnknownField(
+                raise UnknownFieldSemanticError(
                     f"unknown field {name!r} in dataset {self.dataset!r}"
                 )
             return None
         if isinstance(resolved, AmbiguousField):
             if production:
-                raise UnknownField(
+                raise UnknownFieldSemanticError(
                     f"ambiguous field {name!r} in dataset {self.dataset!r} "
                     f"(candidates: {', '.join(resolved.candidates)})"
                 )

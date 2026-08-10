@@ -50,6 +50,7 @@ def _table(
     cardinality="many_to_one",
     strict_pit_allowed=None,
     current_snapshot_only=False,
+    metadata=None,
 ):
     # R17-013: helper default UNKNOWN (None); every production-readable US table
     # declares PIT eligibility explicitly.
@@ -73,31 +74,53 @@ def _table(
         cardinality=cardinality,
         strict_pit_allowed=strict_pit_allowed,
         current_snapshot_only=current_snapshot_only,
+        metadata=dict(metadata or {}),
     )
 
 
 US_TABLE_SPECS: tuple[TableSpec, ...] = (
-    _table("StockDailyBar", "us_stock_daily", domain="price_volume", instrument="Ticker"),
-    _table("StockList", "us_stock_list", instrument="Symbol", domain="reference", join_policy="exact"),
+    # R17-013: every production-readable US table declares strict_pit_allowed
+    # explicitly (+ reason in metadata); R17-018: dataset names align with the
+    # DataAccess registry.
+    _table("StockDailyBar", "us_stock_daily", domain="price_volume", instrument="Ticker",
+           strict_pit_allowed=True, metadata={"pit_reason": "exact_daily D1; PIT-safe"}),
+    _table("StockList", "us_stock_list", instrument="Symbol", domain="reference", join_policy="exact",
+           strict_pit_allowed=True, metadata={"pit_reason": "exact full-history; PIT-safe"}),
     _table(
-        "SecurityMaster", "us_stock_security_master", instrument="Ticker",
+        "SecurityMaster", "us_security_master_daily_snap", instrument="Ticker",
         domain="reference", table_kind="static", join_policy="exact",
+        strict_pit_allowed=True,
+        metadata={"pit_reason": "static reference for stable identifiers only; "
+                                "historical attributes come from DailySnap (R17-068)"},
     ),
     _table(
-        "TickerSharesSnapshot", "us_stock_shares_snapshot", instrument="ticker",
-        domain="capital", join_policy="exact",
+        "TickerSharesSnapshot", "us_ticker_shares_snapshot", instrument="ticker",
+        domain="capital", join_policy="exact", strict_pit_allowed=True,
+        metadata={"pit_reason": "shares snapshot; exact equi-join; PIT-safe"},
     ),
     _table(
         "StockIndicesComponents", "us_stock_index_components", instrument="Symbol",
         domain="index", table_kind="relation", join_policy="exact",
         required_parameters=("IndexName",), cardinality="one_to_many",
+        strict_pit_allowed=True,
+        metadata={"pit_reason": "membership relation; IndexName required; PIT-safe"},
     ),
-    # US StockCapitalDaily has a DUAL schema: ``{date}.parquet`` split/adjustment
-    # events and ``shares_{date}.parquet`` PIT shares.  Both are registered under
-    # one logical table; fields from the two schemas are kept distinct.
+    # R17-019: DataAccess split the dual-schema US StockCapitalDaily into two
+    # datasets: ``us_stock_capital_split`` ({date}.parquet split/adjustment
+    # events) and ``us_stock_capital_shares`` (shares_{date}.parquet PIT shares).
+    # FE mirrors that split — a single reader/glob MUST NOT mix the two schemas.
     _table(
-        "StockCapitalDaily", "us_stock_capital_daily", instrument="ticker",
-        domain="capital", join_policy="exact",
+        "USStockCapitalSplitEvent", "us_stock_capital_split", instrument="ticker",
+        domain="capital", table_kind="event", join_policy="exact",
+        time="execution_date", effective="execution_date", strict_pit_allowed=False,
+        metadata={"pit_reason": "split/adjustment EVENT rows (effective execution_date); "
+                                "not a PIT-safe level table; event-only semantics (R17-019)"},
+    ),
+    _table(
+        "USTickerSharesPITEvent", "us_stock_capital_shares", instrument="ticker",
+        domain="capital", table_kind="event", join_policy="financial_pit",
+        knowledge="filing_date", period="filing_date", strict_pit_allowed=True,
+        metadata={"pit_reason": "sparse shares PIT event source; asof(filing_date) (R17-019)"},
     ),
     # US financial statements: PIT on filing_date; period = period_end;
     # timeframe (quarterly/annual/trailing_twelve_months) MUST be filtered first.
@@ -105,24 +128,36 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
         "StockBalance", "us_stock_balance", time="filing_date", instrument="ticker",
         domain="fundamental", table_kind="financial_event", join_policy="financial_pit",
         knowledge="filing_date", period="period_end", required_parameters=("timeframe",),
+        strict_pit_allowed=True,
+        metadata={"pit_reason": "financial_pit on filing_date; timeframe required; PIT-safe"},
     ),
     _table(
         "StockIncome", "us_stock_income", time="filing_date", instrument="ticker",
         domain="fundamental", table_kind="financial_event", join_policy="financial_pit",
         knowledge="filing_date", period="period_end", required_parameters=("timeframe",),
+        strict_pit_allowed=True,
+        metadata={"pit_reason": "financial_pit on filing_date; timeframe required; PIT-safe"},
     ),
     _table(
         "StockCashFlow", "us_stock_cashflow", time="filing_date", instrument="ticker",
         domain="fundamental", table_kind="financial_event", join_policy="financial_pit",
         knowledge="filing_date", period="period_end", required_parameters=("timeframe",),
+        strict_pit_allowed=True,
+        metadata={"pit_reason": "financial_pit on filing_date; timeframe required; PIT-safe"},
     ),
-    # US dividends: PIT on declaration_date (0.51% null); ex_dividend_date may
-    # hold future dates (clip in backtest); cash_amount currency varies (~12.2%
-    # non-USD, COS has no FX) -> USD-only binding, else FX_PROVIDER_REQUIRED.
+    # R17-020: US StockDividend has NO TradeDate and NO period_end.  knowledge =
+    # declaration_date (PIT anchor), effective = ex_dividend_date (may be future;
+    # clip in backtest), partition/effective key = ex_dividend_date.
+    # ``asof_backward`` is used (not ``financial_pit``) because a dividend is an
+    # EVENT table — it has no report-period selection; the registry forbids
+    # ``financial_pit`` without a period_id_column.
     _table(
-        "StockDividend", "us_stock_dividend", time="TradeDate", instrument="ticker",
-        domain="corporate_action", table_kind="event", join_policy="financial_pit",
-        knowledge="declaration_date", effective="ex_dividend_date", period="period_end",
+        "StockDividend", "us_stock_dividend", time="ex_dividend_date", instrument="ticker",
+        domain="corporate_action", table_kind="event", join_policy="asof_backward",
+        knowledge="declaration_date", effective="ex_dividend_date", period=None,
+        strict_pit_allowed=True,
+        metadata={"pit_reason": "PIT on declaration_date; effective ex_dividend_date may be "
+                                "future (clip); currency filter required (R17-020/021)"},
     ),
     # X0 sparse: only ~49 calendar files (2026-05-12..2026-07-27). NOT a full
     # history daily panel. current_snapshot_only forces strict_pit_allowed=False.
@@ -130,23 +165,37 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
         "StockValuationDaily", "us_stock_valuation_daily", instrument="ticker",
         domain="valuation", join_policy="exact", current_snapshot_only=True,
         strict_pit_allowed=False,
+        metadata={"pit_reason": "X0 sparse current snapshot only; not historical"},
     ),
     _table(
         "StockIndicator", "us_stock_indicator", instrument="ticker",
         domain="fundamental", join_policy="exact", current_snapshot_only=True,
         strict_pit_allowed=False,
+        metadata={"pit_reason": "X0 sparse current snapshot only; not historical"},
     ),
+    # R17-022/023/024: FactNews published_utc is tz-aware UTC (not America/New_York);
+    # ``tickers`` is a list<string> needing an explode adapter (NewsEventAdapter);
+    # PIT is published_utc only; timezone conversion happens only when mapping to a
+    # US session/decision timestamp.
     _table(
-        "FactNews", "us_stock_news", time="published_utc", instrument="ticker",
+        "FactNews", "us_fact_news", time="published_utc", instrument="ticker",
         domain="alternative", table_kind="event", join_policy="exact",
-        timezone="America/New_York",
+        knowledge="published_utc", strict_pit_allowed=True,
+        metadata={
+            "pit_reason": "PIT on published_utc (tz-aware UTC); after-close -> next session",
+            "timezone": "UTC",
+            "instrument_kind": "list<explode>",  # tickers is a list; NewsEventAdapter explodes
+        },
     ),
     _table("Calendar", "us_calendar", time="trade_date", instrument=None,
-           domain="calendar", table_kind="calendar"),
+           domain="calendar", table_kind="calendar",
+           strict_pit_allowed=True, metadata={"pit_reason": "calendar reference; PIT-safe"}),
     _table("EarlyClose", "us_early_close", time="date", instrument=None,
-           domain="calendar", table_kind="calendar"),
+           domain="calendar", table_kind="calendar",
+           strict_pit_allowed=True, metadata={"pit_reason": "calendar reference; PIT-safe"}),
     _table("UniverseDaily", "us_universe_daily", time="trade_date", instrument="ticker",
-           domain="reference", join_policy="exact"),
+           domain="reference", join_policy="exact",
+           strict_pit_allowed=True, metadata={"pit_reason": "exact daily universe; PIT-safe"}),
 )
 
 _TABLE_BY_NAME = {item.name: item for item in US_TABLE_SPECS}
@@ -279,16 +328,18 @@ US_FIELD_SPECS: tuple[FieldSpec, ...] = (
     _f("index_member", "StockIndicesComponents", "Symbol", dtype="string", unit=_UNIT_IDENTIFIER,
        role="identifier", mining_allowed=False),
 
-    # --- StockCapitalDaily (dual schema: splits + PIT shares) --------------
-    _f("split_from", "StockCapitalDaily", "split_from", unit=_UNIT_RATIO, mining_allowed=False),
-    _f("split_to", "StockCapitalDaily", "split_to", unit=_UNIT_RATIO, mining_allowed=False),
-    _f("adjustment_type", "StockCapitalDaily", "adjustment_type", dtype="string",
+    # --- R17-019: US capital split events vs shares PIT vs snapshot --------
+    # Split/adjustment events live in ``us_stock_capital_split`` (event rows).
+    _f("split_from", "USStockCapitalSplitEvent", "split_from", unit=_UNIT_RATIO, mining_allowed=False),
+    _f("split_to", "USStockCapitalSplitEvent", "split_to", unit=_UNIT_RATIO, mining_allowed=False),
+    _f("adjustment_type", "USStockCapitalSplitEvent", "adjustment_type", dtype="string",
        unit=_UNIT_TEXT, role="label", aliases=("split_type",), mining_allowed=False),
-    _f("execution_date", "StockCapitalDaily", "execution_date", dtype="date", unit=_UNIT_DATE,
+    _f("execution_date", "USStockCapitalSplitEvent", "execution_date", dtype="date", unit=_UNIT_DATE,
        role="effective_time", mining_allowed=False),
-    _f("pit_basic_shares_outstanding", "StockCapitalDaily", "pit_basic_shares_outstanding",
+    # Sparse PIT shares live in ``us_stock_capital_shares`` (asof filing_date).
+    _f("pit_basic_shares_outstanding", "USTickerSharesPITEvent", "pit_basic_shares_outstanding",
        unit=_UNIT_SHARE, aliases=("basic_shares_pit",), mining_allowed=False),
-    _f("pit_diluted_shares_outstanding", "StockCapitalDaily", "pit_diluted_shares_outstanding",
+    _f("pit_diluted_shares_outstanding", "USTickerSharesPITEvent", "pit_diluted_shares_outstanding",
        unit=_UNIT_SHARE, aliases=("diluted_shares_pit",), mining_allowed=False),
 
     # --- Financial statements (PIT on filing_date, timeframe filtered) -----
@@ -331,8 +382,12 @@ US_FIELD_SPECS: tuple[FieldSpec, ...] = (
        role="knowledge_time", mining_allowed=False),
     _f("ex_dividend_date", "StockDividend", "ex_dividend_date", dtype="date", unit=_UNIT_DATE,
        role="effective_time", mining_allowed=False),
-    _f("cash_amount", "StockDividend", "cash_amount", unit=_UNIT_USD,
-       metadata={"note": "currency varies ~12.2% non-USD; USD-only usable without FX provider"}),
+    # R17-021: cash_amount is *per-share in the declared currency*, NOT a bare
+    # USD amount.  Only when currency==USD may it map to cash_dividend_per_share@us.
+    _f("cash_amount", "StockDividend", "cash_amount", unit=_UNIT_USD_PER_SHARE,
+       aliases=("cash_dividend_per_share_declared_currency",),
+       metadata={"note": "amount per share in declared currency; currency varies ~12.2% "
+                         "non-USD; USD-only usable without FX provider (R17-021)"}),
     _f("dividend_currency", "StockDividend", "currency", dtype="string", unit=_UNIT_TEXT,
        role="label", aliases=("currency",), mining_allowed=False),
     _f("dividend_frequency", "StockDividend", "frequency", dtype="int64", unit="dimensionless",
@@ -352,13 +407,22 @@ US_FIELD_SPECS: tuple[FieldSpec, ...] = (
     _f("return_on_assets", "StockValuationDaily", "return_on_assets", unit=_UNIT_RATIO,
        aliases=("roa",), metadata={"unit_note": "decimal; A-share Roa is % (divide by 100)"}),
 
-    # --- FactNews -----------------------------------------------------------
+    # --- FactNews (R17-022/023/024) -----------------------------------------
     _f("published_utc", "FactNews", "published_utc", dtype="datetime", unit=_UNIT_DATETIME,
-       role="knowledge_time", mining_allowed=False),
+       role="knowledge_time", mining_allowed=False,
+       metadata={"timezone": "UTC", "note": "tz-aware UTC; convert to US session "
+                                            "time only for decision mapping"}),
     _f("news_tickers", "FactNews", "tickers", dtype="string", unit=_UNIT_TEXT,
+       role="identifier", mining_allowed=False,
+       metadata={"note": "list<string>; NewsEventAdapter must explode before "
+                         "per-ticker daily factor construction (R17-023)"}),
+    # R17-022: the real FactNews physical column is ``title`` (not ``headline``).
+    _f("news_title", "FactNews", "title", dtype="string", unit=_UNIT_TEXT,
+       role="label", aliases=("headline",), mining_allowed=False,
+       metadata={"note": "physical column is title; headline is an alias only (R17-022)"}),
+    # News article id — kept for article-level dedupe across exploded tickers.
+    _f("news_article_id", "FactNews", "id", dtype="string", unit=_UNIT_TEXT,
        role="identifier", mining_allowed=False),
-    _f("news_headline", "FactNews", "headline", dtype="string", unit=_UNIT_TEXT,
-       role="label", mining_allowed=False),
 )
 
 # Fields that exist in the US dictionary but are EMPTY / unusable — used by the

@@ -1093,7 +1093,6 @@ class Analyzer:
                     referenced_fields[node.name] = spec
                 attrs = {"name": node.name}
                 if isinstance(node, FieldRef):
-                    from fields.resolver import resolve_market_field
                     from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
                     # R17-037: the field-registry hash comes from the SAME market
@@ -1129,13 +1128,19 @@ class Analyzer:
                     price_basis = getattr(spec, "price_basis", None) or _price_basis_of_field(
                         node.name, market=self._market
                     )
+                    if self._market is not None:
+                        from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+
+                        reg_hash = (
+                            MULTI_MARKET_FIELD_REGISTRY.registry_for(self._market).catalog_hash()
+                        )
+                    else:
+                        from fields import FIELD_REGISTRY
+
+                        reg_hash = FIELD_REGISTRY.catalog_hash()
                     attrs.update({
                         "field_id": str(spec.field_id),
-                        "field_registry_hash": (
-                            MULTI_MARKET_FIELD_REGISTRY.registry_for(self._market).catalog_hash()
-                            if self._market is not None
-                            else FIELD_REGISTRY.catalog_hash()
-                        ),
+                        "field_registry_hash": reg_hash,
                         "field": spec.name,
                         "dtype": schema.dtype,
                         "unit": spec.unit,
