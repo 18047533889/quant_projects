@@ -556,6 +556,7 @@ class ExecutionResourcePlan:
             io_concurrency=max(1, int(concurrency.get("io_concurrency") or 0) or base.io_concurrency),
             spill_dir=spill_dir,
             spill_disk_bytes=spill_disk_available(spill_dir),
+            per_worker_peak_bytes=per_worker_peak,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -575,6 +576,7 @@ class ExecutionResourcePlan:
             "io_concurrency": self.io_concurrency,
             "spill_dir": self.spill_dir,
             "spill_disk_bytes": self.spill_disk_bytes,
+            "per_worker_peak_bytes": self.per_worker_peak_bytes,
         }
 
 
@@ -845,6 +847,69 @@ class MemoryGovernor:
             if self.total_usage + size > self.process_budget_bytes:
                 self._evict_for(size)
             return self.total_usage + size <= self.process_budget_bytes
+
+    # -- R27-031/168/236：live headroom 动态 admission（不只 this-process RSS vs
+    #    static budget，还要看 MemAvailable / cgroup current / 进程族 RSS） --
+
+    def live_headroom_bytes(
+        self,
+        *,
+        min_host_reserve_gb: float = 8.0,
+        min_host_reserve_fraction: float = 0.15,
+    ) -> int:
+        """当前 live headroom（R27-024..027），作为动态 admission 依据。"""
+        return live_memory_headroom_bytes(
+            hard_limit=self.process_budget_bytes,
+            min_host_reserve_gb=min_host_reserve_gb,
+            min_host_reserve_fraction=min_host_reserve_fraction,
+        )
+
+    def can_admit_live(
+        self,
+        size_bytes: int,
+        *,
+        factor: float = 1.0,
+        min_host_reserve_gb: float = 8.0,
+        min_host_reserve_fraction: float = 0.15,
+    ) -> bool:
+        """live-headroom 感知 admission（R27-131：外部任务内存上涨 → MemAvailable
+        下降 → 尽早拒绝，而不是等自己 RSS 到 90% 才反应）。
+
+        同时满足两个条件才 admit：
+            1. 内部记账 ``total_usage + size <= process_budget``（旧约束）；
+            2. ``size * factor <= live_headroom``（外部共存约束）。
+        """
+        size = max(0, int(size_bytes * factor))
+        with self._lock:
+            if self.total_usage + size > self.process_budget_bytes:
+                self._evict_for(size)
+            if self.total_usage + size > self.process_budget_bytes:
+                return False
+        headroom = self.live_headroom_bytes(
+            min_host_reserve_gb=min_host_reserve_gb,
+            min_host_reserve_fraction=min_host_reserve_fraction,
+        )
+        if size > headroom:
+            self.throttle("live_headroom_blocked")
+            return False
+        return True
+
+    def external_pressure_stage(self) -> str:
+        """R27-131：外部负载导致的内存压力档（normal / blocked / critical）。
+
+        仅看 host MemAvailable 相对外部 reserve 的比例——外部任务突然吃内存时，
+        即使本进程 RSS 不高也会进入更高档，触发停止 admission。
+        """
+        headroom = self.live_headroom_bytes()
+        budget = max(1, self.process_budget_bytes)
+        reserve = int(budget * 0.15)
+        if headroom <= 0:
+            return "critical"
+        if headroom <= reserve * 1.5:
+            return "throttle"
+        if headroom <= reserve * 3.0:
+            return "stop_warmup"
+        return "normal"
 
     def summary(self) -> dict[str, Any]:
         with self._lock:
