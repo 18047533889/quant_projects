@@ -1,6 +1,6 @@
 # FactorEngine R28 Final Acceptance Report
 
-- git_sha: `8217f989f72a13841b6880f71b267056270e5ab1`
+- git_sha: `2b9334fa43a11a09afb9d8ed143fefae063aa4ed`
 - canonical_set_digest: `06498a7b7debeb87f71d7f14f8a69acd99ec83a7be9c65c12bcf2ea2ea734e81`
 - canonicals: 1436
 - pytest: 1528 tests, 0 failed, 0 errors, 6 skipped
