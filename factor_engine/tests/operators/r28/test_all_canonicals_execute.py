@@ -171,6 +171,24 @@ def _apply_overrides():
                "ts_dc_duration_asymmetry", "ts_dc_overshoot_asymmetry",
                "ts_dc_overshoot_ratio", "ts_dc_overshoot_count"):
         audit._SPECIAL_SCALARS[(_c, "threshold")] = 0.01
+    # tail / expectile / EVT / envelope estimators need a large-enough window for
+    # the extreme tail to be observable (window=20 -> all-NaN).
+    for _c in sorted(OperatorRegistry.list_canonical()):
+        if any(k in _c for k in (
+            "ts_expectile", "ts_expected_shortfall", "ts_tail_", "ts_extremal",
+            "ts_extreme_", "ts_evt_", "ts_envelope", "ts_pickands",
+            "ts_upper_tail", "ts_weighted_expected_shortfall", "ts_quantile_",
+            "ts_conditional_mutual_information", "ts_active_information_storage",
+            "ts_first_passage", "ts_delay_intrinsic_dimension",
+            "Supertrend", "cs_rank_copula",
+        )):
+            audit._SPECIAL_SCALARS[(_c, "window")] = 120
+    # EVT tail estimators: k_min/k_max define the tail-observation band.
+    for _c in ("ts_evt_threshold_stability", "ts_pickands_tail_index",
+               "ts_upper_tail_coexceedance_probability"):
+        audit._SPECIAL_SCALARS[(_c, "k_min")] = 10
+        audit._SPECIAL_SCALARS[(_c, "k_max")] = 60
+        audit._SPECIAL_SCALARS[(_c, "window")] = 200
     # scalar params the shared audit fixture does not know yet
     audit._SCALAR_VALUES.update(
         {
@@ -262,7 +280,7 @@ _CONTRACT_REJECTED = (
     "intra_", "intraday_", "minute_", "micro_", "session_",
     # --- fundamental PIT source: period_id + filing vintages (test_fin_* suites) ---
     "fin_", "fiscal_", "report_", "period_", "ttm_", "yoy_", "piotroski_",
-    "cash_flow_", "lqtp_",
+    "cash_flow_", "lqtp_", "revision_",
     # --- event / relation / shareholder source ---
     "holder_", "event_", "relation_", "state_",
     # --- group membership (needs a real group panel) ---
