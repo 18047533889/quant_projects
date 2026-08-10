@@ -23,6 +23,7 @@ from market.context import ASHARE_CONTEXT, US_CONTEXT, MarketContext
 from .units_v2 import (
     CNY,
     CNY_PER_SHARE,
+    DATE,
     RATIO,
     SHARES,
     USD,
@@ -1128,6 +1129,191 @@ for _concept, (_phys_us, _ds_us) in _FIN_US.items():
         # provider resolves the flow semantics, not the concept.
         flow_semantics="single_period_flow",
     )
+
+
+# ---------------------------------------------------------------------------
+# R17-064: previously-declared-but-unbound concepts.  A concept in the registry
+# with NO provider binding resolves to UNKNOWN — worse than an explicit
+# "unavailable", because a grammar/recipe can never tell the difference from
+# "not yet wired".  Every declared concept gets either a REAL binding (when a
+# physical field exists) or an explicit UNAVAILABLE provider.
+# ---------------------------------------------------------------------------
+# total_shares / free_float_shares: A-share capital tables carry them natively;
+# US has no direct total-shares field (TickerSharesSnapshot is the cap source).
+_b(
+    "total_shares", "ashare", "ashare_total_shares",
+    dataset="ashare_stock_capital_daily", physical=("StockCapitalDaily.TotalCapital",),
+    quality=_NATIVE, coverage=_FULL, source_unit=SHARES, canonical_unit=SHARES,
+    transform=_identity, temporal_model="exact_daily", available_at="local_close",
+    source_certified=True, notes="TotalCapital (S1 state snapshot)",
+)
+_b(
+    "total_shares", "us", "us_total_shares_unavailable",
+    physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+    source_unit=SHARES, canonical_unit=SHARES, transform=_identity,
+    temporal_model="unavailable",
+    notes="US has no direct total-shares field; use TickerSharesSnapshot for market cap (R17-064)",
+)
+_b(
+    "free_float_shares", "ashare", "ashare_free_float_shares",
+    dataset="ashare_stock_valuation_daily", physical=("StockValuationDaily.FreeCap",),
+    quality=_NATIVE, coverage=_FULL, source_unit=SHARES, canonical_unit=SHARES,
+    transform=_identity, temporal_model="exact_daily", available_at="local_close",
+    source_certified=True, notes="FreeCap (float share count)",
+)
+_b(
+    "free_float_shares", "us", "us_free_float_shares_unavailable",
+    physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+    source_unit=SHARES, canonical_unit=SHARES, transform=_identity,
+    temporal_model="unavailable",
+    notes="US has no isomorphic free-float shares field (R17-064)",
+)
+# free_float_market_cap_local: A = FreeCap * Close (derived); US unavailable.
+_b(
+    "free_float_market_cap_local", "ashare", "ashare_free_float_market_cap",
+    dataset="ashare_stock_valuation_daily",
+    physical=("StockValuationDaily.FreeCap", "StockDailyBar.Close"),
+    quality=_DERIVED, coverage=_FULL, source_unit=CNY, canonical_unit=CNY,
+    transform=_mul_two("StockValuationDaily.FreeCap", "StockDailyBar.Close"),
+    transform_description="FreeCap * Close (float market cap)",
+    temporal_model="exact_daily", available_at="local_close", source_certified=True,
+    derived_expression="StockValuationDaily.FreeCap * StockDailyBar.Close",
+    notes="float shares * close (R17-064)",
+)
+_b(
+    "free_float_market_cap_local", "us", "us_free_float_market_cap_unavailable",
+    physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+    source_unit=USD, canonical_unit=USD, transform=_identity,
+    temporal_model="unavailable",
+    notes="US has no free-float shares field (R17-064)",
+)
+# earnings_per_share: A = StockIndicator.Eps; US = StockIncome.basic_eps.
+_b(
+    "earnings_per_share", "ashare", "ashare_eps_indicator",
+    dataset="ashare_stock_indicator", physical=("StockIndicator.Eps",),
+    quality=_NATIVE, coverage=_FULL, source_unit=CNY_PER_SHARE, canonical_unit=CNY_PER_SHARE,
+    transform=_identity, temporal_model="financial_pit",
+    knowledge_time="PubDate", available_at="filing", source_certified=True,
+    notes="Eps (CNY/share) asof PubDate (R17-064)",
+)
+_b(
+    "earnings_per_share", "us", "us_eps_income",
+    dataset="us_stock_income", physical=("StockIncome.basic_earnings_per_share",),
+    quality=_NATIVE, coverage=_PARTIAL, source_unit=USD_PER_SHARE, canonical_unit=USD_PER_SHARE,
+    transform=_identity, temporal_model="financial_pit",
+    knowledge_time="filing_date", available_at="filing",
+    required_filters=("timeframe",), source_certified=True,
+    notes="basic_eps asof filing_date; timeframe required (R17-064)",
+)
+# roa_decimal: US has a direct X0 return_on_assets (sparse); A has no direct ROA
+# field — deriving it (net_profit/total_assets) is a recipe-level composition, so
+# the CONCEPT is unavailable for A until a certified derived provider exists.
+_b(
+    "roa_decimal", "ashare", "ashare_roa_unavailable",
+    physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+    source_unit=RATIO, canonical_unit=RATIO, transform=_identity,
+    temporal_model="unavailable",
+    notes="A has no direct ROA field; derive via net_profit/total_assets recipe (R17-064)",
+)
+_b(
+    "roa_decimal", "us", "us_roa_valuation_sparse",
+    dataset="us_stock_valuation_daily", physical=("StockValuationDaily.return_on_assets",),
+    quality=_SPARSE, coverage=CoverageClass.CURRENT_ONLY,
+    source_unit=RATIO, canonical_unit=RATIO, transform=_identity,
+    transform_description="identity (already decimal)",
+    temporal_model="sparse_snapshot", available_at="local_close",
+    source_certified=False,
+    notes="X0 sparse ~49 files; do NOT ffill as full-history daily (R17-064)",
+)
+# gross_margin_decimal / net_profit_margin_decimal: recipe-level derived ratios —
+# no certified direct provider in either market.  Explicitly unavailable.
+for _c in ("gross_margin_decimal", "net_profit_margin_decimal"):
+    _b(
+        _c, "ashare", f"ashare_{_c}_unavailable",
+        physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+        source_unit=RATIO, canonical_unit=RATIO, transform=_identity,
+        temporal_model="unavailable",
+        notes="margin ratios are recipe-level derived (gross_profit/revenue); no certified direct provider (R17-064)",
+    )
+    _b(
+        _c, "us", f"us_{_c}_unavailable",
+        physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+        source_unit=RATIO, canonical_unit=RATIO, transform=_identity,
+        temporal_model="unavailable",
+        notes="margin ratios are recipe-level derived; no certified direct provider (R17-064)",
+    )
+# dividend_ex_date: A = effective-only (no PIT); US = ex_dividend_date effective.
+_b(
+    "dividend_ex_date", "ashare", "ashare_dividend_ex_date",
+    dataset="ashare_stock_dividend", physical=("StockDividend.ExDividendDate",),
+    quality=_PIT_BLOCKED, coverage=_EVENT, source_unit=DATE, canonical_unit=DATE,
+    transform=_identity, temporal_model="effective_only",
+    effective_time="ExDividendDate", available_at="ex_date", source_certified=False,
+    notes="effective-only ex-date; strict PIT blocks (R17-064)",
+)
+_b(
+    "dividend_ex_date", "us", "us_dividend_ex_date",
+    dataset="us_stock_dividend", physical=("StockDividend.ex_dividend_date",),
+    quality=_PIT_BLOCKED, coverage=_EVENT, source_unit=DATE, canonical_unit=DATE,
+    transform=_identity, temporal_model="effective_only",
+    effective_time="ex_dividend_date", available_at="ex_date", source_certified=False,
+    notes="effective ex-date; strict PIT uses declaration_date not ex-date (R17-064)",
+)
+# raw_pre_close: R17-011 — this is the physically-lagged ``lag(raw_close, 1)``
+# concept, NOT a physical column (the exchange PreClose column is the official
+# reference pre-close -> reference_pre_close).  No direct provider; express via
+# ts_lag(raw_close,1).  Explicitly unavailable so grammar never offers it as a
+# physical read.
+_b(
+    "raw_pre_close", "ashare", "ashare_raw_pre_close_unavailable",
+    physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+    source_unit=CNY_PER_SHARE, canonical_unit=CNY_PER_SHARE, transform=_identity,
+    temporal_model="unavailable",
+    notes="lag(raw_close,1) is an operator-derived concept, not a physical column; "
+          "use ts_lag(raw_close,1).  The exchange PreClose column is "
+          "reference_pre_close (R17-011/064)",
+)
+_b(
+    "raw_pre_close", "us", "us_raw_pre_close_unavailable",
+    physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+    source_unit=USD_PER_SHARE, canonical_unit=USD_PER_SHARE, transform=_identity,
+    temporal_model="unavailable",
+    notes="lag(raw_close,1) is an operator-derived concept; use ts_lag(raw_close,1) "
+          "(R17-011/064)",
+)
+# news_sentiment: NO certified sentiment provider in either market (FactNews
+# insights are not a validated sentiment source).  Explicitly unavailable.
+for _m in ("ashare", "us"):
+    _b(
+        "news_sentiment", _m, f"{_m}_news_sentiment_unavailable",
+        physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+        source_unit=RATIO, canonical_unit=RATIO, transform=_identity,
+        temporal_model="unavailable",
+        notes="news sentiment requires a versioned NLP sentiment provider; "
+              "FactNews insights are not certified (R17-025/064)",
+    )
+# holder_concentration: A has a top-holder feed via aggregate_holder_rows (snapshot
+# semantics); the direct daily provider is wired through the relation storage layer.
+# Keep an explicit A-share binding marker so grammar sees a real provider id.
+_b(
+    "holder_concentration", "ashare", "ashare_holder_concentration",
+    dataset="ashare_stock_topten_shareholder",
+    physical=("StockTopTenShareholder.ShareRatio",),
+    quality=_NATIVE, coverage=_PARTIAL, source_unit=UnitSpec.ratio(scale=0.01),
+    canonical_unit=RATIO, transform=_times(0.01),
+    transform_description="ShareRatio / 100 (percent -> decimal)",
+    temporal_model="relation_pit", knowledge_time="PubDate", available_at="filing",
+    source_certified=True,
+    notes="top-holder ShareRatio snapshot; concentration aggregation happens in the "
+          "relation layer (aggregate_holder_rows) (R17-062/064)",
+)
+_b(
+    "holder_concentration", "us", "us_holder_concentration_unavailable",
+    physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+    source_unit=RATIO, canonical_unit=RATIO, transform=_identity,
+    temporal_model="unavailable",
+    notes="US has no same-structure top-holder feed (R17-064)",
+)
 
 
 # ---------------------------------------------------------------------------
