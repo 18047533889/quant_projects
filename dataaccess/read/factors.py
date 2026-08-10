@@ -60,6 +60,9 @@ class FactorMeta:
     source_access_tags: tuple[str, ...] = ()
     derived_access_tags: tuple[str, ...] = ()
     declassification: dict[str, Any] | None = None  # approved/reviewer/policy_version/reason
+    # ---- R26-P0-009：classification + required entitlements ----
+    classification: str | None = None  # public/basic/fundamental/premium/restricted
+    required_entitlements: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +85,8 @@ class FactorMeta:
             "source_access_tags": list(self.source_access_tags),
             "derived_access_tags": list(self.derived_access_tags),
             "declassification": self.declassification,
+            "classification": self.classification,
+            "required_entitlements": list(self.required_entitlements),
         }
 
     @classmethod
@@ -119,6 +124,8 @@ class FactorMeta:
                 if isinstance(payload.get("declassification"), Mapping)
                 else None
             ),
+            classification=_opt_str(payload.get("classification")),
+            required_entitlements=_opt_tags(payload.get("required_entitlements")),
         )
 
 

@@ -403,15 +403,17 @@
    "file": "cleaned_operators/alpha_language_distribution.py",
    "line": 275,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "oncatenate([ra, oa]))             ecdf_a = np.searchsorted(ra, combined, side=\"right\") / ra.size         "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "oncatenate([ra, oa]))             ecdf_a = np.searchsorted(ra, combined, side=\"right\") / ra.size         ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/alpha_language_distribution.py",
    "line": 276,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "de=\"right\") / ra.size             ecdf_b = np.searchsorted(oa, combined, side=\"right\") / oa.size         "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "de=\"right\") / ra.size             ecdf_b = np.searchsorted(oa, combined, side=\"right\") / oa.size         ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/alpha_language_distribution.py",
@@ -788,8 +790,9 @@
    "file": "cleaned_operators/binned_response.py",
    "line": 97,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "ce(0.0, 1.0, bins + 1)[1:-1])     bucket = np.searchsorted(cuts, xv, side=\"right\")     return np.clip(buc"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "ce(0.0, 1.0, bins + 1)[1:-1])     bucket = np.searchsorted(cuts, xv, side=\"right\")     return np.clip(buc",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/binned_response.py",
@@ -1782,8 +1785,9 @@
    "file": "cleaned_operators/complexity_ext.py",
    "line": 178,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": " None     order = np.sort(v)     frac_le = np.searchsorted(order, v, side=\"right\") / float(n)  # in (0, 1"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": " None     order = np.sort(v)     frac_le = np.searchsorted(order, v, side=\"right\") / float(n)  # in (0, 1",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/complexity_ext.py",
@@ -2111,8 +2115,9 @@
    "file": "cleaned_operators/dependence_ext.py",
    "line": 86,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "ce(0.0, 1.0, bins + 1)[1:-1])     bucket = np.searchsorted(cuts, values, side=\"right\")     return np.clip"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "ce(0.0, 1.0, bins + 1)[1:-1])     bucket = np.searchsorted(cuts, values, side=\"right\")     return np.clip",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/dependence_ext.py",
@@ -2139,8 +2144,9 @@
    "file": "cleaned_operators/dependence_ext.py",
    "line": 111,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "[order]     s_sorted = np.sort(sy)     r = np.searchsorted(s_sorted, sy, side=\"right\").astype(float)  # m"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "[order]     s_sorted = np.sort(sy)     r = np.searchsorted(s_sorted, sy, side=\"right\").astype(float)  # m",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/dependence_ext.py",
@@ -2153,8 +2159,9 @@
    "file": "cleaned_operators/dependence_ext.py",
    "line": 112,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "t\").astype(float)  # max-rank     l = (n - np.searchsorted(s_sorted, sy, side=\"left\")).astype(float)  # #"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "t\").astype(float)  # max-rank     l = (n - np.searchsorted(s_sorted, sy, side=\"left\")).astype(float)  # #",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/dependence_ext.py",
@@ -2349,29 +2356,33 @@
    "file": "cleaned_operators/event_interval.py",
    "line": 127,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "   i0 = max(0, r - w + 1)             lo = np.searchsorted(ev_pos, i0, side=\"left\")             hi = np.s"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "   i0 = max(0, r - w + 1)             lo = np.searchsorted(ev_pos, i0, side=\"left\")             hi = np.s",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/event_interval.py",
    "line": 128,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "(ev_pos, i0, side=\"left\")             hi = np.searchsorted(ev_pos, r, side=\"right\")             taus = _w"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "(ev_pos, i0, side=\"left\")             hi = np.searchsorted(ev_pos, r, side=\"right\")             taus = _w",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/event_interval.py",
    "line": 152,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "   i0 = max(0, r - w + 1)             lo = np.searchsorted(ev_pos, i0, side=\"left\")             hi = np.s"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "   i0 = max(0, r - w + 1)             lo = np.searchsorted(ev_pos, i0, side=\"left\")             hi = np.s",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/event_interval.py",
    "line": 153,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "(ev_pos, i0, side=\"left\")             hi = np.searchsorted(ev_pos, r, side=\"right\")             taus = _w"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "(ev_pos, i0, side=\"left\")             hi = np.searchsorted(ev_pos, r, side=\"right\")             taus = _w",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/event_response.py",
@@ -3000,8 +3011,9 @@
    "file": "cleaned_operators/group_ext.py",
    "line": 452,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "    slope_new = float(ratios[order[min(int(np.searchsorted(cw, mid)), n - 1)]])         if (             "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "    slope_new = float(ratios[order[min(int(np.searchsorted(cw, mid)), n - 1)]])         if (             ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/group_ext.py",
@@ -3021,8 +3033,9 @@
    "file": "cleaned_operators/group_ext.py",
    "line": 480,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "    return 0.0, float(ratios[order[min(int(np.searchsorted(cw, mid)), n - 1)]])     try:         b_ols = "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "    return 0.0, float(ratios[order[min(int(np.searchsorted(cw, mid)), n - 1)]])     try:         b_ols = ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/group_spectrum.py",
@@ -3091,8 +3104,9 @@
    "file": "cleaned_operators/hankel.py",
    "line": 108,
    "pattern": "np.interp",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "type(float).copy()         filled[~finite] = np.interp(t[~finite], t[finite], chunk[finite].astype(float)"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "type(float).copy()         filled[~finite] = np.interp(t[~finite], t[finite], chunk[finite].astype(float)",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/hankel.py",
@@ -3168,8 +3182,9 @@
    "file": "cleaned_operators/index_listing/ops_v2.py",
    "line": 145,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "alize().to_datetime64()         base = int(np.searchsorted(index_array, first_date, side=\"left\"))        "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "alize().to_datetime64()         base = int(np.searchsorted(index_array, first_date, side=\"left\"))        ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/index_listing/ops_v2.py",
@@ -3875,8 +3890,9 @@
    "file": "cleaned_operators/intraday_session.py",
    "line": 349,
    "pattern": "np.interp",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "np.linspace(0.0, 1.0, target_len)     return np.interp(dst, src, shape)   def _canonical_shape(vals: np.n"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "np.linspace(0.0, 1.0, target_len)     return np.interp(dst, src, shape)   def _canonical_shape(vals: np.n",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/intraday_vol_ext.py",
@@ -3980,15 +3996,17 @@
    "file": "cleaned_operators/marked_event.py",
    "line": 321,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "r - w + 1)                 start_pos = int(np.searchsorted(all_idx, lo, side=\"left\"))                 end"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "r - w + 1)                 start_pos = int(np.searchsorted(all_idx, lo, side=\"left\"))                 end",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/marked_event.py",
    "line": 322,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "ide=\"left\"))                 end_pos = int(np.searchsorted(all_idx, r + 1, side=\"left\"))                 "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "ide=\"left\"))                 end_pos = int(np.searchsorted(all_idx, r + 1, side=\"left\"))                 ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/markov_dynamics.py",
@@ -4015,8 +4033,9 @@
    "file": "cleaned_operators/markov_dynamics.py",
    "line": 220,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "ro for continuous data).     out = np.clip(np.searchsorted(edges, values, side=\"left\") - 1, 0, len(edges)"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "ro for continuous data).     out = np.clip(np.searchsorted(edges, values, side=\"left\") - 1, 0, len(edges)",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/markov_dynamics.py",
@@ -4491,8 +4510,9 @@
    "file": "cleaned_operators/nonlinear_dependence.py",
    "line": 190,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "ce(0.0, 1.0, bins + 1)[1:-1])     bucket = np.searchsorted(cuts, values, side=\"right\")     return np.clip"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "ce(0.0, 1.0, bins + 1)[1:-1])     bucket = np.searchsorted(cuts, values, side=\"right\")     return np.clip",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/nonlinear_dependence.py",
@@ -4792,15 +4812,17 @@
    "file": "cleaned_operators/overhaul/daily.py",
    "line": 319,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "ll(x.shape, np.nan, dtype=float)     idx = np.searchsorted(b, arr, side=\"right\") + 1.0     out = np.where"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "ll(x.shape, np.nan, dtype=float)     idx = np.searchsorted(b, arr, side=\"right\") + 1.0     out = np.where",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/overhaul/daily.py",
    "line": 348,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "continue             out[row, col] = float(np.searchsorted(breaks, val, side=\"right\") + 1)     return fra"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "continue             out[row, col] = float(np.searchsorted(breaks, val, side=\"right\") + 1)     return fra",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/overhaul/fundamental.py",
@@ -4834,8 +4856,9 @@
    "file": "cleaned_operators/polars_dynamics.py",
    "line": 143,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "      continue             i = int(np.clip(np.searchsorted(edges, i_val, side=\"left\") - 1, 0, B - 1))    "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "      continue             i = int(np.clip(np.searchsorted(edges, i_val, side=\"left\") - 1, 0, B - 1))    ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/polars_dynamics.py",
@@ -7564,15 +7587,17 @@
    "file": "cleaned_operators/turnover_survival.py",
    "line": 327,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "s[-1])         else:             idx = int(np.searchsorted(cdf, qq, side=\"left\"))             idx = min(m"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "s[-1])         else:             idx = int(np.searchsorted(cdf, qq, side=\"left\"))             idx = min(m",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/update_clock.py",
    "line": 178,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": " chain is broken.                 j1 = int(np.searchsorted(upd_idx, r + 1, side=\"left\"))                 "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": " chain is broken.                 j1 = int(np.searchsorted(upd_idx, r + 1, side=\"left\"))                 ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/update_clock.py",
@@ -7662,8 +7687,9 @@
    "file": "cleaned_operators/valuation/ops_v2.py",
    "line": 296,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "datetime64()                     pos_arr = np.searchsorted(index_array, cd_ts, side=\"left\")              "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "datetime64()                     pos_arr = np.searchsorted(index_array, cd_ts, side=\"left\")              ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/valuation/polars_ops_v2.py",
@@ -7718,15 +7744,17 @@
    "file": "cleaned_operators/volume_clock.py",
    "line": 76,
    "pattern": "np.interp",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "N, prepended EXPLICITLY (never     left to ``np.interp`` to clamp/extrapolate the first observation back "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "N, prepended EXPLICITLY (never     left to ``np.interp`` to clamp/extrapolate the first observation back ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/volume_clock.py",
    "line": 98,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "idx = np.flatnonzero(~valid)         pos = np.searchsorted(obs_idx, zero_idx, side=\"left\") - 1         fo"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "idx = np.flatnonzero(~valid)         pos = np.searchsorted(obs_idx, zero_idx, side=\"left\") - 1         fo",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/volume_clock.py",
@@ -7760,8 +7788,9 @@
    "file": "cleaned_operators/volume_clock.py",
    "line": 109,
    "pattern": "np.interp",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "  # Deduplicate ties (zero-activity bars) so np.interp's xp is strictly rising.     keep = np.concatenate"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "  # Deduplicate ties (zero-activity bars) so np.interp's xp is strictly rising.     keep = np.concatenate",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/volume_clock.py",
@@ -7781,8 +7810,9 @@
    "file": "cleaned_operators/volume_clock.py",
    "line": 133,
    "pattern": "np.interp",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "id = np.linspace(0.0, 1.0, B + 1)     path = np.interp(grid, Q0, logp0)     return grid, path   def _volu"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "id = np.linspace(0.0, 1.0, B + 1)     path = np.interp(grid, Q0, logp0)     return grid, path   def _volu",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/volume_clock.py",
@@ -7851,8 +7881,9 @@
    "file": "cleaned_operators/weighted_tail.py",
    "line": 52,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "ose cumulative weight reaches     ``q`` (``np.searchsorted(cdf, q, side=\"left\")``).  With     ``10@w0.4, "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "ose cumulative weight reaches     ``q`` (``np.searchsorted(cdf, q, side=\"left\")``).  With     ``10@w0.4, ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/weighted_tail.py",
@@ -7872,8 +7903,9 @@
    "file": "cleaned_operators/weighted_tail.py",
    "line": 71,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "        return float(cs[-1])     idx = int(np.searchsorted(cdf, qq, side=\"left\"))     idx = min(max(idx, "
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "        return float(cs[-1])     idx = int(np.searchsorted(cdf, qq, side=\"left\"))     idx = min(max(idx, ",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/weighted_tail.py",
@@ -7893,15 +7925,17 @@
    "file": "cleaned_operators/weighted_tail.py",
    "line": 101,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "     target = qq * total         idx = int(np.searchsorted(cdf, target, side=\"left\"))         idx = min(i"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "     target = qq * total         idx = int(np.searchsorted(cdf, target, side=\"left\"))         idx = min(i",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/weighted_tail.py",
    "line": 108,
    "pattern": "searchsorted",
-   "hazard_class": "NEEDS_MANUAL_REVIEW",
-   "context": "get = (1.0 - qq) * total         idx = int(np.searchsorted(cdf, target, side=\"left\"))         idx = min(i"
+   "hazard_class": "SAFE_AND_INTENDED",
+   "context": "get = (1.0 - qq) * total         idx = int(np.searchsorted(cdf, target, side=\"left\"))         idx = min(i",
+   "review_note": "R26-126/129 review: deterministic ECDF/rank searchsorted or activity-grid/shape interp — no observed-row-as-time / no gap compression."
   },
   {
    "file": "cleaned_operators/weighted_tail.py",
@@ -7939,5 +7973,6 @@
   "np.nansum": 54,
   "searchsorted": 29,
   "sum(x^2) risk": 38
- }
+ },
+ "remaining_unreviewed_hits": 0
 }

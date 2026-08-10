@@ -67,6 +67,16 @@ from data_access.security.governed_frame import (
     ExecutionEnvironmentIdentity,
     require_governed_provenance,
 )
+from data_access.security.execution_context import (
+    DataAccessExecutionContext,
+    execution_scope,
+    current_execution_context,
+    current_principal,
+    current_authorizer,
+    current_credential_provider,
+    current_security_digest,
+    resolve_execution_context,
+)
 
 __all__ = [
     "CredentialMaterial",
@@ -106,4 +116,12 @@ __all__ = [
     "GovernedFrame",
     "ExecutionEnvironmentIdentity",
     "require_governed_provenance",
+    "DataAccessExecutionContext",
+    "execution_scope",
+    "current_execution_context",
+    "current_principal",
+    "current_authorizer",
+    "current_credential_provider",
+    "current_security_digest",
+    "resolve_execution_context",
 ]

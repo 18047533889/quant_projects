@@ -125,16 +125,28 @@ def test_composition_eps_different_unit(_loaded):
     """P0-74: EPS has a per-share unit and is NOT part of the money-flow whole."""
     op = OperatorRegistry.get("composition_entropy", "pandas_numpy")
     with pytest.raises(ValueError, match="per-share"):
-        op.calculate(_named_part("revenue"), _named_part("net_income"), _named_part("eps"))
+        op.calculate(
+            _named_part("share_of_volume_bucket_1"),
+            _named_part("share_of_volume_bucket_2"),
+            _named_part("eps"),
+        )
 
 
 def test_composition_market_cap_turnover_not_parts(_loaded):
     """P0-75: market valuation / turnover are whole-firm quantities, not parts."""
     op = OperatorRegistry.get("composition_entropy", "pandas_numpy")
     with pytest.raises(ValueError, match="market valuation"):
-        op.calculate(_named_part("revenue"), _named_part("market_cap"), _named_part("equity"))
+        op.calculate(
+            _named_part("share_of_volume_bucket_1"),
+            _named_part("market_cap"),
+            _named_part("share_of_volume_bucket_2"),
+        )
     with pytest.raises(ValueError, match="turnover"):
-        op.calculate(_named_part("revenue"), _named_part("turnover"), _named_part("equity"))
+        op.calculate(
+            _named_part("share_of_volume_bucket_1"),
+            _named_part("turnover"),
+            _named_part("share_of_volume_bucket_2"),
+        )
 
 
 def test_composition_volume_amount_not_parts(_loaded):
@@ -145,18 +157,18 @@ def test_composition_volume_amount_not_parts(_loaded):
 
 
 def test_composition_schema_financial_statement_whole_is_finite(_loaded):
-    """Same-unit, positive, same-whole money-flow parts compose to a finite CLR."""
-    for canonical in _COMPOSITION_3PART:
-        op = OperatorRegistry.get(canonical, "pandas_numpy")
-        out = op.calculate(
-            _named_part("revenue"), _named_part("net_income"), _named_part("total_assets")
+    """R26-096..099: ``revenue`` / ``net_income`` / ``total_assets`` are NOT
+    mutually-exclusive parts of one whole (Revenue vs NetIncome are different
+    economic flows; ``Assets = Liabilities + Equity`` makes Assets the WHOLE, so
+    listing it as a part double-counts).  The composition gate now REJECTS them
+    as known non-composable parts — the old "financial_statement" auto-schema
+    was an invalid part-whole and is removed."""
+    from cleaned_operators.composition import _same_composition
+
+    with pytest.raises(ValueError, match="not a mutually-exclusive part|double-count"):
+        _same_composition(
+            [_named_part("revenue"), _named_part("net_income"), _named_part("total_assets")]
         )
-        assert out.shape == (8, 1)
-        assert np.isfinite(out.to_numpy()).sum() == out.size, canonical
-    op = OperatorRegistry.get("composition_aitchison_distance", "pandas_numpy")
-    x = [_named_part("revenue"), _named_part("net_income"), _named_part("total_assets")]
-    out = op.calculate(*x, *x)
-    assert np.isfinite(out.to_numpy()).sum() == out.size
 
 
 def test_composition_schema_unknown_part_fields_pass(_loaded):
@@ -180,7 +192,9 @@ def test_composition_schema_unknown_part_fields_pass(_loaded):
 
 def test_composition_family_mismatch_still_rejected(_loaded):
     """P0-69 preserved: explicit composition_id of a different family is a clear
-    error (tested at the gate level — composition_id is an internal keyword)."""
+    error (tested at the gate level — composition_id is an internal keyword).
+    R26-096..099: revenue/net_income/total_assets are now KNOWN non-composable
+    parts, so they are rejected at the gate regardless of composition_id."""
     from cleaned_operators.composition import _same_composition
 
     parts = [
@@ -188,7 +202,7 @@ def test_composition_family_mismatch_still_rejected(_loaded):
         _named_part("net_income"),
         _named_part("total_assets"),
     ]
-    with pytest.raises(ValueError, match="financial_statement"):
+    with pytest.raises(ValueError, match="not a mutually-exclusive part|double-count"):
         _same_composition(parts, composition_id="holder_share")
 
 

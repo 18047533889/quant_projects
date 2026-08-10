@@ -63,37 +63,59 @@ class QueryResultCache:
         self._max_entries = max(1, int(max_entries or capacity))
         self._max_bytes = max_bytes  # None = 不限字节
         self._ttl = ttl_seconds
-        # key -> (ts, value, nbytes)
-        self._store: "OrderedDict[str, tuple[float, Any, int]]" = OrderedDict()
+        # key -> (ts, value, nbytes, meta)
+        # ``meta``：命中时恢复 provenance（original snapshot_id / security
+        # digest / source generation），cache hit 不再丢失审计与 lineage。
+        self._store: "OrderedDict[str, tuple[float, Any, int, dict[str, Any]]]" = OrderedDict()
         self._lock = threading.Lock()
 
     def _total_bytes(self) -> int:
         return sum(item[2] for item in self._store.values())
 
     def get(self, key: str) -> Any | None:
+        """返回缓存值（历史契约）；命中返回裸值。provenance 用 ``get_entry``。"""
+        value, _meta = self.get_entry(key)
+        return value
+
+    def get_entry(self, key: str) -> tuple[Any, dict[str, Any] | None]:
+        """R27（Cache/Write/Unsafe-Surface Closure）：命中返回 ``(value, meta)``。
+
+        ``meta`` 携带写缓存时记录的 provenance（original_snapshot_id /
+        security_digest / principal_id / source_generation / dataset），供
+        cache hit 的审计与 lineage 恢复（R27-A/C：命中不能丢审计）。
+        """
         with self._lock:
             item = self._store.get(key)
             if item is None:
-                return None
-            ts, value, _ = item
+                return None, None
+            ts, value, _size, meta = item
             if time.monotonic() - ts > self._ttl:
                 self._store.pop(key, None)
-                return None
+                return None, None
             self._store.move_to_end(key)
-            return value
+            return value, meta
 
-    def set(self, key: str, value: Any) -> None:
+    def set(self, key: str, value: Any, meta: dict[str, Any] | None = None) -> None:
         size = _estimate_bytes(value)
         with self._lock:
-            self._store[key] = (time.monotonic(), value, size)
+            self._store[key] = (time.monotonic(), value, size, dict(meta or {}))
             self._store.move_to_end(key)
             self._evict_locked()
 
-    def set_with_size(self, key: str, value: Any, nbytes: int | None = None) -> None:
-        """显式指定缓存条目字节数（避免对已物化对象重复估算）。"""
+    def set_with_size(
+        self,
+        key: str,
+        value: Any,
+        nbytes: int | None = None,
+        meta: dict[str, Any] | None = None,
+    ) -> None:
+        """显式指定缓存条目字节数（避免对已物化对象重复估算）。
+
+        ``meta`` 保存 provenance，cache hit 恢复审计/lineage（R27-C）。
+        """
         size = int(nbytes) if nbytes is not None else _estimate_bytes(value)
         with self._lock:
-            self._store[key] = (time.monotonic(), value, size)
+            self._store[key] = (time.monotonic(), value, size, dict(meta or {}))
             self._store.move_to_end(key)
             self._evict_locked()
 
@@ -134,6 +156,111 @@ class QueryResultCache:
 
 def _stable(value: Any) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+
+
+class CachedReadResult:
+    """R27-A/C —— ``read_cached_result()`` 的返回值：裸 Arrow Table + provenance。
+
+    cache hit 不再丢审计/lineage：即使命中也携带 original_snapshot_id、
+    security digest、principal、source generation 与 cache_provenance，
+    供上层（FactorEngine 等）恢复 lineage 并记录 audit。
+    """
+
+    __slots__ = (
+        "table",
+        "cache_hit",
+        "dataset",
+        "snapshot_id",
+        "source_generation",
+        "security_digest",
+        "principal_id",
+        "cache_key",
+        "cache_provenance",
+        "rows",
+        "nbytes",
+    )
+
+    def __init__(
+        self,
+        *,
+        table: Any,
+        cache_hit: bool,
+        dataset: str,
+        snapshot_id: str | None = None,
+        source_generation: str | None = None,
+        security_digest: str | None = None,
+        principal_id: str | None = None,
+        cache_key: str | None = None,
+        cache_provenance: Mapping[str, Any] | None = None,
+    ) -> None:
+        self.table = table
+        self.cache_hit = cache_hit
+        self.dataset = dataset
+        self.snapshot_id = snapshot_id
+        self.source_generation = source_generation
+        self.security_digest = security_digest
+        self.principal_id = principal_id
+        self.cache_key = cache_key
+        self.cache_provenance = dict(cache_provenance or {})
+        self.rows = getattr(table, "num_rows", None)
+        self.nbytes = getattr(table, "nbytes", None)
+
+    def to_arrow(self) -> Any:
+        return self.table
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "cache_hit": self.cache_hit,
+            "dataset": self.dataset,
+            "rows": self.rows,
+            "nbytes": self.nbytes,
+            "snapshot_id": self.snapshot_id,
+            "source_generation": self.source_generation,
+            "security_digest": self.security_digest,
+            "principal_id": self.principal_id,
+            "cache_key": self.cache_key,
+            "cache_provenance": self.cache_provenance,
+        }
+
+
+def _security_scope_digest(*, principal: Any, access_policy: Any) -> str:
+    """R27-A：缓存 key 的 security scope = principal + policy + run_mode。
+
+    principal 缺省/默认（local, DEFAULT）返回空串——表示「未隔离身份」，
+    由调用方决定是否允许共享缓存（restricted/premium 数据一律不缓存）。
+    """
+    payload: dict[str, Any] = {
+        "principal_id": (
+            getattr(principal, "principal_id", None) if principal is not None else None
+        ),
+        "policy_digest": (
+            access_policy.digest()
+            if access_policy is not None
+            and callable(getattr(access_policy, "digest", None))
+            else None
+        ),
+        "clearance": (
+            getattr(principal, "clearance", None) if principal is not None else None
+        ),
+        "entitlements": (
+            sorted(getattr(principal, "entitlements", ()) or ())
+            if principal is not None
+            else None
+        ),
+    }
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
+
+
+def classification_cache_blocked(classification: str | None) -> bool:
+    """R27-A：restricted/premium 数据默认不进跨 principal shared result cache。
+
+    即使 key 已含 security digest（per-principal 隔离），restricted/premium 的
+    结果仍不允许进入进程级共享缓存——避免「高权限读取 → 同一进程其它身份/后续
+    任务仍能拿到该表的内存引用」。classification 未知（unclassified）按可缓存
+    处理（读本身仍受逻辑授权保护）。
+    """
+    return str(classification or "").strip().lower() in {"restricted", "premium"}
 
 
 def query_cache_key(

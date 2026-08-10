@@ -49,8 +49,11 @@ def _survival_kernel(
     """Causal single-pass survival statistics for one column.
 
     Returns ``(age, pct, hazard, residual)`` arrays.  ``age`` is the current
-    active-run length (0 when inactive); each statistic is NaN while its
-    completed-run sample is below the corresponding minimum.
+    active-run length; on an inactive row it is ``0`` under
+    ``inactive_policy="zero"`` and ``NaN`` (not-applicable) under the default
+    ``inactive_policy="nan"`` (R24-109 — an inactive row is NOT a zero-length
+    episode).  Each statistic is NaN while its completed-run sample is below the
+    corresponding minimum.
 
     R24-105..109:
     * LEFT-CENSOR: a run whose true start predates the sample (or whose entry
@@ -88,6 +91,12 @@ def _survival_kernel(
             # episode, and the age is NaN (or a lower_bound under gap_policy).
             if cur > 0 and prev_active:
                 gap_censored = True
+            # R30 §17 (P0-012): a provider gap UNKNOWNS the run state.  Reset the
+            # episode counter so a later ACTIVE row starts a NEW (left-censored)
+            # episode at age 1 instead of inheriting the pre-gap age.  Without
+            # this, ``0,1,NaN,1,0`` reported the post-gap episode as continuing at
+            # age 2 from the pre-gap run — a gap silently merged two episodes.
+            cur = 0
             age[row] = np.nan
             pct[row] = np.nan
             hazard[row] = np.nan

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
@@ -68,6 +69,11 @@ class GlobalResourceGovernor:
         self._lock = threading.Lock()
         self._active: dict[str, ResourceReservation] = {}
         self._remote_inflight = 0
+        # R26-P1-016：DuckDB 并发用信号量（blocking acquire，遵守上限但并行任务
+        # 排队而非误报）；全局 active-queries 才是 fail-closed admission。
+        self._duckdb_sem = threading.BoundedSemaphore(
+            value=max(1, int(max_duckdb_concurrency))
+        )
 
     # ---- 准入 ----
 
@@ -76,8 +82,16 @@ class GlobalResourceGovernor:
 
         入场顺序（§26）：``resolve exact objects → 计算 object count/bytes →
         admission → execute``。这里在 execute 前拦截明显超限。
+
+        R26-P1-015：duplicate ``query_id`` 不能覆盖已有 reservation → reject；
+        ``remote_requests`` 参与 admission；``released`` 状态受控。
         """
         with self._lock:
+            if reservation.query_id in self._active:
+                raise ResourceAdmissionError(
+                    f"resource admission: query_id={reservation.query_id!r} 已存在"
+                    "（R26-P1-015：重复 query_id 禁止覆盖已有 reservation）。"
+                )
             if len(self._active) >= self._max_active_queries:
                 raise ResourceAdmissionError(
                     f"resource admission: active queries {len(self._active)} 达到上限 "
@@ -110,6 +124,16 @@ class GlobalResourceGovernor:
                         f"{inflight + reservation.estimated_scan_bytes} > 上限 "
                         f"{self._max_scan}（R25 §27）。"
                     )
+            # R26-P1-015：remote_requests 参与 admission（P0-017 的 remote 维度）。
+            if self._max_remote is not None:
+                inflight_remote = self._remote_inflight + sum(
+                    r.remote_requests for r in self._active.values()
+                )
+                if inflight_remote + reservation.remote_requests > self._max_remote:
+                    raise ResourceAdmissionError(
+                        f"resource admission: 远程请求 {inflight_remote + reservation.remote_requests}"
+                        f" > 上限 {self._max_remote}（R26-P0-017）。"
+                    )
             self._active[reservation.query_id] = reservation
             return reservation
 
@@ -127,6 +151,24 @@ class GlobalResourceGovernor:
         with self._lock:
             if self._remote_inflight > 0:
                 self._remote_inflight -= 1
+
+    # ---- DuckDB 并发（R26-P1-016：声明的能力必须执行）----
+
+    def acquire_duckdb_slot(self) -> bool:
+        """R26-P1-016：DuckDB 并发 slot（blocking semaphore acquire）。
+
+        遵守 ``max_duckdb_concurrency`` 上限；并发任务排队而非误报 fail（避免
+        把「并行读」误判成超限）。返回 True（acquire 后）。
+        """
+        self._duckdb_sem.acquire()
+        return True
+
+    def release_duckdb_slot(self) -> None:
+        self._duckdb_sem.release()
+
+    def duckdb_inflight(self) -> int:
+        with self._lock:
+            return max(0, self._max_duckdb - self._duckdb_sem._value)
 
     # ---- 释放 ----
 
@@ -192,7 +234,7 @@ def enforce_single_worker_contract() -> bool:
         "true",
         "yes",
     }
-    if workers and int(workers) > 1 and not single:
+    if workers and workers.isdigit() and int(workers) > 1 and not single:
         logger.warning(
             "DATA_ACCESS_WORKERS=%s 且未设 DATA_ACCESS_SINGLE_WORKER=1——进程级 "
             "ResourceGovernor 是 single-worker contract；多 worker 并发会被放大。"
@@ -201,3 +243,21 @@ def enforce_single_worker_contract() -> bool:
         )
         return False
     return True
+
+
+@contextmanager
+def duckdb_slot(governor: "GlobalResourceGovernor | None" = None):
+    """R26-P1-016：DuckDB 并发 slot（声明的 ``max_duckdb_concurrency`` 真正执行）。
+
+    引擎执行（execute_arrow / execute_reader）持有 slot；acquire 失败 → 拒绝
+    （fail-closed，不等排队）。成功/异常都 release exactly once。
+    """
+    gov = governor if governor is not None else get_global_governor()
+    if not gov.acquire_duckdb_slot():
+        raise ResourceAdmissionError(
+            "duckdb concurrency 达到上限（R26-P1-016：max_duckdb_concurrency 真正执行）"
+        )
+    try:
+        yield
+    finally:
+        gov.release_duckdb_slot()

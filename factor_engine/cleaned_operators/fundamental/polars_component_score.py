@@ -33,7 +33,7 @@ def _score_component(component: np.ndarray, direction: str) -> np.ndarray:
     raise ValueError(f"unknown component direction: {direction!r}")
 
 
-def fin_component_score(*panels, component_directions=None, score_weights=None):
+def fin_component_score(*panels, component_directions=None, score_weights=None, missing_policy="score_available"):
     # Each positional arg is a separate date x instrument component panel.
     provided = [p for p in panels if p is not None]
     if not provided:
@@ -65,10 +65,18 @@ def fin_component_score(*panels, component_directions=None, score_weights=None):
         [_score_component(stacked[:, :, i], directions[i]) * weights[i] for i in range(n_components)],
         axis=2,
     )
-    with np.errstate(invalid="ignore"):
-        scored = np.nansum(contributions, axis=2)
-    any_finite = np.any(np.isfinite(contributions), axis=2)
-    scored = np.where(any_finite, scored, np.nan)
+    if missing_policy == "require_full":
+        # R30 §18 parity: a score is only comparable when every component is
+        # finite at that cell; a missing component makes it UNKNOWN (NaN).
+        all_finite = np.all(np.isfinite(contributions), axis=2)
+        with np.errstate(invalid="ignore"):
+            scored = np.nansum(contributions, axis=2)
+        scored = np.where(all_finite, scored, np.nan)
+    else:
+        with np.errstate(invalid="ignore"):
+            scored = np.nansum(contributions, axis=2)
+        any_finite = np.any(np.isfinite(contributions), axis=2)
+        scored = np.where(any_finite, scored, np.nan)
     return pl.DataFrame({c: scored[:, i] for i, c in enumerate(cols)})
 
 
@@ -76,7 +84,8 @@ metadata = OperatorMetadata(
     name="fin_component_score",
     category="fundamental_period",
     description="Weighted multi-panel component score (date×instrument per component).",
-    param_names=[f"component_{i}" for i in range(1, MAX_COMPONENTS + 1)] + ["component_directions", "score_weights"],
+    param_names=[f"component_{i}" for i in range(1, MAX_COMPONENTS + 1)]
+    + ["component_directions", "score_weights", "missing_policy"],
     return_type="series",
     tags=["fundamental", "polars", "native", "component_stack_axis", "multi_panel_components"],
 )

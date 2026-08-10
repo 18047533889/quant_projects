@@ -333,7 +333,9 @@ def test_recovery_fully_observed_is_precise():
     event = np.zeros(10)
     event[1] = 1.0
     # minute 2: |10.05 - 10.0| = 0.05 <= 0.25 * 0.5 = 0.125 -> tau = 1
-    val = _recovery_day(x, event, horizon=5, residual_fraction=0.25, refractory=0)
+    # R26-047/048: the default min_events floor is 3 — this test probes the
+    # kernel's recovery PRECISION, so min_events=1 is passed explicitly.
+    val = _recovery_day(x, event, horizon=5, residual_fraction=0.25, refractory=0, min_events=1)
     assert val == pytest.approx(1.0 / 6.0)
 
 
@@ -367,11 +369,11 @@ def test_recovery_refractory_suppresses_overlap():
     event[2] = 1.0
     event[3] = 1.0  # overlapping shock inside the refractory window
     # With refractory=1 the second event is suppressed -> single event.
-    val = _recovery_day(x, event, horizon=5, residual_fraction=0.25, refractory=1)
+    val = _recovery_day(x, event, horizon=5, residual_fraction=0.25, refractory=1, min_events=1)
     assert val == (5 + 1) / (5 + 1) == 1.0
     # With refractory=0 both events are counted; identical horizons -> same value,
     # but the mechanism is exercised (no crash, deterministic).
-    val0 = _recovery_day(x, event, horizon=5, residual_fraction=0.25, refractory=0)
+    val0 = _recovery_day(x, event, horizon=5, residual_fraction=0.25, refractory=0, min_events=1)
     assert val0 == val
 
 

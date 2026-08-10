@@ -102,10 +102,30 @@ def test_read_cached_hit_still_runs_gates(tmp_path, monkeypatch):
                  "manifest_epoch": "e1", "dataset_version": "v1",
                  "partition_version": "p1"}
         monkeypatch.setattr(st, "manifest_version", lambda *a, **k: dict(fresh))
-        monkeypatch.setattr(
-            st, "read_arrow",
-            lambda *a, **k: pa.table({"ts": [dt.date(2024, 1, 1)], "sym": ["A"], "val": [2.0]}),
+        # R27-B：read_cached 的 miss 走 read_result（带 snapshot/lineage），不再
+        # 透传 normalize_units 给 read_arrow。mock read_result 返回固定表。
+        from data_access.read.read_contract import (
+            ReadLineage,
+            ReadResult,
+            ReadStats,
         )
+
+        def _fake_read_result(*a, **k):
+            t = pa.table({"ts": [dt.date(2024, 1, 1)], "sym": ["A"], "val": [2.0]})
+            return ReadResult(
+                table=t,
+                snapshot=SimpleNamespace(snapshot_id="snap1"),
+                stats=ReadStats(rows=1, bytes=0, elapsed_ms=0.0),
+                lineage=ReadLineage(
+                    dataset="ds",
+                    columns=(),
+                    time_range=None,
+                    instrument_filter=None,
+                    params={},
+                ),
+            )
+
+        monkeypatch.setattr(st, "read_result", _fake_read_result)
         first = st.read_cached("ds", columns=["sym"])
         assert first.num_rows == 1
         # 缓存已命中；gate 必须仍执行（hit 不能绕过 semantic/budget gate）

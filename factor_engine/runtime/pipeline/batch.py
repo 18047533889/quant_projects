@@ -955,25 +955,18 @@ def run_config_directory(
     if pairs is None:
         workers = max(1, int(n_jobs))
         if workers > 1:
-            try:
-                from joblib import Parallel, delayed
+            # R31-118：concurrent.futures 是唯一并行路径（joblib 依赖已移除）。
+            from concurrent.futures import ThreadPoolExecutor, as_completed
 
-                pairs = Parallel(n_jobs=workers, backend="threading")(
-                    delayed(_run_single_config_file)(config_path, **run_kwargs)
+            pairs = []
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                futures = {
+                    pool.submit(_run_single_config_file, config_path, **run_kwargs): config_path
                     for config_path in config_paths
-                )
-            except ImportError:
-                from concurrent.futures import ThreadPoolExecutor, as_completed
-
-                pairs = []
-                with ThreadPoolExecutor(max_workers=workers) as pool:
-                    futures = {
-                        pool.submit(_run_single_config_file, config_path, **run_kwargs): config_path
-                        for config_path in config_paths
-                    }
-                    for future in as_completed(futures):
-                        pairs.append(future.result())
-                pairs.sort(key=lambda item: item[0])
+                }
+                for future in as_completed(futures):
+                    pairs.append(future.result())
+            pairs.sort(key=lambda item: item[0])
         else:
             pairs = [_run_single_config_file(config_path, **run_kwargs) for config_path in config_paths]
 

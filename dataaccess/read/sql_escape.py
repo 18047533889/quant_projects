@@ -793,11 +793,67 @@ def validate_sql_sandbox(query: str) -> None:
     _check_sql_function_allowlist(query, strict=strict)
 
 
-def _query_from_tables(query: str) -> list[str]:
-    """#P0-18 提取 SQL 里 FROM/JOIN 的表名（code 段，跳过字符串/注释）。
+_PLACEHOLDER_RE = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}")
 
-    返回表名列表（含 ``{{name}}`` 占位与引号标识符去引号）。
+
+def _try_sqlglot_table_refs(query: str) -> list[str] | None:
+    """R27-K：用 sqlglot AST 枚举全部表引用（含逗号连接表、子查询、CTE）。
+
+    ``FROM {{a}}, information_schema.tables b`` 这类逗号连接在正则视角里第二张表
+    前面没有 FROM/JOIN 关键字会被漏掉——SQL 安全边界不能再靠关键字正则。sqlglot
+    把整棵 SELECT 树里的 ``exp.Table`` 全取出来（含逗号列表）。
+
+    ``{{name}}`` 占位符先替换成合法标识符再解析，解析完映射回原名。
+
+    返回 None 表示「无法证明」（sqlglot 不可用 / 解析失败）——调用方在
+    production/strict 下 fail-closed。
     """
+    try:
+        import sqlglot
+        from sqlglot import exp
+    except Exception:
+        return None
+    mapping: dict[str, str] = {}
+
+    def _sub(m: "re.Match[str]") -> str:
+        name = m.group(1)
+        ph = f"__dq_scope_{len(mapping)}_{abs(hash(name)) % (10 ** 8)}"
+        mapping[ph] = name
+        return ph
+
+    try:
+        preprocessed = _PLACEHOLDER_RE.sub(_sub, query)
+        parsed = sqlglot.parse_one(preprocessed, read="duckdb")
+    except Exception:
+        return None
+    if parsed is None:
+        return None
+    out: list[str] = []
+    for tbl in parsed.find_all(exp.Table):
+        # 表函数调用（FROM read_parquet(...)）不是裸表引用——由独立的函数
+        # allowlist（_check_sql_function_allowlist）治理。
+        if getattr(tbl, "expressions", None):
+            continue
+        name = tbl.name
+        if not name:
+            continue
+        if name in mapping:
+            name = mapping[name]
+        if name not in out:
+            out.append(name)
+    return out
+
+
+def _query_from_tables(query: str) -> list[str]:
+    """#P0-18 / R27-K 提取 SQL 里的表名。
+
+    优先用 sqlglot AST（能覆盖逗号连接 / 子查询 / CTE）；sqlglot 不可用或解析
+    失败时回退正则（研究用；production/strict 在调用方 fail-closed，见
+    ``_require_provable_table_scope``）。
+    """
+    ast_refs = _try_sqlglot_table_refs(query)
+    if ast_refs is not None:
+        return ast_refs
     import re
 
     out: list[str] = []
@@ -815,6 +871,32 @@ def _query_from_tables(query: str) -> list[str]:
     return out
 
 
+def _require_provable_table_scope(
+    query: str,
+    *,
+    caller: str,
+) -> None:
+    """R27-K：SQL 表集合必须可证明（fail-closed）。
+
+    sqlglot 不可用/解析失败时，正则无法证明逗号连接不会绕过声明表集合——
+    production/strict 直接拒绝执行，绝不用不完整的正则当安全边界。
+    """
+    if _try_sqlglot_table_refs(query) is not None:
+        return
+    from data_access.read.query_budget import is_strict_semantics
+
+    try:
+        strict = is_strict_semantics()
+    except Exception:
+        strict = True
+    if strict:
+        raise ValidationError(
+            f"{caller}: 无法用 AST 证明 SQL 的表集合（缺 sqlglot 或解析失败），"
+            "production/strict 拒绝执行。请安装 sqlglot（pip install sqlglot）"
+            "或显式拆分查询。"
+        )
+
+
 def assert_sql_tables_declared(query: str, declared: Sequence[str]) -> None:
     """#P0-18 production sql_relation 的 FROM 表集合绑定。
 
@@ -824,6 +906,8 @@ def assert_sql_tables_declared(query: str, declared: Sequence[str]) -> None:
     """
     if not query or not declared:
         return
+    # R27-K：表集合必须可证明（AST），production/strict 下 sqlglot 缺失 fail-closed。
+    _require_provable_table_scope(query, caller="sql_relation")
     table_set = set(declared)
     # 允许大小写不敏感匹配（数据集名在 registry 是 snake_case）
     lower_declared = {str(d).lower() for d in table_set}
@@ -856,10 +940,27 @@ def assert_sql_from_scope(query: str, *, allowed: Sequence[str]) -> None:
 
     与 strict 无关：数据源边界是安全/治理问题，research 也不能放开（读到的数据
     不在 snapshot/lineage 里，治理与追溯同时失效）。
-    """
-    import re
 
+    R27-K：表引用用 sqlglot AST 枚举（逗号连接 / 子查询 / CTE 全覆盖）；AST
+    不可证明时（sqlglot 缺失）production/strict fail-closed。
+    """
     allowed_l = {str(a).lower() for a in allowed}
+    _require_provable_table_scope(query, caller="RelationHandle.sql")
+    ast_refs = _try_sqlglot_table_refs(query)
+    if ast_refs is not None:
+        for name in ast_refs:
+            tl = name.lower()
+            if tl in allowed_l:
+                continue
+            if tl.startswith("__scope"):
+                continue
+            raise ValidationError(
+                f"RelationHandle SQL 引用了 scope 外的表：{name!r}。完整 SELECT 只能 "
+                f"FROM/JOIN {sorted(allowed_l)}；其它表一律拒绝（避免读取未声明的数据源"
+                "绕过 DataAccess 治理）。"
+            )
+        return
+    import re
     for chunk in _iter_code_chunks(query):
         for m in re.finditer(
             r"(?i)\b(?:FROM|JOIN)\s+"

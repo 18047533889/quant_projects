@@ -216,7 +216,7 @@ FactorEngine.materialize_incremental_from_config("configs/fa.yaml", since="2024-
 | API | 说明 |
 |-----|------|
 | `run_many_from_config` | `config_data_scope_key` → `config_run_batch_key` → `run_many` |
-| `run_many_from_config_parallel` | 根节点 joblib 并行（共享子式仍串行） |
+| `run_many_from_config_parallel` | R31：默认走 `AdaptiveBatchScheduler`（真实 physical DAG + 资源 admission + as_completed 流式 sink）；旧 layer-loop 仅 `FACTOR_ENGINE_LAYER_LOOP=1` 兼容用 |
 | `materialize_many_from_config(batch_run=True)` | 同组共享 `run_many`，再 `execute_materialize_from_resolved` |
 | `materialize_from_config` | 单 YAML；`ResolvedMaterializeKwargs` 含 `resume_materialize` / CH 等 |
 
@@ -230,7 +230,7 @@ FactorEngine.materialize_incremental_from_config("configs/fa.yaml", since="2024-
 |----|------|------|
 | **读** | `data_access` + **DuckDB** | parquet 批量读、`sql()`/`sql_stream()`、registry 白名单 |
 | **读** | `clickhouse` | 长表 panel 只读 |
-| **算** | **`auto`（默认）** | SQL 可编译子树 → DuckDB/CH；其余 → 认证的 Polars 快路径 → Pandas reference 兜底。算子数量以 `cleaned_operators/docs/operators_catalog.json` 为准（当前注册 canonical 626、daily DSL 白名单 223、extended 920） |
+| **算** | **`auto`（默认）** | SQL 可编译子树 → DuckDB/CH；其余 → 认证的 Polars 快路径 → Pandas reference 兜底。算子数量以 `cleaned_operators/docs/operators_catalog.json` 为准（当前 canonical 与 SQL emitter 数字由 CI 生成，见 `docs/evidence/r31/R31_BACKEND_TARGET_MATRIX.csv` 与 `docs/sql_pushdown_coverage.md`，README 不维护硬编码数字） |
 | **算** | `duckdb_sql` | 强制 DuckDB 方言 SQL 下推（当前 **147** 个已实现 canonical，见 [`sql_pushdown_coverage.md`](docs/sql_pushdown_coverage.md)） |
 | **算** | `clickhouse_sql` | ClickHouse 方言 SQL 下推（fail-closed，未逐算子认证不得继承 DuckDB evidence） |
 | **写** | Parquet factor lake / staging / CH | 经 `write_targets`；DuckDB 不做持久化写目标 |
@@ -283,7 +283,7 @@ sorted(build_dsl_allowlist().keys())
 | `trade_when` `neutralize` | 信号 / 截面 | 条件持仓 / OLS 残差 |
 | 四则 `+ - * /` | 算术 | 或 `add`/`multiply`/… |
 
-**可选依赖**：`pip install "factor-engine[pandas]"`（含 scipy）；`[talib]`（部分技术指标优先 C 实现）；**`[polars]`**；**`[modin]`**（`FACTOR_ENGINE_USE_MODIN=1` 或 `backend.type: pandas_modin`）；**`[parallel]`**（Joblib + CSE，见 `runtime/perf_config.py`）；**`[backtest]`**（Backtrader，见 monorepo `backtest_layer`）。性能脚本：`scripts/profile_pandas_backend.py`、`scripts/bench_pandas_vs_modin.py`。
+**可选依赖**：`pip install "factor-engine[pandas]"`（含 scipy）；`[talib]`（部分技术指标优先 C 实现）；**`[polars]`**；**`[modin]`**（`FACTOR_ENGINE_USE_MODIN=1` 或 `backend.type: pandas_modin`）；**`[performance]`**（psutil + threadpoolctl，R31：ResourceBroker 的 live headroom / IO pressure 需要）；**`[backtest]`**（Backtrader，见 monorepo `backtest_layer`）。R31-118：并行路径统一 `concurrent.futures`（as_completed 流式），`[parallel]`（joblib）extra 已移除。性能脚本：`scripts/profile_pandas_backend.py`、`scripts/bench_pandas_vs_modin.py`、`scripts/sql_certification_factory.py`（R31 SQL parity 认证）。
 
 **回测接口与语义 ADR**：[`docs/adr_backtest_target_position.md`](docs/adr_backtest_target_position.md)（输出协议、策略版本、真实数据路径、分层指标、可复现字段、**信号时点 / 防前视** §13、**多资产执行与指纹** §14）。回测执行层若在独立仓 `backtest_layer/`（本 monorepo 可能未附带），以其 README 为准。
 

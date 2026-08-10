@@ -113,15 +113,22 @@ def _official_session_grid(calendar: Any) -> tuple[int, ...]:
     convention = str(getattr(calendar, "timestamp_convention", "bar_end")).lower()
     if convention not in {"bar_start", "bar_end"}:
         raise ValueError("calendar timestamp_convention must be bar_start or bar_end")
+    # R26-056: the official grid is generated at the calendar's DECLARED
+    # ``bar_freq`` resolution — a 5-min source must not be judged against a
+    # per-minute grid (it would read every 4 of 5 bars as "missing").  The
+    # declared width is never inferred from observed deltas.
+    from runtime.session_panel import declared_width_minutes
+
+    width = declared_width_minutes(calendar)
     out: list[int] = []
     for start_text, stop_text in segments:
         start, stop = _hhmm_minute(start_text), _hhmm_minute(stop_text)
         if stop <= start:
             raise ValueError("calendar segments must be increasing intervals")
         if convention == "bar_start":
-            out.extend(range(start, stop))
+            out.extend(range(start, stop, width))
         else:
-            out.extend(range(start + 1, stop + 1))
+            out.extend(range(start + width, stop + 1, width))
     return tuple(out)
 
 

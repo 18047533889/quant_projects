@@ -43,6 +43,12 @@ data-access-server = "data_access.service.__main__:main"
 [project.entry-points."console_scripts"]
 data-access-quality = "data_access.quality.cli:main"
 
+# 说明：本项目采用「物理目录 = data_access.X 子包」的非标准布局
+# （package-dir 把每个顶层目录映射成带前缀的 dotted package），因此
+# setuptools 的自动 discovery 无法把物理名 core/read/... 重命名成
+# data_access.*，只能显式列出（R26-P0-002）。
+# 防漂移：dataaccess/scripts/check_wheel_inventory.py 会构建 wheel 并校验
+# 所有物理包目录都进入了 distribution，缺失即 CI fail。
 [tool.setuptools]
 packages = [
     "data_access",
@@ -54,6 +60,10 @@ packages = [
     "data_access.service",
     "data_access.clickhouse",
     "data_access.quality",
+    "data_access.contract",
+    "data_access.security",
+    "data_access.runtime",
+    "data_access.snapshot",
 ]
 
 [tool.setuptools.package-dir]
@@ -65,6 +75,10 @@ packages = [
 "data_access.cos" = "cos"
 "data_access.clickhouse" = "clickhouse"
 "data_access.quality" = "quality"
+"data_access.contract" = "contract"
+"data_access.security" = "security"
+"data_access.runtime" = "runtime"
+"data_access.snapshot" = "snapshot"
 
 [tool.setuptools.package-data]
 data_access = ["config/*.yaml", "config/README.md", "docs/*.md"]

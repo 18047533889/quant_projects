@@ -257,21 +257,28 @@ def build_waves_from_dag(
     wave_memory_budget: int = _DEFAULT_WAVE_MEMORY_BUDGET,
     rows_estimate: int = 500_000,
     scan_cost_map: dict[str, Any] | None = None,
+    scope_scan_cost_map: dict[str, Any] | None = None,
 ) -> ReadWavePlan:
     """从 PhysicalFactorDAG 构建读波（source_scope / dataset / snapshot 聚合）。
 
     ``scan_cost_map``：``task_id -> ScanCost``（R27-060/061：FE 在真正 read 前
     从 DataAccess 拿 selected_bytes / estimated_rows / remote）。
+    ``scope_scan_cost_map``（R31-P0-026）：``source_scope -> ScanCost``——task_id
+    在 lower 前不可知，BatchDataRequest 按 source scope 一次 ScanCost，此处按
+    scope 回退。两者优先级：task_id > source_scope > 静态估算。
     """
     planner = ReadWavePlanner(
         wave_memory_budget=wave_memory_budget,
         rows_estimate=rows_estimate,
     )
     scan_cost_map = scan_cost_map or {}
+    scope_scan_cost_map = scope_scan_cost_map or {}
     for task in dag.tasks.values():
         if task.task_type not in {TASK_SOURCE_SCAN, TASK_CSE_SHARED, TASK_ROOT}:
             continue
         cost = scan_cost_map.get(task.task_id)
+        if cost is None:
+            cost = scope_scan_cost_map.get(task.source_scope)
         est_scan = cost.selected_bytes if cost is not None and cost.selected_bytes else None
         est_mem = cost.projection_bytes if cost is not None and cost.projection_bytes else None
         planner.register_scan_task(

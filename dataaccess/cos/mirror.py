@@ -438,7 +438,7 @@ def expected_partitions_with_degraded(
     return _expected_dates_with_degraded(dataset_name, start, end)
 
 
-def physical_partition_for(dataset_name: str) -> Any:
+def physical_partition_for(dataset_name: str, registry: Any = None) -> Any:
     """R25 P0-001/002/016：**唯一物理分区 locator**（mirror/remote/auto 共用）。
 
     优先 RuntimeDatasetContract（契约声明，period_files / event_files 等）；无
@@ -446,6 +446,10 @@ def physical_partition_for(dataset_name: str) -> Any:
 
     **禁止** mirror.py 自己拼 / remote.py 再拼一遍 / registry glob 又是一套——
     物理布局（layout/filename template/partition clock/缺失语义）只有这一个来源。
+
+    R26-P1-030：消费调用方已绑定的 registry（不自行 ``load_registry()`` 再吞异常）——
+    custom registry / test registry / namespace 不会漂移。未传 registry 时才尝试
+    进程默认 registry。
     """
     from data_access.contract.physical_partition import (
         MissingPartitionSemantics,
@@ -458,9 +462,11 @@ def physical_partition_for(dataset_name: str) -> Any:
     # 1) 契约优先：RuntimeDatasetContract 已把 storage_layout（period_files /
     #    event_files）编译成 PhysicalPartitionSpec。
     try:
-        from data_access.registry import load_registry
+        if registry is None:
+            from data_access.registry import load_registry
 
-        rc = compile_runtime_contract(dataset_name, load_registry())
+            registry = load_registry()
+        rc = compile_runtime_contract(dataset_name, registry)
         if rc is not None and rc.physical_partition is not None:
             return rc.physical_partition
     except Exception:
@@ -470,10 +476,10 @@ def physical_partition_for(dataset_name: str) -> Any:
     spec = mirror_spec_for_dataset(dataset_name)
     if spec is None:
         return None
-    try:
-        layout = layout_from_mirror(getattr(spec, "layout", None) or "daily_parquet")
-    except Exception:
-        layout = PhysicalLayout.DAILY_TRADE_DATE
+    # R26-P1-006：mirror 布局声明非法 → fail（不静默 fallback 到 DAILY_TRADE_DATE）。
+    layout = layout_from_mirror(
+        getattr(spec, "layout", None) or "daily_parquet"
+    )
     filename_template = getattr(spec, "filename_template", None)
     file_selector = getattr(spec, "file_selector", None)
     # StockCapital 混放目录：file_selector 决定 filename template。
@@ -687,7 +693,14 @@ def load_mirror_inventory(store: Any, dataset: str) -> dict[str, Any]:
         except (OSError, json.JSONDecodeError):
             continue
         data_file = Path(str(payload.get("path") or mp).replace(".manifest.json", ""))
-        payload["verified"] = bool(payload.get("verified")) and (
+        # R26-P0-008：verified 必须真实 bool——字符串 "false" 不得解析成 True。
+        verified_raw = payload.get("verified")
+        verified = (
+            verified_raw
+            if isinstance(verified_raw, bool)
+            else str(verified_raw).lower() == "true"
+        )
+        payload["verified"] = verified and (
             data_file.exists()
             and data_file.stat().st_size == payload.get("size")
         )

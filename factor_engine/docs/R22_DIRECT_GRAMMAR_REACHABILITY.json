@@ -11196,7 +11196,8 @@
       "open",
       "morning_cutoff",
       "afternoon_start",
-      "session_tz"
+      "session_tz",
+      "endpoint_policy"
     ],
     "smoke_recipe": "smoke:intra_lunch_gap_return::close=continuous_close",
     "terminal_usable": true
@@ -11571,14 +11572,13 @@
     "canonical": "intra_segment_amount_share",
     "composition_usable": true,
     "data_inputs": [
-      "amount"
-    ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [
+      "amount",
       "segment",
       "session_tz"
     ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [],
     "smoke_recipe": "smoke:intra_segment_amount_share::amount=amount_local",
     "terminal_usable": true
   },
@@ -11615,7 +11615,8 @@
     "reachable": true,
     "scalar_parameters": [
       "segment",
-      "session_tz"
+      "session_tz",
+      "endpoint_policy"
     ],
     "smoke_recipe": "smoke:intra_segment_return::close=continuous_close",
     "terminal_usable": true
@@ -11628,14 +11629,13 @@
     "canonical": "intra_segment_volume_share",
     "composition_usable": true,
     "data_inputs": [
-      "volume"
-    ],
-    "mining_visible": true,
-    "reachable": true,
-    "scalar_parameters": [
+      "volume",
       "segment",
       "session_tz"
     ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [],
     "smoke_recipe": "smoke:intra_segment_volume_share::volume=raw_volume_shares",
     "terminal_usable": true
   },
@@ -17806,7 +17806,8 @@
     "scalar_parameters": [
       "threshold",
       "window",
-      "threshold_mode"
+      "threshold_mode",
+      "scale_mode"
     ],
     "smoke_recipe": "smoke:ts_dc_duration_asymmetry::x=continuous_close",
     "terminal_usable": true
@@ -17827,7 +17828,8 @@
     "scalar_parameters": [
       "threshold",
       "window",
-      "threshold_mode"
+      "threshold_mode",
+      "scale_mode"
     ],
     "smoke_recipe": "smoke:ts_dc_event_rate::x=continuous_close",
     "terminal_usable": true
@@ -17848,7 +17850,8 @@
     "scalar_parameters": [
       "threshold",
       "window",
-      "threshold_mode"
+      "threshold_mode",
+      "scale_mode"
     ],
     "smoke_recipe": "smoke:ts_dc_overshoot_asymmetry::x=continuous_close",
     "terminal_usable": true
@@ -17869,7 +17872,8 @@
     "scalar_parameters": [
       "threshold",
       "window",
-      "threshold_mode"
+      "threshold_mode",
+      "scale_mode"
     ],
     "smoke_recipe": "smoke:ts_dc_overshoot_ratio::x=continuous_close",
     "terminal_usable": true

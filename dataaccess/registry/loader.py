@@ -20,6 +20,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping
 
 from data_access.core.exceptions import DataError, ValidationError
@@ -605,6 +606,21 @@ class DatasetRegistry:
 
     def __init__(self, datasets: Mapping[str, Dataset]) -> None:
         self._datasets = dict(datasets)
+        # R27-L：frozen dataclass ≠ immutable——Dataset 的 Mapping 字段仍是
+        # 可变 dict，`store.get_dataset('x').schema['k'] = v` 能改共享 registry。
+        # 统一冻结成 MappingProxyType（只读；dict()/keys()/get()/in 全部兼容）。
+        # engine 的嵌套 options 仍是 dict（residual），顶层字段 mutation 已封。
+        for ds in self._datasets.values():
+            for fname in (
+                "schema",
+                "roles",
+                "engine",
+                "params_schema",
+                "param_specs",
+            ):
+                val = getattr(ds, fname, None)
+                if isinstance(val, dict) and not isinstance(val, MappingProxyType):
+                    object.__setattr__(ds, fname, MappingProxyType(val))
 
     def get(self, name: str) -> Dataset:
         if name not in self._datasets:

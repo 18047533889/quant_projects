@@ -36,6 +36,8 @@
   reason: "dataset footer 行数估算需 pq.read_metadata，与 publish 同类只读 footer"
 - path: data_access/write/upsert.py
   reason: "upsert 需要读已有 partition 做 merge，调 store.read_arrow 会绕一大圈"
+- path: data_access/write/generation.py
+  reason: "R27-G generation 原子代写本体：hive 分区 data.parquet 直写 + manifest.json 单指针 flip（与 publish 同类，不能递归调自己）"
 - path: data_access/read/sql_escape.py
   reason: "有限 SQL 逃生口的实现本体"
 - path: data_access/cos/remote.py
@@ -154,6 +156,8 @@
   reason: "upsert 读取已有分区并原子写回"
 - path: dataaccess/write/publish.py
   reason: "publish 校验 unique_key / 行数需直读 parquet + DuckDB（_validate_unique_key），不能递归调 read_arrow"
+- path: dataaccess/write/generation.py
+  reason: "R27-G generation 原子代写本体：hive 分区 data.parquet 直写 + manifest.json 单指针 flip（与 publish/upsert 同类，不能递归调自己）"
 - path: dataaccess/core/duckdb_capabilities.py
   reason: "dataaccess 自身实现：DuckDB 版本能力探测（import duckdb 读版本）"
 - path: dataaccess/core/retry.py
@@ -369,3 +373,12 @@
   reason: "算子证据认证脚本：按文件读证据 parquet 核验（R25 §49 豁免——独立认证流程）"
 - path: factor_engine/scripts/certify_primitive_evidence.py
   reason: "原语证据认证脚本：按文件读证据 parquet 核验（R25 §49 豁免——独立认证流程）"
+
+
+# ============================================================================
+# O. R26 DataAccess 内部 runtime gate（R26-P0-022：跨 epoch schema evolution）
+#    读 parquet footer 元数据（不读数据）做跨 epoch schema 契约校验，是
+#    DataAccess 正式读路径的一部分，不是裸读旁路。
+# ============================================================================
+- path: dataaccess/read/schema_epoch.py
+  reason: "R26-P0-022 跨 epoch schema gate：pq.ParquetFile 读 footer 元数据校验字段存在性/dtype 兼容，属 DataAccess 内部运行时门禁"

@@ -43,6 +43,8 @@ factor_engine/util/workspace_data/
 .scheduled_*.ready
 
 # 敏感信息（R24 P1-S7 §9：coscli 配置 / credential / secret / key 文件不入库）
+# 注意：只忽略「凭证材料」后缀，绝不用 `credentials.*` 这类会吞掉源码
+# （credentials.py）的模式。R26 §9.2：任何 production *.py 被 ignore 必须 CI fail。
 .env
 *.pem
 *_token*
@@ -50,12 +52,13 @@ factor_engine/util/workspace_data/
 .cos.yaml
 cos.yaml
 *.credentials
-credentials.*
 *.secret
 *.key
 *.s3cred
 *secret_key*
 *secret_id*
+# credentials.py 是纯源码（无真实 secret），必须纳入 Git（R26-P0-001）。
+!dataaccess/security/credentials.py
 
 # 本地备份 / 可重建缓存 / 体积过大产物
 .replace_backup_*/

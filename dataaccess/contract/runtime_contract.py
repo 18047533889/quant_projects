@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass, field
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from data_access.core.exceptions import ValidationError
@@ -172,10 +173,9 @@ class ContractCompiler:
         from data_access.cos_contract import get_cos_contract
         from data_access.read.semantic_catalog import get_semantic_catalog
 
-        try:
-            ds = self._registry.get(dataset)
-        except Exception:
-            ds = None
+        # R26-P0-011：registry.get 失败不吞——compile 异常由 ``_compile_contract_strict``
+        # 在 production 下 hard fail（registry 不可用 ≠ 无 contract ≠ 旧逻辑继续）。
+        ds = self._registry.get(dataset)
         contract = get_cos_contract(dataset)
         catalog = get_semantic_catalog()
         if ds is None and contract is None:
@@ -239,9 +239,14 @@ class ContractCompiler:
         )
 
         # ---- fingerprint（编译产物完整哈希）----
+        # R26-P1-001：必须包含 temporal_axes 与 schema——date_label→instant /
+        # schema 变化必须改 fingerprint。不人工维护字段列表，直接对完整
+        # canonical payload 哈希。
+        # R26-P1-004：market 优先级 = 显式 contract.market > registry market > name 推断。
+        market = _resolve_market(dataset, ds, contract)
         payload = {
             "dataset": dataset,
-            "market": _market_of_name(dataset),
+            "market": market,
             "storage": asdict(storage),
             "physical_partition": physical.to_dict(),
             "pit": asdict(pit),
@@ -250,23 +255,35 @@ class ContractCompiler:
             "cardinality": asdict(cardinality),
             "coverage": asdict(coverage),
             "security": asdict(security),
+            "temporal_axes": {
+                k: v.to_dict() for k, v in sorted(temporal_axes.items())
+            },
+            "schema": asdict(schema),
         }
         text = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         fingerprint = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
+        # R26-P1-002：deep freeze——frozen dataclass 不等于 immutable，外部原地改
+        # temporal_axes/units/schema 会不改 fingerprint。编译后转 MappingProxyType /
+        # tuple，禁止原地修改。
+        frozen_axes = MappingProxyType(dict(temporal_axes))
+        frozen_units = MappingProxyType(dict(units))
         return RuntimeDatasetContract(
             dataset=dataset,
-            market=_market_of_name(dataset),
+            market=market,
             storage=storage,
             physical_partition=physical,
-            temporal_axes=temporal_axes,
+            temporal_axes=frozen_axes,  # type: ignore[arg-type]
             pit=pit,
             filters=filter_reqs,
-            units=units,
+            units=frozen_units,  # type: ignore[arg-type]
             cardinality=cardinality,
             coverage=coverage,
             security=security,
-            schema=schema,
+            schema=SemanticSchemaContract(
+                fields=schema.fields,
+                schema=MappingProxyType(dict(schema.schema)),
+            ),
             fingerprint=fingerprint,
         )
 
@@ -307,11 +324,14 @@ class ContractCompiler:
         deployment/location，业务语义以 RuntimeDatasetContract 为准）。
         """
         # 1) COS 契约 storage_layout（period_files / event_files / daily_parquet ...）
+        # R26-P1-006：authoritative 声明 typo 必须 startup fail，不能 fallback 到
+        # daily——「契约不可用」≠「旧逻辑继续」。
         contract_layout = None
         if contract is not None:
-            try:
-                contract_layout = layout_from_contract(getattr(contract, "storage_layout", None))
-            except ValidationError:
+            raw_layout = getattr(contract, "storage_layout", None)
+            if raw_layout:
+                contract_layout = layout_from_contract(raw_layout)
+            elif contract is not None:
                 contract_layout = None
 
         # 2) mirror layout（退路）
@@ -435,16 +455,20 @@ class ContractCompiler:
         return units
 
     def _security_of(self, dataset: str, ds: Any, contract: Any) -> DatasetSecurityContract:
-        classification = "public"
+        # R26-P1-007：无显式 policy 时 classification = UNCLASSIFIED（不能乐观默认
+        # public）。production/automated mining 对 unknown 应 reject。
+        classification = "unclassified"
         tags: tuple[str, ...] = ()
         try:
             policy = self._registry.access_policy_for_dataset(dataset)
         except Exception:
             policy = None
         if policy is not None:
-            classification = getattr(policy, "classification", "public") or "public"
+            classification = (
+                getattr(policy, "classification", None) or "unclassified"
+            )
             tags = tuple(getattr(policy, "access_tags", ()) or ())
-        return DatasetSecurityContract(classification=classification, access_tags=tags)
+        return DatasetSecurityContract(classification=str(classification), access_tags=tags)
 
 
 def _market_of_name(name: str) -> str | None:
@@ -455,23 +479,40 @@ def _market_of_name(name: str) -> str | None:
     return None
 
 
+def _resolve_market(dataset: str, ds: Any, contract: Any) -> str | None:
+    """R26-P1-004：market 优先级 = 显式 contract.market > registry market > name 推断。"""
+    if contract is not None:
+        cm = getattr(contract, "market", None)
+        if cm:
+            return str(cm)
+    if ds is not None:
+        dm = getattr(ds, "market", None)
+        if dm:
+            return str(dm)
+    return _market_of_name(dataset)
+
+
 def _missing_semantics_of(contract: Any) -> MissingPartitionSemantics:
     raw = getattr(contract, "missing_partition_semantics", "error") or "error"
-    try:
-        return MissingPartitionSemantics(str(raw).lower())
-    except ValueError:
-        return MissingPartitionSemantics.ERROR
+    # R26-P1-006：契约声明非法 → fail（不静默默认 ERROR 掩盖配置 typo）。
+    return MissingPartitionSemantics(str(raw).lower())
 
 
-_compiler: ContractCompiler | None = None
+_compilers: dict[int, ContractCompiler] = {}
 
 
 def get_runtime_contract_compiler(registry: Any) -> ContractCompiler:
-    """进程内 ContractCompiler 单例（按 registry 懒绑定）。"""
-    global _compiler
-    if _compiler is None:
-        _compiler = ContractCompiler(registry)
-    return _compiler
+    """R26-P1-003：ContractCompiler 按 registry 绑定（不再是 first-registry 全局单例）。
+
+    registry A 绑定的 compiler 绝不用于 registry B / test registry / namespace
+    registry。使用方也应在 Store 上显式持有（``self.contract_compiler``）。
+    """
+    key = id(registry)
+    cached = _compilers.get(key)
+    if cached is None:
+        cached = ContractCompiler(registry)
+        _compilers[key] = cached
+    return cached
 
 
 def compile_runtime_contract(dataset: str, registry: Any) -> RuntimeDatasetContract | None:

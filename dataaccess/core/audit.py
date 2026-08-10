@@ -125,6 +125,23 @@ def _should_audit_reads() -> bool:
         }
 
 
+def _touch_private(path: Path) -> None:
+    """R26-P1-013：审计文件显式 0600（不依赖 umask）。"""
+    path.touch(exist_ok=True)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def _mode_too_open(path: Path) -> bool:
+    try:
+        mode = path.stat().st_mode & 0o777
+        return bool(mode & 0o077)  # group/other 可读/写 → 收紧
+    except OSError:
+        return False
+
+
 def record(
     *,
     op: str,
@@ -193,6 +210,14 @@ def record(
     if extra:
         record_obj["extra"] = extra
 
+    # R26-P1-012：paths/params/error/extra 统一递归脱敏（secret/token/signed URL）。
+    from data_access.security.redaction import sanitize_audit_payload
+
+    record_obj["paths"] = sanitize_audit_payload(record_obj.get("paths"))
+    record_obj["params"] = sanitize_audit_payload(record_obj.get("params"))
+    record_obj["error"] = sanitize_audit_payload(record_obj.get("error"))
+    record_obj["extra"] = sanitize_audit_payload(record_obj.get("extra"))
+
     try:
         path = _resolve_audit_path()
         # #P1-65 canonical serializer：datetime/Path/Decimal/numpy/Enum 等非 JSON
@@ -204,6 +229,15 @@ def record(
             default=_canonical_default,
         )
         with _write_lock:
+            # R26-P1-013：审计日志含内部路径/principal/dataset/params——显式
+            # 0600（不依赖 umask），首次创建时生效。
+            try:
+                if not path.exists():
+                    _touch_private(path)
+                elif _mode_too_open(path):
+                    os.chmod(path, 0o600)
+            except OSError:
+                pass
             with path.open("a", encoding="utf-8") as f:
                 # #26 收官轮：跨进程行原子性。``_write_lock`` 只是线程锁，挡不住
                 # 多进程并发 append；CPython 的 ``f.write`` 对 O_APPEND 通常单次

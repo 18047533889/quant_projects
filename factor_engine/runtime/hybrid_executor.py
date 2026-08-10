@@ -72,12 +72,15 @@ def set_worker_thread_env(threads: int) -> None:
     os.environ["DUCKDB_MAX_THREADS"] = str(threads)
 
 
-def _process_initializer(threads: int) -> Callable[[], None]:
-    def _init() -> None:
-        set_worker_thread_env(threads)
-        _logger.info("r27 process worker ready threads=%d", threads)
+def _worker_initializer(threads: int) -> None:
+    """R31-P0-008：顶层进程 worker 初始化函数（可 pickle，spawn 平台安全）。
 
-    return _init
+    旧实现 ``_process_initializer`` 返回嵌套闭包；``ProcessPoolExecutor`` 在
+    macOS/Windows spawn 下需要把 initializer 序列化传给子进程，嵌套函数不可
+    pickle → 进程池创建即失败。顶层函数 + initargs 才是 spawn-safe。
+    """
+    set_worker_thread_env(threads)
+    _logger.info("r31 process worker ready threads=%d", threads)
 
 
 class HybridExecutor:
@@ -111,6 +114,8 @@ class HybridExecutor:
         self._lock = threading.Lock()
         self._thread_task_count = 0
         self._process_task_count = 0
+        # R31-007.4: 连续熔断计数（供调度器/运维观测 backend 健康）。
+        self._process_breaker_hits = 0
 
     def _ensure_pools(self) -> None:
         with self._lock:
@@ -124,7 +129,8 @@ class HybridExecutor:
 
                     self._process_pool = ProcessPoolExecutor(
                         max_workers=self.max_process_workers,
-                        initializer=_process_initializer(self.worker_threads),
+                        initializer=_worker_initializer,
+                        initargs=(self.worker_threads,),
                     )
                 except Exception:
                     self._process_pool = None
@@ -137,19 +143,54 @@ class HybridExecutor:
         cpu_tokens: int = 1,
         prefer: str | None = None,
     ) -> Future:
-        """按 backend GIL 分类提交；``prefer`` ∈ {thread, process} 强制。"""
+        """按 backend GIL 分类提交；``prefer`` ∈ {thread, process} 强制。
+
+        R31-008：``cpu_tokens`` 仅保留签名兼容，**不作为第二套资源治理**——唯一
+        admission authority 是 ``ResourceBroker``（调度器在 submit 前已按 token
+        预留）。此处忽略该参数，避免「Executor 自己也控制并发」的误导。
+        """
+        _ = cpu_tokens  # R31-008: admission 由 broker 统一，Executor 只执行
         self._ensure_pools()
         kind = prefer or classify_backend_execution(backend)
         if self.prefer_process and kind == "thread":
             kind = "process"
         if kind == "process" and self._process_pool is not None:
-            self._process_task_count += 1
-            return self._process_pool.submit(fn, *args)
+            try:
+                self._process_task_count += 1
+                return self._process_pool.submit(fn, *args)
+            except Exception:
+                # R31-007.4 (BROKEN_WORKER_RECOVERY_PASS)：worker 崩溃后进程池不可用。
+                # 重建池（尽快恢复），当前 task 立即回退线程执行，不让整个 Engine
+                # 因一个坏 worker 永久不可用。
+                self._recover_process_pool()
+                self._process_breaker_hits += 1
+                self._thread_task_count += 1
+                return self._thread_pool.submit(fn, *args)
         if self._thread_pool is None:
             self._ensure_pools()
         assert self._thread_pool is not None
         self._thread_task_count += 1
         return self._thread_pool.submit(fn, *args)
+
+    def _recover_process_pool(self) -> None:
+        """R31-007.4：重建损坏的 process pool（连续熔断计数可被调度器读取）。"""
+        with self._lock:
+            if self._process_pool is not None:
+                try:
+                    self._process_pool.shutdown(wait=False)
+                except Exception:
+                    pass
+                self._process_pool = None
+            try:
+                from concurrent.futures import ProcessPoolExecutor
+
+                self._process_pool = ProcessPoolExecutor(
+                    max_workers=self.max_process_workers,
+                    initializer=_worker_initializer,
+                    initargs=(self.worker_threads,),
+                )
+            except Exception:
+                self._process_pool = None
 
     def shutdown(self, *, wait: bool = True) -> None:
         with self._lock:
@@ -164,6 +205,7 @@ class HybridExecutor:
         return {
             "thread_task_count": self._thread_task_count,
             "process_task_count": self._process_task_count,
+            "process_breaker_hits": self._process_breaker_hits,
             "max_thread_workers": self.max_thread_workers,
             "max_process_workers": self.max_process_workers,
             "worker_threads": self.worker_threads,

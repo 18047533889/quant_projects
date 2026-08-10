@@ -566,14 +566,18 @@ def _kama_1d(values: np.ndarray, sc: np.ndarray, er_window: int) -> np.ndarray:
     for t in range(n):
         if not np.isfinite(values[t]):
             # break + rewarm (round-11 P0): a NaN price INVALIDATES the state;
-            # KAMA emits NaN until ``er_window`` consecutive finite prices
+            # KAMA emits NaN until ``er_window + 1`` consecutive finite prices
             # re-accumulate and the ER is re-derived over that contiguous
             # history — no frozen flat line during the re-warmup.
             last = np.nan
             contiguous = 0
             continue
         contiguous += 1
-        if contiguous < er_window:
+        # R30 §21 parity: the ER needs er_window+1 contiguous prices
+        # (close - close.shift(er) pairs bar t with t-er; diff().rolling(er)
+        # needs er finite diffs = er+1 prices).  First legal seed uses the
+        # current close, same rule first-time and after every break.
+        if contiguous < er_window + 1:
             continue
         if not np.isfinite(last):
             last = values[t]

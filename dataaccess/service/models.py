@@ -109,8 +109,10 @@ class DatasetInfo(StrictRequestModel):
     name: str
     kind: str
     access_mode: str
-    time_column: str
-    instrument_column: str
+    # R26-P1-022：真实 registry 里 static 维表/特殊 dataset 可能没有 time/instrument
+    # 列——nullable，否则 FastAPI response validation 对 None 报错。
+    time_column: str | None = None
+    instrument_column: str | None = None
     params_schema: dict[str, str] = Field(default_factory=dict)
 
 

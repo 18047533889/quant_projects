@@ -210,7 +210,7 @@ def _enrich_catalog(daily: set[str]) -> None:
     close_cutoff = {"MACD_line", "MACD_signal", "MACD_hist", "RSI_WILDER", "ATR_WILDER", "ADX", "true_range"}
     for canonical, catalog in OperatorRegistry._catalog.items():
         surface = classify_canonical(canonical)
-        operator = OperatorRegistry.get(canonical)
+        operator = OperatorRegistry.get(canonical, mode="any")
         policy = infer_operator_policy(operator, canonical=canonical) if operator is not None else None
         policy_scope = getattr(policy, "scope", "unknown") if policy is not None else "unknown"
         if policy_scope == "unknown":

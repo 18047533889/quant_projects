@@ -194,8 +194,10 @@ POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
     }
 )
 
-# 因果填充算子：禁止 polars_long / SQL fast path silent no-op（见 ``UnsupportedCausalOperatorError``）
-POLARS_LONG_BLOCKED_CAUSAL: frozenset[str] = frozenset({"bfill", "causal_bfill"})
+# R30 §2: bfill/causal_bfill were physically removed (``tombstones`` is the
+# single authority).  No tier classifies them any more; the emitter's raise
+# guards remain as migration errors for stale hand-built plans only.
+POLARS_LONG_BLOCKED_CAUSAL: frozenset[str] = frozenset()
 
 POLARS_LONG_PASSTHROUGH: frozenset[str] = frozenset()
 

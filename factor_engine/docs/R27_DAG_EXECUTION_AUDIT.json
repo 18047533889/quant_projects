@@ -1,7 +1,7 @@
 {
   "scheduler_probe": {
     "ok": true,
-    "wall_s": 5.965,
+    "wall_s": 0.4,
     "results": [
       "a",
       "b",

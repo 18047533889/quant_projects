@@ -1,8 +1,8 @@
 {
   "broker_probe": {
-    "live_headroom": 26189017088,
-    "host_mem_available": 26189017088,
-    "process_family_rss": 282120192,
+    "live_headroom": 25893855232,
+    "host_mem_available": 25893855232,
+    "process_family_rss": 286892032,
     "pressure_stage": "NORMAL",
     "recommended_concurrency": 8,
     "admission_probe_ok": true,

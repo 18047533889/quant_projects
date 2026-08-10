@@ -444,14 +444,17 @@ def benchmark_light() -> dict[str, object]:
 
         serial_s, _ = _timeit(lambda: engine.run_many(factors, enable_cse=False))
         parallel_s, _ = _timeit(lambda: engine.run_many_parallel(factors, enable_cse=True, n_jobs=2))
+        # fast 计算路径（write_results=False：不落盘，与 serial/parallel 对齐 apples-to-apples；
+        # 真实落盘由 materialize_many_fast 的 writer 与 compute pipeline 重叠，另测）。
         fast_s, fast_out = _timeit(lambda: engine.materialize_many_fast(
             factors, result_policy="sink", storage_format="long", writer_queue_bytes=1 << 22,
+            write_results=False,
         ))
         return {
             "factors": len(factors),
             "serial_wall_s": round(serial_s, 3),
             "run_many_parallel_wall_s": round(parallel_s, 3),
-            "fast_wall_s": round(fast_s, 3),
+            "fast_compute_wall_s": round(fast_s, 3),
             "fast_factors_per_min": round(60 * len(factors) / max(fast_s, 1e-6), 1),
             "fast_results": len(fast_out.get("results", {})),
             "fast_done": fast_out.get("done"),

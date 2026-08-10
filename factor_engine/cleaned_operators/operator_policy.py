@@ -416,10 +416,10 @@ def tier1_policy_keys() -> frozenset[str]:
 """
     return frozenset(resolve_tier1_canonical(name) for name in policy_required_canonicals())
 
-# 不做 Polars 移植且通常非 PIT 安全（FFT/矩阵/随机/CDF-PDF 等）
+# 不做 Polars 移植且通常非 PIT 安全（FFT/矩阵/CDF-PDF 等）。
+# R30 §2: shuffle / rand_* 已物理删除（tombstones 单点），不再属于任何算子集合。
 INTENTIONALLY_PANDAS_ONLY: frozenset[str] = frozenset(
     {
-        "shuffle",
         "fft",
         "ifft",
         "convolve",
@@ -441,11 +441,6 @@ INTENTIONALLY_PANDAS_ONLY: frozenset[str] = frozenset(
         "pca",
         "qr_decompose",
         "lu_decompose",
-        "rand_exp",
-        "rand_lognormal",
-        "rand_normal",
-        "rand_poisson",
-        "rand_uniform",
         "cdf_chi2",
         "cdf_f",
         "cdf_normal",
@@ -493,9 +488,11 @@ PANDAS_ONLY_PIT_SAFE: frozenset[str] = frozenset(
 # Temporal safety is independent of backend availability.  Keep this set
 # limited to operators whose semantics actually consume future observations or
 # deliberately destroy time ordering.
-PIT_UNSAFE_CANONICALS: frozenset[str] = frozenset(
-    {"Lead", "next", "bfill", "causal_bfill", "fillna_interpolate", "shuffle"}
-)
+# R30 §2: Lead/next/bfill/causal_bfill/fillna_interpolate/shuffle were removed
+# from the executable system (see ``tombstones``) — they are not PIT-unsafe
+# operators, they are deleted operators.  The set is now empty; any future
+# future-referencing candidate must instead go through the tombstone audit.
+PIT_UNSAFE_CANONICALS: frozenset[str] = frozenset()
 
 # 破坏 panel shape 的算子（即使 PIT-safe 也不进 production）
 NON_SHAPE_PRESERVING_CANONICALS: frozenset[str] = frozenset({"dropna"})
@@ -684,13 +681,8 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
     "normalize": {"scope": "cs", "pit_safe": True},
     "standardize": {"scope": "cs", "pit_safe": True},
     "col": {"scope": "elementwise", "lookback_window": 0, "pit_safe": True},
-    "Lead": {"scope": "ts", "lag": -1, "pit_safe": False},
-    "next": {"scope": "ts", "lag": -1, "pit_safe": False},
-    "bfill": {"scope": "elementwise", "pit_safe": False, "nan_policy": "ffill_only"},
-    "causal_bfill": {"scope": "elementwise", "pit_safe": False, "nan_policy": "ffill_only"},
     "ffill": {"scope": "elementwise", "pit_safe": True, "nan_policy": "ffill_only"},
     "fillna_const": {"scope": "elementwise", "pit_safe": True},
-    "fillna_interpolate": {"scope": "elementwise", "pit_safe": False},
     "causal_linear_extrapolate": {
         "scope": "ts",
         "pit_safe": True,
@@ -807,7 +799,6 @@ _EXPLICIT_POLICIES: dict[str, dict[str, Any]] = {
         "session_aware": True,
         "reset_at_session_boundary": True,
     },
-    "shuffle": {"scope": "unknown", "pit_safe": False},
     "avg": {"scope": "aggregate", "pit_safe": True},
     "corr_test": {"scope": "hypothesis", "pit_safe": True},
     "abs": {"scope": "elementwise", "pit_safe": True},
@@ -1805,10 +1796,6 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
         or "causal" in tags
     )
     if canon in PIT_UNSAFE_CANONICALS:
-        pit_safe = False
-    elif name in ("lead", "next"):
-        pit_safe = False
-    elif name == "shuffle":
         pit_safe = False
 
     if scope == "ts" and any(k in name for k in ("mean", "std", "sum", "corr", "rank", "decay")):

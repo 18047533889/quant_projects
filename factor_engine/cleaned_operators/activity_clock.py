@@ -323,16 +323,28 @@ _UNITS: dict[str, str] = {
 # floor and the operator degrades to a permanent NaN.  Expose that floor as a
 # ParamSpec so ``validate_operator_call`` rejects it and the search grammar
 # excludes the dead range.
+# R26-118/119: the activity-clock history is NESTED, not max.  Each historical
+# ``scaled_activity[s]`` needs ``scale_window`` PRIOR rows for its rolling
+# median, and the k*-lookback then searches up to ``max_lookback`` more rows —
+# so the raw input history the planner must prefetch is
+# ``scale_window + max_lookback`` (plus the exact boundary).  Declared on
+# ``scale_window`` so the compound formula drives prefetch / warmup / cache.
 _PARAM_SPECS: dict[str, dict[str, ParamSpec]] = {
     "ts_activity_clock_lagged_value": {
-        "scale_window": ParamSpec(dtype=int, min=5),
+        "scale_window": ParamSpec(
+            dtype=int, min=5, history_formula="scale_window + max_lookback"
+        ),
         "include_current": ParamSpec(dtype=bool, choices=(True, False)),
     },
     "ts_activity_clock_lagged_value_prior": {
-        "scale_window": ParamSpec(dtype=int, min=5),
+        "scale_window": ParamSpec(
+            dtype=int, min=5, history_formula="scale_window + max_lookback"
+        ),
     },
     "ts_activity_clock_age": {
-        "scale_window": ParamSpec(dtype=int, min=5),
+        "scale_window": ParamSpec(
+            dtype=int, min=5, history_formula="scale_window + max_lookback"
+        ),
         "include_current": ParamSpec(dtype=bool, choices=(True, False)),
     },
     "ts_max_drawdown_activity_cost": {},

@@ -235,7 +235,7 @@ def test_quantile_regression_beta_recovers_slope():
     rng = np.random.default_rng(9)
     x = _frame(rng.normal(0.0, 1.0, 200))
     y = _frame(2.0 * x.to_numpy()[:, 0] + rng.normal(0.0, 0.5, 200))
-    qb = OperatorRegistry.get("ts_quantile_regression_beta", "pandas_numpy").calculate(y, x, 150, 0.5)
+    qb = OperatorRegistry.get("ts_quantile_regression_beta", "pandas_numpy", mode="any").calculate(y, x, 150, 0.5)
     assert abs(float(qb.to_numpy()[-1, 0]) - 2.0) < 0.3
 
 

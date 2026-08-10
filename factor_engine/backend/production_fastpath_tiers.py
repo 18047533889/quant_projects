@@ -300,7 +300,9 @@ P2_MAP_GROUPS_CANONICALS: frozenset[str] = frozenset(
     }
 )
 
-P2_FILL_INTERPOLATE_CANONICALS: frozenset[str] = frozenset({"bfill", "causal_bfill"})
+# R30 §2: bfill/causal_bfill/fillna_interpolate were physically removed
+# (``tombstones`` is the single authority); no tier classifies them any more.
+P2_FILL_INTERPOLATE_CANONICALS: frozenset[str] = frozenset()
 
 P2_NATIVE_PARITY_PENDING: frozenset[str] = frozenset()
 

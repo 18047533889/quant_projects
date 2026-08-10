@@ -72,30 +72,21 @@ def production_allowed_composite_canonicals() -> frozenset[str]:
 # 向后兼容别名
 PRODUCTION_PIT_REQUIRED: frozenset[str] = PRODUCTION_CORE_CANONICALS
 
-_PIT_EXEMPT: frozenset[str] = frozenset(
-    {"column", "literal", "col", "Lead", "next", "bfill", "causal_bfill", "fillna_interpolate", "shuffle"}
-)
+# R30 §2: tombstoned names (rand_*/shuffle/sample/Lead/next/bfill/causal_bfill/
+# fillna_interpolate/interpolate/dropna/norm*) are physically removed operators,
+# NOT PIT-exempt special categories.  They are excluded via
+# ``tombstones.is_tombstoned`` (single authority) so ``get()`` /
+# ``resolve_canonical()`` raise ``RemovedOperatorError``.  Only genuinely
+# non-temporal elementwise scaffolds remain exempt.
+_PIT_EXEMPT: frozenset[str] = frozenset({"column", "literal", "col"})
 
+# ``PERMANENTLY_FORBIDDEN_CANONICALS`` retains a small set of NEVER-operator
+# utility names that are not tombstoned because they never had an operator
+# identity; everything that once was a random/future/noncausal-fill operator is
+# handled by ``tombstones``.
 PERMANENTLY_FORBIDDEN_CANONICALS: frozenset[str] = frozenset(
     {
-        "bfill",
-        "causal_bfill",
-        "fillna_interpolate",
-        "shuffle",
-        "Lead",
-        "next",
-        "dropna",
         "constant",
-        "interpolate",
-        "norm",
-        "norm_l1",
-        "norm_linf",
-        "rand_exp",
-        "rand_lognormal",
-        "rand_normal",
-        "rand_poisson",
-        "rand_uniform",
-        "sample",
     }
 )
 
@@ -104,14 +95,14 @@ ProductionPolicy = Literal["allowed", "pending", "denied", "permanently_forbidde
 # production DSL 禁止（可 research / experimental，不可 production 投递）
 PRODUCTION_DENIED_CANONICALS: frozenset[str] = frozenset(
     {
-        # Non-causal / random / utility primitives — permanently excluded from
-        # production mining (R22-086..087).  These are NOT factor canonicals.
-        "dropna",
-        "bfill",
-        "causal_bfill",
-        "fillna_interpolate",
-        "shuffle",
+        # R30 §2: rand_*/shuffle/sample/Lead/next/bfill/causal_bfill/
+        # fillna_interpolate/interpolate/norm* are physically removed via
+        # ``tombstones`` (single authority) — they no longer belong in any
+        # operator-governance set.  ``constant`` remains a real internal
+        # canonical and ``dropna`` a real research-status operator that simply
+        # are not production factor terminals.
         "constant",
+        "dropna",
         # Raw matrix / signal-processing primitives — MOVE_INTERNAL capability
         # (R22-083), never a public factor terminal.
         "fft",
@@ -336,7 +327,18 @@ def _compute_allow_in_production(
 
     if is_production_denied(resolved):
         return False
-    if status in ("experimental", "deprecated", "stub", "doc_only"):
+    # R30 §5 (P0-004): production admission is PIT-safe-gated.  A factor that
+    # consumes any future observation can never be production-admitted even if
+    # downstream evidence overlays exist.  This is a hard gate, not a
+    # downstream-evidence check.
+    if not pit_safe:
+        return False
+    # R30 §5 (P0-005): lifecycle is fail-closed.  ``research`` is an explicit
+    # rejection (research tools are never production-admitted); experimental /
+    # deprecated / stub / doc_only are likewise rejected.  Only a reviewed
+    # ``production`` lifecycle passes this gate (the remaining surface / six-gate
+    # checks below still apply).
+    if status in ("research", "experimental", "deprecated", "stub", "doc_only"):
         return False
     if not shape_preserving:
         # NEW-013: a legit grain transform (minute -> daily, snapshot -> daily,
@@ -440,8 +442,21 @@ def _infer_panel_params(op: Any, meta: Any, catalog: dict[str, Any]) -> tuple[st
         sig = inspect.signature(fn)
     except (TypeError, ValueError):
         return ()
+    # R30 §9: a positional parameter with NO default is not necessarily a panel
+    # input — scalar thresholds / bounds (``lower`` / ``upper`` / ``threshold``)
+    # are required scalars that legitimately have no default.  Treating them as
+    # panels misroutes the kernel (e.g. ``ts_threshold_cycle_period(x, lower,
+    # upper, window)`` would feed ``lower`` as a second price panel).  These
+    # names are semantically scalar and are never panel inputs.
+    _SCALAR_THRESHOLD_NAMES = frozenset({
+        "lower", "upper", "threshold", "low", "high", "min_value", "max_value",
+        "alpha", "beta", "gamma", "theta", "sigma", "mu", "rho", "phi",
+        "eps", "epsilon", "tol", "tolerance", "k", "q", "p", "n", "seed",
+    })
     panels: list[str] = []
     for n in names:
+        if n in _SCALAR_THRESHOLD_NAMES:
+            continue  # required scalar threshold / bound, never a panel
         param = sig.parameters.get(n)
         if param is None:
             continue

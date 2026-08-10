@@ -566,7 +566,7 @@ intra_limit_reopen_count,True,True,True,"['intermediate', 'terminal']",['close']
 intra_longest_above_vwap_streak,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']",[],"smoke:intra_longest_above_vwap_streak::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
 intra_longest_below_vwap_streak,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']",[],"smoke:intra_longest_below_vwap_streak::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
 intra_low_time,True,True,True,"['intermediate', 'terminal']",['low'],[],smoke:intra_low_time::low=continuous_low,True
-intra_lunch_gap_return,True,True,True,"['intermediate', 'terminal']",['close'],"['open', 'morning_cutoff', 'afternoon_start', 'session_tz']",smoke:intra_lunch_gap_return::close=continuous_close,True
+intra_lunch_gap_return,True,True,True,"['intermediate', 'terminal']",['close'],"['open', 'morning_cutoff', 'afternoon_start', 'session_tz', 'endpoint_policy']",smoke:intra_lunch_gap_return::close=continuous_close,True
 intra_market_lead_lag_ex_self,True,True,True,"['intermediate', 'terminal']",['close'],"['lag', 'min_obs']",smoke:intra_market_lead_lag_ex_self::close=continuous_close,True
 intra_market_model_r2,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_market_model_r2::close=continuous_close,True
 intra_market_model_r2_ex_self,True,True,True,"['intermediate', 'terminal']","['close', 'free_market_cap']",[],smoke:intra_market_model_r2_ex_self::close=continuous_close,True
@@ -588,10 +588,10 @@ intra_realized_variance,True,True,True,"['intermediate', 'terminal']",['close'],
 intra_return_activity_corr,True,True,True,"['intermediate', 'terminal']","['close', 'activity']",['absolute_return'],smoke:intra_return_activity_corr::close=continuous_close,True
 intra_same_slot_momentum,True,True,True,"['intermediate', 'terminal']",['close'],['window'],smoke:intra_same_slot_momentum::close=continuous_close,True
 intra_same_slot_reversal,True,True,True,"['intermediate', 'terminal']",['close'],['window'],smoke:intra_same_slot_reversal::close=continuous_close,True
-intra_segment_amount_share,True,True,True,"['intermediate', 'terminal']",['amount'],"['segment', 'session_tz']",smoke:intra_segment_amount_share::amount=amount_local,True
+intra_segment_amount_share,True,True,True,"['intermediate', 'terminal']","['amount', 'segment', 'session_tz']",[],smoke:intra_segment_amount_share::amount=amount_local,True
 intra_segment_realized_vol,True,True,True,"['intermediate', 'terminal']",['close'],"['segment', 'session_tz']",smoke:intra_segment_realized_vol::close=continuous_close,True
-intra_segment_return,True,True,True,"['intermediate', 'terminal']",['close'],"['segment', 'session_tz']",smoke:intra_segment_return::close=continuous_close,True
-intra_segment_volume_share,True,True,True,"['intermediate', 'terminal']",['volume'],"['segment', 'session_tz']",smoke:intra_segment_volume_share::volume=raw_volume_shares,True
+intra_segment_return,True,True,True,"['intermediate', 'terminal']",['close'],"['segment', 'session_tz', 'endpoint_policy']",smoke:intra_segment_return::close=continuous_close,True
+intra_segment_volume_share,True,True,True,"['intermediate', 'terminal']","['volume', 'segment', 'session_tz']",[],smoke:intra_segment_volume_share::volume=raw_volume_shares,True
 intra_segment_vwap_deviation,True,True,True,"['intermediate', 'terminal']","['close', 'amount', 'volume']","['segment', 'session_tz']","smoke:intra_segment_vwap_deviation::amount=amount_local,close=continuous_close,volume=raw_volume_shares",True
 intra_session_return_asymmetry,True,True,True,"['intermediate', 'terminal']",['close'],[],smoke:intra_session_return_asymmetry::close=continuous_close,True
 intra_signed_imbalance_proxy,True,True,True,"['intermediate', 'terminal']","['close', 'value']",[],"smoke:intra_signed_imbalance_proxy::close=continuous_close,value=continuous_close",True
@@ -909,10 +909,10 @@ ts_cusum_vol_break_score,True,True,True,"['intermediate', 'terminal']",['x'],"['
 ts_days_since,True,True,True,"['intermediate', 'terminal']","['condition', 'max_lookback']",[],smoke:ts_days_since::condition=condition_bool,True
 ts_days_since_high,True,True,True,"['intermediate', 'terminal']",['x'],['window'],smoke:ts_days_since_high::x=continuous_close,True
 ts_days_since_low,True,True,True,"['intermediate', 'terminal']",['x'],['window'],smoke:ts_days_since_low::x=continuous_close,True
-ts_dc_duration_asymmetry,True,True,True,"['intermediate', 'terminal']","['x', 'scale']","['threshold', 'window', 'threshold_mode']",smoke:ts_dc_duration_asymmetry::x=continuous_close,True
-ts_dc_event_rate,True,True,True,"['intermediate', 'terminal']","['x', 'scale']","['threshold', 'window', 'threshold_mode']",smoke:ts_dc_event_rate::x=continuous_close,True
-ts_dc_overshoot_asymmetry,True,True,True,"['intermediate', 'terminal']","['x', 'scale']","['threshold', 'window', 'threshold_mode']",smoke:ts_dc_overshoot_asymmetry::x=continuous_close,True
-ts_dc_overshoot_ratio,True,True,True,"['intermediate', 'terminal']","['x', 'scale']","['threshold', 'window', 'threshold_mode']",smoke:ts_dc_overshoot_ratio::x=continuous_close,True
+ts_dc_duration_asymmetry,True,True,True,"['intermediate', 'terminal']","['x', 'scale']","['threshold', 'window', 'threshold_mode', 'scale_mode']",smoke:ts_dc_duration_asymmetry::x=continuous_close,True
+ts_dc_event_rate,True,True,True,"['intermediate', 'terminal']","['x', 'scale']","['threshold', 'window', 'threshold_mode', 'scale_mode']",smoke:ts_dc_event_rate::x=continuous_close,True
+ts_dc_overshoot_asymmetry,True,True,True,"['intermediate', 'terminal']","['x', 'scale']","['threshold', 'window', 'threshold_mode', 'scale_mode']",smoke:ts_dc_overshoot_asymmetry::x=continuous_close,True
+ts_dc_overshoot_ratio,True,True,True,"['intermediate', 'terminal']","['x', 'scale']","['threshold', 'window', 'threshold_mode', 'scale_mode']",smoke:ts_dc_overshoot_ratio::x=continuous_close,True
 ts_decay_exp_window,True,True,True,"['intermediate', 'terminal']",['x'],"['window', 'alpha']",smoke:ts_decay_exp_window::x=continuous_close,True
 ts_decay_linear,True,True,True,"['intermediate', 'terminal']",['x'],['window'],smoke:ts_decay_linear::x=continuous_close,True
 ts_delay,True,True,True,"['intermediate', 'terminal']",['x'],['n'],smoke:ts_delay::x=continuous_close,True

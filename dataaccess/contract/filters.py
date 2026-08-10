@@ -54,6 +54,19 @@ class FilterRequirement:
         return self.field
 
 
+def _scope_applies(scope: str, read_mode: str) -> bool:
+    """FilterRequirement.scope 是否在当前 read_mode 生效（R26-P0-012）。"""
+    if scope == "all":
+        return True
+    if scope == "panel":
+        return read_mode in {"panel", "auto"}
+    if scope == "event":
+        return read_mode in {"event", "pit", "auto"}
+    if scope == "dimension":
+        return read_mode in {"dimension", "auto"}
+    return True
+
+
 def _coerce_values(value: Any) -> tuple[Any, ...]:
     """过滤值 → 值元组（标量 → 单元素）。"""
     if value is None:
@@ -74,23 +87,31 @@ def _values_from_mapping(mapping: Mapping[str, Any] | None, field: str) -> tuple
 def validate_filter_requirements(
     contract: Any,
     *,
+    dataset: str | None = None,
     read_mode: str = "auto",
     params: Mapping[str, Any] | None = None,
     filters: Mapping[str, Any] | None = None,
     filters_by_dataset: Mapping[str, Any] | None = None,
     strict: bool | None = None,
 ) -> None:
-    """统一过滤契约校验（P0-003/004）。
+    """统一过滤契约校验（P0-003/004 + R26-P0-012 **per-dataset**）。
 
     覆盖：
         - params（路径参数）
         - filters（全局过滤）
-        - filters_by_dataset（per-dataset 过滤，read_joined）
+        - filters_by_dataset（per-dataset 过滤，read_joined）——**只取当前
+          dataset 自己的过滤器**，绝不把 B dataset 的 filter merge 进 A 去满足
+          A 的 requirement（R26-P0-012 跨 dataset 污染）。
 
     对每条 FilterRequirement：
         1. 缺失 required 字段 → fail-closed（production/strict）；
         2. exactly_one：字段值必须恰好 1 个（missing/multiple 拒绝）；
         3. allowed_values：值必须在枚举内（越界拒绝）。
+
+    ``read_mode``：FilterRequirement.scope（panel/event/dimension/all）生效判定。
+        - panel requirement  只在 read_mode ∈ {panel, auto} 生效
+        - event requirement  在 read_mode ∈ {event, pit} 生效
+        - all               始终生效
 
     与旧的 ``_validate_filters``（cos_contract）对齐：strict（production）直接抛
     ValidationError；research 允许 warning 降级（调用方决定是否放行）。返回 None，
@@ -107,14 +128,29 @@ def validate_filter_requirements(
     )
     if not requirements:
         return
+    if dataset is None:
+        dataset = getattr(contract, "dataset", None) or getattr(contract, "name", None)
 
     problems: list[str] = []
-    # per-dataset filters 合并：read_joined 的 filters_by_dataset 优先于全局。
+    # R26-P0-012：per-dataset——只用 filters_by_dataset[dataset]（若提供），
+    # 不做跨 dataset 合并。
     merged_filters = dict(filters or {})
-    for ds_filters in (filters_by_dataset or {}).values():
-        merged_filters.update(dict(ds_filters or {}))
+    if dataset is not None and filters_by_dataset is not None:
+        ds_filters = filters_by_dataset.get(dataset)
+        if ds_filters:
+            merged_filters.update(dict(ds_filters))
+    elif filters_by_dataset:
+        import logging
 
+        logging.getLogger("data_access.contract_filters").warning(
+            "validate_filter_requirements 未指定 dataset，filters_by_dataset 被忽略"
+            "（R26-P0-012：禁止跨 dataset merge）"
+        )
+
+    mode = str(read_mode or "auto").strip().lower()
     for req in requirements:
+        if not _scope_applies(req.scope, mode):
+            continue
         pv = _values_from_mapping(params, req.field)
         fv = _values_from_mapping(merged_filters, req.field)
         values: tuple[Any, ...] = ()
@@ -204,11 +240,17 @@ def build_filter_requirements_from_contract(
         entry["allowed_values"] = tuple(allowed)
 
     for field, meta in by_field.items():
+        # R26-P0-008：required 只接受真实 bool（internal 构造，但禁止 "false"→True）。
+        required = meta.get("required", True)
+        if not isinstance(required, bool):
+            raise ValidationError(
+                f"FilterRequirement[{field}].required 必须是布尔值，收到 {required!r}"
+            )
         reqs.append(
             FilterRequirement(
                 field=field,
                 scope=meta["scope"],  # type: ignore[arg-type]
-                required=bool(meta.get("required", True)),
+                required=required,
                 cardinality=meta["cardinality"],  # type: ignore[arg-type]
                 allowed_values=tuple(meta.get("allowed_values", ()) or ()),
             )

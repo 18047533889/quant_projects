@@ -148,9 +148,11 @@ def test_supertrend_high_low_nan_with_finite_close_breaks_state():
     # The high/NaN + low/NaN bar with a finite close must NOT keep the stale
     # trend alive: row 3 is NaN (state broken) rather than a carried level.
     assert np.isnan(vals[3])
-    # Row 4's previous close is finite, so TR/ATR (and hence the bands) are
-    # computable again -> the recursion re-seeds to a finite level.
-    assert np.isfinite(vals[4])
+    # R30 §22: after a gap the FIRST valid bar is UNKNOWN (no manufactured
+    # direction), so row 4 stays NaN; direction re-asserts from the price/band
+    # relationship on the FOLLOWING valid bar (row 5).
+    assert np.isnan(vals[4])
+    assert np.isfinite(vals[5])
 
 
 def test_supertrend_stale_trend_not_carried_through_bad_bar():
@@ -165,7 +167,9 @@ def test_supertrend_stale_trend_not_carried_through_bad_bar():
     vals = st["A"].tolist()
     assert np.isfinite(vals[4])      # trend alive before the bad bar
     assert np.isnan(vals[5])         # high/low NaN + finite close -> state broken
-    assert np.isfinite(vals[6])      # re-warmed on the next valid bar
+    # R30 §22: row 6 (first valid after gap) is UNKNOWN; row 7 re-asserts.
+    assert np.isnan(vals[6])
+    assert np.isfinite(vals[7])
 
 
 def test_supertrend_full_ohlc_gap_breaks_and_rewarms():
@@ -178,7 +182,10 @@ def test_supertrend_full_ohlc_gap_breaks_and_rewarms():
     st = Supertrend(high, low, close, 3, 2.0)
     vals = st["A"].tolist()
     assert np.isnan(vals[3])
-    assert np.isfinite(vals[5])  # re-seeded once bands are finite again
+    # R30 §22: row 4 (first valid after gap) is UNKNOWN; row 5 re-asserts once
+    # bands are finite again.
+    assert np.isnan(vals[4])
+    assert np.isfinite(vals[5])
 
 
 # ---------------------------------------------------------------------------

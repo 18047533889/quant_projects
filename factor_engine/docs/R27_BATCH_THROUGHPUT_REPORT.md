@@ -1,12 +1,19 @@
 # R27 Batch Throughput Report
 
-- HEAD: 37008c7ff4eff3823480443b6325577eae394250 dirty=True
-- scheduler probe: {'ok': True, 'wall_s': 5.965, 'results': ['a', 'b', 'c'], 'done': 4, 'broker_stage': 'NORMAL', 'scheduler_explanations': 4}
+- HEAD: 956e6cd61d52cdead98bf85a372c7b4629a4cdb9 dirty=True
+- scheduler probe: {'ok': True, 'wall_s': 0.4, 'results': ['a', 'b', 'c'], 'done': 4, 'broker_stage': 'NORMAL', 'scheduler_explanations': 4}
 - hard gates: 31/31 passed
 
 ## Lightweight throughput (synthetic 20-day 2-instrument panel)
 
-- error: AttributeError: 'ResourcePlan' object has no attribute 'duckdb_budget_bytes'
+- factors: 20
+- serial_wall_s: 0.183
+- run_many_parallel_wall_s: 0.862
+- fast_compute_wall_s: 0.997
+- fast_factors_per_min: 1203.4
+- fast_results: 20
+- fast_done: 34
+- fast_broker_stage: NORMAL
 
 ## Hard gates (R27-230..260)
 

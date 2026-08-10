@@ -1603,88 +1603,136 @@ def _verify_typed_broadcast_axes(
 
 
 def _verify_broadcast_specs(
-    metadata: OperatorMetadata, specs: tuple[BroadcastSpec, ...], frames: list[Any]
+    metadata: OperatorMetadata,
+    specs: tuple[BroadcastSpec, ...],
+    frames: list[Any],
+    *,
+    param_names: tuple[str, ...] = (),
 ) -> None:
-    """Verify non-base panels against a declared :class:`BroadcastSpec`.
+    """Verify broadcast panels against declared :class:`BroadcastSpec` pairs.
 
-    R11 P0-09 fail-closed: the spec names the mapping the operator needs.  For
-    each non-base panel we require its axis to be *interpretable* — a
-    ``DatetimeIndex`` so the date mapping can actually be checked — otherwise
-    the broadcast is unverifiable and must be rejected, not passed.  This closes
-    the old fail-open where an unknown index type silently bypassed the date
-    alignment gate.
+    R11 P0-09 fail-closed: the spec names the mapping the operator needs.  Each
+    spec's ``source_param`` / ``target_param`` names which panels it governs —
+    verification is bound by NAME, not by frame position, so a 3+ panel call,
+    multiple broadcast sources, or a kwargs reorder can never verify the wrong
+    panel against a spec (R30 §11).  An unknown / duplicate / non-panel bound
+    name fails closed rather than skipping the check.
     """
-    base = frames[0]
-    base_idx = getattr(base, "index", None)
-    if not isinstance(base_idx, pd.DatetimeIndex):
-        raise ValueError(
-            f"{metadata.name}: declares BroadcastSpec {[s.mode for s in specs]} but "
-            f"the base panel index {type(base_idx).__name__} is not a DatetimeIndex "
-            "— the broadcast date mapping cannot be verified (R11 P0-09 fail-closed)"
-        )
-    base_dates = base_idx.normalize()
-    base_cols = list(base.columns)
-    for position, frame in enumerate(frames[1:], start=1):
+    if not specs:
+        return
+    # Build the canonical bound ``param_name -> frame`` map.  ``param_names`` is
+    # aligned with positional ``args`` (same order); kwargs carry their own name.
+    # Panel values that arrive positionally get their positional param name.
+    bound_panels: dict[str, Any] = {}
+    if param_names:
+        for name, frame in zip(param_names, frames):
+            bound_panels[name] = frame
+    # kwargs (processed_args order is positional-first; here we only need names
+    # for panels that arrive via kwargs — the caller already merged them into
+    # ``frames`` but position does not map 1:1 for keyword panels).
+    from inspect import Parameter  # noqa: F401  (import kept local for parity)
+
+    def _require_frame(name: str, spec: BroadcastSpec) -> Any:
+        if name not in bound_panels:
+            raise ValueError(
+                f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}) names "
+                f"source/target param {name!r} which is not a bound panel input "
+                "(R30 §11 fail-closed — spec must name an actual panel)"
+            )
+        return bound_panels[name]
+
+    for spec in specs:
+        source_name = spec.source_param
+        target_name = spec.target_param
+        # R30 §11: if names are declared, bind to the named panels.  When no
+        # names are declared (legacy single-broadcast form) fall back to the
+        # first frame as base and the remaining frames as broadcast targets.
+        if source_name or target_name:
+            if not (source_name and target_name):
+                raise ValueError(
+                    f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}) must name "
+                    "BOTH source_param and target_param for named binding "
+                    "(R30 §11 fail-closed)"
+                )
+            if source_name == target_name:
+                raise ValueError(
+                    f"{metadata.name}: BroadcastSpec source_param==target_param "
+                    f"({source_name!r}) is not a valid broadcast (R30 §11 fail-closed)"
+                )
+            base = _require_frame(target_name, spec)
+            frame = _require_frame(source_name, spec)
+        else:
+            # Legacy unnamed form: base = first frame, each other frame verified.
+            base = frames[0]
+            frame = frames[1] if len(frames) > 1 else frames[0]
+        base_idx = getattr(base, "index", None)
+        if not isinstance(base_idx, pd.DatetimeIndex):
+            raise ValueError(
+                f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}) base panel "
+                f"{type(base_idx).__name__} index is not a DatetimeIndex — the "
+                "broadcast date mapping cannot be verified (R11 P0-09 fail-closed)"
+            )
         other_idx = getattr(frame, "index", None)
         if not isinstance(other_idx, pd.DatetimeIndex):
             raise ValueError(
-                f"{metadata.name}: broadcast input panel {position} index "
-                f"{type(other_idx).__name__} is not a DatetimeIndex — cannot verify "
-                "the declared BroadcastSpec mapping (R11 P0-09 fail-closed)"
+                f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}) source panel "
+                f"{type(other_idx).__name__} index is not a DatetimeIndex — cannot "
+                "verify the declared mapping (R11 P0-09 fail-closed)"
             )
+        base_dates = base_idx.normalize()
         other_dates = other_idx.normalize()
-        for spec in specs:
-            if spec.date_mapping == "exact":
-                if not other_dates.equals(base_dates):
-                    raise ValueError(
-                        f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}, "
-                        f"date_mapping='exact') input panel {position} dates are "
-                        "not row-aligned with the base (R11 P0-09)"
-                    )
-            elif spec.date_mapping in ("trading_date", "session"):
-                # R11 P0-10: ``session`` is a REAL frequency-transform mapping —
-                # a daily source (one row per trade date) broadcast onto the
-                # minute grid of the owning market session.  The structural
-                # requirements are (a) the source is genuinely daily-grained
-                # (one row per normalized trade date — a minute source would
-                # carry multiple rows per day), and (b) every source trade date
-                # exists among the base's trading days.  This closes the old
-                # fail-open where date_mapping='session' was declared but never
-                # verified.
-                if spec.date_mapping == "session":
-                    _verify_daily_grain(metadata, spec, frame, position, other_dates)
-                if not set(other_dates).issubset(set(base_dates)):
-                    raise ValueError(
-                        f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}, "
-                        f"date_mapping={spec.date_mapping!r}) input panel {position} "
-                        "carries trading dates absent from the base panel "
-                        "(R11 P0-09 fail-closed)"
-                    )
-            else:  # pragma: no cover - __post_init__ rejects unknown values
+        if spec.date_mapping == "exact":
+            if not other_dates.equals(base_dates):
                 raise ValueError(
-                    f"{metadata.name}: BroadcastSpec.date_mapping={spec.date_mapping!r} "
-                    "is not verified (R11 P0-09 fail-closed)"
+                    f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}, "
+                    f"date_mapping='exact') source {source_name!r} dates are "
+                    "not row-aligned with target (R11 P0-09)"
                 )
-            # R11 P0-10: instrument_policy is enforced, not just stored.
-            other_cols = list(frame.columns)
-            if spec.instrument_policy == "exact":
-                if other_cols != base_cols:
-                    raise ValueError(
-                        f"{metadata.name}: BroadcastSpec(instrument_policy='exact') "
-                        f"input panel {position} columns {other_cols} differ from "
-                        f"the base {base_cols} (R11 P0-10 fail-closed)"
-                    )
-            elif spec.instrument_policy == "subset":
-                if not set(other_cols).issubset(set(base_cols)):
-                    raise ValueError(
-                        f"{metadata.name}: BroadcastSpec(instrument_policy='subset') "
-                        f"input panel {position} columns {other_cols} include "
-                        f"instruments absent from the base {base_cols} "
-                        "(R11 P0-10 fail-closed)"
-                    )
-            # ``independent``: the source carries its own instrument axis; only the
-            # date mapping is constrained.  No column check (intended use:
-            # market-wide scalars, index weights, benchmark series).
+        elif spec.date_mapping in ("trading_date", "session"):
+            # R11 P0-10: ``session`` is a REAL frequency-transform mapping —
+            # a daily source (one row per trade date) broadcast onto the
+            # minute grid of the owning market session.  The structural
+            # requirements are (a) the source is genuinely daily-grained
+            # (one row per normalized trade date — a minute source would
+            # carry multiple rows per day), and (b) every source trade date
+            # exists among the base's trading days.  This closes the old
+            # fail-open where date_mapping='session' was declared but never
+            # verified.
+            if spec.date_mapping == "session":
+                _verify_daily_grain(metadata, spec, frame, 1, other_dates)
+            if not set(other_dates).issubset(set(base_dates)):
+                raise ValueError(
+                    f"{metadata.name}: BroadcastSpec(mode={spec.mode!r}, "
+                    f"date_mapping={spec.date_mapping!r}) source {source_name!r} "
+                    "carries trading dates absent from the target panel "
+                    "(R11 P0-09 fail-closed)"
+                )
+        else:  # pragma: no cover - __post_init__ rejects unknown values
+            raise ValueError(
+                f"{metadata.name}: BroadcastSpec.date_mapping={spec.date_mapping!r} "
+                "is not verified (R11 P0-09 fail-closed)"
+            )
+        # R11 P0-10: instrument_policy is enforced, not just stored.
+        base_cols = list(base.columns)
+        other_cols = list(frame.columns)
+        if spec.instrument_policy == "exact":
+            if other_cols != base_cols:
+                raise ValueError(
+                    f"{metadata.name}: BroadcastSpec(instrument_policy='exact') "
+                    f"source {source_name!r} columns {other_cols} differ from "
+                    f"target {base_cols} (R11 P0-10 fail-closed)"
+                )
+        elif spec.instrument_policy == "subset":
+            if not set(other_cols).issubset(set(base_cols)):
+                raise ValueError(
+                    f"{metadata.name}: BroadcastSpec(instrument_policy='subset') "
+                    f"source {source_name!r} columns {other_cols} include "
+                    f"instruments absent from the target {base_cols} "
+                    "(R11 P0-10 fail-closed)"
+                )
+        # ``independent``: the source carries its own instrument axis; only the
+        # date mapping is constrained.  No column check (intended use:
+        # market-wide scalars, index weights, benchmark series).
 
 
 def _is_daily_grain(normalized_dates) -> bool:
@@ -1716,7 +1764,13 @@ def _verify_daily_grain(
         )
 
 
-def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+def _validate_panel_axes(
+    metadata: OperatorMetadata,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    param_names: tuple[str, ...] = (),
+) -> None:
     frames = [value for value in (*args, *kwargs.values()) if _is_panel(value)]
     if not frames:
         return
@@ -1736,7 +1790,7 @@ def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwar
     # tag without any spec remains the legacy research waiver below.
     specs = tuple(getattr(metadata, "broadcast_specs", None) or ())
     if specs:
-        _verify_broadcast_specs(metadata, specs, frames)
+        _verify_broadcast_specs(metadata, specs, frames, param_names=param_names)
         return
     if tags & _TYPED_BROADCAST_TAGS or "allow_panel_broadcast" in tags:
         # Review #4 R4-99 / review #5 R5-05: a bare ``allow_panel_broadcast`` is
@@ -1803,6 +1857,7 @@ class NormalizedBoundParameters:
     defaults_applied: dict[str, Any]       # kernel/ParamSpec defaults merged for unbound params
     inactive_params: frozenset[str]        # params judged INACTIVE by active_when
     normalized_values: dict[str, Any]      # full canonical bound (scalars + merged defaults)
+    panel_param_names: tuple[str, ...] = ()  # R30 §11: param name aligned with each panel_input
 
 
 @dataclass
@@ -1839,13 +1894,20 @@ def _split_bound(
         target = explicit_aliases.get(key, key)
         scalar_params[target] = value
     panels: list[Any] = []
+    panel_param_names: list[str] = []
     for index, value in enumerate(args):
         name = names[index] if index < len(names) else ""
         if _is_panel(value):
             panels.append(value)
+            panel_param_names.append(name)
         elif name:
             scalar_params.setdefault(name, value)
-    return tuple(panels), scalar_params, alias_resolved
+    # R30 §11: keyword panels are bound by their own name.
+    for key, value in kwargs.items():
+        target = explicit_aliases.get(key, key)
+        if _is_panel(value):
+            panel_param_names.append(target)
+    return tuple(panels), tuple(panel_param_names), scalar_params, alias_resolved
 
 
 def bind_operator_call(
@@ -1876,12 +1938,13 @@ def bind_operator_call(
     # bound; relations and common integer relations run here on it too.
     _validate_common_integer_relations(metadata, (), bound)
     _validate_relational_specs(metadata, operator, (), bound)
-    panel_inputs, scalar_params, alias_resolved = _split_bound(
+    panel_inputs, panel_param_names, scalar_params, alias_resolved = _split_bound(
         metadata, processed_args, processed_kwargs
     )
     active, inactive = _enforce_active_when(metadata, (), bound, defaults)
     bound_obj = NormalizedBoundParameters(
         panel_inputs=panel_inputs,
+        panel_param_names=panel_param_names,  # R30 §11: name-bound broadcast
         scalar_params=scalar_params,
         canonical_aliases_resolved=alias_resolved,
         defaults_applied=dict(defaults or {}),
@@ -1919,7 +1982,14 @@ def validate_operator_call(
     # receives), then run the panel-axis and operator-specific checks.
     call = bind_operator_call(operator, args, kwargs)
     processed_args, processed_kwargs = call.args, call.kwargs
-    _validate_panel_axes(metadata, processed_args, processed_kwargs)
+    # R30 §11: pass the name-bound panel map so BroadcastSpec verification is
+    # bound to source_param/target_param, not frame position.
+    _validate_panel_axes(
+        metadata,
+        processed_args,
+        processed_kwargs,
+        param_names=call.bound.panel_param_names,
+    )
     valid = operator.validate_params(*processed_args, **processed_kwargs)
     if valid is False:
         raise ValueError(f"{metadata.name}: parameter validation failed")

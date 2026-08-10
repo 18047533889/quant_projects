@@ -40,11 +40,17 @@ class ReadHandle:
         budget: Any = None,
         govern_lazy: bool = False,
         normalize: Any = None,
+        _reservation: Any = None,
+        _reservation_release_fn: Any = None,
     ) -> None:
         self.snapshot = snapshot
         self.stats = stats
         self.lineage = lineage
         self._batch_size = batch_size
+        # R26-P0-017：governed lazy ReadHandle 持有 governor reservation，物化/
+        # stream 结束释放（release 幂等，防重复）。
+        self._reservation = _reservation
+        self._reservation_release_fn = _reservation_release_fn
         # #P0-21 governed lazy：production 不暴露 raw LazyFrame，collect 必须走
         # 预算/deadline 治理；``to_lazy()`` 在 governed 时拒绝裸 LazyFrame。
         self._budget = budget
@@ -86,7 +92,13 @@ class ReadHandle:
         """
         from data_access.read.query_budget import collect_polars_with_budget
 
-        table = collect_polars_with_budget(self._source, query_budget=self._budget)
+        try:
+            table = collect_polars_with_budget(
+                self._source, query_budget=self._budget
+            )
+        finally:
+            # R26-P0-017：物化终点释放 governor reservation（幂等）。
+            self._release_reservation()
         if not isinstance(table, pa.Table):
             # 防御：budget 层语义回归（返回非 Arrow）直接 fail，不静默透传。
             raise TypeError(
@@ -94,6 +106,13 @@ class ReadHandle:
                 f"{type(table).__name__}"
             )
         return table
+
+    def _release_reservation(self) -> None:
+        if self._reservation is not None and self._reservation_release_fn is not None:
+            fn = self._reservation_release_fn
+            self._reservation_release_fn = None
+            fn(self._reservation)
+            self._reservation = None
 
     def _ensure_not_consumed(self, action: str) -> None:
         """#P0-C4 one-shot 流一旦开始消费，任何后续物化/迭代都 fail-closed。
@@ -261,8 +280,12 @@ class ReadHandle:
                 return
             # 非 governed lazy 且未 buffer：真正的 collect_stream（低内存），
             # one-shot——完成后迭代器耗尽，后续终点 fail-closed。
-            for batch in self._source.collect_stream():
-                yield batch
+            try:
+                for batch in self._source.collect_stream():
+                    yield batch
+            finally:
+                # R26-P0-017：流式断开/耗尽 → release reservation（幂等）。
+                self._release_reservation()
             self._stream_completed = True
             return
         # table 形态：从 canonical Arrow 切片（可任意次复用）。

@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.10.0 — R27 Cache/Write-Transaction/Unsafe-Surface Closure
+
+R26 之后下一层收口：封闭「旁路 API 与写路径」没有纳入同一 Cache / 事务 /
+Snapshot 世界的问题。基线沿用 `main@58490a63`。
+
+- **Cache 安全**（R27-A/B/C）：`read_cached` cache lookup **之前先 authorize**；
+  key 纳入 security scope（principal+policy+clearance+run_mode）+ classification；
+  restricted/premium 数据默认不进共享缓存；`normalize_units` 不再掉进 `**params`
+  （走 `read(..., normalize_units=True)` 真实 normalize）；cache hit 记录审计 +
+  provenance；新增 `read_cached_result()`（`CachedReadResult` 带 snapshot/来源代）。
+- **物理边界**（R27-D/E）：`VerifiedPhysicalScope`（dataset 绑定 + contract digest），
+  production/strict 下 raw `physical_scope` 拒绝；`_enforce_dataset_path_boundary`
+  强制默认解析路径落在 dataset 自己 authorized root 内（A 不能借全局白名单读 B）。
+- **写路径逻辑授权 + 原子写**（R27-F/G）：新增 `dataset:write/delete/publish` 等
+  action；`write_arrow/upsert/delete_rows/publish_from_staging` 全部过逻辑授权；
+  `generation_pointer` 数据集走**原子代写**（完整新一代 → 原子 flip
+  `manifest.json.generation` 单指针），overwrite/append/upsert/delete 都只读完整一代。
+- **旁路口封闭**（R27-H..L）：stream 单次 snapshot（不再二次 resolve、不 fail-open）；
+  `set_calendar` 运行中冻结（`calendar_snapshot_id` 进缓存 key）；production/strict
+  禁止裸 `scan_polars()`；SQL 逗号连接绕过 → sqlglot AST 白名单（缺失 fail-closed）；
+  registry `schema/roles/engine/params_schema/param_specs` 冻结为 MappingProxyType。
+- **测试**：新增 17 个 destructive tests（test_r27_cache_write_atomic_2026_08.py）；
+  **922 passed**（905 存量 + 17 新）；审计脚本全绿。
+
+## 0.9.9 — R26 Implementation Closure：真实执行链收口 + Clean-Checkout Hardening
+
+R26 二阶审计（基线 58490a63 / 实际 956e6cd6）。核心目标：**让 R25 设计出来的
+Contract / Security / Snapshot / Resource / PIT / Provenance 真正成为一条不可绕过的
+执行链，并保证从 GitHub clean checkout 到 production service 行为一致。**
+
+- **Clean checkout / packaging**（P0-001/002）：`.gitignore` 不再用 `credentials.*`
+  吞源码；`credentials.py` 纳入 Git；`pyproject.toml` 补齐 security/contract/
+  runtime/snapshot 子包；新增 `check_source_inventory.py` / `check_wheel_inventory.py`
+  CI guard；wheel 全 12 子包 fresh-venv import 通过。
+- **PreparedRead + ReadPipeline 唯一执行链**（P0-003/004）：`store.prepare_read()`
+  → `execute_prepared_read()`；9 个 public read path（read_result/read_arrow/read_auto/
+  read_arrow_stream/scan/scan_polars/read_joined/sql/read_uri/read_factors）全部穿过
+  auth→contract→snapshot→budget→governor→verify→execute→verify→release；instrumentation
+  counters exactly-once（T-R26-PIPE-001）。
+- **Security**（P0-005..009）：`DataAccessExecutionContext` ContextVar（HTTP 嵌套读
+  继承请求 principal，并发 A/B 不串身份）；`AccessPolicy` 三态（[]=deny all）；
+  production 无显式 policy → startup fail；strict bool config；factor 权限 all-required +
+  catalog unavailable deny。
+- **PIT / Contract**（P0-011..014）：contract 编译失败 production hard-fail；FilterRequirement
+  per-dataset（不跨 dataset merge）；SQL PIT 不再 COALESCE same-day（`PITUnavailable`）；
+  PITPolicyFloor 拒绝 request 降级。
+- **Snapshot**（P0-015/016）：strict exact identity + manifest 完整校验 + `fail_if_changed`
+  + boundary 校验；verifier before/after 逐身份字段比较（etag/version_id/size/mtime）。
+- **Resource / Cache / Service**（P0-017..021）：governor admission 接主链 + duckdb slot
+  + remote_requests；`QueryBudget.tighten/with_overrides`；CacheManager 真实 TTL/per-principal
+  quota/GC（先物理删除再记账）；service `__main__` 启动跑 startup gate；`/ready` 复用
+  startup gate + 真实 engine probe（credential/legacy fail → 503）。
+- **SchemaEpoch / Provenance / Metadata**（P0-022..025）：真实 parquet footer 跨 epoch
+  schema gate；`GovernedFrame` 不可伪造（provenance 全链校验）；`build_sql_snapshot`
+  逐 dataset auth；`VisibleFactorCatalog`（不泄露 local root，count 基于可见 set）。
+- **P1**：fingerprint 含 temporal/schema、deep freeze、compiler 按 registry 绑定、
+  market 优先级、layout 非法 fail、unclassified 默认、production strict floor、
+  request_id 单一来源、audit 递归脱敏 + 0600、fork/PID guard、DatasetInfo nullable、
+  FileSelector IR、physical_partition_for 消费调用方 registry。
+- **CI audits**：`audit_r25_contract_drift`（0）、`audit_r26_security`（0 fail-open）、
+  `check_source_inventory`（0 ignored .py）、`check_wheel_inventory`（12 子包）、
+  `compileall` OK、allowlist 0 violation。
+- **测试**：R26 新增 30 个 destructive tests（全走 public path / 真实 parquet / 真实
+  HTTP），**905 passed**。报告 `docs/R26_FULL_PLATFORM_CLOSURE_REPORT.md`。
+
 ## 0.9.8 — FE 集成复查收官：FactorEngine→DataAccess adapter + 真 PyArrow parity
 
 沿「FactorEngine → DataAccess → factor lake」链路复查的 13 项（8 项 Freeze

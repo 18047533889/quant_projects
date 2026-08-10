@@ -73,7 +73,9 @@ def resolve_runtime_context(
 
     if production is None:
         production = _production_mode()
-    strict = is_strict_semantics()
+    # R26-P1-009：production 恒 strict——不能被显式参数把 production 降成
+    # non-strict（``production=True, strict_semantics=False`` 是安全漏洞）。
+    strict = bool(production) or is_strict_semantics()
     authorizer = authorizer or get_authorizer()
     principal = principal or getattr(authorizer, "principal", DEFAULT_LOCAL_PRINCIPAL)
     return RuntimeSecurityContext(

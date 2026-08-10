@@ -64,12 +64,17 @@ def _trailing_contiguous_xy(
 
     Gap no-compress (audit P0): a missing point splits the path — data on the
     other side of a gap is never re-joined into the same signature.
+
+    R28-P0-001: when the CURRENT row is non-finite, fail closed (return None)
+    instead of substituting a stale historical run as the current output.  A
+    signature at decision time ``t`` is only defined when the joint input at
+    ``t`` is observable.
     """
     valid = np.isfinite(x) & np.isfinite(y)
     n = valid.shape[0]
+    if n == 0 or not valid[-1]:
+        return None
     end = n
-    while end > 0 and not valid[end - 1]:
-        end -= 1
     start = end
     while start > 0 and valid[start - 1]:
         start -= 1
@@ -146,14 +151,22 @@ def _sig_depth2_norm(x: np.ndarray, y: np.ndarray, window: int) -> float:
     before forming the signature, so every series contributes on equal footing.
     The raw signature statistics remain available via the ``*_area`` / raw
     kernels; only this factor-facing norm uses dimensionless inputs.
+
+    R28 §五十二: the robust scale is computed on the SAME joint finite trailing
+    run that feeds the signature (never on the raw NaN-containing suffix), so the
+    normalisation footprint and the signature footprint always agree.
     """
     seg_x = x[-int(window):]
     seg_y = y[-int(window):]
     if len(seg_x) == 0 or len(seg_y) == 0:
         return np.nan
-    sx = _robust_scale(seg_x)
-    sy = _robust_scale(seg_y)
-    out = _sig_level2(x / sx, y / sy, window)
+    pair = _trailing_contiguous_xy(seg_x, seg_y)
+    if pair is None:
+        return np.nan
+    rx, ry = pair
+    sx = _robust_scale(rx)
+    sy = _robust_scale(ry)
+    out = _sig_level2(rx / sx, ry / sy, len(rx))
     if out is None:
         return np.nan
     return float(np.sqrt(sum(c * c for c in out[:4])))

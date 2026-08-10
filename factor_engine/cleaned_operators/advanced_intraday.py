@@ -306,12 +306,16 @@ class IntradayBarrierApproachAcceleration(SeriesOperator):
             date_mapping="trading_date",
             instrument_policy="exact",
             timezone=_SESSION_TZ,
+            source_param="high_limit",
+            target_param="close",
         ),
         BroadcastSpec(
             mode="daily_to_minute",
             date_mapping="trading_date",
             instrument_policy="exact",
             timezone=_SESSION_TZ,
+            source_param="low_limit",
+            target_param="close",
         ),
     )
     metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R11 #64

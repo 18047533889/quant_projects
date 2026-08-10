@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Iterable
 import numpy as np
 import pandas as pd
-from cleaned_operators.base import OperatorMetadata, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
 
 _EPS=1e-12
 
@@ -162,13 +162,24 @@ def KAMA(close,er_window,fast_window,slow_window):
                 contiguous=0
                 continue
             contiguous+=1
-            if contiguous<er:
-                # Not enough contiguous history to re-derive the ER yet.
+            # R30 §21 (P0-016): the ER needs ``er_window + 1`` contiguous finite
+            # prices — ``close - close.shift(er)`` pairs bar ``t`` with bar
+            # ``t-er``, and the ``diff().rolling(er).sum()`` volatility needs
+            # ``er`` finite diffs (which exist only once ``er+1`` prices are
+            # present).  Seeding at exactly ``er`` points emitted a KAMA reading
+            # whose ER / alpha were not yet fully defined.
+            if contiguous < er + 1:
+                # Not enough contiguous history to fully re-derive the ER yet
+                # (need er+1 prices).  No output until the ER is well-defined.
                 continue
-            if not np.isfinite(last): last=arr[t,c]
-            elif np.isfinite(alpha[t,c]): last=last+alpha[t,c]*(arr[t,c]-last)
-            out[t,c]=last
-    return pd.DataFrame(out,index=close.index,columns=close.columns)
+            if not np.isfinite(last):
+                # First legal KAMA seed after a warmup / gap: the CURRENT close,
+                # the same rule first-time and after every break.
+                last = arr[t, c]
+            elif np.isfinite(alpha[t, c]):
+                last = last + alpha[t, c] * (arr[t, c] - last)
+            out[t, c] = last
+    return pd.DataFrame(out, index=close.index, columns=close.columns)
 
 def Supertrend(high,low,close,atr_window,multiplier):
     w=_pi(atr_window,"atr_window",2); mult=_pf(multiplier,"multiplier",0)
@@ -178,6 +189,12 @@ def Supertrend(high,low,close,atr_window,multiplier):
     hh=high.to_numpy(float); ll=low.to_numpy(float); cu=basic_u.to_numpy(float); cl=basic_l.to_numpy(float); cv=close.to_numpy(float)
     final_u=cu.copy(); final_l=cl.copy(); trend=np.ones((rows,cols),dtype=int)
     for c in range(cols):
+        # R30 §22: ``post_gap`` distinguishes "just broke after a gap" from "still
+        # warming up / still waiting for direction".  The FIRST valid bar after a
+        # break enters UNKNOWN (trend=0, post_gap=True); the NEXT valid bar
+        # re-asserts direction from the price/band relationship — it must NOT
+        # re-enter UNKNOWN (that would deadlock on ``trend[t-1]==0`` forever).
+        post_gap = False
         for t in range(1,rows):
             # break + rewarm: a bar is state-valid only when high/low/close AND
             # the derived ATR-based bands are ALL finite.  A single non-finite
@@ -187,20 +204,47 @@ def Supertrend(high,low,close,atr_window,multiplier):
             if not (np.isfinite(hh[t,c]) and np.isfinite(ll[t,c]) and np.isfinite(cv[t,c])
                     and np.isfinite(cu[t,c]) and np.isfinite(cl[t,c])):
                 trend[t,c] = 0  # sentinel: state broken, next valid bar re-seeds
+                post_gap = True
                 continue
-            if trend[t-1,c] == 0:
-                # Re-seed after a gap from the current bar's own valid bands.
-                trend[t,c] = 1
+            if post_gap:
+                # R30 §22 (P0-017): re-seed after a gap enters UNKNOWN, NOT a
+                # hardcoded bullish restart.  A gap destroys the trend context, so
+                # the next valid bar alone cannot assert a direction — emitting the
+                # lower band here would manufacture a systematic long bias out of a
+                # data hole.  This first valid bar publishes UNKNOWN and clears the
+                # flag; the following valid bar re-asserts direction below.
+                trend[t,c] = 0
                 final_u[t,c] = cu[t,c]
                 final_l[t,c] = cl[t,c]
-                out[t,c] = final_l[t,c]
+                post_gap = False
+                out[t,c] = np.nan  # UNKNOWN after a gap — never a fake direction
                 continue
             if np.isfinite(final_u[t-1,c]) and (cu[t,c]>=final_u[t-1,c] and cv[t-1,c]<=final_u[t-1,c]): final_u[t,c]=final_u[t-1,c]
             if np.isfinite(final_l[t-1,c]) and (cl[t,c]<=final_l[t-1,c] and cv[t-1,c]>=final_l[t-1,c]): final_l[t,c]=final_l[t-1,c]
-            if trend[t-1,c]>0 and cv[t,c]<final_l[t,c]: trend[t,c]=-1
-            elif trend[t-1,c]<0 and cv[t,c]>final_u[t,c]: trend[t,c]=1
-            else: trend[t,c]=trend[t-1,c]
-            out[t,c]=final_l[t,c] if trend[t,c]>0 else final_u[t,c]
+            if trend[t-1,c] == 0:
+                # R30 §22: after a gap / warmup the trend is UNKNOWN.  The next
+                # valid bar re-asserts direction from its own position RELATIVE TO
+                # THE BAND MIDLINE — the standard Supertrend initialisation that
+                # does not pre-judge direction.  Closing above the midpoint starts
+                # a long bias, below starts a short bias; neither is manufactured
+                # by the gap itself.
+                mid_t = 0.5 * (cu[t,c] + cl[t,c])
+                if cv[t,c] >= mid_t:
+                    trend[t,c] = 1
+                else:
+                    trend[t,c] = -1
+            elif trend[t-1,c] > 0 and cv[t,c] < final_l[t,c]:
+                trend[t,c] = -1
+            elif trend[t-1,c] < 0 and cv[t,c] > final_u[t,c]:
+                trend[t,c] = 1
+            else:
+                trend[t,c] = trend[t-1,c]
+            if trend[t,c] > 0:
+                out[t,c] = final_l[t,c]
+            elif trend[t,c] < 0:
+                out[t,c] = final_u[t,c]
+            else:
+                out[t,c] = np.nan
     return pd.DataFrame(out,index=close.index,columns=close.columns)
 def SupertrendDirection(high,low,close,atr_window,multiplier):
     st=Supertrend(high,low,close,atr_window,multiplier); return pd.DataFrame(np.where(close>=st,1.0,-1.0),index=close.index,columns=close.columns).where(st.notna())
@@ -225,17 +269,41 @@ def PSAR(high,low,acceleration,maximum):
                 live = False
                 continue
             if not live:
-                # Seed / re-seed from this jointly-valid bar and reset the
-                # valid-bar history (a gap breaks the sequence; the pre-gap
-                # bars must not resurface as t-1/t-2 references).  The FIRST
-                # seed does not emit (matches the legacy row-0=NaN contract);
-                # a mid-series re-seed emits like the legacy interrupt path.
-                bull=True; sar=lv; ep=hv; af=af0; live=True
+                # R30 §23 (P0-018): seed / re-seed does NOT hardcode a bullish
+                # restart.  A data gap destroys the trend context; forcing
+                # ``bull=True; sar=low`` after every gap manufactures a long bias
+                # out of missing data.  After a gap the state is UNKNOWN: no SAR is
+                # emitted until TWO consecutive valid bars re-assert a direction
+                # from their own high/low movement (first-time seed also uses this
+                # rule).  ``seeded_once`` distinguishes the very first seed (which
+                # the legacy contract leaves NaN) from a mid-series re-seed (which
+                # must not emit a direction either).
+                bull=None; sar=None; ep=None; af=af0; live=True
                 prev1_h, prev1_l = hv, lv
                 prev2_h, prev2_l = None, None
-                if seeded_once:
-                    out[t,c]=sar
+                # Wait for a second valid bar to determine initial direction.
                 seeded_once = True
+                continue
+            if bull is None:
+                # Two valid bars now present: the direction is read from their
+                # own movement — rising high/low -> uptrend (bull), falling ->
+                # downtrend (bear).  No direction, no SAR.
+                if hv > prev1_h and lv > prev1_l:
+                    bull = True
+                    sar = prev1_l
+                    ep = max(hv, prev1_h)
+                elif hv < prev1_h and lv < prev1_l:
+                    bull = False
+                    sar = prev1_h
+                    ep = min(lv, prev1_l)
+                else:
+                    # Indeterminate two-bar move: keep waiting for direction.
+                    prev2_h, prev2_l = prev1_h, prev1_l
+                    prev1_h, prev1_l = hv, lv
+                    continue
+                prev2_h, prev2_l = prev1_h, prev1_l
+                prev1_h, prev1_l = hv, lv
+                out[t,c]=sar
                 continue
             sar=sar+af*(ep-sar)
             if bull:
@@ -304,9 +372,14 @@ _RECURSIVE_EWM = {
 # ``_pi`` float truncation.  A window declared ``dtype=int`` rejects 20.1/20.5/
 # 20.9 at the call boundary (they all used to truncate to the SAME 20, a fake
 # search space); a multiplier/acceleration is a strict positive float.
-_WIN_GE2 = ParamSpec(dtype=int, min=2)   # windows whose kernel uses _pi(w, name, 2)
-_WIN_GE1 = ParamSpec(dtype=int, min=1)   # windows whose kernel uses _pi(w, name)
-_POS_FLOAT = ParamSpec(dtype=float, min=1e-9)  # strict positive (finite) float
+# R30 §24 (P1-025): production scalar parameters carry an explicit ParamRole.
+# Window / horizon knobs are HORIZON (searchable on a coarse grid); a
+# multiplier / band-width float is a STATE_THRESHOLD (a real rule dimension,
+# not an estimator epsilon).  Shared helpers here fix the whole technical
+# family at once instead of leaving 300+ scalars to the ECONOMIC fallback.
+_WIN_GE2 = ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON)
+_WIN_GE1 = ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON)
+_POS_FLOAT = ParamSpec(dtype=float, min=1e-9, param_role=ParamRole.STATE_THRESHOLD)
 
 
 def _rel(expression, message):

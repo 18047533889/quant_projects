@@ -66,17 +66,31 @@ class SnapshotVerifier:
 
     # ---- 验证 ----
 
+    def _remote_identity_of(
+        self, obj: ResolvedObject, meta: Mapping[str, Any]
+    ) -> tuple[Any, Any, Any]:
+        """从 object + 实时 HEAD 提取 (etag, version_id, content_length) 身份三元组。"""
+        return (
+            meta.get("etag") or obj.etag,
+            meta.get("version_id") or obj.version_id,
+            int(meta.get("content_length") or obj.content_length or 0),
+        )
+
     def verify_before_execute(
         self,
         snapshot: ResolvedSourceSnapshot,
         *,
         paths: Sequence[str] | None = None,
     ) -> None:
-        """执行前验证（P0-009/011）。
+        """执行前验证（P0-009/011 + R26-P0-015/016）。
 
         - snapshot 含 unresolved wildcard → 抛 ``SourceSnapshotUnavailable``；
-        - exact object 里每个远端对象必须能 HEAD（etag/size），缺失 → fail-closed；
-        - 本地对象验证 path/size/mtime。
+        - exact object 里每个远端对象必须能 HEAD（etag/size/version_id），缺失 → fail-closed；
+        - **production 下 exact object 必须携带可证明身份**（version_id OR
+          etag+content_length OR 本地 size+mtime）——只有 URI 没有身份证据 →
+          ``SourceSnapshotUnavailable``（R26-P0-015：URI+""+""+0 不是 content identity）；
+        - remote 逐字段比较 etag / version_id / content_length；
+        - 本地对象验证 path/size/mtime_ns。
         """
         strict = self._effective_strict()
         if snapshot.has_wildcard:
@@ -90,33 +104,76 @@ class SnapshotVerifier:
                 f"source snapshot 对象集为空（{snapshot.dataset}）：无法证明读取对象。"
             )
         for obj in snapshot.objects:
-            if str(obj.uri).startswith("s3://"):
+            uri = str(obj.uri)
+            if uri.startswith(("s3://", "cos://")):
+                has_identity = bool(
+                    obj.version_id or (obj.etag and obj.content_length is not None)
+                )
+                if strict and not has_identity:
+                    raise SourceSnapshotUnavailable(
+                        f"remote 对象 {uri} 无可证明身份（version_id/etag+content_length "
+                        "均缺）：URI 不是 content identity（R26-P0-015，production fail-closed）。"
+                    )
                 if self.remote_meta_fn is not None:
-                    meta = self._safe_remote_meta(obj.uri)
+                    meta = self._safe_remote_meta(uri)
                     if meta is None:
                         if strict:
                             raise SourceSnapshotUnavailable(
-                                f"remote 对象 HEAD 失败（{obj.uri}）：无法证明存在/版本，"
+                                f"remote 对象 HEAD 失败（{uri}）：无法证明存在/版本，"
                                 "production fail-closed。"
                             )
                         continue
-                    if obj.etag and meta.get("etag") and obj.etag != meta.get("etag"):
+                    # R26-P0-016：逐身份字段比较（etag / version_id / content_length）。
+                    meta_etag = meta.get("etag")
+                    if obj.etag and meta_etag and obj.etag != meta_etag:
                         raise SourceSnapshotChanged(
-                            f"remote 对象 ETag 变化（{obj.uri}）：快照 {obj.etag} → "
-                            f"{meta.get('etag')}，source snapshot 已过期。"
+                            f"remote 对象 ETag 变化（{uri}）：快照 {obj.etag} → "
+                            f"{meta_etag}，source snapshot 已过期。"
+                        )
+                    meta_version = meta.get("version_id")
+                    if (
+                        obj.version_id
+                        and meta_version
+                        and obj.version_id != meta_version
+                    ):
+                        raise SourceSnapshotChanged(
+                            f"remote 对象 VersionId 变化（{uri}）：快照 {obj.version_id} → "
+                            f"{meta_version}，source snapshot 已过期。"
+                        )
+                    meta_len = meta.get("content_length")
+                    if (
+                        obj.content_length is not None
+                        and meta_len is not None
+                        and int(obj.content_length) != int(meta_len)
+                    ):
+                        raise SourceSnapshotChanged(
+                            f"remote 对象 size 变化（{uri}）：{obj.content_length} → "
+                            f"{meta_len}，source snapshot 已过期。"
                         )
             else:
-                st = self._safe_local_stat(obj.uri)
+                st = self._safe_local_stat(uri)
                 if st is None:
                     if strict:
                         raise SourceSnapshotUnavailable(
-                            f"本地对象缺失（{obj.uri}）：无法证明存在，production fail-closed。"
+                            f"本地对象缺失（{uri}）：无法证明存在，production fail-closed。"
                         )
                     continue
+                # R26-P0-016：本地身份 = path + size + mtime_ns。
                 if obj.content_length is not None and st.size != obj.content_length:
                     raise SourceSnapshotChanged(
-                        f"本地对象 size 变化（{obj.uri}）：{obj.content_length} → {st.size}"
+                        f"本地对象 size 变化（{uri}）：{obj.content_length} → {st.size}"
                     )
+                if obj.last_modified is not None and hasattr(
+                    obj.last_modified, "timestamp"
+                ):
+                    # tz-aware UTC → epoch 秒 → 纳秒；与 stat().st_mtime_ns 比较。
+                    # 绝不用本地时区 mktime（会把 UTC 解释成 local，产生假变化）。
+                    recorded_ns = int(obj.last_modified.timestamp() * 1e9)
+                    if abs(recorded_ns - st.mtime_ns) > 2_000_000_000:
+                        raise SourceSnapshotChanged(
+                            f"本地对象 mtime 变化（{uri}）：快照 {obj.last_modified} "
+                            "→ 当前文件，source snapshot 已过期。"
+                        )
 
     def verify_after_execute(
         self,
@@ -124,15 +181,56 @@ class SnapshotVerifier:
         *,
         paths: Sequence[str] | None = None,
     ) -> None:
-        """可选 final verify（长读后，P0-011）：只对 remote exact object 复核 HEAD。"""
-        if self._effective_strict() and snapshot.objects:
-            for obj in snapshot.objects:
-                if str(obj.uri).startswith("s3://") and self.remote_meta_fn is not None:
-                    meta = self._safe_remote_meta(obj.uri)
-                    if meta is None and self.strict:
-                        raise SourceSnapshotUnavailable(
-                            f"执行后 remote 对象 HEAD 失败（{obj.uri}）"
-                        )
+        """可选 final verify（长读后，P0-011 + R26-P0-016）。
+
+        **重新比较** etag / version_id / content_length（不是只确认 HEAD 存在），
+        并统一用 ``_effective_strict()``（不是原始 ``self.strict``）。
+        """
+        strict = self._effective_strict()
+        if not strict or not snapshot.objects:
+            return
+        for obj in snapshot.objects:
+            uri = str(obj.uri)
+            if uri.startswith(("s3://", "cos://")):
+                if self.remote_meta_fn is None:
+                    continue
+                meta = self._safe_remote_meta(uri)
+                if meta is None:
+                    raise SourceSnapshotUnavailable(
+                        f"执行后 remote 对象 HEAD 失败（{uri}）"
+                    )
+                meta_etag = meta.get("etag")
+                if obj.etag and meta_etag and obj.etag != meta_etag:
+                    raise SourceSnapshotChanged(
+                        f"执行后 remote 对象 ETag 变化（{uri}）：{obj.etag} → {meta_etag}"
+                    )
+                meta_version = meta.get("version_id")
+                if obj.version_id and meta_version and obj.version_id != meta_version:
+                    raise SourceSnapshotChanged(
+                        f"执行后 remote 对象 VersionId 变化（{uri}）："
+                        f"{obj.version_id} → {meta_version}"
+                    )
+                meta_len = meta.get("content_length")
+                if (
+                    obj.content_length is not None
+                    and meta_len is not None
+                    and int(obj.content_length) != int(meta_len)
+                ):
+                    raise SourceSnapshotChanged(
+                        f"执行后 remote 对象 size 变化（{uri}）："
+                        f"{obj.content_length} → {meta_len}"
+                    )
+            else:
+                st = self._safe_local_stat(uri)
+                if st is None:
+                    raise SourceSnapshotUnavailable(
+                        f"执行后本地对象缺失（{uri}）"
+                    )
+                if obj.content_length is not None and st.size != obj.content_length:
+                    raise SourceSnapshotChanged(
+                        f"执行后本地对象 size 变化（{uri}）："
+                        f"{obj.content_length} → {st.size}"
+                    )
 
     # ---- helpers ----
 

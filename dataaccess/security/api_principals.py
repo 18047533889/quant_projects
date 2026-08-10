@@ -35,6 +35,21 @@ from data_access.security.principal import (
     ALL_ACTIONS,
     AccessPolicy,
     DataPrincipal,
+    parse_strict_bool,
+)
+
+# R26-P0-008：安全配置允许的字段；未知 key → 配置拒绝（extra=forbid）。
+_ALLOWED_ENTRY_KEYS = frozenset(
+    {
+        "principal_id",
+        "server_id",
+        "roles",
+        "allowed_datasets",
+        "allowed_factor_namespaces",
+        "allowed_actions",
+        "allow_uri_read",
+        "allow_metadata_sensitive",
+    }
 )
 
 
@@ -68,28 +83,69 @@ class ApiPrincipalRegistry:
     def resolve(
         self, api_key: str
     ) -> tuple[DataPrincipal, AccessPolicy]:
-        """按 api key 解析 (principal, policy)。未命中 → 拒绝（返回 None, None）。"""
+        """按 api key 解析 (principal, policy)。未命中 → 拒绝（返回 None, None）。
+
+        R26-P0-006/008：
+            - ``allowed_datasets`` 三态：缺失/None → unrestricted（None）；
+              ``[]`` → deny all（空 frozenset）；非空 → 精确 allowlist。
+            - 布尔字段必须真实 bool；字符串 "false"/1/0 → 配置拒绝。
+            - 未知 key → 配置拒绝（extra=forbid）。
+        """
         key_hash = hash_api_key(api_key)
         entry = self._by_hash.get(key_hash)
         if entry is None:
             return None, None
-        allowed = frozenset(
-            str(x) for x in (entry.get("allowed_datasets") or []) if x
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"DATA_ACCESS_API_PRINCIPALS[{key_hash[:8]}] 必须是 mapping"
+            )
+        unknown = set(entry) - _ALLOWED_ENTRY_KEYS
+        if unknown:
+            raise ValueError(
+                f"DATA_ACCESS_API_PRINCIPALS[{key_hash[:8]}] 含未知字段 "
+                f"{sorted(unknown)}（R26-P0-008：安全配置 extra=forbid）"
+            )
+        allowed = _strict_set_opt(
+            entry.get("allowed_datasets"),
+            context=f"api_principal[{key_hash[:8]}].allowed_datasets",
         )
-        namespaces = frozenset(
-            str(x) for x in (entry.get("allowed_factor_namespaces") or []) if x
+        namespaces = _strict_set_opt(
+            entry.get("allowed_factor_namespaces"),
+            context=f"api_principal[{key_hash[:8]}].allowed_factor_namespaces",
         )
-        allow_uri = bool(entry.get("allow_uri_read"))
-        allow_sensitive = bool(entry.get("allow_metadata_sensitive"))
-        actions = set(ALL_ACTIONS)
-        if not allow_uri:
-            actions.discard(ACTION_URI_READ)
-        if not allow_sensitive:
-            actions.discard(ACTION_FACTOR_METADATA_SENSITIVE)
+        allow_uri = (
+            parse_strict_bool(
+                entry["allow_uri_read"],
+                context=f"api_principal[{key_hash[:8]}].allow_uri_read",
+            )
+            if "allow_uri_read" in entry
+            else False
+        )
+        allow_sensitive = (
+            parse_strict_bool(
+                entry["allow_metadata_sensitive"],
+                context=f"api_principal[{key_hash[:8]}].allow_metadata_sensitive",
+            )
+            if "allow_metadata_sensitive" in entry
+            else False
+        )
+        if "allowed_actions" in entry:
+            actions_raw = entry["allowed_actions"]
+            if not isinstance(actions_raw, (list, tuple, set, frozenset)):
+                raise ValueError(
+                    f"api_principal[{key_hash[:8]}].allowed_actions 必须是数组"
+                )
+            actions = set(str(x) for x in actions_raw if x)
+        else:
+            actions = set(ALL_ACTIONS)
+            if not allow_uri:
+                actions.discard(ACTION_URI_READ)
+            if not allow_sensitive:
+                actions.discard(ACTION_FACTOR_METADATA_SENSITIVE)
         policy = AccessPolicy(
             allowed_datasets=allowed,
             allowed_factor_namespaces=namespaces,
-            allowed_actions=frozenset(actions),
+            allowed_actions=frozenset(actions) if actions else None,
             allow_uri_read=allow_uri,
         )
         principal = DataPrincipal(
@@ -104,9 +160,25 @@ class ApiPrincipalRegistry:
         principal, policy = self.resolve(api_key)
         if policy is None:
             return []
-        if not policy.allowed_datasets:
+        if policy.allowed_datasets is None or "*" in policy.allowed_datasets:
             return list(all_datasets)
         return [d for d in all_datasets if d in policy.allowed_datasets]
+
+
+def _strict_set_opt(value: object, *, context: str) -> frozenset[str] | None:
+    """API principal 的集合字段三态解析（R26-P0-006）。
+
+    - None / 缺失 -> None（unrestricted）
+    - [] -> frozenset()（deny all）
+    - [..] -> frozenset（精确 allowlist）
+    """
+    if value is None:
+        return None
+    if not isinstance(value, (list, tuple, set, frozenset)):
+        raise ValueError(
+            f"{context} 必须是数组，收到 {value!r}（R26-P0-006 三态配置）"
+        )
+    return frozenset(str(x) for x in value if x)
 
 
 _api_lock = threading.Lock()

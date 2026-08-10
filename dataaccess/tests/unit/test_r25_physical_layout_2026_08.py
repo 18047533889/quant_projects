@@ -94,7 +94,11 @@ def test_tphy002_shares_prefix_locator():
 
 
 def test_tphy002b_shares_remote_path_only_selector():
-    """remote 只访问 shares_*.parquet，不访问 {date}.parquet（P0-002）。"""
+    """remote 只访问 shares_{date}.parquet，不访问 {date}.parquet（P0-002/R26-P0-010）。
+
+    R26-P0-010：不再用「shares_*.parquet」这种宽 glob（会命中任意前缀），改用
+    FileSelector 精确 date 文件名 glob（``shares_[0-9]{4}-...``）。
+    """
     from data_access.cos.mirror import mirror_spec_for_dataset
     from data_access.cos.remote import _remote_prefixed_date
 
@@ -103,8 +107,9 @@ def test_tphy002b_shares_remote_path_only_selector():
     assert spec.file_selector == "shares_"
     paths = _remote_prefixed_date(spec, "us_stock_capital_shares", None)
     assert len(paths) == 1
-    assert paths[0].endswith("shares_*.parquet")
-    assert not paths[0].endswith("*.parquet") or "shares_" in paths[0]
+    assert paths[0].endswith("shares_[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].parquet")
+    # 精确 glob 不得退化成裸 *.parquet（P0-010：不能把 shares_ 排除逻辑当空前缀）。
+    assert not paths[0].endswith("*.parquet")
 
 
 def test_tphy003_split_default_prefix():

@@ -168,7 +168,10 @@ _MINIMUM_EFFECTIVE_SAMPLES: dict[str, int] = {
     "volume_autocorr": 2,
     "turnover_autocorr": 2,
     # regression family: p + 1 (intercept + regressors); poly2 -> 3 points.
-    "ts_regression": 2,
+    # R30 §26 (P0-019): ``ts_regression``'s floor scales with ``n_regressors``
+    # (parameter-aware, resolved in ``minimum_effective_samples`` below) — it is
+    # intentionally NOT in this static map, whose unconditional return would
+    # shadow the parameterised ``n_regressors + 1`` branch.
     "ts_regression_forecast_error": 2,
     "ts_poly2_coeff": 3,
     "ts_poly2_resid": 3,
@@ -206,15 +209,22 @@ def minimum_effective_samples(
     if params is None:
         return None
     # regression family floor scales with the number of regressors when the
-    # operator declares them as params (p + 1).
-    if canonical == "ts_regression":
+    # operator declares them as params (p + 1).  R30 §26: this branch MUST be
+    # reachable (``ts_regression`` is not in the static map above) and must fail
+    # closed — a regression operator with an unresolvable order is conservatively
+    # treated as needing at least 2 effective samples, never 1.
+    if canonical in ("ts_regression", "ts_regression_forecast_error", "ts_poly2_coeff", "ts_poly2_resid"):
         try:
             from cleaned_operators.base import _kernel_param_defaults
             from cleaned_operators.registry import OperatorRegistry
 
-            op = OperatorRegistry.get(canonical)
+            op = OperatorRegistry.get(canonical, mode="any")
             defaults = _kernel_param_defaults(op) if op is not None else {}
             n_regressors = int(params.get("n_regressors", defaults.get("n_regressors", 1)))
+            n_regressors = max(1, n_regressors)
+            if "poly2" in canonical:
+                # quadratic fit: 3 coefficients (1 + 2 regressors) — at least 3.
+                return max(3, n_regressors + 2)
             return max(2, n_regressors + 1)
         except Exception:
             return 2

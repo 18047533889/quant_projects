@@ -23,20 +23,40 @@ import pytest
 def test_tfe004_naked_frame_production_rejected():
     from data_access.core.exceptions import UnknownProvenanceError
     from data_access.security.governed_frame import (
+        ExecutionEnvironmentIdentity,
         GovernedFrame,
         require_governed_provenance,
+    )
+    from data_access.snapshot.source_snapshot import (
+        ResolvedObject,
+        ResolvedSourceSnapshot,
     )
 
     with pytest.raises(UnknownProvenanceError):
         require_governed_provenance({"a": 1}, run_mode="production")
-    # GovernedFrame 通过
+    # R26-P0-023：缺真实 provenance 的 GovernedFrame（伪造帧）production 拒绝。
     gf = GovernedFrame(
         table_or_frame={"a": 1},
         source_snapshot="s",
         lineage="l",
         security_digest="d",
     )
-    out = require_governed_provenance(gf, run_mode="production")
+    with pytest.raises(UnknownProvenanceError, match="无法证明 provenance"):
+        require_governed_provenance(gf, run_mode="production")
+    # 带完整 provenance 的 GovernedFrame production 通过。
+    snap = ResolvedSourceSnapshot(
+        dataset="t",
+        objects=(ResolvedObject(uri="s3://b/t/f.parquet", etag="e1", content_length=1),),
+        content_digest="abc123",
+    )
+    gf_ok = GovernedFrame(
+        table_or_frame={"a": 1},
+        source_snapshot=snap,
+        lineage={"dataset": "t", "params": {}},
+        execution_environment=ExecutionEnvironmentIdentity(run_mode="production"),
+        security_digest="valid-digest",
+    )
+    out = require_governed_provenance(gf_ok, run_mode="production")
     assert out.has_provenance
     # research 显式 unsafe_external_frame 放行
     research = require_governed_provenance(

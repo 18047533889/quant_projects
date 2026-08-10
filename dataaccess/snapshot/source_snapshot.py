@@ -78,9 +78,12 @@ class ResolvedSourceSnapshot:
 
     @property
     def has_wildcard(self) -> bool:
-        """对象集里是否含未解析通配（* / ? / {..}）——production 禁止。"""
+        """对象集里是否含未解析通配（* / ? / [ ] / {..} / **）——production 禁止。
+
+        R26-P0-015：``[0-9]`` 字符类也是 unresolved glob，必须被 gate 拒绝。
+        """
         return any(
-            ("*" in str(o.uri) or "?" in str(o.uri) or "{" in str(o.uri))
+            any(m in str(o.uri) for m in ("*", "?", "[", "]", "{"))
             for o in self.objects
         )
 

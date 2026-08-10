@@ -1706,6 +1706,7 @@ class FactorEngine:
         pit_forbid_forward_fill: bool = False,
         writer_queue_bytes: int = 4 * 1024**3,
         wave_memory_budget: int = 4 * 1024**3,
+        write_results: bool = True,
         materialize_kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """R27-205/140: ``engine.materialize_many_fast(factors, ...)`` 极速批量落值。
@@ -1771,8 +1772,18 @@ class FactorEngine:
             "storage_format": str(storage_format),
             "partition_columns": mk.get("partition_columns"),
             "clickhouse_table": mk.get("clickhouse_table"),
+            # R27-223/205 修复：execute_materialize 的 ch_* 必填参数必须补齐，
+            # 否则 writer 每次调用 TypeError 被 StreamingResultSink 吞掉（静默丢写）。
+            "ch_ensure_table": mk.get("ch_ensure_table", True),
+            "ch_host": mk.get("ch_host"),
+            "ch_port": mk.get("ch_port"),
+            "ch_database": mk.get("ch_database"),
+            "ch_username": mk.get("ch_username"),
+            "ch_password": mk.get("ch_password"),
+            "ch_secure": mk.get("ch_secure"),
         }
         materializations: dict[str, Any] = {}
+        writer_errors: list[str] = []
 
         def _writer(batch: list[ResultItem]) -> None:
             for item in batch:
@@ -1782,19 +1793,29 @@ class FactorEngine:
                 if factor is None:
                     materializations[item.name] = {"error": "factor not found"}
                     continue
+                if write_results is False:
+                    # 计算-only 模式（benchmark/dry-run）：不落盘，只收集结果。
+                    materializations[item.name] = {"result": item.value}
+                    continue
                 output = {
                     "factor": factor,
                     "analysis": analyses.get(item.name),
                     "result": item.value,
                 }
-                out = execute_materialize(
-                    engine_to_use,
-                    factor,
-                    output,
-                    factor_id=fid,
-                    **mm_args,
-                )
-                materializations[item.name] = out.get("materialization", out)
+                try:
+                    out = execute_materialize(
+                        engine_to_use,
+                        factor,
+                        output,
+                        factor_id=fid,
+                        **mm_args,
+                    )
+                    materializations[item.name] = out.get("materialization", out)
+                except Exception as exc:  # noqa: BLE001
+                    # R27-205：写失败必须如实上报，不能静默吞掉（writer 重试循环
+                    # 会把失败项无限重试）。
+                    writer_errors.append(f"{item.name}: {type(exc).__name__}: {exc}")
+                    materializations[item.name] = {"error": str(exc)}
 
         sink = StreamingResultSink(
             writer=_writer,
@@ -1811,6 +1832,7 @@ class FactorEngine:
             )
         ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
         out["materializations"] = materializations
+        out["writer_errors"] = writer_errors
         out["factor_ids"] = list(ids)
         out["storage_format"] = storage_format
         out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})

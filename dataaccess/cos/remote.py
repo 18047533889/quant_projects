@@ -322,16 +322,26 @@ def _remote_prefixed_date(
     dataset_name: str,
     time_range: tuple[Any, Any] | None,
 ) -> list[str]:
-    """R25 P0-002：prefixed_date_file 布局（StockCapital split/shares）远程路径。
+    """R25 P0-002 / R26-P0-010：prefixed_date_file 布局（StockCapital split/shares）远程路径。
 
     与 daily 相同走共享 ``_daily_filename``（file_selector 区分 shares_ 前缀），
-    但 expected_partitions 对该布局返回空（不按 request 时间轴枚举）→ 用目录
-    glob + file_selector 前缀精确限定（shares_*.parquet / *.parquet）。
+    但 expected_partitions 对该布局返回空（不按 request 时间轴枚举）。
+
+    **R26-P0-010**：绝不用「空 prefix + *」表达排除逻辑——split 的
+    ``*.parquet`` 会同时命中 ``shares_*.parquet``（两类 schema 混读）。改用共享
+    ``FileSelector`` IR 生成**精确 date 文件名 glob**（字符类限定，不吞 shares_）。
+    snapshot resolver 再 LIST exact objects 按 ``FileSelector.regex`` 过滤。
     """
+    from data_access.contract.file_selector import file_selector_for_layout
+    from data_access.contract.physical_partition import PhysicalLayout
+
     base = _s3_table_base(spec)
-    selector = getattr(spec, "file_selector", None) or ""
     authorize_s3_path(f"{base}/")
-    return [f"{base}/{selector}*.parquet"]
+    selector = file_selector_for_layout(
+        PhysicalLayout.PREFIXED_DATE_FILE,
+        file_selector=getattr(spec, "file_selector", None),
+    )
+    return [selector.glob_pattern(base)]
 
 
 def _remote_single_full(spec: MirrorSpec) -> list[str]:

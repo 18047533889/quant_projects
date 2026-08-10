@@ -234,6 +234,13 @@ _register_binary_horizontal(
 
 
 def _register_cleaning(canonical: str, name: str, calc_fn) -> None:
+    # R30: tombstoned operators (dropna/bfill/…) have no runtime implementation
+    # and no Polars surface either.  ``_has_polars`` would call ``backends_for``
+    # which asserts the name is still callable and raise RemovedOperatorError.
+    from cleaned_operators.tombstones import is_tombstoned
+
+    if is_tombstoned(canonical):
+        return
     if _has_polars(canonical):
         return
 

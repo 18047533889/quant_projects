@@ -207,7 +207,6 @@ _COSTS: dict[str, OperatorCost] = {
     "yoy": OperatorCost("O(N)", "low", True, 2, False, False),
     "yoy_by_period": OperatorCost("O(N)", "low", True, 2, False, False),
     "avg2": OperatorCost("O(N)", "low", True, 2, False, False),
-    "causal_bfill": OperatorCost("O(N)", "low", True, 2, True, False),
     "downside_beta": OperatorCost("O(NW)", "high", False, 1, False, False),
     "tail_beta": OperatorCost("O(NW)", "high", False, 1, False, False),
     "idio_vol": OperatorCost("O(NW)", "high", False, 1, False, False),

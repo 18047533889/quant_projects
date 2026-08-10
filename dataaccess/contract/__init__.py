@@ -6,6 +6,7 @@
 
 模块：
     - ``physical_partition``  物理分区时钟/布局/缺失语义（P0-001/002/016）
+    - ``file_selector``       FileSelector IR（R26-P0-010，split/shares 精确选择）
     - ``filters``             FilterRequirement 结构化过滤契约（P0-003/004）
     - ``temporal_axis``       TemporalAxisSpec / AvailabilityResult（P0-005/017）
     - ``runtime_contract``    RuntimeDatasetContract + ContractCompiler
@@ -16,6 +17,7 @@ from .physical_partition import (
     PhysicalLayout,
     PhysicalPartitionSpec,
 )
+from .file_selector import FileSelector, file_selector_for_layout
 from .filters import FilterRequirement, validate_filter_requirements
 from .temporal_axis import AvailabilityResult, TemporalAxisSpec
 from .runtime_contract import (
@@ -28,6 +30,8 @@ __all__ = [
     "PhysicalLayout",
     "MissingPartitionSemantics",
     "PhysicalPartitionSpec",
+    "FileSelector",
+    "file_selector_for_layout",
     "FilterRequirement",
     "validate_filter_requirements",
     "TemporalAxisSpec",

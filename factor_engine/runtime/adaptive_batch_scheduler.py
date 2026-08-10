@@ -32,7 +32,7 @@ from planner.physical_factor_dag import (
 )
 from planner.read_wave_planner import ReadWavePlan, build_waves_from_dag
 from runtime.hybrid_executor import HybridExecutor, classify_backend_execution
-from runtime.resource_broker import ResourceBroker
+from runtime.resource_broker import ReservationLease, ResourceBroker
 from runtime.streaming_result_sink import ResultItem, StreamingResultSink
 
 _logger = logging.getLogger(__name__)
@@ -87,6 +87,86 @@ def _dispatch(
         result = execute_root(task)
         return task.task_id, result
     return task.task_id, None
+
+
+#: 错误分类（R31-006）：只有 transient 类自动 retry；确定性 / 语义类禁止 retry。
+ERROR_TRANSIENT = "transient"
+ERROR_PERMANENT = "permanent"
+ERROR_UNKNOWN = "unknown"
+
+_TRANSIENT_EXC_TYPES: tuple[type[BaseException], ...] = (
+    TimeoutError,
+    ConnectionError,
+    OSError,
+)
+#: 明确「重跑也白跑」的错误标记（PIT/语义/参数/不支持算子/schema）。
+_PERMANENT_MARKERS = (
+    "pit ",
+    "pit_",
+    "semantic",
+    "invalid parameter",
+    "unsupported operator",
+    "schema mismatch",
+    "deterministic numeric",
+    "dq error",
+)
+
+
+def classify_error(exc: BaseException) -> str:
+    """R31-006：错误分类——transient 自动 retry；permanent 禁止 retry。
+
+    - ``OSError/TimeoutError/ConnectionError`` 及显式 transient 标记 → transient
+    - PIT violation / semantic violation / invalid param / unsupported op /
+      schema mismatch / deterministic numeric / DQ error → permanent
+    - 其余 → unknown（保守单次 retry）
+    """
+    name = type(exc).__name__.lower()
+    msg = str(exc).lower()
+    if any(m in msg for m in _PERMANENT_MARKERS):
+        return ERROR_PERMANENT
+    if isinstance(exc, _TRANSIENT_EXC_TYPES) or "transient" in msg:
+        return ERROR_TRANSIENT
+    if "oom" in msg or "out of memory" in msg or name in {"memoryerror"}:
+        # OOM 不算 transient：原尺寸重跑只会再 OOM（R31-006 要求降 shard/并发）。
+        return ERROR_PERMANENT
+    return ERROR_UNKNOWN
+
+
+def _dispatch_fusion(
+    group: Any,
+    task_by_id: dict[str, PhysicalFactorTask],
+    backend: Any,
+    ctx: Any,
+    execute_root: Callable[[PhysicalFactorTask], Any],
+) -> tuple[str, dict[str, Any]]:
+    """模块级 fusion 执行函数：返回 ``(group_key, {tid: result})``。
+
+    R31-P0-022：fusion group 真正执行（backend 支持 ``execute_multi_roots`` 则
+    一次 native query；否则诚实 per-root fallback 并计数）。
+    """
+    from planner.native_fusion import execute_fusion_group
+
+    group_key = f"fusion:{group.group_id}"
+    results = execute_fusion_group(
+        group,
+        backend=backend,
+        task_by_id=task_by_id,
+        ctx=ctx,
+        execute_root=execute_root,
+    )
+    return group_key, results
+
+
+def _release_lease(lease: Any) -> None:
+    """释放单租约或 fusion group 的租约列表（each exactly once）。"""
+    if lease is None:
+        return
+    if isinstance(lease, (list, tuple)):
+        for item in lease:
+            if item is not None:
+                item.release()
+    else:
+        lease.release()
 
 
 def _default_contract_for(task_type: str, plan_cost: dict[str, Any]) -> Any:
@@ -147,106 +227,112 @@ class AdaptiveBatchScheduler:
         *,
         enable_cse: bool = True,
         scan_cost_map: dict[str, Any] | None = None,
+        scope_scan_cost_map: dict[str, Any] | None = None,
         fusion_backend_capability: dict[str, bool] | None = None,
+        ctx: Any | None = None,
     ) -> SchedulerPlan:
-        """从现有 ``DAGPlan``（roots + shared_nodes）构建 PhysicalFactorDAG 计划。
+        """从 ``DAGPlan``（roots + shared_nodes）构建 **真实 physical DAG** 计划。
 
-        - shared node → CSE_SHARED task（consumers 记录）;
-        - 每个 root → ROOT task（inputs 含其消费的 shared sids）;
-        - cost / resource contract 从 ``estimate_plan_cost`` 派生。
+        R31-P0-002/003/004：经 :mod:`planner.physical_lowerer` lower 成真实 stage
+        （SOURCE_SCAN / OPERATOR / barrier / ROOT），stage 携带真实 backend
+        context（来自 ``choose_plan_route``）与 calibrated 资源契约——不再固定
+        Pandas / 1 token / 0 bytes。
         """
         from planner.cse import collect_consumed_sids
+        from planner.physical_lowerer import contract_for_plan, lower_batch_dag
 
-        physical = PhysicalFactorDAG()
+        # 尝试经 ctx 拿真实行数/仪器数（SourceScanStage 用真实 ScanCost 估计）。
+        rows: int | None = None
+        instruments = 0
+        if ctx is not None:
+            try:
+                from backend.plan_cost_router import estimate_plan_rows
+
+                rows = estimate_plan_rows(ctx)
+            except Exception:
+                rows = None
+        physical = lower_batch_dag(
+            dag,
+            analyses=analyses,
+            ctx=ctx,
+            rows=rows,
+            instruments=instruments,
+            scan_cost_map=scan_cost_map,
+        )
         cost_by_task: dict[str, Any] = {}
-        # shared nodes
-        for sid, sub in (dag.shared_nodes or {}).items():
-            plan_cost = _plan_cost_bytes(sub)
-            task = PhysicalFactorTask(
-                task_id=f"cse:{sid}",
-                op=str(getattr(sub, "op", "shared")),
-                task_type=TASK_CSE_SHARED,
-                inputs=(),
-                consumers=(),
-                execution_scope=str(getattr(dag, "scope_key", lambda: "")()),
-                source_scope="",
-                source_snapshot_id="",
-                backend_candidates=(),
-                preferred_backend="pandas_numpy",
-                estimated_cost=plan_cost,
-                resource_contract=_default_contract_for(TASK_CSE_SHARED, plan_cost),
-                spillable=True,
-                cacheable=True,
-                deterministic=True,
-                node_ref=sub,
-            )
-            physical.add_task(task)
-            cost_by_task[task.task_id] = plan_cost
-        # roots
-        for fp in dag.roots:
-            plan_cost = _plan_cost_bytes(fp.root)
-            consumed = collect_consumed_sids(fp.root)
-            root = PhysicalFactorTask(
-                task_id=f"root:{fp.factor_name}",
-                op=str(getattr(fp.root, "op", "root")),
-                task_type=TASK_ROOT,
-                inputs=tuple(f"cse:{sid}" for sid in sorted(consumed)),
-                consumers=(),
-                execution_scope=str(fp.execution_scope.scope_key() if fp.execution_scope else ""),
-                source_scope="",
-                source_snapshot_id="",
-                backend_candidates=(),
-                preferred_backend="pandas_numpy",
-                estimated_cost=plan_cost,
-                resource_contract=_default_contract_for(TASK_ROOT, plan_cost),
-                spillable=False,
-                cacheable=False,
-                deterministic=True,
-                node_ref=fp,
-                factor_name=fp.factor_name,
-            )
-            physical.add_task(root)
-            cost_by_task[root.task_id] = plan_cost
-        # consumers / reuse counts
-        for tid, task in list(physical.tasks.items()):
-            for p in task.inputs:
-                if p in physical.tasks:
-                    prev = physical.tasks[p].consumers
-                    physical.tasks[p] = PhysicalFactorTask(
-                        task_id=p,
-                        op=physical.tasks[p].op,
-                        task_type=physical.tasks[p].task_type,
-                        inputs=physical.tasks[p].inputs,
-                        consumers=tuple(sorted((*prev, tid))),
-                        execution_scope=physical.tasks[p].execution_scope,
-                        source_scope=physical.tasks[p].source_scope,
-                        source_snapshot_id=physical.tasks[p].source_snapshot_id,
-                        backend_candidates=physical.tasks[p].backend_candidates,
-                        preferred_backend=physical.tasks[p].preferred_backend,
-                        estimated_cost=physical.tasks[p].estimated_cost,
-                        resource_contract=physical.tasks[p].resource_contract,
-                        shard_spec=physical.tasks[p].shard_spec,
-                        spillable=physical.tasks[p].spillable,
-                        cacheable=physical.tasks[p].cacheable,
-                        deterministic=physical.tasks[p].deterministic,
-                        node_ref=physical.tasks[p].node_ref,
-                        factor_name=physical.tasks[p].factor_name,
-                    )
-        physical.roots = tuple(f"root:{fp.factor_name}" for fp in dag.roots)
         for tid, task in physical.tasks.items():
+            plan_cost = (
+                task.estimated_cost
+                if task.estimated_cost is not None
+                else _plan_cost_bytes(task.node_ref)
+            )
+            cost_by_task[tid] = plan_cost
             self._reuse_counts[tid] = len(task.consumers)
+        # shared ROOT inputs：root 消费的 CSE sid 记入 ROOT.inputs（可执行依赖），
+        # 同时给 CSE shared task 补 consumer 边（topological_order 靠它释放）。
+        for fp in dag.roots:
+            consumed = collect_consumed_sids(fp.root)
+            rid = f"root:{fp.factor_name}"
+            if rid in physical.tasks and consumed:
+                cur = physical.tasks[rid]
+                physical.tasks[rid] = PhysicalFactorTask(
+                    task_id=rid,
+                    op=cur.op,
+                    task_type=cur.task_type,
+                    inputs=tuple(sorted(set((*cur.inputs, *(f"cse:{s}" for s in consumed))))),
+                    consumers=cur.consumers,
+                    execution_scope=cur.execution_scope,
+                    source_scope=cur.source_scope,
+                    source_snapshot_id=cur.source_snapshot_id,
+                    backend_candidates=cur.backend_candidates,
+                    preferred_backend=cur.preferred_backend,
+                    estimated_cost=cur.estimated_cost,
+                    resource_contract=cur.resource_contract,
+                    shard_spec=cur.shard_spec,
+                    spillable=cur.spillable,
+                    cacheable=cur.cacheable,
+                    deterministic=cur.deterministic,
+                    node_ref=cur.node_ref,
+                    factor_name=cur.factor_name,
+                )
+                for sid in consumed:
+                    cid = f"cse:{sid}"
+                    if cid not in physical.tasks:
+                        continue
+                    prev_c = physical.tasks[cid].consumers
+                    physical.tasks[cid] = PhysicalFactorTask(
+                        task_id=cid,
+                        op=physical.tasks[cid].op,
+                        task_type=physical.tasks[cid].task_type,
+                        inputs=physical.tasks[cid].inputs,
+                        consumers=tuple(sorted((*prev_c, rid))),
+                        execution_scope=physical.tasks[cid].execution_scope,
+                        source_scope=physical.tasks[cid].source_scope,
+                        source_snapshot_id=physical.tasks[cid].source_snapshot_id,
+                        backend_candidates=physical.tasks[cid].backend_candidates,
+                        preferred_backend=physical.tasks[cid].preferred_backend,
+                        estimated_cost=physical.tasks[cid].estimated_cost,
+                        resource_contract=physical.tasks[cid].resource_contract,
+                        shard_spec=physical.tasks[cid].shard_spec,
+                        spillable=physical.tasks[cid].spillable,
+                        cacheable=physical.tasks[cid].cacheable,
+                        deterministic=physical.tasks[cid].deterministic,
+                        node_ref=physical.tasks[cid].node_ref,
+                        factor_name=physical.tasks[cid].factor_name,
+                    )
 
         read_waves = build_waves_from_dag(
             physical,
             wave_memory_budget=self.wave_memory_budget,
             scan_cost_map=scan_cost_map,
+            scope_scan_cost_map=scope_scan_cost_map,
         )
         # fusion groups（仅对 ROOT task，且 backend 支持才生成）
         root_tasks = [physical.tasks[t] for t in physical.roots if t in physical.tasks]
         from planner.native_fusion import can_fuse_roots, plan_native_fusion_groups
 
         fusion_groups = []
-        if enable_cse and can_fuse_roots(root_tasks) if root_tasks else False:
+        if enable_cse and (can_fuse_roots(root_tasks) if root_tasks else False):
             fusion_groups = plan_native_fusion_groups(
                 root_tasks,
                 backend_capability=fusion_backend_capability,
@@ -272,31 +358,46 @@ class AdaptiveBatchScheduler:
         ctx: Any,
         execute_root: Callable[[PhysicalFactorTask], Any],
         materialize_shared: Callable[[str, Any], Any],
-    ) -> Future | None:
-        """admission 通过则 dispatch；不通过返回 None（等待下一轮）。"""
+    ) -> tuple[Future | None, ReservationLease | None]:
+        """admission 通过则 dispatch；返回 ``(future, lease)``，不通过返回 ``(None, None)``。
+
+        R31-005/006：admission 返回 **lease**，task 终态统一 ``lease.release()``
+        释放，保证 exactly-once（SUCCESS / FAILED / CANCELLED / TIMEOUT / BROKEN
+        WORKER 都不泄漏 CPU/IO/memory reservation）。
+        """
         contract = task.resource_contract
         fn = _dispatch
         if contract is None:
             self._explain(f"task={task.task_id}: no contract, admit (vacuous)")
-            return self.executor.submit(
-                task.preferred_backend,
-                fn, task, backend, ctx, execute_root, materialize_shared,
+            return (
+                self.executor.submit(
+                    task.preferred_backend,
+                    fn, task, backend, ctx, execute_root, materialize_shared,
+                    prefer="thread",
+                ),
+                None,
             )
         stage = self.broker.pressure_stage()
         if stage in {"PRESSURE_3", "PRESSURE_4", "CRITICAL"}:
             self._explain(f"task={task.task_id}: blocked by pressure_stage={stage}")
-            return None
-        if not self.broker.reserve(contract, task_id=task.task_id):
+            return None, None
+        lease = self.broker.try_reserve(contract, task_id=task.task_id)
+        if lease is None:
             self._explain(
                 f"task={task.task_id}: admission rejected "
                 f"(stage={stage}, headroom={self.broker.snapshot().live_headroom})"
             )
-            return None
+            return None, None
         self._explain(f"task={task.task_id}: admitted (stage={stage})")
-        return self.executor.submit(
+        # R31-P0-007 诚实声明：FE root 执行模型（backend.execute + 共享 ctx/cache）
+        # 的 payload 不可 pickle；进程执行需要 worker-local runtime（Phase D）。
+        # scheduler 统一走 thread pool，并发由 ResourceBroker CPU token 约束。
+        future = self.executor.submit(
             task.preferred_backend,
             fn, task, backend, ctx, execute_root, materialize_shared,
+            prefer="thread",
         )
+        return future, lease
 
     def run(
         self,
@@ -316,12 +417,18 @@ class AdaptiveBatchScheduler:
         """
         from runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
 
-        execute_root = execute_root or (
-            lambda task: _execute_root_with_path(
-                backend, task.node_ref.root, ctx, run_mode=getattr(ctx, "run_mode", None),
+        def _default_execute_root(task: PhysicalFactorTask) -> Any:
+            # R31-P0-002：lowerer 生成的 ROOT task 的 node_ref 是裸 plan；
+            # 旧 DAGPlan 路径 node_ref 是 FactorPlan（带 .root）。
+            node = getattr(task, "node_ref", None)
+            plan = getattr(node, "root", node)
+            result, _path = _execute_root_with_path(
+                backend, plan, ctx, run_mode=getattr(ctx, "run_mode", None),
                 factor_name=task.factor_name,
-            )[0]
-        )
+            )
+            return result
+
+        execute_root = execute_root or _default_execute_root
         materialize_shared = materialize_shared or (
             lambda sid, node: _materialize_shared_subplan(backend, node, ctx, sid)
         )
@@ -332,18 +439,71 @@ class AdaptiveBatchScheduler:
         pending: list[str] = dag.topological_order()
         committed: set[str] = set()
         futures: dict[str, Future] = {}
+        # R31-005: future → task_id / lease 双向绑定（失败/取消也能知道归属并释放）。
+        future_to_task_id: dict[Future, str] = {}
+        future_leases: dict[Future, ReservationLease] = {}
+        # R31-P0-022：fusion group 登记（root task_id → group）。
+        fusion_groups = list(getattr(plan, "fusion_groups", []) or [])
+        group_by_root: dict[str, Any] = {}
+        fusion_done: set[str] = set()
+        future_group_roots: dict[Future, tuple[str, ...]] = {}
+        for _g in fusion_groups:
+            for _tid in _g.roots:
+                group_by_root[_tid] = _g
         remaining = set(pending)
         no_progress_rounds = 0
         while remaining or futures:
             admitted_this_round = 0
+            # 0) fusion group admission：组内全部 root 就绪 → 一次 native query。
+            for group in fusion_groups:
+                gkey = f"fusion:{group.group_id}"
+                if gkey in futures or gkey in fusion_done:
+                    continue
+                roots = [t for t in group.roots if t in dag.tasks]
+                if not roots or any(t in futures or t in committed for t in roots):
+                    continue
+                if not all(all(p in committed for p in dag.tasks[t].inputs) for t in roots):
+                    continue
+                leases: list[ReservationLease] = []
+                ok = True
+                for t in roots:
+                    contract = dag.tasks[t].resource_contract
+                    if contract is not None:
+                        lease = self.broker.try_reserve(contract, task_id=t)
+                        if lease is None:
+                            ok = False
+                            break
+                        leases.append(lease)
+                if not ok:
+                    for lease in leases:
+                        lease.release()
+                    continue
+                future = self.executor.submit(
+                    group.backend,
+                    _dispatch_fusion, group, dag.tasks, backend, ctx, execute_root,
+                    prefer="thread",
+                )
+                futures[gkey] = future
+                future_to_task_id[future] = gkey
+                future_leases[future] = leases
+                future_group_roots[future] = tuple(roots)
+                for t in roots:
+                    remaining.discard(t)
+                admitted_this_round += 1
+                self._explain(
+                    f"fusion group {group.group_id}: admitted {len(roots)} roots "
+                    f"(backend={group.backend})"
+                )
             # 1) admission：所有 predecessor 已 committed 且未在跑的 task。
             for tid in list(remaining):
                 if tid in futures or tid in committed:
                     continue
+                if tid in group_by_root:
+                    continue  # 已由 fusion group 接管
                 task = dag.tasks[tid]
                 if not all(p in committed for p in task.inputs):
                     continue
-                future = self._admit_and_run(
+                future, lease = self._admit_and_run(
                     task,
                     backend=backend,
                     ctx=ctx,
@@ -352,45 +512,90 @@ class AdaptiveBatchScheduler:
                 )
                 if future is not None:
                     futures[tid] = future
+                    future_to_task_id[future] = tid
+                    if lease is not None:
+                        future_leases[future] = lease
                     remaining.discard(tid)
                     admitted_this_round += 1
             # 2) as_completed：先处理完成项（R27-103/104 立即 sink/release）。
             done = wait(list(futures.values()), timeout=0.05)[0]
             for future in done:
+                # R31-005：tid 由映射绑定，不再依赖 future.result() 返回值——
+                # result() 抛异常时也能确定是哪个 task。
+                key = future_to_task_id.pop(future, None)
+                if key is None:
+                    continue
+                lease = future_leases.pop(future, None)
+                futures.pop(key, None)
                 try:
-                    tid, result = future.result(timeout=1.0)
+                    _ret_key, result = future.result(timeout=1.0)
                 except Exception as exc:  # noqa: BLE001
-                    retries = self._retries_remaining.get(tid, 1)
-                    if retries > 0:
-                        self._retries_remaining[tid] = retries - 1
+                    # 释放租约 exactly once（成功/失败/取消统一 finally 语义；
+                    # fusion group 的 lease 是 list）。
+                    _release_lease(lease)
+                    kind = classify_error(exc)
+                    retries = self._retries_remaining.get(key, 1)
+                    # R31-006：只有 transient（或未知=保守单次）自动 retry；
+                    # permanent（PIT/semantic/参数/不支持算子/确定性错误/OOM）不重跑。
+                    if retries > 0 and kind in {ERROR_TRANSIENT, ERROR_UNKNOWN}:
+                        self._retries_remaining[key] = retries - 1
                         self._explain(
-                            f"task={tid}: FAILED {type(exc).__name__}: {exc} "
-                            f"(retrying, {retries - 1} left)"
+                            f"task={key}: FAILED {type(exc).__name__}: {exc} "
+                            f"(class={kind}, retrying, {retries - 1} left)"
                         )
-                        remaining.add(tid)
+                        if key.startswith("fusion:"):
+                            # fusion 失败 → 回退逐 root 重新调度（honest fallback）。
+                            gr = future_group_roots.pop(future, None)
+                            if gr is not None:
+                                for _t in gr:
+                                    remaining.add(_t)
+                        else:
+                            remaining.add(key)
                         continue
-                    # R27-042：不直接 kill 运行中 task；失败重试耗尽则如实抛出。
-                    self._explain(f"task={tid}: FAILED_FATAL {type(exc).__name__}: {exc}")
+                    # R27-042：不直接 kill 运行中 task；永久失败如实抛出。
+                    self._explain(
+                        f"task={key}: FAILED_FATAL {type(exc).__name__}: {exc} "
+                        f"(class={kind})"
+                    )
                     raise
-                contract = dag.tasks[tid].resource_contract
-                if contract is not None:
-                    self.broker.release(contract, task_id=tid)
-                futures.pop(tid, None)
-                committed.add(tid)
+                _release_lease(lease)
+                # fusion group 完成：逐 root 处理结果（honest per-root fallback
+                # 结果也已进入 dict）。
+                group_roots = future_group_roots.pop(future, None)
+                if group_roots is not None:
+                    fusion_done.add(key)
+                    results_by_root = result if isinstance(result, dict) else {}
+                    for _tid in group_roots:
+                        committed.add(_tid)
+                        self._done += 1
+                        self._record_timing(_tid, dag.tasks[_tid])
+                        _res = results_by_root.get(_tid)
+                        if dag.tasks[_tid].task_type == TASK_ROOT:
+                            if sink is not None:
+                                sink.submit(dag.tasks[_tid].factor_name, _res)
+                            if result_handler is not None:
+                                result_handler(dag.tasks[_tid].factor_name, _res)
+                            else:
+                                self._results[dag.tasks[_tid].factor_name] = _res
+                        self._release_consumed(dag, _tid, ctx)
+                    continue
+                committed.add(key)
                 self._done += 1
-                self._record_timing(tid, dag.tasks[tid])
-                if dag.tasks[tid].task_type == TASK_ROOT:
+                self._record_timing(key, dag.tasks[key])
+                if dag.tasks[key].task_type == TASK_ROOT:
                     if sink is not None:
-                        sink.submit(dag.tasks[tid].factor_name, result)
+                        sink.submit(dag.tasks[key].factor_name, result)
                     if result_handler is not None:
-                        result_handler(dag.tasks[tid].factor_name, result)
+                        result_handler(dag.tasks[key].factor_name, result)
                     else:
-                        self._results[dag.tasks[tid].factor_name] = result
+                        self._results[dag.tasks[key].factor_name] = result
                 # 释放已消费的 CSE sid（引用计数归零立即释放）。
-                if dag.tasks[tid].task_type == TASK_ROOT:
-                    self._release_consumed(dag, tid, ctx)
+                if dag.tasks[key].task_type == TASK_ROOT:
+                    self._release_consumed(dag, key, ctx)
             # 3) 动态并发（R27-204）：外部负载高 → 降 soft CPU budget。
-            if self.broker.snapshot().system_cpu_util > 0.8 and self.executor._thread_task_count > 0:
+            # 用缓存的压力档而非强制 snapshot（force 会触发采样，热循环里慢）。
+            if self.broker.pressure_stage() in {"PRESSURE_1", "PRESSURE_2"} \
+                    and self.executor._thread_task_count > 0:
                 self.broker.lower_soft_cpu_budget(factor=0.6)
             # 4) 无进展保护：admission 全部被拒且没有在跑 future → 等资源释放后
             #    再试；连续多轮无进展则诊断（不空转）。
@@ -426,7 +631,8 @@ class AdaptiveBatchScheduler:
 
             task = dag.tasks[tid]
             if task.node_ref is not None:
-                _release_consumed_sids(ctx, task.node_ref.root)
+                node = getattr(task.node_ref, "root", task.node_ref)
+                _release_consumed_sids(ctx, node)
         except Exception:
             pass
 

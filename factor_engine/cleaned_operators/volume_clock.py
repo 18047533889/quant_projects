@@ -92,6 +92,10 @@ def _volume_clock_log_path(
         return None
     # P0-O #80: a zero-activity bar must carry the SAME price as the previous
     # observable bar, else deleting it reconnects two different prices.
+    # R26-055: the equality is TICK/PRICE-PRECISION-AWARE, not binary float
+    # equality — a scale-relative tolerance (``1e-6 * price``) accepts stored
+    # float noise (sub-tick) while still catching a genuinely different price
+    # (real price differences are >= a tick, far larger than the tolerance).
     if np.any(~valid):
         obs_idx = np.flatnonzero(valid)
         zero_idx = np.flatnonzero(~valid)
@@ -100,7 +104,8 @@ def _volume_clock_log_path(
             if pos[i] < 0:
                 continue  # leading zero-activity bars: nothing to reconnect
             prev = obs_idx[pos[i]]
-            if float(price[z]) != float(price[prev]):
+            tol = 1e-6 * max(1.0, abs(float(price[prev])))
+            if abs(float(price[z]) - float(price[prev])) > tol:
                 return None
     act = activity[valid].astype(float)
     logp = np.log(price[valid].astype(float))

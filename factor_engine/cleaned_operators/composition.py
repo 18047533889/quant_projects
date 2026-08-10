@@ -103,21 +103,34 @@ def _parts(*frames: pd.DataFrame | None) -> list[pd.DataFrame]:
 # misclassified gate is an *unknown* field and passes (a caller declaring a
 # volume-by-bucket share ``share_of_volume_bucket_1`` or a holder share
 # ``holder_share_3`` supplies its own CompositionSchema).
-_COMPOSITION_SCHEMA_FIELDS: dict[str, str] = {
-    # financial-statement money flows / balances — same unit (currency), same
-    # economic whole (the firm).  EPS is deliberately NOT here (per-share unit).
-    "revenue": "financial_statement",
-    "operating_revenue": "financial_statement",
-    "net_profit": "financial_statement",
-    "net_income": "financial_statement",
-    "total_assets": "financial_statement",
-    "total_liabilities": "financial_statement",
-    "equity": "financial_statement",
-    "shareholders_equity": "financial_statement",
-}
+# R26-096..099: the previous ``financial_statement`` "family" is NOT a valid
+# part-whole composition schema.  "Same currency + same firm" is not "the same
+# whole's mutually-exclusive parts": Revenue and NetIncome are flows of DIFFERENT
+# economic magnitudes (not exclusive parts of one whole), and
+# ``Assets = Liabilities + Equity`` makes Assets the WHOLE — listing A, L, E as
+# three parts double-counts (R26-097).  None of these fields is auto-certified
+# as a composition part; a caller with a real part-whole relationship (e.g.
+# liability sub-items summing to total liabilities) must supply its own
+# explicit CompositionSchema (R26-098/102).
+_COMPOSITION_SCHEMA_FIELDS: dict[str, str] = {}
 
-# Known fields that are NOT valid composition parts (P0-74/75/76/77).
+# Known fields that are NOT valid composition parts (P0-74/75/76/77 + R26-096..099).
 _MISCLASSIFIED_PARTS: dict[str, str] = {
+    # R26-096..099: same-currency same-firm does NOT make mutually-exclusive
+    # parts of one whole.  Revenue / NetIncome are different economic flows;
+    # ``Assets = Liabilities + Equity`` makes Assets the whole (listing A,L,E as
+    # three parts double-counts); net_profit / net_income are aliases of the
+    # same economic concept (a duplicate PartId).  None may be auto-certified as
+    # a composition part; a genuine part-whole requires an explicit
+    # CompositionSchema.
+    "revenue": "income-statement flow, not a mutually-exclusive part of one balance-sheet whole (R26-096/097)",
+    "operating_revenue": "income-statement flow, not a mutually-exclusive part of one whole (R26-096/097)",
+    "net_profit": "income-statement flow; alias of net_income (duplicate economic part, R26-099)",
+    "net_income": "income-statement flow; alias of net_profit (duplicate economic part, R26-099)",
+    "total_assets": "balance-sheet WHOLE (A = L + E) — listing it as a part double-counts (R26-097)",
+    "total_liabilities": "balance-sheet side; not composable with assets/equity as three generic parts (R26-097)",
+    "equity": "balance-sheet side; not composable with assets/liabilities as three generic parts (R26-097)",
+    "shareholders_equity": "balance-sheet side; not composable with assets/liabilities as three generic parts (R26-097)",
     "eps": "per-share value (different unit from a money-flow whole; P0-74)",
     "market_cap": "market valuation (not a positive part of one economic whole; P0-75)",
     "mkt_cap": "market valuation (not a positive part of one economic whole; P0-75)",
@@ -138,21 +151,30 @@ _MISCLASSIFIED_PARTS: dict[str, str] = {
 }
 
 
+# Recognised field-concept names (schema allow-list ∪ misclassified gate) — the
+# only single-column names trusted as PartIds (R26-101).
+_PART_CONCEPT_NAMES = frozenset(
+    (set(_COMPOSITION_SCHEMA_FIELDS.keys()) | set(_MISCLASSIFIED_PARTS.keys()))
+)
+
+
 def _part_field_name(frame: pd.DataFrame) -> str | None:
     """Best-effort part-field name of one composition panel.
 
-    A *named* part panel is either a frame carrying an explicit ``.name``
-    attribute or a single-column frame whose column name is the field name
-    (e.g. a frame whose only column is ``"revenue"``).  Wide panels whose
-    columns are instrument codes (``000001.SZ``, ``s0``, ...) are anonymous ->
-    ``None`` and stay positionally paired (backward compatible).
+    R26-100/101: a field name is ONLY trusted when it comes from an explicit
+    ``.name`` attribute or a single-column frame whose column name is a
+    RECOGNISED field concept (in the schema allow-list or the misclassified
+    gate).  A standard FE wide panel (rows=date, columns=instrument codes like
+    ``000001.SZ`` / ``s0``) must NEVER be misread as a field id — the stock
+    column name is not a PartId.  Unrecognised single-column names -> ``None``
+    (anonymous, positionally paired, and NOT schema-certified).
     """
     name = getattr(frame, "name", None)
     if isinstance(name, str) and name:
         return name
     if getattr(frame, "shape", (2, 0))[1] == 1:
         col = frame.columns[0]
-        if isinstance(col, str) and col:
+        if isinstance(col, str) and col and col in _PART_CONCEPT_NAMES:
             return col
     return None
 

@@ -49,6 +49,89 @@ def _contract_ir_blocking_problems(store: Any) -> list[str]:
         return [f"ContractIR compile failed: {exc}"]
 
 
+def _security_policy_explicit(store: Any = None) -> list[str]:
+    """R26-P0-007/020：production 下必须显式 principal + policy，不能回退 DEFAULT。"""
+    from data_access.security.policy import production_security_configured
+    from data_access.read.query_budget import is_strict_semantics
+
+    if not is_strict_semantics():
+        return []
+    if not production_security_configured():
+        return [
+            "production 未配置显式 principal + policy（DATA_ACCESS_PRINCIPAL_ID + "
+            "DATA_ACCESS_ALLOWED_DATASETS）。缺配置 ≠ 本地超级用户（R26-P0-007）。"
+        ]
+    return []
+
+
+def _critical_calendar_authoritative(store: Any = None) -> list[str]:
+    """R26-P0-020：critical calendar 必须 authoritative（不 COALESCE same-day）。"""
+    from data_access.read.query_budget import is_strict_semantics
+
+    if not is_strict_semantics():
+        return []
+    try:
+        from data_access.read.session_calendar import compile_available_from_result
+
+        for dataset in ("ashare_stock_daily", "us_stock_daily"):
+            try:
+                result = compile_available_from_result(dataset)
+            except Exception:
+                continue
+            if result is not None and result.degraded:
+                return [
+                    f"critical calendar {dataset} 非 authoritative："
+                    f"{result.degradation_reason or 'degraded'}（R26-P0-013/020 fail）"
+                ]
+    except Exception:
+        pass
+    return []
+
+
+def _source_snapshot_provider_available(store: Any = None) -> list[str]:
+    """R26-P0-020：需要 remote authoritative source 的 production service，snapshot
+    provider 不可用 → 启动失败。"""
+    from data_access.read.query_budget import is_strict_semantics
+
+    if not is_strict_semantics():
+        return []
+    remote_configured = (
+        store is not None
+        and getattr(store, "_pipeline", None) is not None
+        and getattr(store._pipeline, "_resolver", None) is not None
+    )
+    if not remote_configured:
+        return []
+    try:
+        from data_access.core.exceptions import SourceSnapshotUnavailable
+
+        return []
+    except Exception as exc:  # pragma: no cover
+        return [f"source snapshot provider 校验失败：{exc}"]
+
+
+def _single_worker_contract(store: Any = None) -> list[str]:
+    """R26-P1-017：production workers>1 且无共享 limiter → 启动失败（不只 warning）。"""
+    from data_access.read.query_budget import is_strict_semantics
+
+    if not is_strict_semantics():
+        return []
+    import os
+
+    workers = os.environ.get("DATA_ACCESS_WORKERS", "")
+    single = os.environ.get("DATA_ACCESS_SINGLE_WORKER", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if workers and workers.isdigit() and int(workers) > 1 and not single:
+        return [
+            "DATA_ACCESS_WORKERS>1 且未设 DATA_ACCESS_SINGLE_WORKER=1：进程级 "
+            "ResourceGovernor 是 single-worker contract（R26-P1-017，production fail）"
+        ]
+    return []
+
+
 def _cache_permissions_ok(store: Any = None) -> list[str]:
     """§28/§111：cache 权限安全（不泄 secret；权限过宽 fail-closed）。"""
     try:
@@ -96,6 +179,10 @@ def run_startup_gate(
         _credential_provider_valid,
         _legacy_home_fallback_in_use,
         _cache_permissions_ok,
+        _security_policy_explicit,
+        _critical_calendar_authoritative,
+        _source_snapshot_provider_available,
+        _single_worker_contract,
     )
     for check in runner:
         try:

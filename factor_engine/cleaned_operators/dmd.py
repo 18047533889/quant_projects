@@ -134,6 +134,30 @@ def _logsumexp(xs: Sequence[float]) -> float:
     return m + float(np.log(np.sum(np.exp(np.asarray(xs, dtype=float) - m))))
 
 
+def _log1mexp(x: float) -> float:
+    """``log(1 - exp(x))`` computed stably for ``x < 0`` (R30 §15).
+
+    For large negative ``x``, ``exp(x)`` underflows to 0 and the result is
+    simply ``0``; near ``x == 0`` ``-expm1(x)`` avoids the catastrophic
+    ``1 - exp(x)`` cancellation.
+    """
+    if x >= 0.0:  # pragma: no cover - guarded by callers
+        return float("-inf")
+    if x < -0.6931471805599453:  # log(2): exp(x) is tiny enough
+        return float(np.log1p(-np.exp(x)))
+    return float(np.log(-np.expm1(x)))
+
+
+def _log_expm1(x: float) -> float:
+    """``log(exp(x) - 1)`` computed stably for ``x > 0`` (R30 §15).
+
+    ``exp(x)`` overflows to inf for ``x ~ 710+``; the identity
+    ``log(exp(x)-1) = x + log1p(-exp(-x))`` keeps the result finite for any
+    finite positive ``x``.
+    """
+    return float(x + np.log1p(-np.exp(-x)))
+
+
 def _log_finite_horizon_sum(log_rho: float, K: int) -> float:
     """``log( sum_{t=0}^{K-1} rho^t )`` in a cancellation-free closed form,
     taking ``log_rho = log(rho)`` so ``rho = |λ|²`` is NEVER materialised.
@@ -144,24 +168,33 @@ def _log_finite_horizon_sum(log_rho: float, K: int) -> float:
     space: near ``rho == 1`` the direct finite sum is used (``rho - 1`` never
     cancels catastrophically); ``rho > 1`` and ``rho < 1`` use the geometric
     closed form in log domain.  The result is finite for any finite ``log_rho``.
+
+    R30 §15 (P0-011): the old code still executed ``r = exp(log_rho)`` to choose
+    the branch, which overflowed to ``inf`` at ``log_rho = 1000`` and produced
+    ``log(expm1(1000)) = log(inf) = inf``.  All branches are now decided and
+    evaluated in log space via :func:`_log1mexp` / :func:`_log_expm1`; ``rho``
+    is never materialised.
     """
     lr = float(log_rho)
     if lr <= float("-inf"):
         # rho == 0: only the t=0 term survives (0^0 == 1): sum == 1, log == 0.
         return 0.0
-    r = float(np.exp(lr))
-    if abs(r - 1.0) < 1e-6:
-        return float(np.log(np.sum(r ** np.arange(K, dtype=float))))
+    if abs(lr) < 1e-6:
+        # rho == exp(lr) ≈ 1: direct finite sum in LOG space.
+        # sum_{t=0}^{K-1} rho^t ≈ K (all terms ≈ 1), so log ≈ log(K).
+        return float(np.log(K))
     if lr > 0.0:
         K_log_r = K * lr
         # log((r^K - 1)/(r - 1)) = K log r + log(1 - r^{-K}) - log(r - 1)
+        #   = K*lr + log1mexp(-K*lr) - log_expm1(lr)
         return (
             K_log_r
-            + float(np.log1p(-np.exp(-K_log_r)))
-            - float(np.log(np.expm1(lr)))
+            + _log1mexp(-K_log_r)
+            - _log_expm1(lr)
         )
-    # r < 1: log((1 - r^K)/(1 - r)) = log1p(-r^K) - log1p(-r)
-    return float(np.log1p(-np.exp(K * lr))) - float(np.log1p(-r))
+    # r < 1: log((1 - r^K)/(1 - r)) = log1mexp(K*lr) - log1mexp(lr)
+    # (K*lr < 0 and lr < 0, so both log1mexp arguments are negative).
+    return _log1mexp(K * lr) - _log1mexp(lr)
 
 
 def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any] | None:
@@ -230,7 +263,10 @@ def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any
     # b=0 mode a fabricated non-zero energy via the machine epsilon.  ``-inf``
     # propagates the correct semantics (the mode ranks last / vanishes).
     abs_b = np.abs(b)
-    log_b2 = np.where(abs_b == 0.0, -np.inf, 2.0 * np.log(abs_b))
+    # R28 §四十六: same errstate guard as ``log_rho`` so a zero-amplitude mode
+    # resolves to ``-inf`` without emitting a spurious divide-by-zero warning.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        log_b2 = np.where(abs_b == 0.0, -np.inf, 2.0 * np.log(abs_b))
     log_energy = log_b2 + log_sum
     # R26-125: if EVERY mode has ``log_energy == -inf`` (all amplitudes exactly
     # zero), fail closed explicitly — never let ``-inf - -inf -> NaN`` emerge

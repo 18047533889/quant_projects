@@ -28,10 +28,103 @@ class PlanRoute:
     row_count_estimate: int
     ops: tuple[str, ...]
     reason: str = ""
+    # R31-013/014: 每 occurrence 的 bound 参数摘要（window/feature_dim 等）。
+    occurrence_count: int = 0
+
+
+@dataclass(frozen=True)
+class BoundNodeOccurrence:
+    """R31-013/014：一个算子 **occurrence** 的绑定参数（不再去重 canonical）。
+
+    同一个 canonical（如 ``ts_mean``）出现 4 次、参数 window=5/20/60/120 时，
+    每个 occurrence 单独估价——不再只看到 ``ts_mean × 1``。
+    """
+
+    canonical: str
+    op: str
+    node_id: str
+    window: int | None = None
+    k: int | None = None
+    feature_dim: int | None = None
+    regressors: int | None = None
+    group_count: int | None = None
+    inputs: tuple[str, ...] = ()
+
+    def cost_ctx(self, rows: int, instruments: int) -> Any:
+        from backend.operator_cost import CostContext
+
+        return CostContext(
+            rows=rows,
+            instruments=instruments,
+            window=self.window,
+            k=self.k,
+            feature_dim=self.feature_dim,
+            regressors=self.regressors,
+            group_count=self.group_count,
+        )
 
 
 _BENCHMARK_PATH = Path(__file__).resolve().parents[1] / "benchmarks" / "backend_cost_baseline.json"
 _META_OPS = frozenset({"column", "literal", "plan_ref", "materialized_series"})
+
+#: R31-013：从 PlanNode.attrs 提取的 bound 参数键（window/k/feature_dim/regressors）。
+_PARAM_KEYS = ("window", "period", "k", "feature_dim", "regressors", "group_count")
+
+
+def plan_occurrences(plan: PlanNode) -> tuple[BoundNodeOccurrence, ...]:
+    """R31-013/014：遍历整棵 plan，返回**每个 occurrence** 的绑定参数（不去重）。
+
+    ``ts_mean(close,5) + ts_mean(volume,20) + ts_mean(amount,60) + ts_mean(close,120)``
+    产生 4 个独立 occurrence，各带自己的 window——cost model 不再丢重复节点和参数。
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    occurrences: list[BoundNodeOccurrence] = []
+    seen_ids: set[int] = set()
+
+    def _num(attrs: Any, key: str) -> int | None:
+        try:
+            return int(attrs.get(key))
+        except (TypeError, ValueError):
+            return None
+
+    def walk(node: PlanNode) -> str:
+        if id(node) in seen_ids:
+            return getattr(node, "node_id", None) or f"n{id(node)}"
+        seen_ids.add(id(node))
+        attrs = getattr(node, "attrs", None) or {}
+        child_ids = tuple(walk(child) for child in (getattr(node, "inputs", ()) or ()))
+        op = str(getattr(node, "op", "") or "")
+        node_id = getattr(node, "node_id", None) or f"n{len(occurrences)}"
+        # R31-013：meta ops（column/literal/plan_ref/materialized_series）是 O(1) 读取，
+        # 不进 occurrence 列表（旧 ``_canonical_ops`` 同样过滤）；真实 operator 的
+        # 每个 occurrence 都必须保留（不丢重复节点与参数）。
+        if op and op not in _META_OPS:
+            canonical = op
+            try:
+                canonical = OperatorRegistry._aliases.get(op, op)
+            except Exception:
+                canonical = op
+            window = _num(attrs, "window")
+            if window is None:
+                window = _num(attrs, "period")
+            occurrences.append(
+                BoundNodeOccurrence(
+                    canonical=canonical,
+                    op=op,
+                    node_id=str(node_id),
+                    window=window,
+                    k=_num(attrs, "k"),
+                    feature_dim=_num(attrs, "feature_dim"),
+                    regressors=_num(attrs, "regressors"),
+                    group_count=_num(attrs, "group_count"),
+                    inputs=child_ids,
+                )
+            )
+        return str(node_id)
+
+    walk(plan)
+    return tuple(occurrences)
 
 
 def _runtime_family() -> dict[str, str]:
@@ -89,27 +182,63 @@ def _measured_baseline() -> tuple[dict[str, Any], bool]:
         expected = ".".join(expected.split(".")[:2])
         if expected and expected != current.get(key):
             return payload, False
+    # R31-021 (MEASURED_BASELINE_HARDWARE_BOUND)：不同服务器不能共享同一 measured
+    # baseline——不仅软件版本，还要 hardware family：
+    #   - CPU 架构 / model family（x86_64 vs arm64）
+    #   - core bucket（<8 / 8-31 / 32-63 / 64+）
+    #   - RAM bucket（<16 / 16-63 / 64-255 / 256+ GB）
+    #   - storage class（nvme / ssd / network）
+    # 任一不匹配 → 该 baseline 不作为 measured（回退 compatible_family/静态估计）。
+    hw_current = {
+        "arch": str(current.get("architecture", "")),
+        "core_bucket": _core_bucket(int(current.get("effective_cores") or 0)),
+        "ram_bucket": _ram_bucket(int(float(current.get("ram_gb") or 0))),
+        "storage_class": str(current.get("storage_class", "")),
+    }
+    hw_recorded = {
+        "arch": str(recorded.get("architecture") or recorded.get("arch") or ""),
+        "core_bucket": _core_bucket(int(str(recorded.get("effective_cores") or recorded.get("core_bucket") or 0).split(".")[0])),
+        "ram_bucket": _ram_bucket(int(float(str(recorded.get("ram_gb") or recorded.get("ram_bucket") or 0)))),
+        "storage_class": str(recorded.get("storage_class") or ""),
+    }
+    for dim, cur in hw_current.items():
+        rec = hw_recorded.get(dim)
+        if rec and rec != cur:
+            return payload, False
     return payload, True
 
 
+def _core_bucket(n: int) -> str:
+    if n <= 0:
+        return ""
+    if n < 8:
+        return "lt8"
+    if n < 32:
+        return "8-31"
+    if n < 64:
+        return "32-63"
+    return "64+"
+
+
+def _ram_bucket(gb: float) -> str:
+    if gb <= 0:
+        return ""
+    if gb < 16:
+        return "lt16"
+    if gb < 64:
+        return "16-63"
+    if gb < 256:
+        return "64-255"
+    return "256+"
+
+
 def _canonical_ops(plan: PlanNode) -> tuple[str, ...]:
-    from cleaned_operators.registry import OperatorRegistry
+    """R31-013：返回每个 occurrence 的 canonical（**不再去重**）。
 
-    seen: set[str] = set()
-    ordered: list[str] = []
-
-    def walk(node: PlanNode) -> None:
-        op = str(getattr(node, "op", "") or "")
-        if op and op not in _META_OPS:
-            canonical = OperatorRegistry._aliases.get(op, op)
-            if canonical not in seen:
-                seen.add(canonical)
-                ordered.append(canonical)
-        for child in getattr(node, "inputs", ()) or ():
-            walk(child)
-
-    walk(plan)
-    return tuple(ordered)
+    旧实现用 ``seen`` 去重，``ts_mean×4``（window 5/20/60/120）只算 1 次 →
+    严重低估。现在每个节点 occurrence 单独出现。
+    """
+    return tuple(occ.canonical for occ in plan_occurrences(plan))
 
 
 def _contains_source_ref(plan: PlanNode) -> bool:
@@ -254,7 +383,14 @@ def _cost(
     rows: int,
     *,
     delegate_polars: bool = False,
+    occ: BoundNodeOccurrence | None = None,
 ) -> float:
+    """算子 execution cost（**不含** conversion——R31-P0-016：conversion 只在
+    physical edge 真正发生时才计一次，不由每个 operator 各自携带）。
+
+    ``occ`` 提供 bound params（window/feature_dim/regressors），经 CostContext
+    进 ``estimate_backend_cost``——window=5 与 window=120 不再估出同一成本。
+    """
     from backend.operator_cost import estimate_backend_cost
 
     if backend in {"polars_long", "polars_panel"}:
@@ -265,7 +401,7 @@ def _cost(
         # A polars-delegate slot round-trips Polars→Pandas→Polars: it wraps the
         # certified pandas reference, so it can never be cheaper than native
         # pandas for the same canonical.  Cost it as the pandas reference plus a
-        # conversion penalty so the router never picks the delegate "polars" over
+        # delegate penalty so the router never picks the delegate "polars" over
         # native pandas on the backend name alone (R13 P1-65).
         pandas_cost = estimate_backend_cost(
             canonical, "pandas_numpy", row_count_estimate=rows
@@ -275,8 +411,25 @@ def _cost(
         canonical,
         key,
         row_count_estimate=rows,
-        requires_conversion=backend in {"polars_long", "polars_panel"},
+        requires_conversion=False,
+        cost_ctx=occ.cost_ctx(rows, 3000) if occ is not None else None,
     )
+
+
+def _one_conversion_penalty(backend: str, rows: int) -> float:
+    """R31-P0-016：整计划**一次**表示转换代价（后端候选层，非每算子）。
+
+    单 backend 候选（polars_panel / polars_long / duckdb_sql）只发生一次
+    「源表示 → backend 表示 / SQL 物化回 pandas」转换；Pandas reference 零转换。
+    """
+    if backend in {"pandas_numpy"}:
+        return 0.0
+    if backend in {"duckdb_sql", "clickhouse_sql"}:
+        millions = max(rows / 1_000_000.0, 0.001)
+        return 5.0 + 0.10 * millions
+    # polars_panel / polars_long
+    millions = max(rows / 1_000_000.0, 0.001)
+    return 2.0 + 0.05 * millions
 
 
 def _candidate_is_measured(ops: tuple[str, ...], backend: str) -> bool:
@@ -326,12 +479,12 @@ def _execution_memory_budget(ctx: Any) -> int | None:
     return int(plan.process_budget_bytes)
 
 
-def estimate_plan_peak_memory(ops: tuple[str, ...], rows: int) -> int:
-    """估算整计划峰值内存（字节）。
+def estimate_plan_peak_memory(ops: tuple[str, ...], rows: int, backend: str = "pandas_numpy") -> int:
+    """估算整计划峰值内存（字节），**按 backend 分**（R31-P0-017）。
 
-    以 float64 panel（8B/格）为基准，乘以算子内存档位放大系数：high×3、
-    medium×2、low×1，加一次表示转换缓冲。用于把「峰值内存 > budget」的候选
-    backend 移出路由（Phase 5 P1-1）。
+    同一计划不同 backend 的峰值差异很大：DuckDB streaming SQL 无需整个 wide
+    panel 驻留；Polars lazy 可 projection pushdown + streaming；Pandas 才需要
+    全量 materialization。旧实现一份 generic peak 会让所有 backend 一起被拒。
     """
     from backend.operator_cost import get_operator_cost
 
@@ -343,8 +496,81 @@ def estimate_plan_peak_memory(ops: tuple[str, ...], rows: int) -> int:
             factor += 0.5
         elif cost.memory == "medium":
             factor += 0.25
-    # 表示转换 / 中间物化缓冲 ≈ 基准 × 1.5
+    # 表示转换 / 中间物化缓冲 ≈ 基准 × 1.5（Pandas 全量物化最贵）。
+    if backend == "duckdb_sql" or backend == "clickhouse_sql":
+        # SQL streaming：源行 + 少量窗口缓冲，不驻留 wide panel。
+        return int(cells * min(factor, 1.5) * 0.35)
+    if backend in {"polars_panel", "polars_long"}:
+        # Polars lazy/streaming：比 Pandas 低，但仍有转换缓冲。
+        return int(cells * factor * 1.2)
     return int(cells * factor * 1.5)
+
+
+def _dag_aware_mixed_cost(
+    occurrences: tuple[BoundNodeOccurrence, ...],
+    *,
+    rows: int,
+    delegate_ops: frozenset[str],
+    data_kind: str,
+    mode: str,
+    source_ref: bool,
+) -> float | None:
+    """R31-P0-015：**DAG-aware** 的混合 backend 成本（Volcano-lite）。
+
+    对每个 occurrence 计算 ``cost[node, backend]``，包含子图执行 + 表示转换
+    （backend 变化时每次计一次 edge conversion）。分支 A 走 Polars、分支 B 走
+    SQL、交汇处转 Pandas 都能被正确表达——不再是「按 canonical first occurrence
+    选最低 backend + 数 transition 次数」。
+    """
+    from backend.operator_capability import supports_pandas, supports_polars, supports_sql
+
+    nodes = {occ.node_id: occ for occ in occurrences}
+    memo: dict[str, tuple[float, str]] = {}
+    sql_backend = "clickhouse_sql" if data_kind == "clickhouse" else "duckdb_sql"
+
+    def _eligible(occ: BoundNodeOccurrence) -> list[str]:
+        opts: list[str] = []
+        if supports_pandas(occ.canonical, mode=mode):
+            opts.append("pandas_numpy")
+        if supports_polars(occ.canonical, mode=mode):
+            opts.append("polars_panel")
+        if not source_ref and supports_sql(occ.canonical, data_source_kind=data_kind, mode=mode):
+            opts.append("sql")
+        return opts
+
+    def _best(occ: BoundNodeOccurrence) -> tuple[float, str]:
+        if occ.node_id in memo:
+            return memo[occ.node_id]
+        options: list[tuple[float, str]] = []
+        for backend in _eligible(occ):
+            cost = _cost(
+                occ.canonical,
+                backend,
+                rows,
+                delegate_polars=occ.canonical in delegate_ops,
+                occ=occ,
+            )
+            for child_id in occ.inputs:
+                if child_id not in nodes:
+                    continue
+                child_cost, child_backend = _best(nodes[child_id])
+                cost += child_cost
+                if backend != child_backend:
+                    cost += _delegate_penalty(rows)
+            options.append((cost, backend))
+        if not options:
+            return (float("inf"), "")
+        best = min(options, key=lambda item: (item[0], item[1]))
+        memo[occ.node_id] = best
+        return best
+
+    root = occurrences[-1] if occurrences else None
+    if root is None:
+        return None
+    total, _backend = _best(root)
+    if total == float("inf"):
+        return None
+    return total
 
 
 def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
@@ -353,90 +579,83 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
 
     mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
     production = mode == "production"
+    # R31-013/014：每个 occurrence（绑定参数 window/feature_dim）单独估价。
+    occurrences = plan_occurrences(plan)
     ops = _canonical_ops(plan)
+    occ_by_canon: dict[str, list[BoundNodeOccurrence]] = {}
+    for occ in occurrences:
+        occ_by_canon.setdefault(occ.canonical, []).append(occ)
     rows = estimate_plan_rows(ctx)
     source_ref = _contains_source_ref(plan)
     data_kind = _data_source_kind(ctx)
     candidates: dict[str, float] = {}
     mem_budget = _execution_memory_budget(ctx)
-    peak = estimate_plan_peak_memory(ops, rows)
     # R13 P1-65: ops whose only "polars" slot is a pandas-delegating UDF must be
-    # costed with the conversion penalty (never preferred over native pandas).
-    delegate_ops = _polars_delegate_ops(ops)
-    if mem_budget is not None and peak > mem_budget:
-        # 显式资源预算下整计划峰值已超预算：无任何候选可安全执行。
-        from backend.operator_capability import UnsupportedOperatorBackendError
-        raise UnsupportedOperatorBackendError(
-            "no eligible physical plan: estimated peak memory "
-            f"{peak / 1024**2:.0f} MiB exceeds execution budget {mem_budget / 1024**2:.0f} MiB"
-        )
+    # costed with the delegate penalty (never preferred over native pandas).
+    delegate_ops = _polars_delegate_ops(tuple(occ_by_canon.keys()))
 
-    def _within_budget(est_peak: int) -> bool:
-        return mem_budget is None or est_peak <= mem_budget
+    def _within_budget(backend: str, rows_: int) -> bool:
+        if mem_budget is None:
+            return True
+        est_peak = estimate_plan_peak_memory(ops, rows_, backend)
+        return est_peak <= mem_budget
+
+    def _plan_op_cost(backend: str) -> float:
+        total = 0.0
+        for occ in occurrences:
+            total += _cost(
+                occ.canonical,
+                backend,
+                rows,
+                delegate_polars=occ.canonical in delegate_ops,
+                occ=occ,
+            )
+        return total
 
     pandas_ok = all(supports_pandas(op, mode=mode) for op in ops)
-    if pandas_ok and _within_budget(peak):
-        candidates["pandas_numpy"] = sum(_cost(op, "pandas_numpy", rows) for op in ops)
+    if pandas_ok and _within_budget("pandas_numpy", rows):
+        # R31-P0-016：conversion 只计一次（Pandas 零转换）。
+        candidates["pandas_numpy"] = _plan_op_cost("pandas_numpy") + _one_conversion_penalty(
+            "pandas_numpy", rows
+        )
 
     # Wide Polars is valid even when an operator is not Polars-long-native. The
     # plan remains on one wide representation, so conversion is paid once below.
     polars_panel_ok = bool(ops) and not source_ref and all(
         supports_polars(op, mode=mode) for op in ops
     )
-    if polars_panel_ok:
-        cost = sum(
-            _cost(op, "polars_panel", rows, delegate_polars=op in delegate_ops)
-            for op in ops
-        )
-        cost += 2.0 + 0.05 * max(rows / 1_000_000.0, 0.001)
+    if polars_panel_ok and _within_budget("polars_panel", rows):
+        cost = _plan_op_cost("polars_panel") + _one_conversion_penalty("polars_panel", rows)
         candidates["polars_panel"] = cost
 
     polars_long_ok = bool(ops) and not source_ref and all(
         is_polars_long_native_production_safe(op) if production else supports_polars(op, mode=mode)
         for op in ops
     )
-    if polars_long_ok:
-        candidates["polars_long"] = sum(
-            _cost(op, "polars_long", rows, delegate_polars=op in delegate_ops)
-            for op in ops
+    if polars_long_ok and _within_budget("polars_long", rows):
+        candidates["polars_long"] = (
+            _plan_op_cost("polars_long") + _one_conversion_penalty("polars_long", rows)
         )
 
     sql_ok = bool(ops) and not source_ref and data_kind in {"duckdb", "clickhouse"} and all(
         supports_sql(op, data_source_kind=data_kind, mode=mode) for op in ops
     )
     sql_backend = "clickhouse_sql" if data_kind == "clickhouse" else "duckdb_sql"
-    if sql_ok:
-        candidates["duckdb_sql"] = sum(_cost(op, sql_backend, rows) for op in ops)
+    if sql_ok and _within_budget("duckdb_sql", rows):
+        candidates["duckdb_sql"] = (
+            _plan_op_cost(sql_backend) + _one_conversion_penalty(sql_backend, rows)
+        )
 
     if data_kind in {"duckdb", "clickhouse"}:
-        mixed = 0.0
-        mixed_ok = True
-        previous_backend: str | None = None
-        transitions = 0
-        for op in ops:
-            per_op: list[tuple[str, float]] = []
-            if supports_pandas(op, mode=mode):
-                per_op.append(("pandas_numpy", _cost(op, "pandas_numpy", rows)))
-            if supports_polars(op, mode=mode):
-                per_op.append(
-                    (
-                        "polars_panel",
-                        _cost(op, "polars_panel", rows, delegate_polars=op in delegate_ops),
-                    )
-                )
-            if not source_ref and supports_sql(op, data_source_kind=data_kind, mode=mode):
-                per_op.append(("sql", _cost(op, sql_backend, rows)))
-            if not per_op:
-                mixed_ok = False
-                break
-            chosen_backend, chosen_cost = min(per_op, key=lambda item: (item[1], item[0]))
-            if previous_backend is not None and chosen_backend != previous_backend:
-                transitions += 1
-            previous_backend = chosen_backend
-            mixed += chosen_cost
-        if mixed_ok:
-            millions = max(rows / 1_000_000.0, 0.001)
-            mixed += transitions * (3.0 + 0.10 * millions)
+        mixed = _dag_aware_mixed_cost(
+            occurrences,
+            rows=rows,
+            delegate_ops=delegate_ops,
+            data_kind=data_kind,
+            mode=mode,
+            source_ref=source_ref,
+        )
+        if mixed is not None and _within_budget("pandas_numpy", rows):
             candidates["hybrid"] = mixed
 
     if not candidates:
@@ -458,6 +677,7 @@ def choose_plan_route(plan: PlanNode, ctx: Any) -> PlanRoute:
         candidate_costs=tuple(sorted((name, float(cost)) for name, cost in candidates.items())),
         row_count_estimate=rows,
         ops=ops,
+        occurrence_count=len(occurrences),
         reason=(
             "offline measured baseline" if basis == "measured"
             else "certified capability + workload estimate; no compatible measured baseline"

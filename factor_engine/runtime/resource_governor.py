@@ -368,6 +368,20 @@ def spill_disk_available(path: str | os.PathLike | None = None) -> int | None:
         return None
 
 
+def spill_disk_total(path: str | os.PathLike | None = None) -> int | None:
+    """目标目录所在文件系统总容量（字节）；探测失败返回 ``None``。
+
+    R31-P0-011：spill reserve 的 fraction 必须针对 spill 文件系统容量，
+    而不是 RAM 硬上限——spill 盘是独立容量维度。
+    """
+    target = Path(path or tempfile_dir())
+    try:
+        st = os.statvfs(target)
+        return int(st.f_blocks * st.f_frsize)
+    except OSError:
+        return None
+
+
 def tempfile_dir() -> str:
     """spill 临时目录（``FACTOR_ENGINE_SPILL_DIR`` 优先，否则系统 temp）。"""
     raw = os.environ.get("FACTOR_ENGINE_SPILL_DIR", "").strip()
@@ -952,6 +966,16 @@ class ExecutionResourceScope:
         duckdb_threads: int | None = None,
         strict: bool | None = None,
     ) -> None:
+        # R27-166/167：``batch_service.execute_run_many_parallel`` 传入的是 legacy
+        # ``ResourcePlan``（缺 duckdb_budget_bytes / spill_dir 等 ExecutionResourcePlan
+        # 字段），直接进 ``__enter__`` 会 AttributeError —— 这里统一 coerce。
+        try:
+            from runtime.execution_resources import ResourcePlan as _LegacyResourcePlan
+
+            if isinstance(plan, _LegacyResourcePlan):
+                plan = ExecutionResourcePlan.auto(max_workers=plan.n_jobs)
+        except Exception:  # noqa: BLE001
+            pass
         self.plan = plan or ExecutionResourcePlan.auto()
         self._duckdb_threads = duckdb_threads
         # R20-132..137：显式 strict 优先；未给出时从 env 兜底。

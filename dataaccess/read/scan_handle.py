@@ -73,6 +73,25 @@ class ScanHandle:
     budget: QueryBudget
     lineage: ReadLineage
     _store: Any = None
+    _prepared: Any = None  # R26-P0-004：PreparedRead（governor reservation / snapshot）
+
+    def _pipeline_verify_before(self) -> None:
+        if self._store is not None and self._prepared is not None:
+            self._store._pipeline.verify_before(
+                self._prepared.resolved_source_snapshot
+            )
+
+    def _pipeline_verify_after(self) -> None:
+        if self._store is not None and self._prepared is not None:
+            self._store._pipeline.verify_after(
+                self._prepared.resolved_source_snapshot
+            )
+
+    def _release_prepared(self) -> None:
+        if self._store is not None and self._prepared is not None:
+            self._store._pipeline.release_reservation(
+                self._prepared.resource_reservation
+            )
 
     def lazyframe(self) -> Any:
         """返回底层 LazyFrame（research 用；production/strict 只能使用受控方法）。"""
@@ -168,8 +187,12 @@ class ScanHandle:
         err_msg: str | None = None
         try:
             snapshot = self._revalidate_snapshot()
+            # R26-P0-004：collect 前 verify snapshot（文件仍在/身份未变）。
+            self._pipeline_verify_before()
+            self._store._pipeline.counters.execute += 1
             table = collect_polars_with_budget(self._lf, query_budget=self.budget)
             elapsed_ms = (time.perf_counter() - start) * 1000
+            self._pipeline_verify_after()
             stats = ReadStats(
                 rows=table.num_rows,
                 bytes=table.nbytes,
@@ -187,6 +210,8 @@ class ScanHandle:
             err_msg = f"{type(exc).__name__}: {exc}"
             raise
         finally:
+            # R26-P0-017：collect 成功/异常都必须 release governor reservation。
+            self._release_prepared()
             audit.record(
                 op="scan_collect",
                 dataset=self.lineage.dataset,

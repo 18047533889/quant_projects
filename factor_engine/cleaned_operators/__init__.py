@@ -270,6 +270,55 @@ _LOAD_MODULES = (
     "cleaned_operators.research_spectral",
 )
 
+# R30 §7: explicit production / research / internal loader split.  The full
+# default registry ``_LOAD_MODULES`` keeps loading everything (production +
+# research model families + internal kernels) because several of those modules
+# register R28-certified daily canonicals (``ts_ar_*`` / ``ts_*_regression_*``)
+# that must remain in the default runtime.  ``load_all(include_research=False)``
+# loads only the strictly production surface (``PRODUCTION_LOAD_MODULES`` +
+# reviewed extensions) so a plain production bootstrap never registers research
+# tools.  Research-only tools are additionally isolated to
+# ``ResearchToolRegistry`` by layer governance regardless of module loading.
+#
+# ``RESEARCH_LOAD_MODULES`` are the model/research families R30 §7 names; their
+# canonicals are never production-admitted (no six-evidence certification) but
+# stay available for explicit research opt-in.
+RESEARCH_LOAD_MODULES: tuple[str, ...] = (
+    "cleaned_operators.research_polars",
+    "cleaned_operators.ts_model.dynamic_regression",
+    "cleaned_operators.ts_model.ar_meanrev",
+    "cleaned_operators.ts_model.state_space",
+    "cleaned_operators.ts_model.volatility",
+    "cleaned_operators.ts_model.complexity",
+    "cleaned_operators.ts_model.wavelet_spectral",
+    "cleaned_operators.ts_model.sequence_anomaly",
+    "cleaned_operators.ts_model.path_signature",
+    "cleaned_operators.ts_model.polars_regression",
+    "cleaned_operators.cross_section.panel_model",
+    "cleaned_operators.research_transform",
+    "cleaned_operators.dmd",
+    "cleaned_operators.research_spectral",
+)
+
+# Internal kernel utilities: no user-facing factor canonicals; consumed only by
+# other operators.  Kept out of the strict production surface but required for
+# the full registry (many production operators import them transitively).
+INTERNAL_KERNEL_MODULES: tuple[str, ...] = (
+    "cleaned_operators.common.polars_auto",
+    "cleaned_operators.common.polars_np_parity",
+    "cleaned_operators.common.polars_batch_mirror",
+    "cleaned_operators.common.polars_robust_stats",
+    "cleaned_operators.common.polars_cs_misc",
+    "cleaned_operators.common.polars_limit_misc",
+    "cleaned_operators.common.polars_math_extended",
+    "cleaned_operators.common.polars_state_event",
+    "cleaned_operators.common.polars_daily_native",
+    "cleaned_operators.common.polars_group",
+    "cleaned_operators.common.polars_extended",
+    "cleaned_operators.common.polars_statistics",
+    "cleaned_operators.common.polars_misc_utils",
+)
+
 _REVIEWED_EXTENSIONS = (
     "cleaned_operators.production_repairs",
     "cleaned_operators.price_volume.technical_extensions",
@@ -353,7 +402,7 @@ _INITIALIZING = False
 _SKIPPED_OPTIONAL_MODULES: set[str] = set()
 
 
-def load_all() -> None:
+def load_all(*, include_research: bool = True) -> None:
     global _LOADED, _INITIALIZING
     if _LOADED:
         if OperatorRegistry.lifecycle() == "frozen":
@@ -372,14 +421,14 @@ def load_all() -> None:
 
     _INITIALIZING = True
     try:
-        _load_all_impl()
+        _load_all_impl(include_research=include_research)
     finally:
         # ``_INITIALIZING`` must always be reset even when a module raises
         # mid-load, so a later load_all() can retry instead of deadlocking.
         _INITIALIZING = False
 
 
-def _load_all_impl() -> None:
+def _load_all_impl(*, include_research: bool = True) -> None:
     """Run the registry initialisation sequence (wrapped by ``load_all``)."""
     global _LOADED
     # Capability modules build immutable module-level sets on first import.
@@ -394,7 +443,12 @@ def _load_all_impl() -> None:
     from cleaned_operators.registration_audit import install_registration_audit
     install_registration_audit()
 
+    # R30 §7: ``include_research=False`` loads only the strictly production
+    # surface (all non-research modules of the default list + reviewed
+    # extensions).  Research model families are explicit opt-in.
     for mod in _LOAD_MODULES:
+        if mod in RESEARCH_LOAD_MODULES and not include_research:
+            continue
         _load_module_if_available(mod)
 
     for mod in _REVIEWED_EXTENSIONS:
@@ -482,6 +536,13 @@ def _load_all_impl() -> None:
 
     from cleaned_operators.contract_hardening import apply_final_contract_hardening
     apply_final_contract_hardening()
+
+    # R30 §24 (P1-025): backfill an explicit ParamRole for every scalar that
+    # still resolves to the silent ECONOMIC fallback.  Rule-based roles are
+    # marked ``role_source="rule"`` (audit-separated from authored roles).
+    from cleaned_operators.param_role_contract import backfill_scalar_roles
+
+    backfill_scalar_roles()
 
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any, Sequence
 
 from api.factor import Factor
@@ -458,6 +459,37 @@ def _attach_batch_backend_paths(batch_out: dict[str, Any], paths: dict[str, dict
     batch_out["backend_path_summary"] = summarize_batch_backend_paths(paths)
 
 
+def _transition_telemetry(paths: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """R31-104/103：backend transition + conversion 观测（第一等 KPI）。
+
+    每个因子根的 ``primary_route`` 变化计一次 transition；conversion bytes 用
+    批跑结果面板的近似（rows × 8B），真实 conversion 由后端路径标记（SQL→client /
+    polars→pandas 等）标注。
+    """
+    routes: list[str] = []
+    for path in paths.values():
+        route = path.get("primary_route") or path.get("backend") or ""
+        if route:
+            routes.append(str(route))
+    transitions = 0
+    for i in range(1, len(routes)):
+        if routes[i] != routes[i - 1]:
+            transitions += 1
+    sql_paths = sum(1 for p in paths.values() if p.get("used_sql_pushdown"))
+    polars_native = sum(1 for p in paths.values() if p.get("used_polars_long_native"))
+    fallback_paths = sum(1 for p in paths.values() if p.get("polars_long_fallback_reason"))
+    return {
+        "backend_transition_count": transitions,
+        "factor_count": len(routes),
+        "distinct_routes": len(set(routes)),
+        "routes": sorted(set(routes)),
+        "sql_pushdown_factors": sql_paths,
+        "polars_native_factors": polars_native,
+        "fallback_factors": fallback_paths,
+        "avg_transitions_per_factor": round(transitions / max(1, len(routes)), 3),
+    }
+
+
 def _maybe_prepare_batch_data(
     engine: "FactorEngine",
     dag: Any,
@@ -612,6 +644,158 @@ def _maybe_prepare_batch_warmup(
     return engine_to_use, per_windows
 
 
+def _execute_run_many_scheduler(
+    engine: "FactorEngine",
+    factors: Sequence[Factor],
+    dag: Any,
+    analyses: dict[str, AnalysisResult],
+    *,
+    perf: PerfConfig,
+    engine_to_use: "FactorEngine",
+    per_windows: dict[str, Any],
+    input_report: Any,
+    run_mode: str | None,
+    source_bars_per_day: int,
+    result_policy: str,
+    sink: Any,
+    enable_cse: bool,
+    max_concurrency: int | None = None,
+    n_jobs: int | None = None,
+) -> dict[str, Any]:
+    """R31-P0-001：**默认生产执行链** = BatchCompiler → PhysicalPlanner →
+    AdaptiveBatchScheduler → StreamingSink。
+
+    - shared CSE 与 root 统一进 scheduler 的 topological ready queue + admission
+      + as_completed（不再是「shared 先全算 → layer loop」双 control plane）。
+    - 每个 task 经 ResourceBroker token admission；完成即 sink/release（CSE
+      refcount 归零立即释放）。
+    - ``backend_paths`` 逐 root 捕获（production fastpath 校验在
+      ``_execute_root_with_path`` 内照常进行）。
+    - ``FACTOR_ENGINE_LAYER_LOOP=1`` 时降级旧 layer-loop（reference/compat/
+      debug mode），保证研究可对照。
+    """
+    from concurrent.futures import Future
+    import threading
+
+    from backend.routing_env import routing_execution_scope
+    from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    from runtime.resource_telemetry import record_resource_telemetry
+
+    ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
+    ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
+    scheduler = AdaptiveBatchScheduler(
+        max_concurrency=max_concurrency,
+    )
+    # R31-P0-025/026：BatchDataRequest —— 整批 union source deps → 每 source
+    # scope 一次 ScanCost → 喂 read wave / IO token / admission。
+    from planner.batch_data_request import build_batch_data_request
+
+    batch_request = build_batch_data_request(
+        engine_to_use, analyses=analyses, dag=dag, ctx=ctx
+    )
+    plan = scheduler.plan(
+        dag,
+        analyses,
+        enable_cse=enable_cse,
+        scope_scan_cost_map=batch_request.scan_cost_map,
+        ctx=ctx,
+    )
+    batch_request_meta = batch_request.to_dict()
+    out: dict[str, Any] = {}
+    backend_paths: dict[str, dict[str, Any]] = {}
+    paths_lock = threading.Lock()
+    results_lock = threading.Lock()
+
+    def _execute_root(task) -> Any:
+        result, path = _execute_root_with_path(
+            engine_to_use.backend,
+            task.node_ref.root if getattr(task.node_ref, "root", None) is not None else task.node_ref,
+            ctx,
+            run_mode=run_mode,
+            factor_name=task.factor_name,
+        )
+        if per_windows and task.factor_name in per_windows:
+            result = _trim_batch_result(
+                result, per_windows[task.factor_name], bars_per_day=source_bars_per_day
+            )
+        with paths_lock:
+            backend_paths[task.factor_name] = path
+        return result
+
+    def _handle(name: str, result: Any) -> None:
+        with results_lock:
+            _handle_result(
+                result_policy, sink, out, name, result,
+                backend_paths.get(name, {}), backend_paths,
+            )
+
+    with routing_execution_scope(perf):
+        if ctx.shared_result_cache is not None:
+            _setup_cse_refcounts(ctx, dag.roots)
+            validate_cse_refcount_integrity(dag, ctx)
+        run_stats = scheduler.run(
+            plan,
+            backend=engine_to_use.backend,
+            ctx=ctx,
+            execute_root=_execute_root,
+            result_handler=_handle,
+        )
+    batch_out: dict[str, Any] = {
+        "results": out,
+        "dag": dag,
+        "analyses": analyses,
+        "executor": "adaptive_batch_scheduler",
+        "scheduler_stats": run_stats,
+        "batch_data_request": batch_request_meta,
+    }
+    _attach_batch_backend_paths(batch_out, backend_paths)
+    # R31-104/103：backend transition + conversion 是第一等 telemetry。
+    batch_out["backend_transition_telemetry"] = _transition_telemetry(backend_paths)
+    if input_report is not None:
+        batch_out["input_dq"] = input_report.to_dict()
+    if len(factors) > 1:
+        from planner.dependency_graph import build_factor_batch_graph
+
+        batch_graph = build_factor_batch_graph(factors, analyses)
+        batch_out["batch_graph"] = batch_graph.to_dict()
+    if dag.shared_nodes:
+        from planner.rolling_cache import summarize_rolling_cache
+
+        batch_out["rolling_cache"] = summarize_rolling_cache(dag.shared_nodes)
+    if dag.roots:
+        from backend.operator_cost import estimate_plan_cost
+
+        batch_out["plan_costs"] = {
+            fp.factor_name: estimate_plan_cost(fp.root) for fp in dag.roots
+        }
+        from planner.cost_summary import summarize_plans
+
+        batch_out["cost_summary"] = summarize_plans(
+            {fp.factor_name: fp.root for fp in dag.roots}
+        )
+        from planner.scheduling_hints import derive_scheduling_hints
+
+        batch_out["scheduling_hints"] = derive_scheduling_hints(
+            batch_out["cost_summary"]
+        )
+    if per_windows:
+        batch_out["warmup_windows"] = {
+            name: rw.to_dict() for name, rw in per_windows.items()
+        }
+    assert_production_fastpath_runtime(ctx, mode=run_mode, context="run_many:scheduler")
+    fallbacks = summarize_pandas_fallbacks(ctx)
+    if fallbacks:
+        batch_out["production_pandas_fallbacks"] = fallbacks
+    from backend.path_summary import summarize_lazy_caches
+
+    lazy_cache = summarize_lazy_caches(ctx)
+    if lazy_cache:
+        batch_out["lazy_cache_summary"] = lazy_cache
+    ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
+    batch_out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})
+    return batch_out
+
+
 def execute_run_many(
     engine: "FactorEngine",
     factors: Sequence[Factor],
@@ -737,6 +921,27 @@ def execute_run_many(
         input_dq_strict=input_dq_strict,
         input_dq_thresholds=input_dq_thresholds,
     )
+    source_bars_per_day = _batch_source_bars_per_day(engine_to_use)
+    # R31-P0-001：默认主执行链 = AdaptiveBatchScheduler（BatchCompiler →
+    # PhysicalPlanner → Scheduler → StreamingSink）。旧 layer-loop 仅保留为
+    # compatibility / reference / debug mode（``FACTOR_ENGINE_LAYER_LOOP=1``）。
+    if os.environ.get("FACTOR_ENGINE_LAYER_LOOP") != "1":
+        return _execute_run_many_scheduler(
+            engine,
+            factors,
+            dag,
+            analyses,
+            perf=perf,
+            engine_to_use=engine_to_use,
+            per_windows=per_windows,
+            input_report=input_report,
+            run_mode=run_mode,
+            source_bars_per_day=source_bars_per_day,
+            result_policy=result_policy,
+            sink=sink,
+            enable_cse=bool(enable_cse if enable_cse is not None else perf.enable_cse),
+        )
+
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
     from runtime.resource_telemetry import record_resource_telemetry
 
@@ -746,7 +951,6 @@ def execute_run_many(
 
     batch_graph = build_factor_batch_graph(factors, analyses)
     root_by_name = {fp.factor_name: fp for fp in dag.roots}
-    source_bars_per_day = _batch_source_bars_per_day(engine_to_use)
 
     def _run_root(fp) -> tuple[Any, Any]:
         result, path = _execute_root_with_path(
@@ -1039,6 +1243,38 @@ def execute_run_many_parallel(
         input_dq_strict=input_dq_strict,
         input_dq_thresholds=input_dq_thresholds,
     )
+    source_bars_per_day = _batch_source_bars_per_day(engine_to_use)
+    # R31-P0-001：production parallel 默认 = AdaptiveBatchScheduler（资源 scope
+    # 仍包裹以统一线程/内存设置）。旧 layer-loop 仅 compat/debug（env 显式）。
+    if os.environ.get("FACTOR_ENGINE_LAYER_LOOP") != "1":
+        _enter_scope = (lambda: resource_scope.__enter__()) if resource_scope is not None else (lambda: None)
+        _exit_scope = (
+            (lambda: resource_scope.__exit__(None, None, None))
+            if resource_scope is not None
+            else (lambda: None)
+        )
+        _enter_scope()
+        try:
+            return _execute_run_many_scheduler(
+                engine,
+                factors,
+                dag,
+                analyses,
+                perf=perf,
+                engine_to_use=engine_to_use,
+                per_windows=per_windows,
+                input_report=input_report,
+                run_mode=run_mode,
+                source_bars_per_day=source_bars_per_day,
+                result_policy=result_policy,
+                sink=sink,
+                enable_cse=bool(enable_cse if enable_cse is not None else perf.enable_cse),
+                max_concurrency=workers,
+                n_jobs=workers,
+            )
+        finally:
+            _exit_scope()
+
     ctx = engine_to_use._make_context(shared_result_cache={}, perf=perf)
     from runtime.resource_telemetry import record_resource_telemetry
 
@@ -1048,7 +1284,6 @@ def execute_run_many_parallel(
 
     batch_graph = build_factor_batch_graph(factors, analyses)
     root_by_name = {fp.factor_name: fp for fp in dag.roots}
-    source_bars_per_day = _batch_source_bars_per_day(engine_to_use)
 
     def _one(fp):
         result, path = _execute_root_with_path(
@@ -1061,7 +1296,13 @@ def execute_run_many_parallel(
         return fp.factor_name, result, path
 
     _enter_scope = (lambda: resource_scope.__enter__()) if resource_scope is not None else (lambda: None)
-    _exit_scope = (lambda *a: resource_scope.__exit__(*a)) if resource_scope is not None else (lambda *a: None)
+    # R27-166 修复：手工调 ``__exit__`` 必须带 exc_type/exc/tb 三参（with 语句
+    # 自动传；这里 finally 手工调用，原 ``lambda *a`` 展开成 0 参调用必炸）。
+    _exit_scope = (
+        (lambda: resource_scope.__exit__(None, None, None))
+        if resource_scope is not None
+        else (lambda: None)
+    )
     _enter_scope()
     try:
         with routing_execution_scope(perf):

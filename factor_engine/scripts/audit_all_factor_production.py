@@ -1048,8 +1048,12 @@ def _panels(rows: int = 220, columns: int = 6) -> dict[str, pd.DataFrame]:
         columns=assets,
     )
     groups = np.array(["G0", "G1", "G2", "G0", "G1", "G2"], dtype=object)
+    # R28: ``groups`` holds 6 labels; a wide universe (columns > 6, e.g. 30 for
+    # cs_knn k>=20) must tile them cyclically instead of truncating to a
+    # (rows, 6) frame that cannot be assigned 30 columns.
+    group_labels = np.tile(groups, columns // len(groups) + 1)[:columns]
     group = pd.DataFrame(
-        np.tile(groups[:columns], (rows, 1)), index=dates, columns=assets
+        np.tile(group_labels, (rows, 1)), index=dates, columns=assets
     )
     condition = volume.gt(volume.rolling(5, min_periods=1).mean())
 

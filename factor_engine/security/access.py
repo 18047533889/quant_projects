@@ -71,8 +71,16 @@ class DeclassificationApproval:
     def from_dict(cls, raw: Mapping[str, Any] | None) -> "DeclassificationApproval":
         if not raw:
             return cls()
+        # R26-P0-008：approved 必须真实 bool；"false"/1/0 → 配置拒绝（fail-closed，
+        # 禁止把 string "false" 解析成 True）。
+        approved = raw.get("approved")
+        if approved is not None and not isinstance(approved, bool):
+            raise ValueError(
+                "DeclassificationApproval.approved 必须是真正的布尔值，收到 "
+                f"{approved!r}（R26-P0-008：拒绝字符串/数字伪装布尔）"
+            )
         return cls(
-            approved=bool(raw.get("approved")),
+            approved=bool(approved),
             reviewer=str(raw.get("reviewer") or "").strip() or None,
             policy_version=str(raw.get("policy_version") or "").strip() or None,
             reason=str(raw.get("reason") or "").strip() or None,

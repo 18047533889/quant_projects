@@ -88,6 +88,62 @@ class QueryBudget:
                 f"收到 {self.require_time_range!r}"
             )
 
+    # ---- R26-P0-018：不要手写复制 budget（HTTP _api_budget 等），全部字段保留 ----
+
+    _INT_FIELDS = (
+        "max_rows",
+        "max_result_bytes",
+        "max_scan_files",
+        "max_scan_objects",
+        "max_scan_bytes",
+        "max_remote_list_objects",
+        "max_remote_requests",
+        "max_estimated_memory",
+    )
+    _FLOAT_FIELDS = ("max_elapsed_ms",)
+    _BOOL_FIELDS = ("require_columns", "require_time_range")
+
+    def with_overrides(self, **changes: Any) -> "QueryBudget":
+        """构造一份应用了 overrides 的新 budget（P0-018：所有字段保留）。
+
+        未知字段 → 拒绝；值为 None 的字段不覆盖。
+        """
+        from dataclasses import replace
+
+        allowed = set(self.__dataclass_fields__)
+        unknown = set(changes) - allowed
+        if unknown:
+            raise ValidationError(
+                f"QueryBudget.with_overrides 未知字段 {sorted(unknown)}"
+            )
+        clean = {k: v for k, v in changes.items() if v is not None}
+        return replace(self, **clean)
+
+    def tighten(self, **stricter: Any) -> "QueryBudget":
+        """在现有 budget 上取更严（P0-018：HTTP/FE/CLI 统一 effective budget）。
+
+        数值字段取 min（更严）；布尔字段取 OR（更严）。None 不覆盖。
+        """
+        from dataclasses import replace
+
+        clean = {k: v for k, v in stricter.items() if v is not None}
+        unknown = set(clean) - set(self.__dataclass_fields__)
+        if unknown:
+            raise ValidationError(
+                f"QueryBudget.tighten 未知字段 {sorted(unknown)}"
+            )
+        merged: dict[str, Any] = {}
+        for key, val in clean.items():
+            if key in self._INT_FIELDS:
+                merged[key] = _tighter_int(getattr(self, key), int(val))
+            elif key in self._FLOAT_FIELDS:
+                merged[key] = _tighter_float(getattr(self, key), float(val))
+            elif key in self._BOOL_FIELDS:
+                merged[key] = bool(getattr(self, key)) or bool(val)
+            else:
+                merged[key] = val
+        return replace(self, **merged)
+
 
 @dataclass(frozen=True)
 class DatasetQueryPolicy:

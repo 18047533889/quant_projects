@@ -153,6 +153,13 @@ class FourLayerPITError(DataAccessColumnPreflightError):
     """
 
 
+class SnapshotRevalidationUnavailable(DataAccessColumnPreflightError):
+    """R31-P0-029：无 manifest 且 describe 失败，无法 revalidate snapshot。
+
+    production 下 collect 前 revalidation 不可用 = hard fail（安全承诺不完整）。
+    """
+
+
 class HistoricalCoverageError(DataAccessColumnPreflightError):
     """A field's historical coverage over the requested window is below threshold.
 
@@ -1071,7 +1078,73 @@ class DataAccessSource(DataSource):
                 _catalog_config_error_kind(exc), exc, "semantic catalog not available"
             )
             return None
-        catalog_by_name: dict[str, Any] = {}
+        # R31-P0-027：批量 resolve（一次 ``resolve_fields(all_names)``），避免 1000
+        # 因子 × 数百 field 时逐字段 Python/API overhead。批量调用失败（含 clean
+        # miss）时回退逐字段旧路径（保持部分解析 / 错误分类语义完全不变）。
+        try:
+            batch_result = _get_store().resolve_fields(list(names), dataset=self.dataset)
+        except Exception:
+            batch_result = None
+        if batch_result is not None:
+            catalog_by_name: dict[str, Any] = {}
+            try:
+                rows = list(batch_result)
+            except TypeError:
+                rows = []
+            if rows:
+                # key 用 SemanticField.logical name（逐字段语义：按 name 对齐，
+                # 不按 position zip——避免顺序漂移错位）。
+                for row in rows:
+                    field_name = getattr(row, "name", None) or getattr(row, "logical_name", None)
+                    if field_name and field_name in names:
+                        catalog_by_name[str(field_name)] = row
+                if len(catalog_by_name) >= len(names):
+                    return catalog_by_name
+                # 部分命中：命中的直接用，未命中的逐字段补（保留 clean-miss 语义）。
+                missing_names = [n for n in names if n not in catalog_by_name]
+            else:
+                missing_names = list(names)
+            for name in missing_names:
+                try:
+                    result = _get_store().resolve_fields([name], dataset=self.dataset)
+                except Exception as exc:
+                    if _is_clean_catalog_miss(exc):
+                        logger.debug(
+                            "semantic catalog clean miss dataset=%s field=%s: %s",
+                            self.dataset, name, exc,
+                        )
+                        continue
+                    self._raise_or_fallback(
+                        _catalog_resolution_error_kind(exc), exc, "semantic catalog resolution failed"
+                    )
+                    continue
+                if result is None:
+                    continue
+                try:
+                    resolved = list(result)
+                except TypeError:
+                    self._raise_or_fallback(
+                        CatalogResolutionError,
+                        TypeError(
+                            f"catalog resolve_fields returned a non-iterable for dataset={self.dataset!r}"
+                        ),
+                        "semantic catalog resolution returned a non-iterable",
+                    )
+                    continue
+                if len(resolved) != 1:
+                    self._raise_or_fallback(
+                        CatalogResolutionError,
+                        ValueError(
+                            f"catalog resolve_fields returned {len(resolved)} rows for one "
+                            f"request field={name!r} dataset={self.dataset!r}"
+                        ),
+                        "semantic catalog resolution length mismatch",
+                    )
+                    continue
+                catalog_by_name[name] = resolved[0]
+            return catalog_by_name
+        # 批量不可用（catalog 层整体异常已 fallback）→ 旧逐字段路径。
+        catalog_by_name = {}
         for name in names:
             try:
                 result = _get_store().resolve_fields([name], dataset=self.dataset)
@@ -1789,14 +1862,29 @@ class DataAccessSource(DataSource):
                 self.clear_cache(reset_snapshot=False)
             self._manifest_token = token
             return
-        # 无 manifest：回退 describe 快照 id（无法探测时不误伤——scan 边界已记录快照）
+        # 无 manifest：回退 describe 快照 id。
+        # R31-P0-029：describe 异常时 production 必须 hard fail（
+        # ``SnapshotRevalidationUnavailable``）——「collect 前重新验证」的安全
+        # 承诺不允许静默 fail-open；research 才 warning + continue。
         try:
             snapshot = store.describe_dataset(
                 self.dataset,
                 params=dict(self.params),
                 instrument_filter=self.instrument_filter,
             )
-        except Exception:
+        except Exception as exc:
+            if self.strict_unknown_fields:
+                raise SnapshotRevalidationUnavailable(
+                    f"dataset={self.dataset!r} 无 manifest 且 describe_dataset 失败，"
+                    "无法在 polars-long collect 前 revalidate snapshot；production "
+                    "fail-closed（R31-P0-029）。"
+                ) from exc
+            logger.warning(
+                "dataset=%s describe_dataset failed during collect revalidation "
+                "(research continue) dataset=%s",
+                self.dataset,
+                self.dataset,
+            )
             return
         current = snapshot.snapshot_id
         if self._data_snapshot_id and current != self._data_snapshot_id:
@@ -1953,6 +2041,14 @@ class DataAccessSource(DataSource):
                 **self.params,
             )
             self._record_read_snapshot(getattr(handle.snapshot, "snapshot_id", None))
+            # R26-P0-023：production 读必须带可证明 snapshot（provenance envelope）——
+            # 裸 pandas 不能在中间层悄悄丢 provenance 后继续 publish。
+            if self.production and not self._data_snapshot_id:
+                raise RuntimeError(
+                    "FactorEngine production read 缺少可证明 data snapshot"
+                    "（R26-P0-023）：DataAccess 读必须返回受管 ReadHandle 且记录 "
+                    "snapshot_id；无法证明「读了什么 source / 用什么 PIT」时禁止继续。"
+                )
             fetched = arrow_table_to_multiindex_columns(
                 handle.to_arrow(),
                 timestamp_column=ds.time_column,

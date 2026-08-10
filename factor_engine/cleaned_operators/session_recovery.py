@@ -302,6 +302,18 @@ class SessionEventRecoveryScore(SeriesOperator):
         event = _session_local_frame(_as_panel(event), session_tz, calendar)
         cal = calendar if calendar is not None else default_ashare_calendar(bar_freq="1min")
         tz = session_tz or _SESSION_TZ
+        # R30 §30 (P0-015): the session builder's market must come from the
+        # calendar it is given — a calendar that claims a market drives the
+        # panel build; a bare A-share default stays A-share.  Never pretend a
+        # US/HK timezone is supported while the session builder is still
+        # hardcoded to the A-share calendar.
+        cal_market = str(getattr(cal, "market", "") or "")
+        if not cal_market:
+            raise ValueError(
+                "session_event_recovery_score requires a calendar with an explicit "
+                "market (R30 §30 — no half-generic session builder)"
+            )
+        _market = cal_market.lower()
         out: dict[str, pd.Series] = {}
         for inst in x.columns:
             col = x[inst]
@@ -315,7 +327,7 @@ class SessionEventRecoveryScore(SeriesOperator):
                     continue
                 try:
                     px = build_session_panel(
-                        times, vals, cal, market="ashare", session_timezone=tz,
+                        times, vals, cal, market=_market, session_timezone=tz,
                         source_timezone=None, trade_date=pd.Timestamp(day),
                     )
                     if ev is None:
@@ -323,7 +335,7 @@ class SessionEventRecoveryScore(SeriesOperator):
                         continue
                     ev_vals = np.asarray(ev.reindex(group.index), dtype=float)
                     pe = build_session_panel(
-                        times, ev_vals, cal, market="ashare", session_timezone=tz,
+                        times, ev_vals, cal, market=_market, session_timezone=tz,
                         source_timezone=None, trade_date=pd.Timestamp(day),
                     )
                     # R26-051: an EOD recovery factor requires proof the session

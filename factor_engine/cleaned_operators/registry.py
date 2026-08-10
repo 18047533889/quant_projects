@@ -516,13 +516,13 @@ def _contract_hash(operator: Any) -> str:
     the parameter-aware cost band (R9-P1-044).
 
     R9-P1-044 coverage note: ``determinism`` is derived from the declared
-    ``tags`` (``"deterministic"`` is the conventional tag).  The following
-    logical-contract dimensions are NOT yet carried on ``OperatorMetadata`` and
-    are therefore skipped defensively — they do not crash the hash, they simply
-    do not contribute yet: input semantic types, output semantic type,
-    ``ClockContract``, ``HistoryTransform``, a declared ``missing_policy`` and a
-    declared ``universe_requirement``.  When those fields are added to the
-    metadata, feed them through :func:`_freeze_value` here.
+    ``tags`` (``"deterministic"`` is the conventional tag).  R30 §12 closes the
+    long-standing gaps: input/output semantic types, ``ClockContract`` /
+    ``available_at`` / ``same_session_usable``, ``HistoryTransform`` / history
+    formula, ``missing_policy``, ``universe_requirement``, parameter kinds
+    (panel/scalar), ``ParamRole``, and ``BroadcastSpec`` all feed the hash — any
+    change that alters what the factor MEANS changes the digest, so stale
+    evidence / caches are invalidated.
     """
     import hashlib
 
@@ -542,10 +542,14 @@ def _contract_hash(operator: Any) -> str:
             default_repr = "MISSING"
         else:
             default_repr = _freeze_value(default)
+        # R30 §12: parameter ROLE is part of the search/meaning contract.
+        _role = getattr(spec, "param_role", None)
+        role_repr = str(getattr(_role, "value", _role)) if _role is not None else "NONE"
         spec_parts.append(
             f"{key}:(dtype={dtype_name},min={getattr(spec, 'min', None)!r},"
             f"max={getattr(spec, 'max', None)!r},choices={getattr(spec, 'choices', None)!r},"
-            f"active_when={getattr(spec, 'active_when', None)!r},default={default_repr})"
+            f"active_when={getattr(spec, 'active_when', None)!r},default={default_repr},"
+            f"role={role_repr})"
         )
     parts.append("specs={" + ",".join(spec_parts) + "}")
     parts.append("panel=" + ",".join(tuple(getattr(meta, "panel_params", None) or ())))
@@ -560,7 +564,29 @@ def _contract_hash(operator: Any) -> str:
     parts.append(f"in_grain={getattr(meta, 'input_grain', None)!r}")
     parts.append(f"out_grain={getattr(meta, 'output_grain', None)!r}")
     parts.append(f"avail={getattr(meta, 'available_at', None)!r}")
+    # R30 §12: same-session usability (session-close availability semantics).
+    parts.append(f"same_session={bool(getattr(meta, 'same_session_usable', False))!r}")
     parts.append("in_fields=" + ",".join(list(getattr(meta, "input_fields", None) or [])))
+    # R30 §12: input/output SEMANTIC TYPES (FundamentalFeature / Condition /
+    # RawPrice / …) — a type change means the operator eats different data.
+    parts.append("in_sem_types=" + ",".join(
+        f"{k}->{_freeze_value(v)}" for k, v in sorted(
+            (getattr(meta, "input_semantic_types", None) or {}).items()
+        )
+    ))
+    parts.append(f"out_sem_type={getattr(meta, 'output_semantic_type', None)!r}")
+    # R30 §12: HistoryTransform / history semantics — a change in what history
+    # the kernel re-reads changes the factor.
+    parts.append("history_formula=" + ",".join(
+        f"{k}->{getattr(v, 'history_formula', v)!r}" for k, v in sorted(
+            (getattr(meta, "param_specs", None) or {}).items()
+        ) if getattr(v, "history_formula", None) is not None
+    ))
+    # R30 §12: declared missing policy / universe requirement.
+    parts.append(f"missing_policy={_freeze_value(getattr(meta, 'missing_policy', None))}")
+    parts.append(f"universe={_freeze_value(getattr(meta, 'universe_requirement', None))}")
+    parts.append(f"market_scope={_freeze_value(getattr(meta, 'market_scope', None))}")
+    parts.append(f"currency={_freeze_value(getattr(meta, 'currency', None))}")
     # R9-P1-044: cross-parameter feasibility constraints (relational_specs).
     rel = list(getattr(meta, "relational_specs", None) or [])
     rel_parts = []
@@ -570,47 +596,51 @@ def _contract_hash(operator: Any) -> str:
         _names = sorted(getattr(_spec, "param_names", None) or ())
         rel_parts.append(f"{_expr!r}:{_msg!r}:({','.join(_names)})")
     parts.append("relational_specs={" + ",".join(sorted(rel_parts)) + "}")
+    # R30 §12: BroadcastSpec is a declared structural contract.
+    bspecs = list(getattr(meta, "broadcast_specs", None) or ())
+    if bspecs:
+        bs_parts = []
+        for _bs in bspecs:
+            bs_parts.append(
+                f"mode={getattr(_bs, 'mode', '')},dm={getattr(_bs, 'date_mapping', '')},"
+                f"ip={getattr(_bs, 'instrument_policy', '')},"
+                f"src={getattr(_bs, 'source_param', '')},tgt={getattr(_bs, 'target_param', '')}"
+            )
+        parts.append("broadcast={" + ",".join(bs_parts) + "}")
     canonical = getattr(meta, "name", None) or ""
     if canonical:
         # ExecutionContract / statefulness / chunking / checkpoint schema — the
         # single authority in runtime.execution_contract, keyed by canonical.
-        try:
-            from runtime.execution_contract import execution_contract as _ec
+        # R30 §14: contract resolution is FAIL-CLOSED — a key contract that
+        # cannot be resolved must raise, never be silently skipped.
+        from runtime.execution_contract import execution_contract as _ec
 
-            _ec_res = _ec(canonical)
-            parts.append(
-                "execution=" + ",".join([
-                    str(getattr(_ec_res, "state_model", "")),
-                    str(getattr(_ec_res, "chunking", "")),
-                    str(getattr(_ec_res, "checkpoint_schema", "")),
-                ])
-            )
-        except Exception:  # pragma: no cover - runtime contract importable
-            pass
+        _ec_res = _ec(canonical)
+        parts.append(
+            "execution=" + ",".join([
+                str(getattr(_ec_res, "state_model", "")),
+                str(getattr(_ec_res, "chunking", "")),
+                str(getattr(_ec_res, "checkpoint_schema", "")),
+            ])
+        )
         # Edge contract (nan/pos_inf/neg_inf/zero/domain_invalid behaviors).
-        try:
-            from cleaned_operators.edge_requirements import edge_contract as _edge
+        from cleaned_operators.edge_requirements import edge_contract as _edge
 
-            _edge_res = _edge(canonical)
-            if _edge_res is not None:
-                parts.append("edge=" + ",".join(
-                    f"{_dim}:{getattr(_edge_res, _dim, 'invalid')}"
-                    for _dim in ("nan", "pos_inf", "neg_inf", "zero", "domain_invalid")
-                ))
-        except Exception:  # pragma: no cover - edge_requirements importable
-            pass
+        _edge_res = _edge(canonical)
+        if _edge_res is not None:
+            parts.append("edge=" + ",".join(
+                f"{_dim}:{getattr(_edge_res, _dim, 'invalid')}"
+                for _dim in ("nan", "pos_inf", "neg_inf", "zero", "domain_invalid")
+            ))
         # Cost contract: deterministic complexity band + reference runtime cost
         # (operator_cost_model is a pure prefix-match model).
-        try:
-            from cleaned_operators.operator_cost_model import (
-                complexity_label as _cost_label,
-                runtime_cost as _cost_rt,
-            )
+        from cleaned_operators.operator_cost_model import (
+            complexity_label as _cost_label,
+            runtime_cost as _cost_rt,
+        )
 
-            parts.append(f"cost_label={_cost_label(canonical)}")
-            parts.append(f"cost_runtime={_cost_rt(canonical)}")
-        except Exception:  # pragma: no cover - cost model importable
-            pass
+        parts.append(f"cost_label={_cost_label(canonical)}")
+        parts.append(f"cost_runtime={_cost_rt(canonical)}")
         # Determinism: no dedicated field; derive from the declared tags
         # ("deterministic" is the conventional tag across operator modules).
         _tags = getattr(meta, "tags", None) or ()
@@ -635,13 +665,20 @@ def _fn_payload(fn: Any, cls: type) -> str | None:
         closure = getattr(fn, "__closure__", None)
         if code is not None and closure:
             parts = [_code_payload(code, include_names=False)]
+            # R30 §13 (P0-009): a closure cell's position is semantically bound
+            # to its ``co_freevars`` name — the SAME value set in a different
+            # variable binding is a different kernel.  Hash cells in original
+            # order as ``(freevar_name, frozen_value)`` pairs; sorting the cell
+            # values alone dropped that binding relationship.
             cells: list[str] = []
-            for cell in closure:
+            freevars = list(code.co_freevars)
+            for i, cell in enumerate(closure):
+                name = freevars[i] if i < len(freevars) else f"<cell{i}>"
                 try:
-                    cells.append(_freeze_value(cell.cell_contents))
+                    cells.append(f"{name}={_freeze_value(cell.cell_contents)}")
                 except ValueError:  # uninitialised cell
-                    cells.append("<empty>")
-            parts.append("cells=" + ",".join(sorted(cells)))
+                    cells.append(f"{name}=<empty>")
+            parts.append("cells={" + ",".join(cells) + "}")
             return "|".join(parts)
         if code is not None:
             return _code_payload(code, include_names=True)
@@ -1482,6 +1519,9 @@ class OperatorRegistry:
     @classmethod
     def resolve_canonical(cls, name: str, *, max_depth: int = 8) -> str:
         """Resolve aliases transitively and reject cycles or missing targets."""
+        from cleaned_operators.tombstones import assert_callable
+
+        assert_callable(name)
         current = name
         seen: set[str] = set()
         for _ in range(max_depth + 1):
@@ -1876,18 +1916,36 @@ class OperatorRegistry:
         return selection.operator, selection.backend
 
     @classmethod
-    def get(cls, name: str, backend: str = "pandas_numpy") -> Any:
+    def get(cls, name: str, backend: str = "pandas_numpy", *, mode: str = "production") -> Any:
         """按名称与 backend 获取算子实例。
 
         参数:
             name: DSL 名或 canonical 名（先走别名解析）。
             backend: 目标后端，默认 ``pandas_numpy``。
+            mode: 访问模式。``"production"``（默认）只返回 daily/extended
+                surface 算子，research/unsafe/internal/legacy 一律返回
+                ``None``；``"any"`` / ``"research"`` 放行全部 surface
+                （R30 §8 raw-registry production gate）。
 
         返回:
-            算子实例；未注册时返回 ``None``。
+            算子实例；未注册或 production 模式下 surface 不合规返回 ``None``。
+
+        异常:
+            RemovedOperatorError: 名称已物理删除（R30 tombstone）。
         """
+        from cleaned_operators.tombstones import assert_callable
+
+        assert_callable(name)
         canonical = cls.resolve_canonical(name)
-        return cls._operators.get(canonical, {}).get(backend)
+        op = cls._operators.get(canonical, {}).get(backend)
+        if op is None:
+            return None
+        if mode == "production":
+            from cleaned_operators.operator_surface import classify_canonical
+
+            if classify_canonical(canonical) not in {"daily", "extended"}:
+                return None
+        return op
 
     @classmethod
     def list_canonical(cls) -> List[str]:

@@ -40,20 +40,10 @@ SOURCE_BLOCKED_CANONICALS: frozenset[str] = frozenset({
 })
 
 NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({
-    "Lead",
-    "next",
-    "bfill",
-    "causal_bfill",
-    "fillna_interpolate",
-    "shuffle",
-    "dropna",
+    # R30 §2: Lead/next/bfill/causal_bfill/fillna_interpolate/shuffle/dropna/
+    # sample/rand_* were physically removed (``tombstones`` is the single
+    # authority); they have no runtime and are excluded by the tombstone gate.
     "constant",
-    "sample",
-    "rand_exp",
-    "rand_lognormal",
-    "rand_normal",
-    "rand_poisson",
-    "rand_uniform",
     # Source-side relation transforms.  Their legacy DSL names are retained only
     # to fail with a precise migration error; they are not factor-panel targets.
     "holder_concentration_change",

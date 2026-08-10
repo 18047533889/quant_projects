@@ -45,6 +45,10 @@ class ResourceSnapshot:
     timestamp_ms: float
     hard_cpu_slots: int
     system_cpu_util: float
+    #: 本进程族（FactorEngine）自身的 CPU 占用分数 [0,1]（R31-P0-010）。
+    our_cpu_util: float
+    #: 外部负载 ≈ max(0, system_cpu - our_cpu)（R31-P0-010）。
+    external_cpu_util: float
     loadavg: float
     hard_memory_limit: int
     cgroup_memory_current: int | None
@@ -54,6 +58,7 @@ class ResourceSnapshot:
     process_family_rss: int
     process_family_pss: int
     spill_free_bytes: int
+    spill_total_bytes: int
     disk_busy: float
 
     @property
@@ -77,6 +82,8 @@ class ResourceSnapshot:
             "timestamp_ms": self.timestamp_ms,
             "hard_cpu_slots": self.hard_cpu_slots,
             "system_cpu_util": round(self.system_cpu_util, 3),
+            "our_cpu_util": round(self.our_cpu_util, 3),
+            "external_cpu_util": round(self.external_cpu_util, 3),
             "loadavg": self.loadavg,
             "hard_memory_limit": self.hard_memory_limit,
             "cgroup_memory_current": self.cgroup_memory_current,
@@ -86,6 +93,7 @@ class ResourceSnapshot:
             "process_family_rss": self.process_family_rss,
             "process_family_pss": self.process_family_pss,
             "spill_free_bytes": self.spill_free_bytes,
+            "spill_total_bytes": self.spill_total_bytes,
             "disk_busy": round(self.disk_busy, 3),
             "live_headroom": self.live_headroom,
         }
@@ -98,6 +106,14 @@ STAGE_PRESSURE_2 = "PRESSURE_2"   # evict 低价值 cache
 STAGE_PRESSURE_3 = "PRESSURE_3"   # 停止新 task admission + spill
 STAGE_PRESSURE_4 = "PRESSURE_4"   # 降低并发目标
 STAGE_CRITICAL = "CRITICAL"       # 只允许 running task 完成/写出
+
+
+def peak_hint(task: Any) -> int:
+    """task 的 admission 峰值字节（纯 helper，供 admission 事件可读）。"""
+    try:
+        return int(task.admissible_peak_bytes)
+    except Exception:
+        return 0
 
 
 def _read_int(path: str) -> int | None:
@@ -132,10 +148,12 @@ def _host_mem_available() -> int:
     return 0
 
 
-def _cpu_util(interval: float = 0.05) -> float:
+def _cpu_util(interval: float = 0.0) -> float:
     try:
         import psutil  # type: ignore[import-untyped]
 
+        # interval=0：非阻塞（返回自上次调用以来的百分比），不 sleep 50ms——
+        # scheduler 热循环里每次 admission 都采样，blocking 版本会把小批量拖慢。
         return float(psutil.cpu_percent(interval=interval)) / 100.0
     except Exception:
         return 0.0
@@ -150,8 +168,57 @@ def _loadavg() -> float:
         return 0.0
 
 
-def _disk_busy() -> float:
-    return 0.0  # 需要 iostat；第一版 telemetry 占位（R27-032 disk_busy 允许 0）
+def _disk_io_counters() -> tuple[int, int] | None:
+    """当前磁盘累计读写字节（``read_bytes + write_bytes``）；不可用返回 ``None``。
+
+    R31-P0-012：让 IO pressure 可观测——``disk_busy`` 不再是恒 0 占位。
+    """
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        counters = psutil.disk_io_counters()
+        if counters is None:
+            return None
+        return int(counters.read_bytes) + int(counters.write_bytes), int(
+            getattr(counters, "busy_time", 0)
+        )
+    except Exception:
+        return None
+
+
+def _process_family_cpu_times() -> float:
+    """本进程族累计 CPU 秒（user + system，跨全部进程/核心）。
+
+    R31-P0-010：external CPU 需要「FactorEngine 自己吃了多少 CPU」。
+    采样间隔内的增量 / (dt * cores) 即本进程族占用分数。
+    """
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        root = psutil.Process()
+        total = 0.0
+        visited: set[int] = set()
+
+        def _walk(proc: Any) -> None:
+            nonlocal total
+            if proc.pid in visited:
+                return
+            visited.add(proc.pid)
+            try:
+                ct = proc.cpu_times()
+                total += float(ct.user) + float(ct.system)
+            except Exception:
+                pass
+            try:
+                for child in proc.children(recursive=True):
+                    _walk(child)
+            except Exception:
+                pass
+
+        _walk(root)
+        return total
+    except Exception:
+        return 0.0
 
 
 def _process_family_rss(pss: bool = False) -> int:
@@ -223,6 +290,11 @@ class _CpuTokenAllocator:
         with self._lock:
             self.soft_budget = max(1, min(self.hard_slots, slots))
 
+    def can_acquire(self, tokens: int) -> bool:
+        """纯判定：无副作用（R31-P0-009）。"""
+        with self._lock:
+            return self.in_use + tokens <= self.soft_budget
+
     def try_acquire(self, tokens: int) -> bool:
         with self._lock:
             if self.in_use + tokens <= self.soft_budget:
@@ -251,6 +323,11 @@ class _IoTokenAllocator:
         self.in_use = 0
         self._lock = threading.RLock()
 
+    def can_acquire(self, tokens: int = 1) -> bool:
+        """纯判定：无副作用（R31-P0-009）。"""
+        with self._lock:
+            return self.in_use + tokens <= self.concurrency
+
     def try_acquire(self, tokens: int = 1) -> bool:
         with self._lock:
             if self.in_use + tokens <= self.concurrency:
@@ -265,6 +342,52 @@ class _IoTokenAllocator:
     def summary(self) -> dict[str, Any]:
         with self._lock:
             return {"concurrency": self.concurrency, "in_use": self.in_use}
+
+
+class ReservationLease:
+    """R31-005: 幂等 release 的资源预留租约。
+
+    ``broker.try_reserve(task)`` 成功返回 lease；task 终态（SUCCESS / FAILED /
+    CANCELLED / BROKEN_WORKER / TIMEOUT）统一 ``lease.release()``。``release``
+    幂等：重复调用无害（R31_TASK_FAILURE_RESOURCE_LEAK_ZERO 的基础）。
+    """
+
+    def __init__(self, broker: "ResourceBroker", task: TaskResourceContract, task_id: str) -> None:
+        self._broker = broker
+        self._task = task
+        self._task_id = task_id
+        self._released = False
+        self._lock = threading.RLock()
+
+    @property
+    def task(self) -> TaskResourceContract:
+        return self._task
+
+    @property
+    def task_id(self) -> str:
+        return self._task_id
+
+    @property
+    def released(self) -> bool:
+        with self._lock:
+            return self._released
+
+    def release(self) -> None:
+        """幂等释放：CPU/IO token 归还 + ``_running`` 注销，只做一次。"""
+        with self._lock:
+            if self._released:
+                return
+            self._released = True
+            self._broker._release_locked(self._task, task_id=self._task_id)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "task_id": self._task_id,
+            "released": self.released,
+            "cpu_tokens": self._task.cpu_tokens,
+            "io_tokens": self._task.io_tokens,
+            "admissible_peak_bytes": self._task.admissible_peak_bytes,
+        }
 
 
 class ResourceBroker:
@@ -308,11 +431,18 @@ class ResourceBroker:
         self._cpu = _CpuTokenAllocator(self.hard_cpu_slots)
         self._io = _IoTokenAllocator(max(1, self.hard_cpu_slots))
         self._running: dict[str, TaskResourceContract] = {}
+        # R31-P0-006: reserve() 兼容路径持有的租约（try_reserve 直接返回租约不登记）。
+        self._leases: dict[str, ReservationLease] = {}
         self._admission_events: list[str] = []
         self._pressure_log: list[str] = []
         # 外部负载平滑（R27-130/131）
         self._external_cpu_ema: float = 0.0
         self._mem_available_ema: int | None = None
+        # R31-P0-010: 本进程族 CPU 时间增量（采样间隔内算自身占用分数）。
+        self._last_family_cpu_times: float | None = None
+        # R31-P0-012: 磁盘 IO 计数增量（busy 观测）。
+        self._last_io_bytes: int | None = None
+        self._last_io_sample_ms: float | None = None
 
     # -- 采样 --
 
@@ -331,10 +461,28 @@ class ResourceBroker:
             return self._cached
         rss = _process_family_rss(pss=False)
         pss = _process_family_rss(pss=True)
+        system_cpu = _cpu_util()
+        # R31-P0-010：外部 CPU = max(0, system - 本进程族 share)。
+        family_times = _process_family_cpu_times()
+        our_cpu = 0.0
+        if self._last_family_cpu_times is not None:
+            dt = max(0.0001, (now - self._last_sample_ms) / 1000.0)
+            cores = max(1, self.hard_cpu_slots)
+            our_cpu = max(
+                0.0,
+                min(1.0, (family_times - self._last_family_cpu_times) / (dt * cores)),
+            )
+        self._last_family_cpu_times = family_times
+        external_cpu = max(0.0, system_cpu - our_cpu)
+        self._external_cpu_ema = 0.8 * self._external_cpu_ema + 0.2 * external_cpu
+        # R31-P0-012：磁盘 busy ≈ 读写吞吐 / 参考带宽（饱和 → 1.0）。
+        disk_busy = self._disk_io_busy(now)
         snap = ResourceSnapshot(
             timestamp_ms=now,
             hard_cpu_slots=self.hard_cpu_slots,
-            system_cpu_util=_cpu_util(),
+            system_cpu_util=system_cpu,
+            our_cpu_util=our_cpu,
+            external_cpu_util=external_cpu,
             loadavg=_loadavg(),
             hard_memory_limit=self.hard_memory_limit,
             cgroup_memory_current=_cgroup_memory_current(),
@@ -344,10 +492,9 @@ class ResourceBroker:
             process_family_rss=rss,
             process_family_pss=pss,
             spill_free_bytes=self._spill_free(),
-            disk_busy=_disk_busy(),
+            spill_total_bytes=self._spill_total(),
+            disk_busy=disk_busy,
         )
-        # 外部负载 EMA：外部 CPU 占用 ≈ max(0, system_cpu_util - our_cpu_share)。
-        self._external_cpu_ema = 0.8 * self._external_cpu_ema + 0.2 * snap.system_cpu_util
         self._cached = snap
         self._last_sample_ms = now
         return snap
@@ -359,6 +506,35 @@ class ResourceBroker:
             return spill_disk_available(tempfile_dir()) or 0
         except Exception:
             return 0
+
+    def _spill_total(self) -> int:
+        try:
+            from runtime.resource_governor import spill_disk_total, tempfile_dir
+
+            return spill_disk_total(tempfile_dir()) or 0
+        except Exception:
+            return 0
+
+    def _disk_io_busy(self, now: float) -> float:
+        """磁盘 busy 观测（R31-P0-012）：读写吞吐占参考带宽的比例。
+
+        参考带宽（500 MB/s）只是归一化常量；``_last_io_bytes is None``（首次采样）
+        时返回 0.0。探测失败同样返回 0.0（不误伤 admission）。
+        """
+        counters = _disk_io_counters()
+        if counters is None:
+            return 0.0
+        delta_bytes, _busy_time = counters
+        if self._last_io_bytes is None:
+            self._last_io_bytes = delta_bytes
+            self._last_io_sample_ms = now
+            return 0.0
+        dt = max(0.0001, (now - (self._last_io_sample_ms or now)) / 1000.0)
+        bps = max(0, delta_bytes - self._last_io_bytes) / dt
+        self._last_io_bytes = delta_bytes
+        self._last_io_sample_ms = now
+        # 归一化：500 MB/s 视为满速（本地 SSD / NVMe 参考）。
+        return max(0.0, min(1.0, bps / (500 * 1024**2)))
 
     def snapshot(self) -> ResourceSnapshot:
         return self._refresh(force=True)
@@ -396,21 +572,32 @@ class ResourceBroker:
         return min(raw, int(ram * 0.35))
 
     def _usable_spill(self) -> int:
+        """可用 spill = free - reserve；reserve 针对 **spill 盘容量** 计算（R31-P0-011）。
+
+        ``spill_min_free_fraction`` 的基准从 RAM 硬上限改成 spill 文件系统总容量——
+        spill 是独立容量维度，不能用内存比例预留。
+        """
         snap = self._refresh()
         free = snap.spill_free_bytes
+        total = snap.spill_total_bytes or snap.hard_memory_limit
         reserve = max(
             int(self.spill_min_free_gb * 1024**3),
-            int(snap.hard_memory_limit * self.spill_min_free_fraction),
+            int(total * self.spill_min_free_fraction),
         )
         return max(0, free - reserve)
 
     # -- admission --
 
     def can_admit(self, task: TaskResourceContract) -> bool:
+        """R31-P0-009：**纯函数**——只判定，不获取任何 token（无副作用）。
+
+        旧实现 ``can_admit`` 内部调用 ``try_acquire``，调用方只询问不随后
+        reserve/release 时 CPU/IO token 泄漏。现在判定与获取分离：
+        ``can_admit`` 纯判定，``try_reserve`` 原子 check+acquire 并返回 lease。
+        """
         snap = self._refresh()
         stage = self.pressure_stage()
         if stage in {STAGE_PRESSURE_3, STAGE_PRESSURE_4, STAGE_CRITICAL}:
-            self._admission_events.append(f"blocked:{stage}")
             return False
         peak = task.admissible_peak_bytes
         if peak > 0:
@@ -420,44 +607,76 @@ class ResourceBroker:
             # R27-039: sum(running) + candidate*uncertainty <= admissible_memory
             admissible = max(0, snap.live_headroom - self._reserve_bytes())
             if in_use + peak > admissible:
-                self._admission_events.append(f"blocked:memory:{in_use + peak}>{admissible}")
                 return False
-        # CPU token（R27-043/044）
-        if task.cpu_tokens > 0 and not self._cpu.try_acquire(task.cpu_tokens):
-            self._admission_events.append(
-                f"blocked:cpu:{task.cpu_tokens}@{self._cpu.summary()['soft_budget']}"
-            )
-            return False
-        # IO token（R27-119/120）
-        if task.io_tokens > 0 and not self._io.try_acquire(task.io_tokens):
-            self._cpu.release(task.cpu_tokens)
-            self._admission_events.append(
-                f"blocked:io:{task.io_tokens}@{self._io.summary()['concurrency']}"
-            )
-            return False
+        with self._lock:
+            # CPU token（R27-043/044）—— 纯判定
+            if task.cpu_tokens > 0 and not self._cpu.can_acquire(task.cpu_tokens):
+                return False
+            # IO token（R27-119/120）—— 纯判定
+            if task.io_tokens > 0 and not self._io.can_acquire(task.io_tokens):
+                return False
         # spill token（R27-121/122）
         if task.spill_bytes > 0 and task.spill_bytes > self._usable_spill():
-            self._cpu.release(task.cpu_tokens)
-            self._io.release(task.io_tokens)
-            self._admission_events.append(
-                f"blocked:spill:{task.spill_bytes}>{self._usable_spill()}"
-            )
             return False
         return True
 
-    def reserve(self, task: TaskResourceContract, *, task_id: str = "") -> bool:
-        """尝试为 task 预留资源；成功才真正登记。"""
+    def try_reserve(
+        self, task: TaskResourceContract, *, task_id: str = ""
+    ) -> ReservationLease | None:
+        """原子 check + acquire（R31-P0-009/006）：成功返回 lease，失败返回 ``None``。
+
+        在同一把锁内判定并获取：``can_admit`` True 后 ``try_acquire`` 必然成功，
+        不存在「check 通过但 token 被抢走」的窗口。
+        """
+        tid = str(task_id or id(task))
         with self._lock:
             if not self.can_admit(task):
-                return False
-            self._running[task_id or id(task)] = task
-            return True
+                self._admission_events.append(
+                    f"rejected:{task.backend}:cpu={task.cpu_tokens}:mem={peak_hint(task)}"
+                )
+                return None
+            if task.cpu_tokens > 0:
+                self._cpu.try_acquire(task.cpu_tokens)
+            if task.io_tokens > 0:
+                self._io.try_acquire(task.io_tokens)
+            self._running[tid] = task
+        self._admission_events.append(
+            f"admitted:{task.backend}:cpu={task.cpu_tokens}:mem={peak_hint(task)}"
+        )
+        return ReservationLease(self, task, tid)
+
+    def _release_locked(self, task: TaskResourceContract, *, task_id: str) -> None:
+        """租约/旧 API 共用的释放原语（只在 ``ReservationLease.release`` 内幂等化）。"""
+        self._running.pop(task_id, None)
+        self._cpu.release(task.cpu_tokens)
+        self._io.release(task.io_tokens)
+
+    def reserve(self, task: TaskResourceContract, *, task_id: str = "") -> bool:
+        """向后兼容：返回 bool。内部经 ``try_reserve`` 拿到 lease 并持有，
+        ``release()`` 释放。旧调用方 ``reserve→release`` 语义不变，且不再有
+        ``can_admit`` 单独调用泄漏 token 的问题。
+        """
+        tid = str(task_id or id(task))
+        with self._lock:
+            if self._running.get(tid) is not None:
+                return True
+        lease = self.try_reserve(task, task_id=tid)
+        if lease is None:
+            return False
+        with self._lock:
+            self._leases[tid] = lease
+        return True
 
     def release(self, task: TaskResourceContract, *, task_id: str = "") -> None:
+        """向后兼容：按 task_id 释放租约（幂等）。"""
+        tid = str(task_id or id(task))
         with self._lock:
-            self._running.pop(task_id or id(task), None)
-            self._cpu.release(task.cpu_tokens)
-            self._io.release(task.io_tokens)
+            lease = self._leases.pop(tid, None)
+        if lease is not None:
+            lease.release()
+            return
+        # 无租约时直接归还（覆盖直接 try_reserve 后手工 release 的调用方）。
+        self._release_locked(task, task_id=tid)
 
     def recommended_concurrency(self) -> int:
         snap = self._refresh()
@@ -499,6 +718,9 @@ class ResourceBroker:
             "host_mem_available": snap.host_mem_available,
             "process_family_rss": snap.process_family_rss,
             "process_family_pss": snap.process_family_pss,
+            "spill_total_bytes": snap.spill_total_bytes,
+            "spill_free_bytes": snap.spill_free_bytes,
+            "disk_busy": round(snap.disk_busy, 3),
             "reserve_bytes": self._reserve_bytes(),
             "usable_spill_bytes": self._usable_spill(),
             "pressure_stage": self.pressure_stage(),

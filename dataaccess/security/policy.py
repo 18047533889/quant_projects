@@ -66,6 +66,9 @@ class DefaultAuthorizer:
         # None = 每次调用按当前 strict 语义实时判定（避免进程级缓存把某个测试/
         # 会话的 production 状态永久烘焙进授权器）。
         self._strict_default_deny = strict_default_deny
+        # R26-P0-007：是否显式配置了 principal + policy（非 DEFAULT 回退）。
+        # production 下没有显式策略 → startup hard fail，不能当「本地超级用户」。
+        self._explicit_policy = policy is not None and principal is not None
 
     def _is_strict(self) -> bool:
         if self._strict_default_deny is not None:
@@ -79,6 +82,11 @@ class DefaultAuthorizer:
     @property
     def principal(self) -> DataPrincipal:
         return self._principal
+
+    @property
+    def explicit_policy(self) -> bool:
+        """是否显式配置了 principal + policy（P0-007：production 缺配置 → fail）。"""
+        return self._explicit_policy
 
     def authorize(
         self,
@@ -138,6 +146,11 @@ def _authorizer_from_env() -> DefaultAuthorizer:
     - ``DATA_ACCESS_PRINCIPAL_ID``：当前 server principal（缺省 "local"）
     - ``DATA_ACCESS_ALLOWED_DATASETS``：逗号分隔的允许数据集（缺省全部）
     - ``DATA_ACCESS_ALLOW_URI_READ``：是否放行 uri:read（production 默认 False）
+
+    R26-P0-007：production 下必须显式 ``DATA_ACCESS_PRINCIPAL_ID`` +
+    ``DATA_ACCESS_ALLOWED_DATASETS``（或等价的显式 policy 注入）。缺省回退
+    ``DEFAULT_ACCESS_POLICY`` 只允许 research；production 下 ``explicit_policy``
+    = False，startup gate 据此 hard fail（不能「没配置 → 本地超级用户」）。
     """
     principal = _principal_from_env()
     allowed_raw = os.environ.get("DATA_ACCESS_ALLOWED_DATASETS", "").strip()
@@ -148,12 +161,67 @@ def _authorizer_from_env() -> DefaultAuthorizer:
     if allowed_raw:
         allowed = frozenset(p.strip() for p in allowed_raw.split(",") if p.strip())
         policy = AccessPolicy(
-            allowed_datasets=allowed,
+            allowed_datasets=allowed or None,
             allowed_actions=frozenset(DATASET_SCOPED_ACTIONS),
             allow_uri_read=allow_uri,
         )
-        return DefaultAuthorizer(policy=policy, principal=principal)
-    return DefaultAuthorizer(policy=DEFAULT_ACCESS_POLICY, principal=principal)
+        # 显式 principal_id + 显式 allowed_datasets = explicit policy（P0-007）。
+        explicit = bool(
+            os.environ.get("DATA_ACCESS_PRINCIPAL_ID", "").strip()
+        ) and bool(allowed_raw)
+        return _DefaultAuthorizerExplicit(
+            policy=policy,
+            principal=principal,
+            explicit=explicit,
+            strict_default_deny=_env_strict_override(),
+        )
+    return DefaultAuthorizer(
+        policy=DEFAULT_ACCESS_POLICY,
+        principal=principal,
+        strict_default_deny=_env_strict_override(),
+    )
+
+
+def _env_strict_override() -> bool | None:
+    """env 显式 strict 开关（None = 跟随 is_strict_semantics）。"""
+    raw = os.environ.get("DATA_ACCESS_STRICT_READ", "").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "off"}:
+        return False
+    return None
+
+
+class _DefaultAuthorizerExplicit(DefaultAuthorizer):
+    """携带 explicit_policy 标志的 DefaultAuthorizer（R26-P0-007）。"""
+
+    def __init__(
+        self,
+        *,
+        policy: AccessPolicy,
+        principal: DataPrincipal,
+        explicit: bool,
+        strict_default_deny: bool | None = None,
+    ) -> None:
+        super().__init__(
+            policy=policy,
+            principal=principal,
+            strict_default_deny=strict_default_deny,
+        )
+        self._explicit_policy = explicit
+
+
+def production_security_configured() -> bool:
+    """R26-P0-007：当前 authorizer 是否显式配置 principal + policy。
+
+    production 缺配置 → startup gate hard fail；research 允许 DEFAULT。
+    """
+    auth = get_authorizer()
+    explicit = getattr(auth, "explicit_policy", None)
+    if explicit is not None:
+        return bool(explicit)
+    # 非 DefaultAuthorizer 实现（显式注入的 custom authorizer）视为已配置。
+    return True
 
 
 def _principal_from_env() -> DataPrincipal:
@@ -183,4 +251,5 @@ __all__ = [
     "DefaultAuthorizer",
     "set_authorizer",
     "get_authorizer",
+    "production_security_configured",
 ]

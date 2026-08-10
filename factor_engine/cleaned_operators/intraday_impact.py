@@ -137,11 +137,27 @@ def _impact_decay_day(
                 continue
             impacts = sign_e * (logp[e + 1 : e + 1 + horizon] - logp[e - 1])
             norm = impacts / abs(i0)
-            valid = np.abs(norm) > 1e-9
-            if int(valid.sum()) < 2:
+            # R26-057..059: the OLD code dropped ``abs(norm) <= 1e-9`` (fully /
+            # nearly recovered points) from the log-fit — that DELETED the
+            # fastest-recovery evidence and mechanically estimated a SLOWER decay.
+            # Detection-floor censor: every horizon point enters the regression,
+            # with |norm| floored at the smallest POSITIVE |norm| in the horizon
+            # (a fully-recovered point reads "by this h the impact is at most the
+            # smallest detectable magnitude").  Instant recovery -> steep log
+            # drop -> high kappa; no recovery -> flat ~0 -> kappa ~0.
+            absn = np.abs(norm)
+            pos = absn[absn > 0.0]
+            floor = float(np.min(pos)) if pos.size else 1e-12
+            # h=0 anchor: the initial normalised impact is exactly 1 by
+            # construction (i0 / |i0|), so the decay regression measures how fast
+            # the impact drops FROM 1.  Without this anchor an instant recovery
+            # (every post-shock norm ~ 0 -> all at the floor) reads as a FLAT
+            # line and kappa ~ 0, the opposite of the economic meaning (R26-059).
+            hvals = np.arange(0, horizon + 1, dtype=float)
+            if hvals.size < 2:
                 continue
-            hvals = np.arange(1, horizon + 1, dtype=float)[valid]
-            logi = np.log(np.abs(norm[valid]))
+            with np.errstate(divide="ignore", invalid="ignore"):
+                logi = np.log(np.maximum(np.concatenate(([1.0], absn)), floor))
             slope = np.polyfit(hvals, logi, 1)[0]
             kappa = float(-slope)
             if np.isfinite(kappa):

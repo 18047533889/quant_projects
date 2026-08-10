@@ -195,6 +195,23 @@ class SchemaContractError(ValidationError):
     """
 
 
+class ContractCompilationError(ValidationError):
+    """R26-P0-011：RuntimeDatasetContract 编译失败。
+
+    production / automated_research 下 contract 编译异常 = 不可用 ≠ fallback。
+    绝对禁止「except Exception → 旧逻辑继续」。仅对明确无 contract 的合法
+    dataset 允许走声明好的 legacy-compatible contract。
+    """
+
+
+class PITUnavailable(DataAccessError):
+    """R26-P0-013：PIT availability 无法证明（calendar mapping 缺失 / 右边界未知）。
+
+    production SQL/Python/Polars 一律拒绝，绝不 COALESCE 到 knowledge date
+    same-day 放行。
+    """
+
+
 class SemanticUnitError(ValidationError):
     """R25 §36/37 / §78：单位/币种/flow semantics 不兼容。
 

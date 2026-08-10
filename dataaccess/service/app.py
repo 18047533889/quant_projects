@@ -28,7 +28,11 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
+from contextvars import ContextVar
 from typing import Any
+
+# R26-P1-011：request_id 单一来源（middleware 写入，dependency 复用）。
+_request_id_var: ContextVar[str] = ContextVar("data_access_http_request_id", default="")
 
 import pyarrow as pa
 import pyarrow.ipc as ipc
@@ -94,6 +98,27 @@ class _ApiCallContext:
         self.authorizer.authorize(self.principal, dataset, action=action)
 
 
+def _execution_context_for(ctx: _ApiCallContext):
+    """R26-P0-005：把 HTTP 请求身份放进 request-scoped 执行上下文。
+
+    Store 的所有嵌套读（calendar / universe / factor catalog / dependent
+    datasets / credential / cache scope）通过 ContextVar 自动继承请求 principal，
+    绝不改全局 authorizer。并发 API key A/B 不会身份串扰。
+    """
+    from data_access.security.execution_context import (
+        DataAccessExecutionContext,
+    )
+    from data_access.security.run_mode import RunMode
+
+    return DataAccessExecutionContext(
+        principal=ctx.principal,
+        authorizer=ctx.authorizer,
+        access_policy=getattr(ctx.authorizer, "policy", None),
+        request_id=ctx.request_id,
+        run_mode=RunMode("production") if ctx.production else RunMode("interactive_research"),
+    )
+
+
 def _api_budget(request: ReadRequest, settings: ServiceSettings) -> QueryBudget:
     base = resolve_query_budget()
     requested_rows = request.max_rows if request.max_rows is not None else settings.max_rows
@@ -124,7 +149,8 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
     ) -> _ApiCallContext:
         key = API_KEY or settings.api_key
         production = settings.production_mode or os.environ.get("QUANT_PRODUCTION_MODE", "").lower() in {"1", "true", "yes"}
-        request_id = x_request_id or uuid.uuid4().hex
+        # R26-P1-011：优先复用 middleware 生成的 request_id ContextVar（单一来源）。
+        request_id = x_request_id or _request_id_var.get() or uuid.uuid4().hex
 
         # R24 P0-S5 §7 / T-S12：production 恒要求认证。``DATA_ACCESS_API_ALLOW_OPEN=1``
         # 在 production 下**不绕过**（open mode 只允许 dev/research）。
@@ -177,8 +203,15 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):
+        # R26-P1-011：request_id 唯一生成点——middleware 生成并写入 ContextVar，
+        # require_api_key 直接复用，不再二次生成（否则 response id 与 security
+        # context id 不一致）。
         request_id = request.headers.get(settings.request_id_header) or uuid.uuid4().hex
-        response = await call_next(request)
+        token = _request_id_var.set(request_id)
+        try:
+            response = await call_next(request)
+        finally:
+            _request_id_var.reset(token)
         response.headers[settings.request_id_header] = request_id
         response.headers["X-Data-Access-Version"] = data_access.__version__
         return response
@@ -189,54 +222,36 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
 
     @app.get("/ready")
     def ready() -> dict[str, str]:
-        """R25 §62：真正 readiness（轻量检查，不读大表，不泄 secret）。
+        """R25 §62 + R26-P0-021：真正 readiness（复用 startup gate health state）。
 
-        检查：registry 可加载 → ContractIR audit 无 blocking → engine SELECT 1 →
-        CredentialProvider 可解析（不打印 secret）→ 生产模式 legacy home fallback
-        未使用。任一 fail → 503。
+        R26-P0-021 修正：
+            - engine 探测用真实 public API（``execute_arrow``，不是不存在的
+              ``engine.execute()``）；
+            - credential resolve 失败 / legacy root in_use（strict）**必须** 503，
+              不能仍返回 status=ready；
+            - 直接复用 ``run_startup_gate`` 的 health state，不自己另写一套逻辑。
         """
-        from data_access.read.contract_ir import build_contract_ir
-        from data_access.read.query_budget import is_strict_semantics
+        from data_access.runtime.startup_gate import run_startup_gate
 
         store = get_store()
         try:
-            count = len(store.registry.names())
-            # 1) ContractIR compile + audit（无 blocking problem）
-            ir = store.contract_ir()
-            audit_problems = ir.audit() if ir is not None else []
-            if audit_problems:
-                raise RuntimeError(f"contract_ir audit problems: {len(audit_problems)}")
-            # 2) engine SELECT 1
-            store._engine.execute("SELECT 1")
-            # 3) CredentialProvider 可解析（不打印 secret；失败只记 bool）
-            from data_access.security.credentials import _global_credential_provider
-
-            provider = _global_credential_provider()
-            cred_ok = "unset"
-            if provider is not None:
-                try:
-                    provider.resolve()
-                    cred_ok = "ok"
-                except Exception:
-                    cred_ok = "failed"
-            # 4) production 下 legacy /home/shw fallback 不使用（§53）
-            legacy_ok = True
-            if is_strict_semantics():
-                from data_access.cos.mirror import known_cos_mirror_local_roots
-
-                for root in known_cos_mirror_local_roots():
-                    if "/home/shw/" in str(root).lower():
-                        legacy_ok = False
-                        break
+            result = run_startup_gate(store)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if not result.passed:
+            raise HTTPException(
+                status_code=503, detail="数据访问服务未就绪：" + "; ".join(result.problems)
+            )
+        # engine 真实 public API 探测（SELECT 1）。
+        try:
+            store._engine.execute_arrow("SELECT 1", [], deadline_ms=5_000)
         except Exception as exc:
-            raise HTTPException(status_code=503, detail="数据访问服务未就绪") from exc
+            raise HTTPException(status_code=503, detail="engine 探测失败") from exc
         return {
             "status": "ready",
-            "datasets": str(count),
-            "contract_ir": "ok",
+            "datasets": str(len(store.registry.names())),
+            "startup_gate": "ok",
             "engine": "ok",
-            "credential_provider": cred_ok,
-            "legacy_home_fallback": "clean" if legacy_ok else "in_use",
         }
 
     @app.get("/version")
@@ -312,14 +327,18 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             store = get_store()
             budget = _api_budget(request, settings)
             try:
-                batches = store.read_arrow_stream(
-                    request.dataset,
-                    columns=request.columns,
-                    time_range=request.time_range,
-                    instrument_filter=request.instrument_filter,
-                    query_budget=budget,
-                    **request.params,
-                )
+                # R26-P0-005：request-scoped 执行上下文（嵌套读继承请求 principal）。
+                from data_access.security.execution_context import execution_scope
+
+                with execution_scope(_execution_context_for(ctx)):
+                    batches = store.read_arrow_stream(
+                        request.dataset,
+                        columns=request.columns,
+                        time_range=request.time_range,
+                        instrument_filter=request.instrument_filter,
+                        query_budget=budget,
+                        **request.params,
+                    )
             except AccessDeniedError:
                 raise HTTPException(status_code=403, detail="resource is not authorized")
             except ValidationError as exc:
@@ -370,7 +389,11 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         if not query_slots.acquire(blocking=False):
             raise HTTPException(status_code=503, detail="查询并发已达上限，请稍后重试")
         try:
-            return _read_dataset(request, settings)
+            # R26-P0-005：request-scoped 执行上下文（嵌套读继承请求 principal）。
+            from data_access.security.execution_context import execution_scope
+
+            with execution_scope(_execution_context_for(ctx)):
+                return _read_dataset(request, settings)
         finally:
             query_slots.release()
 
@@ -478,18 +501,22 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             budget = _api_budget(ReadRequest(dataset="uri"), settings)
             start = time.perf_counter()
             try:
-                handle = get_store().read_uri(
-                    request.uri,
-                    columns=request.columns,
-                    time_range=request.time_range,
-                    instrument_filter=request.instrument_filter,
-                    filters=request.filters,
-                    limit=request.limit,
-                    format=request.format,
-                    time_column=request.time_column,
-                    instrument_column=request.instrument_column,
-                    query_budget=budget,
-                )
+                # R26-P0-005：request-scoped 执行上下文。
+                from data_access.security.execution_context import execution_scope
+
+                with execution_scope(_execution_context_for(ctx)):
+                    handle = get_store().read_uri(
+                        request.uri,
+                        columns=request.columns,
+                        time_range=request.time_range,
+                        instrument_filter=request.instrument_filter,
+                        filters=request.filters,
+                        limit=request.limit,
+                        format=request.format,
+                        time_column=request.time_column,
+                        instrument_column=request.instrument_column,
+                        query_budget=budget,
+                    )
             except AccessDeniedError:
                 raise HTTPException(status_code=403, detail="resource is not authorized")
             except ValidationError as exc:
@@ -515,7 +542,13 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
     def factors_catalog(ctx: _ApiCallContext = Depends(require_api_key)) -> dict[str, Any]:
         """因子目录清单（FactorCatalog）。普通 ``factor:list`` 只返回脱敏摘要；
         敏感字段另需 ``factor:metadata_sensitive``（§7）。
+
+        R26-P0-025：改用 ``VisibleFactorCatalog``——count / summary 全基于当前
+        principal 可见 set（premium factor 的名字/存在性不外泄）；不暴露服务器
+        本地 ``catalog.root``。
         """
+        from data_access.read.visible_catalog import VisibleFactorCatalog
+
         ctx.authorize("factor_lake", action="factor:list")
         catalog = get_store().get_factor_catalog()
         sensitive = False
@@ -524,13 +557,17 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             sensitive = True
         except AuthorizationError:
             sensitive = False
+        visible = VisibleFactorCatalog(
+            catalog,
+            policy=getattr(ctx.authorizer, "policy", None),
+            principal=ctx.principal,
+        )
         summary = [
-            _redact_factor_meta(m.to_dict(), sensitive=sensitive)
-            for m in catalog.records.values()
+            _redact_factor_meta(m, sensitive=sensitive)
+            for m in visible.summary()
         ]
         return {
-            "root": str(catalog.root),
-            "count": len(catalog),
+            "count": len(visible),
             "factors": summary,
         }
 
@@ -543,15 +580,19 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         try:
             start = time.perf_counter()
             try:
-                handle = get_store().read_factors(
-                    request.factor_ids,
-                    time_range=request.time_range,
-                    universe=request.universe,
-                    frequency=request.frequency,
-                    layout=request.layout,
-                    columns=request.columns,
-                    limit=request.limit,
-                )
+                # R26-P0-005：request-scoped 执行上下文（factor gate 用同一 principal）。
+                from data_access.security.execution_context import execution_scope
+
+                with execution_scope(_execution_context_for(ctx)):
+                    handle = get_store().read_factors(
+                        request.factor_ids,
+                        time_range=request.time_range,
+                        universe=request.universe,
+                        frequency=request.frequency,
+                        layout=request.layout,
+                        columns=request.columns,
+                        limit=request.limit,
+                    )
             except AccessDeniedError:
                 raise HTTPException(status_code=403, detail="resource is not authorized")
             except ValidationError as exc:

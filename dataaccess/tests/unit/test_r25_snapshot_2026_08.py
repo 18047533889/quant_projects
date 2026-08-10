@@ -128,13 +128,19 @@ def test_tsnap005_research_hybrid_allowed():
 
 
 def test_source_manifest_parse():
-    """R25 §13：publisher source manifest 解析（generation + exact objects）。"""
+    """R25 §13 / R26-P0-015：publisher source manifest 解析（generation + exact objects）。
+
+    manifest_version / complete / object_count 为 R26 必填（production fail-closed）。
+    """
     m = parse_source_manifest(
         {
+            "manifest_version": "1",
             "source_generation": "20260810T153000Z-abc",
+            "complete": True,
+            "object_count": 2,
             "objects": [
-                {"key": "t/2024-01-02.parquet", "etag": "e1", "size": 10},
-                {"key": "t/2024-01-03.parquet", "etag": "e2", "size": 20},
+                {"key": "s3://b/t/2024-01-02.parquet", "etag": "e1", "size": 10},
+                {"key": "s3://b/t/2024-01-03.parquet", "etag": "e2", "size": 20},
             ],
         }
     )
@@ -146,8 +152,11 @@ def test_source_manifest_parse():
 def test_resolver_via_manifest():
     """SourceSnapshotResolver 优先 source manifest。"""
     manifest = {
+        "manifest_version": "1",
         "source_generation": "G1",
-        "objects": [{"key": "t/2024-01-02.parquet", "etag": "e1", "size": 10}],
+        "complete": True,
+        "object_count": 1,
+        "objects": [{"key": "s3://b/t/2024-01-02.parquet", "etag": "e1", "size": 10}],
     }
     r = SourceSnapshotResolver(
         source_manifest_fn=lambda ds: manifest, strict=True

@@ -58,8 +58,63 @@ def redact_authorization_header(value: str | None) -> str:
     return f"{marker}...{digest}"
 
 
+# 触发整值脱敏的 key 名（递归匹配，大小写不敏感）。
+_SECRET_KEYS = frozenset(
+    {
+        "secret",
+        "token",
+        "authorization",
+        "password",
+        "credential",
+        "session_token",
+        "signed",
+        "signature",
+        "secret_key",
+        "secret_id",
+        "access_key",
+        "private_key",
+        "api_key",
+        "password",
+    }
+)
+
+
+def sanitize_audit_payload(value: object, *, _path: tuple[str, ...] = ()) -> object:
+    """R26-P1-012：审计 payload 递归脱敏（paths/params/error/extra）。
+
+    - key 命中 secret 特征（secret/token/authorization/password/credential/
+      session_token/signature/...) → 整值 ``redact_secret``；
+    - string 值形如 ``s3://...?...signature=...`` 或含 ``X-Cos-Signature`` →
+      ``redact_uri``（去掉 query）；
+    - 嵌套 list/dict/tuple 递归。
+    """
+    if isinstance(value, dict):
+        return {
+            str(k): sanitize_audit_payload(v, _path=_path + (str(k),))
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [sanitize_audit_payload(v, _path=_path) for v in value]
+    if isinstance(value, str):
+        low_key = " ".join(_path).lower()
+        if any(k in low_key for k in _SECRET_KEYS):
+            return redact_secret(value)
+        if "signature" in low_key:
+            return redact_uri(value)
+        # signed URL 兜底：query 里带签名参数。
+        if value.startswith(("s3://", "cos://", "http://", "https://")) and (
+            "signature=" in value.lower()
+            or "x-cos-signature" in value.lower()
+            or "x-qq-acl" in value.lower()
+        ):
+            return redact_uri(value)
+        return value
+    return value
+
+
 __all__ = [
     "redact_secret",
     "redact_uri",
     "redact_authorization_header",
+    "sanitize_audit_payload",
 ]

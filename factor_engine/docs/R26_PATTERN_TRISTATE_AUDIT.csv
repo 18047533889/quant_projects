@@ -1,0 +1,7 @@
+canonical,nan_input,confirmed_no_pattern,tri_state,neutral_event,two_day_requires_both,unknown_limit
+cdl_doji,NaN,0,yes,,,
+cdl_spinning_top,NaN,,yes,NaN (not +1),,
+cdl_outside_bar,NaN,,yes,NaN (not 0),,
+cdl_engulfing,NaN,,yes,,yes,
+cdl_inside_bar,NaN,,yes,,yes,
+intra_limit_duration,tri_state,,yes,,,NaN

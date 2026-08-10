@@ -25,6 +25,7 @@ data_access.engine —— DuckDB 连接与 PRAGMA 管理
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from typing import Any, Iterator, Sequence
@@ -177,9 +178,24 @@ class DuckDBEngine:
         self._conn = duckdb.connect(":memory:")
         self._write_lock = threading.Lock()
         self._deadline_pool = _DeadlineConnectionPool(size=4)
+        # R26-P1-018：fork/PID 防护——gunicorn --preload / multiprocessing fork /
+        # factor mining process pool 会继承 fork 前创建的 DuckDB native connection /
+        # lock / pool。入口检查 owner_pid，非 owner 进程禁止复用。
+        self.owner_pid = os.getpid()
 
         with self._write_lock:
             apply_pragmas(self._conn, self._config)
+
+    def _check_pid(self) -> None:
+        """R26-P1-018：fork 后子进程继续用父进程 native connection 会损坏状态。"""
+        import os as _os
+
+        if _os.getpid() != self.owner_pid:
+            raise RuntimeError(
+                f"DuckDBEngine 在 fork 后被子进程（pid={_os.getpid()}，owner="
+                f"{self.owner_pid}）复用——native connection/lock/pool 不可继承。"
+                "请在 fork 后 reset 并重建 engine/store/pool（R26-P1-018）。"
+            )
 
         logger.info(
             "DuckDB 初始化完成: threads=%d memory_limit=%s object_cache=%s "
@@ -349,6 +365,7 @@ class DuckDBEngine:
         截止后调用 ``interrupt()``（不打扰共享连接的并发查询）。超时抛
         ``DeadlineExceeded``。
         """
+        self._check_pid()
         start = time.perf_counter()
         elapsed_ms = 0.0
         try:

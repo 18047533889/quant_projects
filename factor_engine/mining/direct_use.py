@@ -858,6 +858,17 @@ _R22_RESEARCH_PROMOTION: dict[str, tuple[DirectUseStatus, str]] = {
         DirectUseStatus.RESEARCH_TOOL,
         "in-sample quantile-regression coefficient — diagnostic; the *_prior / *_forecast_error counterparts are the mineable forms",
     ),
+    # R28 §二十二 / §一百一十六: in-sample AR fitted value / residual are
+    # diagnostic (the current row participates in its own fit) — NOT alpha
+    # terminals.  The ``ts_ar_prior_*`` forms (fit <= t-1) are the mineable ones.
+    "ts_ar_fitted_value": (
+        DirectUseStatus.RESEARCH_TOOL,
+        "in-sample AR fitted value (current row participates in its own fit) — diagnostic; use ts_ar_prior_forecast for the causal one-step form",
+    ),
+    "ts_ar_in_sample_resid": (
+        DirectUseStatus.RESEARCH_TOOL,
+        "in-sample AR residual — diagnostic; use ts_ar_prior_innovation for the causal out-of-sample form",
+    ),
     # R22-058: causal poly2 siblings (prior fit <= t-1; current obs evaluates only).
     "ts_poly2_prior_coeff": (DirectUseStatus.DIRECT_ALPHA, "prior-fit quadratic coefficient — causal"),
     "ts_poly2_forecast_error": (DirectUseStatus.DIRECT_ALPHA, "one-step-ahead quadratic forecast error — causal"),

@@ -49,9 +49,12 @@ from data_access.core.exceptions import (
     DataError,
     MatrixCoverageMiss,
     MatrixUnavailable,
+    PITUnavailable,
     ValidationError,
 )
 from data_access.registry.params_validation import ParamSpec, params_fingerprint, validate_params
+from data_access.runtime.prepared_read import PreparedRead  # type: ignore[name-defined]  # R26-P0-003
+from data_access.runtime.resource_governor import duckdb_slot  # R26-P1-016
 from data_access.read.query_budget import (
     QueryBudget,
     collect_polars_with_budget,
@@ -147,6 +150,27 @@ _WRITE_PATH_META_KEYS = ("write_root", "_write_root", "write_dir", "_write_dir")
 # #44 read()/read_result() 的读取模式：普通面板 / 事件 / PIT / 维表 / 稀疏
 _VALID_READ_MODES = {"auto", "panel", "event", "pit", "dimension", "sparse"}
 
+# R26-P0-014：PIT policy → availability floor 映射（request 只能 same-or-stricter）。
+_PIT_FLOOR_OF = {
+    "strict": "next_session_open",
+    "effective_time_only": "effective_date_only",
+    "knowledge_date_pit": "next_trading_day",
+    "not_applicable": None,
+}
+
+# availability 严格度排序（越大越严格；request 不能低于 contract floor）。
+_PIT_AVAILABILITY_ORDER = {
+    "same_day": 0,
+    "same_instant": 0,
+    "effective_date_only": 1,
+    "next_trading_day": 2,
+    "next_bar": 2,
+    "next_session": 3,
+    "next_session_open": 3,
+    "session": 3,
+    "after_close_next_open": 3,
+}
+
 
 def _cos_mode_is_auto() -> bool:
     """COS 读模式是否为 auto（混合 local+remote 的前提）。"""
@@ -214,6 +238,18 @@ class DataAccessStore:
         self._registry_hash = _compute_registry_hash(registry)
         # #46 注入的市场交易日历（{market: MarketCalendar}），session availability 用
         self._calendars: dict[str, Any] = {}
+        # R27-I：calendar 是 PIT 世界的一部分——bootstrap 注入后冻结，运行中禁止
+        # 修改（否则「代码/数据/表达式没变、结果却变了」）。首次读后自动锁定。
+        self._calendars_locked = False
+        self._calendar_snapshot: str | None = None
+        # R26-P0-004：统一读执行链（snapshot/budget/governor/verify 一条链）。
+        from data_access.runtime.read_pipeline import ReadPipeline
+
+        self._pipeline = ReadPipeline()
+        # R26-P1-003：ContractCompiler 由 Store ownership（绑定本 registry）。
+        from data_access.contract.runtime_contract import ContractCompiler
+
+        self.contract_compiler = ContractCompiler(self._registry)
 
     @contextmanager
     def _dataset_mutation(self, dataset: str, **params: Any):
@@ -311,12 +347,58 @@ class DataAccessStore:
                     rebuild_manifest_for_dataset(self, dataset, **params)
 
     def set_calendar(self, market: str, calendar: Any) -> None:
-        """注入一个市场的交易日历（MarketCalendar），供 session availability 使用。
+        """bootstrap 注入一个市场的交易日历（MarketCalendar），供 session availability 使用。
 
         部署在不同服务器时，可在这里注入该环境的真实交易所日历（替代默认
         周末休市兜底）。市场名：ashare / us。
+
+        R27-I：calendar 是 PIT 世界的一部分，**bootstrap 时注入后不可变**——
+        首次读之后（``_calendars_locked``）再调用会拒绝：不允许「上午 Calendar A、
+        下午有人 set_calendar(Calendar B)」导致同一 expression 结果漂移。要换日历
+        必须重建 Store（新 runtime generation），日历变更会改变
+        ``calendar_snapshot_id()``（进查询缓存 key / ExecutionEnvironmentIdentity）。
         """
-        self._calendars[str(market).strip().lower()] = calendar
+        key = str(market).strip().lower()
+        if self._calendars_locked:
+            raise ValidationError(
+                f"R27-I：PIT 世界已冻结——运行中禁止 set_calendar('{key}')。"
+                "日历必须 bootstrap 时注入一次；修改请重建 Store（新 runtime generation），"
+                "旧缓存会随 calendar_snapshot_id 自动失效。"
+            )
+        self._calendars[key] = calendar
+        # 日历变化 → 快照失效（首次读前可多次注入，冻结前不锁）。
+        self._calendar_snapshot = None
+
+    def lock_calendars(self) -> None:
+        """R27-I：显式冻结 calendar 世界（bootstrap 完成即调用；首次读也会自动锁定）。"""
+        self._calendars_locked = True
+
+    @property
+    def calendars_locked(self) -> bool:
+        return self._calendars_locked
+
+    def calendar_snapshot_id(self) -> str:
+        """R27-I：当前注入日历的内容指纹（market + timezone + trading_days 范围）。
+
+        进查询缓存 key 与 ExecutionEnvironmentIdentity——日历变更生成新 runtime
+        generation，旧缓存不可命中。首次读后 calendar 冻结，快照只算一次。
+        """
+        if self._calendar_snapshot is None:
+            self._calendar_snapshot = self._compute_calendar_snapshot()
+        return self._calendar_snapshot
+
+    def _compute_calendar_snapshot(self) -> str:
+        import hashlib
+
+        parts: list[str] = []
+        for market in sorted(self._calendars):
+            cal = self._calendars[market]
+            days = sorted(str(d) for d in getattr(cal, "trading_days", ()) or ())
+            tz = str(getattr(cal, "timezone", "") or "")
+            head = days[0] if days else "-"
+            tail = days[-1] if days else "-"
+            parts.append(f"{market}:{tz}:{len(days)}:{head}:{tail}")
+        return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
     def get_calendar(self, market: str | None) -> Any | None:
         """取某市场的交易日历：显式注入优先，否则从 registry 日历数据集惰性加载。"""
@@ -370,11 +452,21 @@ class DataAccessStore:
         只做逻辑授权层；registry/path boundary（``PathAuthorizer``）与 CAM/IAM/STS
         是另外两层，各自独立 deny。拒绝抛 ``AccessDeniedError``（脱敏），**绝不
         fallback 到更高身份**。
+
+        R26-P0-005：优先消费当前 request-scoped 执行上下文的 authorizer/principal
+        （HTTP 嵌套读自动继承），无上下文才回退 store 级（process 默认）。
         """
+        from data_access.security.execution_context import (
+            current_authorizer,
+            current_principal,
+        )
         from data_access.security.policy import DatasetAuthorizer
 
-        authorizer: DatasetAuthorizer = self._authorizer_sec
-        authorizer.authorize(principal or self._principal, dataset, action=action)
+        ctx_authorizer = current_authorizer()
+        ctx_principal = current_principal()
+        authorizer: DatasetAuthorizer = ctx_authorizer or self._authorizer_sec
+        eff_principal = principal or ctx_principal or self._principal
+        authorizer.authorize(eff_principal, dataset, action=action)
 
     def authorize_uri(
         self,
@@ -410,41 +502,85 @@ class DataAccessStore:
         self.authorize_dataset(dataset)
 
     def _authorize_factor_tags(self, factor_ids: Sequence[str]) -> None:
-        """R24 P0-S4 §6 / T-S13：按因子 derived access tags 做逻辑授权。
+        """R24 P0-S4 §6 / T-S13 / R26-P0-009：按因子 derived access tags 做逻辑授权。
 
         factor 从 premium source 派生时，其 ``derived_access_tags`` 带有受限 tag
         （如 ``internal.restricted`` / ``alt.premium``）。低权限 principal 不能读该
         因子——restricted source 不能被因子结果洗白。
 
-        匹配：factor 的任一 derived tag 在 principal 的 ``allowed_factor_namespaces``
-        中即可（或 policy 未限制 namespace = 放行）。无 tag 的因子不受此约束。
+        R26-P0-009（从 any-match 改成 **all-required + fail-closed**）：
+            - ``allowed_factor_namespaces`` 三态：None/{"*"} → 放行；空 frozenset
+              → deny all；非空 → **每个** required tag 都必须命中（不再是 any）。
+              factor [market.basic, alt.premium]、principal 只有 market.basic → deny。
+            - FactorCatalog 不可用 → production 一律 deny（无法证明权限 ≠ 允许）。
+            - 因子元数据未知（unknown factor）→ production deny。
         """
+        from data_access.core.exceptions import AccessDeniedError
+
         if not factor_ids:
             return
         policy = self._access_policy
-        # 未配置 namespace 限制 → 放行（DEFAULT）。
-        if policy is None or not getattr(policy, "allowed_factor_namespaces", None):
+        allowed = getattr(policy, "allowed_factor_namespaces", None) if policy else None
+        # R26-P0-006 三态：None / 含 "*" → unrestricted。
+        if allowed is None or "*" in allowed:
             return
-        allowed = set(getattr(policy, "allowed_factor_namespaces", ()) or ())
+        strict = is_strict_semantics()
         try:
             catalog = self.get_factor_catalog()
-        except Exception:
-            return  # catalog 不可读时不误伤（dataset:list 层已授权）
+        except Exception as exc:
+            if strict:
+                raise AccessDeniedError(
+                    "resource is not authorized "
+                    f"(factor catalog unavailable, production fail-closed: {type(exc).__name__})"
+                ) from exc
+            return  # research 宽容（不误伤 dataset:list）
+        if catalog is None or not getattr(catalog, "records", None):
+            if strict:
+                raise AccessDeniedError(
+                    "resource is not authorized "
+                    "(factor catalog empty, production fail-closed)"
+                )
+            return
+        allowed_set = set(allowed)
+        # R26-P0-009：principal clearance / entitlements（来自执行上下文或 store）。
+        from data_access.security.execution_context import current_principal
+        from data_access.security.principal import FACTOR_CLASSIFICATION_LEVELS
+
+        ctx_principal = current_principal() or self._principal
+        clearance_level = getattr(ctx_principal, "clearance_level", lambda: -1)()
+        entitlements = set(getattr(ctx_principal, "entitlements", ()) or ())
         denied: list[str] = []
         for fid in factor_ids:
             meta = catalog.records.get(fid)
-            tags = (
-                tuple(getattr(meta, "derived_access_tags", ()) or ())
-                if meta is not None
-                else ()
-            )
-            if not tags:
+            if meta is None:
+                if strict:
+                    raise AccessDeniedError(
+                        f"resource is not authorized "
+                        f"(factor metadata unknown: {fid}, production deny)"
+                    )
                 continue
-            if not any(t in allowed for t in tags):
+            tags = tuple(
+                getattr(meta, "derived_access_tags", ()) or ()
+            ) or tuple(getattr(meta, "source_access_tags", ()) or ())
+            # P0-009（层 1）：required entitlements ⊆ principal.entitlements ∪
+            # allowed namespaces（compartments）。
+            required_ents = tuple(getattr(meta, "required_entitlements", ()) or ())
+            if required_ents:
+                effective_ents = entitlements | allowed_set
+                if not all(e in effective_ents for e in required_ents):
+                    denied.append(fid)
+                    continue
+            # P0-009（层 2）：classification ≤ principal clearance。
+            classification = str(getattr(meta, "classification", "") or "").strip().lower()
+            if classification:
+                cls_level = FACTOR_CLASSIFICATION_LEVELS.get(classification, 100)
+                if clearance_level < cls_level:
+                    denied.append(fid)
+                    continue
+            # P0-009（层 3）：derived/source tags all-required（不是 any）。
+            if tags and not all(t in allowed_set for t in tags):
                 denied.append(fid)
         if denied:
-            from data_access.core.exceptions import AccessDeniedError
-
             raise AccessDeniedError(
                 "resource is not authorized "
                 f"(factor access tags not allowed: {', '.join(denied)})"
@@ -481,11 +617,17 @@ class DataAccessStore:
         read_params: Mapping[str, Mapping[str, Any]] | None = None,
         read_time_ranges: Mapping[str, tuple[Any, Any] | None] | None = None,
     ) -> DataSnapshot:
-        """为 sql() 多 dataset 读路径构建合并 DataSnapshot（含 COS remote）。"""
+        """为 sql() 多 dataset 读路径构建合并 DataSnapshot（含 COS remote）。
+
+        R26-P0-024：public metadata path——每个 dataset 先做 ``metadata:read``
+        授权（暴露 dataset existence / physical layout / snapshot identity 之前）。
+        """
         params_map = dict(read_params or {})
         time_ranges = dict(read_time_ranges or {})
         snapshots: list[DataSnapshot] = []
         for name in sorted(read_datasets):
+            # R26-P0-024：governed public metadata API 必须逐 dataset auth。
+            self.authorize_dataset(name, action="metadata:read")
             ds = self._registry.get(name)
             paths = self._prepare_dataset_read(
                 ds,
@@ -736,16 +878,14 @@ class DataAccessStore:
         fail-closed vs warning 放行。
         """
         from data_access.contract.filters import validate_filter_requirements
-        from data_access.contract.runtime_contract import compile_runtime_contract
 
-        try:
-            rc = compile_runtime_contract(dataset, self._registry)
-        except Exception:
-            rc = None
+        # R26-P0-011：production 下编译失败 hard fail，不吞异常。
+        rc = self._compile_contract_strict(dataset)
         if rc is None or not rc.filters:
             return
         validate_filter_requirements(
             rc,
+            dataset=dataset,
             read_mode="auto",
             params=params,
             filters=filters,
@@ -1183,31 +1323,79 @@ class DataAccessStore:
             params=params,
         )
 
-    def _read_dataset_object(
+    def _compile_contract_strict(self, dataset: str):
+        """R26-P0-011：RuntimeDatasetContract 编译，production 下失败 hard fail。
+
+        Contract 编译异常 = 不可用 ≠ fallback。仅对明确无 contract 的合法
+        dataset（compile 返回 None）允许走 legacy-compatible 路径。
+        """
+        from data_access.core.exceptions import ContractCompilationError
+
+        try:
+            return self.contract_compiler.compile(dataset)
+        except Exception as exc:
+            if is_strict_semantics():
+                raise ContractCompilationError(
+                    f"RuntimeDatasetContract 编译失败（{dataset}）："
+                    f"{type(exc).__name__}: {exc}"
+                    "（R26-P0-011：contract 不可用 ≠ fallback 到旧逻辑）"
+                ) from exc
+            logger.warning(
+                "RuntimeDatasetContract 编译失败（research 降级）：%s", exc
+            )
+            return None
+
+    def prepare_read(
         self,
-        ds: Dataset,
-        *,
         dataset: str,
-        columns: Sequence[str] | None,
-        time_range: tuple[Any, Any] | None,
-        instrument_filter: Sequence[str] | None,
-        filters: Any,
-        limit: int | None,
-        query_budget: QueryBudget | None,
-        params: dict[str, Any],
+        *,
+        ds: Dataset | None = None,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
+        limit: int | None = None,
+        query_budget: QueryBudget | None = None,
         mode: str = "auto",
         allow_sparse: bool = False,
         allow_effective_time: bool = False,
-        physical_scope: str | Sequence[str] | None = None,
-    ) -> ReadResult:
-        """按已解析的 ``Dataset`` 对象执行一次读（read_result / read_uri 共用）。"""
-        # #P0-5 拒绝 str/bytes 冒充序列（instrument_filter="AAPL" 会逐字符过滤）
+        physical_scope: Any = None,
+        params: Mapping[str, Any] | None = None,
+        request_identity: str | None = None,
+        principal_id: str | None = None,
+    ) -> PreparedRead:
+        """R26-P0-003/004：构建 immutable executable plan。
+
+        prepare 阶段完成 auth → contract gate → 路径 → source snapshot →
+        budget → schema → governor admission，产出 ``PreparedRead``。
+        之后必须 ``execute_prepared_read(prepared)``，禁止 backend 重新解释
+        contract / snapshot / budget。
+        """
+        from data_access.runtime.prepared_read import (
+            PreparedRead,
+            PredicateConstraint,
+            TemporalPlan,
+        )
+        from data_access.security.execution_context import (
+            current_execution_context,
+            current_principal,
+        )
+
+        if ds is None:
+            ds = self._registry.get(dataset)
+        # #P0-5 拒绝 str/bytes 冒充序列
         if instrument_filter is not None:
             ensure_sequence_arg(instrument_filter, name="instrument_filter")
         if columns is not None:
             ensure_sequence_arg(columns, name="columns")
-        # #5 统一读前语义门禁：temporal contract + event cutoff + required_filters
-        # + allowed_filter_values（read_arrow_stream / scan_polars 也走同一入口）
+        # ---- auth ----
+        self._pipeline.counters.auth += 1
+        self.authorize_dataset(dataset)
+        # R27-I：首次读即冻结 calendar 世界——之后 PIT availability 必须与本次
+        # 观察一致，不允许运行中 set_calendar 改变语义。
+        self._calendars_locked = True
+        # ---- contract gate ----
+        self._pipeline.counters.contract += 1
         self._prepare_read_request(
             dataset,
             columns=columns,
@@ -1223,14 +1411,37 @@ class DataAccessStore:
         validate_query_request(
             budget, columns=list(columns) if columns else None, time_range=time_range
         )
+        # ---- physical scope（exact objects）----
+        from data_access.runtime.prepared_read import VerifiedPhysicalScope
+
         if physical_scope is not None:
-            scope = (
-                list(physical_scope)
-                if isinstance(physical_scope, (list, tuple))
-                else [str(physical_scope)]
-            )
-            # #6/#17：精确 URI scope 冻结一次，execution 与 snapshot 消费同一份
-            paths = self._expand_glob_paths(scope)
+            if isinstance(physical_scope, VerifiedPhysicalScope):
+                # R27-D：只有内部构造的 VerifiedPhysicalScope 才能绑定物理范围
+                # 与 dataset —— authorize 的是 dataset，扫描的也是 dataset。
+                if physical_scope.dataset_id != dataset:
+                    raise ValidationError(
+                        f"VerifiedPhysicalScope 绑定 dataset='{physical_scope.dataset_id}'，"
+                        f"但本次读取 dataset='{dataset}' —— 不允许跨数据集复用物理 scope。"
+                    )
+                paths = list(physical_scope.exact_objects)
+            else:
+                # R27-D：raw str/list 物理范围是逃生口——authorize 的是 dataset A、
+                # 真正扫描的却是 caller 另给的路径。production/strict 直接拒绝；
+                # research 允许但强制 dataset boundary（不能借 A 的授权读 B 的文件）。
+                if is_strict_semantics():
+                    raise ValidationError(
+                        "production/strict 模式禁止 raw physical_scope（str/list 路径）。"
+                        "物理读取范围只能由内部 VerifiedPhysicalScope / ReadPlan pin "
+                        "构造；请走 store.read(<dataset>) 正常读。"
+                    )
+                scope = (
+                    list(physical_scope)
+                    if isinstance(physical_scope, (list, tuple))
+                    else [str(physical_scope)]
+                )
+                # #6/#17：精确 URI scope 冻结一次，execution 与 snapshot 消费同一份
+                paths = self._expand_glob_paths(scope)
+                self._enforce_dataset_path_boundary(ds, paths)
         else:
             paths = self._prepare_dataset_read(
                 ds,
@@ -1242,21 +1453,94 @@ class DataAccessStore:
             paths = self._expand_glob_paths(paths)
         files = build_file_manifest(paths)
         self._enforce_scan_files(budget, paths, files=files)
-        self._ensure_schema(ds, paths, params, files=files)
+        # ---- source snapshot resolve + budget enforce（P0-004/010/017）----
+        src_snapshot = self._pipeline.resolve_snapshot(
+            dataset, files=files, paths=paths
+        )
+        self._pipeline.enforce_budget(budget, snapshot=src_snapshot, paths=paths)
+        self._ensure_schema(ds, paths, dict(params or {}), files=files)
+        # R26-P0-022：跨 epoch schema evolution gate（真实 parquet footer）。
+        if len(paths) > 1:
+            self._enforce_schema_epochs(ds, paths, columns=columns)
         snapshot = self._build_snapshot(
-            dataset=dataset, ds=ds, paths=paths, params=params, files=files
+            dataset=dataset, ds=ds, paths=paths, params=dict(params or {}), files=files
         )
         lineage = ReadLineage(
             dataset=dataset,
             columns=tuple(columns) if columns else (),
             time_range=time_range,
             instrument_filter=(
-                tuple(instrument_filter)
-                if instrument_filter is not None
-                else None
+                tuple(instrument_filter) if instrument_filter is not None else None
             ),
             params=snapshot.params,
         )
+        # ---- runtime contract（P0-011 hard-fail）----
+        runtime_contract = self._compile_contract_strict(dataset)
+        # ---- effective filters（P0-012 PredicateConstraint IR）----
+        effective_filters = self._compile_predicate_constraints(
+            dataset, filters=filters, params=params
+        )
+        temporal_plan = self._build_temporal_plan(dataset, mode=mode)
+        rid = request_identity or f"{dataset}:{uuid.uuid4().hex[:12]}"
+        pid = principal_id or getattr(current_principal() or self._principal, "principal_id", "unknown")
+        # ---- governor admission（P0-017：execute 前拦截）----
+        res = self._pipeline.admit(
+            request_identity=rid,
+            principal_id=pid,
+            estimated_scan_bytes=src_snapshot.total_bytes,
+            estimated_memory=0,
+            remote_requests=sum(
+                1 for o in src_snapshot.objects if str(o.uri).startswith(("s3://", "cos://"))
+            ),
+        )
+        return PreparedRead(
+            request_identity=rid,
+            dataset=dataset,
+            runtime_contract=runtime_contract,
+            security_context=current_execution_context(),
+            effective_filters=effective_filters,
+            temporal_plan=temporal_plan,
+            physical_scope=tuple(paths),
+            resolved_source_snapshot=src_snapshot,
+            query_budget=budget,
+            resource_reservation=res,
+            backend_plan={
+                "ds": ds,
+                "columns": list(columns) if columns else None,
+                "time_range": time_range,
+                "instrument_filter": instrument_filter,
+                "filters": filters,
+                "limit": limit,
+                "params": dict(params or {}),
+            },
+            lineage_seed={
+                "lineage": lineage,
+                "snapshot": snapshot,
+            },
+        )
+
+    def execute_prepared_read(
+        self,
+        prepared: PreparedRead,
+        *,
+        verify_after: bool = True,
+    ) -> ReadResult:
+        """R26-P0-004：执行已准备 plan（verify→execute→verify→release）。
+
+        任何 backend 路径都不得绕过 —— 这里是唯一执行出口。
+        """
+        snapshot = prepared.lineage_seed["snapshot"]
+        lineage = prepared.lineage_seed["lineage"]
+        dataset = prepared.dataset
+        bp = prepared.backend_plan
+        ds = bp["ds"]
+        columns = bp["columns"]
+        time_range = bp["time_range"]
+        instrument_filter = bp["instrument_filter"]
+        filters = bp["filters"]
+        limit = bp["limit"]
+        paths = list(prepared.physical_scope)
+        budget = prepared.query_budget
 
         sql, sql_params = self._build_select_sql(
             ds=ds,
@@ -1267,17 +1551,22 @@ class DataAccessStore:
             filters=filters,
             limit=limit,
         )
-
         start = time.perf_counter()
         ok = False
         err_msg: str | None = None
         table: pa.Table | None = None
         try:
-            table = self._engine.execute_arrow(
-                sql, sql_params, deadline_ms=budget.max_elapsed_ms
-            )
+            self._pipeline.verify_before(prepared.resolved_source_snapshot)
+            self._pipeline.counters.execute += 1
+            # R26-P1-016：DuckDB 并发 slot（governed 执行路径持有）。
+            with duckdb_slot(self._pipeline._governor):
+                table = self._engine.execute_arrow(
+                    sql, sql_params, deadline_ms=budget.max_elapsed_ms
+                )
             elapsed_ms = (time.perf_counter() - start) * 1000
             enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
+            if verify_after:
+                self._pipeline.verify_after(prepared.resolved_source_snapshot)
             ok = True
             stats = ReadStats(
                 rows=table.num_rows,
@@ -1303,6 +1592,8 @@ class DataAccessStore:
             err_msg = f"{type(exc).__name__}: {exc}"
             raise
         finally:
+            # R26-P0-017：成功 / 异常都必须 release exactly once。
+            self._pipeline.release_reservation(prepared.resource_reservation)
             elapsed_ms = (time.perf_counter() - start) * 1000
             audit.record(
                 op="read",
@@ -1310,14 +1601,170 @@ class DataAccessStore:
                 ok=ok,
                 rows=table.num_rows if table is not None else None,
                 paths=paths[:5] if paths else None,
-                params=params or None,
+                params=dict(bp.get("params") or {}) if "params" in bp else None,
                 elapsed_ms=elapsed_ms,
                 error=err_msg,
                 extra={
-                    "columns": list(columns) if columns else None,
+                    "columns": columns,
                     "snapshot_id": snapshot.snapshot_id,
+                    "snapshot_digest": (
+                        getattr(prepared.resolved_source_snapshot, "content_digest", None)
+                        if prepared.resolved_source_snapshot is not None
+                        else None
+                    ),
                 },
             )
+
+    def _compile_predicate_constraints(
+        self,
+        dataset: str,
+        *,
+        filters: Any = None,
+        params: Mapping[str, Any] | None = None,
+    ) -> tuple[Any, ...]:
+        """R26-P0-012：把过滤条件编译成 PredicateConstraint IR。
+
+        从 RuntimeDatasetContract.filters 抽取 allowed_values + 检查 params /
+        filters 是否真正限制到 allowed domain。Ne/NotIn/IsNotNull/Or 无法证明
+        子集 → kind="unprovable"（production 下等效未限制）。
+        """
+        from data_access.contract.filters import _coerce_values, _values_from_mapping
+        from data_access.read.predicate_ast import (
+            filter_column_values,
+            filter_constraint_status,
+            parse_filters,
+        )
+
+        rc = self._compile_contract_strict(dataset)
+        constraints: list[Any] = []
+        if rc is None or not rc.filters:
+            return tuple(constraints)
+        from data_access.runtime.prepared_read import PredicateConstraint
+
+        global_ast = parse_filters(filters)
+        for req in rc.filters:
+            pv = _values_from_mapping(params, req.field)
+            fv = _values_from_mapping(dict(filters or {}), req.field)
+            if pv:
+                constraints.append(
+                    PredicateConstraint(
+                        field=req.field,
+                        dataset=dataset,
+                        kind="exact",
+                        scope=req.scope,
+                        values=tuple(pv),
+                    )
+                )
+                continue
+            if fv:
+                constraints.append(
+                    PredicateConstraint(
+                        field=req.field,
+                        dataset=dataset,
+                        kind="exact",
+                        scope=req.scope,
+                        values=tuple(fv),
+                    )
+                )
+                continue
+            status = filter_constraint_status(global_ast, req.field)
+            vals = tuple(filter_column_values(global_ast).get(req.field, ()))
+            constraints.append(
+                PredicateConstraint(
+                    field=req.field,
+                    dataset=dataset,
+                    kind="in" if status == "positive" and vals else "unprovable",
+                    scope=req.scope,
+                    values=vals,
+                )
+            )
+        return tuple(constraints)
+
+    def _build_temporal_plan(self, dataset: str, *, mode: str = "auto"):
+        """R26-P0-014：从 RuntimeDatasetContract 构建 temporal plan（含 PIT floor）。"""
+        from data_access.runtime.prepared_read import TemporalPlan
+
+        rc = self._compile_contract_strict(dataset)
+        if rc is None or rc.physical_partition is None:
+            return TemporalPlan(predicate_clock=None, partition_clock=None)
+        spec = rc.physical_partition
+        availability = None
+        try:
+            from data_access.read.session_calendar import compile_available_from_result
+
+            availability = compile_available_from_result(dataset)
+        except Exception:
+            availability = None
+        pit_floor = getattr(rc.pit, "availability", None)
+        if pit_floor is None:
+            pit_floor = _PIT_FLOOR_OF.get(getattr(rc.pit, "pit_policy", None))
+        return TemporalPlan(
+            predicate_clock=spec.query_clock,
+            partition_clock=spec.partition_clock,
+            availability=availability,
+            pit_floor=pit_floor,
+            pit_fidelity=getattr(rc.pit, "pit_fidelity", None),
+        )
+
+    def _enforce_schema_epochs(
+        self,
+        ds: Dataset,
+        paths: Sequence[str],
+        *,
+        columns: Sequence[str] | None = None,
+    ) -> None:
+        """R26-P0-022：跨 epoch schema evolution gate（真实 parquet footer）。
+
+        逐 object 读 footer → schema fingerprint → epoch 分组；跨 epoch 校验
+        请求字段存在性 + dtype 兼容 + 声明 schema 对齐。违反（production）
+        抛 ``SchemaContractError``，绝不让 ``union_by_name=True`` 掩盖缺字段。
+        """
+        from data_access.read.schema_epoch import SchemaEpochGate
+
+        declared = {
+            str(k): str(v)
+            for k, v in dict(getattr(ds, "schema", None) or {}).items()
+        }
+        gate = SchemaEpochGate(declared_fields=declared)
+        gate.validate(list(paths), requested_columns=list(columns) if columns else None)
+
+    def _read_dataset_object(
+        self,
+        ds: Dataset,
+        *,
+        dataset: str,
+        columns: Sequence[str] | None,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Sequence[str] | None,
+        filters: Any,
+        limit: int | None,
+        query_budget: QueryBudget | None,
+        params: dict[str, Any],
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
+        physical_scope: str | Sequence[str] | None = None,
+    ) -> ReadResult:
+        """按已解析的 ``Dataset`` 对象执行一次读（read_result / read_uri 共用）。
+
+        R26-P0-004：统一走 prepare_read → execute_prepared_read 执行链。
+        """
+        prepared = self.prepare_read(
+            dataset,
+            ds=ds,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            limit=limit,
+            query_budget=query_budget,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+            physical_scope=physical_scope,
+            params=params,
+        )
+        return self.execute_prepared_read(prepared)
 
     def read_asof(
         self,
@@ -1427,6 +1874,7 @@ class DataAccessStore:
         allow_sparse: bool = False,
         allow_effective_time: bool = False,
         physical_scope: str | Sequence[str] | None = None,
+        _return_meta: bool = False,
         **params: Any,
     ) -> Iterator[pa.RecordBatch]:
         """流式读取（PR7）：返回一个 Arrow RecordBatch 生成器。
@@ -1456,42 +1904,25 @@ class DataAccessStore:
             >>> for batch in store.read_arrow_stream("factor_lake", factor_id="mom_3d"):
             ...     total += batch.num_rows
         """
-        self.authorize_dataset(dataset)
-        ds = self._registry.get(dataset)
-        # #5 流式读同样强制 temporal contract + required_filters + allowed values
-        self._prepare_read_request(
+        # R26-P0-004：stream 同样走 prepare_read（auth/contract/snapshot/budget/
+        # governor admission），生成器 close 时 release。
+        prepared = self.prepare_read(
             dataset,
             columns=columns,
             time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            limit=limit,
+            query_budget=query_budget,
             mode=mode,
             allow_sparse=allow_sparse,
             allow_effective_time=allow_effective_time,
-            filters=filters,
+            physical_scope=physical_scope,
             params=params,
         )
-        _assert_instrument_filter_supported(ds, instrument_filter)
-        budget = self._resolve_read_budget(ds, query_budget)
-        validate_query_request(
-            budget, columns=list(columns) if columns else None, time_range=time_range
-        )
-        if physical_scope is not None:
-            scope = (
-                list(physical_scope)
-                if isinstance(physical_scope, (list, tuple))
-                else [str(physical_scope)]
-            )
-            paths = self._expand_glob_paths(scope)
-        else:
-            paths = self._prepare_dataset_read(
-                ds,
-                time_range=time_range,
-                params=params,
-                instrument_filter=instrument_filter,
-            )
-            paths = self._expand_glob_paths(paths)
-        files = build_file_manifest(paths)
-        self._enforce_scan_files(budget, paths, files=files)
-        self._ensure_schema(ds, paths, params, files=files)
+        ds = prepared.backend_plan["ds"]
+        budget = prepared.query_budget
+        paths = list(prepared.physical_scope)
         sql, sql_params = self._build_select_sql(
             ds=ds,
             paths=paths,
@@ -1514,10 +1945,15 @@ class DataAccessStore:
         total_bytes = 0
         ok = False
         err_msg: str | None = None
+        snapshot = prepared.resolved_source_snapshot
 
         def _iter_batches() -> Iterator[pa.RecordBatch]:
             nonlocal total_rows, total_bytes, ok, err_msg
             try:
+                # R26-P0-004/016：第一批产出前 verify snapshot（文件仍在、
+                # identity 未变）。streaming 期间 governor reservation 保持。
+                self._pipeline.verify_before(snapshot)
+                self._pipeline.counters.execute += 1
                 # #P0-20 第一批产出前先查一次 elapsed（覆盖 engine watchdog
                 # 未触发的边界：预算超时优先于 deadline interrupt 的情形）。
                 enforce_stream_budget(
@@ -1536,6 +1972,7 @@ class DataAccessStore:
                         elapsed_ms=(time.perf_counter() - start) * 1000,
                     )
                     yield batch
+                self._pipeline.verify_after(snapshot)
                 ok = True
             except Exception as exc:
                 err_msg = f"{type(exc).__name__}: {exc}"
@@ -1549,6 +1986,8 @@ class DataAccessStore:
                         close()
                 except Exception:
                     pass
+                # R26-P0-017：stream 客户端断开 / break / 异常 → release exactly once。
+                self._pipeline.release_reservation(prepared.resource_reservation)
                 audit.record(
                     op="read",
                     dataset=dataset,
@@ -1565,7 +2004,18 @@ class DataAccessStore:
             "read_arrow_stream dataset=%s batch_size=%d params=%s",
             dataset, batch_size, params or "{}",
         )
-        return _iter_batches()
+        gen = _iter_batches()
+        if _return_meta:
+            # R27-H：内部消费方（_read_handle result="stream"）复用**同一次**
+            # prepare_read 的 snapshot/lineage——不再二次 resolve（TOCTOU），
+            # snapshot 与真正读取的文件是同一份。
+            return (
+                gen,
+                prepared.lineage_seed.get("snapshot"),
+                prepared.lineage_seed.get("lineage"),
+                prepared,
+            )
+        return gen
 
     def _scan_polars_with_paths(
         self,
@@ -1581,8 +2031,12 @@ class DataAccessStore:
         allow_effective_time: bool = False,
         physical_scope: str | Sequence[str] | None = None,
         **params: Any,
-    ) -> tuple[Any, list[str]]:
-        """内部：构建 Polars LazyFrame，同时返回已解析 paths（避免 scan 二次准备）。"""
+    ) -> tuple[Any, list[str], PreparedRead]:
+        """内部：构建 Polars LazyFrame，同时返回已解析 paths 与 PreparedRead。
+
+        R26-P0-004：Polars 路径同样走 ``prepare_read``（auth/contract/snapshot/
+        budget/governor admission）。
+        """
         try:
             import polars as pl_mod
         except ImportError as exc:
@@ -1591,44 +2045,23 @@ class DataAccessStore:
             ) from exc
 
         scan_start = time.perf_counter()
-        ds = self._registry.get(dataset)
-        # #5 Polars 扫描同样强制 temporal contract + required_filters + allowed values
-        self._prepare_read_request(
+        # R26-P0-004：统一 prepare 链（auth/contract/snapshot/budget/governor）。
+        prepared = self.prepare_read(
             dataset,
             columns=columns,
             time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            query_budget=query_budget,
             mode=mode,
             allow_sparse=allow_sparse,
             allow_effective_time=allow_effective_time,
-            filters=filters,
+            physical_scope=physical_scope,
             params=params,
         )
-        _assert_instrument_filter_supported(ds, instrument_filter)
-        budget = self._resolve_read_budget(ds, query_budget)
-        validate_query_request(
-            budget, columns=list(columns) if columns else None, time_range=time_range
-        )
-        if physical_scope is not None:
-            scope = (
-                list(physical_scope)
-                if isinstance(physical_scope, (list, tuple))
-                else [str(physical_scope)]
-            )
-            paths = self._expand_glob_paths(scope)
-        else:
-            paths = self._prepare_dataset_read(
-                ds,
-                time_range=time_range,
-                params=params,
-                instrument_filter=instrument_filter,
-            )
-            # #6/#7 冻结一次：LazyFrame 绑定精确文件清单，collect 前不会因新文件
-            # 而读到 snapshot 没记录的数据（ScanHandle.collect 再 revalidate mtime）。
-            paths = self._expand_glob_paths(paths)
-        # scan_polars 也走 schema 自检：发现声明漂移尽早报。
-        files = build_file_manifest(paths)
-        self._enforce_scan_files(budget, paths, files=files)
-        self._ensure_schema(ds, paths, params, files=files)
+        ds = prepared.backend_plan["ds"]
+        budget = prepared.query_budget
+        paths = list(prepared.physical_scope)
 
         # #29 按 FormatSpec 选 Polars scan 函数：旧代码一律 scan_parquet，
         # CSV/TSV/JSONL 数据集如果路由到 Polars 会被 scan_parquet 处理报错。
@@ -1751,7 +2184,7 @@ class DataAccessStore:
             elapsed_ms=(time.perf_counter() - scan_start) * 1000,
             extra={"scan_polars": True, "columns": list(columns) if columns else None},
         )
-        return lf, paths
+        return lf, paths, prepared
 
     def scan_polars(
         self,
@@ -1782,8 +2215,22 @@ class DataAccessStore:
         依赖：
             需要 `polars` 已安装；没装会 raise ImportError 并提示 `pip install polars`。
         """
-        self.authorize_dataset(dataset)
-        lf, _paths = self._scan_polars_with_paths(
+        # R26-P0-004：scan_polars 走 prepare_read 全链（auth/contract/snapshot/
+        # budget/governor）。裸 LazyFrame 不进入受控执行（无法 hook collect 释放），
+        # governor reservation 在构建后立即释放——真正的受控执行请用 ``scan()``
+        # 返回的 ScanHandle（collect 时 verify/release，T-R26-PIPE/RES-003）。
+        # R27-J：production/strict 直接禁止裸 scan_polars——collect 已离开
+        # DataAccess，丢失 budget/snapshot revalidation/audit/result-size 控制。
+        from data_access.read.query_budget import is_strict_semantics
+
+        if is_strict_semantics():
+            raise ValidationError(
+                "production/strict 模式禁止裸 scan_polars()（collect 会绕过 "
+                "QueryBudget / snapshot revalidation / audit）。请用 "
+                "store.scan() 返回的 ScanHandle（collect 时受控），或 "
+                "native_lazyframe() 做 composition-only 组合。"
+            )
+        lf, _paths, prepared = self._scan_polars_with_paths(
             dataset,
             columns=columns,
             time_range=time_range,
@@ -1794,6 +2241,17 @@ class DataAccessStore:
             allow_sparse=allow_sparse,
             allow_effective_time=allow_effective_time,
             **params,
+        )
+        self._pipeline.release_reservation(prepared.resource_reservation)
+        # R27-J：research 放行但审计标记 unsafe（不再与 scan() 的受控审计同权）。
+        audit.record(
+            op="read",
+            dataset=dataset,
+            ok=True,
+            rows=None,
+            params=params or None,
+            elapsed_ms=0.0,
+            extra={"scan_polars_unsafe": True, "governance_bypassed": True},
         )
         return lf
 
@@ -1812,10 +2270,7 @@ class DataAccessStore:
         **params: Any,
     ) -> ScanHandle:
         """受控 Polars 扫描：``collect()`` 强制 budget + snapshot（production 推荐）。"""
-        self.authorize_dataset(dataset)
-        ds = self._registry.get(dataset)
-        budget = self._resolve_read_budget(ds, query_budget)
-        lf, paths = self._scan_polars_with_paths(
+        lf, paths, prepared = self._scan_polars_with_paths(
             dataset,
             columns=columns,
             time_range=time_range,
@@ -1827,26 +2282,15 @@ class DataAccessStore:
             allow_effective_time=allow_effective_time,
             **params,
         )
-        snapshot = self._build_snapshot(
-            dataset=dataset, ds=ds, paths=paths, params=params
-        )
-        lineage = ReadLineage(
-            dataset=dataset,
-            columns=tuple(columns) if columns else (),
-            time_range=time_range,
-            instrument_filter=(
-                tuple(instrument_filter)
-                if instrument_filter is not None
-                else None
-            ),
-            params=snapshot.params,
-        )
+        snapshot = prepared.lineage_seed["snapshot"]
+        lineage = prepared.lineage_seed["lineage"]
         return ScanHandle(
             _lf=lf,
             snapshot=snapshot,
-            budget=budget,
+            budget=prepared.query_budget,
             lineage=lineage,
             _store=self,
+            _prepared=prepared,
         )
 
     def read_frame(
@@ -2175,6 +2619,17 @@ class DataAccessStore:
                     f"在 datasets.yaml 登记该数据集，再走其 Contract 读取。"
                 )
             rds = self._registry.get(registered)
+            # R27-D：#17 精确 URI 作为 physical scope：Contract 只提供语义门禁，
+            # 物理读取范围仍限定调用方指定的文件——绝不读整个 dataset glob。
+            # 但 raw uri 不能直接当 scope（否则 authorize 的是 registered dataset、
+            # 扫描的却可被替换）。用内部 VerifiedPhysicalScope 绑定 dataset_id。
+            from data_access.runtime.prepared_read import VerifiedPhysicalScope
+
+            verified_scope = VerifiedPhysicalScope(
+                dataset_id=registered,
+                exact_objects=(uri,),
+                contract_digest=self._contract_digest_for(registered),
+            )
             return self._read_handle(
                 rds,
                 dataset=registered,
@@ -2191,9 +2646,7 @@ class DataAccessStore:
                 query_budget=query_budget,
                 params=kwargs,
                 normalize_units=normalize_units,
-                # #17 精确 URI 作为 physical scope：Contract 只提供语义门禁，
-                # 物理读取范围仍限定调用方指定的文件——绝不读整个 dataset glob。
-                physical_scope=uri,
+                physical_scope=verified_scope,
             )
         ds = self._uri_dataset(
             uri,
@@ -2332,6 +2785,7 @@ class DataAccessStore:
         for right_ds in (joins or {}):
             self.authorize_dataset(right_ds)
         self._registry.get(anchor)
+        self._pipeline.counters.auth += 1
         per_ds, fields_meta, default_joins = self._normalize_joined_fields(anchor, fields)
         # #P0-2 统一 effective_join_specs：SemanticField 默认 → COS Contract 默认
         # → 显式 joins/join_specs 覆盖。PIT validator / plan / 组合执行消费同一份。
@@ -2373,6 +2827,7 @@ class DataAccessStore:
                 filters=filters,
                 filters_by_dataset=filters_by_dataset,
             )
+        self._pipeline.counters.contract += 1
 
         merged = self._resolve_sql_budget(list(per_ds), query_budget)
         all_cols = [c for cols in per_ds.values() for c in cols]
@@ -2435,11 +2890,31 @@ class DataAccessStore:
         )
         lineage = SqlReadLineage(datasets=tuple(datasets), query_preview=sql[:200])
 
+        # R26-P0-004/017：read_joined 同样走 pipeline（snapshot/budget/governor/
+        # verify/release）。
+        all_files = []
+        for ds in datasets:
+            dsobj = self._registry.get(ds)
+            all_files.extend(self._files_for_snapshot(dsobj, ds, per_ds_paths.get(ds) or []))
+        join_snapshot = self._pipeline.resolve_snapshot(
+            anchor, files=all_files, paths=per_ds_paths.get(anchor)
+        )
+        self._pipeline.enforce_budget(merged, snapshot=join_snapshot)
+        rid = f"joined:{anchor}:{uuid.uuid4().hex[:12]}"
+        pid = getattr(self._principal, "principal_id", "unknown")
+        res = self._pipeline.admit(
+            request_identity=rid,
+            principal_id=pid,
+            estimated_scan_bytes=join_snapshot.total_bytes,
+        )
+
         start = time.perf_counter()
         ok = False
         err_msg: str | None = None
         table: pa.Table | None = None
         try:
+            self._pipeline.verify_before(join_snapshot)
+            self._pipeline.counters.execute += 1
             table = self._engine.execute_arrow(
                 sql, sql_params, deadline_ms=merged.max_elapsed_ms
             )
@@ -2447,6 +2922,7 @@ class DataAccessStore:
                 table = normalize_table_units(table, fields_meta)
             elapsed_ms = (time.perf_counter() - start) * 1000
             enforce_arrow_budget(merged, table, elapsed_ms=elapsed_ms)
+            self._pipeline.verify_after(join_snapshot)
             ok = True
             stats = ReadStats(
                 rows=table.num_rows, bytes=table.nbytes, elapsed_ms=elapsed_ms
@@ -2464,6 +2940,7 @@ class DataAccessStore:
             err_msg = f"{type(exc).__name__}: {exc}"
             raise
         finally:
+            self._pipeline.release_reservation(res)
             elapsed_ms = (time.perf_counter() - start) * 1000
             audit.record(
                 op="read_joined",
@@ -3028,36 +3505,148 @@ class DataAccessStore:
 
         set_result_cache_enabled(enabled)
 
-    def read_cached(
+    def _contract_digest_for(self, dataset: str) -> str:
+        """R27-D：数据集 Contract 指纹（VerifiedPhysicalScope 绑定用）。
+
+        优先编译后 Contract fingerprint；失败回退 registry hash + 数据集名
+        （仍是 dataset 专属、不可跨数据集伪造）。
+        """
+        try:
+            rc = self.contract_compiler.compile(dataset)
+            fp = getattr(rc, "fingerprint", None)
+            if fp:
+                return str(fp)
+        except Exception:
+            pass
+        return f"{self._registry_hash}:{dataset}"
+
+    def _dataset_classification(self, dataset: str) -> str | None:
+        """R27-A：数据集安全分类（contract 的 DatasetSecurityContract.classification）。
+
+        供缓存决策：restricted/premium 数据默认不进共享结果缓存。
+        """
+        try:
+            rc = self.contract_compiler.compile(dataset)
+            if rc is not None:
+                return getattr(getattr(rc, "security", None), "classification", None)
+        except Exception:
+            pass
+        return None
+
+    def _cache_security_scope(self) -> str:
+        """R27-A：缓存 key 的 security scope digest。
+
+        request-scoped 执行上下文优先（principal+policy+run_mode），无上下文
+        回退 store 级 principal + access policy。同一 query 不同身份 → 不同 key，
+        杜绝跨 principal 缓存泄露（R27-A）。
+        """
+        from data_access.read.query_cache import _security_scope_digest
+        from data_access.security.execution_context import (
+            current_execution_context,
+            current_security_digest,
+        )
+
+        ctx = current_execution_context()
+        principal = ctx.principal if ctx is not None else self._principal
+        policy = ctx.access_policy if ctx is not None else self._access_policy
+        scope = _security_scope_digest(principal=principal, access_policy=policy)
+        # 请求级 security_digest（含 run_mode）并入——research/strict 切换也换 key。
+        sd = current_security_digest()
+        return f"{scope}:{sd}" if sd else scope
+
+    def _cache_miss_read(
         self,
         dataset: str,
         *,
-        columns: Sequence[str] | None = None,
-        time_range: tuple[Any, Any] | None = None,
-        instrument_filter: Sequence[str] | None = None,
-        filters: Any = None,
-        limit: int | None = None,
-        mode: str = "auto",
-        allow_sparse: bool = False,
-        allow_effective_time: bool = False,
-        normalize_units: bool = False,
-        **params: Any,
-    ) -> Any:
-        """带查询结果缓存的 read_arrow（默认关闭，enable_result_cache(True) 开启）。
+        columns: Sequence[str] | None,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Sequence[str] | None,
+        filters: Any,
+        limit: int | None,
+        mode: str,
+        allow_sparse: bool,
+        allow_effective_time: bool,
+        normalize_units: bool,
+        params: dict[str, Any],
+    ) -> tuple[Any, str | None, Any]:
+        """R27-B：cache miss 真实读取，返回 ``(table, snapshot_id, lineage)``。
 
-        key 含 manifest source_epoch（写路径 bump 后自动失效）+ **canonical
-        Filter AST hash** + limit + mode + allow_sparse + allow_effective_time +
-        normalize_units + 语义 catalog 指纹 + Contract IR 指纹（#3：缺这些会命中
-        错误结果）。命中返回 Arrow Table；未命中走 read_arrow 并写入缓存。
+        ``normalize_units=True`` 走 ``self.read(..., normalize_units=True,
+        result="arrow")``——真正经过 semantic normalize 路径（旧代码把
+        ``normalize_units`` 透传给没有该参数的 ``read_arrow``，掉进 ``**params``
+        被当成 dataset 参数）。
+        """
+        if normalize_units:
+            handle = self.read(
+                dataset,
+                columns=columns,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                filters=filters,
+                limit=limit,
+                mode=mode,
+                allow_sparse=allow_sparse,
+                allow_effective_time=allow_effective_time,
+                normalize_units=True,
+                result="arrow",
+                **params,
+            )
+            snapshot = getattr(handle, "snapshot", None)
+            snap_id = getattr(snapshot, "snapshot_id", None) if snapshot is not None else None
+            lineage = getattr(handle, "lineage", None)
+            return handle.to_arrow(), snap_id, lineage
+        rr = self.read_result(
+            dataset,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            limit=limit,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+            **params,
+        )
+        return rr.table, rr.snapshot.snapshot_id, rr.lineage
+
+    def _read_cached_impl(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None,
+        time_range: tuple[Any, Any] | None,
+        instrument_filter: Sequence[str] | None,
+        filters: Any,
+        limit: int | None,
+        mode: str,
+        allow_sparse: bool,
+        allow_effective_time: bool,
+        normalize_units: bool,
+        params: Mapping[str, Any],
+    ) -> tuple[Any, dict[str, Any], bool]:
+        """R27-A/B/C：read_cached 核心 —— authorize → gates → scope key → hit/miss。
+
+        返回 ``(table, meta, cache_hit)``。``meta`` 携带 provenance（snapshot_id /
+        source_generation / security_scope / principal），cache hit 也能恢复
+        审计与 lineage（R27-C）。restricted/premium 数据不进共享缓存（R27-A）。
         """
         from data_access.read.query_cache import (
+            classification_cache_blocked,
             get_query_cache,
             query_cache_key,
             result_cache_enabled,
         )
 
+        params = dict(params)
+        # R27-A：逻辑授权必须在 cache lookup **之前**（高权限用户命中缓存不能
+        # 绕过低权限 principal 的授权；未授权访问在进入 key 前就被拒绝）。
+        self.authorize_dataset(dataset)
+        classification = self._dataset_classification(dataset)
+
+        # R27-B：normalize_units 不再是 key 之外的可选装饰——不进缓存路径也一样
+        # 走真实 normalize 读（修掉 read_arrow 无此参数导致掉进 **params 的 bug）。
         if not result_cache_enabled():
-            return self.read_arrow(
+            table, snap_id, lineage = self._cache_miss_read(
                 dataset,
                 columns=columns,
                 time_range=time_range,
@@ -3068,8 +3657,15 @@ class DataAccessStore:
                 allow_sparse=allow_sparse,
                 allow_effective_time=allow_effective_time,
                 normalize_units=normalize_units,
-                **params,
+                params=params,
             )
+            return table, {
+                "dataset": dataset,
+                "snapshot_id": snap_id,
+                "security_scope": self._cache_security_scope(),
+                "classification": classification,
+            }, False
+
         ds = self._registry.get(dataset)
         # #P0-C2 gates 前置：缓存命中也必须经过与真实 read 完全相同的语义/budget
         # gate（temporal contract / required_filters / allowed values / query
@@ -3104,7 +3700,7 @@ class DataAccessStore:
         # 的话，底层数据被外部系统修改（不经 DataAccess epoch）缓存只能等 TTL。
         # 这里没有 authoritative manifest（不存在 / 不 fresh）就完全跳过缓存。
         if token is None or not token.get("has_manifest") or not token.get("fresh"):
-            return self.read_arrow(
+            table, snap_id, lineage = self._cache_miss_read(
                 dataset,
                 columns=columns,
                 time_range=time_range,
@@ -3115,8 +3711,14 @@ class DataAccessStore:
                 allow_sparse=allow_sparse,
                 allow_effective_time=allow_effective_time,
                 normalize_units=normalize_units,
-                **params,
+                params=params,
             )
+            return table, {
+                "dataset": dataset,
+                "snapshot_id": snap_id,
+                "security_scope": self._cache_security_scope(),
+                "classification": classification,
+            }, False
         try:
             from data_access.read.semantic_catalog import get_semantic_catalog
 
@@ -3132,15 +3734,17 @@ class DataAccessStore:
         key_columns = columns
         if key_columns is None:
             try:
-                ds = self._registry.get(dataset)
                 schema_cols = list((getattr(ds, "schema", None) or {}).keys())
                 if schema_cols:
                     key_columns = schema_cols
             except Exception:
                 key_columns = None
+        # R27-A：security scope + classification 纳入 key——同一 query 不同身份
+        # /不同分类策略不串缓存。
+        security_scope = self._cache_security_scope()
         key = query_cache_key(
             dataset=dataset,
-            params=dict(params),
+            params=params,
             time_range=time_range,
             instruments=instrument_filter,
             columns=key_columns,
@@ -3153,11 +3757,43 @@ class DataAccessStore:
             normalize_units=normalize_units,
             catalog_fingerprint=cat_fp,
             contract_ir_fingerprint=ir_fp,
+            calendar_version=self.calendar_snapshot_id(),
+            extra={
+                "security_scope": security_scope,
+                "classification": classification,
+            },
         )
-        hit = cache.get(key)
-        if hit is not None:
-            return hit
-        table = self.read_arrow(
+        # R27-A：restricted/premium 数据默认不进共享结果缓存（即使 key 已按
+        # principal 隔离，也不让高权限结果以内存引用形式留在进程里给后续身份）。
+        if classification_cache_blocked(classification):
+            table, snap_id, lineage = self._cache_miss_read(
+                dataset,
+                columns=columns,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                filters=filters,
+                limit=limit,
+                mode=mode,
+                allow_sparse=allow_sparse,
+                allow_effective_time=allow_effective_time,
+                normalize_units=normalize_units,
+                params=params,
+            )
+            return table, {
+                "dataset": dataset,
+                "snapshot_id": snap_id,
+                "security_scope": security_scope,
+                "classification": classification,
+            }, False
+        value, meta = cache.get_entry(key)
+        if value is not None:
+            # R27-C：cache hit 必须审计（旧代码 hit 直接 return，用户实际读到
+            # 敏感数据但 audit 无记录），并恢复 provenance。
+            self._audit_cache_hit(
+                dataset, value, meta, params, classification, security_scope
+            )
+            return value, meta or {}, True
+        table, snap_id, lineage = self._cache_miss_read(
             dataset,
             columns=columns,
             time_range=time_range,
@@ -3168,11 +3804,142 @@ class DataAccessStore:
             allow_sparse=allow_sparse,
             allow_effective_time=allow_effective_time,
             normalize_units=normalize_units,
-            **params,
+            params=params,
         )
+        meta = {
+            "dataset": dataset,
+            "snapshot_id": snap_id,
+            "source_generation": token.get("source_epoch") or token.get("dataset_version"),
+            "security_scope": security_scope,
+            "classification": classification,
+            "principal_id": self._current_principal_id(),
+        }
         if table.num_rows is not None:
-            cache.set_with_size(key, table, nbytes=table.nbytes)
-        return table
+            cache.set_with_size(key, table, nbytes=table.nbytes, meta=meta)
+        return table, meta, False
+
+    def _current_principal_id(self) -> str:
+        from data_access.security.execution_context import current_principal
+
+        p = current_principal() or self._principal
+        return getattr(p, "principal_id", "unknown")
+
+    def _audit_cache_hit(
+        self,
+        dataset: str,
+        table: Any,
+        meta: dict[str, Any] | None,
+        params: dict[str, Any],
+        classification: str | None,
+        security_scope: str,
+    ) -> None:
+        """R27-C：cache hit 审计（记录 provenance，不丢 audit / lineage）。"""
+        from data_access.core import audit
+
+        meta = meta or {}
+        audit.record(
+            op="read",
+            dataset=dataset,
+            ok=True,
+            rows=getattr(table, "num_rows", None),
+            paths=None,
+            params=params or None,
+            elapsed_ms=0.0,
+            extra={
+                "cache_hit": True,
+                "original_snapshot_id": meta.get("snapshot_id"),
+                "source_generation": meta.get("source_generation"),
+                "security_scope": security_scope,
+                "classification": classification,
+                "cached_principal_id": meta.get("principal_id"),
+            },
+        )
+
+    def read_cached(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
+        limit: int | None = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
+        normalize_units: bool = False,
+        **params: Any,
+    ) -> Any:
+        """带查询结果缓存的 read（默认关闭，enable_result_cache(True) 开启）。
+
+        key 含 manifest source_epoch（写路径 bump 后自动失效）+ **canonical
+        Filter AST hash** + limit + mode + allow_sparse + allow_effective_time +
+        normalize_units + 语义 catalog 指纹 + Contract IR 指纹 + **security scope**
+        （R27-A：跨 principal 不串缓存）+ **classification**（R27-A：restricted/
+        premium 默认不进共享缓存）。命中返回 Arrow Table 并记录 cache-hit 审计
+        （R27-C）；未命中走真实 read 并写入缓存。需要 provenance 的调用方用
+        ``read_cached_result()``。
+        """
+        value, _meta, _hit = self._read_cached_impl(
+            dataset,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            limit=limit,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+            normalize_units=normalize_units,
+            params=params,
+        )
+        return value
+
+    def read_cached_result(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
+        limit: int | None = None,
+        mode: str = "auto",
+        allow_sparse: bool = False,
+        allow_effective_time: bool = False,
+        normalize_units: bool = False,
+        **params: Any,
+    ) -> Any:
+        """R27-C：read_cached 的 provenance 版本 —— 命中/未命中都返回
+        ``CachedReadResult``（table + snapshot_id + source_generation +
+        security_scope + principal + cache_provenance），上层可恢复 lineage。"""
+        from data_access.read.query_cache import CachedReadResult
+
+        value, meta, hit = self._read_cached_impl(
+            dataset,
+            columns=columns,
+            time_range=time_range,
+            instrument_filter=instrument_filter,
+            filters=filters,
+            limit=limit,
+            mode=mode,
+            allow_sparse=allow_sparse,
+            allow_effective_time=allow_effective_time,
+            normalize_units=normalize_units,
+            params=params,
+        )
+        meta = meta or {}
+        return CachedReadResult(
+            table=value,
+            cache_hit=hit,
+            dataset=dataset,
+            snapshot_id=meta.get("snapshot_id"),
+            source_generation=meta.get("source_generation"),
+            security_digest=meta.get("security_scope"),
+            principal_id=meta.get("principal_id") or self._current_principal_id(),
+            cache_key=None,
+            cache_provenance=meta,
+        )
 
     def coverage(self, dataset: str, **params: Any) -> Any:
         """#14 数据集覆盖/完整性报告：complete/partial/unavailable + 问题列表。"""
@@ -3441,18 +4208,61 @@ class DataAccessStore:
                 or ct.period_column
             )
             if pit_backward:
+                # R26-P0-014：契约 fallback 必须显式带 authoritative availability
+                # （不吞 same_day 默认）。
+                floor = _PIT_FLOOR_OF.get(
+                    str(getattr(ct, "pit_policy", "") or "").strip().lower()
+                )
                 specs[ds] = TemporalJoinSpec(
                     policy="pit_asof",
                     knowledge_time=ct.availability_column or ct.period_column,
                     period_time=ct.period_column,
                     revision_order=tuple(ct.revision_columns or ()),
+                    availability=floor or "next_trading_day",
                 )
         # 显式覆盖（最高优先）
         for ds, raw in (explicit or {}).items():
             if ds not in per_ds:
                 continue
             specs[ds] = parse_join_spec(raw)
+        # R26-P0-014：PIT policy floor——request 只能 same-or-stricter，不能 loosen
+        # contract 的 availability / revision / period-selection。
+        for ds in list(specs):
+            self._apply_pit_policy_floor(ds, specs[ds])
         return specs
+
+    def _apply_pit_policy_floor(self, ds: str, spec: Any) -> None:
+        """R26-P0-014：请求的 join spec 不能低于契约 PIT floor。
+
+        floor 来源：COS 契约 ``pit_policy``（strict → next_session_open /
+        effective_time_only → effective_date_only / knowledge_date_pit →
+        next_trading_day）。请求显式 ``availability=same_day`` 覆盖系统
+        next_session_open → 拒绝（production fail-closed）。
+
+        同时契约 fallback 构造的 TemporalJoinSpec 必须显式带 authoritative
+        availability，不能吃 ``same_day`` 默认（P0-014 第二条）。
+        """
+        from data_access.cos_contract import get_cos_contract
+
+        try:
+            ct = get_cos_contract(ds)
+        except Exception:
+            ct = None
+        if ct is None:
+            return
+        floor = _PIT_FLOOR_OF.get(str(getattr(ct, "pit_policy", "") or "").strip().lower())
+        if floor is None:
+            return
+        spec_avail = str(getattr(spec, "availability", None) or "same_day").strip().lower()
+        if _PIT_AVAILABILITY_ORDER.get(spec_avail, 0) < _PIT_AVAILABILITY_ORDER.get(floor, 3):
+            msg = (
+                f"PIT policy floor 拒绝：数据集 {ds!r} contract 要求 "
+                f"availability={floor}，请求显式 {spec_avail!r} 是降级"
+                "（R26-P0-014：request 只能 same-or-stricter）。"
+            )
+            if is_strict_semantics():
+                raise ValidationError(msg)
+            logger.warning("%s（research 放行）", msg)
 
     def _read_joined_sql(
         self,
@@ -3795,22 +4605,36 @@ class DataAccessStore:
                 if spec.is_calendar_availability and not use_session_avail:
                     market = _market_of_dataset(ds)
                     cal = self.get_calendar(market) if market else None
+                    strict = is_strict_semantics()
                     if cal is not None:
-                        wrapped, _cp, ok = _session_avail_sql(
-                            sub,
-                            right_time_col=right_time,
-                            calendar=cal,
-                            start=time_range[0] if time_range else None,
-                            end=time_range[1] if time_range else None,
-                        )
+                        try:
+                            wrapped, _cp, ok = _session_avail_sql(
+                                sub,
+                                right_time_col=right_time,
+                                calendar=cal,
+                                start=time_range[0] if time_range else None,
+                                end=time_range[1] if time_range else None,
+                                strict=strict,
+                            )
+                        except PITUnavailable:
+                            raise
                         if ok:
                             sub = wrapped
                             params_list.extend(_cp)
                             use_session_avail = True
                     if not use_session_avail:
+                        # R26-P0-013：production 禁止 same-day fallback。
+                        if strict:
+                            from data_access.core.exceptions import PITUnavailable
+
+                            raise PITUnavailable(
+                                f"calendar availability({spec.availability}): 数据集 "
+                                f"{ds!r} 无可用交易日历，无法证明下一交易日可见性"
+                                "（R26-P0-013：production 禁止 same-day fallback）"
+                            )
                         logger.warning(
                             "calendar availability(%s): 数据集 %r 无可用交易日历，"
-                            "回退 >= (same_day)",
+                            "回退 >= (same_day)（research degraded）",
                             spec.availability,
                             ds,
                         )
@@ -4279,8 +5103,7 @@ class DataAccessStore:
                 physical_scope=physical_scope,
             )
         if engine == "polars":
-            budget = self._resolve_read_budget(ds, query_budget)
-            lf, paths = self._scan_polars_with_paths(
+            lf, paths, prepared = self._scan_polars_with_paths(
                 dataset,
                 columns=columns,
                 time_range=time_range,
@@ -4293,20 +5116,9 @@ class DataAccessStore:
                 physical_scope=physical_scope,
                 **params,
             )
-            snapshot = self._build_snapshot(
-                dataset=dataset, ds=ds, paths=paths, params=params
-            )
-            lineage = ReadLineage(
-                dataset=dataset,
-                columns=tuple(columns) if columns else (),
-                time_range=time_range,
-                instrument_filter=(
-                tuple(instrument_filter)
-                if instrument_filter is not None
-                else None
-            ),
-                params=snapshot.params,
-            )
+            budget = prepared.query_budget
+            snapshot = prepared.lineage_seed["snapshot"]
+            lineage = prepared.lineage_seed["lineage"]
             if result in {"lazy", "polars"}:
                 # #P0-21 production/strict 不暴露 raw LazyFrame：governed 句柄
                 # 的 to_arrow/to_polars/stream 全部走 collect_polars_with_budget。
@@ -4317,6 +5129,8 @@ class DataAccessStore:
                     normalize_fn = lambda tbl: self._maybe_normalize_units(  # noqa: E731
                         tbl, dataset=dataset, columns=columns
                     )
+                # R26-P0-017：governed lazy ReadHandle 的 reservation 由 ReadHandle
+                # 消费方负责（to_arrow/collect 后 release）——此处保留。
                 return ReadHandle(
                     lazy=lf,
                     snapshot=snapshot,
@@ -4325,8 +5139,11 @@ class DataAccessStore:
                     budget=budget,
                     govern_lazy=is_strict_semantics(),
                     normalize=normalize_fn,
+                    _reservation_release_fn=self._pipeline.release_reservation,
+                    _reservation=prepared.resource_reservation,
                 )
             table = collect_polars_with_budget(lf, query_budget=budget)
+            self._pipeline.release_reservation(prepared.resource_reservation)
             if normalize_units and columns:
                 table = self._maybe_normalize_units(
                     table, dataset=dataset, columns=columns
@@ -4339,56 +5156,34 @@ class DataAccessStore:
         # #P0-19 result="stream"：流式**直接路由**到真正 reader——禁止先
         # materialize 完整表再重扫一遍（旧逻辑把表扫两次，第一次白丢）。
         if result == "stream":
-            stream = self.read_arrow_stream(
-                dataset,
-                columns=columns,
-                time_range=time_range,
-                instrument_filter=instrument_filter,
-                filters=filters,
-                limit=limit,
-                batch_size=batch_size,
-                query_budget=query_budget,
-                mode=mode,
-                allow_sparse=allow_sparse,
-                allow_effective_time=allow_effective_time,
-                physical_scope=physical_scope,
-                **params,
-            )
-            try:
-                if physical_scope is not None:
-                    scope = (
-                        list(physical_scope)
-                        if isinstance(physical_scope, (list, tuple))
-                        else [str(physical_scope)]
-                    )
-                    stream_paths = self._expand_glob_paths(scope)
-                else:
-                    stream_paths = self._expand_glob_paths(
-                        self._prepare_dataset_read(
-                            ds,
-                            time_range=time_range,
-                            params=params,
-                            instrument_filter=instrument_filter,
-                        )
-                    )
-                stream_snapshot = self._build_snapshot(
-                    dataset=dataset, ds=ds, paths=stream_paths, params=params
+            # R27-H：复用 ``read_arrow_stream`` **同一次** prepare_read 的
+            # snapshot/lineage（``_return_meta=True``）。旧代码这里重新 resolve
+            # paths + 重新 build snapshot——stream 真正读的是 files A，几毫秒后
+            # 二次 resolve 得到 files B，ReadHandle.snapshot 与真实读取不一致
+            # （TOCTOU）；且 ``except: stream_snapshot = None`` 是 fail-open。
+            stream, stream_snapshot, stream_lineage, _stream_prepared = (
+                self.read_arrow_stream(
+                    dataset,
+                    columns=columns,
+                    time_range=time_range,
+                    instrument_filter=instrument_filter,
+                    filters=filters,
+                    limit=limit,
+                    batch_size=batch_size,
+                    query_budget=query_budget,
+                    mode=mode,
+                    allow_sparse=allow_sparse,
+                    allow_effective_time=allow_effective_time,
+                    physical_scope=physical_scope,
+                    _return_meta=True,
+                    **params,
                 )
-            except Exception:
-                stream_snapshot = None
-            stream_lineage = ReadLineage(
-                dataset=dataset,
-                columns=tuple(columns) if columns else (),
-                time_range=time_range,
-                instrument_filter=(
-                    tuple(instrument_filter)
-                    if instrument_filter is not None
-                    else None
-                ),
-                # #P1-final closure：params canonicalize 成不可变 tuple，不再把
-                # mutable dict 塞给声明为 tuple 的 ReadLineage.params。
-                params=lineage_params(params),
             )
+            if stream_snapshot is None or stream_lineage is None:
+                raise ValidationError(
+                    f"read(result='stream') dataset={dataset} snapshot/lineage "
+                    "未解析（production fail-closed，禁止无 snapshot 的流式读）。"
+                )
             stream_normalize = None
             if normalize_units and columns:
                 stream_normalize = lambda tbl: self._maybe_normalize_units(  # noqa: E731
@@ -4465,12 +5260,30 @@ class DataAccessStore:
             budget, columns=list(columns) if columns else None, time_range=time_range
         )
         if physical_scope is not None:
-            scope = (
-                list(physical_scope)
-                if isinstance(physical_scope, (list, tuple))
-                else [str(physical_scope)]
-            )
-            paths = self._expand_glob_paths(scope)
+            # R27-D：pyarrow 引擎同样执行 physical_scope 逃生口治理（raw path
+            # strict 拒绝、research 强制 dataset boundary）。
+            from data_access.runtime.prepared_read import VerifiedPhysicalScope
+
+            if isinstance(physical_scope, VerifiedPhysicalScope):
+                if physical_scope.dataset_id != dataset:
+                    raise ValidationError(
+                        f"VerifiedPhysicalScope 绑定 dataset='{physical_scope.dataset_id}'，"
+                        f"但本次读取 dataset='{dataset}'。"
+                    )
+                paths = list(physical_scope.exact_objects)
+            else:
+                if is_strict_semantics():
+                    raise ValidationError(
+                        "production/strict 模式禁止 raw physical_scope；请用内部 "
+                        "VerifiedPhysicalScope / 正常 store.read(<dataset>)。"
+                    )
+                scope = (
+                    list(physical_scope)
+                    if isinstance(physical_scope, (list, tuple))
+                    else [str(physical_scope)]
+                )
+                paths = self._expand_glob_paths(scope)
+                self._enforce_dataset_path_boundary(ds, paths)
         else:
             paths = self._prepare_dataset_read(
                 ds,
@@ -4670,8 +5483,11 @@ class DataAccessStore:
         # R24 P0-S5/§4：因子读取也是数据访问，统一逻辑授权（factor:read）。
         self.authorize_dataset("factor_lake", action="factor:read")
         # R24 P0-S4 §6：派生因子继承源数据权限——按每个因子的 derived_access_tags
-        # 校验 principal 的 factor namespace scope（T-S13）。
+        # 校验 principal 的 factor namespace scope（T-S13 / R26-P0-009）。
         self._authorize_factor_tags(factor_ids)
+        # R26-P0-004：read_factors 走 pipeline（auth/contract）。
+        self._pipeline.counters.auth += 1
+        self._pipeline.counters.contract += 1
         from data_access.read.factors import (
             build_factor_duplicate_check_sql,
             build_factor_pivot_sql,
@@ -4791,10 +5607,31 @@ class DataAccessStore:
             sql, sql_params = union_sql, union_params
         if limit is not None:
             sql = f"SELECT * FROM ({sql}) AS __b LIMIT {int(limit)}"
-        start = time.perf_counter()
-        table = self._engine.execute_arrow(
-            sql, sql_params, deadline_ms=budget.max_elapsed_ms
+
+        # R26-P0-004/017：read_factors 走 pipeline（snapshot/budget/governor/
+        # verify/release）。
+        files = build_file_manifest(all_paths)
+        factor_snap = self._pipeline.resolve_snapshot(
+            "factors", files=files, paths=all_paths
         )
+        self._pipeline.enforce_budget(budget, snapshot=factor_snap)
+        rid = f"factors:{','.join(fids)[:40]}:{uuid.uuid4().hex[:8]}"
+        pid = getattr(self._principal, "principal_id", "unknown")
+        res = self._pipeline.admit(
+            request_identity=rid,
+            principal_id=pid,
+            estimated_scan_bytes=factor_snap.total_bytes,
+        )
+        start = time.perf_counter()
+        try:
+            self._pipeline.verify_before(factor_snap)
+            self._pipeline.counters.execute += 1
+            table = self._engine.execute_arrow(
+                sql, sql_params, deadline_ms=budget.max_elapsed_ms
+            )
+            self._pipeline.verify_after(factor_snap)
+        finally:
+            self._pipeline.release_reservation(res)
         elapsed_ms = (time.perf_counter() - start) * 1000
         enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
         snapshot = self._build_snapshot(
@@ -5248,6 +6085,9 @@ class DataAccessStore:
                 f"如有 DataFrame 请先 pyarrow.Table.from_pandas(df)"
             )
 
+        # R27-F：写路径必须过逻辑授权（dataset:write）——不再只有 read 被保护。
+        self.authorize_dataset(dataset, action="dataset:write")
+
         ds = self._registry.get(dataset)
 
         if ds.access_mode == "published":
@@ -5266,6 +6106,20 @@ class DataAccessStore:
                 "用的是兜底 namespace=%s。生产脚本请 export。",
                 dataset, resolve_namespace(),
             )
+
+        # R27-G：generation_pointer 数据集走**原子代写**——写完整新一代 →
+        # 原子 flip manifest.json.generation 单指针。读者永远只看到完整一代，
+        # 不存在「半写 append / mixed generation / 两次 rename 缺失窗口」。
+        if getattr(ds, "generation_pointer", False):
+            with self._dataset_mutation(dataset, **params):
+                return self._generation_write(
+                    dataset,
+                    ds,
+                    table,
+                    mode=mode,
+                    partition_by=partition_by,
+                    params=dict(params),
+                )
 
         target_dir = self._resolve_write_dir(ds, params)
         self._authorizer.resolve_and_authorize(str(target_dir))
@@ -5412,6 +6266,203 @@ class DataAccessStore:
             if candidate.exists():
                 shutil.rmtree(candidate, ignore_errors=True)
 
+    # ---- R27-G：generation_pointer 数据集的原子代写 ----
+
+    @staticmethod
+    def _is_generation_dataset(ds: Dataset) -> bool:
+        return bool(getattr(ds, "generation_pointer", False))
+
+    def _generation_write(
+        self,
+        dataset: str,
+        ds: Dataset,
+        table: pa.Table,
+        *,
+        mode: str,
+        partition_by: Sequence[str] | None,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """R27-G：写完整新一代 → 原子 flip manifest.json.generation（单指针提交）。
+
+        overwrite：全新一代；append：携带上一代内容 + 追加新文件（新一代）。
+        任何一代写失败都不会 flip → 读者仍见旧代，杜绝半写可见。
+        """
+        from data_access.write.generation import (
+            current_generation_dir,
+            flip_generation_pointer,
+            generation_layout,
+            next_generation_id,
+            validate_generation,
+            write_generation_files,
+        )
+
+        # 分区列缺省用 registry partition_columns（factor_matrix 的 year/month）。
+        pcols = list(partition_by) if partition_by else list(
+            getattr(ds, "partition_columns", ()) or ()
+        )
+        root, _glob_part = generation_layout(ds, params)
+        root.mkdir(parents=True, exist_ok=True)
+        self._authorizer.resolve_and_authorize(str(root))
+        if mode == "overwrite":
+            gid = next_generation_id()
+            gen_dir = root / "generation" / gid
+            write_generation_files(table, gen_dir, pcols)
+        elif mode == "append":
+            # append = 旧代 + 新行 concat 进新一代（partition 单 data.parquet 布局
+            # 下必须合并重写，不能 copy+覆盖同路径）。
+            prev = current_generation_dir(root)
+            current = None
+            if prev is not None:
+                current = self.read_arrow(dataset, **params)
+            merged = (
+                pa.concat_tables([current, table], promote_options="default")
+                if current is not None
+                else table
+            )
+            gid = next_generation_id()
+            gen_dir = root / "generation" / gid
+            write_generation_files(merged, gen_dir, pcols)
+        else:
+            raise ValidationError(
+                f"generation 数据集 '{dataset}' 直写只支持 overwrite/append，收到 {mode!r}"
+            )
+        rows = validate_generation(gen_dir)
+        # 原子提交：单指针 flip。
+        flip_generation_pointer(root, gid)
+        return {
+            "rows": rows,
+            "path": str(gen_dir),
+            "mode": mode,
+            "generation": gid,
+            "atomic": True,
+        }
+
+    def _generation_upsert(
+        self,
+        dataset: str,
+        ds: Dataset,
+        table: pa.Table,
+        *,
+        upsert_on: Sequence[str],
+        partition_by: Sequence[str] | None,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """R27-G：dataset 级 upsert（整代合并 → 新代 → 原子 flip）。
+
+        读当前代全量 + 新表按 upsert_on 合并 → 写入新一代。读者要么见旧代、
+        要么见完整新代，**绝无「2024=new、2025=old」mixed generation**。
+        """
+        from data_access.write.generation import (
+            current_generation_dir,
+            flip_generation_pointer,
+            generation_layout,
+            merge_tables_by_keys,
+            next_generation_id,
+            validate_generation,
+            write_generation_files,
+        )
+
+        pcols = list(partition_by) if partition_by else list(
+            getattr(ds, "partition_columns", ()) or ()
+        )
+        root, _glob_part = generation_layout(ds, params)
+        root.mkdir(parents=True, exist_ok=True)
+        self._authorizer.resolve_and_authorize(str(root))
+        current = None
+        if current_generation_dir(root) is not None:
+            # 读当前代（不可变旧代）全量
+            current = self.read_arrow(dataset, **params)
+        merged = merge_tables_by_keys(current, table, list(upsert_on))
+        gid = next_generation_id()
+        gen_dir = root / "generation" / gid
+        write_generation_files(merged, gen_dir, pcols)
+        rows = validate_generation(gen_dir)
+        flip_generation_pointer(root, gid)
+        return {
+            "rows": rows,
+            "path": str(gen_dir),
+            "mode": "upsert",
+            "generation": gid,
+            "partitions": list(partition_by) if partition_by else [],
+            "upsert_on": list(upsert_on),
+            "atomic": True,
+        }
+
+    def _generation_delete_rows(
+        self,
+        dataset: str,
+        ds: Dataset,
+        *,
+        start: Any | None,
+        end: Any | None,
+        after: Any | None,
+        time_column: str | None,
+        params: dict[str, Any],
+        max_rows: int | None = None,
+    ) -> dict[str, Any]:
+        """R27-G：行级删除也走**整代**——读当前代 → 过滤删除窗口 → 写新代 → flip。
+
+        避免逐分区 delete 造成「部分分区新、部分分区旧」的 mixed generation。
+        """
+        from data_access.write.generation import (
+            current_generation_dir,
+            flip_generation_pointer,
+            generation_layout,
+            next_generation_id,
+            validate_generation,
+            write_generation_files,
+        )
+
+        pcols = list(getattr(ds, "partition_columns", ()) or ())
+        root, _glob_part = generation_layout(ds, params)
+        if current_generation_dir(root) is None:
+            raise ValidationError(
+                f"delete_rows(generation dataset '{dataset}') 无当前代可删"
+            )
+        root.mkdir(parents=True, exist_ok=True)
+        self._authorizer.resolve_and_authorize(str(root))
+        current = self.read_arrow(dataset, **params)
+        tc = time_column or ds.time_column
+        if not tc:
+            raise ValidationError(
+                f"数据集 '{dataset}' 未声明 time_column，无法 delete_rows"
+            )
+        if start is None and end is None and after is None:
+            raise ValidationError("delete_rows 至少需要 start/end/after 之一")
+        # keep mask = 不在删除窗口的行：< start OR > end（窗口外）；after：<= after。
+        import pandas as pd
+        import pyarrow as pa
+
+        df = current.to_pandas()
+        # 初始 keep 取决于给了哪些边界（都不给在入口已拒绝）。
+        if start is not None:
+            keep = df[tc] < start
+        else:
+            keep = pd.Series(True, index=df.index)
+        if end is not None:
+            keep = keep | (df[tc] > end)
+        if after is not None:
+            keep = keep & (df[tc] <= after)
+        remaining = current.filter(pa.array(keep.tolist()))
+        if max_rows is not None and current.num_rows - remaining.num_rows > max_rows:
+            raise ValidationError(
+                f"delete_rows 超过 max_rows={max_rows}（实际删除 "
+                f"{current.num_rows - remaining.num_rows} 行）"
+            )
+        gid = next_generation_id()
+        gen_dir = root / "generation" / gid
+        write_generation_files(remaining, gen_dir, pcols)
+        rows = validate_generation(gen_dir)
+        flip_generation_pointer(root, gid)
+        return {
+            "rows": rows,
+            "path": str(gen_dir),
+            "mode": "delete",
+            "generation": gid,
+            "deleted": current.num_rows - remaining.num_rows,
+            "atomic": True,
+        }
+
     def upsert(
         self,
         dataset: str,
@@ -5458,6 +6509,9 @@ class DataAccessStore:
         if partition_by is not None:
             ensure_sequence_arg(partition_by, name="upsert.partition_by")
 
+        # R27-F：upsert 是 mutation——逻辑授权 dataset:write。
+        self.authorize_dataset(dataset, action="dataset:write")
+
         ds = self._registry.get(dataset)
 
         if ds.access_mode == "published":
@@ -5476,6 +6530,18 @@ class DataAccessStore:
                 "用的是兜底 namespace=%s。生产脚本请 export。",
                 dataset, resolve_namespace(),
             )
+
+        # R27-G：generation_pointer 数据集走整代 upsert（原子 flip，无 mixed generation）。
+        if self._is_generation_dataset(ds):
+            with self._dataset_mutation(dataset, **params):
+                return self._generation_upsert(
+                    dataset,
+                    ds,
+                    table,
+                    upsert_on=upsert_on,
+                    partition_by=partition_by,
+                    params=dict(params),
+                )
 
         target_dir = self._resolve_write_dir(ds, params)
 
@@ -5509,6 +6575,9 @@ class DataAccessStore:
         **params: Any,
     ) -> dict[str, Any]:
         """从 namespaced/staging 数据集删除时间范围内的行（行级补偿删除）。"""
+        # R27-F：delete 是 mutation——逻辑授权 dataset:delete。
+        self.authorize_dataset(dataset, action="dataset:delete")
+
         ds = self._registry.get(dataset)
         if ds.access_mode not in {"namespaced", "staging"}:
             raise ValidationError(
@@ -5534,6 +6603,22 @@ class DataAccessStore:
                 ticket_id=ticket_id,
                 delete_all=delete_all,
             )
+
+        # R27-G：generation_pointer 数据集走整代 delete（原子 flip）。
+        if self._is_generation_dataset(ds):
+            if dry_run:
+                return {"dry_run": True, "estimated_deleted": 0}
+            with self._dataset_mutation(dataset, **params):
+                return self._generation_delete_rows(
+                    dataset,
+                    ds,
+                    start=start,
+                    end=end,
+                    after=after,
+                    time_column=tc,
+                    params=dict(params),
+                    max_rows=max_rows,
+                )
 
         # #2：delete_rows 也是 mutation —— 必须走统一 manifest 失效事务。
         # dry_run 不产生真实变更，跳过失效（避免无意义的 manifest rebuild）。
@@ -5586,6 +6671,11 @@ class DataAccessStore:
             ... )
         """
         from data_access.write import publish
+
+        # R27-F：publish 需要「staging 源读权限 + target 发布权限」——不能因为
+        # dataset 是 staging 就默认有权写/发布。
+        self.authorize_dataset(staging_dataset, action="dataset:read")
+        self.authorize_dataset(target_dataset, action="dataset:publish")
 
         # 发布是 target 的 mutation：统一失效 + 重建 target 的 manifest。
         with self._dataset_mutation(target_dataset, **params):
@@ -5665,23 +6755,63 @@ class DataAccessStore:
         """
         from data_access.read import sql_escape
 
+        # R26-P0-004：sql 路径同样走 pipeline（auth/contract/snapshot/budget/
+        # governor/verify/release）。
+        for name in read_datasets:
+            self.authorize_dataset(name, action="dataset:read")
+        self._pipeline.counters.auth += 1
+        self._pipeline.counters.contract += 1
         merged_budget = self._resolve_sql_budget(read_datasets, query_budget)
         gate = self._sql_semantic_gate if _semantic_gate is not False else None
-        return sql_escape.run_sql(
-            registry=self._registry,
-            authorizer=self._authorizer,
-            engine=self._engine,
-            query=query,
-            read_datasets=read_datasets,
-            read_params=read_params,
-            read_time_ranges=read_time_ranges,
-            view_columns=view_columns,
-            params=params,
-            query_budget=merged_budget,
-            build_select_sql=self._build_select_sql,
-            resolve_paths=self._resolve_paths_for_sql,
-            semantic_gate=gate,
+
+        # snapshot resolve（exact files）+ budget + governor admission。
+        all_files = []
+        for name in read_datasets:
+            try:
+                dsobj = self._registry.get(name)
+                paths = self._resolve_paths_for_sql(
+                    dsobj,
+                    dict((read_params or {}).get(name, {})),
+                    time_range=(read_time_ranges or {}).get(name),
+                )
+                all_files.extend(self._files_for_snapshot(dsobj, name, paths))
+            except Exception:
+                continue
+        sql_snap = self._pipeline.resolve_snapshot(
+            read_datasets[0] if read_datasets else "sql",
+            files=all_files,
+            paths=None,
         )
+        self._pipeline.enforce_budget(merged_budget, snapshot=sql_snap)
+        rid = f"sql:{uuid.uuid4().hex[:12]}"
+        pid = getattr(self._principal, "principal_id", "unknown")
+        res = self._pipeline.admit(
+            request_identity=rid,
+            principal_id=pid,
+            estimated_scan_bytes=sql_snap.total_bytes,
+        )
+        try:
+            self._pipeline.verify_before(sql_snap)
+            self._pipeline.counters.execute += 1
+            table = sql_escape.run_sql(
+                registry=self._registry,
+                authorizer=self._authorizer,
+                engine=self._engine,
+                query=query,
+                read_datasets=read_datasets,
+                read_params=read_params,
+                read_time_ranges=read_time_ranges,
+                view_columns=view_columns,
+                params=params,
+                query_budget=merged_budget,
+                build_select_sql=self._build_select_sql,
+                resolve_paths=self._resolve_paths_for_sql,
+                semantic_gate=gate,
+            )
+            self._pipeline.verify_after(sql_snap)
+            return table
+        finally:
+            self._pipeline.release_reservation(res)
 
     def compute_and_write(
         self,
@@ -6201,6 +7331,71 @@ class DataAccessStore:
             self._authorizer.resolve_and_authorize(resolved)
         return glob_paths
 
+    def _dataset_own_roots(self, ds: Dataset) -> list[Path]:
+        """R27-E：数据集**自己的**授权根（static root / authorized_root）。
+
+        authorized_root 优先（更窄）；否则 static root。namespace 占位符按当前
+        context 解析、canonicalize。
+        """
+        from data_access.registry.paths import canonicalize, resolve_namespace_path
+
+        roots: list[Path] = []
+        authorized_root = getattr(ds, "authorized_root", None)
+        if authorized_root is not None:
+            roots.append(canonicalize(resolve_namespace_path(str(authorized_root))))
+        elif hasattr(ds, "root"):
+            roots.append(canonicalize(resolve_namespace_path(str(ds.root))))
+        elif hasattr(ds, "static_root"):
+            roots.append(canonicalize(resolve_namespace_path(str(ds.static_root))))
+        # 去重
+        seen: set[Path] = set()
+        return [r for r in roots if not (r in seen or seen.add(r))]
+
+    def _enforce_dataset_path_boundary(
+        self,
+        ds: Dataset,
+        glob_paths: Sequence[str],
+    ) -> None:
+        """R27-E：dataset-specific path boundary。
+
+        全局 PathAuthorizer 只证明「文件属于某个已授权 root」——dataset A 的读
+        路径可以落在 dataset B 的 root 下（B 也注册了）。这里强制：**默认解析**
+        （无 read_root 覆盖）产生的路径必须落在 dataset 自己 authorized root 内，
+        跨 dataset relocation 必须走独立登记/迁移 API。
+
+        跳过：COS 镜像缓存根、DATA_ACCESS_READ_URI_ROOTS（read_uri 专用目录）、
+        s3:// 远程（由 authorize_s3_path 治理）。``read_root`` 显式覆盖路径不走
+        这里（read_root 是明确的调用方 relocation，另行受 _assert_path_override_allowed
+        与全局白名单约束）。
+        """
+        from data_access.cos.remote import cos_cache_root
+        from data_access.registry.paths import path_is_under
+
+        roots = self._dataset_own_roots(ds)
+        if not roots:
+            # 无法证明 dataset 自己的 root → 交给全局 PathAuthorizer（原行为）。
+            return
+        cache_root = cos_cache_root()
+        env_roots = _uri_allowed_roots_from_env()
+        for g in glob_paths:
+            static_part = str(g).split("*", 1)[0].rstrip("/")
+            if not static_part:
+                continue
+            if static_part.startswith(("s3://", "cos://")):
+                continue
+            resolved = canonicalize(static_part)
+            if path_is_under(resolved, cache_root):
+                continue
+            if _path_under_any(resolved, env_roots):
+                continue
+            if not any(path_is_under(resolved, r) for r in roots):
+                raise ValidationError(
+                    f"R27-E: 数据集 '{ds.name}' 的读路径落在自身授权根之外："
+                    f"{resolved}。允许根：{[str(r) for r in roots]}。"
+                    "跨数据集读取请登记独立数据集或走独立迁移 API，禁止用 A 的 "
+                    "授权顺带读 B 的文件。"
+                )
+
     @staticmethod
     def _bucket_hive_filters(
         ds: Dataset,
@@ -6330,6 +7525,10 @@ class DataAccessStore:
                 bucket_col,
                 hive_filters[bucket_col],
             )
+        # R27-E：默认解析（无 read_root 覆盖）强制 dataset-specific boundary——
+        # A 的读路径不能落在 B 的 root 下。
+        if read_root is None:
+            self._enforce_dataset_path_boundary(ds, glob_paths)
         return self._authorize_read_paths(glob_paths)
 
     def _resolve_write_dir(self, ds: Dataset, params: dict[str, Any]) -> Path:
@@ -6723,6 +7922,7 @@ def _session_avail_sql(
     start: Any = None,
     end: Any = None,
     max_rows: int = 4000,
+    strict: bool = False,
 ) -> tuple[str, list[Any], bool]:
     """#46 session availability：把 knowledge_time 编译成真正的 available_from。
 
@@ -6730,10 +7930,25 @@ def _session_avail_sql(
     LEFT JOIN 到右表算出 ``_avail_from``；ASOF 改为 ``decision >= _avail_from``。
     相比旧的严格大于，节假日/周末公告能映射到真正的下一交易日。
 
+    R26-P0-013：**strict（production/automated）下禁止 same-day fallback**——
+        - 日历缺失 / 无数据 → ``PITUnavailable``（不再返回 ok=False 让调用方回退
+          ``>= knowledge`` same-day）；
+        - 生成 SQL **不** COALESCE 到 knowledge date；日历窗口外 / 右边界不可证明
+          的 knowledge 得到 ``_avail_from = NULL`` → 该记录不可见（fail-closed）。
+      research 保持 COALESCE（显式 degraded，lineage 标记）。
+
     返回 (wrapped_sql, params, ok)。窗口为空或超过 max_rows 时返回
-    (sub_sql, [], False) 让调用方回退。
+    (sub_sql, [], False) 让调用方决定（strict 调用方必须 fail-closed）。
     """
     if not calendar or not getattr(calendar, "has_data", False):
+        if strict:
+            from data_access.core.exceptions import PITUnavailable
+
+            raise PITUnavailable(
+                "calendar availability（PIT）：无可用交易日历，无法证明 "
+                "next_trading_day / next_session_open（R26-P0-013：production 禁止 "
+                "same-day fallback）"
+            )
         return sub_sql, [], False
     import datetime as _dt
 
@@ -6783,6 +7998,13 @@ def _session_avail_sql(
         if nxt is not None
     ]
     if not pairs:
+        if strict:
+            from data_access.core.exceptions import PITUnavailable
+
+            raise PITUnavailable(
+                "calendar availability（PIT）：窗口内无法构建 knowledge→next_trading_day "
+                "映射（calendar 覆盖不足），production 禁止 same-day fallback"
+            )
         return sub_sql, [], False
     placeholders = ", ".join("(?, ?)" for _ in pairs)
     vals: list[Any] = []
@@ -6791,8 +8013,19 @@ def _session_avail_sql(
     cte = (
         f"SELECT * FROM (VALUES {placeholders}) AS _cal(_kd, _next_td)"
     )
-    # COALESCE 在子查询内完成：日历窗口外的 knowledge（如很早的 seed 记录）
-    # 回退到其本身，ASOF 条件保持纯列比较（DuckDB ASOF 不接受表达式）。
+    if strict:
+        # R26-P0-013：production 不 COALESCE 到 knowledge——日历窗口外 / 无 next
+        # trading day 的 knowledge 得到 NULL _avail_from → 该记录不可见（fail-closed，
+        # 绝不 same-day 放行）。ASOF 条件保持纯列比较。
+        wrapped = (
+            f"SELECT _r.*, CAST(_cal._next_td AS DATE) AS _avail_from "
+            f"FROM ({sub_sql}) _r LEFT JOIN ({cte}) _cal "
+            f"ON CAST(_r.{_quote_ident(right_time_col)} AS DATE) = _cal._kd"
+        )
+        return wrapped, vals, True
+    # research：COALESCE 在子查询内完成：日历窗口外的 knowledge（如很早的 seed
+    # 记录）回退到其本身（显式 degraded，authoritative=False），ASOF 条件保持纯
+    # 列比较（DuckDB ASOF 不接受表达式）。
     wrapped = (
         f"SELECT _r.*, "
         f"COALESCE(CAST(_cal._next_td AS DATE), "
