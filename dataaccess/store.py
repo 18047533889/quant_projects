@@ -183,6 +183,10 @@ class DataAccessStore:
         self,
         registry: DatasetRegistry,
         engine: DuckDBEngine,
+        *,
+        principal: Any = None,
+        authorizer: Any = None,
+        credential_provider: Any = None,
     ) -> None:
         self._registry = registry
         self._engine = engine
@@ -193,6 +197,17 @@ class DataAccessStore:
         self._authorizer = PathAuthorizer(
             list(registry.allowed_root_templates()) + extra_allowed_roots_from_env()
         )
+        # ---- R24 P0-S2 §26：逻辑授权层（principal + authorizer + credential_provider）----
+        from data_access.security.policy import get_authorizer
+        from data_access.security.principal import (
+            DEFAULT_ACCESS_POLICY,
+            DEFAULT_LOCAL_PRINCIPAL,
+        )
+
+        self._principal = principal or DEFAULT_LOCAL_PRINCIPAL
+        self._authorizer_sec = authorizer if authorizer is not None else get_authorizer()
+        self._credential_provider = credential_provider
+        self._access_policy = getattr(self._authorizer_sec, "policy", DEFAULT_ACCESS_POLICY)
         # PR8 + P0：首访 schema 自检缓存 key = dataset + params + manifest
         self._schema_checked: set[str] = set()
         self._schema_check_lock = threading.Lock()
@@ -327,6 +342,114 @@ class DataAccessStore:
         """登记表内容指纹（用于 data_snapshot_id）。"""
         return self._registry_hash
 
+    # ---- R24 P0-S2 §4 / §26：逻辑授权层 ----
+
+    @property
+    def security_principal(self) -> Any:
+        """当前 store 的 DataPrincipal（server 身份）。"""
+        return self._principal
+
+    @property
+    def security_authorizer(self) -> Any:
+        """当前 store 的 DatasetAuthorizer。"""
+        return self._authorizer_sec
+
+    @property
+    def access_policy(self) -> Any:
+        return self._access_policy
+
+    def authorize_dataset(
+        self,
+        dataset: str,
+        *,
+        action: str = "dataset:read",
+        principal: Any = None,
+    ) -> None:
+        """逻辑授权：backend 选择之前必须调用（§4 / §26）。
+
+        只做逻辑授权层；registry/path boundary（``PathAuthorizer``）与 CAM/IAM/STS
+        是另外两层，各自独立 deny。拒绝抛 ``AccessDeniedError``（脱敏），**绝不
+        fallback 到更高身份**。
+        """
+        from data_access.security.policy import DatasetAuthorizer
+
+        authorizer: DatasetAuthorizer = self._authorizer_sec
+        authorizer.authorize(principal or self._principal, dataset, action=action)
+
+    def authorize_uri(
+        self,
+        uri: str,
+        *,
+        principal: Any = None,
+    ) -> None:
+        """``uri:read`` 是 privileged API（P1-S8 §24）：必须显式授权。
+
+        普通 FactorEngine / read 路径**不能**自动 fallback ``read_uri``。production
+        默认 ``allow_uri_read=False``（§7 / §24）——库内调用也要过逻辑授权。
+
+        两条路径：
+          - URI 唯一反查到已登记数据集（strict read_uri 的既有契约）→ 授权该
+            数据集的 ``dataset:read``（本质是一次按 URI 定位的 dataset 读）；
+          - 其余任意 URI → 必须显式 ``uri:read``（production/strict 默认拒绝）。
+        """
+        try:
+            fmt = _infer_format_from_uri(str(uri), "auto")
+        except Exception:
+            fmt = "auto"
+        try:
+            registered = self._resolve_registered_dataset_for_uri(str(uri), fmt)
+        except Exception:
+            registered = None
+        if registered is not None:
+            self.authorize_dataset(registered, action="dataset:read", principal=principal)
+            return
+        self.authorize_dataset(str(uri), action="uri:read", principal=principal)
+
+    def _authorize_dataset_deny_noop(self, dataset: str) -> None:
+        """读路径统一入口（无 action 参数版本，供没有显式 principal 的调用）。"""
+        self.authorize_dataset(dataset)
+
+    def _authorize_factor_tags(self, factor_ids: Sequence[str]) -> None:
+        """R24 P0-S4 §6 / T-S13：按因子 derived access tags 做逻辑授权。
+
+        factor 从 premium source 派生时，其 ``derived_access_tags`` 带有受限 tag
+        （如 ``internal.restricted`` / ``alt.premium``）。低权限 principal 不能读该
+        因子——restricted source 不能被因子结果洗白。
+
+        匹配：factor 的任一 derived tag 在 principal 的 ``allowed_factor_namespaces``
+        中即可（或 policy 未限制 namespace = 放行）。无 tag 的因子不受此约束。
+        """
+        if not factor_ids:
+            return
+        policy = self._access_policy
+        # 未配置 namespace 限制 → 放行（DEFAULT）。
+        if policy is None or not getattr(policy, "allowed_factor_namespaces", None):
+            return
+        allowed = set(getattr(policy, "allowed_factor_namespaces", ()) or ())
+        try:
+            catalog = self.get_factor_catalog()
+        except Exception:
+            return  # catalog 不可读时不误伤（dataset:list 层已授权）
+        denied: list[str] = []
+        for fid in factor_ids:
+            meta = catalog.records.get(fid)
+            tags = (
+                tuple(getattr(meta, "derived_access_tags", ()) or ())
+                if meta is not None
+                else ()
+            )
+            if not tags:
+                continue
+            if not any(t in allowed for t in tags):
+                denied.append(fid)
+        if denied:
+            from data_access.core.exceptions import AccessDeniedError
+
+            raise AccessDeniedError(
+                "resource is not authorized "
+                f"(factor access tags not allowed: {', '.join(denied)})"
+            )
+
     def describe_dataset(
         self,
         dataset: str,
@@ -335,6 +458,7 @@ class DataAccessStore:
         instrument_filter: Sequence[str] | None = None,
     ) -> DataSnapshot:
         """解析路径并构建数据快照（不读数据）。"""
+        self.authorize_dataset(dataset, action="metadata:read")
         ds = self._registry.get(dataset)
         raw_params = dict(params or {})
         paths = self._resolve_paths(
@@ -762,6 +886,25 @@ class DataAccessStore:
                 elif g_status == "weak" or p_status == "weak":
                     # #15 无法证明子集：Ne/NotIn/IsNotNull/Or 部分分支等
                     problems.append((ds, c, ["<unprovable>"]))
+            # R24 P0-PIT5 §14：结构化 filter cardinality（timeframe exactly-one）。
+            for card_field, card_kind in contract.filter_cardinalities:
+                if card_kind != "exactly_one":
+                    continue
+                present_vals: list[Any] = []
+                if card_field in effective:
+                    pv = effective[card_field]
+                    present_vals = (
+                        list(pv)
+                        if isinstance(pv, (list, tuple, set, frozenset))
+                        else [pv]
+                    )
+                g_vals = dict(filter_column_values(global_ast)).get(card_field, [])
+                p_vals = dict(filter_column_values(per_ds_ast)).get(card_field, [])
+                present_vals = present_vals or list(g_vals) or list(p_vals)
+                if len(present_vals) != 1:
+                    problems.append(
+                        (ds, card_field, ["<exactly_one:missing-or-multiple>"])
+                    )
         if not problems:
             return
         detail = "; ".join(f"{ds}.{c}={bad!r}" for ds, c, bad in problems)
@@ -973,6 +1116,7 @@ class DataAccessStore:
         ``mode``（#44）：auto|panel|event|pit|dimension|sparse——读取的语义模式，
         决定 COS 契约如何强制（事件表不能当普通面板读等）。
         """
+        self.authorize_dataset(dataset)
         ds = self._registry.get(dataset)
         return self._read_dataset_object(
             ds,
@@ -1137,6 +1281,7 @@ class DataAccessStore:
         **params: Any,
     ) -> ReadResult:
         """Point-in-time 读：``time_column <= as_of``（闭区间上界）。
+        self.authorize_dataset(dataset)
 
         返回带 ``DataSnapshot`` 的 ``ReadResult``，供 lineage / 回测复现使用。
         """
@@ -1261,6 +1406,7 @@ class DataAccessStore:
             >>> for batch in store.read_arrow_stream("factor_lake", factor_id="mom_3d"):
             ...     total += batch.num_rows
         """
+        self.authorize_dataset(dataset)
         ds = self._registry.get(dataset)
         # #5 流式读同样强制 temporal contract + required_filters + allowed values
         self._prepare_read_request(
@@ -1586,6 +1732,7 @@ class DataAccessStore:
         依赖：
             需要 `polars` 已安装；没装会 raise ImportError 并提示 `pip install polars`。
         """
+        self.authorize_dataset(dataset)
         lf, _paths = self._scan_polars_with_paths(
             dataset,
             columns=columns,
@@ -1615,6 +1762,7 @@ class DataAccessStore:
         **params: Any,
     ) -> ScanHandle:
         """受控 Polars 扫描：``collect()`` 强制 budget + snapshot（production 推荐）。"""
+        self.authorize_dataset(dataset)
         ds = self._registry.get(dataset)
         budget = self._resolve_read_budget(ds, query_budget)
         lf, paths = self._scan_polars_with_paths(
@@ -1704,6 +1852,7 @@ class DataAccessStore:
 
         大结果且需保持低内存峰值时，优先 ``read_auto_stream()``。
         """
+        self.authorize_dataset(dataset)
         ds = self._registry.get(dataset)
         budget = self._resolve_read_budget(ds, query_budget)
 
@@ -1902,6 +2051,7 @@ class DataAccessStore:
         返回 ``ReadHandle``，支持 ``.to_arrow() / .to_pandas() / .to_polars() /
         .to_lazy() / .stream()``。
         """
+        self.authorize_dataset(dataset)
         ds = self._registry.get(dataset)
         return self._read_handle(
             ds,
@@ -1960,6 +2110,9 @@ class DataAccessStore:
         from data_access.read.formats import normalize_format_name
 
         uri = str(uri)  # 兼容 Path 对象
+        # R24 P1-S8 §24：read_uri 是 privileged API——先逻辑授权（uri:read），
+        # production 默认 allow_uri_read=False。
+        self.authorize_uri(uri)
         fmt = _infer_format_from_uri(uri, format)
         self._assert_uri_allowed(uri, format=fmt)
         strict = is_strict_semantics()
@@ -2122,6 +2275,12 @@ class DataAccessStore:
             raise ValidationError(
                 "read_joined 在 DuckDB 内完成 join，engine 必须为 duckdb"
             )
+        self.authorize_dataset(anchor)
+        # 每个 join 数据集也要逻辑授权（#54：右表同样受 dataset scope 约束）。
+        for right_ds in list(fields or {}) if not isinstance(fields, str) else []:
+            self.authorize_dataset(right_ds)
+        for right_ds in (joins or {}):
+            self.authorize_dataset(right_ds)
         self._registry.get(anchor)
         per_ds, fields_meta, default_joins = self._normalize_joined_fields(anchor, fields)
         # #P0-2 统一 effective_join_specs：SemanticField 默认 → COS Contract 默认
@@ -2958,12 +3117,14 @@ class DataAccessStore:
 
     def coverage(self, dataset: str, **params: Any) -> Any:
         """#14 数据集覆盖/完整性报告：complete/partial/unavailable + 问题列表。"""
+        self.authorize_dataset(dataset, action="metadata:read")
         from data_access.read.coverage import compute_coverage
 
         return compute_coverage(self, dataset, params=params)
 
     def metadata_plane(self, dataset: str, **params: Any) -> Any:
         """#38 统一元数据访问层：manifest/coverage/PIT index/schema/contract 一处拿。"""
+        self.authorize_dataset(dataset, action="metadata:read")
         from data_access.read.metadata_plane import DatasetMetadataPlane
 
         return DatasetMetadataPlane(self, dataset, params=dict(params))
@@ -3000,7 +3161,11 @@ class DataAccessStore:
         ds = self._registry.get(dataset)
         try:
             paths = self._resolve_raw_paths(ds, time_range=None, params=params)
-        except Exception:
+        except Exception as exc:
+            # R24 P1-S9：metadata probe 同样不得吞授权错误。
+            from data_access.core.exceptions import propagate_authorization
+
+            propagate_authorization(exc)
             return {"dataset": dataset, "has_manifest": False}
         root = manifest_root_for_paths(paths)
         if root is None:
@@ -3946,7 +4111,12 @@ class DataAccessStore:
         cols = [ds.time_column, inst_col] if ds.time_column else [inst_col]
         try:
             table = self.read_arrow(universe, columns=cols, time_range=time_range)
-        except Exception:
+        except Exception as exc:
+            # R24 P1-S9 §25：universe 解析遇到 AuthorizationError 必须原样传播，
+            # 绝不能降级成空 universe。
+            from data_access.core.exceptions import propagate_authorization
+
+            propagate_authorization(exc)
             table = None
         members: set[str] = set()
         if table is not None and table.num_rows:
@@ -4438,6 +4608,11 @@ class DataAccessStore:
 
         返回 ``ReadHandle``，可 ``.to_arrow() / .to_polars() / .to_lazy()``。
         """
+        # R24 P0-S5/§4：因子读取也是数据访问，统一逻辑授权（factor:read）。
+        self.authorize_dataset("factor_lake", action="factor:read")
+        # R24 P0-S4 §6：派生因子继承源数据权限——按每个因子的 derived_access_tags
+        # 校验 principal 的 factor namespace scope（T-S13）。
+        self._authorize_factor_tags(factor_ids)
         from data_access.read.factors import (
             build_factor_duplicate_check_sql,
             build_factor_pivot_sql,
@@ -4766,6 +4941,7 @@ class DataAccessStore:
         discover: bool = True,
     ):
         """加载因子目录（FactorCatalog）。空目录时可选从因子湖扫描重建。"""
+        self.authorize_dataset("factor_lake", action="factor:list")
         from data_access.read.factors import FactorCatalog, factor_catalog_root
 
         root = factor_catalog_root(self, dataset)

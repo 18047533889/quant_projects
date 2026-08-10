@@ -184,10 +184,10 @@ class GroupMeanPolars(SeriesOperator):
     """Polars 组内均值"""
     metadata = OperatorMetadata(
         name="group_mean", category="cross_sectional", description="组内均值",
-        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+        param_names=["x", "group", "fallback_policy"], return_type="series", tags=["cross_sectional", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         return _group_rowwise(x, group, _mean_row)
 
 
@@ -195,10 +195,10 @@ class GroupMeanPolars(SeriesOperator):
 class GroupSumPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="group_sum", category="cross_sectional", description="组内求和",
-        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+        param_names=["x", "group", "fallback_policy"], return_type="series", tags=["cross_sectional", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         return _group_rowwise(x, group, _sum_row)
 
 
@@ -206,10 +206,10 @@ class GroupSumPolars(SeriesOperator):
 class GroupMinPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="group_min", category="cross_sectional", description="组内最小值",
-        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+        param_names=["x", "group", "fallback_policy"], return_type="series", tags=["cross_sectional", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         return _group_rowwise(x, group, _min_row)
 
 
@@ -217,10 +217,10 @@ class GroupMinPolars(SeriesOperator):
 class GroupMaxPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="group_max", category="cross_sectional", description="组内最大值",
-        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+        param_names=["x", "group", "fallback_policy"], return_type="series", tags=["cross_sectional", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         return _group_rowwise(x, group, _max_row)
 
 
@@ -228,10 +228,10 @@ class GroupMaxPolars(SeriesOperator):
 class GroupCountPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="group_count", category="cross_sectional", description="组内非空计数",
-        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+        param_names=["x", "group", "fallback_policy"], return_type="series", tags=["cross_sectional", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         return _group_rowwise(x, group, _count_row)
 
 
@@ -240,10 +240,10 @@ class GroupStdPolars(SeriesOperator):
     """Polars 组内标准差"""
     metadata = OperatorMetadata(
         name="group_std", category="cross_sectional", description="组内标准差",
-        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+        param_names=["x", "group", "fallback_policy"], return_type="series", tags=["cross_sectional", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         return _group_rowwise(x, group, _std_row)
 
 
@@ -259,10 +259,10 @@ class GroupZscorePolars(SeriesOperator):
     """Polars 组内 zscore"""
     metadata = OperatorMetadata(
         name="group_zscore", category="cross_sectional", description="组内 zscore",
-        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+        param_names=["x", "group", "fallback_policy"], return_type="series", tags=["cross_sectional", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         return _group_rowwise(x, group, _zscore_row)
 
 
@@ -271,10 +271,10 @@ class GroupRankPolars(SeriesOperator):
     """Polars 组内排名 pct"""
     metadata = OperatorMetadata(
         name="group_rank", category="cross_sectional", description="组内排名 pct",
-        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+        param_names=["x", "group", "fallback_policy"], return_type="series", tags=["cross_sectional", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         return _group_rowwise(x, group, _rank_row)
 
 
@@ -283,10 +283,10 @@ class GroupNormalizePolars(SeriesOperator):
     """Polars 组内 [0,1] 归一化"""
     metadata = OperatorMetadata(
         name="group_normalize", category="cross_sectional", description="组内 [0,1] 归一化",
-        param_names=["x", "group"], return_type="series", tags=["cross_sectional", "polars"],
+        param_names=["x", "group", "fallback_policy"], return_type="series", tags=["cross_sectional", "polars"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         def _norm(row_x, row_g):
             out = np.full_like(row_x, np.nan)
             mask = ~np.isnan(row_x)
@@ -442,7 +442,7 @@ class GroupRankWeightedValuePolars(SeriesOperator):
         name="group_rank_weighted_value",
         category="cross_sectional",
         description="组内平均排名线性加权（CS rank-weighted value；非时间衰减）",
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
         return_type="series",
         tags=["cross_sectional", "polars"],
     )
@@ -466,13 +466,14 @@ class GroupDecayLinearPolars(SeriesOperator):
         name="group_decay_linear",
         category="cross_sectional",
         description="组内按排名线性加权（兼容名；window 不参与计算，诚实名称 group_rank_weighted_value）",
-        param_names=["x", "group", "window"],
+        param_names=["x", "group", "window", "fallback_policy"],
         return_type="series",
         tags=["cross_sectional", "polars"],
         param_specs={"window": ParamSpec(dtype=int, searchable=False, param_role=ParamRole.POLICY)},
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, group: pl.DataFrame = None, window: int = 5, **kwargs
+        self, x: pl.DataFrame, group: pl.DataFrame = None, window: int = 5,
+        fallback_policy: str = "nan", **kwargs
     ) -> pl.DataFrame:
         return _group_rowwise(x, group, _decay_linear_row)

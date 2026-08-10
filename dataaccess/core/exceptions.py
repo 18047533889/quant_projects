@@ -115,6 +115,51 @@ class AuditWriteError(DataAccessError):
     """
 
 
+class AuthorizationError(DataAccessError):
+    """逻辑授权层拒绝（R24 P0-S2）。
+
+    表示「这个身份没有权限做这件事」——**不是 backend 错误，禁止 fallback 到
+    更高身份**（不得读 ~/.cos.yaml 换 credential、不得换 profile、不得换一个
+    更高权限的 bucket）。外部错误信息已经脱敏（P1-S6）。
+    """
+
+
+class AccessDeniedError(AuthorizationError):
+    """显式 403 / Forbidden / PermissionDenied / AccessDenied。
+
+    与 ``NotFound`` / ``NoRows`` 严格区分（P1-S9）：universe 解析 / calendar /
+    metadata probe / coverage / remote fallback / mirror 遇到本错误必须原样
+    传播，绝不能 ``except Exception: return None`` 或降级成空 universe。
+    """
+
+
+class TemporalContractError(DataAccessError):
+    """时间语义契约违例（R24 P0-PIT 系列 / P1-S9）。
+
+    与「数据不存在」区分：请求违反 knowledge/effective/period 时钟、availability、
+    date_label vs instant、timeframe 等时间契约时抛出。
+    """
+
+
+def propagate_authorization(exc: BaseException) -> None:
+    """R24 P1-S9 §25：AuthorizationError 必须原样传播。
+
+    调用方在 ``except Exception:`` 宽捕获里应先行调用本函数——若当前异常是
+    ``AuthorizationError``（含 ``AccessDeniedError``）就原样重抛，绝不能被
+    ``return None`` / 空 universe / 降级数据 吞掉。
+    """
+    if isinstance(exc, AuthorizationError):
+        raise exc
+
+
+class FinancialRevisionAmbiguityError(DataAccessError):
+    """财务 duplicate/revision 冲突无法确定性解决（R24 P1-PIT7）。
+
+    同一 semantic key 多行且值冲突、又没有可信 revision availability 时
+    production fail-closed——绝不依赖 parquet 扫描顺序。
+    """
+
+
 class CommittedButAuditFailed(AuditWriteError):
     """#P0 收官（0.9.5）：**数据已提交、仅审计确认失败**。
 

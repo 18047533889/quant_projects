@@ -208,6 +208,8 @@ NUMERIC_CONTROL_PARAMS = frozenset({
     "n_levels", "n_buckets", "preset", "side",
     # R22: more scalar knobs that a generic name heuristic could misread as panel
     "epsilon", "revision_policy", "min_effective", "k_scale",
+    # R24: holder-rank missing-policy and output-mode scalar knobs
+    "missing_semantic", "output_mode",
 })
 
 

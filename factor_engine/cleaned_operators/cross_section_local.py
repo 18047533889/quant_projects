@@ -13,7 +13,8 @@ space**.
 * ``cs_knn_local_gradient_norm``  — ||beta|| of that local regression (how
   sensitive the target is to the features *in that region*).
 * ``cs_rank_copula_mi`` / ``cs_rank_copula_entropy`` — cross-sectional rank
-  copula mutual information / entropy of two fields.
+  copula mutual information / entropy of two fields (Jeffreys-smoothed plug-in
+  estimator, single definition — no Miller–Madow layer, R26-011).
 
 Features are rank-standardised per day (scale-free L2); all kernels are
 per-day cross-sections (prefix-causal, no future stocks/days), deterministic,
@@ -475,19 +476,19 @@ def _copula_cross_series(a: np.ndarray, b: np.ndarray, grid: int, entropy: bool)
         raw = np.zeros((g, g), dtype=np.float64)
         for i in range(u.shape[0]):
             raw[u[i], v[i]] += 1.0
-        # P1-21 finite-sample correction (Miller-Madow): the plug-in entropy/MI
-        # is upward biased by ~(K-1)/(2N); occupied-cell counts are taken from
-        # the unsmoothed joint so the correction reflects real occupancy.
-        k_xy = int((raw > 0).sum())
-        k_u = int((raw.sum(axis=1) > 0).sum())
-        k_v = int((raw.sum(axis=0) > 0).sum())
+        # R26-009..011: single estimator definition — Jeffreys/Dirichlet
+        # smoothed plug-in, NO Miller–Madow on top.  Miller–Madow is a bias
+        # correction for the RAW plug-in estimator; layering it over a
+        # pseudo-count smoothing double-corrects (R26-010), driving MI negative
+        # on near-independent data and adding a mechanical N-drift.  The
+        # smoothed joint is a proper probability distribution, so the KL MI is
+        # non-negative and the normalized entropy stays in [0,1] by construction.
         joint = raw + _ALPHA  # Jeffreys smoothing, deterministic
         joint /= joint.sum()
         if entropy:
             ent = float(-np.sum(joint * np.log(joint)))
-            # Miller-Madow entropy bias + normalize by log(grid²) so entropy is
-            # a resolution-independent [0,1] concentration measure (P1-21).
-            ent = ent + float(k_xy - 1) / (2.0 * N)
+            # Normalize by log(grid²) so entropy is a resolution-independent
+            # [0,1] concentration measure (P1-21).  No MM term (R26-011).
             out[t, :] = ent / np.log(float(g * g))
         else:
             pu = joint.sum(axis=1)
@@ -500,19 +501,7 @@ def _copula_cross_series(a: np.ndarray, b: np.ndarray, grid: int, entropy: bool)
                     if p <= _EPS or denom <= _EPS:
                         continue
                     mi += p * np.log(p / denom)
-            # Miller-Madow MI bias correction (P1-21 / R15-INC-174).
-            #
-            # Derivation: I = H_X + H_Y - H_XY.  With the standard entropy
-            # correction H_MM = H_ML + (K-1)/(2N) applied to each term,
-            #
-            #   I_MM = I_ML + [(k_u-1) + (k_v-1) - (k_xy-1)] / (2N)
-            #        = I_ML + (k_u + k_v - k_xy - 1) / (2N).
-            #
-            # For near-independent variables k_xy ≈ k_u·k_v is large, so this is
-            # negative and DAMPENS the upward plug-in MI bias toward 0.  The
-            # pre-R15 code added ``(k_xy - k_u - k_v + 1)`` — the exact negative —
-            # which INFLATED MI on independent data (a false positive control).
-            mi = mi + float(k_u + k_v - k_xy - 1) / (2.0 * N)
+            # KL(MI) of the smoothed joint — always >= 0.  No MM term (R26-011).
             out[t, :] = float(mi)
     return out
 
@@ -531,8 +520,9 @@ def _register_copula_op(canonical: str, description: str, entropy: bool) -> Seri
         )
 
     # R11 #28: ``cs_rank_copula_entropy`` is normalised by log(grid^2) to [0,1]
-    # — the unit is DIMENSIONLESS, not nats.  ``cs_rank_copula_mi`` stays nats
-    # (raw plug-in MI, no normalisation).
+    # — the unit is DIMENSIONLESS, not nats.  ``cs_rank_copula_mi`` stays nats.
+    # R26-011: both use the Jeffreys-smoothed plug-in estimator (NO Miller–Madow
+    # layer) — single definition, MI >= 0 by construction.
     unit = "dimensionless" if entropy else "nats"
     metadata = _metadata(
         canonical, description, ["a", "b", "grid"], unit=unit, cost=6,

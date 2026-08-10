@@ -24,10 +24,28 @@ US_COS_CONTRACTS = {
 
 for _name in ("balance", "income", "cashflow"):
     key = f"us_stock_{_name}"
-    US_COS_CONTRACTS[key] = _c(key, "us", "E2", "asof", "ticker", availability_column="filing_date", period_column="period_end", required_event_filters=("timeframe",), allowed_filter_values=(("timeframe", _TIMEFRAME),), availability_must_follow_period=True, storage_layout="period_files")
+    # R24 P0-PIT1/2/3/5 §10-12/§14：filing_date 是 date_label（不是可同日使用的
+    # instant）；availability 保守到 next_session_open（date-only 下一交易时段）；
+    # timeframe 必须 exactly-one 进入 identity；filing_date 是真披露时点，US 支持
+    # vintage PIT（revision_availability_time=filing_date，T-P10）。
+    US_COS_CONTRACTS[key] = _c(
+        key, "us", "E2", "asof", "ticker",
+        availability_column="filing_date",
+        period_column="period_end",
+        required_event_filters=("timeframe",),
+        allowed_filter_values=(("timeframe", _TIMEFRAME),),
+        availability_must_follow_period=True,
+        storage_layout="period_files",
+        time_representation="date_label",
+        time_precision="date",
+        semantic_timezone="America/New_York",
+        revision_availability_time="filing_date",
+        pit_fidelity="vintage_pit",
+        filter_cardinalities=(("timeframe", "exactly_one"),),
+    )
 
 US_COS_CONTRACTS.update({
-    "us_stock_dividend": _c("us_stock_dividend", "us", "E2", "event", "ticker", pit="strict", availability_column="declaration_date", event_column="ex_dividend_date", period_column="ex_dividend_date", event_id_columns=("id",), storage_layout="event_files", note="Knowledge-time = declaration_date (~0.51% null; rows missing it fail closed, never ex-date fallback); effective/event date = ex_dividend_date (secondary)."),
+    "us_stock_dividend": _c("us_stock_dividend", "us", "E2", "event", "ticker", pit="strict", availability_column="declaration_date", event_column="ex_dividend_date", period_column="ex_dividend_date", event_id_columns=("id",), storage_layout="event_files", time_representation="date_label", time_precision="date", semantic_timezone="America/New_York", note="Knowledge-time = declaration_date (~0.51% null; rows missing it fail closed, never ex-date fallback); effective/event date = ex_dividend_date (secondary). cash_amount currency is dynamic (R24 P0-XM2) - see cash_dividend_local/usd."),
     # StockCapitalDaily 目录混放两种 schema（C13）：{date}.parquet=拆分事件，
     # shares_{date}.parquet=稀疏 PIT 股本。拆成两个数据集，各自 storage_layout
     # 归递归布局（全量 sync + complete marker），绝不按决策日枚举文件名。
@@ -40,7 +58,7 @@ US_COS_CONTRACTS.update({
     # 字典把 FactNews 明确标为 RAW_EVENT（PIT=published_utc）。新闻事件与财务
     # 事件不同：entity_list explode、event_id、publication 时间戳、事件窗口、
     # source confidence——不再复用 E2 标签。
-    "us_fact_news": _c("us_fact_news", "us", "RAW_EVENT", "event", "ticker", pit="strict", availability_column="published_utc", storage_layout="event_files", cardinality="one_to_many", note="FactNews clean news; PIT=published_utc; TradeDate is partition only."),
+    "us_fact_news": _c("us_fact_news", "us", "RAW_EVENT", "event", "ticker", pit="strict", availability_column="published_utc", storage_layout="event_files", cardinality="one_to_many", time_representation="instant", time_precision="timestamp", storage_timezone="UTC", semantic_timezone="America/New_York", note="FactNews clean news; PIT=published_utc (true UTC instant - only instant path is timezone-shifted, date_label never is); TradeDate is partition only."),
     "us_ticker_alias": _c("us_ticker_alias", "us", "EMPTY", "refuse", "ticker", pit="unsupported"),
     "us_stock_status": _c("us_stock_status", "us", "EMPTY", "refuse", "Symbol", pit="unsupported"),
     "us_stock_industry": _c("us_stock_industry", "us", "EMPTY", "refuse", "Symbol", pit="unsupported"),

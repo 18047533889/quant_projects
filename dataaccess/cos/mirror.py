@@ -373,17 +373,8 @@ def _expected_dates(dataset_name: str, start: date, end: date) -> list[date]:
 
     避免「交易日型数据按自然日枚举」导致周末/节假日被当成缺失 partition，进而
     误判 mirror 不完整 / 误切 remote。需要 degraded 标记时用
-    ``_expected_dates_with_degraded``。
-    """
-    return _expected_dates_with_degraded(dataset_name, start, end)[0]
-
-
-def _expected_dates(dataset_name: str, start: date, end: date) -> list[date]:
-    """#25 决定哪些 partition 应该存在：trade_day 用交易日历，calendar_day 用自然日。
-
-    避免「交易日型数据按自然日枚举」导致周末/节假日被当成缺失 partition，进而
-    误判 mirror 不完整 / 误切 remote。需要 degraded 标记时用
-    ``_expected_dates_with_degraded``。
+    ``_expected_dates_with_degraded``。**唯一 implementation**（R24 P1-1：删除
+    历史重复定义）。
     """
     return _expected_dates_with_degraded(dataset_name, start, end)[0]
 
@@ -448,11 +439,50 @@ def _local_table_dir(spec: MirrorSpec) -> Path:
     return spec.local_root
 
 
+def _cache_scope_fields() -> dict[str, Any]:
+    """R24 P0-S3 §5.5：cache manifest 的非 secret 权限身份（scope 绑定）。
+
+    权限降低 / 策略变化后，旧的高权限 cache 不得自动复用（scope 不匹配 →
+    ``_mirror_file_state`` 判 stale → 重新拉取）。只写非 secret 标识，绝不写
+    credential 本身。
+    """
+    import hashlib as _hashlib
+
+    fields: dict[str, Any] = {}
+    try:
+        from data_access.security.policy import get_authorizer
+        from data_access.security.credentials import _global_credential_provider
+
+        auth = get_authorizer()
+        fields["access_policy_digest"] = getattr(
+            getattr(auth, "policy", None), "digest", lambda: None
+        )() or None
+        principal = getattr(auth, "principal", None)
+        fields["principal_scope_id"] = (
+            getattr(principal, "principal_id", None) or None
+        )
+        provider = _global_credential_provider()
+        if provider is not None:
+            try:
+                material = provider.resolve()
+                fields["credential_scope_id"] = (
+                    material.credential_scope_id or None
+                )
+            except Exception:
+                fields["credential_scope_id"] = None
+    except Exception:
+        pass
+    return fields
+
+
 def _write_download_manifest(dest: Path, *, remote_key: str | None = None) -> None:
     """#27 写入本地镜像 manifest（size + mtime + checksum + 下载时间 + verified）。
 
     供 mirror inventory（``load_mirror_inventory``）判定镜像是否真正正确——单纯
     ``Path.exists()`` 不足以发现下载中断 / 文件损坏 / 上游同名更新。
+
+    R24 P0-S3 §5.5：manifest 增加 ``principal_scope_id / access_policy_digest /
+    credential_scope_id``——权限 scope 不匹配的旧缓存不得复用。
     """
     import hashlib
     import time as _time
@@ -470,6 +500,7 @@ def _write_download_manifest(dest: Path, *, remote_key: str | None = None) -> No
         "downloaded_at": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
         "verified": True,
     }
+    payload.update(_cache_scope_fields())
     try:
         h = hashlib.sha256()
         with dest.open("rb") as fh:
@@ -630,33 +661,67 @@ def _local_file_usable(dest: Path) -> bool:
 
 
 def _sync_cos_file(cos_uri: str, dest: Path) -> None:
+    """从 COS 下载单个对象到本地（R24 P0-S3 §5.3 / T-S08 安全临时文件）。
+
+    - 目标文件是 symlink → 拒绝（symlink 替换攻击：恶意预建 symlink 把下载重定向
+      到 root 之外）；
+    - 用 ``tempfile.NamedTemporaryFile(dir=dest.parent, delete=False)``（O_EXCL
+      原子创建随机名）下载，防止 tmp 抢占 / 并发 writer 覆盖 / symlink 替换；
+    - 下载完成后 ``chmod 0600``（文件默认私有，绝不开 world-readable）；
+    - ``os.replace`` 原子落盘 + 写 scope 绑定的 manifest。
+    """
+    import os as _os
+    import tempfile as _tempfile
+
     dest.parent.mkdir(parents=True, exist_ok=True)
     if _local_file_fresh(dest):
         return
-    tmp = dest.with_suffix(dest.suffix + ".tmp")
-    if tmp.exists():
+    if dest.is_symlink():
+        raise ValidationError(
+            f"本地镜像目标 {dest} 是 symlink，拒绝覆盖（T-S08 symlink 攻击 fail-closed）"
+        )
+    tmp = None
+    try:
+        # O_EXCL 原子创建随机名临时文件（防 tmp 抢占 / symlink 替换 / 并发覆盖）。
+        tmp = _tempfile.NamedTemporaryFile(
+            dir=dest.parent, prefix=".cosdl-", suffix=".tmp", delete=False
+        )
+        tmp_path = Path(tmp.name)
+        tmp.close()
+        _run_cos_cli(["cp", cos_uri, str(tmp_path)])
+        if not tmp_path.exists() or tmp_path.stat().st_size <= 0:
+            logger.debug("cos_mirror: 跳过空/缺失下载 %s", cos_uri)
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+            return
         try:
-            tmp.unlink()
+            _os.chmod(tmp_path, 0o600)  # 文件默认 0600（私有）
         except OSError:
             pass
-    try:
-        _run_cos_cli(["cp", cos_uri, str(tmp)])
-        if not tmp.exists() or tmp.stat().st_size <= 0:
-            logger.debug("cos_mirror: 跳过空/缺失下载 %s", cos_uri)
-            if tmp.exists():
-                tmp.unlink()
-            return
-        tmp.replace(dest)
+        if dest.exists() and dest.is_symlink():
+            raise ValidationError(
+                f"本地镜像目标 {dest} 是 symlink，拒绝覆盖（T-S08）"
+            )
+        tmp_path.replace(dest)
         _write_download_manifest(dest, remote_key=cos_uri)
     except subprocess.CalledProcessError as exc:
-        if tmp.exists():
+        if tmp is not None:
             try:
-                tmp.unlink()
+                Path(tmp.name).unlink()
             except OSError:
                 pass
         if _is_missing_object_error(exc):
             logger.debug("cos_mirror: 跳过缺失文件 %s", cos_uri)
             return
+        raise
+    except Exception:
+        if tmp is not None:
+            try:
+                Path(tmp.name).unlink()
+            except OSError:
+                pass
         raise
 
 

@@ -28,6 +28,51 @@ from cleaned_operators.base import (
 import numpy as np
 import pandas as pd
 
+# R24-095/096: strict fallback policy enum.  An unknown string must RAISE —
+# never fall through to a default branch that silently changes the economic
+# definition (e.g. "nna" becoming global demean).
+_GROUP_FALLBACK_POLICIES = frozenset({"nan", "error", "global", "keep_original"})
+_FALLBACK_POLICY_SPEC = ParamSpec(
+    dtype=str,
+    choices=("nan", "error", "global", "keep_original"),
+    default="nan",
+    searchable=False,
+)
+
+
+def validate_fallback_policy(policy: str, *, operator: str = "") -> None:
+    if policy not in _GROUP_FALLBACK_POLICIES:
+        raise ValueError(
+            f"{operator} fallback_policy must be one of "
+            f"{sorted(_GROUP_FALLBACK_POLICIES)!r}, got {policy!r} "
+            "(R24-096 — unknown policy never falls to a default branch)"
+        )
+
+
+def strict_group_align(x: pd.DataFrame, group: pd.DataFrame | None):
+    """R24-097: strict axes gate for group panels — no silent ``reindex``.
+
+    A misaligned group panel would re-pair an instrument to a different group
+    and fabricate a spurious group statistic.  Raise instead of reindexing.
+    """
+    if group is None:
+        return x, None
+    from cleaned_operators.relation.ops import strict_relation_align
+
+    x, group = strict_relation_align(x, group)
+    return x, group
+
+
+def _strict_group_panel(group: pd.DataFrame | None, x: pd.DataFrame) -> pd.DataFrame | None:
+    """Strict-check a group panel against x; raise on any axis mismatch.
+
+    Replaces the legacy ``_strict_group_panel(group, x)`` —
+    a misaligned group is a semantic corruption, never silently repaired.
+    """
+    _x, _g = strict_group_align(x, group)
+    return _g
+
+
 # canonical=deltas backend=pandas_numpy selected=deltas source=time_series/panel_ops.py
 @register_operator(name="deltas", category="time_series", business_category="group_neutralization", canonical="deltas", source="factor_dsl_np")
 class Deltas(SeriesOperator):
@@ -112,12 +157,15 @@ class GroupRankWeightedValue(SeriesOperator):
             "group_rank_weighted_value(ROE, industry_code)",
             "group_rank_weighted_value(returns, get('industry_sw'))"
         ],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "rank_weighted", "group", "linear"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         return _group_rank_weighted_value_panel(x, group, fallback_policy=fallback_policy)
 
 
@@ -139,13 +187,15 @@ class GroupDecayLinear(SeriesOperator):
             "group_decay_linear(ROE, industry_code)",
             "group_decay_linear(returns, get('industry_sw'), 5)"
         ],
-        param_names=["x", "group", "window"],
+        param_names=["x", "group", "window", "fallback_policy"],
         return_type="series",
         tags=["cross_sectional", "decay", "linear", "group", "rank_weighted", "compat_alias"],
         param_specs={"window": ParamSpec(dtype=int, searchable=False, param_role=ParamRole.POLICY)},
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, window: int = 5, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         return _group_rank_weighted_value_panel(x, group, fallback_policy=fallback_policy)
 
 
@@ -190,7 +240,7 @@ class GroupTSDecayLinear(SeriesOperator):
             # 无分组输入：纯时间衰减，不做任何横截面 gate。
             return decay
 
-        g = group.reindex(index=x.index, columns=x.columns)
+        g = _strict_group_panel(group, x)
         result = decay.copy()
         for date in x.index:
             group_slice = g.loc[date]
@@ -230,12 +280,15 @@ class GroupDemean(SeriesOperator):
             "group_demean(ROE, industry_code)",
             "group_demean(returns, get('industry_sw'))"
         ],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "demean", "group", "industry"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         from cleaned_operators._numpy_kernels import group_demean_panel_
 
         # R19-063..065: a missing ``group`` must NOT silently degrade to a
@@ -244,7 +297,7 @@ class GroupDemean(SeriesOperator):
         # ``fallback`` policy: the default ``"nan"`` leaves the output NaN
         # (fail-closed); only the explicit ``fallback_policy="global"`` opts
         # into row-wise demean, and ``"keep_original"`` preserves the input.
-        g = group.reindex(index=x.index, columns=x.columns).to_numpy() if group is not None else None
+        g = _strict_group_panel(group, x).to_numpy() if group is not None else None
         out = group_demean_panel_(
             x.to_numpy(dtype=float, copy=False), g, fallback=fallback_policy
         )
@@ -262,12 +315,15 @@ class GroupMean(SeriesOperator):
         category="cross_sectional",
         description="计算组内均值",
         examples=["group_mean(ROE, industry_code)"],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "mean", "group", "aggregate"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -309,12 +365,15 @@ class GroupSum(SeriesOperator):
         category="cross_sectional",
         description="计算组内求和",
         examples=["group_sum(volume, industry_code)"],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "sum", "group", "aggregate"],
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
@@ -346,12 +405,15 @@ class GroupMin(SeriesOperator):
         category="cross_sectional",
         description="计算组内最小值",
         examples=["group_min(close, industry_code)"],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "min", "group", "aggregate"],
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
@@ -383,12 +445,15 @@ class GroupMax(SeriesOperator):
         category="cross_sectional",
         description="计算组内最大值",
         examples=["group_max(close, industry_code)"],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "max", "group", "aggregate"],
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
@@ -420,12 +485,15 @@ class GroupCount(SeriesOperator):
         category="cross_sectional",
         description="计算组内非空样本数",
         examples=["group_count(close, industry_code)"],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "count", "group", "aggregate"],
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
@@ -459,12 +527,15 @@ class GroupNormalize(SeriesOperator):
             "group_normalize(ROE, industry_code)",
             "group_normalize(PE, get('industry_sw'))"
         ],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "normalize", "group", "industry"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -587,12 +658,15 @@ class GroupRank(SeriesOperator):
             "group_rank(ROE, industry_code)",
             "group_rank(PE, get('industry_sw'))"
         ],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "rank", "group", "industry"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         """
         参数:
             x: 待排名的因子值DataFrame (dates x stocks)
@@ -647,12 +721,15 @@ class GroupStd(SeriesOperator):
         category="cross_sectional",
         description="计算组内标准差",
         examples=["group_std(ROE, industry_code)"],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "std", "group", "aggregate"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -755,12 +832,15 @@ class GroupZScore(SeriesOperator):
             "group_zscore(ROE, industry_code)",
             "group_zscore(returns, get('industry_sw'))"
         ],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
+        param_specs={"fallback_policy": _FALLBACK_POLICY_SPEC},
         return_type="series",
         tags=["cross_sectional", "zscore", "group", "industry", "standardize"]
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
+        
+        validate_fallback_policy(fallback_policy, operator=type(self).__name__)
         """
         参数:
             x: 待标准化的因子值DataFrame (dates x stocks)

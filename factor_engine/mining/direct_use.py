@@ -36,6 +36,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Iterable, Sequence
 
+import numpy as np
+import pandas as pd  # noqa: F401  (used by the R25 parameter-injectivity probe)
+
 from mining.operator_catalog import (
     MiningRole,
     RoleSource,
@@ -611,8 +614,10 @@ _DEFAULT_INPUT_RECIPE: dict[str, dict[str, str]] = {
     "ts_log_return": {"x": "continuous_close"},
     "parkinson_vol": {"high": "continuous_high", "low": "continuous_low"},
     "amihud_illiquidity": {"ret": "return_decimal", "amount": "amount_local"},
-    "ts_average_volume": {"volume": "continuous_volume"},
-    "dollar_volume": {"close": "continuous_close", "volume": "continuous_volume"},
+    # R25-029/030/173: volume is a share COUNT — bind to raw_volume_shares, NOT
+    # continuous_volume (raw volume must not be adjusted by the price factor).
+    "ts_average_volume": {"volume": "raw_volume_shares"},
+    "dollar_volume": {"close": "continuous_close", "volume": "raw_volume_shares"},
     "true_range": {"high": "continuous_high", "low": "continuous_low", "close": "continuous_close"},
     "ATR_WILDER": {"high": "continuous_high", "low": "continuous_low", "close": "continuous_close"},
     "NATR": {"high": "continuous_high", "low": "continuous_low", "close": "continuous_close"},
@@ -1353,19 +1358,23 @@ _INPUT_CONCEPT_FALLBACK: dict[str, str] = {
     "x": "continuous_close", "close": "continuous_close",
     "high": "continuous_high", "low": "continuous_low",
     "open": "continuous_open", "vwap": "continuous_vwap",
-    "volume": "continuous_volume", "amount": "amount_local",
+    # R25-030/173: volume is a share COUNT — never adjusted by the price factor.
+    "volume": "raw_volume_shares", "amount": "amount_local",
     "ret": "return_decimal", "returns": "return_decimal",
     "return": "return_decimal", "y": "return_decimal",
     "benchmark_ret": "benchmark_return", "benchmark": "benchmark_return",
-    "weight": "continuous_close", "weights": "continuous_close",
+    # R25-032/033: weight/weights are NOT price-like signals.  A generic
+    # continuous_close binding is forbidden — a weight slot must be resolved by
+    # the per-canonical contract (NonNegativeWeight / SignedWeight) or fail
+    # recipe resolution, never silently fabricated as close.
     "values": "continuous_close", "value": "continuous_close",
-    "f1": "return_decimal", "f2": "volume", "f3": "turnover",
+    "f1": "return_decimal", "f2": "raw_volume_shares", "f3": "turnover",
     "a": "continuous_close", "b": "continuous_close", "c": "continuous_close",
     "price": "continuous_close", "source": "continuous_close",
     "target": "return_decimal", "factor": "continuous_close",
     "open_p": "continuous_open", "high_p": "continuous_high",
     "low_p": "continuous_low", "close_p": "continuous_close",
-    "volume_p": "continuous_volume", "amount_p": "amount_local",
+    "volume_p": "raw_volume_shares", "amount_p": "amount_local",
     # fundamental period / income / balance concepts (R17 resolver names).
     "period_id": "period_id",
     "turnover": "turnover",
@@ -1396,20 +1405,13 @@ _INPUT_CONCEPT_FALLBACK: dict[str, str] = {
     "inventory": "inventory",
     "receivables": "accounts_receivable",
     "payables": "accounts_payable",
-    # generic multi-series slots — a recipe binds the first series to the
-    # anchor price concept so every retained operator has a real binding.
-    "f1": "return_decimal", "f2": "volume", "f3": "turnover", "f4": "continuous_close",
-    "p1": "continuous_close", "p2": "continuous_close", "p3": "continuous_close",
-    "p4": "continuous_close", "p5": "continuous_close", "p6": "continuous_close",
-    "p7": "continuous_close",
-    "s1": "continuous_close", "s2": "continuous_close", "s3": "continuous_close",
-    "s4": "continuous_close", "s5": "continuous_close", "s6": "continuous_close",
-    "s7": "continuous_close", "s8": "continuous_close", "s9": "continuous_close",
-    "s10": "continuous_close",
-    "sid1": "continuous_close", "sid2": "continuous_close", "sid3": "continuous_close",
-    "sid4": "continuous_close", "sid5": "continuous_close", "sid6": "continuous_close",
-    "sid7": "continuous_close", "sid8": "continuous_close", "sid9": "continuous_close",
-    "sid10": "continuous_close",
+    # R25-032/033: anonymous multi-input slots (sid*/p*/s*/f4) must NOT default
+    # to continuous_close.  ``sid*`` are entity identifiers (EntityStableId),
+    # not price panels; ``weight`` needs NonNegativeWeight/SignedWeight; other
+    # anonymous slots must be decided by the per-canonical contract.  Removing
+    # these generic bindings makes such operators fail recipe resolution
+    # honestly instead of silently binding every slot to the anchor close price.
+    "f1": "return_decimal", "f2": "raw_volume_shares", "f3": "turnover",
 }
 
 
@@ -1699,11 +1701,15 @@ _OUTPUT_DOMAIN_ALPHA_PATTERNS: list[tuple[str, str]] = [
     ("_entropy", "continuous_nonnegative"),
     ("_distance", "continuous_nonnegative"),
     ("_imbalance", "continuous_signed"),
-    ("_corr", "bounded_0_1"),
+    # R25-086/087/175: a correlation is [-1,1] (never bounded_0_1), and R^2 can
+    # be negative out-of-sample / under some definitions (never uniformly [0,1]).
+    # The suffix heuristic is at most a candidate suggestion; an explicit
+    # OutputDomainSpec is the production authority (R25-089).
+    ("_corr", "neg_one_one"),
     ("_beta", "continuous_signed"),
     ("_alpha", "continuous_signed"),
     ("_resid", "continuous_signed"),
-    ("_r2", "bounded_0_1"),
+    ("_r2", "continuous_signed"),
     ("_coeff", "continuous_signed"),
     ("_coefficient", "continuous_signed"),
     ("_strength", "continuous_nonnegative"),
@@ -1791,6 +1797,97 @@ def _is_production_denied(canonical: str) -> bool:
         return canonical in PRODUCTION_DENIED_CANONICALS
     except Exception:
         return False
+
+
+def _probe_parameter_injectivity(
+    canonical: str, op: Any, searchable: tuple[str, ...], panel_params: Sequence[str] = ()
+) -> bool:
+    """R25-040..042 / R25-172: real parameter-injectivity certificate.
+
+    For each searchable parameter, run the operator on a tiny synthetic panel
+    at its default value and at one or two probe values; if the output is
+    bitwise-identical across every probe the parameter is DEAD (injectivity
+    fails).  Returns True only when EVERY searchable parameter was genuinely
+    observed to change the output (injective/effective), or when there are no
+    searchable parameters (vacuously injective).  Any execution failure or a
+    fixture that cannot be built keeps the certificate False (honestly "not
+    proven") — a catch-into-False never grants a green flag (R25-134/135).
+    """
+    if not searchable:
+        return True  # no searchable parameter -> vacuously injective
+    if op is None:
+        return False
+    if not panel_params:
+        try:
+            cat = OperatorRegistry._catalog.get(canonical, {})
+            split = _authoritative_param_split(canonical, cat)
+            panel_params = split[0]
+        except Exception:
+            pass
+    if not panel_params:
+        return False  # cannot build a fixture without panel inputs
+    try:
+        # 40 rows so rolling/statistical parameters (window up to ~30) see
+        # different data — a 2-row fixture would be all-NaN for any window and
+        # falsely report every window-parameter as DEAD (R25-053 false blocker).
+        idx = pd.date_range("2024-01-01", periods=40, freq="B")
+        base = [float(i % 7) + 0.5 for i in range(40)]
+        panels = [
+            pd.DataFrame({"A": base, "B": [v * 2.0 for v in base]}, index=idx, dtype=float)
+            for _ in panel_params
+        ]
+        defaults = dict(getattr(getattr(op, "metadata", None), "param_specs", {}) or {})
+        base_kwargs = {}
+        for name in searchable:
+            spec = defaults.get(name)
+            if spec is not None and getattr(spec, "default", None) is not None:
+                base_kwargs[name] = spec.default
+        base_out = op.calculate(*panels, **base_kwargs)
+        base_hash = _stable_output_hash(base_out)
+        for name in searchable:
+            probe_values = _injectivity_probe_values(name, defaults.get(name))
+            changed = False
+            for value in probe_values:
+                kw = dict(base_kwargs)
+                kw[name] = value
+                try:
+                    probe_out = op.calculate(*panels, **kw)
+                except Exception:
+                    continue  # this probe value not executable — try next
+                if _stable_output_hash(probe_out) != base_hash:
+                    changed = True
+                    break
+            if not changed:
+                # DEAD_PARAMETER: no probe changed the output.
+                return False
+        return True
+    except Exception:
+        return False
+
+
+def _stable_output_hash(out: Any) -> str:
+    """Deterministic NaN-aware digest of an operator output."""
+    import hashlib
+
+    try:
+        arr = np.asarray(out, dtype=float)
+    except Exception:
+        return "unhashable"
+    finite = np.nan_to_num(arr, nan=-1e30, posinf=1e30, neginf=-1e30)
+    return hashlib.sha1(np.ascontiguousarray(finite).tobytes()).hexdigest()
+
+
+def _injectivity_probe_values(name: str, spec: Any) -> list[Any]:
+    """Two distinct executable probe values for a searchable parameter."""
+    default = getattr(spec, "default", None)
+    candidates = [1, 2, 3, 5, 10, 20, 60, 0.5, 0.25, 0.01]
+    if name in ("q", "quantile", "p", "percentile", "alpha", "threshold", "coverage_threshold", "k", "d"):
+        base = default if isinstance(default, (int, float)) else 0.5
+        return [base * 0.5 if base else 0.5, base * 0.8 if base else 0.8]
+    if default is not None and isinstance(default, (int, float)):
+        step = 1 if isinstance(default, int) and int(default) == default else 0.5
+        return [default + step, default + 2 * step]
+    return candidates[:2]
 
 
 def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> DirectUseOperator:
@@ -1915,7 +2012,7 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         default_params=tuple(catalog.get("param_names") or ()),
         searchable_params=searchable,
         search_grade_by_param=_search_grades(canonical),
-        parameter_injectivity_passed=False,
+        parameter_injectivity_passed=_probe_parameter_injectivity(canonical, op, searchable, panel_params),
         stateful=stateful,
         execution_model=exec_model,
         checkpoint_supported=checkpoint,

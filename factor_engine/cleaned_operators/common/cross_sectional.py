@@ -1138,12 +1138,12 @@ class CrossSectionalNeutralizePolars(SeriesOperator):
         category="cross_sectional",
         description="对因子进行行业中性化处理",
         examples=["c_neutralize(ROE, industry)"],
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
         return_type="series",
         tags=["cross_sectional", "neutralize", "industry"]
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
 
         # R19-063: ``group is None`` 不再退化为全局 demean（那是 cs_demean 的职责）。

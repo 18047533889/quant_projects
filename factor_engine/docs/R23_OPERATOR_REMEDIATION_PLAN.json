@@ -2,7 +2,7 @@
   "blocker_counts": {
     "PIT11_EXPECTATION_POST_EVENT_LEAK": 7,
     "PIT18_REVISION_EVENT_UNPROVEN": 14,
-    "experimental lifecycle: not production-certified (R23-303)": 1376
+    "experimental lifecycle: not production-certified (R23-303)": 1383
   },
   "blockers": {
     "experimental lifecycle: not production-certified (R23-303)": [
@@ -371,6 +371,7 @@
       "fin_sign_change_count",
       "fin_stability",
       "fin_std",
+      "fin_total_operating_accruals",
       "fin_trend_acceleration",
       "fin_trend_r2",
       "fin_trend_slope",
@@ -466,6 +467,7 @@
       "holder_class_entropy",
       "holder_class_js_shift",
       "holder_common_holding_peer_return",
+      "holder_company_ownership_hhi",
       "holder_concentration",
       "holder_concentration_acceleration",
       "holder_concentration_slope",
@@ -483,6 +485,7 @@
       "holder_locked_share_ratio",
       "holder_nature_entropy",
       "holder_net_entry_share",
+      "holder_observed_topk_hhi",
       "holder_peer_return_breadth",
       "holder_pledge_change",
       "holder_pledge_concentration",
@@ -734,6 +737,7 @@
       "rank_corr",
       "real_turnover_rate",
       "relation_category_share",
+      "relation_category_signed_contribution",
       "relation_concentration_acceleration",
       "relation_diffusion_score",
       "relation_distinct_count",
@@ -1155,6 +1159,9 @@
       "ts_pivot_low_count",
       "ts_pivot_low_spacing",
       "ts_poly2_coeff",
+      "ts_poly2_forecast_error",
+      "ts_poly2_forecast_error_z",
+      "ts_poly2_prior_coeff",
       "ts_poly2_resid",
       "ts_positive_ratio",
       "ts_prev_high",

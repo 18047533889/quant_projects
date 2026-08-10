@@ -54,13 +54,14 @@ def _panel(values, columns, dates=None):
 
 def test_group_rank_weighted_value_is_canonical_without_window() -> None:
     op = OperatorRegistry.get("group_rank_weighted_value")
-    assert op.metadata.param_names == ["x", "group"]
+    # R24-094: fallback_policy is now a DECLARED behavioral param.
+    assert op.metadata.param_names == ["x", "group", "fallback_policy"]
     assert "window" not in op.metadata.param_names
 
 
 def test_group_decay_linear_window_dead_param_is_policy() -> None:
     op = OperatorRegistry.get("group_decay_linear")
-    assert op.metadata.param_names == ["x", "group", "window"]
+    assert op.metadata.param_names == ["x", "group", "window", "fallback_policy"]
     spec = op.metadata.param_specs["window"]
     assert spec.searchable is False
     assert spec.param_role is ParamRole.POLICY

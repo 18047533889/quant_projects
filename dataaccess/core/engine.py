@@ -33,7 +33,7 @@ import duckdb
 import pyarrow as pa
 
 from .duckdb_config import DuckDBConfig, apply_pragmas, resolve_duckdb_config
-from .exceptions import EngineError
+from .exceptions import AccessDeniedError, EngineError
 from .retry import retry_io
 from data_access.read.telemetry import maybe_log_slow_query_plan, record_query
 
@@ -281,6 +281,23 @@ class DuckDBEngine:
             cursor.close()
             raise
 
+    @staticmethod
+    def _wrap_query_error(sql: str, exc: Exception) -> Exception:
+        """把 DuckDB 查询错误包装成 DataAccess 异常类型（R24 P1-S9）。
+
+        403 / Forbidden / PermissionDenied / AccessDenied / unauthorized 属于
+        授权层错误，**不是 backend 错误**——必须原样传播为 ``AccessDeniedError``，
+        禁止任何调用方 ``except Exception: return None`` 或降级成空 universe，
+        更禁止换更高权限 credential 重试（T-S02）。
+        其余 duckdb 错误保持 ``EngineError``（外部信息脱敏：不打印完整 SQL）。
+        """
+        from data_access.core.retry import ErrorClass, classify_exception
+
+        if classify_exception(exc) == ErrorClass.AUTH:
+            return AccessDeniedError(f"resource is not authorized (cloud denied)")
+        # 外部错误不泄露 SQL / 完整 local/COS path（P1-S6 §8）。
+        return EngineError(f"DuckDB 查询失败: {exc}")
+
     def explain(self, sql: str, params: Sequence[Any] | None = None) -> str:
         """返回 EXPLAIN 计划文本（诊断用，默认不在热路径调用）。"""
         cursor = self._conn.cursor()
@@ -344,7 +361,7 @@ class DuckDBEngine:
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             return table
         except duckdb.Error as exc:
-            raise EngineError(f"DuckDB 查询失败: {exc}\nSQL: {sql[:500]}") from exc
+            raise self._wrap_query_error(sql, exc) from exc
         finally:
             if not elapsed_ms:
                 elapsed_ms = (time.perf_counter() - start) * 1000.0
@@ -568,7 +585,7 @@ class DuckDBEngine:
                 )
             return self._execute_reader_core(sql, params, batch_size=batch_size)
         except duckdb.Error as exc:
-            raise EngineError(f"DuckDB 流式查询失败: {exc}\nSQL: {sql[:500]}") from exc
+            raise self._wrap_query_error(sql, exc) from exc
         finally:
             record_query(
                 elapsed_ms=(time.perf_counter() - start) * 1000.0,
@@ -588,7 +605,7 @@ class DuckDBEngine:
                 return self._conn.sql(sql, params=list(params))
             return self._conn.sql(sql)
         except duckdb.Error as exc:
-            raise EngineError(f"DuckDB relation 构建失败: {exc}\nSQL: {sql[:500]}") from exc
+            raise self._wrap_query_error(sql, exc) from exc
 
     @retry_io()
     def execute_isolated_arrow(
@@ -698,7 +715,7 @@ class DuckDBEngine:
                     f"sql() 查询超过 deadline={deadline_ms:.0f}ms 被取消。"
                     "请缩小 time_range / 指定 view_columns，或提高 max_elapsed_ms。"
                 ) from exc
-            raise EngineError(f"DuckDB scoped sql 失败: {exc}\nSQL: {sql[:500]}") from exc
+            raise self._wrap_query_error(sql, exc) from exc
         finally:
             timed_out.set()
             conn.close()

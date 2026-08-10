@@ -213,24 +213,56 @@ def main() -> None:
     from fields.catalog import ASHARE_FIELD_SPECS, ASHARE_TABLE_SPECS
     from fields.catalog_us import US_FIELD_SPECS, US_TABLE_SPECS
 
+    # R25-064..066: the source-certificate key is ``market::dataset::table`` so
+    # A/US same-name tables (StockIncome, StockDailyBar, …) never collide.
+    # R25-067/068 (knowledge-time resolution): exact-observed daily/session
+    # tables have NO separate knowledge-time concept — declare
+    # ``N/A_EXACT_OBSERVATION`` instead of a bare UNPROVEN; a snapshot/relation/
+    # event/fundamental table that claims strict_pit_allowed=True but proves no
+    # key clock is flagged ``production_block`` (R25-068).
+    _EXACT_OBSERVED = {
+        "panel", "minute_session", "calendar", "static",
+    }
+    _EXACT_JOIN = {"exact", "exact_date", "minute_session", "state_asof", "financial_pit"}
+
+    def _resolution(t, m) -> tuple[str, bool]:
+        explicit = m.get("knowledge_time_resolution")
+        if explicit:
+            return str(explicit), False
+        if t.strict_pit_allowed and t.table_kind in _EXACT_OBSERVED and t.join_policy in _EXACT_JOIN:
+            # R25-067: the observation IS the data — a separate knowledge clock
+            # does not apply.
+            return "N/A_EXACT_OBSERVATION", False
+        if t.strict_pit_allowed:
+            # R25-068: claims PIT-safe but proves no key clock -> production
+            # block risk.
+            return "UNPROVEN", True
+        return "UNPROVEN", False
+
     temporal = {}
-    for t in list(ASHARE_TABLE_SPECS) + list(US_TABLE_SPECS):
-        m = dict(t.metadata)
-        temporal[t.name] = {
-            "dataset": t.dataset,
-            "knowledge_time_column": t.knowledge_time_column,
-            "period_id_column": t.period_id_column,
-            "revision_column": t.revision_column,
-            "effective_time_column": t.effective_time_column,
-            "strict_pit_allowed": t.strict_pit_allowed,
-            "required_parameters": list(t.required_parameters),
-            "knowledge_time_resolution": m.get("knowledge_time_resolution", "UNPROVEN"),
-            "announcement_pit_certified": m.get("announcement_pit_certified", None),
-            "revision_vintage_pit_certified": m.get("revision_vintage_pit_certified", None),
-            "restatement_risk": m.get("restatement_risk", None),
-            "timeframe_required": m.get("timeframe_required", None),
-            "pit_reason": m.get("pit_reason", ""),
-        }
+    for market, spec_list in (("ashare", ASHARE_TABLE_SPECS), ("us", US_TABLE_SPECS)):
+        for t in spec_list:
+            m = dict(t.metadata)
+            resolution, block = _resolution(t, m)
+            key = f"{market}::{t.dataset}::{t.name}"
+            temporal[key] = {
+                "market": market,
+                "dataset": t.dataset,
+                "table": t.name,
+                "knowledge_time_column": t.knowledge_time_column,
+                "period_id_column": t.period_id_column,
+                "revision_column": t.revision_column,
+                "effective_time_column": t.effective_time_column,
+                "strict_pit_allowed": t.strict_pit_allowed,
+                "required_parameters": list(t.required_parameters),
+                "knowledge_time_resolution": resolution,
+                "production_block_risk": block,
+                "announcement_pit_certified": m.get("announcement_pit_certified", None),
+                "revision_vintage_pit_certified": m.get("revision_vintage_pit_certified", None),
+                "restatement_risk": m.get("restatement_risk", None),
+                "timeframe_required": m.get("timeframe_required", None),
+                "pit_reason": m.get("pit_reason", ""),
+            }
     with open(os.path.join(DOCS, "R23_TEMPORAL_SOURCE_CERTIFICATES.json"), "w") as fh:
         json.dump(temporal, fh, ensure_ascii=False, indent=2, default=str)
 

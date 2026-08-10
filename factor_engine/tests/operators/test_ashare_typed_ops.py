@@ -49,9 +49,20 @@ def test_holder_change_is_snapshot_based():
         "available_at": ["2024-01-01", "2024-04-01", "2024-04-02"],
         "concentration": [0.4, 0.45, 0.45],
     })
-    result = relation_snapshot_change(rows, value_column="concentration")
+    result = relation_snapshot_change(
+        rows, value_column="concentration", decision_time="2024-04-15"
+    )
     assert len(result) == 2
     assert result.iloc[-1]["concentration_change"] == pytest.approx(0.05)
+    # R24-030..032: a future revision of an old snapshot is NOT visible at an
+    # earlier decision time (a full-sample keep-last would leak it).  At
+    # 2024-03-15 only snapshot 1 (available 2024-01-01) is visible — snapshot 2
+    # has no revision visible yet.
+    old = relation_snapshot_change(
+        rows, value_column="concentration", decision_time="2024-03-15"
+    )
+    assert len(old) == 1
+    assert old.iloc[0]["snapshot_id"] == 1
 
 
 def test_ashare_lowerings_registered():

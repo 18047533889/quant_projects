@@ -113,12 +113,14 @@ def test_hill_upper_lower_negation_mirror():
     # side='lower' call is no longer NaN'd by a negative quantile threshold).
     assert np.isfinite(lo_x)
     assert abs(float(lo_x) - float(up_nx)) < 1e-9
-    # A positive-magnitude series keeps a well-defined lower tail (threshold
-    # Q(x, frac) > 0) and both sides stay finite.
+    # R26-060..062: a strictly-POSITIVE magnitude / level has a left tail BOUNDED
+    # below by 0 — classic Hill (the ``z = -x`` mirror) does not apply to it and
+    # would produce a misleading negative ξ.  The positive-level lower tail is
+    # explicitly unsupported -> NaN; the UPPER tail stays finite.
     mag = np.abs(rng.standard_t(df=3, size=4000)) + 0.05
     lo_mag = _hill_series(mag, window=mag.size, side="lower", tail_fraction=0.2, min_tail_count=10)[-1]
     up_mag = _hill_series(mag, window=mag.size, side="upper", tail_fraction=0.2, min_tail_count=10)[-1]
-    assert np.isfinite(lo_mag)
+    assert np.isnan(lo_mag), "strictly-positive level lower tail must be unsupported (R26-061)"
     assert np.isfinite(up_mag)
 
 

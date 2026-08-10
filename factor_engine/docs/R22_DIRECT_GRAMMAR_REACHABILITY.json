@@ -56,7 +56,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:CMF::close=continuous_close,high=continuous_high,low=continuous_low,volume=continuous_volume",
+    "smoke_recipe": "smoke:CMF::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -96,7 +96,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:ChaikinOscillator::close=continuous_close,high=continuous_high,low=continuous_low,volume=continuous_volume",
+    "smoke_recipe": "smoke:ChaikinOscillator::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -194,7 +194,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:EaseOfMovement::high=continuous_high,low=continuous_low,volume=continuous_volume",
+    "smoke_recipe": "smoke:EaseOfMovement::high=continuous_high,low=continuous_low,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -213,7 +213,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ForceIndex::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:ForceIndex::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -387,7 +387,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:MFI::close=continuous_close,high=continuous_high,low=continuous_low,volume=continuous_volume",
+    "smoke_recipe": "smoke:MFI::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -499,7 +499,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:PVO::volume=continuous_volume",
+    "smoke_recipe": "smoke:PVO::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -518,7 +518,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:PVO_hist::volume=continuous_volume",
+    "smoke_recipe": "smoke:PVO_hist::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -537,7 +537,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:PVO_signal::volume=continuous_volume",
+    "smoke_recipe": "smoke:PVO_signal::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -765,7 +765,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:abnormal_volume::volume=continuous_volume",
+    "smoke_recipe": "smoke:abnormal_volume::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -800,7 +800,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:abs_return_volume_corr::ret=return_decimal,volume=continuous_volume",
+    "smoke_recipe": "smoke:abs_return_volume_corr::ret=return_decimal,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -851,7 +851,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:adv::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:adv::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -1065,7 +1065,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ashare_limit_down_volume_ratio::volume=continuous_volume",
+    "smoke_recipe": "smoke:ashare_limit_down_volume_ratio::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -1269,7 +1269,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ashare_limit_up_volume_ratio::volume=continuous_volume",
+    "smoke_recipe": "smoke:ashare_limit_up_volume_ratio::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -1519,7 +1519,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:bounded_nvi::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:bounded_nvi::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -1538,7 +1538,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:bounded_pvi::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:bounded_pvi::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -2866,7 +2866,7 @@
     "scalar_parameters": [
       "k"
     ],
-    "smoke_recipe": "smoke:cs_actual_lof_score::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:cs_actual_lof_score::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -2887,7 +2887,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:cs_autoencoder_reconstruction_error::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:cs_autoencoder_reconstruction_error::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -3164,7 +3164,7 @@
     "scalar_parameters": [
       "k"
     ],
-    "smoke_recipe": "smoke:cs_knn_distance::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:cs_knn_distance::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -3185,7 +3185,7 @@
     "scalar_parameters": [
       "k"
     ],
-    "smoke_recipe": "smoke:cs_knn_graph_dirichlet_energy::f1=return_decimal,f2=volume,f3=turnover,target=return_decimal",
+    "smoke_recipe": "smoke:cs_knn_graph_dirichlet_energy::f1=return_decimal,f2=raw_volume_shares,f3=turnover,target=return_decimal",
     "terminal_usable": true
   },
   {
@@ -3206,7 +3206,7 @@
       "k",
       "ridge"
     ],
-    "smoke_recipe": "smoke:cs_knn_local_gradient_norm::f1=return_decimal,f2=volume,f3=turnover,target=return_decimal",
+    "smoke_recipe": "smoke:cs_knn_local_gradient_norm::f1=return_decimal,f2=raw_volume_shares,f3=turnover,target=return_decimal",
     "terminal_usable": false
   },
   {
@@ -3228,7 +3228,7 @@
       "k",
       "ridge"
     ],
-    "smoke_recipe": "smoke:cs_knn_local_linear_residual::f1=return_decimal,f2=volume,f3=turnover,target=return_decimal",
+    "smoke_recipe": "smoke:cs_knn_local_linear_residual::f1=return_decimal,f2=raw_volume_shares,f3=turnover,target=return_decimal",
     "terminal_usable": true
   },
   {
@@ -3249,7 +3249,7 @@
     "scalar_parameters": [
       "k"
     ],
-    "smoke_recipe": "smoke:cs_knn_local_moran::f1=return_decimal,f2=volume,f3=turnover,target=return_decimal",
+    "smoke_recipe": "smoke:cs_knn_local_moran::f1=return_decimal,f2=raw_volume_shares,f3=turnover,target=return_decimal",
     "terminal_usable": true
   },
   {
@@ -3270,7 +3270,7 @@
       "k",
       "lag"
     ],
-    "smoke_recipe": "smoke:cs_knn_neighbor_retention::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:cs_knn_neighbor_retention::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -3291,7 +3291,7 @@
     "scalar_parameters": [
       "k"
     ],
-    "smoke_recipe": "smoke:cs_knn_peer_mean_ex_self::f1=return_decimal,f2=volume,f3=turnover,target=return_decimal",
+    "smoke_recipe": "smoke:cs_knn_peer_mean_ex_self::f1=return_decimal,f2=raw_volume_shares,f3=turnover,target=return_decimal",
     "terminal_usable": true
   },
   {
@@ -3311,7 +3311,7 @@
     "scalar_parameters": [
       "k"
     ],
-    "smoke_recipe": "smoke:cs_knn_tangent_residual::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:cs_knn_tangent_residual::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -3389,7 +3389,7 @@
     "scalar_parameters": [
       "k"
     ],
-    "smoke_recipe": "smoke:cs_local_density_score::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:cs_local_density_score::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -3440,7 +3440,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:cs_mahalanobis_distance::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:cs_mahalanobis_distance::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -3537,7 +3537,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:cs_neutralize::weight=continuous_close,y=return_decimal",
+    "smoke_recipe": "smoke:cs_neutralize::y=return_decimal",
     "terminal_usable": true
   },
   {
@@ -3758,7 +3758,7 @@
     "scalar_parameters": [
       "k"
     ],
-    "smoke_recipe": "smoke:cs_relative_density_ratio::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:cs_relative_density_ratio::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -3833,7 +3833,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:cs_robust_mahalanobis_mad::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:cs_robust_mahalanobis_mad::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -3853,7 +3853,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:cs_shrinkage_mahalanobis::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:cs_shrinkage_mahalanobis::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -3874,7 +3874,7 @@
       "window",
       "directions"
     ],
-    "smoke_recipe": "smoke:cs_sliced_wasserstein_copula_shift::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:cs_sliced_wasserstein_copula_shift::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -4036,7 +4036,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:cs_weighted_demean::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:cs_weighted_demean::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -4053,7 +4053,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:cs_weighted_mean::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:cs_weighted_mean::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -4070,7 +4070,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:cs_weighted_percentile_rank::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:cs_weighted_percentile_rank::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -4087,7 +4087,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:cs_weighted_zscore::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:cs_weighted_zscore::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -4107,7 +4107,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:cs_wls_resid::weight=continuous_close,x=continuous_close,y=return_decimal",
+    "smoke_recipe": "smoke:cs_wls_resid::x=continuous_close,y=return_decimal",
     "terminal_usable": true
   },
   {
@@ -4214,7 +4214,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:dollar_volume::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:dollar_volume::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -4233,7 +4233,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:dollar_volume_zscore::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:dollar_volume_zscore::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -4324,7 +4324,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:down_volume_ratio::ret=return_decimal,volume=continuous_volume",
+    "smoke_recipe": "smoke:down_volume_ratio::ret=return_decimal,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -5381,12 +5381,21 @@
     "canonical": "fin_component_score",
     "composition_usable": true,
     "data_inputs": [
-      "components"
+      "component_1",
+      "component_2",
+      "component_3",
+      "component_4",
+      "component_5",
+      "component_6",
+      "component_7",
+      "component_8",
+      "component_directions",
+      "score_weights"
     ],
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:fin_component_score::components=continuous_close",
+    "smoke_recipe": "smoke:fin_component_score::component_1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -7835,7 +7844,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:free_float_turnover::volume=continuous_volume",
+    "smoke_recipe": "smoke:free_float_turnover::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -7941,7 +7950,8 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "group"
+      "group",
+      "fallback_policy"
     ],
     "smoke_recipe": "smoke:group_count::x=continuous_close",
     "terminal_usable": false
@@ -7981,7 +7991,8 @@
     "reachable": true,
     "scalar_parameters": [
       "group",
-      "window"
+      "window",
+      "fallback_policy"
     ],
     "smoke_recipe": "smoke:group_decay_linear::x=continuous_close",
     "terminal_usable": true
@@ -8097,7 +8108,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:group_ex_self_weighted_mean::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:group_ex_self_weighted_mean::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -8116,7 +8127,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:group_feature_coverage_ratio::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:group_feature_coverage_ratio::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": false
   },
   {
@@ -8137,7 +8148,7 @@
     "scalar_parameters": [
       "group_schema_version"
     ],
-    "smoke_recipe": "smoke:group_feature_effective_rank::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:group_feature_effective_rank::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": false
   },
   {
@@ -8159,7 +8170,7 @@
       "group_schema_version",
       "eigen_gap"
     ],
-    "smoke_recipe": "smoke:group_feature_mode_localization::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:group_feature_mode_localization::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": false
   },
   {
@@ -8180,7 +8191,7 @@
     "scalar_parameters": [
       "group_schema_version"
     ],
-    "smoke_recipe": "smoke:group_feature_mode_share::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:group_feature_mode_share::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": false
   },
   {
@@ -8202,7 +8213,7 @@
       "group_schema_version",
       "eigen_gap"
     ],
-    "smoke_recipe": "smoke:group_feature_second_mode_localization::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:group_feature_second_mode_localization::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": false
   },
   {
@@ -8223,7 +8234,7 @@
     "scalar_parameters": [
       "group_schema_version"
     ],
-    "smoke_recipe": "smoke:group_feature_spectral_gap::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:group_feature_spectral_gap::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": false
   },
   {
@@ -8242,7 +8253,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:group_feature_valid_member_count::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:group_feature_valid_member_count::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": false
   },
   {
@@ -8313,7 +8324,8 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "group"
+      "group",
+      "fallback_policy"
     ],
     "smoke_recipe": "smoke:group_max::x=continuous_close",
     "terminal_usable": false
@@ -8331,7 +8343,8 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "group"
+      "group",
+      "fallback_policy"
     ],
     "smoke_recipe": "smoke:group_mean::x=continuous_close",
     "terminal_usable": false
@@ -8349,7 +8362,8 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "group"
+      "group",
+      "fallback_policy"
     ],
     "smoke_recipe": "smoke:group_min::x=continuous_close",
     "terminal_usable": false
@@ -8385,7 +8399,9 @@
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "fallback_policy"
+    ],
     "smoke_recipe": "smoke:group_neutralize::x=continuous_close",
     "terminal_usable": true
   },
@@ -8402,7 +8418,8 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "group"
+      "group",
+      "fallback_policy"
     ],
     "smoke_recipe": "smoke:group_normalize::x=continuous_close",
     "terminal_usable": true
@@ -8422,7 +8439,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:group_peer_beta_deviation::weight=continuous_close",
+    "smoke_recipe": "smoke:group_peer_beta_deviation::beta=continuous_close",
     "terminal_usable": true
   },
   {
@@ -8517,7 +8534,9 @@
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "fallback_policy"
+    ],
     "smoke_recipe": "smoke:group_rank::x=continuous_close",
     "terminal_usable": true
   },
@@ -8534,7 +8553,8 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "group"
+      "group",
+      "fallback_policy"
     ],
     "smoke_recipe": "smoke:group_rank_weighted_value::x=continuous_close",
     "terminal_usable": true
@@ -8615,7 +8635,7 @@
       "min_reference_days",
       "composition_policy"
     ],
-    "smoke_recipe": "smoke:group_spd_feature_structure_shift::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:group_spd_feature_structure_shift::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -8631,7 +8651,8 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "group"
+      "group",
+      "fallback_policy"
     ],
     "smoke_recipe": "smoke:group_std::x=continuous_close",
     "terminal_usable": false
@@ -8649,7 +8670,8 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "group"
+      "group",
+      "fallback_policy"
     ],
     "smoke_recipe": "smoke:group_sum::x=continuous_close",
     "terminal_usable": false
@@ -8816,7 +8838,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:group_weighted_mean::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:group_weighted_mean::x=continuous_close",
     "terminal_usable": false
   },
   {
@@ -8834,7 +8856,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:group_weighted_zscore::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:group_weighted_zscore::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -8868,7 +8890,9 @@
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
+    "scalar_parameters": [
+      "fallback_policy"
+    ],
     "smoke_recipe": "smoke:group_zscore::x=continuous_close",
     "terminal_usable": true
   },
@@ -8945,7 +8969,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_class_entropy::s1=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close",
+    "smoke_recipe": "smoke:holder_class_entropy::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -8970,7 +8994,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_class_js_shift::s1=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close",
+    "smoke_recipe": "smoke:holder_class_js_shift::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -8989,6 +9013,31 @@
     "reachable": true,
     "scalar_parameters": [],
     "smoke_recipe": "smoke:holder_common_holding_peer_return::peer_return=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "holder_company_ownership_hhi",
+    "composition_usable": true,
+    "data_inputs": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s6",
+      "s7",
+      "s8",
+      "s9",
+      "s10"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [],
+    "smoke_recipe": "smoke:holder_company_ownership_hhi::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9078,7 +9127,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_disclosure_count::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_disclosure_count::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9113,7 +9162,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_disclosure_coverage::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_disclosure_coverage::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9168,7 +9217,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_entry_share::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_entry_share::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9223,7 +9272,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_exit_share::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_exit_share::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9265,7 +9314,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_freeze_concentration::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close",
+    "smoke_recipe": "smoke:holder_freeze_concentration::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9337,7 +9386,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_id_matched_churn::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_id_matched_churn::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9392,7 +9441,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_id_matched_entry_share::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_id_matched_entry_share::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9447,7 +9496,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_id_matched_exit_share::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_id_matched_exit_share::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9502,7 +9551,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_id_overlap_ratio::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_id_overlap_ratio::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9542,7 +9591,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_nature_entropy::s1=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close",
+    "smoke_recipe": "smoke:holder_nature_entropy::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9597,7 +9646,34 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_net_entry_share::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_net_entry_share::s1=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "holder_observed_topk_hhi",
+    "composition_usable": true,
+    "data_inputs": [
+      "s1",
+      "s2",
+      "s3",
+      "s4",
+      "s5",
+      "s6",
+      "s7",
+      "s8",
+      "s9",
+      "s10"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [
+      "missing_semantic"
+    ],
+    "smoke_recipe": "smoke:holder_observed_topk_hhi::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9656,7 +9732,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_pledge_concentration::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close",
+    "smoke_recipe": "smoke:holder_pledge_concentration::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9698,7 +9774,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_pledged_holder_count::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close",
+    "smoke_recipe": "smoke:holder_pledged_holder_count::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9753,7 +9829,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_rank_stability::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_rank_stability::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9808,7 +9884,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_share_weighted_rank_migration::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_share_weighted_rank_migration::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9877,7 +9953,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_topk_share_sum::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_topk_share_sum::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -9932,7 +10008,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:holder_weighted_churn::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:holder_weighted_churn::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -10166,7 +10242,8 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [
-      "max_lookback"
+      "max_lookback",
+      "output_mode"
     ],
     "smoke_recipe": "smoke:index_membership_age::member=continuous_close",
     "terminal_usable": true
@@ -10439,7 +10516,7 @@
     "scalar_parameters": [
       "tail_minutes"
     ],
-    "smoke_recipe": "smoke:intra_close_participation::volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_close_participation::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -10825,7 +10902,7 @@
       "start_minute",
       "end_minute"
     ],
-    "smoke_recipe": "smoke:intra_interval_volume_share::volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_interval_volume_share::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -10846,7 +10923,7 @@
       "start_minute",
       "end_minute"
     ],
-    "smoke_recipe": "smoke:intra_interval_vwap_deviation::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_interval_vwap_deviation::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11066,7 +11143,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_longest_above_vwap_streak::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_longest_above_vwap_streak::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11084,7 +11161,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_longest_below_vwap_streak::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_longest_below_vwap_streak::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11276,7 +11353,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_price_vwap_max_negative_excursion::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_price_vwap_max_negative_excursion::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11294,7 +11371,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_price_vwap_max_positive_excursion::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_price_vwap_max_positive_excursion::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11559,7 +11636,7 @@
       "segment",
       "session_tz"
     ],
-    "smoke_recipe": "smoke:intra_segment_volume_share::volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_segment_volume_share::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11580,7 +11657,7 @@
       "segment",
       "session_tz"
     ],
-    "smoke_recipe": "smoke:intra_segment_vwap_deviation::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_segment_vwap_deviation::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11704,7 +11781,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:intra_slot_volume_surprise::volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_slot_volume_surprise::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11741,7 +11818,7 @@
     "scalar_parameters": [
       "tail_quantile"
     ],
-    "smoke_recipe": "smoke:intra_tail_volume_share::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_tail_volume_share::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11759,7 +11836,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_time_above_vwap::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_time_above_vwap::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11863,7 +11940,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_volume_price_alignment::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_volume_price_alignment::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11917,7 +11994,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_vwap_above_ratio::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_vwap_above_ratio::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11935,7 +12012,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_vwap_cross_count::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_vwap_cross_count::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11953,7 +12030,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_vwap_path_curvature::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_vwap_path_curvature::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11971,7 +12048,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_vwap_path_curvature_pct::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_vwap_path_curvature_pct::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -11989,7 +12066,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_vwap_path_slope::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_vwap_path_slope::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -12007,7 +12084,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_vwap_path_slope_pct::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_vwap_path_slope_pct::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -12025,7 +12102,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intra_vwap_reversion_speed::amount=amount_local,close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intra_vwap_reversion_speed::amount=amount_local,close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -12085,7 +12162,7 @@
       "scale_window",
       "locked"
     ],
-    "smoke_recipe": "smoke:intraday_bvc_imbalance::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intraday_bvc_imbalance::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -12581,7 +12658,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:intraday_vwap_deviation::close=continuous_close,price=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:intraday_vwap_deviation::close=continuous_close,price=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -13481,7 +13558,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:pattern_bear_flag::close=continuous_close,high=continuous_high,low=continuous_low,volume=continuous_volume",
+    "smoke_recipe": "smoke:pattern_bear_flag::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -13505,7 +13582,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:pattern_bear_pennant::close=continuous_close,high=continuous_high,low=continuous_low,volume=continuous_volume",
+    "smoke_recipe": "smoke:pattern_bear_pennant::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -13592,7 +13669,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:pattern_bull_flag::close=continuous_close,high=continuous_high,low=continuous_low,volume=continuous_volume",
+    "smoke_recipe": "smoke:pattern_bull_flag::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -13616,7 +13693,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:pattern_bull_pennant::close=continuous_close,high=continuous_high,low=continuous_low,volume=continuous_volume",
+    "smoke_recipe": "smoke:pattern_bull_pennant::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -14293,7 +14370,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:price_volume_divergence::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:price_volume_divergence::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -14385,7 +14462,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:real_turnover_rate::volume=continuous_volume",
+    "smoke_recipe": "smoke:real_turnover_rate::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -14403,6 +14480,23 @@
     "reachable": true,
     "scalar_parameters": [],
     "smoke_recipe": "smoke:relation_category_share::value=continuous_close",
+    "terminal_usable": true
+  },
+  {
+    "ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "canonical": "relation_category_signed_contribution",
+    "composition_usable": true,
+    "data_inputs": [
+      "value",
+      "category"
+    ],
+    "mining_visible": true,
+    "reachable": true,
+    "scalar_parameters": [],
+    "smoke_recipe": "smoke:relation_category_signed_contribution::value=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14528,8 +14622,10 @@
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:relation_entropy::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close",
+    "scalar_parameters": [
+      "missing_semantic"
+    ],
+    "smoke_recipe": "smoke:relation_entropy::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14609,8 +14705,10 @@
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:relation_hhi::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close",
+    "scalar_parameters": [
+      "missing_semantic"
+    ],
+    "smoke_recipe": "smoke:relation_hhi::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14665,7 +14763,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:relation_peer_weighted_mean_ex_self::value=continuous_close,weight=continuous_close",
+    "smoke_recipe": "smoke:relation_peer_weighted_mean_ex_self::value=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14720,7 +14818,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:relation_rank_entity_mobility::p1=continuous_close,p2=continuous_close,p3=continuous_close,p4=continuous_close,p5=continuous_close,p6=continuous_close,p7=continuous_close,s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close,sid1=continuous_close,sid10=continuous_close,sid2=continuous_close,sid3=continuous_close,sid4=continuous_close,sid5=continuous_close,sid6=continuous_close,sid7=continuous_close,sid8=continuous_close,sid9=continuous_close",
+    "smoke_recipe": "smoke:relation_rank_entity_mobility::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14771,8 +14869,10 @@
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:relation_rank_weighted_sum::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close",
+    "scalar_parameters": [
+      "missing_semantic"
+    ],
+    "smoke_recipe": "smoke:relation_rank_weighted_sum::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14799,7 +14899,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:relation_share_mobility::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close",
+    "smoke_recipe": "smoke:relation_share_mobility::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14826,7 +14926,7 @@
     "scalar_parameters": [
       "k"
     ],
-    "smoke_recipe": "smoke:relation_topk_concentration::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close",
+    "smoke_recipe": "smoke:relation_topk_concentration::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14850,8 +14950,10 @@
     ],
     "mining_visible": true,
     "reachable": true,
-    "scalar_parameters": [],
-    "smoke_recipe": "smoke:relation_topk_sum::s1=continuous_close,s10=continuous_close,s2=continuous_close,s3=continuous_close,s4=continuous_close,s5=continuous_close,s6=continuous_close,s7=continuous_close,s8=continuous_close,s9=continuous_close",
+    "scalar_parameters": [
+      "missing_semantic"
+    ],
+    "smoke_recipe": "smoke:relation_topk_sum::s1=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14868,7 +14970,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:relation_weighted_change::value=continuous_close,weight=continuous_close",
+    "smoke_recipe": "smoke:relation_weighted_change::value=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14888,7 +14990,7 @@
     "scalar_parameters": [
       "min_peers"
     ],
-    "smoke_recipe": "smoke:relation_weighted_std_ex_self::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:relation_weighted_std_ex_self::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -14906,7 +15008,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:relative_volume::volume=continuous_volume",
+    "smoke_recipe": "smoke:relative_volume::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -14946,7 +15048,7 @@
     "scalar_parameters": [
       "periods"
     ],
-    "smoke_recipe": "smoke:report_change_breadth::eps=earnings_per_share,f1=return_decimal,f2=volume,f3=turnover,period_id=period_id",
+    "smoke_recipe": "smoke:report_change_breadth::eps=earnings_per_share,f1=return_decimal,f2=raw_volume_shares,f3=turnover,period_id=period_id",
     "terminal_usable": true
   },
   {
@@ -14967,7 +15069,7 @@
     "scalar_parameters": [
       "periods"
     ],
-    "smoke_recipe": "smoke:report_change_coherence::f1=return_decimal,f2=volume,f3=turnover,period_id=period_id",
+    "smoke_recipe": "smoke:report_change_coherence::f1=return_decimal,f2=raw_volume_shares,f3=turnover,period_id=period_id",
     "terminal_usable": true
   },
   {
@@ -15121,7 +15223,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:return_volume_beta::ret=return_decimal,volume=continuous_volume",
+    "smoke_recipe": "smoke:return_volume_beta::ret=return_decimal,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -15140,7 +15242,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:return_volume_corr::ret=return_decimal,volume=continuous_volume",
+    "smoke_recipe": "smoke:return_volume_corr::ret=return_decimal,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -15219,7 +15321,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:rolling_adl_flow::close=continuous_close,high=continuous_high,low=continuous_low,volume=continuous_volume",
+    "smoke_recipe": "smoke:rolling_adl_flow::close=continuous_close,high=continuous_high,low=continuous_low,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -15257,7 +15359,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:rolling_obv::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:rolling_obv::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -15276,7 +15378,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:rolling_pvt::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:rolling_pvt::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -15294,7 +15396,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:rolling_vwap::price=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:rolling_vwap::price=continuous_close,volume=raw_volume_shares",
     "terminal_usable": false
   },
   {
@@ -15455,7 +15557,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:signed_dollar_volume::close=continuous_close,ret=return_decimal,volume=continuous_volume",
+    "smoke_recipe": "smoke:signed_dollar_volume::close=continuous_close,ret=return_decimal,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -15521,7 +15623,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:signed_volume::ret=return_decimal,volume=continuous_volume",
+    "smoke_recipe": "smoke:signed_volume::ret=return_decimal,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -15540,7 +15642,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:signed_volume_imbalance::ret=return_decimal,volume=continuous_volume",
+    "smoke_recipe": "smoke:signed_volume_imbalance::ret=return_decimal,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -16056,7 +16158,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:true_turnover_rate::volume=continuous_volume",
+    "smoke_recipe": "smoke:true_turnover_rate::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -16618,7 +16720,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_average_volume::volume=continuous_volume",
+    "smoke_recipe": "smoke:ts_average_volume::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -17235,7 +17337,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_consolidation_volume_decay::volume=continuous_volume",
+    "smoke_recipe": "smoke:ts_consolidation_volume_decay::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -18331,7 +18433,7 @@
       "recent_window",
       "prior_window"
     ],
-    "smoke_recipe": "smoke:ts_energy_break_score::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:ts_energy_break_score::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -18825,7 +18927,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_feature_effective_rank::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:ts_feature_effective_rank::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -18845,7 +18947,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_feature_mode_share::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:ts_feature_mode_share::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -18866,7 +18968,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_feature_pca_reconstruction_error::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:ts_feature_pca_reconstruction_error::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": false
   },
   {
@@ -18887,7 +18989,7 @@
       "recent_window",
       "prior_window"
     ],
-    "smoke_recipe": "smoke:ts_feature_subspace_rotation::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:ts_feature_subspace_rotation::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -19937,7 +20039,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_impulse_volume::volume=continuous_volume",
+    "smoke_recipe": "smoke:ts_impulse_volume::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -20095,7 +20197,7 @@
       "recent_window",
       "prior_window"
     ],
-    "smoke_recipe": "smoke:ts_joint_energy_shift::f1=return_decimal,f2=volume,f3=turnover",
+    "smoke_recipe": "smoke:ts_joint_energy_shift::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -24321,7 +24423,9 @@
     "reachable": true,
     "scalar_parameters": [
       "history_window",
-      "min_completed_runs"
+      "min_completed_runs",
+      "inactive_policy",
+      "gap_policy"
     ],
     "smoke_recipe": "smoke:ts_state_age_percentile::state=continuous_close",
     "terminal_usable": true
@@ -24381,7 +24485,9 @@
     "scalar_parameters": [
       "history_window",
       "min_completed_runs",
-      "alpha"
+      "alpha",
+      "inactive_policy",
+      "gap_policy"
     ],
     "smoke_recipe": "smoke:ts_state_exit_hazard::state=continuous_close",
     "terminal_usable": true
@@ -24422,7 +24528,9 @@
     "reachable": true,
     "scalar_parameters": [
       "history_window",
-      "min_completed_runs"
+      "min_completed_runs",
+      "inactive_policy",
+      "gap_policy"
     ],
     "smoke_recipe": "smoke:ts_state_residual_life::state=continuous_close",
     "terminal_usable": true
@@ -25719,7 +25827,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_vector_path_curvature::f1=return_decimal,f2=volume",
+    "smoke_recipe": "smoke:ts_vector_path_curvature::f1=return_decimal,f2=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -25738,7 +25846,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_vector_path_efficiency::f1=return_decimal,f2=volume",
+    "smoke_recipe": "smoke:ts_vector_path_efficiency::f1=return_decimal,f2=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -25757,7 +25865,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_vector_self_intersection_rate::f1=return_decimal,f2=volume",
+    "smoke_recipe": "smoke:ts_vector_self_intersection_rate::f1=return_decimal,f2=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -25779,7 +25887,7 @@
       "window",
       "k"
     ],
-    "smoke_recipe": "smoke:ts_vector_state_local_density::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:ts_vector_state_local_density::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -25801,7 +25909,7 @@
       "window",
       "shrinkage"
     ],
-    "smoke_recipe": "smoke:ts_vector_state_mahalanobis::f1=return_decimal,f2=volume,f3=turnover,f4=continuous_close",
+    "smoke_recipe": "smoke:ts_vector_state_mahalanobis::f1=return_decimal,f2=raw_volume_shares,f3=turnover",
     "terminal_usable": true
   },
   {
@@ -25820,7 +25928,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_vector_turning_coherence::f1=return_decimal,f2=volume",
+    "smoke_recipe": "smoke:ts_vector_turning_coherence::f1=return_decimal,f2=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26090,7 +26198,7 @@
       "target",
       "min_periods"
     ],
-    "smoke_recipe": "smoke:ts_weighted_downside_deviation::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:ts_weighted_downside_deviation::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -26109,7 +26217,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:ts_weighted_drawdown_area::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:ts_weighted_drawdown_area::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -26131,7 +26239,7 @@
       "side",
       "min_tail_count"
     ],
-    "smoke_recipe": "smoke:ts_weighted_expected_shortfall::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:ts_weighted_expected_shortfall::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -26174,7 +26282,7 @@
       "target",
       "min_periods"
     ],
-    "smoke_recipe": "smoke:ts_weighted_semivariance::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:ts_weighted_semivariance::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -26194,7 +26302,7 @@
       "window",
       "order"
     ],
-    "smoke_recipe": "smoke:ts_weighted_standardized_moment::weight=continuous_close,x=continuous_close",
+    "smoke_recipe": "smoke:ts_weighted_standardized_moment::x=continuous_close",
     "terminal_usable": true
   },
   {
@@ -26473,7 +26581,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:up_down_volume_ratio::ret=return_decimal,volume=continuous_volume",
+    "smoke_recipe": "smoke:up_down_volume_ratio::ret=return_decimal,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26492,7 +26600,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:up_volume_ratio::ret=return_decimal,volume=continuous_volume",
+    "smoke_recipe": "smoke:up_volume_ratio::ret=return_decimal,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26696,7 +26804,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:valuation_quality_mismatch::weight=continuous_close",
+    "smoke_recipe": "smoke:valuation_quality_mismatch::valuation=continuous_close",
     "terminal_usable": true
   },
   {
@@ -26714,7 +26822,7 @@
     "mining_visible": true,
     "reachable": true,
     "scalar_parameters": [],
-    "smoke_recipe": "smoke:volume_acceleration::volume=continuous_volume",
+    "smoke_recipe": "smoke:volume_acceleration::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26733,7 +26841,7 @@
       "window",
       "lag"
     ],
-    "smoke_recipe": "smoke:volume_autocorr::volume=continuous_volume",
+    "smoke_recipe": "smoke:volume_autocorr::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26751,7 +26859,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:volume_momentum::volume=continuous_volume",
+    "smoke_recipe": "smoke:volume_momentum::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26771,7 +26879,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:volume_price_range_density::high=continuous_high,low=continuous_low,volume=continuous_volume",
+    "smoke_recipe": "smoke:volume_price_range_density::high=continuous_high,low=continuous_low,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26789,7 +26897,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:volume_shock::volume=continuous_volume",
+    "smoke_recipe": "smoke:volume_shock::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26807,7 +26915,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:volume_volatility::volume=continuous_volume",
+    "smoke_recipe": "smoke:volume_volatility::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26826,7 +26934,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:volume_weighted_momentum::close=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:volume_weighted_momentum::close=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26845,7 +26953,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:volume_weighted_return::ret=return_decimal,volume=continuous_volume",
+    "smoke_recipe": "smoke:volume_weighted_return::ret=return_decimal,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26863,7 +26971,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:volume_zscore::volume=continuous_volume",
+    "smoke_recipe": "smoke:volume_zscore::volume=raw_volume_shares",
     "terminal_usable": true
   },
   {
@@ -26882,7 +26990,7 @@
     "scalar_parameters": [
       "window"
     ],
-    "smoke_recipe": "smoke:vwap_deviation::price=continuous_close,volume=continuous_volume",
+    "smoke_recipe": "smoke:vwap_deviation::price=continuous_close,volume=raw_volume_shares",
     "terminal_usable": true
   },
   {

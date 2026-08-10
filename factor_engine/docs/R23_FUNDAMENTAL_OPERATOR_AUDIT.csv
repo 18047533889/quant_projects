@@ -110,6 +110,7 @@ fin_surprise,,CERTIFIED_CONTEXTUAL,UNKNOWN,see binding,not-declared,,,,PubDate/f
 fin_surprise_event_percentile,,CERTIFIED_CONTEXTUAL,UNKNOWN,see binding,not-declared,,,,PubDate/filing_date (DATE_ONLY_NEXT_SESSION),n/a,n/a,PIT11_EXPECTATION_POST_EVENT_LEAK
 fin_surprise_event_zscore,,CERTIFIED_CONTEXTUAL,UNKNOWN,see binding,not-declared,,,,PubDate/filing_date (DATE_ONLY_NEXT_SESSION),n/a,n/a,PIT11_EXPECTATION_POST_EVENT_LEAK
 fin_surprise_zscore,,CERTIFIED_CONTEXTUAL,UNKNOWN,see binding,not-declared,,,,PubDate/filing_date (DATE_ONLY_NEXT_SESSION),n/a,n/a,PIT11_EXPECTATION_POST_EVENT_LEAK
+fin_total_operating_accruals,,SUPPORTING_ONLY,UNKNOWN,see binding,flow_type:Stock,,,,field knowledge column,n/a,n/a,
 fin_trend_acceleration,,SUPPORTING_ONLY,UNKNOWN,see binding,not-declared,,,,field knowledge column,n/a,n/a,
 fin_trend_r2,,SUPPORTING_ONLY,UNKNOWN,see binding,not-declared,,,,field knowledge column,n/a,n/a,
 fin_trend_slope,,SUPPORTING_ONLY,UNKNOWN,see binding,not-declared,,,,field knowledge column,n/a,n/a,

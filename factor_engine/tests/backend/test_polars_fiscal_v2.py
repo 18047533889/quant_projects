@@ -33,8 +33,17 @@ def panels():
             x.iloc[start:end, x.columns.get_loc(col)] = rng.choice([-1.0, 0.0, 1.0, 2.0])
     high = pd.DataFrame(np.cumsum(rng.normal(0, 1, (90, 2)), axis=0) + 100, index=index, columns=["A", "B"])
     low = high - rng.uniform(0.5, 2, (90, 2))
-    comp = pd.DataFrame({"c1": [1.0, -1.0, 0.0, np.nan, 2.0, -3.0] * 15, "c2": [0.0, 1.0, -1.0, 2.0, np.nan, 1.0] * 15})
-    return x, pid, high, low, comp
+    # R25-184: fin_component_score takes SEPARATE date x instrument panels (one
+    # component each), not a wide component-stack DataFrame.
+    comp1 = pd.DataFrame(
+        {"A": [1.0, -1.0, 0.0, np.nan, 2.0, -3.0] * 15, "B": [0.0, 1.0, -1.0, 2.0, np.nan, 1.0] * 15},
+        index=index,
+    )
+    comp2 = pd.DataFrame(
+        {"A": [0.0, 1.0, -1.0, 2.0, np.nan, 1.0] * 15, "B": [1.0, -1.0, 0.0, np.nan, 2.0, -3.0] * 15},
+        index=index,
+    )
+    return x, pid, high, low, comp1, comp2
 
 
 def _polars(frame: pd.DataFrame) -> pl.DataFrame:
@@ -73,7 +82,7 @@ def _assert_parity(name, args, kwargs, rtol=1e-8, atol=1e-8):
 
 
 def test_native_polars_fiscal_v2_matches_pandas(panels):
-    x, pid, high, low, comp = panels
+    x, pid, high, low, comp1, comp2 = panels
     cases = [
         ("fiscal_true_streak", (x, pid), {"require_consecutive": True}),
         ("fiscal_true_streak", (x, pid), {"require_consecutive": False}),
@@ -85,8 +94,8 @@ def test_native_polars_fiscal_v2_matches_pandas(panels):
         ("fiscal_change_direction_agreement", (x, x, pid), {"periods": 8, "min_periods": 3}),
         ("ts_confirmed_pivot_high", (high,), {"left_window": 3, "right_window": 3}),
         ("ts_confirmed_pivot_low", (low,), {"left_window": 3, "right_window": 3}),
-        ("fin_component_score", (comp,), {}),
-        ("fin_component_score", (comp,), {"component_directions": ["up", "down"], "score_weights": [1.0, 0.5]}),
+        ("fin_component_score", (comp1, comp2), {}),
+        ("fin_component_score", (comp1, comp2), {"component_directions": ["up", "down"], "score_weights": [1.0, 0.5]}),
     ]
     for name, args, kwargs in cases:
         _assert_parity(name, args, kwargs)

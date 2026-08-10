@@ -73,7 +73,7 @@
         "close": "continuous_close",
         "high": "continuous_high",
         "low": "continuous_low",
-        "volume": "continuous_volume"
+        "volume": "raw_volume_shares"
       },
       "delete_reason": "",
       "family_budget": 16,
@@ -136,7 +136,7 @@
         "close": "continuous_close",
         "high": "continuous_high",
         "low": "continuous_low",
-        "volume": "continuous_volume"
+        "volume": "raw_volume_shares"
       },
       "delete_reason": "",
       "family_budget": 6,
@@ -160,5 +160,5 @@
       "target_terminal": true
     }
   ],
-  "rows": 1433
+  "rows": 1436
 }

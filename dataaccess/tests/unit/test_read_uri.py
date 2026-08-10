@@ -75,9 +75,15 @@ def test_read_uri_blocked_in_production(tmp_path, monkeypatch):
     pq.write_table(pa.table({"a": [1]}), str(tmp_path / "data.parquet"))
     monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
     store = _make_store(tmp_path)
-    from data_access.core.exceptions import ValidationError
+    # R24 P1-S8 §24 / P1-S9：production 下 read_uri 是 privileged API，一律
+    # fail-closed：
+    #   - URI 反查到已登记数据集 → 走 dataset 契约 + production budget floor
+    #     （require_columns）→ ValidationError；
+    #   - 未登记的任意 URI → uri:read 授权拒绝 → AccessDeniedError。
+    # 两者都是「拒绝」，绝不允许静默读任意路径。
+    from data_access.core.exceptions import AccessDeniedError, ValidationError
 
-    with pytest.raises(ValidationError):
+    with pytest.raises((ValidationError, AccessDeniedError)):
         store.read_uri(str(tmp_path / "data.parquet"))
 
 

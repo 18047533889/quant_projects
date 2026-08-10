@@ -180,15 +180,22 @@ def test_explicit_api_key_is_required_when_configured(monkeypatch):
 
 
 def test_production_allow_open_escape(monkeypatch):
+    """R24 P0-S5 / T-S12：production + DATA_ACCESS_API_ALLOW_OPEN=1 **不绕过**认证。
+
+    旧行为把 production+allow_open 当 open mode（无 key 200）——那是权限绕过。
+    production 恒要求 auth，open mode 只允许 dev/research。
+    """
     from data_access.service.app import create_app
     from data_access.service.config import ServiceSettings
 
     monkeypatch.setattr("data_access.service.app.API_KEY", "")
     monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    monkeypatch.delenv("DATA_ACCESS_API_PRINCIPALS", raising=False)
     local_app = create_app(
         ServiceSettings(api_key="", production_mode=True, allow_open=True)
     )
     with patch("data_access.service.app.get_store", return_value=_mock_store()):
         client = TestClient(local_app)
         resp = client.get("/v1/datasets")
-        assert resp.status_code == 200
+        # 未配置任何 key 且 production → 503（服务未就绪）；绝不再是 open 200。
+        assert resp.status_code in (401, 503)

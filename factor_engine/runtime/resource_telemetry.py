@@ -13,6 +13,29 @@ from typing import Any
 
 
 def _rss_bytes() -> int | None:
+    """当前进程 RSS（R27-035/169）：psutil current → /proc/self/status VmRSS。
+
+    ``ru_maxrss`` 是**历史峰值**，不是当前值；用它在 start/end 采样会把两端都
+    变成同一个峰值，不能用于 adaptive scheduling（R27-034/144）。
+    """
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        return int(psutil.Process().memory_info().rss)
+    except Exception:
+        pass
+    try:
+        with open("/proc/self/status", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) * 1024
+    except Exception:
+        pass
+    return None
+
+
+def _lifetime_peak_rss_bytes() -> int | None:
+    """进程历史峰值 RSS（``ru_maxrss``）；与 current RSS 分开（R27-035/144）。"""
     try:
         import resource
 
@@ -43,7 +66,8 @@ def snapshot_resource_telemetry(perf: Any | None = None, plan: Any | None = None
     out: dict[str, Any] = {
         "effective_cpu_slots": effective_cpu_slots(),
         "effective_memory_limit_bytes": effective_memory_limit_bytes(),
-        "rss_start_bytes": _rss_bytes(),
+        "rss_current_start": _rss_bytes(),
+        "rss_peak_lifetime": _lifetime_peak_rss_bytes(),
     }
     if plan is not None:
         for key, value in plan.to_dict().items():

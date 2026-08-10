@@ -417,7 +417,11 @@ class MarketCalendar:
         return prev
 
     def available_from(
-        self, knowledge: Any, availability: str = "next_trading_day"
+        self,
+        knowledge: Any,
+        availability: str = "next_trading_day",
+        *,
+        time_representation: str | None = None,
     ) -> Any:
         """把 knowledge 时间编译成「数据真正可用」的时间。
 
@@ -430,9 +434,16 @@ class MarketCalendar:
         #11/#12：knowledge 带时刻时**先把 UTC timestamp 转成交易所本地
         时区**再判断 session 边界（美股 filing timestamp 是实质 PIT bug）；
         非交易日绝不生成「当天的开盘」。
+
+        R24 P0-PIT2 §11：``time_representation="date_label"``（filing_date /
+        PubDate）按日期标签处理，不做时区换算。
         """
         return compile_available_from(
-            knowledge, availability, calendar=self, latency=None
+            knowledge,
+            availability,
+            calendar=self,
+            latency=None,
+            time_representation=time_representation,
         )
 
     def _first_start(self) -> _dt.time:
@@ -544,6 +555,7 @@ def compile_available_from(
     latency: int | None = None,
     bar_interval_minutes: int = 1,
     strict: bool | None = None,
+    time_representation: str | None = None,
 ) -> Any:
     """**统一 AvailabilityCompiler**：把 knowledge 编译成「数据真正可用」的
     ``available_from``。Python helper（``read_cos_events_asof``）、SQL join
@@ -561,20 +573,35 @@ def compile_available_from(
         - next_trading_day ：下一交易日（knowledge 是日期 → 日期；带时刻 →
           下一交易日 session 开盘）
         - after_close_next_open ：盘后披露 → 下一交易日 session 开盘
-    无日历 / 无 session 时回退 knowledge——调用方按统一的 strict 比较符（> 或
-    >=）继续，语义与 ``TemporalJoinSpec.comparison_operator`` 一致。
 
-    ``latency``（bar 数）叠加在结果上：额外可见性延迟。
+    R24 P0-PIT6 §15：calendar-required availability（next_bar / next_session_open /
+    next_trading_day / after_close_next_open / session）在**真实日历加载失败时
+    production/strict 必须 hard fail**，禁止 ``logger.warning → fallback same_day``。
+    Research 需要显式 ``allow_temporal_degradation``（见 ``MarketCalendar.available_from``
+    调用方）才回退 knowledge，且 lineage 要标 ``temporal_semantics_degraded=true``。
+
+    R24 P0-PIT2 §11：``time_representation="date_label"`` 时 knowledge 按日期标签
+    处理（不做时区换算）。``latency``（bar 数）叠加在结果上：额外可见性延迟。
     """
     av = str(availability or "same_day").lower()
     if av in {"same_instant", "same_day", "effective_date_only"}:
         return _apply_latency(knowledge, latency, bar_interval_minutes)
-    if calendar is None or not getattr(calendar, "has_data", False):
-        return knowledge
     if strict is None:
         strict = _strict_calendar_mode()
+    if calendar is None or not getattr(calendar, "has_data", False):
+        # R24 P0-PIT6 §15：calendar-required availability 必须真实日历；strict 下
+        # 日历不可用 = 无法证明可见时点 → hard fail（不回退 same_day/knowledge）。
+        if strict:
+            raise ValidationError(
+                f"availability={av!r} 需要交易日历，但日历不可用"
+                "（calendar=None / 无交易日）。production/strict fail-closed："
+                "禁止 same_day fallback（look-ahead）。请补齐日历数据。"
+            )
+        return knowledge  # research 显式降级（调用方需在 lineage 标记 degraded）
     session = getattr(calendar, "session", None)
-    kdate, ktime = _to_local_date_time(knowledge, calendar.timezone)
+    kdate, ktime = _to_local_date_time(
+        knowledge, calendar.timezone, time_representation=time_representation
+    )
     if kdate is None:
         if strict:
             raise ValidationError(
@@ -773,16 +800,29 @@ def _as_date(value: Any) -> _dt.date | None:
         return None
 
 
-def _to_local_date_time(value: Any, timezone: str | None) -> tuple[_dt.date | None, _dt.time | None]:
+def _to_local_date_time(
+    value: Any,
+    timezone: str | None,
+    *,
+    time_representation: str | None = None,
+) -> tuple[_dt.date | None, _dt.time | None]:
     """把 knowledge 归一化成交易所本地 (date, time)。
 
     #11：带时区的 datetime 先用 ``ZoneInfo(market timezone)`` 转成本地时间；
     naive datetime 按字典约定视为 **UTC 存储**，同样先转本地（A 股 QuoteTime /
     美股 filing timestamp 都存 UTC）。date 无时刻 → (d, None)。
+
+    R24 P0-PIT2 §11 / T-P07：``time_representation="date_label"`` 时，naive
+    datetime（如 ``filing_date = 2024-05-27 00:00:00``）是**日期标签伪装成
+    timestamp**——绝不当 UTC instant 转纽约（会提前一天变成 2024-05-26
+    20:00）。date_label 直接用其日期；只有 ``instant`` 才做时区换算。
     """
     if not isinstance(value, _dt.datetime):
         d = _as_date(value)
         return (d, None)
+    if time_representation == "date_label":
+        # 日期标签：忽略时刻（通常 00:00），直接用日期——不做时区换算。
+        return value.date(), None
     tz = None
     tz_name = (timezone or "").strip()
     if tz_name and tz_name.upper() not in {"", "UTC", "ETC/UTC"}:

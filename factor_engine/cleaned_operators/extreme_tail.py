@@ -179,6 +179,15 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
         # Only an exact zero / non-finite threshold is degenerate (division by
         # zero / no defined ratio); a mixed-sign exceedance set falls out as NaN
         # through the ``np.isfinite(xi)`` guard below.
+        # R26-060..062: the LOWER tail is only a valid Hill problem on SIGNED
+        # data (returns / residuals / downside losses), whose negative values
+        # mirror onto positive, unbounded-above loss magnitudes.  A window with
+        # NO negative values is a strictly-positive level / magnitude whose left
+        # tail is BOUNDED below by 0 — classic Hill (``z = -x`` mirror) does not
+        # apply to it and produces a misleading negative ξ.  Such a window fails
+        # closed to NaN (explicitly unsupported lower tail for positive levels).
+        if side == "lower" and float(np.min(valid)) >= 0.0:
+            continue
         z = valid if side == "upper" else -valid
         u = float(np.quantile(z, 1.0 - frac))
         exc = z[z > u]

@@ -84,6 +84,19 @@ class SemanticField:
     # COLUMN_MISSING 检查（它们不落盘）。
     derived_expression: str | None = None
     derived_from: tuple[str, ...] = ()
+    # ---- R24 P0-PIT2/3/4 §11-13：时间表示与 PIT fidelity ----
+    time_representation: str | None = None     # date_label / instant
+    time_precision: str | None = None          # date / timestamp
+    pit_fidelity: str | None = None            # knowledge_date_pit / vintage_pit / effective_only / unsupported
+    revision_availability_time: str | None = None  # 历史修订的市场可知时点（A股=unknown）
+    # ---- R24 P0/P1-XM3 §19：typed Unit + currency ----
+    dimension: str | None = None               # ratio/money/money_per_share/price/shares/identifier/boolean/count
+    currency: str | None = None                # CNY/USD/...（None = 无量纲或未声明）
+    currency_column: str | None = None         # 动态币种所在物理列（如 US dividend currency）
+    cross_market_comparable: bool = True       # 未经 FX/市场内标准化不得跨市场直接联合
+    requires_fx: bool = False                  # 需要显式 FX dataset + FX PIT 才能统一
+    # ---- R24 P0-XM5 §21：flow semantics（机器可读）----
+    flow_semantics: str | None = None          # cumulative_ytd_flow / single_period_flow / point_in_time_stock
 
     @property
     def is_scale_applicable(self) -> bool:
@@ -119,7 +132,102 @@ class SemanticField:
             "period_values": list(self.period_values),
             "derived_expression": self.derived_expression,
             "derived_from": list(self.derived_from),
+            "time_representation": self.time_representation,
+            "time_precision": self.time_precision,
+            "pit_fidelity": self.pit_fidelity,
+            "revision_availability_time": self.revision_availability_time,
+            "dimension": self.dimension,
+            "currency": self.currency,
+            "currency_column": self.currency_column,
+            "cross_market_comparable": self.cross_market_comparable,
+            "requires_fx": self.requires_fx,
+            "flow_semantics": self.flow_semantics,
         }
+
+
+@dataclass(frozen=True)
+class UnitSpec:
+    """R24 P0/P1-XM3 §19：typed Unit + currency。
+
+    从 scale 升级：除了 ``scale``（单位换算乘子），还必须表达 dimension /
+    currency / cross_market_comparable / requires_fx——「A股 Return bp → decimal」
+    用 scale 就够，但「CNY money vs USD money」必须显式声明，未经 FX 或市场内
+    标准化禁止跨市场直接联合。
+
+    ``from_field(f)`` 从 SemanticField 编译（source_unit/canonical_unit/scale/
+    currency/dimension/cross_market_comparable/requires_fx）。
+    """
+
+    dimension: str | None = None
+    currency: str | None = None
+    scale: float | None = None
+    source_unit: str | None = None
+    canonical_unit: str | None = None
+    cross_market_comparable: bool = True
+    requires_fx: bool = False
+
+    @classmethod
+    def from_field(cls, f: "SemanticField") -> "UnitSpec":
+        return cls(
+            dimension=getattr(f, "dimension", None),
+            currency=getattr(f, "currency", None),
+            scale=getattr(f, "scale", None),
+            source_unit=getattr(f, "source_unit", None),
+            canonical_unit=getattr(f, "canonical_unit", None),
+            cross_market_comparable=bool(
+                getattr(f, "cross_market_comparable", True)
+            ),
+            requires_fx=bool(getattr(f, "requires_fx", False)),
+        )
+
+    def is_money(self) -> bool:
+        return self.dimension == "money" or self.currency is not None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "dimension": self.dimension,
+            "currency": self.currency,
+            "scale": self.scale,
+            "source_unit": self.source_unit,
+            "canonical_unit": self.canonical_unit,
+            "cross_market_comparable": self.cross_market_comparable,
+            "requires_fx": self.requires_fx,
+        }
+
+
+def cross_market_compatible(
+    a: "SemanticField | None",
+    b: "SemanticField | None",
+    *,
+    a_units: "UnitSpec | None" = None,
+    b_units: "UnitSpec | None" = None,
+) -> tuple[bool, str]:
+    """R24 P0-XM3 §19 / T-X03：跨市场字段是否允许直接统一。
+
+    允许统一：
+        - decimal return / dimensionless ratio（scale 一致且非 money）；
+    禁止：
+        - CNY money vs USD money（不同 currency、未声明 cross_market_comparable 且
+          无 FX）——T-X03 直接 reject；
+        - CNY/share vs USD/share；
+        - dynamic-currency dividend（requires_fx=True）未经 FX dataset + FX PIT。
+
+    返回 ``(compatible, reason)``；incompatible 时 reason 说明缺什么。
+    """
+    au = a_units or (UnitSpec.from_field(a) if a is not None else UnitSpec())
+    bu = b_units or (UnitSpec.from_field(b) if b is not None else UnitSpec())
+    if au.is_money() and bu.is_money():
+        if au.currency and bu.currency and au.currency != bu.currency:
+            if not (au.cross_market_comparable and bu.cross_market_comparable):
+                return False, (
+                    f"money 币种不一致（{au.currency} vs {bu.currency}）且未声明 "
+                    "cross_market_comparable；需显式 FX dataset + FX PIT 或市场内标准化"
+                )
+            if au.requires_fx or bu.requires_fx:
+                return False, "money 跨市场统一需要显式 FX dataset + FX PIT"
+    elif au.is_money() != bu.is_money():
+        return False, f"字段维度不一致（{au.dimension} vs {bu.dimension}）"
+    return True, ""
 
 
 def _tuple_of(
@@ -177,7 +285,28 @@ def _float_or_none(value: Any) -> float | None:
 
 
 # #31 合法枚举集合
-_VALID_AVAILABILITY = {"same_day", "next_trading_day", "session"}
+# R24 P0-PIT3/6：并入 temporal_join 的全部 availability（same_instant / next_bar /
+# next_session_open / after_close_next_open / effective_date_only）——US date-only
+# filing 需要 next_session_open，不能只允许 same_day/next_trading_day。
+_VALID_AVAILABILITY = {
+    "same_day",
+    "next_trading_day",
+    "session",
+    "same_instant",
+    "next_bar",
+    "next_session_open",
+    "after_close_next_open",
+    "effective_date_only",
+}
+_VALID_TIME_REPRESENTATIONS = {None, "date_label", "instant"}
+_VALID_TIME_PRECISIONS = {None, "date", "timestamp"}
+_VALID_PIT_FIDELITIES = {
+    None,
+    "knowledge_date_pit",
+    "vintage_pit",
+    "effective_only",
+    "unsupported",
+}
 # #7 join_policy strict enum：canonical 集合与 ``join_spec_from_field`` 支持的
 # 一一对应。拼写错（``pit_asof_backword``）之前在 ``join_spec_from_field`` 里
 # 静默丢成 None → exact——**丢掉 PIT join 语义**（不是崩，而是可能引入未来数据）。
@@ -316,6 +445,16 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         "period_values",
         "derived_expression",
         "derived_from",
+        "time_representation",
+        "time_precision",
+        "pit_fidelity",
+        "revision_availability_time",
+        "dimension",
+        "currency",
+        "currency_column",
+        "cross_market_comparable",
+        "requires_fx",
+        "flow_semantics",
     }
     unknown = sorted(set(raw) - _KNOWN_KEYS)
     if unknown:
@@ -364,6 +503,24 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
                 f"{sorted(_VALID_JOIN_POLICIES)} 内"
             )
         join_policy = jp
+    # R24 P0-PIT2 §11：time_representation / time_precision / pit_fidelity 严格枚举。
+    time_representation = _str_or_none(raw.get("time_representation"))
+    if time_representation not in _VALID_TIME_REPRESENTATIONS:
+        raise ValidationError(
+            f"{context}: time_representation={time_representation!r} 非法"
+            "（应为 date_label / instant）"
+        )
+    time_precision = _str_or_none(raw.get("time_precision"))
+    if time_precision not in _VALID_TIME_PRECISIONS:
+        raise ValidationError(
+            f"{context}: time_precision={time_precision!r} 非法（应为 date / timestamp）"
+        )
+    pit_fidelity = _str_or_none(raw.get("pit_fidelity"))
+    if pit_fidelity not in _VALID_PIT_FIDELITIES:
+        raise ValidationError(
+            f"{context}: pit_fidelity={pit_fidelity!r} 非法"
+            "（应为 knowledge_date_pit / vintage_pit / effective_only / unsupported）"
+        )
     return SemanticField(
         logical_name=logical,
         dataset=str(dataset) if dataset else None,
@@ -411,6 +568,22 @@ def parse_semantic_field(name: str, raw: dict[str, Any]) -> SemanticField:
         derived_from=_tuple_of(
             raw.get("derived_from"), name=f"{logical}.derived_from"
         ),
+        time_representation=time_representation,
+        time_precision=time_precision,
+        pit_fidelity=pit_fidelity,
+        revision_availability_time=_str_or_none(
+            raw.get("revision_availability_time")
+        ),
+        dimension=_str_or_none(raw.get("dimension")),
+        currency=_str_or_none(raw.get("currency")),
+        currency_column=_str_or_none(raw.get("currency_column")),
+        cross_market_comparable=_strict_bool(
+            raw.get("cross_market_comparable"), context=context, default=True
+        ),
+        requires_fx=_strict_bool(
+            raw.get("requires_fx"), context=context, default=False
+        ),
+        flow_semantics=_str_or_none(raw.get("flow_semantics")),
     )
 
 

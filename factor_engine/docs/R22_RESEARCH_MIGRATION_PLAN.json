@@ -440,6 +440,14 @@
     "recommended_factor_replacement": ""
   },
   {
+    "canonical": "holder_company_ownership_hhi",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
     "canonical": "holder_concentration_change",
     "current_surface": "research",
     "direct_use_status": "delete_no_data",
@@ -465,6 +473,14 @@
   },
   {
     "canonical": "holder_disclosure_coverage",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "holder_observed_topk_hhi",
     "current_surface": "extended",
     "direct_use_status": "direct_alpha",
     "disposition": "direct_visible",
@@ -773,6 +789,14 @@
     "direct_use_status": "move_internal",
     "disposition": "moved_internal",
     "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "relation_category_signed_contribution",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
     "recommended_factor_replacement": ""
   },
   {

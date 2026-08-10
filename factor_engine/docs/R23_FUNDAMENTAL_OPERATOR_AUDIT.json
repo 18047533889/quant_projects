@@ -1665,6 +1665,21 @@
     "blockers": "PIT11_EXPECTATION_POST_EVENT_LEAK"
   },
   {
+    "canonical": "fin_total_operating_accruals",
+    "module": "",
+    "final_status": "SUPPORTING_ONLY",
+    "q1_input_grain": "UNKNOWN",
+    "q2_ashare_default": "see binding",
+    "accepted_flow_semantics": "flow_type:Stock",
+    "flow_slot_a": "",
+    "flow_slot_b": "",
+    "timeframe_requirement": "",
+    "knowledge_clock": "field knowledge column",
+    "revision_clock": "n/a",
+    "left_censor_policy": "n/a",
+    "blockers": ""
+  },
+  {
     "canonical": "fin_trend_acceleration",
     "module": "",
     "final_status": "SUPPORTING_ONLY",

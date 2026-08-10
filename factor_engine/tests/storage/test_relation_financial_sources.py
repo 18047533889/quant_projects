@@ -58,13 +58,59 @@ def test_top_ten_aggregation_and_pit_visibility() -> None:
         "holding_amount": range(1, 13),
         "holding_ratio": np.arange(1, 13) / 100,
     })
-    agg = aggregate_holder_rows(rows)
+    agg = aggregate_holder_rows(rows, ratio_unit="decimal")
     assert agg.loc[0, "top_ten_holder_count"] == 10
     assert agg.loc[0, "top_ten_holding_amount"] == sum(range(3, 13))
     assert np.isclose(agg.loc[0, "top_ten_holding_ratio"], sum(range(3, 13)) / 100)
-    out = top_ten_features_asof(_decisions("2024-04-29", "2024-05-01"), rows)
+    out = top_ten_features_asof(
+        _decisions("2024-04-29", "2024-05-01"), rows,
+        ratio_unit="decimal", allow_unbounded_staleness=True,
+    )
     assert np.isnan(out.loc[0, "top_ten_holding_ratio"])
     assert np.isclose(out.loc[1, "top_ten_holding_ratio"], sum(range(3, 13)) / 100)
+    # R24-033: snapshot age metadata is carried.
+    assert "snapshot_available_at" in out.columns
+    assert "snapshot_age_days" in out.columns
+
+
+def test_holder_ratio_unit_never_inferred_from_data() -> None:
+    # R24-021: raw percent values [0.3, 0.8] with a declared percent contract
+    # are read as 0.3% / 0.8%, not 30% / 80%.
+    rows = pd.DataFrame({
+        "instrument": ["A"] * 2,
+        "period_end": pd.to_datetime(["2024-03-31"] * 2),
+        "available_at": pd.to_datetime(["2024-04-30"] * 2),
+        "holding_amount": [100.0, 200.0],
+        "holding_ratio": [0.3, 0.8],
+    })
+    agg = aggregate_holder_rows(rows, ratio_unit="percent")
+    assert np.isclose(agg.loc[0, "top_ten_holding_ratio"], 0.003 + 0.008)
+
+
+def test_holder_ratio_contract_violation_raises() -> None:
+    # R24-022: a mixed out-of-contract value must raise a source-contract error,
+    # not silently rescale the whole series.
+    rows = pd.DataFrame({
+        "instrument": ["A"] * 2,
+        "period_end": pd.to_datetime(["2024-03-31"] * 2),
+        "available_at": pd.to_datetime(["2024-04-30"] * 2),
+        "holding_amount": [100.0, 200.0],
+        "holding_ratio": [0.008, 2.0],
+    })
+    with pytest.raises(ValueError, match="source-contract error"):
+        aggregate_holder_rows(rows, ratio_unit="decimal")
+
+
+def test_holder_ratio_unit_is_required_no_guessing() -> None:
+    rows = pd.DataFrame({
+        "instrument": ["A"],
+        "period_end": pd.to_datetime(["2024-03-31"]),
+        "available_at": pd.to_datetime(["2024-04-30"]),
+        "holding_amount": [100.0],
+        "holding_ratio": [0.05],
+    })
+    with pytest.raises(ValueError, match="ratio_unit"):
+        aggregate_holder_rows(rows)
 
 
 def test_industry_is_single_source_and_index_symbol_is_exact() -> None:

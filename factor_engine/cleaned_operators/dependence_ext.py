@@ -98,14 +98,19 @@ def _chatterjee_xi(xv: np.ndarray, yv: np.ndarray) -> float:
         return np.nan
     if float(np.std(xv)) <= _EPS or float(np.std(yv)) <= _EPS:
         return np.nan
-    # Tie-aware Chatterjee ξ (review R4-49).  The no-tie formula
+    # Tie-aware Chatterjee ξ (review R4-49, R26-005..007).  The no-tie formula
     # 1 - 3·Σ|Δr|/(n²-1) assumes continuous data; A-share series have many
     # zero-return / limit / discrete values.  The general formula uses
     # r_i = #{j: Y_j ≤ Y_i} (max-rank) and l_i = #{j: Y_j ≥ Y_i}:
     #   ξ = 1 - n·Σ_{i<n}|r_{i+1}-r_i| / (2·Σ_i l_i(n-l_i)).
-    # X ties are resolved deterministically by sorting on Y within each tied-X
-    # group (canonical, independent of the row order the stable sort would use).
-    order = np.lexsort((yv, xv))  # primary X, secondary Y
+    #
+    # R26-005/006: X ties MUST NOT be resolved by sorting on Y.  Sorting tied-X
+    # rows by the *response* makes the within-group Y-sequence monotone, which
+    # mechanically shrinks |r_{i+1}-r_i| inside every tie group and inflates ξ —
+    # on independent data with heavy X ties this reaches ~0.9 (measured).  We
+    # use a stable sort on X only: tied-X rows keep their input (chronological)
+    # order, which is deterministic and completely independent of y (R26-007).
+    order = np.argsort(xv, kind="stable")
     sy = yv[order]
     s_sorted = np.sort(sy)
     r = np.searchsorted(s_sorted, sy, side="right").astype(float)  # max-rank
@@ -271,6 +276,7 @@ class TsChatterjeeXi(SeriesOperator):
     """Chatterjee 秩相关:按 x 排序后相邻 y 秩差的归一化,测量函数型依赖。
 
     接近 1 → y 几乎由 x 决定（任意单调/非单调函数均捕捉）。P2。
+    R26-007: tie-aware 估计量；x 并列内部按输入（时序）序确定，与 y 无关。
     """
 
     metadata = _metadata(

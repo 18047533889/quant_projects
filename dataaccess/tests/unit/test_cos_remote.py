@@ -2,6 +2,8 @@
 """COS 远程直读路径与模式测试。"""
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from data_access.cos.remote import (
@@ -93,11 +95,18 @@ def test_resolve_s3_credentials_missing_without_cos_yaml(monkeypatch):
 
 
 def test_resolve_s3_credentials_falls_back_to_cos_yaml(monkeypatch, tmp_path):
-    """env 缺省时回退到 coscli 配置的 secretid/secretkey。"""
+    """research 显式 opt-in 时回退到 coscli 配置的 secretid/secretkey。
+
+    R24 P0-S1 §3.4：读 ``~/.cos.yaml`` 必须 ``DATA_ACCESS_ALLOW_COSCLI_CONFIG_PARSE=1``
+    显式 opt-in（production/strict 永远禁止）。
+    """
     from data_access.cos.remote import resolve_s3_credentials
 
     monkeypatch.delenv("COS_SECRET_ID", raising=False)
     monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("DATA_ACCESS_STRICT_READ", raising=False)
+    monkeypatch.delenv("QUANT_PRODUCTION_MODE", raising=False)
+    monkeypatch.setenv("DATA_ACCESS_ALLOW_COSCLI_CONFIG_PARSE", "1")
     cfg = tmp_path / "cos.yaml"
     cfg.write_text(
         "cos:\n  base:\n    secretid: 'TEST_ID'\n    secretkey: 'TEST_KEY'\n",
@@ -109,3 +118,29 @@ def test_resolve_s3_credentials_falls_back_to_cos_yaml(monkeypatch, tmp_path):
     assert creds.secret_access_key == "TEST_KEY"
     # endpoint 由 region 推断
     assert creds.endpoint.endswith(".myqcloud.com")
+
+
+def test_resolve_s3_credentials_production_never_parses_cos_yaml(monkeypatch, tmp_path):
+    """R24 P0-S1 / T-S03：production 下 ~/.cos.yaml 存在也绝不解析、绝不注入 env。
+
+    即使机上有更宽的 base credential，DataAccess 也不能绕过 ``clean-cos-ro``
+    的服务器权限分级自动读取。
+    """
+    from data_access.cos.remote import resolve_s3_credentials
+
+    monkeypatch.delenv("COS_SECRET_ID", raising=False)
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.setenv("QUANT_PRODUCTION_MODE", "1")
+    cfg = tmp_path / "cos.yaml"
+    cfg.write_text(
+        "cos:\n  base:\n    secretid: 'PROD_WIDE_ID'\n    secretkey: 'PROD_WIDE_KEY'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("DATA_ACCESS_COS_YAML", str(cfg))
+    # 显式 opt-in 也不能在 production 生效（allow_coscli_config_parse 恒 False）。
+    monkeypatch.setenv("DATA_ACCESS_ALLOW_COSCLI_CONFIG_PARSE", "1")
+    with pytest.raises(ValidationError, match="凭证"):
+        resolve_s3_credentials()
+    # 绝不把 secret 写进 os.environ（T-S03）
+    assert os.environ.get("COS_SECRET_ID") is None
+    assert os.environ.get("COS_SECRET_KEY") is None

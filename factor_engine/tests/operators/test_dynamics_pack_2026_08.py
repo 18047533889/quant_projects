@@ -267,17 +267,26 @@ def test_volume_clock_efficiency_monotonic_near_one():
 
 
 def test_session_recovery_fast_vs_never():
-    per = 120
+    # R26-050/051: the operator grid-aligns to the official A-share session, so
+    # the fixture must be the full 240-bar session (09:31-11:30 + 13:01-15:00).
+    per = 240
     dates = pd.date_range("2024-01-01", periods=3, freq="B")
-    idx = pd.DatetimeIndex([d + pd.Timedelta(minutes=570 + m) for d in dates for m in range(per)])
-    seq1 = np.concatenate([np.linspace(10, 10.05, 60), np.full(60, 10.4)])          # never recovers
-    seq2 = np.concatenate([np.linspace(10, 10.05, 60),
-                           np.r_[10.4, np.linspace(10.4, 10.05, 14), np.full(45, 10.05)]])
+    idx = pd.DatetimeIndex(
+        [d + pd.Timedelta(minutes=m) for d in dates
+         for m in list(range(571, 691)) + list(range(781, 901))]
+    )
+    seq1 = np.concatenate([np.linspace(10, 10.05, 120), np.full(120, 10.4)])          # never recovers
+    seq2 = np.concatenate([np.linspace(10, 10.05, 120),
+                           np.r_[10.4, np.linspace(10.4, 10.05, 29), np.full(90, 10.05)]])
     seq3 = np.linspace(10, 10.05, per)
     price = pd.DataFrame(np.concatenate([seq1, seq2, seq3])[:, None], index=idx, columns=["S0"])
     r = np.abs(np.diff(price.to_numpy()[:, 0], prepend=10.0))
     ev = pd.DataFrame((r > 0.1).astype(float), index=idx, columns=["S0"])
-    out = OperatorRegistry.get("session_event_recovery_score", "pandas_numpy").calculate(price, ev, 30, 0.25)
+    # min_events=1 is passed explicitly (kernel path) — this test exercises the
+    # fast-vs-never recovery SEMANTICS; the R26-048 default floor (>=3) is
+    # covered by test_recovery_min_events_*.
+    op = OperatorRegistry.get("session_event_recovery_score", "pandas_numpy")
+    out = op._calculate_series(price, ev, horizon=30, residual_fraction=0.25, min_events=1)
     vals = out.to_numpy()[:, 0]
     assert vals[0] == pytest.approx(1.0)      # fragile
     assert vals[1] < 0.5                      # resilient

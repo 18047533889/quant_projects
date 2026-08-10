@@ -97,6 +97,19 @@ class NormalizedFieldPlan:
     strict_pit_allowed: bool | None = None
     current_snapshot_only: bool = False
     role: str = "feature"
+    # R24-062: temporal metadata must NOT be dropped in the plan layer — every
+    # semantic dimension that changes the economic meaning of the read is carried
+    # forward so the IR / Plan / cache identity can stay attached to the source.
+    concept_id: str | None = None
+    field_id: str | None = None
+    temporal_model: str | None = None
+    period_id_column: str | None = None
+    availability_precision: str | None = None
+    availability_expr: str | None = None
+    timeframe: str | None = None
+    source_vintage: str | None = None
+    snapshot_policy: str | None = None
+    missing_semantic: str | None = None
 
     @property
     def is_scale_applicable(self) -> bool:
@@ -149,7 +162,25 @@ def _catalog_coverage(field) -> str | None:
     return _coverage_from_temporal_model(getattr(field, "temporal_model", None))
 
 
-def _resolve_table_spec(table: str | None, market: str | None) -> TableSpec | None:
+class TableResolutionStatus(str, enum.Enum):
+    """R24-063: why a table did not resolve — distinct outcomes, no fail-open.
+
+    ``REGISTRY_ERROR`` / ``AMBIGUOUS`` must hard-fail in production instead of
+    silently degrading (e.g. ``current_snapshot_only=False``).
+    """
+
+    TABLE_NOT_REGISTERED = "table_not_registered"
+    REGISTRY_ERROR = "registry_error"
+    AMBIGUOUS = "ambiguous"
+    RESOLVED = "resolved"
+
+
+def _resolve_table_spec(
+    table: str | None,
+    market: str | None,
+    *,
+    production: bool = False,
+) -> tuple[TableSpec | None, TableResolutionStatus]:
     """Resolve a ``TableSpec`` within an EXPLICIT market (R17-002).
 
     Same-named tables carry DIFFERENT semantics per market (US
@@ -157,21 +188,50 @@ def _resolve_table_spec(table: str | None, market: str | None) -> TableSpec | No
     D1; ``StockCapitalDaily`` is split/dual-schema in US vs S1 in A-share).
     Resolving a bare table name against the legacy A-share-only
     ``FIELD_REGISTRY`` would interpret a US table with A-share semantics.
+
+    R24-063/064: returns ``(spec, status)``.  ``TABLE_NOT_REGISTERED`` is a
+    benign "no contract"; ``REGISTRY_ERROR`` / ``AMBIGUOUS`` are NOT — a
+    production caller must raise rather than treat them as "not registered".
     """
     if not table:
-        return None
+        return None, TableResolutionStatus.TABLE_NOT_REGISTERED
     try:
         if market:
             from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
-            return MULTI_MARKET_FIELD_REGISTRY.registry_for(market).resolve_table(
-                str(table)
-            )
-        from fields import FIELD_REGISTRY
+            registry = MULTI_MARKET_FIELD_REGISTRY.registry_for(market)
+        else:
+            from fields import FIELD_REGISTRY
 
-        return FIELD_REGISTRY.resolve_table(str(table))
-    except Exception:  # pragma: no cover - defensive
-        return None
+            registry = FIELD_REGISTRY
+        spec = registry.resolve_table(str(table))
+    except KeyError:
+        return None, TableResolutionStatus.TABLE_NOT_REGISTERED
+    except Exception as exc:  # registry internal error — NOT a benign miss
+        if production:
+            raise
+        return None, TableResolutionStatus.REGISTRY_ERROR
+    if spec is None:
+        return None, TableResolutionStatus.TABLE_NOT_REGISTERED
+    return spec, TableResolutionStatus.RESOLVED
+
+
+def _table_current_snapshot_only(
+    table: str | None, market: str | None, *, production: bool = False
+) -> bool:
+    """Look up a table's ``current_snapshot_only`` within one market.
+
+    R24-063/064: a REGISTRY_ERROR in production hard-fails instead of silently
+    reporting ``False`` (which would let a current-snapshot table backfill a
+    historical panel).
+    """
+    table_spec, status = _resolve_table_spec(table, market, production=production)
+    if status in (TableResolutionStatus.REGISTRY_ERROR, TableResolutionStatus.AMBIGUOUS):
+        raise RuntimeError(
+            f"table {table!r} for market {market!r} failed to resolve "
+            f"({status.value}) — production cannot treat this as not-registered"
+        )
+    return bool(table_spec is not None and getattr(table_spec, "current_snapshot_only", False))
 
 
 def _table_current_snapshot_only(table: str | None, market: str | None) -> bool:
@@ -242,6 +302,17 @@ def plan_from_field_spec(name: str, spec: Any, *, market: str | None = None) -> 
         strict_pit_allowed=getattr(spec, "strict_pit_allowed", None),
         current_snapshot_only=_table_current_snapshot_only(getattr(spec, "table", None), eff_market),
         role=str(getattr(spec, "role", "feature") or "feature"),
+        # R24-062: propagate the full temporal metadata, never dropping it.
+        concept_id=getattr(spec, "concept_id", None),
+        field_id=getattr(spec, "field_id", None) or str(getattr(spec, "name", None)),
+        temporal_model=getattr(spec, "temporal_model", None),
+        period_id_column=getattr(spec, "period_id_column", None),
+        availability_precision=getattr(spec, "availability_precision", None),
+        availability_expr=getattr(spec, "availability_expr", None),
+        timeframe=getattr(spec, "timeframe", None),
+        source_vintage=getattr(spec, "source_vintage", None),
+        snapshot_policy=getattr(spec, "snapshot_policy", None),
+        missing_semantic=getattr(spec, "missing_semantic", None),
     )
 
 
@@ -297,6 +368,17 @@ def plan_from_catalog_field(name: str, field: Any, *, market: str | None = None)
         strict_pit_allowed=getattr(field, "strict_pit_allowed", None),
         current_snapshot_only=_table_current_snapshot_only(getattr(field, "table", None), eff_market),
         role=str(getattr(field, "role", "feature") or "feature"),
+        # R24-062: propagate the full temporal metadata, never dropping it.
+        concept_id=getattr(field, "concept_id", None),
+        field_id=getattr(field, "field_id", None) or str(getattr(field, "name", None)),
+        temporal_model=getattr(field, "temporal_model", None),
+        period_id_column=getattr(field, "period_id_column", None),
+        availability_precision=getattr(field, "availability_precision", None),
+        availability_expr=getattr(field, "availability_expr", None),
+        timeframe=getattr(field, "timeframe", None),
+        source_vintage=getattr(field, "source_vintage", None),
+        snapshot_policy=getattr(field, "snapshot_policy", None),
+        missing_semantic=getattr(field, "missing_semantic", None),
     )
 
 
@@ -316,6 +398,12 @@ class MissingSemantic(enum.Enum):
     NOT_APPLICABLE = "not_applicable"
     NOT_TRADING = "not_trading"
     STRUCTURAL_ZERO = "structural_zero"
+    # R24-065..067: the source has no history for this time/instrument at all
+    # (e.g. a current-snapshot table with no row for a historical date).  This is
+    # distinct from NOT_APPLICABLE (economically not applicable): OUT_OF_COVERAGE
+    # means the SOURCE simply has no data — mining must source-block it, not
+    # treat it as an ordinary NaN.
+    OUT_OF_COVERAGE = "out_of_coverage"
 
 
 #: Field temporal models whose missing cells are semantically "no event row
@@ -374,7 +462,10 @@ def missing_semantic_for_plan(plan: Any) -> MissingSemantic:
     if coverage in _NO_EVENT_COVERAGE:
         return MissingSemantic.NO_EVENT
     if coverage == "current_snapshot":
-        return MissingSemantic.NOT_APPLICABLE
+        # R24-065..067: a current-snapshot table with no row for a historical
+        # date is OUT_OF_COVERAGE (the source has no history) — NOT_APPLICABLE is
+        # reserved for economically-not-applicable fields.
+        return MissingSemantic.OUT_OF_COVERAGE
     role = str(getattr(plan, "role", "") or "").lower()
     if role in {"knowledge_time", "period_id", "effective_time", "ingestion_time"}:
         return MissingSemantic.NOT_APPLICABLE

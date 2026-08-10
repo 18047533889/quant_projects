@@ -72,7 +72,7 @@
       "close": "continuous_close",
       "high": "continuous_high",
       "low": "continuous_low",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -135,7 +135,7 @@
       "close": "continuous_close",
       "high": "continuous_high",
       "low": "continuous_low",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 6,
@@ -292,7 +292,7 @@
     "default_recipe": {
       "high": "continuous_high",
       "low": "continuous_low",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -323,7 +323,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 6,
@@ -598,7 +598,7 @@
       "close": "continuous_close",
       "high": "continuous_high",
       "low": "continuous_low",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -780,7 +780,7 @@
     "current_mining_role": "alpha_high_cost",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 6,
@@ -810,7 +810,7 @@
     "current_mining_role": "alpha_high_cost",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 6,
@@ -840,7 +840,7 @@
     "current_mining_role": "alpha_high_cost",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 6,
@@ -1208,7 +1208,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -1269,7 +1269,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "ret": "return_decimal",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -1278,7 +1278,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "neg_one_one",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -1387,7 +1387,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -1744,7 +1744,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -2038,7 +2038,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -2484,7 +2484,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -2515,7 +2515,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -4866,9 +4866,8 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -4899,9 +4898,8 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 6,
@@ -5381,9 +5379,8 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -5414,7 +5411,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover",
       "target": "return_decimal"
     },
@@ -5447,7 +5444,7 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover",
       "target": "return_decimal"
     },
@@ -5479,7 +5476,7 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover",
       "target": "return_decimal"
     },
@@ -5512,7 +5509,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover",
       "target": "return_decimal"
     },
@@ -5545,7 +5542,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -5577,7 +5574,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover",
       "target": "return_decimal"
     },
@@ -5610,7 +5607,7 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -5733,9 +5730,8 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -5826,9 +5822,8 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -5978,7 +5973,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "y": "return_decimal"
     },
     "delete_reason": "",
@@ -6344,9 +6338,8 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -6468,9 +6461,8 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -6501,9 +6493,8 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -6534,7 +6525,7 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -6807,7 +6798,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -6838,7 +6828,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -6869,7 +6858,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -6900,7 +6888,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -6931,7 +6918,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close",
       "y": "return_decimal"
     },
@@ -7170,7 +7156,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -7201,7 +7187,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -7352,7 +7338,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "ret": "return_decimal",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -9048,7 +9034,7 @@
     "current_mining_role": "fundamental_pit",
     "current_surface": "daily",
     "default_recipe": {
-      "components": "continuous_close"
+      "component_1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -12011,7 +11997,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -13006,7 +12992,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -13429,7 +13415,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -13461,7 +13446,7 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -13493,7 +13478,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -13525,7 +13510,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -13557,7 +13542,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -13589,7 +13574,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -13621,7 +13606,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -13653,7 +13638,7 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -13953,7 +13938,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close"
+      "beta": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -14254,7 +14239,7 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -14555,7 +14540,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -14586,7 +14570,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -14768,14 +14751,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -14805,11 +14781,7 @@
     "current_mining_role": "alpha",
     "current_surface": "extended",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -14840,6 +14812,36 @@
     "current_surface": "daily",
     "default_recipe": {
       "peer_return": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "shareholder_pit"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "holder_company_ownership_hhi",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15013,26 +15015,7 @@
     "current_mining_role": "alpha",
     "current_surface": "extended",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15062,26 +15045,7 @@
     "current_mining_role": "alpha",
     "current_surface": "extended",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15111,33 +15075,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15167,33 +15105,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15253,16 +15165,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15322,33 +15225,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15378,33 +15255,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15434,33 +15285,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15490,33 +15315,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15576,14 +15375,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15613,33 +15405,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15649,6 +15415,36 @@
     ],
     "mining_lane": "alpha_direct",
     "output_domain": "bounded_0_1",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "shareholder_pit"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "holder_observed_topk_hhi",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "s1": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -15729,23 +15525,7 @@
     "current_mining_role": "internal",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15772,16 +15552,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15841,16 +15612,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15880,33 +15642,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -15936,33 +15672,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -16052,26 +15762,7 @@
     "current_mining_role": "alpha",
     "current_surface": "extended",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -16101,33 +15792,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -17003,7 +16668,7 @@
     "current_mining_role": "intraday_eod",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -17692,7 +17357,7 @@
     "current_mining_role": "intraday_eod",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -17724,7 +17389,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -18084,7 +17749,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -18116,7 +17781,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -18245,7 +17910,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -18502,7 +18167,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -18534,7 +18199,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -18867,7 +18532,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "neg_one_one",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -19065,7 +18730,7 @@
     "current_mining_role": "intraday_eod",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19097,7 +18762,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19336,7 +19001,7 @@
     "current_mining_role": "intraday_eod",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19397,7 +19062,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19429,7 +19094,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19610,7 +19275,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19702,7 +19367,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19734,7 +19399,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19766,7 +19431,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19798,7 +19463,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19830,7 +19495,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19862,7 +19527,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19894,7 +19559,7 @@
     "default_recipe": {
       "amount": "amount_local",
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -19985,7 +19650,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -20769,7 +20434,7 @@
     "default_recipe": {
       "close": "continuous_close",
       "price": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -21425,7 +21090,7 @@
     "current_surface": "research",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -22271,7 +21936,7 @@
       "close": "continuous_close",
       "high": "continuous_high",
       "low": "continuous_low",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -22304,7 +21969,7 @@
       "close": "continuous_close",
       "high": "continuous_high",
       "low": "continuous_low",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -22428,7 +22093,7 @@
       "close": "continuous_close",
       "high": "continuous_high",
       "low": "continuous_low",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -22461,7 +22126,7 @@
       "close": "continuous_close",
       "high": "continuous_high",
       "low": "continuous_low",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -23420,7 +23085,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -23581,7 +23246,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "neg_one_one",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -23602,7 +23267,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -23642,6 +23307,36 @@
     ],
     "mining_lane": "alpha_direct",
     "output_domain": "bounded_0_1",
+    "production_certified": false,
+    "replacement": "",
+    "search_prior": 1.0,
+    "source_recipes": [
+      "relation_pit"
+    ],
+    "target_ast_positions": [
+      "intermediate",
+      "terminal"
+    ],
+    "target_disposition": "direct_visible",
+    "target_terminal": true
+  },
+  {
+    "canonical": "relation_category_signed_contribution",
+    "cost_budget": 9,
+    "current_direct_status": "direct_alpha",
+    "current_mining_role": "alpha",
+    "current_surface": "extended",
+    "default_recipe": {
+      "value": "continuous_close"
+    },
+    "delete_reason": "",
+    "family_budget": 16,
+    "market_contexts": [
+      "ashare",
+      "us"
+    ],
+    "mining_lane": "alpha_direct",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -23842,16 +23537,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -23971,16 +23657,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24070,8 +23747,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "value": "continuous_close",
-      "weight": "continuous_close"
+      "value": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24101,33 +23777,7 @@
     "current_mining_role": "alpha",
     "current_surface": "extended",
     "default_recipe": {
-      "p1": "continuous_close",
-      "p2": "continuous_close",
-      "p3": "continuous_close",
-      "p4": "continuous_close",
-      "p5": "continuous_close",
-      "p6": "continuous_close",
-      "p7": "continuous_close",
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close",
-      "sid1": "continuous_close",
-      "sid10": "continuous_close",
-      "sid2": "continuous_close",
-      "sid3": "continuous_close",
-      "sid4": "continuous_close",
-      "sid5": "continuous_close",
-      "sid6": "continuous_close",
-      "sid7": "continuous_close",
-      "sid8": "continuous_close",
-      "sid9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24187,16 +23837,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24226,16 +23867,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24265,16 +23897,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24304,16 +23927,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "s1": "continuous_close",
-      "s10": "continuous_close",
-      "s2": "continuous_close",
-      "s3": "continuous_close",
-      "s4": "continuous_close",
-      "s5": "continuous_close",
-      "s6": "continuous_close",
-      "s7": "continuous_close",
-      "s8": "continuous_close",
-      "s9": "continuous_close"
+      "s1": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24343,8 +23957,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "value": "continuous_close",
-      "weight": "continuous_close"
+      "value": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24374,7 +23987,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -24405,7 +24017,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24467,7 +24079,7 @@
     "default_recipe": {
       "eps": "earnings_per_share",
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover",
       "period_id": "period_id"
     },
@@ -24500,7 +24112,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover",
       "period_id": "period_id"
     },
@@ -24749,7 +24361,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "ret": "return_decimal",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24780,7 +24392,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "ret": "return_decimal",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24789,7 +24401,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "neg_one_one",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -24907,7 +24519,7 @@
       "close": "continuous_close",
       "high": "continuous_high",
       "low": "continuous_low",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24968,7 +24580,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -24999,7 +24611,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -25030,7 +24642,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "price": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 8,
@@ -25329,7 +24941,7 @@
     "default_recipe": {
       "close": "continuous_close",
       "ret": "return_decimal",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -25449,7 +25061,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "ret": "return_decimal",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -25480,7 +25092,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "ret": "return_decimal",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -26431,7 +26043,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -27384,7 +26996,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -28330,7 +27942,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -28431,7 +28043,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "neg_one_one",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -29401,7 +29013,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "neg_one_one",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -30081,7 +29693,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -30302,7 +29914,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "neg_one_one",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -30867,7 +30479,7 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -30899,7 +30511,7 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -30931,9 +30543,8 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 8,
@@ -30963,7 +30574,7 @@
     "current_surface": "extended",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -32640,7 +32251,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -32889,7 +32500,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
+      "f2": "raw_volume_shares",
       "f3": "turnover"
     },
     "delete_reason": "",
@@ -33471,7 +33082,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "neg_one_one",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -35002,7 +34613,7 @@
       "us"
     ],
     "mining_lane": "alpha_high_cost",
-    "output_domain": "bounded_0_1",
+    "output_domain": "neg_one_one",
     "production_certified": false,
     "replacement": "",
     "search_prior": 0.2,
@@ -35299,7 +34910,7 @@
       "us"
     ],
     "mining_lane": "supporting",
-    "output_domain": "bounded_0_1",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "ts_multi_regression_r2_prior",
     "search_prior": 1.0,
@@ -36104,7 +35715,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "neg_one_one",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -38143,7 +37754,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -38391,7 +38002,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -40066,7 +39677,7 @@
       "us"
     ],
     "mining_lane": "alpha_direct",
-    "output_domain": "bounded_0_1",
+    "output_domain": "continuous_signed",
     "production_certified": false,
     "replacement": "",
     "search_prior": 1.0,
@@ -41730,7 +41341,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume"
+      "f2": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -41761,7 +41372,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume"
+      "f2": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -41792,7 +41403,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume"
+      "f2": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -41823,9 +41434,8 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -41856,9 +41466,8 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume",
-      "f3": "turnover",
-      "f4": "continuous_close"
+      "f2": "raw_volume_shares",
+      "f3": "turnover"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -41889,7 +41498,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "f1": "return_decimal",
-      "f2": "volume"
+      "f2": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -42306,7 +41915,6 @@
     "current_mining_role": "alpha",
     "current_surface": "extended",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -42337,7 +41945,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -42368,7 +41975,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -42429,7 +42035,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -42460,7 +42065,6 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close",
       "x": "continuous_close"
     },
     "delete_reason": "",
@@ -42915,7 +42519,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "ret": "return_decimal",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -42946,7 +42550,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "ret": "return_decimal",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43330,7 +42934,7 @@
     "current_mining_role": "fundamental_pit",
     "current_surface": "daily",
     "default_recipe": {
-      "weight": "continuous_close"
+      "valuation": "continuous_close"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43360,7 +42964,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43390,7 +42994,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43420,7 +43024,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43452,7 +43056,7 @@
     "default_recipe": {
       "high": "continuous_high",
       "low": "continuous_low",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43482,7 +43086,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43512,7 +43116,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43543,7 +43147,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "close": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43574,7 +43178,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "ret": "return_decimal",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43604,7 +43208,7 @@
     "current_mining_role": "alpha",
     "current_surface": "daily",
     "default_recipe": {
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,
@@ -43635,7 +43239,7 @@
     "current_surface": "daily",
     "default_recipe": {
       "price": "continuous_close",
-      "volume": "continuous_volume"
+      "volume": "raw_volume_shares"
     },
     "delete_reason": "",
     "family_budget": 16,

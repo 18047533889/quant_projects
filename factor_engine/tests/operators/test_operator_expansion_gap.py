@@ -93,8 +93,13 @@ def test_intraday_segment_return_morning():
         pd.Timestamp("2024-01-02 14:00"),
     ])
     panel = pd.DataFrame({"A": [10.0, 10.5, 11.0]}, index=idx)
+    # R26-025: EndpointPolicy.EXACT is the production default — 11:30 is absent,
+    # so the morning segment return is NaN, never 10:00-as-11:30.
     out = IntraSegmentReturn()._calculate_series(panel)
-    assert out.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(10.5 / 10.0 - 1.0, rel=1e-9)
+    assert np.isnan(out.loc[pd.Timestamp("2024-01-02"), "A"])
+    # The explicit recent-valid policy reproduces the legacy first/last-finite.
+    out_rv = IntraSegmentReturn()._calculate_series(panel, endpoint_policy="recent_valid")
+    assert out_rv.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(10.5 / 10.0 - 1.0, rel=1e-9)
 
 
 def test_intraday_segment_handles_utc_index():
@@ -112,14 +117,17 @@ def test_intraday_segment_handles_utc_index():
         ]
     )
     close = pd.DataFrame({"A": [10.0, 10.5, 11.0, 11.2]}, index=idx)
-    out_morning = IntraSegmentReturn()._calculate_series(close, segment="morning")
+    # R26-025/027: exact endpoints require 11:30 / 15:00 / 13:01 present; a sparse
+    # fixture yields NaN by default.  recent_valid keeps the UTC-conversion +
+    # segment-split check meaningful here.
+    out_morning = IntraSegmentReturn()._calculate_series(close, segment="morning", endpoint_policy="recent_valid")
     assert out_morning.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(10.5 / 10.0 - 1.0, rel=1e-9)
-    out_afternoon = IntraSegmentReturn()._calculate_series(close, segment="afternoon")
+    out_afternoon = IntraSegmentReturn()._calculate_series(close, segment="afternoon", endpoint_policy="recent_valid")
     assert out_afternoon.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(11.2 / 11.0 - 1.0, rel=1e-9)
 
     # lunch gap: afternoon first open vs morning last close.
     open_px = pd.DataFrame({"A": [10.0, 10.4, 11.05, 11.1]}, index=idx)
-    out_lunch = IntraLunchGapReturn()._calculate_series(close, open_px)
+    out_lunch = IntraLunchGapReturn()._calculate_series(close, open_px, endpoint_policy="recent_valid")
     assert out_lunch.loc[pd.Timestamp("2024-01-02"), "A"] == pytest.approx(11.05 / 10.5 - 1.0, rel=1e-9)
 
 
@@ -175,19 +183,22 @@ def test_intraday_empty_day_is_nan_not_zero():
 
 
 def test_intraday_source_blocked_operators_are_not_production_targets():
-    """``intraday_vwap_deviation`` is genuinely session-aware (close relative to
-    the intraday cumulative VWAP) and needs minute bars, so it remains
-    source-blocked.  ``intraday_volatility`` was audited 2026-08 and is actually
-    the daily close-to-open rolling volatility (open/close inputs), so it was
-    unblocked and is a production target.  The ``intra_*`` minute→daily family and
-    the relation/index panel operators are eligible production targets."""
+    """R22-070..071: source eligibility is CONTEXTUAL, never a global ban.
+    ``intraday_vwap_deviation`` (session-aware, close vs intraday cumulative
+    VWAP) is removed from the global SOURCE_BLOCKED set and handled by the
+    per-market DirectUse context gate; ``intraday_volatility`` is the daily
+    close-to-open rolling volatility and is a production target.  The
+    ``intra_*`` minute→daily family and relation/index panel operators are
+    eligible production targets."""
     from cleaned_operators.production_hardening import factor_production_targets
 
     assert "intraday_volatility" not in SOURCE_BLOCKED_CANONICALS
-    assert "intraday_vwap_deviation" in SOURCE_BLOCKED_CANONICALS
+    # R22-070..071: the global ban set is intentionally empty of factor-shaped
+    # operators — per-market minute-source context gates replace it.
+    assert "intraday_vwap_deviation" not in SOURCE_BLOCKED_CANONICALS
     targets = factor_production_targets()
     assert "intraday_volatility" in targets
-    assert "intraday_vwap_deviation" not in targets
+    assert "intraday_vwap_deviation" in targets
     for name in ("intra_realized_variance", "intra_limit_reopen_count", "intra_amihud",
                  "index_weight"):
         assert name in targets, name
@@ -261,13 +272,15 @@ def test_event_decay_asof_future_does_not_affect_past():
 def test_fin_component_score_sums_directions():
     from cleaned_operators.fundamental.component_score import FinComponentScore
 
-    dates = pd.date_range("2024-01-02", periods=2)
-    # three component columns; second row all-NaN exercises missing handling
-    comp = pd.DataFrame(
-        {"c1": [1.0, np.nan], "c2": [-2.0, np.nan], "c3": [3.0, np.nan]},
-        index=pd.DatetimeIndex(["2024-01-02", "2024-01-03"]),
-        dtype=float,
+    dates = pd.DatetimeIndex(["2024-01-02", "2024-01-03"])
+    # R25-184: each component is its OWN date x instrument panel; the score is
+    # per cell across the component slots (row 1 is all-NaN missing handling).
+    c1 = pd.DataFrame({"A": [1.0, np.nan]}, index=dates, dtype=float)
+    c2 = pd.DataFrame({"A": [-2.0, np.nan]}, index=dates, dtype=float)
+    c3 = pd.DataFrame({"A": [3.0, np.nan]}, index=dates, dtype=float)
+    out = FinComponentScore()._calculate_series(
+        c1, c2, c3, component_directions=["up", "down", "up"]
     )
-    out = FinComponentScore()._calculate_series(comp, component_directions=["up", "down", "up"])
-    assert out.iloc[0, 0] == pytest.approx(1.0 + 1.0 + 1.0)
+    # row0: up(1)=1 + down(-2)=1 + up(3)=1 => 3 ; row1 all NaN => NaN
+    assert out.iloc[0, 0] == pytest.approx(3.0)
     assert np.isnan(out.iloc[1, 0])

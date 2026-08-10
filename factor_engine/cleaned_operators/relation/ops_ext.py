@@ -130,9 +130,12 @@ class GroupSignalAttractionShare(SeriesOperator):
         damping: float = _DAMPING_DEFAULT,
         **_: Any,
     ) -> pd.DataFrame:
-        x, group = x.copy(), group.copy()
-        if not group.index.equals(x.index) or not group.columns.equals(x.columns):
-            group = group.reindex(index=x.index, columns=x.columns)
+        # R24-005: strict axes gate — no silent ``reindex`` on a mismatched
+        # group panel (a misaligned group would re-pair instruments to a
+        # different group and fabricate a spurious attraction share).
+        from cleaned_operators.relation.ops import strict_relation_align
+
+        x, group = strict_relation_align(x.copy(), group.copy())
         d = float(damping)
         if not (0.0 < d < 1.0):
             raise ValueError("group_signal_attraction_share requires 0 < damping < 1")

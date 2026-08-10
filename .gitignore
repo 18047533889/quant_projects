@@ -42,11 +42,20 @@ workspace_data/
 factor_engine/util/workspace_data/
 .scheduled_*.ready
 
-# 敏感信息
+# 敏感信息（R24 P1-S7 §9：coscli 配置 / credential / secret / key 文件不入库）
 .env
 *.pem
 *_token*
 **/lqtp_platform_full_response.json
+.cos.yaml
+cos.yaml
+*.credentials
+credentials.*
+*.secret
+*.key
+*.s3cred
+*secret_key*
+*secret_id*
 
 # 本地备份 / 可重建缓存 / 体积过大产物
 .replace_backup_*/

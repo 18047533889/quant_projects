@@ -71,7 +71,29 @@ TABLE_DATASETS: dict[str, str] = {
 }
 
 
-def logical_table_contract(table: str) -> LogicalTableContract:
+# R24-058/059: US financial statement tables share the same statement table
+# names as A-share (StockBalance / StockIncome / StockCashFlow / StockIndicator)
+# but are market-scoped datasets.  Market-scoped field-contract registration
+# resolves US tables through this map.
+US_LOGICAL_TABLES: dict[str, LogicalTableContract] = {
+    "StockBalance": LogicalTableContract("us_stock_balance", "financial_pit"),
+    "StockIncome": LogicalTableContract("us_stock_income", "financial_pit"),
+    "StockCashFlow": LogicalTableContract("us_stock_cashflow", "financial_pit"),
+    "StockIndicator": LogicalTableContract("us_stock_indicator", "financial_pit"),
+    "StockValuationDaily": LogicalTableContract("us_stock_valuation_daily", "exact"),
+    "StockDailyBar": LogicalTableContract(None, "anchor"),
+    "StockDividend": LogicalTableContract("us_stock_dividend", "effective_only"),
+    "StockList": LogicalTableContract("us_stock_list", "asof_backward"),
+}
+
+
+def logical_table_contract(table: str, market: str = "ashare") -> LogicalTableContract:
+    """Resolve a logical-table contract (A-share authoritative; US via R24-058)."""
+    if str(market).strip().lower() == "us":
+        try:
+            return US_LOGICAL_TABLES[str(table)]
+        except KeyError as exc:
+            raise KeyError(f"unknown US logical table {table!r}") from exc
     try:
         return ASHARE_LOGICAL_TABLES[str(table)]
     except KeyError as exc:

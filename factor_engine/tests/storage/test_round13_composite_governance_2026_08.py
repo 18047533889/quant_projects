@@ -52,6 +52,16 @@ class _FailingRefreshSource(DataSource):
     def snapshot_token(self):
         return "snap-A"
 
+    def temporal_contract(self):
+        # R24-084..087: plain panel — generic asof is allowed.
+        from storage.datasource import TemporalContract
+
+        return TemporalContract(
+            temporal_sensitivity="none",
+            snapshot_capability="none",
+            join_capability="generic_asof",
+        )
+
     def load_column(self, name: str):
         self.load_calls += 1
         return self.data[name]
@@ -72,6 +82,16 @@ class _EraSource(DataSource):
 
     def snapshot_token(self):
         return self.era
+
+    def temporal_contract(self):
+        # R24-084..087: plain panel — generic asof is allowed.
+        from storage.datasource import TemporalContract
+
+        return TemporalContract(
+            temporal_sensitivity="none",
+            snapshot_capability="none",
+            join_capability="generic_asof",
+        )
 
     def load_column(self, name: str):
         self.load_calls += 1

@@ -59,6 +59,7 @@ from cleaned_operators.base import (
     register_operator,
 )
 from cleaned_operators.microstructure.intraday_agg import _as_panel
+from runtime.session_panel import build_session_panel, default_ashare_calendar
 
 _EPS = 1e-12
 _SESSION_TZ = "Asia/Shanghai"
@@ -155,8 +156,16 @@ def _recovery_day(
     horizon: int,
     residual_fraction: float,
     refractory: int = 1,
-    min_events: int = 1,
+    min_events: int = 3,
 ) -> float:
+    """Recovery median over grid-aligned arrays.
+
+    R26-050: ``x`` / ``event`` must be aligned to the official session grid, so
+    ``s + k`` is ``k`` REAL official slots — never ``k`` observed rows.  The
+    caller (the operator) builds grid-aligned panels; a missing timestamp is an
+    explicit NaN slot, and the existing missing-price censor already fails
+    closed across it.
+    """
     H = max(1, int(horizon))
     if not (0.0 < float(residual_fraction) <= 1.0):
         raise ValueError("session_event_recovery_score requires 0 < residual_fraction <= 1")
@@ -172,7 +181,14 @@ def _recovery_day(
     taus: list[float] = []
     suppress_until = -1
     for s in range(1, n):
-        if not np.isfinite(event[s]) or event[s] == 0.0:
+        if event[s] == 0.0:
+            continue
+        if not np.isfinite(event[s]):
+            # R26-049 EventMissingPolicy.BREAK/CENSOR: an unknown event slot must
+            # never silently read as "no event".  It does not trigger a recovery
+            # path, and the refractory context must not be assumed continuous
+            # across it — leave the day fail-closed only when a *used* path is
+            # ambiguous (handled in the horizon loop below).
             continue
         if s <= suppress_until:
             # R11 #79: refractory — an overlapping shock inside the quiet window
@@ -202,6 +218,11 @@ def _recovery_day(
                 # than a false precise recovery at a later observed minute.
                 censored = True
                 break
+            if not np.isfinite(event[s + k]):
+                # R26-049: an UNKNOWN event slot inside the horizon censors the
+                # path — the episode is not seamlessly connected across it.
+                censored = True
+                break
             if abs(v - b) <= c * a:
                 tau = k
                 break
@@ -210,10 +231,11 @@ def _recovery_day(
         taus.append(float(tau))
         suppress_until = s + rf
     if len(taus) < me:
-        # P0-88: a single shock -> the median is that one shock -> statistically
-        # unstable.  The day needs at least ``min_events`` effective events
-        # (after right-censoring / refractory suppression) before the median is
-        # meaningful; otherwise fail closed.
+        # P0-88 / R26-047/048: fewer than ``min_events`` effective events
+        # (after right-censoring / refractory suppression / unknown-event
+        # censoring) makes the median statistically unstable — fail closed.
+        # The DEFAULT (``min_events=3``) is the reviewed floor; the doc no
+        # longer claims single-shock output while the default allows it.
         return np.nan
     return float(np.median(taus) / (H + 1))
 
@@ -246,7 +268,9 @@ class SessionEventRecoveryScore(SeriesOperator):
         # 0 is compile-INVALID exactly like the runtime, not just runtime-invalid.
         "residual_fraction": ParamSpec(dtype=float, min=0.0, max=1.0),
         "refractory": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.POLICY),
-        "min_events": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),  # P0-88
+        # R26-048: default + ParamSpec floor = the reviewed min-effective-sample
+        # (>=3 effective events before a daily median is meaningful).
+        "min_events": ParamSpec(dtype=int, min=3, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),  # P0-88 / R26-048
         "session_tz": ParamSpec(dtype=str, searchable=False, param_role=ParamRole.POLICY),  # R11 #77 / P0-87
     }
     metadata.relational_specs = [
@@ -264,16 +288,20 @@ class SessionEventRecoveryScore(SeriesOperator):
         residual_fraction: float = 0.25,
         refractory: int = 1,
         session_tz: str | None = None,
-        min_events: int = 1,
+        min_events: int = 3,
         calendar: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
+        # R26-047/048: min_events default = the reviewed floor (3 effective
+        # events) — a single shock must NOT produce a daily score by default.
         if not (0.0 < float(residual_fraction) <= 1.0):
             raise ValueError("session_event_recovery_score requires 0 < residual_fraction <= 1")
         rf = max(0, int(refractory))
         me = max(1, int(min_events))
         x = _session_local_frame(_as_panel(x), session_tz, calendar)
         event = _session_local_frame(_as_panel(event), session_tz, calendar)
+        cal = calendar if calendar is not None else default_ashare_calendar(bar_freq="1min")
+        tz = session_tz or _SESSION_TZ
         out: dict[str, pd.Series] = {}
         for inst in x.columns:
             col = x[inst]
@@ -281,14 +309,33 @@ class SessionEventRecoveryScore(SeriesOperator):
             per_day: dict[pd.Timestamp, float] = {}
             for day, group in col.groupby(col.index.normalize()):
                 vals = np.asarray(group, dtype=float)
-                if ev is None:
-                    per_day[day] = np.nan
-                    continue
-                ev_vals = np.asarray(ev.reindex(group.index), dtype=float)
+                times = np.asarray(group.index, dtype="datetime64[ns]")
                 if not np.any(np.isfinite(vals)):
                     per_day[day] = np.nan
                     continue
-                per_day[day] = _recovery_day(vals, ev_vals, horizon, float(residual_fraction), rf, me)
+                try:
+                    px = build_session_panel(
+                        times, vals, cal, market="ashare", session_timezone=tz,
+                        source_timezone=None, trade_date=pd.Timestamp(day),
+                    )
+                    if ev is None:
+                        per_day[day] = np.nan
+                        continue
+                    ev_vals = np.asarray(ev.reindex(group.index), dtype=float)
+                    pe = build_session_panel(
+                        times, ev_vals, cal, market="ashare", session_timezone=tz,
+                        source_timezone=None, trade_date=pd.Timestamp(day),
+                    )
+                    # R26-051: an EOD recovery factor requires proof the session
+                    # actually reached its close.  A truncated session (data ends
+                    # at 14:00) must not emit a full-session factor — the close
+                    # slot must carry a valid bar.
+                    if not px.is_valid_bar[px.n_slots - 1]:
+                        per_day[day] = np.nan
+                        continue
+                    per_day[day] = _recovery_day(px.values, pe.values, horizon, float(residual_fraction), rf, me)
+                except (ValueError, ZeroDivisionError, OverflowError):
+                    per_day[day] = np.nan
             out[inst] = pd.Series(per_day, dtype=float)
         if not out:
             return pd.DataFrame(dtype=float)

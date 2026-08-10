@@ -1,9 +1,9 @@
 # R23 Per-Canonical Semantic/PIT Audit
 
-Total canonicals: 1430
+Total canonicals: 1436
 
-- **SUPPORTING_ONLY**: 1377
-- **CERTIFIED**: 29
+- **SUPPORTING_ONLY**: 1384
+- **CERTIFIED**: 28
 - **CERTIFIED_CONTEXTUAL**: 21
 - **RESEARCH_TOOL**: 3
 
@@ -397,7 +397,7 @@ Total canonicals: 1430
 | fin_surprise_event_percentile | fundamental_period | CERTIFIED_CONTEXTUAL | PIT11_EXPECTATION_POST_EVENT_LEAK |
 | fin_surprise_event_zscore | fundamental_period | CERTIFIED_CONTEXTUAL | PIT11_EXPECTATION_POST_EVENT_LEAK |
 | fin_surprise_zscore | fundamental_period | CERTIFIED_CONTEXTUAL | PIT11_EXPECTATION_POST_EVENT_LEAK |
-| fin_total_operating_accruals |  | CERTIFIED |  |
+| fin_total_operating_accruals | fundamental_period | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | fin_trend_acceleration | fundamental_period | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | fin_trend_r2 | fundamental_period | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | fin_trend_slope | fundamental_period | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
@@ -493,6 +493,7 @@ Total canonicals: 1430
 | holder_class_entropy | shareholder | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | holder_class_js_shift | structure_shift | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | holder_common_holding_peer_return | shareholder | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
+| holder_company_ownership_hhi | shareholder | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | holder_concentration | shareholder | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | holder_concentration_acceleration | shareholder | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | holder_concentration_change |  | RESEARCH_TOOL |  |
@@ -512,6 +513,7 @@ Total canonicals: 1430
 | holder_locked_share_ratio | shareholder | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | holder_nature_entropy | shareholder | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | holder_net_entry_share | shareholder | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
+| holder_observed_topk_hhi | relation | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | holder_peer_return_breadth | shareholder | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | holder_pledge_change | shareholder | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | holder_pledge_churn |  | CERTIFIED |  |
@@ -677,7 +679,7 @@ Total canonicals: 1430
 | intraday_volatility_time_centroid | intraday_microstructure | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | intraday_volume_clock_path_efficiency | intraday_microstructure | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | intraday_volume_clock_roughness | intraday_microstructure | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
-| intraday_vwap_deviation |  | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
+| intraday_vwap_deviation | intraday_microstructure | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | intraday_wasserstein_pair_distance | intraday_microstructure | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | inverse | elementwise_math | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | is_finite | signal | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
@@ -772,6 +774,7 @@ Total canonicals: 1430
 | rank_corr | time_series | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | real_turnover_rate | intraday_microstructure | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | relation_category_share | relation | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
+| relation_category_signed_contribution | relation | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | relation_concentration_acceleration | relation | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | relation_diffusion_score | tail_systemic | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | relation_distinct_count | relation | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
@@ -1205,6 +1208,9 @@ Total canonicals: 1430
 | ts_pivot_low_count | price_structure | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | ts_pivot_low_spacing | price_structure | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | ts_poly2_coeff | time_series | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
+| ts_poly2_forecast_error | time_series | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
+| ts_poly2_forecast_error_z | time_series | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
+| ts_poly2_prior_coeff | time_series | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | ts_poly2_resid | time_series | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | ts_positive_ratio | time_series | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |
 | ts_prev_high | price_structure | SUPPORTING_ONLY | experimental lifecycle: not production-certified (R23-303) |

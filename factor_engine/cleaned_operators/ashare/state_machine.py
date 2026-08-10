@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.common.strict_params import strict_nonnegative_int
 from cleaned_operators.rolling_pack import check_window, frame_like, register_polars_bridge
 
 
@@ -218,7 +219,13 @@ class AshareDaysSinceLimitUp(SeriesOperator):
     )
 
     def _calculate_series(self, limit_up_event: pd.DataFrame, max_lookback: Any = None, **_: Any) -> pd.DataFrame:
-        limit_v = int(max_lookback) if max_lookback is not None else None
+        # R25-005/167: strict non-negative integer authority — reject fractional /
+        # NaN / Inf / bool instead of silently truncating ``int(3.7) -> 3``.
+        limit_v = (
+            None
+            if max_lookback is None
+            else strict_nonnegative_int(max_lookback, "max_lookback")
+        )
         return frame_like(limit_up_event, _days_since(limit_up_event.to_numpy(dtype=float), limit_v))
 
 
@@ -240,7 +247,12 @@ class AshareDaysSinceLimitDown(SeriesOperator):
     )
 
     def _calculate_series(self, limit_down_event: pd.DataFrame, max_lookback: Any = None, **_: Any) -> pd.DataFrame:
-        limit_v = int(max_lookback) if max_lookback is not None else None
+        # R25-005/167: strict non-negative integer authority (no silent int()).
+        limit_v = (
+            None
+            if max_lookback is None
+            else strict_nonnegative_int(max_lookback, "max_lookback")
+        )
         return frame_like(limit_down_event, _days_since(limit_down_event.to_numpy(dtype=float), limit_v))
 
 

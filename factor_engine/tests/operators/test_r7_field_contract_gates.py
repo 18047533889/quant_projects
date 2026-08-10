@@ -113,7 +113,7 @@ def test_current_snapshot_only_now_window_allowed():
 # #282 four-layer PIT eligibility
 # ---------------------------------------------------------------------------
 def test_four_layer_pit_combined_eligibility():
-    from pit_contract import four_layer_pit_allowed
+    from pit_contract import PITLayerVerdict, four_layer_pit_allowed
 
     ok, layers = four_layer_pit_allowed(
         field_pit_allowed=True,
@@ -121,15 +121,21 @@ def test_four_layer_pit_combined_eligibility():
         dataset_pit_allowed=True,
         operator_pit_allowed=True,
     )
-    assert ok is True and all(layers.values())
+    assert ok is True
+    assert all(v == PITLayerVerdict.PROVEN_TRUE for v in layers.values())
 
     ok, layers = four_layer_pit_allowed(field_pit_allowed=False)
-    assert ok is False and layers["field_pit_allowed"] is False
+    assert ok is False and layers["field_pit_allowed"] == PITLayerVerdict.PROVEN_FALSE
 
     ok, layers = four_layer_pit_allowed(
         field_pit_allowed=True, operator_pit_allowed=False
     )
-    assert ok is False and layers["operator_pit_allowed"] is False
+    assert ok is False and layers["operator_pit_allowed"] == PITLayerVerdict.PROVEN_FALSE
+
+    # R24-049..051: an OMITTED layer is UNKNOWN — never treated as True.
+    ok, layers = four_layer_pit_allowed(field_pit_allowed=True)
+    assert ok is False
+    assert layers["table_pit_allowed"] == PITLayerVerdict.UNKNOWN
 
 
 def test_four_layer_pit_source_preflight_rejects_field_layer():
@@ -390,10 +396,11 @@ def test_missing_semantic_mapping():
     )
     assert missing_semantic_for_plan(financial_pit) is MissingSemantic.UNKNOWN
 
-    # R17-004: a current-snapshot table not covering a historical date is
-    # NOT_APPLICABLE (out-of-coverage), not "no event".
+    # R17-004 + R24-065..067: a current-snapshot table not covering a
+    # historical date is OUT_OF_COVERAGE (the source has no history) — NOT
+    # "no event" and NOT "economically not applicable".
     current_only = NormalizedFieldPlan(logical_concept="mc", coverage="current_snapshot")
-    assert missing_semantic_for_plan(current_only) is MissingSemantic.NOT_APPLICABLE
+    assert missing_semantic_for_plan(current_only) is MissingSemantic.OUT_OF_COVERAGE
 
     dense = NormalizedFieldPlan(logical_concept="close", coverage="historical_panel")
     assert missing_semantic_for_plan(dense) is MissingSemantic.UNKNOWN
@@ -406,6 +413,9 @@ def test_missing_semantic_mapping():
 
     assert {item.name for item in MissingSemantic} == {
         "UNKNOWN", "NO_EVENT", "NOT_APPLICABLE", "NOT_TRADING", "STRUCTURAL_ZERO",
+        # R24-065: OUT_OF_COVERAGE = the source has no history for this
+        # time/instrument.
+        "OUT_OF_COVERAGE",
     }
 
 

@@ -178,7 +178,8 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
         "IndexConstituent", "ashare_index_constituent", domain="index",
         table_kind="relation", join_policy="exact", required_parameters=("IndexSymbol",),
         cardinality="one_to_many", strict_pit_allowed=True,
-        metadata={"pit_reason": "exact_daily relation; PIT-safe; IndexSymbol required"},
+        metadata={"pit_reason": "exact_daily relation; PIT-safe; IndexSymbol required",
+                  "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"},
     ),
     _table("EtfDailyBar", "ashare_etf_daily", domain="etf", aliases=("ETFDailyBar",),
            strict_pit_allowed=True, metadata={"pit_reason": "exact_daily; PIT-safe"}),
@@ -202,7 +203,8 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
         "StockIndustry", "ashare_stock_industry", time="TradeDate", domain="classification",
         table_kind="relation", join_policy="exact", required_parameters=("IndustrySource",),
         strict_pit_allowed=True,
-        metadata={"pit_reason": "exact_daily relation; PIT-safe; IndustrySource required"},
+        metadata={"pit_reason": "exact_daily relation; PIT-safe; IndustrySource required",
+                  "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"},
     ),
     _table("StockStatus", "ashare_stock_status", domain="status", join_policy="state_asof",
            strict_pit_allowed=True,
@@ -216,7 +218,9 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
         knowledge="PubDate", period="ReportPeriodEndDate", cardinality="one_to_many",
         strict_pit_allowed=True,
         metadata={"pit_reason": "S1 snapshot keyed by TradeDate; relation_pit on "
-                                "PubDate visibility; PIT-safe (R17-062)"},
+                                "PubDate visibility; PIT-safe (R17-062)",
+                  # R25-068: PubDate is a date-only announcement day -> next-session.
+                  "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"},
     ),
     _table(
         "StockTopTenFloatShareholder", "ashare_stock_topten_float_shareholder",
@@ -224,7 +228,8 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
         join_policy="relation_pit", knowledge="PubDate", period="ReportPeriodEndDate",
         cardinality="one_to_many", strict_pit_allowed=True,
         metadata={"pit_reason": "S1 snapshot keyed by TradeDate; relation_pit on "
-                                "PubDate visibility; PIT-safe (R17-062)"},
+                                "PubDate visibility; PIT-safe (R17-062)",
+                  "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"},
     ),
 )
 

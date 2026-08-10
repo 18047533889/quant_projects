@@ -471,6 +471,7 @@ high_low_spread_proxy,ashare|us,daily_bar,True
 holder_class_entropy,ashare|us,shareholder_pit,True
 holder_class_js_shift,ashare|us,shareholder_pit,True
 holder_common_holding_peer_return,ashare|us,shareholder_pit,True
+holder_company_ownership_hhi,ashare|us,shareholder_pit,True
 holder_concentration,ashare|us,shareholder_pit,True
 holder_concentration_acceleration,ashare|us,shareholder_pit,True
 holder_concentration_slope,ashare|us,shareholder_pit,True
@@ -488,6 +489,7 @@ holder_id_overlap_ratio,ashare|us,shareholder_pit,True
 holder_locked_share_ratio,ashare|us,shareholder_pit,True
 holder_nature_entropy,ashare|us,shareholder_pit,True
 holder_net_entry_share,ashare|us,shareholder_pit,True
+holder_observed_topk_hhi,ashare|us,shareholder_pit,True
 holder_peer_return_breadth,ashare|us,shareholder_pit,True
 holder_pledge_change,ashare|us,shareholder_pit,True
 holder_pledge_concentration,ashare|us,shareholder_pit,True
@@ -737,6 +739,7 @@ rank,ashare|us,daily_bar,True
 rank_corr,ashare|us,daily_bar,True
 real_turnover_rate,ashare|us,daily_bar,True
 relation_category_share,ashare|us,relation_pit,True
+relation_category_signed_contribution,ashare|us,relation_pit,True
 relation_concentration_acceleration,ashare|us,relation_pit,True
 relation_diffusion_score,ashare|us,relation_pit,True
 relation_distinct_count,ashare|us,relation_pit,True

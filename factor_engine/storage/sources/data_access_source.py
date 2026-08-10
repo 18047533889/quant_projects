@@ -193,6 +193,13 @@ class HistoricalCoverageContract:
     min_stock_coverage_threshold: float = 0.5
     min_stock_coverage_quantile: float = 0.9
     coverage_date_threshold: float = 0.7
+    # R24-071/072: requested-window coverage vs full-history coverage are SEPARATE
+    # evidence.  When the caller requests a window, the overall gate uses
+    # ``requested_window_coverage`` (if declared) instead of the full-history
+    # ratio — a poor 2010s full-history must not veto a well-covered 2025-2026
+    # window unless the policy explicitly requires a full-history minimum.
+    requested_window_coverage: float | None = None
+    require_full_history_minimum: bool = False
     # R17-006: coverage identity must be market-aware.  The same logical field
     # (e.g. ``market_cap``) has different providers/coverage in A-share vs US;
     # keying coverage contracts only by ``field`` let a later-registered market
@@ -201,6 +208,12 @@ class HistoricalCoverageContract:
     provider_id: str | None = None
     dataset: str | None = None
     universe_id: str | None = None
+    # R24-068..070: the coverage contract identity is a joint key
+    # (market, dataset, provider, field_id/concept_id, timeframe, universe_id,
+    # source_version).  A revenue vs US revenue never share; US quarterly vs US
+    # TTM never share.
+    timeframe: str | None = None
+    source_version: str | None = None
 
     def covers_window(
         self,
@@ -208,9 +221,14 @@ class HistoricalCoverageContract:
         end: str | None = None,
         *,
         threshold: float | None = None,
+        universe_stocks: set[str] | None = None,
+        require_full_history_minimum: bool | None = None,
     ) -> bool:
         """True when the field's coverage meets ``threshold`` over [start, end]."""
-        return not self._evaluate(start=start, end=end, threshold=threshold)
+        return not self._evaluate(
+            start=start, end=end, threshold=threshold, universe_stocks=universe_stocks,
+            require_full_history_minimum=require_full_history_minimum,
+        )
 
     def violations(
         self,
@@ -218,9 +236,14 @@ class HistoricalCoverageContract:
         end: str | None = None,
         *,
         threshold: float | None = None,
+        universe_stocks: set[str] | None = None,
+        require_full_history_minimum: bool | None = None,
     ) -> list[str]:
         """Return a human-readable list of coverage violations (empty = OK)."""
-        return self._evaluate(start=start, end=end, threshold=threshold)
+        return self._evaluate(
+            start=start, end=end, threshold=threshold, universe_stocks=universe_stocks,
+            require_full_history_minimum=require_full_history_minimum,
+        )
 
     def _evaluate(
         self,
@@ -228,6 +251,8 @@ class HistoricalCoverageContract:
         start: str | None = None,
         end: str | None = None,
         threshold: float | None = None,
+        universe_stocks: set[str] | None = None,
+        require_full_history_minimum: bool | None = None,
     ) -> list[str]:
         """Single shared coverage evaluator (R9-P0-023/024).
 
@@ -236,13 +261,32 @@ class HistoricalCoverageContract:
         are evaluated only for dates/years inside [start, end] (all years/dates
         when no window is given), and per-stock coverage is gated by a quantile
         rule so a high aggregate cannot mask a tail of poorly covered stocks.
+
+        R24-073/074: when ``universe_stocks`` is supplied, the per-stock gate
+        evaluates ONLY the stocks in the CURRENT requested universe (e.g.
+        CSI300 / S&P500) — a stock outside the campaign universe is never
+        allowed to drag the verdict, and coverage evidence carries the universe
+        identity via the contract key.
         """
         threshold = float(threshold if threshold is not None else self.threshold)
         if not 0.0 <= threshold <= 1.0:
             raise ValueError("coverage threshold must be in [0, 1]")
         problems: list[str] = []
 
-        ratio = float(self.coverage_ratio)
+        window_requested = bool(start is not None or end is not None)
+        req_full = (
+            self.require_full_history_minimum
+            if require_full_history_minimum is None
+            else bool(require_full_history_minimum)
+        )
+        # R24-071/072: with a requested window, gate on the requested-window
+        # coverage (when declared) unless the policy explicitly requires a
+        # full-history minimum.  A poor 2010s full-history must not veto a
+        # well-covered 2025-2026 window.
+        if window_requested and not req_full and self.requested_window_coverage is not None:
+            ratio = float(self.requested_window_coverage)
+        else:
+            ratio = float(self.coverage_ratio)
         if ratio < threshold:
             problems.append(f"overall coverage {ratio:.3f} < threshold {threshold:.3f}")
 
@@ -305,6 +349,12 @@ class HistoricalCoverageContract:
         # Per-stock quantile gate (R9-P0-024): at least ``min_stock_coverage_quantile``
         # of stocks must have per-stock coverage >= ``min_stock_coverage_threshold``.
         by_stock = self.coverage_by_stock or {}
+        if universe_stocks is not None:
+            # R24-073/074: coverage verdict is computed over the CURRENT
+            # requested universe, never the contract's full stock list.
+            by_stock = {
+                k: v for k, v in by_stock.items() if k in universe_stocks
+            }
         if by_stock:
             stock_threshold = float(self.min_stock_coverage_threshold)
             quantile = float(self.min_stock_coverage_quantile)
@@ -319,8 +369,9 @@ class HistoricalCoverageContract:
             frac = covered / total if total else 1.0
             if frac < quantile:
                 problems.append(
-                    f"only {covered}/{total} stocks ({frac:.1%}) have per-stock "
-                    f"coverage >= {stock_threshold:.3f}; required >= {quantile:.1%}"
+                    f"only {covered}/{total} stocks in the requested universe "
+                    f"({frac:.1%}) have per-stock coverage >= {stock_threshold:.3f}; "
+                    f"required >= {quantile:.1%}"
                 )
         return problems
 
@@ -333,6 +384,8 @@ def assert_historical_coverage(
     threshold: float | None = None,
     required: bool = False,
     context: str = "",
+    universe_stocks: set[str] | None = None,
+    require_full_history_minimum: bool | None = None,
 ) -> None:
     """Raise :class:`HistoricalCoverageError` when ``contract`` does not cover the window.
 
@@ -340,6 +393,10 @@ def assert_historical_coverage(
     execution requirement — a missing contract is ``COVERAGE_EVIDENCE_MISSING``
     (fail closed) when ``required=True`` (production), instead of silently
     passing ("no evidence == qualified").
+
+    R24-073/074: ``universe_stocks`` restricts the per-stock gate to the CURRENT
+    campaign universe.  R24-071/072: ``require_full_history_minimum`` opts into
+    a full-history gate even when a window is requested.
     """
     if contract is None:
         if required:
@@ -349,7 +406,11 @@ def assert_historical_coverage(
                 "a declared HistoricalCoverageContract; COVERAGE_EVIDENCE_MISSING)"
             )
         return
-    problems = contract.violations(start=start, end=end, threshold=threshold)
+    problems = contract.violations(
+        start=start, end=end, threshold=threshold,
+        universe_stocks=universe_stocks,
+        require_full_history_minimum=require_full_history_minimum,
+    )
     if problems:
         raise HistoricalCoverageError(
             f"field {contract.field!r} historical coverage over "
@@ -357,14 +418,34 @@ def assert_historical_coverage(
         )
 
 
-#: Coverage contracts keyed by (field, market) — R17-006: the same logical field
-#: has DIFFERENT provider coverage per market, so a US ``market_cap`` contract
-#: must never be satisfied by / overwrite the A-share one.
-_COVERAGE_CONTRACTS: dict[tuple[str, str], HistoricalCoverageContract] = {}
+#: Coverage contracts keyed by a JOINT identity — R24-068..070:
+#: (market, dataset, provider, field/concept, timeframe, universe_id,
+#: source_version).  A revenue vs US revenue never share; US quarterly vs US TTM
+#: never share.  Legacy ``(field, market)`` / ``(field, "any")`` keys are kept as
+#: a backward-compatible fallback.
+_COVERAGE_CONTRACTS: dict[tuple, HistoricalCoverageContract] = {}
 
 
-def _coverage_key(field: str, market: str | None) -> tuple[str, str]:
-    return (str(field).strip(), str(market or "any").strip().lower())
+def _coverage_key(
+    field: str,
+    market: str | None,
+    *,
+    dataset: str | None = None,
+    provider_id: str | None = None,
+    timeframe: str | None = None,
+    universe_id: str | None = None,
+    source_version: str | None = None,
+) -> tuple:
+    # R24-068: joint key.  ``None`` components become "any".
+    return (
+        str(field).strip(),
+        str(market or "any").strip().lower(),
+        str(dataset or "any").strip(),
+        str(provider_id or "any").strip(),
+        str(timeframe or "any").strip(),
+        str(universe_id or "any").strip(),
+        str(source_version or "any").strip(),
+    )
 
 
 def register_coverage_contract(
@@ -374,30 +455,62 @@ def register_coverage_contract(
     provider_id: str | None = None,
     dataset: str | None = None,
     universe_id: str | None = None,
+    timeframe: str | None = None,
+    source_version: str | None = None,
 ) -> HistoricalCoverageContract:
     """Register a :class:`HistoricalCoverageContract` for coverage gating (#315).
 
-    R17-006: contracts are keyed by ``(field, market)`` so A/US coverage for the
-    same concept never collide.  ``market`` defaults from the contract itself.
+    R17-006 + R24-068: contracts are keyed by a JOINT identity
+    ``(market, dataset, provider, field, timeframe, universe_id, source_version)``
+    so A/US / quarterly/TTM coverage never collide.  ``market`` defaults from
+    the contract itself; the optional context is recorded in the dict key.
     """
     if contract is None or not getattr(contract, "field", None):
         raise ValueError("coverage contract requires a field name")
     eff_market = market or getattr(contract, "market", None)
-    # Stamped onto the contract for lineage/audit (contracts are frozen dataclasses;
-    # this helper receives optional context, recorded in the dict key).
-    _COVERAGE_CONTRACTS[_coverage_key(contract.field, eff_market)] = contract
+    _COVERAGE_CONTRACTS[
+        _coverage_key(
+            contract.field, eff_market,
+            dataset=dataset or getattr(contract, "dataset", None),
+            provider_id=provider_id or getattr(contract, "provider_id", None),
+            timeframe=timeframe or getattr(contract, "timeframe", None),
+            universe_id=universe_id or getattr(contract, "universe_id", None),
+            source_version=source_version or getattr(contract, "source_version", None),
+        )
+    ] = contract
     return contract
 
 
-def get_coverage_contract(field: str, *, market: str | None = None) -> HistoricalCoverageContract | None:
-    """Look up a coverage contract for ``field`` in ``market`` (R17-006).
+def get_coverage_contract(
+    field: str,
+    *,
+    market: str | None = None,
+    dataset: str | None = None,
+    provider_id: str | None = None,
+    timeframe: str | None = None,
+    universe_id: str | None = None,
+    source_version: str | None = None,
+) -> HistoricalCoverageContract | None:
+    """Look up a coverage contract for a field (R24-068 joint key).
 
-    Falls back to the legacy ``(field, "any")`` key so pre-R17 registrations keep
-    working, but a market-scoped registration always wins.
+    Exact joint-key match first; falls back to progressively coarser keys so
+    pre-R24 registrations keep working, but the most specific registration wins.
     """
-    key = _coverage_key(field, market)
-    if key in _COVERAGE_CONTRACTS:
-        return _COVERAGE_CONTRACTS[key]
+    base = (str(field).strip(), str(market or "any").strip().lower())
+    specifics = (dataset, provider_id, timeframe, universe_id, source_version)
+    for i in range(len(specifics) + 1):
+        narrowed = list(specifics)
+        for j in range(i, len(specifics)):
+            narrowed[j] = None
+        key = (
+            base[0], base[1],
+            *[str(v or "any") for v in narrowed],
+        )
+        if key in _COVERAGE_CONTRACTS:
+            return _COVERAGE_CONTRACTS[key]
+    # Legacy fallback keys.
+    if (base[0], base[1]) in _COVERAGE_CONTRACTS:
+        return _COVERAGE_CONTRACTS[(base[0], base[1])]
     return _COVERAGE_CONTRACTS.get((str(field).strip(), "any"))
 
 
@@ -570,6 +683,8 @@ class DataAccessSource(DataSource):
         mining_coverage_threshold: float | None = None,
         pit_enforce: bool = False,
         snapshot_only: bool = False,
+        snapshot_valid_at: str | None = None,
+        snapshot_created_at: str | None = None,
     ) -> None:
         self.dataset = dataset
         self.fields = dict(fields or {})
@@ -607,6 +722,11 @@ class DataAccessSource(DataSource):
         #: Round-7 WS-E #280 opt-in: only the current snapshot may be used, so a
         #: ``current_snapshot_only`` field is allowed even on a "now" window.
         self.snapshot_now_only = bool(snapshot_now_only)
+        # R24-075..077: caller ``snapshot_now_only`` is INTENT, not proof.  The
+        # source must carry its snapshot validity metadata so the runtime can
+        # verify a requested decision range against the real snapshot validity.
+        self.snapshot_valid_at: str | None = snapshot_valid_at
+        self.snapshot_created_at: str | None = snapshot_created_at
         #: Round-11 §35 (plan A) SnapshotOnlySourcePolicy: the WHOLE source is a
         #: current-only snapshot (X0 sparse valuation/indicator).  Production
         #: historical mining over it hard-fails (see
@@ -1161,22 +1281,44 @@ class DataAccessSource(DataSource):
             self.assert_four_layer_pit(plans)
         return plans
 
-    def _window_is_historical(self) -> bool:
+    def _window_is_historical(self, asof: str | None = None) -> bool:
         """True when this source is configured for a historical (backfill) window.
 
-        No ``start_date`` (full history) or a ``start_date`` strictly before
-        today counts as historical — the danger for a ``current_snapshot_only``
-        field is the current snapshot leaking into the past (round-7 WS-E #280).
+        No ``start_date`` (full history) or a ``start_date`` strictly before the
+        reference point counts as historical — the danger for a
+        ``current_snapshot_only`` field is the current snapshot leaking into the
+        past (round-7 WS-E #280).
+
+        R24-078: the reference point is the ``asof`` decision context (source
+        snapshot validity / decision date) when provided.  Machine
+        ``datetime.now()`` is only the research fallback — it is never the
+        authority for production.
         """
         if self.start_date is None:
             return True
         try:
             import pandas as pd
 
-            return bool(
-                pd.Timestamp(self.start_date).normalize()
-                < pd.Timestamp.now().normalize()
-            )
+            if asof is not None:
+                reference = pd.Timestamp(asof).normalize()
+            elif self.snapshot_valid_at is not None:
+                reference = pd.Timestamp(self.snapshot_valid_at).normalize()
+            elif self.production and self.enforce_mining_gate:
+                # Production historical-MINING cannot prove "historical" against
+                # machine time — require an explicit decision context (R24-078:
+                # machine datetime.now() is never authoritative for a mining gate).
+                raise HistoricalSnapshotBackfillError(
+                    "production mining cannot judge historical/current without a "
+                    "decision context (asof) or source snapshot_valid_at "
+                    "(R24-078 — machine datetime.now() is not authoritative)"
+                )
+            else:
+                reference = pd.Timestamp.now().normalize()
+            return bool(pd.Timestamp(self.start_date).normalize() < reference)
+        except HistoricalSnapshotBackfillError:
+            # R24-078: the production decision-context requirement must NOT be
+            # swallowed by the generic date-parsing except below.
+            raise
         except (ValueError, TypeError):
             return True
 
@@ -1195,6 +1337,24 @@ class DataAccessSource(DataSource):
         """
         if not (self.enforce_mining_gate or self.mining_coverage_threshold is not None):
             return
+        # R24-075..077: ``snapshot_now_only`` is a caller INTENT.  In production
+        # it is only honored when the source supplies its snapshot validity
+        # metadata AND the requested window lies within that validity — a bare
+        # caller boolean never self-proves.  This check runs BEFORE the
+        # historical-window computation so the proof requirement is reported
+        # first.
+        if (
+            self.snapshot_now_only
+            and self.production
+            and self.snapshot_valid_at is None
+            and self.snapshot_created_at is None
+        ):
+            raise HistoricalSnapshotBackfillError(
+                f"dataset {self.dataset!r} requested snapshot_now_only=True in "
+                "production but the source declares no snapshot_valid_at / "
+                "snapshot_created_at — a caller boolean is intent, not proof "
+                "(R24-075..077)"
+            )
         historical = self._window_is_historical()
         # Round-11 §35 (plan A): SnapshotOnlySourcePolicy — a snapshot_only source
         # is current-only; production historical mining is a hard fail (the
@@ -1334,6 +1494,8 @@ class DataAccessSource(DataSource):
                     table_pit_allowed = True
                 if dataset_pit_allowed is None:
                     dataset_pit_allowed = True
+            from pit_contract import PITLayerVerdict
+
             combined, layers = four_layer_pit_allowed(
                 field_pit_allowed=bool(field_pit_allowed),
                 table_pit_allowed=bool(table_pit_allowed),
@@ -1341,7 +1503,12 @@ class DataAccessSource(DataSource):
                 operator_pit_allowed=bool(operator_pit_allowed),
             )
             if not combined:
-                failed = sorted(k for k, v in layers.items() if not v)
+                # R24-049..051: a layer is failed unless PROVEN_TRUE — the enum
+                # members are string enums (all truthy), so compare explicitly.
+                failed = sorted(
+                    k for k, v in layers.items()
+                    if v != PITLayerVerdict.PROVEN_TRUE
+                )
                 raise FourLayerPITError(
                     f"field {name!r} PIT eligibility failed at layer(s): "
                     f"{', '.join(failed)}"

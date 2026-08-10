@@ -13,6 +13,7 @@ be computed from pre-aggregated rank columns.
 """
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
 
 import numpy as np
@@ -62,6 +63,82 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
 
 
+def strict_relation_align(*panels: pd.DataFrame) -> tuple[pd.DataFrame, ...]:
+    """R24-005: fail-closed strict-axes gate for multi-panel relation inputs.
+
+    Public relation operators MUST pass every panel through this gate before any
+    numpy pairing.  It forbids the silent alignment the R24 audit targets:
+    ``reindex_like`` / ``reindex`` / ``align(outer|inner)`` / position-only
+    ``.to_numpy()`` pairing.  Checks, against the FIRST panel:
+
+    * DataFrame type for every panel;
+    * index EXACT equality (not a reindexable subset / union);
+    * columns EXACT equality (instrument identity — a shuffled column order is
+      a mismatch, never auto-repaired);
+    * unique index / unique columns (a duplicated axis is ambiguous);
+    * index timezone consistency.
+
+    Any violation raises ``TypeError``/``ValueError`` — never normalizes.
+    """
+    if not panels:
+        raise ValueError("strict_relation_align requires at least one panel")
+    base = panels[0]
+    if not isinstance(base, pd.DataFrame):
+        raise TypeError(
+            f"relation panel 0 is {type(base).__name__}, expected pandas DataFrame"
+        )
+    for position, panel in enumerate(panels[1:], start=1):
+        if not isinstance(panel, pd.DataFrame):
+            raise TypeError(
+                f"relation panel {position} is {type(panel).__name__}, "
+                "expected pandas DataFrame"
+            )
+        if not panel.index.equals(base.index):
+            raise ValueError(
+                f"relation panel {position} index != panel 0 "
+                "(fail-closed; no silent reindex)"
+            )
+        if not panel.columns.equals(base.columns):
+            raise ValueError(
+                f"relation panel {position} columns != panel 0 "
+                "(fail-closed; no silent reindex)"
+            )
+    if not base.index.is_unique:
+        raise ValueError("relation panel index is not unique (fail-closed)")
+    if not base.columns.is_unique:
+        raise ValueError("relation panel columns are not unique (fail-closed)")
+    try:
+        tzs = {getattr(idx, "tz", None) for p in panels for idx in (p.index,)}
+    except Exception:  # pragma: no cover - non-datetime index
+        tzs = {None}
+    if len(tzs) > 1:
+        raise ValueError(
+            "relation panels have inconsistent index timezones (fail-closed)"
+        )
+    return panels
+
+
+class HolderRankMissingSemantic(str, Enum):
+    """R24-015: why a holder-rank slot is empty.
+
+    Only :attr:`STRUCTURAL_ZERO` / :attr:`OUTSIDE_TOP_K` may be treated as a
+    numeric 0.  :attr:`NOT_REPORTED` / :attr:`SOURCE_MISSING` / :attr:`UNKNOWN`
+    must fail closed (NaN / coverage fail) — a blank slot is NOT evidence of a
+    zero holding.
+    """
+
+    STRUCTURAL_ZERO = "structural_zero"
+    NOT_REPORTED = "not_reported"
+    SOURCE_MISSING = "source_missing"
+    OUTSIDE_TOP_K = "outside_top_k"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def permits_zero(cls, value: str) -> bool:
+        """R24-016: only structural zero / outside-top-k may count as 0."""
+        return value in (cls.STRUCTURAL_ZERO.value, cls.OUTSIDE_TOP_K.value)
+
+
 def _stack_panels(*panels: pd.DataFrame) -> np.ndarray:
     """Align positional panels to the first panel and stack to (N, rows, cols).
 
@@ -69,15 +146,9 @@ def _stack_panels(*panels: pd.DataFrame) -> np.ndarray:
     exact same date axis and instrument columns.  A silent ``reindex`` could
     re-pair a row to a different date (or an instrument column to a different
     name) after an upstream misalignment, manufacturing a spurious concentration /
-    mobility value.  Fail closed instead (R11 #122).
+    mobility value.  Fail closed instead (R11 #122, hardened by R24-005).
     """
-    base = panels[0]
-    for position, panel in enumerate(panels[1:], start=1):
-        if not panel.index.equals(base.index) or not panel.columns.equals(base.columns):
-            raise ValueError(
-                f"relation panel {position} has a different index/columns than "
-                "panel 0 (fail-closed; no silent reindex)"
-            )
+    panels = strict_relation_align(*panels)
     arrays = [np.asarray(p.to_numpy(dtype=float)) for p in panels]
     return np.stack(arrays, axis=0)
 
@@ -86,6 +157,31 @@ def _finite_weights(panel: pd.DataFrame, threshold: float = 0.0) -> np.ndarray:
     values = panel.to_numpy(dtype=float)
     out = np.where(np.isfinite(values) & (values > threshold), values, np.nan)
     return out
+
+
+_MISSING_SEMANTIC_CHOICES = (
+    "structural_zero", "outside_top_k", "not_reported", "source_missing", "unknown",
+)
+
+
+def _rank_values(stacked: np.ndarray, missing_semantic: str) -> np.ndarray:
+    """R24-016/017: apply the holder-rank missing semantics to stacked slots.
+
+    ``structural_zero`` / ``outside_top_k`` → empty slots count as 0
+    (structurally absent holders contribute nothing).  ``not_reported`` /
+    ``source_missing`` / ``unknown`` → empty slots fail closed: NaN stays NaN
+    and the aggregation mask excludes the cell (never a guessed 0).
+    """
+    if missing_semantic not in _MISSING_SEMANTIC_CHOICES:
+        raise ValueError(
+            f"missing_semantic must be one of {_MISSING_SEMANTIC_CHOICES!r}; "
+            f"got {missing_semantic!r}"
+        )
+    if HolderRankMissingSemantic.permits_zero(missing_semantic):
+        return np.nan_to_num(stacked, nan=0.0)
+    # fail-closed: NaN stays NaN (it contributes neither to the sum nor the
+    # share denominator, and any cell the caller must see as unknown stays NaN)
+    return stacked
 
 
 # ---------------------------------------------------------------------------
@@ -102,23 +198,96 @@ def _finite_weights(panel: pd.DataFrame, threshold: float = 0.0) -> np.ndarray:
     status="experimental",
 )
 class RelationHhi(SeriesOperator):
-    """按名次面板计算持股集中度 HHI = Σw_i²（w_i = s_i / Σs）。"""
+    """按名次面板计算持股集中度 HHI = Σw_i²（w_i = s_i / Σs）。
+
+    R24-012..014: this is the *observed-top-k* economic definition — the share
+    denominator is the observed top-k subtotal, NOT the company's total shares.
+    The company-ownership HHI (denominator = total shares) is the separate
+    canonical ``holder_company_ownership_hhi``; the two are NEVER aliased.
+    ``missing_semantic`` (R24-015..017) controls how an empty rank slot is
+    treated: only ``structural_zero`` / ``outside_top_k`` may count as 0;
+    ``not_reported`` / ``source_missing`` / ``unknown`` fail closed (NaN).
+    """
 
     metadata = _metadata(
         "relation_hhi",
-        "名次面板持股集中度 HHI（仅已披露前十大股东口径，非全体股东结构）。",
-        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
+        "名次面板持股集中度 HHI（observed top-k 口径，分母=已观测 top-k 合计；"
+        "公司总股本口径见 holder_company_ownership_hhi）。",
+        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+         "missing_semantic"],
         category="relation",
         domain="relation",
         unit="ratio",
+        extra_tags=("output_domain:bounded_0_1",),
+        param_specs={
+            "missing_semantic": ParamSpec(
+                dtype=str,
+                choices=("structural_zero", "outside_top_k", "not_reported",
+                         "source_missing", "unknown"),
+                default="outside_top_k",
+                searchable=False,
+            ),
+        },
     )
 
-    def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, *args: pd.DataFrame, missing_semantic: str = "outside_top_k", **_: Any) -> pd.DataFrame:
         if len(args) < 2:
             raise ValueError("relation_hhi requires at least two ranked panels")
         base = args[0]
         stacked = _stack_panels(*args)
-        values = np.nan_to_num(stacked, nan=0.0)
+        values = _rank_values(stacked, missing_semantic)
+        total = values.sum(axis=0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            shares = values / total
+            hhi = np.sum(shares * shares, axis=0)
+        hhi = np.where(total > 0, hhi, np.nan)
+        return _frame_like(base, hhi)
+
+
+@register_operator(
+    name="holder_observed_topk_hhi",
+    category="relation",
+    business_category="shareholder",
+    canonical="holder_observed_topk_hhi",
+    source="relation.ops",
+    status="experimental",
+)
+class HolderObservedTopkHhi(SeriesOperator):
+    """R24-011..013: 股东集中度 HHI，权重分母 = observed top-k subtotal。
+
+    This is the second of the two distinct HHI economic definitions.  The first
+    (``holder_company_ownership_hhi``) uses the company's total shares as the
+    denominator; this one normalizes by the observed top-k subtotal first
+    (Σ (s_i / Σ_topk s)²).  Per R24-014 the two are SEPARATE canonicals — never
+    aliased to one another.  ``relation_hhi`` keeps the same formula as a
+    relation-domain name; this is the explicit holder-domain canonical.
+    """
+
+    metadata = _metadata(
+        "holder_observed_topk_hhi",
+        "前十大股东观测 top-k 口径 HHI（分母=观测 top-k 合计）。",
+        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+         "missing_semantic"],
+        category="relation",
+        domain="shareholder",
+        unit="ratio",
+        extra_tags=("output_domain:bounded_0_1", "hhi_topk_denominator"),
+        param_specs={
+            "missing_semantic": ParamSpec(
+                dtype=str,
+                choices=_MISSING_SEMANTIC_CHOICES,
+                default="outside_top_k",
+                searchable=False,
+            ),
+        },
+    )
+
+    def _calculate_series(self, *args: pd.DataFrame, missing_semantic: str = "outside_top_k", **_: Any) -> pd.DataFrame:
+        if len(args) < 2:
+            raise ValueError("holder_observed_topk_hhi requires at least two ranked panels")
+        base = args[0]
+        stacked = _stack_panels(*args)
+        values = _rank_values(stacked, missing_semantic)
         total = values.sum(axis=0)
         with np.errstate(divide="ignore", invalid="ignore"):
             shares = values / total
@@ -141,23 +310,34 @@ class RelationEntropy(SeriesOperator):
     metadata = _metadata(
         "relation_entropy",
         "名次面板持股分布归一化熵。",
-        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
+        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+         "missing_semantic"],
         category="relation",
         domain="relation",
         unit="ratio",
+        extra_tags=("output_domain:bounded_0_1",),
+        param_specs={
+            "missing_semantic": ParamSpec(
+                dtype=str,
+                choices=("structural_zero", "outside_top_k", "not_reported",
+                         "source_missing", "unknown"),
+                default="outside_top_k",
+                searchable=False,
+            ),
+        },
     )
 
-    def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, *args: pd.DataFrame, missing_semantic: str = "outside_top_k", **_: Any) -> pd.DataFrame:
         if len(args) < 2:
             raise ValueError("relation_entropy requires at least two ranked panels")
         base = args[0]
         stacked = _stack_panels(*args)
-        values = np.nan_to_num(stacked, nan=0.0)
+        values = _rank_values(stacked, missing_semantic)
         total = values.sum(axis=0)
         with np.errstate(divide="ignore", invalid="ignore"):
             shares = values / total
             entropy = -np.sum(shares * np.log(np.where(shares > 0, shares, 1.0)), axis=0)
-        count = (np.isfinite(stacked)).sum(axis=0).astype(float)
+        count = (np.isfinite(values)).sum(axis=0).astype(float)
         with np.errstate(divide="ignore", invalid="ignore"):
             normalized = np.where(count > 1, entropy / np.log(count), 0.0)
         return _frame_like(base, np.where(total > 0, normalized, np.nan))
@@ -177,22 +357,33 @@ class RelationTopkSum(SeriesOperator):
     metadata = _metadata(
         "relation_topk_sum",
         "前 K 名持股合计。",
-        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
+        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+         "missing_semantic"],
         category="relation",
         domain="relation",
         # R11 #118: a plain sum carries the unit of its addends (the rank-panel
         # share values), NOT a uniform ratio.
         unit="same_as:value",
         output_unit="same_as:value",
+        param_specs={
+            "missing_semantic": ParamSpec(
+                dtype=str,
+                choices=("structural_zero", "outside_top_k", "not_reported",
+                         "source_missing", "unknown"),
+                default="outside_top_k",
+                searchable=False,
+            ),
+        },
     )
 
-    def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, *args: pd.DataFrame, missing_semantic: str = "outside_top_k", **_: Any) -> pd.DataFrame:
         if len(args) < 2:
             raise ValueError("relation_topk_sum requires at least two ranked panels")
         base = args[0]
         stacked = _stack_panels(*args)
-        total = np.nansum(stacked, axis=0)
-        total = np.where(np.isfinite(stacked).sum(axis=0) > 0, total, np.nan)
+        values = _rank_values(stacked, missing_semantic)
+        total = np.nansum(values, axis=0)
+        total = np.where(np.isfinite(values).sum(axis=0) > 0, total, np.nan)
         return _frame_like(base, total)
 
 
@@ -210,28 +401,39 @@ class RelationRankWeightedSum(SeriesOperator):
     metadata = _metadata(
         "relation_rank_weighted_sum",
         "逆名次加权持股均值。",
-        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"],
+        ["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10",
+         "missing_semantic"],
         category="relation",
         domain="relation",
         # R11 #118: a weighted MEAN carries the unit of the weighted values
         # (same_as:value), not a uniform ratio.
         unit="same_as:value",
         output_unit="same_as:value",
+        param_specs={
+            "missing_semantic": ParamSpec(
+                dtype=str,
+                choices=("structural_zero", "outside_top_k", "not_reported",
+                         "source_missing", "unknown"),
+                default="outside_top_k",
+                searchable=False,
+            ),
+        },
     )
 
-    def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, *args: pd.DataFrame, missing_semantic: str = "outside_top_k", **_: Any) -> pd.DataFrame:
         if len(args) < 2:
             raise ValueError("relation_rank_weighted_sum requires at least two ranked panels")
         base = args[0]
         stacked = _stack_panels(*args)
+        values = _rank_values(stacked, missing_semantic)
         ranks = np.arange(1, stacked.shape[0] + 1, dtype=float)[:, None, None]
         weights = 1.0 / ranks
-        finite = np.isfinite(stacked)
-        weighted = np.nansum(np.where(finite, stacked * weights, 0.0), axis=0)
+        finite = np.isfinite(values)
+        weighted = np.nansum(np.where(finite, values * weights, 0.0), axis=0)
         weight_sum = np.sum(np.where(finite, weights, 0.0), axis=0)
         with np.errstate(divide="ignore", invalid="ignore"):
             out = weighted / weight_sum
-        out = np.where(np.isfinite(stacked).sum(axis=0) > 0, out, np.nan)
+        out = np.where(np.isfinite(values).sum(axis=0) > 0, out, np.nan)
         return _frame_like(base, out)
 
 
@@ -244,21 +446,36 @@ class RelationRankWeightedSum(SeriesOperator):
     status="experimental",
 )
 class RelationCategoryShare(SeriesOperator):
-    """个股 value 占同日期同类目 value 总和的比例。"""
+    """个股 value 占同日期同类目 value 总和的比例。
+
+    R24-008: the input ``value`` must be a non-negative activity / weight /
+    amount (a "share" is only well-defined for non-negative weights).  For a
+    signed contribution see ``relation_category_signed_contribution``.
+    R24-010: the output is a true share → ``output_domain=bounded_0_1``.
+    R24-004/005: the two panels are strict-aligned — a ``reindex_like`` /
+    position-only pairing is forbidden and raises on any axis mismatch.
+    """
 
     metadata = _metadata(
         "relation_category_share",
-        "value 占同类别总和的比例。",
+        "value 占同类别总和的比例（value 须为非负权重/活动量/金额）。",
         ["value", "category"],
         category="relation",
         domain="relation",
         unit="ratio",
+        extra_tags=("output_domain:bounded_0_1",),
     )
 
     def _calculate_series(self, value: pd.DataFrame, category: pd.DataFrame, **_: Any) -> pd.DataFrame:
-        value, category = value.reindex_like(category), category
+        value, category = strict_relation_align(value, category)
         vv = value.to_numpy(dtype=float)
         cv = category.to_numpy()
+        if np.any((vv < 0) & np.isfinite(vv)):
+            raise ValueError(
+                "relation_category_share requires NON-NEGATIVE value input "
+                "(R24-008); negative / signed contributions must use "
+                "relation_category_signed_contribution"
+            )
         rows, cols = vv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for row in range(rows):
@@ -269,6 +486,45 @@ class RelationCategoryShare(SeriesOperator):
                 if not np.isfinite(group_sum) or group_sum == 0:
                     continue
                 out[row][idx] = vv[row][idx] / group_sum
+        return _frame_like(value, out)
+
+
+@register_operator(
+    name="relation_category_signed_contribution",
+    category="relation",
+    business_category="relation",
+    canonical="relation_category_signed_contribution",
+    source="relation.ops",
+    status="experimental",
+)
+class RelationCategorySignedContribution(SeriesOperator):
+    """组内 signed value 占同组绝对量合计的贡献（可 <0 或 >1，非 share）。"""
+
+    metadata = _metadata(
+        "relation_category_signed_contribution",
+        "signed value / Σ|value| over category（输出可 <0 或 >1；非 share）。",
+        ["value", "category"],
+        category="relation",
+        domain="relation",
+        unit="ratio",
+        # R24-009: the output of the SIGNED form is a contribution, not a share
+        # — it may fall outside [0,1], so it must not be tagged bounded_0_1.
+    )
+
+    def _calculate_series(self, value: pd.DataFrame, category: pd.DataFrame, **_: Any) -> pd.DataFrame:
+        value, category = strict_relation_align(value, category)
+        vv = value.to_numpy(dtype=float)
+        cv = category.to_numpy()
+        rows, cols = vv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        for row in range(rows):
+            labels = pd.unique(cv[row])
+            for label in labels:
+                idx = cv[row] == label
+                abs_sum = float(np.nansum(np.abs(vv[row][idx])))
+                if not np.isfinite(abs_sum) or abs_sum == 0:
+                    continue
+                out[row][idx] = vv[row][idx] / abs_sum
         return _frame_like(value, out)
 
 
@@ -296,6 +552,7 @@ class RelationPeerWeightedMeanExSelf(SeriesOperator):
     )
 
     def _calculate_series(self, value: pd.DataFrame, weight: pd.DataFrame, group: pd.DataFrame, **_: Any) -> pd.DataFrame:
+        value, weight, group = strict_relation_align(value, weight, group)
         vv = value.to_numpy(dtype=float)
         wv = weight.to_numpy(dtype=float)
         gv = group.to_numpy()
@@ -454,8 +711,14 @@ class RelationWeightedChange(SeriesOperator):
     )
 
     def _calculate_series(self, value: pd.DataFrame, weight: pd.DataFrame, **_: Any) -> pd.DataFrame:
-        delta = value - value.shift(1)
-        return delta * weight
+        # R24-004/005: ``delta * weight`` would silently reindex on mismatched
+        # axes — strict-align both panels first, then pair positions.
+        value, weight = strict_relation_align(value, weight)
+        vv = value.to_numpy(dtype=float)
+        wv = weight.to_numpy(dtype=float)
+        delta = np.full(vv.shape, np.nan, dtype=float)
+        delta[1:, :] = vv[1:, :] - vv[:-1, :]
+        return _frame_like(value, delta * wv)
 
 
 # ---------------------------------------------------------------------------
@@ -576,44 +839,114 @@ class IndexEntryExitEvent(SeriesOperator):
     status="experimental",
 )
 class IndexMembershipAge(SeriesOperator):
-    """距指数纳入以来经过的交易行数。"""
+    """距指数纳入以来经过的交易行数。
+
+    R24-036..038: a provider gap (NaN membership) must NOT reset the entry age.
+    ``last_confirmed_membership_state`` / ``last_confirmed_entry`` /
+    ``unknown_gap_start`` are maintained per instrument.  When membership
+    recovers to the same state after a gap, the entry age is NOT reset; and
+    when the gap makes the exact entry timing unprovable, the output is NaN
+    (fail-closed) unless ``output_mode="lower_bound"`` emits the floor age.
+    """
 
     metadata = _metadata(
         "index_membership_age",
-        "距纳入以来经过的行数。",
-        ["member", "max_lookback"],
+        "距纳入以来经过的行数（provider gap 不重置 entry age；gap 内不可证时 NaN）。",
+        ["member", "max_lookback", "output_mode"],
         category="index",
         domain="index",
         unit="count",
         # review §17: ``max_lookback`` is a strict-integer row cap — 5.1 must be
         # rejected, never ``int(max_lookback)``-truncated.  ``None`` (the
         # declared default) means uncapped.
-        param_specs={"max_lookback": ParamSpec(dtype=int, min=1, default=None)},
+        param_specs={
+            "max_lookback": ParamSpec(dtype=int, min=1, default=None),
+            "output_mode": ParamSpec(
+                dtype=str,
+                choices=("exact", "lower_bound"),
+                default="exact",
+                searchable=False,
+            ),
+        },
     )
 
-    def _calculate_series(self, member: pd.DataFrame, max_lookback: Any = None, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, member: pd.DataFrame, max_lookback: Any = None, output_mode: str = "exact", **_: Any) -> pd.DataFrame:
         limit = None if max_lookback is None else int(max_lookback)
+        if output_mode not in ("exact", "lower_bound"):
+            raise ValueError(f"output_mode must be 'exact' or 'lower_bound', got {output_mode!r}")
         mv = member.to_numpy(dtype=float)
         rows, cols = mv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            last_entry = -1
+            # R24-036: per-instrument confirmed-membership state machine.
+            last_confirmed_state: bool | None = None
+            last_confirmed_entry = -1
+            in_gap = False
+            gap_unresolved = False
             for row in range(rows):
                 value = mv[row, col]
                 if not np.isfinite(value):
-                    last_entry = -1
+                    # Provider gap begins (do NOT reset last_confirmed_entry).
+                    if last_confirmed_state is not None and not in_gap:
+                        in_gap = True
                     out[row, col] = np.nan
                     continue
-                if value != 0:
-                    if last_entry < 0:
-                        last_entry = row
-                    distance = row - last_entry
+                state = value != 0
+                if in_gap:
+                    in_gap = False
+                    if last_confirmed_state is None:
+                        # No prior confirmed state at all: cold-start.
+                        last_confirmed_state = state
+                        if state:
+                            last_confirmed_entry = row
+                        out[row, col] = np.nan
+                        continue
+                    if state == last_confirmed_state and state:
+                        # Recovered to the SAME member state after a provider
+                        # gap.  R24-037: never reset the entry age.  R24-038:
+                        # whether an exit happened inside the gap is
+                        # unprovable → exact age stays NaN (the ambiguity is
+                        # permanent in a daily panel); lower_bound emits the
+                        # floor age row - last_confirmed_entry.
+                        if output_mode == "lower_bound":
+                            distance = row - last_confirmed_entry
+                            if limit is None or distance < limit:
+                                out[row, col] = float(distance)
+                        else:
+                            gap_unresolved = True
+                        continue
+                    if state and not last_confirmed_state:
+                        # Genuine entry happened during the gap; the exact entry
+                        # row is unprovable → NaN (exact) / floor 0 (lower_bound).
+                        last_confirmed_state = True
+                        last_confirmed_entry = row
+                        if output_mode == "lower_bound":
+                            out[row, col] = 0.0
+                        else:
+                            gap_unresolved = True
+                        continue
+                    # state == False: exited (or never member) — no age; the
+                    # confirmed non-member state ends the (possibly gap-unknown)
+                    # member run and resets the entry anchor.
+                    last_confirmed_state = False
+                    last_confirmed_entry = -1
+                    gap_unresolved = False
+                    continue
+                last_confirmed_state = state
+                if state:
+                    # R24-038: an unresolved gap keeps the exact entry age NaN.
+                    if gap_unresolved and output_mode == "exact":
+                        continue
+                    if last_confirmed_entry < 0:
+                        last_confirmed_entry = row
+                    distance = row - last_confirmed_entry
                     if limit is None or distance < limit:
                         out[row, col] = float(distance)
                 else:
-                    # 已剔除：不再累计成分股年龄
+                    # 已剔除：不再累计成分股年龄；已确认的非成员解除 gap 疑义。
                     out[row, col] = np.nan
-                    last_entry = -1
+                    last_confirmed_entry = -1
+                    gap_unresolved = False
         return _frame_like(member, out)
 
 
@@ -661,6 +994,7 @@ class EventCumulativeReturnPast(SeriesOperator):
     def _calculate_series(self, ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
         w = int(window)
         lag = max(0, int(event_effective_lag))
+        ret, event = strict_relation_align(ret, event)
         rv = ret.to_numpy(dtype=float)
         ev = event.to_numpy(dtype=float)
         rows, cols = rv.shape
@@ -705,6 +1039,7 @@ class EventAbnormalReturnPast(SeriesOperator):
     def _calculate_series(self, ret: pd.DataFrame, benchmark_ret: pd.DataFrame, event: pd.DataFrame, window: int = 20, event_effective_lag: int = 1, **_: Any) -> pd.DataFrame:
         w = int(window)
         lag = max(0, int(event_effective_lag))
+        ret, benchmark_ret, event = strict_relation_align(ret, benchmark_ret, event)
         rv = ret.to_numpy(dtype=float)
         bv = benchmark_ret.to_numpy(dtype=float)
         ev = event.to_numpy(dtype=float)
@@ -740,6 +1075,7 @@ def _event_since_last_agg(
     """
     w = int(window)
     lag = max(0, int(lag))
+    ret, event = strict_relation_align(ret, event)
     rv = ret.to_numpy(dtype=float)
     ev = event.to_numpy(dtype=float)
     rows, cols = rv.shape
@@ -915,8 +1251,10 @@ def _day_diff_frame(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
     """Elementwise calendar-day difference ``right - left``.
 
     Accepts datetime64 panels (converted per element) or numeric row-position
-    panels.  Never relies on ``DataFrame.dt``.
+    panels.  Never relies on ``DataFrame.dt``.  R24-005: the two panels are
+    strict-aligned first — position-only pairing on mismatched axes raises.
     """
+    left, right = strict_relation_align(left, right)
     a = left.to_numpy()
     b = right.to_numpy()
     out = np.full(a.shape, np.nan, dtype=float)
@@ -1049,6 +1387,7 @@ class RelationOverlapRatio(SeriesOperator):
     )
 
     def _calculate_series(self, current_ids: pd.DataFrame, previous_ids: pd.DataFrame, method: str = "jaccard", **_: Any) -> pd.DataFrame:
+        current_ids, previous_ids = strict_relation_align(current_ids, previous_ids)
         cur = _row_entity_ids(current_ids)
         prev = _row_entity_ids(previous_ids)
         out = []
@@ -1103,6 +1442,8 @@ _surface.extend_extended_only({
         "relation_distinct_count", "relation_overlap_ratio", "index_weight",
         "event_return_since_last", "event_arithmetic_return_sum",
         "event_log_return_sum", "event_active_count",
+        # R24-009/011: new relation/shareholder canonicals
+        "relation_category_signed_contribution", "holder_observed_topk_hhi",
     })
 
 # ``event_compounded_return`` 是 ``event_return_since_last`` 的语义别名（复利口径）。

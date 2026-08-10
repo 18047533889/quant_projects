@@ -186,6 +186,46 @@ def _mul_two(field_a: str, field_b: str):
 # executed or hashed.  It is now a machine-executable contract.
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
+class AdjustmentFactorCertificate:
+    """R24-144/145: SINGLE authority for a continuous price adjustment factor.
+
+    A provider's price adjustment (``adjusted = raw * factor``) is either
+    certified PIT-safe (the historical factor does not contain FUTURE corporate
+    actions) or it is not.  FieldSpec / ProviderBinding may only REFERENCE this
+    certificate — they must never write their own contradicting
+    ``source_certified`` / ``adjustment_status`` / ``direction`` states.
+
+    ``vintage_pit_certified`` (R24-146..148): False when the vendor recomputes
+    the historical factor with future splits/dividends — a continuous historical
+    LEVEL is then NOT a strict-PIT raw feature (return ratios that are
+    scale-insensitive may still be certified per family).
+    """
+
+    canonical: str
+    direction: str = "backward_multiplier"
+    formula: str = "adjusted = raw * factor"
+    source_certified: bool = False
+    vintage_pit_certified: bool = False
+    certificate_hash: str | None = None
+
+    def verify_field_metadata(self, field_metadata: dict[str, Any] | None) -> None:
+        """R24-145: the FieldSpec metadata must agree with the certificate.
+
+        Raises when the field writes a contradicting adjustment/price state
+        instead of deferring to this certificate.
+        """
+        field_metadata = dict(field_metadata or {})
+        raw_adjusted = str(field_metadata.get("adjustment_status", "") or "").lower()
+        if raw_adjusted and self.source_certified and raw_adjusted == "unverified":
+            raise ValueError(
+                f"field {self.canonical!r} declares adjustment_status='unverified' "
+                "but the provider certificate certifies it — contradicting "
+                "states are forbidden (R24-144/145); FieldSpec/ProviderBinding "
+                "must defer to the AdjustmentFactorCertificate"
+            )
+
+
+@dataclass(frozen=True)
 class FilterRequirement:
     """One required read-side filter on a physical provider.
 
@@ -1519,6 +1559,15 @@ class FinancialPeriodAdapter:
         """
         import pandas as pd
 
+        # R24-157: production financial asof is fixed BACKWARD.  A ``forward`` /
+        # ``nearest`` direction would read future filings into the cross-section
+        # and must never be exposed as a production option.
+        if direction != "backward":
+            raise ValueError(
+                "FinancialPeriodAdapter.asof requires direction='backward' for "
+                f"financial reads (got {direction!r}) — forward/nearest would "
+                "leak future filings into the cross-section (R24-157)"
+            )
         key = on or ("PubDate" if market == "ashare" else "filing_date")
         ev = events.copy()
         if pd.api.types.is_datetime64_any_dtype(ev[key].dtype) is False:

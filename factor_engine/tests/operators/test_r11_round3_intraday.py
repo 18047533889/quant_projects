@@ -301,10 +301,15 @@ def test_recovery_min_events_gate():
 def test_recovery_min_events_via_operator():
     from cleaned_operators.session_recovery import SessionEventRecoveryScore
 
-    idx = pd.DatetimeIndex([pd.Timestamp("2024-01-01") + pd.Timedelta(minutes=m) for m in range(120)])
-    x = pd.DataFrame(np.linspace(10.0, 10.5, 120), index=idx, columns=["S0"])
-    ev = np.zeros(120)
-    ev[5] = 1.0
+    # R26-050/051: the operator grid-aligns to the official A-share session, so
+    # the fixture must be the full 240-bar session with a reachable close.
+    idx = pd.DatetimeIndex(
+        [pd.Timestamp("2024-01-02 09:31") + pd.Timedelta(minutes=m) for m in range(120)]
+        + [pd.Timestamp("2024-01-02 13:01") + pd.Timedelta(minutes=m) for m in range(120)]
+    )
+    x = pd.DataFrame(np.linspace(10.0, 10.5, 240), index=idx, columns=["S0"])
+    ev = np.zeros(240)
+    ev[5] = 1.0  # a single shock
     evf = pd.DataFrame({"S0": ev}, index=idx)
     op = SessionEventRecoveryScore()
     assert np.isfinite(op._calculate_series(x, evf, horizon=5, residual_fraction=0.25, min_events=1).iloc[0, 0])

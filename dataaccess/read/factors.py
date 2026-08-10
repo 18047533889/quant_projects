@@ -56,6 +56,10 @@ class FactorMeta:
     data_snapshot: str | None = None
     created_at: str | None = None
     status: str | None = None
+    # ---- R24 P0-S4 §6：派生数据权限继承 ----
+    source_access_tags: tuple[str, ...] = ()
+    derived_access_tags: tuple[str, ...] = ()
+    declassification: dict[str, Any] | None = None  # approved/reviewer/policy_version/reason
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -75,6 +79,9 @@ class FactorMeta:
             "data_snapshot": self.data_snapshot,
             "created_at": self.created_at,
             "status": self.status,
+            "source_access_tags": list(self.source_access_tags),
+            "derived_access_tags": list(self.derived_access_tags),
+            "declassification": self.declassification,
         }
 
     @classmethod
@@ -105,6 +112,13 @@ class FactorMeta:
             data_snapshot=_opt_str(payload.get("data_snapshot")),
             created_at=_opt_str(payload.get("created_at")),
             status=_opt_str(payload.get("status")),
+            source_access_tags=_opt_tags(payload.get("source_access_tags")),
+            derived_access_tags=_opt_tags(payload.get("derived_access_tags")),
+            declassification=(
+                dict(payload.get("declassification"))
+                if isinstance(payload.get("declassification"), Mapping)
+                else None
+            ),
         )
 
 
@@ -113,6 +127,17 @@ def _opt_str(value: Any) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _opt_tags(value: Any) -> tuple[str, ...]:
+    """access tags 序列归一化；非 list/tuple/set → 空（容错，不影响权限判定源）。"""
+    if value is None:
+        return ()
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return tuple(str(t).strip() for t in value if str(t).strip())
+    if isinstance(value, str):
+        return (value,) if value.strip() else ()
+    return ()
 
 
 def _opt_int(value: Any, *, strict: bool = False, field: str = "int") -> int | None:

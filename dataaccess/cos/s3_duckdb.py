@@ -85,20 +85,28 @@ def apply_s3_credentials(conn, creds: S3Credentials) -> None:
 
 
 def _apply_s3_secret(conn, creds: S3Credentials) -> None:
-    """DuckDB Secret Manager 方式：credential 变化自动按指纹重建。"""
+    """DuckDB Secret Manager 方式：credential 变化自动按指纹重建。
+
+    R24 P0-S1 §3.4：STS/CAM 临时身份必须带 ``session_token``（没有 session
+    token 的临时凭证是不完整的）。日志只记录 endpoint/region/url_style——
+    绝不记录 secret / token / 完整 access key。
+    """
     secret_name = "data_access_cos"
     use_ssl = "true" if creds.use_ssl else "false"
     url_style = creds.url_style or "path"
-    # secret 名是标识符（非字符串字面量）；常量自持有，安全拼接
-    conn.execute(
+    parts = [
         f"CREATE OR REPLACE SECRET {secret_name} (TYPE S3,"
         + f"KEY_ID {_sql_string(creds.access_key_id)},"
         + f"SECRET {_sql_string(creds.secret_access_key)},"
         + f"ENDPOINT {_sql_string(creds.endpoint)},"
         + f"REGION {_sql_string(creds.region)},"
         + f"USE_SSL {use_ssl},"
-        + f"URL_STYLE {_sql_string(url_style)});"
-    )
+        + f"URL_STYLE {_sql_string(url_style)}",
+    ]
+    if creds.session_token:
+        parts.append(f"SESSION_TOKEN {_sql_string(creds.session_token)}")
+    parts.append(");")
+    conn.execute("".join(parts))
     logger.info(
         "duckdb httpfs secret configured endpoint=%s region=%s url_style=%s",
         creds.endpoint,
@@ -108,9 +116,11 @@ def _apply_s3_secret(conn, creds: S3Credentials) -> None:
 
 
 def _apply_s3_legacy(conn, creds: S3Credentials) -> None:
-    """老版本 SET s3_* 注入。"""
+    """老版本 SET s3_* 注入（STS 时一并设置 s3_session_token）。"""
     conn.execute(f"SET s3_access_key_id={_sql_string(creds.access_key_id)}")
     conn.execute(f"SET s3_secret_access_key={_sql_string(creds.secret_access_key)}")
+    if creds.session_token:
+        conn.execute(f"SET s3_session_token={_sql_string(creds.session_token)}")
     conn.execute(f"SET s3_endpoint={_sql_string(creds.endpoint)}")
     conn.execute(f"SET s3_region={_sql_string(creds.region)}")
     conn.execute(f"SET s3_url_style={_sql_string(creds.url_style)}")

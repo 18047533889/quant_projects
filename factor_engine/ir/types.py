@@ -24,6 +24,8 @@ Round-7 WS-C (review #265-#278):
 from __future__ import annotations
 
 import datetime
+import hashlib
+import json
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -105,6 +107,7 @@ class SemanticType(str, Enum):
     POSITIVE_LEVEL = "PositiveLevel"
     NON_NEGATIVE_ACTIVITY = "NonNegativeActivity"
     NON_NEGATIVE_WEIGHT = "NonNegativeWeight"
+    NON_NEGATIVE_AMOUNT = "NonNegativeAmount"
     EVENT_BOOL = "EventBool"
     MASK_BOOL = "MaskBool"
     STATE_SIGNED = "StateSigned"
@@ -115,6 +118,18 @@ class SemanticType(str, Enum):
     FINANCIAL_SINGLE_PERIOD_FLOW = "FinancialSinglePeriodFlow"
     FINANCIAL_CUMULATIVE_YTD_FLOW = "FinancialCumulativeYTDFlow"
     FINANCIAL_TTM_FLOW = "FinancialTTMFlow"
+    # R24-110: extended financial / temporal semantic kinds.
+    FINANCIAL_ANNUAL_FLOW = "FinancialAnnualFlow"
+    FINANCIAL_RATIO = "FinancialRatio"
+    FINANCIAL_RATE = "FinancialRate"
+    FISCAL_PERIOD_ID = "FiscalPeriodId"
+    KNOWLEDGE_TIMESTAMP = "KnowledgeTimestamp"
+    EFFECTIVE_TIMESTAMP = "EffectiveTimestamp"
+    REVISION_TIMESTAMP = "RevisionTimestamp"
+    COMPONENT_STACK = "ComponentStack"
+    APPLICABILITY_MASK = "ApplicabilityMask"
+    COVERAGE_MASK = "CoverageMask"
+    OUT_OF_COVERAGE = "OutOfCoverage"
     RELATION_GRAPH = "RelationGraph"
 
 
@@ -128,8 +143,16 @@ SEMANTIC_TYPE: dict[str, SemanticType] = {
     "price_basis.return": SemanticType.RETURN_DECIMAL,
     "flow_semantics.stock": SemanticType.FINANCIAL_STOCK,
     "flow_semantics.single_period_flow": SemanticType.FINANCIAL_SINGLE_PERIOD_FLOW,
+    "flow_semantics.annual_flow": SemanticType.FINANCIAL_ANNUAL_FLOW,
     "flow_semantics.cumulative_ytd_flow": SemanticType.FINANCIAL_CUMULATIVE_YTD_FLOW,
     "flow_semantics.ttm_flow": SemanticType.FINANCIAL_TTM_FLOW,
+    "role.fiscal_period_id": SemanticType.FISCAL_PERIOD_ID,
+    "role.knowledge_timestamp": SemanticType.KNOWLEDGE_TIMESTAMP,
+    "role.effective_timestamp": SemanticType.EFFECTIVE_TIMESTAMP,
+    "role.revision_timestamp": SemanticType.REVISION_TIMESTAMP,
+    "role.applicability_mask": SemanticType.APPLICABILITY_MASK,
+    "role.coverage_mask": SemanticType.COVERAGE_MASK,
+    "role.out_of_coverage": SemanticType.OUT_OF_COVERAGE,
     "frequency.minute": SemanticType.MINUTE_SERIES,
     "frequency.daily": SemanticType.DAILY_SERIES,
     "role.group_key": SemanticType.GROUP_KEY,
@@ -147,9 +170,27 @@ _PRICE_BASIS_TO_SEMANTIC: dict[str, SemanticType] = {
 _FLOW_SEMANTICS_TO_SEMANTIC: dict[str, SemanticType] = {
     "stock": SemanticType.FINANCIAL_STOCK,
     "single_period_flow": SemanticType.FINANCIAL_SINGLE_PERIOD_FLOW,
+    "annual_flow": SemanticType.FINANCIAL_ANNUAL_FLOW,
     "cumulative_ytd_flow": SemanticType.FINANCIAL_CUMULATIVE_YTD_FLOW,
     "ttm_flow": SemanticType.FINANCIAL_TTM_FLOW,
 }
+
+
+class PeriodDuration(str, Enum):
+    """R24-111/112: a financial flow's duration dimension.
+
+    ``single_period_flow`` alone cannot distinguish a US annual statement from a
+    quarterly one.  ``PeriodDuration`` makes the duration explicit so an annual
+    number is never combined with quarterly data as if they were comparable.
+    """
+
+    QUARTER = "quarter"
+    HALF_YEAR = "half_year"
+    ANNUAL = "annual"
+    TTM = "ttm"
+    YTD = "ytd"
+    IRREGULAR = "irregular"
+    UNKNOWN = "unknown"
 
 
 def semantic_type_of(
@@ -185,6 +226,79 @@ def semantic_type_of(
     if str(frequency or "").lower() == "daily":
         return SemanticType.DAILY_SERIES
     return None
+
+
+# ---------------------------------------------------------------------------
+# SemanticIdentityDigest (R24-132..134).
+#
+# A stable, order-independent digest of the semantic attributes that CHANGE the
+# economic definition of a factor/cache/materialization identity.  It INCLUDES
+# market / concept-field identity / provider / unit semantic / price basis /
+# flow semantic / period duration / timeframe / universe / availability /
+# knowledge-time / revision / source vintage / missing policy / group fallback
+# and EXCLUDES debug notes / description / cost estimate / display tags.
+# ---------------------------------------------------------------------------
+_SEMANTIC_IDENTITY_KEYS = (
+    "market",
+    "concept_id",
+    "field_id",
+    "provider_id",
+    "dataset",
+    "unit_semantic",
+    "price_basis",
+    "flow_semantics",
+    "period_duration",
+    "timeframe",
+    "universe_id",
+    "availability_policy",
+    "availability_precision",
+    "availability_expr",
+    "knowledge_time_policy",
+    "revision_policy",
+    "source_vintage",
+    "snapshot_id",
+    "missing_policy",
+    "group_fallback",
+    "temporal_model",
+)
+
+
+@dataclass(frozen=True)
+class SemanticIdentityDigest:
+    """R24-132..134: the semantic-dimension digest for factor/cache identity.
+
+    ``value`` is a deterministic hash of the semantic attributes that change
+    the economic definition.  Two formulas with the same text but different
+    market / universe / same-day / revision / group-fallback semantics get
+    DIFFERENT digests (R24-205..209).
+    """
+
+    value: str
+    dimensions: dict[str, Any]
+
+    @classmethod
+    def from_attrs(
+        cls,
+        attrs: dict[str, Any] | None,
+        *,
+        exclude_debug: bool = True,
+    ) -> "SemanticIdentityDigest":
+        dims: dict[str, Any] = {}
+        for key in _SEMANTIC_IDENTITY_KEYS:
+            value = (attrs or {}).get(key)
+            if value is None:
+                continue
+            if exclude_debug and key in {"description", "debug_notes"}:
+                continue
+            dims[key] = value
+        canonical = json.dumps(
+            dims, sort_keys=True, ensure_ascii=True, default=str,
+            separators=(",", ":"),
+        )
+        return cls(value=hashlib.sha256(canonical.encode()).hexdigest()[:16], dimensions=dims)
+
+    def __str__(self) -> str:
+        return f"SemanticIdentityDigest({self.value})"
 
 
 # ---------------------------------------------------------------------------
@@ -419,8 +533,18 @@ def _resolve_column(row: Any, primary: str, aliases: tuple[str, ...] = ()) -> An
     return None
 
 
+class TemporalResolutionError(ValueError):
+    """R24-125: a timezone localization failure is an ERROR — a naive timestamp
+    silently returned would misplace the wall-clock semantic in production."""
+
+
 def _localize(dt: datetime.datetime, timezone: Any) -> datetime.datetime:
-    """Attach a timezone to a naive best-effort timestamp (defensive)."""
+    """Attach a timezone to a naive best-effort timestamp (defensive).
+
+    R24-125: on failure this RAISES ``TemporalResolutionError`` (production
+    fail-closed) instead of silently returning the naive ``dt`` — a naive
+    result would be interpreted in the wrong timezone downstream.
+    """
     if timezone is None:
         return dt
     try:
@@ -429,8 +553,12 @@ def _localize(dt: datetime.datetime, timezone: Any) -> datetime.datetime:
 
             return dt.replace(tzinfo=ZoneInfo(timezone))
         return dt.replace(tzinfo=timezone)
-    except Exception:
-        return dt
+    except Exception as exc:
+        raise TemporalResolutionError(
+            f"timezone localization failed for {dt!r} with timezone "
+            f"{timezone!r}: {type(exc).__name__}: {exc} (R24-125 — never "
+            "returns a naive timestamp)"
+        ) from exc
 
 
 def _session_date(
@@ -546,6 +674,13 @@ class AvailabilityExpr:
 
     __slots__ = ()
 
+    #: R24-190/191: which side of the corporate action the expression pins.
+    #: ``knowledge`` = when the market KNOWS the fact; ``effective`` = when the
+    #: economic event takes effect (ex-date / record / payment).  An ex-date is
+    #: NOT itself "when the market knows the ex-date" — a source that declares a
+    #: declaration date uses knowledge=declaration, effective=ex-date.
+    expr_kind: str = "knowledge"
+
     #: ordering key — larger means *later* (less usable at an earlier decision).
     #: UNKNOWN uses +infinity so it always wins the "latest" propagation.
     lateness: float
@@ -589,6 +724,27 @@ class AvailabilityExpr:
 
     def __hash__(self) -> int:
         return hash((type(self), tuple(sorted(vars(self).items()))))
+
+
+class KnowledgeAvailabilityExpr(AvailabilityExpr):
+    """R24-190/191: an availability expression pinned to KNOWLEDGE time.
+
+    When the market becomes aware of a fact (filing / publication /
+    declaration).  Distinct from :class:`EconomicEffectiveExpr`.
+    """
+
+    expr_kind: str = "knowledge"
+
+
+class EconomicEffectiveExpr(AvailabilityExpr):
+    """R24-190/191: an availability expression pinned to the ECONOMIC EFFECTIVE
+    time (ex-date / record date / payment date / effective date).
+
+    These are when the event takes effect, NOT when the market knows about it.
+    A source that declares both uses knowledge=declaration, effective=ex-date.
+    """
+
+    expr_kind: str = "effective"
 
 
 class UnknownAvailability(AvailabilityExpr):
@@ -769,16 +925,16 @@ class NextTradingOpen(AvailabilityExpr):
         decision_context: Any = None,
     ) -> Any:
         ref = _resolve_column(row, self.reference, ("pub_date", "publication_date"))
-        if ref is None and decision_context is not None:
-            ref = getattr(decision_context, "asof", None) or getattr(
-                decision_context, "date", None
-            )
+        # R24-119/120: the decision time must NEVER substitute for an unknown
+        # publication reference — that would fabricate a knowledge time.  An
+        # unknown knowledge reference fails closed.
         ref_ts = _coerce_timestamp(ref)
         if ref_ts is None:
             raise NotImplementedError(
                 "NextTradingOpen.resolve() needs the reference date "
                 f"(row[{self.reference!r}]) and a trading calendar to compute "
-                "the next session open"
+                "the next session open — the decision time is not a valid "
+                "publication fallback (R24-119/120)"
             )
         if calendar is None or isinstance(calendar, str):
             raise NotImplementedError(
@@ -853,7 +1009,7 @@ class NextTradingDay(AvailabilityExpr):
 
 
 @dataclass(frozen=True)
-class FilingDate(AvailabilityExpr):
+class FilingDate(KnowledgeAvailabilityExpr):
     """Value usable only from the regulatory filing date of ``reference``."""
 
     reference: str = "ReportPeriodEndDate"
@@ -870,10 +1026,14 @@ class FilingDate(AvailabilityExpr):
         timezone: Any = None,
         decision_context: Any = None,
     ) -> Any:
+        # R24-116..118: a filing knowledge time may NEVER fall back to the
+        # report PERIOD end date — period_time is not knowledge_time, and doing
+        # so hard-codes a PIT leak.  Only true filing/announcement timestamps
+        # qualify; a missing filing timestamp resolves to UNKNOWN (fail-closed).
         value = _resolve_column(
             row,
             "filing_date",
-            ("announcement_date", "filingdate", "report_date", self.reference),
+            ("announcement_date", "filingdate"),
         )
         return _resolve_timestamp_column(
             self, value, row, "FilingDate.resolve()", timezone
@@ -881,7 +1041,7 @@ class FilingDate(AvailabilityExpr):
 
 
 @dataclass(frozen=True)
-class PubDate(AvailabilityExpr):
+class PubDate(KnowledgeAvailabilityExpr):
     """Value usable only from the publication date of ``reference``."""
 
     reference: str = "PubDate"
@@ -909,7 +1069,7 @@ class PubDate(AvailabilityExpr):
 
 
 @dataclass(frozen=True)
-class DeclarationDate(AvailabilityExpr):
+class DeclarationDate(KnowledgeAvailabilityExpr):
     reference: str = "DeclarationDate"
     lateness: float = 100.0
 
@@ -935,7 +1095,7 @@ class DeclarationDate(AvailabilityExpr):
 
 
 @dataclass(frozen=True)
-class ExDate(AvailabilityExpr):
+class ExDate(EconomicEffectiveExpr):
     """Ex-dividend date — DISTINCT from :class:`DeclarationDate` (R9-P0-009)."""
 
     reference: str = "ExDate"
@@ -961,7 +1121,7 @@ class ExDate(AvailabilityExpr):
 
 
 @dataclass(frozen=True)
-class RecordDate(AvailabilityExpr):
+class RecordDate(EconomicEffectiveExpr):
     """Record date for a corporate action (distinct from declaration/ex dates)."""
 
     reference: str = "RecordDate"
@@ -985,7 +1145,7 @@ class RecordDate(AvailabilityExpr):
 
 
 @dataclass(frozen=True)
-class PaymentDate(AvailabilityExpr):
+class PaymentDate(EconomicEffectiveExpr):
     """Payment date for a corporate action (distinct from declaration/ex dates)."""
 
     reference: str = "PaymentDate"
@@ -1013,7 +1173,7 @@ class PaymentDate(AvailabilityExpr):
 
 
 @dataclass(frozen=True)
-class EffectiveDate(AvailabilityExpr):
+class EffectiveDate(EconomicEffectiveExpr):
     """Effective date (value usable from the effective/生效 instant)."""
 
     reference: str = "EffectiveDate"
@@ -1065,7 +1225,7 @@ class TimestampColumn(AvailabilityExpr):
 
 
 @dataclass(frozen=True)
-class KnowledgeTime(AvailabilityExpr):
+class KnowledgeTime(KnowledgeAvailabilityExpr):
     """Generic knowledge-time coordinate (latest descriptor)."""
 
     lateness: float = 1000.0
@@ -1308,12 +1468,31 @@ class SourceVintageSpec:
     marks a specific point-in-time snapshot.  All fields optional — an
     unversioned field carries a spec with ``None`` members, never a mismatched
     tuple or bare string.
+
+    R24-188: extended with the source identity (market/provider/dataset/
+    timeframe/period identity/availability precision/policy hash) so a vintage
+    spec is self-describing instead of a bare timestamp triple.
+    R24-189: ``revision_time_column`` / ``revision_id_column`` /
+    ``revision_sequence_column`` are EXPLICIT — tuple position is never used to
+    guess "first = revision_time, last = version_id".
     """
 
     knowledge_time: str | None = None
     revision_time: str | None = None
     version_id: str | None = None
     snapshot_id: str | None = None
+    # R24-188: extended source identity.
+    market: str | None = None
+    provider: str | None = None
+    dataset: str | None = None
+    timeframe: str | None = None
+    period_identity: str | None = None
+    availability_precision: str | None = None
+    policy_hash: str | None = None
+    # R24-189: explicit revision columns.
+    revision_time_column: str | None = None
+    revision_id_column: str | None = None
+    revision_sequence_column: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1321,22 +1500,51 @@ class SourceVintageSpec:
             "revision_time": self.revision_time,
             "version_id": self.version_id,
             "snapshot_id": self.snapshot_id,
+            "market": self.market,
+            "provider": self.provider,
+            "dataset": self.dataset,
+            "timeframe": self.timeframe,
+            "period_identity": self.period_identity,
+            "availability_precision": self.availability_precision,
+            "policy_hash": self.policy_hash,
+            "revision_time_column": self.revision_time_column,
+            "revision_id_column": self.revision_id_column,
+            "revision_sequence_column": self.revision_sequence_column,
         }
 
     @classmethod
     def from_field_spec(cls, spec: Any) -> "SourceVintageSpec":
         """Build a spec from a ``FieldSpec``'s knowledge/revision columns.
 
-        A ``revision_columns`` tuple is interpreted as a revision chain: the
-        first column is the revision-time marker, the last is the latest version.
+        R24-189: the revision chain is read from the EXPLICIT
+        ``revision_time_column`` / ``revision_id_column`` /
+        ``revision_sequence_column`` fields when declared; a legacy
+        ``revision_columns`` tuple is only a back-compat fallback (first =
+        revision-time marker, last = latest version) and is never authoritative
+        when the explicit columns exist.
         """
+        revision_time = getattr(spec, "revision_time_column", None)
+        version_id = getattr(spec, "revision_id_column", None)
         revision_columns = tuple(getattr(spec, "revision_columns", None) or ())
-        knowledge_time = getattr(spec, "knowledge_time_column", None)
+        if revision_time is None and revision_columns:
+            revision_time = revision_columns[0]
+        if version_id is None and revision_columns:
+            version_id = revision_columns[-1]
         return cls(
-            knowledge_time=knowledge_time,
-            revision_time=revision_columns[0] if revision_columns else None,
-            version_id=revision_columns[-1] if len(revision_columns) > 1 else None,
+            knowledge_time=getattr(spec, "knowledge_time_column", None),
+            revision_time=revision_time,
+            version_id=version_id,
             snapshot_id=None,
+            market=getattr(spec, "market", None),
+            provider=getattr(spec, "provider", None),
+            dataset=getattr(spec, "dataset", None),
+            timeframe=getattr(spec, "timeframe", None),
+            period_identity=getattr(spec, "period_id_column", None),
+            availability_precision=getattr(spec, "availability_precision", None),
+            policy_hash=getattr(spec, "policy_hash", None),
+            revision_time_column=getattr(spec, "revision_time_column", None),
+            revision_id_column=getattr(spec, "revision_id_column", None),
+            revision_sequence_column=getattr(spec, "revision_sequence_column", None),
         )
 
 
@@ -1409,6 +1617,35 @@ OPERATOR_INPUT_TYPE_CONTRACTS: dict[str, tuple[ArgumentTypeContract, ...]] = {
         ArgumentTypeContract("x"),
         ArgumentTypeContract("group", frozenset({"GroupKey"})),
     ),
+    # R24-008/113/114: relation/shareholder and group operators get typed input
+    # contracts so an economically-constrained input is never fed the wrong kind.
+    "relation_category_share": (
+        ArgumentTypeContract("value", frozenset({
+            "NonNegativeWeight", "NonNegativeActivity", "NonNegativeAmount",
+        })),
+        ArgumentTypeContract("category"),
+    ),
+    "relation_peer_weighted_mean_ex_self": (
+        ArgumentTypeContract("value"),
+        ArgumentTypeContract("weight", frozenset({"NonNegativeWeight"})),
+        ArgumentTypeContract("group", frozenset({"GroupKey"})),
+    ),
+    "group_demean": (
+        ArgumentTypeContract("x"),
+        ArgumentTypeContract("group", frozenset({"GroupKey"})),
+    ),
+    "group_mean": (
+        ArgumentTypeContract("x"),
+        ArgumentTypeContract("group", frozenset({"GroupKey"})),
+    ),
+    "group_sum": (
+        ArgumentTypeContract("x"),
+        ArgumentTypeContract("group", frozenset({"GroupKey"})),
+    ),
+    "group_rank_weighted_value": (
+        ArgumentTypeContract("x"),
+        ArgumentTypeContract("group", frozenset({"GroupKey"})),
+    ),
 }
 
 
@@ -1417,9 +1654,11 @@ __all__ = [
     "ArgumentTypeContract",
     "AvailabilityExpr",
     "DeclarationDate",
+    "EconomicEffectiveExpr",
     "EffectiveDate",
     "ExDate",
     "FilingDate",
+    "KnowledgeAvailabilityExpr",
     "KnowledgeTime",
     "LocalClose",
     "MIXED",
@@ -1429,16 +1668,19 @@ __all__ = [
     "NextTradingOpen",
     "OPERATOR_INPUT_TYPE_CONTRACTS",
     "PaymentDate",
+    "PeriodDuration",
     "PreClose",
     "PubDate",
     "RecordDate",
     "SEMANTIC_TYPE",
+    "SemanticIdentityDigest",
     "SessionClose",
     "SessionOpen",
     "SessionSegmentEnd",
     "SemanticLattice",
     "SemanticType",
     "SourceVintageSpec",
+    "TemporalResolutionError",
     "TimestampColumn",
     "UNKNOWN",
     "UnknownAvailability",

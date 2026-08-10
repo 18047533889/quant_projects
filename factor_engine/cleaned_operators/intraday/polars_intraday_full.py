@@ -159,8 +159,8 @@ def _seg_return(close: pl.DataFrame, segment: str) -> pl.DataFrame:
     return _pivot(out, "v")
 
 
-_mk("intra_segment_return", "指定时段（morning/afternoon）收盘/开盘收益 - 1（Polars）。", ["close", "segment", "session_tz"],
-   lambda close, segment="morning": _seg_return(close, segment))
+_mk("intra_segment_return", "指定时段（morning/afternoon）收盘/开盘收益 - 1（Polars）。", ["close", "segment", "session_tz", "endpoint_policy"],
+   lambda close, segment="morning", session_tz=None, endpoint_policy="exact": _seg_return(close, segment))
 
 
 def _seg_share(value: pl.DataFrame, segment: str) -> pl.DataFrame:
@@ -693,8 +693,9 @@ def _lunch_gap_return(close: pl.DataFrame, open_px: pl.DataFrame, morning_cutoff
 
 
 _mk("intra_lunch_gap_return", "午间跳空：下午首根 Open/上午末根 Close - 1（Polars）。",
-   ["close", "open", "morning_cutoff", "afternoon_start", "session_tz"],
-   lambda close, open_px, morning_cutoff="11:30", afternoon_start="13:00", session_tz=None:
+   ["close", "open", "morning_cutoff", "afternoon_start", "session_tz", "endpoint_policy"],
+   lambda close, open_px, morning_cutoff="11:30", afternoon_start="13:00", session_tz=None,
+       endpoint_policy="exact":
        _lunch_gap_return(close, open_px, morning_cutoff, afternoon_start))
 
 

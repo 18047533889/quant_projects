@@ -25,6 +25,21 @@ class CountingSeriesSource(DataSource):
         self.calls[name] = self.calls.get(name, 0) + 1
         return self.data[name]
 
+    def snapshot_token(self):
+        # R24-079: a stable test token makes production composites verifiable.
+        return "test-snap"
+
+    def temporal_contract(self):
+        # R24-084..087: a plain panel with no knowledge-time is safe for generic
+        # asof — declared, never inferred from the (absent) dataset name.
+        from storage.datasource import TemporalContract
+
+        return TemporalContract(
+            temporal_sensitivity="none",
+            snapshot_capability="token",
+            join_capability="generic_asof",
+        )
+
 
 def test_composite_source_aligns_auxiliary_columns_to_anchor_and_caches():
     price = CountingSeriesSource(

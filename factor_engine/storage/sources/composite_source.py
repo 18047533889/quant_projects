@@ -170,6 +170,11 @@ class CompositeSnapshotBarrier:
 
         比较 ``version`` + ``verified``（忽略 ``observed_at``；P0-29 下任一侧
         ``verified=False`` 也视为「变化」——不确认的 snapshot 不得当「无更新」）。
+
+        R24-081: on success the manifest recorded is EXACTLY the epoch verified
+        for this read (``after`` == ``before``) — a later refresh that advances
+        the source is a separate observation and never silently rewrites the
+        read's epoch.
         """
         if self._before is None:
             return
@@ -182,6 +187,8 @@ class CompositeSnapshotBarrier:
                 f"(before={self._before!r} after={after!r}); "
                 "refusing to serve a non-atomic cross-source read"
             )
+        # Record the VERIFIED epoch (not a fresh re-read) so manifest == data.
+        self._source._snapshot_manifest = after
 
 
 class CompositeDataSource(DataSource):
@@ -532,6 +539,14 @@ class CompositeDataSource(DataSource):
                     # "confirmed None".
                     snapshot = None
                     verified = False
+            # R24-079/080: a child with NO snapshot token (and no acceptable
+            # alternative proof — content hash / tx id / MVCC / manifest digest)
+            # is UNVERIFIABLE.  ``version=None, verified=True`` must never be
+            # recorded: in production, no token → verified=False so ``None==None``
+            # is never mistaken for "no update".  Research keeps the legacy
+            # lenient reading for back-compat.
+            if snapshot is None and production:
+                verified = False
             manifest.append((name, SnapshotState(version=snapshot, verified=verified)))
         return tuple(manifest)
 
@@ -591,8 +606,29 @@ class CompositeDataSource(DataSource):
         子源首次读取后快照 id 从 ``None`` 变为真实值 —— 这是本组合源自己触发
         的读取，不是外部快照变化，必须在 load 末尾刷新清单，否则下一次 load
         会误判为变化而每次清空缓存。
+
+        R24-081/082: the recorded manifest MUST equal the epoch verified for the
+        read.  If the source advanced between the verified read (``revalidate``)
+        and this record (data=A, manifest=B), recording B would let a stale A
+        cache survive the next ``B == B`` check.  Detect the drift, invalidate
+        and refuse instead — the caller retries.
         """
-        self._snapshot_manifest = self._child_snapshot_manifest()
+        current = self._child_snapshot_manifest()
+        if (
+            self._snapshot_manifest is not None
+            and self._snapshot_manifest_changed(self._snapshot_manifest, current)
+        ):
+            if self._effective_production:
+                self._clear_caches()
+                raise CompositeSnapshotVerificationError(
+                    "composite source advanced between the verified read and the "
+                    "manifest record (data=A, manifest=B) — refusing to record a "
+                    "mismatched epoch; invalidate and retry (R24-082)"
+                )
+            # Research: a permanently-unverifiable source (e.g. failing refresh)
+            # has no coherent epoch; record the observation and let the next
+            # load's invalidation gate handle it.
+        self._snapshot_manifest = current
 
     def _expand_alias(self, name: str) -> str:
         """_expand_alias。
@@ -836,20 +872,40 @@ class CompositeDataSource(DataSource):
     def _is_pit_sensitive_source(source: Any, *, production: bool) -> bool:
         """源是否 PIT 语义敏感（不能交给 Composite 自行 merge_asof）。
 
-        #收官轮 P0（Integration）：以下三类源的 temporal 对齐必须由 DataAccess
-        read_joined / SourceRef certified PIT resolver 完成，Composite 只允许
-        ``exact`` 对齐（源自己已经把 temporal 语义对齐好）：
-          * ``read_mode in {event, pit}`` 的 DataAccessSource；
-          * 已知无 knowledge-time 的 cleaned 财务源（``_NO_KNOWLEDGE_TIME_FUNDAMENTALS``，
-            period_end 无 filing_date，asof 拼接有真实前视风险）；
-          * COS 契约 ``pit_policy=="strict"`` 的 E2 源（availability/filing_date 时钟）。
+        R24-084..087: the FIRST authority is the source's declared
+        ``temporal_contract()``.  A source that does not implement it, or whose
+        contract is ``unknown``, is PIT-sensitive (fail-closed) — NEVER "safe by
+        omission" because a ``dataset`` attribute is missing.  The legacy
+        dataset-name / COS-contract heuristics remain only as a back-compat
+        fallback for sources that have not yet declared a contract.
 
-        P1-09：COS 契约查询失败在 production 下 fail-closed（抛
+        P1-09: COS 契约查询失败在 production 下 fail-closed（抛
         ``CompositeContractUnavailableError``），不能把「无法证明」当成
         「probably safe」；research 才允许告警后按非敏感回退。
         """
+        contract_method = getattr(source, "temporal_contract", None)
+        if callable(contract_method):
+            try:
+                tc = contract_method()
+            except Exception as exc:
+                if production:
+                    raise CompositeContractUnavailableError(
+                        f"source {type(source).__name__} temporal_contract() "
+                        f"failed ({type(exc).__name__}: {exc}); production "
+                        "fail-closed — cannot prove PIT-sensitivity"
+                    ) from exc
+                logger.warning(
+                    "source %s temporal_contract() failed; research 放行: %s",
+                    type(source).__name__,
+                    exc,
+                )
+                tc = None
+            if tc is not None and getattr(tc, "join_capability", "unknown") != "unknown":
+                # R24-087: detection from the contract, not a dataset blacklist.
+                return bool(getattr(tc, "pit_sensitive", True))
+        # Legacy heuristic fallback (pre-R24 sources without a contract).
         if not hasattr(source, "dataset"):
-            return False
+            return True  # R24-084: no dataset ≠ not sensitive → fail-closed
         dataset = str(getattr(source, "dataset", "") or "")
         try:
             from .data_access_source import _NO_KNOWLEDGE_TIME_FUNDAMENTALS

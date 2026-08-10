@@ -465,13 +465,14 @@ class GroupNeutralizeNative(SeriesOperator):
         name="group_neutralize",
         category="cross_sectional",
         description="组内去均值",
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
         return_type="series",
         tags=["group", "polars", "native"],
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, group: pl.DataFrame | None = None, **kwargs
+        self, x: pl.DataFrame, group: pl.DataFrame | None = None,
+        fallback_policy: str = "nan", **kwargs
     ) -> pl.DataFrame:
         # Wide-panel Polars unpivot is far slower than the vectorized numpy kernel;
         # bridge to pandas_numpy for eager wide frames. Long-table / SQL keep their
@@ -563,13 +564,14 @@ class GroupNormalizeNative(SeriesOperator):
         name="group_normalize",
         category="cross_sectional",
         description="组内 min-max",
-        param_names=["x", "group"],
+        param_names=["x", "group", "fallback_policy"],
         return_type="series",
         tags=["group", "polars", "native"],
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, group: pl.DataFrame | None = None, **kwargs
+        self, x: pl.DataFrame, group: pl.DataFrame | None = None,
+        fallback_policy: str = "nan", **kwargs
     ) -> pl.DataFrame:
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
             key = ["_r", "_g"] if "_g" in long.columns else ["_r"]

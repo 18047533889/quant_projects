@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import BroadcastSpec, OperatorMetadata, ParamSpec, SeriesOperator, register_operator
-from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg, _daily_agg_two
+from cleaned_operators.microstructure.intraday_agg import _as_panel, _daily_agg_legacy, _daily_agg_two
 from cleaned_operators.rolling_pack import register_polars_udf
 
 _EPS = 1e-12
@@ -618,7 +618,7 @@ class IntradaySubsampledRvDispersion(SeriesOperator):
         if sm < 2:
             raise ValueError("intraday_subsampled_rv_dispersion requires sampling >= 2")
         frame = _session_local_frame(_as_panel(returns), session_tz)
-        return _daily_agg(frame, lambda v, t: _subsampled_rv_dispersion(v, sm))
+        return _daily_agg_legacy(frame, lambda v, t: _subsampled_rv_dispersion(v, sm))
 
 
 def _vol_signature_slope(day_vals: np.ndarray, max_interval: int) -> float:
@@ -678,7 +678,7 @@ class IntradayVolatilitySignatureSlope(SeriesOperator):
         if mi < 4:
             raise ValueError("intraday_volatility_signature_slope requires max_interval >= 4")
         frame = _session_local_frame(_as_panel(returns), session_tz)
-        return _daily_agg(frame, lambda v, t: _vol_signature_slope(v, mi))
+        return _daily_agg_legacy(frame, lambda v, t: _vol_signature_slope(v, mi))
 
 
 def _realized_power_variation(day_vals: np.ndarray, order: float, sampling: int) -> float:
@@ -722,7 +722,7 @@ class IntradayRealizedPowerVariation(SeriesOperator):
         if sm < 1:
             raise ValueError("intraday_realized_power_variation requires sampling >= 1")
         frame = _session_local_frame(_as_panel(returns), session_tz)
-        return _daily_agg(frame, lambda v, t: _realized_power_variation(v, od, sm))
+        return _daily_agg_legacy(frame, lambda v, t: _realized_power_variation(v, od, sm))
 
 
 def _day_profile_equal_count(day_vals: np.ndarray, n_slots: int) -> np.ndarray | None:

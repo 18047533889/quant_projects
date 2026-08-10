@@ -1,24 +1,44 @@
 # -*- coding: utf-8 -*-
-"""Minute frequency to daily aggregation operators.
+"""Minute → daily intraday aggregation operators (microstructure family).
 
 Each operator accepts minute-frequency OHLCV panels (row index is a minute
-timestamp, columns are instruments) and returns a daily-frequency panel
-(row index is the calendar date, columns are instruments).
+timestamp, columns are instruments) and emits one daily value per instrument
+(session-close available), i.e. every kernel is a shape-changing minute → daily
+cross-sectional factor after close.  Operators never emit a row per minute.
 
-Contract
---------
-* The output is one scalar per (TradeDate, Symbol): it can be used as a daily
-  cross-sectional factor after close.  Operators never emit a row per minute.
 * All kernels are causal: they only use the day's own minute data plus that
-  day's daily limit prices, never future bars or future days.
-* Empty / all-NaN windows yield NaN, never Inf or a fabricated zero.
-* These operators require a certified minute dataset.  Until one is available
-  they remain ``SOURCE_BLOCKED_CANONICALS`` and are excluded from production
-  targets (see ``production_hardening``).
+  day's daily limit/close inputs, so a day's value is known at session close.
 
-Segment convention (A-share default): morning 09:31--11:30, afternoon
-13:01--15:00, expressed in minute-of-day as [571, 690] and [781, 900] —
-240 bars total, matching DataAccess's unified A-share 1-minute session.
+* These operators require a certified minute dataset.  Until one is available
+  the surface stays SOURCE_BLOCKED; the kernels below are nevertheless the
+  single place the numerical semantics are pinned.
+
+R26-013..039 (physical clock): every operator canonicalizes its minute panel
+through :class:`runtime.session_panel.SessionPanel` BEFORE any statistic is
+computed:
+
+* bar frequency comes from the DECLARED ``bar_freq`` (default ``"1min"``) +
+  ``market`` — NEVER from a modal of observed minute deltas (R26-014).  A
+  dataset that systematically drops every other bar therefore fails the
+  official-grid coverage gate instead of re-certifying itself at 2-min
+  resolution.
+* physically absent timestamps become explicit missing slots via reindex onto
+  the official session grid (R26-017..019).
+* log-returns only exist between adjacent official slots; a gap is NaN, never a
+  single fused bar (R26-020).
+* coverage / share denominators count unique valid official slots, never
+  observed row counts; a duplicate official slot is a DQ failure (R26-021).
+* segment / lunch-gap endpoints are EXACT official minutes by default
+  (EndpointPolicy.EXACT, R26-025..027); ``endpoint_policy="recent_valid"`` is
+  an explicit opt-in.
+* ``intra_high_time`` / ``intra_low_time`` use the official slot ordinal, never
+  the compressed observed-row index (R26-030).
+* limit masks stay tri-state (unknown limit / missing bar -> NaN, never a
+  fabricated False) and the up/down touch side needs only its own OHLC side
+  (R26-031..034).
+* incomplete full-day denominators make share operators NaN (R26-035).
+* the session trade-date is computed in the session timezone, so UTC-stored
+  minute data is split on the correct session day (R26-036..038).
 """
 from __future__ import annotations
 
@@ -29,40 +49,25 @@ import numpy as np
 import pandas as pd
 
 from cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from runtime.session_calendar import SessionCalendar
+from runtime.session_panel import (
+    SessionPanel,
+    build_session_panel,
+    default_ashare_calendar,
+    session_trade_dates,
+)
 
 _EPS = 1e-12
 _MORNING = (571, 690)   # 09:31 .. 11:30 (A-share 240-bar session, matches DataAccess)
-_AFTERNOON = (781, 900) # 13:01 .. 15:00
+_AFTERNOON = (781, 900)  # 13:01 .. 15:00
 _SEGMENT_RANGES = {"morning": _MORNING, "afternoon": _AFTERNOON}
+_SEGMENT_END_MOD = {"morning": 690, "afternoon": 900}   # exact official close minute
+_SEGMENT_START_MOD = {"morning": 571, "afternoon": 781}  # exact official first-bar minute
 
-# P0-43/45: official A-share session grid, derived from the declared segment
-# constants above (morning 09:31-11:30, afternoon 13:01-15:00 = 240 minutes).
-# Lunch-gap minutes (12:31-13:00) are NOT part of the grid: they never count as
-# missing, and a non-official bar must never inflate coverage.
-_OFFICIAL_MINUTES = np.asarray(
-    [m for lo, hi in _SEGMENT_RANGES.values() for m in range(lo, hi + 1)],
-    dtype=int,
-)
-
-
-def _bar_width_minutes(mods: np.ndarray) -> int:
-    """Structural bar width in minutes (modal positive minute delta).
-
-    Data-RESOLUTION property (1-min vs 5-min bars), never a completeness
-    signal.  Used to map the official session minutes onto the per-session BAR
-    count for the coverage denominator (P0-43/45).
-    """
-    diffs = np.diff(mods)
-    diffs = diffs[diffs > 0]
-    if diffs.size == 0:
-        return 1
-    vals, counts = np.unique(diffs, return_counts=True)
-    return int(vals[int(np.argmax(counts))])
-
-
-def _expected_slots(official_minutes: np.ndarray, width: int) -> int:
-    """Official-grid slot count for ``official_minutes`` at bar ``width``."""
-    return int(math.ceil(int(official_minutes.size) / max(1, width)))
+_DEFAULT_SESSION_TZ = "Asia/Shanghai"
+# R26-038: documented storage convention for the A-share minute pipeline (UTC).
+_DEFAULT_SOURCE_TZ = {"ashare": "UTC", "cn": "UTC", "a": "UTC"}
+_COVERAGE_FLOOR = 0.9  # official-slot coverage required for RV / share / limits
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
@@ -98,22 +103,67 @@ def _minute_of_day(times: np.ndarray) -> np.ndarray:
     return seconds // 60
 
 
-def _log_returns(vals: np.ndarray) -> np.ndarray:
-    out = np.full(len(vals), np.nan)
-    if len(vals) > 1:
-        # R6-192: explicit positive-price contract.  log(negative/zero) leaking
-        # -inf/NaN into the return silently corrupts downstream aggregates; a
-        # non-positive price is invalid data and yields NaN (fail-closed), not
-        # a fabricated log-return.
-        with np.errstate(divide="ignore", invalid="ignore"):
-            out[1:] = np.log(vals[1:] / vals[:-1])
-            out[1:][(vals[1:] <= 0.0) | (vals[:-1] <= 0.0)] = np.nan
-    return out
+def _declared_calendar(market: str | None, bar_freq: str | None) -> SessionCalendar:
+    """Declared A-share SessionCalendar from ``market`` + ``bar_freq``.
+
+    R26-013/014: bar frequency is a DECLARED contract property (never a modal
+    of observed deltas).  ``bar_freq`` defaults to the documented 1-minute
+    session; anything else is an explicit declaration.
+    """
+    freq = str(bar_freq or "1min")
+    market_norm = (market or "ashare").lower().replace("_", "").replace(" ", "")
+    if market_norm in {"ashare", "cn", "a", "china"}:
+        return default_ashare_calendar(bar_freq=freq)
+    return SessionCalendar(market=market_norm.upper(), bar_freq=freq, timestamp_convention="bar_end")
 
 
-def _daily_agg(frame: pd.DataFrame, fn: Callable[[np.ndarray, np.ndarray], float]) -> pd.DataFrame:
-    """Apply per-(instrument, calendar-day) aggregation fn(vals, times)."""
+def _session_local_frame(
+    frame: pd.DataFrame,
+    *,
+    session_tz: str | None,
+    source_timezone: str | None,
+    market: str | None,
+) -> pd.DataFrame:
+    """Convert a tz-aware minute panel to session wall-clock (naive).
+
+    R26-036..038: A-share minute data is stored in UTC; the session segments are
+    defined in Asia/Shanghai wall-clock.  A tz-aware index with no declared /
+    documented ``source_timezone`` fails closed (raise) — never silently
+    assumed session-local.
+    """
     frame = _as_panel(frame)
+    idx = frame.index
+    if isinstance(idx, pd.DatetimeIndex) and idx.tz is not None:
+        src_tz = source_timezone or _DEFAULT_SOURCE_TZ.get((market or "ashare").lower())
+        if src_tz is None:
+            raise ValueError(
+                "tz-aware minute data requires a declared `source_timezone`; "
+                "unknown storage timezone fails closed (R26-038)"
+            )
+        frame = frame.tz_convert(session_tz or _DEFAULT_SESSION_TZ)
+        frame.index = frame.index.tz_localize(None)
+    return frame
+
+
+def _daily_agg(
+    frame: pd.DataFrame,
+    fn: Callable[[SessionPanel], float],
+    *,
+    market: str | None = None,
+    bar_freq: str | None = None,
+    session_tz: str | None = None,
+    source_timezone: str | None = None,
+) -> pd.DataFrame:
+    """Apply fn(panel) per (instrument, session-local trade date).
+
+    The panel is grid-aligned (SessionPanel); absent bars are explicit missing
+    slots.  The trade-date is the session-local calendar date (R26-036).
+    """
+    frame = _session_local_frame(
+        _as_panel(frame), session_tz=session_tz, source_timezone=source_timezone, market=market
+    )
+    cal = _declared_calendar(market, bar_freq)
+    tz = session_tz or _DEFAULT_SESSION_TZ
     out: dict[str, pd.Series] = {}
     for inst in frame.columns:
         col = frame[inst]
@@ -125,7 +175,14 @@ def _daily_agg(frame: pd.DataFrame, fn: Callable[[np.ndarray, np.ndarray], float
                 per_day[day] = np.nan
                 continue
             try:
-                per_day[day] = float(fn(vals, times))
+                panel = build_session_panel(
+                    times, vals, cal,
+                    market=str(market or "ashare"),
+                    session_timezone=tz,
+                    source_timezone=None,  # already session-local
+                    trade_date=pd.Timestamp(day),
+                )
+                per_day[day] = float(fn(panel))
             except (ValueError, ZeroDivisionError, OverflowError):
                 per_day[day] = np.nan
         out[inst] = pd.Series(per_day, dtype=float)
@@ -134,40 +191,49 @@ def _daily_agg(frame: pd.DataFrame, fn: Callable[[np.ndarray, np.ndarray], float
     return pd.DataFrame(out).sort_index()
 
 
-def _daily_agg_two(
+def _pair_agg(
     frame_a: pd.DataFrame,
     frame_b: pd.DataFrame,
-    fn: Callable[[np.ndarray, np.ndarray], float],
+    fn: Callable[[SessionPanel, SessionPanel], float],
+    *,
+    market: str | None = None,
+    bar_freq: str | None = None,
+    session_tz: str | None = None,
+    source_timezone: str | None = None,
 ) -> pd.DataFrame:
-    """Apply fn(a_vals, b_vals) per (instrument, day).
+    """Tuple-complete pair aggregation (R26-022..024).
 
-    PAIRED-MISSING policy (P0-44): the two panels form a pair — both present or
-    both missing.  A bar with exactly one of ``a``/``b`` finite is data-invalid
-    and must not silently act as a single-series bar (e.g. a bar with
-    amount=NaN but volume finite must never become volume-only).  Such rows are
-    dropped from BOTH panels; a missing pair member is never zero-filled.  A
-    deliberate single-field aggregation path (an fn that aggregates only one of
-    the two fields) still receives the pair-filtered rows, so the pairing is
-    enforced once here at the routing layer.
+    Both panels are reindexed onto the same official grid; a slot is usable only
+    when BOTH carry a valid bar.  A bar with exactly one finite member is
+    data-invalid and never acts as a single-series bar.
     """
-    frame_a, frame_b = _as_panel(frame_a), _as_panel(frame_b)
+    a = _session_local_frame(
+        _as_panel(frame_a), session_tz=session_tz, source_timezone=source_timezone, market=market
+    )
+    b = _session_local_frame(
+        _as_panel(frame_b), session_tz=session_tz, source_timezone=source_timezone, market=market
+    )
+    cal = _declared_calendar(market, bar_freq)
+    tz = session_tz or _DEFAULT_SESSION_TZ
     out: dict[str, pd.Series] = {}
-    for inst in frame_a.columns:
-        a, b = frame_a[inst], frame_b[inst]
-        # P0-44: usable rows require BOTH ``a`` and ``b`` finite.  Rows where
-        # only one member is finite are treated as missing in both (dropped) —
-        # never passed through as a single-series bar.
-        joined = pd.concat([a, b], axis=1, keys=["a", "b"]).dropna(subset=["a", "b"])
-        joined["day"] = joined.index.normalize()
+    for inst in a.columns:
         per_day: dict[pd.Timestamp, float] = {}
-        for day, group in joined.groupby("day"):
-            vals_a = np.asarray(group["a"], dtype=float)
-            vals_b = np.asarray(group["b"], dtype=float)
-            if not np.any(np.isfinite(vals_a)) or not np.any(np.isfinite(vals_b)):
+        for day, ga in a[inst].groupby(a[inst].index.normalize()):
+            gb = b[inst]
+            gb = gb[gb.index.normalize() == day]
+            va = np.asarray(ga, dtype=float)
+            vb = np.asarray(gb, dtype=float)
+            ta = np.asarray(ga.index, dtype="datetime64[ns]")
+            tb = np.asarray(gb.index, dtype="datetime64[ns]")
+            if not np.any(np.isfinite(va)) or not np.any(np.isfinite(vb)):
                 per_day[day] = np.nan
                 continue
             try:
-                per_day[day] = float(fn(vals_a, vals_b))
+                pa = build_session_panel(ta, va, cal, market=str(market or "ashare"),
+                                         session_timezone=tz, source_timezone=None, trade_date=pd.Timestamp(day))
+                pb = build_session_panel(tb, vb, cal, market=str(market or "ashare"),
+                                         session_timezone=tz, source_timezone=None, trade_date=pd.Timestamp(day))
+                per_day[day] = float(fn(pa, pb))
             except (ValueError, ZeroDivisionError, OverflowError):
                 per_day[day] = np.nan
         out[inst] = pd.Series(per_day, dtype=float)
@@ -176,30 +242,57 @@ def _daily_agg_two(
     return pd.DataFrame(out).sort_index()
 
 
-def _daily_agg_three(
+def _triple_agg(
     frame_a: pd.DataFrame,
     frame_b: pd.DataFrame,
     frame_c: pd.DataFrame,
-    fn: Callable[[np.ndarray, np.ndarray, np.ndarray], float],
+    fn: Callable[[SessionPanel, SessionPanel, SessionPanel], float],
+    *,
+    market: str | None = None,
+    bar_freq: str | None = None,
+    session_tz: str | None = None,
+    source_timezone: str | None = None,
 ) -> pd.DataFrame:
-    """Apply fn(a_vals, b_vals, c_vals) per (instrument, day)."""
-    frame_a, frame_b, frame_c = _as_panel(frame_a), _as_panel(frame_b), _as_panel(frame_c)
+    """Tuple-complete three-input aggregation (R26-022..024).
+
+    A required slot is usable only when ALL required inputs are valid — the old
+    helper dropped on ``a`` alone and let ``b``/``c`` NaNs silently change the
+    cohort / denominator (R26-154).
+    """
+    a = _session_local_frame(
+        _as_panel(frame_a), session_tz=session_tz, source_timezone=source_timezone, market=market
+    )
+    b = _session_local_frame(
+        _as_panel(frame_b), session_tz=session_tz, source_timezone=source_timezone, market=market
+    )
+    c = _session_local_frame(
+        _as_panel(frame_c), session_tz=session_tz, source_timezone=source_timezone, market=market
+    )
+    cal = _declared_calendar(market, bar_freq)
+    tz = session_tz or _DEFAULT_SESSION_TZ
     out: dict[str, pd.Series] = {}
-    for inst in frame_a.columns:
-        joined = pd.concat(
-            [frame_a[inst], frame_b[inst], frame_c[inst]], axis=1, keys=["a", "b", "c"]
-        ).dropna(subset=["a"])
-        joined["day"] = joined.index.normalize()
+    for inst in a.columns:
         per_day: dict[pd.Timestamp, float] = {}
-        for day, group in joined.groupby("day"):
-            vals_a = np.asarray(group["a"], dtype=float)
-            vals_b = np.asarray(group["b"], dtype=float)
-            vals_c = np.asarray(group["c"], dtype=float)
-            if not np.any(np.isfinite(vals_a)):
+        for day, ga in a[inst].groupby(a[inst].index.normalize()):
+            gb = b[inst]; gb = gb[gb.index.normalize() == day]
+            gc = c[inst]; gc = gc[gc.index.normalize() == day]
+            va = np.asarray(ga, dtype=float)
+            vb = np.asarray(gb, dtype=float)
+            vc = np.asarray(gc, dtype=float)
+            ta = np.asarray(ga.index, dtype="datetime64[ns]")
+            tb = np.asarray(gb.index, dtype="datetime64[ns]")
+            tc = np.asarray(gc.index, dtype="datetime64[ns]")
+            if not (np.any(np.isfinite(va)) and np.any(np.isfinite(vb)) and np.any(np.isfinite(vc))):
                 per_day[day] = np.nan
                 continue
             try:
-                per_day[day] = float(fn(vals_a, vals_b, vals_c))
+                pa = build_session_panel(ta, va, cal, market=str(market or "ashare"),
+                                         session_timezone=tz, source_timezone=None, trade_date=pd.Timestamp(day))
+                pb = build_session_panel(tb, vb, cal, market=str(market or "ashare"),
+                                         session_timezone=tz, source_timezone=None, trade_date=pd.Timestamp(day))
+                pc = build_session_panel(tc, vc, cal, market=str(market or "ashare"),
+                                         session_timezone=tz, source_timezone=None, trade_date=pd.Timestamp(day))
+                per_day[day] = float(fn(pa, pb, pc))
             except (ValueError, ZeroDivisionError, OverflowError):
                 per_day[day] = np.nan
         out[inst] = pd.Series(per_day, dtype=float)
@@ -208,41 +301,48 @@ def _daily_agg_three(
     return pd.DataFrame(out).sort_index()
 
 
-_SESSION_TZ = "Asia/Shanghai"
-
-
-def _session_local(frame: pd.DataFrame, tz: str | None = None) -> pd.DataFrame:
-    """Convert a tz-aware index to session wall-clock (naive) for minute-of-day math.
-
-    A-share COS minute data is stored in UTC; the A-share session segments
-    (09:31--11:30 / 13:01--15:00) are defined in Asia/Shanghai wall-clock time.
-    Naive indexes are assumed to already be in session wall-clock time.
-    """
-    frame = _as_panel(frame)
-    if isinstance(frame.index, pd.DatetimeIndex) and frame.index.tz is not None:
-        tz = tz or _SESSION_TZ
-        frame = frame.tz_convert(tz)
-        frame.index = frame.index.tz_localize(None)
-    return frame
-
-
-def _seg_mask(times: np.ndarray, segment: str) -> np.ndarray:
+def _seg_mask(minute_of_day: np.ndarray, segment: str) -> np.ndarray:
+    """Segment mask.  Accepts either minute-of-day (int) or timestamp arrays."""
+    arr = np.asarray(minute_of_day)
+    if arr.dtype.kind in "mM":
+        arr = _minute_of_day(arr)
     lo, hi = _SEGMENT_RANGES[str(segment)]
-    minutes = _minute_of_day(times)
-    return (minutes >= lo) & (minutes <= hi)
+    return (arr >= lo) & (arr <= hi)
+
+
+def _coverage_ok(panel: SessionPanel, floor: float = _COVERAGE_FLOOR) -> bool:
+    """Coverage gate (R26-021): unique valid official slots / expected slots."""
+    return panel.coverage() >= floor
 
 
 # ---------------------------------------------------------------------------
 # § Segment aggregation
 # ---------------------------------------------------------------------------
 
-def _seg_return(vals, times, segment):
-    mask = _seg_mask(times, segment)
-    sel = vals[mask]
-    finite = sel[np.isfinite(sel)]
-    if len(finite) < 2:
+def _seg_return(panel: SessionPanel, segment: str, endpoint_policy: str = "exact") -> float:
+    """Segment return (close at end / close at start - 1).
+
+    R26-025/026: EndpointPolicy.EXACT by default — the official segment start
+    and end minutes are required.  ``endpoint_policy="recent_valid"`` is an
+    explicit opt-in that uses the last/first finite close inside the segment.
+    """
+    if endpoint_policy == "exact":
+        lo = _SEGMENT_START_MOD[str(segment)]
+        hi = _SEGMENT_END_MOD[str(segment)]
+        start = panel.value_at_minute(lo)
+        end = panel.value_at_minute(hi)
+        if not np.isfinite(start) or not np.isfinite(end) or start <= _EPS:
+            return np.nan
+        return float(end / start - 1.0)
+    # explicit recent-valid policy: last/first finite within the segment
+    mods = panel.grid.expected_minutes
+    seg = _seg_mask(mods, segment)
+    vals = np.where(seg, panel.values, np.nan)
+    valid = panel.is_valid_bar & np.isfinite(vals)
+    idx = np.where(valid)[0]
+    if len(idx) < 2 or vals[idx[0]] <= _EPS:
         return np.nan
-    return float(finite[-1] / finite[0] - 1.0)
+    return float(vals[idx[-1]] / vals[idx[0]] - 1.0)
 
 
 @register_operator(
@@ -255,17 +355,55 @@ def _seg_return(vals, times, segment):
     status="experimental",
 )
 class IntraSegmentReturn(SeriesOperator):
-    metadata = _metadata("intra_segment_return", "指定时段（morning/afternoon）收盘/开盘收益 - 1。", ["close", "segment", "session_tz"], unit="return")
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R6-190
+    metadata = _metadata(
+        "intra_segment_return",
+        "指定时段（morning/afternoon）收盘/开盘收益 - 1（默认官方端点精确）。",
+        ["close", "segment", "session_tz", "endpoint_policy"],
+        unit="return",
+    )
+    metadata.param_specs = {
+        "endpoint_policy": ParamSpec(dtype=str, choices=("exact", "recent_valid"), searchable=False),
+    }
 
-    def _calculate_series(self, close, segment="morning", session_tz=None, **_):
-        return _daily_agg(_session_local(close, session_tz), lambda v, t: _seg_return(v, t, segment))
+    def _calculate_series(self, close, segment="morning", session_tz=None,
+                          endpoint_policy="exact", **_):
+        if segment not in _SEGMENT_RANGES:
+            raise ValueError(f"segment must be in {{morning, afternoon}}, got {segment!r}")
+        return _daily_agg(
+            close,
+            lambda panel: _seg_return(panel, segment, endpoint_policy),
+            session_tz=session_tz,
+        )
 
 
-def _seg_volume_share(vals, times, segment, total):
-    mask = _seg_mask(times, segment)
-    seg = float(np.nansum(vals[mask]))
-    return seg / total if total > _EPS else np.nan
+def _seg_volume_share(panel: SessionPanel, segment: str) -> float:
+    """Segment volume / full-day volume.
+
+    R26-035: an incomplete full-day denominator must not produce a normal
+    share.  Below 90% official-slot coverage the denominator is unknown -> NaN.
+    """
+    if not _coverage_ok(panel):
+        return np.nan
+    mods = panel.grid.expected_minutes
+    seg = _seg_mask(mods, segment)
+    valid = panel.is_valid_bar & np.isfinite(panel.values)
+    total = float(panel.values[valid].sum())
+    seg_total = float(panel.values[valid & seg].sum())
+    if total <= _EPS:
+        return np.nan
+    return seg_total / total
+
+
+def _make_seg_share(unit: str):
+    def _calculate_series(self, value, segment="morning", session_tz=None, **_):
+        if segment not in _SEGMENT_RANGES:
+            raise ValueError(f"segment must be in {{morning, afternoon}}, got {segment!r}")
+        return _daily_agg(
+            value,
+            lambda panel: _seg_volume_share(panel, segment),
+            session_tz=session_tz,
+        )
+    return _calculate_series
 
 
 @register_operator(
@@ -278,14 +416,14 @@ def _seg_volume_share(vals, times, segment, total):
     status="experimental",
 )
 class IntraSegmentVolumeShare(SeriesOperator):
-    metadata = _metadata("intra_segment_volume_share", "指定时段成交量占全天比例。", ["volume", "segment", "session_tz"], unit="ratio")
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R6-190
+    metadata = _metadata(
+        "intra_segment_volume_share",
+        "指定时段成交量占全天比例（完整日 denominator 才有效）。",
+        ["volume", "segment", "session_tz"], unit="ratio",
+    )
+    metadata.param_specs = {}
 
-    def _calculate_series(self, volume, segment="morning", session_tz=None, **_):
-        def fn(v, t):
-            total = float(np.nansum(v))
-            return _seg_volume_share(v, t, segment, total)
-        return _daily_agg(_session_local(volume, session_tz), fn)
+    _calculate_series = _make_seg_share("volume")
 
 
 @register_operator(
@@ -298,25 +436,35 @@ class IntraSegmentVolumeShare(SeriesOperator):
     status="experimental",
 )
 class IntraSegmentAmountShare(SeriesOperator):
-    metadata = _metadata("intra_segment_amount_share", "指定时段成交额占全天比例。", ["amount", "segment", "session_tz"], unit="ratio")
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R6-190
+    metadata = _metadata(
+        "intra_segment_amount_share",
+        "指定时段成交额占全天比例（完整日 denominator 才有效）。",
+        ["amount", "segment", "session_tz"], unit="ratio",
+    )
+    metadata.param_specs = {}
 
-    def _calculate_series(self, amount, segment="morning", session_tz=None, **_):
-        def fn(v, t):
-            total = float(np.nansum(v))
-            return _seg_volume_share(v, t, segment, total)
-        return _daily_agg(_session_local(amount, session_tz), fn)
+    _calculate_series = _make_seg_share("amount")
 
 
-def _seg_vwap_deviation(close_v, amt_v, vol_v, times, segment):
-    mask = _seg_mask(times, segment)
-    c = close_v[mask]
-    a = np.nansum(amt_v[mask])
-    v = np.nansum(vol_v[mask])
-    if len(c) < 1 or v <= _EPS or not np.isfinite(c[-1]):
+def _seg_vwap_deviation(pc: SessionPanel, pa: SessionPanel, pv: SessionPanel, segment: str) -> float:
+    """Segment-end close vs cumulative segment VWAP.
+
+    Exact endpoint for the close (R26-025); the VWAP is the tuple-complete
+    amount/volume over the segment.  An incomplete segment fails closed.
+    """
+    if not _coverage_ok(pc):
         return np.nan
-    vwap = a / v
-    return float(c[-1] / vwap - 1.0)
+    end = pc.value_at_minute(_SEGMENT_END_MOD[str(segment)])
+    if not np.isfinite(end):
+        return np.nan
+    mods = pc.grid.expected_minutes
+    seg = _seg_mask(mods, segment)
+    valid = pc.is_valid_bar & pa.is_valid_bar & pv.is_valid_bar & seg
+    a = np.nansum(np.where(valid, pa.values, np.nan))
+    v = np.nansum(np.where(valid, pv.values, np.nan))
+    if v <= _EPS or not np.isfinite(end):
+        return np.nan
+    return float(end / (a / v) - 1.0)
 
 
 @register_operator(
@@ -329,63 +477,31 @@ def _seg_vwap_deviation(close_v, amt_v, vol_v, times, segment):
     status="experimental",
 )
 class IntraSegmentVwapDeviation(SeriesOperator):
-    metadata = _metadata("intra_segment_vwap_deviation", "指定时段末价相对该时段累计 VWAP 的偏差。", ["close", "amount", "volume", "segment", "session_tz"], unit="ratio")
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R6-190
+    metadata = _metadata(
+        "intra_segment_vwap_deviation",
+        "指定时段末价相对该时段累计 VWAP 的偏差。",
+        ["close", "amount", "volume", "segment", "session_tz"],
+        unit="ratio",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, amount, volume, segment="morning", session_tz=None, **_):
-        frame = _session_local(close, session_tz)
-        amt = _session_local(amount, session_tz)
-        vol = _session_local(volume, session_tz)
-        out = {}
-        for inst in frame.columns:
-            joined = pd.concat([frame[inst], amt[inst], vol[inst]], axis=1, keys=["c", "a", "v"]).dropna(subset=["c"])
-            joined["day"] = joined.index.normalize()
-            per_day = {}
-            for day, group in joined.groupby("day"):
-                per_day[day] = _seg_vwap_deviation(
-                    np.asarray(group["c"], dtype=float),
-                    np.asarray(group["a"], dtype=float),
-                    np.asarray(group["v"], dtype=float),
-                    np.asarray(group.index, dtype="datetime64[ns]"),
-                    segment,
-                )
-            out[inst] = pd.Series(per_day, dtype=float)
-        return pd.DataFrame(out).sort_index()
+        if segment not in _SEGMENT_RANGES:
+            raise ValueError(f"segment must be in {{morning, afternoon}}, got {segment!r}")
+        return _triple_agg(
+            close, amount, volume,
+            lambda pa, pb, pc: _seg_vwap_deviation(pa, pb, pc, segment),
+            session_tz=session_tz,
+        )
 
 
-def _coverage_ok(
-    r: np.ndarray,
-    mods: np.ndarray,
-    expected_slots: int,
-    floor: float = 0.9,
-) -> bool:
-    """Coverage gate: realised-variation estimates must not treat data gaps as
-    zero-return minutes (P1-56 / P0-43/45).
-
-    The denominator is the OFFICIAL expected slot count for the measured grid
-    (``expected_slots``), never the observed row count — a wholly missing bar
-    silently shrinks ``r.size`` and could otherwise read 100% covered.  ``mods``
-    (minute-of-day, aligned with ``r``) selects only bars on the official
-    session grid, so lunch-gap bars never count as missing and a non-official
-    bar never inflates coverage.
-    """
-    if expected_slots <= 0:
-        return False
-    covered = int(np.sum(np.isfinite(r) & np.isin(mods, _OFFICIAL_MINUTES)))
-    return covered / expected_slots >= floor
-
-
-def _seg_realized_vol(close_v, times, segment):
-    mods = _minute_of_day(times)
-    mask = _seg_mask(times, segment)
-    r = _log_returns(close_v[mask])
-    # P0-43/45: coverage is measured against the OFFICIAL segment grid, never
-    # the observed row count.
-    lo, hi = _SEGMENT_RANGES[str(segment)]
-    width = _bar_width_minutes(mods)
-    expected = _expected_slots(np.arange(lo, hi + 1, dtype=int), width)
-    if not _coverage_ok(r, mods[mask], expected):
+def _seg_realized_vol(panel: SessionPanel, segment: str) -> float:
+    if not _coverage_ok(panel):
         return np.nan
+    mods = panel.grid.expected_minutes
+    seg = _seg_mask(mods, segment)
+    r = np.where(seg, panel.log_returns(), np.nan)
     with np.errstate(invalid="ignore"):
         return float(math.sqrt(float(np.nansum(r * r))))
 
@@ -400,25 +516,31 @@ def _seg_realized_vol(close_v, times, segment):
     status="experimental",
 )
 class IntraSegmentRealizedVol(SeriesOperator):
-    metadata = _metadata("intra_segment_realized_vol", "指定时段已实现波动率 sqrt(sum(r_t^2))。", ["close", "segment", "session_tz"], unit="volatility")
-    metadata.param_specs = {"session_tz": ParamSpec(dtype=str, searchable=False)}  # R6-190
+    metadata = _metadata(
+        "intra_segment_realized_vol",
+        "指定时段已实现波动率 sqrt(sum(r_t^2))。",
+        ["close", "segment", "session_tz"], unit="volatility",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, segment="morning", session_tz=None, **_):
-        return _daily_agg(_session_local(close, session_tz), lambda v, t: _seg_realized_vol(v, t, segment))
+        if segment not in _SEGMENT_RANGES:
+            raise ValueError(f"segment must be in {{morning, afternoon}}, got {segment!r}")
+        return _daily_agg(
+            close, lambda panel: _seg_realized_vol(panel, segment),
+            session_tz=session_tz,
+        )
 
 
 # ---------------------------------------------------------------------------
 # § Realized variance / semivariance / bipower / jump
 # ---------------------------------------------------------------------------
 
-def _rv(close_v, times):
-    r = _log_returns(close_v)
-    # P0-43/45: coverage is measured against the OFFICIAL day grid, never the
-    # observed row count.
-    mods = _minute_of_day(times)
-    width = _bar_width_minutes(mods)
-    if not _coverage_ok(r, mods, _expected_slots(_OFFICIAL_MINUTES, width)):
+def _rv(panel: SessionPanel) -> float:
+    if not _coverage_ok(panel):
         return np.nan
+    r = panel.log_returns()
     with np.errstate(invalid="ignore"):
         return float(np.nansum(r * r))
 
@@ -433,27 +555,27 @@ def _rv(close_v, times):
     status="experimental",
 )
 class IntraRealizedVariance(SeriesOperator):
-    metadata = _metadata("intra_realized_variance", "日内已实现方差 sum(r_t^2)。", ["close"], unit="variance")
+    metadata = _metadata(
+        "intra_realized_variance",
+        "日内已实现方差 sum(r_t^2)（官方网格逐槽）。",
+        ["close"], unit="variance",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, lambda v, t: _rv(v, t))
+        return _daily_agg(close, _rv)
 
 
-def _semivariance(close_v, times, side):
-    r = _log_returns(close_v)
-    # P0-43/45: coverage is measured against the OFFICIAL day grid, never the
-    # observed row count.
-    mods = _minute_of_day(times)
-    width = _bar_width_minutes(mods)
-    if not _coverage_ok(r, mods, _expected_slots(_OFFICIAL_MINUTES, width)):
+def _semivariance(panel: SessionPanel, side: str) -> float:
+    if not _coverage_ok(panel):
         return np.nan
+    r = panel.log_returns()
     if side == "down":
         r = np.where(r < 0, r, 0.0)
     elif side == "up":
         r = np.where(r > 0, r, 0.0)
     else:
-        # An invalid ``side`` must fail loudly, never silently fall back to the
-        # full RV (P1-55).
         raise ValueError("intra_realized_semivariance requires side in {'up', 'down'}")
     with np.errstate(invalid="ignore"):
         return float(np.nansum(r * r))
@@ -469,28 +591,26 @@ def _semivariance(close_v, times, side):
     status="experimental",
 )
 class IntraRealizedSemivariance(SeriesOperator):
-    metadata = _metadata("intra_realized_semivariance", "日内上/下半方差 sum(r_t^2 * 1(sign))。", ["close", "side"], unit="variance")
+    metadata = _metadata(
+        "intra_realized_semivariance",
+        "日内上/下半方差 sum(r_t^2 * 1(sign))。",
+        ["close", "side"], unit="variance",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, side="down", **_):
         if side not in ("up", "down"):
-            # Invalid side must fail loudly (P1-55), not fall back to full RV.
             raise ValueError("intra_realized_semivariance requires side in {'up', 'down'}")
-        return _daily_agg(close, lambda v, t: _semivariance(v, t, side))
+        return _daily_agg(close, lambda panel: _semivariance(panel, side))
 
 
-def _bipower(close_v, times):
-    r = _log_returns(close_v)
-    # P0-43/45: coverage is measured against the OFFICIAL day grid, never the
-    # observed row count.
-    mods = _minute_of_day(times)
-    width = _bar_width_minutes(mods)
-    if not _coverage_ok(r, mods, _expected_slots(_OFFICIAL_MINUTES, width)):
+def _bipower(panel: SessionPanel) -> float:
+    if not _coverage_ok(panel):
         return np.nan
-    # Bipower variation must use *real adjacent* minute returns.  Compressing
-    # the finite returns and differencing the compressed series pairs 09:40 with
-    # 09:42 across a gap — a 3rd-round P1-53 numerical bug.  Multiplying the raw
-    # positional array means any product touching a NaN return is dropped and
-    # only truly adjacent finite minutes are summed.
+    r = panel.log_returns()
+    # Bipower variation uses *real adjacent* grid returns: a missing slot is an
+    # explicit NaN, so no pair spans a gap (R26-020).
     with np.errstate(invalid="ignore"):
         return float((math.pi / 2.0) * np.nansum(np.abs(r[1:]) * np.abs(r[:-1])))
 
@@ -505,15 +625,21 @@ def _bipower(close_v, times):
     status="experimental",
 )
 class IntraBipowerVariation(SeriesOperator):
-    metadata = _metadata("intra_bipower_variation", "日内双幂变差 (pi/2)*sum(|r_t||r_{t-1}|)。", ["close"], unit="variance")
+    metadata = _metadata(
+        "intra_bipower_variation",
+        "日内双幂变差 (pi/2)*sum(|r_t||r_{t-1}|)。",
+        ["close"], unit="variance",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, lambda v, t: _bipower(v, t))
+        return _daily_agg(close, _bipower)
 
 
-def _jump_ratio(close_v, times):
-    rv = _rv(close_v, times)
-    bv = _bipower(close_v, times)
+def _jump_ratio(panel: SessionPanel) -> float:
+    rv = _rv(panel)
+    bv = _bipower(panel)
     if not np.isfinite(rv) or not np.isfinite(bv) or rv <= _EPS:
         return np.nan
     return float(max(rv - bv, 0.0) / rv)
@@ -529,27 +655,34 @@ def _jump_ratio(close_v, times):
     status="experimental",
 )
 class IntraJumpRatio(SeriesOperator):
-    metadata = _metadata("intra_jump_ratio", "日内跳跃占比 max(RV-BV,0)/RV。", ["close"], unit="ratio")
+    metadata = _metadata(
+        "intra_jump_ratio",
+        "日内跳跃占比 max(RV-BV,0)/RV。",
+        ["close"], unit="ratio",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, lambda v, t: _jump_ratio(v, t))
+        return _daily_agg(close, _jump_ratio)
 
 
 # ---------------------------------------------------------------------------
 # § Intraday price path
 # ---------------------------------------------------------------------------
 
-def _path_efficiency(close_v):
-    mask = np.isfinite(close_v)
-    if mask.sum() < 2:
+def _path_efficiency(panel: SessionPanel) -> float:
+    """|net displacement| / arc length over the longest trailing contiguous
+    complete run (R26-028/029).
+
+    A missing slot BREAKS the path: interior gaps are never bridged by a
+    straight segment between gap endpoints (which would shorten the path and
+    inflate efficiency).
+    """
+    run = panel.contiguous_complete_run()
+    if run.sum() < 2:
         return np.nan
-    idx = np.where(mask)[0]
-    pts = close_v[idx]
-    # Value-contiguous arc length through consecutive finite closes (bridging
-    # interior gaps with the straight segment between their endpoints).  By the
-    # triangle inequality this is always >= |net displacement|, so efficiency
-    # stays in [0,1] — P1-54 (compressing the finite closes skipped the gap and
-    # inflated efficiency).
+    pts = panel.values[run]
     length = float(np.sum(np.abs(np.diff(pts))))
     if length <= _EPS:
         return 0.0
@@ -566,27 +699,31 @@ def _path_efficiency(close_v):
     status="experimental",
 )
 class IntraPathEfficiency(SeriesOperator):
-    metadata = _metadata("intra_path_efficiency", "日内路径效率 |净位移|/路径长度。", ["close"], unit="ratio")
+    metadata = _metadata(
+        "intra_path_efficiency",
+        "日内路径效率 |净位移|/路径长度（缺口断开路径）。",
+        ["close"], unit="ratio",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, lambda v, t: _path_efficiency(v))
+        return _daily_agg(close, _path_efficiency)
 
 
-def _position_of(high_v, times, *, low: bool):
-    finite_mask = np.isfinite(high_v)
-    if not np.any(finite_mask):
+def _position_of(panel: SessionPanel, *, low: bool) -> float:
+    """Position of the extreme value as official-slot ordinal / session slot count.
+
+    R26-030: the slot_id (official minute ordinal) is used, never the compressed
+    observed-row index — missing/duplicate bars must not move "when the high
+    occurred".
+    """
+    valid = panel.is_valid_bar & np.isfinite(panel.values)
+    if not np.any(valid):
         return np.nan
-    idx = np.where(finite_mask)[0]
-    vals = high_v[finite_mask]
-    target = np.argmin(vals) if low else np.argmax(vals)
-    # Normalise by the *observed session grid* (all rows, finite or not).  The
-    # previous denominator counted only finite bars, so a high at raw slot 200
-    # on a 150-finite-bar day produced 200/150 > 1 — a direct numerical error
-    # (P0-23).  ``raw_slot / total_grid`` is always in [0, 1).
-    total = len(high_v)
-    if total <= 0:
-        return np.nan
-    return float(idx[target]) / float(total)
+    vals = np.where(valid, panel.values, np.nan)
+    target = int(np.nanargmin(vals)) if low else int(np.nanargmax(vals))
+    return float(panel.slot_id[target]) / float(panel.n_slots)
 
 
 @register_operator(
@@ -599,10 +736,16 @@ def _position_of(high_v, times, *, low: bool):
     status="experimental",
 )
 class IntraHighTime(SeriesOperator):
-    metadata = _metadata("intra_high_time", "全天最高价首次出现位置 / 有效分钟数。", ["high"], unit="position")
+    metadata = _metadata(
+        "intra_high_time",
+        "全天最高价首次出现位置（官方 slot ordinal / 会话 slot 数）。",
+        ["high"], unit="position",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, high, **_):
-        return _daily_agg(high, lambda v, t: _position_of(v, t, low=False))
+        return _daily_agg(high, lambda panel: _position_of(panel, low=False))
 
 
 @register_operator(
@@ -615,23 +758,30 @@ class IntraHighTime(SeriesOperator):
     status="experimental",
 )
 class IntraLowTime(SeriesOperator):
-    metadata = _metadata("intra_low_time", "全天最低价首次出现位置 / 有效分钟数。", ["low"], unit="position")
+    metadata = _metadata(
+        "intra_low_time",
+        "全天最低价首次出现位置（官方 slot ordinal / 会话 slot 数）。",
+        ["low"], unit="position",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, low, **_):
-        return _daily_agg(low, lambda v, t: _position_of(v, t, low=True))
+        return _daily_agg(low, lambda panel: _position_of(panel, low=True))
 
 
-def _vwap_above_ratio(close_v, amount_v, volume_v):
-    valid_vwap = np.isfinite(amount_v) & np.isfinite(volume_v) & (volume_v > 0)
-    total_v = float(np.sum(np.where(valid_vwap, volume_v, 0.0)))
-    total_a = float(np.sum(np.where(valid_vwap, amount_v, 0.0)))
-    if total_v <= _EPS:
+def _vwap_above_ratio(pc: SessionPanel, pa: SessionPanel, pv: SessionPanel) -> float:
+    valid = pc.is_valid_bar & pa.is_valid_bar & pv.is_valid_bar & (pv.values > 0)
+    a = np.where(valid, pa.values, 0.0)
+    v = np.where(valid, pv.values, 0.0)
+    tv = float(v.sum())
+    if tv <= _EPS:
         return np.nan
-    day_vwap = total_a / total_v
-    valid = np.isfinite(close_v) & valid_vwap
-    if valid.sum() == 0:
+    day_vwap = float(a.sum()) / tv
+    ok = valid & np.isfinite(pc.values)
+    if ok.sum() == 0:
         return np.nan
-    return float(np.mean(close_v[valid] > day_vwap))
+    return float(np.mean(pc.values[ok] > day_vwap))
 
 
 @register_operator(
@@ -644,10 +794,36 @@ def _vwap_above_ratio(close_v, amount_v, volume_v):
     status="experimental",
 )
 class IntraVwapAboveRatio(SeriesOperator):
-    metadata = _metadata("intra_vwap_above_ratio", "收盘价高于当日 VWAP 的分钟占比。", ["close", "amount", "volume"], unit="ratio")
+    metadata = _metadata(
+        "intra_vwap_above_ratio",
+        "收盘价高于当日 VWAP 的分钟占比。",
+        ["close", "amount", "volume"], unit="ratio",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, amount, volume, **_):
-        return _daily_agg_three(close, amount, volume, _vwap_above_ratio)
+        return _triple_agg(close, amount, volume, _vwap_above_ratio)
+
+
+def _vwap_cross_count(pc: SessionPanel, pa: SessionPanel, pv: SessionPanel) -> float:
+    # Tuple-complete cumulative VWAP over the aligned grid (R26-022..024).
+    valid = pc.is_valid_bar & pa.is_valid_bar & pv.is_valid_bar
+    vol = np.where(valid, pv.values, np.nan)
+    amt = np.where(valid, pa.values, np.nan)
+    cum_v = np.nancumsum(vol)
+    cum_a = np.nancumsum(amt)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cum_vwap = np.where(cum_v > _EPS, cum_a / cum_v, np.nan)
+    ok = valid & np.isfinite(pc.values) & np.isfinite(cum_vwap)
+    if ok.sum() < 2:
+        return np.nan
+    c = np.where(ok, pc.values, np.nan)
+    sign = np.sign(c - cum_vwap)
+    sign = sign[ok]
+    if len(sign) < 2:
+        return 0.0
+    return float(np.sum(sign[1:] != sign[:-1]))
 
 
 @register_operator(
@@ -660,67 +836,24 @@ class IntraVwapAboveRatio(SeriesOperator):
     status="experimental",
 )
 class IntraVwapCrossCount(SeriesOperator):
-    metadata = _metadata("intra_vwap_cross_count", "收盘价相对累计 VWAP 的方向变化次数。", ["close", "amount", "volume"], unit="count")
+    metadata = _metadata(
+        "intra_vwap_cross_count",
+        "收盘价相对累计 VWAP 的方向变化次数。",
+        ["close", "amount", "volume"], unit="count",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, amount, volume, **_):
-        frame = _as_panel(close)
-        amt = _as_panel(amount)
-        vol = _as_panel(volume)
-        out = {}
-        for inst in frame.columns:
-            joined = pd.concat([frame[inst], amt[inst], vol[inst]], axis=1, keys=["c", "a", "v"]).dropna(subset=["c"])
-            joined["day"] = joined.index.normalize()
-            per_day = {}
-            for day, group in joined.groupby("day"):
-                per_day[day] = _vwap_cross_count(
-                    np.asarray(group["c"], dtype=float),
-                    np.asarray(group["a"], dtype=float),
-                    np.asarray(group["v"], dtype=float),
-                )
-            out[inst] = pd.Series(per_day, dtype=float)
-        return pd.DataFrame(out).sort_index()
-
-
-def _vwap_cross_count(close_v, amount_v, volume_v):
-    # Cumulative VWAP runs on the full aligned grid (all traded bars), while the
-    # cross test only fires on rows where BOTH close and the cumulative VWAP
-    # exist.  The previous code compressed ``close`` to its finite rows but kept
-    # ``amount``/``volume`` on the full axis — the two arrays could desync when a
-    # close was missing (P0-24).
-    # P0-44: volume/amount are a PAIR — both present or both missing.  A bar with
-    # only one of the two finite is data-invalid; zero-filling the missing member
-    # would silently desync the cumulative VWAP (a missing amount folds in as 0
-    # while its volume counts, or vice versa).  Treat the pair as missing
-    # together and never zero-fill.
-    pair_ok = np.isfinite(volume_v) & np.isfinite(amount_v)
-    vol = np.where(pair_ok, volume_v, np.nan)
-    amt = np.where(pair_ok, amount_v, np.nan)
-    cum_v = np.nancumsum(vol)
-    cum_a = np.nancumsum(amt)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        cum_vwap = np.where(cum_v > _EPS, cum_a / cum_v, np.nan)
-    valid = np.isfinite(close_v) & np.isfinite(cum_vwap)
-    if valid.sum() < 2:
-        return np.nan
-    c = np.where(valid, close_v, np.nan)
-    sign = np.sign(c - cum_vwap)
-    sign = sign[valid]
-    if len(sign) < 2:
-        return 0.0
-    return float(np.sum(sign[1:] != sign[:-1]))
+        return _triple_agg(close, amount, volume, _vwap_cross_count)
 
 
 # ---------------------------------------------------------------------------
 # § Intraday volume / amount distribution
 # ---------------------------------------------------------------------------
 
-def _concentration(vals):
-    # R6-191: intra_concentration is a distribution-of-activity primitive —
-    # its input contract is NonnegativeActivity.  A negative value is INVALID,
-    # not "the amount that happened in the opposite direction"; silently
-    # abs()-ing it manufactures an undeclared semantics.  Fail closed on any
-    # negative entry instead of folding it in as positive mass.
-    v = np.asarray(vals, dtype=float)
+def _concentration(panel: SessionPanel) -> float:
+    v = np.where(panel.is_valid_bar, panel.values, np.nan)
     if np.any(v < 0.0):
         return np.nan
     finite = v[np.isfinite(v)]
@@ -741,16 +874,20 @@ def _concentration(vals):
     status="experimental",
 )
 class IntraConcentration(SeriesOperator):
-    metadata = _metadata("intra_concentration", "日内成交集中度 sum((value/sum)^2)。", ["value"], unit="hhi")
+    metadata = _metadata(
+        "intra_concentration",
+        "日内成交集中度 sum((value/sum)^2)。",
+        ["value"], unit="hhi",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, value, **_):
-        return _daily_agg(value, lambda v, t: _concentration(v))
+        return _daily_agg(value, _concentration)
 
 
-def _entropy(vals, normalize=True):
-    # R6-191: same NonnegativeActivity contract as _concentration — a negative
-    # value is data-invalid, never abs()-folded in as positive mass.
-    v = np.asarray(vals, dtype=float)
+def _entropy(panel: SessionPanel, normalize: bool = True) -> float:
+    v = np.where(panel.is_valid_bar, panel.values, np.nan)
     if np.any(v < 0.0):
         return np.nan
     finite = v[np.isfinite(v)]
@@ -776,23 +913,28 @@ def _entropy(vals, normalize=True):
     status="experimental",
 )
 class IntraEntropy(SeriesOperator):
-    metadata = _metadata("intra_entropy", "日内成交分布熵（归一化）。", ["value", "normalize"], unit="entropy")
-    metadata.param_specs = {"normalize": ParamSpec(dtype=bool, searchable=False)}  # R6-190
+    metadata = _metadata(
+        "intra_entropy",
+        "日内成交分布熵（归一化）。",
+        ["value", "normalize"], unit="entropy",
+    )
+    metadata.param_specs = {
+        "normalize": ParamSpec(dtype=bool, searchable=False),
+    }
 
     def _calculate_series(self, value, normalize=True, **_):
-        return _daily_agg(value, lambda v, t: _entropy(v, bool(normalize)))
+        return _daily_agg(value, lambda panel: _entropy(panel, bool(normalize)))
 
 
-def _signed_imbalance_proxy(close_v, value_v):
-    r = np.sign(_log_returns(close_v))
-    # P0-44: ``value`` is pair-filtered at the ``_daily_agg_two`` routing layer
-    # (both panels finite), so the zero-fill below is a defensive no-op — a
-    # missing bar is never folded in as zero.
-    value = np.where(np.isfinite(value_v), value_v, 0.0)
+def _signed_imbalance_proxy(pc: SessionPanel, pv: SessionPanel) -> float:
+    r = pc.log_returns()
+    valid = pc.is_valid_bar & pv.is_valid_bar
+    value = np.where(valid, pv.values, 0.0)
     total = float(value.sum())
     if total <= _EPS:
         return np.nan
-    return float(np.sum(np.where(np.isfinite(r), r, 0.0) * value) / total)
+    signed = np.where(np.isfinite(r) & valid, np.sign(r), 0.0) * value
+    return float(signed.sum() / total)
 
 
 @register_operator(
@@ -805,18 +947,24 @@ def _signed_imbalance_proxy(close_v, value_v):
     status="experimental",
 )
 class IntraSignedImbalanceProxy(SeriesOperator):
-    metadata = _metadata("intra_signed_imbalance_proxy", "基于分钟价格方向的成交不平衡代理 sum(sign(r)*value)/sum(value)。", ["close", "value"], unit="ratio")
+    metadata = _metadata(
+        "intra_signed_imbalance_proxy",
+        "基于分钟价格方向的成交不平衡代理 sum(sign(r)*value)/sum(value)。",
+        ["close", "value"], unit="ratio",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, value, **_):
-        return _daily_agg_two(close, value, lambda a, b: _signed_imbalance_proxy(a, b))
+        return _pair_agg(close, value, _signed_imbalance_proxy)
 
 
-def _return_activity_corr(close_v, activity_v, absolute_return):
-    r = _log_returns(close_v)
+def _return_activity_corr(pc: SessionPanel, pa: SessionPanel, absolute_return: bool) -> float:
+    r = pc.log_returns()
     if absolute_return:
         r = np.abs(r)
-    mask = np.isfinite(r) & np.isfinite(activity_v)
-    r, a = r[mask], activity_v[mask]
+    valid = pc.is_valid_bar & pa.is_valid_bar & np.isfinite(pa.values)
+    r, a = r[valid], pa.values[valid]
     if len(r) < 2 or np.std(r) <= _EPS or np.std(a) <= _EPS:
         return np.nan
     return float(np.corrcoef(r, a)[0, 1])
@@ -832,24 +980,32 @@ def _return_activity_corr(close_v, activity_v, absolute_return):
     status="experimental",
 )
 class IntraReturnActivityCorr(SeriesOperator):
-    metadata = _metadata("intra_return_activity_corr", "分钟收益与成交活动相关性（可选绝对值）。", ["close", "activity", "absolute_return"], unit="corr")
+    metadata = _metadata(
+        "intra_return_activity_corr",
+        "分钟收益与成交活动相关性（可选绝对值）。",
+        ["close", "activity", "absolute_return"], unit="corr",
+    )
+    metadata.param_specs = {
+        "absolute_return": ParamSpec(dtype=bool, searchable=False),
+    }
 
     def _calculate_series(self, close, activity, absolute_return=False, **_):
-        return _daily_agg_two(close, activity, lambda a, b: _return_activity_corr(a, b, bool(absolute_return)))
+        return _pair_agg(
+            close, activity,
+            lambda pa, pb: _return_activity_corr(pa, pb, bool(absolute_return)),
+        )
 
 
 # ---------------------------------------------------------------------------
 # § Intraday liquidity
 # ---------------------------------------------------------------------------
 
-def _intra_amihud(close_v, amount_v, scale):
-    r = np.abs(_log_returns(close_v))
-    # P0-44: ``amount`` is pair-filtered at the ``_daily_agg_two`` routing layer
-    # (both panels finite), so the zero-fill below is a defensive no-op — a
-    # missing amount is never folded in as a zero-amount bar.
-    amount = np.where(np.isfinite(amount_v), amount_v, 0.0)
+def _intra_amihud(pc: SessionPanel, pa: SessionPanel, scale: float) -> float:
+    r = np.abs(pc.log_returns())
+    valid = pc.is_valid_bar & pa.is_valid_bar
+    amount = np.where(valid, pa.values, np.nan)
     denom = np.maximum(amount, _EPS)
-    ratio = np.where(np.isfinite(r), r / denom, np.nan)
+    ratio = np.where(np.isfinite(r) & valid, r / denom, np.nan)
     ratio = ratio[np.isfinite(ratio)]
     if len(ratio) == 0:
         return np.nan
@@ -866,27 +1022,31 @@ def _intra_amihud(close_v, amount_v, scale):
     status="experimental",
 )
 class IntraAmihud(SeriesOperator):
-    metadata = _metadata("intra_amihud", "日内 Amihud 非流动性 mean(|r|/max(amount,eps))*scale。", ["close", "amount", "scale"], unit="illiquidity")
-
-    # R6-189: ``scale`` is a pure output-unit rescaling (1e6 vs 1e8 vs 1e10 give
-    # identical ordering / alpha) — it must never be a search parameter.
-    metadata.param_specs = {"scale": ParamSpec(dtype=float, searchable=False)}
+    metadata = _metadata(
+        "intra_amihud",
+        "日内 Amihud 非流动性 mean(|r|/max(amount,eps))*scale。",
+        ["close", "amount", "scale"], unit="illiquidity",
+    )
+    # R6-189: ``scale`` is a pure output-unit rescaling — never a search param.
+    metadata.param_specs = {
+        "scale": ParamSpec(dtype=float, searchable=False),
+    }
 
     def _calculate_series(self, close, amount, scale=1e8, **_):
-        return _daily_agg_two(close, amount, lambda a, b: _intra_amihud(a, b, float(scale)))
+        return _pair_agg(
+            close, amount, lambda pa, pb: _intra_amihud(pa, pb, float(scale)),
+        )
 
 
-def _kyle_lambda_proxy(close_v, amount_v):
-    r = _log_returns(close_v)
-    # P0-44: ``amount`` is pair-filtered at the ``_daily_agg_two`` routing layer
-    # (both panels finite), so the zero-fill below is a defensive no-op — a
-    # missing amount is never folded in as a zero-amount bar.
-    amount = np.where(np.isfinite(amount_v), amount_v, 0.0)
+def _kyle_lambda_proxy(pc: SessionPanel, pa: SessionPanel) -> float:
+    r = pc.log_returns()
+    valid = pc.is_valid_bar & pa.is_valid_bar
+    amount = np.where(valid, pa.values, 0.0)
     total = float(amount.sum())
     if total <= _EPS:
         return np.nan
     signed_share = np.sign(r) * amount / total
-    mask = np.isfinite(r) & np.isfinite(signed_share)
+    mask = valid & np.isfinite(r) & np.isfinite(signed_share)
     r, s = r[mask], signed_share[mask]
     if len(r) < 3 or np.std(s) <= _EPS:
         return np.nan
@@ -904,14 +1064,20 @@ def _kyle_lambda_proxy(close_v, amount_v):
     status="experimental",
 )
 class IntraKyleLambdaProxy(SeriesOperator):
-    metadata = _metadata("intra_kyle_lambda_proxy", "日内 Kyle Lambda 代理（收益对方向性成交额占比回归）。", ["close", "amount"], unit="lambda")
+    metadata = _metadata(
+        "intra_kyle_lambda_proxy",
+        "日内 Kyle Lambda 代理（收益对方向性成交额占比回归）。",
+        ["close", "amount"], unit="lambda",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, amount, **_):
-        return _daily_agg_two(close, amount, lambda a, b: _kyle_lambda_proxy(a, b))
+        return _pair_agg(close, amount, _kyle_lambda_proxy)
 
 
-def _extreme_bar_return(close_v, side):
-    r = _log_returns(close_v)
+def _extreme_bar_return(panel: SessionPanel, side: str) -> float:
+    r = panel.log_returns()
     r = r[np.isfinite(r)]
     if len(r) == 0:
         return np.nan
@@ -928,27 +1094,51 @@ def _extreme_bar_return(close_v, side):
     status="experimental",
 )
 class IntraExtremeBarReturn(SeriesOperator):
-    metadata = _metadata("intra_extreme_bar_return", "日内单分钟最大/最小收益。", ["close", "side"], unit="return")
+    metadata = _metadata(
+        "intra_extreme_bar_return",
+        "日内单分钟最大/最小收益。",
+        ["close", "side"], unit="return",
+    )
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, side="max", **_):
-        # R6-184: the kernel silently treated ANY side != "max" as "min", so
-        # ``side="abc"`` silently produced the min return.  Validate the enum.
         if side not in ("max", "min"):
             raise ValueError("side must be 'max' or 'min'")
-        return _daily_agg(close, lambda v, t: _extreme_bar_return(v, side))
+        return _daily_agg(close, lambda panel: _extreme_bar_return(panel, side))
 
 
-def _lunch_gap_return(close_v, open_v, times, morning_cutoff, afternoon_start):
-    minutes = _minute_of_day(times)
-    morning_mask = minutes <= _minute_hm(morning_cutoff)
-    afternoon_mask = minutes >= _minute_hm(afternoon_start)
-    morning_close = close_v[morning_mask]
-    afternoon_open = open_v[afternoon_mask]
-    mc = morning_close[np.isfinite(morning_close)]
-    ao = afternoon_open[np.isfinite(afternoon_open)]
-    if len(mc) == 0 or len(ao) == 0 or mc[-1] <= _EPS:
+def _lunch_gap_return(
+    pc: SessionPanel,
+    po: SessionPanel,
+    morning_cutoff: str,
+    afternoon_start: str,
+    endpoint_policy: str = "exact",
+) -> float:
+    """Lunch gap: afternoon first-bar Open / morning last-bar Close - 1.
+
+    R26-027: EXACT official endpoints by default — 11:30 close and 13:01 open
+    are required.  A missing 11:30 must NOT be replaced by 11:29, nor 13:01 by
+    13:02, unless ``endpoint_policy="recent_valid"`` is declared.
+    """
+    if endpoint_policy == "exact":
+        mc = pc.value_at_minute(_SEGMENT_END_MOD["morning"])  # 11:30
+        ao = po.value_at_minute(_SEGMENT_START_MOD["afternoon"])  # 13:01
+        if not np.isfinite(mc) or not np.isfinite(ao) or mc <= _EPS:
+            return np.nan
+        return float(ao / mc - 1.0)
+    # explicit recent-valid policy
+    mcm = _minute_of_day(pc.grid.expected)  # grid minute-of-day
+    am = _minute_of_day(po.grid.expected)
+    morning_mask = mcm <= _minute_hm(morning_cutoff)
+    afternoon_mask = am >= _minute_hm(afternoon_start)
+    mc_vals = np.where(morning_mask & pc.is_valid_bar, pc.values, np.nan)
+    ao_vals = np.where(afternoon_mask & po.is_valid_bar, po.values, np.nan)
+    mc_vals = mc_vals[np.isfinite(mc_vals)]
+    ao_vals = ao_vals[np.isfinite(ao_vals)]
+    if len(mc_vals) == 0 or len(ao_vals) == 0 or mc_vals[-1] <= _EPS:
         return np.nan
-    return float(ao[0] / mc[-1] - 1.0)
+    return float(ao_vals[0] / mc_vals[-1] - 1.0)
 
 
 def _minute_hm(text: str) -> int:
@@ -966,95 +1156,85 @@ def _minute_hm(text: str) -> int:
     status="experimental",
 )
 class IntraLunchGapReturn(SeriesOperator):
-    metadata = _metadata("intra_lunch_gap_return", "午间跳空：下午首根 Open/上午末根 Close - 1。",
-               ["close", "open", "morning_cutoff", "afternoon_start", "session_tz"], unit="return")
-    metadata.param_specs = {  # R6-190: config knobs, not search parameters
+    metadata = _metadata(
+        "intra_lunch_gap_return",
+        "午间跳空：下午首根 Open/上午末根 Close - 1（默认官方端点精确）。",
+        ["close", "open", "morning_cutoff", "afternoon_start", "session_tz", "endpoint_policy"],
+        unit="return",
+    )
+    metadata.param_specs = {  # config knobs, not search parameters
         "morning_cutoff": ParamSpec(dtype=str, searchable=False),
         "afternoon_start": ParamSpec(dtype=str, searchable=False),
-        "session_tz": ParamSpec(dtype=str, searchable=False),
+        "endpoint_policy": ParamSpec(dtype=str, choices=("exact", "recent_valid"), searchable=False),
     }
 
-    def _calculate_series(self, close, open_px, morning_cutoff="11:30", afternoon_start="13:01", session_tz=None, **_):
-        frame = _session_local(close, session_tz)
-        opn = _session_local(open_px, session_tz)
-        out = {}
-        for inst in frame.columns:
-            # R6-185: the OLD code ``dropna(subset=["c","o"])`` required BOTH
-            # close and open to be finite on the SAME minute before the join —
-            # the morning last-close and the afternoon first-open both had to
-            # be complete, dropping a valid morning close if its open was
-            # missing and vice versa.  The morning needs only Close, the
-            # afternoon only Open, so concatenate without a joint dropna and let
-            # ``_lunch_gap_return`` select each side independently.
-            joined = pd.concat([frame[inst], opn[inst]], axis=1, keys=["c", "o"])
-            joined["day"] = joined.index.normalize()
-            per_day = {}
-            for day, group in joined.groupby("day"):
-                per_day[day] = _lunch_gap_return(
-                    np.asarray(group["c"], dtype=float),
-                    np.asarray(group["o"], dtype=float),
-                    np.asarray(group.index, dtype="datetime64[ns]"),
-                    morning_cutoff, afternoon_start,
-                )
-            out[inst] = pd.Series(per_day, dtype=float)
-        return pd.DataFrame(out).sort_index()
+    def _calculate_series(self, close, open_px, morning_cutoff="11:30", afternoon_start="13:01",
+                          session_tz=None, endpoint_policy="exact", **_):
+        return _pair_agg(
+            close, open_px,
+            lambda pc, po: _lunch_gap_return(pc, po, morning_cutoff, afternoon_start, endpoint_policy),
+            session_tz=session_tz,
+        )
 
 
 # ---------------------------------------------------------------------------
 # § Intraday limit-up / limit-down behavior
 # ---------------------------------------------------------------------------
 
-def _broadcast_daily_limits(close_frame, limit_frame):
-    """Broadcast a daily limit panel (index=date) onto a minute panel by date."""
-    lim = _as_panel(limit_frame)
-    out = {}
-    for inst in close_frame.columns:
-        if inst not in lim.columns:
-            continue
-        close_col = close_frame[inst]
-        lim_col = lim[inst]
-        days = close_col.index.normalize()
-        out[inst] = pd.Series(
-            lim_col.reindex(pd.DatetimeIndex(days.unique())).reindex(pd.DatetimeIndex(days)).to_numpy(),
-            index=close_col.index,
-        )
-    return pd.DataFrame(out)
+def _broadcast_daily_limits(panel: SessionPanel, limit_series: pd.Series | None) -> float | np.ndarray:
+    """Broadcast a daily limit value onto every official slot of the panel.
+
+    Returns a per-slot limit array (repeated across slots) or NaN when the
+    daily limit is unavailable for the panel's date.
+    """
+    if limit_series is None:
+        return np.full(panel.n_slots, np.nan)
+    date = pd.Timestamp(panel.trade_date)
+    try:
+        value = float(limit_series.loc[date])
+    except (KeyError, TypeError):
+        return np.full(panel.n_slots, np.nan)
+    return np.full(panel.n_slots, value)
 
 
-def _limit_mask(close_v, limit_v, side):
-    """Limit-touch mask over a per-minute series.
+def _limit_touch_mask(
+    pc: SessionPanel, limit_v: np.ndarray, side: str
+) -> tuple[bool, np.ndarray, np.ndarray]:
+    """Limit-touch tri-state over the official grid.
 
-    R6-187: a NaN limit price means the day's limit level is UNKNOWN — it must
-    not be read as "no limit state" (which would silently count every minute as
-    not-at-limit and fabricate duration/reopen statistics).  The mask is
-    tri-state: True = at limit, False = valid bar below/above the known limit,
-    None = limit unknown (the caller must emit NaN, not False).
+    Returns ``(day_known, touch, valid)``:
+    * ``day_known`` — the daily limit level itself is finite (the limit is a
+      daily broadcast, so all-or-nothing).  An unknown limit makes the whole
+      day's limit state unknown (R26-031/032).
+    * ``touch`` — per-slot True/False where the limit is known AND the required
+      bar field is valid.
+    * ``valid`` — per-slot bars usable for limit statistics (present + finite
+      limit).  An ABSENT bar is excluded from the denominator — it must never
+      read as a confirmed non-touch, but it must also not nuke the day.
     """
     limit_known = np.isfinite(limit_v)
-    bar_valid = np.isfinite(close_v)
+    bar_valid = pc.is_valid_bar
+    day_known = bool(np.all(limit_known))
+    usable = limit_known & bar_valid
     if side == "up":
-        base = limit_known & bar_valid & (close_v >= limit_v - _EPS)
+        touch = usable & (pc.values >= limit_v - _EPS)
     elif side == "down":
-        base = limit_known & bar_valid & (close_v <= limit_v + _EPS)
+        touch = usable & (pc.values <= limit_v + _EPS)
     else:
         raise ValueError(f"unknown limit side: {side!r}")
-    out = np.full(len(close_v), np.nan, dtype=object)
-    out[base] = True
-    out[limit_known & ~base] = False
-    return out
+    return day_known, touch, usable
 
 
-def _limit_first_hit_time(close_v, times, limit_v, side):
-    mask = _limit_mask(close_v, limit_v, side)
-    # R6-187: limit level unknown -> the whole day's limit state is unknown,
-    # emit NaN rather than a fabricated "never hit".
-    if np.any(pd.isna(mask)):
+def _limit_first_hit_time(pc: SessionPanel, limit_v: np.ndarray, side: str) -> float:
+    day_known, touch, usable = _limit_touch_mask(pc, limit_v, side)
+    if not day_known or pc.n_slots == 0:
         return np.nan
-    idx = np.flatnonzero(mask)
-    n = len(close_v)
-    if len(idx) == 0 or n == 0:
+    idx = np.flatnonzero(touch)
+    if len(idx) == 0:
         return np.nan
-    return float(idx[0]) / float(n)
+    # R26-034: official slot ordinal (physical clock), never the compressed
+    # observed-row index.
+    return float(pc.slot_id[idx[0]]) / float(pc.n_slots)
 
 
 @register_operator(
@@ -1067,44 +1247,42 @@ def _limit_first_hit_time(close_v, times, limit_v, side):
     status="experimental",
 )
 class IntraLimitFirstHitTime(SeriesOperator):
-    metadata = _metadata("intra_limit_first_hit_time", "首次触及涨/跌停的分钟位置 / 有效分钟数。", ["close", "high", "low", "high_limit", "low_limit", "side"], unit="position")
+    metadata = _metadata(
+        "intra_limit_first_hit_time",
+        "首次触及涨/跌停的分钟位置（官方 slot ordinal / 会话 slot 数）。",
+        ["close", "high", "low", "high_limit", "low_limit", "side"],
+        unit="position",
+    )
     metadata.tags.append("allow_panel_broadcast")
+    metadata.param_specs = {}
 
-    def _calculate_series(self, close, high=None, low=None, high_limit=None, low_limit=None, side="up", **_):
-        # R6-186: "touch" must use the minute HIGH for the up-limit and the
-        # minute LOW for the down-limit — a minute whose high == limit_up but
-        # close < limit_up really touched the board but a close-based mask
-        # missed it.  ``sealed`` states (sustained at limit) can use close, but
-        # the FIRST-HIT is a touch event.  ``high``/``low`` are optional
-        # panels; when not provided the operator falls back to close (legacy
-        # behaviour) so the positional contract stays backward-compatible.
+
+    def _calculate_series(self, close, high=None, low=None, high_limit=None, low_limit=None,
+                          side="up", **_):
+        # R26-033: a first-hit TOUCH needs only its own OHLC side.  ``side=up``
+        # uses the minute HIGH vs upper limit; ``side=down`` uses the minute LOW
+        # vs lower limit.  The OPPOSITE side's panel must never gate the check.
         if side not in ("up", "down"):
             raise ValueError("side must be 'up' or 'down'")
-        touch = (high if side == "up" else low) if (high is not None and low is not None) else close
-        frame = _as_panel(touch)
-        lim = _broadcast_daily_limits(frame, high_limit if side == "up" else low_limit)
-        out = {}
-        for inst in frame.columns:
-            joined = pd.concat([frame[inst], lim[inst]], axis=1, keys=["c", "l"]).dropna(subset=["c"])
-            joined["day"] = joined.index.normalize()
-            per_day = {}
-            for day, group in joined.groupby("day"):
-                per_day[day] = _limit_first_hit_time(
-                    np.asarray(group["c"], dtype=float),
-                    np.asarray(group.index, dtype="datetime64[ns]"),
-                    np.asarray(group["l"], dtype=float), side,
-                )
-            out[inst] = pd.Series(per_day, dtype=float)
-        return pd.DataFrame(out).sort_index()
+        touch = high if (side == "up" and high is not None) else (low if (side == "down" and low is not None) else close)
+        limit_panel = high_limit if side == "up" else low_limit
+        lim_series = _as_panel(limit_panel).iloc[:, 0] if limit_panel is not None else None
+
+        def _fn(pc: SessionPanel) -> float:
+            limit_v = _broadcast_daily_limits(pc, lim_series)
+            return _limit_first_hit_time(pc, np.asarray(limit_v, dtype=float), side)
+
+        return _daily_agg(touch, _fn)
 
 
-def _limit_duration(close_v, limit_v, side):
-    mask = _limit_mask(close_v, limit_v, side)
-    # R6-187: unknown limit level -> NaN, not "0 minutes at limit".
-    if np.any(pd.isna(mask)):
+def _limit_duration(pc: SessionPanel, limit_v: np.ndarray, side: str) -> float:
+    day_known, touch, usable = _limit_touch_mask(pc, limit_v, side)
+    if not day_known:
         return np.nan
-    n = len(close_v)
-    return float(np.count_nonzero(mask)) / float(n) if n > 0 else np.nan
+    n = int(usable.sum())
+    if n <= 0:
+        return np.nan
+    return float(touch.sum()) / float(n)
 
 
 @register_operator(
@@ -1117,43 +1295,34 @@ def _limit_duration(close_v, limit_v, side):
     status="experimental",
 )
 class IntraLimitDuration(SeriesOperator):
-    metadata = _metadata("intra_limit_duration", "收盘价处于涨/跌停价附近的分钟占比。", ["close", "high_limit", "low_limit", "side"], unit="ratio")
+    metadata = _metadata(
+        "intra_limit_duration",
+        "收盘价处于涨/跌停价附近的分钟占比。",
+        ["close", "high_limit", "low_limit", "side"], unit="ratio",
+    )
     metadata.tags.append("allow_panel_broadcast")
+    metadata.param_specs = {}
+
 
     def _calculate_series(self, close, high_limit=None, low_limit=None, side="up", **_):
-        frame = _as_panel(close)
-        lim = _broadcast_daily_limits(frame, high_limit if side == "up" else low_limit)
-        out = {}
-        for inst in frame.columns:
-            joined = pd.concat([frame[inst], lim[inst]], axis=1, keys=["c", "l"]).dropna(subset=["c"])
-            joined["day"] = joined.index.normalize()
-            per_day = {}
-            for day, group in joined.groupby("day"):
-                per_day[day] = _limit_duration(
-                    np.asarray(group["c"], dtype=float),
-                    np.asarray(group["l"], dtype=float), side,
-                )
-            out[inst] = pd.Series(per_day, dtype=float)
-        return pd.DataFrame(out).sort_index()
+        limit_panel = high_limit if side == "up" else low_limit
+        lim_series = _as_panel(limit_panel).iloc[:, 0] if limit_panel is not None else None
+
+        def _fn(pc: SessionPanel) -> float:
+            limit_v = _broadcast_daily_limits(pc, lim_series)
+            return _limit_duration(pc, np.asarray(limit_v, dtype=float), side)
+
+        return _daily_agg(close, _fn)
 
 
-def _limit_reopen_count(close_v, limit_v, side, transition):
-    mask = _limit_mask(close_v, limit_v, side)
-    # R6-187: unknown limit level -> the day's limit state is unknown; a
-    # reopen/reseal count built on a guessed mask is fabricated.
-    if np.any(pd.isna(mask)):
+def _limit_reopen_count(pc: SessionPanel, limit_v: np.ndarray, side: str, transition: str) -> float:
+    day_known, touch, usable = _limit_touch_mask(pc, limit_v, side)
+    if not day_known:
         return np.nan
-    # R6-188: run the transition state machine on the OFFICIAL minute grid.
-    # A missing minute (NaN close) is a boundary: the state before and after a
-    # gap cannot be compared as adjacent minutes.  The caller must NOT
-    # ``dropna`` the grid (which would turn "1 -> gap -> 0" into an adjacent
-    # 1->0 transition).  We treat a NaN close as "episode interrupted": no
-    # transition is counted across it.
-    m = np.asarray(mask, dtype=bool)
-    valid = np.isfinite(close_v) & np.isfinite(limit_v)
+    m = np.asarray(touch, dtype=bool)
     count = 0.0
-    for i in range(1, len(m)):
-        if not (valid[i] and valid[i - 1]):
+    for i in range(1, pc.n_slots):
+        if not (usable[i] and usable[i - 1]):
             continue  # grid gap: state not comparable across a missing minute
         if transition == "open" and m[i - 1] and not m[i]:
             count += 1.0
@@ -1172,28 +1341,113 @@ def _limit_reopen_count(close_v, limit_v, side, transition):
     status="experimental",
 )
 class IntraLimitReopenCount(SeriesOperator):
-    metadata = _metadata("intra_limit_reopen_count", "封板打开（open）/ 重新封板（reseal）次数。", ["close", "high_limit", "low_limit", "side", "transition"], unit="count")
+    metadata = _metadata(
+        "intra_limit_reopen_count",
+        "封板打开（open）/ 重新封板（reseal）次数。",
+        ["close", "high_limit", "low_limit", "side", "transition"], unit="count",
+    )
     metadata.tags.append("allow_panel_broadcast")
+    metadata.param_specs = {}
 
-    def _calculate_series(self, close, high_limit=None, low_limit=None, side="up", transition="open", **_):
-        frame = _as_panel(close)
-        lim = _broadcast_daily_limits(frame, high_limit if side == "up" else low_limit)
-        out = {}
-        for inst in frame.columns:
-            # R6-188: NO dropna — the reopen state machine must run on the
-            # OFFICIAL minute grid so a missing minute is a boundary, not a
-            # silent reconnection (``1 -> [missing] -> 0`` must not count as a
-            # 1->0 adjacent transition).
-            joined = pd.concat([frame[inst], lim[inst]], axis=1, keys=["c", "l"])
-            joined["day"] = joined.index.normalize()
-            per_day = {}
-            for day, group in joined.groupby("day"):
-                per_day[day] = _limit_reopen_count(
-                    np.asarray(group["c"], dtype=float),
-                    np.asarray(group["l"], dtype=float), side, transition,
-                )
-            out[inst] = pd.Series(per_day, dtype=float)
-        return pd.DataFrame(out).sort_index()
+
+    def _calculate_series(self, close, high_limit=None, low_limit=None, side="up",
+                          transition="open", **_):
+        limit_panel = high_limit if side == "up" else low_limit
+        lim_series = _as_panel(limit_panel).iloc[:, 0] if limit_panel is not None else None
+
+        def _fn(pc: SessionPanel) -> float:
+            limit_v = _broadcast_daily_limits(pc, lim_series)
+            return _limit_reopen_count(pc, np.asarray(limit_v, dtype=float), side, transition)
+
+        return _daily_agg(close, _fn)
+
+
+# ---------------------------------------------------------------------------
+# R26 legacy-compat shims for ``microstructure/flow_impact.py`` and
+# ``advanced_intraday.py``.
+#
+# flow_impact's BVC / impact operators and advanced_intraday's subsampled /
+# signature operators consume the pre-R26 plumbing (``_daily_agg_two`` /
+# ``_daily_agg_legacy`` / raw ``_log_returns``).  They are NOT
+# grid-canonicalized; the R26 physical-clock kernels live behind the new
+# ``_pair_agg`` / ``SessionPanel.log_returns`` path above.  The shims keep
+# those modules' behaviour byte-identical; their raw-array log-returns are
+# audited separately (R26-126..129).
+# ---------------------------------------------------------------------------
+
+def _daily_agg_legacy(
+    frame: pd.DataFrame,
+    fn: Callable[[np.ndarray, np.ndarray], float],
+) -> pd.DataFrame:
+    """LEGACY raw-array daily aggregation for advanced_intraday (R26-deprecated).
+
+    New minute kernels MUST use :func:`_daily_agg` (grid-canonicalized).
+    """
+    frame = _as_panel(frame)
+    out: dict[str, pd.Series] = {}
+    for inst in frame.columns:
+        col = frame[inst]
+        per_day: dict[pd.Timestamp, float] = {}
+        for day, group in col.groupby(col.index.normalize()):
+            vals = np.asarray(group, dtype=float)
+            times = np.asarray(group.index, dtype="datetime64[ns]")
+            if not np.any(np.isfinite(vals)):
+                per_day[day] = np.nan
+                continue
+            try:
+                per_day[day] = float(fn(vals, times))
+            except (ValueError, ZeroDivisionError, OverflowError):
+                per_day[day] = np.nan
+        out[inst] = pd.Series(per_day, dtype=float)
+    if not out:
+        return pd.DataFrame(dtype=float)
+    return pd.DataFrame(out).sort_index()
+
+
+def _log_returns(vals: np.ndarray) -> np.ndarray:
+    """LEGACY raw-array log returns for flow_impact (R26-deprecated).
+
+    New minute kernels MUST use :meth:`SessionPanel.log_returns` (grid-gated,
+    no gap fusion).  Kept only for the flow_impact consumer.
+    """
+    out = np.full(len(vals), np.nan)
+    if len(vals) > 1:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out[1:] = np.log(vals[1:] / vals[:-1])
+            out[1:][(vals[1:] <= 0.0) | (vals[:-1] <= 0.0)] = np.nan
+    return out
+
+
+def _daily_agg_two(
+    frame_a: pd.DataFrame,
+    frame_b: pd.DataFrame,
+    fn: Callable[[np.ndarray, np.ndarray], float],
+) -> pd.DataFrame:
+    """LEGACY pair aggregation for flow_impact (R26-deprecated).
+
+    Raw-observed-row pair-drop; new code uses :func:`_pair_agg`.
+    """
+    a = _as_panel(frame_a)
+    b = _as_panel(frame_b)
+    out: dict[str, pd.Series] = {}
+    for inst in a.columns:
+        joined = pd.concat([a[inst], b[inst]], axis=1, keys=["a", "b"]).dropna(subset=["a", "b"])
+        joined["day"] = joined.index.normalize()
+        per_day: dict[pd.Timestamp, float] = {}
+        for day, group in joined.groupby("day"):
+            vals_a = np.asarray(group["a"], dtype=float)
+            vals_b = np.asarray(group["b"], dtype=float)
+            if not np.any(np.isfinite(vals_a)) or not np.any(np.isfinite(vals_b)):
+                per_day[day] = np.nan
+                continue
+            try:
+                per_day[day] = float(fn(vals_a, vals_b))
+            except (ValueError, ZeroDivisionError, OverflowError):
+                per_day[day] = np.nan
+        out[inst] = pd.Series(per_day, dtype=float)
+    if not out:
+        return pd.DataFrame(dtype=float)
+    return pd.DataFrame(out).sort_index()
 
 
 __all__ = [
@@ -1220,14 +1474,4 @@ _surface.extend_extended_only(set(__all__))
 # a certified minute dataset is available.
 from cleaned_operators import operator_surface as _surface  # noqa: E402
 
-_surface.extend_extended_only({
-        "intra_segment_return", "intra_segment_volume_share", "intra_segment_amount_share",
-        "intra_segment_vwap_deviation", "intra_segment_realized_vol",
-        "intra_realized_variance", "intra_realized_semivariance", "intra_bipower_variation",
-        "intra_jump_ratio", "intra_path_efficiency", "intra_high_time", "intra_low_time",
-        "intra_vwap_above_ratio", "intra_vwap_cross_count", "intra_concentration",
-        "intra_entropy", "intra_signed_imbalance_proxy", "intra_return_activity_corr",
-        "intra_amihud", "intra_kyle_lambda_proxy", "intra_extreme_bar_return",
-        "intra_lunch_gap_return", "intra_limit_first_hit_time", "intra_limit_duration",
-        "intra_limit_reopen_count",
-    })
+_surface.extend_extended_only(set(__all__))

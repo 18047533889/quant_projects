@@ -105,6 +105,15 @@ class ContractIRDataset:
     coverage_policy: str | None = None
     # ---- #9 多根时间轴（#P0-9）----
     temporal_axes: TemporalAxes | None = None
+    # ---- R24 P0-PIT2/3/4/5 §11-14：时间表示 / PIT fidelity / filter cardinality ----
+    time_representation: str | None = None   # date_label / instant
+    time_precision: str | None = None        # date / timestamp
+    pit_fidelity: str | None = None          # knowledge_date_pit / vintage_pit / ...
+    revision_availability_time: str | None = None  # 历史修订 market-visible 时点
+    dedup_tiebreaker: list[str] = field(default_factory=list)  # 仅确定性去重 tiebreaker
+    filter_cardinalities: dict[str, str] = field(default_factory=dict)  # {field: exactly_one}
+    storage_timezone: str | None = None
+    semantic_timezone: str | None = None
     # ---- 审计问题（#P0-33：audit() 引用 d.issues，必须声明）----
     issues: list[str] = field(default_factory=list)
 
@@ -232,6 +241,17 @@ def build_contract_ir(
             )
             entry.allowed_filter_values = dict(contract.allowed_filter_values or ())
             entry.coverage_policy = contract.missing_partition_semantics
+            # R24 P0-PIT2/3/4/5：时间表示 / PIT fidelity / filter cardinality /
+            # revision 语义（revision_columns 是 dedup tiebreaker，不是 historical
+            # revision availability）。
+            entry.time_representation = contract.time_representation
+            entry.time_precision = contract.time_precision
+            entry.pit_fidelity = contract.pit_fidelity
+            entry.revision_availability_time = contract.revision_availability_time
+            entry.dedup_tiebreaker = list(contract.revision_columns or ())
+            entry.filter_cardinalities = dict(contract.filter_cardinalities or ())
+            entry.storage_timezone = contract.storage_timezone
+            entry.semantic_timezone = contract.semantic_timezone
         if reg_ds is not None:
             entry.partitioning = dict(getattr(reg_ds, "partitioning", None) or {})
             entry.storage_backend, entry.storage_layout, entry.file_format = (
@@ -335,6 +355,27 @@ def build_contract_ir(
                         f"字段级 duplicate_policy={fdup!r} 与契约默认 "
                         f"{entry.duplicate_policy!r} 不一致（数据集 {name!r}）"
                     )
+            # R24 §33：知识时钟 / 时间表示 / PIT fidelity 的契约↔字段漂移检测。
+            _FIELD_CONTRACT_FIELDS = (
+                ("knowledge_time", "knowledge_time"),
+                ("time_representation", "time_representation"),
+                ("pit_fidelity", "pit_fidelity"),
+                ("revision_availability_time", "revision_availability_time"),
+            )
+            for field_attr, entry_attr in _FIELD_CONTRACT_FIELDS:
+                fvals = {
+                    getattr(f, field_attr, None)
+                    for f in catalog._fields.values()
+                    if f.dataset == name and getattr(f, field_attr, None)
+                }
+                if len(fvals) == 1:
+                    fv = next(iter(fvals))
+                    ev = getattr(entry, entry_attr, None)
+                    if fv not in (None, ev):
+                        entry.issues.append(
+                            f"字段级 {field_attr}={fv!r} 与契约 "
+                            f"{ev!r} 不一致（数据集 {name!r}，R24 §33 语义漂移）"
+                        )
         out[name] = entry
 
     return ContractIR(out)

@@ -226,19 +226,43 @@ def test_state_deadband_ignores_small_changes():
 
 
 def test_stateful_survival_excludes_current_run():
-    """ts_state_age_percentile reference sample must be completed runs only."""
-    n = 40
+    """ts_state_age_percentile reference sample must be completed runs only.
+
+    R24-105/106: the FIRST observed active run is LEFT-CENSORED (its true start
+    predates the sample) and must NOT enter the completed distribution.  A run
+    is only completed when its entry was observed (a confirmed inactive row
+    preceded it).
+    """
+    n = 41
     dates = pd.bdate_range("2024-01-02", periods=n)
     cols = ["A"]
-    # Two completed runs of length 2, then a long current run.
+    # Leading confirmed inactive row, then two completed runs of length 2 with
+    # observed entries, then a long current run.
     state = pd.DataFrame(0.0, index=dates, columns=cols)
-    state.iloc[0:2] = 1.0   # completed run length 2
-    state.iloc[10:12] = 1.0  # completed run length 2
-    state.iloc[20:30] = 1.0  # current run
+    state.iloc[1:3] = 1.0   # completed run length 2 (entry observed at row 0)
+    state.iloc[11:13] = 1.0  # completed run length 2 (entry observed)
+    state.iloc[21:31] = 1.0  # current run
     out = OperatorRegistry.get("ts_state_age_percentile", "pandas_numpy").calculate(
         state, history_window=60, min_completed_runs=2
     )
     # At age 1 of the current run: ECDF of 1 among completed {2,2} = 0
     # At age 3: ECDF of 3 among {2,2} = 1 (both <= 3)
-    assert out["A"].iloc[20] == pytest.approx(0.0)
-    assert out["A"].iloc[22] == pytest.approx(1.0)
+    assert out["A"].iloc[21] == pytest.approx(0.0)
+    assert out["A"].iloc[23] == pytest.approx(1.0)
+
+
+def test_stateful_survival_left_censored_first_run_excluded():
+    """R24-247 golden: active,active,active,inactive — the first run is
+    left-censored and must NOT join the completed distribution."""
+    dates = pd.bdate_range("2024-01-02", periods=7)
+    cols = ["A"]
+    state = pd.DataFrame(0.0, index=dates, columns=cols)
+    state.iloc[0:3] = 1.0   # left-censored run (starts at sample start)
+    state.iloc[4:6] = 1.0   # observed-entry run (row 3 inactive)
+    out = OperatorRegistry.get("ts_state_age_percentile", "pandas_numpy").calculate(
+        state, history_window=60, min_completed_runs=2
+    )
+    # Only ONE completed run exists (the observed-entry one); the left-censored
+    # run is excluded -> the sample never reaches min_completed_runs=2 -> NaN.
+    assert np.isnan(out["A"].iloc[5])
+    assert np.isnan(out["A"].iloc[6])

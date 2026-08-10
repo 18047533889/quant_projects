@@ -25,6 +25,13 @@ def _per_gate_verified(canonical: str) -> dict[str, bool]:
         "semantic_golden_verified": False,
         "temporal_prefix_verified": False,
         "source_contract_verified": False,
+        # R25-012: honest runtime-audit fields (execution / shape / determinism /
+        # prefix causality) — read through so consumers can see exactly which
+        # evidence tier each operator actually earned.
+        "runtime_execution_verified": False,
+        "shape_verified": False,
+        "determinism_verified": False,
+        "prefix_kernel_causality_verified": False,
     }
     try:
         from backend.factor_operator_evidence import load_factor_operator_evidence
@@ -126,6 +133,20 @@ def apply_evidence_certification_overlay() -> None:
             "semantic_golden_verified",
             "temporal_prefix_verified",
             "source_contract_verified",
+        ):
+            catalog[_key] = bool(certified) and per_gate.get(_key, False)
+
+        # R25-012 (evidence independence): also surface the honest runtime-audit
+        # fields on the catalog so consumers can distinguish "the synthetic
+        # runtime audit ran" from "an independent math golden / source contract
+        # was proven".  These four come from the runtime audit and are NEVER
+        # upgraded by it (semantic_golden/source_contract stay False unless their
+        # own independent evidence exists).
+        for _key in (
+            "runtime_execution_verified",
+            "shape_verified",
+            "determinism_verified",
+            "prefix_kernel_causality_verified",
         ):
             catalog[_key] = bool(certified) and per_gate.get(_key, False)
 

@@ -123,7 +123,10 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
         domain="index", table_kind="relation", join_policy="exact",
         required_parameters=("IndexName",), cardinality="one_to_many",
         strict_pit_allowed=True,
-        metadata={"pit_reason": "membership relation; IndexName required; PIT-safe"},
+        metadata={"pit_reason": "membership relation; IndexName required; PIT-safe",
+                  # R25-068: membership observed on the exact date -> no separate
+                  # knowledge-time clock.
+                  "knowledge_time_resolution": "N/A_EXACT_OBSERVATION"},
     ),
     # R17-019: DataAccess split the dual-schema US StockCapitalDaily into two
     # datasets: ``us_stock_capital_split`` ({date}.parquet split/adjustment
@@ -140,7 +143,9 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
         "USTickerSharesPITEvent", "us_stock_capital_shares", instrument="ticker",
         domain="capital", table_kind="event", join_policy="financial_pit",
         knowledge="filing_date", period="filing_date", strict_pit_allowed=True,
-        metadata={"pit_reason": "sparse shares PIT event source; asof(filing_date) (R17-019)"},
+        metadata={"pit_reason": "sparse shares PIT event source; asof(filing_date) (R17-019)",
+                  # R25-068: filing_date is date-only -> next-session conservative.
+                  "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"},
     ),
     # US financial statements: PIT on filing_date; period = period_end;
     # timeframe (quarterly/annual/trailing_twelve_months) MUST be filtered first.
@@ -179,7 +184,9 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
         knowledge="declaration_date", effective="ex_dividend_date", period=None,
         strict_pit_allowed=True,
         metadata={"pit_reason": "PIT on declaration_date; effective ex_dividend_date may be "
-                                "future (clip); currency filter required (R17-020/021)"},
+                                "future (clip); currency filter required (R17-020/021)",
+                  # R25-068: declaration_date is date-only -> next-session.
+                  "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"},
     ),
     # X0 sparse: only ~49 calendar files (2026-05-12..2026-07-27). NOT a full
     # history daily panel. current_snapshot_only forces strict_pit_allowed=False.
@@ -207,6 +214,8 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
             "pit_reason": "PIT on published_utc (tz-aware UTC); after-close -> next session",
             "timezone": "UTC",
             "instrument_kind": "list<explode>",  # tickers is a list; NewsEventAdapter explodes
+            # R25-068: published_utc is a real tz-aware UTC timestamp.
+            "knowledge_time_resolution": "EXACT_TIMESTAMP",
         },
     ),
     _table("Calendar", "us_calendar", time="trade_date", instrument=None,

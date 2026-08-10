@@ -1,6 +1,6 @@
 # R23 Fundamental Operator Audit
 
-Fundamental canonicals: 159
+Fundamental canonicals: 160
 
 | canonical | final_status | accepted_flow_semantics | blockers |
 |---|---|---|---|
@@ -115,6 +115,7 @@ Fundamental canonicals: 159
 | fin_surprise_event_percentile | CERTIFIED_CONTEXTUAL | not-declared | PIT11_EXPECTATION_POST_EVENT_LEAK |
 | fin_surprise_event_zscore | CERTIFIED_CONTEXTUAL | not-declared | PIT11_EXPECTATION_POST_EVENT_LEAK |
 | fin_surprise_zscore | CERTIFIED_CONTEXTUAL | not-declared | PIT11_EXPECTATION_POST_EVENT_LEAK |
+| fin_total_operating_accruals | SUPPORTING_ONLY | flow_type:Stock |  |
 | fin_trend_acceleration | SUPPORTING_ONLY | not-declared |  |
 | fin_trend_r2 | SUPPORTING_ONLY | not-declared |  |
 | fin_trend_slope | SUPPORTING_ONLY | not-declared |  |

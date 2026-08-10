@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Literal
+from enum import Enum
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -30,33 +31,89 @@ class PITColumns:
 AvailablePolicy = Literal["same_day", "next_trading_day"]
 
 
+class AvailabilityPrecision(str, Enum):
+    """R24-046..048: availability precision is a DECLARED source-metadata
+    attribute, never inferred from data values (e.g. ``time == midnight``)."""
+
+    DATE = "date"
+    TIMESTAMP_SECOND = "timestamp_second"
+    TIMESTAMP_MILLISECOND = "timestamp_millisecond"
+    TIMESTAMP_NANOSECOND = "timestamp_nanosecond"
+    SESSION_LABEL = "session_label"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def is_timestamp(cls, precision: "AvailabilityPrecision | str | None") -> bool:
+        """True only for a declared sub-day timestamp precision."""
+        if precision is None:
+            return False
+        if isinstance(precision, AvailabilityPrecision):
+            return precision in {cls.TIMESTAMP_SECOND, cls.TIMESTAMP_MILLISECOND, cls.TIMESTAMP_NANOSECOND}
+        return str(precision) in {
+            cls.TIMESTAMP_SECOND.value,
+            cls.TIMESTAMP_MILLISECOND.value,
+            cls.TIMESTAMP_NANOSECOND.value,
+        }
+
+
+class PITLayerVerdict(str, Enum):
+    """R24-049..051: tri-state four-layer PIT gate.
+
+    An omitted layer must be ``UNKNOWN`` — never ``True``.  Production rejects
+    any layer that is not ``PROVEN_TRUE``.
+    """
+
+    PROVEN_TRUE = "proven_true"
+    PROVEN_FALSE = "proven_false"
+    UNKNOWN = "unknown"
+
+
+def _verdict(value: bool | PITLayerVerdict | None) -> PITLayerVerdict:
+    if value is None:
+        return PITLayerVerdict.UNKNOWN
+    if isinstance(value, PITLayerVerdict):
+        return value
+    return PITLayerVerdict.PROVEN_TRUE if bool(value) else PITLayerVerdict.PROVEN_FALSE
+
+
 def four_layer_pit_allowed(
     *,
-    field_pit_allowed: bool,
-    table_pit_allowed: bool = True,
-    dataset_pit_allowed: bool = True,
-    operator_pit_allowed: bool = True,
-) -> tuple[bool, dict[str, bool]]:
+    field_pit_allowed: bool | PITLayerVerdict | None,
+    table_pit_allowed: bool | PITLayerVerdict | None = None,
+    dataset_pit_allowed: bool | PITLayerVerdict | None = None,
+    operator_pit_allowed: bool | PITLayerVerdict | None = None,
+    production: bool = False,
+) -> tuple[bool, dict[str, PITLayerVerdict]]:
     """Combined four-layer PIT eligibility (round-7 WS-E #282).
 
-    Production PIT eligibility = ``field ∧ table ∧ dataset ∧ operator``.  Each
-    layer is a bool; the combined result is false if any layer is false.  Returns
-    ``(combined, layer_status)`` so a caller can report which layer rejected the
-    field.
+    R24-049..051: every layer is tri-state.  ``None`` (an omitted/unsupplied
+    layer) becomes ``UNKNOWN`` — it is NEVER treated as ``True``.  In
+    production, ``UNKNOWN`` or ``PROVEN_FALSE`` on any layer rejects (combined
+    ``False``); research treats ``UNKNOWN`` as an unresolved (reject) too —
+    only a fully ``PROVEN_TRUE`` stack admits PIT.
 
     * ``field_pit_allowed`` — the field's ``strict_pit_allowed`` contract.
     * ``table_pit_allowed`` — the owning logical table's ``strict_pit_allowed``.
-    * ``dataset_pit_allowed`` — the DataAccess COS contract's ``pit_policy``
-      (``strict``) supports PIT reads.
+    * ``dataset_pit_allowed`` — the DataAccess COS contract's ``pit_policy``.
     * ``operator_pit_allowed`` — operator-level PIT policy (caller-supplied).
     """
-    layers = {
-        "field_pit_allowed": bool(field_pit_allowed),
-        "table_pit_allowed": bool(table_pit_allowed),
-        "dataset_pit_allowed": bool(dataset_pit_allowed),
-        "operator_pit_allowed": bool(operator_pit_allowed),
+    layers: dict[str, PITLayerVerdict] = {
+        "field_pit_allowed": _verdict(field_pit_allowed),
+        "table_pit_allowed": _verdict(table_pit_allowed),
+        "dataset_pit_allowed": _verdict(dataset_pit_allowed),
+        "operator_pit_allowed": _verdict(operator_pit_allowed),
     }
-    return (all(layers.values()), layers)
+    combined = all(
+        v == PITLayerVerdict.PROVEN_TRUE for v in layers.values()
+    )
+    if not combined:
+        unknown = [k for k, v in layers.items() if v == PITLayerVerdict.UNKNOWN]
+        if unknown:
+            logger.warning(
+                "four-layer PIT gate has UNKNOWN layers %s — never treated as "
+                "True (R24-051); production rejects UNKNOWN", sorted(unknown),
+            )
+    return (combined, layers)
 
 
 def _shift_available_to_next_decision(
@@ -186,33 +243,53 @@ def _same_day_precision_check(
     *,
     production: bool,
     dataset: str,
+    precision: AvailabilityPrecision | str | None = None,
 ) -> None:
-    """R10 #46: ``same_day`` requires TIMESTAMP-precision availability.
+    """R10 #46 + R24-046..048: ``same_day`` requires DECLARED timestamp
+    precision.
 
-    A date-only ``PubDate`` (midnight, e.g. ``2026-08-01 00:00:00``) under
-    ``same_day`` lets an after-close filing drive that same day's close (leak).
-    Production rejects any event whose ``available_at`` is date-only; research
-    keeps the legacy opt-in but warns loudly.
+    A date-only availability under ``same_day`` lets an after-close filing drive
+    that same day's close (leak).  The precision MUST come from source metadata
+    (``precision``) — it is NEVER inferred by inspecting data values (a
+    midnight ``00:00:00`` timestamp is not proof of date-only semantics).
+    ``UNKNOWN``/``DATE`` precision rejects in production and warns in research.
     """
-    avail = pd.to_datetime(available, errors="coerce", utc=True)
-    midnight = pd.Timestamp("00:00:00").time()
-    has_date_only = avail.notna().any() and bool(
-        (avail.dt.time == midnight).any()
-    )
-    if not has_date_only:
+    precision = AvailabilityPrecision(precision) if precision is not None else AvailabilityPrecision.UNKNOWN
+    if precision == AvailabilityPrecision.UNKNOWN:
+        # No declared precision.  Backward-compatible research fallback: use a
+        # TIMESTAMP only if EVERY value carries a real time-of-day.
+        avail = pd.to_datetime(available, errors="coerce", utc=True)
+        midnight = pd.Timestamp("00:00:00").time()
+        non_null = avail[avail.notna()]
+        looks_timestamp = non_null.empty or bool((non_null.dt.time != midnight).all())
+        inferred = AvailabilityPrecision.TIMESTAMP_NANOSECOND if looks_timestamp else AvailabilityPrecision.DATE
+        if not looks_timestamp and production:
+            raise ValueError(
+                f"same_day PIT on {dataset!r} requires a DECLARED "
+                "AvailabilityPrecision (R24-046..048); the availability values "
+                "look date-only and precision was not declared. Provide "
+                "source metadata precision or use next_trading_day."
+            )
+        logger.warning(
+            "same_day PIT on %r has no DECLARED availability precision; "
+            "inferred %s from data values (research-only fallback).",
+            dataset, inferred.value,
+        )
         return
+    if AvailabilityPrecision.is_timestamp(precision):
+        return
+    # Declared DATE / SESSION_LABEL (or any non-timestamp) precision.
     if production:
         raise ValueError(
             f"same_day PIT on {dataset!r} requires TIMESTAMP-precision "
-            "available_at (AvailabilityPrecision.TIMESTAMP); date-only "
-            "(midnight) PubDate cannot safely drive a same-day decision — "
+            f"available_at; declared precision is {precision.value!r}. "
             "use next_trading_day or provide real announcement timestamps."
         )
     logger.warning(
-        "same_day PIT on %r uses date-only (midnight) available_at; "
+        "same_day PIT on %r uses declared precision %r; "
         "after-close filing could leak into the same day's close. "
         "production rejects this; research keeps legacy behaviour.",
-        dataset,
+        dataset, precision.value,
     )
 
 
@@ -244,8 +321,15 @@ def pit_asof_join(
     market_timezone: str = "UTC",
     staleness_basis: Literal["knowledge_at", "market_visible_at"] = "knowledge_at",
     production: bool = False,
+    precision: AvailabilityPrecision | str | None = None,
 ) -> pd.DataFrame:
     """Backward as-of join enforcing ``market_visible_at <= decision_timestamp``.
+
+    R24-040/041: this is the **event / knowledge-time** selector
+    (``select_latest_event_by_knowledge_time``) — it picks the event with the
+    latest visible knowledge time, NOT the latest fiscal-period state (see
+    :func:`select_latest_fiscal_period_state`).  It is NOT the right tool for
+    financial period-state reads.
 
     Historical revision vintages must be retained in ``events``.  This function
     never deduplicates a report period to its final revised value before joining.
@@ -308,10 +392,12 @@ def pit_asof_join(
     right = events.copy()
     left[decision_time] = pd.to_datetime(left[decision_time], errors="raise", utc=True)
     right[columns.available_at] = pd.to_datetime(right[columns.available_at], errors="raise", utc=True)
-    # R10 #46: same_day requires TIMESTAMP precision.
+    # R10 #46 + R24-046..048: same_day requires a DECLARED timestamp precision
+    # (source metadata), never inferred from midnight data values.
     if available_policy == "same_day":
         _same_day_precision_check(
-            right[columns.available_at], production=production, dataset=columns.instrument
+            right[columns.available_at], production=production,
+            dataset=columns.instrument, precision=precision,
         )
     # R9-P0-020: preserve the ORIGINAL announcement time under a distinct name —
     # the join key below is the market-visible time, so ``available_at`` in the
@@ -384,10 +470,60 @@ def pit_asof_join(
     return joined
 
 
-def _period_mask(period_end: pd.Series, selector: VisiblePeriodSelector) -> pd.Series:
-    dates = pd.to_datetime(period_end, errors="coerce")
+# R24-056/057: explicit selector lattice.  A caller may only keep or tighten the
+# registered field contract — never loosen a narrow contract to a broad one.
+#   annual_only    ⊂ latest_visible_period
+#   quarterly_only ⊂ latest_visible_period
+_PERIOD_SELECTOR_LATTICE = {
+    "latest_visible_period": frozenset({"latest_visible_period", "annual_only", "quarterly_only"}),
+    "annual_only": frozenset({"annual_only"}),
+    "quarterly_only": frozenset({"quarterly_only"}),
+}
+
+
+def selector_compatible(required: str, requested: str) -> bool:
+    """R24-056/057: ``requested`` is allowed iff it keeps or tightens ``required``.
+
+    ``requested in _PERIOD_SELECTOR_LATTICE[required]`` — a narrow contract
+    (``annual_only``) cannot be relaxed to ``latest_visible_period``, while a
+    broad contract (``latest_visible_period``) may be tightened to either
+    annual or quarterly view.
+    """
+    if required not in _PERIOD_SELECTOR_LATTICE:
+        raise ValueError(f"unknown required period selector {required!r}")
+    if requested not in _PERIOD_SELECTOR_LATTICE:
+        raise ValueError(f"unknown requested period selector {requested!r}")
+    return requested in _PERIOD_SELECTOR_LATTICE[required]
+
+
+def _period_mask(
+    period_end: pd.Series,
+    selector: VisiblePeriodSelector,
+    timeframe: pd.Series | None = None,
+    fiscal_quarter: pd.Series | None = None,
+) -> pd.Series:
+    """Select fiscal periods by declared timeframe / fiscal columns (R24-043..045).
+
+    A US non-December fiscal year must NOT be identified by ``month==12 &&
+    day==31``.  When the events carry a declared ``timeframe`` column (e.g.
+    ``annual`` / ``quarterly`` / ``ttm``) or ``fiscal_quarter`` / ``fiscal_year``
+    columns, those are authoritative.  The calendar ``12-31`` heuristic is only a
+    last resort for panels that carry no fiscal metadata (documented, not ideal).
+    """
     if selector == "latest_visible_period":
         return pd.Series(True, index=period_end.index)
+    if timeframe is not None and timeframe.notna().any():
+        tf = timeframe.astype(str).str.lower().str.strip()
+        annual_flags = ("annual", "fy", "a", "year", "annual_report", "y")
+        quarterly_flags = ("quarterly", "q", "quarter", "q1", "q2", "q3", "q4")
+        if selector == "annual_only":
+            return tf.isin(annual_flags)
+        return tf.isin(quarterly_flags) & ~tf.isin(annual_flags)
+    if fiscal_quarter is not None and selector == "quarterly_only":
+        # fiscal_quarter in {1,2,3,4} marks a quarterly statement; annual has NaN.
+        fq = pd.to_numeric(fiscal_quarter, errors="coerce")
+        return fq.notna() & (fq.astype(int) >= 1) & (fq.astype(int) <= 4)
+    dates = pd.to_datetime(period_end, errors="coerce")
     if selector == "annual_only":
         return (dates.dt.month == 12) & (dates.dt.day == 31)
     if selector == "quarterly_only":
@@ -408,11 +544,21 @@ def select_visible_row_bundles(
     market_calendar: pd.DatetimeIndex | None = None,
     market_timezone: str = "UTC",
     production: bool = False,
+    precision: AvailabilityPrecision | str | None = None,
+    timeframe_column: str | None = None,
+    fiscal_quarter_column: str | None = None,
 ) -> pd.DataFrame:
     """Select one whole visible report row for every decision.
 
     Rows are selected by availability first, then by the latest eligible report
     period and revision.  All value columns therefore come from the same row.
+
+    R24-040/041: this is the **fiscal-period-state** selector
+    (``select_latest_fiscal_period_state``).  It is semantically distinct from
+    the event/knowledge-time selector (:func:`pit_asof_join` /
+    ``select_latest_event_by_knowledge_time``): it picks the LATEST REPORT
+    PERIOD visible at the decision, so a same-day restatement of an OLD period
+    (R24-042) never moves the selected financial state backwards.
 
     ``available_policy`` mirrors :func:`pit_asof_join`: the default is
     ``next_trading_day`` (round-6 P0-03) so a date-level announcement is only
@@ -420,7 +566,10 @@ def select_visible_row_bundles(
     timezone, when provided) strictly after ``PubDate``; ``same_day`` is
     the legacy exact-match behaviour for callers with real timestamps.
     ``production`` (R10 #8/#46) rejects next_trading_day without a market
-    calendar and same_day on date-only availability.
+    calendar and same_day on non-timestamp declared precision.
+    ``precision`` (R24-046..048) must be the DECLARED availability precision
+    from source metadata; ``timeframe_column`` / ``fiscal_quarter_column``
+    (R24-043..045) drive the annual/quarterly mask when present.
     """
     if available_policy not in {"same_day", "next_trading_day"}:
         raise ValueError(f"unknown available policy {available_policy!r}")
@@ -436,7 +585,9 @@ def select_visible_row_bundles(
     validate_fundamental_events(events, columns)
     if decision_time not in decisions.columns or columns.instrument not in decisions.columns:
         raise ValueError("decisions missing PIT decision columns")
-    filtered = events.loc[_period_mask(events[columns.period_end], selector)].copy()
+    tf = events[timeframe_column] if timeframe_column and timeframe_column in events.columns else None
+    fq = events[fiscal_quarter_column] if fiscal_quarter_column and fiscal_quarter_column in events.columns else None
+    filtered = events.loc[_period_mask(events[columns.period_end], selector, tf, fq)].copy()
     left = decisions.copy()
     left["__pit_row_order__"] = range(len(left))
     left[decision_time] = pd.to_datetime(left[decision_time], errors="raise", utc=True)
@@ -446,10 +597,12 @@ def select_visible_row_bundles(
     filtered[columns.period_end] = pd.to_datetime(
         filtered[columns.period_end], errors="raise", utc=True
     )
-    # R10 #46: same_day requires TIMESTAMP precision.
+    # R10 #46 + R24-046..048: same_day requires TIMESTAMP precision declared in
+    # source metadata (never inferred from midnight data values).
     if available_policy == "same_day":
         _same_day_precision_check(
-            filtered[columns.available_at], production=production, dataset=columns.instrument
+            filtered[columns.available_at], production=production,
+            dataset=columns.instrument, precision=precision,
         )
     # R9-P0-019/021: preserve the original knowledge time; visibility is the
     # market-session time, distinct from the factor's decision cadence.
@@ -496,3 +649,140 @@ def select_visible_row_bundles(
         .drop(columns="__pit_row_order__")
         .reset_index(drop=True)
     )
+
+
+def select_latest_fiscal_period_state(
+    decisions: pd.DataFrame,
+    events: pd.DataFrame,
+    **kwargs: Any,
+) -> pd.DataFrame:
+    """R24-040: explicit fiscal-period-state selector (latest period → revision).
+
+    Semantically identical to :func:`select_visible_row_bundles` — the name is
+    the explicit API so a caller cannot mistake it for an event/knowledge-time
+    selector.  An old-period restatement (R24-042) never moves the selected
+    financial state backwards.
+    """
+    return select_visible_row_bundles(decisions, events, **kwargs)
+
+
+def select_latest_event_by_knowledge_time(
+    decisions: pd.DataFrame,
+    events: pd.DataFrame,
+    **kwargs: Any,
+) -> pd.DataFrame:
+    """R24-040: explicit event/knowledge-time selector (latest visible event).
+
+    Semantically identical to :func:`pit_asof_join` — the latest visible
+    *event* by knowledge time.  This is NOT a fiscal-period-state selector; use
+    :func:`select_latest_fiscal_period_state` for financial reads.
+    """
+    return pit_asof_join(decisions, events, **kwargs)
+
+
+def select_specific_period_vintage(
+    decisions: pd.DataFrame,
+    events: pd.DataFrame,
+    *,
+    period_end: pd.Timestamp,
+    decision_time: str = "decision_timestamp",
+    columns: PITColumns = PITColumns(),
+    available_policy: AvailablePolicy = "next_trading_day",
+    market_calendar: pd.DatetimeIndex | None = None,
+    market_timezone: str = "UTC",
+    production: bool = False,
+    precision: AvailabilityPrecision | str | None = None,
+) -> pd.DataFrame:
+    """R24-040: select the visible vintage of ONE specific fiscal period.
+
+    At each decision time, only rows whose ``period_end == period_end`` AND that
+    are market-visible are candidates; the newest visible revision of that period
+    is returned (one row per decision).  Used for old-period restatement analysis
+    without contaminating the latest-period state.
+    """
+    if available_policy not in {"same_day", "next_trading_day"}:
+        raise ValueError(f"unknown available policy {available_policy!r}")
+    if (
+        production
+        and available_policy == "next_trading_day"
+        and market_calendar is None
+    ):
+        raise ValueError(
+            "production PIT with available_policy='next_trading_day' requires "
+            "a real exchange calendar (market_calendar + market_timezone)."
+        )
+    validate_fundamental_events(events, columns)
+    events = events.copy()
+    events[columns.period_end] = pd.to_datetime(events[columns.period_end], errors="raise", utc=True)
+    target = pd.Timestamp(period_end)
+    target = target.tz_localize("UTC") if target.tzinfo is None else target.tz_convert("UTC")
+    filtered = events.loc[events[columns.period_end] == target].copy()
+    filtered[columns.available_at] = pd.to_datetime(filtered[columns.available_at], errors="raise", utc=True)
+    filtered["knowledge_at"] = filtered[columns.available_at]
+    if available_policy == "next_trading_day":
+        if market_calendar is not None:
+            market_visible = _market_visible_shift(
+                filtered[columns.available_at], market_calendar, market_timezone=market_timezone
+            )
+        else:
+            market_visible = _shift_available_to_next_decision(
+                filtered[columns.available_at], decisions, decision_time=decision_time
+            )
+        filtered["market_visible_at"] = market_visible
+        filtered[columns.available_at] = market_visible
+        filtered = filtered.loc[market_visible.notna()].copy()
+    else:
+        _same_day_precision_check(
+            filtered[columns.available_at], production=production,
+            dataset=columns.instrument, precision=precision,
+        )
+        filtered["market_visible_at"] = filtered[columns.available_at]
+    left = decisions.copy()
+    left[decision_time] = pd.to_datetime(left[decision_time], errors="raise", utc=True)
+    selected_rows: list[dict[str, object]] = []
+    event_columns = [c for c in filtered.columns if c != columns.instrument]
+    for decision in left.to_dict("records"):
+        visible = filtered.loc[
+            (filtered[columns.instrument] == decision[columns.instrument])
+            & (filtered["market_visible_at"] <= decision[decision_time])
+        ]
+        if visible.empty:
+            selected_rows.append({**decision, **{column: pd.NA for column in event_columns}})
+            continue
+        sort_cols = [columns.available_at]
+        if columns.revision_id in visible.columns:
+            sort_cols.append(columns.revision_id)
+        chosen = visible.sort_values(sort_cols, kind="stable").iloc[-1].to_dict()
+        chosen.pop(columns.instrument, None)
+        selected_rows.append({**decision, **chosen})
+    return pd.DataFrame(selected_rows).reset_index(drop=True)
+
+
+def select_revision_event_stream(
+    events: pd.DataFrame,
+    *,
+    columns: PITColumns = PITColumns(),
+    decision_time: str | pd.Timestamp | None = None,
+) -> pd.DataFrame:
+    """R24-040: return the full visible revision event stream (never collapsed).
+
+    Unlike :func:`select_latest_fiscal_period_state`, this does NOT select one
+    row per decision — it returns every revision of every period that is visible
+    by ``decision_time`` (or the whole panel when ``None``), ordered by
+    (instrument, period_end, available_at, revision_id).  Used for revision
+    latency / restatement analysis.
+    """
+    validate_fundamental_events(events, columns)
+    out = events.copy()
+    out[columns.available_at] = pd.to_datetime(out[columns.available_at], errors="raise", utc=True)
+    out[columns.period_end] = pd.to_datetime(out[columns.period_end], errors="raise", utc=True)
+    out["knowledge_at"] = out[columns.available_at]
+    if decision_time is not None:
+        cutoff = pd.Timestamp(decision_time)
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.tz_localize("UTC")
+        out = out.loc[out[columns.available_at] <= cutoff].copy()
+    sort_cols = [columns.instrument, columns.period_end, columns.available_at]
+    if columns.revision_id in out.columns:
+        sort_cols.append(columns.revision_id)
+    return out.sort_values(sort_cols, kind="stable").reset_index(drop=True)

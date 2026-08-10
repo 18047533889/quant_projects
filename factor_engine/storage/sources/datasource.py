@@ -1,7 +1,38 @@
 """数据源抽象：按列名返回与引擎约定一致的 MultiIndex Series（timestamp × instrument）。"""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any
+
+
+@dataclass(frozen=True)
+class TemporalContract:
+    """R24-084..087: a source's TEMPORAL contract, the single authority for
+    whether a source is PIT-sensitive and how it may be joined.
+
+    Detection must come from this contract — NEVER from a ``dataset`` name
+    blacklist or a missing ``dataset`` attribute (a source without a dataset
+    is ``unknown``, which is PIT-sensitive / fail-closed, not "safe").
+
+    * ``temporal_sensitivity`` — ``none`` (plain panel), ``event`` (knowledge
+      time), ``pit`` (knowledge + revision + period), ``unknown`` (fail-closed).
+    * ``snapshot_capability`` — ``none`` / ``token`` / ``manifest`` / ``unknown``.
+    * ``join_capability`` — ``generic_asof`` (safe for Composite merge_asof),
+      ``exact_only`` (Composite may exact-align), ``pit_required`` (must go
+      through a certified PIT resolver), ``unknown`` (fail-closed).
+    """
+
+    temporal_sensitivity: str = "unknown"
+    snapshot_capability: str = "unknown"
+    join_capability: str = "unknown"
+
+    @property
+    def pit_sensitive(self) -> bool:
+        """True when generic asof must NOT be used on this source."""
+        if self.join_capability == "generic_asof":
+            return False
+        # pit_required / exact_only / unknown → PIT-sensitive (fail-closed).
+        return True
 
 
 def clean_execution_spec(payload: dict[str, Any]) -> dict[str, Any]:
@@ -46,3 +77,14 @@ class DataSource(ABC):
         （调用方按「无可推导配置」处理）。
         """
         return None
+
+    def temporal_contract(self) -> TemporalContract:
+        """R24-084/085: the source's declared temporal contract.
+
+        Every DataSource MUST implement this.  The base class returns the
+        fail-closed UNKNOWN contract — a source without a declared contract is
+        PIT-sensitive (never "safe by omission").  Concrete sources that are
+        plain panels should return ``TemporalContract(join_capability=
+        "generic_asof")``.
+        """
+        return TemporalContract()

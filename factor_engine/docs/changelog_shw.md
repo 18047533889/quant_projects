@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-08-10 R24 DataAccess 安全 / PIT / 跨市场语义专项整改（第 37 版）
+
+**内容**：DataAccess 权限边界 / 数据泄露 / COS 多服务器分级权限 / 财务 PIT /
+A股与美股单位与会计语义 / DataAccess↔FactorEngine 契约漂移（详见
+`dataaccess/docs/R24_SECURITY_PIT_CROSSMARKET_CLOSURE_REPORT.md`）。7 阶段：
+
+- **安全**：`dataaccess/security/` 薄层（CredentialProvider / DataPrincipal /
+  AccessPolicy / redaction / api key→principal）；production 禁解析 `~/.cos.yaml`、
+  不写 os.environ secret；S3Credentials STS + repr 脱敏；store 读/写入口统一授权门；
+  `read_uri` privileged；403→`AccessDeniedError` 不 fallback；secure cache 按
+  principal 隔离 + 0700/0600 + O_EXCL temp + symlink 拒绝；`propagate_authorization`
+  防吞授权错误；gitleaks CI + `.gitignore` secrets；audit 安全分类。
+- **PIT**：US filing_date=date_label（不转纽约提前一天）→ next_session_open；
+  A UpdateTime 仅 dedup tiebreaker（`pit_fidelity=knowledge_date_pit`）；US
+  `vintage_pit`；timeframe exactly-one；strict 无日历 hard fail。
+- **跨市场**：US dividend 拆 local/usd + currency；`UnitSpec` +
+  `cross_market_compatible`（CNY vs USD 禁静默混合）；net_income
+  consolidated/attributable 分开；`flow_semantics` 机器可读；instrument 加 market
+  namespace。
+- **派生因子权限继承**：`factor_engine/security/access.py`（新文件）——
+  `derive_derived_access_tags` / `require_declassification_approval`（禁止自动降密）；
+  DataAccess `FactorMeta` 带 access tags；read_factors 按 tag 授权。
+
+**测试**：`test_r24_security_2026_08.py`（13）+ `test_r24_pit_crossmarket_2026_08.py`
+（15）+ 存量回归 → **785 passed**。
+
 ## 2026-08-09 FactorEngine R14 第三轮 production DataEvent 收口（第 36 版）
 
 **内容**：外部 AI 复查最新 main@44b2946 确认 **DataAccess Core Freeze + 普通

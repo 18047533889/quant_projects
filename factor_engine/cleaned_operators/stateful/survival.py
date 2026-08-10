@@ -42,13 +42,32 @@ def _survival_kernel(
     min_haz: int,
     min_res: int,
     alpha: float,
+    *,
+    inactive_policy: str = "nan",
+    gap_policy: str = "nan",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Causal single-pass survival statistics for one column.
 
     Returns ``(age, pct, hazard, residual)`` arrays.  ``age`` is the current
     active-run length (0 when inactive); each statistic is NaN while its
     completed-run sample is below the corresponding minimum.
+
+    R24-105..109:
+    * LEFT-CENSOR: a run whose true start predates the sample (or whose entry
+      was not observed — first row active, or entry inside a provider gap) is
+      ``left_censored`` and is NEVER added to the completed-run distribution
+      unless a real episode start was observed.
+    * GAP-CENSOR: a provider gap inside an active run makes its length unknown;
+      the run is not recorded and the exact age stays NaN (``gap_policy="nan"``)
+      or is reported as a ``lower_bound`` floor.
+    * INACTIVE: ``inactive_policy="nan"`` (R24-109, default) emits NaN on
+      inactive rows (they are NOT applicable, not a 0-percentile outcome);
+      ``inactive_policy="zero"`` keeps the legacy 0 reading.
     """
+    if inactive_policy not in ("nan", "zero"):
+        raise ValueError(f"inactive_policy must be 'nan' or 'zero', got {inactive_policy!r}")
+    if gap_policy not in ("nan", "lower_bound"):
+        raise ValueError(f"gap_policy must be 'nan' or 'lower_bound', got {gap_policy!r}")
     rows = state_col.shape[0]
     age = np.zeros(rows, dtype=float)
     pct = np.zeros(rows, dtype=float)
@@ -57,26 +76,38 @@ def _survival_kernel(
     completed: list[float] = []
     cur = 0
     prev_active = False
+    prev_finite = False
+    run_observed_entry = False   # True when the current run's start was observed
+    gap_censored = False         # True when a provider gap broke the run
     for row in range(rows):
         s = state_col[row]
         if not np.isfinite(s):
-            # P0-005: a missing state is UNKNOWN, not a state exit.  A data
-            # gap (suspension / provider miss) must not terminate the episode
-            # into the completed-run history, nor be read as an inactive row.
-            # Break and re-baseline: the run is dropped, nothing is recorded,
-            # and the row emits NaN (never 0, which would look like a neutral
-            # state to downstream models).
-            cur = 0
-            prev_active = False
+            # P0-005 + R24-107/108: a missing state is UNKNOWN, not a state
+            # exit.  A data gap inside an active run makes the run length
+            # unknown (gap_censored): it is never recorded as a completed
+            # episode, and the age is NaN (or a lower_bound under gap_policy).
+            if cur > 0 and prev_active:
+                gap_censored = True
             age[row] = np.nan
             pct[row] = np.nan
             hazard[row] = np.nan
             residual[row] = np.nan
+            prev_active = False
+            prev_finite = False
             continue
         active = s != 0.0
         if active:
+            if cur == 0:
+                # New run begins.  The entry is OBSERVED only if the previous
+                # row was a confirmed inactive row; otherwise the run is
+                # left-censored (R24-105) — never counted as completed.
+                run_observed_entry = prev_finite and not prev_active
             cur += 1
-            age[row] = cur
+            if gap_censored:
+                # R24-108: exact age is unknown after a provider gap.
+                age[row] = float(cur) if gap_policy == "lower_bound" else np.nan
+            else:
+                age[row] = float(cur)
             comp = np.asarray(completed, dtype=float)
             # percentile
             if comp.size >= min_pct:
@@ -105,15 +136,28 @@ def _survival_kernel(
                 residual[row] = np.nan
         else:
             if prev_active:
-                completed.append(float(cur))
-                if len(completed) > history_window:
-                    completed.pop(0)
+                # Run ended.  Only an observed-entry, non-gap-censored run is a
+                # COMPLETED episode (R24-106/108).
+                if run_observed_entry and not gap_censored:
+                    completed.append(float(cur))
+                    if len(completed) > history_window:
+                        completed.pop(0)
                 cur = 0
-            age[row] = 0.0
-            pct[row] = 0.0
-            hazard[row] = 0.0
-            residual[row] = 0.0
+            if inactive_policy == "nan":
+                # R24-109: inactive is NOT a 0-percentile outcome.
+                age[row] = np.nan
+                pct[row] = np.nan
+                hazard[row] = np.nan
+                residual[row] = np.nan
+            else:
+                age[row] = 0.0
+                pct[row] = 0.0
+                hazard[row] = 0.0
+                residual[row] = 0.0
+            gap_censored = False
+            run_observed_entry = False
         prev_active = active
+        prev_finite = True
     return age, pct, hazard, residual
 
 
@@ -135,7 +179,7 @@ class TsStateAgePercentile(SeriesOperator):
     metadata = metadata(
         "ts_state_age_percentile",
         "当前状态年龄在历史已结束 episode 中的经验分位。",
-        ["state", "history_window", "min_completed_runs"],
+        ["state", "history_window", "min_completed_runs", "inactive_policy", "gap_policy"],
         domain="trading_state",
         unit="ratio",
     )
@@ -145,6 +189,8 @@ class TsStateAgePercentile(SeriesOperator):
         state: pd.DataFrame,
         history_window: int = 60,
         min_completed_runs: int = 5,
+        inactive_policy: str = "nan",
+        gap_policy: str = "nan",
         **_: Any,
     ) -> pd.DataFrame:
         hw = max(2, int(history_window))
@@ -153,7 +199,10 @@ class TsStateAgePercentile(SeriesOperator):
         rows, cols = sv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            _, pct, _, _ = _survival_kernel(sv[:, col], hw, mc, mc, mc, 1.0)
+            _, pct, _, _ = _survival_kernel(
+                sv[:, col], hw, mc, mc, mc, 1.0,
+                inactive_policy=inactive_policy, gap_policy=gap_policy,
+            )
             out[:, col] = pct
         return frame_like(state, out)
 
@@ -177,7 +226,7 @@ class TsStateExitHazard(SeriesOperator):
     metadata = metadata(
         "ts_state_exit_hazard",
         "当前状态年龄的历史退出风险(平滑 hazard)。",
-        ["state", "history_window", "min_completed_runs", "alpha"],
+        ["state", "history_window", "min_completed_runs", "alpha", "inactive_policy", "gap_policy"],
         domain="trading_state",
         unit="ratio",
     )
@@ -188,6 +237,8 @@ class TsStateExitHazard(SeriesOperator):
         history_window: int = 60,
         min_completed_runs: int = 5,
         alpha: float = 1.0,
+        inactive_policy: str = "nan",
+        gap_policy: str = "nan",
         **_: Any,
     ) -> pd.DataFrame:
         hw = max(2, int(history_window))
@@ -197,7 +248,10 @@ class TsStateExitHazard(SeriesOperator):
         rows, cols = sv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            _, _, hazard, _ = _survival_kernel(sv[:, col], hw, mc, mc, mc, al)
+            _, _, hazard, _ = _survival_kernel(
+                sv[:, col], hw, mc, mc, mc, al,
+                inactive_policy=inactive_policy, gap_policy=gap_policy,
+            )
             out[:, col] = hazard
         return frame_like(state, out)
 
@@ -219,7 +273,7 @@ class TsStateResidualLife(SeriesOperator):
     metadata = metadata(
         "ts_state_residual_life",
         "当前状态的期望剩余寿命(基于已完成 episode)。",
-        ["state", "history_window", "min_completed_runs"],
+        ["state", "history_window", "min_completed_runs", "inactive_policy", "gap_policy"],
         domain="trading_state",
         unit="count",
     )
@@ -229,6 +283,8 @@ class TsStateResidualLife(SeriesOperator):
         state: pd.DataFrame,
         history_window: int = 60,
         min_completed_runs: int = 20,
+        inactive_policy: str = "nan",
+        gap_policy: str = "nan",
         **_: Any,
     ) -> pd.DataFrame:
         hw = max(2, int(history_window))
@@ -237,7 +293,10 @@ class TsStateResidualLife(SeriesOperator):
         rows, cols = sv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
-            _, _, _, residual = _survival_kernel(sv[:, col], hw, mc, mc, mc, 1.0)
+            _, _, _, residual = _survival_kernel(
+                sv[:, col], hw, mc, mc, mc, 1.0,
+                inactive_policy=inactive_policy, gap_policy=gap_policy,
+            )
             out[:, col] = residual
         return frame_like(state, out)
 

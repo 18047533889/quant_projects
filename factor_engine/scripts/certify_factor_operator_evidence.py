@@ -158,22 +158,32 @@ def main() -> int:
     # RECORD (a dict), not just a name list — ``production_certification_overlay.
     # _per_gate_verified`` reads ``semantic_golden_verified`` /
     # ``temporal_prefix_verified`` / ``source_contract_verified`` from it, and
-    # each of those must be earned by its own verified record or the six-gate
-    # certification deadlocks to experimental for EVERY factor operator (a
-    # round-6 regression: the overlay gained the per-gate requirement while this
-    # certifier still emitted a plain list).  The runtime audit genuinely
-    # verifies all three for every passed canonical: determinism (repeated
-    # evaluation equality — semantic), prefix causality (historical-prefix
-    # invariance — temporal), and the declared param/source contract (the audit
-    # builds the call from the operator's declared params and asserts axes —
-    # source contract).  Dict iteration also yields canonical names, so
-    # ``pandas_reference_production_safe`` and the set-mismatch validation are
-    # unaffected.
+    # each of those must be earned by its own verified record.
+    #
+    # R25-011..014 / R25-186 (evidence independence): the synthetic runtime
+    # audit proves ONLY execution, shape, determinism and historical-prefix
+    # causality on the default-parameter fixture.  It does NOT prove the
+    # operator's mathematical/economic semantics against an independent golden,
+    # and it does NOT prove a real DataAccess/source PIT contract.  Those two
+    # gates are therefore written as ``False`` (honestly not earned) and can
+    # only flip True via their OWN independent evidence (a math golden /
+    # metamorphic fixture, and a FieldSpec/ProviderBinding/DataAccess source
+    # contract).  ``temporal_prefix_verified`` IS earned here because the
+    # runtime audit runs a historical-prefix invariance check.  Dict iteration
+    # still yields canonical names, so ``pandas_reference_production_safe`` and
+    # the set-mismatch validation are unaffected.
     operators_record = {
         canonical: {
-            "semantic_golden_verified": True,
+            # Honest runtime-audit evidence (R25-012) — what the synthetic
+            # runtime audit genuinely proves:
+            "runtime_execution_verified": True,
+            "shape_verified": True,
+            "determinism_verified": True,
+            "prefix_kernel_causality_verified": True,
             "temporal_prefix_verified": True,
-            "source_contract_verified": True,
+            # NOT earned by the runtime audit — require independent evidence:
+            "semantic_golden_verified": False,
+            "source_contract_verified": False,
         }
         for canonical in certified
     }

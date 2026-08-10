@@ -38,6 +38,23 @@ from .namespace import resolve_namespace, resolve_operator
 _DEFAULT_AUDIT_SUBPATH = "logs/data_access_audit.jsonl"
 _write_lock = threading.Lock()
 
+# R24 P1-5 §35：安全审计日志分类——不再全是泛化 400/422。
+SECURITY_AUTHENTICATION_FAILED = "AUTHENTICATION_FAILED"
+SECURITY_AUTHORIZATION_DENIED = "AUTHORIZATION_DENIED"
+SECURITY_PIT_REJECTED = "PIT_REJECTED"
+SECURITY_DATA_NOT_FOUND = "DATA_NOT_FOUND"
+SECURITY_DATA_CORRUPTION = "DATA_CORRUPTION"
+SECURITY_QUERY_INVALID = "QUERY_INVALID"
+
+SECURITY_CATEGORIES = frozenset({
+    SECURITY_AUTHENTICATION_FAILED,
+    SECURITY_AUTHORIZATION_DENIED,
+    SECURITY_PIT_REJECTED,
+    SECURITY_DATA_NOT_FOUND,
+    SECURITY_DATA_CORRUPTION,
+    SECURITY_QUERY_INVALID,
+})
+
 
 def _resolve_audit_path() -> Path:
     """按优先级算审计日志路径。第一次调用时创建父目录。"""
@@ -121,6 +138,7 @@ def record(
     error: str | None = None,
     extra: dict[str, Any] | None = None,
     durable: bool = False,
+    category: str | None = None,
 ) -> None:
     """记一条审计日志。
 
@@ -142,6 +160,9 @@ def record(
         error: 失败时的错误消息
         extra: 任意额外字段（比如 upsert_on 列）
         durable: 是否要求 durable acknowledgement（权威写入/发布用）
+        category: R24 P1-5 §35 安全审计分类（AUTHENTICATION_FAILED /
+            AUTHORIZATION_DENIED / PIT_REJECTED / DATA_NOT_FOUND /
+            DATA_CORRUPTION / QUERY_INVALID）
     """
     if op == "read" and not _should_audit_reads():
         return
@@ -154,6 +175,8 @@ def record(
         "dataset": dataset,
         "ok": ok,
     }
+    if category:
+        record_obj["category"] = category
     if mode is not None:
         record_obj["mode"] = mode
     if rows is not None:
@@ -211,6 +234,41 @@ def record(
             ) from exc
         # 审计失败不能影响业务（observability）。PR5 会加告警路径。
         pass
+
+
+def record_security_event(
+    category: str,
+    *,
+    decision: str,
+    dataset: str | None = None,
+    principal_id: str | None = None,
+    request_id: str | None = None,
+    detail: str | None = None,
+) -> None:
+    """R24 P1-5 §35 / P1-S6 §8：安全审计事件（只写非 secret 字段）。
+
+    写 request_id / principal_id / dataset_id / policy_decision；
+    **不写** secret / signed URL / 完整 credential / 高权限 dataset 列表。
+    """
+    extra: dict[str, Any] = {"decision": decision}
+    if principal_id:
+        extra["principal_id"] = principal_id
+    if request_id:
+        extra["request_id"] = request_id
+    if detail:
+        # 只允许非 secret 的简短细节（由调用方保证不泄露路径/凭证）
+        extra["detail"] = str(detail)[:300]
+    try:
+        record(
+            op="security",
+            dataset=dataset or "-",
+            ok=(decision != "deny"),
+            error=None if decision == "allow" else decision,
+            extra=extra,
+            category=category,
+        )
+    except Exception:
+        pass  # 安全审计是 observability：失败不阻塞业务
 
 
 class AuditTimer:

@@ -16,10 +16,10 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, field
+from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 from .mirror import (
     DATASET_MIRROR_REGISTRY,
@@ -35,6 +35,7 @@ from data_access.core.exceptions import ValidationError
 
 if TYPE_CHECKING:
     from data_access.registry import Dataset, StaticDataset
+    from data_access.security.credentials import CredentialMaterial
 
 logger = logging.getLogger("data_access.cos_remote")
 
@@ -43,12 +44,81 @@ _VALID_MODES = frozenset({"mirror", "remote", "auto"})
 
 @dataclass(frozen=True)
 class S3Credentials:
-    access_key_id: str
-    secret_access_key: str
+    """COS/S3 凭证（R24 P0-S1 §3.4 / §3.5）。
+
+    ``secret_access_key`` / ``session_token`` 带 ``repr=False``——日志、异常、
+    repr 绝不能打印（STS/CAM 临时身份没有 session token 支持是不完整的）。
+
+    - ``session_token``：STS 临时凭证 token（可空）
+    - ``expires_at``：临时凭证过期时间（可空，provider 已知才填）
+    - ``principal_id``：这份凭证对应的 server principal（可空）
+    - ``credential_scope_id``：凭证权限范围标识（可空，cache scope 绑定用）
+    """
+
+    access_key_id: str = field(repr=False)
+    secret_access_key: str = field(repr=False)
     endpoint: str
     region: str
     use_ssl: bool = True
     url_style: str = "path"
+    session_token: str | None = field(default=None, repr=False)
+    expires_at: datetime | None = None
+    principal_id: str | None = None
+    credential_scope_id: str | None = None
+
+    def __repr__(self) -> str:
+        from data_access.security.redaction import redact_secret
+
+        return (
+            "S3Credentials("
+            f"access_key_id={redact_secret(self.access_key_id)}, "
+            "secret_access_key=<redacted>, "
+            f"endpoint={self.endpoint!r}, region={self.region!r}, "
+            f"use_ssl={self.use_ssl}, url_style={self.url_style!r}, "
+            f"session_token={'<redacted>' if self.session_token else None!r}, "
+            f"expires_at={self.expires_at!r}, "
+            f"principal_id={self.principal_id!r}, "
+            f"credential_scope_id={self.credential_scope_id!r})"
+        )
+
+    @classmethod
+    def from_material(
+        cls,
+        m: "CredentialMaterial",
+        *,
+        endpoint: str,
+        region: str,
+        use_ssl: bool = True,
+        url_style: str = "path",
+    ) -> "S3Credentials":
+        return cls(
+            access_key_id=m.access_key_id,
+            secret_access_key=m.secret_access_key,
+            endpoint=endpoint,
+            region=region,
+            use_ssl=use_ssl,
+            url_style=url_style,
+            session_token=m.session_token,
+            expires_at=m.expires_at,
+            principal_id=m.principal_id,
+            credential_scope_id=m.credential_scope_id,
+        )
+
+    @property
+    def has_session_token(self) -> bool:
+        return bool(self.session_token)
+
+    def to_safe_dict(self) -> dict[str, Any]:
+        from data_access.security.redaction import redact_secret
+
+        return {
+            "access_key_id": redact_secret(self.access_key_id),
+            "endpoint": self.endpoint,
+            "region": self.region,
+            "has_session_token": self.has_session_token,
+            "principal_id": self.principal_id,
+            "credential_scope_id": self.credential_scope_id,
+        }
 
 
 def cos_read_mode() -> str:
@@ -104,58 +174,70 @@ def authorize_s3_path(path: str, extra_prefixes: Sequence[str] | None = None) ->
 
 
 def _read_cos_cli_credentials() -> tuple[str, str]:
-    """Fall back to the coscli/clean-cos-ro config (``~/.cos.yaml``).
+    """research-only：从 coscli/clean-cos-ro 配置（``~/.cos.yaml``）读取凭证。
 
-    The remote path must not silently require env vars when the team's standard
-    COS CLI already has credentials configured.  Only ``secretid``/``secretkey``
-    from ``cos.base`` are read; nothing is logged.
+    R24 P0-S1 §3：production/strict 下**禁止**解析 ``~/.cos.yaml`` 获取 base
+    credential（会绕过 ``clean-cos-ro`` 的服务器权限分级）。research 也要求显式
+    ``DATA_ACCESS_ALLOW_COSCLI_CONFIG_PARSE=1`` opt-in。返回 ``(secretid, secretkey)``
+    或 ``("", "")``。
     """
-    import shutil
+    from data_access.security.credentials import (
+        CosCliConfigProvider,
+        allow_coscli_config_parse,
+    )
 
-    explicit = (
-        os.environ.get("DATA_ACCESS_COS_YAML")
-        or os.environ.get("COS_CONFIG_FILE")
-        or ""
-    ).strip()
-    # 显式指定配置路径时以它为权威（便于测试/CI 覆盖）；否则默认读 ~/.cos.yaml。
-    candidates = [explicit] if explicit else [str(Path.home() / ".cos.yaml")]
-    for path in candidates:
-        if not path or not Path(path).is_file():
-            continue
-        try:
-            import yaml
-
-            payload = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
-            base = (payload or {}).get("cos", {}).get("base", {}) or {}
-            secret_id = str(base.get("secretid") or "").strip()
-            secret_key = str(base.get("secretkey") or "").strip()
-            if secret_id and secret_key:
-                return secret_id, secret_key
-        except Exception:
-            continue
-    return "", ""
+    if not allow_coscli_config_parse():
+        return "", ""
+    try:
+        material = CosCliConfigProvider().resolve()
+        return material.access_key_id, material.secret_access_key
+    except ValidationError:
+        return "", ""
 
 
 def resolve_s3_credentials() -> S3Credentials:
-    """解析腾讯云 COS / 通用 S3 凭证。
+    """解析腾讯云 COS / 通用 S3 凭证（R24 P0-S1 §3.1）。
 
-    优先级：环境变量 → coscli/clean-cos-ro 配置（``~/.cos.yaml``）。
+    凭证只来自明确 CredentialProvider 链：
+        1. 显式注入的 CredentialProvider（``set_credential_provider``）；
+        2. 部署注入的 server-scoped env credential（EnvCredentialProvider，§3.1 C）；
+        3. research 显式 opt-in 的 coscli 配置（CosCliConfigProvider，§3.4）。
+
+    **production/strict 下绝不自动解析 ``~/.cos.yaml -> cos.base.secret*``**
+    （A/B/C/D 之外的来源全部拒绝）。任何 provider 都不写 ``os.environ``。
     endpoint 缺省按 region 推断为 ``cos.<region>.myqcloud.com``。
     """
-    access = (
-        os.environ.get("COS_SECRET_ID")
-        or os.environ.get("AWS_ACCESS_KEY_ID")
-        or os.environ.get("S3_ACCESS_KEY_ID")
-        or ""
-    ).strip()
-    secret = (
-        os.environ.get("COS_SECRET_KEY")
-        or os.environ.get("AWS_SECRET_ACCESS_KEY")
-        or os.environ.get("S3_SECRET_ACCESS_KEY")
-        or ""
-    ).strip()
-    if not access or not secret:
+    from data_access.security.credentials import (
+        EnvCredentialProvider,
+        _global_credential_provider,
+    )
+
+    material = None
+    provider = _global_credential_provider()
+    if provider is not None:
+        material = provider.resolve()
+    else:
+        try:
+            material = EnvCredentialProvider().resolve()
+        except ValidationError:
+            material = None
+    if material is None:
+        # research 显式 opt-in：coscli/clean-cos-ro 配置（不影响 production）。
         access, secret = _read_cos_cli_credentials()
+        if access and secret:
+            from data_access.security.credentials import CredentialMaterial
+
+            material = CredentialMaterial(
+                access_key_id=access,
+                secret_access_key=secret,
+                source="coscli-research",
+            )
+    if material is None:
+        raise ValidationError(
+            "COS 远程直读需要凭证：请通过部署注入 COS_SECRET_ID + COS_SECRET_KEY"
+            "（或 AWS_/S3_ 前缀），或显式配置 CredentialProvider。"
+            "production 禁止解析 ~/.cos.yaml（见 DATA_ACCESS_ALLOW_COSCLI_CONFIG_PARSE）。"
+        )
     endpoint = (
         os.environ.get("DATA_ACCESS_COS_S3_ENDPOINT")
         or os.environ.get("COS_S3_ENDPOINT")
@@ -168,12 +250,6 @@ def resolve_s3_credentials() -> S3Credentials:
         or os.environ.get("S3_REGION")
         or "ap-guangzhou"
     ).strip()
-    if not access or not secret:
-        raise ValidationError(
-            "COS 远程直读需要凭证：设置 COS_SECRET_ID + COS_SECRET_KEY，"
-            "或 AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY，"
-            "或提供 ~/.cos.yaml（coscli/clean-cos-ro 配置）。"
-        )
     if not endpoint:
         # Tencent COS 默认 endpoint 由 region 推断。
         endpoint = f"cos.{region}.myqcloud.com"
@@ -183,9 +259,8 @@ def resolve_s3_credentials() -> S3Credentials:
         "no",
     }
     url_style = os.environ.get("DATA_ACCESS_COS_S3_URL_STYLE", "path").strip() or "path"
-    return S3Credentials(
-        access_key_id=access,
-        secret_access_key=secret,
+    return S3Credentials.from_material(
+        material,
         endpoint=endpoint,
         region=region,
         use_ssl=use_ssl,
@@ -746,55 +821,131 @@ def reset_httpfs_probe_cache() -> None:
 
 
 def load_cos_cli_credentials_into_env() -> bool:
-    """从 ``~/.cos.yaml`` 注入 COS_SECRET_*（若尚未设置）。成功返回 True。"""
-    if os.environ.get("COS_SECRET_ID") and os.environ.get("COS_SECRET_KEY"):
-        return True
-    yaml_path = Path(os.environ.get("DATA_ACCESS_COS_YAML", Path.home() / ".cos.yaml"))
-    if not yaml_path.is_file():
-        return False
+    """**已废弃**（R24 P0-S1 §3.3）：绝不把 secret 写入全局环境。
+
+    - production/strict：直接抛 ``ValidationError``——进程存在解析 coscli 配置
+      注入 env 的架构能力本身就是安全债（子进程继承 / crash dump / 长驻 worker
+      其他模块可读 / 测试进程污染）。
+    - research：不再写入 ``os.environ``。返回 False 并告警，调用方应改用
+      ``resolve_s3_credentials``（research 显式 ``DATA_ACCESS_ALLOW_COSCLI_
+      CONFIG_PARSE=1`` 时由 provider 链兜底）。
+    """
+    from data_access.read.query_budget import is_strict_semantics
+
+    if is_strict_semantics():
+        raise ValidationError(
+            "load_cos_cli_credentials_into_env() 已废弃：禁止把 COS secret 写入"
+            "全局 os.environ（production fail-closed）。请改用 resolve_s3_credentials()"
+            "（凭证只来自 CredentialProvider / 部署注入 env）。"
+        )
+    logger.warning(
+        "load_cos_cli_credentials_into_env() 已废弃且不再写入 os.environ；"
+        "请改用 resolve_s3_credentials()"
+    )
+    return False
+
+
+def _cache_principal_scope() -> str:
+    """当前 principal 的 cache scope id（R24 P0-S3 §5.1）。
+
+    高权限服务器下载的数据不能因为落盘就失去权限保护——cache 必须按
+    user/principal 隔离，不同 principal 不能共用同一份 cache。
+
+    来源：``DATA_ACCESS_PRINCIPAL_ID``（部署注入）→ 否则 uid。只取脱敏的
+    principal 标识，不参与权限判定本身（那属于 CAM/IAM + AccessPolicy）。
+    """
+    pid = os.environ.get("DATA_ACCESS_PRINCIPAL_ID", "").strip()
+    if pid:
+        return pid.replace("/", "_").replace(":", "_").replace(" ", "_") or "p"
     try:
-        import yaml
-    except ImportError:
-        return False
-    try:
-        data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
-        base = (data.get("cos") or {}).get("base") or {}
-        sid = str(base.get("secretid") or "").strip()
-        skey = str(base.get("secretkey") or "").strip()
-        if not sid or not skey:
-            return False
-        os.environ.setdefault("COS_SECRET_ID", sid)
-        os.environ.setdefault("COS_SECRET_KEY", skey)
-        buckets = (data.get("cos") or {}).get("buckets") or []
-        for b in buckets:
-            if not isinstance(b, dict):
-                continue
-            ep = str(b.get("endpoint") or "").strip()
-            region = str(b.get("region") or "").strip()
-            if ep:
-                os.environ.setdefault("DATA_ACCESS_COS_S3_ENDPOINT", ep)
-            if region:
-                os.environ.setdefault("DATA_ACCESS_COS_S3_REGION", region)
-            break
-        return True
-    except Exception as exc:
-        logger.debug("load ~/.cos.yaml failed: %s", exc)
-        return False
+        return f"u{os.getuid()}"
+    except (AttributeError, OSError):
+        return "uunknown"
 
 
 def cos_cache_root() -> Path:
-    """CLI remote 按需缓存根（与永久 mirror 根分离）。"""
+    """CLI remote 按需缓存根（与永久 mirror 根分离，R24 P0-S3 §5.1 按 principal 隔离）。
+
+    优先 ``$XDG_CACHE_HOME/quant-dataaccess/cos/<principal_scope>/``；
+    否则 ``/tmp/data_access_cos_cache_<uid>/<principal_scope>/``。
+    显式 ``DATA_ACCESS_COS_CACHE_ROOT`` 时在其下再挂 ``<principal_scope>/`` 子目录
+    （仍按 principal 隔离，不允许跨 principal 共享）。
+    """
     raw = os.environ.get("DATA_ACCESS_COS_CACHE_ROOT")
     if raw:
-        return Path(raw).expanduser().resolve()
+        return (Path(raw).expanduser().resolve() / _cache_principal_scope()).resolve()
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    if xdg and xdg.strip():
+        return (Path(xdg).expanduser() / "quant-dataaccess" / "cos" / _cache_principal_scope()).resolve()
     workspace = os.environ.get("QUANTSOCIETY_WORKSPACE_DATA_ROOT")
     if workspace:
-        return (Path(workspace) / ".cos_remote_cache").resolve()
-    return Path("/tmp/data_access_cos_cache").resolve()
+        return (Path(workspace) / ".cos_remote_cache" / _cache_principal_scope()).resolve()
+    return (Path(f"/tmp/data_access_cos_cache_{_cache_principal_scope()}")).resolve()
+
+
+def ensure_cache_root_secure(root: Path | None = None) -> Path:
+    """R24 P0-S3 §5.2 / §5.4 / T-S07 / T-S08：缓存根的权限安全保证。
+
+    - 默认 directory=0700；显式 ``DATA_ACCESS_COS_CACHE_MODE``（如 ``0750``）可用
+      group 模式（须显式配置，不默认 world-readable）；
+    - production/strict 下 root 权限过宽（world-readable / group-world writable）、
+      root 是 symlink → fail-closed；
+    - root 必须落在当前 principal scope 下（防跨 principal 复用高权限缓存）。
+    """
+    import stat as _stat
+
+    from data_access.read.query_budget import is_strict_semantics
+
+    root = root or cos_cache_root()
+    # 若已存在，先做安全校验（T-S07）。
+    if root.exists():
+        if root.is_symlink() or root.is_symlink():
+            if is_strict_semantics():
+                raise ValidationError(
+                    f"COS cache root 是 symlink，拒绝使用（T-S08 fail-closed）: {root}"
+                )
+        lstat = root.lstat()
+        mode = _stat.S_IMODE(lstat.st_mode)
+        if mode & _stat.S_IWOTH:
+            if is_strict_semantics():
+                raise ValidationError(
+                    f"COS cache root 对 world 可写（{oct(mode)}），production fail-closed: {root}"
+                )
+        if mode & _stat.S_IROTH:
+            # world-readable 只在 strict 下拒绝；非 strict 也收敛到 0700。
+            if is_strict_semantics():
+                raise ValidationError(
+                    f"COS cache root 对 world 可读（{oct(mode)}），production fail-closed: {root}"
+                )
+    root.mkdir(parents=True, exist_ok=True)
+    # 默认目录 0700（或显式 DATA_ACCESS_COS_CACHE_MODE=0750/0710 group 模式）。
+    _ALLOWED_CACHE_MODES = {0o700, 0o750, 0o710}
+    try:
+        mode = int(os.environ.get("DATA_ACCESS_COS_CACHE_MODE", "700"), 8)
+    except (ValueError, TypeError):
+        mode = 0o700
+    if mode not in _ALLOWED_CACHE_MODES:
+        # 显式 group 模式只允许 0700/0750/0710；其余（含 world-readable）拒绝。
+        if is_strict_semantics():
+            raise ValidationError(
+                f"DATA_ACCESS_COS_CACHE_MODE={os.environ.get('DATA_ACCESS_COS_CACHE_MODE')} "
+                "非法（只允许 0700 / 0750 / 0710；world-readable 拒绝）"
+            )
+        mode = 0o700
+    try:
+        os.chmod(root, mode)
+    except OSError:
+        pass
+    return root
 
 
 def _cache_mirror_spec(spec: MirrorSpec) -> MirrorSpec:
-    """把 mirror 的本地根改到 cache，COS 前缀不变。"""
+    """把 mirror 的本地根改到 cache，COS 前缀不变。
+
+    R24 P0-S3 §5.1/§5.4：先 ``ensure_cache_root_secure``（root 权限校验 + 建目录）
+    再返回——cache 根永远按 principal scope 隔离，权限过宽 fail-closed。
+    """
+    ensure_cache_root_secure()
     cos = spec.cos_prefix.rstrip("/")
     without_scheme = cos.split("://", 1)[-1]
     parts = without_scheme.split("/", 1)
@@ -837,7 +988,6 @@ def materialize_remote_via_cli(
                 f"backend（DATA_ACCESS_COS_REMOTE_BACKEND=httpfs），CLI 仅支持已登记 "
                 f"mirror spec 的数据集"
             )
-        raise ValidationError(f"数据集 '{dataset_name}' 未配置 COS mirror")
         raise ValidationError(f"数据集 '{dataset_name}' 未配置 COS mirror，无法 remote/cli 读取")
     cache_spec = _cache_mirror_spec(spec)
 
@@ -908,8 +1058,12 @@ def prepare_cos_remote_paths(
     ds: "Dataset | None" = None,
     params: Mapping[str, Any] | None = None,
 ) -> tuple[list[str], str]:
-    """返回 (paths, backend)，backend 为 ``httpfs`` 或 ``cli``。"""
-    load_cos_cli_credentials_into_env()
+    """返回 (paths, backend)，backend 为 ``httpfs`` 或 ``cli``。
+
+    R24 P0-S1：不再调用 ``load_cos_cli_credentials_into_env``（禁止 secret 写
+    入 os.environ）；httpfs 凭证由 ``cos_remote_backend`` → ``resolve_s3_credentials``
+    按 CredentialProvider 链解析。
+    """
     backend = cos_remote_backend()
     if backend == "httpfs":
         return (

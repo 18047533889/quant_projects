@@ -41,13 +41,23 @@ _US_VALUATION_FIELD_ALIASES: dict[str, str] = {
 }
 
 
-def validate_production_dsl(formula: str) -> tuple[bool, str]:
+def validate_production_dsl(formula: str, *, market: str | None = None) -> tuple[bool, str]:
     """production 模式公式校验：语法 + 算子 production 允许。
+
+    R24-158..160: the production validator runs a REAL ``Analyzer(production=True,
+    market=resolved_market)`` (never the research Analyzer with an implicit
+    market), and the bare-field check resolves through
+    ``MULTI_MARKET_FIELD_REGISTRY.registry_for(market)`` — a US formula must
+    never be validated against the legacy A-share registry.
 
     Parameters
     ----------
     formula : str
         DSL 公式字符串。
+    market : str | None
+        The market the formula will run in (``ashare`` / ``us``).  ``None``
+        defaults to ``ashare`` for back-compat, but every production entry point
+        MUST pass the resolved market (R24-159).
 
     Returns
     -------
@@ -60,11 +70,11 @@ def validate_production_dsl(formula: str) -> tuple[bool, str]:
     from backend.cleaned_bridge import ensure_cleaned_loaded
 
     import ast
-    # R17-001: the production-DSL gate resolves through the market-aware resolver
-    # with an EXPLICIT A-share context (the current single-market production DSL),
-    # never the implicit legacy fallback.
-    from fields.resolver import resolve_market_field
-    from market.context import ASHARE_CONTEXT
+    market = str(market or "ashare").strip().lower()
+    # R24-160: per-market field registry — never the legacy A-only FIELD_REGISTRY.
+    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+
+    registry = MULTI_MARKET_FIELD_REGISTRY.registry_for(market)
 
     try:
         tree = ast.parse(str(formula), mode="eval")
@@ -81,8 +91,7 @@ def validate_production_dsl(formula: str) -> tuple[bool, str]:
             and isinstance(node.args[0].value, str)
         ):
             continue
-        resolved = resolve_market_field(node.args[0].value, ASHARE_CONTEXT, strict=False)
-        spec = resolved.spec if resolved is not None else None
+        spec = registry.get(node.args[0].value, strict=False)
         if spec is not None and spec.table != "StockDailyBar":
             bare_secondary.append(spec.name)
     if bare_secondary:
@@ -95,7 +104,11 @@ def validate_production_dsl(formula: str) -> tuple[bool, str]:
     if not ok:
         return False, msg
     try:
-        Analyzer().lower(parse_expr(str(formula), surface="daily"))
+        # R24-158: the production validator must run the PRODUCTION Analyzer
+        # with the resolved market — a research/default Analyzer is a bypass.
+        Analyzer(production=True, market=market).lower(
+            parse_expr(str(formula), surface="daily"), production=True
+        )
     except (DSLParseError, KeyError, ValueError, TypeError, SyntaxError) as exc:
         return False, str(exc)
     # Parsing may finalize/bootstrap operator metadata; refresh the certified

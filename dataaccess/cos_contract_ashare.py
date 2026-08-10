@@ -31,7 +31,24 @@ ASHARE_COS_CONTRACTS = {
 
 for _name in ("balance", "income", "cashflow", "indicator"):
     key = f"ashare_stock_{_name}"
-    ASHARE_COS_CONTRACTS[key] = _c(key, "ashare", "E1", "asof", "Symbol", availability_column="PubDate", period_column="ReportPeriodEndDate", revision_columns=("UpdateTime",), availability_must_follow_period=True, storage_layout=D)
+    # R24 P0-PIT4 §13：UpdateTime 只是 dedup_tiebreaker（供应商 freshness），
+    # **不是** historical revision availability。knowledge_time=PubDate；
+    # pit_fidelity=knowledge_date_pit（COS 无历史 revision vintage，不能承诺
+    # full bitemporal revision-vintage PIT）。time_representation=date_label——
+    # 不允许把 naive 00:00 当 UTC instant 转时区提前一天。
+    ASHARE_COS_CONTRACTS[key] = _c(
+        key, "ashare", "E1", "asof", "Symbol",
+        availability_column="PubDate",
+        period_column="ReportPeriodEndDate",
+        revision_columns=("UpdateTime",),
+        availability_must_follow_period=True,
+        storage_layout=D,
+        time_representation="date_label",
+        time_precision="date",
+        semantic_timezone="Asia/Shanghai",
+        revision_availability_time=None,
+        pit_fidelity="knowledge_date_pit",
+    )
 
 ASHARE_COS_CONTRACTS["ashare_stock_dividend"] = _c(
     "ashare_stock_dividend", "ashare", "E1", "event", "Symbol",

@@ -55,7 +55,10 @@ class Schema:
     domain: str = "auxiliary"
     price_basis: str | None = None  # RAW / CONTINUOUS / RAW_OFFICIAL_LIMIT / RETURN
     flow_semantics: str | None = None  # stock / single_period_flow / cumulative_ytd_flow / ttm_flow
-    pit_safe: bool = True
+    # R24-129/130: pit_safe defaults to UNKNOWN (None), NOT True — a field whose
+    # PIT eligibility is undeclared must never be certified safe by omission.
+    # Research raw-compat paths may opt in explicitly.
+    pit_safe: bool | None = None
     nullable: bool = True
     # Round-6 P0-50 PIT/availability coordinate.  ``available_at`` is the
     # *label* of the knowledge-time descriptor propagated as

@@ -20,6 +20,15 @@ _PANEL = {"dense", "state_ready", "minute", "event_only", "sparse", "dimension",
 _PIT = {"strict", "effective_time_only", "unsupported", "not_applicable"}
 _CALENDAR_DOMAINS = {"trade_day", "calendar_day", "event_time", "static"}
 _CARDINALITY = {"one_to_one", "one_to_many", "many_to_one", "many_to_many"}  # 相对股票日频面板
+_TIME_REPRESENTATIONS = {None, "date_label", "instant"}
+_TIME_PRECISIONS = {None, "date", "timestamp"}
+_PIT_FIDELITIES = {
+    "knowledge_date_pit",
+    "vintage_pit",
+    "effective_only",
+    "unsupported",
+}
+_FILTER_CARDINALITIES = {"exactly_one", "one_or_more", "optional"}
 
 
 @dataclass(frozen=True)
@@ -57,6 +66,20 @@ class COSDatasetContract:
     expected_cadence: str | None = None        # daily/weekly/quarterly/annual/event_driven
     max_staleness: str | None = None           # 如 "7d"（超过告警/查询前提示）
     missing_partition_semantics: str = "error" # error/warn/empty_ok
+    # ---- R24 P0-PIT2 §11：时间表示 / 精度与时区契约 ----
+    time_representation: str | None = None     # date_label / instant
+    time_precision: str | None = None          # date / timestamp
+    storage_timezone: str | None = None        # 物理存储时区（如 UTC）
+    semantic_timezone: str | None = None       # 语义时区（如 Asia/Shanghai / America/New_York）
+    # ---- R24 P0-PIT4 §13：revision 语义拆分 ----
+    # revision_columns 保留 = 去重 tiebreaker（如 UpdateTime）；而
+    # revision_availability_time = 历史 revision 的 market-visible 时点（如
+    # 尚无 = None/unknown）。A股 UpdateTime 是供应商 freshness，**不是**市场可知
+    # 修订时间——绝不能充当 historical revision availability。
+    revision_availability_time: str | None = None
+    pit_fidelity: str = "knowledge_date_pit"   # knowledge_date_pit / vintage_pit / effective_only / unsupported
+    # ---- R24 P0-PIT5 §14：结构化 filter requirement（exactly-one 等）----
+    filter_cardinalities: tuple[tuple[str, str], ...] = ()  # (field, cardinality) 如 ("timeframe","exactly_one")
 
     def __post_init__(self) -> None:
         if self.temporal_model not in _MODELS or self.panel_policy not in _PANEL or self.pit_policy not in _PIT:
@@ -71,6 +94,25 @@ class COSDatasetContract:
             raise ValueError(f"effective-time PIT requires event_column: {self.name}")
         if self.temporal_model == "RAW_EVENT" and not self.availability_column:
             raise ValueError(f"RAW_EVENT requires availability_column: {self.name}")
+        if self.time_representation not in _TIME_REPRESENTATIONS:
+            raise ValueError(
+                f"invalid time_representation {self.time_representation!r}: {self.name}"
+            )
+        if self.time_precision not in _TIME_PRECISIONS:
+            raise ValueError(
+                f"invalid time_precision {self.time_precision!r}: {self.name}"
+            )
+        if self.pit_fidelity not in _PIT_FIDELITIES:
+            raise ValueError(f"invalid pit_fidelity {self.pit_fidelity!r}: {self.name}")
+        for field_name, cardinality in self.filter_cardinalities:
+            if cardinality not in _FILTER_CARDINALITIES:
+                raise ValueError(
+                    f"invalid filter_cardinality {cardinality!r} for {field_name}: {self.name}"
+                )
+            if self.required_event_filters and field_name not in self.required_event_filters and field_name not in self.required_panel_filters and field_name not in self.required_dimension_filters:
+                raise ValueError(
+                    f"filter_cardinality 声明的 {field_name} 不在 required_*_filters 中: {self.name}"
+                )
 
     @property
     def is_event(self) -> bool:
@@ -152,6 +194,22 @@ def _validate_filters(contract: COSDatasetContract, filters: Mapping[str, Any] |
         bad = [item for item in values if item not in choices]
         if bad:
             raise ValidationError(f"数据集 {contract.name!r} 的过滤条件 {name}={bad!r} 不在允许值 {choices!r} 中")
+    # R24 P0-PIT5 §14：结构化 filter cardinality（如 timeframe exactly-one）。
+    for field_name, cardinality in contract.filter_cardinalities:
+        present = field_name in supplied and supplied[field_name] not in (None, "")
+        if cardinality == "exactly_one":
+            if not present:
+                raise ValidationError(
+                    f"数据集 {contract.name!r} 的过滤条件 {field_name} 必须提供且只能一个值"
+                    f"（cardinality=exactly_one，{context}）。missing/multiple/invalid 一律拒绝。"
+                )
+            values = supplied[field_name]
+            count = len(values) if isinstance(values, (list, tuple, set, frozenset)) else 1
+            if count != 1:
+                raise ValidationError(
+                    f"数据集 {contract.name!r} 的过滤条件 {field_name} 只允许一个值"
+                    f"（cardinality=exactly_one），收到 {values!r}（{context}）"
+                )
     return supplied
 
 
@@ -309,6 +367,20 @@ def normalize_return_values(values: Any, dataset: str) -> Any:
         import pyarrow.compute as pc
         return pc.multiply(pc.cast(values, pa.float64(), safe=False), pa.scalar(scale, type=pa.float64()))
     return values.astype(float) * scale if hasattr(values, "astype") else np.asarray(values, dtype=float) * scale
+
+
+def market_scoped_instrument(market: str | None, instrument: str) -> str:
+    """R24 P1-XM6 §22：跨市场统一结果中不要只有裸 instrument。
+
+    推荐 ``ashare:000001.SZ`` / ``us:AAPL`` 形式。主键逻辑必须是
+    ``(market, instrument)``——避免未来港股 / ETF / index / ADR / 同 ticker
+    空间冲突。物理源仍保留原 vendor code（``instrument`` 原样）。
+
+    ``market`` 为 None/未知时保持裸 instrument（不猜市场，避免错误加前缀）。
+    """
+    if not market:
+        return str(instrument)
+    return f"{market}:{instrument}"
 
 
 def semantic_contract_fingerprint() -> str:

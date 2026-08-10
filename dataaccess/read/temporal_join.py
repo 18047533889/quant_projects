@@ -117,6 +117,9 @@ class TemporalJoinSpec:
     future_cutoff: bool = True             # effective_time_only 事件右表不读未来生效事件
     # ---- #P0-7 availability_latency：额外可见性延迟（如分钟/bar 数）----
     availability_latency: int | None = None
+    # ---- R24 P0-PIT2 §11：时间表示（date_label / instant）----
+    time_representation: str | None = None
+    time_precision: str | None = None
 
     def __post_init__(self) -> None:
         """#P0-final closure 5：**对象自身即合法**，不依赖「从哪个入口创建」。
@@ -200,6 +203,8 @@ class TemporalJoinSpec:
             "period_values": list(self.period_values),
             "future_cutoff": self.future_cutoff,
             "availability_latency": self.availability_latency,
+            "time_representation": self.time_representation,
+            "time_precision": self.time_precision,
         }
 
 
@@ -361,6 +366,8 @@ def join_spec_from_field(field: Any) -> TemporalJoinSpec | None:
             availability=availability,
             period_selection=period_selection,
             period_values=tuple(getattr(field, "period_values", ()) or ()),
+            time_representation=getattr(field, "time_representation", None),
+            time_precision=getattr(field, "time_precision", None),
         )
     if policy == "exact" and (revision or getattr(field, "primary_key", ())):
         return TemporalJoinSpec(
@@ -397,6 +404,7 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
         "policy", "decision_time", "knowledge_time", "period_time", "revision_order",
         "availability", "deduplicate", "primary_key", "duplicate_policy",
         "period_selection", "period_values", "future_cutoff", "availability_latency",
+        "time_representation", "time_precision",
     })
     unknown = sorted(set(raw) - _JOIN_SPEC_KEYS)
     if unknown:
@@ -443,4 +451,6 @@ def parse_join_spec(raw: Any) -> TemporalJoinSpec:
         period_values=_period_values_of(raw.get("period_values")),
         future_cutoff=_as_bool(raw.get("future_cutoff"), True),
         availability_latency=latency,
+        time_representation=_str_or_none(raw.get("time_representation")),
+        time_precision=_str_or_none(raw.get("time_precision")),
     )
