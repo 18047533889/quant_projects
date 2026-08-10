@@ -372,6 +372,16 @@ class MarketFieldBinding:
     # semantics; quarterization/growth/TTM operators read this field.  None ==
     # not declared (callers keep the concept-level default).
     flow_semantics: str | None = None
+    # R17-033: dynamic validity policy — a provider's EXACT_DERIVED+FULL tag is
+    # not the whole story.  US continuous prices are computed from AdjFactor which
+    # may be CLAMPED for long-history tickers; a level-sensitive operator must not
+    # trust absolute adjusted-price LEVELS on a clamped ticker (return/log-return
+    # paths are safe).  ``None`` == no dynamic restriction.
+    dynamic_validity_policy: str | None = None
+    # R17-085: whether the provider output is LEVEL-sensitive (absolute adjusted
+    # price matters) vs return-invariant.  Drives operator eligibility on clamped
+    # tickers.  ``None`` == not declared (conservative: assume level-sensitive).
+    level_sensitive: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -394,6 +404,9 @@ class MarketFieldBinding:
             "derived_expression": self.derived_expression,
             "coverage_gate": self.coverage_gate,
             "dependencies": [d.to_dict() for d in self.dependencies],
+            "flow_semantics": self.flow_semantics,
+            "dynamic_validity_policy": self.dynamic_validity_policy,
+            "level_sensitive": self.level_sensitive,
             "notes": self.notes,
         }
 
@@ -596,6 +609,8 @@ def _b(
     coverage_gate=None,
     dependencies=(),
     flow_semantics=None,
+    dynamic_validity_policy=None,
+    level_sensitive=None,
     registry: ProviderRegistry = PROVIDER_REGISTRY,
 ) -> MarketFieldBinding:
     binding = MarketFieldBinding(
@@ -621,6 +636,8 @@ def _b(
         coverage_gate=coverage_gate,
         dependencies=tuple(dependencies),
         flow_semantics=flow_semantics,
+        dynamic_validity_policy=dynamic_validity_policy,
+        level_sensitive=level_sensitive,
     )
     registry.register(binding)
     return binding
@@ -733,7 +750,16 @@ _b(
     temporal_model="exact_daily", available_at="local_close",
     source_certified=True,
     derived_expression="StockDailyBar.Close * StockDailyBar.AdjFactor",
-    notes="clamp flag (adj_factor > 1e6) -> use returns for long windows",
+    # R17-033: AdjFactor may be CLAMPED for long-history tickers — the absolute
+    # adjusted LEVEL is not certified for long-window level-based operators on a
+    # clamped ticker.  Return/log-return paths remain valid.
+    dynamic_validity_policy=(
+        "if is_adj_factor_clamped(ticker): absolute continuous-price LEVEL "
+        "providers are not certified for long-history level-based operators; "
+        "use return/log-return path or re-baseline"
+    ),
+    level_sensitive=True,
+    notes="clamp flag (adj_factor > 1e6) -> use returns for long windows; level-sensitive (R17-033/085)",
 )
 
 # P0-010: continuous_open/high/low/vwap — the raw OHLC siblings of
@@ -777,7 +803,15 @@ for _canon, _bar in (
         temporal_model="exact_daily", available_at="local_close",
         source_certified=True,
         derived_expression=f"StockDailyBar.{_bar} * StockDailyBar.AdjFactor",
-        notes="same backward AdjFactor as continuous_close",
+        # R17-033: same AdjFactor-clamp caveat as continuous_close — level-based
+        # long-window operators must not trust absolute adjusted LEVELS on a
+        # clamped ticker.
+        dynamic_validity_policy=(
+            "if is_adj_factor_clamped(ticker): absolute continuous-price LEVEL "
+            "providers are not certified for long-history level-based operators"
+        ),
+        level_sensitive=True,
+        notes="same backward AdjFactor as continuous_close; level-sensitive (R17-033/085)",
     )
 for _raw, _phys in (("raw_volume_shares", "Volume"),):
     _b(
