@@ -91,6 +91,56 @@ class AggregationSpec:
     market: str | None = None
     timezone: str | None = None
 
+    def __post_init__(self) -> None:
+        """R29-P0：直接构造（不经 ``parse_aggregation_spec``）也强制校验。
+
+        封 programmatic bypass：``AggregationSpec(aggregation="abc", period=-3,
+        index=-8, market="mars", timezone="xxx")`` 不能再绕过 parser 的严格
+        检查——与 TemporalJoinSpec 的 invariant 下沉同理。空默认构造
+        （``AggregationSpec()`` = minute_range、无边界）保持合法（AggregationItem
+        的 default_factory 依赖它）；跨字段边界只在显式提供了字段时校验。
+        """
+        agg = self.aggregation
+        if agg not in _VALID_AGGREGATIONS:
+            raise ValidationError(
+                f"聚合 '{agg}' 不支持；合法: {sorted(_VALID_AGGREGATIONS)}"
+            )
+        if self.market is not None and str(self.market).strip().lower() not in {
+            "ashare",
+            "us",
+        }:
+            raise ValidationError(f"聚合 market={self.market!r} 非法（应为 ashare/us）")
+        if self.metric is not None and self.metric not in _METRIC_FUNCS:
+            raise ValidationError(
+                f"不支持的分钟聚合 metric '{self.metric}'；合法: {sorted(_METRIC_FUNCS)}"
+            )
+        # 与 parser 同语义：strict int（禁 bool/小数截断/负数）、HH:MM、IANA 时区。
+        object.__setattr__(
+            self, "period", _strict_int(self.period, context="聚合 period", minimum=1)
+        )
+        object.__setattr__(
+            self, "index", _strict_int(self.index, context="聚合 index", minimum=0)
+        )
+        object.__setattr__(
+            self, "timezone", _validate_timezone(self.timezone, context="聚合 timezone")
+        )
+        object.__setattr__(self, "start", _parse_hhmm(self.start, context="聚合 start"))
+        object.__setattr__(self, "end", _parse_hhmm(self.end, context="聚合 end"))
+        object.__setattr__(self, "hhmm", _parse_hhmm(self.hhmm, context="聚合 hhmm"))
+        # 跨字段：只在显式提供了边界时校验（空默认保持合法）。
+        if agg == "minute_range" and (self.start is None) != (self.end is None):
+            raise ValidationError("minute_range 需要 start 和 end（二者必须同时提供）")
+        if self.start is not None and self.end is not None and self.start > self.end:
+            raise ValidationError(
+                f"minute_range start={self.start} 必须早于 end={self.end}"
+            )
+        if (
+            agg == "minute_at"
+            and self.hhmm is None
+            and (self.start is not None or self.end is not None)
+        ):
+            raise ValidationError("minute_at 需要 hhmm")
+
     def effective_metric(self, field: str) -> str:
         m = self.metric or _semantic_metric(field)
         if m not in _METRIC_FUNCS:

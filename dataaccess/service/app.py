@@ -256,7 +256,15 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
 
     @app.get("/version")
     def version() -> dict[str, str]:
-        return {"package": "data-access", "version": data_access.__version__, "api": "v1"}
+        # R29-P0 #207：build SHA 进 /version——两台机器版本号相同但代码不同时，
+        # build_sha 一眼可辨（可复现）。
+        build = getattr(data_access, "__build_sha__", None)
+        return {
+            "package": "data-access",
+            "version": data_access.__version__,
+            "build_sha": build,
+            "api": "v1",
+        }
 
     @app.get("/v1/metrics", dependencies=[Depends(require_api_key)])
     def metrics() -> dict[str, Any]:

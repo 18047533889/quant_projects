@@ -235,7 +235,7 @@ class SchemaEpochGate:
                         None,
                     )
                     if source is None or not self._migration_approved(
-                        source, epoch, "add_column", col
+                        source, epoch, col, "add_column"
                     ):
                         problems.append(
                             f"列 {col!r} 在 epoch {epoch.fingerprint[:8]} 缺失"
@@ -255,7 +255,7 @@ class SchemaEpochGate:
                     if da == db or _dtypes_compatible(da, db):
                         continue
                     ea, eb = by_fp[a_fp], by_fp[b_fp]
-                    if not self._migration_approved(ea, eb, "dtype_change", col):
+                    if not self._migration_approved(ea, eb, col, "dtype_change"):
                         problems.append(
                             f"列 {col!r} dtype 跨 epoch 不兼容（{a_fp[:8]}={da} vs "
                             f"{b_fp[:8]}={db}），且无 approved dtype_change migration"

@@ -118,6 +118,14 @@ __all__ = [
 from importlib.metadata import PackageNotFoundError, version as _package_version
 
 try:
-    __version__ = _package_version("data-access")
+    _base_version = _package_version("data-access")
 except PackageNotFoundError:
-    __version__ = "0.8.0+local"
+    _base_version = "0.8.0+local"
+
+# R29-P0 #207：SCM/commit 驱动版本（0.10.2+build.<sha>），build SHA 也进
+# snapshot/lineage 身份——换代码构建即换数据身份，杜绝「两台机器都显示同版本、
+# 实际代码不同」的复现地狱。
+from data_access._build_meta import build_sha, full_version
+
+__version__ = full_version(_base_version)
+__build_sha__ = build_sha()

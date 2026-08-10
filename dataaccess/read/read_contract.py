@@ -124,6 +124,9 @@ class ReadLineage:
     # []=空池 WHERE FALSE），不能折叠成同一个 ()。
     instrument_filter: tuple[str, ...] | None = ()
     params: tuple[tuple[str, Any], ...] = ()
+    # R29-P0 #207：lineage 携带 build SHA（可复现——同一 data 在不同代码构建下
+    # 的 provenance 不同）。
+    build_sha: str | None = None
 
     def __post_init__(self) -> None:
         # 统一把序列型字段冻结成 tuple（list/set 传入时防 lineage 被外部变异）。
@@ -413,6 +416,14 @@ def build_data_snapshot(
     file_versions = tuple(files) if files is not None else build_file_manifest(paths)
     manifest_hash = file_manifest_hash(file_versions)
     schema_hash = schema_hash_from_decl(schema)
+    # R29-P0 #207：build SHA 并入 snapshot 身份——换代码构建即换 snapshot_id
+    # （lineage/缓存身份与「哪个版本的代码读的」绑定，杜绝跨构建复用）。
+    try:
+        from data_access._build_meta import build_sha
+
+        build = build_sha()
+    except Exception:
+        build = None
     identity = json.dumps(
         {
             "dataset": dataset,
@@ -420,6 +431,7 @@ def build_data_snapshot(
             "schema_hash": schema_hash,
             "manifest_hash": manifest_hash,
             "params": canon,
+            "build_sha": build,
         },
         sort_keys=True,
         separators=(",", ":"),

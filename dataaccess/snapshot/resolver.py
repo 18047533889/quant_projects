@@ -99,6 +99,11 @@ def parse_source_manifest(
     """
     from data_access.core.exceptions import SourceSnapshotUnavailable
 
+    # R29-P0 #199：None/空输入 = 无 publisher manifest（合法状态，不是损坏）→
+    # 返回 None（resolver 走 LIST/HEAD/FileVersion 兜底）。只有「提供了但损坏」
+    # 才 fail-closed——None 不能被当成损坏 manifest。
+    if raw is None or raw == "" or raw == {}:
+        return None
     if isinstance(raw, str):
         try:
             raw = json.loads(raw)
@@ -254,6 +259,11 @@ class SourceSnapshotResolver:
                             返回 exact objects）。None = 不执行 LIST。
     - ``head_object_fn``   ：给定 s3:// uri → ResolvedObject（COS HEAD）。None = 不 HEAD。
     - ``source_manifest_fn``：给定 dataset → SourceManifest | None（publisher 提供）。
+    - ``fallback_fn``      ：R29-P0——**主链化**：publisher manifest / exact LIST /
+                            HEAD 都无解时，回退到 FileVersion snapshot
+                            （``resolved_snapshot_from_files``）。这把 FileVersion 与
+                            SourceManifest 两套世界收进**一条**解析链：FileVersion
+                            只是最后兜底分支，不再与 resolver 并行两套。
     """
 
     def __init__(
@@ -262,12 +272,16 @@ class SourceSnapshotResolver:
         list_objects_fn: Callable[[str], Sequence[ResolvedObject]] | None = None,
         head_object_fn: Callable[[str], ResolvedObject | None] | None = None,
         source_manifest_fn: Callable[[str], Any | None] | None = None,
+        fallback_fn: Callable[
+            [str, Sequence[str] | None, Sequence[Any] | None], Any
+        ] | None = None,
         strict: bool | None = None,
         file_selector: Any = None,
     ) -> None:
         self._list_objects_fn = list_objects_fn
         self._head_object_fn = head_object_fn
         self._source_manifest_fn = source_manifest_fn
+        self._fallback_fn = fallback_fn
         self._strict = strict
         # R26-P0-010：FileSelector IR（split/shares 精确过滤）。
         self._file_selector = file_selector
@@ -289,14 +303,18 @@ class SourceSnapshotResolver:
         policy: str = "latest",
         pin_snapshot_id: str | None = None,
         paths: Sequence[str] | None = None,
+        files: Sequence[Any] | None = None,
     ) -> ResolvedSourceSnapshot:
         """解析 dataset 的 source snapshot。
 
-        解析顺序（R25 §30）：
-            1. publisher source manifest（最权威）；
+        解析顺序（R29-P0 主链化）：
+            1. publisher source manifest（最权威）——**即使 object_count=0，
+               权威空 generation 也拥有完整 object set**，不再继续 LIST/HEAD/
+               fallback（#14：防「合法空 manifest」继续 LIST 把旧对象复活）；
             2. exact object list（COS LIST，若提供 list_objects_fn）；
             3. HEAD exact objects（paths 不含通配时逐对象 HEAD）；
-            4. 都无法解析 exact object set 且 strict → ``SourceSnapshotUnavailable``
+            4. ``fallback_fn``（FileVersion snapshot，R29-P0 主链兜底）；
+            5. 全部无解且 strict → ``SourceSnapshotUnavailable``
                （production 禁止 wildcard-only snapshot）。
         """
         strict = self._effective_strict()
@@ -322,9 +340,15 @@ class SourceSnapshotResolver:
                         f"source manifest 解析失败（{dataset}）：{exc}"
                     ) from exc
 
+        # R29-P0 #14：区分 manifest_absent 与 manifest_present_but_empty。
+        # publisher 明确发布 complete=true、object_count=0 的合法空 generation 时，
+        # manifest 已拥有完整 object set（空集）——**不得**继续向下 LIST/HEAD/
+        # fallback（那会越过权威声明、把旧对象「复活」）。
+        manifest_present = manifest is not None
+
         objects: tuple[ResolvedObject, ...] = ()
         generation = None
-        if manifest is not None:
+        if manifest_present:
             objects = manifest.objects
             generation = manifest.source_generation
             logger.info(
@@ -332,8 +356,8 @@ class SourceSnapshotResolver:
                 dataset, generation, len(objects),
             )
 
-        # 2) exact object list（COS LIST）。
-        if not objects and self._list_objects_fn is not None and paths:
+        # 2) exact object list（COS LIST）——仅 manifest 缺席时才允许。
+        if not objects and not manifest_present and self._list_objects_fn is not None and paths:
             prefix = _common_prefix(paths)
             if prefix:
                 try:
@@ -355,8 +379,8 @@ class SourceSnapshotResolver:
                             f"COS LIST 失败（{prefix}）：{exc}"
                         ) from exc
 
-        # 3) HEAD exact objects（paths 不含通配）。
-        if not objects and self._head_object_fn is not None and paths:
+        # 3) HEAD exact objects（paths 不含通配）——仅 manifest 缺席时。
+        if not objects and not manifest_present and self._head_object_fn is not None and paths:
             head_objs: list[ResolvedObject] = []
             for p in paths:
                 if "*" in p or "?" in p or "{" in p:
@@ -373,17 +397,41 @@ class SourceSnapshotResolver:
                     head_objs.append(h)
             objects = tuple(head_objs)
 
-        # 4) 仍无法得到 exact object set：strict 下 wildcard-only 禁止进 executor。
+        # 4) R29-P0 主链兜底：FileVersion snapshot（fallback_fn）。manifest 缺席
+        #    且无 exact 身份时，本地 file-manifest snapshot 是合法分支。
+        if not objects and not manifest_present and self._fallback_fn is not None:
+            try:
+                fb = self._fallback_fn(dataset, paths, files)
+            except Exception as exc:
+                if strict:
+                    raise SourceSnapshotUnavailable(
+                        f"FileVersion snapshot 兜底失败（{dataset}）：{exc}"
+                    ) from exc
+                fb = None
+            if fb is not None:
+                objs = tuple(getattr(fb, "objects", ()) or ())
+                if objs:
+                    objects = objs
+                    generation = getattr(fb, "source_generation", None)
+                    logger.debug(
+                        "source_snapshot: %s via file_manifest objects=%d",
+                        dataset, len(objs),
+                    )
+
+        # 5) 仍无法得到 exact object set。
+        #     - manifest 权威存在（含空集）→ 合法空 snapshot；
+        #     - fallback 无 exact objects（本地空 dataset）→ 合法空 snapshot；
+        #     - 完全无解 + strict → wildcard-only 禁止进 executor。
         if not objects:
-            if strict:
+            if strict and not manifest_present:
                 raise SourceSnapshotUnavailable(
                     f"dataset={dataset!r} 无法解析 exact source snapshot（无 publisher "
-                    "manifest、无 exact object list、无 HEAD 结果）。production "
-                    "fail-closed：wildcard URI 不构成可证明 snapshot。"
+                    "manifest、无 exact object list、无 HEAD 结果、无 FileVersion 兜底）。"
+                    "production fail-closed：wildcard URI 不构成可证明 snapshot。"
                 )
             return ResolvedSourceSnapshot(
                 dataset=dataset,
-                source_generation=None,
+                source_generation=generation,
                 objects=(),
                 content_digest="",
             )
@@ -492,9 +540,13 @@ def resolve_source_snapshot(
     policy: str = "latest",
     pin_snapshot_id: str | None = None,
     paths: Sequence[str] | None = None,
+    files: Sequence[Any] | None = None,
     list_objects_fn: Callable[[str], Sequence[ResolvedObject]] | None = None,
     head_object_fn: Callable[[str], ResolvedObject | None] | None = None,
     source_manifest_fn: Callable[[str], Any | None] = None,
+    fallback_fn: Callable[
+        [str, Sequence[str] | None, Sequence[Any] | None], Any
+    ] | None = None,
     strict: bool | None = None,
 ) -> ResolvedSourceSnapshot:
     """便捷入口：解析 dataset 的权威 source snapshot。"""
@@ -502,10 +554,12 @@ def resolve_source_snapshot(
         list_objects_fn=list_objects_fn,
         head_object_fn=head_object_fn,
         source_manifest_fn=source_manifest_fn,
+        fallback_fn=fallback_fn,
         strict=strict,
     ).resolve(
         dataset,
         policy=policy,
         pin_snapshot_id=pin_snapshot_id,
         paths=paths,
+        files=files,
     )

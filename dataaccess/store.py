@@ -50,9 +50,12 @@ from data_access.core.exceptions import (
     MatrixCoverageMiss,
     MatrixUnavailable,
     PITUnavailable,
+    SchemaContractError,
     ValidationError,
 )
 from data_access.registry.params_validation import ParamSpec, params_fingerprint, validate_params
+from data_access._build_meta import build_sha as _build_sha  # R29-P0 #207：lineage build 身份
+__build_sha__ = _build_sha()
 from data_access.runtime.prepared_read import PreparedRead  # type: ignore[name-defined]  # R26-P0-003
 from data_access.runtime.resource_governor import duckdb_slot  # R26-P1-016
 from data_access.read.query_budget import (
@@ -235,6 +238,11 @@ class DataAccessStore:
         # PR8 + P0：首访 schema 自检缓存 key = dataset + params + manifest
         self._schema_checked: set[str] = set()
         self._schema_check_lock = threading.Lock()
+        # R29-P0 #205：job 级 resolution 缓存（DataReadSession 注入）。key=
+        # (dataset, params_fingerprint, time_range, instrument_filter)；命中跳过
+        # glob 重解析 / 文件 stat / 镜像检查——FactorEngine 对同一批因子重复读同一
+        # dataset 时 prepare ONCE。None = 未启用（普通读不缓存）。仅读场景使用。
+        self._resolution_cache: dict | None = None
         self._registry_hash = _compute_registry_hash(registry)
         # #46 注入的市场交易日历（{market: MarketCalendar}），session availability 用
         self._calendars: dict[str, Any] = {}
@@ -246,12 +254,37 @@ class DataAccessStore:
         # R28-3：注入 credential-aware 的真实 COS HEAD resolver 作为
         # ``SnapshotVerifier.remote_meta_fn``——production/strict 下 verify 真正到
         # COS 做「执行前 HEAD + 执行后 HEAD」身份比较，不再「有对象身份证 → 是」。
-        from data_access.runtime.read_pipeline import ReadPipeline
+        from data_access.runtime.read_pipeline import (
+            ReadPipeline,
+            resolved_snapshot_from_files,
+        )
+        from data_access.snapshot.resolver import SourceSnapshotResolver
         from data_access.snapshot.verifier import SnapshotVerifier
 
+        # R29-P0 #199：SourceSnapshotResolver 成为 Store 主读链的必选组件。
+        # publisher source manifest / exact LIST / HEAD 未接线时，fallback 分支
+        # 走 FileVersion snapshot（原 ReadPipeline 直连逻辑）——两条世界收进
+        # resolver 一条链，外部后续把 list/head/source_manifest_fn 接上即升级。
+        def _file_manifest_fallback(
+            _ds_name: str,
+            _paths: Sequence[str] | None,
+            _files: Sequence[Any] | None,
+        ) -> Any:
+            if _files is not None:
+                return resolved_snapshot_from_files(_ds_name, _files)
+            return None
+
         self._pipeline = ReadPipeline(
-            verifier=SnapshotVerifier(remote_meta_fn=self._remote_meta_head)
+            verifier=SnapshotVerifier(remote_meta_fn=self._remote_meta_head),
+            resolver=SourceSnapshotResolver(
+                source_manifest_fn=self._source_manifest_fn,
+                fallback_fn=_file_manifest_fallback,
+            ),
         )
+        # R29-P0 #201：engine 的 DuckDB 并发闸重链到 pipeline 的 governor——engine
+        # ``_exec_sem`` 与 governor ``_duckdb_sem`` 是同一信号量（单一 admission）。
+        # Store 各路径不再显式 ``duckdb_slot``（那会与 engine 内闸双份计账）。
+        self._engine.set_governor(self._pipeline._governor)
         # R26-P1-003：ContractCompiler 由 Store ownership（绑定本 registry）。
         from data_access.contract.runtime_contract import ContractCompiler
 
@@ -309,15 +342,30 @@ class DataAccessStore:
             yield
             return
 
-        try:
-            raw_paths = self._resolve_raw_paths(
-                ds, time_range=None, params=dict(params)
-            )
-        except Exception:
-            if active_exc is None:
-                raise
-            raw_paths = []
-        root = manifest_root_for_paths(raw_paths)
+        # R29-P0：generation 数据集的锁根必须是**逻辑数据集根**
+        # （generation_layout 的 resolve_root），不能锁 ``generation/<gid>``——
+        # pointer G1→G2 后新 writer 锁 G2、旧 writer 仍锁 G1，同一逻辑 dataset
+        # 出现两把锁 → 并发写竞态。逻辑根稳定，manifest.json / _manifest.json
+        # 都活在那里。
+        lock_root: Path | None = None
+        if self._is_generation_dataset(ds):
+            try:
+                from data_access.write.generation import generation_layout
+
+                lock_root, _glob_part = generation_layout(ds, dict(params))
+            except Exception:
+                lock_root = None
+        if lock_root is None:
+            try:
+                raw_paths = self._resolve_raw_paths(
+                    ds, time_range=None, params=dict(params)
+                )
+            except Exception:
+                if active_exc is None:
+                    raise
+                raw_paths = []
+            lock_root = manifest_root_for_paths(raw_paths)
+        root = lock_root
         if root is None:
             # 无 manifest 的数据集：没有可失效/重建的 sidecar，正文自己负责锁。
             yield
@@ -591,6 +639,39 @@ class DataAccessStore:
                 "resource is not authorized "
                 f"(factor access tags not allowed: {', '.join(denied)})"
             )
+
+    # R29-P0 #191：带 factor_id 参数的 factor 数据集。
+    _FACTOR_FACTORID_DATASETS = frozenset(
+        {"factor_lake", "factor_lake_wide", "factor_lake_staging"}
+    )
+
+    def _authorize_factor_params(
+        self, dataset: str, params: Mapping[str, Any] | None
+    ) -> None:
+        """R29-P0 #191：generic read/scan/read_joined 对 factor 数据集同样做
+        factor-level 授权。
+
+        专用 ``read_factors`` 已有 ``_authorize_factor_tags``；但普通 ``/v1/read``
+        只做 dataset 授权——持有 ``factor_lake dataset:read`` 的人可绕过
+        ``_authorize_factor_tags()`` 直接 ``factor_id=xxx`` 读受限因子。这里把
+        factor-level 授权并入统一读路径：params 含 ``factor_id``（或 factor_ids）
+        且数据集是 factor 家族时，强制走 ``_authorize_factor_tags``。
+        """
+        if dataset not in self._FACTOR_FACTORID_DATASETS:
+            return
+        if not params:
+            return
+        raw = params.get("factor_id") or params.get("factor_ids")
+        if raw is None:
+            return
+        if isinstance(raw, (list, tuple, set, frozenset)):
+            ids = [str(x) for x in raw if x]
+        else:
+            ids = [str(raw)]
+        ids = [x for x in ids if x and x != "*"]
+        if not ids:
+            return
+        self._authorize_factor_tags(ids)
 
     def describe_dataset(
         self,
@@ -1397,6 +1478,9 @@ class DataAccessStore:
         # ---- auth ----
         self._pipeline.counters.auth += 1
         self.authorize_dataset(dataset)
+        # R29-P0 #191：factor 数据集 generic read 同样强制 factor-level 授权
+        # （防「只有 dataset:read 却直接 factor_id=xxx 读受限因子」）。
+        self._authorize_factor_params(dataset, params)
         # R27-I：首次读即冻结 calendar 世界——之后 PIT availability 必须与本次
         # 观察一致，不允许运行中 set_calendar 改变语义。
         self._calendars_locked = True
@@ -1420,6 +1504,10 @@ class DataAccessStore:
         # ---- physical scope（exact objects）----
         from data_access.runtime.prepared_read import VerifiedPhysicalScope
 
+        # R29-P0 #205：job 级 resolution 缓存（只对默认解析生效；physical_scope
+        # 精确对象集不缓存）。提前初始化避免 Verified 分支引用未定义局部变量。
+        _cache = getattr(self, "_resolution_cache", None)
+        _hit = None
         if physical_scope is not None:
             if isinstance(physical_scope, VerifiedPhysicalScope):
                 # R27-D：只有内部构造的 VerifiedPhysicalScope 才能绑定物理范围
@@ -1464,15 +1552,38 @@ class DataAccessStore:
                 paths = self._expand_glob_paths(scope)
                 self._enforce_dataset_path_boundary(ds, paths)
         else:
-            paths = self._prepare_dataset_read(
-                ds,
-                time_range=time_range,
-                params=params,
-                instrument_filter=instrument_filter,
-            )
-            # #6 冻结 glob → 精确文件列表：DuckDB 不再二次 expand（TOCTOU）
-            paths = self._expand_glob_paths(paths)
-        files = build_file_manifest(paths)
+            # R29-P0 #205：job 级 resolution 缓存命中 → 跳过 glob 重解析/文件
+            # stat/镜像检查（FactorEngine 对同一批因子重复读同一 dataset 时
+            # prepare ONCE）。只对无 physical_scope 的默认解析生效；Verified scope
+            # 已是精确对象集，无需缓存。
+            _cache = getattr(self, "_resolution_cache", None)
+            _ckey = None
+            _hit = None
+            if _cache is not None:
+                _ckey = (
+                    dataset,
+                    params_fingerprint(params),
+                    str(time_range),
+                    str(tuple(instrument_filter) if instrument_filter else None),
+                )
+                _hit = _cache.get(_ckey)
+            if _hit is not None:
+                paths, files = _hit
+            else:
+                paths = self._prepare_dataset_read(
+                    ds,
+                    time_range=time_range,
+                    params=params,
+                    instrument_filter=instrument_filter,
+                )
+                # #6 冻结 glob → 精确文件列表：DuckDB 不再二次 expand（TOCTOU）
+                paths = self._expand_glob_paths(paths)
+                files = build_file_manifest(paths)
+                if _cache is not None:
+                    _cache[_ckey] = (paths, files)
+        if not (_cache is not None and _hit is not None):
+            # VerifiedPhysicalScope / 无缓存路径：files 由 paths 构建（幂等）。
+            files = build_file_manifest(paths)
         self._enforce_scan_files(budget, paths, files=files)
         # ---- source snapshot resolve + budget enforce（P0-004/010/017）----
         src_snapshot = self._pipeline.resolve_snapshot(
@@ -1494,6 +1605,8 @@ class DataAccessStore:
                 tuple(instrument_filter) if instrument_filter is not None else None
             ),
             params=snapshot.params,
+            # R29-P0 #207：lineage 记录 build SHA（可复现）。
+            build_sha=__build_sha__,
         )
         # ---- runtime contract（P0-011 hard-fail）----
         runtime_contract = self._compile_contract_strict(dataset)
@@ -1504,6 +1617,20 @@ class DataAccessStore:
         temporal_plan = self._build_temporal_plan(dataset, mode=mode)
         rid = request_identity or f"{dataset}:{uuid.uuid4().hex[:12]}"
         pid = principal_id or getattr(current_principal() or self._principal, "principal_id", "unknown")
+        # R29-P0 #201：全请求 absolute deadline——prepare 开始即建立；prepare 阶段
+        # HEAD/LIST/schema 的耗时计入请求预算，execute 只拿剩余时间。
+        deadline_at = None
+        if budget is not None and getattr(budget, "max_elapsed_ms", None):
+            _ms = float(budget.max_elapsed_ms)
+            if _ms > 0:
+                deadline_at = time.monotonic() + _ms / 1000.0
+                if time.monotonic() >= deadline_at:
+                    from data_access.core.exceptions import DeadlineExceeded
+
+                    raise DeadlineExceeded(
+                        f"请求在 prepare 阶段即超过 deadline={_ms:.0f}ms"
+                        "（R29-P0 #201：HEAD/LIST/schema 也计入请求预算）。"
+                    )
         # ---- governor admission（P0-017：execute 前拦截）----
         res = self._pipeline.admit(
             request_identity=rid,
@@ -1525,6 +1652,10 @@ class DataAccessStore:
             resolved_source_snapshot=src_snapshot,
             query_budget=budget,
             resource_reservation=res,
+            # R29-P0：prepare 时刻固化安全身份，execute 前强制 equality。
+            security_digest=self._effective_security_digest(),
+            credential_scope_id=self._effective_credential_scope(),
+            deadline_at=deadline_at,
             backend_plan={
                 "ds": ds,
                 "columns": list(columns) if columns else None,
@@ -1550,6 +1681,8 @@ class DataAccessStore:
 
         任何 backend 路径都不得绕过 —— 这里是唯一执行出口。
         """
+        # R29-P0：terminal execute 前强制 security context 与 prepare 时刻一致。
+        self._assert_prepared_security_current(prepared)
         snapshot = prepared.lineage_seed["snapshot"]
         lineage = prepared.lineage_seed["lineage"]
         dataset = prepared.dataset
@@ -1579,11 +1712,24 @@ class DataAccessStore:
         try:
             self._pipeline.verify_before(prepared.resolved_source_snapshot)
             self._pipeline.counters.execute += 1
-            # R26-P1-016：DuckDB 并发 slot（governed 执行路径持有）。
-            with duckdb_slot(self._pipeline._governor):
-                table = self._engine.execute_arrow(
-                    sql, sql_params, deadline_ms=budget.max_elapsed_ms
-                )
+            # R29-P0 #201：engine 内部已持 governor 同一信号量（set_governor 重链），
+            # 不再显式 duckdb_slot——单一并发闸，无双份计账。
+            # 全请求 deadline：prepare 建立的 absolute deadline 已过 → fail-fast；
+            # 否则只给 execute 剩余时间。
+            deadline_ms = budget.max_elapsed_ms
+            if prepared.deadline_at is not None:
+                _remaining = prepared.deadline_at - time.monotonic()
+                if _remaining <= 0:
+                    from data_access.core.exceptions import DeadlineExceeded
+
+                    raise DeadlineExceeded(
+                        "prepare→execute 已超过请求 deadline（R29-P0 #201：全请求"
+                        " absolute deadline，prepare 阶段 HEAD/LIST/schema 已计入）。"
+                    )
+                deadline_ms = _remaining * 1000.0
+            table = self._engine.execute_arrow(
+                sql, sql_params, deadline_ms=deadline_ms
+            )
             elapsed_ms = (time.perf_counter() - start) * 1000
             enforce_arrow_budget(budget, table, elapsed_ms=elapsed_ms)
             if verify_after:
@@ -1740,13 +1886,46 @@ class DataAccessStore:
         请求字段存在性 + dtype 兼容 + 声明 schema 对齐。违反（production）
         抛 ``SchemaContractError``，绝不让 ``union_by_name=True`` 掩盖缺字段。
         """
-        from data_access.read.schema_epoch import SchemaEpochGate
+        from data_access.read.schema_epoch import (
+            SchemaEpochGate,
+            SchemaMigration,
+        )
 
         declared = {
             str(k): str(v)
             for k, v in dict(getattr(ds, "schema", None) or {}).items()
         }
-        gate = SchemaEpochGate(declared_fields=declared)
+        # R29-P0 #194：把 registry 声明的 schema_migrations 编译成 typed IR 注入
+        # gate——跨 epoch 缺字段/dtype 变化的合法演进由 Dataset Contract 显式
+        # 审批（approved=true 才放行），生产读取有真实 migration source。
+        migrations: list[SchemaMigration] = []
+        for raw in getattr(ds, "schema_migrations", ()) or ():
+            try:
+                # approved 由 registry 严格解析（_strict_bool）；这里要求真实 bool
+                # （audit R26 §7.2：安全配置拒绝字符串伪装布尔，不用 bool(raw.get(..))）。
+                _approved = raw.get("approved", False)
+                if not isinstance(_approved, bool):
+                    raise SchemaContractError(
+                        f"数据集 '{ds.name}' schema_migrations.approved 必须是 true/"
+                        f"false 布尔，收到 {_approved!r}"
+                    )
+                migrations.append(
+                    SchemaMigration(
+                        from_fingerprint=str(raw["from_fingerprint"]),
+                        to_fingerprint=str(raw["to_fingerprint"]),
+                        kind=str(raw.get("kind") or "add_column"),
+                        field=raw.get("field") and str(raw["field"]),
+                        approved=_approved,
+                        reviewer=raw.get("reviewer") and str(raw["reviewer"]),
+                    )
+                )
+            except (KeyError, TypeError) as exc:
+                raise SchemaContractError(
+                    f"数据集 '{ds.name}' 的 schema_migrations 项非法：{raw!r}（{exc}）"
+                ) from exc
+        gate = SchemaEpochGate(
+            declared_fields=declared, migrations=migrations
+        )
         # R28-8：优先用 manifest 的 schema epoch 摘要做 O(1) 分组，避免逐文件开
         # parquet footer（FactorEngine 热路径）。manifest 缺失/无摘要 → 回退真实 footer。
         manifest = None
@@ -2825,6 +3004,11 @@ class DataAccessStore:
             self.authorize_dataset(right_ds)
         for right_ds in (joins or {}):
             self.authorize_dataset(right_ds)
+        # R29-P0 #191：join 里 factor 数据集按 factor_id 强制 factor-level 授权
+        # （generic read_joined 不能成为 factor 权限的旁路）。
+        all_ds_params = dict(params_by_dataset or {})
+        for _ds in [anchor, *((fields or {}) if not isinstance(fields, str) else ()), *(joins or {})]:
+            self._authorize_factor_params(_ds, all_ds_params.get(_ds) or params)
         self._registry.get(anchor)
         self._pipeline.counters.auth += 1
         per_ds, fields_meta, default_joins = self._normalize_joined_fields(anchor, fields)
@@ -2873,6 +3057,12 @@ class DataAccessStore:
         merged = self._resolve_sql_budget(list(per_ds), query_budget)
         all_cols = [c for cols in per_ds.values() for c in cols]
         validate_query_request(merged, columns=all_cols or None, time_range=time_range)
+        # R29-P0 #201：read_joined 全请求 absolute deadline（resolve/HEAD 已耗时，
+        # 执行只拿剩余）。
+        _rjd = None
+        if getattr(merged, "max_elapsed_ms", None):
+            if float(merged.max_elapsed_ms) > 0:
+                _rjd = time.monotonic() + float(merged.max_elapsed_ms) / 1000.0
 
         sql, sql_params, datasets, per_ds_paths = self._read_joined_sql(
             anchor,
@@ -2966,12 +3156,23 @@ class DataAccessStore:
         try:
             self._pipeline.verify_before(join_snapshot)
             self._pipeline.counters.execute += 1
-            # R28-11：read_joined 同样持有 DuckDB 并发 slot（之前直接 execute_arrow
-            # 绕过 governor 的 max_duckdb_concurrency）。
-            with duckdb_slot(self._pipeline._governor):
-                table = self._engine.execute_arrow(
-                    sql, sql_params, deadline_ms=merged.max_elapsed_ms
-                )
+            # R29-P0 #201：engine 内部持 governor 同一信号量（set_governor 重链），
+            # read_joined 不再显式 duckdb_slot——单一并发闸。全请求 deadline：
+            # resolve/HEAD 已计入，execute 只拿剩余时间。
+            _deadline_ms = merged.max_elapsed_ms
+            if _rjd is not None:
+                _rm = _rjd - time.monotonic()
+                if _rm <= 0:
+                    from data_access.core.exceptions import DeadlineExceeded
+
+                    raise DeadlineExceeded(
+                        "read_joined 已超过请求 deadline（R29-P0 #201：resolve/HEAD "
+                        "计入请求预算）。"
+                    )
+                _deadline_ms = _rm * 1000.0
+            table = self._engine.execute_arrow(
+                sql, sql_params, deadline_ms=_deadline_ms
+            )
             if normalize_units and fields_meta:
                 table = normalize_table_units(table, fields_meta)
             elapsed_ms = (time.perf_counter() - start) * 1000
@@ -3576,6 +3777,15 @@ class DataAccessStore:
             return None
         return _remote_object_meta(str(uri), fresh=True)
 
+    def _source_manifest_fn(self, dataset: str) -> Any:
+        """R29-P0 #199：publisher source manifest 钩子（默认未接线 → None）。
+
+        部署方在 Store 上覆写此钩子即可把 publisher manifest / authoritative
+        generation 接入**普通读主链**（SourceSnapshotResolver 已注入 pipeline）。
+        返回 None = 无 publisher manifest → resolver 走 LIST/HEAD/FileVersion 兜底。
+        """
+        return None
+
     def _contract_digest_for(self, dataset: str) -> str:
         """R27-D：数据集 Contract 指纹（VerifiedPhysicalScope 绑定用）。
 
@@ -3590,6 +3800,84 @@ class DataAccessStore:
         except Exception:
             pass
         return f"{self._registry_hash}:{dataset}"
+
+    def _effective_security_digest(self) -> str | None:
+        """R29-P0：当前生效的安全身份指纹（request context 优先，回退 store 基线）。
+
+        返回 None 仅当无法计算（非 server 本机、无 policy）——调用方按
+        principal 基线继续。PreparedRead 固化该值，execute 前重新计算比较。
+        """
+        from data_access.security.execution_context import current_execution_context
+
+        ctx = current_execution_context()
+        if ctx is not None:
+            return ctx.security_digest or ctx.digest()
+        # store 基线：principal_id + access policy digest + run_mode。
+        import hashlib
+        import json
+
+        policy = self._access_policy
+        payload = {
+            "principal_id": getattr(self._principal, "principal_id", None),
+            "policy_digest": (
+                policy.digest() if policy is not None and hasattr(policy, "digest") else None
+            ),
+            "run_mode": None,
+        }
+        text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
+
+    def _effective_credential_scope(self) -> str | None:
+        """R29-P0：生效 credential provider 的 scope id（request-scoped 优先）。
+
+        credential_scope_id 标识这份凭证对应的权限范围（IAM policy hash），
+        PreparedRead 固化它，execute 前比较——更换凭证（scope 不同）后旧
+        PreparedRead 禁止继续执行。
+        """
+        from data_access.security.credentials import _global_credential_provider
+        from data_access.security.execution_context import current_credential_provider
+
+        provider = current_credential_provider()
+        if provider is None:
+            provider = self._credential_provider
+        if provider is None:
+            provider = _global_credential_provider()
+        if provider is None:
+            return None
+        try:
+            material = provider.resolve()
+            return getattr(material, "credential_scope_id", None) or None
+        except Exception:
+            return None
+
+    def _assert_prepared_security_current(
+        self, prepared: "PreparedRead"
+    ) -> None:
+        """R29-P0：PreparedRead 执行前强制安全身份与当前 context 相等。
+
+        高权限 context 里 prepare 的对象不允许被低权限/换凭证的 context 直接
+        execute——PreparedRead 不是跨上下文的通行证。任一身份不可比（None）
+        视为无差异；可比的必须相等。
+        """
+        from data_access.core.exceptions import AccessDeniedError
+
+        cur_digest = self._effective_security_digest()
+        if prepared.security_digest and cur_digest and prepared.security_digest != cur_digest:
+            raise AccessDeniedError(
+                "PreparedRead 的 security context 与当前执行上下文不一致："
+                "在高权限/不同身份 context 中 prepare 的对象不能在当前 context "
+                "直接 execute（R29-P0）。请重新 prepare。"
+            )
+        cur_scope = self._effective_credential_scope()
+        if (
+            prepared.credential_scope_id
+            and cur_scope
+            and prepared.credential_scope_id != cur_scope
+        ):
+            raise AccessDeniedError(
+                "PreparedRead 的 credential scope 与当前凭证范围不一致："
+                "更换凭证后旧 PreparedRead 禁止继续执行（R29-P0）。请重新 prepare。"
+            )
 
     def _dataset_classification(self, dataset: str) -> str | None:
         """R27-A：数据集安全分类（contract 的 DatasetSecurityContract.classification）。
@@ -4056,6 +4344,9 @@ class DataAccessStore:
         )
 
         ds = self._registry.get(dataset)
+        mutation_owner = str(
+            getattr(ds, "mutation_owner", "dataaccess") or "dataaccess"
+        )
         try:
             paths = self._resolve_raw_paths(ds, time_range=None, params=params)
         except Exception as exc:
@@ -4063,21 +4354,40 @@ class DataAccessStore:
             from data_access.core.exceptions import propagate_authorization
 
             propagate_authorization(exc)
-            return {"dataset": dataset, "has_manifest": False}
+            return {
+                "dataset": dataset,
+                "has_manifest": False,
+                "mutation_owner": mutation_owner,
+            }
         root = manifest_root_for_paths(paths)
         if root is None:
-            return {"dataset": dataset, "has_manifest": False}
+            return {
+                "dataset": dataset,
+                "has_manifest": False,
+                "mutation_owner": mutation_owner,
+            }
         token = manifest_version_token(root)
         if token is None:
-            return {"dataset": dataset, "has_manifest": False}
+            return {
+                "dataset": dataset,
+                "has_manifest": False,
+                "mutation_owner": mutation_owner,
+            }
         src = token.get("source_epoch")
         built = token.get("manifest_built_epoch")
         legacy = token.get("manifest_epoch")
         if src is None and built is None and legacy is not None:
             src = built = legacy
+        # R29-P0 #206：mutation_owner 进 freshness token——dataaccess 才能用
+        # source_epoch==built 判 fresh；external_mutable 需 LIST/stat、
+        # external_versioned 需 publisher manifest、immutable 按 content identity。
+        mutation_owner = str(getattr(ds, "mutation_owner", "dataaccess") or "dataaccess")
+        if mutation_owner != "dataaccess":
+            src = built = None  # epoch 不权威 → 禁止把 epoch-fresh 当真
         return {
             "dataset": dataset,
             "has_manifest": True,
+            "mutation_owner": mutation_owner,
             "fresh": (src is not None and src == built),
             "dataset_version": token.get("dataset_version"),
             "partition_version": token.get("partition_version"),
@@ -4530,8 +4840,15 @@ class DataAccessStore:
                 # #P0-1 聚合锚点已物化：anchor 子查询 = 临时 parquet（行空间
                 # ts/inst + 聚合输出列）。锚点的 filter/instrument 已在聚合时
                 # 应用，这里不再走 registry 分支；右表 join 语义照常完整。
-                sub = "SELECT * FROM read_parquet(?)"
-                params_list.append(anchor_override["path"])
+                # R29-P0 #204：优先用共享 pool 数据库里的持久视图（跨连接可见，
+                # 免临时 parquet round-trip）；回退 read_parquet(?)。视图名带
+                # uuid 后缀，不会与真实表冲突；SQL 端 _quote_ident 由调用方保证。
+                rel = anchor_override.get("relation")
+                if rel:
+                    sub = f'SELECT * FROM "{rel}"'
+                else:
+                    sub = "SELECT * FROM read_parquet(?)"
+                    params_list.append(anchor_override["path"])
                 per_ds_paths[ds] = list(anchor_override.get("source_paths", []))
             elif ds == anchor or policy == "exact":
                 branch_tr = time_range
@@ -6591,7 +6908,9 @@ class DataAccessStore:
             if keep_sub is None or keep_sub.num_rows == 0:
                 continue
             write_partition_drop_cols(gen_dir, rel_dir, keep_sub, pcols)
-        rows = validate_generation(gen_dir)
+        # R29-P0 #200：全分区删光 → 合法显式空 generation（标记 row_count=0、
+        # complete=true），不再要求「至少一个 parquet」而无法 flip。
+        rows = validate_generation(gen_dir, allow_empty=True)
         flip_generation_pointer(root, gid)
         return {
             "rows": rows,
@@ -6599,6 +6918,7 @@ class DataAccessStore:
             "mode": "delete",
             "generation": gid,
             "deleted": current.num_rows - remaining.num_rows,
+            "empty": rows == 0,
             "atomic": True,
         }
 
@@ -7197,6 +7517,8 @@ class DataAccessStore:
         from data_access.cos.mirror import ensure_local_mirror_for_dataset
         from data_access.cos.remote import should_read_cos_remote
 
+        # R29-P0：prepare_read/read 允许 params=None（统一空 dict），防 dict(None)。
+        params = dict(params or {})
         peek = dict(params)
         explicit_read_root = (
             peek.get("read_root")
@@ -7668,6 +7990,17 @@ class DataAccessStore:
         # A 的读路径不能落在 B 的 root 下。
         if read_root is None:
             self._enforce_dataset_path_boundary(ds, glob_paths)
+        # R29-P0 #200：权威空 generation（generation.meta.json 标记在
+        # ``generation/<gid>/`` 根）→ 返回空文件集，读取得 0 行 typed 结果，
+        # 而不是 DuckDB "No files found" 失败。
+        if self._is_generation_dataset(ds):
+            for _gp in glob_paths:
+                _parts = Path(str(_gp).split("*", 1)[0]).parts
+                for _i, _part in enumerate(_parts):
+                    if _part == "generation" and _i + 1 < len(_parts):
+                        _gen_dir = Path(*_parts[: _i + 2])
+                        if (_gen_dir / "generation.meta.json").exists():
+                            return []
         return self._authorize_read_paths(glob_paths)
 
     def _resolve_write_dir(self, ds: Dataset, params: dict[str, Any]) -> Path:

@@ -97,8 +97,10 @@ def write_generation_files(
     与上游 FactorEngine（test_r14_matrix_generation_resolver 的 ``_write_generation``）
     约定一致：每个 hive 分区写 ``data.parquet``，分区列进目录、不进文件
     （读路径 ``hive_partitioning=true`` 会从目录重建列）。返回总行数。
+
+    R29-P0 #204：弃 ``to_pandas() + groupby``——分区枚举走 DuckDB ``SELECT
+    DISTINCT``（typed）、分区筛选走 typed CAST，全程 Arrow，无 pandas 中转。
     """
-    import pyarrow as pa
     import pyarrow.parquet as pq
 
     gen_dir.mkdir(parents=True, exist_ok=True)
@@ -112,30 +114,39 @@ def write_generation_files(
             f"generation 分区列 {list(partition_by)} 不全在表中（缺 "
             f"{set(partition_by) - set(pcols)}）"
         )
-    df = table.to_pandas()
     total = 0
-    for key, group in df.groupby(list(pcols), dropna=False):
-        if isinstance(key, tuple):
-            parts = dict(zip(pcols, key))
-        else:
-            parts = {pcols[0]: key}
-        dir_path = gen_dir
-        for col in pcols:
-            dir_path = dir_path / f"{col}={parts[col]}"
-        dir_path.mkdir(parents=True, exist_ok=True)
-        sub = group.drop(columns=list(pcols))
-        sub_tbl = pa.Table.from_pandas(sub, preserve_index=False)
-        pq.write_table(sub_tbl, dir_path / "data.parquet")
-        total += sub_tbl.num_rows
+    for rel_dir in sorted(partition_rel_dirs(table, pcols)):
+        sub = filter_table_by_partition(table, rel_dir)
+        if sub is None or sub.num_rows == 0:
+            continue
+        write_partition_drop_cols(gen_dir, rel_dir, sub, pcols)
+        total += sub.num_rows
     return total
 
 
-def validate_generation(gen_dir: Path) -> int:
-    """新代必须至少有一个可读 parquet footer；返回总行数。"""
+# R29-P0 #200：显式空 generation 的标记文件（delete-all 全分区删光时写入）。
+_EMPTY_GENERATION_META = "generation.meta.json"
+
+
+def validate_generation(gen_dir: Path, *, allow_empty: bool = False) -> int:
+    """新代必须至少有一个可读 parquet footer；返回总行数。
+
+    R29-P0 #200：``allow_empty=True`` 时允许显式空 generation（delete-all 全分区
+    删光）——写入 ``generation.meta.json``（row_count=0, complete=true）标记，
+    读者据此识别「权威空代」而非「代缺失」（不写空 parquet、不 glob 出旧数据）。
+    """
     import pyarrow.parquet as pq
 
     files = sorted(gen_dir.rglob("*.parquet"))
     if not files:
+        if allow_empty:
+            gen_dir.mkdir(parents=True, exist_ok=True)
+            meta = gen_dir / _EMPTY_GENERATION_META
+            meta.write_text(
+                json.dumps({"row_count": 0, "complete": True}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            return 0
         raise ValidationError(f"generation 目录无 parquet 文件，拒绝 flip：{gen_dir}")
     total = 0
     for fp in files:

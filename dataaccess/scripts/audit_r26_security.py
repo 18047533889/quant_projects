@@ -45,15 +45,18 @@ _KNOWN_SWALLOWS = (
     "security/governed_frame.py:139",  # expected digest 回退（仍校验非空）
     "security/policy.py:245",         # production_security_configured custom authorizer 回退
     # startup_gate 的 except→return [problems] 是 gate 的设计：collect→production 端 raise。
+    # R29-P0 #198 重写 startup gate 后行号位移（calendar/source snapshot 真实 probe）。
     "runtime/startup_gate.py:48",
     "runtime/startup_gate.py:79",
     "runtime/startup_gate.py:86",
     "runtime/startup_gate.py:109",
     "runtime/startup_gate.py:142",
     "runtime/startup_gate.py:156",
+    "runtime/startup_gate.py:211",
+    "runtime/startup_gate.py:225",
     # verifier/resolver `_effective_strict` return True = fail-closed（异常→strict）。
     "snapshot/verifier.py:64",
-    "snapshot/resolver.py:282",
+    "snapshot/resolver.py:296",
     # verifier `_safe_remote_meta`/`_safe_local_stat` return None → strict 调用方 fail-closed。
     "snapshot/verifier.py:258",
     "snapshot/verifier.py:269",

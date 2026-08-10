@@ -93,6 +93,26 @@ class ScanHandle:
                 self._prepared.resource_reservation
             )
 
+    # R29-P0 #206：governed 句柄显式生命周期——lazy reservation 无天然 release
+    # point（``h = store.scan(...)`` 后不再 collect 就返回 → reservation 泄漏）。
+    # ``collect()`` 已在其 finally 释放；close()/with/GC 提供不消费即释放的路径。
+    # release 幂等（pipeline.release_reservation 检查 ``released``）。
+    def close(self) -> None:
+        """显式释放 governor reservation（不执行 LazyFrame）。幂等。"""
+        self._release_prepared()
+
+    def __enter__(self) -> "ScanHandle":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    def __del__(self) -> None:  # pragma: no cover - GC 兜底
+        try:
+            self._release_prepared()
+        except Exception:
+            pass
+
     def lazyframe(self) -> Any:
         """返回底层 LazyFrame（research 用；production/strict 只能使用受控方法）。"""
         if is_strict_semantics():
@@ -253,12 +273,17 @@ class ScanHandle:
                 import polars as pl
 
                 if isinstance(result, pl.LazyFrame):
+                    # R29-P0：派生句柄必须继承 `_prepared`——否则 `.filter()/.select()`
+                    # 链式 lazy collect 后 pipeline verify/release 变成 no-op、governor
+                    # reservation 泄漏。release 由 release_reservation 的 `released`
+                    # 标记保证 exactly once（多句柄共享同一 reservation 安全）。
                     return ScanHandle(
                         _lf=result,
                         snapshot=self.snapshot,
                         budget=self.budget,
                         lineage=self.lineage,
                         _store=self._store,
+                        _prepared=self._prepared,
                     )
             except ImportError:
                 pass

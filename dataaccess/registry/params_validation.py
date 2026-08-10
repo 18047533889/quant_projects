@@ -9,7 +9,10 @@ from typing import Any, Mapping
 from data_access.core.exceptions import ValidationError
 from data_access.read.read_contract import canonicalize_params
 
-_UNSAFE_PATH_CHARS = re.compile(r"[/\\:\0]")
+# R29-P0：路径参数禁止分隔符与**glob metachar / quote**——``factor_id/universe/
+# frequency/strategy_id`` 直接插入 root/glob 模板，``* ? [ ] { }`` 或引号会让参数
+# 变成通配符/注入点（``factor_id="*"`` 一次扫全湖、``strategy_id="'..'"`` 逃逸）。
+_UNSAFE_PATH_CHARS = re.compile(r'[/\\:\0*?\[\]{}]|[\'"]')
 _PATH_SEGMENT_DEFAULT = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 _INTEGER_TEXT = re.compile(r"^[+-]?\d+$")
 _SUPPORTED_TYPES = {"str", "int"}
@@ -114,10 +117,15 @@ class ParamSpec:
 
         # #P0-50 path_segment 用严格 bool 解析：``"false"`` 字符串 → False，
         # 不是 ``bool("false") == True``。
+        #
+        # R29-P0：默认 **True**——所有 parametric 参数最终都会进入 root/glob
+        # 模板，未显式 ``path_segment: false`` 的参数一律套用路径段白名单
+        # ``^[A-Za-z0-9_.-]{1,128}$``（禁 glob metachar/quote/分隔符/遍历）。
+        # 显式 `false` 仍需通过 _UNSAFE_PATH_CHARS 基础检查。
         path_segment = _parse_strict_bool(
             payload.get("path_segment"),
             context=f"params_schema['{name}'].path_segment",
-            default=False,
+            default=True,
         )
         return cls(
             name=name,

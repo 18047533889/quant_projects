@@ -114,6 +114,25 @@ class ReadHandle:
             fn(self._reservation)
             self._reservation = None
 
+    # R29-P0 #206：governed handle 的显式资源生命周期——lazy reservation 没有天然
+    # release point（``with store.read(...) as h`` 后不用 h 就返回），必须支持
+    # close()/with/GC 兜底。release 幂等（``_reservation_release_fn=None``）。
+    def close(self) -> None:
+        """显式释放 governor reservation（不消费结果）。幂等。"""
+        self._release_reservation()
+
+    def __enter__(self) -> "ReadHandle":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    def __del__(self) -> None:  # pragma: no cover - GC 兜底
+        try:
+            self._release_reservation()
+        except Exception:
+            pass
+
     def _ensure_not_consumed(self, action: str) -> None:
         """#P0-C4 one-shot 流一旦开始消费，任何后续物化/迭代都 fail-closed。
 

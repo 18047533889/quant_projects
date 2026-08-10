@@ -205,6 +205,7 @@ class DuckDBEngine:
         enable_object_cache: bool = True,
         config: DuckDBConfig | None = None,
         max_concurrency: int | None = None,
+        governor: Any = None,
     ) -> None:
         self._config = config or resolve_duckdb_config(
             threads=threads,
@@ -223,9 +224,20 @@ class DuckDBEngine:
             except Exception:
                 max_concurrency = 8
         self._max_concurrency = max(1, int(max_concurrency))
-        # 进程级统一 DuckDB 并发信号量：**所有** public execution entry 共用
-        # （R28-11：不需要每个调用方记得 ``with duckdb_slot()``）。
-        self._exec_sem = threading.Semaphore(self._max_concurrency)
+        # R29-P0 #201：DuckDB 并发**单一信号量**。
+        #   - 显式注入 governor → engine ``_exec_sem`` 直接就是 governor 的
+        #     ``_duckdb_sem``（同一个对象，无双闸）；
+        #   - 否则 standalone engine 用自带闸（``max_concurrency`` 语义保持：
+        #     显式 5 → 闸 5、pool 5）；Store 建 pipeline 后经 ``set_governor``
+        #     重链到 pipeline governor → 单一 admission point。
+        from data_access.runtime.resource_governor import get_global_governor
+
+        if governor is not None:
+            self._governor = governor
+            self._exec_sem = governor.duckdb_semaphore
+        else:
+            self._governor = get_global_governor()
+            self._exec_sem = threading.Semaphore(self._max_concurrency)
 
         self._conn = duckdb.connect(":memory:")
         self._write_lock = threading.Lock()
@@ -275,6 +287,17 @@ class DuckDBEngine:
             duckdb.__version__,
             self._max_concurrency,
         )
+
+    def set_governor(self, governor: Any) -> None:
+        """R29-P0 #201：把 DuckDB 并发闸重链到指定 governor 的**同一信号量**。
+
+        Store 建 pipeline 后调用，保证自定义（测试/多租户）governor 也被 engine
+        尊重——engine 的 ``_exec_sem`` 就是 governor 的 ``_duckdb_sem``，单一闸。
+        """
+        from data_access.runtime.resource_governor import get_global_governor
+
+        self._governor = governor if governor is not None else get_global_governor()
+        self._exec_sem = self._governor.duckdb_semaphore
 
     def _check_pid(self) -> None:
         """R26-P1-018：fork 后子进程继续用父进程 native connection 会损坏状态。
@@ -327,6 +350,57 @@ class DuckDBEngine:
                     self._conn.execute(f"DROP VIEW IF EXISTS {view_name}")
                 except duckdb.Error as exc:
                     logger.warning("清理 TEMP VIEW %s 失败：%s", view_name, exc)
+
+    # ---- R29-P0 #204：组合读锚点跨连接注册（去临时 parquet round-trip）----
+
+    def register_anchor_relation(self, view_name: str, table: Any) -> None:
+        """把 Arrow 表注册成**共享 pool 数据库里的持久表**（跨连接可见）。
+
+        pool 连接（deadline/isolated）与这里开的短连接连同一数据库文件
+        （``_pool_db_path``）——同 path → 同 DatabaseInstance → 同一 catalog，
+        持久表对全部 pool 连接可见。组合读（聚合锚点 + join）因此免写临时
+        parquet、免压缩/解压 round-trip。
+
+        用 ``CREATE TABLE ... AS SELECT``（**物化数据**，不是 VIEW）：VIEW 会
+        把 ``__da_anchor_src`` 的注册引用存进定义，短连接关闭后跨连接查询变悬空
+        引用；TABLE 真正复制数据进共享库，无悬空。用后必须
+        ``drop_anchor_relation`` 清理。失败（pool 文件不可用）→ 抛异常，调用方
+        回退临时 parquet。
+        """
+        if not self._pool_db_path:
+            raise RuntimeError(
+                "DuckDB 共享 pool 数据库不可用，无法注册组合锚点关系"
+                "（调用方应回退临时 parquet）"
+            )
+        import duckdb as _ddb
+
+        con = _ddb.connect(self._pool_db_path)
+        try:
+            con.register("__da_anchor_src", table)
+            con.execute(
+                f'CREATE OR REPLACE TABLE "{view_name}" AS '
+                "SELECT * FROM __da_anchor_src"
+            )
+        finally:
+            try:
+                con.unregister("__da_anchor_src")
+            except Exception:
+                pass
+            con.close()
+
+    def drop_anchor_relation(self, view_name: str) -> None:
+        """删除组合锚点持久表（finally 清理）；失败只记日志。"""
+        if not self._pool_db_path:
+            return
+        import duckdb as _ddb
+
+        con = _ddb.connect(self._pool_db_path)
+        try:
+            con.execute(f'DROP TABLE IF EXISTS "{view_name}"')
+        except Exception as exc:
+            logger.warning("清理组合锚点表 %s 失败：%s", view_name, exc)
+        finally:
+            con.close()
 
     # ---- 查询接口 ----
 

@@ -291,11 +291,22 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     )
     agg_table = agg_handle.to_arrow()
 
-    # 聚合锚点 → 临时 parquet（DuckDB 游标对 register() 的对象不可见，临时文件
-    # 最稳、可移植）。行空间列固定为 ts / inst（aggregate_minute_bundle 输出）。
-    anchor_fd, anchor_path = tempfile.mkstemp(suffix=".parquet", prefix="da_plan_agg_")
-    os.close(anchor_fd)
-    pq.write_table(agg_table, anchor_path)
+    # R29-P0 #204：聚合锚点优先注册成**共享 pool 数据库里的持久视图**（跨连接
+    # 可见，免写临时 parquet、免压缩/解压 round-trip）；pool 数据库不可用时回退
+    # 临时 parquet（旧机制）。行空间列固定为 ts / inst（aggregate_minute_bundle
+    # 输出）。
+    anchor_view: str | None = None
+    anchor_path: str | None = None
+    try:
+        anchor_view = f"da_composed_anchor_{uuid.uuid4().hex[:8]}"
+        store._engine.register_anchor_relation(anchor_view, agg_table)
+    except Exception:
+        anchor_view = None
+        _anchor_fd, anchor_path = tempfile.mkstemp(
+            suffix=".parquet", prefix="da_plan_agg_"
+        )
+        os.close(_anchor_fd)
+        pq.write_table(agg_table, anchor_path)
 
     # 锚点投影 = ts/inst + 聚合输出列（非 ts/inst 的物化列）
     agg_cols = [c for c in agg_table.column_names if c not in ("ts", "inst")]
@@ -350,6 +361,8 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
         # #2 时变 universe 才下沉 INNER JOIN；静态 universe 已展开进 insts
         universe=(req.universe if time_varying else None),
         anchor_override={
+            # R29-P0 #204：有持久视图用 relation（免临时 parquet）；否则 path 回退。
+            "relation": anchor_view,
             "path": anchor_path,
             "time_column": "ts",
             "instrument_column": "inst",
@@ -393,6 +406,14 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
     # 的 query_policy 取最严——旧代码只取 anchor 的 policy（``_resolve_read_budget
     # (anchor_dsobj, None)``），非 anchor 表 max_rows/max_scan_files 全被绕过。
     budget = store._resolve_sql_budget(list(plan.datasets), None)
+    # R29-P0 #201：组合读全请求 absolute deadline（resolve/snapshot 已耗时，执行
+    # 只拿剩余）。
+    _composed_deadline_at = None
+    if getattr(budget, "max_elapsed_ms", None):
+        if float(budget.max_elapsed_ms) > 0:
+            import time as _tm
+
+            _composed_deadline_at = _tm.monotonic() + float(budget.max_elapsed_ms) / 1000.0
 
     # #P1-final closure 4 max_scan_files：组合读同样对每张参与表的实际匹配文件数
     # 做硬限制（read_joined 在 snapshot 阶段 enforce，这里逐 dataset 补上）。
@@ -415,6 +436,42 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
             continue
         store._enforce_scan_files(budget, paths_ds)
 
+    # R29-P0 #197：组合执行走**统一 ReadPipeline**——admit → verify_before →
+    # execute(duckdb_slot + counters.execute) → verify_after → release。旧代码
+    # 直接 ``engine.execute_*`` 绕过 governor reservation / snapshot verify，
+    # 组合读是 PreparedRead 之外的第二条旁路（与 read_joined / read_factors 对齐）。
+    import uuid
+
+    from data_access.security.execution_context import current_principal
+
+    join_snapshot = None
+    if snapshots:
+        all_files: list[Any] = []
+        for s in snapshots:
+            all_files.extend(list(getattr(s, "files", ()) or ()))
+        join_snapshot = store._pipeline.resolve_snapshot(
+            anchor, files=all_files, paths=source_paths or None
+        )
+        store._pipeline.enforce_budget(budget, snapshot=join_snapshot)
+    ctx_principal = current_principal() or store._principal
+    pid = getattr(ctx_principal, "principal_id", "unknown")
+    res = store._pipeline.admit(
+        request_identity=f"composed:{anchor}:{uuid.uuid4().hex[:12]}",
+        principal_id=pid,
+        estimated_scan_bytes=(
+            join_snapshot.total_bytes if join_snapshot is not None else 0
+        ),
+        remote_requests=(
+            sum(
+                1
+                for o in join_snapshot.objects
+                if str(o.uri).startswith(("s3://", "cos://"))
+            )
+            if join_snapshot is not None
+            else 0
+        ),
+    )
+
     need_normalize = bool(getattr(req, "normalize_units", False) and plan.fields)
     result_mode = str(getattr(req, "result", "auto") or "auto")
 
@@ -424,8 +481,15 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
         # （逐 batch 累计，超限立即抛，不物化到超限才发现）。
         from data_access.read.query_budget import enforce_stream_budget
 
+        # R29-P0 #197/#201：组合流式同样 verify_before → execute（engine 内部持
+        # governor 同一信号量）→ verify_after。
+        store._pipeline.verify_before(join_snapshot)
+        store._pipeline.counters.execute += 1
         reader = store._engine.execute_reader(
-            sql, sql_params, batch_size=100_000, deadline_ms=budget.max_elapsed_ms
+            sql,
+            sql_params,
+            batch_size=100_000,
+            deadline_ms=_remaining_ms(budget, _composed_deadline_at),
         )
         acc_rows = 0
         acc_bytes = 0
@@ -444,6 +508,7 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
                         elapsed_ms=(_perf_counter() - stream_start) * 1000,
                     )
                     yield batch
+                store._pipeline.verify_after(join_snapshot)
             finally:
                 try:
                     close = getattr(reader, "close", None)
@@ -451,10 +516,8 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
                         close()
                 except Exception:
                     pass
-                try:
-                    os.unlink(anchor_path)
-                except OSError:
-                    pass
+                _cleanup_anchor(store, anchor_view, anchor_path)
+                store._pipeline.release_reservation(res)
 
         stats = ReadStats(rows=0, bytes=0, elapsed_ms=0.0)
         return ReadHandle(
@@ -463,14 +526,23 @@ def _execute_composed(store: Any, plan: Any, req: Any) -> Any:
 
     start_clock = _perf_counter()
     try:
+        # R29-P0 #197/#201：组合物化同样 verify_before → execute（engine 内部持
+        # governor 同一信号量）→ verify_after。
+        store._pipeline.verify_before(join_snapshot)
+        store._pipeline.counters.execute += 1
+        # R29-P0 #204：anchor 视图活在**共享 pool 数据库**里（跨连接可见）——
+        # 无显式 budget deadline 时也必须给个默认 deadline 强制走 pool 连接
+        # （execute_arrow 无 deadline 会落到 self._conn `:memory:`，看不到视图）。
+        _deadline_ms = _remaining_ms(budget, _composed_deadline_at)
+        if _deadline_ms is None and anchor_view is not None:
+            _deadline_ms = 30_000.0  # 默认 30s 请求预算（强制 pool 路由）
         table = store._engine.execute_arrow(
-            sql, sql_params, deadline_ms=budget.max_elapsed_ms
+            sql, sql_params, deadline_ms=_deadline_ms
         )
+        store._pipeline.verify_after(join_snapshot)
     finally:
-        try:
-            os.unlink(anchor_path)
-        except OSError:
-            pass
+        _cleanup_anchor(store, anchor_view, anchor_path)
+        store._pipeline.release_reservation(res)
     elapsed_ms = (_perf_counter() - start_clock) * 1000
 
     if need_normalize:
@@ -491,6 +563,42 @@ def _perf_counter() -> float:
     import time
 
     return time.perf_counter()
+
+
+def _cleanup_anchor(store: Any, anchor_view: str | None, anchor_path: str | None) -> None:
+    """R29-P0 #204：组合锚点清理——持久视图 DROP / 临时 parquet unlink（都幂等）。"""
+    import os
+
+    if anchor_view:
+        try:
+            store._engine.drop_anchor_relation(anchor_view)
+        except Exception:
+            pass
+    if anchor_path:
+        try:
+            os.unlink(anchor_path)
+        except OSError:
+            pass
+
+
+def _remaining_ms(budget: Any, deadline_at: float | None) -> float | None:
+    """R29-P0 #201：全请求 absolute deadline 的剩余时间（ms）。
+
+    ``deadline_at`` 缺省 → 返回 budget.max_elapsed_ms（保持旧语义）；
+    已过 → 抛 DeadlineExceeded（fail-fast，不跑完才报超时）。
+    """
+    if deadline_at is None:
+        return getattr(budget, "max_elapsed_ms", None)
+    import time as _tm
+
+    remaining = deadline_at - _tm.monotonic()
+    if remaining <= 0:
+        from data_access.core.exceptions import DeadlineExceeded
+
+        raise DeadlineExceeded(
+            "组合读已超过请求 deadline（R29-P0 #201：resolve/snapshot 计入请求预算）。"
+        )
+    return remaining * 1000.0
 
 
 def _strict_mode() -> bool:

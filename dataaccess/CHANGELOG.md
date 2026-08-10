@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.10.2 — R29 Execution/Governance/Security Second-Pass Closure
+
+R28 修完后暴露的下一层（基线 `main@8449d9c`）：契约/治理实际缺口、执行旁路、
+安全 fail-open。用户二扫的 ~20 项全部封闭（+ 附带 4 项）。
+
+- **correctness/security**：ScanHandle 链式派生句柄继承 `_prepared`（verify/release 不再
+  no-op）+ `close()/with/__del__`；generation mutation 锁用**稳定逻辑根**（不含
+  `generation/<gid>`，G1→G2 两 writer 不再两把锁）；路径参数默认 `path_segment=True` +
+  禁 glob metachar/quote（`factor_id="*"` 拒绝）；factor 家族 generic read 强制
+  `_authorize_factor_tags`；`allowed_actions=[]` 保持空 frozenset（deny all，不再退化
+  None=unrestricted）；`SchemaEpochGate.validate()` 参数顺序修复（`"add_column"` 不再传
+  `col` 位）+ schema_migrations 从 registry 编译成 typed IR 注入 gate；`ReadPlan pin`
+  构造 `VerifiedPhysicalScope`（strict 下 pin 可执行）；`PreparedRead` 固化
+  `security_digest`+`credential_scope_id`，execute 前跨上下文 equality；组合执行
+  `_execute_composed` 入统一 pipeline（admit→verify→execute→verify→release）；startup
+  gate 真实加载 calendar + `next_trading_day`/`next_session_open` smoke probe。
+- **remote/runtime**：`SourceSnapshotResolver` 主链化（FileVersion 兜底收进 resolver）；
+  authoritative empty manifest 不再继续 LIST（防旧对象复活）；DuckDB engine `_exec_sem`
+  与 governor `_duckdb_sem` 同一信号量（单一并发闸，移除 Store 双 `duckdb_slot`）；
+  全请求 absolute deadline（prepare 的 HEAD/LIST/schema 计入预算）；generation
+  delete-all 支持权威空代（`generation.meta.json`）+ `generation_required` 指针缺失
+  fail-closed。
+- **性能架构**：组合锚点注册成共享 pool 库持久表（去临时 parquet round-trip）；
+  `write_generation_files` 全面去 pandas（DuckDB DISTINCT + typed CAST）；
+  **DataReadSession**（job 级 resolution 缓存，同一批因子 prepare ONCE）；
+  ScanHandle/ReadHandle 显式生命周期；`mutation_owner` 进 freshness token；
+  版本 SCM 驱动（build SHA 进 `/version`/snapshot/lineage，pyproject 0.10.2）。
+- **附带**：`DataRequest.transforms/field_params/frequency`（无 aggregations）明确
+  reject（不静默忽略）；`AggregationSpec.__post_init__` 封 programmatic bypass；
+  `_resolve_raw_paths` 容忍 `params=None`。
+- **测试**：新增 23 个 destructive tests（test_r29_closure_2026_08.py）；
+  **973 passed**（950 存量 + 23 新）；审计脚本全绿。
+
 ## 0.10.1 — R28 Concurrency/Snapshot-Truth/Remote-Auth/Schema-Gate-Cost/Write-Perf Closure
 
 R27 之后的下一层（基线 `main@49907850`）：底层并发、快照真实性、远端权限、

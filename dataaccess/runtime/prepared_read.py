@@ -117,6 +117,17 @@ class PreparedRead:
     resource_reservation: Any = None
     backend_plan: Mapping[str, Any] = field(default_factory=dict)
     lineage_seed: Mapping[str, Any] = field(default_factory=dict)
+    # R29-P0：prepare 时刻固化的安全身份。``security_digest`` =
+    # (principal_id + policy.digest + run_mode) 的指纹；``credential_scope_id`` =
+    # 生效 credential provider 的 scope。terminal execute 前必须与当前 execution
+    # context 重新计算并相等——高权限上下文 prepare 的对象不能被低权限上下文
+    # 直接 execute（PreparedRead 不是跨上下文的通行证）。
+    security_digest: str | None = None
+    credential_scope_id: str | None = None
+    # R29-P0 #201：**全请求 absolute deadline**——prepare 开始即建立
+    # ``monotonic() + max_elapsed_ms``，execute 只拿剩余时间（prepare 阶段
+    # HEAD/LIST/schema 的耗时也计入请求预算，不再给 execute 一个全新完整 deadline）。
+    deadline_at: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {

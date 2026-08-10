@@ -633,6 +633,25 @@ class ReadPlan:
         # #4 execute 只消费 plan 编译时冻结的语义（compiled），不读活的 request——
         # 调用方在 plan() 之后改 req.filters/joins/aggregations 不再影响执行。
         req = self.compiled if self.compiled is not None else self.request
+        # R29-P0 #203：任何 public API 参数只有两个状态——**真正执行，或立即明确
+        # reject**。transforms / field_params / frequency 目前只在 explain 里显示、
+        # generic 读路径不消费——绝不能静默忽略（调用方以为生效、结果逐字节一样）。
+        if req.transforms:
+            raise ValidationError(
+                "request.transforms 尚未被任何执行路径消费（R29-P0：拒绝静默忽略）。"
+                "当前只有 aggregations 真正执行分钟→日变换；请改用 aggregations 或移除 "
+                "transforms。"
+            )
+        if req.field_params:
+            raise ValidationError(
+                "request.field_params 尚未被任何执行路径消费（R29-P0：拒绝静默忽略）。"
+                "字段级变换参数请接入语义字段变换或移除 field_params。"
+            )
+        if req.frequency and not req.aggregations:
+            raise ValidationError(
+                "request.frequency 只在与 aggregations 配合时才有语义（分钟→日）；"
+                "单独设置会被静默忽略（R29-P0：拒绝静默忽略）。"
+            )
         # #5 snapshot pin：fail_if_changed / pin 在 execute 前校验数据版本未变
         self._verify_snapshot_pin(store)
         # #11 节点式执行：聚合+join 组合先交给 PhysicalPlanExecutor；
@@ -719,13 +738,25 @@ class ReadPlan:
             # ``_verify_snapshot_pin`` 已证明当前文件与冻结身份逐字节一致，这里把
             # 同一份清单注入 ``physical_scope``，scan 不再重新 glob 解析，杜绝
             # verify 与 scan 之间底层文件被替换的 TOCTOU。
-            pinned_scope: list[str] | None = None
+            #
+            # R29-P0：strict 模式拒绝 raw str/list physical_scope（逃生口），必须
+            # 构造 ``VerifiedPhysicalScope`` 绑定 dataset_id + contract_digest——
+            # 与 read_uri 一致，物理范围与授权数据集不可再分离。
+            pinned_scope: Any = None
             if self.snapshot_policy == "pin":
                 pinned = self.plan_pinned_files.get(ds)
                 if pinned:
                     paths = [str(getattr(fv, "path", "")) for fv in pinned]
                     if paths:
-                        pinned_scope = paths
+                        from data_access.runtime.prepared_read import (
+                            VerifiedPhysicalScope,
+                        )
+
+                        pinned_scope = VerifiedPhysicalScope(
+                            dataset_id=ds,
+                            exact_objects=tuple(paths),
+                            contract_digest=store._contract_digest_for(ds),
+                        )
             return store.read(
                 ds,
                 columns=cols or None,

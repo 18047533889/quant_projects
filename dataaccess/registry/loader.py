@@ -53,6 +53,12 @@ _COMMON_DATASET_KEYS = frozenset({
     # R14 #1：factor_matrix 走 generation 指针（manifest.json 的 ``generation``
     # 指向当前不可变代；reader 只读该代，绝不 glob generation/* 混入 previous）。
     "generation_pointer",
+    # R29-P0 #200：generation_required（manifest 缺失 → 禁 legacy fallback）。
+    "generation_required",
+    # R29-P0 #194：跨 epoch schema migration 审批（缺字段/dtype 变化的合法演进）。
+    "schema_migrations",
+    # R29-P0 #206：数据集的 mutation ownership（manifest 新鲜度语义）。
+    "mutation_owner",
 })
 _STATIC_DATASET_KEYS = _COMMON_DATASET_KEYS | frozenset({"root", "glob"})
 _PARAMETRIC_DATASET_KEYS = _COMMON_DATASET_KEYS | frozenset({
@@ -98,6 +104,14 @@ class StaticDataset(DatasetBase):
     # generic read/scan 遇到直接拒绝，杜绝在「asset」这种列轴上假过滤。
     specialized_only: bool = False
     specialized_only_reason: str | None = None
+    # R29-P0 #194：跨 epoch schema migration 审批（typed IR，SchemaEpochGate 消费）。
+    schema_migrations: tuple[Mapping[str, Any], ...] = ()
+    # R29-P0 #206：mutation ownership——manifest 新鲜度语义的根。
+    #   dataaccess          → source_epoch bump（DataAccess 自己写，epoch 权威）
+    #   external_versioned  → publisher generation/source manifest
+    #   external_mutable    → LIST/stat/checkpoint/watch（epoch 不权威）
+    #   immutable           → content identity（只读，identity 即新鲜度）
+    mutation_owner: str = "dataaccess"
     # ---- 通用 Data IO Layer 新增字段（全部带默认值，向后兼容） ----
     format_spec: FormatSpec = field(default_factory=FormatSpec)   # 物理文件格式（parquet/csv/...）
     storage: StorageSpec | None = None                            # #P0-final closure 4 typed StorageSpec
@@ -155,9 +169,19 @@ class ParametricDataset(DatasetBase):
     engine: dict[str, Any] | None = None                          # 优先/兜底执行引擎
     schema_version: str | None = None                             # #36 schema 版本号
     authorized_root: Path | None = None                           # #P0-49 显式授权根
+    # R29-P0 #194：跨 epoch schema migration 审批（typed IR，SchemaEpochGate 消费）。
+    schema_migrations: tuple[Mapping[str, Any], ...] = ()
+    # R29-P0 #206：mutation ownership（dataaccess/external_versioned/
+    # external_mutable/immutable）——见 StaticDataset 注释。
+    mutation_owner: str = "dataaccess"
     # R14 #1：factor_matrix 走 generation 指针。读路径只解析
     # ``manifest.json`` 的 ``generation`` 指向那一代；缺该指针才 legacy glob。
     generation_pointer: bool = False
+    # R29-P0 #200：正式迁移到 generation 模型的数据集声明 ``generation_required``。
+    # manifest.json 缺失/无 generation 时**禁止 legacy fallback**（fail-closed）——
+    # manifest 被误删可能把 orphan/legacy 数据重新读出来；legacy fallback 仅限
+    # migration/research（generation_pointer=true 但未声明 required）。
+    generation_required: bool = False
 
     @property
     def kind(self) -> str:
@@ -241,6 +265,15 @@ class ParametricDataset(DatasetBase):
                             f"（{gen_dir}）——当前发布代损坏，拒绝读取（fail-closed）"
                         )
                     return [str(gen_dir / glob_part)]
+            # R29-P0 #200：generation_required 数据集 manifest 缺失 → fail-closed，
+            # 禁止 legacy fallback（manifest 误删会重新读 orphan/legacy 数据）。
+            if self.generation_required:
+                raise DataError(
+                    f"{self.name} 已声明 generation_required=true，但 manifest.json "
+                    f"缺失/无 generation 指针（{manifest}）——拒绝 legacy fallback"
+                    "（R29-P0：正式迁移到 generation 模型的数据集不允许 orphan/"
+                    "legacy 数据复活）。请用 migration/research 数据集处理旧布局。"
+                )
         return [str(Path(root) / glob_part)]
 
 
@@ -314,6 +347,65 @@ def _parse_schema_version(raw: dict, *, context: str) -> str | None:
             f"{context}: schema_version 必须是字符串，收到 {sv!r}"
         )
     return sv.strip()
+
+
+def _parse_schema_migrations(
+    raw: dict, *, context: str
+) -> tuple[Mapping[str, Any], ...]:
+    """R29-P0 #194：``schema_migrations`` 严格解析（typed migration IR 的 registry 源）。
+
+    每项必须含 ``from_fingerprint`` / ``to_fingerprint``（schema 指纹，16 位 hex）
+    与 ``kind``（add_column / dtype_change / unit_change）；``approved`` 缺省 False
+    ——**未 approved 的 migration 不构成放行依据**（fail-closed：必须显式批准）。
+    unknown-key / 非数组 → 启动失败（安全配置 extra=forbid）。
+    """
+    if "schema_migrations" not in raw:
+        return ()
+    value = raw.get("schema_migrations")
+    if not isinstance(value, (list, tuple)):
+        raise ValidationError(
+            f"{context}: schema_migrations 必须是数组，收到 {type(value).__name__}"
+        )
+    _KNOWN = {"from_fingerprint", "to_fingerprint", "kind", "field", "approved", "reviewer"}
+    out: list[Mapping[str, Any]] = []
+    for i, entry in enumerate(value):
+        if not isinstance(entry, dict):
+            raise ValidationError(
+                f"{context}: schema_migrations[{i}] 必须是 mapping"
+            )
+        unknown = sorted(set(entry) - _KNOWN)
+        if unknown:
+            raise ValidationError(
+                f"{context}: schema_migrations[{i}] 含未知 key {unknown}；"
+                f"应为 {sorted(_KNOWN)} 之一（R29-P0 fail-closed）"
+            )
+        f_from = entry.get("from_fingerprint")
+        f_to = entry.get("to_fingerprint")
+        kind = str(entry.get("kind") or "").strip().lower()
+        if not isinstance(f_from, str) or not f_from or not isinstance(f_to, str) or not f_to:
+            raise ValidationError(
+                f"{context}: schema_migrations[{i}] 必须含非空 from_fingerprint "
+                "/ to_fingerprint"
+            )
+        if kind not in {"add_column", "dtype_change", "unit_change"}:
+            raise ValidationError(
+                f"{context}: schema_migrations[{i}].kind 必须是 add_column / "
+                f"dtype_change / unit_change，收到 {kind!r}"
+            )
+        approved = _strict_bool(
+            entry.get("approved", False), key="approved", context=context
+        )
+        out.append(
+            {
+                "from_fingerprint": f_from,
+                "to_fingerprint": f_to,
+                "kind": kind,
+                "field": (str(entry["field"]) if entry.get("field") else None),
+                "approved": approved,
+                "reviewer": (str(entry["reviewer"]) if entry.get("reviewer") else None),
+            }
+        )
+    return tuple(out)
 
 
 def _parse_authorized_root(
@@ -483,6 +575,13 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         key="generation_pointer",
         context=context,
     )
+    # R29-P0 #200：generation_required=true 要求 manifest.json 必须有 generation
+    # 指针——manifest 缺失时 resolve_paths fail-closed（禁止 legacy fallback）。
+    generation_required = _strict_bool(
+        raw.get("generation_required", False),
+        key="generation_required",
+        context=context,
+    )
     specialized_reason = raw.get("specialized_only_reason")
     if specialized_reason is not None and not isinstance(specialized_reason, str):
         raise ValidationError(
@@ -492,6 +591,14 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         raise ValidationError(
             f"{context}: specialized_only=true 时必须同时给出 specialized_only_reason"
             "（说明为什么不能 generic 读、该用什么专用入口）"
+        )
+    schema_migrations = _parse_schema_migrations(raw, context=context)
+    # R29-P0 #206：mutation_owner 严格枚举（未知值 fail-closed）。
+    mutation_owner = str(raw.get("mutation_owner", "dataaccess") or "dataaccess").strip().lower()
+    if mutation_owner not in {"dataaccess", "external_versioned", "external_mutable", "immutable"}:
+        raise ValidationError(
+            f"{context}: mutation_owner 必须是 dataaccess / external_versioned / "
+            f"external_mutable / immutable 之一，收到 {mutation_owner!r}"
         )
 
     if kind == "static":
@@ -536,6 +643,8 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
             layout_policy=layout_policy,
             specialized_only=specialized_only,
             specialized_only_reason=specialized_reason,
+            schema_migrations=schema_migrations,
+            mutation_owner=mutation_owner,
         )
     root_template_raw = _require_str(raw, "root_template", context=context)
     root_template = expand_env(root_template_raw)
@@ -594,9 +703,12 @@ def _parse_dataset(name: str, raw: dict) -> Dataset:
         query_policy=query_policy,
         partition_columns=partition_columns,
         storage_format=storage_format,
+        generation_required=generation_required,
         layout_policy=layout_policy,
         specialized_only=specialized_only,
         specialized_only_reason=specialized_reason,
+        schema_migrations=schema_migrations,
+        mutation_owner=mutation_owner,
         generation_pointer=generation_pointer,
     )
 

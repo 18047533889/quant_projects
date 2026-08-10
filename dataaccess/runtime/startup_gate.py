@@ -65,49 +65,118 @@ def _security_policy_explicit(store: Any = None) -> list[str]:
 
 
 def _critical_calendar_authoritative(store: Any = None) -> list[str]:
-    """R26-P0-020：critical calendar 必须 authoritative（不 COALESCE same-day）。"""
+    """R26-P0-020：critical calendar 必须 authoritative（不 COALESCE same-day）。
+
+    R29-P0：不再调错签名的 ``compile_available_from_result(dataset)``（需要
+    knowledge/availability），而是**真实加载** ashare/us 日历并对一个边界日期跑
+    ``next_trading_day`` + ``next_session_open`` smoke probe——证明「已注入的日历
+    真的能推出下一交易日/下一开盘点」，而不是只 import 一下。
+    """
     from data_access.read.query_budget import is_strict_semantics
 
     if not is_strict_semantics():
         return []
-    try:
-        from data_access.read.session_calendar import compile_available_from_result
+    if store is None:
+        return []
+    from datetime import date, datetime, timedelta
 
-        for dataset in ("ashare_stock_daily", "us_stock_daily"):
-            try:
-                result = compile_available_from_result(dataset)
-            except Exception:
-                continue
-            if result is not None and result.degraded:
-                return [
-                    f"critical calendar {dataset} 非 authoritative："
-                    f"{result.degradation_reason or 'degraded'}（R26-P0-013/020 fail）"
-                ]
-    except Exception:
-        pass
-    return []
+    from data_access.read.session_calendar import compile_available_from
+
+    problems: list[str] = []
+    for market in ("ashare", "us"):
+        try:
+            cal = store.get_calendar(market)
+        except Exception as exc:
+            problems.append(f"critical calendar {market} 加载失败：{exc}")
+            continue
+        if cal is None:
+            problems.append(
+                f"critical calendar {market} 未注入/未加载（production 必须提供真实"
+                "交易所日历，禁止 same_day fallback）"
+            )
+            continue
+        if not getattr(cal, "has_data", False):
+            problems.append(f"critical calendar {market} 无交易日数据")
+            continue
+        if getattr(cal, "source", None) == "fallback":
+            problems.append(
+                f"critical calendar {market} 是 fallback 兜底日历（非权威，禁止 "
+                "look-ahead 语义依赖）"
+            )
+            continue
+        # 真实 smoke probe：最近一个周六 → next_trading_day 必须返回交易日。
+        today = date.today()
+        sat = today - timedelta(days=(today.weekday() - 5) % 7)
+        try:
+            nxt = cal.next_trading_day(sat)
+        except Exception as exc:
+            problems.append(f"critical calendar {market} next_trading_day 失败：{exc}")
+            continue
+        if nxt is None or not cal.is_trading_day(nxt):
+            problems.append(
+                f"critical calendar {market} smoke probe 失败："
+                f"next_trading_day({sat})={nxt}（非交易日）"
+            )
+            continue
+        # next_session_open availability 必须编译成 authoritative（不降级）。
+        try:
+            res = compile_available_from(
+                datetime(nxt.year, nxt.month, nxt.day, 0, 0),
+                "next_session_open",
+                calendar=cal,
+            )
+            if getattr(res, "authoritative", True) is False:
+                problems.append(
+                    f"critical calendar {market} next_session_open 非 authoritative"
+                    f"（{getattr(res, 'degradation_reason', 'degraded')}）"
+                )
+        except Exception as exc:
+            problems.append(
+                f"critical calendar {market} next_session_open probe 失败：{exc}"
+            )
+    return problems
 
 
 def _source_snapshot_provider_available(store: Any = None) -> list[str]:
     """R26-P0-020：需要 remote authoritative source 的 production service，snapshot
-    provider 不可用 → 启动失败。"""
+    provider 不可用 → 启动失败。
+
+    R29-P0 #199：SourceSnapshotResolver 已是 Store 主读链必选组件——production
+    strict 下 resolver 未注入直接 fail（不再是「resolver=None 直接通过」的 no-op）。
+    resolver 存在时对 critical dataset 做真实 ``resolve()`` smoke probe（拉 publisher
+    manifest / exact object set），而不是只 import 一个异常类型就返回成功。
+    """
     from data_access.read.query_budget import is_strict_semantics
 
     if not is_strict_semantics():
         return []
-    remote_configured = (
-        store is not None
-        and getattr(store, "_pipeline", None) is not None
-        and getattr(store._pipeline, "_resolver", None) is not None
-    )
-    if not remote_configured:
+    if store is None:
         return []
-    try:
-        from data_access.core.exceptions import SourceSnapshotUnavailable
-
-        return []
-    except Exception as exc:  # pragma: no cover
-        return [f"source snapshot provider 校验失败：{exc}"]
+    pipeline = getattr(store, "_pipeline", None)
+    resolver = getattr(pipeline, "_resolver", None) if pipeline is not None else None
+    if resolver is None:
+        return [
+            "production 未注入 SourceSnapshotResolver：无法解析权威 source snapshot"
+            "（R29-P0 #199，resolver 是主读链必选组件）"
+        ]
+    # 真实 smoke probe：对关键 generation/remote 数据集走一次 resolve()。
+    problems: list[str] = []
+    for ds_name in ("factor_matrix", "factor_lake"):
+        try:
+            store._registry.get(ds_name)
+        except Exception:
+            continue  # 未注册的部署不强制
+        try:
+            snap = resolver.resolve(ds_name)
+        except Exception as exc:
+            problems.append(
+                f"source snapshot smoke probe 失败（{ds_name}）："
+                f"{type(exc).__name__}: {exc}"
+            )
+            continue
+        if snap is None:
+            problems.append(f"source snapshot smoke probe 返回 None（{ds_name}）")
+    return problems
 
 
 def _single_worker_contract(store: Any = None) -> list[str]:

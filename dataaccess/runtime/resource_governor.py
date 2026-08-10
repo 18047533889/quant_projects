@@ -171,6 +171,14 @@ class GlobalResourceGovernor:
     def release_duckdb_slot(self) -> None:
         self._duckdb_sem.release()
 
+    @property
+    def duckdb_semaphore(self) -> threading.BoundedSemaphore:
+        """R29-P0 #201：DuckDB 并发**单一信号量**（engine ``_exec_sem`` 与
+        ``duckdb_slot`` 共用同一个对象）——不再存在「Store slot + Engine sem」
+        两把并发闸（每 query 双份计账、有效并发减半）。
+        """
+        return self._duckdb_sem
+
     def duckdb_inflight(self) -> int:
         with self._lock:
             return max(0, self._max_duckdb - self._duckdb_sem._value)

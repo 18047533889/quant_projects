@@ -145,7 +145,9 @@ class ApiPrincipalRegistry:
         policy = AccessPolicy(
             allowed_datasets=allowed,
             allowed_factor_namespaces=namespaces,
-            allowed_actions=frozenset(actions) if actions else None,
+            # R29-P0：显式 allowed_actions=[] 必须保持空 frozenset（deny all），
+            # 不能 `if actions else None` 退化成 None=unrestricted 的 fail-open。
+            allowed_actions=frozenset(actions),
             allow_uri_read=allow_uri,
         )
         principal = DataPrincipal(

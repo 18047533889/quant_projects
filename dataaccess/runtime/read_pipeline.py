@@ -154,10 +154,15 @@ class ReadPipeline:
         paths: Sequence[str] | None = None,
         strict: bool | None = None,
     ) -> ResolvedSourceSnapshot:
-        """resolve exact source snapshot（P0-004）。优先 injected resolver。"""
+        """resolve exact source snapshot（P0-004）。优先 injected resolver。
+
+        R29-P0 #199：resolver 是**主读链**——FileVersion snapshot 作为 resolver 的
+        fallback 分支（``files`` 透传给 resolver 的 fallback_fn），不再在 pipeline
+        层与 resolver 并行两套世界。
+        """
         self.counters.snapshot += 1
         if self._resolver is not None:
-            snap = self._resolver.resolve(dataset, paths=paths)
+            snap = self._resolver.resolve(dataset, paths=paths, files=files)
             if snap is not None:
                 return snap
         if files is not None:
