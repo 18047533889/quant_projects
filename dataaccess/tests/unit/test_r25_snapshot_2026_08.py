@@ -127,21 +127,39 @@ def test_tsnap005_research_hybrid_allowed():
         assert out is not None
 
 
-def test_source_manifest_parse():
-    """R25 §13 / R26-P0-015：publisher source manifest 解析（generation + exact objects）。
+def _digest(objs):
+    from data_access.snapshot.source_snapshot import content_digest_of_objects
 
-    manifest_version / complete / object_count 为 R26 必填（production fail-closed）。
+    return content_digest_of_objects(objs)
+
+
+def test_source_manifest_parse():
+    """R25 §13 / R26-P0-015 / R28-5：publisher source manifest 解析（generation + exact objects）。
+
+    manifest_version / complete / object_count 为 R26 必填；R28-5 起 dataset /
+    content_digest / prefix / published_at 也是 strict 必填，且 content_digest
+    必须等于重算值。
     """
+    objs = [
+        {"key": "s3://b/t/2024-01-02.parquet", "etag": "e1", "size": 10},
+        {"key": "s3://b/t/2024-01-03.parquet", "etag": "e2", "size": 20},
+    ]
+    from data_access.snapshot.source_snapshot import ResolvedObject
+
+    digest = _digest(
+        [ResolvedObject(uri=o["key"], etag=o["etag"], content_length=o["size"]) for o in objs]
+    )
     m = parse_source_manifest(
         {
             "manifest_version": "1",
             "source_generation": "20260810T153000Z-abc",
             "complete": True,
+            "dataset": "t",
+            "prefix": "s3://b/t",
+            "content_digest": digest,
+            "published_at": "2026-08-10T00:00:00Z",
             "object_count": 2,
-            "objects": [
-                {"key": "s3://b/t/2024-01-02.parquet", "etag": "e1", "size": 10},
-                {"key": "s3://b/t/2024-01-03.parquet", "etag": "e2", "size": 20},
-            ],
+            "objects": objs,
         }
     )
     assert m.source_generation == "20260810T153000Z-abc"
@@ -149,14 +167,49 @@ def test_source_manifest_parse():
     assert m.objects[0].etag == "e1"
 
 
+def test_source_manifest_parse_digest_mismatch():
+    """R28-5：strict 下 content_digest 必须等于重算值（对象被改 → 拒）。"""
+    from data_access.snapshot.source_snapshot import ResolvedObject
+
+    objs = [
+        {"key": "s3://b/t/2024-01-02.parquet", "etag": "e1", "size": 10},
+        {"key": "s3://b/t/2024-01-03.parquet", "etag": "e2", "size": 20},
+    ]
+    digest = _digest(
+        [ResolvedObject(uri=o["key"], etag=o["etag"], content_length=o["size"]) for o in objs]
+    )
+    with pytest.raises(Exception, match="content_digest"):
+        parse_source_manifest(
+            {
+                "manifest_version": "1",
+                "source_generation": "G1",
+                "complete": True,
+                "dataset": "t",
+                "prefix": "s3://b/t",
+                "content_digest": "tampered",
+                "published_at": "2026-08-10T00:00:00Z",
+                "object_count": 2,
+                "objects": objs,
+            }
+        )
+
+
 def test_resolver_via_manifest():
     """SourceSnapshotResolver 优先 source manifest。"""
+    from data_access.snapshot.source_snapshot import ResolvedObject
+
+    obj = {"key": "s3://b/t/2024-01-02.parquet", "etag": "e1", "size": 10}
+    digest = _digest([ResolvedObject(uri=obj["key"], etag=obj["etag"], content_length=obj["size"])])
     manifest = {
         "manifest_version": "1",
         "source_generation": "G1",
         "complete": True,
+        "dataset": "t",
+        "prefix": "s3://b/t",
+        "content_digest": digest,
+        "published_at": "2026-08-10T00:00:00Z",
         "object_count": 1,
-        "objects": [{"key": "s3://b/t/2024-01-02.parquet", "etag": "e1", "size": 10}],
+        "objects": [obj],
     }
     r = SourceSnapshotResolver(
         source_manifest_fn=lambda ds: manifest, strict=True

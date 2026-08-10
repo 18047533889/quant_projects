@@ -145,22 +145,48 @@ class SchemaEpochGate:
         except Exception:
             return True
 
-    def group_epochs(self, paths: Sequence[str]) -> list[SchemaEpoch]:
-        """读真实 parquet footer，按 schema 指纹分组为 epochs。"""
+    def group_epochs(
+        self,
+        paths: Sequence[str],
+        *,
+        manifest: Any = None,
+    ) -> list[SchemaEpoch]:
+        """按 schema 指纹分组为 epochs。
+
+        R28-8：``manifest`` 提供 schema epoch 摘要时走 **O(1) manifest 分组**
+        （publish 时算好、query-time 直接读摘要，不再逐文件开 parquet footer——
+        FactorEngine 热路径的关键）；manifest 缺失 / 摘要不覆盖的 path 回退真实
+        footer（O(N)，生产数据集 manifest 已构建时不触发）。
+        """
+        known_fields: dict[str, dict[str, str]] = {}
+        known_hash_by_path: dict[str, str] = {}
+        if manifest is not None:
+            summary = manifest.epoch_summary_for_paths(paths)
+            if summary is not None:
+                hash_by_path, epoch_fields = summary
+                known_hash_by_path = hash_by_path
+                known_fields = epoch_fields
         groups: dict[str, dict[str, Any]] = {}
         for p in paths:
-            try:
-                schema = parquet_footer_schema(str(p))
-            except Exception as exc:
-                if self._effective_strict():
-                    raise SchemaContractError(
-                        f"parquet footer schema 读取失败（{p}）：{exc}"
-                        "（R26-P0-022，production fail-closed）"
-                    ) from exc
-                continue
-            fp = schema_fingerprint(schema)
-            g = groups.setdefault(fp, {"fields": schema, "objects": []})
-            g["objects"].append(str(p))
+            path_str = str(p)
+            shash = known_hash_by_path.get(path_str)
+            fields = known_fields.get(shash) if shash is not None else None
+            if fields is None:
+                # manifest 未覆盖：逐文件读真实 footer（回退路径）。
+                try:
+                    schema = parquet_footer_schema(path_str)
+                except Exception as exc:
+                    if self._effective_strict():
+                        raise SchemaContractError(
+                            f"parquet footer schema 读取失败（{p}）：{exc}"
+                            "（R26-P0-022，production fail-closed）"
+                        ) from exc
+                    continue
+                fields = schema
+                shash = schema_fingerprint(schema)
+            fp = schema_fingerprint(fields)
+            g = groups.setdefault(fp, {"fields": dict(fields), "objects": []})
+            g["objects"].append(path_str)
         return [
             SchemaEpoch(
                 fingerprint=fp,
@@ -175,36 +201,64 @@ class SchemaEpochGate:
         paths: Sequence[str],
         *,
         requested_columns: Sequence[str] | None = None,
+        manifest: Any = None,
     ) -> list[SchemaEpoch]:
-        """跨 epoch 校验；违反抛 ``SchemaContractError``（strict）。返回 epochs。"""
+        """跨 epoch 校验；违反抛 ``SchemaContractError``（strict）。返回 epochs。
+
+        R28-7：迁移判定改为**真实 epoch pair 比较**（A→B 不是 A→A）。旧实现
+        ``mig.covers(epoch.fp, epoch.fp, ...)`` 是 A→A 自环、dtype 分支传
+        ``epoch=None`` 导致 approved dtype migration 永远匹配不到、add_column
+        还允许「任意 approved migration」放行——三类都错。现在：
+          - add_column：缺字段的 epoch E 需要一条**来自某个含该字段的 epoch F**
+            的 ``F→E add_column`` approved migration；
+          - dtype_change：不相容 dtype 的每一对 epoch (A, B) 都需要
+            ``A→B``（或 ``B→A``）approved migration；
+          - 不再有「任意 approved migration 就放行」的兜底。
+
+        R28-8：``manifest`` 提供时 schema epoch 分组走 manifest 摘要（O(1)），
+        不再逐文件 footer。
+        """
         strict = self._effective_strict()
-        epochs = self.group_epochs(paths)
+        epochs = self.group_epochs(paths, manifest=manifest)
         if len(epochs) <= 1:
             return epochs
-        # 跨 epoch：请求字段必须在每个 epoch 存在 + dtype 兼容。
         columns = list(requested_columns) if requested_columns else list(self._declared)
+        by_fp = {e.fingerprint: e for e in epochs}
         problems: list[str] = []
-        field_dtypes: dict[str, set[str]] = {}
+        field_dtypes: dict[str, dict[str, str]] = {}
         for epoch in epochs:
             for col in columns:
                 if not epoch.has_field(col):
-                    if not self._migration_approved(epoch, col, "add_column"):
+                    # 需要一个「含该字段的 epoch → 本 epoch」的 add_column migration。
+                    source = next(
+                        (e for e in epochs if e is not epoch and e.has_field(col)),
+                        None,
+                    )
+                    if source is None or not self._migration_approved(
+                        source, epoch, "add_column", col
+                    ):
                         problems.append(
                             f"列 {col!r} 在 epoch {epoch.fingerprint[:8]} 缺失"
-                            f"（{epoch.objects[0]}）"
+                            f"（{epoch.objects[0]}），且无 {source.fingerprint[:8] if source else '?'}→"
+                            f"{epoch.fingerprint[:8]} 的 approved add_column migration"
                         )
                     continue
                 dt = epoch.dtype_of(col) or ""
-                field_dtypes.setdefault(col, set()).add(_normalize_dtype(dt))
-        for col, dtypes in field_dtypes.items():
-            dtypes = set(dtypes)
-            base = next(iter(dtypes))
-            for other in dtypes - {base}:
-                if not _dtypes_compatible(base, other):
-                    if not self._migration_approved(None, col, "dtype_change"):
+                field_dtypes.setdefault(col, {})[epoch.fingerprint] = _normalize_dtype(dt)
+        # dtype 逐对比较（R28-7：真实 epoch pair，不再 A→A 自环）。
+        for col, fp_to_dt in field_dtypes.items():
+            fps = list(fp_to_dt)
+            for i in range(len(fps)):
+                for j in range(i + 1, len(fps)):
+                    a_fp, b_fp = fps[i], fps[j]
+                    da, db = fp_to_dt[a_fp], fp_to_dt[b_fp]
+                    if da == db or _dtypes_compatible(da, db):
+                        continue
+                    ea, eb = by_fp[a_fp], by_fp[b_fp]
+                    if not self._migration_approved(ea, eb, "dtype_change", col):
                         problems.append(
-                            f"列 {col!r} dtype 跨 epoch 不兼容："
-                            f"{sorted(dtypes)}（R26-P0-022）"
+                            f"列 {col!r} dtype 跨 epoch 不兼容（{a_fp[:8]}={da} vs "
+                            f"{b_fp[:8]}={db}），且无 approved dtype_change migration"
                         )
         if not problems:
             return epochs
@@ -221,12 +275,25 @@ class SchemaEpochGate:
         return epochs
 
     def _migration_approved(
-        self, epoch: SchemaEpoch | None, col: str, kind: str
+        self,
+        from_epoch: SchemaEpoch,
+        to_epoch: SchemaEpoch,
+        col: str,
+        kind: str,
     ) -> bool:
+        """R28-7：approved migration 必须**精确覆盖该 epoch pair + kind + field**。
+
+        migration 无方向性（schema evolution 双侧同判）——``A→B`` 或 ``B→A``
+        都认可。不再有「任意 approved migration」的宽松兜底。
+        """
+        a, b = from_epoch.fingerprint, to_epoch.fingerprint
         for mig in self._migrations:
-            if epoch is not None and mig.covers(epoch.fingerprint, epoch.fingerprint, kind, col):
+            if mig.kind != kind:
+                continue
+            if {mig.from_fingerprint, mig.to_fingerprint} != {a, b}:
+                continue
+            if mig.field and mig.field != col:
+                continue
+            if mig.approved:
                 return True
-        # add_column 允许任何 epoch 到任何 epoch 的 approved migration。
-        if kind == "add_column" and any(m.approved for m in self._migrations):
-            return True
         return False

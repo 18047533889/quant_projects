@@ -173,6 +173,10 @@ class DatasetManifest:
     # #P0-30 manifest generation id：parquet + JSON sidecar 都带同一 generation。
     # 两份不一致（进程死在两次 replace 之间）→ 视为 mixed generation → 不 fresh。
     manifest_generation_id: str | None = None
+    # R28-8：schema epoch 摘要 ``{schema_hash: {field: dtype}}``——publish/manifest
+    # 构建时算一次，query-time ``SchemaEpochGate`` 直接从摘要分组，不再逐文件开
+    # parquet footer（O(N footer) → O(schema epochs)，FactorEngine 热路径关键）。
+    schema_epochs: dict[str, dict[str, str]] | None = None
 
     @property
     def is_fresh_epoch(self) -> bool:
@@ -306,6 +310,8 @@ class DatasetManifest:
                 "file_count": self.file_count,
                 "dataset_version": self.dataset_version,
                 "partition_version": self.partition_version,
+                # R28-8：schema epoch 摘要（query-time O(1) 分组，避免逐文件 footer）。
+                "schema_epochs": self.schema_epochs or {},
             },
         )
         return out
@@ -367,6 +373,7 @@ class DatasetManifest:
             manifest_built_epoch=built,
             manifest_epoch=legacy,
             manifest_generation_id=generation,
+            schema_epochs=meta.get("schema_epochs") or None,
         )
 
     def prune_by_time(
@@ -439,6 +446,26 @@ class DatasetManifest:
             paths &= set(self.prune_by_instruments(instrument_filter))
         return sorted(paths)
 
+    def epoch_summary_for_paths(
+        self, paths: Sequence[str]
+    ) -> tuple[dict[str, str], dict[str, dict[str, str]]] | None:
+        """R28-8：从 manifest schema epoch 摘要构建 (path→schema_hash, hash→fields)。
+
+        返回 None 表示 manifest 没有 schema_epochs 摘要（老 manifest / 未构建）——
+        调用方回退逐文件 footer。path 未在 manifest 文件清单中的也会回退 footer。
+        这是 query-time O(files) 的纯内存映射（无 parquet footer I/O）。
+        """
+        if not self.schema_epochs or not self.files:
+            return None
+        hash_by_path: dict[str, str] = {}
+        for f in self.files:
+            if f.schema_hash and f.path in hash_by_path:
+                # 同一 path 不会重复出现；去重防御。
+                continue
+            if f.schema_hash:
+                hash_by_path[f.path] = f.schema_hash
+        return hash_by_path, dict(self.schema_epochs)
+
 
 def _at(data: Mapping[str, list[Any]], col: str, i: int) -> Any:
     arr = data.get(col)
@@ -504,6 +531,8 @@ def _read_manifest_meta_json(root: Path) -> dict[str, str]:
         # #P0-12 必须把 generation 完整带回来——之前读回时丢字段，load() 的
         # parquet vs JSON mismatch 检测无法可靠生效。
         "manifest_generation_id": payload.get("manifest_generation_id"),
+        # R28-8：schema epoch 摘要随 sidecar 带回（query-time O(1) 分组）。
+        "schema_epochs": payload.get("schema_epochs"),
     }
 
 
@@ -846,6 +875,7 @@ def build_manifest_for_dataset(
     inst_col = ds.instrument_column
     file_rows: list[ManifestFile] = []
     row_groups: list[ManifestRowGroup] = []
+    schema_epochs: dict[str, dict[str, str]] = {}
     for fp in files:
         try:
             meta = pq.read_metadata(str(fp))
@@ -863,6 +893,21 @@ def build_manifest_for_dataset(
         footer_bytes = meta.serialized_size
         schema_names = list(meta.schema.names)
         schema_hash = _schema_hash(meta.schema)
+        # R28-8：记录 schema epoch 摘要（{field: logical dtype}）。同一 fingerprint
+        # 的物理文件 logical schema 相同——从 schema_arrow 取（与 schema_epoch
+        # 的 _normalize_dtype 归一化基准一致）。
+        if schema_hash not in schema_epochs:
+            arrow_schema = getattr(meta.schema, "schema_arrow", None)
+            if arrow_schema is not None:
+                schema_epochs[schema_hash] = {
+                    str(arrow_schema.names[i]): str(arrow_schema.field(i).type)
+                    for i in range(len(arrow_schema.names))
+                }
+            else:
+                schema_epochs[schema_hash] = {
+                    str(meta.schema.column(i).name): str(meta.schema.column(i).physical_type)
+                    for i in range(len(meta.schema))
+                }
         min_t = max_t = min_i = max_i = None
         t_idx = schema_names.index(time_col) if time_col in schema_names else None
         i_idx = schema_names.index(inst_col) if inst_col in schema_names else None
@@ -930,6 +975,7 @@ def build_manifest_for_dataset(
         row_groups=tuple(row_groups) if row_groups else None,
         created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         time_dtype=time_dtype,
+        schema_epochs=schema_epochs or None,
     )
     manifest.save(root)
     return manifest

@@ -163,7 +163,16 @@ class SnapshotVerifier:
                     raise SourceSnapshotChanged(
                         f"本地对象 size 变化（{uri}）：{obj.content_length} → {st.size}"
                     )
-                if obj.last_modified is not None and hasattr(
+                # R28-4：优先原始 ``mtime_ns`` **精确**比较（消除 2s 容差下
+                # 「同大小文件替换」的漏网）；仅老构造（无 mtime_ns）回退
+                # last_modified 的 2s 容差。
+                if obj.mtime_ns is not None:
+                    if st.mtime_ns != int(obj.mtime_ns):
+                        raise SourceSnapshotChanged(
+                            f"本地对象 mtime 变化（{uri}）：快照 mtime_ns="
+                            f"{obj.mtime_ns} → 当前 {st.mtime_ns}，source snapshot 已过期。"
+                        )
+                elif obj.last_modified is not None and hasattr(
                     obj.last_modified, "timestamp"
                 ):
                     # tz-aware UTC → epoch 秒 → 纳秒；与 stat().st_mtime_ns 比较。
@@ -231,6 +240,14 @@ class SnapshotVerifier:
                         f"执行后本地对象 size 变化（{uri}）："
                         f"{obj.content_length} → {st.size}"
                     )
+                # R28-4：执行后同样精确比较 mtime_ns（不只 size）——否则
+                # 「同大小文件替换」在 final verify 里也漏网。
+                if obj.mtime_ns is not None:
+                    if st.mtime_ns != int(obj.mtime_ns):
+                        raise SourceSnapshotChanged(
+                            f"执行后本地对象 mtime 变化（{uri}）：快照 mtime_ns="
+                            f"{obj.mtime_ns} → 当前 {st.mtime_ns}，source snapshot 已过期。"
+                        )
 
     # ---- helpers ----
 

@@ -42,6 +42,7 @@ class CacheEntryState(Enum):
     EVICTABLE = "evictable"
     STALE = "stale"
     QUARANTINED = "quarantined"
+    DELETE_FAILED = "delete_failed"
 
 
 @dataclass
@@ -104,9 +105,17 @@ class CacheManager:
 
     @staticmethod
     def _safe_delete(path: str) -> bool:
-        """物理删除（文件或目录），**不跟随 symlink**。成功返回 True。"""
+        """物理删除（文件或目录），**不跟随 symlink**。成功返回 True。
+
+        R28-2：**路径已不存在 → 返回 True**（无字节占盘，可放心从账本释放）。
+        只有真正的 ``OSError``（权限/占用/IO）才算删除失败——那才需要保留 entry、
+        ``size_bytes`` 继续计入 quota（DELETE_FAILED，账本反映现实）。
+        """
         p = Path(path)
         try:
+            if not p.exists() and not p.is_symlink():
+                # 文件/目录已不在（或从未创建）→ 无字节占盘 → 视为已释放。
+                return True
             if p.is_symlink() or p.is_file():
                 p.unlink(missing_ok=True)
                 return True
@@ -140,67 +149,106 @@ class CacheManager:
         LRU 到 low_watermark）；无法释放 → 拒绝新条目（不等磁盘 100%）。
 
         R26-P0-019：TTL 过期条目视为 stale 并物理清理；per-principal 配额真实执行。
+
+        R28-1：过期条目重建**不再在持锁状态下递归调用 ``pin()``**（非重入
+        ``threading.Lock`` 会同一线程二次 acquire 直接死锁）。改为锁内
+        ``_admit_new_locked`` 原地重建（原删除失败 → 保留 entry + DELETE_FAILED
+        + 拒绝新 admission，见 R28-2）。
         """
         now = time.time()
         with self._lock:
             entry = self._entries.get(key)
             if entry is None:
-                new_size = size_bytes or 0
-                if self._max_bytes is not None:
-                    if self._total_bytes_locked() + new_size > self._max_bytes:
-                        self._gc_locked(now=now)
-                        if self._total_bytes_locked() + new_size > self._max_bytes:
-                            raise MemoryError(
-                                "cache admission: 磁盘达 high_watermark 且无法释放（pinned），"
-                                "拒绝新 cache 条目（R25 §28，不等磁盘 100%）"
-                            )
-                # R26-P0-019：per-principal quota 真实执行。
-                if (
-                    self._per_principal_quota is not None
-                    and principal_scope
-                    and self._principal_bytes_locked(principal_scope) + new_size
-                    > self._per_principal_quota
-                ):
-                    self._gc_principal_locked(principal_scope, now=now)
-                    if (
-                        self._principal_bytes_locked(principal_scope) + new_size
-                        > self._per_principal_quota
-                    ):
-                        raise MemoryError(
-                            f"cache admission: principal {principal_scope!r} 配额超限"
-                            f"（R26-P0-019 per-principal quota fail-closed）"
-                        )
-                entry = CacheEntry(
-                    key=key,
-                    path=path or "",
-                    size_bytes=new_size,
-                    state=CacheEntryState.PINNED,
-                    refcount=1,
-                    last_access=now,
-                    created_at=now,
-                    expires_at=(now + self._ttl) if self._ttl is not None else None,
+                self._admit_new_locked(
+                    key,
+                    now,
+                    path=path,
+                    size_bytes=size_bytes,
                     principal_scope=principal_scope,
                     security_digest=security_digest,
                     source_snapshot_id=source_snapshot_id,
                 )
-                self._entries[key] = entry
-            else:
-                if self._expired(entry, now):
-                    # 过期条目：物理清理后重建（R26-P0-019 TTL 真实执行）。
-                    self._remove_entry_locked(key, entry)
-                    entry = None
-                    return self.pin(
-                        key,
-                        path=path,
-                        size_bytes=size_bytes,
-                        principal_scope=principal_scope,
-                        security_digest=security_digest,
-                        source_snapshot_id=source_snapshot_id,
+                logger.debug("cache pin %s refcount=1", key)
+                return
+            if self._expired(entry, now):
+                # 过期条目：物理清理后原地重建（R28-2 删除失败 → fail-closed）。
+                removed = self._remove_entry_locked(key, entry)
+                if not removed:
+                    raise MemoryError(
+                        f"cache pin {key}: 过期条目物理删除失败（{entry.path}），"
+                        "字节仍计入配额且不允许新建同 key（否则账本双重计账）。"
+                        "请检查缓存目录权限（R28：删除失败不得从账本消失）。"
                     )
-                entry.refcount += 1
-                entry.last_access = now
-                entry.state = CacheEntryState.PINNED
+                self._admit_new_locked(
+                    key,
+                    now,
+                    path=path,
+                    size_bytes=size_bytes,
+                    principal_scope=principal_scope,
+                    security_digest=security_digest,
+                    source_snapshot_id=source_snapshot_id,
+                )
+                logger.debug("cache pin %s refcount=1 (re-admit after expire)", key)
+                return
+            entry.refcount += 1
+            entry.last_access = now
+            entry.state = CacheEntryState.PINNED
             logger.debug("cache pin %s refcount=%d", key, entry.refcount)
+
+    def _admit_new_locked(
+        self,
+        key: str,
+        now: float,
+        *,
+        path: str | None,
+        size_bytes: int,
+        principal_scope: str | None,
+        security_digest: str | None,
+        source_snapshot_id: str | None,
+    ) -> None:
+        """持锁状态下 admit 一个新 entry（R28-1：pin 死锁修复的原地重建）。
+
+        含 max_bytes GC / per-principal quota / fail-closed 拒绝逻辑。调用方必须
+        已持有 ``self._lock``。
+        """
+        new_size = size_bytes or 0
+        if self._max_bytes is not None:
+            if self._total_bytes_locked() + new_size > self._max_bytes:
+                self._gc_locked(now=now)
+                if self._total_bytes_locked() + new_size > self._max_bytes:
+                    raise MemoryError(
+                        "cache admission: 磁盘达 high_watermark 且无法释放（pinned），"
+                        "拒绝新 cache 条目（R25 §28，不等磁盘 100%）"
+                    )
+        # R26-P0-019：per-principal quota 真实执行。
+        if (
+            self._per_principal_quota is not None
+            and principal_scope
+            and self._principal_bytes_locked(principal_scope) + new_size
+            > self._per_principal_quota
+        ):
+            self._gc_principal_locked(principal_scope, now=now)
+            if (
+                self._principal_bytes_locked(principal_scope) + new_size
+                > self._per_principal_quota
+            ):
+                raise MemoryError(
+                    f"cache admission: principal {principal_scope!r} 配额超限"
+                    f"（R26-P0-019 per-principal quota fail-closed）"
+                )
+        self._entries[key] = CacheEntry(
+            key=key,
+            path=path or "",
+            size_bytes=new_size,
+            state=CacheEntryState.PINNED,
+            refcount=1,
+            last_access=now,
+            created_at=now,
+            expires_at=(now + self._ttl) if self._ttl is not None else None,
+            principal_scope=principal_scope,
+            security_digest=security_digest,
+            source_snapshot_id=source_snapshot_id,
+        )
 
     def unpin(self, key: str) -> None:
         now = time.time()
@@ -256,18 +304,28 @@ class CacheManager:
         )
 
     def _remove_entry_locked(self, key: str, entry: CacheEntry) -> bool:
-        """物理删除成功才更新 logical accounting（R26-P0-019 防 double-count）。"""
-        deleted = False
-        if entry.path:
-            deleted = self._safe_delete(entry.path)
-        self._entries.pop(key, None)
-        if not deleted and entry.path:
-            # 管理器删除但磁盘未释放 → 记日志（report 不再声称已释放）。
-            logger.warning(
-                "cache entry %s 从 manager 移除但物理文件未删除：%s",
-                key, entry.path,
-            )
-        return deleted
+        """物理删除成功才从 manager 移除（R26-P0-019 防 double-count）。
+
+        R28-2：**删除失败绝不 ``_entries.pop(key)``**——否则 DataAccess 账面以为
+        几十 GB 已释放、实际文件还在磁盘，GC 继续跑会把真实磁盘打满而账面还有
+        空间。删除失败 → entry 保留、标记 ``DELETE_FAILED``、``size_bytes`` 仍
+        计入 quota（账本反映现实）；后续 GC 会再次尝试删除。
+        """
+        if not entry.path:
+            # 无物理路径（纯 logical 占位）→ 直接移除，无字节可释放。
+            self._entries.pop(key, None)
+            return False
+        deleted = self._safe_delete(entry.path)
+        if deleted:
+            self._entries.pop(key, None)
+            return True
+        entry.state = CacheEntryState.DELETE_FAILED
+        logger.warning(
+            "cache entry %s 物理删除失败（%s）：保留 entry 并计入配额（R28-2 "
+            "DELETE_FAILED，账本不消失），GC 下次会重试。",
+            key, entry.path,
+        )
+        return False
 
     # ---- GC（§28/§69 + R26-P0-019）----
 

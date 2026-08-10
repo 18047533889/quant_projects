@@ -15,6 +15,11 @@ dependencies = [
     "pyarrow>=14.0",
     "duckdb>=0.10",
     "numpy>=1.24",
+    # R28-18：sqlglot 从 [sql] optional 提为 base 依赖。SQL 是正式能力
+    # （sql() / sql_relation / RelationHandle.sql），AST 是它的沙箱安全边界
+    # （逗号连接绕过治理）。之前只在 [sql] extra，service 部署没装 → 部署后才
+    # fail-closed。安全边界必须是「装上就有」，不能等部署后才发现。
+    "sqlglot>=25.0",
 ]
 
 [project.optional-dependencies]

@@ -326,11 +326,19 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         try:
             store = get_store()
             budget = _api_budget(request, settings)
-            try:
-                # R26-P0-005：request-scoped 执行上下文（嵌套读继承请求 principal）。
-                from data_access.security.execution_context import execution_scope
+            # R28-16：request-scoped 执行上下文必须覆盖**整个 stream 生命周期**
+            # （含真正执行的那部分）。旧实现 ``with execution_scope(...)`` 只包住
+            # ``store.read_arrow_stream(...)`` 调用——生成器是惰性的，prepare_read
+            # 在调用时执行，但 verify/execute/流式读在 ``next()`` 时才跑，那时
+            # scope 早已退出，嵌套读（calendar/universe/credential/cache scope）
+            # 全部回退到 process 级 principal → 身份串扰。这里：
+            #   - 创建生成器（prepare_read 立即执行）时在 scope 内；
+            #   - ``next()`` 与 body() 流式消费都包在 ``execution_scope`` 内。
+            exec_ctx = _execution_context_for(ctx)
+            from data_access.security.execution_context import execution_scope
 
-                with execution_scope(_execution_context_for(ctx)):
+            try:
+                with execution_scope(exec_ctx):
                     batches = store.read_arrow_stream(
                         request.dataset,
                         columns=request.columns,
@@ -345,11 +353,26 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             except DataAccessError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+            def _scoped_batches():
+                # R28-16：生成器真正执行（verify/execute/流式读）也在 request-scoped
+                # 执行上下文内——不再退化成 process 级身份。
+                with execution_scope(exec_ctx):
+                    for b in batches:
+                        yield b
+
+            it = _scoped_batches()
             try:
-                first = next(batches)
+                first = next(it)
             except StopIteration:
                 query_slots.release()
                 return Response(status_code=204)
+            except AccessDeniedError:
+                raise HTTPException(status_code=403, detail="resource is not authorized")
+            except ValidationError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except DataAccessError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
 
             def body():
                 try:
@@ -359,7 +382,7 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
                         yield sink.getvalue()
                         sink.seek(0)
                         sink.truncate(0)
-                        for batch in batches:
+                        for batch in it:
                             writer.write_batch(batch)
                             yield sink.getvalue()
                             sink.seek(0)

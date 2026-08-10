@@ -53,10 +53,11 @@ _KNOWN_SWALLOWS = (
     "runtime/startup_gate.py:156",
     # verifier/resolver `_effective_strict` return True = fail-closed（异常→strict）。
     "snapshot/verifier.py:64",
-    "snapshot/resolver.py:213",
+    "snapshot/resolver.py:282",
     # verifier `_safe_remote_meta`/`_safe_local_stat` return None → strict 调用方 fail-closed。
-    "snapshot/verifier.py:252",
-    "snapshot/verifier.py:260",
+    "snapshot/verifier.py:258",
+    "snapshot/verifier.py:269",
+    "snapshot/verifier.py:277",
 )
 
 

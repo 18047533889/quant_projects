@@ -148,6 +148,166 @@ def validate_generation(gen_dir: Path) -> int:
     return total
 
 
+# ---- R28-26：generation copy-on-write（COW）-------------------------------
+
+def _hive_value(v: Any) -> str:
+    """分区值 → hive 目录段字符串（与 write_generation_files 的 pandas 输出一致）。"""
+    if v is None:
+        return "None"
+    return str(v)
+
+
+def _arrow_type_sql(arrow_type: Any) -> str:
+    """pyarrow 类型 → DuckDB CAST 目标类型（分区字符串参数 typed 比较用）。"""
+    import pyarrow as pa
+
+    if pa.types.is_integer(arrow_type):
+        return "BIGINT" if pa.types.is_int64(arrow_type) else "INTEGER"
+    if pa.types.is_floating(arrow_type):
+        return "DOUBLE"
+    if pa.types.is_timestamp(arrow_type):
+        return "TIMESTAMP"
+    if pa.types.is_date(arrow_type):
+        return "DATE"
+    return "VARCHAR"
+
+
+def partition_rel_dirs(table: Any, partition_by: Sequence[str]) -> set[str]:
+    """表中出现的分区相对目录集（``year=2024/month=01``），typed→str。
+
+    R28-26：COW 需要知道「新表会碰哪些分区」，未碰的分区才能硬链接复用。
+    用 DuckDB ``SELECT DISTINCT``（typed，不用 pandas 字符串拼接）。
+    """
+    pcols = [c for c in partition_by if c in getattr(table, "column_names", ())]
+    if not pcols:
+        return set()
+    import duckdb
+
+    con = duckdb.connect(":memory:")
+    try:
+        con.register("_t", table)
+        rows = con.execute(
+            f"SELECT DISTINCT {', '.join(pcols)} FROM _t"
+        ).fetchall()
+    finally:
+        con.close()
+    out: set[str] = set()
+    for vals in rows:
+        out.add("/".join(f"{c}={_hive_value(v)}" for c, v in zip(pcols, vals)))
+    return out
+
+
+def hardlink_cow(
+    src_gen: Path,
+    dst_gen: Path,
+    *,
+    skip_rel_dirs: set[str],
+) -> list[Path]:
+    """COW：把 src 代**未变更**的分区 ``data.parquet`` 硬链接到 dst 代。
+
+    更新时间复杂度从「O(整个历史数据集)」降到「O(变更分区)」：旧分区只加一个
+    inode 引用（无数据拷贝），新分区由调用方全新写。跨文件系统/硬链接失败
+    回退 copy。返回硬链接的 parquet 文件列表。
+    """
+    dst_gen.mkdir(parents=True, exist_ok=True)
+    linked: list[Path] = []
+    for data_file in sorted(src_gen.rglob("data.parquet")):
+        rel_dir = data_file.parent.relative_to(src_gen).as_posix()
+        if rel_dir in skip_rel_dirs:
+            continue
+        target = dst_gen / rel_dir / "data.parquet"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.link(str(data_file), str(target))
+        except OSError:
+            shutil.copy2(str(data_file), str(target))
+        linked.append(target)
+    return linked
+
+
+def _rel_dir_parts(rel_dir: str) -> dict[str, str]:
+    return {
+        seg.split("=", 1)[0]: seg.split("=", 1)[1]
+        for seg in rel_dir.split("/")
+        if "=" in seg
+    }
+
+
+def read_partition_typed(src_gen: Path, rel_dir: str) -> Any | None:
+    """读 src 代某个分区，**用 DuckDB hive_partitioning 重建分区列**（typed）。
+
+    分区列在目录名里、不在 parquet 文件里——``pq.read_table`` 读回会丢列。这里
+    ``hive_partitioning=true`` 让 DuckDB 从目录重建 ``year=2024/month=01`` → 与
+    新表 schema 一致，可直接 concat/merge。
+    """
+    import duckdb
+
+    p = src_gen / rel_dir / "data.parquet"
+    if not p.exists():
+        return None
+    con = duckdb.connect(":memory:")
+    try:
+        q = f"SELECT * FROM read_parquet('{p}', hive_partitioning=true)"
+        return con.execute(q).to_arrow_table()
+    finally:
+        con.close()
+
+
+def filter_table_by_partition(table: Any, rel_dir: str) -> Any:
+    """从整表筛出属于某分区的行（typed——分区字符串参数按列类型 CAST 比较）。
+
+    返回 None 表示 rel_dir 的分区列不全在表中（保守：调用方按全部行处理）。
+    """
+    import duckdb
+
+    rel_parts = _rel_dir_parts(rel_dir)
+    if not rel_parts:
+        return table
+    con = duckdb.connect(":memory:")
+    try:
+        con.register("_t", table)
+        conds: list[str] = []
+        params: list[Any] = []
+        for col, val in rel_parts.items():
+            if col not in table.column_names:
+                continue
+            conds.append(
+                f"_t.{col} = CAST(? AS {_arrow_type_sql(table[col].type)})"
+            )
+            params.append(val)
+        if not conds:
+            return table
+        return con.execute(
+            f"SELECT * FROM _t WHERE {' AND '.join(conds)}", params
+        ).to_arrow_table()
+    finally:
+        con.close()
+
+
+def rows_in_partition(table: Any, rel_dir: str) -> int:
+    """表中某分区的行数（delete COW 判定部分删除用）。"""
+    sub = filter_table_by_partition(table, rel_dir)
+    return 0 if sub is None else sub.num_rows
+
+
+def write_partition_drop_cols(
+    dst_gen: Path,
+    rel_dir: str,
+    table: Any,
+    partition_by: Sequence[str],
+) -> None:
+    """把合并后的表写入 dst 代某分区：**丢掉分区列**（与 write_generation_files
+    约定一致——分区列进目录、不进文件），写 ``data.parquet``。"""
+    import pyarrow.parquet as pq
+
+    d = dst_gen / rel_dir
+    d.mkdir(parents=True, exist_ok=True)
+    pcols = [c for c in partition_by if c in table.column_names]
+    if pcols:
+        table = table.drop_columns(pcols)
+    pq.write_table(table, d / "data.parquet")
+
+
 def generation_layout(ds: Any, params: dict[str, Any]) -> tuple[Path, Path]:
     """解析 generation 数据集的 (root, glob_part)。
 
@@ -190,19 +350,27 @@ def merge_tables_by_keys(
         if k not in new_table.column_names or k not in old_table.column_names:
             raise ValidationError(f"upsert 合并键 {k!r} 不在表列中（generation 合并）")
     # 旧表去掉将被新表覆盖的 key 组合，再 concat 新表 → 整代幂等。
-    # 多 key 用组合列做 is_in（单 key 直接用列）。
+    # R28-26：多 key 合并**不再用 pandas** ``astype(str)+"|" join + isin``——那套
+    # 既有 key collision/类型丢失风险又慢。改 DuckDB **typed anti-join**：
+    # ``NOT EXISTS ... IS NOT DISTINCT FROM``（NULL-safe，不做字符串拼接）。
     if len(keys) == 1:
         col = keys[0]
         keep_mask = pc.invert(pc.is_in(old_table[col], value_set=new_table[col]))
         drop = old_table.filter(keep_mask)
     else:
-        import pandas as pd
+        import duckdb
 
-        old = old_table.to_pandas()
-        new = new_table.to_pandas()
-        old_keys = old[list(keys)].astype(str).agg("|".join, axis=1)
-        new_keys = new[list(keys)].astype(str).agg("|".join, axis=1)
-        old = old[~old_keys.isin(set(new_keys))]
-        merged = pd.concat([old, new], ignore_index=True)
-        return pa.Table.from_pandas(merged, preserve_index=False)
+        con = duckdb.connect(":memory:")
+        try:
+            con.register("_old", old_table)
+            con.register("_new", new_table)
+            conds = " AND ".join(
+                f"_old.{k} IS NOT DISTINCT FROM _new.{k}" for k in keys
+            )
+            drop = con.execute(
+                "SELECT _old.* FROM _old WHERE NOT EXISTS "
+                f"(SELECT 1 FROM _new WHERE {conds})"
+            ).to_arrow_table()
+        finally:
+            con.close()
     return pa.concat_tables([drop, new_table], promote_options="default")

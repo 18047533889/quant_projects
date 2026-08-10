@@ -211,9 +211,14 @@ def resolve_s3_credentials() -> S3Credentials:
         EnvCredentialProvider,
         _global_credential_provider,
     )
+    from data_access.security.execution_context import current_credential_provider
 
     material = None
-    provider = _global_credential_provider()
+    # R28-17：优先 **request-scoped** credential provider（HTTP/任务执行上下文的
+    # 每 principal 凭证），再回退进程级全局 provider。之前只认全局——并发 API key
+    # A/B 各自带自己的受限凭证时，嵌套读（read_joined / cache miss / stream）会
+    # 拿全局 base credential，绕过 per-principal 权限分级。
+    provider = current_credential_provider() or _global_credential_provider()
     if provider is not None:
         material = provider.resolve()
     else:

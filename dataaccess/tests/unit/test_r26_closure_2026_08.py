@@ -275,12 +275,24 @@ def test_tr26_snap001_manifest_uri_only_rejected():
     """R26-P0-015：manifest object 只有 URI（无 etag/version）production reject。"""
     from data_access.snapshot.resolver import SourceSnapshotResolver
 
+    from data_access.snapshot.source_snapshot import (
+        ResolvedObject,
+        content_digest_of_objects,
+    )
+
+    _identityless = {"key": "s3://b/t/f.parquet"}  # 无 etag/size
     manifest = {
         "manifest_version": "1",
         "source_generation": "G1",
         "complete": True,
+        "dataset": "t",
+        "prefix": "s3://b/t",
+        "content_digest": content_digest_of_objects(
+            [ResolvedObject(uri=_identityless["key"])]
+        ),
+        "published_at": "2026-08-10T00:00:00Z",
         "object_count": 1,
-        "objects": [{"key": "s3://b/t/f.parquet"}],  # 无 etag/size
+        "objects": [_identityless],
     }
     r = SourceSnapshotResolver(source_manifest_fn=lambda ds: manifest, strict=True)
     with pytest.raises(SourceSnapshotUnavailable, match="content identity"):
@@ -316,17 +328,27 @@ def test_tr26_snap006_manifest_prefix_escape():
     """R26-P0-015：manifest object 越出 registered prefix → reject。"""
     from data_access.snapshot.resolver import SourceSnapshotResolver
 
+    from data_access.snapshot.source_snapshot import (
+        ResolvedObject,
+        content_digest_of_objects,
+    )
+
+    _obj = {"key": "s3://OTHER/t/f.parquet", "etag": "e1", "size": 10}
     manifest = {
         "manifest_version": "1",
         "source_generation": "G1",
         "complete": True,
+        "dataset": "t",
+        "prefix": "s3://b/t",
+        "content_digest": content_digest_of_objects(
+            [ResolvedObject(uri=_obj["key"], etag=_obj["etag"], content_length=_obj["size"])]
+        ),
+        "published_at": "2026-08-10T00:00:00Z",
         "object_count": 1,
-        "objects": [
-            {"key": "s3://OTHER/t/f.parquet", "etag": "e1", "size": 10},
-        ],
+        "objects": [_obj],
     }
     r = SourceSnapshotResolver(source_manifest_fn=lambda ds: manifest, strict=True)
-    with pytest.raises(SourceSnapshotUnavailable, match="boundary"):
+    with pytest.raises(SourceSnapshotUnavailable, match="越出"):
         r.resolve("t", paths=["s3://b/t/*.parquet"])
 
 

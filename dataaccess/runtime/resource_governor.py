@@ -69,6 +69,9 @@ class GlobalResourceGovernor:
         self._lock = threading.Lock()
         self._active: dict[str, ResourceReservation] = {}
         self._remote_inflight = 0
+        # R28-9：远端请求总数（成本/telemetry 维度，admission 不消费——并发由
+        # acquire_remote_slot 治理）。QueryBudget 的 remote 预算在 pipeline 层执行。
+        self._remote_requests_total = 0
         # R26-P1-016：DuckDB 并发用信号量（blocking acquire，遵守上限但并行任务
         # 排队而非误报）；全局 active-queries 才是 fail-closed admission。
         self._duckdb_sem = threading.BoundedSemaphore(
@@ -124,16 +127,18 @@ class GlobalResourceGovernor:
                         f"{inflight + reservation.estimated_scan_bytes} > 上限 "
                         f"{self._max_scan}（R25 §27）。"
                     )
-            # R26-P1-015：remote_requests 参与 admission（P0-017 的 remote 维度）。
-            if self._max_remote is not None:
-                inflight_remote = self._remote_inflight + sum(
-                    r.remote_requests for r in self._active.values()
-                )
-                if inflight_remote + reservation.remote_requests > self._max_remote:
-                    raise ResourceAdmissionError(
-                        f"resource admission: 远程请求 {inflight_remote + reservation.remote_requests}"
-                        f" > 上限 {self._max_remote}（R26-P0-017）。"
-                    )
+            # R28-9：remote 维度拆成两个独立指标，**admission 不再把「远端请求总数」
+            # 当成并发上限**。旧实现把 ``reservation.remote_requests``（一次查询要
+            # 访问的 COS 对象数，可能 100+）累加后与 ``max_remote_concurrency``
+            # 比——一次查 100 个对象并不等于同时发 100 个请求，实际并发可能只有
+            # 4，导致系统性过度限流。
+            #   - ``remote_requests``：成本/QueryBudget 维度，由 read_pipeline
+            #     ``enforce_remote_request_budget``（per-query 对象数预算）治理；
+            #   - ``remote_concurrency``：真正的并发 governor，由
+            #     ``acquire_remote_slot()`` / ``release_remote_slot()`` 治理
+            #     （``_remote_inflight`` 是真实 in-flight 并发数）。
+            # 这里只保留一个累积计数器供 telemetry（admission 判定不消费它）。
+            self._remote_requests_total += max(0, reservation.remote_requests)
             self._active[reservation.query_id] = reservation
             return reservation
 
@@ -196,6 +201,7 @@ class GlobalResourceGovernor:
                 "per_principal_active": self._per_principal_active,
                 "active": len(self._active),
                 "remote_inflight": self._remote_inflight,
+                "remote_requests_total": self._remote_requests_total,
             }
 
 

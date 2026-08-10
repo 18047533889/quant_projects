@@ -78,7 +78,7 @@ def _validate_manifest_object(uri: str, entry: Any, problems: list[str]) -> bool
 
 
 def parse_source_manifest(
-    raw: Any, *, strict: bool = True
+    raw: Any, *, strict: bool = True, expected_dataset: str | None = None
 ) -> SourceManifest | None:
     """解析 publisher source manifest（dict 或 JSON 字符串）。
 
@@ -86,6 +86,16 @@ def parse_source_manifest(
     duplicate / empty URI / ../ escape / cross bucket / digest。违反 → 抛
     ``SourceSnapshotUnavailable``（不是返回 None——None 意味着「无 manifest」，
     损坏 manifest 必须 fail，不能当「没提供」放行）。
+
+    R28-5（strict 必填 + 强校验，不再「有才校验」）：
+      - ``dataset`` 必填，且与 ``expected_dataset``（resolver 传入）一致；
+      - ``content_digest`` 必填，且**重新计算** ``content_digest_of_objects``
+        并与声明值比较（同 key 被 overwrite / 字段被篡改 → digest 不符 → 拒）；
+      - ``prefix`` 必填，每个 object URI 必须落在 prefix 的 **bucket + path
+        segment** 边界内（不是字符串前缀，防 ``abc``/``abcd`` collision）；
+      - ``object_count`` 必填（不是有才校验）；
+      - ``published_at`` 必填（非空）；
+      - cross-bucket consistency：所有 object 必须同一 bucket。
     """
     from data_access.core.exceptions import SourceSnapshotUnavailable
 
@@ -123,7 +133,29 @@ def parse_source_manifest(
         raise SourceSnapshotUnavailable(
             "source manifest 缺少 manifest_version（R26-P0-015 fail-closed）"
         )
-    problems: list[str] = []
+    # R28-5：strict 必填字段（dataset / content_digest / prefix / published_at）。
+    manifest_dataset = str(raw.get("dataset", "")).strip() or None
+    declared_digest = str(raw.get("content_digest", "")).strip() or None
+    declared_prefix = str(raw.get("prefix", "")).strip() or None
+    published_at = str(raw.get("published_at", "")).strip() or None
+    strict_problems: list[str] = []
+    if strict and manifest_dataset is None:
+        strict_problems.append("缺少 dataset（R28-5 strict 必填）")
+    elif (
+        strict
+        and expected_dataset is not None
+        and manifest_dataset != expected_dataset
+    ):
+        strict_problems.append(
+            f"dataset={manifest_dataset!r} 与请求数据集 {expected_dataset!r} 不一致"
+        )
+    if strict and declared_digest is None:
+        strict_problems.append("缺少 content_digest（R28-5 strict 必填）")
+    if strict and declared_prefix is None:
+        strict_problems.append("缺少 prefix（R28-5 strict 必填）")
+    if strict and published_at is None:
+        strict_problems.append("缺少 published_at（R28-5 strict 必填）")
+    problems: list[str] = list(strict_problems)
     seen_uris: set[str] = set()
     objs: list[ResolvedObject] = []
     for entry in raw.get("objects") or ():
@@ -152,7 +184,19 @@ def parse_source_manifest(
                 )
             )
     declared_count = raw.get("object_count")
-    if strict and declared_count is not None:
+    # R28-5：strict 下 object_count 必填（不再「有才校验」），且必须等于实际。
+    if strict:
+        if declared_count is None:
+            problems.append("缺少 object_count（R28-5 strict 必填）")
+        else:
+            try:
+                if int(declared_count) != len(objs):
+                    problems.append(
+                        f"manifest object_count={declared_count} != 实际 {len(objs)}"
+                    )
+            except (TypeError, ValueError):
+                problems.append(f"manifest object_count 非法：{declared_count!r}")
+    elif declared_count is not None:
         try:
             if int(declared_count) != len(objs):
                 problems.append(
@@ -160,6 +204,31 @@ def parse_source_manifest(
                 )
         except (TypeError, ValueError):
             problems.append(f"manifest object_count 非法：{declared_count!r}")
+    # R28-5：cross-bucket consistency + prefix segment 边界 + content_digest 重算。
+    if objs:
+        buckets = {
+            str(o.uri).split("/", 3)[2]
+            for o in objs
+            if str(o.uri).startswith(("s3://", "cos://"))
+        }
+        if len(buckets) > 1:
+            problems.append(
+                f"manifest 跨 bucket 不一致：{sorted(buckets)}（R28-5 fail-closed）"
+            )
+        if strict and declared_prefix:
+            for o in objs:
+                if not _uri_is_within(declared_prefix, str(o.uri)):
+                    problems.append(
+                        f"manifest object {o.uri} 越出 prefix {declared_prefix!r}"
+                        "（R28-5 bucket+segment 边界）"
+                    )
+        if strict and declared_digest:
+            recomputed = content_digest_of_objects(objs)
+            if recomputed != declared_digest:
+                problems.append(
+                    f"manifest content_digest={declared_digest} != 重算 {recomputed}"
+                    "（R28-5：对象身份被修改/声明 digest 过期）"
+                )
     if strict and problems:
         raise SourceSnapshotUnavailable(
             "source manifest 验证失败（R26-P0-015 fail-closed）："
@@ -169,12 +238,12 @@ def parse_source_manifest(
         source_generation=str(gen),
         objects=tuple(objs),
         manifest_version=manifest_version,
-        dataset=raw.get("dataset"),
+        dataset=manifest_dataset,
         complete=bool(complete),
         object_count=len(objs),
-        content_digest=raw.get("content_digest"),
-        prefix=raw.get("prefix"),
-        published_at=raw.get("published_at"),
+        content_digest=declared_digest,
+        prefix=declared_prefix,
+        published_at=published_at,
     )
 
 
@@ -243,7 +312,9 @@ class SourceSnapshotResolver:
         if self._source_manifest_fn is not None:
             try:
                 manifest = parse_source_manifest(
-                    self._source_manifest_fn(dataset), strict=strict
+                    self._source_manifest_fn(dataset),
+                    strict=strict,
+                    expected_dataset=dataset,
                 )
             except Exception as exc:
                 if strict:
@@ -318,11 +389,13 @@ class SourceSnapshotResolver:
             )
 
         # R26-P0-015：object 必须在 dataset registered boundary 下（paths 公共前缀）。
+        # R28-5：改为 **bucket + path-segment 级**边界检查（不再是字符串前缀，
+        # 防 ``abc``/``abcd`` prefix collision）。
         if objects and paths and strict:
             boundary = _common_prefix(paths)
             if boundary:
                 for o in objects:
-                    if not str(o.uri).startswith(boundary):
+                    if not _uri_is_within(boundary, str(o.uri)):
                         raise SourceSnapshotUnavailable(
                             f"manifest object {o.uri} 越出 dataset registered boundary "
                             f"{boundary!r}（R26-P0-015，production fail-closed）"
@@ -360,6 +433,29 @@ class SourceSnapshotResolver:
 
 
 _GLOB_MARKERS = ("*", "?", "[", "{", "]")
+
+
+def _uri_is_within(boundary: str, uri: str) -> bool:
+    """R28-5：URI **bucket + path-segment 级**边界检查（不再是字符串前缀）。
+
+    ``str.startswith`` 会把 ``s3://b/table/year=2024`` 当 ``year=20240`` 的边界
+    （``abc``/``abcd`` prefix collision），导致越界对象漏过。这里按 segment 精确
+    比较：bucket 必须完全相等（``s3://`` 与 ``cos://`` 视为同一 COS 命名空间），
+    之后 boundary 的每个 path segment 必须与对象 URI 对应 segment 逐字相等。
+    """
+    if not boundary or not uri:
+        return uri.startswith(boundary)
+    if uri.startswith(("s3://", "cos://")) and boundary.startswith(("s3://", "cos://")):
+        b = boundary.replace("s3://", "scheme://").replace("cos://", "scheme://")
+        o = uri.replace("s3://", "scheme://").replace("cos://", "scheme://")
+        b_parts = b.rstrip("/").split("/")
+        o_parts = o.split("/")
+        if len(o_parts) < len(b_parts):
+            return False
+        if o_parts[: len(b_parts)] != b_parts:
+            return False
+        return True
+    return uri.startswith(boundary)
 
 
 def _common_prefix(paths: Sequence[str]) -> str | None:

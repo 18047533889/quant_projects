@@ -805,6 +805,14 @@ def _try_sqlglot_table_refs(query: str) -> list[str] | None:
 
     ``{{name}}`` 占位符先替换成合法标识符再解析，解析完映射回原名。
 
+    R28-18：AST scope 收紧——
+      - **限定名 ``catalog.schema.table`` 返回全限定名**（不再只取 ``tbl.name``）：
+        旧实现 ``FROM arbitrary.bar`` 只取 ``bar``，能匹配声明集合里的 ``bar``，
+        绕过沙箱读到任意 schema 的同名表；
+      - **CTE 别名跳过**（``WITH x AS (...) SELECT ... FROM x``——``x`` 是局部
+        定义不是真实表引用），但 CTE **体内**的真实表引用照常枚举；
+      - 表函数（``FROM read_parquet(...)``）仍由独立函数 allowlist 治理。
+
     返回 None 表示「无法证明」（sqlglot 不可用 / 解析失败）——调用方在
     production/strict 下 fail-closed。
     """
@@ -828,6 +836,14 @@ def _try_sqlglot_table_refs(query: str) -> list[str] | None:
         return None
     if parsed is None:
         return None
+    # R28-18：CTE 别名集合（局部定义，非真实表引用）。
+    cte_names: set[str] = set()
+    try:
+        cte_names = {
+            str(c.alias_or_name) for c in (getattr(parsed, "ctes", None) or ())
+        }
+    except Exception:
+        pass
     out: list[str] = []
     for tbl in parsed.find_all(exp.Table):
         # 表函数调用（FROM read_parquet(...)）不是裸表引用——由独立的函数
@@ -837,8 +853,18 @@ def _try_sqlglot_table_refs(query: str) -> list[str] | None:
         name = tbl.name
         if not name:
             continue
+        # R28-18：限定名 catalog.schema.table → 全限定名，防止与裸声明名混配。
+        qual: list[str] = []
+        if getattr(tbl, "catalog", None):
+            qual.append(str(tbl.catalog))
+        if getattr(tbl, "db", None):
+            qual.append(str(tbl.db))
+        if qual:
+            name = ".".join(qual + [name])
         if name in mapping:
             name = mapping[name]
+        if name in cte_names:
+            continue
         if name not in out:
             out.append(name)
     return out

@@ -92,8 +92,8 @@ def resolved_snapshot_from_files(
     objects: list[ResolvedObject] = []
     for f in files or ():
         path = str(getattr(f, "path", ""))
-        last_modified = None
         mtime_ns = getattr(f, "mtime_ns", None)
+        last_modified = None
         if mtime_ns:
             from datetime import datetime, timezone
 
@@ -113,6 +113,9 @@ def resolved_snapshot_from_files(
                     or getattr(f, "size", None)
                 ) or None,
                 last_modified=last_modified,
+                # R28-4：原始纳秒 mtime 直接带上——执行后校验按 size+mtime_ns
+                # 精确比较，不再走 datetime→float→ns 的二次换算与 2s 容差。
+                mtime_ns=int(mtime_ns) if mtime_ns else None,
                 source=source,
             )
         )

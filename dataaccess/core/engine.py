@@ -57,12 +57,47 @@ class _DeadlineConnectionPool:
     #P0-10 关闭后 acquire → ``EngineClosedError``。
     """
 
-    def __init__(self, size: int = 4) -> None:
+    def __init__(
+        self,
+        size: int = 4,
+        *,
+        db_path: str | None = None,
+        threads_per_conn: int | None = None,
+    ) -> None:
         self._max = max(1, size)
+        # R28-13：pool 连接不再各自 ``duckdb.connect(':memory:')``（独立数据库实例
+        # → 各自的 footer/object cache）。改连**同一共享临时文件数据库**——DuckDB
+        # DatabaseManager 对同一 path 复用同一个 DatabaseInstance，object cache /
+        # buffer pool / catalog 全局共享，FactorEngine 重复读同一批 parquet 时从
+        # 「4 个独立 cache」变成「1 个热 cache」。
+        self._db_path = db_path
+        # R28-14：每连接 threads 上限（总 worker ≈ max_concurrency × threads_per_conn）。
+        self._threads_per_conn = threads_per_conn
         self._cond = threading.Condition()
         self._idle: list[duckdb.DuckDBPyConnection] = []
         self._active = 0
         self._closed = False
+
+    def _new_connection(self) -> "duckdb.DuckDBPyConnection":
+        if self._db_path:
+            return duckdb.connect(self._db_path, read_only=False)
+        return duckdb.connect(":memory:")
+
+    def _conn_config(self, config: Any) -> Any:
+        """R28-14：单连接线程上限（约束 concurrent×per_query ≈ physical cores）。
+
+        ``threads`` 是每个 DatabaseInstance 全局的 worker 数。若 4 个并发连接各自
+        ``apply_pragmas(config)`` 都用主机 CPU 数，16 核机器会调度 64 个 worker。
+        这里把每个连接缩到 ``max(1, total_threads // max_concurrency)``。
+        """
+        if self._threads_per_conn is None:
+            return config
+        try:
+            from dataclasses import replace
+
+            return replace(config, threads=self._threads_per_conn)
+        except Exception:
+            return config
 
     def acquire(self, config: Any, *, wait_seconds: float = 5.0) -> "duckdb.DuckDBPyConnection":
         from data_access.core.exceptions import EngineClosedError, ResourceBudgetExceeded
@@ -77,7 +112,7 @@ class _DeadlineConnectionPool:
                     self._active += 1
                     break
                 if self._active + len(self._idle) < self._max:
-                    conn = duckdb.connect(":memory:")
+                    conn = self._new_connection()
                     self._active += 1
                     break
                 remaining = deadline - time.monotonic()
@@ -89,7 +124,7 @@ class _DeadlineConnectionPool:
                     )
                 self._cond.wait(min(remaining, 0.1))
         try:
-            apply_pragmas(conn, config)
+            apply_pragmas(conn, self._conn_config(config))
         except Exception:
             # #P0-38 pragma 配置失败：conn 已从池里取出（_active += 1），必须
             # 丢回/销毁并递减，否则反复失败会把池容量永久占满。
@@ -169,15 +204,56 @@ class DuckDBEngine:
         memory_limit: str | None = None,
         enable_object_cache: bool = True,
         config: DuckDBConfig | None = None,
+        max_concurrency: int | None = None,
     ) -> None:
         self._config = config or resolve_duckdb_config(
             threads=threads,
             memory_limit=memory_limit,
             enable_object_cache=enable_object_cache,
         )
+        # R28-10/14：DuckDB 并发 **单一 source of truth**——pool 容量与
+        # ``_exec_sem`` 都取同一个 ``max_concurrency``（缺省读进程级 governor 的
+        # ``max_duckdb_concurrency``）。旧实现 governor 默认 8、deadline pool 却
+        # 固定 4：配置 8 实际 4 个在跑 + 4 个等 pool。现在统一成一个数。
+        if max_concurrency is None:
+            try:
+                from data_access.runtime.resource_governor import get_global_governor
+
+                max_concurrency = get_global_governor().max_duckdb_concurrency
+            except Exception:
+                max_concurrency = 8
+        self._max_concurrency = max(1, int(max_concurrency))
+        # 进程级统一 DuckDB 并发信号量：**所有** public execution entry 共用
+        # （R28-11：不需要每个调用方记得 ``with duckdb_slot()``）。
+        self._exec_sem = threading.Semaphore(self._max_concurrency)
+
         self._conn = duckdb.connect(":memory:")
         self._write_lock = threading.Lock()
-        self._deadline_pool = _DeadlineConnectionPool(size=4)
+        # R28-13：pool 连接共享同一临时文件数据库（object/footer cache 跨连接共享）。
+        self._pool_db_path: str | None = None
+        try:
+            import tempfile
+
+            _fd, _path = tempfile.mkstemp(
+                prefix="da_duckdb_pool_", suffix=".db"
+            )
+            os.close(_fd)
+            # mkstemp 产生的是 0 字节空文件，DuckDB 要求「不存在」或「合法 DB 文件」。
+            # 删掉后由首个 pool 连接创建；同 path 复用同一个 DatabaseInstance
+            # （object cache / buffer pool 跨连接共享，R28-13）。
+            os.remove(_path)
+            self._pool_db_path = _path
+        except OSError:
+            self._pool_db_path = None
+        # R28-14：每连接 threads 上限 ≈ total_threads // max_concurrency。
+        _tpc = None
+        if self._config.threads:
+            _tpc = max(1, int(self._config.threads) // self._max_concurrency)
+        self._deadline_pool = _DeadlineConnectionPool(
+            size=self._max_concurrency,
+            db_path=self._pool_db_path,
+            threads_per_conn=_tpc,
+        )
         # R26-P1-018：fork/PID 防护——gunicorn --preload / multiprocessing fork /
         # factor mining process pool 会继承 fork 前创建的 DuckDB native connection /
         # lock / pool。入口检查 owner_pid，非 owner 进程禁止复用。
@@ -186,8 +262,25 @@ class DuckDBEngine:
         with self._write_lock:
             apply_pragmas(self._conn, self._config)
 
+        # R28-15：初始化完成日志移回 ``__init__``——旧实现在 ``_check_pid()`` 里，
+        # 而 ``execute_arrow`` 每次先 ``_check_pid()``，普通 query 会不断刷
+        # 「DuckDB 初始化完成」（日志噪音 + 无谓开销）。
+        logger.info(
+            "DuckDB 初始化完成: threads=%d memory_limit=%s object_cache=%s "
+            "temp_directory=%s version=%s max_concurrency=%d",
+            self._config.threads,
+            self._config.memory_limit or "(default)",
+            self._config.enable_object_cache,
+            self._config.temp_directory or "(default)",
+            duckdb.__version__,
+            self._max_concurrency,
+        )
+
     def _check_pid(self) -> None:
-        """R26-P1-018：fork 后子进程继续用父进程 native connection 会损坏状态。"""
+        """R26-P1-018：fork 后子进程继续用父进程 native connection 会损坏状态。
+
+        R28-15：这里只做 fork 防护（不含初始化日志——已移回 ``__init__``）。
+        """
         import os as _os
 
         if _os.getpid() != self.owner_pid:
@@ -196,16 +289,6 @@ class DuckDBEngine:
                 f"{self.owner_pid}）复用——native connection/lock/pool 不可继承。"
                 "请在 fork 后 reset 并重建 engine/store/pool（R26-P1-018）。"
             )
-
-        logger.info(
-            "DuckDB 初始化完成: threads=%d memory_limit=%s object_cache=%s "
-            "temp_directory=%s version=%s",
-            self._config.threads,
-            self._config.memory_limit or "(default)",
-            self._config.enable_object_cache,
-            self._config.temp_directory or "(default)",
-            duckdb.__version__,
-        )
 
     @property
     def config(self) -> DuckDBConfig:
@@ -364,32 +447,36 @@ class DuckDBEngine:
         ``deadline_ms``：查询超时主动取消。使用独立连接 + watchdog 线程在
         截止后调用 ``interrupt()``（不打扰共享连接的并发查询）。超时抛
         ``DeadlineExceeded``。
+
+        R28-11：engine 内部统一 ``_exec_sem`` 并发门（不再要求调用方记得
+        ``with duckdb_slot()``）。
         """
         self._check_pid()
-        start = time.perf_counter()
-        elapsed_ms = 0.0
-        try:
-            if deadline_ms is not None:
-                table = self._execute_isolated_with_deadline(
-                    sql, params, deadline_ms=deadline_ms
-                )
-            else:
-                table = self._execute_arrow_core(sql, params)
-            elapsed_ms = (time.perf_counter() - start) * 1000.0
-            return table
-        except duckdb.Error as exc:
-            raise self._wrap_query_error(sql, exc) from exc
-        finally:
-            if not elapsed_ms:
+        with self._exec_sem:
+            start = time.perf_counter()
+            elapsed_ms = 0.0
+            try:
+                if deadline_ms is not None:
+                    table = self._execute_isolated_with_deadline(
+                        sql, params, deadline_ms=deadline_ms
+                    )
+                else:
+                    table = self._execute_arrow_core(sql, params)
                 elapsed_ms = (time.perf_counter() - start) * 1000.0
-            record_query(elapsed_ms=elapsed_ms, sql=sql, op="arrow")
-            maybe_log_slow_query_plan(
-                self,
-                elapsed_ms=elapsed_ms,
-                sql=sql,
-                params=params,
-                op="arrow",
-            )
+                return table
+            except duckdb.Error as exc:
+                raise self._wrap_query_error(sql, exc) from exc
+            finally:
+                if not elapsed_ms:
+                    elapsed_ms = (time.perf_counter() - start) * 1000.0
+                record_query(elapsed_ms=elapsed_ms, sql=sql, op="arrow")
+                maybe_log_slow_query_plan(
+                    self,
+                    elapsed_ms=elapsed_ms,
+                    sql=sql,
+                    params=params,
+                    op="arrow",
+                )
 
     def _requires_remote_storage(self, sql: str, params: Sequence[Any] | None) -> bool:
         """#P0-11 判断本次执行是否需要 S3 配置。
@@ -445,18 +532,59 @@ class DuckDBEngine:
 
         #P0-7 超时 / interrupt / 任何异常路径连接标记 unhealthy → 直接丢弃，
         不重新进池。
+
+        # R28-12：**request absolute deadline 贯穿整条链**（governor slot →
+        # connection pool → S3 credential → execute）。旧实现：pool acquire 默认
+        # 最多等 5s，deadline 只有 1s 时 pool 等了 3s，watchdog 算出的 wait < 0，
+        # ``if wait > 0`` 为 False 反而不 interrupt——查询继续真正跑完，最后才
+        # 抛 DeadlineExceeded。现在：
+        #   1. deadline 已过 → 直接 fail-fast（根本不执行）；
+        #   2. pool acquire 只允许消费剩余时间（wait_seconds=剩余）；
+        #   3. acquire 后 deadline 已过 → 归还连接并 fail（不执行）；
+        #   4. watchdog 在 wait <= 0 时立即 interrupt（不再静默放行）。
         """
-        from data_access.core.exceptions import DeadlineExceeded
+        from data_access.core.exceptions import DeadlineExceeded, ResourceBudgetExceeded
 
         deadline_sec = max(0.001, deadline_ms / 1000.0)
         absolute_deadline = time.monotonic() + deadline_sec
-        conn = self._deadline_pool.acquire(self._config)
+        if time.monotonic() >= absolute_deadline:
+            raise DeadlineExceeded(
+                f"查询超过 deadline={deadline_ms:.0f}ms（请求 deadline 已耗尽，"
+                "未开始执行）。请降低并发或提高 query_budget.max_elapsed_ms。"
+            )
+        remaining = max(0.0, absolute_deadline - time.monotonic())
+        try:
+            conn = self._deadline_pool.acquire(
+                self._config, wait_seconds=min(5.0, remaining)
+            )
+        except ResourceBudgetExceeded:
+            # R28-12：pool 等待耗尽**请求 deadline** → 语义上是查询超时（不是并发
+            # 误报）。旧实现这里漏转换，查询会继续跑完才报超时。
+            raise DeadlineExceeded(
+                f"查询超过 deadline={deadline_ms:.0f}ms（连接池等待耗尽请求 "
+                "deadline）。请降低并发或提高 query_budget.max_elapsed_ms。"
+            ) from None
+        if time.monotonic() >= absolute_deadline:
+            self._deadline_pool.release(conn, healthy=True)
+            raise DeadlineExceeded(
+                f"查询超过 deadline={deadline_ms:.0f}ms（连接池等待耗尽请求 "
+                "deadline）。请降低并发或提高 query_budget.max_elapsed_ms。"
+            )
         timed_out = threading.Event()
         healthy = True
 
         def _watchdog() -> None:
             wait = absolute_deadline - time.monotonic()
-            if wait > 0 and not timed_out.wait(wait):
+            if wait <= 0:
+                # R28-12：deadline 已过（pool 等待吃掉了预算）→ 立即 interrupt，
+                # 不再静默放行让查询跑完。
+                timed_out.set()
+                try:
+                    conn.interrupt()
+                except Exception:
+                    pass
+                return
+            if not timed_out.wait(wait):
                 timed_out.set()
                 try:
                     conn.interrupt()
@@ -593,22 +721,52 @@ class DuckDBEngine:
 
         ``deadline_ms``（#32）：流式查询也主动超时取消——独立池连接 + watchdog
         interrupt；ManagedBatchReader 关闭时归还连接。
+
+        R28-11/15：``execute_reader`` 同样过 ``_check_pid()``（fork 防护覆盖所有
+        public execution entry），并持有 ``_exec_sem``——信号量随 reader **stream
+        生命周期**持有，reader 关闭（含 GC / break / 异常）才释放。
         """
+        self._check_pid()
+        self._exec_sem.acquire()
+        released = threading.Event()
+
+        def _release_sem(_reader: Any = None) -> None:
+            if not released.is_set():
+                released.set()
+                self._exec_sem.release()
+
         start = time.perf_counter()
         try:
             if deadline_ms is not None:
-                return self._execute_isolated_reader_with_deadline(
+                reader = self._execute_isolated_reader_with_deadline(
                     sql, params, batch_size=batch_size, deadline_ms=deadline_ms
                 )
-            return self._execute_reader_core(sql, params, batch_size=batch_size)
+            else:
+                reader = self._execute_reader_core(sql, params, batch_size=batch_size)
         except duckdb.Error as exc:
+            _release_sem()
             raise self._wrap_query_error(sql, exc) from exc
+        except Exception:
+            _release_sem()
+            raise
         finally:
             record_query(
                 elapsed_ms=(time.perf_counter() - start) * 1000.0,
                 sql=sql,
                 op="reader",
             )
+        # 组合 on_close：先执行 reader 原有回调（归还连接），再释放信号量。
+        original_on_close = getattr(reader, "_on_close", None)
+
+        def _composed_on_close(rd: Any) -> None:
+            try:
+                if original_on_close is not None:
+                    original_on_close(rd)
+            finally:
+                _release_sem(rd)
+
+        reader._on_close = _composed_on_close
+        return reader
 
     def relation(self, sql: str, params: Sequence[Any] | None = None) -> Any:
         """返回一个 DuckDB Relation 对象（``RelationHandle`` 的底层扫描）。
@@ -616,7 +774,10 @@ class DuckDBEngine:
         仅供 schema/explain 等只读检查使用；大数据 fetch 请走受控路径
         （RelationHandle.collect / execute_arrow）。relation 对象本身惰性，
         不会立即执行查询。
+
+        R28-15：relation 也是 public execution entry——同样过 fork 防护。
         """
+        self._check_pid()
         try:
             if params:
                 return self._conn.sql(sql, params=list(params))
@@ -630,7 +791,11 @@ class DuckDBEngine:
         sql: str,
         params: Sequence[Any] | None = None,
     ) -> pa.Table:
-        """独立 :memory: 连接执行（ad-hoc SQL，不污染共享 catalog）。"""
+        """独立 :memory: 连接执行（ad-hoc SQL，不污染共享 catalog）。
+
+        R28-15：同样过 fork 防护（public execution entry 统一覆盖）。
+        """
+        self._check_pid()
         conn = duckdb.connect(":memory:")
         try:
             apply_pragmas(conn, self._config)
@@ -683,7 +848,27 @@ class DuckDBEngine:
 
         ``deadline_ms``：watchdog 超时 interrupt 本连接（scoped 连接是独立的，
         不影响共享连接上的并发查询）。
+
+        R28-11/15：scoped sql 同样持有 ``_exec_sem`` + ``_check_pid``（所有
+        public execution entry 统一并发/fork 防护）。
         """
+        from data_access.core.exceptions import DeadlineExceeded
+
+        self._check_pid()
+        with self._exec_sem:
+            return self._execute_scoped_sql_arrow_locked(
+                register_specs, sql, params, deadline_ms=deadline_ms
+            )
+
+    def _execute_scoped_sql_arrow_locked(
+        self,
+        register_specs: Sequence[tuple[str, str]],
+        sql: str,
+        params: Sequence[Any] | None = None,
+        *,
+        deadline_ms: float | None = None,
+    ) -> pa.Table:
+        """``_exec_sem`` 已持有时的 scoped sql 执行体（R28-11 拆分）。"""
         from data_access.core.exceptions import DeadlineExceeded
 
         start = time.perf_counter()
@@ -752,9 +937,13 @@ class DuckDBEngine:
         ManagedBatchReader 的 on_before_read 在下次 read 时抛 ``DeadlineExceeded``
         ——流式查询第一批数据不返回时外层 budget 也能强制取消（不再只能等
         第一批出来才查 elapsed）。
+
+        R28-15：public execution entry 同样过 fork 防护。
         """
         from data_access.core.exceptions import DeadlineExceeded
         from data_access.read.managed_reader import ManagedBatchReader
+
+        self._check_pid()
 
         def _iter() -> Iterator[pa.RecordBatch]:
             conn = duckdb.connect(":memory:")
@@ -851,12 +1040,22 @@ class DuckDBEngine:
 
     def close(self) -> None:
         """#P0-10 显式关闭：先关 deadline 连接池（idle 连接一起 shutdown），
-        再关共享连接。关闭后 acquire/execute → EngineClosedError fail-fast。"""
+        再关共享连接。关闭后 acquire/execute → EngineClosedError fail-fast。
+
+        R28-13：关闭后清理共享 pool 临时数据库文件。
+        """
         self._deadline_pool.close()
         try:
             self._conn.close()
         except duckdb.Error:
             pass
+        if self._pool_db_path:
+            try:
+                if os.path.exists(self._pool_db_path):
+                    os.remove(self._pool_db_path)
+            except OSError:
+                pass
+            self._pool_db_path = None
 
 
 # ---- 进程共享单例 -----------------------------------------------------------

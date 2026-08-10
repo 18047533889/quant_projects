@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.10.1 — R28 Concurrency/Snapshot-Truth/Remote-Auth/Schema-Gate-Cost/Write-Perf Closure
+
+R27 之后的下一层（基线 `main@49907850`）：底层并发、快照真实性、远端权限、
+schema gate 成本、写性能本身。用户逐项复核的 28 项全部封闭。
+
+- **缓存正确性**（R28-1/2）：`CacheManager.pin()` 过期重建不再持非重入锁递归
+  （死锁 → 原地重建）；删除失败保留 entry + `DELETE_FAILED` + 字节仍计入配额
+  （不再「账面释放几十 GB、磁盘还满着」）。
+- **快照真实性**（R28-3/4/5）：`SnapshotVerifier` 注入 credential-aware 真实
+  COS HEAD（执行前/后真正比较 etag/version）；本地按 `size + mtime_ns` 精确校验
+  （`ResolvedObject.mtime_ns`，消「同大小替换」漏网）；`SourceManifest` strict 必填
+  dataset/content_digest(重算)/prefix/published_at/object_count + bucket+segment 边界。
+- **物理 scope / schema gate**（R28-6/7/8）：`VerifiedPhysicalScope.contract_digest`
+  消费（contract 更新后旧 scope 拒绝）；SchemaEpoch 迁移改真实 epoch-pair（A→B）；
+  schema epoch 摘要落 manifest，query-time O(1) 分组（不再逐文件 footer）。
+- **远端治理 / DuckDB 并发**（R28-9..15）：remote「请求总数」不再当并发上限；
+  DuckDB 并发单一 source of truth + `_exec_sem` 下沉 engine（覆盖 read_joined 等全部
+  路径）；request absolute deadline 贯穿 pool（fail-fast + `wait<=0` 立即 interrupt）；
+  pool 连接共享同一数据库实例（object cache 跨连接共享）；每连接 threads 缩放
+  （concurrent×per_query≈cores）；初始化日志移回 `__init__` + fork 防护覆盖全入口。
+- **HTTP/凭证/SQL/写性能**（R28-16/17/18/26）：stream scope 覆盖生成器生命周期；
+  `resolve_s3_credentials` 优先 request-scoped provider + read_joined 归因 request
+  principal；sqlglot 限定名 `catalog.schema.table` 不混配裸名 + sqlglot 提为 base
+  依赖；generation append/upsert/delete 走 **copy-on-write**（未变分区硬链接，
+  更新时间 O(变更分区)）；`merge_tables_by_keys` 多键去 pandas（DuckDB typed
+  anti-join）。
+- **测试**：新增 28 个 destructive tests（test_r28_concurrency_snapshot_2026_08.py）；
+  **950 passed**（922 存量 + 28 新）；审计脚本全绿。报告
+  `docs/R28_CONCURRENCY_SNAPSHOT_PERF_CLOSURE_REPORT.md`。
+
 ## 0.10.0 — R27 Cache/Write-Transaction/Unsafe-Surface Closure
 
 R26 之后下一层收口：封闭「旁路 API 与写路径」没有纳入同一 Cache / 事务 /

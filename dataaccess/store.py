@@ -243,9 +243,15 @@ class DataAccessStore:
         self._calendars_locked = False
         self._calendar_snapshot: str | None = None
         # R26-P0-004：统一读执行链（snapshot/budget/governor/verify 一条链）。
+        # R28-3：注入 credential-aware 的真实 COS HEAD resolver 作为
+        # ``SnapshotVerifier.remote_meta_fn``——production/strict 下 verify 真正到
+        # COS 做「执行前 HEAD + 执行后 HEAD」身份比较，不再「有对象身份证 → 是」。
         from data_access.runtime.read_pipeline import ReadPipeline
+        from data_access.snapshot.verifier import SnapshotVerifier
 
-        self._pipeline = ReadPipeline()
+        self._pipeline = ReadPipeline(
+            verifier=SnapshotVerifier(remote_meta_fn=self._remote_meta_head)
+        )
         # R26-P1-003：ContractCompiler 由 Store ownership（绑定本 registry）。
         from data_access.contract.runtime_contract import ContractCompiler
 
@@ -1423,7 +1429,22 @@ class DataAccessStore:
                         f"VerifiedPhysicalScope 绑定 dataset='{physical_scope.dataset_id}'，"
                         f"但本次读取 dataset='{dataset}' —— 不允许跨数据集复用物理 scope。"
                     )
+                # R28-6：消费 contract_digest——旧 plan 在 dataset contract 更新后
+                # 必须拒绝继续执行（否则 scope 的语义绑定失效、旧列语义被当新语义
+                # 读）。digest 为空（老构造）→ 跳过（不额外拒绝，仍受 dataset_id 绑定）。
+                if physical_scope.contract_digest:
+                    current_digest = self._contract_digest_for(dataset)
+                    if physical_scope.contract_digest != current_digest:
+                        raise ValidationError(
+                            f"VerifiedPhysicalScope.contract_digest 过期：scope 绑定 "
+                            f"{physical_scope.contract_digest}，dataset '{dataset}' 当前契约 "
+                            f"{current_digest}。contract 更新后旧物理 scope 禁止执行（R28-6）。"
+                        )
                 paths = list(physical_scope.exact_objects)
+                # R28-6：Verified 分支同样强制 dataset-specific 物理边界——authorize
+                # 的是 dataset，路径必须落在 dataset 自己授权根内（不能借 verified
+                # scope 顺带读其它数据集的根）。
+                self._enforce_dataset_path_boundary(ds, paths)
             else:
                 # R27-D：raw str/list 物理范围是逃生口——authorize 的是 dataset A、
                 # 真正扫描的却是 caller 另给的路径。production/strict 直接拒绝；
@@ -1726,7 +1747,27 @@ class DataAccessStore:
             for k, v in dict(getattr(ds, "schema", None) or {}).items()
         }
         gate = SchemaEpochGate(declared_fields=declared)
-        gate.validate(list(paths), requested_columns=list(columns) if columns else None)
+        # R28-8：优先用 manifest 的 schema epoch 摘要做 O(1) 分组，避免逐文件开
+        # parquet footer（FactorEngine 热路径）。manifest 缺失/无摘要 → 回退真实 footer。
+        manifest = None
+        try:
+            from data_access.read.manifest import (
+                DatasetManifest,
+                manifest_root_for_paths,
+            )
+
+            root = manifest_root_for_paths(list(paths))
+            if root is not None:
+                m = DatasetManifest.load(root)
+                if m is not None and m.schema_epochs:
+                    manifest = m
+        except Exception:
+            manifest = None
+        gate.validate(
+            list(paths),
+            requested_columns=list(columns) if columns else None,
+            manifest=manifest,
+        )
 
     def _read_dataset_object(
         self,
@@ -2901,11 +2942,21 @@ class DataAccessStore:
         )
         self._pipeline.enforce_budget(merged, snapshot=join_snapshot)
         rid = f"joined:{anchor}:{uuid.uuid4().hex[:12]}"
-        pid = getattr(self._principal, "principal_id", "unknown")
+        # R28-17：governor 归因用 request-scoped principal（HTTP/执行上下文），
+        # 不再只取 process 级 principal——否则并发请求下审计/限流都归到服务器身份。
+        from data_access.security.execution_context import current_principal
+
+        ctx_principal = current_principal() or self._principal
+        pid = getattr(ctx_principal, "principal_id", "unknown")
         res = self._pipeline.admit(
             request_identity=rid,
             principal_id=pid,
             estimated_scan_bytes=join_snapshot.total_bytes,
+            remote_requests=sum(
+                1
+                for o in join_snapshot.objects
+                if str(o.uri).startswith(("s3://", "cos://"))
+            ),
         )
 
         start = time.perf_counter()
@@ -2915,9 +2966,12 @@ class DataAccessStore:
         try:
             self._pipeline.verify_before(join_snapshot)
             self._pipeline.counters.execute += 1
-            table = self._engine.execute_arrow(
-                sql, sql_params, deadline_ms=merged.max_elapsed_ms
-            )
+            # R28-11：read_joined 同样持有 DuckDB 并发 slot（之前直接 execute_arrow
+            # 绕过 governor 的 max_duckdb_concurrency）。
+            with duckdb_slot(self._pipeline._governor):
+                table = self._engine.execute_arrow(
+                    sql, sql_params, deadline_ms=merged.max_elapsed_ms
+                )
             if normalize_units and fields_meta:
                 table = normalize_table_units(table, fields_meta)
             elapsed_ms = (time.perf_counter() - start) * 1000
@@ -3504,6 +3558,23 @@ class DataAccessStore:
         from data_access.read.query_cache import set_result_cache_enabled
 
         set_result_cache_enabled(enabled)
+
+    def _remote_meta_head(self, uri: str) -> dict[str, Any] | None:
+        """R28-3：credential-aware 真实 COS HEAD（``fresh=True`` 绕过 TTL memo）。
+
+        供 ``SnapshotVerifier.remote_meta_fn`` 用——执行前/执行后真正到 COS 比较
+        etag/version_id/content_length，不再只检查 snapshot 里有没有身份字段。
+        strict/production 下 ``_remote_snapshot_meta_enabled`` 默认开启；research
+        关闭时返回 None（verifier 在非 strict 下跳过 remote HEAD）。
+        """
+        from data_access.read.read_contract import (
+            _remote_object_meta,
+            _remote_snapshot_meta_enabled,
+        )
+
+        if not _remote_snapshot_meta_enabled():
+            return None
+        return _remote_object_meta(str(uri), fresh=True)
 
     def _contract_digest_for(self, dataset: str) -> str:
         """R27-D：数据集 Contract 指纹（VerifiedPhysicalScope 绑定用）。
@@ -5270,7 +5341,18 @@ class DataAccessStore:
                         f"VerifiedPhysicalScope 绑定 dataset='{physical_scope.dataset_id}'，"
                         f"但本次读取 dataset='{dataset}'。"
                     )
+                # R28-6：Verified 分支同样消费 contract_digest + 强制 dataset
+                # physical boundary（与 prepare_read 一致）。
+                if physical_scope.contract_digest:
+                    current_digest = self._contract_digest_for(dataset)
+                    if physical_scope.contract_digest != current_digest:
+                        raise ValidationError(
+                            f"VerifiedPhysicalScope.contract_digest 过期：scope 绑定 "
+                            f"{physical_scope.contract_digest}，dataset '{dataset}' 当前契约 "
+                            f"{current_digest}。contract 更新后旧物理 scope 禁止执行（R28-6）。"
+                        )
                 paths = list(physical_scope.exact_objects)
+                self._enforce_dataset_path_boundary(ds, paths)
             else:
                 if is_strict_semantics():
                     raise ValidationError(
@@ -6289,11 +6371,16 @@ class DataAccessStore:
         """
         from data_access.write.generation import (
             current_generation_dir,
+            filter_table_by_partition,
             flip_generation_pointer,
             generation_layout,
+            hardlink_cow,
             next_generation_id,
+            partition_rel_dirs,
+            read_partition_typed,
             validate_generation,
             write_generation_files,
+            write_partition_drop_cols,
         )
 
         # 分区列缺省用 registry partition_columns（factor_matrix 的 year/month）。
@@ -6308,20 +6395,29 @@ class DataAccessStore:
             gen_dir = root / "generation" / gid
             write_generation_files(table, gen_dir, pcols)
         elif mode == "append":
-            # append = 旧代 + 新行 concat 进新一代（partition 单 data.parquet 布局
-            # 下必须合并重写，不能 copy+覆盖同路径）。
+            # R28-26：append 走 **copy-on-write**——旧代未变更分区硬链接进新一代
+            # （O(1)，不复制数据），只对「新表会碰到的分区」做旧行+新行 concat 重写。
+            # 更新时间复杂度从「O(整个历史)」降到「O(变更分区)」。
             prev = current_generation_dir(root)
-            current = None
-            if prev is not None:
-                current = self.read_arrow(dataset, **params)
-            merged = (
-                pa.concat_tables([current, table], promote_options="default")
-                if current is not None
-                else table
-            )
             gid = next_generation_id()
             gen_dir = root / "generation" / gid
-            write_generation_files(merged, gen_dir, pcols)
+            if prev is not None:
+                touched = partition_rel_dirs(table, pcols)
+                hardlink_cow(prev, gen_dir, skip_rel_dirs=touched)
+                for rel_dir in sorted(touched):
+                    old_part = read_partition_typed(prev, rel_dir)
+                    new_part = filter_table_by_partition(table, rel_dir)
+                    if old_part is not None and new_part is not None:
+                        merged = pa.concat_tables(
+                            [old_part, new_part], promote_options="default"
+                        )
+                    elif old_part is not None:
+                        merged = old_part
+                    else:
+                        merged = new_part
+                    write_partition_drop_cols(gen_dir, rel_dir, merged, pcols)
+            else:
+                write_generation_files(table, gen_dir, pcols)
         else:
             raise ValidationError(
                 f"generation 数据集 '{dataset}' 直写只支持 overwrite/append，收到 {mode!r}"
@@ -6335,6 +6431,7 @@ class DataAccessStore:
             "mode": mode,
             "generation": gid,
             "atomic": True,
+            "cow": mode == "append" and current_generation_dir(root) is not None,
         }
 
     def _generation_upsert(
@@ -6354,12 +6451,16 @@ class DataAccessStore:
         """
         from data_access.write.generation import (
             current_generation_dir,
+            filter_table_by_partition,
             flip_generation_pointer,
             generation_layout,
+            hardlink_cow,
             merge_tables_by_keys,
             next_generation_id,
+            partition_rel_dirs,
+            read_partition_typed,
             validate_generation,
-            write_generation_files,
+            write_partition_drop_cols,
         )
 
         pcols = list(partition_by) if partition_by else list(
@@ -6368,14 +6469,33 @@ class DataAccessStore:
         root, _glob_part = generation_layout(ds, params)
         root.mkdir(parents=True, exist_ok=True)
         self._authorizer.resolve_and_authorize(str(root))
-        current = None
-        if current_generation_dir(root) is not None:
-            # 读当前代（不可变旧代）全量
-            current = self.read_arrow(dataset, **params)
-        merged = merge_tables_by_keys(current, table, list(upsert_on))
-        gid = next_generation_id()
-        gen_dir = root / "generation" / gid
-        write_generation_files(merged, gen_dir, pcols)
+        prev = current_generation_dir(root)
+        if prev is None:
+            # 无当前代 → 全新一代（整表写入）。
+            merged = table
+            gid = next_generation_id()
+            gen_dir = root / "generation" / gid
+            write_generation_files(merged, gen_dir, pcols)
+        else:
+            # R28-26：upsert 走 COW——只重写「新表会碰到」的分区（旧分区行 + 新表
+            # 行按 upsert_on 合并），未碰分区硬链接复用。整代单指针 flip 语义不变，
+            # 读者永远只见完整一代。
+            gid = next_generation_id()
+            gen_dir = root / "generation" / gid
+            touched = partition_rel_dirs(table, pcols)
+            hardlink_cow(prev, gen_dir, skip_rel_dirs=touched)
+            for rel_dir in sorted(touched):
+                old_part = read_partition_typed(prev, rel_dir)
+                new_part = filter_table_by_partition(table, rel_dir)
+                if old_part is not None and new_part is not None:
+                    merged = merge_tables_by_keys(old_part, new_part, list(upsert_on))
+                elif old_part is not None:
+                    merged = old_part
+                elif new_part is not None:
+                    merged = new_part
+                else:
+                    continue
+                write_partition_drop_cols(gen_dir, rel_dir, merged, pcols)
         rows = validate_generation(gen_dir)
         flip_generation_pointer(root, gid)
         return {
@@ -6386,6 +6506,7 @@ class DataAccessStore:
             "partitions": list(partition_by) if partition_by else [],
             "upsert_on": list(upsert_on),
             "atomic": True,
+            "cow": prev is not None,
         }
 
     def _generation_delete_rows(
@@ -6406,16 +6527,21 @@ class DataAccessStore:
         """
         from data_access.write.generation import (
             current_generation_dir,
+            filter_table_by_partition,
             flip_generation_pointer,
             generation_layout,
+            hardlink_cow,
             next_generation_id,
+            partition_rel_dirs,
+            rows_in_partition,
             validate_generation,
-            write_generation_files,
+            write_partition_drop_cols,
         )
 
         pcols = list(getattr(ds, "partition_columns", ()) or ())
         root, _glob_part = generation_layout(ds, params)
-        if current_generation_dir(root) is None:
+        prev = current_generation_dir(root)
+        if prev is None:
             raise ValidationError(
                 f"delete_rows(generation dataset '{dataset}') 无当前代可删"
             )
@@ -6451,7 +6577,20 @@ class DataAccessStore:
             )
         gid = next_generation_id()
         gen_dir = root / "generation" / gid
-        write_generation_files(remaining, gen_dir, pcols)
+        # R28-26：delete 走 COW——只重写「有行被删」的分区，其余硬链接复用。
+        cur_parts = partition_rel_dirs(current, pcols)
+        rem_parts = partition_rel_dirs(remaining, pcols)
+        touched = set(cur_parts) - set(rem_parts)
+        for rd in (set(cur_parts) & set(rem_parts)):
+            if rows_in_partition(current, rd) != rows_in_partition(remaining, rd):
+                touched.add(rd)
+        hardlink_cow(prev, gen_dir, skip_rel_dirs=touched)
+        for rel_dir in sorted(touched):
+            # 被删光的分区**不写空文件**（否则 reader 会看到 0 行的空分区目录）。
+            keep_sub = filter_table_by_partition(remaining, rel_dir)
+            if keep_sub is None or keep_sub.num_rows == 0:
+                continue
+            write_partition_drop_cols(gen_dir, rel_dir, keep_sub, pcols)
         rows = validate_generation(gen_dir)
         flip_generation_pointer(root, gid)
         return {

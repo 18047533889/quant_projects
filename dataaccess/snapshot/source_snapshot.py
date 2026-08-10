@@ -23,6 +23,9 @@ class ResolvedObject:
     - ``version_id``     COS 对象版本（VersionId，若 bucket 开启版本控制）
     - ``content_length`` 对象字节数
     - ``last_modified``  最后修改时间
+    - ``mtime_ns``       **原始纳秒 mtime**（R28-4：不再 datetime→float→ns 绕一圈，
+                         执行前/后直接按 ``size + mtime_ns`` 精确比较，消除 2s 容差
+                         下「同大小文件替换」的漏网）
     - ``source``         exact_list（COS LIST/HEAD）| source_manifest（上游权威）
     """
 
@@ -31,6 +34,7 @@ class ResolvedObject:
     version_id: str | None = None
     content_length: int | None = None
     last_modified: datetime | None = None
+    mtime_ns: int | None = None
     source: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -44,6 +48,7 @@ class ResolvedObject:
                 if getattr(self.last_modified, "isoformat", None)
                 else self.last_modified
             ),
+            "mtime_ns": self.mtime_ns,
             "source": self.source,
         }
 
