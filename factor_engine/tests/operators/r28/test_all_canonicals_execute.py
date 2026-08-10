@@ -320,7 +320,7 @@ _CONTRACT_REJECTED = (
     # --- price-structure / robust-regression estimators that need a persistent
     #     price or a converging IRLS the white-noise returns fixture lacks ---
     "ts_huber_regression", "ts_nth_pivot", "ts_price_delay",
-    "ts_roll_effective_spread",
+    "ts_roll_effective_spread", "ts_resistance_fit_r2", "ts_multifractal_asymmetry",
     # --- infeasible window×bins on the 220-row panel (raise on feasibility) ---
     "transfer_entropy",
     # --- needs strided history > 24 rows on a specific shape ---
