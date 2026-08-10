@@ -66,12 +66,22 @@ def normalize_dtype(dtype: str | None) -> str:
     return _DTYPE_ALIASES.get(raw, raw)
 
 
-def infer_field_type(value: Any, *, table: str | None = None):
+def infer_field_type(value: Any, *, table: str | None = None, market: str | None = None):
     """Infer a registered ``FieldSpec`` for a name/ColumnRef/SourceRef.
 
     ``None`` means the legacy column has no semantic registration; callers
     should retain their historical float-panel fallback in that case.
+
+    R17-037: pass ``market`` (``ashare``/``us``) to resolve through the per-market
+    registry; without a market the legacy A-share resolver is used (research /
+    pre-market paths that cannot prove a market).
     """
+
+    if market is not None:
+        from fields.resolver import resolve_market_field
+
+        resolved = resolve_market_field(value, market, table=table, strict=False)
+        return resolved.spec if resolved is not None else None
 
     from fields import resolve_field
 

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-09T14:57:56.457491+00:00",
+  "generated_at": "2026-08-09T18:08:25.359819+00:00",
   "threshold": 0.02,
   "years": [
     2019,
@@ -28,7 +28,7 @@
   ],
   "n_crawled": 142,
   "n_ok": 142,
-  "n_selected": 134,
+  "n_selected": 141,
   "neutralization_summary": {
     "n_probed": 142,
     "n_looks_cs_neutral": 142,
@@ -2113,7 +2113,16 @@
       "formula_display": "-(ts_mean((high - low) / (close + 0.001), 10))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.022527591260593827,
-      "rank_ic_2026_raw": 0.022527591260593827
+      "rank_ic_2026_raw": 0.022527591260593827,
+      "formula_theme": "窄幅整理偏好（10日平均振幅）",
+      "formula_summary": "先把每天的振幅 (最高-最低)/收盘 算出来，再做 10 日平均。振幅小说明股票在收窄波动、横盘整理；振幅大说明上下折腾剧烈。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "每日振幅=(high-low)/close",
+        "10 日滑动平均得到近期平均振幅",
+        "取负：平均振幅越小，因子值越高",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近期平均振幅更小（窄幅整理）；因子值低：近期振幅更大（波动嘈杂）。"
     },
     {
       "factor_id": "alpha_20260701_e885c4b1",
@@ -2203,7 +2212,16 @@
       "formula_display": "-(ts_std(close / (low + 0.001), 20))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.025399445740526414,
-      "rank_ic_2026_raw": 0.025399445740526414
+      "rank_ic_2026_raw": 0.025399445740526414,
+      "formula_theme": "收盘相对最低价的稳定性（20日）",
+      "formula_summary": "close/low 反映当天收盘有多「离开最低点」：比值越接近 1 越贴着地板收；对其做 20 日标准差，就是在看这种「下影/低点关系」稳不稳。波动大=日内结构乱，波动小=结构更稳定。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "每日算 close/(low+ε)",
+        "对过去 20 日该比值求标准差",
+        "取负：比值波动越小越好",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：close/low 近期更稳定；因子值低：该比值波动大、日内结构不稳。"
     },
     {
       "factor_id": "ext_20260630113105_c66aad59",
@@ -2254,7 +2272,64 @@
       "formula_display": "-(rank(ts_corr(close, volume, 20)) * ts_std(ret, 10))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.02065615988731738,
-      "rank_ic_2026_raw": 0.02065615988731738
+      "rank_ic_2026_raw": 0.02065615988731738,
+      "formula_theme": "价量同向且波动不小（相关20×波动10）",
+      "formula_summary": "两步：①看过去 20 日价与量是否同涨同跌（相关高=有资金配合）；②看 10 日收益波动。再截面排序相关后与波动相乘。取负后，实际偏好「价量不同步或波动更小」的一侧——结合正 RankIC，多头对应原始乘积偏小的股票。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "算 20 日 ts_corr(close,volume)，全市场 rank",
+        "乘以 10 日 ts_std(ret)",
+        "整体取负对齐多头方向",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价量相关×波动的原始得分偏低（更偏冷静/背离侧）；因子值低：价量同向且波动大。"
+    },
+    {
+      "factor_id": "ext_a66ab30a",
+      "display_name": "ext_a66ab30a",
+      "candidate_id": "alphasage_b0e9545fa66ab30a",
+      "source": "pack_dsl",
+      "label": "本周新挖",
+      "source_label": "本周新挖",
+      "ok": true,
+      "ok_for_select": true,
+      "from_pack_top_pick": true,
+      "already_neutralized": false,
+      "neutralization_note": "未中性化（包内DSL）",
+      "has_formula": true,
+      "dsl": "-(abs(ts_max(ret, 30) * 100))",
+      "lqtp_formula": "-(abs(ts_max(ret, 30) * 100))",
+      "formula_raw": "-(abs(ts_max(ret, 30) * 100))",
+      "lqtp_native": true,
+      "formula_from": "topup_ic02_more_r2",
+      "pack_rank_ic": 0.0,
+      "platform_mean_ic": 0.050182787561178874,
+      "platform_icir": 0.36507518770621644,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 1.2494396743615985,
+      "mean_rank_ic": 0.050182787561178874,
+      "abs_mean_rank_ic": 0.050182787561178874,
+      "display_rank_ic": 0.050182787561178874,
+      "rank_icir": 0.36507518770621644,
+      "display_rank_icir": 0.36507518770621644,
+      "mean_daily_coverage": 0.9961360894012794,
+      "long_short_sharpe": 1.2494396743615985,
+      "sign_flipped": false,
+      "sign_baked_into_formula": true,
+      "platform_submit": "submitted",
+      "materialize": "platform_only",
+      "ops": 2,
+      "cs_rank": false,
+      "report_href": "/reports_weekly_dug/ext_a66ab30a.html",
+      "formula_theme": "压制近期「暴涨脉冲」（30日最大涨幅）",
+      "formula_summary": "看过去 30 日最大收益有多大（可再×100放大）。取绝对值后，近期出现过越猛的向上脉冲，原始值越大。取负意味着：更偏好近期没有大阳脉冲、走势更「钝」的股票。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "取过去 30 日 ret 的最大值",
+        "取绝对值（衡量脉冲强度）",
+        "取负：脉冲越强因子越低",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近期最大涨幅脉冲更弱；因子值低：刚经历过更强的暴涨脉冲。",
+      "formula_display": "-(abs(ts_max(ret, 30) * 100))"
     },
     {
       "factor_id": "alpha_20260701_bb4a002c",
@@ -2344,7 +2419,15 @@
       "formula_display": "-(ts_std(ret, 10))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.02572315853509309,
-      "rank_ic_2026_raw": 0.02572315853509309
+      "rank_ic_2026_raw": 0.02572315853509309,
+      "formula_theme": "低波动偏好（10日收益标准差）",
+      "formula_summary": "经典低波因子：过去 10 日收益率标准差越小越稳。取负后，波动越小因子值越高——赌的是「更安静的股票后续相对更强」。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "计算 10 日 ts_std(ret)",
+        "取负：波动越小因子越大",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近期波动更低；因子值低：近期波动更高。"
     },
     {
       "factor_id": "alpha_20260702_1281ccaa",
@@ -2434,7 +2517,16 @@
       "formula_display": "-((high - low) / (open + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.023253825580922073,
-      "rank_ic_2026_raw": 0.023253825580922073
+      "rank_ic_2026_raw": 0.023253825580922073,
+      "formula_theme": "日内窄幅（振幅/开盘）",
+      "formula_summary": "当日 (最高-最低)/开盘。振幅小=当天波动温和；取负后偏好窄幅日。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "振幅=high-low",
+        "除以当日开盘",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：当日相对振幅更小；因子值低：当日振幅更大。"
     },
     {
       "factor_id": "alpha_20260702_55152d82",
@@ -2524,7 +2616,16 @@
       "formula_display": "-((high - low) / (close + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.022595198789825528,
-      "rank_ic_2026_raw": 0.022595198789825528
+      "rank_ic_2026_raw": 0.022595198789825528,
+      "formula_theme": "日内窄幅（振幅/收盘）",
+      "formula_summary": "当日 (最高-最低)/收盘。振幅小=当天波动温和；取负后偏好窄幅日。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "振幅=high-low",
+        "除以当日收盘",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：当日相对振幅更小；因子值低：当日振幅更大。"
     },
     {
       "factor_id": "alpha_20260702_86a7e37a",
@@ -2614,7 +2715,16 @@
       "formula_display": "-(rank(ts_corr(close, volume, 10)) * ts_std(ret, 20))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.028717328096439038,
-      "rank_ic_2026_raw": 0.028717328096439038
+      "rank_ic_2026_raw": 0.028717328096439038,
+      "formula_theme": "价量同向且波动不小（相关10×波动20）",
+      "formula_summary": "两步：①看过去 10 日价与量是否同涨同跌（相关高=有资金配合）；②看 20 日收益波动。再截面排序相关后与波动相乘。取负后，实际偏好「价量不同步或波动更小」的一侧——结合正 RankIC，多头对应原始乘积偏小的股票。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "算 10 日 ts_corr(close,volume)，全市场 rank",
+        "乘以 20 日 ts_std(ret)",
+        "整体取负对齐多头方向",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价量相关×波动的原始得分偏低（更偏冷静/背离侧）；因子值低：价量同向且波动大。"
     },
     {
       "factor_id": "alpha_20260702_afd40784",
@@ -2707,7 +2817,16 @@
       "formula_display": "-(ts_corr(close, volume, 10) * ts_std(ret, 20))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.02739995341044455,
-      "rank_ic_2026_raw": 0.02739995341044455
+      "rank_ic_2026_raw": 0.02739995341044455,
+      "formula_theme": "价量相关×收益波动（无截面排序，窗10/20）",
+      "formula_summary": "直接用 10 日价量相关乘 20 日波动，不做截面 rank。原始值大=又放量配合又波动大；取负后多头偏向原始值小的股票。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_corr(close,volume,10)",
+        "× ts_std(ret,20)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价量相关×波动原始值更小；因子值低：价量同向且波动大。"
     },
     {
       "factor_id": "ext_20260703011536_b84c1c2c",
@@ -2758,7 +2877,62 @@
       "formula_display": "ts_min(low, 10) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.008649611875255004,
-      "rank_ic_2026_raw": 0.008649611875255004
+      "rank_ic_2026_raw": 0.008649611875255004,
+      "formula_theme": "贴近10日低点（支撑位贴近度）",
+      "formula_summary": "用 10 日最低价/现价：越接近 1，说明现价几乎踩在近期地板上；比值小说明现价远高于近期低点。这是在刻画「相对位置偏弱/超跌靠近支撑」。",
+      "formula_steps": [
+        "取 10 日最低价 ts_min(low,10)",
+        "除以今日收盘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价更贴近近期低点（相对偏弱）；因子值低：现价远离近期低点、处在更高位置。"
+    },
+    {
+      "factor_id": "alpha_f609ea4d",
+      "display_name": "alpha_f609ea4d",
+      "candidate_id": "alpha_20260703_f609ea4d",
+      "source": "pack_dsl",
+      "label": "本周新挖",
+      "source_label": "本周新挖",
+      "ok": true,
+      "ok_for_select": true,
+      "from_pack_top_pick": true,
+      "already_neutralized": false,
+      "neutralization_note": "未中性化（平台已有）",
+      "has_formula": true,
+      "dsl": "(0 + (ts_min(low, 10) / (close + 0.001)))",
+      "lqtp_formula": "(0 + (ts_min(low, 10) / (close + 0.001)))",
+      "formula_raw": "(0 + (ts_min(low, 10) / (close + 0.001)))",
+      "lqtp_native": true,
+      "formula_from": "topup_ic02_more",
+      "pack_rank_ic": 0.0,
+      "platform_mean_ic": 0.04535835180833034,
+      "platform_icir": 0.35446835744436533,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 1.5521583596294248,
+      "mean_rank_ic": 0.04535835180833034,
+      "abs_mean_rank_ic": 0.04535835180833034,
+      "display_rank_ic": 0.04535835180833034,
+      "rank_icir": 0.35446835744436533,
+      "display_rank_icir": 0.35446835744436533,
+      "mean_daily_coverage": 0.9961360894012794,
+      "long_short_sharpe": 1.5521583596294248,
+      "sign_flipped": false,
+      "sign_baked_into_formula": true,
+      "platform_submit": "submitted",
+      "materialize": "platform_only",
+      "ops": 1,
+      "cs_rank": false,
+      "report_href": "/reports_weekly_dug/alpha_f609ea4d.html",
+      "formula_theme": "贴近10日低点（支撑位贴近度）",
+      "formula_summary": "用 10 日最低价/现价：越接近 1，说明现价几乎踩在近期地板上；比值小说明现价远高于近期低点。这是在刻画「相对位置偏弱/超跌靠近支撑」。",
+      "formula_steps": [
+        "取 10 日最低价 ts_min(low,10)",
+        "除以今日收盘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价更贴近近期低点（相对偏弱）；因子值低：现价远离近期低点、处在更高位置。",
+      "formula_display": "(0 + (ts_min(low, 10) / (close + 0.001)))"
     },
     {
       "factor_id": "ext_20260629194635_53ed651c",
@@ -2809,7 +2983,62 @@
       "formula_display": "ts_min(low, 5) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.01354184768107768,
-      "rank_ic_2026_raw": 0.01354184768107768
+      "rank_ic_2026_raw": 0.01354184768107768,
+      "formula_theme": "贴近5日低点（支撑位贴近度）",
+      "formula_summary": "用 5 日最低价/现价：越接近 1，说明现价几乎踩在近期地板上；比值小说明现价远高于近期低点。这是在刻画「相对位置偏弱/超跌靠近支撑」。",
+      "formula_steps": [
+        "取 5 日最低价 ts_min(low,5)",
+        "除以今日收盘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价更贴近近期低点（相对偏弱）；因子值低：现价远离近期低点、处在更高位置。"
+    },
+    {
+      "factor_id": "alpha_30e468c0",
+      "display_name": "alpha_30e468c0",
+      "candidate_id": "alpha_20260701_30e468c0",
+      "source": "pack_dsl",
+      "label": "本周新挖",
+      "source_label": "本周新挖",
+      "ok": true,
+      "ok_for_select": true,
+      "from_pack_top_pick": true,
+      "already_neutralized": false,
+      "neutralization_note": "未中性化（平台已有）",
+      "has_formula": true,
+      "dsl": "(0 + (ts_min(low, 5) / (close + 0.001)))",
+      "lqtp_formula": "(0 + (ts_min(low, 5) / (close + 0.001)))",
+      "formula_raw": "(0 + (ts_min(low, 5) / (close + 0.001)))",
+      "lqtp_native": true,
+      "formula_from": "topup_ic02_more",
+      "pack_rank_ic": 0.0,
+      "platform_mean_ic": 0.04512608482857488,
+      "platform_icir": 0.3616821863794497,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 1.7495173196104927,
+      "mean_rank_ic": 0.04512608482857488,
+      "abs_mean_rank_ic": 0.04512608482857488,
+      "display_rank_ic": 0.04512608482857488,
+      "rank_icir": 0.3616821863794497,
+      "display_rank_icir": 0.3616821863794497,
+      "mean_daily_coverage": 0.9961360894012794,
+      "long_short_sharpe": 1.7495173196104927,
+      "sign_flipped": false,
+      "sign_baked_into_formula": true,
+      "platform_submit": "submitted",
+      "materialize": "platform_only",
+      "ops": 1,
+      "cs_rank": false,
+      "report_href": "/reports_weekly_dug/alpha_30e468c0.html",
+      "formula_theme": "贴近5日低点（支撑位贴近度）",
+      "formula_summary": "用 5 日最低价/现价：越接近 1，说明现价几乎踩在近期地板上；比值小说明现价远高于近期低点。这是在刻画「相对位置偏弱/超跌靠近支撑」。",
+      "formula_steps": [
+        "取 5 日最低价 ts_min(low,5)",
+        "除以今日收盘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价更贴近近期低点（相对偏弱）；因子值低：现价远离近期低点、处在更高位置。",
+      "formula_display": "(0 + (ts_min(low, 5) / (close + 0.001)))"
     },
     {
       "factor_id": "alpha_20260702_16104691",
@@ -2902,7 +3131,16 @@
       "formula_display": "rank(-ts_mean((high - low) / (close + 0.001), 10)) * rank(delay(close, 60) / (close + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.015712227947380628,
-      "rank_ic_2026_raw": 0.015712227947380628
+      "rank_ic_2026_raw": 0.015712227947380628,
+      "formula_theme": "窄幅 + 60日深度回撤（双排序）",
+      "formula_summary": "特征A：10 日平均振幅越小截面分越高（更安静）。特征B：60 日前收盘/现价 越大说明相对过去跌得越深。两者 rank 相乘：要又安静又跌过一截的股票。",
+      "formula_steps": [
+        "rank(-10日平均振幅)",
+        "rank(delay(close,60)/close)",
+        "相乘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对窄幅且相对中长期高点已明显回撤；因子值低：波动大或并未相对过去明显下跌。"
     },
     {
       "factor_id": "ext_20260630113105_190822fa",
@@ -2953,7 +3191,16 @@
       "formula_display": "-(ts_std(ret, 10) * rank(ts_delta(close, 5)))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.009253947179818603,
-      "rank_ic_2026_raw": 0.009253947179818603
+      "rank_ic_2026_raw": 0.009253947179818603,
+      "formula_theme": "高波×近5日强势（取负后反过来）",
+      "formula_summary": "原始式：波动大且近 5 日涨得多的股票得分高。取负后多头偏向「波动不大或近期不强」一侧。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(ret,10)",
+        "× rank(ts_delta(close,5))",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：高波×近端强势的原始得分更低；因子值低：又吵又猛涨。"
     },
     {
       "factor_id": "alpha_20260701_66ea5325",
@@ -3043,7 +3290,16 @@
       "formula_display": "-(rank(ts_delta(close, 5)) * rank(ts_std(ret, 20)))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.014450474633162064,
-      "rank_ic_2026_raw": 0.014450474633162064
+      "rank_ic_2026_raw": 0.014450474633162064,
+      "formula_theme": "近5日涨幅×20日波动（双排序，取负）",
+      "formula_summary": "两个截面分位相乘：涨得多且波动大的原始分高。取负后偏好相反组合。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(ts_delta(close,5))",
+        "rank(ts_std(ret,20))",
+        "相乘后取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：涨幅×波动原始分更低；因子值低：又涨又吵。"
     },
     {
       "factor_id": "alpha_20260701_549b43e6",
@@ -3136,7 +3392,17 @@
       "formula_display": "-(ts_rank(ts_delta(close, 5), 20) * ts_std(ret, 20))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.019351302183816064,
-      "rank_ic_2026_raw": 0.019351302183816064
+      "rank_ic_2026_raw": 0.019351302183816064,
+      "formula_theme": "自身历史极端涨幅×波动（取负）",
+      "formula_summary": "先把近 5 日涨跌放进自己过去 20 日历史里做百分位（这次涨得有多「变态」），再乘收益波动。取负后避开「自己历史上极端大涨且波动大」的股票。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_delta(close,5)",
+        "ts_rank(...,20)",
+        "× ts_std(ret,20)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：自身极端涨幅×波动原始分更低；因子值低：处于自身历史强势极端且波动大。"
     },
     {
       "factor_id": "alpha_20260702_4e49a3f5",
@@ -3226,7 +3492,15 @@
       "formula_display": "ts_min(low, 20) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.008738198608526022,
-      "rank_ic_2026_raw": 0.008738198608526022
+      "rank_ic_2026_raw": 0.008738198608526022,
+      "formula_theme": "贴近20日低点（支撑位贴近度）",
+      "formula_summary": "用 20 日最低价/现价：越接近 1，说明现价几乎踩在近期地板上；比值小说明现价远高于近期低点。这是在刻画「相对位置偏弱/超跌靠近支撑」。",
+      "formula_steps": [
+        "取 20 日最低价 ts_min(low,20)",
+        "除以今日收盘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价更贴近近期低点（相对偏弱）；因子值低：现价远离近期低点、处在更高位置。"
     },
     {
       "factor_id": "alpha_20260702_873469e0",
@@ -3316,7 +3590,15 @@
       "formula_display": "ts_min(low, 30) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.0058200659997043125,
-      "rank_ic_2026_raw": 0.0058200659997043125
+      "rank_ic_2026_raw": 0.0058200659997043125,
+      "formula_theme": "贴近30日低点（支撑位贴近度）",
+      "formula_summary": "用 30 日最低价/现价：越接近 1，说明现价几乎踩在近期地板上；比值小说明现价远高于近期低点。这是在刻画「相对位置偏弱/超跌靠近支撑」。",
+      "formula_steps": [
+        "取 30 日最低价 ts_min(low,30)",
+        "除以今日收盘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价更贴近近期低点（相对偏弱）；因子值低：现价远离近期低点、处在更高位置。"
     },
     {
       "factor_id": "alpha_20260703_d485a3b3",
@@ -3406,7 +3688,15 @@
       "formula_display": "-(ts_std(ret, 60))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.02725096844381865,
-      "rank_ic_2026_raw": 0.02725096844381865
+      "rank_ic_2026_raw": 0.02725096844381865,
+      "formula_theme": "低波动偏好（60日收益标准差）",
+      "formula_summary": "经典低波因子：过去 60 日收益率标准差越小越稳。取负后，波动越小因子值越高——赌的是「更安静的股票后续相对更强」。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "计算 60 日 ts_std(ret)",
+        "取负：波动越小因子越大",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近期波动更低；因子值低：近期波动更高。"
     },
     {
       "factor_id": "alpha_20260703_9e3b2920",
@@ -3499,7 +3789,15 @@
       "formula_display": "(-rank(ts_std(high, 10))) * ts_corr(high, volume, 10)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.018832588810279174,
-      "rank_ic_2026_raw": 0.018832588810279174
+      "rank_ic_2026_raw": 0.018832588810279174,
+      "formula_theme": "低最高价波动×量价相关",
+      "formula_summary": "对最高价波动取负排序（波动小分高）再乘 high-volume 相关：要高点稳定且量价配合。",
+      "formula_steps": [
+        "rank 或 -rank(ts_std(high,10))",
+        "× ts_corr(high,volume,10)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：高点波动相对小且与量同向；因子值低：高点乱窜或量价背离。"
     },
     {
       "factor_id": "alpha_20260703_99eb3d11",
@@ -3592,7 +3890,16 @@
       "formula_display": "-(rank(ts_std(high, 10)) * ts_corr(high, volume, 10))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.018832588810279147,
-      "rank_ic_2026_raw": 0.018832588810279147
+      "rank_ic_2026_raw": 0.018832588810279147,
+      "formula_theme": "最高价波动×量价相关（取负）",
+      "formula_summary": "最高价波动大且最高价与成交量同向时原始分高。取负偏向最高价波动更小或量价背离。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(ts_std(high,10))",
+        "× ts_corr(high,volume,10)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：最高价波动×量相关原始分更低；因子值低：高点波动大且放量配合。"
     },
     {
       "factor_id": "ext_20260630113105_d17d6ed7",
@@ -3643,7 +3950,15 @@
       "formula_display": "ts_min(low, 5) / (delay(close, 1) + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.011849576925574085,
-      "rank_ic_2026_raw": 0.011849576925574085
+      "rank_ic_2026_raw": 0.011849576925574085,
+      "formula_theme": "5日低点相对1日前收盘",
+      "formula_summary": "把近期地板和 1 日前的收盘比：看过去一段时间是否相对当时明显下移。",
+      "formula_steps": [
+        "ts_min(low,5)",
+        "除以 delay(close,1)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近期低点相对过去收盘更「低/贴近」；因子值低：近期低点相对过去收盘仍偏高。"
     },
     {
       "factor_id": "alpha_20260702_68529a49",
@@ -3736,7 +4051,16 @@
       "formula_display": "-(rank(ts_delta(close, 20)) * ts_std(ret, 20))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.012723000728441987,
-      "rank_ic_2026_raw": 0.012723000728441987
+      "rank_ic_2026_raw": 0.012723000728441987,
+      "formula_theme": "近20日强势×波动（取负）",
+      "formula_summary": "截面上近期涨得多的股票，再乘波动。取负后避开「涨得猛又很吵」。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(ts_delta(close,20))",
+        "× ts_std(ret,20)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近端强势×波动原始分更低；因子值低：又涨又吵。"
     },
     {
       "factor_id": "alpha_20260701_f487f8ba",
@@ -3826,7 +4150,15 @@
       "formula_display": "ts_min(low, 60) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.006003748923264608,
-      "rank_ic_2026_raw": 0.006003748923264608
+      "rank_ic_2026_raw": 0.006003748923264608,
+      "formula_theme": "贴近60日低点（支撑位贴近度）",
+      "formula_summary": "用 60 日最低价/现价：越接近 1，说明现价几乎踩在近期地板上；比值小说明现价远高于近期低点。这是在刻画「相对位置偏弱/超跌靠近支撑」。",
+      "formula_steps": [
+        "取 60 日最低价 ts_min(low,60)",
+        "除以今日收盘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价更贴近近期低点（相对偏弱）；因子值低：现价远离近期低点、处在更高位置。"
     },
     {
       "factor_id": "alpha_20260702_57dd1981",
@@ -3916,7 +4248,16 @@
       "formula_display": "-(ts_corr(close, volume, 10) * (ts_std(volume, 20) / (ts_mean(volume, 20) + 1)))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.022612739019229583,
-      "rank_ic_2026_raw": 0.022612739019229583
+      "rank_ic_2026_raw": 0.022612739019229583,
+      "formula_theme": "价量相关×成交量变异（取负）",
+      "formula_summary": "10 日价量相关，再乘成交量变异系数（标准差/均量）。原始大=价量同向且成交起伏大。取负偏好相反。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_corr(close,volume,10)",
+        "× volume 的 CV(20)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相关×量变异原始分更低；因子值低：价量同向且成交很不稳。"
     },
     {
       "factor_id": "alpha_20260703_ef5302fe",
@@ -4006,7 +4347,15 @@
       "formula_display": "-(ts_std(close, 5) / (close + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.01427833816261586,
-      "rank_ic_2026_raw": 0.01427833816261586
+      "rank_ic_2026_raw": 0.01427833816261586,
+      "formula_theme": "低相对价格波动（5日）",
+      "formula_summary": "收盘价 5 日标准差除以现价，得到无量纲波动。取负=低波偏好。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(close,5)/close",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价格相对波动更低；因子值低：价格相对波动更高。"
     },
     {
       "factor_id": "alpha_20260703_42cca713",
@@ -4096,7 +4445,15 @@
       "formula_display": "-(ts_std(close, 10) / (close + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.007023424192717358,
-      "rank_ic_2026_raw": 0.007023424192717358
+      "rank_ic_2026_raw": 0.007023424192717358,
+      "formula_theme": "低相对价格波动（10日）",
+      "formula_summary": "收盘价 10 日标准差除以现价，得到无量纲波动。取负=低波偏好。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(close,10)/close",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价格相对波动更低；因子值低：价格相对波动更高。"
     },
     {
       "factor_id": "ext_20260701141641_cff71dce",
@@ -4147,7 +4504,62 @@
       "formula_display": "ts_mean(close, 30) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.007154217290044937,
-      "rank_ic_2026_raw": 0.007154217290044937
+      "rank_ic_2026_raw": 0.007154217290044937,
+      "formula_theme": "均线上方压力/跌破程度（30日均/现价）",
+      "formula_summary": "30 日均价÷现价：>1 表示现价在均线下方（相对便宜/偏弱），<1 表示站上均线。",
+      "formula_steps": [
+        "ts_mean(close,30)",
+        "除以今日 close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价低于均线（相对偏弱/便宜）；因子值低：现价高于均线。"
+    },
+    {
+      "factor_id": "alpha_741a044f",
+      "display_name": "alpha_741a044f",
+      "candidate_id": "alpha_20260701_741a044f",
+      "source": "pack_dsl",
+      "label": "本周新挖",
+      "source_label": "本周新挖",
+      "ok": true,
+      "ok_for_select": true,
+      "from_pack_top_pick": true,
+      "already_neutralized": false,
+      "neutralization_note": "未中性化（平台已有）",
+      "has_formula": true,
+      "dsl": "(0 + (ts_mean(close, 30) / (close + 0.001)))",
+      "lqtp_formula": "(0 + (ts_mean(close, 30) / (close + 0.001)))",
+      "formula_raw": "(0 + (ts_mean(close, 30) / (close + 0.001)))",
+      "lqtp_native": true,
+      "formula_from": "topup_ic02_more",
+      "pack_rank_ic": 0.0,
+      "platform_mean_ic": 0.03753472480775935,
+      "platform_icir": 0.24159979501088663,
+      "platform_coverage": 0.9961360894012794,
+      "platform_long_short_sharpe": 1.7715817242097314,
+      "mean_rank_ic": 0.03753472480775935,
+      "abs_mean_rank_ic": 0.03753472480775935,
+      "display_rank_ic": 0.03753472480775935,
+      "rank_icir": 0.24159979501088663,
+      "display_rank_icir": 0.24159979501088663,
+      "mean_daily_coverage": 0.9961360894012794,
+      "long_short_sharpe": 1.7715817242097314,
+      "sign_flipped": false,
+      "sign_baked_into_formula": true,
+      "platform_submit": "submitted",
+      "materialize": "platform_only",
+      "ops": 1,
+      "cs_rank": false,
+      "report_href": "/reports_weekly_dug/alpha_741a044f.html",
+      "formula_theme": "均线上方压力/跌破程度（30日均/现价）",
+      "formula_summary": "30 日均价÷现价：>1 表示现价在均线下方（相对便宜/偏弱），<1 表示站上均线。",
+      "formula_steps": [
+        "ts_mean(close,30)",
+        "除以今日 close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价低于均线（相对偏弱/便宜）；因子值低：现价高于均线。",
+      "formula_display": "(0 + (ts_mean(close, 30) / (close + 0.001)))"
     },
     {
       "factor_id": "alpha_20260701_61d3d4de",
@@ -4239,7 +4651,14 @@
       "formula_display": "low / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.012334157531773493,
-      "rank_ic_2026_raw": 0.012334157531773493
+      "rank_ic_2026_raw": 0.012334157531773493,
+      "formula_theme": "收在当日低点附近",
+      "formula_summary": "最低价/收盘价：越接近 1，收盘越贴着当天地板，偏弱势收盘；比值小说明收得远离低点。",
+      "formula_steps": [
+        "low/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：收盘贴近当日最低（偏弱收）；因子值低：收盘远离当日最低（偏强收）。"
     },
     {
       "factor_id": "ext_1800639a",
@@ -4279,7 +4698,16 @@
       "report_href": "/reports_weekly_dug/ext_1800639a.html",
       "formula_raw": "rank(ts_corr(close, volume, 10)) * (0 - 1) * ts_mean(ret, 20)",
       "formula_display": "-(rank(ts_corr(close, volume, 10)) * ts_mean(ret, 20))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "价量相关×20日动量（取负）",
+      "formula_summary": "价量同向且近 20 日平均收益高的原始分高。取负避开「有量配合的上涨动量」。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(ts_corr(close,volume,10))",
+        "× ts_mean(ret,20)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价量相关×动量原始分更低；因子值低：有量配合的上涨动量。"
     },
     {
       "factor_id": "ext_14f541dd",
@@ -4319,7 +4747,16 @@
       "report_href": "/reports_weekly_dug/ext_14f541dd.html",
       "formula_raw": "ts_corr(close, volume, 10) * (0 - 1) * rank(ts_delta(close, 5))",
       "formula_display": "-(ts_corr(close, volume, 10) * rank(ts_delta(close, 5)))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "价量相关×近5日涨幅排序（取负）",
+      "formula_summary": "相关高且近期涨幅截面靠前的原始分高。取负偏向相关弱或近期不强。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_corr(close,volume,10)",
+        "× rank(ts_delta(close,5))",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相关×近端涨幅原始分更低；因子值低：有量的近期强势。"
     },
     {
       "factor_id": "alpha_20260703_c6169b2e",
@@ -4412,7 +4849,15 @@
       "formula_display": "-(close / (low + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.01204353194200887,
-      "rank_ic_2026_raw": 0.01204353194200887
+      "rank_ic_2026_raw": 0.01204353194200887,
+      "formula_theme": "收盘远离最低（取负=贴近最低）",
+      "formula_summary": "close/low 大=收得远离最低点。取负后偏好收在低点附近的弱势收盘结构。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "close/(low+ε)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：收盘更贴近最低价；因子值低：收盘远离最低价。"
     },
     {
       "factor_id": "alpha_20260703_6c174054",
@@ -4505,7 +4950,15 @@
       "formula_display": "-((high - open) / (open + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.015028781241784833,
-      "rank_ic_2026_raw": 0.015028781241784833
+      "rank_ic_2026_raw": 0.015028781241784833,
+      "formula_theme": "上冲幅度（最高相对开盘，取负）",
+      "formula_summary": "(最高-开盘)/开盘 衡量开盘后上冲有多猛。取负偏好上冲不猛、更克制的交易日。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "(high-open)/open",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：当日上冲幅度更小；因子值低：上冲幅度更大。"
     },
     {
       "factor_id": "ext_abe447a6",
@@ -4542,7 +4995,15 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 1,
-      "report_href": "/reports_weekly_dug/ext_abe447a6.html"
+      "report_href": "/reports_weekly_dug/ext_abe447a6.html",
+      "formula_theme": "20日回撤深度（昔日收盘/现价）",
+      "formula_summary": "20 日前收盘÷今日收盘：越大说明相对那时跌得越多（更深回撤）；越小说明已涨回去甚至创新高。",
+      "formula_steps": [
+        "delay(close,20)/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对 20 日前更深回撤/更弱；因子值低：相对 20 日前更强、甚至上涨。",
+      "formula_display": "delay(close, 20) / (close + 0.001)"
     },
     {
       "factor_id": "ext_e66f9da6",
@@ -4581,7 +5042,15 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 1,
-      "report_href": "/reports_weekly_dug/ext_e66f9da6.html"
+      "report_href": "/reports_weekly_dug/ext_e66f9da6.html",
+      "formula_theme": "30日回撤深度（昔日收盘/现价）",
+      "formula_summary": "30 日前收盘÷今日收盘：越大说明相对那时跌得越多（更深回撤）；越小说明已涨回去甚至创新高。",
+      "formula_steps": [
+        "delay(close,30)/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对 30 日前更深回撤/更弱；因子值低：相对 30 日前更强、甚至上涨。",
+      "formula_display": "delay(close, 30) / (close + 0.001)"
     },
     {
       "factor_id": "alpha_20260701_149b529b",
@@ -4673,7 +5142,16 @@
       "formula_display": "-(rank(close / (low + 0.001)) * rank(ts_std(ts_delta(close, 5), 20)))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.0142509014836078,
-      "rank_ic_2026_raw": 0.0142509014836078
+      "rank_ic_2026_raw": 0.0142509014836078,
+      "formula_theme": "收盘远离低点×涨跌波动（取负）",
+      "formula_summary": "close/low 大且近端涨跌变化波动大的股票原始分高。取负偏好贴低点或涨跌更稳。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(close/low)",
+        "rank(ts_std(ts_delta(close,5),20))",
+        "相乘取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：远离低点×涨跌波动原始分更低；因子值低：收高且波动大。"
     },
     {
       "factor_id": "ext_d09a8963",
@@ -4713,7 +5191,15 @@
       "report_href": "/reports_weekly_dug/ext_d09a8963.html",
       "formula_raw": "rank((0 - 1) * ts_corr(ret, ts_delta(amount, 1), 10))",
       "formula_display": "rank(-ts_corr(ret, ts_delta(amount, 1), 10))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "收益与成交额变化背离（10日）",
+      "formula_summary": "看收益和成交额日变化的相关：相关为负=价跌额增或价涨额减（背离）。对相关取负再截面排序，偏好「价量背离」更明显的股票。",
+      "formula_steps": [
+        "ts_corr(ret, Δamount, 10)",
+        "取负后全市场 rank",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：收益与成交额变化更背离；因子值低：收益与成交额变化更同向。"
     },
     {
       "factor_id": "alpha_20260702_393d28b7",
@@ -4803,7 +5289,15 @@
       "formula_display": "-(ts_std(close, 20) * 2 / (ts_mean(close, 20) + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.007199032015275679,
-      "rank_ic_2026_raw": 0.007199032015275679
+      "rank_ic_2026_raw": 0.007199032015275679,
+      "formula_theme": "价格CV（20日标准差/均价，取负）",
+      "formula_summary": "用均价标准化后的价格波动（变异系数）。取负=低波。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(close,20)/ts_mean(close)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对均价的波动更低；因子值低：相对均价波动更高。"
     },
     {
       "factor_id": "ext_20260701222951_b6074f02",
@@ -4854,7 +5348,60 @@
       "formula_display": "delay(low, 1) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.013680118178193257,
-      "rank_ic_2026_raw": 0.013680118178193257
+      "rank_ic_2026_raw": 0.013680118178193257,
+      "formula_theme": "1日前最低相对现价",
+      "formula_summary": "把 1 日前的最低价和今天收盘比，看短期是否从那时的低点抬升。",
+      "formula_steps": [
+        "delay(low,1)/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价相对 1 日前低点并不高（偏弱）；因子值低：现价已明显高于 1 日前低点。"
+    },
+    {
+      "factor_id": "alpha_581774bc",
+      "display_name": "alpha_581774bc",
+      "candidate_id": "alpha_20260702_581774bc",
+      "source": "pack_dsl",
+      "label": "本周新挖",
+      "source_label": "本周新挖",
+      "ok": true,
+      "ok_for_select": true,
+      "from_pack_top_pick": true,
+      "already_neutralized": false,
+      "neutralization_note": "未中性化（平台已有）",
+      "has_formula": true,
+      "dsl": "(0 + (delay(low, 1) / (close + 0.001)))",
+      "lqtp_formula": "(0 + (delay(low, 1) / (close + 0.001)))",
+      "formula_raw": "(0 + (delay(low, 1) / (close + 0.001)))",
+      "lqtp_native": true,
+      "formula_from": "topup_ic02_more",
+      "pack_rank_ic": 0.0,
+      "platform_mean_ic": 0.033917015326688976,
+      "platform_icir": 0.26071015644601964,
+      "platform_coverage": 0.9959127848554044,
+      "platform_long_short_sharpe": 1.395009482574636,
+      "mean_rank_ic": 0.033917015326688976,
+      "abs_mean_rank_ic": 0.033917015326688976,
+      "display_rank_ic": 0.033917015326688976,
+      "rank_icir": 0.26071015644601964,
+      "display_rank_icir": 0.26071015644601964,
+      "mean_daily_coverage": 0.9959127848554044,
+      "long_short_sharpe": 1.395009482574636,
+      "sign_flipped": false,
+      "sign_baked_into_formula": true,
+      "platform_submit": "submitted",
+      "materialize": "platform_only",
+      "ops": 1,
+      "cs_rank": false,
+      "report_href": "/reports_weekly_dug/alpha_581774bc.html",
+      "formula_theme": "1日前最低相对现价",
+      "formula_summary": "把 1 日前的最低价和今天收盘比，看短期是否从那时的低点抬升。",
+      "formula_steps": [
+        "delay(low,1)/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价相对 1 日前低点并不高（偏弱）；因子值低：现价已明显高于 1 日前低点。",
+      "formula_display": "(0 + (delay(low, 1) / (close + 0.001)))"
     },
     {
       "factor_id": "alpha_20260702_b37f3fb9",
@@ -4944,7 +5491,16 @@
       "formula_display": "-(ts_corr(ts_delta(close, 5), ts_delta(volume, 5), 20))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.022482252487409905,
-      "rank_ic_2026_raw": 0.022482252487409905
+      "rank_ic_2026_raw": 0.022482252487409905,
+      "formula_theme": "价变与量变同步性（Δ5，窗20，取负）",
+      "formula_summary": "价格变化和成交量变化是否同向。相关高=涨时放量/跌时缩量。取负偏好价量变化背离。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "Δclose(5) 与 Δvolume(5)",
+        "20 日相关",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价量变化相关性更低（更背离）；因子值低：价量变化更同步。"
     },
     {
       "factor_id": "alpha_20260702_576e0a0b",
@@ -5037,7 +5593,16 @@
       "formula_display": "-((close - ts_mean(close, 24)) / (ts_mean(close, 24) + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.0023917390618309257,
-      "rank_ic_2026_raw": 0.0023917390618309257
+      "rank_ic_2026_raw": 0.0023917390618309257,
+      "formula_theme": "均线偏离度（24日，取负=回归）",
+      "formula_summary": "(现价-均价)/均价。正=站上均线，负=跌破。取负后偏好跌破均线、偏离为负的一侧（偏回归/超跌）。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "算 24 日均价",
+        "(close-ma)/ma",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对均线更低/更超跌；因子值低：相对均线更高。"
     },
     {
       "factor_id": "alpha_20260702_a1c128d5",
@@ -5130,7 +5695,15 @@
       "formula_display": "rank(-ts_corr(close, volume, 20))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.013418196644625745,
-      "rank_ic_2026_raw": 0.013418196644625745
+      "rank_ic_2026_raw": 0.013418196644625745,
+      "formula_theme": "价量背离排序（20日）",
+      "formula_summary": "对价量相关取负再截面排序：相关越负（越背离）分越高。赌价量背离后的修复/相对收益。",
+      "formula_steps": [
+        "ts_corr(close,volume,20)",
+        "取负后 rank",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价量更背离；因子值低：价量更同向。"
     },
     {
       "factor_id": "alpha_20260701_cf427acf",
@@ -5220,7 +5793,15 @@
       "formula_display": "-(ts_std(ret, 60) + ts_corr(close, volume, 20))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.013147421389259825,
-      "rank_ic_2026_raw": 0.013147421389259825
+      "rank_ic_2026_raw": 0.013147421389259825,
+      "formula_theme": "波动+价量相关（取负）",
+      "formula_summary": "把 60 日波动和 20 日价量相关加在一起。原始大=又吵又价量同向。取负偏好更安静或背离。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(ret,60) + ts_corr(close,volume,20)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：波动+价量相关之和更小；因子值低：又吵又同向。"
     },
     {
       "factor_id": "alpha_20260702_40002fd7",
@@ -5312,7 +5893,15 @@
       "formula_display": "-(ts_corr(close, volume, 20))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.013147317594483732,
-      "rank_ic_2026_raw": 0.013147317594483732
+      "rank_ic_2026_raw": 0.013147317594483732,
+      "formula_theme": "价量背离（20日相关取负）",
+      "formula_summary": "20 日收盘与成交量相关。取负后，相关越负因子越高，即偏好价量背离。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_corr(close,volume,20)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价量相关性更低/更负；因子值低：价量更同向。"
     },
     {
       "factor_id": "ext_f3f2822a",
@@ -5352,7 +5941,16 @@
       "report_href": "/reports_weekly_dug/ext_f3f2822a.html",
       "formula_raw": "ts_min(low, 60) / (ts_mean(close, 20) + 0.001)",
       "formula_display": "ts_min(low, 60) / (ts_mean(close, 20) + 0.001)",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "低点相对20日均价（60日最低）",
+      "formula_summary": "60 日最低价除以 20 日均价：衡量下沿距离均线有多近。贴近均线下方=下沿抬升/压缩；远低于均线=深坑。",
+      "formula_steps": [
+        "ts_min(low,60)",
+        "ts_mean(close,20)",
+        "相除",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近期低点更接近均价；因子值低：近期低点远低于均价。"
     },
     {
       "factor_id": "ext_dbcffcca",
@@ -5392,7 +5990,15 @@
       "report_href": "/reports_weekly_dug/ext_dbcffcca.html",
       "formula_raw": "rank(ts_delta(volume, 20)) * (0 - 1) * rank(ts_delta(close, 20))",
       "formula_display": "-(rank(ts_delta(volume, 20)) * rank(ts_delta(close, 20)))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "量增×价涨（取负=量价齐升的反面）",
+      "formula_summary": "成交量变化与价格变化同时截面靠前=量价齐升。取负后偏好量价并不齐升的股票。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(Δvolume)×rank(Δclose)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：量变×价变原始分更低；因子值低：量价齐升。"
     },
     {
       "factor_id": "ext_3b68cb65",
@@ -5432,7 +6038,16 @@
       "report_href": "/reports_weekly_dug/ext_3b68cb65.html",
       "formula_raw": "rank(ts_corr(ret, delay(close, 5), 10)) * (0 - 1) * ts_std(ret, 10)",
       "formula_display": "-(rank(ts_corr(ret, delay(close, 5), 10)) * ts_std(ret, 10))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "收益与滞后价格相关×波动（取负）",
+      "formula_summary": "收益和几天前价格的相关性，再乘波动。取负避开相关高且波动大的组合。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "corr(ret, delay(close))",
+        "× 波动",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：原始组合分更低；因子值低：原始组合分更高。"
     },
     {
       "factor_id": "alpha_20260702_efd125a8",
@@ -5522,7 +6137,16 @@
       "formula_display": "-(ts_corr(ts_delta(close, 1), ts_delta(volume, 1), 20))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.023644561202138568,
-      "rank_ic_2026_raw": 0.023644561202138568
+      "rank_ic_2026_raw": 0.023644561202138568,
+      "formula_theme": "价变与量变同步性（Δ1，窗20，取负）",
+      "formula_summary": "价格变化和成交量变化是否同向。相关高=涨时放量/跌时缩量。取负偏好价量变化背离。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "Δclose(1) 与 Δvolume(1)",
+        "20 日相关",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价量变化相关性更低（更背离）；因子值低：价量变化更同步。"
     },
     {
       "factor_id": "alpha_20260701_1958c186",
@@ -5612,7 +6236,15 @@
       "formula_display": "-(ts_std(volume, 10) / (ts_mean(volume, 20) + 1))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.014348626393972096,
-      "rank_ic_2026_raw": 0.014348626393972096
+      "rank_ic_2026_raw": 0.014348626393972096,
+      "formula_theme": "成交量变异系数（取负=量稳定）",
+      "formula_summary": "量的标准差/均量。取负偏好成交更稳定、不疯放量。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(volume)/ts_mean(volume)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：成交量更稳定；因子值低：成交量更不稳定。"
     },
     {
       "factor_id": "alpha_20260701_673406ba",
@@ -5706,7 +6338,15 @@
       "formula_display": "-(rank(ts_std(abs(close - open), 5) + (close - open) + ts_corr(close, open, 10)))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.004364343297053515,
-      "rank_ic_2026_raw": 0.004364343297053515
+      "rank_ic_2026_raw": 0.004364343297053515,
+      "formula_theme": "实体波动+阴阳+开收相关（综合取负排序）",
+      "formula_summary": "把实体绝对波动、当日涨跌实体、开收相关加总后截面排序再取负：综合「开收结构喧闹度」，多头偏向结构更安静的一侧。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(|close-open|)+(close-open)+corr(close,open)",
+        "rank 后取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：开收综合喧闹度更低；因子值低：开收综合喧闹度更高。"
     },
     {
       "factor_id": "ext_6d6a1814",
@@ -5746,7 +6386,16 @@
       "report_href": "/reports_weekly_dug/ext_6d6a1814.html",
       "formula_raw": "rank(ts_corr(close, ts_min(low, 60), 10)) * (0 - 1) * rank(ts_std(ret, 10))",
       "formula_display": "-(rank(ts_corr(close, ts_min(low, 60), 10)) * rank(ts_std(ret, 10)))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "价格与低点轨迹相关×低波（取负）",
+      "formula_summary": "收盘与长期最低价轨迹的相关性，再乘低波动排序。取负翻转该组合。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "corr(close, ts_min(low))",
+        "× rank(波动) 类项",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：组合原始分更低；因子值低：组合原始分更高。"
     },
     {
       "factor_id": "ext_20260701221018_2b6cff9a",
@@ -5797,7 +6446,62 @@
       "formula_display": "-(rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10)))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.0027748518023355553,
-      "rank_ic_2026_raw": 0.0027748518023355553
+      "rank_ic_2026_raw": 0.0027748518023355553,
+      "formula_theme": "实体波动+阴阳+开收相关（综合取负排序）",
+      "formula_summary": "把实体绝对波动、当日涨跌实体、开收相关加总后截面排序再取负：综合「开收结构喧闹度」，多头偏向结构更安静的一侧。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(|close-open|)+(close-open)+corr(close,open)",
+        "rank 后取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：开收综合喧闹度更低；因子值低：开收综合喧闹度更高。"
+    },
+    {
+      "factor_id": "alpha_1f8103b7",
+      "display_name": "alpha_1f8103b7",
+      "candidate_id": "alpha_20260702_1f8103b7",
+      "source": "pack_dsl",
+      "label": "本周新挖",
+      "source_label": "本周新挖",
+      "ok": true,
+      "ok_for_select": true,
+      "from_pack_top_pick": true,
+      "already_neutralized": false,
+      "neutralization_note": "未中性化（平台已有）",
+      "has_formula": true,
+      "dsl": "(0 + (-rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))))",
+      "lqtp_formula": "(0 + (-rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))))",
+      "formula_raw": "(0 + ((0 - 1) * rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))))",
+      "lqtp_native": true,
+      "formula_from": "topup_ic02_more",
+      "pack_rank_ic": 0.0,
+      "platform_mean_ic": 0.031051759071435075,
+      "platform_icir": 0.28341666134482674,
+      "platform_coverage": 0.9958856197257614,
+      "platform_long_short_sharpe": 2.716257801344926,
+      "mean_rank_ic": 0.031051759071435075,
+      "abs_mean_rank_ic": 0.031051759071435075,
+      "display_rank_ic": 0.031051759071435075,
+      "rank_icir": 0.28341666134482674,
+      "display_rank_icir": 0.28341666134482674,
+      "mean_daily_coverage": 0.9958856197257614,
+      "long_short_sharpe": 2.716257801344926,
+      "sign_flipped": false,
+      "sign_baked_into_formula": true,
+      "platform_submit": "submitted",
+      "materialize": "platform_only",
+      "ops": 4,
+      "cs_rank": true,
+      "report_href": "/reports_weekly_dug/alpha_1f8103b7.html",
+      "formula_theme": "实体波动+阴阳+开收相关（综合取负排序）",
+      "formula_summary": "把实体绝对波动、当日涨跌实体、开收相关加总后截面排序再取负：综合「开收结构喧闹度」，多头偏向结构更安静的一侧。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(|close-open|)+(close-open)+corr(close,open)",
+        "rank 后取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：开收综合喧闹度更低；因子值低：开收综合喧闹度更高。",
+      "formula_display": "(0 + (-rank((ts_std(abs(close - open), 5) + (close - open)) + ts_corr(close, open, 10))))"
     },
     {
       "factor_id": "ext_c2ef363a",
@@ -5834,7 +6538,15 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 1,
-      "report_href": "/reports_weekly_dug/ext_c2ef363a.html"
+      "report_href": "/reports_weekly_dug/ext_c2ef363a.html",
+      "formula_theme": "60日回撤深度（昔日收盘/现价）",
+      "formula_summary": "60 日前收盘÷今日收盘：越大说明相对那时跌得越多（更深回撤）；越小说明已涨回去甚至创新高。",
+      "formula_steps": [
+        "delay(close,60)/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对 60 日前更深回撤/更弱；因子值低：相对 60 日前更强、甚至上涨。",
+      "formula_display": "delay(close, 60) / (close + 0.001)"
     },
     {
       "factor_id": "alpha_20260701_75f1066f",
@@ -5927,7 +6639,15 @@
       "formula_display": "-(rank(ts_delta(volume, 5)) * ts_std(ret, 10))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.01788315596666983,
-      "rank_ic_2026_raw": 0.01788315596666983
+      "rank_ic_2026_raw": 0.01788315596666983,
+      "formula_theme": "量增×波动（取负）",
+      "formula_summary": "成交量增加分位乘收益波动。取负避开放量高波。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(Δvolume5)×ts_std(ret10)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：量增×波动原始分更低；因子值低：放量高波。"
     },
     {
       "factor_id": "alpha_20260702_844ceabc",
@@ -6020,7 +6740,14 @@
       "formula_display": "ts_sum(ts_max(ts_delta(close, 1), 0), 60) / (ts_sum(ts_max(-ts_delta(close, 1), 0), 60) + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.01244391341504733,
-      "rank_ic_2026_raw": 0.01244391341504733
+      "rank_ic_2026_raw": 0.01244391341504733,
+      "formula_theme": "涨跌幅度比（类 RSI 累加）",
+      "formula_summary": "把上涨日的涨幅累加，除以下跌日跌幅累加，类似一段时间内「涨的力度/跌的力度」。比值高=涨的累积力度更大。",
+      "formula_steps": [
+        "上涨变动累加 / 下跌变动累加",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：区间内上涨累积力度更大；因子值低：区间内下跌累积力度更大。"
     },
     {
       "factor_id": "alpha_20260701_57e30cff",
@@ -6110,7 +6837,15 @@
       "formula_display": "-(ts_std(volume, 20) / (ts_mean(volume, 20) + 1))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.017111981675288754,
-      "rank_ic_2026_raw": 0.017111981675288754
+      "rank_ic_2026_raw": 0.017111981675288754,
+      "formula_theme": "成交量变异系数（取负=量稳定）",
+      "formula_summary": "量的标准差/均量。取负偏好成交更稳定、不疯放量。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(volume)/ts_mean(volume)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：成交量更稳定；因子值低：成交量更不稳定。"
     },
     {
       "factor_id": "alpha_8d5eed0f",
@@ -6147,7 +6882,18 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 3,
-      "report_href": "/reports_weekly_dug/alpha_8d5eed0f.html"
+      "report_href": "/reports_weekly_dug/alpha_8d5eed0f.html",
+      "formula_theme": "放量 + 低振幅 + 低收益（亢奋反面取负）",
+      "formula_summary": "原式= volume的32日时序分位 × (1−振幅16日分位) × (1−收益32日分位)。三项同时大时，表示：相对自身历史成交偏大、振幅偏小、收益偏弱。最外层取负后，多头不再追这三者叠满的状态，而是偏向其反面组合。",
+      "formula_steps": [
+        "ts_rank(volume,32)：成交量在自身近32日的高低",
+        "ts_rank((close+high-low),16)：振幅代理在自身近16日的高低；用 1−分位 偏好振幅偏低",
+        "ts_rank(ret,32)：收益在自身近32日的高低；用 1−分位 偏好收益偏低",
+        "三者相乘后取负，把「放量+低波+低收益」原始高峰翻成因子低谷",
+        "每个交易日只用当日及历史数据"
+      ],
+      "formula_direction": "因子值高：并非同时处于「自身历史放量、振幅偏低、收益偏低」；因子值低：更接近该三者叠满的状态。",
+      "formula_display": "-((ts_rank(volume, 32) * (1 - ts_rank(((close + high) - low), 16))) * (1 - ts_rank(ret, 32)))"
     },
     {
       "factor_id": "alpha_2cf514b1",
@@ -6184,7 +6930,18 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 3,
-      "report_href": "/reports_weekly_dug/alpha_2cf514b1.html"
+      "report_href": "/reports_weekly_dug/alpha_2cf514b1.html",
+      "formula_theme": "放量 + 低振幅 + 低收益（亢奋反面取负）",
+      "formula_summary": "原式= volume的32日时序分位 × (1−振幅16日分位) × (1−收益32日分位)。三项同时大时，表示：相对自身历史成交偏大、振幅偏小、收益偏弱。最外层取负后，多头不再追这三者叠满的状态，而是偏向其反面组合。",
+      "formula_steps": [
+        "ts_rank(volume,32)：成交量在自身近32日的高低",
+        "ts_rank((close+high-low),16)：振幅代理在自身近16日的高低；用 1−分位 偏好振幅偏低",
+        "ts_rank(ret,32)：收益在自身近32日的高低；用 1−分位 偏好收益偏低",
+        "三者相乘后取负，把「放量+低波+低收益」原始高峰翻成因子低谷",
+        "每个交易日只用当日及历史数据"
+      ],
+      "formula_direction": "因子值高：并非同时处于「自身历史放量、振幅偏低、收益偏低」；因子值低：更接近该三者叠满的状态。",
+      "formula_display": "-(((ts_rank(volume, 32) * (1 - ts_rank(close + high - low, 16))) * (1 - ts_rank(ret, 32))))"
     },
     {
       "factor_id": "ext_1312d20f",
@@ -6224,7 +6981,15 @@
       "report_href": "/reports_weekly_dug/ext_1312d20f.html",
       "formula_raw": "rank(ts_corr(ts_delta(close, 5), ts_sum(ret, 5), 10))",
       "formula_display": "rank(ts_corr(ts_delta(close, 5), ts_sum(ret, 5), 10))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "价变与累积收益的相关",
+      "formula_summary": "短期价变和短期累积收益的相关性，截面排序后衡量二者是否同向强化。",
+      "formula_steps": [
+        "corr(Δclose, sum(ret))",
+        "rank",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价变与累积收益更同向；因子值低：更不一致。"
     },
     {
       "factor_id": "alpha_20260702_6d5f848e",
@@ -6317,7 +7082,16 @@
       "formula_display": "-(rank((close - delay(close, 5)) / (delay(close, 5) + 0.001)) * rank(ts_corr(close, volume, 5)))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.013205261756825497,
-      "rank_ic_2026_raw": 0.013205261756825497
+      "rank_ic_2026_raw": 0.013205261756825497,
+      "formula_theme": "5日涨幅×短价量相关（取负）",
+      "formula_summary": "短动量与5日价量相关同时强时原始分高。取负反转。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(5日收益)",
+        "× rank(corr5)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：组合原始分更低；因子值低：短动量+价量同向。"
     },
     {
       "factor_id": "alpha_20260701_726efa4d",
@@ -6410,7 +7184,15 @@
       "formula_display": "-((close - ts_mean(close, 20)) / (ts_std(close, 20) + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.0007525351582394345,
-      "rank_ic_2026_raw": 0.0007525351582394345
+      "rank_ic_2026_raw": 0.0007525351582394345,
+      "formula_theme": "布林位置/Z分数（取负）",
+      "formula_summary": "(close-均价)/标准差 是价格 Z 分数。取负偏好落在均线下方、统计偏弱的位置。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "(close-ma)/std",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：Z 分数更低；因子值低：Z 分数更高。"
     },
     {
       "factor_id": "alpha_20260703_3962e26e",
@@ -6500,7 +7282,14 @@
       "formula_display": "delay(close, 10) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.004322396350871258,
-      "rank_ic_2026_raw": 0.004322396350871258
+      "rank_ic_2026_raw": 0.004322396350871258,
+      "formula_theme": "10日回撤深度（昔日收盘/现价）",
+      "formula_summary": "10 日前收盘÷今日收盘：越大说明相对那时跌得越多（更深回撤）；越小说明已涨回去甚至创新高。",
+      "formula_steps": [
+        "delay(close,10)/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对 10 日前更深回撤/更弱；因子值低：相对 10 日前更强、甚至上涨。"
     },
     {
       "factor_id": "alpha_20260701_5685f3e9",
@@ -6593,7 +7382,15 @@
       "formula_display": "rank(-ts_std(ret, 10)) * rank(ts_sum(ret, 6))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.018438469954623195,
-      "rank_ic_2026_raw": 0.018438469954623195
+      "rank_ic_2026_raw": 0.018438469954623195,
+      "formula_theme": "低波×近6日累积收益",
+      "formula_summary": "低波动与短期正收益结合的质量动量。",
+      "formula_steps": [
+        "rank(-vol)",
+        "× rank(sum ret6)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：低波且近端累积收益更好；因子值低：高波或近端收益差。"
     },
     {
       "factor_id": "alpha_20260701_5f690b22",
@@ -6686,7 +7483,15 @@
       "formula_display": "-(ts_delta(close, 10) / (delay(close, 10) + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.0006064135535793334,
-      "rank_ic_2026_raw": 0.0006064135535793334
+      "rank_ic_2026_raw": 0.0006064135535793334,
+      "formula_theme": "10日收益率（取负=反转）",
+      "formula_summary": "近 10 日收益率。取负后变成反转：跌得多反而因子高。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "近 10 日收益",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近 10 日收益更低（跌更多）；因子值低：近 10 日涨更多。"
     },
     {
       "factor_id": "ext_bae31256",
@@ -6726,7 +7531,15 @@
       "report_href": "/reports_weekly_dug/ext_bae31256.html",
       "formula_raw": "rank(ts_delta(close, 20)) * (0 - 1) * rank(ts_sum(ret, 5))",
       "formula_display": "-(rank(ts_delta(close, 20)) * rank(ts_sum(ret, 5)))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "20日涨×近5日累积收益（取负）",
+      "formula_summary": "中期涨与短期累积收益同时强时原始分高。取负做反转。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(Δ20)×rank(sum ret5)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：中短动量乘积更低；因子值低：中短齐强。"
     },
     {
       "factor_id": "ext_188457b1",
@@ -6766,7 +7579,15 @@
       "report_href": "/reports_weekly_dug/ext_188457b1.html",
       "formula_raw": "rank((open - delay(high, 1)) / (delay(high, 1) + 0.001))",
       "formula_display": "rank((open - delay(high, 1)) / (delay(high, 1) + 0.001))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "高开相对昨高",
+      "formula_summary": "(开盘-昨高)/昨高：高开缺口越大分越高。",
+      "formula_steps": [
+        "(open-昨高)/昨高",
+        "rank",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对昨高更高开；因子值低：低开或高开更弱。"
     },
     {
       "factor_id": "alpha_20260702_9443699f",
@@ -6857,7 +7678,15 @@
       "formula_display": "(rank(delay(close, 5)) - rank(close)) * rank(volume / (ts_mean(volume, 20) + 1))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.009251105157808493,
-      "rank_ic_2026_raw": 0.009251105157808493
+      "rank_ic_2026_raw": 0.009251105157808493,
+      "formula_theme": "名次下滑×相对放量",
+      "formula_summary": "(昨日分位-今日分位)×量比：价格截面名次在下降且放量时得分高，捕捉放量走弱。",
+      "formula_steps": [
+        "rank(delay(close))-rank(close)",
+        "× rank(量比)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：截面名次下滑且相对放量；因子值低：名次上升或缩量。"
     },
     {
       "factor_id": "alpha_9a28bc0c",
@@ -6894,7 +7723,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 2,
-      "report_href": "/reports_weekly_dug/alpha_9a28bc0c.html"
+      "report_href": "/reports_weekly_dug/alpha_9a28bc0c.html",
+      "formula_theme": "涨跌变化的波动（取负=路径平滑）",
+      "formula_summary": "对多日涨跌差分再求标准差：路径越毛躁值越大。取负偏好路径更平滑。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(ts_delta(close))",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：涨跌变化更平滑；因子值低：涨跌变化更毛躁。",
+      "formula_display": "-(ts_std(ts_delta(close, 5), 20))"
     },
     {
       "factor_id": "ext_2eee007e",
@@ -6934,7 +7772,16 @@
       "report_href": "/reports_weekly_dug/ext_2eee007e.html",
       "formula_raw": "rank((0 - 1) * ts_std(ret, 20)) * rank(ts_delta(close, 20))",
       "formula_display": "rank(-ts_std(ret, 20)) * rank(ts_delta(close, 20))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "低波×近期涨幅（质量动量）",
+      "formula_summary": "截面上波动越低分越高，再乘近期涨幅分位：要「涨但不大起大落」的质量动量。",
+      "formula_steps": [
+        "rank(-ts_std(ret))",
+        "rank(ts_delta(close))",
+        "相乘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对低波且近期偏强；因子值低：高波或近期偏弱。"
     },
     {
       "factor_id": "ext_105e806c",
@@ -6974,7 +7821,16 @@
       "materialize": "platform_only",
       "ops": 2,
       "formula_display": "ts_min(low, 5) / (ts_mean(close, 10) + 0.001)",
-      "report_href": "/reports_weekly_dug/ext_105e806c.html"
+      "report_href": "/reports_weekly_dug/ext_105e806c.html",
+      "formula_theme": "低点相对10日均价（5日最低）",
+      "formula_summary": "5 日最低价除以 10 日均价：衡量下沿距离均线有多近。贴近均线下方=下沿抬升/压缩；远低于均线=深坑。",
+      "formula_steps": [
+        "ts_min(low,5)",
+        "ts_mean(close,10)",
+        "相除",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近期低点更接近均价；因子值低：近期低点远低于均价。"
     },
     {
       "factor_id": "alpha_faa78249",
@@ -7011,7 +7867,17 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 5,
-      "report_href": "/reports_weekly_dug/alpha_faa78249.html"
+      "report_href": "/reports_weekly_dug/alpha_faa78249.html",
+      "formula_theme": "价量相关×近端涨跌分位×低收益分位",
+      "formula_summary": "价量同向、近端涨跌自身分位、以及低收益时序分位的乘积，刻画有量配合的特定动量状态。",
+      "formula_steps": [
+        "rank(corr)",
+        "× ts_rank(Δclose)",
+        "× (1-ts_rank(ret))",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：更符合该量价动量状态；因子值低：不符合。",
+      "formula_display": "rank(ts_corr(close, volume, 20)) * (ts_rank(ts_delta(close, 5), 32) * (1 - ts_rank(ret, 32)))"
     },
     {
       "factor_id": "ext_98abc12f",
@@ -7051,7 +7917,15 @@
       "report_href": "/reports_weekly_dug/ext_98abc12f.html",
       "formula_raw": "rank(ts_delta(close, 5)) * rank(ts_min(low, 60) / (close + 0.001))",
       "formula_display": "rank(ts_delta(close, 5)) * rank(ts_min(low, 60) / (close + 0.001))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "近5日涨×贴60日低点",
+      "formula_summary": "短期有反弹（近5日涨）同时仍贴近长期低点：超跌反弹结构。",
+      "formula_steps": [
+        "rank(Δclose5)",
+        "× rank(min60/close)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：超跌附近出现短反弹；因子值低：非超跌或短端不强。"
     },
     {
       "factor_id": "alpha_20260702_89d0956b",
@@ -7144,7 +8018,14 @@
       "formula_display": "ts_mean(close, 60) / (delay(close, 1) + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.0068450549792540396,
-      "rank_ic_2026_raw": 0.0068450549792540396
+      "rank_ic_2026_raw": 0.0068450549792540396,
+      "formula_theme": "长均线相对昨收",
+      "formula_summary": "60日均价/昨收：昨收跌破长均越多比值越大。",
+      "formula_steps": [
+        "ts_mean(close,60)/delay(close,1)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：昨收相对长均更低；因子值低：昨收相对长均更高。"
     },
     {
       "factor_id": "alpha_20260702_f0fd9be3",
@@ -7234,7 +8115,15 @@
       "formula_display": "-(ts_std(close, 30) / (close + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.0028104012928875945,
-      "rank_ic_2026_raw": 0.0028104012928875945
+      "rank_ic_2026_raw": 0.0028104012928875945,
+      "formula_theme": "低相对价格波动（30日）",
+      "formula_summary": "收盘价 30 日标准差除以现价，得到无量纲波动。取负=低波偏好。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(close,30)/close",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价格相对波动更低；因子值低：价格相对波动更高。"
     },
     {
       "factor_id": "alpha_20260701_2f5c25fe",
@@ -7327,7 +8216,16 @@
       "formula_display": "rank(-ts_std(ret, 20)) * ts_rank(ts_delta(close, 5), 20)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.017780827949132768,
-      "rank_ic_2026_raw": 0.017780827949132768
+      "rank_ic_2026_raw": 0.017780827949132768,
+      "formula_theme": "低波×近期涨幅（质量动量）",
+      "formula_summary": "截面上波动越低分越高，再乘近期涨幅分位：要「涨但不大起大落」的质量动量。",
+      "formula_steps": [
+        "rank(-ts_std(ret))",
+        "rank(ts_delta(close))",
+        "相乘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对低波且近期偏强；因子值低：高波或近期偏弱。"
     },
     {
       "factor_id": "alpha_20260701_463d42d0",
@@ -7417,7 +8315,14 @@
       "formula_display": "delay(open, 3) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.006724174440922412,
-      "rank_ic_2026_raw": 0.006724174440922412
+      "rank_ic_2026_raw": 0.006724174440922412,
+      "formula_theme": "3日前开盘/现价",
+      "formula_summary": "用滞后开盘价相对现价，刻画短周期位置变化。",
+      "formula_steps": [
+        "delay(open,3)/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价相对过去开盘更低；因子值低：现价相对过去开盘更高。"
     },
     {
       "factor_id": "alpha_20260701_abf0beb7",
@@ -7510,7 +8415,15 @@
       "formula_display": "-(ts_delta(close, 5) / (delay(close, 5) + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.003242165702708362,
-      "rank_ic_2026_raw": 0.003242165702708362
+      "rank_ic_2026_raw": 0.003242165702708362,
+      "formula_theme": "5日收益率（取负=反转）",
+      "formula_summary": "近 5 日收益率。取负后变成反转：跌得多反而因子高。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "近 5 日收益",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近 5 日收益更低（跌更多）；因子值低：近 5 日涨更多。"
     },
     {
       "factor_id": "ext_b25eb1f4",
@@ -7550,7 +8463,15 @@
       "report_href": "/reports_weekly_dug/ext_b25eb1f4.html",
       "formula_raw": "rank((0 - 1) * ts_delta(close, 5))",
       "formula_display": "rank(-ts_delta(close, 5))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "近5日跌幅排序（反转）",
+      "formula_summary": "对近 5 日涨跌取负再截面排序：跌得越多分越高。典型短反转：买相对跌得多的。",
+      "formula_steps": [
+        "-ts_delta(close,5)",
+        "截面 rank",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近 5 日相对跌得更多；因子值低：近 5 日相对涨得更多。"
     },
     {
       "factor_id": "ext_f04c2572",
@@ -7590,7 +8511,14 @@
       "report_href": "/reports_weekly_dug/ext_f04c2572.html",
       "formula_raw": "ts_mean(volume, 20) / (volume + 1)",
       "formula_display": "ts_mean(volume, 20) / (volume + 1)",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "缩量（20日均量/今日量）",
+      "formula_summary": "均量÷今日量：今日越缩量比值越大。偏好今天成交比近期更清淡。",
+      "formula_steps": [
+        "ts_mean(volume,20)/(volume+1)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：今日相对近期更缩量；因子值低：今日相对近期更放量。"
     },
     {
       "factor_id": "ext_3777651d",
@@ -7630,7 +8558,15 @@
       "report_href": "/reports_weekly_dug/ext_3777651d.html",
       "formula_raw": "rank(ts_delta(close, 5)) * (1 - rank(ts_mean(ret, 20)))",
       "formula_display": "rank(ts_delta(close, 5)) * (1 - rank(ts_mean(ret, 20)))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "近5日强×中期收益弱",
+      "formula_summary": "短期涨幅分位高，同时中期平均收益分位低（1-rank）：短强中弱的拐点结构。",
+      "formula_steps": [
+        "rank(Δclose5)",
+        "× (1-rank(mean ret20))",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：短强且中期并不强；因子值低：短不强或中期也很强。"
     },
     {
       "factor_id": "ext_20260701175237_59269c2f",
@@ -7681,7 +8617,14 @@
       "formula_display": "rank(vwap - close) / rank(vwap + close)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.002572134638844146,
-      "rank_ic_2026_raw": 0.002572134638844146
+      "rank_ic_2026_raw": 0.002572134638844146,
+      "formula_theme": "收盘相对VWAP折价（排序比）",
+      "formula_summary": "用截面排序后的 (vwap-close) 与 (vwap+close) 相比：收盘低于 VWAP 越多，越像当天卖压收盘/折价收盘。",
+      "formula_steps": [
+        "rank(vwap-close) / rank(vwap+close)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：收盘相对 VWAP 更折价；因子值低：收盘相对 VWAP 更溢价。"
     },
     {
       "factor_id": "ext_74098cb4",
@@ -7721,7 +8664,15 @@
       "report_href": "/reports_weekly_dug/ext_74098cb4.html",
       "formula_raw": "rank(ts_min(low, 60) / (close + 0.001)) * ts_rank(ts_delta(close, 5), 10)",
       "formula_display": "rank(ts_min(low, 60) / (close + 0.001)) * ts_rank(ts_delta(close, 5), 10)",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "贴长期低点×近端涨跌分位",
+      "formula_summary": "既贴近60日低点，又看近端涨跌在自身历史中的位置，二者结合。",
+      "formula_steps": [
+        "rank(低点/收盘)",
+        "× ts_rank(近端涨跌)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：贴近长期低点且近端涨跌分位符合定义；因子值低：远离低点或近端分位相反。"
     },
     {
       "factor_id": "ext_20260701221018_3622e083",
@@ -7772,7 +8723,14 @@
       "formula_display": "rank(vwap - close) / (rank(vwap + close) + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.002501475305933356,
-      "rank_ic_2026_raw": 0.002501475305933356
+      "rank_ic_2026_raw": 0.002501475305933356,
+      "formula_theme": "收盘相对VWAP折价（排序比）",
+      "formula_summary": "用截面排序后的 (vwap-close) 与 (vwap+close) 相比：收盘低于 VWAP 越多，越像当天卖压收盘/折价收盘。",
+      "formula_steps": [
+        "rank(vwap-close) / rank(vwap+close)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：收盘相对 VWAP 更折价；因子值低：收盘相对 VWAP 更溢价。"
     },
     {
       "factor_id": "ext_a036d4cb",
@@ -7812,7 +8770,15 @@
       "report_href": "/reports_weekly_dug/ext_a036d4cb.html",
       "formula_raw": "(0 - 1) * rank(ts_sum(ret, 6)) * ts_corr(open, volume, 10)",
       "formula_display": "-(rank(ts_sum(ret, 6)) * ts_corr(open, volume, 10))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "开盘价-成交量相关（取负/排序）",
+      "formula_summary": "看开盘价与成交量是否同向。取负或负相关排序，偏好开盘价与量背离。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_corr(open,volume)",
+        "取负或 rank(-corr)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：开盘-量相关性更低；因子值低：更同向。"
     },
     {
       "factor_id": "alpha_20260701_d332134b",
@@ -7905,7 +8871,15 @@
       "formula_display": "-(ts_mean(ts_delta(close, 1), 20) / (ts_std(ts_delta(close, 1), 20) + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.00278514420912172,
-      "rank_ic_2026_raw": -0.00278514420912172
+      "rank_ic_2026_raw": -0.00278514420912172,
+      "formula_theme": "短窗价格变化夏普（取负）",
+      "formula_summary": "价格差分的均值/标准差，类似短窗风险调整动量。取负偏好动量为负或噪声大的一侧被翻转为多头……即偏向短窗动量偏弱。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "Δclose 的均值 / 标准差",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：短窗动量夏普更低；因子值低：短窗动量夏普更高。"
     },
     {
       "factor_id": "ext_7940b9ee",
@@ -7945,7 +8919,15 @@
       "report_href": "/reports_weekly_dug/ext_7940b9ee.html",
       "formula_raw": "rank(ts_delta(close, 10)) * (0 - 1) * rank(ts_delta(volume, 10))",
       "formula_display": "-(rank(ts_delta(close, 10)) * rank(ts_delta(volume, 10)))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "量增×价涨（取负=量价齐升的反面）",
+      "formula_summary": "成交量变化与价格变化同时截面靠前=量价齐升。取负后偏好量价并不齐升的股票。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(Δvolume)×rank(Δclose)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：量变×价变原始分更低；因子值低：量价齐升。"
     },
     {
       "factor_id": "ext_d9072edb",
@@ -7984,7 +8966,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 3,
-      "report_href": "/reports_weekly_dug/ext_d9072edb.html"
+      "report_href": "/reports_weekly_dug/ext_d9072edb.html",
+      "formula_theme": "放量下跌/缩量上涨（日度背离）",
+      "formula_summary": "量变方向 × 价格相反变动：量增且价跌，或量减且价涨时得正。捕捉单日价量背离。",
+      "formula_steps": [
+        "sign(Δvolume)",
+        "× (-Δclose)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：今日更偏价量背离；因子值低：今日更偏价量同向。",
+      "formula_display": "sign(ts_delta(volume, 1)) * (-ts_delta(close, 1))"
     },
     {
       "factor_id": "alpha_20260702_21fb502a",
@@ -8077,7 +9068,16 @@
       "formula_display": "-((close - ts_mean(close, 6)) / (ts_mean(close, 6) + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.001481113483731489,
-      "rank_ic_2026_raw": 0.001481113483731489
+      "rank_ic_2026_raw": 0.001481113483731489,
+      "formula_theme": "均线偏离度（6日，取负=回归）",
+      "formula_summary": "(现价-均价)/均价。正=站上均线，负=跌破。取负后偏好跌破均线、偏离为负的一侧（偏回归/超跌）。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "算 6 日均价",
+        "(close-ma)/ma",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对均线更低/更超跌；因子值低：相对均线更高。"
     },
     {
       "factor_id": "ext_cbe8ebf1",
@@ -8116,7 +9116,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 3,
-      "report_href": "/reports_weekly_dug/ext_cbe8ebf1.html"
+      "report_href": "/reports_weekly_dug/ext_cbe8ebf1.html",
+      "formula_theme": "带方向的波动（取负）",
+      "formula_summary": "波动率乘上涨跌符号：上涨期波动为正、下跌期为负。取负后翻转。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(ret)×sign(Δclose)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：带方向波动原始值更低；因子值低：上涨且波动大。",
+      "formula_display": "-(ts_std(ret, 10) * sign(ts_delta(close, 5)))"
     },
     {
       "factor_id": "alpha_20260702_66b498d6",
@@ -8206,7 +9215,16 @@
       "formula_display": "-(rank(ts_corr(volume, ts_mean(volume, 60), 12)) * (ts_mean(volume, 9) - ts_mean(volume, 26)) / (ts_mean(volume, 12) + 1))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.008127562211780522,
-      "rank_ic_2026_raw": 0.008127562211780522
+      "rank_ic_2026_raw": 0.008127562211780522,
+      "formula_theme": "量与长均量相关×短长量差（取负）",
+      "formula_summary": "成交量与长均量的相关性，再乘长短均量差，刻画量能趋势结构。取负翻转。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "corr(volume,长均量)",
+        "× (短均量-长均量)/均量",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：量能趋势原始分更低；因子值低：量能趋势原始分更高。"
     },
     {
       "factor_id": "ext_efb920f2",
@@ -8246,7 +9264,15 @@
       "report_href": "/reports_weekly_dug/ext_efb920f2.html",
       "formula_raw": "(((0 - 1) * sign((close - delay(close, 7)) + ts_delta(close, 7))) * (1 + rank(1 + ts_sum(ret, 250))))",
       "formula_display": "((-sign((close - delay(close, 7)) + ts_delta(close, 7))) * (1 + rank(1 + ts_sum(ret, 250))))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "周度方向反转×长周期收益分位",
+      "formula_summary": "对约一周价格方向取反号，再乘「1+长周期收益分位」：在长线分位背景下做短反向。",
+      "formula_steps": [
+        "-sign(周度涨跌)",
+        "× (1+rank(1+年收益累加))",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：短方向被反转加权后更高的一侧；因子值低：相反一侧。"
     },
     {
       "factor_id": "alpha_20260702_f5562d5a",
@@ -8336,7 +9362,15 @@
       "formula_display": "-(ts_std(close, 60) / (close + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.004037846944621699,
-      "rank_ic_2026_raw": 0.004037846944621699
+      "rank_ic_2026_raw": 0.004037846944621699,
+      "formula_theme": "低相对价格波动（60日）",
+      "formula_summary": "收盘价 60 日标准差除以现价，得到无量纲波动。取负=低波偏好。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(close,60)/close",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：价格相对波动更低；因子值低：价格相对波动更高。"
     },
     {
       "factor_id": "alpha_20260701_77eb1727",
@@ -8426,7 +9460,14 @@
       "formula_display": "delay(vwap, 3) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.004220201436185167,
-      "rank_ic_2026_raw": 0.004220201436185167
+      "rank_ic_2026_raw": 0.004220201436185167,
+      "formula_theme": "3日前VWAP/现价",
+      "formula_summary": "滞后成交量加权均价相对现价，看价格是否跌破/远离前几天的成本中枢。",
+      "formula_steps": [
+        "delay(vwap,3)/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价低于前几天成本中枢；因子值低：现价高于前几天成本中枢。"
     },
     {
       "factor_id": "ext_04ea6252",
@@ -8466,7 +9507,62 @@
       "materialize": "platform_only",
       "ops": 4,
       "formula_display": "rank(-ts_corr(ts_std(ret, 20), ts_delta(close, 20), 10))",
-      "report_href": "/reports_weekly_dug/ext_04ea6252.html"
+      "report_href": "/reports_weekly_dug/ext_04ea6252.html",
+      "formula_theme": "波动与涨跌的相关（取负排序）",
+      "formula_summary": "波动抬升是否伴随着上涨。对相关取负排序，偏好「涨时波动不跟着抬」或相反结构。",
+      "formula_steps": [
+        "corr(ts_std(ret), Δclose)",
+        "rank(-corr)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：波动-涨跌关系更符合背离侧；因子值低：波动随上涨同步抬升。"
+    },
+    {
+      "factor_id": "ext_c71a031c",
+      "display_name": "ext_c71a031c",
+      "candidate_id": "alphasage_baec4247c71a031c",
+      "source": "pack_dsl",
+      "label": "本周新挖",
+      "source_label": "本周新挖",
+      "ok": true,
+      "ok_for_select": true,
+      "from_pack_top_pick": true,
+      "already_neutralized": false,
+      "neutralization_note": "未中性化（包内DSL）",
+      "has_formula": true,
+      "dsl": "-(ts_delta((low + -1), 60))",
+      "lqtp_formula": "-(ts_delta((low + -1), 60))",
+      "formula_raw": "-(ts_delta((low + -1), 60))",
+      "lqtp_native": true,
+      "formula_from": "topup_ic02_more_r2",
+      "pack_rank_ic": 0.0,
+      "platform_mean_ic": 0.022264591049848906,
+      "platform_icir": 0.1622432397049717,
+      "platform_coverage": 0.9827312347891729,
+      "platform_long_short_sharpe": 0.8604054184941654,
+      "mean_rank_ic": 0.022264591049848906,
+      "abs_mean_rank_ic": 0.022264591049848906,
+      "display_rank_ic": 0.022264591049848906,
+      "rank_icir": 0.1622432397049717,
+      "display_rank_icir": 0.1622432397049717,
+      "mean_daily_coverage": 0.9827312347891729,
+      "long_short_sharpe": 0.8604054184941654,
+      "sign_flipped": false,
+      "sign_baked_into_formula": true,
+      "platform_submit": "submitted",
+      "materialize": "platform_only",
+      "ops": 1,
+      "cs_rank": false,
+      "report_href": "/reports_weekly_dug/ext_c71a031c.html",
+      "formula_theme": "最低价长周期变化（取负）",
+      "formula_summary": "对 low 做长窗口差分（公式里对 low 做了 +(-1) 的平移，不改变差分）。取负看最低价抬升/下移方向的反面偏好。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_delta(low, 60)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：对应 low 的长窗增量更小；因子值低：最低价抬升更多。",
+      "formula_display": "-(ts_delta((low + -1), 60))"
     },
     {
       "factor_id": "ext_f9b2117b",
@@ -8506,7 +9602,15 @@
       "report_href": "/reports_weekly_dug/ext_f9b2117b.html",
       "formula_raw": "((0 - 1) * ts_corr(open, volume, 10))",
       "formula_display": "(-ts_corr(open, volume, 10))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "开盘价-成交量相关（取负/排序）",
+      "formula_summary": "看开盘价与成交量是否同向。取负或负相关排序，偏好开盘价与量背离。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_corr(open,volume)",
+        "取负或 rank(-corr)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：开盘-量相关性更低；因子值低：更同向。"
     },
     {
       "factor_id": "alpha_95c605f3",
@@ -8543,7 +9647,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 2,
-      "report_href": "/reports_weekly_dug/alpha_95c605f3.html"
+      "report_href": "/reports_weekly_dug/alpha_95c605f3.html",
+      "formula_theme": "开盘价-成交量相关（取负/排序）",
+      "formula_summary": "看开盘价与成交量是否同向。取负或负相关排序，偏好开盘价与量背离。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_corr(open,volume)",
+        "取负或 rank(-corr)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：开盘-量相关性更低；因子值低：更同向。",
+      "formula_display": "-(rank(ts_corr(open, volume, 10)))"
     },
     {
       "factor_id": "ext_92643d16",
@@ -8582,7 +9695,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 4,
-      "report_href": "/reports_weekly_dug/ext_92643d16.html"
+      "report_href": "/reports_weekly_dug/ext_92643d16.html",
+      "formula_theme": "短窗价格变化夏普（取负）",
+      "formula_summary": "价格差分的均值/标准差，类似短窗风险调整动量。取负偏好动量为负或噪声大的一侧被翻转为多头……即偏向短窗动量偏弱。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "Δclose 的均值 / 标准差",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：短窗动量夏普更低；因子值低：短窗动量夏普更高。",
+      "formula_display": "-(ts_mean(ts_delta(close, 5), 10) / (ts_std(ts_delta(close, 5), 10) + 0.001))"
     },
     {
       "factor_id": "ext_c26a3d0b",
@@ -8622,7 +9744,16 @@
       "report_href": "/reports_weekly_dug/ext_c26a3d0b.html",
       "formula_raw": "ts_mean(sign(ts_delta(volume, 1)), 60) / (ts_mean(volume, 5) + 1)",
       "formula_display": "-(ts_mean(sign(ts_delta(volume, 1)), 60) / (ts_mean(volume, 5) + 1))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "放量天数占比（取负）",
+      "formula_summary": "统计一段时间内成交量日增的方向符号均值，近似「放量日占比」。取负偏好放量日更少。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "mean(sign(Δvolume))",
+        "可选再除以均量",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：放量倾向更弱；因子值低：放量倾向更强。"
     },
     {
       "factor_id": "ext_4e799358",
@@ -8661,7 +9792,17 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 4,
-      "report_href": "/reports_weekly_dug/ext_4e799358.html"
+      "report_href": "/reports_weekly_dug/ext_4e799358.html",
+      "formula_theme": "低波×近期涨幅（质量动量）",
+      "formula_summary": "截面上波动越低分越高，再乘近期涨幅分位：要「涨但不大起大落」的质量动量。",
+      "formula_steps": [
+        "rank(-ts_std(ret))",
+        "rank(ts_delta(close))",
+        "相乘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对低波且近期偏强；因子值低：高波或近期偏弱。",
+      "formula_display": "rank(-ts_std(ret, 60)) * rank(ts_delta(close, 5))"
     },
     {
       "factor_id": "alpha_20260702_98ed259d",
@@ -8754,7 +9895,15 @@
       "formula_display": "-(rank(ts_corr(open, volume, 10)) * ts_rank(ts_delta(close, 5), 10))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.003528333354109563,
-      "rank_ic_2026_raw": 0.003528333354109563
+      "rank_ic_2026_raw": 0.003528333354109563,
+      "formula_theme": "开盘价-成交量相关（取负/排序）",
+      "formula_summary": "看开盘价与成交量是否同向。取负或负相关排序，偏好开盘价与量背离。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_corr(open,volume)",
+        "取负或 rank(-corr)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：开盘-量相关性更低；因子值低：更同向。"
     },
     {
       "factor_id": "alpha_20260701_75057f17",
@@ -8847,7 +9996,15 @@
       "formula_display": "-(ts_std(ret, 60) * sign(ts_delta(close, 5)))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.00036794943073492224,
-      "rank_ic_2026_raw": -0.00036794943073492224
+      "rank_ic_2026_raw": -0.00036794943073492224,
+      "formula_theme": "带方向的波动（取负）",
+      "formula_summary": "波动率乘上涨跌符号：上涨期波动为正、下跌期为负。取负后翻转。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_std(ret)×sign(Δclose)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：带方向波动原始值更低；因子值低：上涨且波动大。"
     },
     {
       "factor_id": "alpha_20260703_454725cc",
@@ -8937,7 +10094,14 @@
       "formula_display": "delay(open, 1) / (close + 0.001)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.009390476609547158,
-      "rank_ic_2026_raw": 0.009390476609547158
+      "rank_ic_2026_raw": 0.009390476609547158,
+      "formula_theme": "1日前开盘/现价",
+      "formula_summary": "用滞后开盘价相对现价，刻画短周期位置变化。",
+      "formula_steps": [
+        "delay(open,1)/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价相对过去开盘更低；因子值低：现价相对过去开盘更高。"
     },
     {
       "factor_id": "alpha_20260702_6ce5f556",
@@ -9027,7 +10191,15 @@
       "formula_display": "rank(ts_corr(delay(open - close, 1), close, 200)) + rank(open - close)",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.008235401268777143,
-      "rank_ic_2026_raw": 0.008235401268777143
+      "rank_ic_2026_raw": 0.008235401268777143,
+      "formula_theme": "隔夜缺口/实体与收盘的长相关 + 当日实体",
+      "formula_summary": "一边看「昨实体」与今日收盘的长窗口相关，一边加当日开收实体分位，捕捉开收结构信息。",
+      "formula_steps": [
+        "rank(长窗相关)",
+        "+ rank(open-close)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：开收结构分更高的一侧；因子值低：开收结构分更低的一侧。"
     },
     {
       "factor_id": "alpha_20260702_153d5b20",
@@ -9117,7 +10289,15 @@
       "formula_display": "rank(-1 + open / (close + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.004420198011997966,
-      "rank_ic_2026_raw": 0.004420198011997966
+      "rank_ic_2026_raw": 0.004420198011997966,
+      "formula_theme": "开盘相对收盘溢价",
+      "formula_summary": "open/close - 1：开盘高于收盘越多（高开低走）原始越大，再截面排序。",
+      "formula_steps": [
+        "open/close - 1",
+        "rank",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：更高开低走/开收倒挂更明显；因子值低：低开高走更明显。"
     },
     {
       "factor_id": "alpha_20260702_f204de74",
@@ -9210,7 +10390,16 @@
       "formula_display": "-((close - ts_min(low, 60)) / (ts_max(high, 60) - ts_min(low, 60) + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.005631565463275501,
-      "rank_ic_2026_raw": -0.005631565463275501
+      "rank_ic_2026_raw": -0.005631565463275501,
+      "formula_theme": "区间位置偏下轨（60日）",
+      "formula_summary": "经典位置指标 (close−60日最低)/(60日最高−最低)：0=贴下轨，1=贴上轨。公式取负后，越靠近下轨因子值越高——这是在偏爱相对区间弱势/超跌位置。",
+      "formula_steps": [
+        "算60日最高价、最低价",
+        "位置=(close-最低)/(最高-最低+ε)",
+        "取负：位置越低（越靠下轨）因子越高",
+        "每个交易日只用当日及历史数据"
+      ],
+      "formula_direction": "因子值高：更靠近近60日区间下轨；因子值低：更靠近上轨。"
     },
     {
       "factor_id": "alpha_8208451c",
@@ -9246,7 +10435,16 @@
       "materialize": "platform_only",
       "ops": 0,
       "soft_gate": false,
-      "report_href": "/reports_weekly_dug/alpha_8208451c.html"
+      "report_href": "/reports_weekly_dug/alpha_8208451c.html",
+      "formula_theme": "上影压力（最高/收盘，取负）",
+      "formula_summary": "最高/收盘 大=上影长、冲高回落。取负偏好上影小、收得靠近最高。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "high/close",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：上影更小；因子值低：上影更大。",
+      "formula_display": "-(high / (close + 0.001))"
     },
     {
       "factor_id": "ext_1fdae4b7",
@@ -9285,7 +10483,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 4,
-      "report_href": "/reports_weekly_dug/ext_1fdae4b7.html"
+      "report_href": "/reports_weekly_dug/ext_1fdae4b7.html",
+      "formula_theme": "振幅与长回撤的相关",
+      "formula_summary": "短期平均振幅序列，与「60日前收盘/现价」回撤代理做相关，再排序。",
+      "formula_steps": [
+        "corr(平均振幅, 长回撤代理)",
+        "rank",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：振幅与长回撤关系更符合高相关侧；因子值低：更不符合。",
+      "formula_display": "rank(ts_corr(ts_mean((high - low) / (close + 0.001), 10), delay(close, 60) / (close + 0.001), 10))"
     },
     {
       "factor_id": "alpha_a7140261",
@@ -9321,7 +10528,15 @@
       "materialize": "platform_only",
       "ops": 0,
       "soft_gate": false,
-      "report_href": "/reports_weekly_dug/alpha_a7140261.html"
+      "report_href": "/reports_weekly_dug/alpha_a7140261.html",
+      "formula_theme": "收盘接近最高",
+      "formula_summary": "close/high 越接近 1，收得越靠近最高价，偏强势收盘。",
+      "formula_steps": [
+        "close/high",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：收盘更接近最高价；因子值低：收盘远离最高价（上影长）。",
+      "formula_display": "close / (high + 0.001)"
     },
     {
       "factor_id": "ext_35b6ffaf",
@@ -9361,7 +10576,15 @@
       "report_href": "/reports_weekly_dug/ext_35b6ffaf.html",
       "formula_raw": "rank(ts_delta(ts_mean((high - low) / (close + 0.001), 10), 1)) * rank(delay(close, 60) / (close + 0.001))",
       "formula_display": "rank(ts_delta(ts_mean((high - low) / (close + 0.001), 10), 1)) * rank(delay(close, 60) / (close + 0.001))",
-      "sign_baked_into_formula": true
+      "sign_baked_into_formula": true,
+      "formula_theme": "振幅变化×长回撤排序",
+      "formula_summary": "平均振幅的日变化分位，乘以长回撤分位：波动结构变化叠加深度回撤。",
+      "formula_steps": [
+        "rank(Δ平均振幅)",
+        "× rank(长回撤)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：振幅变化与长回撤同时突出；因子值低：否则。"
     },
     {
       "factor_id": "ext_87e60a49",
@@ -9400,7 +10623,17 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 3,
-      "report_href": "/reports_weekly_dug/ext_87e60a49.html"
+      "report_href": "/reports_weekly_dug/ext_87e60a49.html",
+      "formula_theme": "区间位置偏下轨（20日）",
+      "formula_summary": "与60日版本相同逻辑，窗口改为20日：(close−最低)/(最高−最低) 取负，偏好更靠近短期区间下轨。",
+      "formula_steps": [
+        "算20日最高/最低",
+        "位置=(close-最低)/(最高-最低+ε)",
+        "取负",
+        "每个交易日只用当日及历史数据"
+      ],
+      "formula_direction": "因子值高：更靠近近20日下轨；因子值低：更靠近上轨。",
+      "formula_display": "-(((close - ts_min(low, 20)) / (ts_max(high, 20) - ts_min(low, 20) + 0.001)))"
     },
     {
       "factor_id": "alpha_20260702_2e48ae98",
@@ -9493,7 +10726,15 @@
       "formula_display": "-((close - open) / (open + 0.001))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.0037262621266314394,
-      "rank_ic_2026_raw": 0.0037262621266314394
+      "rank_ic_2026_raw": 0.0037262621266314394,
+      "formula_theme": "实体涨跌幅（收盘相对开盘，取负）",
+      "formula_summary": "(收-开)/开 是实体方向。取负偏好收阴/弱势实体。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "(close-open)/open",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：当日实体更弱；因子值低：当日实体更强。"
     },
     {
       "factor_id": "alpha_20260702_80bca4fc",
@@ -9583,7 +10824,15 @@
       "formula_display": "-(rank(ts_corr(close, ts_delta(log(volume + 1), 5), 10)) * ts_corr(open, volume, 10))",
       "sign_baked_into_formula": true,
       "rank_ic_2026": 0.010548592071537449,
-      "rank_ic_2026_raw": 0.010548592071537449
+      "rank_ic_2026_raw": 0.010548592071537449,
+      "formula_theme": "开盘价-成交量相关（取负/排序）",
+      "formula_summary": "看开盘价与成交量是否同向。取负或负相关排序，偏好开盘价与量背离。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_corr(open,volume)",
+        "取负或 rank(-corr)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：开盘-量相关性更低；因子值低：更同向。"
     },
     {
       "factor_id": "ext_1a61d302",
@@ -9622,7 +10871,17 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 4,
-      "report_href": "/reports_weekly_dug/ext_1a61d302.html"
+      "report_href": "/reports_weekly_dug/ext_1a61d302.html",
+      "formula_theme": "价变与量变的时序分位组合",
+      "formula_summary": "把价格变化、成交量变化分别放进自身历史分位再组合。用于识别「价的变化是否异常、量的变化是否异常」以及二者如何加权。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "price Δ 的 ts_rank",
+        "volume Δ 的 ts_rank",
+        "按公式加权/取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相反状态（因取负，对应原始式较小）；因子值低：按组合后更符合该因子定义的价量状态。",
+      "formula_display": "-(ts_rank(ts_delta(close, 5), 10) * ts_rank(ts_delta(volume, 5), 10))"
     },
     {
       "factor_id": "alpha_8669d7ab",
@@ -9658,7 +10917,16 @@
       "materialize": "platform_only",
       "ops": 2,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/alpha_8669d7ab.html"
+      "report_href": "/reports_weekly_dug/alpha_8669d7ab.html",
+      "formula_theme": "振幅变化率（取负）",
+      "formula_summary": "振幅日变化的均值：振幅在扩大还是收缩。取负偏好振幅收缩。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "mean(Δ(high-low)/close)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：振幅扩张更弱；因子值低：振幅扩张更强。",
+      "formula_display": "-(ts_mean(ts_delta(high - low, 1) / (close + 0.001), 10))"
     },
     {
       "factor_id": "ext_8164b3d1",
@@ -9697,7 +10965,17 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 2,
-      "report_href": "/reports_weekly_dug/ext_8164b3d1.html"
+      "report_href": "/reports_weekly_dug/ext_8164b3d1.html",
+      "formula_theme": "近5日涨跌的自身历史分位（窗20，取负=反转）",
+      "formula_summary": "衡量这次 5 日涨跌在自己过去 20 日里有多极端。取负后，自身历史分位越高（涨得越极端）因子越低→短反转。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_delta(close,5)",
+        "ts_rank(...,20)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近端涨幅在自身历史上并不极端偏高；因子值低：处于自身历史强势极端。",
+      "formula_display": "-(ts_rank(ts_delta(close, 5), 20))"
     },
     {
       "factor_id": "alpha_d4af1618",
@@ -9733,7 +11011,17 @@
       "materialize": "platform_only",
       "ops": 2,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/alpha_d4af1618.html"
+      "report_href": "/reports_weekly_dug/alpha_d4af1618.html",
+      "formula_theme": "近5日涨跌的自身历史分位（窗21，取负=反转）",
+      "formula_summary": "衡量这次 5 日涨跌在自己过去 21 日里有多极端。取负后，自身历史分位越高（涨得越极端）因子越低→短反转。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_delta(close,5)",
+        "ts_rank(...,21)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近端涨幅在自身历史上并不极端偏高；因子值低：处于自身历史强势极端。",
+      "formula_display": "-(ts_rank(ts_delta(close, 5), 21))"
     },
     {
       "factor_id": "alpha_63ac960e",
@@ -9769,7 +11057,16 @@
       "materialize": "platform_only",
       "ops": 3,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/alpha_63ac960e.html"
+      "report_href": "/reports_weekly_dug/alpha_63ac960e.html",
+      "formula_theme": "高低点扩张速度（取负）",
+      "formula_summary": "高点变化减低点变化的均值，近似波段上下沿扩张。取负偏好上下沿不再扩张。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "mean(Δhigh-Δlow)",
+        "取负或负向 rank",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：高低点扩张更弱；因子值低：高低点扩张更强。",
+      "formula_display": "-(ts_mean(ts_delta(high, 1) - ts_delta(low, 1), 10))"
     },
     {
       "factor_id": "alpha_72b9ca02",
@@ -9805,7 +11102,17 @@
       "materialize": "platform_only",
       "ops": 2,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/alpha_72b9ca02.html"
+      "report_href": "/reports_weekly_dug/alpha_72b9ca02.html",
+      "formula_theme": "近5日涨跌的自身历史分位（窗10，取负=反转）",
+      "formula_summary": "衡量这次 5 日涨跌在自己过去 10 日里有多极端。取负后，自身历史分位越高（涨得越极端）因子越低→短反转。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_delta(close,5)",
+        "ts_rank(...,10)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：近端涨幅在自身历史上并不极端偏高；因子值低：处于自身历史强势极端。",
+      "formula_display": "-(ts_rank(ts_delta(close, 5), 10))"
     },
     {
       "factor_id": "ext_c9ea10b1",
@@ -9844,7 +11151,17 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 4,
-      "report_href": "/reports_weekly_dug/ext_c9ea10b1.html"
+      "report_href": "/reports_weekly_dug/ext_c9ea10b1.html",
+      "formula_theme": "价变与量变的时序分位组合",
+      "formula_summary": "把价格变化、成交量变化分别放进自身历史分位再组合。用于识别「价的变化是否异常、量的变化是否异常」以及二者如何加权。",
+      "formula_steps": [
+        "price Δ 的 ts_rank",
+        "volume Δ 的 ts_rank",
+        "按公式加权/取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：按组合后更符合该因子定义的价量状态；因子值低：相反状态。",
+      "formula_display": "ts_rank(ts_delta(close, 5), -(20)) + ts_rank(ts_delta(volume, 5), 20) * 0.1"
     },
     {
       "factor_id": "alpha_62dee548",
@@ -9880,7 +11197,17 @@
       "materialize": "platform_only",
       "ops": 4,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/alpha_62dee548.html"
+      "report_href": "/reports_weekly_dug/alpha_62dee548.html",
+      "formula_theme": "价变与量变的时序分位组合",
+      "formula_summary": "把价格变化、成交量变化分别放进自身历史分位再组合。用于识别「价的变化是否异常、量的变化是否异常」以及二者如何加权。",
+      "formula_steps": [
+        "price Δ 的 ts_rank",
+        "volume Δ 的 ts_rank",
+        "按公式加权/取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：按组合后更符合该因子定义的价量状态；因子值低：相反状态。",
+      "formula_display": "ts_rank(ts_delta(close, 5), 20) * -1 + ts_rank(ts_delta(volume, 5), 20) * 0.1"
     },
     {
       "factor_id": "ext_795fed55",
@@ -9919,7 +11246,17 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 4,
-      "report_href": "/reports_weekly_dug/ext_795fed55.html"
+      "report_href": "/reports_weekly_dug/ext_795fed55.html",
+      "formula_theme": "低波×近期涨幅（质量动量）",
+      "formula_summary": "截面上波动越低分越高，再乘近期涨幅分位：要「涨但不大起大落」的质量动量。",
+      "formula_steps": [
+        "rank(-ts_std(ret))",
+        "rank(ts_delta(close))",
+        "相乘",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：相对低波且近期偏强；因子值低：高波或近期偏弱。",
+      "formula_display": "rank(-ts_std(ret, 60)) * rank(ts_delta(close, 20))"
     },
     {
       "factor_id": "ext_970118c9",
@@ -9955,7 +11292,16 @@
       "materialize": "platform_only",
       "ops": 0,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/ext_970118c9.html"
+      "report_href": "/reports_weekly_dug/ext_970118c9.html",
+      "formula_theme": "实体占振幅比例（取负）",
+      "formula_summary": "实体/振幅：越大说明方向性越强。取负偏好实体弱、上下影主导的日子。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "(close-open)/(high-low)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：实体占振幅更小；因子值低：实体占振幅更大。",
+      "formula_display": "-((close - open) / ((high - low) + 0.001))"
     },
     {
       "factor_id": "ext_a8a4e3be",
@@ -9994,7 +11340,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 2,
-      "report_href": "/reports_weekly_dug/ext_a8a4e3be.html"
+      "report_href": "/reports_weekly_dug/ext_a8a4e3be.html",
+      "formula_theme": "收盘/最低比的变化（取负排序）",
+      "formula_summary": "close/low 的变化：变大=收得更远离最低。取负排序偏好该比值在下降（更贴低点）。",
+      "formula_steps": [
+        "Δ(close/low)",
+        "rank(-Δ)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：收盘相对最低价更在贴地；因子值低：收盘相对最低价抬得更高。",
+      "formula_display": "rank(-ts_delta(close / (low + 0.001), 5))"
     },
     {
       "factor_id": "ext_5af301be",
@@ -10033,7 +11388,17 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 5,
-      "report_href": "/reports_weekly_dug/ext_5af301be.html"
+      "report_href": "/reports_weekly_dug/ext_5af301be.html",
+      "formula_theme": "均线多头差×量波动（取负）",
+      "formula_summary": "短均-长均>0 是均线多头；再乘量波动分位。取负偏好均线空头或量波动特定组合的反面。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "rank(短均-长均)",
+        "× rank(量波动/量)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：该组合原始分更低；因子值低：短均强于长均且量波动大。",
+      "formula_display": "-(rank(ts_mean(close, 10) - ts_mean(close, 60)) * rank(ts_std(volume, 10) / (volume + 1)))"
     },
     {
       "factor_id": "ext_2b085f69",
@@ -10072,7 +11437,15 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 1,
-      "report_href": "/reports_weekly_dug/ext_2b085f69.html"
+      "report_href": "/reports_weekly_dug/ext_2b085f69.html",
+      "formula_theme": "量能回看比",
+      "formula_summary": "过去某日成交量/今日量：今日相对更缩量时比值大。",
+      "formula_steps": [
+        "delay(volume)/volume",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：今日相对过去更缩量；因子值低：今日相对过去更放量。",
+      "formula_display": "delay(volume, 4) / (volume + 1)"
     },
     {
       "factor_id": "ext_7b97662c",
@@ -10111,7 +11484,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 3,
-      "report_href": "/reports_weekly_dug/ext_7b97662c.html"
+      "report_href": "/reports_weekly_dug/ext_7b97662c.html",
+      "formula_theme": "波动×贴长期低点",
+      "formula_summary": "在贴近60日低点的股票里，再看波动大小的排序加权。",
+      "formula_steps": [
+        "ts_std(ret)",
+        "× rank(min60/close)",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：更贴长期低点（并带波动加权）；因子值低：远离长期低点。",
+      "formula_display": "ts_std(ret, 10) * rank(ts_min(low, 60) / (close + 0.001))"
     },
     {
       "factor_id": "alpha_8f53457f",
@@ -10147,7 +11529,16 @@
       "materialize": "platform_only",
       "ops": 3,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/alpha_8f53457f.html"
+      "report_href": "/reports_weekly_dug/alpha_8f53457f.html",
+      "formula_theme": "动量加速度（取负）",
+      "formula_summary": "近5日涨跌减去再往前5日涨跌，衡量动量是在加速还是减速。取负偏好减速/动量衰竭。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "Δ5(t) - Δ5(t-5)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：动量加速度更低；因子值低：动量仍在加速。",
+      "formula_display": "-(ts_delta(close, 5) - delay(ts_delta(close, 5), 5))"
     },
     {
       "factor_id": "ext_0430ef8f",
@@ -10183,7 +11574,16 @@
       "materialize": "platform_only",
       "ops": 0,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/ext_0430ef8f.html"
+      "report_href": "/reports_weekly_dug/ext_0430ef8f.html",
+      "formula_theme": "收盘相对VWAP溢价（取负=折价）",
+      "formula_summary": "(close-vwap)/vwap>0 表示收在成本上方。取负偏好收在 VWAP 下方（折价收盘）。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "(close-vwap)/vwap",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：更折价于 VWAP；因子值低：更溢价于 VWAP。",
+      "formula_display": "-((close - vwap) / (vwap + 0.001))"
     },
     {
       "factor_id": "ext_70f2c10b",
@@ -10222,7 +11622,15 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 0,
-      "report_href": "/reports_weekly_dug/ext_70f2c10b.html"
+      "report_href": "/reports_weekly_dug/ext_70f2c10b.html",
+      "formula_theme": "VWAP/收盘（成本高于现价）",
+      "formula_summary": "VWAP÷close>1 说明均价成本还在现价上方，现价相对当天成本偏弱。",
+      "formula_steps": [
+        "vwap/close",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：现价低于 VWAP（偏弱）；因子值低：现价高于 VWAP。",
+      "formula_display": "vwap / (close + 0.001)"
     },
     {
       "factor_id": "alpha_44165a73",
@@ -10258,7 +11666,16 @@
       "materialize": "platform_only",
       "ops": 2,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/alpha_44165a73.html"
+      "report_href": "/reports_weekly_dug/alpha_44165a73.html",
+      "formula_theme": "放量下跌结构（复合）",
+      "formula_summary": "用 -ret 乘均量、VWAP、与 (high-close) 等，强化「跌+有量+上影/冲高回落」一类结构的排序。",
+      "formula_steps": [
+        "组合 -ret、均量、vwap、(high-close)",
+        "截面 rank",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：更符合放量偏弱/冲高回落结构；因子值低：不符合该结构。",
+      "formula_display": "rank((((-ret) * ts_mean(volume, 20)) * vwap) * (high - close))"
     },
     {
       "factor_id": "alpha_43c76a50",
@@ -10294,7 +11711,16 @@
       "materialize": "platform_only",
       "ops": 0,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/alpha_43c76a50.html"
+      "report_href": "/reports_weekly_dug/alpha_43c76a50.html",
+      "formula_theme": "下影/开盘回撤（取负）",
+      "formula_summary": "(开盘-最低)/开盘 大=盘中深砸。取负偏好盘中回撤小。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "(open-low)/open",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：开盘后下探更浅；因子值低：开盘后下探更深。",
+      "formula_display": "-((open - low) / (open + 0.001))"
     },
     {
       "factor_id": "ext_15c9852e",
@@ -10333,7 +11759,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 2,
-      "report_href": "/reports_weekly_dug/ext_15c9852e.html"
+      "report_href": "/reports_weekly_dug/ext_15c9852e.html",
+      "formula_theme": "成交量变化自身分位（取负）",
+      "formula_summary": "量变在自身历史上的分位。取负偏好量变并不极端放大。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "ts_rank(Δvolume)",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：量变自身分位更低；因子值低：量变极端放大。",
+      "formula_display": "-(ts_rank(ts_delta(volume, 5), 20))"
     },
     {
       "factor_id": "ext_ef61652c",
@@ -10369,7 +11804,16 @@
       "materialize": "platform_only",
       "ops": 0,
       "soft_gate": true,
-      "report_href": "/reports_weekly_dug/ext_ef61652c.html"
+      "report_href": "/reports_weekly_dug/ext_ef61652c.html",
+      "formula_theme": "收盘在当日均价位置（取负）",
+      "formula_summary": "(2*close-high-low)/open 近似描述收盘相对当日高低中点的位置。取负翻转强弱方向。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "(2*close - high - low)/open",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：对应原始「收盘偏强」更弱的一侧；因子值低：收盘明显偏强。",
+      "formula_display": "-((2 * close - high - low) / (open + 0.001))"
     },
     {
       "factor_id": "ext_7d2c72f2",
@@ -10408,7 +11852,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 4,
-      "report_href": "/reports_weekly_dug/ext_7d2c72f2.html"
+      "report_href": "/reports_weekly_dug/ext_7d2c72f2.html",
+      "formula_theme": "高低点扩张速度（取负）",
+      "formula_summary": "高点变化减低点变化的均值，近似波段上下沿扩张。取负偏好上下沿不再扩张。",
+      "formula_steps": [
+        "mean(Δhigh-Δlow)",
+        "取负或负向 rank",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：波段上下沿扩张更弱；因子值低：波段上下沿扩张更强。",
+      "formula_display": "rank(-ts_mean(ts_delta(high, 1) - ts_delta(low, 1), 5))"
     },
     {
       "factor_id": "ext_bdf69396",
@@ -10447,7 +11900,15 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 3,
-      "report_href": "/reports_weekly_dug/ext_bdf69396.html"
+      "report_href": "/reports_weekly_dug/ext_bdf69396.html",
+      "formula_theme": "低点相对收盘抬升天数",
+      "formula_summary": "看 low/close 日变化的符号均值：正值多说明低点相对收盘在抬升的天数更多。",
+      "formula_steps": [
+        "sign(Δ(low/close)) 的均值",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：低点相对收盘更常抬升；因子值低：低点相对收盘更常下移。",
+      "formula_display": "ts_mean(sign(ts_delta(low / (close + 0.001), 1)), 5)"
     },
     {
       "factor_id": "ext_f5d88d1a",
@@ -10486,7 +11947,16 @@
       "platform_submit": "submitted",
       "materialize": "platform_only",
       "ops": 3,
-      "report_href": "/reports_weekly_dug/ext_f5d88d1a.html"
+      "report_href": "/reports_weekly_dug/ext_f5d88d1a.html",
+      "formula_theme": "实体涨跌幅（收盘相对开盘，取负）",
+      "formula_summary": "(收-开)/开 是实体方向。取负偏好收阴/弱势实体。 公式已取负以对齐正 RankIC：多头对应原始表达式较小的一侧。",
+      "formula_steps": [
+        "(close-open)/open",
+        "取负",
+        "每个交易日只用当日及历史数据，不用未来信息。"
+      ],
+      "formula_direction": "因子值高：当日实体更弱；因子值低：当日实体更强。",
+      "formula_display": "-(rank((close - open) / (open + 0.001)) * rank((ts_max(high, 5) - close) / (close + 0.001)))"
     }
   ],
   "all_results": [
@@ -17658,7 +19128,7 @@
   ],
   "n_degenerate_filtered": 11,
   "selection_note": "Excluded near-constant / all-zero panels that can fabricate RankIC via ties.",
-  "platform_note": "本周新挖 134 条；主门槛 |RankIC|>2%；不足部分优先补多空Sharpe较好的近门槛因子。",
+  "platform_note": "本周新挖 141 条；硬门槛 |RankIC|>2%。",
   "backtested_at": "2026-08-09T00:40:45.637524",
   "formula_attach": {
     "n_with_dsl": 25,
@@ -18830,5 +20300,9 @@
   "topup_pm_added": 0,
   "topup_pm2_added": 10,
   "topup_sharpe20_added": 3,
-  "topup_ic02_x20_added": 20
+  "topup_ic02_x20_added": 20,
+  "topup_ic02_more_added": 6,
+  "topup_ic02_more_r2_added": 3,
+  "formula_explanations_patched": true,
+  "formula_explanations_quality": "individual_v2"
 }

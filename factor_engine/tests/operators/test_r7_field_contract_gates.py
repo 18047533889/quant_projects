@@ -378,8 +378,22 @@ def test_missing_semantic_mapping():
     sparse = NormalizedFieldPlan(logical_concept="ann", coverage="sparse_event")
     assert missing_semantic_for_plan(sparse) is MissingSemantic.NO_EVENT
 
+    # R17-004: a partial-history FINANCIAL field's missing value is UNKNOWN
+    # (expected but not yet observed), never reinterpreted as "no event".
     financial = NormalizedFieldPlan(logical_concept="rev", coverage="partial_history")
-    assert missing_semantic_for_plan(financial) is MissingSemantic.NO_EVENT
+    assert missing_semantic_for_plan(financial) is MissingSemantic.UNKNOWN
+
+    # ``coverage=partial_history`` IS the financial-pit plan: a missing numeric
+    # financial value is UNKNOWN, never NO_EVENT (R17-004).
+    financial_pit = NormalizedFieldPlan(
+        logical_concept="roe", coverage="partial_history", semantic_kind="roe"
+    )
+    assert missing_semantic_for_plan(financial_pit) is MissingSemantic.UNKNOWN
+
+    # R17-004: a current-snapshot table not covering a historical date is
+    # NOT_APPLICABLE (out-of-coverage), not "no event".
+    current_only = NormalizedFieldPlan(logical_concept="mc", coverage="current_snapshot")
+    assert missing_semantic_for_plan(current_only) is MissingSemantic.NOT_APPLICABLE
 
     dense = NormalizedFieldPlan(logical_concept="close", coverage="historical_panel")
     assert missing_semantic_for_plan(dense) is MissingSemantic.UNKNOWN

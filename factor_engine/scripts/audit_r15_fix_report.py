@@ -19,13 +19,18 @@ the taskbook's own "R11 fixed" comments.
 """
 from __future__ import annotations
 
+import argparse
 import csv
-import json
 import re
+import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-TASKBOK = Path("/home/shw/quant_projects/FactorEngine_全量最终审计整改提示词_20260809.md")
+# R16-012: the taskbook path is repo-relative and CLI-injectable — a hard-coded
+# single-machine path made the report incomplete on any other host.  A missing
+# taskbook is NOT_RUN/ERROR, never a silent empty report.
+DEFAULT_TASKBOK = REPO / ".." / "FactorEngine_全量最终审计整改提示词_20260809.md"
 OUT = REPO / "build" / "r15_audit"
 
 # ---------------------------------------------------------------------------
@@ -88,48 +93,103 @@ def _find_module(marker_file: str) -> Path | None:
     return None
 
 
-def _has_test_cover(test_glob: str) -> bool:
-    for p in (REPO / "tests").rglob("test_*.py"):
-        if re.search(test_glob, p.name):
-            return True
-    return False
+def _passed_junit_nodes(junitxml: Path) -> tuple[set[str], bool]:
+    """R16-011: read the REAL junit report for PASSED test nodes.
+
+    Returns ``(passed_node_files, junit_loaded)`` where ``passed_node_files``
+    is the set of test FILE paths that have at least one passed test node.
+    A missing/unreadable junit is reported honestly (``junit_loaded=False``) —
+    a finding can then only be ``not_run``, never ``fixed``.
+    """
+    if not junitxml.exists():
+        return set(), False
+    try:
+        root = ET.parse(junitxml).getroot()
+    except (ET.ParseError, OSError) as exc:
+        print(f"  WARN: junit unreadable at {junitxml}: {exc}", file=sys.stderr)
+        return set(), False
+    passed: set[str] = set()
+    for tc in root.iter("testcase"):
+        # a passed node has no <failure>/<error> children
+        if any(ch.tag in ("failure", "error") for ch in tc):
+            continue
+        cname = tc.get("classname", "")
+        passed.add(cname.split(".")[-1] if cname else tc.get("name", ""))
+    return passed, True
 
 
-def scan_evidence() -> dict[str, str]:
-    status: dict[str, str] = {}
+def scan_evidence(junitxml: Path) -> dict[str, dict[str, object]]:
+    """R16-011: status + real evidence binding per taskbook item.
+
+    A finding is ``fixed`` ONLY when the distinctive marker is in the CURRENT
+    source AND a PASSED junit node exists under a matching regression-test file.
+    ``test_glob`` alone (file existence) is not proof — the junit passed-node
+    binding is.
+    """
+    passed, junit_loaded = _passed_junit_nodes(junitxml)
+    status: dict[str, dict[str, object]] = {}
     for item, (mod, marker, test_glob) in EVIDENCE.items():
         module = _find_module(mod)
         if module is None:
-            status[item] = "not_applicable"
+            status[item] = {"status": "not_applicable",
+                            "evidence": f"module {mod} absent"}
             continue
         text = module.read_text(encoding="utf-8")
-        if re.search(marker, text) and _has_test_cover(test_glob):
-            status[item] = "fixed"
+        if not re.search(marker, text):
+            status[item] = {"status": "not_fixed",
+                            "evidence": f"marker {marker!r} not in current {mod}"}
+            continue
+        if not junit_loaded:
+            status[item] = {"status": "not_run",
+                            "evidence": "marker present but no junit report to prove "
+                                        "a matching test node passed"}
+            continue
+        matching = sorted(f for f in passed if re.search(test_glob, f))
+        if matching:
+            status[item] = {"status": "fixed",
+                            "evidence": f"marker in {mod} + passed junit node(s): "
+                                        f"{matching[:4]}"}
         else:
-            status[item] = "pending_research" if marker.startswith("checkpoint") else "not_fixed"
+            status[item] = {"status": "not_fixed",
+                            "evidence": f"marker in {mod} but no PASSED junit node "
+                                        f"matching {test_glob!r}"}
     return status
 
 
-def _all_items() -> list[str]:
+def _all_items(taskbok: Path) -> list[str]:
     """Every NEW-0xx / HIST-0xx code in the taskbook, in document order."""
-    if not TASKBOK.exists():
+    if not taskbok.exists():
         return []
-    text = TASKBOK.read_text(encoding="utf-8")
+    text = taskbok.read_text(encoding="utf-8")
     return re.findall(r"\b(NEW-\d{3})\b|\b(HIST-\d{3})\b", text)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--taskbook", default=str(DEFAULT_TASKBOK),
+                        help="R16-012: repo-relative or explicit path to the audit taskbook")
+    parser.add_argument("--junitxml", default=str(OUT / "junit.xml"),
+                        help="pytest junit report proving regression-test nodes passed")
+    args = parser.parse_args(argv)
+
     OUT.mkdir(parents=True, exist_ok=True)
-    evidence = scan_evidence()
-    codes = sorted({a or b for a, b in _all_items()})
+    taskbok = Path(args.taskbook)
+    junitxml = Path(args.junitxml)
+    if not taskbok.exists():
+        # R16-012: a missing taskbook is an ERROR, never a silent empty report.
+        print(f"ERROR: taskbook not found: {taskbok}", file=sys.stderr)
+        return 1
+    evidence = scan_evidence(junitxml)
+    codes = sorted({a or b for a, b in _all_items(taskbok)})
 
     rows: list[dict[str, str]] = []
     for code in codes:
+        rec = evidence.get(code) or {"status": "pending_research",
+                                     "evidence": "open item (checkpoint / null-calibration / real-data)"}
         rows.append({
             "item": code,
-            "status": evidence.get(code, "pending_research"),
-            "evidence": "module marker + regression test" if code in evidence else
-                        "open item (checkpoint / null-calibration / real-data) — see memory",
+            "status": rec["status"],
+            "evidence": rec["evidence"],
         })
 
     csv_path = OUT / "operator_fix_report_by_item.csv"
@@ -171,7 +231,14 @@ def main() -> None:
     print(f"fix report: {csv_path}")
     for status, n in sorted(counts.items()):
         print(f"  {status}: {n}")
+    # R16-011: a claimed-fixed item whose real junit proof is missing (not_run)
+    # is a release FAILURE — a marker-only claim must not pass.
+    if counts.get("not_run", 0):
+        print(f"\nFAIL: {counts['not_run']} claimed-fixed item(s) have no PASSED junit "
+              "node proof (run the regression tests with --junitxml first)", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

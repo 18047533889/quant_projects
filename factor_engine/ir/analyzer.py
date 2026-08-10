@@ -573,23 +573,40 @@ def _is_return_field(name: str) -> bool:
     return any(marker in low for marker in _RETURN_NAME_MARKERS)
 
 
-def _price_basis_of_field(name: str) -> str | None:
+def _price_basis_of_field(name: str, *, market: str | None = None) -> str | None:
     """Resolve a leaf field's canonical ``price_basis`` metadata.
 
     Prefers the registered ``FieldSpec.price_basis`` (populated by the catalog),
     then the canonical-concept registry (legacy DSL spellings such as ``close``
     -> ``raw_close``).  ``None`` means neither carries a price basis, so callers
     keep the legacy name-set as a fallback.
-    """
-    from fields import resolve_field
 
-    try:
-        spec = resolve_field(name)
-        basis = getattr(spec, "price_basis", None)
-        if basis:
-            return basis
-    except Exception:
-        pass
+    R17-037: when ``market`` is given the field is resolved through the
+    per-market registry — a US ``close`` must never be tagged with an A-share
+    price-basis/alias.  ``market=None`` keeps the legacy A-share-bound resolver
+    for pre-market IR paths that cannot prove a market.
+    """
+    if market is not None:
+        try:
+            from fields.resolver import resolve_market_field
+
+            resolved = resolve_market_field(name, market)
+            if resolved is not None:
+                basis = getattr(resolved.spec, "price_basis", None)
+                if basis:
+                    return basis
+        except Exception:
+            pass
+    else:
+        from fields import resolve_field
+
+        try:
+            spec = resolve_field(name)
+            basis = getattr(spec, "price_basis", None)
+            if basis:
+                return basis
+        except Exception:
+            pass
     try:
         from fields.concepts import concept_alias_map, get_concept
 
@@ -642,8 +659,21 @@ def _resolve_operator_price_basis(
     return bases.pop() if len(bases) == 1 else None
 
 
-def _flow_semantics_of_field(name: str) -> str | None:
-    """Resolve a leaf field's reporting-flow semantics from its ``FieldSpec``."""
+def _flow_semantics_of_field(name: str, *, market: str | None = None) -> str | None:
+    """Resolve a leaf field's reporting-flow semantics from its ``FieldSpec``.
+
+    R17-037: market-aware when ``market`` is provided (US quarterly/TTM flow
+    semantics must not be read from the A-share legacy FieldSpec).
+    """
+    if market is not None:
+        try:
+            from fields.resolver import resolve_market_field
+
+            resolved = resolve_market_field(name, market)
+            if resolved is not None:
+                return getattr(resolved.spec, "flow_semantics", None)
+        except Exception:
+            return None
     from fields import resolve_field
 
     try:
@@ -655,7 +685,7 @@ def _flow_semantics_of_field(name: str) -> str | None:
     return getattr(spec, "flow_semantics", None)
 
 
-def validate_typed_input_contracts(ir: IRNode) -> list[str]:
+def validate_typed_input_contracts(ir: IRNode, *, market: str | None = None) -> list[str]:
     """Reject operator families whose typed input contract is violated.
 
     Audit P1-T: ``drawdown(return_series)`` is rejected (drawdown needs a
@@ -671,6 +701,10 @@ def validate_typed_input_contracts(ir: IRNode) -> list[str]:
     R11 P0-22: each validator checks only DIRECT children's own
     ``semantic_attrs`` (never a descendant-leaf scan) — the parent reads each
     child's propagated ``price_basis`` / name instead of sweeping the subtree.
+
+    R17-037: ``market`` threads the per-market registry into the leaf-field
+    price-basis fallback so a US formula is never tagged by the A-share legacy
+    resolver.
     """
     errors: list[str] = []
 
@@ -678,7 +712,7 @@ def validate_typed_input_contracts(ir: IRNode) -> list[str]:
         children = _direct_child_attrs(node)
         if node.op in _DRAWDOWN_FAMILY:
             for name, sem in children:
-                basis = sem.get("price_basis") or _price_basis_of_field(name)
+                basis = sem.get("price_basis") or _price_basis_of_field(name, market=market)
                 if _is_return_field(name) or basis in {"RETURN"}:
                     errors.append(
                         f"{node.op} on return input {name}: drawdown requires a "
@@ -686,7 +720,7 @@ def validate_typed_input_contracts(ir: IRNode) -> list[str]:
                     )
         elif node.op in _SPECTRAL_FAMILY:
             for name, sem in children:
-                basis = sem.get("price_basis") or _price_basis_of_field(name)
+                basis = sem.get("price_basis") or _price_basis_of_field(name, market=market)
                 if name in _RAW_PRICE_FIELDS or basis in {"RAW"}:
                     errors.append(
                         f"{node.op} on raw split-sensitive price {name}: spectral "
@@ -694,7 +728,7 @@ def validate_typed_input_contracts(ir: IRNode) -> list[str]:
                     )
         elif str(node.op).startswith("ashare_limit_"):
             for name, sem in children:
-                basis = sem.get("price_basis") or _price_basis_of_field(name)
+                basis = sem.get("price_basis") or _price_basis_of_field(name, market=market)
                 if name in _CONTINUOUS_PRICE_FIELDS or basis in {"CONTINUOUS", "RETURN"}:
                     errors.append(
                         f"{node.op} on continuous price {name}: A-share limit "
@@ -993,11 +1027,33 @@ def validate_max_domains(analysis: AnalysisResult, *, max_domains: int = 2) -> l
 class Analyzer:
     """Lower Expr trees to IR and derive deterministic causal history."""
 
-    def __init__(self, *, production: bool = False) -> None:
+    def __init__(self, *, production: bool = False, market: str | None = None) -> None:
         # Round-7 WS-C (#273): production mode rejects raw ColumnRefs with no
         # registered FieldSpec (no generic float-panel fallback).  Research mode
         # (default) keeps the explicit opt-in.
         self._production = bool(production)
+        # R17-037: the analyzer resolves leaf fields through the per-market
+        # registry when a market is declared.  ``None`` keeps legacy behavior
+        # (A-share-bound) for callers that cannot prove a market.
+        self._market = market
+
+    def _resolve_field_ir(self, node: Any):
+        """Resolve a ColumnRef/FieldRef through the per-market registry (R17-037).
+
+        When a market is declared the legacy A-share registry is never consulted:
+        a US formula's leaf fields resolve against ``MULTI_MARKET_FIELD_REGISTRY``
+        so A-share aliases / units / price-basis cannot leak into the typed IR.
+        ``market=None`` keeps the legacy resolver for callers that cannot prove
+        a market.
+        """
+        if self._market is not None:
+            from fields.resolver import resolve_market_field
+
+            resolved = resolve_market_field(node, self._market, strict=False)
+            return resolved.spec if resolved is not None else None
+        from fields import resolve_field
+
+        return resolve_field(node)
 
     def lower(self, expr: Expr, *, production: bool | None = None) -> AnalysisResult:
         columns: set[str] = set()
@@ -1017,9 +1073,7 @@ class Analyzer:
 
             if isinstance(node, ColumnRef):
                 columns.add(node.name)
-                from fields import FIELD_REGISTRY, resolve_field
-
-                spec = resolve_field(node)
+                spec = self._resolve_field_ir(node)
                 # Round-7 WS-C (#273): production mode fails closed on an unknown
                 # raw ColumnRef — no generic float-panel fallback.  Research mode
                 # keeps the explicit opt-in.  ``effective_production`` is computed
@@ -1039,9 +1093,19 @@ class Analyzer:
                     referenced_fields[node.name] = spec
                 attrs = {"name": node.name}
                 if isinstance(node, FieldRef):
-                    from fields import FIELD_REGISTRY
+                    from fields.resolver import resolve_market_field
+                    from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
-                    current_hash = FIELD_REGISTRY.catalog_hash()
+                    # R17-037: the field-registry hash comes from the SAME market
+                    # registry the field was resolved in (A/US catalogs differ).
+                    if self._market is not None:
+                        current_hash = (
+                            MULTI_MARKET_FIELD_REGISTRY.registry_for(self._market).catalog_hash()
+                        )
+                    else:
+                        from fields import FIELD_REGISTRY
+
+                        current_hash = FIELD_REGISTRY.catalog_hash()
                     if not node.catalog_hash or node.catalog_hash != current_hash:
                         raise FieldCatalogMismatchError(
                             f"field {node.field_id or node.canonical_name!r} catalog hash "
@@ -1063,11 +1127,15 @@ class Analyzer:
                     )
                 if spec is not None:
                     price_basis = getattr(spec, "price_basis", None) or _price_basis_of_field(
-                        node.name
+                        node.name, market=self._market
                     )
                     attrs.update({
                         "field_id": str(spec.field_id),
-                        "field_registry_hash": FIELD_REGISTRY.catalog_hash(),
+                        "field_registry_hash": (
+                            MULTI_MARKET_FIELD_REGISTRY.registry_for(self._market).catalog_hash()
+                            if self._market is not None
+                            else FIELD_REGISTRY.catalog_hash()
+                        ),
                         "field": spec.name,
                         "dtype": schema.dtype,
                         "unit": spec.unit,
@@ -1286,7 +1354,13 @@ class Analyzer:
                         # R10 #6: a node with NO PIT declaration is UNKNOWN
                         # (None), not safe.  The lattice join propagates UNKNOWN
                         # upward; the production four-layer PIT gate rejects it.
-                        view["pit_safe"] = None
+                        # A literal constant is not a data field — it carries no
+                        # PIT hazard and must not poison the root's pit_safe to
+                        # UNKNOWN (a scalar 3 has no look-ahead).
+                        if child.op == "literal":
+                            view["pit_safe"] = True
+                        else:
+                            view["pit_safe"] = None
                     child_views.append(view)
                 semantic = lattice_join_semantic_attrs(child_views)
                 # knowledge_model / fiscal_grain / universe_id are PIT
@@ -1392,7 +1466,7 @@ class Analyzer:
         grain_errors = validate_field_grain_contracts(ir)
         if grain_errors:
             raise FieldGrainContractError("; ".join(grain_errors))
-        typed_errors = validate_typed_input_contracts(ir)
+        typed_errors = validate_typed_input_contracts(ir, market=self._market)
         if typed_errors:
             raise TypedInputContractError("; ".join(typed_errors))
         semantic_kind_errors = validate_semantic_kind_contracts(ir)

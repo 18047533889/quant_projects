@@ -304,10 +304,19 @@ def _inst_window(
     *,
     min_periods: int = 1,
 ) -> str:
-    """按 instrument 分区的固定长度滚动窗口聚合 SQL（含 min_periods 门槛）。"""
+    """按 instrument 分区的固定长度滚动窗口聚合 SQL（含 min_periods 门槛）。
+
+    ±Inf is dropped to NULL before aggregation (pandas rolling machinery treats
+    Inf as fully missing — excluded from BOTH the aggregate and the min_periods
+    count), so a windowed aggregate over an Inf row matches the pandas reference
+    and the polars long path.
+    """
+    isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+    isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+    safe = f"CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) AND NOT {isinf_fn}(_v) THEN _v END"
     over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
-    cnt = f"COUNT(_v) OVER ({over})"
-    rolled = f"{agg}(_v) OVER ({over})"
+    cnt = f"COUNT({safe}) OVER ({over})"
+    rolled = f"{agg}({safe}) OVER ({over})"
     if min_periods <= 1:
         body = rolled
     else:
@@ -1127,7 +1136,12 @@ def _rolling_corr_lag_sql(
 
 
 def _linear_decay_over_inst(w: int, inner_sql: str, *, dialect: SqlDialect) -> str:
-    """线性衰减加权均值：最近观测权重 ``w``，最早为 ``1``（对齐 ``ts_decay_linear``）。"""
+    """线性衰减加权均值：最近观测权重 ``w``，最早为 ``1``（对齐 ``ts_decay_linear``）。
+
+    ±Inf rows are treated as missing (pandas ``_linear_weighted_1d`` drops them
+    and renormalizes the surviving original weight slots).
+    """
+    isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
     num_parts: list[str] = []
     den_parts: list[str] = []
     for lag in range(w):
@@ -1136,8 +1150,9 @@ def _linear_decay_over_inst(w: int, inner_sql: str, *, dialect: SqlDialect) -> s
             v = "_v"
         else:
             v = f"LAG(_v, {lag}) OVER (PARTITION BY inst ORDER BY ts)"
-        num_parts.append(f"CASE WHEN {v} IS NOT NULL THEN {weight}.0 * {v} ELSE 0 END")
-        den_parts.append(f"CASE WHEN {v} IS NOT NULL THEN {weight}.0 ELSE 0 END")
+        valid = f"{v} IS NOT NULL AND NOT {isinf_fn}({v})"
+        num_parts.append(f"CASE WHEN {valid} THEN {weight}.0 * {v} ELSE 0 END")
+        den_parts.append(f"CASE WHEN {valid} THEN {weight}.0 ELSE 0 END")
     num = " + ".join(num_parts)
     den = f"{_dialect_fn(dialect, 'nullif')}(" + " + ".join(den_parts) + ", 0)"
     return f"SELECT ts, inst, ({num}) / {den} AS _v FROM ({inner_sql}) t"

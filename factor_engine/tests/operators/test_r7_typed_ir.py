@@ -49,8 +49,18 @@ def test_lattice_join_merges_dimensions():
     # Conflicting dimensions are recorded as mixed_ — not silently inherited.
     assert merged["mixed_domain"] == ("price_volume", "fundamental")
     assert merged["mixed_semantic_kind"] == ("PriceRaw", "FinancialCumulativeYTDFlow")
-    # pit_safe ANDs across inputs.
-    assert merged["pit_safe"] is True
+    # pit_safe ANDs across inputs (R10 #6): children with NO PIT declaration are
+    # UNKNOWN (None) — never coerced to safe.  Only a declared True on every
+    # input proves the root safe.
+    assert merged["pit_safe"] is None
+    assert lattice_join_semantic_attrs([
+        {"pit_safe": True},
+        {"pit_safe": True},
+    ])["pit_safe"] is True
+    assert lattice_join_semantic_attrs([
+        {"pit_safe": True},
+        {"pit_safe": None},
+    ])["pit_safe"] is None
 
 
 def test_lattice_join_single_child_propagates_scalar():

@@ -232,23 +232,39 @@ def build_all() -> None:
     )
 
     # ------------------------------------------------------------ dump 7 (golden)
+    # R16-003: a real GoldenNullRunner — the file's existence no longer stands
+    # in for the battery actually running.  Every applicable canonical emits
+    # (canonical, test_id, outcome); NOT_RUN/AUDIT_ERROR outcomes are explicit
+    # and never count as certified.
+    golden = _golden_null_runner(canonicals, reg)
+    golden_outcomes = [g for g in golden if g["outcome"] in ("PASS", "FAIL")]
     (OUT / "golden_null_test_report.json").write_text(
         json.dumps({
-            "note": "golden/null battery executed separately (tests/operator_golden); "
-                    "this dump records which production candidates have param_specs "
-                    "fixtures runnable by semantic_audit.contract_fixture.",
-            "production_candidates_with_specs": sum(
-                1 for r in rows if r["production_certified"] and r["n_param_specs"] > 0
-            ),
+            "runner": "GoldenNullRunner",
+            "records": golden,
+            "counts": {
+                "total": len(golden),
+                "pass": sum(1 for g in golden if g["outcome"] == "PASS"),
+                "fail": sum(1 for g in golden if g["outcome"] == "FAIL"),
+                "not_applicable": sum(1 for g in golden if g["outcome"] == "N/A"),
+                "not_run": sum(1 for g in golden if g["outcome"] == "NOT_RUN"),
+                "audit_error": sum(1 for g in golden if g["outcome"] == "AUDIT_ERROR"),
+            },
+            "covered_canonical_hash": _set_hash({g["canonical"] for g in golden_outcomes}),
         }, ensure_ascii=False, indent=1),
         encoding="utf-8",
     )
 
     # --------------------------------------------------- dump 5 (A-share coverage)
-    ashare_rows = _ashare_coverage(canonicals, reg)
+    # R16-001: full-registry coverage + set-equality meta (no 200-slice).
+    ashare_rows, ashare_meta = _ashare_coverage(canonicals, reg)
     pd.DataFrame(ashare_rows).to_csv(OUT / "ashare_practical_coverage.csv", index=False)
+    (OUT / "ashare_coverage_meta.json").write_text(
+        json.dumps(ashare_meta, ensure_ascii=False, indent=1, default=str), encoding="utf-8"
+    )
 
     # --------------------------------------------------- dump 3 (semantic dup)
+    # R16-002: full-registry duplicate scan (no 300-slice).
     dup = _semantic_duplicates(canonicals, reg)
     (OUT / "semantic_duplicate_report.json").write_text(
         json.dumps(dup, ensure_ascii=False, indent=1, default=str), encoding="utf-8"
@@ -262,6 +278,82 @@ def build_all() -> None:
         print(f"  {p.name}")
 
 
+def _set_hash(names: set[str]) -> str:
+    """Stable coverage-set hash (R16-001/002/003)."""
+    import hashlib
+
+    return hashlib.sha256(
+        json.dumps(sorted(names), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:16]
+
+
+def _golden_null_runner(canonicals: list[str], reg) -> list[dict[str, object]]:
+    """R16-003: per-canonical golden/null battery with explicit outcomes.
+
+    Every applicable canonical emits ``(canonical, test_id, outcome)`` where
+    outcome is one of PASS / FAIL / N/A / NOT_RUN / AUDIT_ERROR — the file's
+    existence no longer stands in for the battery running, and a NOT_RUN /
+    AUDIT_ERROR outcome never counts as certified.
+    """
+    from cleaned_operators.operator_surface import classify_canonical
+
+    panel = _synthetic_panel(n_rows=60, n_cols=3, seed=7)
+    constant = pd.DataFrame(
+        np.full_like(panel.to_numpy(dtype=float), 1.0),
+        index=panel.index,
+        columns=panel.columns,
+    )
+    records: list[dict[str, object]] = []
+    for canon in canonicals:
+        op = reg.get(canon)
+        surface = classify_canonical(canon)
+        # Golden/null apply to factor-shaped canonicals; internal/unsafe/compat
+        # aliases are not applicable (they are not factor terminals).
+        if op is None:
+            records.append({"canonical": canon, "test_id": "golden::synthetic",
+                            "outcome": "NOT_RUN", "reason": "no runtime operator"})
+            continue
+        if surface not in ("daily", "extended"):
+            records.append({"canonical": canon, "test_id": "golden::synthetic",
+                            "outcome": "N/A", "reason": f"surface={surface}"})
+            continue
+        # --- golden::synthetic: runs, output shape preserved, not all-NaN ---
+        try:
+            out = op.calculate(panel)
+            arr = out.to_numpy(dtype=float)
+        except Exception as exc:  # noqa: BLE001
+            records.append({"canonical": canon, "test_id": "golden::synthetic",
+                            "outcome": "AUDIT_ERROR", "reason": f"{type(exc).__name__}: {exc}"})
+            continue
+        if arr.shape != panel.shape:
+            records.append({"canonical": canon, "test_id": "golden::synthetic",
+                            "outcome": "FAIL", "reason": f"shape {arr.shape} != {panel.shape}"})
+            continue
+        if not np.isfinite(arr).any():
+            records.append({"canonical": canon, "test_id": "golden::synthetic",
+                            "outcome": "FAIL", "reason": "all-NaN on normal panel"})
+            continue
+        records.append({"canonical": canon, "test_id": "golden::synthetic",
+                        "outcome": "PASS", "reason": "shape+finite ok"})
+        # --- null::constant: constant input must not silently fabricate
+        #     spurious finite signal (NaN or constant is acceptable) ---
+        try:
+            c_out = op.calculate(constant)
+            c_arr = c_out.to_numpy(dtype=float)
+        except Exception as exc:  # noqa: BLE001
+            records.append({"canonical": canon, "test_id": "null::constant",
+                            "outcome": "AUDIT_ERROR", "reason": f"{type(exc).__name__}: {exc}"})
+            continue
+        finite_fraction = float(np.isfinite(c_arr).mean())
+        if finite_fraction < 0.5 or np.nanstd(c_arr) == 0 or np.isnan(np.nanstd(c_arr)):
+            records.append({"canonical": canon, "test_id": "null::constant",
+                            "outcome": "PASS", "reason": f"constant ok (finite={finite_fraction:.2f})"})
+        else:
+            records.append({"canonical": canon, "test_id": "null::constant",
+                            "outcome": "FAIL", "reason": f"constant panel produced varying signal (finite={finite_fraction:.2f})"})
+    return records
+
+
 def _synthetic_panel(n_rows: int = 60, n_cols: int = 3, seed: int = 7) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     idx = pd.date_range("2024-01-01", periods=n_rows, freq="B")
@@ -269,23 +361,36 @@ def _synthetic_panel(n_rows: int = 60, n_cols: int = 3, seed: int = 7) -> pd.Dat
                         columns=[f"S{i:03d}" for i in range(n_cols)])
 
 
-def _ashare_coverage(canonicals: list[str], reg) -> list[dict[str, object]]:
-    """Practical A-share-style coverage on a synthetic panel: unique/std/Inf/
-    NaN-streak per canonical (bounded subset — running 1400 ops is heavy)."""
+def _ashare_coverage(canonicals: list[str], reg) -> tuple[list[dict[str, object]], dict[str, object]]:
+    """R16-001: FULL-registry A-share-style coverage — no fixed slice.
+
+    The old ``sample = canonicals[:200]`` silently excluded every canonical past
+    rank 200 from the master report.  Now EVERY canonical gets an outcome; one
+    that cannot be constructed/executed is recorded as ``NOT_RUN``/``AUDIT_ERROR``
+    (never dropped), and the emitted meta record carries the audited-set hash so
+    ``audited == FinalRegistrySnapshot.canonicals`` can be proven by set equality.
+    """
+    import hashlib
+
     panel = _synthetic_panel()
     rows: list[dict[str, object]] = []
-    # Limit to a representative sample to keep the audit tractable.
-    sample = canonicals[:200]
-    for canon in sample:
+    not_run: list[dict[str, object]] = []
+    audited: set[str] = set()
+    for canon in canonicals:
         op = reg.get(canon)
         if op is None:
+            not_run.append({"canonical": canon, "reason": "no runtime operator"})
             continue
         try:
             out = op.calculate(panel)
             arr = out.to_numpy(dtype=float)
-        except Exception:  # noqa: BLE001
-            rows.append({"canonical": canon, "runnable": False})
+        except Exception as exc:  # noqa: BLE001
+            not_run.append({
+                "canonical": canon,
+                "reason": f"AUDIT_ERROR {type(exc).__name__}: {exc}",
+            })
             continue
+        audited.add(canon)
         flat = arr[np.isfinite(arr)]
         streaks: list[int] = []
         for j in range(arr.shape[1]):
@@ -306,64 +411,112 @@ def _ashare_coverage(canonicals: list[str], reg) -> list[dict[str, object]]:
             "inf_count": int(np.isinf(arr).sum()),
             "longest_nan_streak": int(max(streaks)) if streaks else 0,
         })
-    return rows
+    covered = audited | {r["canonical"] for r in not_run}
+    covered_hash = hashlib.sha256(
+        json.dumps(sorted(covered), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:16]
+    meta = {
+        "registry_total": len(canonicals),
+        "audited": len(audited),
+        "not_run": len(not_run),
+        "not_run_records": not_run,
+        "covered_canonical_hash": covered_hash,
+        "set_equality": covered == set(canonicals),
+        "fully_audited": audited == set(canonicals),
+    }
+    return rows, meta
 
 
 def _semantic_duplicates(canonicals: list[str], reg) -> dict[str, object]:
-    """Exact / affine / rank / corr duplicate clusters on a synthetic battery.
+    """R16-002: FULL-registry exact/affine/corr duplicate clusters.
 
-    Runs on the bounded first-300 sample (all pairwise is O(n^2) over 1400 ops);
-    the report states the sample so the numbers are honest.
+    Every public canonical enters candidate generation.  O(N²) over the full
+    registry is bucketed by (input_grain, output_unit, scalar-arity) so only
+    contracts that COULD duplicate are compared pairwise; each canonical still
+    gets a machine outcome (member of a cluster, or ``checked_not_duplicate``).
     """
+    import hashlib
+
     panel = _synthetic_panel(n_rows=40, n_cols=3, seed=11)
-    sample = canonicals[:300]
     out_map: dict[str, np.ndarray] = {}
-    for canon in sample:
+    meta_map: dict[str, tuple[str, str, int]] = {}
+    not_run: list[dict[str, object]] = []
+    for canon in canonicals:
         op = reg.get(canon)
         if op is None:
+            not_run.append({"canonical": canon, "reason": "no runtime operator"})
             continue
+        entry = reg._catalog.get(canon, {})
+        bucket = (
+            str(entry.get("input_grain") or ""),
+            str(entry.get("output_unit") or ""),
+            int(_param_names(canon, reg).__len__()),
+        )
         try:
             out = op.calculate(panel).to_numpy(dtype=float)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            not_run.append({
+                "canonical": canon,
+                "reason": f"AUDIT_ERROR {type(exc).__name__}: {exc}",
+            })
             continue
         if out.size == 0 or not np.isfinite(out).any():
+            not_run.append({"canonical": canon, "reason": "no finite output on battery"})
             continue
         out_map[canon] = out
+        meta_map[canon] = bucket
 
-    names = sorted(out_map)
-    # kind -> (base, [duplicates])
+    from collections import defaultdict as _dd
+
+    buckets: dict[tuple[str, str, int], list[str]] = _dd(list)
+    for canon in out_map:
+        buckets[meta_map[canon]].append(canon)
+
     clusters: dict[str, list[tuple[str, list[str]]]] = defaultdict(list)
-    for i in range(len(names)):
-        a = names[i]
-        va = out_map[a].ravel()
-        va_f = va[np.isfinite(va)]
-        if va_f.size < 3:
-            continue
-        for j in range(i + 1, len(names)):
-            b = names[j]
-            vb = out_map[b].ravel()
-            both = np.isfinite(va) & np.isfinite(vb)
-            if both.sum() < 3:
+    checked: set[str] = set()
+    for bucket_names in buckets.values():
+        names = sorted(bucket_names)
+        for i in range(len(names)):
+            a = names[i]
+            va = out_map[a].ravel()
+            va_f = va[np.isfinite(va)]
+            if va_f.size < 3:
                 continue
-            u, v = va[both], vb[both]
-            if np.allclose(u, v, rtol=1e-9, atol=1e-12):
-                kind = "exact"
-            elif abs(u.mean()) > 1e-12 and np.allclose(
-                    u / u.mean(), v / v.mean(), rtol=1e-9, atol=1e-12):
-                kind = "affine"
-            elif np.corrcoef(u, v)[0, 1] > 0.9999:
-                kind = "corr"
-            else:
-                continue
-            base = a
-            entry = next((e for e in clusters[kind] if e[0] == base), None)
-            if entry is None:
-                clusters[kind].append((base, [b]))
-            else:
-                entry[1].append(b)
+            for j in range(i + 1, len(names)):
+                b = names[j]
+                vb = out_map[b].ravel()
+                both = np.isfinite(va) & np.isfinite(vb)
+                if both.sum() < 3:
+                    continue
+                u, v = va[both], vb[both]
+                if np.allclose(u, v, rtol=1e-9, atol=1e-12):
+                    kind = "exact"
+                elif abs(u.mean()) > 1e-12 and np.allclose(
+                        u / u.mean(), v / v.mean(), rtol=1e-9, atol=1e-12):
+                    kind = "affine"
+                elif np.corrcoef(u, v)[0, 1] > 0.9999:
+                    kind = "corr"
+                else:
+                    continue
+                checked.add(a)
+                checked.add(b)
+                base = a
+                entry = next((e for e in clusters[kind] if e[0] == base), None)
+                if entry is None:
+                    clusters[kind].append((base, [b]))
+                else:
+                    entry[1].append(b)
+    covered = set(out_map) | {r["canonical"] for r in not_run}
+    covered_hash = hashlib.sha256(
+        json.dumps(sorted(covered), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:16]
     return {
-        "note": "bounded sample of first 300 canonicals; pairwise exact/affine/0.9999-corr",
+        "note": "FULL-registry duplicate scan (bucketed by grain/unit/arity); "
+                "every canonical has an outcome",
         "sample_size": len(out_map),
+        "not_run": not_run,
+        "covered_canonical_hash": covered_hash,
+        "set_equality": covered == set(canonicals),
         "clusters": {
             kind: [{"base": base, "duplicates": dups} for base, dups in entries]
             for kind, entries in clusters.items()

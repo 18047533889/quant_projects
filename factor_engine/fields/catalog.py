@@ -41,9 +41,13 @@ def _table(
     revision_order=(),
     current_snapshot_only=False,
     cardinality="many_to_one",
-    strict_pit_allowed=True,
+    strict_pit_allowed=None,
     metadata=None,
 ):
+    # R17-013: the helper default is UNKNOWN (None), matching the TableSpec
+    # default.  A table whose PIT eligibility was never declared must NOT
+    # silently become PIT-safe; every production-readable table declares
+    # True/False explicitly (+ reason in metadata).
     return TableSpec(
         name=name,
         dataset=dataset,
@@ -71,20 +75,29 @@ def _table(
 
 
 ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
-    _table("StockDailyBar", "ashare_stock_daily", domain="price_volume"),
+    # R17-013: every production-readable table declares strict_pit_allowed
+    # explicitly (never the UNKNOWN default); reason lives in metadata.
+    _table("StockDailyBar", "ashare_stock_daily", domain="price_volume",
+           strict_pit_allowed=True,
+           metadata={"pit_reason": "exact_daily D1 panel; PIT-safe"}),
     _table(
         "StockMinuteBar", "ashare_stock_minute", time="QuoteTime",
         domain="price_volume", frequency="minute", table_kind="minute_session",
         join_policy="minute_session", timezone="Asia/Shanghai",
-        session_calendar="ashare",
+        session_calendar="ashare", strict_pit_allowed=True,
         # Round-7 WS-E #293: the A-share COS minute mirror labels the one-minute
         # bar with its END timestamp (09:31 = the 09:30-09:31 bar, last 15:00).
         # Declared here so the runtime session slotting never guesses from a
         # 09:30/13:00 heuristic.
-        metadata={"bar_timestamp_role": "bar_end", "bar_timestamp_convention": "bar_end"},
+        metadata={"bar_timestamp_role": "bar_end", "bar_timestamp_convention": "bar_end",
+                  "pit_reason": "exact minute_session; PIT-safe"},
     ),
-    _table("StockValuationDaily", "ashare_stock_valuation_daily", domain="valuation"),
-    _table("StockCapitalDaily", "ashare_stock_capital_daily", domain="capital", join_policy="state_asof"),
+    _table("StockValuationDaily", "ashare_stock_valuation_daily", domain="valuation",
+           strict_pit_allowed=True,
+           metadata={"pit_reason": "exact_daily D1; PIT-safe"}),
+    _table("StockCapitalDaily", "ashare_stock_capital_daily", domain="capital",
+           join_policy="state_asof", strict_pit_allowed=True,
+           metadata={"pit_reason": "S1 snapshot with explicit max_staleness policy (R17-071); exact when fresh"}),
     # Financial tables: knowledge = PubDate (announcement day), period =
     # ReportPeriodEndDate.  revision = UpdateTime is the COS write timestamp used
     # ONLY as a deterministic in-snapshot tiebreaker (never as a historical

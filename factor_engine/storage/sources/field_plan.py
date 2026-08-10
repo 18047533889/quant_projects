@@ -72,7 +72,14 @@ class NormalizedFieldPlan:
     knowledge_time: str | None = None
     effective_time: str | None = None
     revision_order: tuple[str, ...] = field(default_factory=tuple)
+    # R17-003: ``universe`` was overloaded with three different meanings across
+    # the two plan builders (registry path -> spec.domain, catalog path ->
+    # field.market).  It is now a DEPRECATED compatibility view; the three
+    # explicit fields below are authoritative.
     universe: str | None = None
+    market: str | None = None
+    universe_id: str | None = None
+    semantic_domain: str | None = None
     coverage: str | None = None
     mining_allowed: bool = True
     price_basis: str | None = None
@@ -83,7 +90,11 @@ class NormalizedFieldPlan:
     allowed_operator_families: tuple[str, ...] = field(default_factory=tuple)
     null_policy: str = "preserve"
     semantic_kind: str | None = None
-    strict_pit_allowed: bool = True
+    # R17-005: tri-state PIT eligibility.  ``None`` = UNKNOWN (never declared).
+    # Production treats ``None`` as fail-closed (cannot prove PIT-safe is not
+    # PIT-safe); the raw-plan default was ``True``, which silently certified
+    # every undeclared field as PIT-eligible.
+    strict_pit_allowed: bool | None = None
     current_snapshot_only: bool = False
     role: str = "feature"
 
@@ -138,24 +149,66 @@ def _catalog_coverage(field) -> str | None:
     return _coverage_from_temporal_model(getattr(field, "temporal_model", None))
 
 
-def _table_current_snapshot_only(table: str | None) -> bool:
-    """Look up a table's ``current_snapshot_only`` from the FE FIELD_REGISTRY."""
+def _resolve_table_spec(table: str | None, market: str | None) -> TableSpec | None:
+    """Resolve a ``TableSpec`` within an EXPLICIT market (R17-002).
+
+    Same-named tables carry DIFFERENT semantics per market (US
+    ``StockValuationDaily`` is an X0 current snapshot while A-share's is a full
+    D1; ``StockCapitalDaily`` is split/dual-schema in US vs S1 in A-share).
+    Resolving a bare table name against the legacy A-share-only
+    ``FIELD_REGISTRY`` would interpret a US table with A-share semantics.
+    """
     if not table:
-        return False
+        return None
     try:
+        if market:
+            from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+
+            return MULTI_MARKET_FIELD_REGISTRY.registry_for(market).resolve_table(
+                str(table)
+            )
         from fields import FIELD_REGISTRY
 
-        table_spec = FIELD_REGISTRY.resolve_table(str(table))
-        return bool(getattr(table_spec, "current_snapshot_only", False))
+        return FIELD_REGISTRY.resolve_table(str(table))
     except Exception:  # pragma: no cover - defensive
-        return False
+        return None
 
 
-def plan_from_field_spec(name: str, spec: Any) -> NormalizedFieldPlan:
-    """Build a plan from a FactorEngine ``FieldSpec`` (registry)."""
+def _table_current_snapshot_only(table: str | None, market: str | None) -> bool:
+    """Look up a table's ``current_snapshot_only`` within one market."""
+    table_spec = _resolve_table_spec(table, market)
+    return bool(table_spec is not None and getattr(table_spec, "current_snapshot_only", False))
+
+
+def _market_from_dataset(dataset: str | None) -> str | None:
+    """Infer the market from a physical dataset name when no explicit market.
+
+    DataAccess dataset names are market-prefixed (``ashare_stock_*`` /
+    ``us_stock_*``).  ``None`` when the dataset does not declare a market.
+    """
+    if not dataset:
+        return None
+    low = str(dataset).strip().lower()
+    if low.startswith("us_"):
+        return "us"
+    if low.startswith("ashare_") or low.startswith("cn_"):
+        return "ashare"
+    return None
+
+
+def plan_from_field_spec(name: str, spec: Any, *, market: str | None = None) -> NormalizedFieldPlan:
+    """Build a plan from a FactorEngine ``FieldSpec`` (registry).
+
+    R17-003: ``universe`` is split into ``market`` / ``universe_id`` /
+    ``semantic_domain``.  The registry path now keeps the three explicit
+    fields; ``universe`` remains a deprecated compatibility view.
+    """
+    dataset = getattr(spec, "dataset", None)
+    eff_market = market or _market_from_dataset(dataset)
+    domain = getattr(spec, "domain", None)
     return NormalizedFieldPlan(
         logical_concept=name,
-        physical_dataset=getattr(spec, "dataset", None),
+        physical_dataset=dataset,
         physical_fields=(
             (spec.source_name,) if getattr(spec, "source_name", None) else ()
         ),
@@ -166,7 +219,14 @@ def plan_from_field_spec(name: str, spec: Any) -> NormalizedFieldPlan:
         knowledge_time=getattr(spec, "knowledge_time_column", None),
         effective_time=getattr(spec, "effective_time_column", None),
         revision_order=tuple(getattr(spec, "revision_columns", ()) or ()),
-        universe=getattr(spec, "domain", None),
+        universe=domain if eff_market is None else eff_market,
+        market=eff_market,
+        universe_id=(
+            str(getattr(spec, "universe_id", None))
+            if getattr(spec, "universe_id", None) is not None
+            else None
+        ),
+        semantic_domain=domain,
         coverage=_coverage_from_temporal_model(getattr(spec, "temporal_model", None)),
         mining_allowed=bool(getattr(spec, "mining_allowed", True)),
         price_basis=getattr(spec, "price_basis", None),
@@ -179,23 +239,29 @@ def plan_from_field_spec(name: str, spec: Any) -> NormalizedFieldPlan:
         ),
         null_policy=str(getattr(spec, "null_policy", "preserve") or "preserve"),
         semantic_kind=getattr(spec, "semantic_kind", None),
-        strict_pit_allowed=bool(getattr(spec, "strict_pit_allowed", True)),
-        current_snapshot_only=_table_current_snapshot_only(getattr(spec, "table", None)),
+        strict_pit_allowed=getattr(spec, "strict_pit_allowed", None),
+        current_snapshot_only=_table_current_snapshot_only(getattr(spec, "table", None), eff_market),
         role=str(getattr(spec, "role", "feature") or "feature"),
     )
 
 
-def plan_from_catalog_field(name: str, field: Any) -> NormalizedFieldPlan:
+def plan_from_catalog_field(name: str, field: Any, *, market: str | None = None) -> NormalizedFieldPlan:
     """Build a plan from a DataAccess ``SemanticField`` (catalog).
 
     ``mining_allowed`` and ``coverage`` are copied from the catalog semantic
     field instead of being dropped (round-7 P0); a field that carries a
     ``derived_expression`` is marked derived (``transform`` + ``derived_from``)
     so the resolve path never reads its raw physical column as the value.
+
+    R17-003: ``market`` comes from the catalog field's market, ``semantic_domain``
+    from its domain, ``universe`` is deprecated.
     """
+    dataset = getattr(field, "dataset", None)
+    eff_market = market or getattr(field, "market", None) or _market_from_dataset(dataset)
+    domain = getattr(field, "domain", None)
     return NormalizedFieldPlan(
         logical_concept=name,
-        physical_dataset=getattr(field, "dataset", None),
+        physical_dataset=dataset,
         physical_fields=(
             (field.physical_name,) if getattr(field, "physical_name", None) else ()
         ),
@@ -208,7 +274,14 @@ def plan_from_catalog_field(name: str, field: Any) -> NormalizedFieldPlan:
         knowledge_time=getattr(field, "knowledge_time", None),
         effective_time=getattr(field, "effective_time", None),
         revision_order=tuple(getattr(field, "revision_order", ()) or ()),
-        universe=getattr(field, "market", None),
+        universe=eff_market,
+        market=eff_market,
+        universe_id=(
+            str(getattr(field, "universe_id", None))
+            if getattr(field, "universe_id", None) is not None
+            else None
+        ),
+        semantic_domain=domain,
         coverage=_catalog_coverage(field),
         mining_allowed=bool(getattr(field, "mining_allowed", True)),
         price_basis=getattr(field, "price_basis", None),
@@ -221,8 +294,8 @@ def plan_from_catalog_field(name: str, field: Any) -> NormalizedFieldPlan:
         ),
         null_policy=str(getattr(field, "null_policy", "preserve") or "preserve"),
         semantic_kind=getattr(field, "semantic_kind", None),
-        strict_pit_allowed=bool(getattr(field, "strict_pit_allowed", True)),
-        current_snapshot_only=_table_current_snapshot_only(getattr(field, "table", None)),
+        strict_pit_allowed=getattr(field, "strict_pit_allowed", None),
+        current_snapshot_only=_table_current_snapshot_only(getattr(field, "table", None), eff_market),
         role=str(getattr(field, "role", "feature") or "feature"),
     )
 
@@ -245,35 +318,65 @@ class MissingSemantic(enum.Enum):
     STRUCTURAL_ZERO = "structural_zero"
 
 
-#: Field temporal models / coverage values whose missing cells are semantically
-#: "no event occurred" rather than "value unknown".
+#: Field temporal models whose missing cells are semantically "no event row
+#: occurred" rather than "value unknown" (R17-004).
+#:
+#: R17-004: ``financial_event`` / ``financial_pit`` are REMOVED from this set.
+#: A financial statement table that has no row on a date means "no filing that
+#: day" (the event absent), but a row that EXISTS with a NaN numeric field is
+#: an UNKNOWN value — mapping the whole financial field to NO_EVENT conflates
+#: "today had no announcement" with "the announced number is missing" and lets
+#: event-count / zero-fill / mask operators wrongly consume a missing financial.
+#: Only pure event/announcement tables (no row == no event) stay NO_EVENT.
 _NO_EVENT_TEMPORAL_MODELS = frozenset({
-    "sparse_event", "financial_event", "financial_pit", "effective_only",
-    "relation_pit", "sparse_snapshot", "event", "event_series",
+    "sparse_event", "effective_only", "event", "event_series",
 })
-_NO_EVENT_COVERAGE = frozenset({"sparse_event", "partial_history", "current_snapshot"})
+#: R17-004: ``partial_history`` / ``current_snapshot`` are removed — a
+#: partial-history financial field missing a date is UNKNOWN (expected but not
+#: yet observed), and a current-snapshot table not covering a historical date is
+#: NOT_APPLICABLE / OUT_OF_COVERAGE (a different semantic than "no event").
+_NO_EVENT_COVERAGE = frozenset({"sparse_event"})
 
 
 def missing_semantic_for_plan(plan: Any) -> MissingSemantic:
     """Map a field (``NormalizedFieldPlan`` / ``FieldSpec``) to its MissingSemantic.
 
-    The mapping is driven by the declared null_policy, temporal model and
-    coverage so sparse-event fields resolve to ``NO_EVENT`` and dense fields to
-    ``UNKNOWN`` (round-7 WS-E #316).
+    R17-004 splits missing semantics (never collapse them through one temporal
+    model):
+
+    * event/announcement table has no row          -> ``NO_EVENT``
+    * an existing row has a NaN numeric field       -> ``UNKNOWN``
+    * current-snapshot table not covering a date    -> ``NOT_APPLICABLE``
+    * field structurally absent for the security    -> ``NOT_APPLICABLE``
+    * suspension / no session                       -> ``NOT_TRADING``
+    * explicit structural zero only                 -> ``STRUCTURAL_ZERO``
+
+    A financial field (``financial_pit`` / ``partial_history``) whose numeric
+    value is missing resolves to ``UNKNOWN`` — it is never reinterpreted as
+    "no event".
     """
     null_policy = str(getattr(plan, "null_policy", "preserve") or "preserve").lower()
     if null_policy in {"zero", "zero_fill", "as_zero", "structural_zero"}:
         return MissingSemantic.STRUCTURAL_ZERO
     temporal_model = str(getattr(plan, "temporal_model", "") or "").strip().lower()
+    # Financial event rows: an existing row's numeric NaN is UNKNOWN, but a
+    # *financial event table* with no row on a date still means NO_EVENT for the
+    # event (e.g. no dividend that day).  Only the row-level numeric missing is
+    # UNKNOWN — that is a different object than the table-level absence.
     if temporal_model in _NO_EVENT_TEMPORAL_MODELS:
         return MissingSemantic.NO_EVENT
+    if temporal_model in {"financial_event", "financial_pit"}:
+        role = str(getattr(plan, "role", "") or "").lower()
+        if role in {"knowledge_time", "period_id", "effective_time", "ingestion_time"}:
+            return MissingSemantic.NOT_APPLICABLE
+        return MissingSemantic.UNKNOWN
     coverage = str(getattr(plan, "coverage", "") or "").strip().lower()
     if coverage in _NO_EVENT_COVERAGE:
         return MissingSemantic.NO_EVENT
+    if coverage == "current_snapshot":
+        return MissingSemantic.NOT_APPLICABLE
     role = str(getattr(plan, "role", "") or "").lower()
     if role in {"knowledge_time", "period_id", "effective_time", "ingestion_time"}:
-        return MissingSemantic.NOT_APPLICABLE
-    if coverage == "current_snapshot":
         return MissingSemantic.NOT_APPLICABLE
     return MissingSemantic.UNKNOWN
 

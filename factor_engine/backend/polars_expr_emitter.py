@@ -62,11 +62,83 @@ _PREDICATE_OPS: frozenset[str] = frozenset(
 )
 _NAN_PRESERVE_PARENT_OPS: frozenset[str] = frozenset({"maximum", "minimum"})
 
+# Operators whose PANDAS reference kernel is a pandas rolling / expanding / ewm
+# AGGREGATION: pandas' rolling machinery treats ±Inf as MISSING (a window
+# containing Inf averages the remaining finite values — it never propagates
+# Inf).  The polars path must drop Inf the same way BEFORE the window, or a
+# single Inf row corrupts the whole window on polars while pandas stays finite.
+# Elementwise / shift operators (ts_delta, ts_pct, returns, log_returns, ...)
+# PROPAGATE Inf in the pandas reference and are deliberately NOT listed.
+_PANDAS_ROLLING_DROP_INF_OPS: frozenset[str] = frozenset(
+    {
+        "ts_mean",
+        "ts_median",
+        "ts_sum",
+        "ts_min",
+        "ts_max",
+        "ts_std",
+        "ts_var",
+        "ts_skew",
+        "ts_kurt",
+        "ts_quantile",
+        "ts_zscore",
+        "ts_sharpe",
+        "ts_autocorr",
+        "ts_corr",
+        "ts_cov",
+        "ts_beta",
+        "ts_ewm_mean",
+        "ts_ewm_std",
+        "ts_rank",
+        "ts_pct_rank",
+        "ts_rank_mean",
+        "ts_rank_std",
+        "ts_returns",
+        "ts_pct_chg",
+        "ts_decay_linear",
+        "SMA",
+        "true_range",
+        "atr",
+        "avg_true_range_pct",
+        "expanding_mean",
+        "expanding_std",
+        "expanding_sum",
+        "expanding_min",
+        "expanding_max",
+        "cumsum",
+        "cum_delta",
+        "cum_std",
+        "ts_max_drawdown",
+        "ts_drawdown",
+        "ts_linear_reg_slope",
+        "ts_linear_reg_residual",
+        "ts_time_slope",
+        "ts_range_expansion",
+        "volume_ratio",
+        "rolling_obv",
+        "rolling_pvt",
+    }
+)
 
-def _sanitize_nan_for_compute(inner: pl.LazyFrame | None) -> pl.LazyFrame | None:
-    """Pandas 数值路径：IEEE NaN 按缺失处理（rolling / coalesce 等）。"""
+
+def _sanitize_nan_for_compute(
+    inner: pl.LazyFrame | None, *, drop_inf: bool = False
+) -> pl.LazyFrame | None:
+    """Pandas 数值路径：IEEE NaN 按缺失处理（rolling / coalesce 等）。
+
+    ``drop_inf`` — the pandas rolling/expanding/ewm reference treats ±Inf as
+    missing too; drop it to NULL so a windowed aggregation on polars agrees
+    with the pandas kernel (which silently excludes Inf rows).
+    """
     if inner is None:
         return None
+    if drop_inf:
+        return inner.with_columns(
+            pl.when(pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite())
+            .then(None)
+            .otherwise(pl.col(_VAL))
+            .alias(_VAL)
+        )
     return inner.with_columns(
         pl.when(pl.col(_VAL).is_nan()).then(None).otherwise(pl.col(_VAL)).alias(_VAL)
     )
@@ -81,13 +153,20 @@ def _compile_child(
     ctx: Any | None = None,
     memo: dict[tuple[Any, ...], pl.LazyFrame] | None = None,
 ) -> pl.LazyFrame | None:
-    """编译子节点；非 predicate 父算子在子结果上将 NaN 规范为 NULL。"""
+    """编译子节点；非 predicate 父算子在子结果上将 NaN 规范为 NULL。
+
+    For rolling/expanding/ewm aggregation parents, ±Inf is dropped to NULL too
+    (the pandas reference treats Inf as missing inside rolling machinery), so a
+    single Inf input cannot corrupt the polars window while pandas stays finite.
+    """
     if index >= len(node.inputs):
         return None
     inner = _compile_polars(node.inputs[index], base, ctx=ctx, memo=memo)
     if inner is None or parent_op in _PREDICATE_OPS or parent_op in _NAN_PRESERVE_PARENT_OPS:
         return inner
-    return _sanitize_nan_for_compute(inner)
+    return _sanitize_nan_for_compute(
+        inner, drop_inf=parent_op in _PANDAS_ROLLING_DROP_INF_OPS
+    )
 
 _GRP = "_grp"
 
@@ -340,9 +419,16 @@ def _rolling_linear_decay_expr(w: int) -> pl.Expr:
         valid = np.isfinite(arr)
         if not valid.any():
             return np.nan
+        # Age-slot anchored (R16-070, mirrors ``_linear_weighted_1d_numpy``):
+        # slice weights by the FULL window slot length (NaN slots included), so
+        # each value keeps its original weight position; only then mask by the
+        # valid positions.  Slicing by the valid COUNT re-anchors weights onto
+        # the wrong slots and diverges from the pandas reference whenever the
+        # window contains a NaN/Inf hole.
+        ww = weights[-len(arr) :]
         seg = arr[valid]
-        ww = weights[-len(seg) :]
-        return float(np.dot(seg, ww) / ww.sum())
+        w = ww[valid]
+        return float(np.dot(seg, w) / w.sum())
 
     return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
 
@@ -845,7 +931,14 @@ def _ts_rolling_expr_on_column(op: str, col_name: str, spec) -> pl.Expr:
     """在宽表 base 列上直接构造 ts 窗口 expr（用于 DAG fusion，完整 WindowSpec）。"""
     from backend.numeric_semantics import std_ddof_value
 
-    c = pl.when(pl.col(col_name).is_nan()).then(None).otherwise(pl.col(col_name))
+    if op in _PANDAS_ROLLING_DROP_INF_OPS:
+        # pandas rolling machinery treats ±Inf as missing; drop it so the
+        # fused window agrees with the pandas reference and the duckdb SQL path.
+        c = pl.when(
+            pl.col(col_name).is_nan() | pl.col(col_name).is_infinite()
+        ).then(None).otherwise(pl.col(col_name))
+    else:
+        c = pl.when(pl.col(col_name).is_nan()).then(None).otherwise(pl.col(col_name))
     w = spec.size
     mp = spec.min_periods
     if op == "ts_mean":

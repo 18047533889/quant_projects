@@ -1187,16 +1187,30 @@ class DataAccessSource(DataSource):
         return False
 
     def _table_pit_allowed(self, plan: NormalizedFieldPlan) -> bool | None:
-        """Table-layer PIT eligibility（三态；None=无法证明，无 TableSpec/异常）。"""
+        """Table-layer PIT eligibility（三态；None=无法证明，无 TableSpec/异常）。
+
+        R17-002: the table is resolved within the plan's MARKET (or inferred from
+        the dataset name), never against the legacy A-share-only registry — a US
+        table (e.g. ``StockValuationDaily``) must not be interpreted with A-share
+        same-name semantics.  R17-005: the tri-state is preserved (None ==
+        UNKNOWN -> production fail-closed).
+        """
         if not plan.physical_dataset:
             return None
         try:
-            from fields import FIELD_REGISTRY
+            if getattr(plan, "market", None):
+                from fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
 
-            table_spec = FIELD_REGISTRY.resolve_table(str(plan.physical_dataset))
+                table_spec = MULTI_MARKET_FIELD_REGISTRY.registry_for(
+                    plan.market
+                ).resolve_table(str(plan.physical_dataset))
+            else:
+                from fields import FIELD_REGISTRY
+
+                table_spec = FIELD_REGISTRY.resolve_table(str(plan.physical_dataset))
             if table_spec is None:
                 return None
-            return bool(getattr(table_spec, "strict_pit_allowed", True))
+            return getattr(table_spec, "strict_pit_allowed", None)
         except Exception:
             return None
 

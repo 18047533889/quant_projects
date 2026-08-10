@@ -675,20 +675,27 @@ def main() -> int:
     for key, value in result["counts"].items():
         print(f"  {key} = {value}")
 
-    _HARD_INVARIANTS = (
-        "UNCLASSIFIED_FACTOR_CANONICALS",
-        "MINING_ROLE_UNRESOLVED",
-        "MINING_ELIGIBLE_WITHOUT_CERTIFICATION",
-        "PERMANENTLY_FORBIDDEN_IN_PUBLIC_REGISTRY",
-        "CERTIFIED_FACTOR_NOT_IN_MINING_MANIFEST",
+    # R16-008: release-blocking invariants are marked in the result, and strict
+    # mode fails on ANY of them — not just the five legacy hard gates.
+    release_blocking = set(result.get("release_blocking") or ())
+    # R16-007: a mineable/production canonical whose dead-param probe raised an
+    # AUDIT_ERROR is itself a release blocker (it was never audited).
+    dead_audit_errors = (
+        result.get("detector_coverage", {}).get("DEAD_SEARCHABLE_PARAMS", {}).get("audit_errors") or []
     )
     if not args.no_strict:
         violations = [
-            name for name in _HARD_INVARIANTS
+            name for name in sorted(release_blocking)
             if result["invariants"].get(name)
         ]
         if violations:
-            print(f"\nSTRICT FAIL: hard release invariants non-empty: {violations}")
+            print(f"\nSTRICT FAIL: release-blocking invariants non-empty: {violations}")
+            return 1
+        if dead_audit_errors:
+            print(
+                f"\nSTRICT FAIL: {len(dead_audit_errors)} dead-param probe AUDIT_ERRORs "
+                f"(first: {dead_audit_errors[0]})"
+            )
             return 1
     return 0
 
