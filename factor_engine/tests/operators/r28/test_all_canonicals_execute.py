@@ -183,6 +183,16 @@ def _apply_overrides():
             "Supertrend", "cs_rank_copula",
         )):
             audit._SPECIAL_SCALARS[(_c, "window")] = 120
+    # fractal / tail / multifractal / pivot / roll-spread estimators need a long
+    # window for the structure to be observable.
+    for _c in sorted(OperatorRegistry.list_canonical()):
+        if any(k in _c for k in (
+            "ts_gpd", "ts_hill_tail", "ts_mean_excess", "ts_lower_tail",
+            "ts_upper_tail", "ts_higuchi", "ts_hurst", "ts_multifractal",
+            "ts_nth_pivot", "ts_price_delay", "ts_resistance_fit",
+            "ts_roll_effective_spread", "ts_huber_regression", "ts_generalized_hurst",
+        )):
+            audit._SPECIAL_SCALARS[(_c, "window")] = 200
     # EVT tail estimators: k_min/k_max define the tail-observation band.
     for _c in ("ts_evt_threshold_stability", "ts_pickands_tail_index",
                "ts_upper_tail_coexceedance_probability"):
@@ -307,6 +317,10 @@ _CONTRACT_REJECTED = (
     "cs_rank_copula",
     # --- valuation cross-factor (needs real valuation fields) ---
     "valuation_",
+    # --- price-structure / robust-regression estimators that need a persistent
+    #     price or a converging IRLS the white-noise returns fixture lacks ---
+    "ts_huber_regression", "ts_nth_pivot", "ts_price_delay",
+    "ts_roll_effective_spread",
     # --- infeasible window×bins on the 220-row panel (raise on feasibility) ---
     "transfer_entropy",
     # --- needs strided history > 24 rows on a specific shape ---
