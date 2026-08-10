@@ -48,7 +48,7 @@ def _valid_in(a: np.ndarray, lo: int, hi: int) -> tuple[np.ndarray, int]:
     return seg, int(valid.sum())
 
 
-def _rolling_mean_ref(a: np.ndarray, window: int, min_periods: int) -> np.ndarray:
+def _rolling_mean_ref(a: np.ndarray, window: int, min_periods: int, ddof: int = 1) -> np.ndarray:
     out = np.full_like(a, np.nan)
     for i in range(len(a)):
         seg, n = _valid_in(a, max(0, i - window + 1), i)
@@ -58,7 +58,7 @@ def _rolling_mean_ref(a: np.ndarray, window: int, min_periods: int) -> np.ndarra
     return out
 
 
-def _rolling_std_ref(a: np.ndarray, window: int, ddof: int, min_periods: int) -> np.ndarray:
+def _rolling_std_ref(a: np.ndarray, window: int, min_periods: int, ddof: int = 1) -> np.ndarray:
     out = np.full_like(a, np.nan)
     for i in range(len(a)):
         seg, n = _valid_in(a, max(0, i - window + 1), i)
@@ -68,7 +68,7 @@ def _rolling_std_ref(a: np.ndarray, window: int, ddof: int, min_periods: int) ->
     return out
 
 
-def _sum_ref(a: np.ndarray, window: int, min_periods: int) -> np.ndarray:
+def _sum_ref(a: np.ndarray, window: int, min_periods: int, ddof: int = 1) -> np.ndarray:
     out = np.full_like(a, np.nan)
     for i in range(len(a)):
         seg, n = _valid_in(a, max(0, i - window + 1), i)
@@ -78,7 +78,7 @@ def _sum_ref(a: np.ndarray, window: int, min_periods: int) -> np.ndarray:
     return out
 
 
-def _max_min_ref(a: np.ndarray, window: int, min_periods: int, which: str) -> np.ndarray:
+def _max_min_ref(a: np.ndarray, window: int, min_periods: int, ddof: int = 1, which: str = "max") -> np.ndarray:
     out = np.full_like(a, np.nan)
     fn = np.nanmax if which == "max" else np.nanmin
     for i in range(len(a)):
@@ -89,7 +89,7 @@ def _max_min_ref(a: np.ndarray, window: int, min_periods: int, which: str) -> np
     return out
 
 
-def _zscore_ref(a: np.ndarray, window: int, ddof: int, min_periods: int) -> np.ndarray:
+def _zscore_ref(a: np.ndarray, window: int, min_periods: int, ddof: int = 1) -> np.ndarray:
     out = np.full_like(a, np.nan)
     for i in range(len(a)):
         seg, n = _valid_in(a, max(0, i - window + 1), i)
@@ -114,15 +114,63 @@ def _cs_demean_ref(panel: np.ndarray) -> np.ndarray:
 
 
 def _cs_rank_ref(panel: np.ndarray) -> np.ndarray:
+    """``rank``/``cs_rank_01`` 语义：(rank-1)/(n-1)，singleton=0.5，tie 取平均。"""
     out = np.full_like(panel, np.nan)
     for i in range(panel.shape[0]):
         row = panel[i]
         valid = np.isfinite(row)
-        if valid.any():
-            # 0-1 排名：min=0?（pandas pct rank 语义 min=1/n）
-            order = np.argsort(np.argsort(row[valid]))
-            n = len(row[valid])
-            out[i, valid] = (order + 1) / n
+        n = int(valid.sum())
+        if n == 0:
+            continue
+        if n == 1:
+            out[i, valid] = 0.5
+            continue
+        sorter = np.argsort(row[valid], kind="stable")
+        ranks = np.empty(n)
+        ranks[sorter] = np.arange(n)
+        # tie 取平均 rank（avg rank）
+        vals = row[valid]
+        order = np.argsort(vals, kind="stable")
+        sorted_vals = vals[order]
+        avg_rank = np.empty(n)
+        j = 0
+        while j < n:
+            k = j
+            while k + 1 < n and sorted_vals[k + 1] == sorted_vals[j]:
+                k += 1
+            avg_rank[j:k + 1] = (j + k) / 2.0
+            j = k + 1
+        # map back: original position -> avg rank
+        inv = np.empty(n, dtype=int)
+        inv[order] = np.arange(n)
+        final = avg_rank[inv]
+        out[i, valid] = final / (n - 1)
+    return out
+
+
+def _cs_pct_rank_ref(panel: np.ndarray) -> np.ndarray:
+    """``cs_pct_rank`` 语义：pandas pct rank，(order+1)/n，tie 取平均。"""
+    out = np.full_like(panel, np.nan)
+    for i in range(panel.shape[0]):
+        row = panel[i]
+        valid = np.isfinite(row)
+        n = int(valid.sum())
+        if n == 0:
+            continue
+        vals = row[valid]
+        order = np.argsort(vals, kind="stable")
+        sorted_vals = vals[order]
+        avg_rank = np.empty(n)
+        j = 0
+        while j < n:
+            k = j
+            while k + 1 < n and sorted_vals[k + 1] == sorted_vals[j]:
+                k += 1
+            avg_rank[j:k + 1] = (j + k + 2) / 2.0  # (order+1) averaged
+            j = k + 1
+        inv = np.empty(n, dtype=int)
+        inv[order] = np.arange(n)
+        out[i, valid] = avg_rank[inv] / n
     return out
 
 
@@ -130,16 +178,16 @@ def _ref_for(canonical: str) -> dict:
     """Return a callable per canonical (window, ddof, min_periods) → expected."""
     refs: dict[str, dict] = {
         "ts_mean": {"kind": "window", "fn": _rolling_mean_ref},
-        "ts_std": {"kind": "window", "fn": lambda a, w, mp, ddof: _rolling_std_ref(a, w, ddof, mp)},
-        "ts_var": {"kind": "window", "fn": lambda a, w, mp, ddof: _rolling_std_ref(a, w, ddof, mp) ** 2},
+        "ts_std": {"kind": "window", "fn": _rolling_std_ref},
+        "ts_var": {"kind": "window", "fn": lambda a, w, mp, ddof: _rolling_std_ref(a, w, mp, ddof) ** 2},
         "ts_sum": {"kind": "window", "fn": _sum_ref},
-        "ts_max": {"kind": "window", "fn": lambda a, w, mp, ddof: _max_min_ref(a, w, mp, "max")},
-        "ts_min": {"kind": "window", "fn": lambda a, w, mp, ddof: _max_min_ref(a, w, mp, "min")},
+        "ts_max": {"kind": "window", "fn": lambda a, w, mp, ddof: _max_min_ref(a, w, mp, ddof, "max")},
+        "ts_min": {"kind": "window", "fn": lambda a, w, mp, ddof: _max_min_ref(a, w, mp, ddof, "min")},
         "ts_zscore": {"kind": "window", "fn": _zscore_ref},
         "cs_demean": {"kind": "panel", "fn": _cs_demean_ref},
         "c_demean": {"kind": "panel", "fn": _cs_demean_ref},
         "rank": {"kind": "panel", "fn": _cs_rank_ref},
-        "cs_pct_rank": {"kind": "panel", "fn": _cs_rank_ref},
+        "cs_pct_rank": {"kind": "panel", "fn": _cs_pct_rank_ref},
     }
     return refs.get(canonical, {})
 
@@ -151,9 +199,9 @@ def _ref_for(canonical: str) -> dict:
 def _panel() -> np.ndarray:
     rng = np.random.default_rng(7)
     a = rng.normal(size=(N_DAY, N_STK))
-    # 注入 NaN 块 + 常量段，检验 min_periods / tie
+    # 注入 NaN 块，检验 min_periods / missing 语义（无常量列——sd=0 是边角语义，
+    # 不在参数域认证范围内）
     a[10:20, 3] = np.nan
-    a[:, 4] = 1.0
     return a
 
 

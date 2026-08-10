@@ -1,0 +1,170 @@
+{
+  "task_book": "FactorEngine_R37_最新HEAD剩余系统性风险终审_..._20260811.md",
+  "task_book_baseline_sha": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+  "audit_time_sha": "9b912b95d15027e2712c624f18a0fff55d20311b",
+  "created_at": "2026-08-11",
+  "producer_script": "scripts/generate_r37_baseline.py",
+  "operator_inventory": {
+    "total_production_canonicals": 1391,
+    "with_typed_signature": 33,
+    "without_typed_signature": 1358,
+    "by_surface": {
+      "daily": 1150,
+      "extended": 237,
+      "research": 4
+    },
+    "parquet_written": true
+  },
+  "resource_arch": {
+    "modules": {
+      "host_resource_coordinator": {
+        "importable": true,
+        "classes": [
+          "HostResourceCoordinator",
+          "HostResourceLease"
+        ]
+      },
+      "resource_broker": {
+        "importable": true,
+        "classes": [
+          "ReservationLease",
+          "ResourceBroker",
+          "ResourceSnapshot",
+          "_CpuTokenAllocator",
+          "_IoTokenAllocator"
+        ]
+      },
+      "resource_governor": {
+        "importable": true,
+        "classes": [
+          "ExecutionResourcePlan",
+          "ExecutionResourceScope",
+          "MemoryGovernor"
+        ]
+      },
+      "resource_autopilot": {
+        "importable": true,
+        "classes": [
+          "ResourceController",
+          "ResourceDecision",
+          "_DecisionLogEntry"
+        ]
+      },
+      "resource_calibration_store": {
+        "importable": true,
+        "classes": [
+          "ResourceCalibrationStore",
+          "ShapeCalibration"
+        ]
+      },
+      "resource_monitor": {
+        "importable": true,
+        "classes": [
+          "HostResourceEnvelope",
+          "MemorySlopeTracker",
+          "ResourceSignals"
+        ]
+      },
+      "auto_shard_planner": {
+        "importable": true,
+        "classes": [
+          "AutoShardPlanner",
+          "ShardPlan"
+        ]
+      },
+      "governed_buffer_store": {
+        "importable": true,
+        "classes": [
+          "GovernedBufferStore"
+        ]
+      },
+      "change_impact_dag": {
+        "importable": true,
+        "classes": [
+          "AffectedWindow"
+        ]
+      }
+    },
+    "single_authority": false,
+    "host_resource_coordinator_class": "HostResourceCoordinator",
+    "has_singleton": false
+  },
+  "fe_da_boundary": {
+    "fe_da_modules": {
+      "dataaccess_capabilities": {
+        "importable": false,
+        "error": "No module named 'dataaccess.capabilities'"
+      },
+      "dataaccess_resource_bridge": {
+        "importable": false,
+        "error": "No module named 'dataaccess.runtime.resource_bridge'"
+      },
+      "dataaccess_governor": {
+        "importable": true,
+        "classes": [
+          "GlobalResourceGovernor",
+          "ResourceReservation"
+        ],
+        "funcs": [
+          "duckdb_slot",
+          "enforce_single_worker_contract",
+          "get_global_governor",
+          "reset_global_governor"
+        ]
+      },
+      "fe_prepared_batch_session": {
+        "importable": true,
+        "classes": [],
+        "funcs": [
+          "_assert_no_native_certified_fallback",
+          "_attach_batch_backend_paths",
+          "_batch_source_bars_per_day",
+          "_clear_polars_long_shared_sid",
+          "_cluster_factors_by_cost",
+          "_execute_root_with_path",
+          "_execute_run_many_scheduler",
+          "_handle_result",
+          "_materialize_shared_subplan",
+          "_maybe_prepare_batch_data",
+          "_maybe_prepare_batch_warmup",
+          "_release_consumed_sids",
+          "_setup_cse_refcounts",
+          "_transition_telemetry",
+          "_trim_batch_result",
+          "choose_execution_mode",
+          "execute_run_many",
+          "execute_run_many_iter",
+          "execute_run_many_parallel",
+          "materialize_shared_nodes_parallel"
+        ]
+      },
+      "fe_batch_data_request": {
+        "importable": true,
+        "classes": [],
+        "funcs": [
+          "_assert_no_native_certified_fallback",
+          "_attach_batch_backend_paths",
+          "_batch_source_bars_per_day",
+          "_clear_polars_long_shared_sid",
+          "_cluster_factors_by_cost",
+          "_execute_root_with_path",
+          "_execute_run_many_scheduler",
+          "_handle_result",
+          "_materialize_shared_subplan",
+          "_maybe_prepare_batch_data",
+          "_maybe_prepare_batch_warmup",
+          "_release_consumed_sids",
+          "_setup_cse_refcounts",
+          "_transition_telemetry",
+          "_trim_batch_result",
+          "choose_execution_mode",
+          "execute_run_many",
+          "execute_run_many_iter",
+          "execute_run_many_parallel",
+          "materialize_shared_nodes_parallel"
+        ]
+      }
+    },
+    "capability_handshake": false
+  }
+}

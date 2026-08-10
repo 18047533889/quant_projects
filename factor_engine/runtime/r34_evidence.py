@@ -39,9 +39,14 @@ class GateResult:
     status: GateStatus
     executed_cases: int
     failed_cases: int
+    passed_cases: int = 0
+    case_ids: tuple[str, ...] = ()
     evidence_files: tuple[str, ...] = ()
     evidence_hashes: tuple[str, ...] = ()
     commit_sha: str = ""
+    component_hashes: dict = field(default_factory=dict)
+    fixture_hashes: dict = field(default_factory=dict)
+    generated_at: str = ""
     details: dict = field(default_factory=dict)
 
     @classmethod
@@ -52,23 +57,37 @@ class GateResult:
     def from_cases(
         cls, gate_id: str, cases: list[bool], evidence_files: tuple[str, ...] = (),
         commit_sha: str = "", details: dict | None = None,
+        case_ids: list[str] | None = None, component_hashes: dict | None = None,
+        fixture_hashes: dict | None = None, generated_at: str = "",
     ) -> "GateResult":
-        """从 case 级布尔结果聚合一个 gate。
+        """从 case 级布尔结果聚合一个 gate（R37-P0-001 扩展）。
 
         case 为空 -> NOT_RUN；有 FAIL -> FAIL；全 PASS 且 case 数 > 0 -> PASS。
+        R37 新增：passed_cases / case_ids / component_hashes / fixture_hashes /
+        generated_at —— 让每个 gate 记录"哪些 case 真执行了、绑定哪些组件 hash"，
+        presence-only 无法冒充 executed case。
         """
         executed = len(cases)
         failed = int(any(not c for c in cases))
+        passed = executed - failed
         if executed == 0:
             status: GateStatus = "NOT_RUN"
         elif failed:
             status = "FAIL"
         else:
             status = "PASS"
+        cids = tuple(case_ids or [])
+        if cids and len(cids) != executed:
+            cids = (f"case{i}" for i in range(executed))  # type: ignore[assignment]
+            cids = tuple(cids)
         return cls(
             gate_id=gate_id, status=status, executed_cases=executed,
-            failed_cases=failed, evidence_files=evidence_files,
-            commit_sha=commit_sha, details=details or {},
+            failed_cases=failed, passed_cases=passed, case_ids=cids,
+            evidence_files=evidence_files, commit_sha=commit_sha,
+            component_hashes=dict(component_hashes or {}),
+            fixture_hashes=dict(fixture_hashes or {}),
+            generated_at=generated_at,
+            details=details or {},
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -77,9 +96,14 @@ class GateResult:
             "status": self.status,
             "executed_cases": self.executed_cases,
             "failed_cases": self.failed_cases,
+            "passed_cases": self.passed_cases,
+            "case_ids": list(self.case_ids),
             "evidence_files": list(self.evidence_files),
             "evidence_hashes": list(self.evidence_hashes),
             "commit_sha": self.commit_sha,
+            "component_hashes": self.component_hashes,
+            "fixture_hashes": self.fixture_hashes,
+            "generated_at": self.generated_at,
             "details": self.details,
         }
 
@@ -299,9 +323,13 @@ def _scan_assign(node: ast.Assign, path: Path, findings: list[dict[str, Any]]) -
         return
     for target in node.targets:
         if _is_gates_subscript(target) or _is_gates_attr(target):
+            try:
+                rel = str(path.relative_to(FE_ROOT))
+            except ValueError:
+                rel = str(path)
             findings.append(
                 {
-                    "file": str(path.relative_to(FE_ROOT)),
+                    "file": rel,
                     "line": node.lineno,
                     "literal": value_literal,
                     "assign_type": type(node).__name__,

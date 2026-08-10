@@ -45,6 +45,8 @@
     "scripts/audit_r34_evidence.py",
     "scripts/audit_r34_hard_gates.py",
     "scripts/audit_r34_parameter_domains.py",
+    "scripts/audit_r36_hard_gates.py",
+    "scripts/audit_r37_evidence_truth.py",
     "scripts/audit_semantic_hash_completeness.py",
     "scripts/audit_stub_surface.py",
     "scripts/audit_unit_normalization_once.py",
@@ -54,7 +56,7 @@
     "scripts/certify_primitive_evidence.py",
     "scripts/certify_recipe_evidence.py"
   ],
-  "literal_true_false_gate_assignments": 20,
+  "literal_true_false_gate_assignments": 21,
   "in_exception_probe_context": [
     {
       "file": "scripts/audit_r32_hard_gates.py",
@@ -174,6 +176,12 @@
       "file": "scripts/audit_r33_hard_gates.py",
       "line": 254,
       "literal": true,
+      "assign_type": "Assign"
+    },
+    {
+      "file": "scripts/audit_r36_hard_gates.py",
+      "line": 35,
+      "literal": false,
       "assign_type": "Assign"
     }
   ],

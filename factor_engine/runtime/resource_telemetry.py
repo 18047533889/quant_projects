@@ -90,12 +90,17 @@ def resource_telemetry_summary(perf: Any | None = None) -> dict[str, Any]:
     return out
 
 
-def finalize_resource_telemetry(telemetry: dict[str, Any]) -> dict[str, Any]:
+def finalize_resource_telemetry(
+    telemetry: dict[str, Any],
+    *,
+    run_peak: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """运行结束时补 current RSS 结束值 + lifetime peak（R27-144）。
 
-    明确拆开：``rss_current_end`` 是当下真实 RSS；``rss_peak_lifetime`` 是进程
-    历史峰值（ru_maxrss）；``rss_peak_run`` 取两者当前已知的最大值（本 run
-    真实峰值由 scheduler 的 run 级探针另外维护）。
+    R36 P0-029（§169）：``rss_peak_run`` 必须来自 **run 专用 sampler** 的窗口
+    峰值（``run_peak``），不能混入进程历史 lifetime peak（ru_maxrss）——否则
+    无法训练 task memory model。run_peak 未提供时退化为当前已知最大值（诚实
+    标注来源）。
     """
     telemetry = dict(telemetry or {})
     current = _rss_bytes()
@@ -103,13 +108,28 @@ def finalize_resource_telemetry(telemetry: dict[str, Any]) -> dict[str, Any]:
     telemetry["rss_current_end"] = current
     if lifetime is not None:
         telemetry["rss_peak_lifetime"] = lifetime
+    if run_peak is not None:
+        # §168 true run peak：只统计该 run 时间窗口的 process family PSS。
+        peak_pss = int(run_peak.get("peak_family_pss", 0) or 0)
+        peak_rss = int(run_peak.get("peak_family_rss", 0) or 0)
+        telemetry["rss_peak_run"] = peak_rss
+        telemetry["rss_peak_run_pss"] = peak_pss
+        telemetry["rss_peak_run_source"] = "run_peak_sampler"
+        telemetry["run_peak"] = run_peak
+    else:
         known = [v for v in (telemetry.get("rss_current_start"), current, lifetime)
                  if isinstance(v, int) and v > 0]
-        telemetry["rss_peak_run"] = max(known) if known else lifetime
+        telemetry["rss_peak_run"] = max(known) if known else (lifetime or 0)
+        telemetry["rss_peak_run_source"] = "current_max_fallback"
     return telemetry
 
 
-def record_resource_telemetry(runtime_stats: dict[str, Any] | None, *, finalize: bool = False) -> dict[str, Any]:
+def record_resource_telemetry(
+    runtime_stats: dict[str, Any] | None,
+    *,
+    finalize: bool = False,
+    run_peak: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """把资源 telemetry 写入 runtime_stats（幂等，不覆盖已有更完整快照）。"""
     stats = dict(runtime_stats or {})
     current = stats.get("resource")
@@ -118,7 +138,7 @@ def record_resource_telemetry(runtime_stats: dict[str, Any] | None, *, finalize:
     else:
         current = dict(current)
     if finalize:
-        current = finalize_resource_telemetry(current)
+        current = finalize_resource_telemetry(current, run_peak=run_peak)
     # 环境变量来源（供审计/lineage）
     current["env"] = {
         "QUANT_PRODUCTION_MODE": os.environ.get("QUANT_PRODUCTION_MODE", ""),

@@ -142,6 +142,20 @@ class GlobalResourceGovernor:
             self._active[reservation.query_id] = reservation
             return reservation
 
+    # ---- R36 P0-017：由 HostResourceCoordinator 派生 envelope 上限 ----
+
+    def set_max_total_reserved_memory(self, memory_bytes: int) -> None:
+        """FE HostResourceCoordinator 注入 Safe Envelope（§54：DA 不独立决定全局内存）。
+
+        独立 DataAccess service 运行时，生产默认应从 hard/live resource envelope
+        自动派生，而不是 ``None``（无限）。由协调器在每次 batch run 前调用。
+        """
+        self._max_memory = max(0, int(memory_bytes)) if memory_bytes is not None else None
+
+    def set_max_total_scan_bytes_inflight(self, scan_bytes: int) -> None:
+        """协调器注入 scan inflight 上限（§56：scan bytes inflight 成为 host lease 一部分）。"""
+        self._max_scan = max(0, int(scan_bytes)) if scan_bytes is not None else None
+
     # ---- 远程并发 ----
 
     def acquire_remote_slot(self) -> bool:

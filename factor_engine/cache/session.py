@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -27,15 +28,19 @@ class ExecutionCacheSession:
     cse_budget_bytes: int | None = None
     panel_budget_bytes: int | None = None
     execution_id: str = "session"
+    # R36 P0-022：governor 层注册失败时 fail-closed（production）/ warning（research）。
+    strict: bool | None = None
 
     def __post_init__(self) -> None:
-        """初始化默认 dict 与 ``ExpressionCache`` / ``PanelCache`` 包装。"""
+        """初始化默认 dict 与 ``ExpressionCache`` / ``PanelCache`` / ``BufferStore``。"""
         if self.panel_cache is None:
             self.panel_cache = {}
         if self.shared_result_cache is None:
             self.shared_result_cache = {}
         if self.stats is None:
             self.stats = CacheHitStats()
+        if self.strict is None:
+            self.strict = os.environ.get("FACTOR_ENGINE_RUN_MODE") == "production"
         # 审计 #334：session 层名带 execution_id，不同 session 不再互踩记账；
         # 同一 execution_id 重复注册时后者覆盖（可接受）。
         self._l0_layer = f"{self.execution_id}:l0_cse"
@@ -51,19 +56,48 @@ class ExecutionCacheSession:
             budget_bytes=self.panel_budget_bytes,
             layer_name=self._l1_layer,
         )
+        # R36 P0-021（§104/105）：CSE 共享缓冲的 governed 写入通道——取代 raw
+        # ``shared_result_cache[sid]=value`` 作为唯一权威写入路径。
+        from runtime.buffer_store import GovernedBufferStore
+
+        self._buffer_store = GovernedBufferStore(
+            self.shared_result_cache, budget_bytes=self.cse_budget_bytes
+        )
         # Phase 5 R6：把 CSE / panel 两层注册到全局 MemoryGovernor 的 evict hooks，
         # RSS 高压档时由 governor 主动逐出。
+        # R36 P0-022（§107）：注册失败不能 ``except: pass``——生产下「以为有内存
+        # 治理、实际没有」比没有治理更危险，必须 fail-closed。
         try:
             from runtime.resource_governor import global_memory_governor
 
             gov = global_memory_governor()
             gov.register_layer(self._l0_layer, self._expression_cache.evict_if_over_budget)
             gov.register_layer(self._l1_layer, self._panel_cache.evict_if_over_budget)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            if self.strict:
+                raise RuntimeError(
+                    "ExecutionCacheSession: 无法注册 governor evict layer "
+                    f"（R36 P0-022 fail-closed）——{type(exc).__name__}: {exc}"
+                ) from exc
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "cache session 注册 governor layer 失败（research 模式降级 warning）: %s",
+                exc,
+            )
+
+    @property
+    def buffer_store(self) -> Any:
+        """R36 P0-021：governed CSE buffer store（put/get/release/spill）。"""
+        return self._buffer_store
 
     def release(self) -> None:
-        """释放本 session 在 MemoryGovernor 中的层注册与记账（审计 #334）。"""
+        """释放本 session 在 MemoryGovernor 中的层注册与记账（审计 #334）。
+
+        R36 P0-023（§108）：unregister_layer 只移除 governor accounting；必须同时
+        **清空 backing dict 的真实引用**（``shared_result_cache`` / ``panel_cache``），
+        否则「实际内存仍在、账面已经没了」。
+        """
         try:
             from runtime.resource_governor import global_memory_governor
 
@@ -72,6 +106,11 @@ class ExecutionCacheSession:
             gov.unregister_layer(self._l1_layer)
         except Exception:
             pass
+        # §108：backing refs 与 accounting 一起释放。
+        if self.shared_result_cache is not None:
+            self.shared_result_cache.clear()
+        if self.panel_cache is not None:
+            self.panel_cache.clear()
 
     @property
     def expression_cache(self) -> ExpressionCache:
@@ -95,6 +134,7 @@ class ExecutionCacheSession:
             shared_result_cache=self.shared_result_cache,
             panel_cache=self.panel_cache,
             runtime_stats={"cache": self.stats},
+            shared_buffers=self._buffer_store,
         )
 
     def get_shared(self, sid: str) -> Any | None:

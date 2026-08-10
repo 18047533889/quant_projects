@@ -1,5 +1,5 @@
 {
-  "current_head": "c2309dbd4abe73945d8f1c97b402b8b4cbdc75b6",
+  "current_head": "9b912b95d15027e2712c624f18a0fff55d20311b",
   "artifacts": {
     "factor_operator_verified": {
       "path": "evidence/factor_operator_verified.json",
@@ -210,6 +210,24 @@
       "bound_sha": "",
       "bound": false,
       "current_head": false
+    },
+    "r35/R35_HEAD": {
+      "path": "docs/evidence/r35/R35_HEAD.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r36/R36_HEAD": {
+      "path": "docs/evidence/r36/R36_HEAD.json",
+      "bound_sha": "",
+      "bound": false,
+      "current_head": false
+    },
+    "r37/R37_HEAD": {
+      "path": "docs/evidence/r37/R37_HEAD.json",
+      "bound_sha": "9b912b95d15027e2712c624f18a0fff55d20311b",
+      "bound": true,
+      "current_head": true
     }
   }
 }

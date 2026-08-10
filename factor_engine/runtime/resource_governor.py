@@ -220,6 +220,44 @@ def process_family_rss_bytes(*, prefer_pss: bool = False) -> int:
         return 0
 
 
+def process_family_memory_bytes(*, prefer_pss: bool = True) -> int | None:
+    """R36 P0-007（§14/15）：进程族内存，PSS 优先。
+
+    PSS > family RSS > self RSS > VmRSS > ru_maxrss。PSS 对跨进程共享
+    （shared memory / mmap / Arrow buffers / 共享库）更接近真实物理占用
+    （§15：RSS 简单相加会重复计算共享页）。
+    """
+    try:
+        rss = process_family_rss_bytes(prefer_pss=False)
+        if prefer_pss:
+            pss = process_family_rss_bytes(prefer_pss=True)
+            if pss and pss > 0:
+                return int(pss)
+        if rss and rss > 0:
+            return int(rss)
+    except Exception:
+        pass
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        return int(psutil.Process().memory_info().rss)
+    except Exception:
+        pass
+    try:
+        with open("/proc/self/status", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) * 1024
+    except Exception:
+        pass
+    try:
+        import resource
+
+        return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024
+    except Exception:
+        return None
+
+
 def live_memory_headroom_bytes(
     *,
     hard_limit: int | None = None,
@@ -785,8 +823,16 @@ class MemoryGovernor:
                     return int(rss)
             except Exception:
                 pass
-        # 审计 #341：优先用真实当前 RSS；不可用时读 /proc/self/status VmRSS；
-        # 最后才 fallback ru_maxrss。
+        # R36 P0-007（§14/15）：统一优先 **process family PSS**（主进程+子进程，
+        # 共享页不重复计）；不可用 → family RSS → self RSS → VmRSS → ru_maxrss。
+        try:
+            from runtime.resource_governor import process_family_memory_bytes
+
+            v = process_family_memory_bytes(prefer_pss=True)
+            if v is not None and v > 0:
+                return int(v)
+        except Exception:
+            pass
         try:
             import psutil  # type: ignore[import-untyped]
 
@@ -937,6 +983,19 @@ class MemoryGovernor:
             }
 
 
+def check_nested_cpu_oversubscription(
+    outer_workers: int,
+    inner_threads: int,
+    cpu_budget: int,
+) -> bool:
+    """§129/130：``outer_workers × inner_threads <= dynamic_cpu_budget``。
+
+    8 factor tasks × 8 BLAS threads = 64 runnable（16 核机器上 oversubscription）。
+    返回 True 表示**存在 oversubscription 风险**（需降 outer 或 inner）。
+    """
+    return (max(0, outer_workers) * max(1, inner_threads)) > max(1, cpu_budget)
+
+
 # ---------------------------------------------------------------------------
 # ExecutionResourceScope（R15）
 # ---------------------------------------------------------------------------
@@ -946,6 +1005,12 @@ class MemoryGovernor:
 #: env 时加锁，避免两个并发 engine request 的 enter/exit 交错恢复 previous
 #: （R20-138..145）。
 _ENV_LOCK = threading.RLock()
+
+#: R36 P0-028（§125）：并发 scope 检测——process-global env 的 set/restore 由
+#: ``_ENV_LOCK`` 串行化，但**执行**不在锁内；两个不同线程的 scope 并发执行时
+#: 会互相看到对方的 env。``_ACTIVE_SCOPE_THREADS`` 记录当前持有 scope 的线程。
+_ACTIVE_SCOPE_THREADS: set[int] = set()
+_ACTIVE_SCOPE_LOCK = threading.Lock()
 
 
 class ExecutionResourceScope:
@@ -992,6 +1057,22 @@ class ExecutionResourceScope:
 
     def __enter__(self) -> "ExecutionResourceScope":
         with _ENV_LOCK:
+            # R36 P0-028（§125）：若已有另一线程的 scope 在执行，process-global
+            # env 会在执行期间被对方的 enter/exit 覆盖——并发 job 用 env 做 task
+            # 级动态资源控制是错误做法。production fail-closed，research warning。
+            with _ACTIVE_SCOPE_LOCK:
+                other = [tid for tid in _ACTIVE_SCOPE_THREADS if tid != threading.get_ident()]
+            if other:
+                msg = (
+                    "ExecutionResourceScope 并发交叉: 线程 "
+                    f"{threading.get_ident()} 进入 scope，但线程 {other} 已在执行"
+                    " —— process-global env（DUCKDB_MAX_THREADS 等）在执行期间会被"
+                    " 互相覆盖；请改用 connection/query-owned setting 或 worker 进程"
+                    " 隔离（R36 P0-028）。"
+                )
+                if self.strict:
+                    raise ResourceContractApplyError(msg)
+                _logger.warning(msg)
             self._prev = {
                 "DUCKDB_MAX_THREADS": os.environ.get("DUCKDB_MAX_THREADS"),
                 "POLARS_MAX_THREADS": os.environ.get("POLARS_MAX_THREADS"),
@@ -1018,6 +1099,8 @@ class ExecutionResourceScope:
                 os.environ["DUCKDB_MAX_TEMP_DIRECTORY_SIZE"] = str(self.plan.spill_budget_bytes)
             self.effective_threads = int(threads)
             self._apply_live_pragma(threads)
+        with _ACTIVE_SCOPE_LOCK:
+            _ACTIVE_SCOPE_THREADS.add(threading.get_ident())
         return self
 
     def _apply_live_pragma(self, threads: int) -> None:
@@ -1049,6 +1132,8 @@ class ExecutionResourceScope:
             )
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        with _ACTIVE_SCOPE_LOCK:
+            _ACTIVE_SCOPE_THREADS.discard(threading.get_ident())
         with _ENV_LOCK:
             for key, value in self._prev.items():
                 if value is None:

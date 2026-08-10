@@ -13,6 +13,7 @@ import os
 import queue
 import threading
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
@@ -30,13 +31,14 @@ class JobDeadlineExceeded(RuntimeError):
 
 
 #: R31-P1-039：service 全局共享的 ResourceBroker（job admission + task admission
-#: 统一）。worker 执行 job 时通过 contextvar 传给内部 scheduler，避免「4 个 HTTP
-#: job × 16 内部 workers = 64 runnable」的过载。
-_service_broker_ctx: "Any | None" = None
+#: 统一）。worker 执行 job 时通过 **ContextVar** 传给内部 scheduler（§58），避免
+#: 「4 个 HTTP job × 16 内部 workers = 64 runnable」的过载，也避免旧 module-global
+#: ``_service_broker_ctx`` 的「A set → B set → A restore」竞态（R36 P0-018）。
+_service_broker_ctx_var: ContextVar[Any] = ContextVar("service_broker", default=None)
 
 
 def _get_service_broker() -> Any | None:
-    return _service_broker_ctx
+    return _service_broker_ctx_var.get()
 
 
 @dataclass
@@ -86,12 +88,16 @@ class BoundedJobQueue:
         self._queue_put_times: dict[str, float] = {}
         self.jobs_submitted_total = 0
         self.jobs_rejected_total = 0
-        # R31-P1-039：service 全局共享 broker（跨 job 统一 admission）。
+        # R36 P0-016/§57：service 用 HostResourceCoordinator 的 broker——job
+        # admission + task admission 与 FE 内部 scheduler / DA 共享同一资源权威
+        # （不再各自建独立 broker）。
         try:
-            from runtime.resource_broker import ResourceBroker
+            from runtime.host_resource_coordinator import get_host_coordinator
 
-            self.broker = ResourceBroker()
+            self.coordinator = get_host_coordinator()
+            self.broker = self.coordinator.broker
         except Exception:
+            self.coordinator = None
             self.broker = None
 
     # -- lifecycle ----------------------------------------------------------
@@ -238,11 +244,11 @@ class BoundedJobQueue:
         self._store.update(job)
 
     def _begin(self, job: JobRecord, run_fn: Callable[[JobRecord], None]) -> None:
-        global _service_broker_ctx
         with self._lock:
             self._running[job.run_id] = job
-        prev_broker = _service_broker_ctx
-        _service_broker_ctx = self.broker  # job 执行期间共享 broker
+        # R36 P0-018（§58）：ContextVar——每个 worker 线程自己的 job 执行期间
+        # 可见 shared broker；互不覆盖，A restore 不会影响 B 仍在运行的任务。
+        token = _service_broker_ctx_var.set(self.broker)
         try:
             run_fn(job)
         except BaseException:  # noqa: BLE001
@@ -252,7 +258,7 @@ class BoundedJobQueue:
             # 会拒绝覆盖，保持 terminal 状态权威。
             self._mark_unexpected_failure(job)
         finally:
-            _service_broker_ctx = prev_broker
+            _service_broker_ctx_var.reset(token)
             with self._lock:
                 self._running.pop(job.run_id, None)
                 self._queue_put_times.pop(job.run_id, None)

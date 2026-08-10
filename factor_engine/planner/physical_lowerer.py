@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -153,11 +154,29 @@ class BackendStageContext:
     gil_bound: bool = False
     releases_gil: bool = True
     backend_threads: int = 1
+    # R36 P0-008（§21/22/25）：admission token 必须 ≥ 实际 engine threads。
+    cpu_tokens: int = 1
     streamable: bool = False
     materializes_full_panel: bool = True
     spillable: bool = False
     shardable: bool = False
     shard_dimension: str | None = None
+
+
+def _engine_threads_for(backend: str) -> int:
+    """R36 P0-008：backend 的真实 engine threads（DUCKDB/POLARS 从 env 读）。
+
+    DuckDB ``SET threads=N`` 的 task 不能只 ``cpu_tokens=1``（§21：否则资源账本
+    失真）。env 由 ``ExecutionResourceScope`` 按资源计划设置。
+    """
+    if backend not in {"duckdb_sql", "clickhouse_sql", "sql", "polars"}:
+        return 1
+    env_key = "DUCKDB_MAX_THREADS" if backend != "polars" else "POLARS_MAX_THREADS"
+    raw = os.environ.get(env_key, "").strip()
+    if raw.isdigit() and int(raw) > 0:
+        return int(raw)
+    # 未设置时保守默认：duckdb 通常多线程。
+    return 4 if backend != "polars" else 2
 
 
 def backend_context_for(
@@ -196,12 +215,16 @@ def backend_context_for(
     # GIL 属性：由算子的真实 native 能力决定，不由 backend 名字粗判（R31-P0-004）。
     gil_bound = norm == "pandas_numpy"
     releases_gil = norm in {"polars", "duckdb_sql", "clickhouse_sql"}
+    # R36 P0-008（§21/22）：actual engine threads 与 admission tokens 一致——
+    # DuckDB ``threads=N`` 的 stage 声明 N 个 CPU token。
+    engine_threads = _engine_threads_for(norm)
     return BackendStageContext(
         backend_candidates=tuple(backend_candidates),
         preferred_backend=norm,
         gil_bound=gil_bound,
         releases_gil=releases_gil,
-        backend_threads=1,
+        backend_threads=engine_threads,
+        cpu_tokens=engine_threads,
         streamable=norm in {"duckdb_sql", "clickhouse_sql", "polars"},
         materializes_full_panel=norm == "pandas_numpy",
     )
@@ -239,7 +262,9 @@ def contract_for_plan(
         basis = "static"
     if peak <= 0:
         peak = max(1, (rows or 500_000) * 8)
-    cpu_tokens = 1
+    # R36 P0-008（§22）：cpu_tokens / backend_threads 与实际 engine threads 一致。
+    engine_threads = _engine_threads_for(backend)
+    cpu_tokens = engine_threads
     io_tokens = 1 if backend in {"duckdb_sql", "clickhouse_sql", "sql"} else 0
     out_bytes = max(1, (rows or 500_000) * 8)
     return TaskResourceContract(
@@ -252,7 +277,7 @@ def contract_for_plan(
         gil_bound=backend == "pandas_numpy",
         releases_gil=backend != "pandas_numpy",
         backend=backend,
-        backend_threads=1,
+        backend_threads=engine_threads,
         shardable=False,
         shard_dimension=None,
         uncertainty=uncertainty,

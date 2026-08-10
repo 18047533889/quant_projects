@@ -92,7 +92,23 @@ def _dispatch(
         materialize_shared(sid, task.node_ref)
         return task.task_id, None
     if task.task_type == TASK_ROOT:
-        result = execute_root(task)
+        # R35 §23/§24: pin the task's inner BLAS/OpenMP threads to its
+        # broker-granted CPU budget so FE_workers × inner_threads never
+        # oversubscribes the host.  thread_budget is a no-op when threadpoolctl
+        # is unavailable (performance extra not installed).
+        budget = 1
+        try:
+            contract = task.resource_contract
+            if contract is not None:
+                bt = getattr(contract, "backend_threads", None)
+                if bt and int(bt) >= 1:
+                    budget = int(bt)
+        except Exception:
+            budget = 1
+        from runtime.execution_traits import thread_budget
+
+        with thread_budget(budget):
+            result = execute_root(task)
         return task.task_id, result
     return task.task_id, None
 
@@ -211,12 +227,21 @@ class AdaptiveBatchScheduler:
         max_concurrency: int | None = None,
     ) -> None:
         if broker is None:
-            # R31-P1-039：service job 执行期间共享进程级 broker（job admission +
-            # task admission 统一），避免 HTTP job 之间/与内部 workers 叠加过载。
+            # R31-P1-039 + R36 P0-016：优先用 service ContextVar 里的共享 broker
+            # （job admission + task admission 统一）；没有则用进程级唯一
+            # HostResourceCoordinator 的 broker——不再各自 new 独立 ResourceBroker
+            #（§52 one host resource authority）。
             try:
                 from service.queue import _get_service_broker
 
                 broker = _get_service_broker()
+            except Exception:
+                broker = None
+        if broker is None:
+            try:
+                from runtime.host_resource_coordinator import get_host_coordinator
+
+                broker = get_host_coordinator().broker
             except Exception:
                 broker = None
         self.broker = broker or ResourceBroker()
@@ -248,11 +273,22 @@ class AdaptiveBatchScheduler:
         self._scheduler_stats: dict[str, Any] = {
             "real_task_done": 0, "virtual_task_done": 0, "virtual_task_ratio": 0.0,
         }
+        # R36 P0-002：最近一次 ResourceDecision（broker 建议值，admission 消费）。
+        self._last_decision: Any | None = None
 
     def cancel(self) -> None:
         """请求取消：后续 admission 一律拒绝；run 在无在跑任务时提前结束。"""
         self._cancelled = True
         self._explain("CANCELLED: no new task admitted; finishing running tasks")
+
+    def _dynamic_wave_budget(self) -> int:
+        """R36 P0-010：从 broker ResourceDecision 取动态 read-wave 预算。"""
+        try:
+            decision = self.broker.resource_decision()
+            self._last_decision = decision
+            return max(1, int(decision.read_wave_bytes))
+        except Exception:
+            return self.wave_memory_budget
 
     # -- plan --
 
@@ -325,9 +361,12 @@ class AdaptiveBatchScheduler:
                         consumers=tuple(sorted((*prev_c, rid))),
                     )
 
+        # R36 P0-010：read wave 预算不再固定 4GB——plan 时从 broker decision 取
+        # 动态值（§35：min(calibrated_optimum, SafeEnvelope×wave_fraction, job lease)）。
+        wave_budget = self._dynamic_wave_budget()
         read_waves = build_waves_from_dag(
             physical,
-            wave_memory_budget=self.wave_memory_budget,
+            wave_memory_budget=wave_budget,
             scan_cost_map=scan_cost_map,
             scope_scan_cost_map=scope_scan_cost_map,
         )
@@ -410,31 +449,37 @@ class AdaptiveBatchScheduler:
         return future, lease
 
     def _dynamic_concurrency_limit(self, sink: StreamingResultSink | None) -> int:
-        """R33-P0-038：显式并发上限 = min(max_concurrency, broker CPU budget, sink)。
+        """R33-P0-038 + R36 P0-001/002/012：显式并发上限。
 
-        ResourceBroker 的 ``try_reserve`` 仍做精确 memory/CPU admission；本值是
-        阻止「大量廉价 task 同时 submit」的**额外**显式闸（R33-P0-038）。
+        ``hard_target = min(user_max_concurrency, broker decision target_concurrency)``
+        （§4）；sink backpressure 再降（§40：>0.70 reduce，>0.90 stop non-critical）。
+        ResourceBroker 的 ``try_reserve`` 仍做精确 memory/CPU admission。
         """
         limit = self.max_concurrency
         if limit is None or limit <= 0:
             limit = 2 ** 31
+        # R36 P0-002：broker 算出的动态目标必须被消费（推荐值真正生效）。
+        decision = getattr(self, "_last_decision", None)
         broker_limit = 1
-        try:
-            broker_limit = max(1, int(self.broker.cpu_budget()))
-        except Exception:
-            broker_limit = max(1, int(getattr(self.broker, "hard_cpu_slots", 1) or 1))
+        if decision is not None:
+            broker_limit = max(1, int(decision.target_cpu_tokens))
+        else:
+            try:
+                broker_limit = max(1, int(self.broker.cpu_budget()))
+            except Exception:
+                broker_limit = max(1, int(getattr(self.broker, "hard_cpu_slots", 1) or 1))
         limit = min(limit, broker_limit)
         if sink is not None:
             try:
-                # R33-P0-046：sink backpressure 反馈进动态并发（越接近满越少并发）。
+                # R33-P0-046 + R36 P0-012：backpressure 显式 0.70 / 0.90 双档。
                 ratio = getattr(sink, "backpressure_ratio", None)
                 if ratio is None:
                     ratio = sink.queue.backpressure_ratio
                 ratio = float(ratio)
-                if ratio >= 0.8:
-                    limit = max(1, limit // 2)
-                elif ratio >= 0.6:
-                    limit = max(1, int(limit * 0.75))
+                if ratio >= 0.90:
+                    limit = max(1, limit // 4)
+                elif ratio >= 0.70:
+                    limit = max(1, int(limit * 0.5))
             except Exception:
                 pass
         return max(1, limit)
@@ -620,6 +665,17 @@ class AdaptiveBatchScheduler:
                     f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
                 )
                 break
+            # R36 P0-002/003：每个 control tick 消费 broker 的 ResourceDecision——
+            # 压力升高 AIMD fast down、压力解除稳定后 slow up、动态 budgets
+            # （wave/block/sink）全部在此刷新（§301 伪代码 scheduler.set_targets）。
+            decision = self.broker.resource_decision(
+                job_memory_lease_bytes=None,
+                sink_backpressure=float(sink.backpressure_ratio) if sink is not None else 0.0,
+            )
+            self._last_decision = decision
+            # R36 P0-010：dynamic read wave（§35/36）——运行中不拆已执行 wave，
+            # 只影响后续 plan / 新 wave。
+            self.wave_memory_budget = int(decision.read_wave_bytes)
             # 0) read waves：SOURCE_SCAN ready → 真实 scan（R33-P0-016）。
             wave_scan_done += self._execute_read_waves(
                 plan, dag, committed, remaining, ctx,
@@ -761,6 +817,7 @@ class AdaptiveBatchScheduler:
                         committed.add(_tid)
                         real_done += 1
                         self._record_timing(_tid, dag.tasks[_tid])
+                        self._record_task_calibration(_tid, dag.tasks[_tid])
                         _res = results_by_root.get(_tid)
                         if dag.tasks[_tid].task_type == TASK_ROOT:
                             if sink is not None:
@@ -774,6 +831,7 @@ class AdaptiveBatchScheduler:
                 committed.add(key)
                 real_done += 1
                 self._record_timing(key, dag.tasks[key])
+                self._record_task_calibration(key, dag.tasks[key])
                 if dag.tasks[key].task_type == TASK_ROOT:
                     if sink is not None:
                         sink.submit(dag.tasks[key].factor_name, result)
@@ -784,22 +842,29 @@ class AdaptiveBatchScheduler:
                 # 释放已消费的 CSE sid（引用计数归零立即释放）。
                 if dag.tasks[key].task_type == TASK_ROOT:
                     self._release_consumed(dag, key, ctx)
-            # 4) 动态并发（R27-204）：外部负载高 → 降 soft CPU budget。
-            if self.broker.pressure_stage() in {"PRESSURE_1", "PRESSURE_2"} \
-                    and self.executor._thread_task_count > 0:
-                self.broker.lower_soft_cpu_budget(factor=0.6)
+            # 4) R36 P0-003：动态 CPU 由 ResourceController 双向控制（每 tick 在
+            #    顶部决策里 fast down / slow up）——不再一次性写死 0.6。
             # 5) 无进展保护：admission 全部被拒且没有在跑 future → 等资源释放后
-            #    再试；连续多轮无进展则诊断（不空转）。
+            #    再试；连续多轮无进展则**先 auto-shard replan smaller**（§100），
+            #    再失败——不能只报 stuck。
             if admitted_this_round == 0 and not futures and remaining:
                 no_progress_rounds += 1
                 if no_progress_rounds >= 200:
+                    replanned = self._auto_shard_replan(dag, remaining)
+                    if replanned:
+                        self._explain(
+                            f"R36_AUTO_SHARD: replanned {replanned} task(s) smaller "
+                            f"(remaining={len(remaining)})"
+                        )
+                        no_progress_rounds = 0
+                        continue
                     self._explain(
                         "STUCK: no task admitted for 200 rounds; broker headroom="
                         f"{self.broker.snapshot().live_headroom} remaining={sorted(remaining)[:5]}"
                     )
                     raise RuntimeError(
                         "AdaptiveBatchScheduler made no progress: all ready tasks "
-                        "rejected by ResourceBroker admission; "
+                        "rejected by ResourceBroker admission (auto-shard not legal); "
                         f"broker={self.broker.summary()} remaining={sorted(remaining)[:10]}"
                     )
             else:
@@ -816,6 +881,12 @@ class AdaptiveBatchScheduler:
             ),
             "concurrency_limit_final": self._dynamic_concurrency_limit(sink),
             "read_waves": self._wave_summary,
+            "resource_decision": (
+                self._last_decision.to_dict()
+                if self._last_decision is not None
+                else None
+            ),
+            "resource_controller": self.broker.resource_controller_summary(),
         }
         return {
             "results": self._results,
@@ -885,6 +956,7 @@ class AdaptiveBatchScheduler:
                 result = execute_root(task)
                 committed.add(tid)
                 self._record_timing(tid, task)
+                self._record_task_calibration(tid, task)
                 if sink is not None:
                     sink.submit(task.factor_name, result)
                 if result_handler is not None:
@@ -965,6 +1037,74 @@ class AdaptiveBatchScheduler:
             "preferred_backend": task.preferred_backend,
         }
 
+    def _auto_shard_replan(self, dag: PhysicalFactorDAG, remaining: set[str]) -> int:
+        """R36 P0-020（§100）：ready task 始终无法 admission 且 shardable 时，
+        先 replan smaller shard，再失败。返回 replan 的 task 数。
+        """
+        if not getattr(self, "_shard_replanned", None):
+            self._shard_replanned: set[str] = set()
+        try:
+            from dataclasses import replace as _replace
+
+            from runtime.auto_shard_planner import AutoShardPlanner
+
+            planner = AutoShardPlanner()
+            env = self.broker.resource_envelope()
+            safe = max(1, int(env.safe_memory_bytes))
+            candidates = [
+                dag.tasks[t]
+                for t in remaining
+                if t in dag.tasks and dag.tasks[t].executable
+                and t not in self._shard_replanned
+            ]
+            if not candidates:
+                return 0
+            plans = planner.plan_for_tasks(candidates, safe_envelope_bytes=safe)
+            n = 0
+            for tid, plan in plans.items():
+                task = dag.tasks[tid]
+                contract = getattr(task, "resource_contract", None)
+                if contract is None:
+                    continue
+                new_contract = _replace(
+                    contract,
+                    peak_memory_bytes=plan.per_shard_peak_bytes,
+                    output_bytes=plan.per_shard_peak_bytes,
+                    estimate_basis=f"auto-shard:{plan.dimension}",
+                )
+                dag.tasks[tid] = rebase_task(
+                    task, resource_contract=new_contract
+                )
+                self._shard_replanned.add(tid)
+                n += 1
+            return n
+        except Exception:
+            return 0
+
+    def _record_task_calibration(self, tid: str, task: PhysicalFactorTask) -> None:
+        """R36 P0-005/006：task 完成后把真实 elapsed/output 记入 calibration store。
+
+        peak 内存为当前契约估计（per-task 精确 PSS attribution 需要 isolated
+        calibration / concurrent marginal model，§171——第一版如实标记 basis）。
+        """
+        try:
+            from runtime.resource_calibration_store import global_calibration_store
+            from runtime.resource_shape import ResourceShapeKey
+
+            contract = getattr(task, "resource_contract", None)
+            peak = int(contract.peak_memory_bytes) if contract is not None else 0
+            out = int(contract.output_bytes) if contract is not None else 0
+            elapsed = self._task_timing.get(tid, {}).get("finished_at_ms", 0.0)
+            global_calibration_store().record(
+                ResourceShapeKey.from_task(task),
+                elapsed_ms=float(elapsed),
+                peak_mem=peak,
+                output_bytes=out,
+                spill_bytes=int(contract.spill_bytes) if contract is not None else 0,
+            )
+        except Exception:
+            pass  # calibration 是性能数据，不因失败影响正确执行
+
     # -- materialize --
 
     def materialize(
@@ -974,11 +1114,22 @@ class AdaptiveBatchScheduler:
         backend: Any,
         ctx: Any,
         writer: Callable[[list[ResultItem]], None],
-        queue_bytes: int = 4 * 1024**3,
+        queue_bytes: int | None = None,
         batch_size: int = 1,
         **run_kwargs: Any,
     ) -> dict[str, Any]:
-        """run + 流式写（R27-102..109 compute 与 write pipeline 重叠）。"""
+        """run + 流式写（R27-102..109 compute 与 write pipeline 重叠）。
+
+        R36 P0-011：``queue_bytes=None`` 时从 broker ResourceDecision 取动态
+        sink 预算（§38/39：min(SafeEnvelope×0.05, job_lease×0.10, cap)）。
+        """
+        if queue_bytes is None:
+            try:
+                decision = self.broker.resource_decision()
+                self._last_decision = decision
+                queue_bytes = max(1, int(decision.result_queue_bytes))
+            except Exception:
+                queue_bytes = 4 * 1024**3
         sink = StreamingResultSink(
             writer=writer,
             queue_bytes=queue_bytes,

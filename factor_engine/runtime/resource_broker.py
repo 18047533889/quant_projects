@@ -26,6 +26,10 @@ from typing import Any
 
 from runtime.task_resource_contract import DEFAULT_UNCERTAINTY, TaskResourceContract
 
+# R36：PSI / memory slope / swap 信号（§28/29/154）。resource_broker 只采集，
+# 判定在 resource_autopilot（惰性 import 避免循环依赖）。
+from runtime.resource_monitor import MemorySlopeTracker  # noqa: E402
+
 _logger = logging.getLogger(__name__)
 
 #: 采样节流（R27-033：500ms~2s，默认 1s）。不要每 operator cell 采样。
@@ -60,6 +64,18 @@ class ResourceSnapshot:
     spill_free_bytes: int
     spill_total_bytes: int
     disk_busy: float
+    # R36（§28/29）：PSI / memory slope / swap / memory.events —— 反馈控制输入。
+    cpu_psi_some: float = 0.0
+    cpu_psi_full: float = 0.0
+    memory_psi_some: float = 0.0
+    memory_psi_full: float = 0.0
+    io_psi_some: float = 0.0
+    io_psi_full: float = 0.0
+    mem_available_slope: float = 0.0
+    memory_events: dict = field(default_factory=dict)
+    swap_current: int | None = None
+    swap_max: int | None = None
+    major_fault_rate: float = 0.0
 
     @property
     def live_headroom(self) -> int:
@@ -96,6 +112,12 @@ class ResourceSnapshot:
             "spill_total_bytes": self.spill_total_bytes,
             "disk_busy": round(self.disk_busy, 3),
             "live_headroom": self.live_headroom,
+            "cpu_psi_some": round(self.cpu_psi_some, 4),
+            "memory_psi_some": round(self.memory_psi_some, 4),
+            "io_psi_some": round(self.io_psi_some, 4),
+            "mem_available_slope": round(self.mem_available_slope, 3),
+            "swap_current": self.swap_current,
+            "swap_max": self.swap_max,
         }
 
 
@@ -166,6 +188,38 @@ def _loadavg() -> float:
         return float(_os.getloadavg()[0])
     except (AttributeError, OSError):
         return 0.0
+
+
+def _psi(namespace: str) -> tuple[float, float]:
+    """PSI ``(some_avg10, full_avg10)``；不可读返回 ``(0.0, 0.0)``（R36 §28）。"""
+    try:
+        from runtime.resource_monitor import psi_cpu, psi_io, psi_memory
+
+        reader = {"cpu": psi_cpu, "memory": psi_memory, "io": psi_io}[namespace]
+        out = reader()
+        if out is None:
+            return 0.0, 0.0
+        return float(out[0]), float(out[1])
+    except Exception:
+        return 0.0, 0.0
+
+
+def _swap() -> tuple[int | None, int | None]:
+    try:
+        from runtime.resource_monitor import swap_usage
+
+        return swap_usage()
+    except Exception:
+        return None, None
+
+
+def _memory_events() -> dict:
+    try:
+        from runtime.resource_monitor import read_memory_events
+
+        return read_memory_events()
+    except Exception:
+        return {}
 
 
 def _disk_io_counters() -> tuple[int, int] | None:
@@ -443,6 +497,10 @@ class ResourceBroker:
         # R31-P0-012: 磁盘 IO 计数增量（busy 观测）。
         self._last_io_bytes: int | None = None
         self._last_io_sample_ms: float | None = None
+        # R36（§69）：MemAvailable 时间斜率（预测性压力）。
+        self._slope_tracker = MemorySlopeTracker()
+        # R36：ResourceController（惰性构造，避免循环 import）。
+        self._controller: Any = None
 
     # -- 采样 --
 
@@ -477,6 +535,14 @@ class ResourceBroker:
         self._external_cpu_ema = 0.8 * self._external_cpu_ema + 0.2 * external_cpu
         # R31-P0-012：磁盘 busy ≈ 读写吞吐 / 参考带宽（饱和 → 1.0）。
         disk_busy = self._disk_io_busy(now)
+        mem_available = _host_mem_available()
+        # R36（§69）：MemAvailable 斜率——外部任务快速吃内存时提前让路。
+        slope = self._slope_tracker.update(now / 1000.0, mem_available)
+        # R36（§28/29）：PSI + swap + memory.events。
+        cpu_psi = _psi("cpu")
+        mem_psi = _psi("memory")
+        io_psi = _psi("io")
+        sw_cur, sw_max = _swap()
         snap = ResourceSnapshot(
             timestamp_ms=now,
             hard_cpu_slots=self.hard_cpu_slots,
@@ -486,7 +552,7 @@ class ResourceBroker:
             loadavg=_loadavg(),
             hard_memory_limit=self.hard_memory_limit,
             cgroup_memory_current=_cgroup_memory_current(),
-            host_mem_available=_host_mem_available(),
+            host_mem_available=mem_available,
             process_rss=rss,
             worker_rss=0,
             process_family_rss=rss,
@@ -494,6 +560,16 @@ class ResourceBroker:
             spill_free_bytes=self._spill_free(),
             spill_total_bytes=self._spill_total(),
             disk_busy=disk_busy,
+            cpu_psi_some=cpu_psi[0],
+            cpu_psi_full=cpu_psi[1],
+            memory_psi_some=mem_psi[0],
+            memory_psi_full=mem_psi[1],
+            io_psi_some=io_psi[0],
+            io_psi_full=io_psi[1],
+            mem_available_slope=slope,
+            memory_events=_memory_events(),
+            swap_current=sw_cur,
+            swap_max=sw_max,
         )
         self._cached = snap
         self._last_sample_ms = now
@@ -716,6 +792,109 @@ class ResourceBroker:
     def lower_soft_cpu_budget(self, factor: float = 0.5) -> None:
         """外部负载升高 → 降低 soft CPU budget（R27-130）。"""
         self._cpu.set_soft_budget(int(self.hard_cpu_slots * max(0.1, factor)))
+
+    # -- R36 双向控制器（P0-003：压力恢复后自动升速） --
+
+    def raise_soft_cpu_budget(self, amount: int = 1) -> None:
+        """压力解除后**升** soft CPU budget（每次 +1，slow additive increase）。
+
+        R36 P0-003：旧实现只有 ``lower_soft_cpu_budget``（只降不升），下午另一个
+        算法结束后 FE 会永远停在低预算。本方法由 ResourceController 在稳定 N 样本
+        后调用（§66 fast down / slow up）。
+        """
+        self._cpu.set_soft_budget(min(self.hard_cpu_slots, self._cpu.soft_budget + int(amount)))
+
+    def restore_cpu_budget(self) -> None:
+        """一次性恢复 full budget（异常回退 conservative 时用）。"""
+        self._cpu.set_soft_budget(self.hard_cpu_slots)
+
+    # -- R36 ResourceDecision（P0-002：broker 算出建议值，scheduler 必须消费） --
+
+    def _resource_controller(self) -> Any:
+        if self._controller is None:
+            from runtime.resource_autopilot import ResourceController
+
+            self._controller = ResourceController(self)
+        return self._controller
+
+    def _signals_from_snapshot(self, snap: ResourceSnapshot) -> Any:
+        """从单个采样构造 ResourceSignals（避免一个 tick 内多次 force 采样）。"""
+        from runtime.resource_monitor import ResourceSignals
+
+        return ResourceSignals(
+            host_mem_available=snap.host_mem_available,
+            cgroup_mem_current=snap.cgroup_memory_current,
+            family_rss=snap.process_family_rss,
+            family_pss=snap.process_family_pss,
+            memory_psi_some=snap.memory_psi_some,
+            memory_psi_full=snap.memory_psi_full,
+            cpu_util=snap.system_cpu_util,
+            cpu_psi_some=snap.cpu_psi_some,
+            io_psi_some=snap.io_psi_some,
+            disk_latency_ms=0.0,
+            writer_backpressure=0.0,
+            scan_backpressure=0.0,
+            mem_available_slope=snap.mem_available_slope,
+            memory_events=dict(snap.memory_events),
+            swap_current=snap.swap_current,
+            swap_max=snap.swap_max,
+        )
+
+    def _envelope_from_snapshot(self, snap: ResourceSnapshot) -> Any:
+        """从单个采样构造 Safe Envelope（§303/17）。"""
+        from runtime.resource_monitor import compute_safe_envelope
+
+        env = compute_safe_envelope(
+            hard_memory_bytes=self.hard_memory_limit,
+            live_headroom_bytes=snap.live_headroom,
+            emergency_reserve_bytes=self._reserve_bytes(),
+            family_pss=snap.process_family_pss,
+        )
+        from dataclasses import replace
+
+        return replace(
+            env,
+            hard_cpu_tokens=self.hard_cpu_slots,
+            target_cpu_tokens=max(1, self._cpu.soft_budget),
+            io_capacity_score=1.0,
+            remote_capacity_score=1.0,
+            spill_free_bytes=snap.spill_free_bytes,
+        )
+
+    def resource_signals(self) -> Any:
+        """当前 ResourceSignals（PSI + slope + swap + family memory）。"""
+        return self._signals_from_snapshot(self._refresh(force=True))
+
+    def resource_envelope(self) -> Any:
+        """当前 Safe Envelope（§303/17）。"""
+        return self._envelope_from_snapshot(self._refresh(force=True))
+
+    def resource_decision(
+        self,
+        *,
+        job_memory_lease_bytes: int | None = None,
+        sink_backpressure: float = 0.0,
+    ) -> Any:
+        """R36 P0-002：一个 control tick 的完整 ResourceDecision。
+
+        scheduler 在每次 admission 前消费：``target_concurrency`` 是最新硬目标
+        （§4：``hard_target = min(user_max_concurrency, target_concurrency)``），
+        ``read_wave_bytes`` / ``factor_block_bytes`` / ``result_queue_bytes`` 是
+        动态 budgets（§35/38/49）。同一 tick 只采样一次（斜率不被稀释）。
+        """
+        snap = self._refresh(force=True)
+        return self._resource_controller().tick(
+            self._signals_from_snapshot(snap),
+            self._envelope_from_snapshot(snap),
+            job_memory_lease_bytes=job_memory_lease_bytes,
+            sink_backpressure=sink_backpressure,
+        )
+
+    def resource_controller_summary(self) -> dict[str, Any]:
+        try:
+            return self._resource_controller().to_dict()
+        except Exception:
+            return {}
 
     def summary(self) -> dict[str, Any]:
         snap = self._refresh()

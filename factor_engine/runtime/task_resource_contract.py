@@ -159,3 +159,34 @@ def unsafe_contract(reason: str = "semantic shardability unknown") -> TaskResour
         shard_dimension=None,
         estimate_basis=f"unsafe:{reason}",
     )
+
+
+def parallel_kernel_contract(
+    *,
+    numba_threads: int,
+    peak_memory_bytes: int = 0,
+    output_bytes: int = 0,
+    shardable: bool = False,
+) -> TaskResourceContract:
+    """R36 §133..135：Numba ``parallel=True`` 的 kernel 契约——cpu_tokens 必须
+    = 实际并行线程数（§135：task contract 写 ``cpu_tokens=N``）。
+
+    第一阶段默认 ``parallel=False``（§134：由 FE outer scheduler 负责并行）；
+    单个巨大 Numba block 才考虑 prange，且此处声明真实 token。
+    """
+    threads = max(1, int(numba_threads))
+    return TaskResourceContract(
+        predicted_elapsed_ms=0.0,
+        cpu_tokens=threads,
+        io_tokens=0,
+        peak_memory_bytes=max(0, int(peak_memory_bytes)),
+        output_bytes=max(0, int(output_bytes)),
+        gil_bound=False,
+        releases_gil=True,
+        backend="numba",
+        backend_threads=threads,
+        shardable=shardable,
+        shard_dimension="asset" if shardable else None,
+        uncertainty=UNCERTAINTY_COLD,
+        estimate_basis=f"numba-parallel:{threads}t",
+    )

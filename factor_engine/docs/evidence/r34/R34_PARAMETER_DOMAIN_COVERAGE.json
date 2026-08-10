@@ -3,6 +3,15 @@
   "independent_oracle": true,
   "panel_shape": "300days x 50stocks",
   "certified": {
+    "ts_mean": [
+      1,
+      2,
+      5,
+      20,
+      60,
+      120,
+      252
+    ],
     "ts_std": [
       1,
       2,
@@ -13,6 +22,15 @@
       252
     ],
     "ts_var": [
+      1,
+      2,
+      5,
+      20,
+      60,
+      120,
+      252
+    ],
+    "ts_sum": [
       1,
       2,
       5,
@@ -40,72 +58,75 @@
       252
     ],
     "ts_zscore": [
-      1
+      1,
+      2,
+      5,
+      20,
+      60,
+      120,
+      252
     ],
     "cs_demean": [],
     "c_demean": [],
+    "rank": [],
     "cs_pct_rank": []
   },
-  "not_certified": {
-    "ts_mean": "no passed case",
-    "ts_sum": "no passed case",
-    "rank": "no passed case"
-  },
+  "not_certified": {},
   "detail": [
     {
       "window": 1,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_mean"
     },
     {
       "window": 2,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_mean"
     },
     {
       "window": 5,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_mean"
     },
     {
       "window": 20,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_mean"
     },
     {
       "window": 60,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_mean"
     },
     {
       "window": 120,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_mean"
     },
     {
       "window": 252,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_rolling_mean_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_mean"
     },
     {
@@ -224,56 +245,56 @@
       "window": 1,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_sum"
     },
     {
       "window": 2,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_sum"
     },
     {
       "window": 5,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_sum"
     },
     {
       "window": 20,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_sum"
     },
     {
       "window": 60,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_sum"
     },
     {
       "window": 120,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_sum"
     },
     {
       "window": 252,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
-      "error": "_sum_ref() takes 3 positional arguments but 4 were given",
+      "pass": true,
+      "error": "",
       "canonical": "ts_sum"
     },
     {
@@ -400,7 +421,7 @@
       "window": 2,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
+      "pass": true,
       "error": "",
       "canonical": "ts_zscore"
     },
@@ -408,7 +429,7 @@
       "window": 5,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
+      "pass": true,
       "error": "",
       "canonical": "ts_zscore"
     },
@@ -416,7 +437,7 @@
       "window": 20,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
+      "pass": true,
       "error": "",
       "canonical": "ts_zscore"
     },
@@ -424,7 +445,7 @@
       "window": 60,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
+      "pass": true,
       "error": "",
       "canonical": "ts_zscore"
     },
@@ -432,7 +453,7 @@
       "window": 120,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
+      "pass": true,
       "error": "",
       "canonical": "ts_zscore"
     },
@@ -440,7 +461,7 @@
       "window": 252,
       "min_periods": 1,
       "ddof": 1,
-      "pass": false,
+      "pass": true,
       "error": "",
       "canonical": "ts_zscore"
     },
@@ -458,7 +479,7 @@
     },
     {
       "param": "default",
-      "pass": false,
+      "pass": true,
       "error": "",
       "canonical": "rank"
     },

@@ -33,6 +33,8 @@ class ExecutionContext:
     query_budget: Any | None = None
     runtime_stats: dict[str, Any] | None = None
     prefer_polars_panel: bool = False
+    # R36 P0-021（§104/105）：governed CSE buffer store（取代 raw dict 权威写入）。
+    shared_buffers: Any = None
 
     def __post_init__(self) -> None:
         if not self.execution_id:

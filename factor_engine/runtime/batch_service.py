@@ -93,6 +93,17 @@ def _materialize_shared_subplan(
             return
     if ctx.shared_result_cache is not None:
         value = backend.execute(sub, ctx)
+        # R36 P0-021（§104/106）：经 GovernedBufferStore 写入（byte 预算 + 记账 +
+        # 冷淘汰），不再 raw dict 写入绕过治理。store 拒绝时回退 ExpressionCache
+        # governed 路径；两者都不可用才允许 raw（研究降级），production 直接拒绝。
+        store = getattr(ctx, "shared_buffers", None)
+        if store is not None:
+            store.put(sid, value)
+            return
+        cache = getattr(ctx, "expression_cache", None)
+        if cache is not None and getattr(cache, "set", None) is not None:
+            cache.set(sid, value)
+            return
         ctx.shared_result_cache[sid] = value
 
 
@@ -114,11 +125,15 @@ def _release_consumed_sids(ctx: Any, root: Any) -> None:
     if refcounts is None:
         return
     cache = getattr(ctx, "expression_cache", None)
+    store = getattr(ctx, "shared_buffers", None)
     for sid in consumed:
         remaining = refcounts.get(sid, 1) - 1
         refcounts[sid] = remaining
         if remaining <= 0:
-            if cache is not None:
+            if store is not None:
+                # R36 P0-023：backing ref 与 accounting 同时释放（governed store）。
+                store.release(sid)
+            elif cache is not None:
                 cache.release(sid)
             else:
                 ctx.shared_result_cache.pop(sid, None)
@@ -712,6 +727,18 @@ def _execute_run_many_scheduler(
     scheduler = AdaptiveBatchScheduler(
         max_concurrency=max_concurrency,
     )
+    # R36 P0-016/017（§54/56）：FE batch run 是唯一资源权威——把 Safe Envelope
+    # 应用到 DA governor（max_total_reserved_memory / scan inflight），DA 不再
+    # 独立决定全局内存（no double admission）。
+    try:
+        from runtime.host_resource_coordinator import get_host_coordinator
+
+        da_env = get_host_coordinator().apply_da_envelope()
+        runtime = dict(ctx.runtime_stats or {})
+        runtime["host_coordinator_da_envelope"] = da_env
+        ctx.runtime_stats = runtime  # type: ignore[attr-defined]
+    except Exception:
+        pass
     # R33-P0-001..006：BatchDataRequest —— 从 analyses/plan 提取（multi-source）
     # → 每 source scope 一次 ScanCost（真实 time_range + instruments）→ 喂 read
     # wave / IO token / admission。估算失败记录 degraded planning（不静默）。
@@ -779,37 +806,50 @@ def _execute_run_many_scheduler(
                 backend_paths.get(name, {}), backend_paths,
             )
 
-    with routing_execution_scope(perf):
-        if ctx.shared_result_cache is not None:
-            _setup_cse_refcounts(ctx, dag.roots)
-            validate_cse_refcount_integrity(dag, ctx)
-        # R33 §39：Auto Execution Mode——小批量走 serial fused（DIRECT_VECTOR），
-        # 不建 future / 不占 lease（scheduler overhead > compute savings）。
-        mode = choose_execution_mode(factors, analyses, dag)
-        if mode == "DIRECT_VECTOR":
-            run_stats = scheduler.run_serial_fused(
-                plan,
-                backend=engine_to_use.backend,
-                ctx=ctx,
-                execute_root=_execute_root,
-                result_handler=_handle,
-            )
-        else:
-            run_stats = scheduler.run(
-                plan,
-                backend=engine_to_use.backend,
-                ctx=ctx,
-                execute_root=_execute_root,
-                result_handler=_handle,
-                input_dq_check=input_dq_check,
-                input_dq_strict=input_dq_strict,
-                input_dq_thresholds=input_dq_thresholds,
-            )
-        if isinstance(run_stats.get("scheduler_stats"), dict):
-            run_stats["scheduler_stats"]["auto_execution_mode"] = mode
-        else:
-            run_stats["scheduler_stats"] = {"auto_execution_mode": mode}
-        run_stats["auto_execution_mode"] = mode
+    # R36 P0-029：run 级专用峰值采样器（start→stop 只统计本 run 窗口的
+    # process family PSS/RSS，不混入 lifetime peak）。
+    from runtime.run_peak_sampler import RunPeakSampler
+
+    run_peak_sampler = RunPeakSampler(interval_s=0.5)
+    run_peak_sampler.start()
+    try:
+        with routing_execution_scope(perf):
+            if ctx.shared_result_cache is not None:
+                _setup_cse_refcounts(ctx, dag.roots)
+                validate_cse_refcount_integrity(dag, ctx)
+            # R33 §39：Auto Execution Mode——小批量走 serial fused（DIRECT_VECTOR），
+            # 不建 future / 不占 lease（scheduler overhead > compute savings）。
+            mode = choose_execution_mode(factors, analyses, dag)
+            if mode == "DIRECT_VECTOR":
+                run_stats = scheduler.run_serial_fused(
+                    plan,
+                    backend=engine_to_use.backend,
+                    ctx=ctx,
+                    execute_root=_execute_root,
+                    result_handler=_handle,
+                )
+            else:
+                run_stats = scheduler.run(
+                    plan,
+                    backend=engine_to_use.backend,
+                    ctx=ctx,
+                    execute_root=_execute_root,
+                    result_handler=_handle,
+                    input_dq_check=input_dq_check,
+                    input_dq_strict=input_dq_strict,
+                    input_dq_thresholds=input_dq_thresholds,
+                )
+            if isinstance(run_stats.get("scheduler_stats"), dict):
+                run_stats["scheduler_stats"]["auto_execution_mode"] = mode
+            else:
+                run_stats["scheduler_stats"] = {"auto_execution_mode": mode}
+            run_stats["auto_execution_mode"] = mode
+    finally:
+        peak = run_peak_sampler.stop()
+        ctx.runtime_stats = record_resource_telemetry(
+            ctx.runtime_stats, finalize=True, run_peak=peak
+        )
+        run_stats["run_peak"] = peak
     batch_out: dict[str, Any] = {
         "results": out,
         "dag": dag,
