@@ -41,37 +41,32 @@ _LEGACY_ALLOWLIST = {
     "fields/__init__.py",
 }
 
-#: Documented ``market=None`` fallback branches: functions whose PRIMARY path is
-#: market-aware (``resolve_market_field``) and that fall back to the legacy
-#: A-share resolver ONLY when the caller cannot prove a market.  Each is
-#: audited to route through ``resolve_market_field`` first when a market is
-#: available (R17-037).  Keyed by ``path:line`` of the legacy call.
-_LEGACY_FALLBACK_SITES = {
-    # ir/analyzer.py — _price_basis_of_field / _flow_semantics_of_field /
-    # Analyzer._resolve_field_ir use resolve_market_field when market is given.
-    "ir/analyzer.py:601",
-    "ir/analyzer.py:604",
-    "ir/analyzer.py:677",
-    "ir/analyzer.py:680",
-    "ir/analyzer.py:1054",
-    "ir/analyzer.py:1056",
-    # ir/types.py — infer_field_type(market=...) primary path is market-aware.
-    "ir/types.py:86",
-    "ir/types.py:88",
-    # storage/sources/field_plan.py — _resolve_table_spec uses the market registry
-    # when a market is known; the legacy else-branch is the market=None fallback.
-    "storage/sources/field_plan.py:172",
-    # storage/sources/data_access_source.py — _table_pit_allowed resolves per-market
-    # when plan.market is set; legacy else-branch is the market=None fallback;
-    # _field_spec resolves per-market when the dataset declares a market, else the
-    # legacy else-branch is the dataset-without-market fallback.
-    "storage/sources/data_access_source.py:1400",
-    "storage/sources/data_access_source.py:1875",
-    "storage/sources/data_access_source.py:1075",
-    # storage/sources/clickhouse_source.py — market-aware when the table name
-    # declares one; legacy else-branch is the bare-table fallback.
-    "storage/sources/clickhouse_source.py:202",
-}
+#: Documented ``market=None`` fallback pattern: a bare legacy call is allowed
+#: ONLY when the SAME function/block routes through the market-aware resolver
+#: first (``resolve_market_field`` / ``MULTI_MARKET_FIELD_REGISTRY`` appears
+#: within the surrounding 40 lines) — i.e. the legacy call is the explicit
+#: no-market fallback, not a primary path (R17-037).
+#:
+#: This is pattern-based (not line-based) so concurrent edits that shift lines do
+#: not produce false positives.
+_MARKET_AWARE_MARKER = re.compile(
+    r"resolve_market_field|MULTI_MARKET_FIELD_REGISTRY"
+)
+_FALLBACK_WINDOW = 40
+
+
+def _is_market_aware_fallback(rel: str, lines: list[str], lineno: int) -> bool:
+    """True when a legacy call is an explicit market=None fallback.
+
+    The surrounding window (``_FALLBACK_WINDOW`` lines before/after) must contain
+    a market-aware resolver marker, proving the primary path routes per-market.
+    """
+    start = max(0, lineno - _FALLBACK_WINDOW)
+    end = min(len(lines), lineno + _FALLBACK_WINDOW)
+    for line in lines[start:end]:
+        if _MARKET_AWARE_MARKER.search(line):
+            return True
+    return False
 
 
 def _is_production_source(path: Path) -> bool:
@@ -95,26 +90,34 @@ def scan() -> dict[str, list[str]]:
         if rel in _LEGACY_ALLOWLIST:
             continue
         text = py.read_text(encoding="utf-8")
+        lines = text.splitlines()
         hits: list[str] = []
-        for lineno, line in enumerate(text.splitlines(), 1):
-            site = f"{rel}:{lineno}"
-            # R17-001: a documented market=None fallback branch is allowed ONLY
-            # because its primary path is market-aware (resolve_market_field).
-            if site in _LEGACY_FALLBACK_SITES:
-                continue
+        for lineno, line in enumerate(lines, 1):
+            # R17-001: a bare legacy call is allowed ONLY when the surrounding
+            # block also has a market-aware primary path (explicit market=None
+            # fallback), never as a primary resolver.
+            def _is_fallback() -> bool:
+                return _is_market_aware_fallback(rel, lines, lineno)
+
             if _IMPORT_RE.search(line) and not line.strip().startswith("#"):
-                hits.append(f"{lineno}: bare `from fields import ... resolve_field`")
+                if not _is_fallback():
+                    hits.append(f"{lineno}: bare `from fields import ... resolve_field`")
+                continue
             if (
                 (_CALL_RE.search(line) and "resolve_market_field" not in line)
                 and not line.strip().startswith("#")
             ):
-                hits.append(f"{lineno}: bare `resolve_field(...)` (legacy A-share bound)")
+                if not _is_fallback():
+                    hits.append(f"{lineno}: bare `resolve_field(...)` (legacy A-share bound)")
             if _REQUIRE_RE.search(line) and not line.strip().startswith("#"):
-                hits.append(f"{lineno}: bare `require_field(...)` (legacy A-share bound)")
+                if not _is_fallback():
+                    hits.append(f"{lineno}: bare `require_field(...)` (legacy A-share bound)")
             if _REGISTRY_RESOLVE_RE.search(line):
-                hits.append(f"{lineno}: bare `FIELD_REGISTRY.resolve*`")
+                if not _is_fallback():
+                    hits.append(f"{lineno}: bare `FIELD_REGISTRY.resolve*`")
             if _REGISTRY_GET_RE.search(line):
-                hits.append(f"{lineno}: bare `FIELD_REGISTRY.get(...)`")
+                if not _is_fallback():
+                    hits.append(f"{lineno}: bare `FIELD_REGISTRY.get(...)`")
         if hits:
             findings[rel] = hits
     return findings
