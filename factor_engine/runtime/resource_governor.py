@@ -143,6 +143,121 @@ def _host_memory_bytes() -> int | None:
     return None
 
 
+def _host_mem_available_bytes() -> int:
+    """当前可用内存（MemAvailable）——live headroom 的主机侧输入（R27-023/025）。"""
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        return max(0, int(psutil.virtual_memory().available))
+    except Exception:
+        pass
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("MemAvailable:"):
+                    return max(0, int(line.split()[1]) * 1024)
+    except OSError:
+        pass
+    return 0
+
+
+def _cgroup_memory_current_bytes() -> int | None:
+    """cgroup v2 ``memory.current``（R27-024）；不可读返回 ``None``。"""
+    for p in ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.current"):
+        try:
+            raw = Path(p).read_text(encoding="utf-8").strip()
+            return int(raw)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def process_family_rss_bytes(*, prefer_pss: bool = False) -> int:
+    """主进程 + 递归子进程的 RSS/PSS 之和（R27-036/238）。
+
+    Linux ``/proc/*/smaps_rollup`` 可读时优先 PSS（共享内存更准）；否则 RSS。
+    """
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        def _one(proc: Any) -> tuple[int, int]:
+            mi = proc.memory_info()
+            rss = int(getattr(mi, "rss", 0))
+            pss = int(getattr(mi, "pss", 0)) or 0
+            if pss == 0:
+                try:
+                    with open(f"/proc/{proc.pid}/smaps_rollup", encoding="utf-8") as fh:
+                        for line in fh:
+                            if line.startswith("Pss:"):
+                                pss = int(line.split()[1]) * 1024
+                                break
+                except OSError:
+                    pass
+            return rss, pss
+
+        root = psutil.Process()
+        total_rss = 0
+        total_pss = 0
+        visited: set[int] = set()
+
+        def _walk(proc: Any) -> None:
+            nonlocal total_rss, total_pss
+            if proc.pid in visited:
+                return
+            visited.add(proc.pid)
+            r, p = _one(proc)
+            total_rss += r
+            total_pss += p
+            try:
+                for child in proc.children(recursive=True):
+                    _walk(child)
+            except Exception:
+                pass
+
+        _walk(root)
+        return total_pss if prefer_pss and total_pss else total_rss
+    except Exception:
+        return 0
+
+
+def live_memory_headroom_bytes(
+    *,
+    hard_limit: int | None = None,
+    min_host_reserve_gb: float = 8.0,
+    min_host_reserve_fraction: float = 0.15,
+) -> int:
+    """live headroom = min(cgroup_headroom, host_headroom, configured_headroom)（R27-024..027）。
+
+    - ``cgroup_headroom = memory.max - memory.current``（无限则略过）
+    - ``host_headroom = MemAvailable - external_reserve``
+    - ``configured_headroom = hard_limit - FE_process_family_RSS``
+    """
+    limit = hard_limit or effective_memory_limit_bytes()
+    candidates: list[int] = []
+    cur = _cgroup_memory_current_bytes()
+    if cur is not None:
+        cgroup_headroom = max(0, limit - cur)
+        candidates.append(cgroup_headroom)
+    reserve = max(int(min_host_reserve_gb * 1024**3),
+                  int(limit * min_host_reserve_fraction))
+    host_headroom = max(0, _host_mem_available_bytes() - reserve)
+    candidates.append(host_headroom)
+    configured = max(0, limit - process_family_rss_bytes())
+    candidates.append(configured)
+    return min(candidates) if candidates else 0
+
+
+def _default_per_worker_peak_bytes() -> int:
+    """每 worker 峰值内存（字节）：env 覆盖，默认 3GiB（R27-021/167）。"""
+    env = os.environ.get("FACTOR_ENGINE_PER_WORKER_PEAK_BYTES", "").strip()
+    if env.isdigit() and int(env) > 0:
+        return int(env)
+    legacy = os.environ.get("FACTOR_ENGINE_PER_WORKER_PEAK_MB", "").strip()
+    if legacy.isdigit() and float(legacy) > 0:
+        return int(float(legacy) * 1024 * 1024)
+    return 3 * 1024**3
+
+
 def effective_memory_limit_bytes(
     *,
     explicit_bytes: int | None = None,
