@@ -122,12 +122,18 @@ def operator_support(
     # Production certification gate (market-independent).
     if production and ctx.provider_profile == "production":
         prod = _production_allowlist()
-        if prod and name not in prod:
+        # R17-042: a SUCCESSFULLY LOADED EMPTY allowlist means 0 operators are
+        # production-certified — it must fail every operator closed, NOT degrade
+        # the gate to a no-op.  ``_production_allowlist`` already raises on build
+        # failure; here we distinguish "loaded, empty" (restrict everything) from
+        # "not loaded" (impossible — raised above).
+        if name not in prod:
             return MarketSupport(
                 canonical=raw_name, market=market,
                 status=MarketStatus.RESEARCH_ONLY,
                 reason_codes=("NOT_PRODUCTION_CERTIFIED",),
-                notes="not on the production allowlist; research may opt in explicitly",
+                notes="not on the production allowlist (empty allowlist == 0 "
+                      "operators certified, R17-042); research may opt in explicitly",
             )
 
     # P0-015: ``ashare_*`` prefix is a HARD A-share lock unless an explicit

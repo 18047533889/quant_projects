@@ -27,7 +27,16 @@ class MarketCapability(str, Enum):
     FREE_FLOAT_SHARES = "FREE_FLOAT_SHARES"
     DAILY_TURNOVER = "DAILY_TURNOVER"
     INDUSTRY_CLASSIFICATION = "INDUSTRY_CLASSIFICATION"
+    # R17-047: TRADABILITY_STATUS split into distinct economic states (A IsSuspend
+    # != US CS+Close != listing membership).  ``tradable_eod_mask`` is the
+    # COMPOSITE.  Legacy name kept for back-compat as SUSPENSION_STATUS@ashare.
     TRADABILITY_STATUS = "TRADABILITY_STATUS"
+    SUSPENSION_STATUS = "SUSPENSION_STATUS"
+    LISTING_STATUS = "LISTING_STATUS"
+    COMMON_EQUITY_MEMBERSHIP = "COMMON_EQUITY_MEMBERSHIP"
+    RESEARCH_UNIVERSE = "RESEARCH_UNIVERSE"
+    INTRADAY_HALT = "INTRADAY_HALT"
+    TRADABLE_EOD_MASK = "TRADABLE_EOD_MASK"
     DAILY_PRICE_LIMITS = "DAILY_PRICE_LIMITS"
     FULL_MINUTE_OHLCV = "FULL_MINUTE_OHLCV"
     TICK_TRADES = "TICK_TRADES"
@@ -37,12 +46,23 @@ class MarketCapability(str, Enum):
     INDEX_WEIGHTS = "INDEX_WEIGHTS"
     FINANCIAL_PIT = "FINANCIAL_PIT"
     FINANCIAL_QUARTERLY = "FINANCIAL_QUARTERLY"
+    # R17-046: A-share financial is cumulative-YTD native; TTM is DERIVED (needs
+    # period continuity), not an unconditional native capability.
     FINANCIAL_TTM = "FINANCIAL_TTM"
+    FINANCIAL_PIT_STATEMENTS = "FINANCIAL_PIT_STATEMENTS"
+    QUARTER_FLOW_DERIVABLE = "QUARTER_FLOW_DERIVABLE"
+    TTM_DERIVABLE = "TTM_DERIVABLE"
+    TTM_NATIVE = "TTM_NATIVE"
     DIVIDEND_ANNOUNCEMENT = "DIVIDEND_ANNOUNCEMENT"
     DIVIDEND_EFFECTIVE_EVENT = "DIVIDEND_EFFECTIVE_EVENT"
     TOP_HOLDERS = "TOP_HOLDERS"
     HOLDER_PLEDGE = "HOLDER_PLEDGE"
+    # R17-025: NEWS is too coarse.  Split event/text/sentiment/entity-link.
     NEWS = "NEWS"
+    NEWS_EVENT = "NEWS_EVENT"
+    NEWS_TEXT = "NEWS_TEXT"
+    NEWS_SENTIMENT = "NEWS_SENTIMENT"
+    NEWS_ENTITY_LINK = "NEWS_ENTITY_LINK"
     SECURITY_MASTER = "SECURITY_MASTER"
     EARLY_CLOSE_CALENDAR = "EARLY_CLOSE_CALENDAR"
     FX = "FX"
@@ -146,14 +166,26 @@ ASHARE_CAPABILITIES: frozenset[MarketCapability] = frozenset(
         MarketCapability.FREE_FLOAT_SHARES,
         MarketCapability.DAILY_TURNOVER,
         MarketCapability.INDUSTRY_CLASSIFICATION,
+        # R17-029/047: A-share has suspension status (IsSuspend) + listing + ST
+        # states; the composite tradable mask is derivable.
         MarketCapability.TRADABILITY_STATUS,
+        MarketCapability.SUSPENSION_STATUS,
+        MarketCapability.LISTING_STATUS,
+        MarketCapability.RESEARCH_UNIVERSE,
+        MarketCapability.TRADABLE_EOD_MASK,
         MarketCapability.DAILY_PRICE_LIMITS,
         MarketCapability.FULL_MINUTE_OHLCV,
         MarketCapability.INDEX_MEMBERSHIP,
         MarketCapability.INDEX_WEIGHTS,
         MarketCapability.FINANCIAL_PIT,
         MarketCapability.FINANCIAL_QUARTERLY,
+        # R17-046: A-share financial is cumulative-YTD native; TTM is DERIVABLE
+        # (not native).  The coarse FINANCIAL_TTM remains for back-compat only;
+        # production TTM operators must gate on TTM_DERIVABLE.
         MarketCapability.FINANCIAL_TTM,
+        MarketCapability.FINANCIAL_PIT_STATEMENTS,
+        MarketCapability.QUARTER_FLOW_DERIVABLE,
+        MarketCapability.TTM_DERIVABLE,
         MarketCapability.DIVIDEND_EFFECTIVE_EVENT,
         MarketCapability.TOP_HOLDERS,
         MarketCapability.HOLDER_PLEDGE,
@@ -170,11 +202,24 @@ US_CAPABILITIES: frozenset[MarketCapability] = frozenset(
         MarketCapability.FINANCIAL_PIT,
         MarketCapability.FINANCIAL_QUARTERLY,
         MarketCapability.FINANCIAL_TTM,
+        MarketCapability.FINANCIAL_PIT_STATEMENTS,
+        MarketCapability.QUARTER_FLOW_DERIVABLE,
+        # R17-046: US financial is single-period/timeframe-native; TTM is native
+        # only when the timeframe filter selects it — expressed as TTM_NATIVE on
+        # the provider binding, not on the market set.
         MarketCapability.DIVIDEND_ANNOUNCEMENT,
+        # R17-025: US has NEWS_EVENT / NEWS_TEXT providers; NEWS_SENTIMENT is
+        # provider-required (FactNews insights not a certified sentiment source).
         MarketCapability.NEWS,
+        MarketCapability.NEWS_EVENT,
+        MarketCapability.NEWS_TEXT,
         MarketCapability.SECURITY_MASTER,
         MarketCapability.EARLY_CLOSE_CALENDAR,
         MarketCapability.INDEX_MEMBERSHIP,
+        # R17-047: US has common-equity membership + research universe, but NO
+        # suspension status and no full tradable mask (halt far too sparse).
+        MarketCapability.COMMON_EQUITY_MEMBERSHIP,
+        MarketCapability.RESEARCH_UNIVERSE,
         # Massive-SIP capabilities are *provider-dependent*: certified only after
         # full coverage/PIT/session validation.  Keep them OUT of the production
         # set until then so minute/tick operators stay SOURCE_UNCERTIFIED.
@@ -187,16 +232,25 @@ _CAPABILITY_SETS = {
 }
 
 
-def capabilities_for(market: str) -> frozenset[MarketCapability]:
+def canonicalize_market_id(market: str) -> str:
+    """The single market-canonicalization authority (R17-048).
+
+    ``capabilities_for``/``MarketContext`` used to accept DIFFERENT alias sets
+    (``cn/china/usa`` vs ``ashare/us``) — one layer accepting ``china`` while
+    another raised on it.  Every entry point canonicalizes exactly once at the
+    outermost layer; internal objects only ever hold ``ashare`` / ``us``.
+    """
     key = str(market).strip().lower()
-    if key == "a_share" or key == "cn" or key == "china":
-        key = "ashare"
-    if key in ("usa",):
-        key = "us"
-    try:
-        return _CAPABILITY_SETS[key]
-    except KeyError as exc:  # pragma: no cover - defensive
-        raise KeyError(f"no capability set for market {market!r}") from exc
+    if key in ("a_share", "cn", "china", "ashare"):
+        return "ashare"
+    if key in ("usa", "us"):
+        return "us"
+    raise KeyError(f"unknown market {market!r}; expected ashare|us (or an alias)")
+
+
+def capabilities_for(market: str) -> frozenset[MarketCapability]:
+    key = canonicalize_market_id(market)
+    return _CAPABILITY_SETS[key]
 
 
 @dataclass(frozen=True)

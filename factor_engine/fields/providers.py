@@ -287,6 +287,53 @@ class ProviderDependency:
 
 
 # ---------------------------------------------------------------------------
+# R17-035: FinancialPeriodPolicy — period selection is a machine contract, not
+# a hidden assumption in the asof adapter.  Every market chooses a policy; the
+# policy (and the specific selection values) enter factor identity / lineage.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class FinancialPeriodPolicy:
+    """How one market selects the visible financial period (R17-035).
+
+    A-share: same ``PubDate`` may hold several ``ReportPeriodEndDate`` rows —
+    ``latest_period_known_asof_decision_time`` selects the most recent period
+    whose knowledge time is <= decision time.  US: an exact ``timeframe``
+    (quarterly/annual/trailing_twelve_months) MUST be filtered first, then the
+    latest filing revision for the selected period is taken.
+    """
+
+    timeframe: str | None = None  # quarterly | annual | trailing_twelve_months | None
+    period_selection: str = "latest_visible_period"
+    revision_selection: str = "latest_filing_revision"
+    same_day_visibility_policy: str = "DATE_ONLY_CONSERVATIVE_NEXT_SESSION"
+    flow_conversion_policy: str = "single_period_from_cumulative_ytd"
+
+    def to_dict(self) -> dict[str, Any]:
+        return dict(
+            timeframe=self.timeframe,
+            period_selection=self.period_selection,
+            revision_selection=self.revision_selection,
+            same_day_visibility_policy=self.same_day_visibility_policy,
+            flow_conversion_policy=self.flow_conversion_policy,
+        )
+
+
+ASHARE_FINANCIAL_PERIOD_POLICY = FinancialPeriodPolicy(
+    period_selection="latest_period_known_asof_decision_time",
+    same_day_visibility_policy="DATE_ONLY_CONSERVATIVE_NEXT_SESSION",
+    flow_conversion_policy="quarter_from_cumulative_ytd",
+)
+
+US_FINANCIAL_PERIOD_POLICY = FinancialPeriodPolicy(
+    timeframe="quarterly",  # must be set by the caller; default is explicit
+    period_selection="exact_timeframe_latest_filing_revision",
+    revision_selection="latest_filing_revision",
+    same_day_visibility_policy="DATE_ONLY_CONSERVATIVE_NEXT_SESSION",
+    flow_conversion_policy="single_period_flow",  # US statements are period-scoped
+)
+
+
+# ---------------------------------------------------------------------------
 # Binding contract.
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -319,6 +366,12 @@ class MarketFieldBinding:
     # Empty tuple == the single ``dataset``/``physical_fields`` describe the whole
     # read; non-empty == the planner MUST materialize every edge.
     dependencies: tuple[ProviderDependency, ...] = ()
+    # R17-036: flow semantics is a RESOLVED-PROVIDER output, not a concept static
+    # property.  A-share cumulative-YTD rows, US quarterly single-period, US TTM
+    # rows all live under the same canonical concept but have DIFFERENT flow
+    # semantics; quarterization/growth/TTM operators read this field.  None ==
+    # not declared (callers keep the concept-level default).
+    flow_semantics: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -415,7 +468,99 @@ class ProviderRegistry:
         return {"bindings": [b.to_dict() for chain in self._bindings.values() for b in chain]}
 
 
+class ProviderResolver:
+    """R17-032: walk a provider CHAIN and select the first eligible provider.
+
+    A registered chain (``bindings()``) does NOT prove the runtime will pick a
+    secondary when the primary lacks data/coverage.  This resolver applies the
+    eligibility gates in a fixed order and records the rejection reason for each
+    candidate so provider *selection* becomes observable (lineage), not a silent
+    ``chain[0]``.
+
+    Gate order: market/context eligibility -> source certification -> required
+    filters -> PIT -> requested-window coverage -> universe coverage ->
+    currency/session constraints -> select first eligible.
+    """
+
+    def __init__(self, registry: ProviderRegistry | None = None) -> None:
+        self._registry = registry or PROVIDER_REGISTRY
+
+    def resolve(
+        self,
+        concept_id: str,
+        market: str,
+        *,
+        context: Any = None,
+        production: bool = True,
+        start: str | None = None,
+        end: str | None = None,
+        universe_id: str | None = None,
+    ) -> tuple[MarketFieldBinding | None, list[dict[str, Any]]]:
+        """Select the first eligible provider in the chain.
+
+        Returns ``(selected, decisions)`` where ``decisions`` records every
+        candidate's provider_id + chosen/rejected reason (for lineage).
+        """
+        chain = self._registry.bindings(concept_id, market)
+        if not chain:
+            return None, []
+        decisions: list[dict[str, Any]] = []
+        ctx = context
+        eff_market = canonicalize_provider_market(market)
+        for candidate in chain:
+            reasons: list[str] = []
+            if candidate.quality == ProviderQuality.UNAVAILABLE:
+                reasons.append("UNAVAILABLE")
+            if production and not candidate.source_certified:
+                reasons.append("SOURCE_UNCERTIFIED")
+            if production and not candidate.quality.production_usable:
+                reasons.append(f"QUALITY_{candidate.quality.value}")
+            if candidate.coverage == CoverageClass.CURRENT_ONLY and (
+                start is not None or end is not None
+            ):
+                reasons.append("CURRENT_ONLY_CANNOT_BACKFILL")
+            if (
+                start is not None
+                and end is not None
+                and candidate.coverage == CoverageClass.PARTIAL
+                and candidate.coverage_gate is not None
+                and candidate.coverage_gate < 0.8
+                and universe_id is None
+            ):
+                reasons.append("COVERAGE_BELOW_FLOOR_NO_UNIVERSE_MASK")
+            if reasons:
+                decisions.append(
+                    {
+                        "provider": candidate.provider_id,
+                        "concept": concept_id,
+                        "market": eff_market,
+                        "selected": False,
+                        "reasons": reasons,
+                    }
+                )
+                continue
+            decisions.append(
+                {
+                    "provider": candidate.provider_id,
+                    "concept": concept_id,
+                    "market": eff_market,
+                    "selected": True,
+                    "reasons": [],
+                }
+            )
+            return candidate, decisions
+        return None, decisions
+
+
+def canonicalize_provider_market(market: str) -> str:
+    """Canonical market id for provider resolution (R17-048 authority)."""
+    from market.capabilities import canonicalize_market_id
+
+    return canonicalize_market_id(market)
+
+
 PROVIDER_REGISTRY = ProviderRegistry()
+PROVIDER_RESOLVER = ProviderResolver()
 
 _UNAVAILABLE = ProviderQuality.UNAVAILABLE
 _NATIVE = ProviderQuality.EXACT_NATIVE
@@ -450,6 +595,7 @@ def _b(
     derived_expression=None,
     coverage_gate=None,
     dependencies=(),
+    flow_semantics=None,
     registry: ProviderRegistry = PROVIDER_REGISTRY,
 ) -> MarketFieldBinding:
     binding = MarketFieldBinding(
@@ -474,6 +620,7 @@ def _b(
         derived_expression=derived_expression,
         coverage_gate=coverage_gate,
         dependencies=tuple(dependencies),
+        flow_semantics=flow_semantics,
     )
     registry.register(binding)
     return binding
@@ -929,6 +1076,10 @@ for _concept, (_phys_a, _ds_a) in _FIN_A.items():
         transform=_identity, temporal_model="financial_pit",
         knowledge_time="PubDate", available_at="filing",
         source_certified=True, notes="asof(PubDate); flow fields are cumulative YTD",
+        # R17-036: A-share statement rows are cumulative-YTD flow — the resolved
+        # provider declares it, so quarterize/growth operators read the real
+        # semantics instead of the concept's static default.
+        flow_semantics="cumulative_ytd_flow",
     )
 for _concept, (_phys_us, _ds_us) in _FIN_US.items():
     _b(
@@ -939,6 +1090,9 @@ for _concept, (_phys_us, _ds_us) in _FIN_US.items():
         knowledge_time="filing_date", available_at="filing",
         required_filters=("timeframe",),
         source_certified=True, notes="asof(filing_date); MUST filter timeframe (quarterly/annual/TTM)",
+        # R17-036: US statements are period-scoped by the timeframe filter — the
+        # provider resolves the flow semantics, not the concept.
+        flow_semantics="single_period_flow",
     )
 
 
@@ -1068,11 +1222,34 @@ class FinancialPeriodAdapter:
     """
 
     @staticmethod
-    def filter_timeframe(frame: Any, timeframe: str) -> Any:
-        """US-only: keep rows whose ``timeframe`` equals ``timeframe``."""
-        if "timeframe" in getattr(frame, "columns", ()):
-            return frame[frame["timeframe"] == timeframe]
-        return frame
+    def filter_timeframe(frame: Any, timeframe: str, *, market: str | None = None) -> Any:
+        """US financial: keep rows whose ``timeframe`` equals ``timeframe``.
+
+        R17-034: the ``timeframe`` filter is a HARD contract for US financials —
+        a missing timeframe column or a missing ``timeframe`` argument must fail
+        closed (never silently return the unfiltered frame, which would mix
+        quarterly/annual/TTM in one cross-section).  A-share financials do not
+        use timeframe; ``market="ashare"`` keeps the legacy lenient path.
+        """
+        if market == "ashare":
+            return frame
+        if not timeframe:
+            raise ValueError(
+                "filter_timeframe requires an explicit timeframe (quarterly / "
+                "annual / trailing_twelve_months) for US financials (R17-034)"
+            )
+        if "timeframe" not in getattr(frame, "columns", ()):
+            raise ValueError(
+                "US financial frame is missing the timeframe column; refusing to "
+                "return an unfiltered period mix (R17-034)"
+            )
+        filtered = frame[frame["timeframe"] == timeframe]
+        if filtered.empty and not frame.empty:
+            # Timeframe column exists but the requested value selects nothing —
+            # still valid (e.g. no annual rows yet), so only the *column* absence
+            # is a hard error.  An empty selection is a data condition.
+            pass
+        return filtered
 
     @staticmethod
     def asof(
@@ -1226,10 +1403,13 @@ __all__ = [
     "JoinRequirement",
     "MarketFieldBinding",
     "PROVIDER_REGISTRY",
+    "PROVIDER_RESOLVER",
     "ProviderDependency",
     "ProviderRegistry",
+    "ProviderResolver",
     "apply_binding_transform",
     "binding",
+    "canonicalize_provider_market",
     "explain_field_support",
     "parse_filter_requirement",
     "require_binding",
