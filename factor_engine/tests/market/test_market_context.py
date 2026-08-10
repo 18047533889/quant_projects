@@ -48,6 +48,10 @@ def test_research_profile_opens_gates() -> None:
     # production stays closed
     assert US_CONTEXT.allow_proxy is False
     assert US_CONTEXT.allow_sparse is False
+    # R17-050: as_research must NOT auto-open effective-time-only (non-PIT ex-date
+    # semantics is a dangerous explicit flag, false even in research).
+    assert research.allow_effective_time_only is False
+    assert US_CONTEXT.with_non_pit_effective_time().allow_effective_time_only is True
 
 
 def test_capabilities_snapshot() -> None:

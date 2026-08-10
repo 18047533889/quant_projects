@@ -75,11 +75,19 @@ def test_dividend_pit_blocked_ashare_allowed_research() -> None:
 
     a_prod = explain_field_support("cash_dividend_per_share", "ashare")
     assert a_prod.status == MarketStatus.PIT_BLOCKED
+    # R17-050: ``as_research()`` does NOT open effective-time-only — a bare
+    # research profile still leaves A-share ex-date-only dividends PIT_BLOCKED.
     a_research = explain_field_support(
         "cash_dividend_per_share", "ashare",
         context=ASHARE_CONTEXT.as_research(),
     )
-    assert a_research.status == MarketStatus.RESEARCH_ONLY
+    assert a_research.status == MarketStatus.PIT_BLOCKED
+    # Only the EXPLICIT dangerous flag opts into effective-time-only semantics.
+    a_explicit = explain_field_support(
+        "cash_dividend_per_share", "ashare",
+        context=ASHARE_CONTEXT.with_non_pit_effective_time(),
+    )
+    assert a_explicit.status == MarketStatus.RESEARCH_ONLY
 
     # US dividend: EXACT_NATIVE quality but PARTIAL coverage (0.51% null,
     # ~12.2% non-USD excluded) -> CERTIFIED_PARTIAL, not full-market native.

@@ -70,6 +70,17 @@ class MarketContext:
     allow_proxy: bool = False
     allow_sparse: bool = False
     allow_effective_time_only: bool = False
+    # R17-052: data/source lineage attached to the market contract — a formula
+    # must not reuse cache/evidence from an older data snapshot / registry hash.
+    data_snapshot_id: str | None = None
+    source_snapshot_time: str | None = None
+    provider_profile_version: str | None = None
+    field_registry_hash: str | None = None
+    market_registry_hash: str | None = None
+    universe_policy_hash: str | None = None
+    calendar_version: str | None = None
+    # R17-049: explicit annualization basis (None == resolve from calendar).
+    annualization_basis: str | None = None
     extra: dict[str, Any] = field(default_factory=dict, compare=False, hash=False)
 
     def __post_init__(self) -> None:
@@ -81,35 +92,63 @@ class MarketContext:
             raise ValueError(
                 f"provider_profile must be 'production' or 'research', got {self.provider_profile!r}"
             )
+        # R17-051: decision_timestamp MUST be tz-aware — a naive timestamp cannot
+        # express "which local session has closed" for cross-market visibility.
+        if self.decision_timestamp is not None:
+            ts = self.decision_timestamp
+            if hasattr(ts, "tzinfo") and getattr(ts, "tzinfo", None) is None:
+                raise ValueError(
+                    "MarketContext.decision_timestamp must be tz-aware (R17-051); "
+                    f"got naive {ts!r}"
+                )
 
     def with_profile(self, profile: str) -> "MarketContext":
         """Return a copy with a different provider profile (production/research)."""
         return replace(self, provider_profile=profile)
 
     def as_research(self) -> "MarketContext":
-        """Production -> research convenience (opens proxy/sparse/effective gates).
+        """Production -> research convenience.
 
-        Research is allowed to opt in to proxy providers, sparse as-of backfill,
-        and effective-time-only (e.g. ex-dividend) semantics — always with
-        explicit warnings, never silently in production.
+        R17-050: research opens proxy/sparse gates (performance/coverage
+        leniency) but does NOT open effective-time-only semantics — using
+        ex-date-only data (no announcement PIT) is a DANGEROUS non-PIT flag that
+        must be set explicitly, even in research.
         """
         return replace(
             self,
             provider_profile="research",
             allow_proxy=True,
             allow_sparse=True,
-            allow_effective_time_only=True,
+            # allow_effective_time_only deliberately NOT enabled here (R17-050).
         )
+
+    def with_non_pit_effective_time(self, *, enabled: bool = True) -> "MarketContext":
+        """Explicitly open/close effective-time-only (ex-date) semantics.
+
+        This is the DANGEROUS flag R17-050 demands be separate: it defaults False
+        in research too.  Callers that knowingly use A-share ex-date-only
+        dividends must opt in and record it in lineage.
+        """
+        return replace(self, allow_effective_time_only=bool(enabled))
 
     @property
     def trading_days_per_year(self) -> int:
-        # Both markets trade ~242-252 days/year.  A/US annualization factors are
-        # kept here (not hardcoded sqrt(252) inside operators) per the market
-        # contract; exact value comes from the calendar when available.
+        # R17-049: annualization is calendar-aware.  A fixed 252 is only a
+        # fallback when no calendar is available; the resolved market calendar /
+        # requested-window session count should drive operators.  Minute
+        # volatility must NOT use 252 directly (session length differs).
+        if self.annualization_basis == "calendar":
+            return 0  # sentinel: caller must resolve from the calendar
         return 252
 
     @property
     def annualization_factor(self) -> float:
+        if self.annualization_basis == "calendar":
+            raise ValueError(
+                "annualization_basis='calendar' requires resolving the market "
+                "calendar; MarketContext.annualization_factor is not a fixed 252 "
+                "(R17-049)"
+            )
         return float(self.trading_days_per_year)
 
     def to_dict(self) -> dict[str, Any]:
@@ -126,6 +165,20 @@ class MarketContext:
             allow_sparse=self.allow_sparse,
             allow_effective_time_only=self.allow_effective_time_only,
         )
+        # R17-052: lineage fields fold into the serialized contract.
+        for key in (
+            "data_snapshot_id",
+            "source_snapshot_time",
+            "provider_profile_version",
+            "field_registry_hash",
+            "market_registry_hash",
+            "universe_policy_hash",
+            "calendar_version",
+            "annualization_basis",
+        ):
+            value = getattr(self, key, None)
+            if value is not None:
+                result[key] = value
         if self.decision_timestamp is not None:
             result["decision_timestamp"] = str(self.decision_timestamp)
         return result

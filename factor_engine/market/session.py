@@ -47,6 +47,12 @@ class SessionSpec:
     # Known early-close dates (e.g. US half-days).  Populated by a Calendar
     # provider at runtime; empty here means "no early close known".
     early_close_dates: frozenset[str] = field(default_factory=frozenset)
+    # R17-054: actual per-date early-close times from the Calendar provider
+    # (ISO date -> time-of-day); None when unknown.  ``for_date`` shortens the
+    # session to these.
+    _early_close_times: dict[str, Any] | None = field(
+        default=None, repr=False, compare=False, hash=False
+    )
 
     def slot_for_local(self, ts: datetime) -> int | None:
         """Map a local wall-clock datetime to a SessionSlotId (1-based bar).
@@ -85,9 +91,12 @@ class SessionSpec:
     def for_date(self, trade_date: Any) -> "SessionSpec":
         """Return the session as-of ``trade_date`` (early-close aware, P1-18).
 
-        Without a Calendar provider the base session is returned unchanged; a
-        runtime calendar should subclass/replace ``early_close_dates`` so an
-        early-close day gets a down-weighted/excluded session contract.
+        R17-054: an early-close date REALLY shortens the session — the Calendar
+        provider records the actual close time, and the returned spec carries the
+        correct segments / slot_count / expected_bar_count so volume/volatility /
+        session-profile operators normalize on the real day instead of seeing a
+        note-only "half day".  Without a Calendar provider the base session is
+        returned unchanged.
         """
         import pandas as pd
 
@@ -95,22 +104,79 @@ class SessionSpec:
             key = pd.Timestamp(trade_date).strftime("%Y-%m-%d")
         except Exception:  # pragma: no cover - defensive
             return self
+        close_time = None
+        if self._early_close_times is not None:
+            close_time = self._early_close_times.get(key)
+        if close_time is None:
+            close_time = self._default_early_close_time()
         if key in self.early_close_dates and self.early_close_policy != "none":
-            # Half-day: use the segments but shrink the close edge.  For US a
-            # typical early close ends 13:00; we expose the flag for the caller
-            # (volume/volatility factors down-weight or exclude the day).
+            # Build the shortened session.  US typical early close ends 13:00;
+            # ``close_time`` (from the Calendar provider) overrides.
+            close_t = self._to_time(close_time)
+            segments = tuple(
+                seg if seg.end <= close_t
+                else SessionSegment(start=seg.start, end=close_t, slot_offset=seg.slot_offset)
+                for seg in self.segments
+            )
+            # Bar count = sum of minute deltas over the shortened segments.
+            slot_count = sum(
+                int(
+                    (seg.end.hour * 60 + seg.end.minute)
+                    - (seg.start.hour * 60 + seg.start.minute)
+                )
+                for seg in segments
+            )
             return SessionSpec(
                 session_id=self.session_id,
                 timezone=self.timezone,
-                segments=self.segments,
-                slot_count=self.slot_count,
+                segments=segments,
+                slot_count=slot_count,
                 minute_bars=self.minute_bars,
                 early_close_policy=self.early_close_policy,
-                notes=self.notes + f" [early-close {key}]",
+                notes=self.notes + f" [early-close {key} -> close {close_t:%H:%M}, {slot_count} bars]",
                 bar_convention=self.bar_convention,
                 early_close_dates=self.early_close_dates,
             )
         return self
+
+    def with_early_close_times(self, times: dict[str, Any]) -> "SessionSpec":
+        """Return a copy carrying the Calendar provider's actual close times.
+
+        The supplied dates are also folded into ``early_close_dates`` so
+        ``for_date`` recognizes them as early closes (R17-054).
+        """
+        return SessionSpec(
+            session_id=self.session_id,
+            timezone=self.timezone,
+            segments=self.segments,
+            slot_count=self.slot_count,
+            minute_bars=self.minute_bars,
+            early_close_policy=self.early_close_policy,
+            notes=self.notes,
+            bar_convention=self.bar_convention,
+            early_close_dates=self.early_close_dates | frozenset(times.keys()),
+            _early_close_times=dict(times),
+        )
+
+    def _default_early_close_time(self) -> Any:
+        """Default early-close time when the Calendar provider is absent (13:00)."""
+        try:
+            from datetime import time as _time
+
+            return _time(13, 0)
+        except Exception:  # pragma: no cover - defensive
+            return None
+
+    @staticmethod
+    def _to_time(value: Any) -> Any:
+        from datetime import time as _time
+
+        if isinstance(value, _time):
+            return value
+        try:
+            return _time(value.hour, value.minute)
+        except Exception:  # pragma: no cover - defensive
+            return _time(13, 0)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -135,6 +201,9 @@ def _tz(name: str) -> Any:
 
 
 # A-share: 09:31-11:30 (120 bars) + 13:01-15:00 (120 bars) = 240 bars/day.
+# R17-053: the A-share COS minute mirror labels each bar with its END timestamp
+# (09:31 = the 09:30-09:31 bar, 15:00 = the last bar) — bar_convention=bar_end,
+# NOT the SessionSpec bar_start default.
 ASHARE_SESSION = SessionSpec(
     session_id="ASHARE_CONTINUOUS",
     timezone=TIMEZONE_ASHARE,
@@ -144,12 +213,16 @@ ASHARE_SESSION = SessionSpec(
     ),
     slot_count=240,
     early_close_policy="none",
-    notes="09:31-11:30 + 13:01-15:00 CST (UTC+8); no 09:30/13:00 bars; no lunch bars",
+    bar_convention="bar_end",
+    notes="09:31-11:30 + 13:01-15:00 CST (UTC+8), BAR-END labels; no 09:30/13:00 "
+          "bars; no lunch bars (R17-053)",
 )
 
 # US: regular 09:30-16:00 Eastern, DST-aware; early-close half-days flagged.
 # Bar-START convention: 390 minute bars labelled 09:30..15:59; 16:00 is the
 # exclusive session end (slot_for_local(16:00) -> None, never slot 391).
+# R17-055: US early-close days are ~tens of TRUE dates in the whole history, not
+# "~51 per year" — the wrong year-frequency is gone from the docs.
 US_SESSION = SessionSpec(
     session_id="US_REGULAR",
     timezone=TIMEZONE_US,
@@ -158,7 +231,7 @@ US_SESSION = SessionSpec(
     early_close_policy="down_weight",
     bar_convention="bar_start",
     notes="09:30-16:00 Eastern (bar-start, 390 bars); DST via America/New_York; "
-          "is_early_close ~51 days/year",
+          "early-close dates are ~tens of true days in all history (R17-055)",
 )
 
 _SESSION_BY_MARKET = {"ashare": ASHARE_SESSION, "us": US_SESSION}

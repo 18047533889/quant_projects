@@ -99,6 +99,18 @@ def operator_support(
     from cleaned_operators.operator_market import contract_for
     from cleaned_operators.registry import OperatorRegistry
 
+    # R17-041: if both ``market`` and ``context`` are given they must agree —
+    # a call asserting market='us' with an A-share context would silently gate
+    # the wrong way.  (Best is to pass only the context; the string is kept for
+    # back-compat.)
+    if context is not None:
+        from market.capabilities import canonicalize_market_id
+
+        if canonicalize_market_id(market) != canonicalize_market_id(context.market):
+            raise ValueError(
+                f"operator_support market={market!r} disagrees with "
+                f"context.market={context.market!r} (R17-041)"
+            )
     ctx = context or _market_ctx(market)
     raw_name = str(canonical).strip()
     # DSL aliases (e.g. ``industry_neutralize`` -> ``group_neutralize``) resolve
@@ -447,18 +459,27 @@ def explain_expression_support(
     market: str,
     *,
     production: bool = True,
+    surface: str = "daily",
+    decision_timestamp: Any = None,
+    universe_policy: str = "default",
+    context: MarketContext | None = None,
 ) -> dict[str, Any]:
     """Propagate market support through a DSL expression AST (compile-time).
 
     Returns ``{"supported": bool, "failed_nodes": [...], "warnings": [...]}``.
     ``expr`` may be a parsed DSL AST or a formula string.
+
+    R17-040: ``surface`` replaces the hardcoded ``"daily"`` — a minute formula
+    must not sneak through the daily parser's grain gate.  ``context`` (when
+    given) is threaded to the per-node walk so market/grain/session decisions
+    share one authority.
     """
     from api.dsl_parser import parse_expr
     from expr.base import Expr
 
     if isinstance(expr, str):
         try:
-            expr = parse_expr(expr, surface="daily")
+            expr = parse_expr(expr, surface=surface)
         except Exception as exc:  # pragma: no cover - defensive
             return {
                 "supported": False,
@@ -480,6 +501,9 @@ def explain_expression_support(
         "supported": not failed,
         "failed_nodes": failed,
         "warnings": warnings,
+        "surface": surface,
+        "decision_timestamp": str(decision_timestamp) if decision_timestamp is not None else None,
+        "universe_policy": universe_policy,
     }
 
 
