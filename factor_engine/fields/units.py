@@ -17,6 +17,12 @@ UNIT_SHARE_10K = "share_10K"
 UNIT_RATIO = "ratio"
 UNIT_PERCENT = "percent"
 UNIT_BASIS_POINT = "basis_point"
+# R17-012: prices / EPS / cash dividend are CNY *per share* (not a bare CNY
+# amount); stock dividend / stock transfer are dimensionless per-share ratios
+# (NOT share counts).  These spellings keep the dimension distinct from a money
+# amount / share count while mapping to the same scalar scale.
+UNIT_CNY_PER_SHARE = "CNY/share"
+UNIT_SHARE_RATIO = "share_ratio"
 
 _UNIT_ALIASES = {
     "": UNIT_DIMENSIONLESS,
@@ -30,6 +36,9 @@ _UNIT_ALIASES = {
     "timestamp": UNIT_DATETIME,
     "id": UNIT_IDENTIFIER,
     "identifier": UNIT_IDENTIFIER,
+    "cny/share": UNIT_CNY_PER_SHARE,
+    "cny per share": UNIT_CNY_PER_SHARE,
+    "yuan/share": UNIT_CNY_PER_SHARE,
     "string": UNIT_TEXT,
     "text": UNIT_TEXT,
     "cny": UNIT_CNY,
@@ -85,9 +94,14 @@ def unit_normalization(source_unit: str | None, target_unit: str | None) -> Unit
     to_base = {
         UNIT_CNY: ("currency", 1.0),
         UNIT_CNY_10K: ("currency", 10_000.0),
+        # R17-012: CNY/share is a per-share money dimension (scale 1.0 vs CNY —
+        # a "CNY" amount and "CNY/share" have the same numeric scale, but the
+        # dimension is distinct so price * amount is not silently conflated).
+        UNIT_CNY_PER_SHARE: ("currency", 1.0),
         UNIT_SHARE: ("count", 1.0),
         UNIT_SHARE_10K: ("count", 10_000.0),
         UNIT_RATIO: ("ratio", 1.0),
+        UNIT_SHARE_RATIO: ("ratio", 1.0),
         UNIT_PERCENT: ("ratio", 0.01),
         UNIT_BASIS_POINT: ("ratio", 0.0001),
     }

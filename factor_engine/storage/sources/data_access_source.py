@@ -5,7 +5,9 @@ import hashlib
 import json
 import os
 import sys
+import threading
 import time
+import weakref
 from collections import OrderedDict
 from dataclasses import dataclass, field as _dc_field
 from typing import Any, Iterable
@@ -19,6 +21,47 @@ from .datasource import DataSource
 from .field_plan import NormalizedFieldPlan, plan_from_catalog_field, plan_from_field_spec
 
 logger = get_logger("storage.data_access_source")
+
+
+class _SourceThreadState(threading.local):
+    """Per-thread overrides for shared ``DataAccessSource`` instance state.
+
+    R20-107..113：lazy scan 的 ``_lazy_scan`` / ``read_auto`` 是共享 mutable state，
+    但 ``run_many_parallel`` 的每个 worker 线程都会 ``enable_lazy_scan(True)`` 并在
+    finally 里恢复。直接改实例属性会让 restore 交错（A 恢复成 B 的前值）。改用
+    per-thread override：每个线程的 enable/restore 只影响自己线程的视图，主线程
+    的 base 值永远不被 worker 污染。
+
+    R20-114..118：``_factor_engine_lqtp_wrapper`` 也从「改共享 inner 的实例属性」
+    改为 per-thread 注册表，并发 context 不再互相覆盖 pointer。
+    """
+
+    def __init__(self) -> None:
+        self.lazy_overrides: "weakref.WeakKeyDictionary[Any, dict[str, bool]]" = (
+            weakref.WeakKeyDictionary()
+        )
+        self.logical_wrappers: "weakref.WeakKeyDictionary[Any, Any]" = (
+            weakref.WeakKeyDictionary()
+        )
+
+
+_source_tls = _SourceThreadState()
+
+
+def register_logical_wrapper(inner: Any, wrapper: Any) -> None:
+    """Per-thread 注册 inner → logical wrapper（替代 ``setattr(inner, ...)``）。
+
+    供 :mod:`backend.context` 使用，避免并发 context 在共享 inner 上互相覆盖
+    ``_factor_engine_lqtp_wrapper``。
+    """
+    if wrapper is None:
+        _source_tls.logical_wrappers.pop(inner, None)
+    else:
+        _source_tls.logical_wrappers[inner] = wrapper
+
+
+def _logical_wrapper_for(inner: Any) -> Any | None:
+    return _source_tls.logical_wrappers.get(inner)
 
 
 class DataAccessColumnPreflightError(ValueError):
@@ -145,6 +188,14 @@ class HistoricalCoverageContract:
     min_stock_coverage_threshold: float = 0.5
     min_stock_coverage_quantile: float = 0.9
     coverage_date_threshold: float = 0.7
+    # R17-006: coverage identity must be market-aware.  The same logical field
+    # (e.g. ``market_cap``) has different providers/coverage in A-share vs US;
+    # keying coverage contracts only by ``field`` let a later-registered market
+    # overwrite the other's contract.
+    market: str | None = None
+    provider_id: str | None = None
+    dataset: str | None = None
+    universe_id: str | None = None
 
     def covers_window(
         self,
@@ -270,14 +321,28 @@ class HistoricalCoverageContract:
 
 
 def assert_historical_coverage(
-    contract: HistoricalCoverageContract,
+    contract: HistoricalCoverageContract | None,
     *,
     start: str | None = None,
     end: str | None = None,
     threshold: float | None = None,
+    required: bool = False,
+    context: str = "",
 ) -> None:
-    """Raise :class:`HistoricalCoverageError` when ``contract`` does not cover the window."""
+    """Raise :class:`HistoricalCoverageError` when ``contract`` does not cover the window.
+
+    R17-007: for a PARTIAL/SPARSE/CURRENT_ONLY provider, coverage evidence is an
+    execution requirement — a missing contract is ``COVERAGE_EVIDENCE_MISSING``
+    (fail closed) when ``required=True`` (production), instead of silently
+    passing ("no evidence == qualified").
+    """
     if contract is None:
+        if required:
+            raise HistoricalCoverageError(
+                f"{context}coverage evidence MISSING for requested window "
+                f"[{start}, {end}] (partial/sparse/current-only provider requires "
+                "a declared HistoricalCoverageContract; COVERAGE_EVIDENCE_MISSING)"
+            )
         return
     problems = contract.violations(start=start, end=end, threshold=threshold)
     if problems:
@@ -287,18 +352,48 @@ def assert_historical_coverage(
         )
 
 
-#: Coverage contracts keyed by logical field name (round-7 WS-E #315).  The
-#: search/factor preflight registers partial-history contracts here so the
-#: column-resolution gate can enforce them without re-reading data.
-_COVERAGE_CONTRACTS: dict[str, HistoricalCoverageContract] = {}
+#: Coverage contracts keyed by (field, market) — R17-006: the same logical field
+#: has DIFFERENT provider coverage per market, so a US ``market_cap`` contract
+#: must never be satisfied by / overwrite the A-share one.
+_COVERAGE_CONTRACTS: dict[tuple[str, str], HistoricalCoverageContract] = {}
 
 
-def register_coverage_contract(contract: HistoricalCoverageContract) -> HistoricalCoverageContract:
-    """Register a :class:`HistoricalCoverageContract` for coverage gating (#315)."""
+def _coverage_key(field: str, market: str | None) -> tuple[str, str]:
+    return (str(field).strip(), str(market or "any").strip().lower())
+
+
+def register_coverage_contract(
+    contract: HistoricalCoverageContract,
+    *,
+    market: str | None = None,
+    provider_id: str | None = None,
+    dataset: str | None = None,
+    universe_id: str | None = None,
+) -> HistoricalCoverageContract:
+    """Register a :class:`HistoricalCoverageContract` for coverage gating (#315).
+
+    R17-006: contracts are keyed by ``(field, market)`` so A/US coverage for the
+    same concept never collide.  ``market`` defaults from the contract itself.
+    """
     if contract is None or not getattr(contract, "field", None):
         raise ValueError("coverage contract requires a field name")
-    _COVERAGE_CONTRACTS[str(contract.field)] = contract
+    eff_market = market or getattr(contract, "market", None)
+    # Stamped onto the contract for lineage/audit (contracts are frozen dataclasses;
+    # this helper receives optional context, recorded in the dict key).
+    _COVERAGE_CONTRACTS[_coverage_key(contract.field, eff_market)] = contract
     return contract
+
+
+def get_coverage_contract(field: str, *, market: str | None = None) -> HistoricalCoverageContract | None:
+    """Look up a coverage contract for ``field`` in ``market`` (R17-006).
+
+    Falls back to the legacy ``(field, "any")`` key so pre-R17 registrations keep
+    working, but a market-scoped registration always wins.
+    """
+    key = _coverage_key(field, market)
+    if key in _COVERAGE_CONTRACTS:
+        return _COVERAGE_CONTRACTS[key]
+    return _COVERAGE_CONTRACTS.get((str(field).strip(), "any"))
 
 
 def _ensure_data_access_importable() -> None:
@@ -539,12 +634,15 @@ class DataAccessSource(DataSource):
         self.semantic_filters = dict(semantic_filters or {})
         self.read_mode = str(read_mode or "panel").lower()
         self._validate_semantic_contract()
-        self.read_auto = (
+        # R20-107..113：构造期只写 base；per-thread lazy/read_auto override 走
+        # 属性（``_lazy_scan`` / ``read_auto``），worker 线程的 enable/restore
+        # 不污染共享实例的 base。
+        self._read_auto_base = (
             bool(read_auto)
             if read_auto is not None
             else bool(self.params.pop("read_auto", False))
         )
-        self._lazy_scan = bool(self.params.pop("lazy_scan", False))
+        self._lazy_scan_base = bool(self.params.pop("lazy_scan", False))
         #: Unified field-resolution plans keyed by ``(logical_name,
         #: semantic_catalog_version)`` (P0-11, round-7 P0).  Produced by
         #: ``_resolve_columns`` / ``_ensure_field_plans`` and consumed by scale
@@ -572,6 +670,9 @@ class DataAccessSource(DataSource):
         self._max_cache_bytes = _default_data_cache_budget()
         self._cache_bytes = 0
         self._closed = False
+        # R20-111：restore 失败 / 检测到运行态被破坏时置位。production 下任何
+        # 后续读操作 ``_assert_healthy`` 直接 abort；research 至少记 warning。
+        self._corrupted_state: str | None = None
 
     def _validate_semantic_contract(self) -> None:
         """Apply COS panel/event and required-filter policy at construction.
@@ -658,6 +759,64 @@ class DataAccessSource(DataSource):
     def lazy_scan(self) -> bool:
         return bool(self._lazy_scan)
 
+    @property
+    def _lazy_scan(self) -> bool:
+        """Effective lazy-scan flag（R20-107..113：per-thread override → base）。"""
+        overrides = _source_tls.lazy_overrides.get(self)
+        if overrides is not None and "_lazy_scan" in overrides:
+            return overrides["_lazy_scan"]
+        return self._lazy_scan_base
+
+    @_lazy_scan.setter
+    def _lazy_scan(self, value: bool) -> None:
+        _source_tls.lazy_overrides.setdefault(self, {})["_lazy_scan"] = bool(value)
+
+    @property
+    def read_auto(self) -> bool:
+        """Effective ``read_auto`` flag（R20-107..113：per-thread override → base）。"""
+        overrides = _source_tls.lazy_overrides.get(self)
+        if overrides is not None and "read_auto" in overrides:
+            return overrides["read_auto"]
+        return self._read_auto_base
+
+    @read_auto.setter
+    def read_auto(self, value: bool) -> None:
+        _source_tls.lazy_overrides.setdefault(self, {})["read_auto"] = bool(value)
+
+    @property
+    def _factor_engine_lqtp_wrapper(self) -> Any | None:
+        """Per-thread logical wrapper（R20-114..118：不做共享 setattr）。
+
+        ``lineage_service._logical_wrapper`` 用 ``getattr(data_source,
+        "_factor_engine_lqtp_wrapper")`` 找回逻辑 wrapper —— 通过本属性读
+        per-thread 注册表，并发 context 不再互相覆盖。
+        """
+        return _logical_wrapper_for(self)
+
+    @_factor_engine_lqtp_wrapper.setter
+    def _factor_engine_lqtp_wrapper(self, wrapper: Any) -> None:
+        register_logical_wrapper(self, wrapper)
+
+    def _mark_corrupted(self, reason: str) -> None:
+        """R20-111：记录运行态被破坏（restore 失败等）。research 记 warning，
+        production 下后续 ``_assert_healthy`` 直接 abort。"""
+        self._corrupted_state = str(reason)
+        _logger.error("DataAccessSource corrupted-state: %s", reason)
+
+    def _assert_healthy(self) -> None:
+        """R20-111：production 下 corrupted-state 必须 abort，不能继续用坏 source。"""
+        if self._corrupted_state is not None:
+            from runtime.production_policy import is_production_mode
+
+            if is_production_mode(self.run_mode):
+                raise RuntimeError(
+                    f"DataAccessSource is in corrupted state: {self._corrupted_state}"
+                )
+            _logger.warning(
+                "DataAccessSource corrupted-state (research continues): %s",
+                self._corrupted_state,
+            )
+
     def execution_spec(self) -> dict[str, Any]:
         """返回可重建（``storage.factory.build_data_source``）的 canonical 配置。
 
@@ -700,6 +859,8 @@ class DataAccessSource(DataSource):
     def _assert_open(self) -> None:
         if self._closed:
             raise RuntimeError("DataAccessSource is closed")
+        # R20-111：production 下 corrupted-state 必须 abort；research 记 warning。
+        self._assert_healthy()
 
     def _time_range(self) -> tuple[Any, Any] | None:
         if self.start_date is None and self.end_date is None:
@@ -1046,12 +1207,15 @@ class DataAccessSource(DataSource):
         fails closed in production (``strict_unknown_fields``) and warns in
         research.
         """
-        contract = _COVERAGE_CONTRACTS.get(name)
+        contract = get_coverage_contract(
+            name, market=getattr(plan, "market", None)
+        )
         if contract is None:
             if self.strict_unknown_fields:
                 raise HistoricalCoverageError(
                     f"field {name!r} is {plan.coverage!r} but has no declared "
-                    "HistoricalCoverageContract; coverage-gate cannot be satisfied"
+                    "HistoricalCoverageContract; coverage-gate cannot be satisfied "
+                    "(COVERAGE_EVIDENCE_MISSING)"
                 )
             return
         assert_historical_coverage(
@@ -1059,6 +1223,8 @@ class DataAccessSource(DataSource):
             start=self.start_date,
             end=self.end_date,
             threshold=self.mining_coverage_threshold,
+            required=self.strict_unknown_fields,
+            context=f"field {name!r} market={getattr(plan, 'market', None)!r}: ",
         )
 
     def assert_four_layer_pit(

@@ -235,10 +235,18 @@ def _f(
     mining_allowed=True,
     grain="instrument_time",
     allowed_operator_families=(),
+    required_filters=None,
     metadata=None,
     current_snapshot_only=None,
 ):
     table_spec = _TABLE_BY_NAME[table]
+    # R17-014: table-level required parameters (timeframe / IndexName / ...) are
+    # the authoritative filter contract; every mineable field inherits them.
+    effective_required = (
+        tuple(required_filters)
+        if required_filters is not None
+        else table_spec.required_parameters
+    )
     return FieldSpec(
         name=name,
         table=table,
@@ -269,6 +277,7 @@ def _f(
         ),
         mining_allowed=mining_allowed,
         allowed_operator_families=tuple(allowed_operator_families),
+        required_filters=effective_required,
         metadata=dict(metadata or {}),
     )
 

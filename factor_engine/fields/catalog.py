@@ -8,6 +8,7 @@ from .units import (
     UNIT_BASIS_POINT,
     UNIT_BOOLEAN,
     UNIT_CNY,
+    UNIT_CNY_PER_SHARE,
     UNIT_DATE,
     UNIT_DATETIME,
     UNIT_DIMENSIONLESS,
@@ -15,6 +16,7 @@ from .units import (
     UNIT_PERCENT,
     UNIT_RATIO,
     UNIT_SHARE,
+    UNIT_SHARE_RATIO,
     UNIT_TEXT,
 )
 
@@ -278,10 +280,21 @@ def _f(
     mining_allowed=True,
     grain="instrument_time",
     allowed_operator_families=(),
+    price_basis=None,
+    flow_semantics=None,
+    required_filters=None,
     metadata=None,
 ):
     table_spec = _TABLE_BY_NAME[table]
     role = validate_field_role(role)
+    # R17-014: table-level required parameters (IndustrySource / IndexSymbol /
+    # timeframe) are the authoritative filter contract — every mineable field
+    # inherits them as required_filters.  A field-level override wins.
+    effective_required = (
+        tuple(required_filters)
+        if required_filters is not None
+        else table_spec.required_parameters
+    )
     return FieldSpec(
         name=name,
         table=table,
@@ -312,6 +325,9 @@ def _f(
         ),
         mining_allowed=mining_allowed,
         allowed_operator_families=tuple(allowed_operator_families),
+        price_basis=price_basis,
+        flow_semantics=flow_semantics,
+        required_filters=effective_required,
         metadata=dict(metadata or {}),
     )
 
@@ -319,21 +335,37 @@ def _f(
 ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
     _f("trade_date", "StockDailyBar", "TradeDate", dtype="date", unit=UNIT_DATE, role="time", aliases=("date",)),
     _f("symbol", "StockDailyBar", "Symbol", dtype="string", unit=UNIT_IDENTIFIER, role="instrument", aliases=("ticker",)),
-    # Prices/volume carry NO adjustment: the physical COS contract is unadjusted
-    # prices + a forward vendor Factor whose direction is not yet sample-verified
-    # (COS lqtp dict §1.1/§4.8).  Do not pre-adjust until the direction is proven.
-    _f("open", "StockDailyBar", "Open", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("high", "StockDailyBar", "High", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("low", "StockDailyBar", "Low", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("close", "StockDailyBar", "Close", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("pre_close", "StockDailyBar", "PreClose", unit=UNIT_CNY, aliases=("prev_close",), metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("volume", "StockDailyBar", "Volume", unit=UNIT_SHARE, metadata={"adjusted": False, "adjustment_status": "unverified"}),
+    # R17-010: the A-share COS contract VERIFIES Factor is a backward cumulative
+    # multiplier (continuous_price = raw_price * Factor); raw OHLC/VWAP/limit are
+    # RAW basis (unadjusted); continuous prices are exposed via canonical derived
+    # concepts (continuous_close = Close * Factor).  "unverified" metadata is gone.
+    # R17-012: price fields are CNY per share (dimension CNY/share), not a bare
+    # CNY amount; scale_to_canonical stays 1.0 (CNY and CNY/share share the
+    # numeric scale — the dimension is what differs).
+    _f("open", "StockDailyBar", "Open", unit=UNIT_CNY_PER_SHARE, price_basis="RAW",
+       metadata={"adjusted": False, "adjustment_status": "raw", "price_basis": "RAW"}),
+    _f("high", "StockDailyBar", "High", unit=UNIT_CNY_PER_SHARE, price_basis="RAW",
+       metadata={"adjusted": False, "adjustment_status": "raw", "price_basis": "RAW"}),
+    _f("low", "StockDailyBar", "Low", unit=UNIT_CNY_PER_SHARE, price_basis="RAW",
+       metadata={"adjusted": False, "adjustment_status": "raw", "price_basis": "RAW"}),
+    _f("close", "StockDailyBar", "Close", unit=UNIT_CNY_PER_SHARE, price_basis="RAW",
+       metadata={"adjusted": False, "adjustment_status": "raw", "price_basis": "RAW"}),
+    _f("pre_close", "StockDailyBar", "PreClose", unit=UNIT_CNY_PER_SHARE, aliases=("prev_close",),
+       price_basis="OFFICIAL_REFERENCE_PRE_CLOSE",
+       metadata={"adjusted": True, "adjustment_status": "official_reference_pre_close",
+                 "price_basis": "OFFICIAL_REFERENCE_PRE_CLOSE", "note": "R17-011 official reference pre-close; not lag(raw_close,1)"}),
+    _f("volume", "StockDailyBar", "Volume", unit=UNIT_SHARE, metadata={"adjusted": False, "adjustment_status": "raw"}),
     _f("amount", "StockDailyBar", "Amount", unit=UNIT_CNY, aliases=("turnover_value",)),
     _f("ret", "StockDailyBar", "Return", unit=UNIT_RATIO, source_unit=UNIT_BASIS_POINT, aliases=("return", "returns")),
-    _f("adj_factor", "StockDailyBar", "Factor", unit=UNIT_RATIO, aliases=("factor",), metadata={"direction": "unverified"}),
-    _f("vwap", "StockDailyBar", "Vwap", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("high_limit", "StockDailyBar", "HighLimit", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("low_limit", "StockDailyBar", "LowLimit", unit=UNIT_CNY, metadata={"adjusted": False, "adjustment_status": "unverified"}),
+    _f("adj_factor", "StockDailyBar", "Factor", unit=UNIT_RATIO, aliases=("factor",),
+       metadata={"direction": "backward_multiplier",
+                 "note": "continuous_price = raw_price * Factor (verified; R17-010)"}),
+    _f("vwap", "StockDailyBar", "Vwap", unit=UNIT_CNY_PER_SHARE, price_basis="RAW",
+       metadata={"adjusted": False, "adjustment_status": "raw", "price_basis": "RAW"}),
+    _f("high_limit", "StockDailyBar", "HighLimit", unit=UNIT_CNY_PER_SHARE, price_basis="RAW_OFFICIAL_LIMIT",
+       metadata={"adjusted": False, "adjustment_status": "raw_official_limit", "price_basis": "RAW_OFFICIAL_LIMIT"}),
+    _f("low_limit", "StockDailyBar", "LowLimit", unit=UNIT_CNY_PER_SHARE, price_basis="RAW_OFFICIAL_LIMIT",
+       metadata={"adjusted": False, "adjustment_status": "raw_official_limit", "price_basis": "RAW_OFFICIAL_LIMIT"}),
     _f("is_suspend", "StockDailyBar", "IsSuspend", dtype="bool", unit=UNIT_BOOLEAN),
     # UpdateTime is the vendor/pipeline write time to COS (freshness only), never a
     # market/announcement/revision-knowable instant — role ingestion_time, not knowledge_time.
@@ -358,7 +390,8 @@ ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
 
     _f("total_capital", "StockCapitalDaily", "TotalCapital", unit=UNIT_SHARE, aliases=("total_shares",)),
     _f("circulating_capital", "StockCapitalDaily", "CirculatingCapital", unit=UNIT_SHARE, aliases=("float_shares",)),
-    _f("eps", "StockIndicator", "Eps", unit=UNIT_CNY),
+    # R17-012: EPS is CNY per share (per-share dimension), not a bare CNY amount.
+    _f("eps", "StockIndicator", "Eps", unit=UNIT_CNY_PER_SHARE),
     _f("roe", "StockIndicator", "Roe", unit=UNIT_RATIO, source_unit=UNIT_PERCENT),
     _f("pub_date", "StockIndicator", "PubDate", dtype="date", unit=UNIT_DATE, role="knowledge_time", mining_allowed=False),
     _f("report_period_end_date", "StockIndicator", "ReportPeriodEndDate", dtype="date", unit=UNIT_DATE, role="period_id", aliases=("report_date",), mining_allowed=False),
@@ -417,9 +450,11 @@ ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
     _f("financing_cash_flow", "StockCashFlow", "NetFinanceCashFlow", unit=UNIT_CNY, grain="flow_ytd"),
     _f("fix_intan_other_asset_acquis_cash", "StockCashFlow", "FixIntanOtherAssetAcquiCash", unit=UNIT_CNY, aliases=("capex",), grain="flow_ytd"),
     # StockDividend effective-only fields (COS lqtp dict §4.17): no announcement PIT.
-    _f("cash_dividend", "StockDividend", "CashDividend", unit=UNIT_CNY, temporal_model="effective_only", strict_pit_allowed=False),
-    _f("stock_dividend", "StockDividend", "StockDividend", unit=UNIT_SHARE, temporal_model="effective_only", strict_pit_allowed=False),
-    _f("stock_transfer", "StockDividend", "StockTransfer", unit=UNIT_SHARE, temporal_model="effective_only", strict_pit_allowed=False),
+    # R17-012: CashDividend is CNY per share; StockDividend/StockTransfer are
+    # dimensionless per-share RATIOS (proportions), not share counts.
+    _f("cash_dividend", "StockDividend", "CashDividend", unit=UNIT_CNY_PER_SHARE, temporal_model="effective_only", strict_pit_allowed=False),
+    _f("stock_dividend", "StockDividend", "StockDividend", unit=UNIT_SHARE_RATIO, temporal_model="effective_only", strict_pit_allowed=False),
+    _f("stock_transfer", "StockDividend", "StockTransfer", unit=UNIT_SHARE_RATIO, temporal_model="effective_only", strict_pit_allowed=False),
     _f("right_reg_date", "StockDividend", "RightRegDate", dtype="date", unit=UNIT_DATE, temporal_model="effective_only", mining_allowed=False),
 
     # StockIndicator 物理列名与 COS parquet 逐列核对（2026-08）。

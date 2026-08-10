@@ -231,6 +231,62 @@ def parse_filter_requirement(raw: Any) -> FilterRequirement:
 
 
 # ---------------------------------------------------------------------------
+# R17-016/R17-017: structured dependency contracts.  ``universe_daily present``
+# was previously modeled as a required filter, but it is ANOTHER DATASET, not a
+# column predicate of the current table.  A derived provider (US market cap =
+# TickerSharesSnapshot.shares * StockDailyBar.Close) spans multiple datasets;
+# the binding's single ``dataset=`` slot cannot describe it.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class JoinRequirement:
+    """A cross-dataset join a provider's execution graph must materialize."""
+
+    dataset: str
+    table: str
+    field: str | None = None
+    join_keys: tuple[str, ...] = ()
+    temporal_join: str = "exact"  # exact | asof_backward | financial_pit
+    required_filters: tuple[FilterRequirement, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "dataset": self.dataset,
+            "table": self.table,
+            "field": self.field,
+            "join_keys": list(self.join_keys),
+            "temporal_join": self.temporal_join,
+            "required_filters": [f.to_dict() for f in self.required_filters],
+        }
+
+
+@dataclass(frozen=True)
+class ProviderDependency:
+    """One physical read edge in a provider's execution graph (R17-017).
+
+    A derived provider declares its inputs as explicit dependency edges instead
+    of hiding cross-table reads in ``physical_fields`` behind a single
+    ``dataset=``.  The planner materializes these edges into a source plan.
+    """
+
+    dataset: str
+    table: str
+    field: str
+    join_keys: tuple[str, ...] = ()
+    temporal_join: str = "exact"
+    required_filters: tuple[FilterRequirement, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "dataset": self.dataset,
+            "table": self.table,
+            "field": self.field,
+            "join_keys": list(self.join_keys),
+            "temporal_join": self.temporal_join,
+            "required_filters": [f.to_dict() for f in self.required_filters],
+        }
+
+
+# ---------------------------------------------------------------------------
 # Binding contract.
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
@@ -258,6 +314,11 @@ class MarketFieldBinding:
     derived_expression: str | None = None  # executable expression for derived providers
     coverage_gate: float | None = None  # P1-002: fraction of target universe the
     # provider actually covers; when < 0.8 the resolver flags production use.
+    # R17-016/R17-017: explicit cross-dataset dependency graph for derived
+    # providers (e.g. US market cap = TickerSharesSnapshot.shares * Close).
+    # Empty tuple == the single ``dataset``/``physical_fields`` describe the whole
+    # read; non-empty == the planner MUST materialize every edge.
+    dependencies: tuple[ProviderDependency, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -279,6 +340,7 @@ class MarketFieldBinding:
             "source_certified": self.source_certified,
             "derived_expression": self.derived_expression,
             "coverage_gate": self.coverage_gate,
+            "dependencies": [d.to_dict() for d in self.dependencies],
             "notes": self.notes,
         }
 
@@ -387,6 +449,7 @@ def _b(
     notes="",
     derived_expression=None,
     coverage_gate=None,
+    dependencies=(),
     registry: ProviderRegistry = PROVIDER_REGISTRY,
 ) -> MarketFieldBinding:
     binding = MarketFieldBinding(
@@ -410,6 +473,7 @@ def _b(
         transform_description=transform_description,
         derived_expression=derived_expression,
         coverage_gate=coverage_gate,
+        dependencies=tuple(dependencies),
     )
     registry.register(binding)
     return binding
@@ -454,7 +518,7 @@ _b(
 # --- raw prices ------------------------------------------------------------
 for _raw, _phys in (
     ("raw_open", "Open"), ("raw_high", "High"), ("raw_low", "Low"),
-    ("raw_close", "Close"), ("raw_pre_close", "PreClose"), ("raw_vwap", "Vwap"),
+    ("raw_close", "Close"), ("raw_vwap", "Vwap"),
 ):
     _b(
         _raw, "ashare", f"ashare_raw_{_phys.lower()}",
@@ -466,7 +530,7 @@ for _raw, _phys in (
     )
 for _raw, _phys in (
     ("raw_open", "Open"), ("raw_high", "High"), ("raw_low", "Low"),
-    ("raw_close", "Close"), ("raw_pre_close", "PreClose"), ("raw_vwap", "VWAP"),
+    ("raw_close", "Close"), ("raw_vwap", "VWAP"),
 ):
     _b(
         _raw, "us", f"us_raw_{_phys.lower()}",
@@ -475,6 +539,28 @@ for _raw, _phys in (
         source_unit=USD_PER_SHARE, canonical_unit=USD_PER_SHARE,
         transform=_identity, temporal_model="exact_daily", available_at="local_close",
         source_certified=True,
+    )
+
+# R17-011: ``reference_pre_close`` — the exchange's OFFICIAL reference pre-close
+# (A-share PreClose already removes corporate-action jumps; US PreClose is the
+# official reference).  This is distinct from ``lag(raw_close,1)``; the physical
+# ``PreClose`` column binds to THIS concept, and ``raw_pre_close`` above no longer
+# reads the PreClose column (it is a pure lag-derived concept when registered by a
+# derived provider / operator, never the official reference).
+for _market, _ds, _phys in (
+    ("ashare", "ashare_stock_daily", "PreClose"),
+    ("us", "us_stock_daily", "PreClose"),
+):
+    _b(
+        "reference_pre_close", _market, f"{_market}_reference_pre_close",
+        dataset=_ds, physical=(f"StockDailyBar.{_phys}",),
+        quality=_NATIVE, coverage=_FULL,
+        source_unit=(CNY_PER_SHARE if _market == "ashare" else USD_PER_SHARE),
+        canonical_unit=(CNY_PER_SHARE if _market == "ashare" else USD_PER_SHARE),
+        transform=_identity, temporal_model="exact_daily", available_at="local_open",
+        source_certified=True,
+        transform_description="identity (official reference pre-close; company-action adjusted)",
+        notes="OFFICIAL_REFERENCE_PRE_CLOSE basis (R17-011); not lag(raw_close,1)",
     )
 
 # --- continuous (backward-adjusted) prices --------------------------------
@@ -600,6 +686,18 @@ _b(
     source_certified=True,
     derived_expression="TickerSharesSnapshot.weighted_shares_outstanding * StockDailyBar.Close",
     coverage_gate=0.42,
+    # R17-017: explicit cross-dataset dependency graph (no more "dataset points at
+    # shares, physical_fields sneakily reference DailyBar" half-declaration).
+    dependencies=(
+        ProviderDependency(
+            dataset="us_ticker_shares_snapshot", table="TickerSharesSnapshot",
+            field="weighted_shares_outstanding", temporal_join="exact",
+        ),
+        ProviderDependency(
+            dataset="us_stock_daily", table="StockDailyBar",
+            field="Close", temporal_join="exact",
+        ),
+    ),
     notes="~42% coverage of StockDailyBar tickers; NOT the X0 sparse market_cap; coverage_gate<0.8 -> production flags",
 )
 
@@ -721,11 +819,23 @@ _b(
     temporal_model="exact_daily", available_at="local_close",
     source_certified=False,
     derived_expression="us_tradable = (StockList.type=='CS') AND isfinite(StockDailyBar.Close)",
+    # R17-016: ``universe_daily`` is ANOTHER DATASET, not a column predicate of
+    # the current table — it is a JoinRequirement the planner must materialize,
+    # not a required_filter.
     required_filters=(
-        FilterRequirement(field="universe_daily", operator="present", required=True),
-        FilterRequirement(field="StockDailyBar", operator="present", required=True),
+        FilterRequirement(field="StockList.type", operator="present", required=True),
     ),
-    notes="real boolean from CS list type + finite DailyBar close (universe_daily membership declared via required_filters); is_ticker_halt is far too sparse to be an IsSuspend equivalent",
+    dependencies=(
+        ProviderDependency(
+            dataset="us_universe_daily", table="UniverseDaily", field="ticker",
+            temporal_join="exact",
+        ),
+        ProviderDependency(
+            dataset="us_stock_daily", table="StockDailyBar", field="Close",
+            temporal_join="exact",
+        ),
+    ),
+    notes="real boolean from CS list type + finite DailyBar close (universe_daily is a JOIN dependency, R17-016); is_ticker_halt is far too sparse to be an IsSuspend equivalent",
 )
 
 # --- index ---------------------------------------------------------------------
@@ -1113,8 +1223,10 @@ def apply_binding_transform(binding: MarketFieldBinding, value: Any, *, fields: 
 __all__ = [
     "FilterRequirement",
     "FinancialPeriodAdapter",
+    "JoinRequirement",
     "MarketFieldBinding",
     "PROVIDER_REGISTRY",
+    "ProviderDependency",
     "ProviderRegistry",
     "apply_binding_transform",
     "binding",

@@ -31,6 +31,11 @@ from .units_v2 import (
 PRICE_BASIS_RAW = "RAW"
 PRICE_BASIS_CONTINUOUS = "CONTINUOUS"
 PRICE_BASIS_RAW_OFFICIAL_LIMIT = "RAW_OFFICIAL_LIMIT"
+# R17-011: the official/reference pre-close (ex-dividend / corporate-action
+# adjusted reference price), distinct from ``lag(raw_close, 1)`` — the exchange's
+# PreClose already removes company-action jumps, so return/gap/limit operators
+# must choose the correct basis instead of mixing them.
+PRICE_BASIS_OFFICIAL_REFERENCE_PRE_CLOSE = "OFFICIAL_REFERENCE_PRE_CLOSE"
 PRICE_BASIS_RETURN = "RETURN"
 PRICE_BASIS_EITHER = "EITHER"
 
@@ -145,7 +150,19 @@ _c("raw_low", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_
 _c("raw_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
   aliases=("close",), cross_market_comparable=False)
 _c("raw_pre_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
-  aliases=("pre_close", "prev_close"), cross_market_comparable=False)
+  aliases=("prev_close",), cross_market_comparable=False,
+  description="physically lagged previous raw close (lag(raw_close,1)).  NOT the "
+              "exchange's official reference pre-close — see reference_pre_close (R17-011).")
+# R17-011: the exchange's official/reference pre-close (A-share PreClose already
+# removes corporate-action jumps; US PreClose is the official reference).  This is
+# a DIFFERENT economic concept from lag(raw_close,1): return/gap/limit operators
+# that consume the official basis must reference this concept, never the lagged
+# raw close.
+_c("reference_pre_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
+  price_basis=PRICE_BASIS_OFFICIAL_REFERENCE_PRE_CLOSE,
+  aliases=("pre_close",), cross_market_comparable=False,
+  description="official reference pre-close (company-action adjusted); distinct "
+              "from lag(raw_close,1) (R17-011)")
 _c("raw_vwap", "price_volume", "price", LOCAL_PRICE_PER_SHARE, price_basis=PRICE_BASIS_RAW,
   aliases=("vwap",), cross_market_comparable=False)
 
