@@ -317,6 +317,25 @@ class ExecutionResourcePlan:
     io_concurrency: int
     spill_dir: str
     spill_disk_bytes: int | None
+    # R27-021/167：每 worker 峰值内存（字节）——RAM 硬约束 worker 数的真实依据。
+    per_worker_peak_bytes: int = 3 * 1024**3
+
+    @classmethod
+    def _memory_bounded_workers(
+        cls,
+        workers: int,
+        process_budget_bytes: int,
+        per_worker_peak_bytes: int | None,
+    ) -> int:
+        """``n_jobs <= floor(process_budget / per_worker_peak)``（R27-021/167）。
+
+        让每 worker 峰值内存**真正**限制并发，而不是只有注释声称。32 核 16GB
+        机器、每 worker 3GB → 最多 5 个 worker。
+        """
+        if per_worker_peak_bytes is None or per_worker_peak_bytes <= 0:
+            return workers
+        by_memory = max(1, process_budget_bytes // per_worker_peak_bytes)
+        return max(1, min(workers, by_memory))
 
     @classmethod
     def auto(cls, *, max_workers: int | None = None) -> "ExecutionResourcePlan":
@@ -331,6 +350,9 @@ class ExecutionResourcePlan:
         cpu = effective_cpu_slots()
         workers = max_workers if max_workers and max_workers > 0 else cpu
         workers = max(1, min(workers, cpu))
+        # R27-021/167：每 worker 峰值内存真正约束 worker 数。
+        per_worker_peak = _default_per_worker_peak_bytes()
+        workers = cls._memory_bounded_workers(workers, process, per_worker_peak)
         # DuckDB 官方：memory_limit 只覆盖部分分配，建议 50-60% 系统内存 + 降 threads。
         # 避免 oversubscription：n_jobs × duckdb_threads <= cpu。
         duckdb_threads = max(1, min(cpu, cpu // workers if workers else cpu))

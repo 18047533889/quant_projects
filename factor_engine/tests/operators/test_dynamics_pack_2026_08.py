@@ -277,7 +277,7 @@ def test_session_recovery_fast_vs_never():
     )
     seq1 = np.concatenate([np.linspace(10, 10.05, 120), np.full(120, 10.4)])          # never recovers
     seq2 = np.concatenate([np.linspace(10, 10.05, 120),
-                           np.r_[10.4, np.linspace(10.4, 10.05, 29), np.full(90, 10.05)]])
+                           np.r_[10.4, np.linspace(10.4, 10.05, 14), np.full(105, 10.05)]])
     seq3 = np.linspace(10, 10.05, per)
     price = pd.DataFrame(np.concatenate([seq1, seq2, seq3])[:, None], index=idx, columns=["S0"])
     r = np.abs(np.diff(price.to_numpy()[:, 0], prepend=10.0))
