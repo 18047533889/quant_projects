@@ -100,13 +100,16 @@ def _bucket_of(node_id: str) -> str:
 def parse_junit(junit: Path) -> dict:
     tree = ET.parse(junit)
     root = tree.getroot()
-    tests = int(root.attrib.get("tests", 0))
-    failures = int(root.attrib.get("failures", 0))
-    errors = int(root.attrib.get("errors", 0))
-    skipped = int(root.attrib.get("skipped", 0))
-    time_s = float(root.attrib.get("time", 0))
+    # pytest writes <testsuites><testsuite ...><testcase ...>; the <testsuite>
+    # element carries the aggregate counters.
+    suite = root.find("testsuite") if root.tag == "testsuites" else root
+    tests = int(suite.attrib.get("tests", 0))
+    failures = int(suite.attrib.get("failures", 0))
+    errors = int(suite.attrib.get("errors", 0))
+    skipped = int(suite.attrib.get("skipped", 0))
+    time_s = float(suite.attrib.get("time", 0))
     cases: list[dict] = []
-    for case in root.iter("case"):
+    for case in suite.iter("testcase"):
         node_id = f"{case.attrib.get('classname','')}::{case.attrib.get('name','')}"
         status = "passed"
         for child in case:
@@ -131,6 +134,8 @@ def parse_junit(junit: Path) -> dict:
 
 
 def main() -> None:
+    sys.path.insert(0, str(REPO))
+    sys.path.insert(0, str(REPO.parent))
     junit_path = Path(sys.argv[1]) if len(sys.argv) > 1 else OUT / "R28_PYTEST_JUNIT.xml"
     junit = parse_junit(junit_path)
     inventory = _load_inventory()
@@ -153,6 +158,12 @@ def main() -> None:
         if case["status"] in ("failed", "error"):
             rec["status"] = case["status"]
 
+    def _status_of(node_id, junit):
+        for case in junit["cases"]:
+            if case["node_id"] == node_id:
+                return case["status"]
+        return "?"
+
     results_rows = []
     for c in canonicals:
         rec = per_canonical[c]
@@ -165,12 +176,6 @@ def main() -> None:
                 "node_ids": ";".join(rec["node_ids"][:8]),
             }
         )
-
-    def _status_of(node_id, junit):
-        for case in junit["cases"]:
-            if case["node_id"] == node_id:
-                return case["status"]
-        return "?"
 
     # ---- canonical test coverage matrix ----
     coverage_rows = []
@@ -200,14 +205,27 @@ def main() -> None:
         coverage_rows.append(row)
 
     # ---- forbidden operator audit ----
-    forbidden = {}
-    forbidden_canonicals = [
-        n for n in canonicals
-        if any(k in n for k in ("Lead", "next", "bfill", "shuffle", "sample", "rand_"))
-    ]
+    # Exact forbidden names (tombstoned / PERMANENTLY_FORBIDDEN), NOT substring
+    # matches — "next" is a legitimate substring of ts_garch_next_vol_forecast.
+    from cleaned_operators.operator_spec import PERMANENTLY_FORBIDDEN_CANONICALS
+    from cleaned_operators.tombstones import is_tombstoned
+    from cleaned_operators.operator_surface import INTERNAL_ONLY_CANONICALS
+
+    forbidden_set = set(PERMANENTLY_FORBIDDEN_CANONICALS) | {
+        n for n in canonicals if is_tombstoned(n)
+    }
+    # A forbidden name may survive only as a documented INTERNAL grammar helper
+    # (``constant``, needed by the DSL/recipes for scalar literals) — it is
+    # DENIED and never in a factor authoring surface.  Runtime-SURFACE-zero means
+    # no forbidden name is mineable/authorable.
+    forbidden_canonicals = sorted(
+        (forbidden_set & set(canonicals)) - set(INTERNAL_ONLY_CANONICALS)
+    )
+    internal_forbidden = sorted(forbidden_set & set(canonicals) & set(INTERNAL_ONLY_CANONICALS))
     forbidden = {
         "present_in_registry": forbidden_canonicals,
         "runtime_surface_zero": forbidden_canonicals == [],
+        "internal_grammar_exception": internal_forbidden,
         "random_factor_terminals_zero": True,
         "checked": "see test_forbidden_operator_surface.py + test_no_random_factor_terminals.py",
     }

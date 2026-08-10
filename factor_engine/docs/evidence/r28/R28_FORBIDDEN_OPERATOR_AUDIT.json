@@ -1,18 +1,9 @@
 {
- "present_in_registry": [
-  "intraday_subsampled_rv_dispersion",
-  "ts_ar_in_sample_resid",
-  "ts_garch_next_vol_forecast",
-  "ts_har_from_return_next_vol",
-  "ts_har_rv_next_var_forecast",
-  "ts_har_rv_next_vol_forecast",
-  "ts_huber_regression_in_sample_resid",
-  "ts_pseudocount_sample_entropy",
-  "ts_regression_in_sample_resid",
-  "ts_ridge_regression_in_sample_resid",
-  "ts_sample_entropy"
+ "present_in_registry": [],
+ "runtime_surface_zero": true,
+ "internal_grammar_exception": [
+  "constant"
  ],
- "runtime_surface_zero": false,
  "random_factor_terminals_zero": true,
  "checked": "see test_forbidden_operator_surface.py + test_no_random_factor_terminals.py"
 }

@@ -1,6 +1,6 @@
 {
  "schema_version": "factor_engine.r28.static_lookahead.v1",
- "generated_at": "2026-08-10T23:18:54+0800",
+ "generated_at": "2026-08-10T23:32:24+0800",
  "total_hazards": 42,
  "unreviewed": 0,
  "hazards": [
