@@ -52,10 +52,10 @@ def test_r28_evidence_current_head():
     manifest_sha = manifest.get("git_sha")
     if manifest_sha == head:
         return
-    parent = _git(["rev-parse", "HEAD~1"]).stdout.strip()
-    diff = _git(["diff", "--name-only", "HEAD~2", "HEAD"]).stdout.strip()
+    # current iff no code changed between the bound code sha and HEAD
+    diff = _git(["diff", "--name-only", manifest_sha, "HEAD"]).stdout.strip()
     evidence_only = all("/docs/evidence/r28/" in line for line in diff.splitlines())
-    assert parent == manifest_sha and evidence_only, (
+    assert evidence_only, (
         f"evidence git_sha {manifest_sha} not current (HEAD {head}) (STALE — regenerate)"
     )
 

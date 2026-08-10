@@ -41,9 +41,10 @@ def git(cmd: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(REPO), *cmd], capture_output=True, text=True)
 
 
-def _only_evidence_commits() -> bool:
-    """True when every commit in HEAD~2..HEAD touches only docs/evidence/r28."""
-    out = git(["diff", "--name-only", "HEAD~2", "HEAD"]).stdout.strip()
+def _only_evidence_commits_since(manifest_sha: str) -> bool:
+    """True when every file changed between the manifest code sha and HEAD is an
+    evidence artifact (no code changed after the evidence was generated)."""
+    out = git(["diff", "--name-only", manifest_sha, "HEAD"]).stdout.strip()
     if not out:
         return False
     return all("/docs/evidence/r28/" in line for line in out.splitlines())
@@ -75,8 +76,7 @@ def main() -> int:
         if manifest_sha == sha:
             ok_sha = True
         else:
-            parent = git(["rev-parse", "HEAD~1"]).stdout.strip()
-            ok_sha = parent == manifest_sha and _only_evidence_commits()
+            ok_sha = _only_evidence_commits_since(manifest_sha)
         if not ok_sha:
             problems.append(
                 f"evidence git_sha {manifest_sha} != HEAD {sha} (STALE)"
