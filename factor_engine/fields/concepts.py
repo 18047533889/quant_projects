@@ -51,6 +51,8 @@ ROLE_GROUP_KEY = "group_key"
 ROLE_STATUS = "status"
 ROLE_TIME = "time"
 ROLE_IDENTIFIER = "identifier"
+# R17-067: continuous weight (index weight, portfolio weight) — NOT a group key.
+ROLE_WEIGHT = "weight"
 
 
 @dataclass(frozen=True)
@@ -66,7 +68,15 @@ class FieldConceptSpec:
     role: str = ROLE_FEATURE
     price_basis: str | None = None  # RAW / CONTINUOUS / RAW_OFFICIAL_LIMIT / RETURN
     flow_semantics: str | None = None  # stock / single_period_flow / cumulative_ytd_flow / ttm_flow
+    # R17-065: ``cross_market_comparable`` was overloaded.  Unit comparability is
+    # NOT accounting-definition comparability (A ROE % vs US X0 ROE have the same
+    # decimal unit but differ in period/annualization/attribution).  The single
+    # bool is deprecated in favour of the four explicit fields.
     cross_market_comparable: bool = False
+    unit_comparable: bool | None = None          # same canonical unit/dimension
+    definition_comparable: bool | None = None    # same accounting/economic definition
+    provider_available_by_market: dict[str, bool] = field(default_factory=dict)
+    cross_market_rank_allowed: bool = False      # only True when BOTH unit+definition
     market_local_only: bool = False
     allowed_operator_families: tuple[str, ...] = ()
     description: str = ""
@@ -84,6 +94,10 @@ class FieldConceptSpec:
             "price_basis": self.price_basis,
             "flow_semantics": self.flow_semantics,
             "cross_market_comparable": self.cross_market_comparable,
+            "unit_comparable": self.unit_comparable,
+            "definition_comparable": self.definition_comparable,
+            "provider_available_by_market": dict(self.provider_available_by_market),
+            "cross_market_rank_allowed": self.cross_market_rank_allowed,
             "market_local_only": self.market_local_only,
             "allowed_operator_families": list(self.allowed_operator_families),
             "aliases": list(self.aliases),
@@ -113,11 +127,24 @@ def _c(
     price_basis=None,
     flow_semantics=None,
     cross_market_comparable=False,
+    unit_comparable=None,
+    definition_comparable=None,
+    provider_available_by_market=None,
+    cross_market_rank_allowed=None,
     market_local_only=False,
     role=ROLE_FEATURE,
     aliases=(),
     description="",
 ):
+    # R17-065: when the new structured comparability fields are given they win;
+    # cross_market_comparable (deprecated) back-fills unit_comparable only.
+    eff_unit = unit_comparable if unit_comparable is not None else cross_market_comparable
+    eff_definition = definition_comparable if definition_comparable is not None else cross_market_comparable
+    eff_rank = (
+        cross_market_rank_allowed
+        if cross_market_rank_allowed is not None
+        else (bool(eff_unit and eff_definition))
+    )
     return _reg(
         FieldConceptSpec(
             concept_id=concept_id,
@@ -127,6 +154,10 @@ def _c(
             price_basis=price_basis,
             flow_semantics=flow_semantics,
             cross_market_comparable=cross_market_comparable,
+            unit_comparable=eff_unit,
+            definition_comparable=eff_definition,
+            provider_available_by_market=dict(provider_available_by_market or {}),
+            cross_market_rank_allowed=eff_rank,
             market_local_only=market_local_only,
             role=role,
             aliases=tuple(aliases),
@@ -195,8 +226,14 @@ _c("free_float_market_cap_local", "valuation", "amount", LOCAL_MONEY, market_loc
   aliases=("free_market_cap", "float_market_cap"))
 _c("total_shares", "capital", "count", SHARES, aliases=("total_capital", "total_shares"))
 _c("free_float_shares", "capital", "count", SHARES, aliases=("free_cap", "free_float_shares"))
+# R17-065: turnover is UNIT-comparable (decimal ratio) but NOT cross-market
+# rankable — US has no isomorphic D1 turnover provider, so a joint A+US rank
+# would silently rank US names as constant/absent.
 _c("turnover_ratio_decimal", "valuation", "ratio", RATIO, aliases=("turnover_ratio", "turnover"),
-  cross_market_comparable=True, description="Turnover as decimal. A: TurnoverRatio/100.")
+  cross_market_comparable=False, unit_comparable=True, definition_comparable=False,
+  provider_available_by_market={"ashare": True, "us": False},
+  cross_market_rank_allowed=False,
+  description="Turnover as decimal. A: TurnoverRatio/100; US: no provider (R17-065).")
 
 # --- price limits (A-share mechanism) -------------------------------------
 _c("upper_price_limit", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
@@ -207,17 +244,36 @@ _c("lower_price_limit", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   aliases=("low_limit",), description="Official daily lower limit price (raw). A-share only.")
 
 # --- fundamental ratios ---------------------------------------------------
+# R17-066: ROE has the same DECIMAL UNIT in A/US but different accounting
+# definitions (A Roe indicator often unannualized parent-equity basis; US X0
+# return_on_equity sparse valuation basis).  unit_comparable but NOT
+# definition_comparable -> no joint A+US cross-sectional rank without an
+# explicit comparator policy.
 _c("roe_decimal", "fundamental", "ratio", RATIO, aliases=("roe",),
-  cross_market_comparable=True, description="ROE as decimal. A: Roe/100; US: return_on_equity identity.")
+  cross_market_comparable=False, unit_comparable=True, definition_comparable=False,
+  provider_available_by_market={"ashare": True, "us": True},
+  cross_market_rank_allowed=False,
+  description="ROE as decimal. A: Roe/100; US: return_on_equity identity. "
+              "Unit-comparable, definition-NOT-comparable (R17-066).")
 _c("roa_decimal", "fundamental", "ratio", RATIO, aliases=("roa",),
-  cross_market_comparable=True)
+  cross_market_comparable=False, unit_comparable=True, definition_comparable=False,
+  provider_available_by_market={"ashare": False, "us": True},
+  cross_market_rank_allowed=False)
 _c("gross_margin_decimal", "fundamental", "ratio", RATIO, aliases=("gross_profit_margin",),
-  cross_market_comparable=True)
+  cross_market_comparable=False, unit_comparable=True, definition_comparable=False,
+  provider_available_by_market={"ashare": False, "us": False},
+  cross_market_rank_allowed=False)
 _c("net_profit_margin_decimal", "fundamental", "ratio", RATIO,
-  aliases=("net_profit_margin",), cross_market_comparable=True)
+  aliases=("net_profit_margin",), cross_market_comparable=False,
+  unit_comparable=True, definition_comparable=False,
+  provider_available_by_market={"ashare": False, "us": False},
+  cross_market_rank_allowed=False)
 _c("dividend_yield_decimal", "fundamental", "ratio", RATIO,
   aliases=("dividend_yield", "dividend_ratio"),
-  cross_market_comparable=True, description="Dividend yield as decimal. A: DividendRatio/100; US: dividend_yield identity.")
+  cross_market_comparable=False, unit_comparable=True, definition_comparable=False,
+  provider_available_by_market={"ashare": True, "us": True},
+  cross_market_rank_allowed=False,
+  description="Dividend yield as decimal. A: DividendRatio/100; US: dividend_yield identity.")
 
 # --- financial statements (flow / stock amounts, local currency) ----------
 # The canonical statement concepts default to the A-share reporting-flow
@@ -227,18 +283,41 @@ _c("dividend_yield_decimal", "fundamental", "ratio", RATIO,
 _c("operating_revenue", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
   flow_semantics=FLOW_SEMANTICS_CUMULATIVE_YTD,
   aliases=("revenue",), description="Revenue for the period in local currency.")
+# R17-078: ``net_profit`` (A NetProfit includes minority interest; US
+# net_income_loss_attributable_common_shareholders) and the parent/common-attributable
+# line are DIFFERENT economic concepts.  Cross-market profitability/ROE/PE-derived
+# factors must choose the matching attribution basis.
 _c("net_profit", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
   flow_semantics=FLOW_SEMANTICS_CUMULATIVE_YTD,
-  aliases=("net_income",))
+  aliases=("net_income",),
+  description="Net profit TOTAL (A includes minority interest).  For parent/common-"
+              "attributable use net_income_attributable (R17-078).")
+_c("net_income_attributable", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
+  flow_semantics=FLOW_SEMANTICS_CUMULATIVE_YTD,
+  aliases=("net_income_parent", "parent_net_profit", "net_income_common"),
+  description="Net income attributable to parent (A) / common shareholders (US). "
+              "The attribution-aligned profitability basis (R17-078).")
 _c("operating_cash_flow", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
   flow_semantics=FLOW_SEMANTICS_CUMULATIVE_YTD, aliases=("ocf",))
 _c("total_assets", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
   flow_semantics=FLOW_SEMANTICS_STOCK)
 _c("total_liabilities", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
   flow_semantics=FLOW_SEMANTICS_STOCK)
+# R17-079: equity attribution must align with the net-income attribution basis.
+# A uses parent equity; US should use total_equity_attributable_to_parent when the
+# numerator is parent/common net income — not total_equity (which includes
+# noncontrolling interest).
 _c("equity", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
   flow_semantics=FLOW_SEMANTICS_STOCK,
-  aliases=("shareholders_equity", "total_equity"))
+  aliases=("shareholders_equity", "total_equity"),
+  description="Equity.  A: parent-company owners' equity.  US: prefer "
+              "total_equity_attributable_to_parent for attribution-aligned "
+              "ROE (R17-079).")
+_c("equity_attributable", "fundamental", "amount", LOCAL_MONEY, market_local_only=True,
+  flow_semantics=FLOW_SEMANTICS_STOCK,
+  aliases=("equity_parent", "parent_equity", "equity_common"),
+  description="Equity attributable to parent (A) / common shareholders (US); the "
+              "attribution-aligned denominator (R17-079).")
 _c("earnings_per_share", "fundamental", "price", LOCAL_PRICE_PER_SHARE, aliases=("eps",))
 
 # --- classification / status ----------------------------------------------
@@ -247,7 +326,10 @@ _c("industry_group", "classification", "group", IDENTIFIER, role=ROLE_GROUP_KEY,
 _c("tradability_state", "classification", "status", BOOLEAN, role=ROLE_STATUS,
   market_local_only=True, description="Tradable mask. A: not IsSuspend; US: CS universe + valid price/volume.")
 _c("index_member", "index", "boolean", BOOLEAN, role=ROLE_STATUS, aliases=("is_index_member",))
-_c("index_weight", "index", "ratio", RATIO, role=ROLE_GROUP_KEY,
+# R17-067: index_weight is a CONTINUOUS ratio, not a categorical group id — it
+# must never be routed through a group-by/categorical path.  It carries the new
+# ROLE_WEIGHT (a continuous weight semantic kind).
+_c("index_weight", "index", "ratio", RATIO, role=ROLE_WEIGHT,
   market_local_only=True, description="Index constituent weight as decimal. A: Weight/100; US: no weight.")
 
 # --- dividends / corporate actions ----------------------------------------

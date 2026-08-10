@@ -1094,6 +1094,9 @@ _FIN_A = {
     "total_assets": ("StockBalance.TotalAssets", "ashare_stock_balance"),
     "total_liabilities": ("StockBalance.TotalLiability", "ashare_stock_balance"),
     "equity": ("StockBalance.EquitiesParentCompanyOwners", "ashare_stock_balance"),
+    # R17-078/079: attribution-aligned concepts.
+    "net_income_attributable": ("StockIncome.NpParentCompanyOwners", "ashare_stock_income"),
+    "equity_attributable": ("StockBalance.EquitiesParentCompanyOwners", "ashare_stock_balance"),
 }
 _FIN_US = {
     "operating_revenue": ("StockIncome.revenue", "us_stock_income"),
@@ -1101,7 +1104,11 @@ _FIN_US = {
     "operating_cash_flow": ("StockCashFlow.net_cash_from_operating_activities", "us_stock_cashflow"),
     "total_assets": ("StockBalance.total_assets", "us_stock_balance"),
     "total_liabilities": ("StockBalance.total_liabilities", "us_stock_balance"),
-    "equity": ("StockBalance.total_equity", "us_stock_balance"),
+    # R17-079: equity denominator must match the common-shareholder numerator —
+    # total_equity includes noncontrolling interest; use the attributable line.
+    "equity": ("StockBalance.total_equity_attributable_to_parent", "us_stock_balance"),
+    "net_income_attributable": ("StockIncome.net_income_loss_attributable_common_shareholders", "us_stock_income"),
+    "equity_attributable": ("StockBalance.total_equity_attributable_to_parent", "us_stock_balance"),
 }
 for _concept, (_phys_a, _ds_a) in _FIN_A.items():
     _b(
