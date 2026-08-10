@@ -1,0 +1,13 @@
+{
+ "git_sha": "c85de62c89266452a8342a80c781032591bd59ed",
+ "canonical_set_digest": "06498a7b7debeb87f71d7f14f8a69acd99ec83a7be9c65c12bcf2ea2ea734e81",
+ "generated_at": "2026-08-10T23:21:33+0800",
+ "tests": 1436,
+ "failures": 0,
+ "errors": 0,
+ "skipped": 0,
+ "time": 548.074,
+ "canonicals": 1436,
+ "canonicals_with_test": 1436,
+ "canonicals_zero_test": 0
+}
