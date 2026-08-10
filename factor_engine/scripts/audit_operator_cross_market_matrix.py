@@ -85,6 +85,13 @@ def main() -> None:
     _load()
     OUT.mkdir(parents=True, exist_ok=True)
 
+    # Load the FULL registry explicitly — import-time registration alone can
+    # under-populate during concurrent edits, which would silently shrink the
+    # audited canonical set.
+    from cleaned_operators import load_all
+
+    load_all()
+
     from market.capability_resolver import operator_support
     from cleaned_operators.registry import OperatorRegistry
 
