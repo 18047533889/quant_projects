@@ -179,10 +179,18 @@ def _log_finite_horizon_sum(log_rho: float, K: int) -> float:
     if lr <= float("-inf"):
         # rho == 0: only the t=0 term survives (0^0 == 1): sum == 1, log == 0.
         return 0.0
-    if abs(lr) < 1e-6:
-        # rho == exp(lr) ≈ 1: direct finite sum in LOG space.
-        # sum_{t=0}^{K-1} rho^t ≈ K (all terms ≈ 1), so log ≈ log(K).
-        return float(np.log(K))
+    if abs(lr) < 1e-6 and abs(lr * K) < 1e-3:
+        # rho == exp(lr) ≈ 1: direct finite sum in LOG space via log-sum-exp
+        # (rho^t = exp(lr*t), each term ≈ 1, so the sum ≈ K is representable and
+        # there is no cancellation).  This matches the exact direct sum to
+        # machine precision for the near-1 case (R30 §15 ``lr≈0``); the
+        # geometric closed form below is also accurate but the direct log-sum is
+        # tighter at ~1e-12.
+        return float(np.log(np.sum(np.exp(lr * np.arange(K, dtype=float)))))
+    # R30 §15: the exact geometric closed form in log space is accurate even for
+    # tiny |lr| as long as |lr*K| is resolvable (the near-1 test rho=1.0000005,
+    # K=1000 has lr*K≈5e-4, so log(K) would lose ~2e-4 — the closed form below
+    # keeps it to machine precision).  rho is never materialised.
     if lr > 0.0:
         K_log_r = K * lr
         # log((r^K - 1)/(r - 1)) = K log r + log(1 - r^{-K}) - log(r - 1)

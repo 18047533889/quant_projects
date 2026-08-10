@@ -170,27 +170,52 @@ class PhysicalFactorDAG:
         ]
 
     def critical_path_remaining_ms(self, task_id: str, cost_ms: dict[str, float]) -> float:
-        """task 后最长剩余路径耗时（R27-007 critical path 优先）。"""
-        t = self.tasks.get(task_id)
-        if t is None or not t.consumers:
-            return float(cost_ms.get(task_id, 0.0))
-        return float(cost_ms.get(task_id, 0.0)) + max(
-            self.critical_path_remaining_ms(c, cost_ms) for c in t.consumers
-        )
+        """task 后最长剩余路径耗时（R27-007 critical path 优先）。
+
+        R32-P1-048: reverse-topological DP（O(V+E)）—— 不再递归无 memo（DAG
+        diamond 结构会指数爆炸）。每次调用线性计算全部 task 的 critical path，
+        直接查表返回。
+        """
+        try:
+            order = self.topological_order()
+        except RuntimeError:
+            order = list(self.tasks.keys())
+        memo: dict[str, float] = {}
+        for tid in reversed(order):
+            t = self.tasks.get(tid)
+            if t is None:
+                memo[tid] = float(cost_ms.get(tid, 0.0))
+                continue
+            consumers = [c for c in t.consumers if c in self.tasks]
+            if not consumers:
+                memo[tid] = float(cost_ms.get(tid, 0.0))
+            else:
+                memo[tid] = float(cost_ms.get(tid, 0.0)) + max(
+                    memo[c] for c in consumers
+                )
+        return memo.get(task_id, float(cost_ms.get(task_id, 0.0)))
 
     def topological_order(self) -> list[str]:
-        """Kahn 拓扑序（稳定、确定性）。"""
+        """Kahn 拓扑序（稳定、确定性）。
+
+        R32-P1-049: heapq 取代 ``pop(0) + 反复 sort`` —— 大 DAG 从 O(V²) 降到
+        O((V+E)·log V)。
+        """
+        import heapq
+
         order: list[str] = []
         indegree = {tid: len(t.inputs) for tid, t in self.tasks.items()}
-        ready = sorted(tid for tid, deg in indegree.items() if deg == 0)
+        ready = [tid for tid, deg in indegree.items() if deg == 0]
+        heapq.heapify(ready)
         while ready:
-            tid = ready.pop(0)
+            tid = heapq.heappop(ready)
             order.append(tid)
             for succ in sorted(self.tasks[tid].consumers):
+                if succ not in indegree:
+                    continue
                 indegree[succ] -= 1
                 if indegree[succ] == 0:
-                    ready.append(succ)
-                    ready.sort()
+                    heapq.heappush(ready, succ)
         if len(order) != len(self.tasks):
             raise RuntimeError(
                 f"PhysicalFactorDAG has a cycle: {len(order)}/{len(self.tasks)} "

@@ -1,0 +1,6 @@
+{
+  "float64_history_downcast_forbidden": true,
+  "inf_mask_mismatch_blocks_equal": true,
+  "nan_mask_mismatch_blocks_equal": true,
+  "rank_is_cross_sectional_per_timestamp": true
+}

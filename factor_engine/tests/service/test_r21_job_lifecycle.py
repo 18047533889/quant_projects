@@ -96,8 +96,13 @@ class TestDurableStore:
         from service.jobstore import check_single_process_workers
         from service.errors import ServiceError
 
+        # R32-P0-023: SQLite JobStore 不等于全局多进程 Queue —— 多个 Uvicorn
+        # worker 各有本地 queue/max_running/per-user counter，4×4 worker 可能跑
+        # 16 个 job。single_process 策略下 workers>1 一律拒绝（即使 durable
+        # store），绝不静默退化成每进程本地并发。
         monkeypatch.setenv("UVICORN_WORKERS", "4")
+        monkeypatch.setenv("FACTOR_ENGINE_SERVICE_DURABLE_STORE", "sqlite")
         with pytest.raises(ServiceError):
             check_single_process_workers()
-        monkeypatch.setenv("FACTOR_ENGINE_SERVICE_DURABLE_STORE", "sqlite")
-        check_single_process_workers()  # no raise with durable store
+        monkeypatch.setenv("UVICORN_WORKERS", "1")
+        check_single_process_workers()  # 单进程 OK

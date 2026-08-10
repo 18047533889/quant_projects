@@ -45,7 +45,8 @@ LOCALIZATION_OPS = [
 
 
 def _get(name: str, backend: str = "pandas_numpy"):
-    op = OperatorRegistry.get(name, backend) or OperatorRegistry.get(name)
+    # R30 §8: research-surface DMD canonicals require explicit opt-in mode.
+    op = OperatorRegistry.get(name, backend, mode="any") or OperatorRegistry.get(name, mode="any")
     assert op is not None, name
     return op
 

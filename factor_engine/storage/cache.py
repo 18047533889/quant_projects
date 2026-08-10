@@ -19,9 +19,35 @@ PLAN_CACHE_SCHEMA_VERSION = 2
 #: persistent cache 命名空间（R20-159 / R20-468）。
 _OPTIMIZER_COMPILER_SEMANTIC_VERSION = "1"
 _LOWERING_SEMANTIC_VERSION = "1"
-#: 持久化保存的 per-key 写锁（多 writer 同 key 交错生成 payload/meta 的防护）。
+#: R32-P1-045: bounded per-key 写锁 registry（多 writer 同 key 交错生成
+#: payload/meta 的防护）。历史实现 ``dict[str, Lock]`` 对每个唯一 key 保留
+#: Lock，per-key 表会无限增长。现在用有界 LRU（最多 ``_SAVE_LOCK_MAX`` 个锁，
+#: 超限时淘汰最久未用的 key）。
 _SAVE_LOCKS: dict[str, threading.Lock] = {}
 _SAVE_LOCKS_GUARD = threading.Lock()
+_SAVE_LOCKS_ORDER: list[str] = []
+_SAVE_LOCK_MAX = 4096
+
+
+def _save_lock_for(key: str) -> threading.Lock:
+    """R32-P1-045: bounded lock registry —— 超限淘汰最久未用 key。"""
+    global _SAVE_LOCKS, _SAVE_LOCKS_ORDER
+    with _SAVE_LOCKS_GUARD:
+        lock = _SAVE_LOCKS.get(key)
+        if lock is not None:
+            try:
+                _SAVE_LOCKS_ORDER.remove(key)
+            except ValueError:
+                pass
+            _SAVE_LOCKS_ORDER.append(key)
+            return lock
+        lock = threading.Lock()
+        _SAVE_LOCKS[key] = lock
+        _SAVE_LOCKS_ORDER.append(key)
+        while len(_SAVE_LOCKS) > _SAVE_LOCK_MAX:
+            oldest = _SAVE_LOCKS_ORDER.pop(0)
+            _SAVE_LOCKS.pop(oldest, None)
+        return lock
 
 
 def _governor():
@@ -256,6 +282,9 @@ class CacheManager:
         return out
 
 
+UNKNOWN_CACHE_NAMESPACE = "unknown_ops"
+
+
 def _operator_namespace() -> str:
     """获取算子目录哈希命名空间（用于磁盘缓存路径隔离）。
 
@@ -268,6 +297,10 @@ def _operator_namespace() -> str:
     R20-159：命名空间必须覆盖 numeric semantics / lowering semantics / optimizer
     compiler semantic version —— 任一语义变更都 invalidate 整个磁盘缓存目录，
     绝不从旧语义的缓存里拿子树。
+
+    R32-P1-046: 解析失败返回 ``UNKNOWN_CACHE_NAMESPACE``（"unknown_ops"）。
+    production 下由调用方（``_namespace_root``）fail-closed 抛错 —— 未解析
+    namespace 的 production 缓存读写是语义污染的来源，绝不静默当 cache miss。
     """
     try:
         from cleaned_operators.operator_policy import compute_operator_catalog_hash
@@ -279,7 +312,7 @@ def _operator_namespace() -> str:
             f"{_compiler_semantic_hash()}"
         )
     except Exception:
-        return "unknown_ops"
+        return UNKNOWN_CACHE_NAMESPACE
 
 
 def _compiler_semantic_hash() -> str:
@@ -477,9 +510,9 @@ def _save_value(path: Path, value: Any) -> None:
     meta["index_schema"] = _index_schema_meta(value.index)
 
     # R20-158：per-key 写锁（同 key 多 writer 交错 payload/meta 的防护）。
+    # R32-P1-045：bounded lock registry（per-key 表不再无限增长）。
     key = str(path)
-    with _SAVE_LOCKS_GUARD:
-        lock = _SAVE_LOCKS.setdefault(key, threading.Lock())
+    lock = _save_lock_for(key)
     with lock:
         tmp_dir = path.parent
         tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -635,14 +668,32 @@ class PersistentPlanCache(CacheManager):
 
     def _namespace_root(self) -> Path:
         """_namespace_root。
-        
+
+        R32-P1-046: production 下 namespace 解析失败（"unknown_ops"）必须抛错 —
+        — production 禁写/禁读未解析 namespace（否则两个不同 operator/field 集合
+        的缓存共享同一稳定目录）。research 下 "unknown_ops" 视为 cache miss。
+
         参数:
             无
-        
+
         返回:
             Path
         """
-        return self.root / _operator_namespace()
+        ns = _operator_namespace()
+        if ns == UNKNOWN_CACHE_NAMESPACE:
+            from runtime.production_policy import is_production_mode
+
+            if is_production_mode():
+                raise RuntimeError(
+                    "persistent cache namespace is unresolved ('unknown_ops'): "
+                    "operator/field catalog hash resolution failed. Production "
+                    "forbids reading or writing an unresolved cache namespace "
+                    "(R32-P1-046)."
+                )
+            # research：未知 namespace 不命中任何缓存 —— 返回一个恒空的哨兵目录
+            # 由调用方当作 cache miss（磁盘路径不存在）。
+            return self.root / ".unknown_ops_miss"
+        return self.root / ns
 
     def _disk_path(self, scoped_key: str) -> Path:
         """_disk_path。

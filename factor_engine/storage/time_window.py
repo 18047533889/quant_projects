@@ -99,9 +99,10 @@ def resolve_incremental_window_for_bar_freq(
     calendar: TradingCalendar | None = None,
     bar_freq: str | None = None,
     use_tick_precise: bool = True,
+    market: str | None = None,
 ) -> dict[str, pd.Timestamp | None | str]:
     """按 bar 频率解析增量时间窗口。
-    
+
     参数:
         watermark_end: 水位线结束日期（可选）
         lookback_bars: 预热 bar 数（可选）
@@ -111,12 +112,15 @@ def resolve_incremental_window_for_bar_freq(
         calendar: 交易日历实例（可选）
         bar_freq: bar 频率字符串（可选）
         use_tick_precise: 是否使用 tick 精确扩窗（可选）
-    
+        market: 市场标识（ashare/us/CN…，决定 session 结构，可选）
+
     返回:
         dict[str, pd.Timestamp | None | str]
-    
-    
-    日内源默认 ``intraday_tick_precise``：按 bar 时长精确扩窗；
+
+
+    日内源默认 ``intraday_session_clock``（R32-P0-004）：分钟 lookback/tail 在
+    真实 session slot grid 上偏移（认识 09:30 开盘 / 11:30–13:00 午休 / 半日市 /
+    early close / DST），不再是「交易日零点 + bar_duration × N」；
         ``use_tick_precise=False`` 时回退 ``intraday_calendar_approx``（+1 日缓冲）。
     """
     from cleaned_operators.operator_policy import (
@@ -153,20 +157,32 @@ def resolve_incremental_window_for_bar_freq(
     )
 
     if use_tick_precise:
-        bar_td = bar_freq_to_timedelta(bar_freq)
+        from runtime.session_calendar import SessionCalendar
+
+        # R32-P0-004: 所有分钟 lookback/tail 必须在真实 session slot grid 上偏移
+        # （认识 09:30 开盘 / 11:30–13:00 午休 / 集合竞价 / 半日市 / early close）。
+        # 不再用「交易日零点 + bar_duration × bars_per_day」的线性算术。
+        session_market = str(market or "US").strip().upper()
+        session_cal = SessionCalendar(
+            market=session_market,
+            bar_freq=bar_freq,
+            timestamp_convention="bar_end",
+        )
         wm_raw = since or watermark_end
         wm = pd.Timestamp(wm_raw).normalize() if wm_raw else None
         if wm is not None:
-            end_anchor = wm + bar_td * bpd
-            out["load_start"] = end_anchor - bar_td * lb
+            # 以当日最后一个合法 bar slot 为 end_anchor（bar_end 惯例）。
+            day_slots = session_cal.bar_slots(wm)
+            end_anchor = day_slots[-1] if day_slots else wm
+            out["load_start"] = session_cal.offset_bars(end_anchor, -lb)
             if tail > 0:
-                output_precise = end_anchor - bar_td * tail
+                output_precise = session_cal.offset_bars(end_anchor, -tail)
                 cal_out = out.get("output_start")
                 if cal_out is None:
                     out["output_start"] = output_precise
                 else:
                     out["output_start"] = min(pd.Timestamp(cal_out), output_precise)
-        out["window_mode"] = "intraday_tick_precise"
+        out["window_mode"] = "intraday_session_clock"
     else:
         out["window_mode"] = "intraday_calendar_approx"
 
@@ -298,7 +314,11 @@ def _normalize_bound_for_index(
         else:
             ts = ts.tz_convert(index_tz)
     elif ts.tz is not None:
-        ts = ts.tz_localize(None)
+        # R32-P0-005: 禁止 ``tz_localize(None)`` 直接 strip tz —— 那只是丢弃
+        # tz 标签保留本地墙钟，等于把「跨时区转换」当成「去掉 tz」。naive index
+        # 的显式 timestamp convention 是 UTC：先 tz_convert 到 UTC 保住 instante，
+        # 再 drop tz 标签。
+        ts = ts.tz_convert("UTC").tz_localize(None)
     return ts
 
 

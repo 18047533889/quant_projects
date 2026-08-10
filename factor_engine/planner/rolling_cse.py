@@ -104,28 +104,15 @@ def _isfinite(v: float) -> bool:
 def _output_semantic_digest(node: PlanNode) -> str:
     """节点 output semantic_attrs 的稳定摘要；为空时返回 ``""``。
 
-    与 ``plan_hash._semantic_digest`` 同构：排序后 JSON 序列化再 SHA-256，保证
-    相同语义属性得到相同摘要、不同语义属性得到不同摘要。
+    R32-P0-009: 删除本模块重复的 repr-based canonicalizer —— 未知 semantic attr
+    用 ``repr(v)``（可能含内存地址 / 无法重建）与主 ``plan_hash`` 的 typed
+    fail-closed 语义冲突。所有 semantic digest 只走一个权威实现
+    ``plan_hash._semantic_digest``（typed JSON schema，未知类型抛
+    ``PlanSemanticAttrTypeError``）。
     """
-    if not node.semantic_attrs:
-        return ""
+    from planner.plan_hash import _semantic_digest as _typed_semantic_digest
 
-    def _norm(v: Any) -> Any:
-        if isinstance(v, (str, int, float, bool)) or v is None:
-            return v
-        if isinstance(v, (set, frozenset)):
-            return sorted((_norm(x) for x in v), key=repr)
-        if isinstance(v, (list, tuple)):
-            return [_norm(x) for x in v]
-        if isinstance(v, dict):
-            return {str(k): _norm(val) for k, val in sorted(v.items())}
-        return repr(v)
-
-    import hashlib
-
-    payload = sorted((k, _norm(v)) for k, v in node.semantic_attrs.items())
-    s = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=repr)
-    return hashlib.sha256(s.encode("utf-8")).hexdigest()
+    return _typed_semantic_digest(node) or ""
 
 
 def rolling_semantic_key(node: PlanNode, memo: dict[int, str] | None = None) -> str | None:
@@ -181,16 +168,17 @@ def rolling_semantic_key(node: PlanNode, memo: dict[int, str] | None = None) -> 
 
 
 def _postorder(root: PlanNode) -> list[PlanNode]:
-    """后序遍历计划树，返回节点列表。"""
+    """后序遍历计划树，返回节点列表（R32-P1-047: 迭代实现，栈安全）。"""
     out: list[PlanNode] = []
-
-    def visit(n: PlanNode) -> None:
-        """后序递归访问单节点。"""
-        for c in n.inputs:
-            visit(c)
-        out.append(n)
-
-    visit(root)
+    stack: list[tuple[PlanNode, bool]] = [(root, False)]
+    while stack:
+        node, visited = stack.pop()
+        if visited:
+            out.append(node)
+            continue
+        stack.append((node, True))
+        for child in getattr(node, "inputs", ()) or ():
+            stack.append((child, False))
     return out
 
 

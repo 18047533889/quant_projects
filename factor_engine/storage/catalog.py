@@ -15,6 +15,7 @@ Notes
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import sqlite3
@@ -22,15 +23,17 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Generic, Iterable, TypeVar
+from typing import Any, Generic, Iterable, Iterator, TypeVar
 
 from .exceptions import (
     CatalogCorruptionError,
+    CatalogMigrationError,
     CatalogSerializationError,
     FactorHashMismatchError,
     FactorNotFoundError,
     FactorRetiredError,
     FactorSemanticIdentityMismatchError,
+    ProductionModeResolutionError,
 )
 
 T = TypeVar("T")
@@ -346,8 +349,16 @@ CREATE TABLE IF NOT EXISTS factor_materialize_checkpoint (
     status          TEXT NOT NULL,
     error_message   TEXT,
     updated_at      TEXT NOT NULL,
-    partition_key   TEXT,
+    partition_key   TEXT NOT NULL,
     PRIMARY KEY (factor_id, partition_key)
+);
+
+-- R32-P0-012: schema-versioned migration authority。每个迁移版本一行，
+-- checksum 绑定迁移报告；catalog 打开时从当前版本顺序迁移到最新。
+CREATE TABLE IF NOT EXISTS catalog_schema_version (
+    version     INTEGER NOT NULL PRIMARY KEY,
+    migrated_at TEXT NOT NULL,
+    checksum    TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS factor_dependency (
@@ -421,6 +432,28 @@ class _ThreadSafeConnection:
         with self._lock:
             return self._conn.close()
 
+    @contextlib.contextmanager
+    def transaction(self) -> "Iterator[None]":
+        """R32-P0-011: 锁住的事务 —— BEGIN/COMMIT 全程持同一 RLock。
+
+        ``execute()`` 与 ``commit()`` 各自独立锁：线程 A execute 后释放锁，
+        线程 B 可在 A 的 commit 前插入 statement，被 A 的 commit 一起提交。
+        本 context manager 把 ``BEGIN IMMEDIATE`` → 全部写操作 → ``COMMIT``
+        （或失败 ``ROLLBACK``）包在**同一个 RLock** 临界区内，杜绝 interleave。
+        """
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                yield
+            except Exception:
+                try:
+                    self._conn.execute("ROLLBACK")
+                except sqlite3.OperationalError:
+                    pass
+                raise
+            else:
+                self._conn.execute("COMMIT")
+
     def __getattr__(self, name: str) -> Any:
         return getattr(self._conn, name)
 
@@ -451,9 +484,23 @@ class FactorCatalog:
         self._conn = _ThreadSafeConnection(raw_conn)
         # WAL 模式：大幅提升多进程并发读写能力
         self._conn.execute("PRAGMA journal_mode=WAL;")
+        self._conn.execute("PRAGMA synchronous=NORMAL;")
         self._conn.execute("PRAGMA busy_timeout=30000;")
+        # R32-P0-010: SQLite foreign keys 默认关闭 —— Schema 虽写了 FK，若没有
+        # ``PRAGMA foreign_keys=ON`` 约束实际不执行。启动必须开启并验证 == 1。
+        self._conn.execute("PRAGMA foreign_keys=ON;")
+        fk_enabled = self._conn.execute("PRAGMA foreign_keys;").fetchone()
+        if int(fk_enabled[0]) != 1:
+            raise CatalogMigrationError(
+                f"SQLite foreign_keys could not be enabled for catalog {self._db_path}"
+            )
         self._conn.executescript(_SCHEMA_SQL)
         self._migrate_schema()
+        # 清掉 _migrate_schema 遗留的隐式事务（DML 触发），否则 BEGIN IMMEDIATE
+        # 报 "cannot start a transaction within a transaction"。
+        self._conn.commit()
+        # R32-P0-012: schema-versioned migration（独占事务 + checksum + backup）。
+        self._run_versioned_migration()
         self._conn.commit()
 
     def _exec_commit(self, sql: str, params: tuple = ()) -> None:
@@ -556,7 +603,7 @@ class FactorCatalog:
                 " status          TEXT NOT NULL,"
                 " error_message   TEXT,"
                 " updated_at      TEXT NOT NULL,"
-                " partition_key   TEXT,"
+                " partition_key   TEXT NOT NULL,"
                 " PRIMARY KEY (factor_id, partition_key)"
                 ")"
             )
@@ -572,6 +619,127 @@ class FactorCatalog:
                 "ALTER TABLE factor_materialize_checkpoint__new "
                 "RENAME TO factor_materialize_checkpoint"
             )
+
+    # ------------------------------------------------------------------
+    # R32-P0-012/013: schema-versioned migration
+    # ------------------------------------------------------------------
+
+    #: R32 catalog schema 版本。每个破坏性迁移递增一次；``catalog_schema_version``
+    #: 表记录已应用版本 + checksum。
+    CATALOG_SCHEMA_VERSION = 2
+
+    def _run_versioned_migration(self) -> None:
+        """从 ``catalog_schema_version`` 记录的当前版本顺序迁移到最新。
+
+        - 独占事务（BEGIN IMMEDIATE）内执行迁移，避免两个进程并发迁移 race；
+        - destructive 迁移前 backup catalog 文件；
+        - 每个版本记录 checksum + migrated_at。
+        """
+        row = self._conn.execute(
+            "SELECT COALESCE(MAX(version), 0) FROM catalog_schema_version"
+        ).fetchone()
+        current = int(row[0]) if row[0] is not None else 0
+        target = self.CATALOG_SCHEMA_VERSION
+        if current >= target:
+            return
+        # destructive 迁移前 backup（灾难恢复：迁移失败可从 backup 回滚）。
+        try:
+            backup_path = self._db_path.with_name(
+                f"{self._db_path.name}.backup-v{target}"
+            )
+            import shutil
+
+            shutil.copy2(str(self._db_path), str(backup_path))
+        except OSError:  # pragma: no cover - backup 失败仍继续（迁移本身仍安全）
+            backup_path = None
+        for version in range(current + 1, target + 1):
+            try:
+                self._conn.execute("BEGIN IMMEDIATE")
+                if version == 2:
+                    self._migrate_checkpoint_partition_key_not_null()
+                migrated_at = datetime.now(timezone.utc).isoformat()
+                checksum = hashlib.sha256(
+                    json.dumps(
+                        {"version": version, "migrated_at": migrated_at},
+                        sort_keys=True,
+                    ).encode("utf-8")
+                ).hexdigest()[:16]
+                self._conn.execute(
+                    "INSERT INTO catalog_schema_version (version, migrated_at, checksum) "
+                    "VALUES (?, ?, ?)",
+                    (version, migrated_at, checksum),
+                )
+                self._conn.execute("COMMIT")
+            except Exception:
+                try:
+                    self._conn.execute("ROLLBACK")
+                except sqlite3.OperationalError:
+                    pass
+                raise CatalogMigrationError(
+                    f"catalog schema migration v{current}->v{target} failed at "
+                    f"v{version}; catalog rolled back to pre-migration state. "
+                    f"Backup (if taken) at {backup_path}"
+                )
+
+    def _migrate_checkpoint_partition_key_not_null(self) -> None:
+        """R32-P0-013: partition_key 作为逻辑主键一部分必须 NOT NULL。
+
+        legacy 表定义 ``partition_key TEXT``（可空）；已存在 NULL partition_key
+        的行迁移为 ``'year=' || partition_year``。重建（SQLite 无法 ALTER PK）。
+        """
+        rows = self._conn.execute(
+            "PRAGMA table_info(factor_materialize_checkpoint)"
+        ).fetchall()
+        notnull = {r[1]: r[3] for r in rows}
+        if notnull.get("partition_key"):
+            return  # 已是 NOT NULL
+        self._conn.execute("DROP INDEX IF EXISTS idx_factor_mat_ck_partition_key")
+        self._conn.execute(
+            "CREATE TABLE factor_materialize_checkpoint__nn ("
+            " factor_id       TEXT NOT NULL,"
+            " partition_year  INTEGER NOT NULL,"
+            " run_id          TEXT NOT NULL,"
+            " status          TEXT NOT NULL,"
+            " error_message   TEXT,"
+            " updated_at      TEXT NOT NULL,"
+            " partition_key   TEXT NOT NULL,"
+            " PRIMARY KEY (factor_id, partition_key)"
+            ")"
+        )
+        self._conn.execute(
+            "INSERT OR IGNORE INTO factor_materialize_checkpoint__nn "
+            "(factor_id, partition_year, run_id, status, error_message, updated_at, partition_key) "
+            "SELECT factor_id, partition_year, run_id, status, error_message, updated_at, "
+            "       COALESCE(partition_key, 'year=' || CAST(partition_year AS TEXT)) "
+            "FROM factor_materialize_checkpoint"
+        )
+        self._conn.execute("DROP TABLE factor_materialize_checkpoint")
+        self._conn.execute(
+            "ALTER TABLE factor_materialize_checkpoint__nn "
+            "RENAME TO factor_materialize_checkpoint"
+        )
+
+    def catalog_integrity_check(self) -> dict[str, Any]:
+        """R32 §5: ``PRAGMA quick_check`` + ``PRAGMA foreign_key_check``。
+
+        返回 ``{"quick_check": "ok"|..., "foreign_key_check": [...], "version": N,
+        "foreign_keys_enabled": bool}``。
+        """
+        quick = self._conn.execute("PRAGMA quick_check;").fetchone()
+        fk_violations = [
+            dict(r)
+            for r in self._conn.execute("PRAGMA foreign_key_check;").fetchall()
+        ]
+        version_row = self._conn.execute(
+            "SELECT COALESCE(MAX(version), 0) FROM catalog_schema_version"
+        ).fetchone()
+        fk_enabled = self._conn.execute("PRAGMA foreign_keys;").fetchone()
+        return {
+            "quick_check": str(quick[0]) if quick else "error",
+            "foreign_key_check": fk_violations,
+            "schema_version": int(version_row[0]) if version_row and version_row[0] else 0,
+            "foreign_keys_enabled": int(fk_enabled[0]) == 1,
+        }
 
     # ------------------------------------------------------------------
     # 上下文管理器
@@ -675,8 +843,13 @@ class FactorCatalog:
                 from runtime.production_policy import is_production_mode
 
                 effective_production = is_production_mode()
-            except Exception:  # pragma: no cover - 解析失败按 research 处理
-                effective_production = False
+            except Exception as exc:  # R32-P0-014
+                # Production authority 解析失败不能 fail-open 到 research —— 那会
+                # 绕过 identity / typed-JSON / precision 等全部生产硬门。
+                raise ProductionModeResolutionError(
+                    f"production authority resolution failed for catalog register "
+                    f"of '{factor_id}': {exc!r}"
+                ) from exc
 
         # NEW-P0-56/57: deleted-factor 复用守卫。物理分区文件仍在磁盘上，直接
         # 复用 factor_id 会混合旧世代（2020-2025）与新世代（2026）数据。
@@ -873,52 +1046,55 @@ class FactorCatalog:
             无
         """
         info = self.get_factor_info(factor_id)
-        if retire and info is not None:
-            self._conn.execute(
-                "INSERT INTO factor_retired "
-                "(factor_id, retired_at, factor_version, ast_hash) "
-                "VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(factor_id) DO UPDATE SET "
-                "retired_at=excluded.retired_at, "
-                "factor_version=excluded.factor_version, "
-                "ast_hash=excluded.ast_hash",
-                (
-                    factor_id,
-                    datetime.now(timezone.utc).isoformat(),
-                    info.get("factor_version"),
-                    info.get("ast_hash"),
-                ),
-            )
-        self._conn.execute(
-            "DELETE FROM factor_run WHERE factor_id = ?", (factor_id,)
-        )
-        self._conn.execute(
-            "DELETE FROM factor_materialize_checkpoint WHERE factor_id = ?", (factor_id,)
-        )
-        self._conn.execute(
-            "DELETE FROM factor_column_dep WHERE factor_id = ?", (factor_id,)
-        )
-        self._conn.execute(
-            "DELETE FROM factor_dependency WHERE factor_id = ?", (factor_id,)
-        )
-        self._conn.execute(
-            "DELETE FROM factor_watermark WHERE factor_id = ?", (factor_id,)
-        )
-        # R11 #8: 新增的依赖 edge / full definition 表也要同步删除，否则 factor_id
-        # 删除再复用时会残留旧 edge / full-spec（DependencyCatalog 查询按 factor_id
-        # 命中，导致「新因子」被旧依赖误触发重算）。
-        for table in ("factor_dependency_edge", "factor_full_definition"):
-            try:
+        # R32-P0-011: 多语句删除必须整体持同一 RLock 事务（BEGIN IMMEDIATE →
+        # 全部 DELETE → COMMIT），线程 B 不能在 A 的 delete 语句之间插入 statement
+        # 被 A 的 commit 一起提交。
+        with self._conn.transaction():
+            if retire and info is not None:
                 self._conn.execute(
-                    f"DELETE FROM {table} WHERE factor_id = ?", (factor_id,)
+                    "INSERT INTO factor_retired "
+                    "(factor_id, retired_at, factor_version, ast_hash) "
+                    "VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(factor_id) DO UPDATE SET "
+                    "retired_at=excluded.retired_at, "
+                    "factor_version=excluded.factor_version, "
+                    "ast_hash=excluded.ast_hash",
+                    (
+                        factor_id,
+                        datetime.now(timezone.utc).isoformat(),
+                        info.get("factor_version"),
+                        info.get("ast_hash"),
+                    ),
                 )
-            except sqlite3.OperationalError:
-                # 表可能尚未创建（首次运行从未触发过 _ensure_tables）。
-                pass
-        self._conn.execute(
-            "DELETE FROM factor_registry WHERE factor_id = ?", (factor_id,)
-        )
-        self._conn.commit()
+            self._conn.execute(
+                "DELETE FROM factor_run WHERE factor_id = ?", (factor_id,)
+            )
+            self._conn.execute(
+                "DELETE FROM factor_materialize_checkpoint WHERE factor_id = ?", (factor_id,)
+            )
+            self._conn.execute(
+                "DELETE FROM factor_column_dep WHERE factor_id = ?", (factor_id,)
+            )
+            self._conn.execute(
+                "DELETE FROM factor_dependency WHERE factor_id = ?", (factor_id,)
+            )
+            self._conn.execute(
+                "DELETE FROM factor_watermark WHERE factor_id = ?", (factor_id,)
+            )
+            # R11 #8: 新增的依赖 edge / full definition 表也要同步删除，否则 factor_id
+            # 删除再复用时会残留旧 edge / full-spec（DependencyCatalog 查询按 factor_id
+            # 命中，导致「新因子」被旧依赖误触发重算）。
+            for table in ("factor_dependency_edge", "factor_full_definition"):
+                try:
+                    self._conn.execute(
+                        f"DELETE FROM {table} WHERE factor_id = ?", (factor_id,)
+                    )
+                except sqlite3.OperationalError:
+                    # 表可能尚未创建（首次运行从未触发过 _ensure_tables）。
+                    pass
+            self._conn.execute(
+                "DELETE FROM factor_registry WHERE factor_id = ?", (factor_id,)
+            )
 
     def _get_retired(self, factor_id: str) -> dict | None:
         """返回 ``factor_retired`` 墓碑记录（None 表示未退役）。"""
@@ -1185,33 +1361,34 @@ class FactorCatalog:
         """
         cols = sorted(set(str(c) for c in referenced_columns if c))
         now = datetime.now(timezone.utc).isoformat()
-        self._conn.execute(
-            "INSERT INTO factor_dependency "
-            "(factor_id, referenced_columns_json, lookback, frequency, source_dataset, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(factor_id) DO UPDATE SET "
-            "referenced_columns_json=excluded.referenced_columns_json, "
-            "lookback=excluded.lookback, frequency=excluded.frequency, "
-            "source_dataset=excluded.source_dataset, updated_at=excluded.updated_at",
-            (
-                factor_id,
-                json.dumps(cols, ensure_ascii=False),
-                int(lookback),
-                frequency,
-                source_dataset,
-                now,
-            ),
-        )
-        self._conn.execute(
-            "DELETE FROM factor_column_dep WHERE factor_id = ?",
-            (factor_id,),
-        )
-        for col in cols:
+        # R32-P0-011: upsert + 全量替换 column_dep 必须整体持同一 RLock 事务。
+        with self._conn.transaction():
             self._conn.execute(
-                "INSERT OR IGNORE INTO factor_column_dep (column_name, factor_id) VALUES (?, ?)",
-                (col, factor_id),
+                "INSERT INTO factor_dependency "
+                "(factor_id, referenced_columns_json, lookback, frequency, source_dataset, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(factor_id) DO UPDATE SET "
+                "referenced_columns_json=excluded.referenced_columns_json, "
+                "lookback=excluded.lookback, frequency=excluded.frequency, "
+                "source_dataset=excluded.source_dataset, updated_at=excluded.updated_at",
+                (
+                    factor_id,
+                    json.dumps(cols, ensure_ascii=False),
+                    int(lookback),
+                    frequency,
+                    source_dataset,
+                    now,
+                ),
             )
-        self._conn.commit()
+            self._conn.execute(
+                "DELETE FROM factor_column_dep WHERE factor_id = ?",
+                (factor_id,),
+            )
+            for col in cols:
+                self._conn.execute(
+                    "INSERT OR IGNORE INTO factor_column_dep (column_name, factor_id) VALUES (?, ?)",
+                    (col, factor_id),
+                )
 
     def get_factor_dependency(self, factor_id: str) -> dict | None:
         """get_factor_dependency。

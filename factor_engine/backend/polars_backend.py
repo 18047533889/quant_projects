@@ -185,7 +185,12 @@ class PolarsBackend(PandasBackend):
                 runtime["lazy_scan"] = True
             ctx = replace(ctx, runtime_stats=runtime, prefer_polars_panel=True)
 
-            if _env_flag("FACTOR_ENGINE_POLARS_EXPR") and ctx.data_source is not None:
+            # R31-P1-034 (POLARS_NATIVE_AUTO_PLANNED)：Polars native 整树编译是
+            # 默认自动路径，不再靠运维手工开关。env 仅用于 debug force-disable
+            # （``FACTOR_ENGINE_POLARS_EXPR=0``）。能力不足/异常时按既有逻辑诚实
+            # 回退逐节点。
+            _polars_expr_auto = os.environ.get("FACTOR_ENGINE_POLARS_EXPR", "").strip().lower() not in {"0", "false", "off"}
+            if _polars_expr_auto and ctx.data_source is not None:
                 from .polars_expr_backend import execute_polars_expr_plan, plan_is_polars_expr_capable
 
                 if plan_is_polars_expr_capable(plan):

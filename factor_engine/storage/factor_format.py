@@ -152,7 +152,13 @@ def unpivot_wide_to_long(
     )
     frame[timestamp_col] = pd.to_datetime(frame[timestamp_col])
     frame[asset_col] = frame[asset_col].astype("string")
-    frame[value_col] = frame[value_col].astype("float32")
+    # R32-P0-024: 宽表→长表保留原 panel 精度。绝不强制 downcast 成 float32 ——
+    # 否则历史 float64 面板在 wide 路径做一次 upsert 就被永久降精度。空 panel
+    # 保持 float64 默认。
+    if not frame[value_col].empty:
+        frame[value_col] = frame[value_col].astype(panel.dtypes.iloc[0])
+    else:
+        frame[value_col] = frame[value_col].astype("float64")
     return frame.dropna(subset=[value_col]).reset_index(drop=True)
 
 

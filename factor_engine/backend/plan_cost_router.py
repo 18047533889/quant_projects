@@ -81,6 +81,11 @@ def plan_occurrences(plan: PlanNode) -> tuple[BoundNodeOccurrence, ...]:
 
     occurrences: list[BoundNodeOccurrence] = []
     seen_ids: set[int] = set()
+    # R31-013 fix：node_id 用**独立计数器**（不是 len(occurrences)）。meta op
+    # 不 append occurrence 却仍要占用一个 node_id；若用 occurrence 计数，第一个
+    # 非 meta 算子会与第一个 meta 子节点拿到相同 id → occurrence 指向自身 → DP
+    # 无限递归。
+    node_counter: list[int] = [0]
 
     def _num(attrs: Any, key: str) -> int | None:
         try:
@@ -92,10 +97,15 @@ def plan_occurrences(plan: PlanNode) -> tuple[BoundNodeOccurrence, ...]:
         if id(node) in seen_ids:
             return getattr(node, "node_id", None) or f"n{id(node)}"
         seen_ids.add(id(node))
+        node_counter[0] += 1
+        # 关键：**先** 捕获自己的 node_id（在 walk children 之前）——children 会
+        # 继续递增计数器；若后取，父节点会拿到最后一个子节点的 id → 与子节点
+        # 同 id → occurrence 自引用 → DP 无限递归。
+        my_id = f"n{node_counter[0]}"
         attrs = getattr(node, "attrs", None) or {}
         child_ids = tuple(walk(child) for child in (getattr(node, "inputs", ()) or ()))
         op = str(getattr(node, "op", "") or "")
-        node_id = getattr(node, "node_id", None) or f"n{len(occurrences)}"
+        node_id = getattr(node, "node_id", None) or my_id
         # R31-013：meta ops（column/literal/plan_ref/materialized_series）是 O(1) 读取，
         # 不进 occurrence 列表（旧 ``_canonical_ops`` 同样过滤）；真实 operator 的
         # 每个 occurrence 都必须保留（不丢重复节点与参数）。

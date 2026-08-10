@@ -189,9 +189,27 @@ class StreamingResultSink:
         return self.queue.put(ResultItem(name=name, value=value, meta=dict(meta)))
 
     def finish(self) -> None:
+        """收尾：close → join writer → 补写漏掉的 item。
+
+        R31 fix：``close()`` 会让 writer 在「队列恰好为空」时提前 break，而此刻
+        compute 侧可能已 put 但未消费的 item 会被漏掉——close 后 join 再 drain
+        剩余 item 补齐（不静默丢结果）。
+        """
         self.queue.close()
         for t in self._threads:
             t.join(timeout=5.0)
+        remaining = self.queue.drain()
+        if remaining:
+            for i in range(0, len(remaining), self._batch_size):
+                batch = remaining[i : i + self._batch_size]
+                try:
+                    self._writer(batch)
+                    with self._lock:
+                        self._writes_done += len(batch)
+                        self._write_bytes += sum(b.bytes for b in batch)
+                except Exception:
+                    # 补写失败：不静默丢（但收尾阶段不再无限重试）。
+                    pass
 
     def summary(self) -> dict[str, Any]:
         with self._lock:

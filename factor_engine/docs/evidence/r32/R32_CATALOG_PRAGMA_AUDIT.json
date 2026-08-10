@@ -1,0 +1,8 @@
+{
+  "foreign_key_check": [],
+  "foreign_keys_enabled": true,
+  "quick_check": "ok",
+  "schema_version": 2,
+  "schema_versioned_migration": true,
+  "transaction_begin_immediate": true
+}

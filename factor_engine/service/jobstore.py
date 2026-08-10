@@ -179,7 +179,14 @@ class JobStore:
         (self.root / "quarantine").mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._jobs: dict[str, JobRecord] = {}
-        self._idempotency_index: dict[str, str] = {}
+        # R32-P0-015: 内存 idempotency 索引与 SQLite 唯一键语义一致 —— 复合键
+        # ``(owner_principal, job_type, idempotency_key)``。历史只按
+        # ``idempotency_key`` 单键，跨用户/跨类型会误碰撞。
+        self._idempotency_index: dict[tuple[str, str, str], str] = {}
+        # app 层会预先把 principal+job_type 编进 key 字符串（_scoped_idempotency_key），
+        # 因此 job.idempotency_key 本身已唯一；保留一个按 key 字符串的次索引供
+        # ``get_by_idempotency_key(key)``（app 传入已 scope 的 key）直接命中。
+        self._idempotency_scoped: dict[str, str] = {}
         self.corruption_count = 0
         self.corruptions: list[str] = []
         self._use_sqlite = (
@@ -225,6 +232,26 @@ class JobStore:
             self._restore_from_manifests()
         self._reconcile_stale_running()
 
+    @staticmethod
+    def _idem_key_for(
+        job: "JobRecord | dict[str, Any]",
+    ) -> tuple[str, str, str]:
+        """R32-P0-015: 复合 idempotency 键 ``(owner_principal, job_type, idempotency_key)``。
+
+        与 SQLite ``UNIQUE(idempotency_key, owner_principal, job_type)`` 语义一致。
+        """
+        if isinstance(job, dict):
+            return (
+                str(job.get("owner_principal") or job.get("requested_by") or "anonymous"),
+                str(job.get("job_type") or "compute"),
+                str(job.get("idempotency_key") or ""),
+            )
+        return (
+            job.owner_principal or job.requested_by or "anonymous",
+            job.job_type or "compute",
+            str(job.idempotency_key or ""),
+        )
+
     def _restore_from_sqlite(self) -> None:
         cur = self._sqlite_conn.execute("SELECT payload FROM jobs")
         for (payload_text,) in cur.fetchall():
@@ -236,7 +263,8 @@ class JobStore:
             job = self._job_from_raw(raw)
             self._jobs[job.run_id] = job
             if job.idempotency_key:
-                self._idempotency_index[job.idempotency_key] = job.run_id
+                self._idempotency_index[self._idem_key_for(job)] = job.run_id
+                self._idempotency_scoped[job.idempotency_key] = job.run_id
 
     def _restore_from_manifests(self) -> None:
         for path in sorted(self.manifest_root.glob("*.json")):
@@ -259,7 +287,8 @@ class JobStore:
                 continue
             self._jobs[job.run_id] = job
             if job.idempotency_key:
-                self._idempotency_index[job.idempotency_key] = job.run_id
+                self._idempotency_index[self._idem_key_for(job)] = job.run_id
+                self._idempotency_scoped[job.idempotency_key] = job.run_id
 
     def _job_from_raw(self, raw: dict[str, Any]) -> JobRecord:
         if int(raw.get("schema_version", MANIFEST_SCHEMA_VERSION)) > MANIFEST_SCHEMA_VERSION:
@@ -300,14 +329,19 @@ class JobStore:
         )
 
     def _reconcile_stale_running(self) -> None:
-        """R21-073/074: a restart must never leave a phantom ``running`` job."""
+        """R21-073/074: a restart must never leave a phantom ``running`` job.
+
+        R32-P0-017: startup reconciliation 必须写回 durable authority ——
+        ``write_manifest=False`` 只改内存，重启后 running/queued 又被标成
+        interrupted 的状态没有持久化，下一次重启看到的仍是旧状态。
+        """
         for job in list(self._jobs.values()):
             if job.is_nonterminal:
                 job.status = JobStatus.INTERRUPTED
                 job.error_code = "JOB_INTERRUPTED"
                 job.error = "job interrupted by service restart (non-terminal at startup)"
                 job.finished_at = _utc_now()
-                self.update(job, write_manifest=False)
+                self.update(job, write_manifest=True)
 
     def _quarantine_path(self, path: Path) -> None:
         self.corruption_count += 1
@@ -329,45 +363,148 @@ class JobStore:
     def create(self, job: JobRecord) -> JobRecord:
         with self._lock:
             if job.idempotency_key:
-                existing = self._idempotency_index.get(job.idempotency_key)
+                idem_key = self._idem_key_for(job)
+                existing = self._idempotency_index.get(idem_key)
                 if existing and existing in self._jobs:
-                    return self._jobs[existing]
-                self._idempotency_index[job.idempotency_key] = job.run_id
+                    existing_job = self._jobs[existing]
+                    # R32-P0-016: 同 key 不同 request_digest 必须 409，绝不静默复用。
+                    if (
+                        job.request_digest
+                        and existing_job.request_digest
+                        and job.request_digest != existing_job.request_digest
+                    ):
+                        raise ServiceError(
+                            "IDEMPOTENCY_KEY_CONFLICT",
+                            f"idempotency key {job.idempotency_key!r} for "
+                            f"(owner={idem_key[0]}, type={idem_key[1]}) was already used "
+                            f"with a different request digest; refusing to silently "
+                            f"reuse run_id={existing_job.run_id}",
+                            status=409,
+                        )
+                    return existing_job
+                self._idempotency_index[idem_key] = job.run_id
+                self._idempotency_scoped[job.idempotency_key] = job.run_id
             self._jobs[job.run_id] = job
-            self._persist(job)
+            self._persist(job, create=True)
         return job
 
-    def get_by_idempotency_key(self, key: str) -> Optional[JobRecord]:
+    def get_by_idempotency_key(
+        self, key: str, *, owner_principal: Optional[str] = None, job_type: Optional[str] = None
+    ) -> Optional[JobRecord]:
         with self._lock:
-            run_id = self._idempotency_index.get(str(key))
+            if owner_principal is not None and job_type is not None:
+                run_id = self._idempotency_index.get(
+                    (owner_principal or "anonymous", job_type or "compute", str(key))
+                )
+            else:
+                # app 层预先把 principal+job_type 编进 key 字符串，直接用该字符串命中。
+                run_id = self._idempotency_scoped.get(str(key))
             return self._jobs.get(run_id) if run_id else None
 
     def get(self, run_id: str) -> Optional[JobRecord]:
         with self._lock:
             return self._jobs.get(run_id)
 
-    def update(self, job: JobRecord, *, write_manifest: bool = True) -> None:
+    def update(self, job: JobRecord, *, write_manifest: bool = True) -> bool:
+        """Persist a job state change.
+
+        R32-P0-022: 已进入 terminal 状态的 job 不允许被后来的旧执行覆盖 ——
+        heartbeat monitor 标 INTERRUPTED 后，真实 worker 线程随后写 SUCCEEDED
+        会被拒绝（terminal 状态不可变）。返回 True 表示已写入。
+        """
         with self._lock:
+            current = self._jobs.get(job.run_id)
+            if (
+                current is not None
+                and current.is_terminal
+                and current.status != job.status
+            ):
+                return False
             self._jobs[job.run_id] = job
             if write_manifest:
                 self._persist(job)
+            return True
 
-    def _persist(self, job: JobRecord) -> None:
+    def cas_transition(
+        self,
+        job: JobRecord,
+        *,
+        expected_status: str,
+        write_manifest: bool = True,
+    ) -> bool:
+        """R32-P0-022: CAS 状态迁移 —— 只在当前 ``status == expected_status`` 时写入。
+
+        SQLite 路径用 ``UPDATE ... WHERE run_id=? AND status=?`` + rowcount 判定，
+        跨进程也保持 CAS；terminal 状态不能被后来的旧执行（如 heartbeat 标
+        INTERRUPTED 后 run_fn 才写 SUCCEEDED）覆盖。返回是否成功迁移。
+        """
+        with self._lock:
+            current = self._jobs.get(job.run_id)
+            if current is None or current.status != expected_status:
+                return False
+            self._jobs[job.run_id] = job
+            if write_manifest:
+                if self._use_sqlite:
+                    payload = self._job_to_raw(job)
+                    cur = self._sqlite_conn.execute(
+                        "UPDATE jobs SET payload=?,idempotency_key=?,owner_principal=?,"
+                        "job_type=?,status=?,submitted_at=? WHERE run_id=? AND status=?",
+                        (
+                            json.dumps(payload, ensure_ascii=False),
+                            job.idempotency_key,
+                            job.owner_principal,
+                            job.job_type,
+                            job.status,
+                            job.submitted_at,
+                            job.run_id,
+                            expected_status,
+                        ),
+                    )
+                    self._sqlite_conn.commit()
+                    if cur.rowcount == 0:
+                        # 另一个进程已迁移 status —— 回滚内存态，CAS 失败。
+                        del self._jobs[job.run_id]
+                        self._jobs[current.run_id] = current
+                        return False
+                else:
+                    self._write_manifest(job)
+            return True
+
+    def _persist(self, job: JobRecord, *, create: bool = False) -> None:
         if self._use_sqlite:
             payload = self._job_to_raw(job)
-            self._sqlite_conn.execute(
-                "INSERT OR REPLACE INTO jobs(run_id,payload,idempotency_key,owner_principal,job_type,status,submitted_at) "
-                "VALUES(?,?,?,?,?,?,?)",
-                (
-                    job.run_id,
-                    json.dumps(payload, ensure_ascii=False),
-                    job.idempotency_key,
-                    job.owner_principal,
-                    job.job_type,
-                    job.status,
-                    job.submitted_at,
-                ),
-            )
+            if create:
+                # R32-P0-016: 绝不用 INSERT OR REPLACE —— 两个进程同时提交相同
+                # idempotency tuple 时可能互相 replace。用 ON CONFLICT DO NOTHING，
+                # 冲突时保留先到者（真实幂等），随后 SELECT 读回既有 run_id。
+                self._sqlite_conn.execute(
+                    "INSERT INTO jobs(run_id,payload,idempotency_key,owner_principal,job_type,status,submitted_at) "
+                    "VALUES(?,?,?,?,?,?,?) "
+                    "ON CONFLICT(idempotency_key, owner_principal, job_type) DO NOTHING",
+                    (
+                        job.run_id,
+                        json.dumps(payload, ensure_ascii=False),
+                        job.idempotency_key,
+                        job.owner_principal,
+                        job.job_type,
+                        job.status,
+                        job.submitted_at,
+                    ),
+                )
+            else:
+                self._sqlite_conn.execute(
+                    "UPDATE jobs SET payload=?,idempotency_key=?,owner_principal=?,"
+                    "job_type=?,status=?,submitted_at=? WHERE run_id=?",
+                    (
+                        json.dumps(payload, ensure_ascii=False),
+                        job.idempotency_key,
+                        job.owner_principal,
+                        job.job_type,
+                        job.status,
+                        job.submitted_at,
+                        job.run_id,
+                    ),
+                )
             self._sqlite_conn.commit()
         else:
             self._write_manifest(job)
@@ -421,6 +558,19 @@ class JobStore:
                 fh.flush()
                 os.fsync(fh.fileno())
             os.replace(str(tmp), str(path))
+            # R32-P0-018: os.replace 后必须 fsync manifest 目录 —— 否则 rename
+            # 本身未持久化，宣称 durable 的 job manifest 在 crash 后可能丢。
+            try:
+                dir_fd = os.open(str(self.manifest_root), os.O_RDONLY)
+            except OSError:
+                dir_fd = None
+            if dir_fd is not None:
+                try:
+                    os.fsync(dir_fd)
+                except OSError:
+                    pass
+                finally:
+                    os.close(dir_fd)
         finally:
             if tmp.exists():
                 try:
@@ -452,17 +602,64 @@ class JobStore:
                 pass
 
 
-def check_single_process_workers() -> None:
-    """R21-078: refuse production with the process-local store if workers>1.
+#: R32-P0-023: service 全局并发 authority 策略。
+#:
+#: SQLite JobStore 不等于全局多进程 Queue —— 多个 Uvicorn worker 各自有本地
+#: queue / max_running / per-user counter，4×4 worker 可能实际跑 16 个 job。
+#: 本策略显式声明生产选择：
+#:   - ``single_process``（默认）：只能单 service process + FactorEngine 内部并行
+#:     （多 worker 直接拒绝启动，fail-closed）；
+#:   - ``global_lease``：需要真正外部/global lease queue —— 本 repo 尚未实现，
+#:     显式请求时会拒绝启动，绝不静默退化成每进程本地并发。
+#: 默认值：``FACTOR_ENGINE_SERVICE_CONCURRENCY_POLICY`` 环境变量，缺省
+#: ``single_process``。
+SERVICE_CONCURRENCY_POLICY_SINGLE_PROCESS = "single_process"
+SERVICE_CONCURRENCY_POLICY_GLOBAL_LEASE = "global_lease"
 
-    Called from create_app() when the store is not SQLite-backed and uvicorn
-    reports multiple workers.
-    """
-    workers = int(os.environ.get("UVICORN_WORKERS", "") or os.environ.get("WEB_CONCURRENCY", "1"))
-    if workers > 1 and os.environ.get("FACTOR_ENGINE_SERVICE_DURABLE_STORE", "").lower() != "sqlite":
+
+def resolve_service_concurrency_policy() -> str:
+    policy = os.environ.get("FACTOR_ENGINE_SERVICE_CONCURRENCY_POLICY", "").strip().lower()
+    if not policy:
+        return SERVICE_CONCURRENCY_POLICY_SINGLE_PROCESS
+    if policy not in {
+        SERVICE_CONCURRENCY_POLICY_SINGLE_PROCESS,
+        SERVICE_CONCURRENCY_POLICY_GLOBAL_LEASE,
+    }:
         raise ServiceError(
             "INTERNAL_ERROR",
-            "process-local JobStore is unsafe with multiple workers; set "
-            "FACTOR_ENGINE_SERVICE_DURABLE_STORE=sqlite or run single-process",
+            f"unknown FACTOR_ENGINE_SERVICE_CONCURRENCY_POLICY={policy!r} "
+            f"(allowed: {SERVICE_CONCURRENCY_POLICY_SINGLE_PROCESS}, {SERVICE_CONCURRENCY_POLICY_GLOBAL_LEASE})",
+            status=500,
+        )
+    return policy
+
+
+def check_single_process_workers() -> None:
+    """R21-078 + R32-P0-023: explicit global concurrency authority.
+
+    - ``single_process``：拒绝任何多 worker 部署 —— 每个 worker 的本地 queue /
+      max_running / per-principal counter 不是全局 authority；
+    - ``global_lease``：需要真正外部/global lease queue，当前未实现 → 拒绝启动
+      （绝不静默退化成每进程本地并发 4×4=16）。
+    """
+    policy = resolve_service_concurrency_policy()
+    workers = int(os.environ.get("UVICORN_WORKERS", "") or os.environ.get("WEB_CONCURRENCY", "1"))
+    if policy == SERVICE_CONCURRENCY_POLICY_SINGLE_PROCESS:
+        if workers > 1:
+            raise ServiceError(
+                "INTERNAL_ERROR",
+                f"service concurrency policy is '{SERVICE_CONCURRENCY_POLICY_SINGLE_PROCESS}' "
+                f"but {workers} uvicorn workers are configured. SQLite JobStore is NOT a "
+                f"global multi-process queue: each worker has its own local queue and "
+                f"max_running, so 4×4 workers would run up to 16 jobs. Run a single "
+                f"service process (workers=1) with FactorEngine internal parallelism.",
+                status=500,
+            )
+    else:  # global_lease
+        raise ServiceError(
+            "INTERNAL_ERROR",
+            f"service concurrency policy '{SERVICE_CONCURRENCY_POLICY_GLOBAL_LEASE}' requires a "
+            f"real external/global lease queue, which is not implemented in this repo. "
+            f"Refusing to silently degrade to per-process local concurrency.",
             status=500,
         )

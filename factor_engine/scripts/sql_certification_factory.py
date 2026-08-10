@@ -351,7 +351,7 @@ def write_backend_target_matrix() -> dict[str, Any]:
         writer.writeheader()
         for row in sorted(matrix_rows, key=lambda x: x["canonical"]):
             writer.writerow(row)
-    return {"canonicals_in_matrix": len(matrix_rows), "certified_duckdb_prod": sum(1 for r in rows if r["duckdb_prod_safe"] == "yes")}
+    return {"canonicals_in_matrix": len(matrix_rows), "certified_duckdb_prod": sum(1 for r in rows if r["duckdb_prod"] == "yes")}
 
 
 def main() -> int:

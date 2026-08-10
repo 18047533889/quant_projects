@@ -152,3 +152,21 @@ class FactorRetiredError(Exception):
     （2020-2025 旧因子 / 2026 新因子）混在同一个目录下。抛本异常强制调用方
     升级 factor_id 或显式声明全量重建。
     """
+
+
+class ProductionModeResolutionError(RuntimeError):
+    """R32-P0-014: production authority 解析意外异常时抛出（fail-open 关闭）。
+
+    catalog 等 production 决策点解析运行模式时，意外异常不得默认 ``False`` 静默
+    回落成 research —— 那会把「production authority 解析失败」伪装成「非生产」，
+    绕过 production 硬门（identity / precision / typed-JSON / direct-local 禁写）。
+    """
+
+
+class CatalogMigrationError(RuntimeError):
+    """R32-P0-012: catalog schema migration 失败 / 校验和不匹配时抛出。
+
+    schema 版本化独占迁移：from_version → to_version、migration checksum、
+    destructive migration 前 backup、migration report。任何一步失败都必须在
+    迁移前状态停止（事务回滚），绝不半迁移。
+    """

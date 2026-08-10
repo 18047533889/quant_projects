@@ -319,6 +319,16 @@ INTERNAL_KERNEL_MODULES: tuple[str, ...] = (
     "cleaned_operators.common.polars_misc_utils",
 )
 
+# The strictly-production module list: everything the default list loads minus
+# the research model families and the internal kernel utilities.  The full
+# ``_LOAD_MODULES`` remains the default (several research-module canonicals are
+# R28-certified daily); ``load_all(include_research=False)`` loads exactly
+# ``PRODUCTION_LOAD_MODULES`` + reviewed extensions.
+PRODUCTION_LOAD_MODULES: tuple[str, ...] = tuple(
+    m for m in _LOAD_MODULES
+    if m not in RESEARCH_LOAD_MODULES and m not in INTERNAL_KERNEL_MODULES
+)
+
 _REVIEWED_EXTENSIONS = (
     "cleaned_operators.production_repairs",
     "cleaned_operators.price_volume.technical_extensions",
@@ -543,6 +553,12 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     from cleaned_operators.param_role_contract import backfill_scalar_roles
 
     backfill_scalar_roles()
+
+    # R30 §25 (P1-024): migrate legacy recursive kernels off the
+    # ``_STATEFUL_CANONICALS`` name-seed fallback onto explicit self-declarations.
+    from cleaned_operators.stateful_contract_migration import apply_stateful_contract_migration
+
+    apply_stateful_contract_migration()
 
     OperatorRegistry.finalize()
     OperatorRegistry.freeze()

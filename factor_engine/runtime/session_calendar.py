@@ -41,6 +41,9 @@ class SessionCalendar:
     bars_per_session: int | None = None
     segments: tuple[tuple[str, str], ...] | None = None
     timestamp_convention: str = "bar_end"
+    #: R32-P0-004: 跨日偏移的交易日过滤。缺省按周一到周五（A 股常规）；真实
+    #: 节假日日历由上层 TradingCalendar 提供（``holidays`` 冻结日期集）。
+    holidays: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         market = str(self.market or "US").upper()
@@ -63,8 +66,22 @@ class SessionCalendar:
         object.__setattr__(self, "bar_freq", str(self.bar_freq))
         object.__setattr__(self, "segments", parsed)
         object.__setattr__(self, "timestamp_convention", convention)
+        object.__setattr__(
+            self,
+            "holidays",
+            frozenset(
+                pd.Timestamp(h).normalize()
+                for h in (self.holidays or ())
+            ),
+        )
         if self.session_bars <= 0:
             raise ValueError("SessionCalendar requires a positive bar count")
+
+    def _is_trading_day(self, day: pd.Timestamp) -> bool:
+        """R32-P0-004: 交易日过滤 —— 周末 + 显式 holidays 非交易日。"""
+        if day.weekday() >= 5:
+            return False
+        return day.normalize() not in self.holidays
 
     @classmethod
     def ashare(
@@ -148,8 +165,89 @@ class SessionCalendar:
             output[valid] = number
         return output
 
+    def bar_slots(self, day: str | pd.Timestamp) -> list[pd.Timestamp]:
+        """单交易日的合法 bar slot 时间戳（session-slot aware，跳过午休）。
+
+        R32-P0-004: 会话结构（09:30 开盘 / 11:30–13:00 午休 / 集合竞价 / 半日
+        市 / early close / DST）决定合法 bar grid —— 不再是「交易日零点 +
+        bar_duration × N」的线性算术。
+        """
+        day = pd.Timestamp(day).normalize()
+        width = max(1, int(self.bar_timedelta / pd.Timedelta(minutes=1)))
+        slots: list[pd.Timestamp] = []
+        for start_text, stop_text in self.segments or ():
+            start, stop = _minute(start_text), _minute(stop_text)
+            if self.timestamp_convention == "bar_end":
+                # bar_end 用 (open, close]：slot = start + k*width，k>=1。
+                k = 1
+                while start + k * width <= stop:
+                    slots.append(day + pd.Timedelta(minutes=start + k * width))
+                    k += 1
+            else:
+                # bar_start 用 [open, close)：slot = start + k*width，k>=0。
+                k = 0
+                while start + k * width < stop:
+                    slots.append(day + pd.Timedelta(minutes=start + k * width))
+                    k += 1
+        return slots
+
     def offset_bars(self, anchor: str | pd.Timestamp, n_bars: int) -> pd.Timestamp:
-        return pd.Timestamp(anchor) + self.bar_timedelta * int(n_bars)
+        """R32-P0-004: session-slot-aware bar offset（跳过午休 / 跨交易日）。
+
+        anchor 若不在合法 slot 上，先按偏移方向吸附到最近的合法 slot；再沿
+        session grid 逐 slot 偏移 n_bars。跨日时进入下一交易日（business day
+        近似；节假日裁剪由上层 TradingCalendar 负责）。n_bars 有界（lookback
+        通常 ≤ 数千），逐 slot 走是廉价且正确的。
+        """
+        n = int(n_bars)
+        ts = pd.Timestamp(anchor)
+        if n == 0:
+            return ts
+        sign = 1 if n > 0 else -1
+        steps = abs(n)
+        day = ts.normalize()
+        slots = self.bar_slots(day)
+        # 定位 anchor 在当前日 slot grid 中的位置（按偏移方向吸附）。
+        pos = 0
+        if slots:
+            if sign > 0:
+                pos = next((i for i, s in enumerate(slots) if s >= ts), len(slots))
+            else:
+                pos = next(
+                    (i for i in range(len(slots) - 1, -1, -1) if slots[i] <= ts),
+                    -1,
+                )
+        cur = ts
+        while steps > 0:
+            if sign > 0:
+                if slots and pos < len(slots) - 1:
+                    pos += 1
+                    cur = slots[pos]
+                    steps -= 1
+                else:
+                    day += pd.Timedelta(days=1)
+                    while not self._is_trading_day(day):
+                        day += pd.Timedelta(days=1)
+                    slots = self.bar_slots(day)
+                    if slots:
+                        pos = 0
+                        cur = slots[0]
+                        steps -= 1
+            else:
+                if slots and pos > 0:
+                    pos -= 1
+                    cur = slots[pos]
+                    steps -= 1
+                else:
+                    day -= pd.Timedelta(days=1)
+                    while not self._is_trading_day(day):
+                        day -= pd.Timedelta(days=1)
+                    slots = self.bar_slots(day)
+                    if slots:
+                        pos = len(slots) - 1
+                        cur = slots[-1]
+                        steps -= 1
+        return cur
 
     def warmup_load_start(
         self,

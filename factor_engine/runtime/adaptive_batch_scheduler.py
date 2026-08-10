@@ -202,6 +202,15 @@ class AdaptiveBatchScheduler:
         wave_memory_budget: int = 4 * 1024**3,
         max_concurrency: int | None = None,
     ) -> None:
+        if broker is None:
+            # R31-P1-039：service job 执行期间共享进程级 broker（job admission +
+            # task admission 统一），避免 HTTP job 之间/与内部 workers 叠加过载。
+            try:
+                from service.queue import _get_service_broker
+
+                broker = _get_service_broker()
+            except Exception:
+                broker = None
         self.broker = broker or ResourceBroker()
         self.executor = executor or HybridExecutor(broker=self.broker)
         self.sink = sink
@@ -217,6 +226,14 @@ class AdaptiveBatchScheduler:
         self._done = 0
         self._failed_once: set[str] = set()
         self._retries_remaining: dict[str, int] = {}
+        # R31-069/P1-040：CancellationToken——cancel() 后不再 admit 新 task，
+        # 在跑 task 自然完成；无 future 时 run 提前结束（不阻塞、不泄漏租约）。
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        """请求取消：后续 admission 一律拒绝；run 在无在跑任务时提前结束。"""
+        self._cancelled = True
+        self._explain("CANCELLED: no new task admitted; finishing running tasks")
 
     # -- plan --
 
@@ -365,6 +382,9 @@ class AdaptiveBatchScheduler:
         释放，保证 exactly-once（SUCCESS / FAILED / CANCELLED / TIMEOUT / BROKEN
         WORKER 都不泄漏 CPU/IO/memory reservation）。
         """
+        if self._cancelled:
+            self._explain(f"task={task.task_id}: not admitted (cancelled)")
+            return None, None
         contract = task.resource_contract
         fn = _dispatch
         if contract is None:
@@ -454,6 +474,12 @@ class AdaptiveBatchScheduler:
         no_progress_rounds = 0
         while remaining or futures:
             admitted_this_round = 0
+            # R31-069/P1-040：取消 → 不再 admit 新 task；无在跑任务时提前结束。
+            if self._cancelled and not futures:
+                self._explain(
+                    f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
+                )
+                break
             # 0) fusion group admission：组内全部 root 就绪 → 一次 native query。
             for group in fusion_groups:
                 gkey = f"fusion:{group.group_id}"

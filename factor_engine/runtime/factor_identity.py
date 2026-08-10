@@ -209,6 +209,130 @@ def _semantic_value(plan: Any, key: str) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# R32-P0-040: dependency-scoped operator / field digest
+#
+# 历史 ``compute_factor_identity`` 缺省绑定**整库** ``operator_catalog_hash`` /
+# ``field_catalog_hash`` —— 添加一个完全无关的 operator/field 会让所有
+# factor_version / cache / checkpoint 失效（whole-catalog hash 污染单因子
+# identity）。R32 §4 规则 4/5：operator/field hash 只计算本 plan 依赖项。
+# 真正全局语义（numeric/compiler/calendar rule）单独 global digest。
+# ---------------------------------------------------------------------------
+
+
+def _plan_operator_canonicals(plan: Any) -> list[str]:
+    """收集计划实际引用的去重 canonical operator 名（不含 column/literal/plan_ref）。"""
+    if plan is None:
+        return []
+    seen: set[str] = set()
+    stack = [plan]
+    while stack:
+        node = stack.pop()
+        if node is None:
+            continue
+        op = str(getattr(node, "op", "") or "")
+        if op and op not in {"column", "literal", "plan_ref", "materialized_series"}:
+            try:
+                from cleaned_operators.registry import OperatorRegistry
+
+                canonical = OperatorRegistry.resolve_canonical(op)
+            except Exception:  # noqa: BLE001 - bootstrap 保守按原 op
+                canonical = op
+            seen.add(canonical)
+        stack.extend(getattr(node, "inputs", ()) or ())
+    return sorted(seen)
+
+
+def _plan_column_names(plan: Any) -> list[str]:
+    """收集计划实际引用的 leaf column 名。"""
+    if plan is None:
+        return []
+    seen: set[str] = set()
+    stack = [plan]
+    while stack:
+        node = stack.pop()
+        if node is None:
+            continue
+        op = str(getattr(node, "op", "") or "")
+        if op in {"column", "col"}:
+            name = str((getattr(node, "attrs", None) or {}).get("name") or "")
+            if name:
+                seen.add(name)
+        stack.extend(getattr(node, "inputs", ()) or ())
+    return sorted(seen)
+
+
+def scoped_operator_contract_hash(plan: Any, *, backend: str = "pandas_numpy") -> str:
+    """R32-P0-040: ``PlanOperatorDependencyDigest`` —— 只对计划引用的算子做 hash。
+
+    与整库 ``compute_operator_catalog_hash`` 不同：无关算子变化不再污染本因子
+    的 identity。未加载 registry / 未知算子按原 op 名保守计入（fail-closed：
+    注册后 digest 必变）。
+    """
+    import json
+
+    from cleaned_operators.operator_policy import infer_operator_policy
+    from cleaned_operators.registry import OperatorRegistry
+
+    canons = _plan_operator_canonicals(plan)
+    entries: list[dict[str, Any]] = []
+    for canon in canons:
+        try:
+            op = OperatorRegistry.get(canon, backend=backend, mode="any")
+            policy = (
+                infer_operator_policy(op, canonical=canon).to_dict()
+                if op is not None
+                else None
+            )
+            entries.append({
+                "canonical": canon,
+                "category": (
+                    str(getattr(getattr(op, "metadata", None), "category", ""))
+                    if op is not None else ""
+                ),
+                "policy": policy,
+            })
+        except Exception:  # noqa: BLE001 - bootstrap 保守计入
+            entries.append({"canonical": canon, "policy": None})
+    payload = json.dumps(entries, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def scoped_field_contract_hash(plan: Any) -> str:
+    """R32-P0-040: ``PlanFieldDependencyDigest`` —— 只对计划引用的字段做 hash。
+
+    从 field registry 提取被引用字段（按 name / table.name 解析）的 spec；未注册
+    的列名也计入 digest（带 unregistered 标记），保证字段加入 registry 后 digest
+    变化。无关字段变化不污染本因子 identity。
+    """
+    import json
+
+    cols = _plan_column_names(plan)
+    if not cols:
+        return _stable_hash({"scoped_fields": []})
+    try:
+        from fields import get_field_registry
+
+        registry = get_field_registry()
+        field_specs = {
+            getattr(s, "name", ""): s.to_dict() for s in registry.fields()
+        }
+    except Exception:  # noqa: BLE001 - registry 不可用：整列名兜底
+        field_specs = {}
+    scoped: dict[str, Any] = {}
+    for col in cols:
+        key = str(col).lower()
+        spec = field_specs.get(key)
+        if spec is None:
+            # 可能在 table.name 形式下（如 "ashare_price.close"）。
+            for name, s in field_specs.items():
+                if name.lower().endswith(f".{key}") or key.endswith(f".{name.lower()}"):
+                    spec = s
+                    break
+        scoped[col] = spec if spec is not None else {"unregistered": True}
+    return _stable_hash({"scoped_fields": scoped})
+
+
+# ---------------------------------------------------------------------------
 # 身份计算
 # ---------------------------------------------------------------------------
 
@@ -259,15 +383,25 @@ def compute_factor_identity(plan: Any, ctx: Any = None) -> FactorSemanticIdentit
 
     operator_contract_hash = _ctx_override(ctx, "operator_contract_hash")
     if operator_contract_hash is None:
-        from cleaned_operators.operator_policy import compute_operator_catalog_hash
+        # R32-P0-040: 有 plan 时只对**本 plan 依赖的算子**做 digest —— 无关算子
+        # 变化不再污染单因子 identity（whole-catalog hash 污染修复）。无 plan 时
+        # 回退整库 hash（保留历史行为）。
+        if plan is not None:
+            operator_contract_hash = scoped_operator_contract_hash(plan)
+        else:
+            from cleaned_operators.operator_policy import compute_operator_catalog_hash
 
-        operator_contract_hash = compute_operator_catalog_hash()
+            operator_contract_hash = compute_operator_catalog_hash()
 
     field_contract_hash = _ctx_override(ctx, "field_contract_hash")
     if field_contract_hash is None:
-        from fields import compute_field_catalog_hash
+        # R32-P0-040: 只对本 plan 引用的字段做 digest。无 plan 时回退整库 hash。
+        if plan is not None:
+            field_contract_hash = scoped_field_contract_hash(plan)
+        else:
+            from fields import compute_field_catalog_hash
 
-        field_contract_hash = compute_field_catalog_hash()
+            field_contract_hash = compute_field_catalog_hash()
 
     source_contract_hash = _ctx_override(ctx, "source_contract_hash")
     if source_contract_hash is None:

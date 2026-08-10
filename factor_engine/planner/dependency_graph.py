@@ -250,18 +250,31 @@ def _dependency_layers(nodes: dict[str, FactorNode]) -> list[list[str]]:
     deps: dict[str, set[str]] = {
         name: {d for d in node.dependencies if d in nodes} for name, node in nodes.items()
     }
-    # 拓扑分层（Kahn）。
+    # R32-P1-051: 标准 Kahn indegree —— 反向邻接（consumers）逐边扣入度，
+    # 不再每层反复扫描 entire remaining（大 DAG O(V²) → O(V+E)）。
+    consumers: dict[str, list[str]] = {n: [] for n in names}
+    indegree: dict[str, int] = {n: 0 for n in names}
+    for name in names:
+        for dep in deps[name]:
+            indegree[name] += 1
+            consumers[dep].append(name)
     layers: list[list[str]] = []
-    remaining = set(names)
-    while remaining:
-        ready = sorted(
-            n for n in remaining if not (deps[n] & remaining)
-        )
-        if not ready:
-            # 环（异常）：按 name 序逐个串行，保证终态。
-            ready = [min(remaining)]
-        layers.append(ready)
-        remaining -= set(ready)
+    ready = sorted(n for n in names if indegree[n] == 0)
+    while ready:
+        layers.append(list(ready))
+        next_ready: list[str] = []
+        for n in ready:
+            for other in consumers[n]:
+                indegree[other] -= 1
+                if indegree[other] == 0:
+                    next_ready.append(other)
+        ready = sorted(next_ready)
+    scheduled = {n for layer in layers for n in layer}
+    if len(scheduled) != len(names):
+        # 环（异常）：未排入层的节点按 name 序逐个串行，保证终态。
+        remaining = [n for n in names if n not in scheduled]
+        for n in remaining:
+            layers.append([n])
     return layers
 
 

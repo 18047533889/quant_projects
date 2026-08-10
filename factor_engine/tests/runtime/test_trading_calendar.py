@@ -9,6 +9,7 @@ from runtime.incremental import build_incremental_plan
 from storage.time_window import business_day_offset, resolve_incremental_window
 from storage.trading_calendar import (
     TradingCalendar,
+    CalendarCoverageError,
     clear_trading_calendar_cache,
     get_trading_calendar,
     infer_market,
@@ -97,5 +98,12 @@ def test_register_trading_calendar_cache():
 
 def test_trading_calendar_clamps_out_of_range():
     cal = TradingCalendar(["2024-01-02", "2024-01-03"])
-    assert cal.offset("2024-01-02", -5) == pd.Timestamp("2024-01-02")
-    assert cal.offset("2024-01-03", 10) == pd.Timestamp("2024-01-03")
+    # R32-P0-002: 越界默认抛 CalendarCoverageError（production incremental 禁止
+    # clamp —— 缺历史日历会变成看似合法的 warmup 日期）；clamp=True 仅显式
+    # UI/research 用途。
+    with pytest.raises(CalendarCoverageError):
+        cal.offset("2024-01-02", -5)
+    with pytest.raises(CalendarCoverageError):
+        cal.offset("2024-01-03", 10)
+    assert cal.offset("2024-01-02", -5, clamp=True) == pd.Timestamp("2024-01-02")
+    assert cal.offset("2024-01-03", 10, clamp=True) == pd.Timestamp("2024-01-03")

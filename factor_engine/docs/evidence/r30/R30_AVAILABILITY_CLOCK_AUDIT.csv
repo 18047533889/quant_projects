@@ -1,0 +1,1419 @@
+canonical,surface,available_at,same_session_usable,inferred_available_at,inferred_same_session_usable,input_panels,status
+ADX,daily,,,,,[],OK
+ATR_WILDER,daily,,,,,[],OK
+CMF,daily,,,,,[],OK
+CMO,daily,,,,,[],OK
+ChaikinOscillator,daily,,,,,[],OK
+DEMA,daily,,,,,[],OK
+DMI_minus,daily,,,,,[],OK
+DMI_plus,daily,,,,,[],OK
+DX,daily,,,,,[],OK
+EaseOfMovement,daily,,,,,[],OK
+ForceIndex,daily,,,,,[],OK
+KAMA,daily,,,,,[],OK
+KeltnerLower,daily,,,,,[],OK
+KeltnerMid,daily,,,,,[],OK
+KeltnerPosition,daily,,,,,[],OK
+KeltnerUpper,daily,,,,,[],OK
+MACD_hist,daily,,,,,[],OK
+MACD_line,daily,,,,,[],OK
+MACD_signal,daily,,,,,[],OK
+MFI,daily,,,,,[],OK
+NATR,daily,,,,,[],OK
+PPO,daily,,,,,[],OK
+PPO_hist,daily,,,,,[],OK
+PPO_signal,daily,,,,,[],OK
+PSAR,daily,,,,,[],OK
+PVO,daily,,,,,[],OK
+PVO_hist,daily,,,,,[],OK
+PVO_signal,daily,,,,,[],OK
+RSI_WILDER,daily,,,,,[],OK
+Supertrend,daily,,,,,[],OK
+SupertrendDirection,daily,,,,,[],OK
+TEMA,daily,,,,,[],OK
+TSI,daily,,,,,[],OK
+TSI_signal,daily,,,,,[],OK
+UltimateOscillator,daily,,,,,[],OK
+VortexMinus,daily,,,,,[],OK
+VortexPlus,daily,,,,,[],OK
+a_share_cap_ratio,daily,,,,,[],OK
+abnormal_turnover,daily,,,,,[],OK
+abnormal_volume,daily,,,,,[],OK
+abs,daily,,,,,['x'],OK
+abs_return_volume_corr,daily,,,,,[],OK
+acos,daily,,,,,['x'],OK
+acos_bounded,extended,,,,,['x'],OK
+add,daily,,,,,[],OK
+adv,daily,,,,,[],OK
+altman_z_score,daily,,,,,[],OK
+amihud_illiquidity,daily,,,,,[],OK
+and_,daily,,,,,[],OK
+ashare_days_since_limit_down,daily,,,,,['limit_down_event'],OK
+ashare_days_since_limit_up,daily,,,,,['limit_up_event'],OK
+ashare_failed_limit_count,daily,,,session_close,False,"['close', 'high_limit', 'low_limit']",NEEDS_DECL
+ashare_limit_asymmetry,daily,,,,,"['up_event', 'down_event']",OK
+ashare_limit_distance,daily,,,session_close,False,"['close', 'upper_limit']",NEEDS_DECL
+ashare_limit_down_streak,daily,,,session_close,False,"['close', 'low_limit', 'valid_trade']",NEEDS_DECL
+ashare_limit_down_touch,daily,,,,,['lower_limit'],OK
+ashare_limit_down_volume_ratio,daily,,,session_close,False,"['volume', 'limit_down_event']",NEEDS_DECL
+ashare_limit_event_density,daily,,,,,['event'],OK
+ashare_limit_failed,daily,,,session_close,False,"['close', 'upper_limit']",NEEDS_DECL
+ashare_limit_one_price,daily,,,session_close,False,"['close', 'upper_limit', 'lower_limit']",NEEDS_DECL
+ashare_limit_open_down_streak,daily,,,,,"['low_limit', 'valid_trade']",OK
+ashare_limit_open_failed,daily,,,,,['upper_limit'],OK
+ashare_limit_open_up_streak,daily,,,,,"['high_limit', 'valid_trade']",OK
+ashare_limit_touch_count,daily,,,,,"['high_limit', 'low_limit']",OK
+ashare_limit_up_streak,daily,,,session_close,False,"['close', 'high_limit', 'valid_trade']",NEEDS_DECL
+ashare_limit_up_touch,daily,,,,,['upper_limit'],OK
+ashare_limit_up_volume_ratio,daily,,,session_close,False,"['volume', 'limit_up_event']",NEEDS_DECL
+ashare_one_price_limit_streak,daily,,,session_close,False,"['close', 'high_limit', 'low_limit', 'valid_trade']",NEEDS_DECL
+ashare_open_at_upper_limit,daily,,,,,['upper_limit'],OK
+ashare_suspension_episode_length,daily,,,,,['is_suspend'],OK
+asin,daily,,,,,['x'],OK
+asin_bounded,extended,,,,,['x'],OK
+atan,daily,,,,,['x'],OK
+atan2,daily,,,,,"['y', 'x']",OK
+average_turnover,daily,,,,,[],OK
+baseline_scaled_wasserstein_distance,extended,session_close,False,session_close,False,"['x', 'y']",OK
+benchmark_excess_return,daily,,,session_close,False,"['ret', 'benchmark_ret']",NEEDS_DECL
+benchmark_relative_price,daily,,,,,[],OK
+bollinger_pct_b,daily,,,,,[],OK
+bollinger_width,daily,,,,,[],OK
+book_to_price,daily,,,,,['pb'],OK
+bounded_nvi,daily,,,,,[],OK
+bounded_pvi,daily,,,,,[],OK
+calendar_day_diff,daily,,,,,"['date1', 'date2']",OK
+candle_abs_body,daily,,,,,[],OK
+candle_body,daily,,,,,[],OK
+candle_body_percentile,daily,,,,,[],OK
+candle_body_position,daily,,,,,[],OK
+candle_body_ratio,daily,,,,,[],OK
+candle_body_zscore,daily,,,,,[],OK
+candle_close_location,daily,,,,,[],OK
+candle_close_strength,daily,,,,,[],OK
+candle_direction,daily,,,,,[],OK
+candle_gap,daily,,,,,[],OK
+candle_gap_atr,daily,,,,,[],OK
+candle_gap_pct,daily,,,,,[],OK
+candle_inside_ratio,daily,,,,,[],OK
+candle_lower_shadow,daily,,,,,[],OK
+candle_lower_shadow_ratio,daily,,,,,[],OK
+candle_lower_shadow_zscore,daily,,,,,[],OK
+candle_overlap_ratio,daily,,,,,[],OK
+candle_range,daily,,,,,[],OK
+candle_range_atr,daily,,,,,[],OK
+candle_range_percentile,daily,,,,,[],OK
+candle_range_zscore,daily,,,,,[],OK
+candle_rejection_lower,daily,,,,,[],OK
+candle_rejection_upper,daily,,,,,[],OK
+candle_upper_shadow,daily,,,,,[],OK
+candle_upper_shadow_ratio,daily,,,,,[],OK
+candle_upper_shadow_zscore,daily,,,,,[],OK
+candlestick_pattern,daily,,,session_close,False,"['open', 'close', 'pattern']",NEEDS_DECL
+capital_change_age,daily,,,,,[],OK
+capital_change_magnitude,daily,,,,,[],OK
+cash_flow_lifecycle_stage,daily,,,,,[],OK
+cbrt,daily,,,,,['x'],OK
+cdl_dark_cloud_cover,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_doji,daily,,,,,[],OK
+cdl_dragonfly_doji,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_engulfing,daily,,,,,[],OK
+cdl_evening_star,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_gravestone_doji,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_hammer,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_hanging_man,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_harami,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_harami_cross,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_inside_bar,daily,,,,,[],OK
+cdl_inverted_hammer,daily,,,,,[],OK
+cdl_marubozu,daily,,,,,[],OK
+cdl_morning_star,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_outside_bar,daily,,,,,[],OK
+cdl_piercing,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_shooting_star,daily,,,,,[],OK
+cdl_spinning_top,daily,,,,,[],OK
+cdl_three_black_crows,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_three_white_soldiers,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_tweezer_bottom,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+cdl_tweezer_top,daily,,,session_close,False,"['open', 'close']",NEEDS_DECL
+ceil,daily,,,,,['x'],OK
+choppiness_index,daily,,,,,[],OK
+circulating_cap_ratio_change,extended,,,,,[],OK
+circulating_cap_unlock_proxy,daily,,,,,[],OK
+clip,daily,,,,,['x'],OK
+coalesce,daily,,,,,[],OK
+composition_aitchison_distance,daily,,,,,[],OK
+composition_clr_component,daily,,,,,[],OK
+composition_entropy,daily,,,,,[],OK
+composition_ilr_balance,daily,,,,,[],OK
+composition_js_divergence,daily,,,,,[],OK
+composition_normalized_entropy,extended,,,,,[],OK
+corwin_schultz_spread,daily,,,,,[],OK
+cos,daily,,,,,['x'],OK
+cos_phase,extended,,,,,['x'],OK
+coskewness_to_market,daily,,,session_close,False,['ret'],NEEDS_DECL
+cross_event,daily,,,,,"['x', 'y']",OK
+cs_actual_lof_score,daily,,,,,[],OK
+cs_autoencoder_reconstruction_error,extended,,,,,[],OK
+cs_bucket,daily,,,,,[],OK
+cs_bucket_fixed,daily,,,,,[],OK
+cs_bucket_historical,daily,,,,,[],OK
+cs_count,daily,,,,,['x'],OK
+cs_coverage_ratio,daily,,,,,[],OK
+cs_demean,daily,,,,,['x'],OK
+cs_fill_mean,daily,,,,,[],OK
+cs_fill_median,daily,,,,,[],OK
+cs_hartigan_dip,daily,,,,,[],OK
+cs_huber_resid,daily,,,,,"['y', 'x']",OK
+cs_impute_mean,daily,,,,,[],OK
+cs_impute_median,daily,,,,,[],OK
+cs_isolation,daily,,,,,['x'],OK
+cs_isotonic_residual,daily,,,,,"['y', 'x']",OK
+cs_isotonic_residual_lagged_direction,extended,,,,,"['y', 'x']",OK
+cs_knn_distance,daily,,,,,[],OK
+cs_knn_graph_dirichlet_energy,daily,,,,,"['target', 'f1', 'f2', 'f3']",OK
+cs_knn_local_gradient_norm,extended,,,,,"['target', 'f1', 'f2', 'f3']",OK
+cs_knn_local_linear_residual,extended,,,,,"['target', 'f1', 'f2', 'f3']",OK
+cs_knn_local_moran,daily,,,,,"['target', 'f1', 'f2', 'f3']",OK
+cs_knn_neighbor_retention,daily,,,,,"['f1', 'f2', 'f3']",OK
+cs_knn_peer_mean_ex_self,daily,,,,,"['target', 'f1', 'f2', 'f3']",OK
+cs_knn_tangent_residual,extended,,,,,"['f1', 'f2', 'f3']",OK
+cs_lad_resid,daily,,,,,"['y', 'x']",OK
+cs_local_curvature,daily,,,,,['x'],OK
+cs_local_density,daily,,,,,['x'],OK
+cs_local_density_score,daily,,,,,[],OK
+cs_mad,daily,,,,,['x'],OK
+cs_mad_zscore,daily,,,,,['x'],OK
+cs_mahalanobis_distance,daily,,,,,[],OK
+cs_mean,daily,,,,,['x'],OK
+cs_multi_resid,daily,,,,,[],OK
+cs_multi_ridge_resid,extended,,,,,[],OK
+cs_neighbor_gap,daily,,,,,['x'],OK
+cs_neutralize,daily,,,,,[],OK
+cs_pct_rank,daily,,,,,['x'],OK
+cs_physical_panel_coverage,extended,,,,,[],OK
+cs_quantile,daily,,,,,['x'],OK
+cs_quantile_resid,daily,,,,,[],OK
+cs_rank_churn,daily,,,,,['x'],OK
+cs_rank_combined_churn,extended,,,,,['x'],OK
+cs_rank_composition_churn,extended,,,,,['x'],OK
+cs_rank_copula_entropy,extended,,,,,"['a', 'b']",OK
+cs_rank_copula_mi,extended,,,,,"['a', 'b']",OK
+cs_rank_gaussian,daily,,,,,[],OK
+cs_regression,daily,,,,,"['y', 'x']",OK
+cs_relative_density_ratio,daily,,,,,[],OK
+cs_resid,daily,,,,,"['y', 'x']",OK
+cs_residual_percentile,daily,,,,,[],OK
+cs_ridge_resid,daily,,,,,[],OK
+cs_robust_mahalanobis_mad,daily,,,,,[],OK
+cs_shrinkage_mahalanobis,daily,,,,,[],OK
+cs_sliced_wasserstein_copula_shift,extended,,,,,"['f1', 'f2', 'f3']",OK
+cs_spline_resid,daily,,,,,[],OK
+cs_std,daily,,,,,['x'],OK
+cs_sum,daily,,,,,['x'],OK
+cs_tail_breadth,extended,,,,,['x'],OK
+cs_tail_retention,daily,,,,,['x'],OK
+cs_trimmed_ols_resid,extended,,,,,"['y', 'x']",OK
+cs_universe_coverage,extended,,,,,[],OK
+cs_valid_count,daily,,,,,[],OK
+cs_weighted_demean,daily,,,,,[],OK
+cs_weighted_mean,daily,,,,,[],OK
+cs_weighted_percentile_rank,daily,,,,,[],OK
+cs_weighted_zscore,daily,,,,,[],OK
+cs_wls_resid,daily,,,,,[],OK
+date_diff_days,daily,,,,,[],OK
+digital_count,daily,,,,,"['x', 'd', 'run']",OK
+directional_change_extent,daily,,,,,['price'],OK
+directional_change_state,daily,,,,,['price'],OK
+divide,daily,,,,,[],OK
+dollar_volume,daily,,,,,[],OK
+dollar_volume_zscore,daily,,,,,[],OK
+donchian_lower,daily,,,,,[],OK
+donchian_mid,daily,,,,,[],OK
+donchian_position,daily,,,,,[],OK
+donchian_upper,daily,,,,,[],OK
+down_volume_ratio,daily,,,,,[],OK
+earnings_yield,daily,,,,,['pe'],OK
+efficiency_ratio,daily,,,,,[],OK
+eq,daily,,,,,"['x', 'y']",OK
+event_abnormal_return_past,daily,,,session_close,False,"['ret', 'benchmark_ret', 'event']",NEEDS_DECL
+event_active_count,daily,,,session_close,False,"['ret', 'event']",NEEDS_DECL
+event_allan_factor,daily,,,,,[],OK
+event_allan_log_mean,extended,,,,,[],OK
+event_allan_scaling_slope,extended,,,,,[],OK
+event_arithmetic_return_sum,daily,,,session_close,False,"['ret', 'event']",NEEDS_DECL
+event_cluster_count,daily,,,,,['condition'],OK
+event_cluster_mean_size,daily,,,,,['condition'],OK
+event_cumulative_return_past,daily,,,session_close,False,"['ret', 'event']",NEEDS_DECL
+event_decay_asof,daily,,,,,['event'],OK
+event_fano_excess,extended,,,,,['event'],OK
+event_fano_factor,daily,,,,,['event'],OK
+event_frequency,daily,,,,,['condition'],OK
+event_hawkes_branching_ratio_proxy,extended,,,,,['event'],OK
+event_historical_response_mean,daily,,,,,"['response', 'event']",OK
+event_historical_response_sign_balance,daily,,,,,"['response', 'event']",OK
+event_interval_mark_coupling,extended,,,,,"['event', 'mark']",OK
+event_interval_memory,daily,,,,,['event'],OK
+event_level_survival_share,daily,,,,,[],OK
+event_local_variation,daily,,,,,['event'],OK
+event_log_return_sum,daily,,,session_close,False,"['ret', 'event']",NEEDS_DECL
+event_mark_autocorr,extended,,,,,"['event', 'mark']",OK
+event_refractory,daily,,,,,['condition'],OK
+event_response_decay_rate,daily,,,,,"['response', 'event']",OK
+event_response_dispersion,daily,,,,,"['response', 'event']",OK
+event_response_effective_events,extended,,,,,['event'],OK
+event_response_overlap_ratio,extended,,,,,['event'],OK
+event_response_peak_lag,daily,,,,,"['response', 'event']",OK
+event_response_reversal_strength,daily,,,,,"['response', 'event']",OK
+event_return_since_last,daily,,,session_close,False,"['ret', 'event']",NEEDS_DECL
+exp,daily,,,,,['x'],OK
+exp_neg,daily,,,,,['x'],OK
+expanding_rank,daily,,,,,['x'],OK
+ffill_limit,daily,,,,,[],OK
+fillna_const,daily,,,,,['x'],OK
+fin_accrual_ratio,daily,,,,,[],OK
+fin_acquisition_cash_intensity,daily,,,,,[],OK
+fin_actual_expectation_divergence,daily,,,,,[],OK
+fin_announcement_lag,daily,,,,,"['period_end_date', 'pub_date']",OK
+fin_applicability_mask,daily,,,,,['value'],OK
+fin_average_balance,daily,,,,,[],OK
+fin_beat_streak,daily,,,,,[],OK
+fin_borrowing_intensity,daily,,,,,[],OK
+fin_cagr,daily,,,,,[],OK
+fin_capex_growth,daily,,,,,[],OK
+fin_capex_intensity,daily,,,,,[],OK
+fin_cash_burn_runway,daily,,,,,[],OK
+fin_cash_conversion,daily,,,,,[],OK
+fin_cash_earnings_gap,daily,,,,,[],OK
+fin_cash_sales_divergence,daily,,,,,[],OK
+fin_cashflow_persistence,daily,,,,,[],OK
+fin_common_size,daily,,,,,[],OK
+fin_component_score,daily,,,,,[],OK
+fin_comprehensive_income_gap,daily,,,,,[],OK
+fin_contract_asset_growth,daily,,,,,[],OK
+fin_contract_asset_intensity,daily,,,,,[],OK
+fin_contract_asset_liability_gap,daily,,,,,[],OK
+fin_contract_liability_growth,daily,,,,,[],OK
+fin_contract_liability_intensity,daily,,,,,[],OK
+fin_core_earnings_ratio,daily,,,,,[],OK
+fin_cv,daily,,,,,[],OK
+fin_days_since_expectation_revision,daily,,,,,[],OK
+fin_days_since_update,daily,,,,,[],OK
+fin_debt_repayment_intensity,daily,,,,,[],OK
+fin_debt_service_coverage_proxy,daily,,,,,[],OK
+fin_deferred_tax_gap,daily,,,,,[],OK
+fin_delta_noa,daily,,,,,[],OK
+fin_diff,daily,,,,,[],OK
+fin_discontinued_operation_ratio,daily,,,,,[],OK
+fin_divergence,daily,,,,,[],OK
+fin_earnings_cash_gap_volatility,daily,,,,,[],OK
+fin_earnings_persistence,daily,,,,,[],OK
+fin_earnings_smoothness,daily,,,,,[],OK
+fin_equity_capital_growth,daily,,,,,[],OK
+fin_expectation_dispersion,daily,,,,,[],OK
+fin_expectation_revision,daily,,,,,[],OK
+fin_expectation_revision_count,daily,,,,,[],OK
+fin_expectation_revision_magnitude,daily,,,,,[],OK
+fin_expectation_revision_pct,daily,,,,,[],OK
+fin_expectation_revision_speed,daily,,,,,[],OK
+fin_expense_sales_divergence,daily,,,,,[],OK
+fin_fair_value_income_dependence,daily,,,,,[],OK
+fin_financing_gap,daily,,,,,[],OK
+fin_fundamental_strength_coverage,extended,,,,,[],OK
+fin_fundamental_strength_score,daily,,,,,[],OK
+fin_goodwill_intensity,daily,,,,,[],OK
+fin_goodwill_risk_score,daily,,,,,[],OK
+fin_growth,daily,,,,,[],OK
+fin_growth_acceleration,daily,,,,,[],OK
+fin_growth_change,daily,,,,,[],OK
+fin_growth_persistence,daily,,,,,[],OK
+fin_growth_stability,daily,,,,,[],OK
+fin_growth_volatility,daily,,,,,[],OK
+fin_impairment_intensity,daily,,,,,[],OK
+fin_interest_coverage_proxy,daily,,,,,[],OK
+fin_inventory_sales_divergence,daily,,,,,[],OK
+fin_investment_income_dependence,daily,,,,,[],OK
+fin_lag,daily,,,,,[],OK
+fin_lease_asset_liability_gap,daily,,,,,[],OK
+fin_lease_intensity,daily,,,,,[],OK
+fin_log_change,daily,,,,,[],OK
+fin_mad,daily,,,,,[],OK
+fin_margin_persistence,daily,,,,,[],OK
+fin_mean_abs_deviation,extended,,,,,[],OK
+fin_median_abs_deviation,extended,,,,,[],OK
+fin_minority_profit_share,daily,,,,,[],OK
+fin_miss_streak,daily,,,,,[],OK
+fin_monotonicity,daily,,,,,[],OK
+fin_negative_streak,daily,,,,,[],OK
+fin_net_borrowing_cashflow,daily,,,,,[],OK
+fin_net_debt_issuance,daily,,,,,[],OK
+fin_noncore_income_ratio,daily,,,,,[],OK
+fin_oci_to_equity,daily,,,,,[],OK
+fin_other_earnings_dependence,daily,,,,,[],OK
+fin_pct_change,daily,,,,,[],OK
+fin_percentile_history,daily,,,,,[],OK
+fin_percentile_vs_prior_history,extended,,,,,[],OK
+fin_period_restated,extended,,,,,[],OK
+fin_period_revision_age,extended,,,,,[],OK
+fin_period_revision_count,extended,,,,,[],OK
+fin_positive_streak,daily,,,,,[],OK
+fin_qoq,daily,,,,,[],OK
+fin_quarter_from_cumulative,daily,,,,,[],OK
+fin_range,daily,,,,,[],OK
+fin_ratio,daily,,,,,[],OK
+fin_rd_capitalization_ratio,daily,,,,,[],OK
+fin_rd_total_intensity,daily,,,,,[],OK
+fin_receivable_sales_divergence,daily,,,,,[],OK
+fin_restated_flag,daily,,,,,[],OK
+fin_revision_count,daily,,,,,[],OK
+fin_revision_delta,daily,,,,,[],OK
+fin_revision_direction,daily,,,,,[],OK
+fin_revision_magnitude,daily,,,,,[],OK
+fin_revision_pct,daily,,,,,[],OK
+fin_roe_cash_gap,daily,,,,,[],OK
+fin_seasonal_percentile,daily,,,,,[],OK
+fin_seasonal_zscore,daily,,,,,[],OK
+fin_sign_change_count,daily,,,,,[],OK
+fin_stability,daily,,,,,[],OK
+fin_staleness,daily,,,,,[],OK
+fin_std,daily,,,,,[],OK
+fin_surprise,daily,,,,,[],OK
+fin_surprise_event_percentile,daily,,,,,[],OK
+fin_surprise_event_zscore,daily,,,,,[],OK
+fin_surprise_zscore,daily,,,,,[],OK
+fin_total_operating_accruals,daily,,,,,[],OK
+fin_trend_acceleration,daily,,,,,[],OK
+fin_trend_r2,daily,,,,,[],OK
+fin_trend_slope,daily,,,,,[],OK
+fin_trend_tstat,daily,,,,,[],OK
+fin_ttm,extended,,,,,[],OK
+fin_ttm_cumulative,daily,,,,,[],OK
+fin_ttm_quarterly,daily,,,,,[],OK
+fin_turnover,daily,,,,,[],OK
+fin_working_capital_accruals,daily,,,,,[],OK
+fin_working_capital_change,daily,,,,,[],OK
+fin_yoy,daily,,,,,[],OK
+fin_zscore_history,daily,,,,,[],OK
+fin_zscore_vs_prior_history,extended,,,,,[],OK
+fiscal_accrual_quality,daily,,,,,[],OK
+fiscal_ar_resid_std,daily,,,,,[],OK
+fiscal_asymmetric_elasticity,daily,,,,,[],OK
+fiscal_autocorr,daily,,,,,[],OK
+fiscal_change_direction_agreement,daily,,,,,[],OK
+fiscal_direction_consistency,daily,,,,,[],OK
+fiscal_pair_direction_agreement,daily,,,,,[],OK
+fiscal_perpetual_inventory,daily,,,,,[],OK
+fiscal_regression_resid_std,daily,,,,,[],OK
+fiscal_reversal_ratio,daily,,,,,[],OK
+fiscal_sign_agreement,daily,,,,,[],OK
+fiscal_sign_consistency,daily,,,,,[],OK
+fiscal_standardized_surprise,daily,,,,,[],OK
+fiscal_true_streak,daily,,,,,[],OK
+fix,daily,,,,,['x'],OK
+flex_max,daily,,,,,"['x', 'y_or_window']",OK
+flex_min,daily,,,,,"['x', 'y_or_window']",OK
+float_share_ratio,daily,,,,,[],OK
+floor,daily,,,,,['x'],OK
+free_float_ratio,daily,,,,,[],OK
+free_float_share_ratio,daily,,,,,[],OK
+free_float_turnover,daily,,,,,[],OK
+free_to_circulating_ratio,daily,,,,,[],OK
+fundamental_staleness,daily,,,,,[],OK
+garman_klass_vol,daily,,,,,[],OK
+ge,daily,,,,,"['x', 'y']",OK
+group_corr_mst_length,daily,,,,,"['x', 'group_id']",OK
+group_count,daily,,,,,['x'],OK
+group_current_members_tail_coexceedance,daily,,,,,"['x', 'group_id']",OK
+group_decay_linear,daily,,,,,['x'],OK
+group_distribution_js_divergence,daily,,,,,[],OK
+group_ex_self_mad,daily,,,,,"['x', 'group']",OK
+group_ex_self_mean,daily,,,,,"['x', 'group']",OK
+group_ex_self_quantile,daily,,,,,"['x', 'group']",OK
+group_ex_self_std,daily,,,,,"['x', 'group']",OK
+group_ex_self_weighted_mean,daily,,,,,"['x', 'weight', 'group']",OK
+group_feature_coverage_ratio,extended,,,,,"['f1', 'f2', 'f3', 'group']",OK
+group_feature_effective_rank,daily,,,,,"['f1', 'f2', 'f3', 'group']",OK
+group_feature_mode_localization,daily,,,,,"['f1', 'f2', 'f3', 'group']",OK
+group_feature_mode_share,daily,,,,,"['f1', 'f2', 'f3', 'group']",OK
+group_feature_second_mode_localization,daily,,,,,"['f1', 'f2', 'f3', 'group']",OK
+group_feature_spectral_gap,daily,,,,,"['f1', 'f2', 'f3', 'group']",OK
+group_feature_valid_member_count,extended,,,,,"['f1', 'f2', 'f3', 'group']",OK
+group_impute_median,daily,,,,,[],OK
+group_kurtosis,daily,,,,,"['x', 'group']",OK
+group_leader_laggard_exposure,daily,,,,,[],OK
+group_max,daily,,,,,['x'],OK
+group_mean,daily,,,,,['x'],OK
+group_min,daily,,,,,['x'],OK
+group_multi_level_rank_consistency,daily,,,,,[],OK
+group_neutralize,daily,,,,,['x'],OK
+group_normalize,daily,,,,,['x'],OK
+group_peer_beta_deviation,daily,,,,,[],OK
+group_peer_deviation_index,daily,,,,,[],OK
+group_peer_information_diffusion,daily,,,,,[],OK
+group_percentile,daily,,,,,['x'],OK
+group_quantile_spread,daily,,,,,"['x', 'group']",OK
+group_rank,daily,,,,,['x'],OK
+group_rank_weighted_value,daily,,,,,['x'],OK
+group_return_dispersion_exposure,daily,,,,,[],OK
+group_signal_attraction_share,extended,,,,,"['x', 'group']",OK
+group_skewness,daily,,,,,"['x', 'group']",OK
+group_spd_feature_structure_shift,extended,,,,,"['f1', 'f2', 'f3', 'group']",OK
+group_std,daily,,,,,['x'],OK
+group_sum,daily,,,,,['x'],OK
+group_tail_centrality,extended,,,,,"['x', 'group_id']",OK
+group_tail_lead_score,extended,,,,,"['x', 'group_id']",OK
+group_tail_ratio,daily,,,,,"['x', 'group']",OK
+group_topk_mean,daily,,,,,[],OK
+group_ts_decay_linear,daily,,,,,['x'],OK
+group_valid_count,daily,,,,,[],OK
+group_wasserstein_barycenter_distance,extended,,,,,[],OK
+group_weighted_mean,daily,,,,,[],OK
+group_weighted_zscore,daily,,,,,[],OK
+group_winsorize,daily,,,,,['x'],OK
+group_zscore,daily,,,,,['x'],OK
+gt,daily,,,,,"['x', 'y']",OK
+hierarchical_group_neutralize,daily,,,,,"['x', 'group', 'subgroup']",OK
+high_low_spread_proxy,daily,,,,,[],OK
+holder_class_entropy,daily,,,,,[],OK
+holder_class_js_shift,extended,,,,,"['s1', 's2', 's3', 's4', 's5', 'ps1', 'ps2', 'ps3', 'ps4', 'ps5']",OK
+holder_common_holding_peer_return,daily,,,,,[],OK
+holder_company_ownership_hhi,extended,,,,,[],OK
+holder_concentration,daily,,,,,"['top_holder_shares', 'total_shares']",OK
+holder_concentration_acceleration,daily,,,,,[],OK
+holder_concentration_slope,daily,,,,,[],OK
+holder_disclosure_count,extended,,,,,[],OK
+holder_disclosure_coverage,extended,,,,,[],OK
+holder_entry_share,daily,,,,,[],OK
+holder_exit_share,daily,,,,,[],OK
+holder_float_concentration_gap,daily,,,,,[],OK
+holder_freeze_concentration,daily,,,,,[],OK
+holder_freeze_ratio,daily,,,,,[],OK
+holder_id_matched_churn,daily,,,,,[],OK
+holder_id_matched_entry_share,daily,,,,,[],OK
+holder_id_matched_exit_share,daily,,,,,[],OK
+holder_id_overlap_ratio,daily,,,,,[],OK
+holder_locked_share_ratio,daily,,,,,[],OK
+holder_nature_entropy,daily,,,,,[],OK
+holder_net_entry_share,daily,,,,,[],OK
+holder_observed_topk_hhi,extended,,,,,[],OK
+holder_peer_return_breadth,daily,,,,,[],OK
+holder_pledge_change,daily,,,,,[],OK
+holder_pledge_churn,daily,,,,,[],OK
+holder_pledge_concentration,daily,,,,,[],OK
+holder_pledge_ratio,daily,,,,,[],OK
+holder_pledged_holder_count,daily,,,,,[],OK
+holder_rank_stability,daily,,,,,[],OK
+holder_share_weighted_rank_migration,daily,,,,,[],OK
+holder_shareholder_network_centrality,daily,,,,,[],OK
+holder_shareholder_overlap_ratio,daily,,,,,[],OK
+holder_topk_share_sum,extended,,,,,[],OK
+holder_weighted_churn,daily,,,,,[],OK
+hump_decay,daily,,,,,['x'],OK
+ichimoku_cloud_position,daily,,,,,[],OK
+ichimoku_cloud_width,daily,,,,,[],OK
+ichimoku_kijun,daily,,,,,[],OK
+ichimoku_senkou_a,daily,,,,,[],OK
+ichimoku_senkou_b,daily,,,,,[],OK
+ichimoku_tenkan,daily,,,,,[],OK
+idio_skew,daily,,,session_close,False,['ret'],NEEDS_DECL
+idio_vol,daily,,,session_close,False,['ret'],NEEDS_DECL
+index_entry_exit_event,daily,,,,,['member'],OK
+index_event_decay,daily,,,,,[],OK
+index_member,daily,,,,,['member'],OK
+index_membership_age,daily,,,,,['member'],OK
+index_reconstitution_churn,daily,,,,,[],OK
+index_weight,daily,,,,,['weight'],OK
+index_weight_change,daily,,,,,['weight'],OK
+index_weight_gap_to_free_float,daily,,,,,[],OK
+industry_rolling_pca_loading,extended,,,,,[],OK
+industry_size_neutralize,daily,,,,,['x'],OK
+intra_abs_return_profile_cosine,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_amihud,daily,session_close,False,session_close,False,"['close', 'amount']",OK
+intra_amount_profile_cosine,daily,,,,,['x'],OK
+intra_amount_profile_jsd,daily,,,,,['x'],OK
+intra_bar_range_deviation,daily,,,,,[],OK
+intra_bar_range_persistence,daily,,,,,[],OK
+intra_beta_asymmetry,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_bipower_variation,daily,session_close,False,session_close,False,['close'],OK
+intra_close_participation,daily,,,session_close,False,['volume'],NEEDS_DECL
+intra_concentration,daily,session_close,False,session_close,False,['value'],OK
+intra_continuous_variance,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_down_down_semibeta,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_down_up_semibeta,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_drawdown_depth,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_drawdown_duration,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_drawdown_recovery_half_life,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_entropy,daily,session_close,False,session_close,False,['value'],OK
+intra_extreme_bar_return,daily,session_close,False,session_close,False,['close'],OK
+intra_high_low_affinity,daily,,,,,[],OK
+intra_high_time,daily,session_close,False,session_close,False,[],OK
+intra_idiosyncratic_kurtosis,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_idiosyncratic_kurtosis_ex_self,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_idiosyncratic_skewness,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_idiosyncratic_skewness_ex_self,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_idiosyncratic_variance,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_idiosyncratic_variance_ex_self,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_industry_lead_lag_ex_self,daily,,,session_close,False,"['close', 'industry']",NEEDS_DECL
+intra_interval_amount_share,daily,,,session_close,False,['amount'],NEEDS_DECL
+intra_interval_illiquidity,daily,,,session_close,False,"['close', 'amount']",NEEDS_DECL
+intra_interval_realized_variance,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_interval_return,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_interval_volume_share,daily,,,session_close,False,['volume'],NEEDS_DECL
+intra_interval_vwap_deviation,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intra_jump_clustering,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_jump_concentration,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_jump_count,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_jump_first_time,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_jump_last_time,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_jump_ratio,daily,session_close,False,session_close,False,['close'],OK
+intra_jump_variation,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_kyle_lambda_proxy,daily,session_close,False,session_close,False,"['close', 'amount']",OK
+intra_limit_duration,daily,session_close,False,session_close,False,['close'],OK
+intra_limit_first_hit_time,daily,session_close,False,session_close,False,['close'],OK
+intra_limit_reopen_count,daily,session_close,False,session_close,False,['close'],OK
+intra_longest_above_vwap_streak,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intra_longest_below_vwap_streak,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intra_low_time,daily,session_close,False,session_close,False,[],OK
+intra_lunch_gap_return,daily,session_close,False,session_close,False,['close'],OK
+intra_market_lead_lag_ex_self,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_market_model_r2,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_market_model_r2_ex_self,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_max_drawdown,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_max_drawup,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_negative_jump_variation,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_negative_tail_variation,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_path_efficiency,daily,session_close,False,session_close,False,['close'],OK
+intra_positive_jump_variation,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_positive_tail_variation,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_price_vwap_max_negative_excursion,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intra_price_vwap_max_positive_excursion,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intra_profile_earth_mover_distance,daily,,,,,['x'],OK
+intra_realized_beta,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_realized_beta_ex_self,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_realized_correlation,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_realized_correlation_ex_self,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_realized_kurtosis,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_realized_quarticity,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_realized_semivariance,daily,session_close,False,session_close,False,['close'],OK
+intra_realized_skewness,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_realized_variance,daily,session_close,False,session_close,False,['close'],OK
+intra_return_activity_corr,daily,session_close,False,session_close,False,"['close', 'activity']",OK
+intra_return_profile_cosine,daily,,,,,['x'],OK
+intra_same_slot_momentum,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_same_slot_reversal,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_segment_amount_share,daily,session_close,False,session_close,False,[],OK
+intra_segment_realized_vol,daily,session_close,False,session_close,False,['close'],OK
+intra_segment_return,daily,session_close,False,session_close,False,['close'],OK
+intra_segment_volume_share,daily,session_close,False,session_close,False,[],OK
+intra_segment_vwap_deviation,daily,session_close,False,session_close,False,"['close', 'amount', 'volume']",OK
+intra_session_return_asymmetry,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_signed_imbalance_proxy,daily,session_close,False,session_close,False,"['close', 'value']",OK
+intra_signed_jump_ratio,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_signed_return_profile_cosine,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_signed_tail_variation_ratio,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_slot_amount_surprise,daily,,,session_close,False,['amount'],NEEDS_DECL
+intra_slot_volatility_surprise,daily,,,,,[],OK
+intra_slot_volume_surprise,daily,,,session_close,False,['volume'],NEEDS_DECL
+intra_tail_event_count,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_tail_volume_share,daily,,,session_close,False,"['close', 'volume']",NEEDS_DECL
+intra_time_above_vwap,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intra_tripower_quarticity,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_up_down_semibeta,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_up_up_semibeta,daily,,,session_close,False,"['close', 'free_market_cap']",NEEDS_DECL
+intra_ute_high,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_ute_low,daily,,,session_close,False,['close'],NEEDS_DECL
+intra_volume_price_alignment,daily,,,session_close,False,"['close', 'volume']",NEEDS_DECL
+intra_volume_profile_cosine,daily,,,,,['x'],OK
+intra_volume_profile_jsd,daily,,,,,['x'],OK
+intra_vwap_above_ratio,daily,session_close,False,session_close,False,"['close', 'amount', 'volume']",OK
+intra_vwap_cross_count,daily,session_close,False,session_close,False,"['close', 'amount', 'volume']",OK
+intra_vwap_path_curvature,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intra_vwap_path_curvature_pct,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intra_vwap_path_slope,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intra_vwap_path_slope_pct,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intra_vwap_reversion_speed,daily,,,session_close,False,"['close', 'amount', 'volume']",NEEDS_DECL
+intraday_activity_duration_curvature,daily,session_close,False,session_close,False,['activity'],OK
+intraday_barrier_approach_acceleration,extended,session_close,False,session_close,False,"['close', 'high_limit', 'low_limit']",OK
+intraday_bvc_imbalance,daily,,,session_close,False,"['close', 'volume']",NEEDS_DECL
+intraday_impact_asymmetry,daily,,,session_close,False,"['returns', 'flow']",NEEDS_DECL
+intraday_impact_beta,daily,,,session_close,False,"['returns', 'flow']",NEEDS_DECL
+intraday_impact_decay_rate,extended,session_close,False,session_close,False,"['ret', 'amount']",OK
+intraday_jump_test_stat,daily,,,session_close,False,['returns'],NEEDS_DECL
+intraday_medrv,daily,,,session_close,False,['returns'],NEEDS_DECL
+intraday_minrv,daily,,,session_close,False,['returns'],NEEDS_DECL
+intraday_profile_pca_residual,daily,,,,,"['x', 'session_id']",OK
+intraday_profile_phase_shift,extended,session_close,False,session_close,False,['x'],OK
+intraday_profile_surprise_energy,extended,session_close,False,session_close,False,['x'],OK
+intraday_quantile_curve_pca_residual,extended,session_close,False,session_close,False,['returns'],OK
+intraday_quantile_curve_pca_score,extended,session_close,False,session_close,False,['returns'],OK
+intraday_realized_power_variation,extended,session_close,False,session_close,False,['returns'],OK
+intraday_realized_semivariance_balance,daily,,,session_close,False,['returns'],NEEDS_DECL
+intraday_return_wasserstein_shift,daily,,,session_close,False,['returns'],NEEDS_DECL
+intraday_rv_signature_curvature,daily,,,session_close,False,['returns'],NEEDS_DECL
+intraday_rv_signature_slope,daily,,,session_close,False,['close'],NEEDS_DECL
+intraday_session_shape_novelty,daily,,,,,"['x', 'session_id']",OK
+intraday_subsampled_rv_dispersion,extended,session_close,False,session_close,False,['returns'],OK
+intraday_volatility,daily,,,,,[],OK
+intraday_volatility_concentration,daily,,,session_close,False,['returns'],NEEDS_DECL
+intraday_volatility_entropy,daily,,,session_close,False,['returns'],NEEDS_DECL
+intraday_volatility_signature_slope,extended,session_close,False,session_close,False,['returns'],OK
+intraday_volatility_time_centroid,daily,,,session_close,False,['returns'],NEEDS_DECL
+intraday_volume_clock_path_efficiency,daily,,,,,"['price', 'activity']",OK
+intraday_volume_clock_roughness,daily,,,,,"['price', 'activity']",OK
+intraday_vwap_deviation,extended,,,session_close,False,"['close', 'price', 'volume']",NEEDS_DECL
+intraday_wasserstein_pair_distance,extended,session_close,False,session_close,False,"['x', 'y']",OK
+inverse,daily,,,,,[],OK
+is_finite,daily,,,,,['x'],OK
+is_infinite,daily,,,,,['x'],OK
+is_nan,daily,,,,,['x'],OK
+is_not_null,daily,,,,,['x'],OK
+is_null,daily,,,,,['x'],OK
+le,daily,,,,,"['x', 'y']",OK
+lerp,daily,,,,,"['a', 'b']",OK
+limit_down_close,daily,,,session_close,False,"['close', 'lower_limit']",NEEDS_DECL
+limit_up_close,daily,,,session_close,False,"['close', 'upper_limit']",NEEDS_DECL
+listing_age,daily,,,,,[],OK
+log,daily,,,,,[],OK
+log10,daily,,,,,['x'],OK
+log2,daily,,,,,['x'],OK
+log_abs,daily,,,,,['x'],OK
+log_positive_or_nan,daily,,,,,[],OK
+lqtp_historical_cvar,daily,,,,,['x'],OK
+lt,daily,,,,,"['x', 'y']",OK
+market_cap_free_cap_gap,daily,,,,,[],OK
+maximum,daily,,,,,"['x', 'y']",OK
+minimum,daily,,,,,"['x', 'y']",OK
+multi_index_entry_intensity,daily,,,,,[],OK
+multiply,daily,,,,,[],OK
+ne,daily,,,,,"['x', 'y']",OK
+neg,daily,,,,,['x'],OK
+normalize,daily,,,,,['x'],OK
+not_,daily,,,,,[],OK
+ohlc_corwin_schultz_spread,extended,,,,,[],OK
+open_close_return,daily,session_close,False,session_close,False,['close'],OK
+open_to_vwap_return,daily,session_close,False,session_close,False,['vwap'],OK
+or_,daily,,,,,[],OK
+overnight_return,daily,after_open,False,after_open,False,['pre_close'],OK
+overnight_volatility,daily,,,,,[],OK
+panel_mixture_of_experts_score,extended,,,,,[],OK
+panel_regime_conditioned_forecast,extended,,,,,[],OK
+panel_rolling_elastic_net_forecast,extended,,,,,[],OK
+panel_rolling_pca_explained_ratio,extended,,,,,[],OK
+panel_rolling_pca_loading,extended,,,,,[],OK
+panel_rolling_pca_resid,extended,,,,,[],OK
+panel_rolling_pca_resid_momentum,extended,,,,,[],OK
+panel_rolling_pca_resid_vol,extended,,,,,[],OK
+panel_rolling_pcr_forecast,extended,,,,,[],OK
+panel_rolling_pls_forecast,extended,,,,,[],OK
+parkinson_vol,daily,,,,,[],OK
+pattern_123_bear,daily,,,,,[],OK
+pattern_123_bull,daily,,,,,[],OK
+pattern_ascending_triangle,daily,,,,,[],OK
+pattern_bear_flag,daily,,,,,[],OK
+pattern_bear_pennant,daily,,,,,[],OK
+pattern_breakdown_retest,daily,,,,,[],OK
+pattern_breakout_retest,daily,,,,,[],OK
+pattern_broadening,daily,,,,,[],OK
+pattern_bull_flag,daily,,,,,[],OK
+pattern_bull_pennant,daily,,,,,[],OK
+pattern_cup,daily,,,,,[],OK
+pattern_cup_handle,daily,,,,,[],OK
+pattern_descending_triangle,daily,,,,,[],OK
+pattern_double_bottom,daily,,,,,[],OK
+pattern_double_top,daily,,,,,[],OK
+pattern_falling_channel,daily,,,,,[],OK
+pattern_falling_wedge,daily,,,,,[],OK
+pattern_head_shoulders,daily,,,,,[],OK
+pattern_inverse_head_shoulders,daily,,,,,[],OK
+pattern_rectangle,daily,,,,,[],OK
+pattern_rising_channel,daily,,,,,[],OK
+pattern_rising_wedge,daily,,,,,[],OK
+pattern_rounding_bottom,daily,,,,,[],OK
+pattern_rounding_top,daily,,,,,[],OK
+pattern_sym_triangle,daily,,,,,[],OK
+pattern_triple_bottom,daily,,,,,[],OK
+pattern_triple_top,daily,,,,,[],OK
+period_average,daily,,,,,[],OK
+period_cagr,daily,,,,,[],OK
+period_change,daily,,,,,[],OK
+period_lag,daily,,,,,[],OK
+period_stability,daily,,,,,[],OK
+piotroski_f_score,daily,,,,,[],OK
+piotroski_f_score_tolerant,extended,,,,,[],OK
+piotroski_observed_count,extended,,,,,[],OK
+piotroski_partial_score,extended,,,,,[],OK
+power,daily,,,,,['x'],OK
+price_impact,daily,,,,,[],OK
+price_spread_deviation,daily,,,,,['x'],OK
+price_turnover_divergence,daily,,,,,[],OK
+price_volume_divergence,daily,,,,,[],OK
+quarter_from_cumulative,daily,,,,,[],OK
+range_volatility,daily,,,,,[],OK
+rank,daily,,,,,['x'],OK
+rank_corr,daily,,,,,"['x', 'y']",OK
+real_turnover_rate,daily,,,session_close,False,"['volume', 'float_shares']",NEEDS_DECL
+relation_category_share,daily,,,,,"['value', 'category']",OK
+relation_category_signed_contribution,extended,,,,,"['value', 'category']",OK
+relation_concentration_acceleration,daily,,,,,['hhi'],OK
+relation_diffusion_score,extended,,,,,"['x', 'group']",OK
+relation_distinct_count,extended,,,,,['entity_ids'],OK
+relation_distribution_excess_kurtosis,extended,,,,,[],OK
+relation_distribution_pearson_kurtosis,extended,,,,,[],OK
+relation_distribution_skew,daily,,,,,[],OK
+relation_entropy,daily,,,,,[],OK
+relation_entropy_change,daily,,,,,['entropy'],OK
+relation_entry_count,daily,,,,,['member'],OK
+relation_exit_count,daily,,,,,['member'],OK
+relation_hhi,daily,,,,,[],OK
+relation_hhi_change,daily,,,,,['hhi'],OK
+relation_overlap_ratio,extended,,,,,"['current_ids', 'previous_ids']",OK
+relation_peer_weighted_mean_ex_self,daily,,,,,"['value', 'weight', 'group']",OK
+relation_rank_entity_mobility,extended,,,,,[],OK
+relation_rank_mobility,daily,,,,,[],OK
+relation_rank_weighted_sum,daily,,,,,[],OK
+relation_share_mobility,daily,,,,,[],OK
+relation_topk_concentration,daily,,,,,[],OK
+relation_topk_sum,daily,,,,,[],OK
+relation_weighted_change,daily,,,,,"['value', 'weight']",OK
+relation_weighted_std_ex_self,daily,,,,,"['x', 'weight', 'group']",OK
+relative_volume,daily,,,,,[],OK
+report_benford_js_divergence,extended,,,session_close,False,['amount'],NEEDS_DECL
+report_change_breadth,daily,,,,,[],OK
+report_change_coherence,daily,,,,,[],OK
+report_filing_delay_surprise,daily,,,,,['delay'],OK
+report_revision_magnitude,extended,,,,,"['x', 'prev_x', 'current_period_id', 'prev_period_id']",OK
+report_rolling_mean,daily,,,,,[],OK
+report_yoy_lag,daily,,,,,[],OK
+residual_momentum_capm,daily,,,session_close,False,['ret'],NEEDS_DECL
+return_per_turnover,daily,,,,,[],OK
+return_turnover_beta,daily,,,,,[],OK
+return_volume_beta,daily,,,,,[],OK
+return_volume_corr,daily,,,,,[],OK
+revision_delta,daily,,,,,[],OK
+rogers_satchell_vol,daily,,,,,[],OK
+roll_spread_proxy,daily,,,,,[],OK
+rolling_adl_flow,daily,,,,,[],OK
+rolling_beta_to_market,extended,,,session_close,False,['ret'],NEEDS_DECL
+rolling_obv,daily,,,,,[],OK
+rolling_pvt,daily,,,,,[],OK
+rolling_vwap,daily,,,,,[],OK
+round,daily,,,,,['x'],OK
+row_sum_skipna,daily,,,,,[],OK
+safe_div_null,daily,,,,,[],OK
+saturate,daily,,,,,['x'],OK
+scale,daily,,,,,['x'],OK
+session_event_recovery_score,daily,,,,,"['x', 'event']",OK
+sigmoid,daily,,,,,['x'],OK
+sign,daily,,,,,['x'],OK
+signed_dollar_volume,daily,,,,,[],OK
+signed_log,daily,,,,,['x'],OK
+signed_power,daily,,,,,['x'],OK
+signed_sqrt,daily,,,,,['x'],OK
+signed_volume,daily,,,,,[],OK
+signed_volume_imbalance,daily,,,,,[],OK
+sin,daily,,,,,['x'],OK
+sin_phase,extended,,,,,['x'],OK
+size_neutralize,daily,,,,,['x'],OK
+sqrt,daily,,,,,['x'],OK
+sqrt_abs,daily,,,,,['x'],OK
+square,daily,,,,,['x'],OK
+state_deadband,daily,,,,,['x'],OK
+state_episode_efficiency,daily,,,,,"['x', 'state']",OK
+state_episode_excursion_balance,daily,,,,,"['x', 'state']",OK
+state_episode_mae,daily,,,,,"['x', 'state', 'scale']",OK
+state_episode_mfe,daily,,,,,"['x', 'state', 'scale']",OK
+state_episode_retrace_ratio,daily,,,,,"['x', 'state']",OK
+state_ewm_if,daily,,,,,"['x', 'condition']",OK
+state_hold,daily,,,,,"['value', 'update_condition']",OK
+state_latch,daily,,,,,"['set_condition', 'reset_condition']",OK
+state_since_count,extended,,,,,"['x', 'reset_condition']",OK
+state_since_last,extended,,,,,"['x', 'reset_condition']",OK
+state_since_mean,extended,,,,,"['x', 'reset_condition']",OK
+state_since_sum,extended,,,,,"['x', 'reset_condition']",OK
+state_since_trend_tstat,daily,,,,,"['x', 'reset_condition']",OK
+state_slew_limit,daily,,,,,['x'],OK
+subtract,daily,,,,,[],OK
+suspension_frequency,daily,,,,,[],OK
+suspension_status_coverage,daily,,,,,[],OK
+tail_beta,daily,,,session_close,False,['ret'],NEEDS_DECL
+tanh,daily,,,,,['x'],OK
+tradable_state,daily,,,,,"['listed', 'suspended', 'limit_up', 'limit_down']",OK
+trade_when,daily,,,,,"['condition', 'signal']",OK
+true_range,daily,,,,,[],OK
+true_turnover_rate,daily,,,,,[],OK
+truncate,daily,,,,,['x'],OK
+ts_abdi_ranaldo_spread,daily,,,,,[],OK
+ts_abs_concentration,extended,,,,,['x'],OK
+ts_abs_entropy,daily,,,,,['x'],OK
+ts_abs_entropy_nats,extended,,,,,['x'],OK
+ts_abs_entropy_normalized,daily,,,,,['x'],OK
+ts_active_information_storage,extended,,,,,['x'],OK
+ts_activity_clock_age,daily,,,,,[],OK
+ts_activity_clock_lagged_value,daily,,,,,[],OK
+ts_activity_clock_lagged_value_prior,extended,,,,,[],OK
+ts_ar_coeff_stability,daily,,,,,['x'],OK
+ts_ar_coefficient,daily,,,,,['x'],OK
+ts_ar_fitted_value,extended,,,,,['x'],OK
+ts_ar_forecast,daily,,,,,['x'],OK
+ts_ar_in_sample_resid,extended,,,,,['x'],OK
+ts_ar_innovation,daily,,,,,['x'],OK
+ts_ar_innovation_z,daily,,,,,['x'],OK
+ts_ar_prior_coeff,daily,,,,,['x'],OK
+ts_ar_prior_forecast,daily,,,,,['x'],OK
+ts_ar_prior_innovation,daily,,,,,['x'],OK
+ts_ar_prior_innovation_z,daily,,,,,['x'],OK
+ts_argmax,daily,,,,,[],OK
+ts_argmax_age,daily,,,,,[],OK
+ts_argmax_index_from_oldest,daily,,,,,[],OK
+ts_argmin,daily,,,,,[],OK
+ts_argmin_age,daily,,,,,[],OK
+ts_argmin_index_from_oldest,daily,,,,,[],OK
+ts_autocorr,daily,,,,,['x'],OK
+ts_autocorr_decay_half_life,daily,,,,,['x'],OK
+ts_autocorrelation_time,daily,,,,,['x'],OK
+ts_autocorrelation_time_initial_positive_sequence,extended,,,,,['x'],OK
+ts_average_volume,daily,,,session_close,False,"['volume', 'window']",NEEDS_DECL
+ts_bds_statistic,extended,,,,,[],OK
+ts_best_lag_corr_excess,extended,,,,,"['y', 'x']",OK
+ts_best_lag_corr_raw,extended,,,,,"['y', 'x']",OK
+ts_beta,daily,,,,,"['y', 'x']",OK
+ts_beta_break_score,extended,,,,,"['y', 'x']",OK
+ts_beta_if,daily,,,,,"['y', 'x', 'condition']",OK
+ts_betti_1_max_persistence,extended,,,,,['x'],OK
+ts_bicoherence_top_decile_excess,extended,,,,,[],OK
+ts_bicoherence_top_decile_mean,extended,,,,,[],OK
+ts_binned_response_curvature,daily,,,,,"['y', 'x']",OK
+ts_binned_response_monotonicity,daily,,,,,"['y', 'x']",OK
+ts_bottomk_mean,daily,,,,,[],OK
+ts_bottomk_std,daily,,,,,[],OK
+ts_bottomk_sum,daily,,,,,[],OK
+ts_breakdown_low,daily,,,,,[],OK
+ts_breakout_high,daily,,,,,[],OK
+ts_bures_corr_shift,extended,,,,,"['x', 'y']",OK
+ts_change_point_probability,extended,,,,,[],OK
+ts_channel_position,daily,,,,,[],OK
+ts_channel_width,daily,,,,,[],OK
+ts_channel_width_atr,daily,,,,,[],OK
+ts_channel_width_pct,daily,,,,,[],OK
+ts_channel_width_slope,daily,,,,,[],OK
+ts_chatterjee_xi,daily,,,,,"['x', 'y']",OK
+ts_chord_excursion_area,daily,,,,,['x'],OK
+ts_conditional_mutual_information,daily,,,,,"['x', 'y', 'z']",OK
+ts_conditional_transfer_entropy,extended,,,,,"['target', 'source', 'condition']",OK
+ts_confirmed_pivot_high,daily,,,,,[],OK
+ts_confirmed_pivot_low,daily,,,,,[],OK
+ts_consolidation_slope,daily,,,,,[],OK
+ts_consolidation_volume_decay,daily,,,,,[],OK
+ts_consolidation_width,daily,,,,,[],OK
+ts_copula_central_asymmetry,extended,,,,,"['x', 'y']",OK
+ts_corr,daily,,,,,"['x', 'y']",OK
+ts_corr_if,daily,,,,,"['x', 'y', 'condition']",OK
+ts_count_if,daily,,,,,[],OK
+ts_cov,daily,,,,,"['x', 'y']",OK
+ts_cov_if,daily,,,,,[],OK
+ts_coverage_ratio,daily,,,,,[],OK
+ts_cpt_value,daily,,,session_close,False,['returns'],NEEDS_DECL
+ts_cross_extremogram,extended,,,,,"['target', 'source']",OK
+ts_cross_quantilogram,extended,,,,,"['target', 'source']",OK
+ts_cross_spectral_coherence,daily,,,,,[],OK
+ts_cross_spectral_phase,daily,,,,,[],OK
+ts_crossing_acceleration,daily,,,,,"['x', 'y']",OK
+ts_crossing_speed,daily,,,,,"['x', 'y']",OK
+ts_cumulative_deviation_score,extended,,,,,['x'],OK
+ts_current_drawdown_area,daily,,,,,['x'],OK
+ts_current_drawdown_duration,daily,,,,,['x'],OK
+ts_cusum_pressure,daily,,,,,['x'],OK
+ts_cusum_vol_break_score,extended,,,,,[],OK
+ts_days_since,daily,,,,,[],OK
+ts_days_since_high,daily,,,,,[],OK
+ts_days_since_low,daily,,,,,[],OK
+ts_dc_duration_asymmetry,extended,,,,,"['x', 'scale']",OK
+ts_dc_event_rate,extended,,,,,"['x', 'scale']",OK
+ts_dc_overshoot_asymmetry,extended,,,,,"['x', 'scale']",OK
+ts_dc_overshoot_ratio,extended,,,,,"['x', 'scale']",OK
+ts_decay_exp_window,daily,,,,,['x'],OK
+ts_decay_linear,daily,,,,,['x'],OK
+ts_delay,daily,,,,,['x'],OK
+ts_delay_intrinsic_dimension,daily,,,,,['x'],OK
+ts_delta,daily,,,,,['x'],OK
+ts_detrended_level_spectral_entropy,extended,,,,,[],OK
+ts_dfa_hurst,extended,,,,,[],OK
+ts_distance_corr,daily,,,,,"['x', 'y']",OK
+ts_distance_correlation_partial_proxy,daily,,,,,"['x', 'y', 'z']",OK
+ts_distance_cov,daily,,,,,"['x', 'y']",OK
+ts_distance_to_high,daily,,,,,[],OK
+ts_distance_to_low,daily,,,,,[],OK
+ts_distance_to_resistance,daily,,,,,[],OK
+ts_distance_to_support,daily,,,,,[],OK
+ts_dmd_level_dominant_frequency,extended,,,,,[],OK
+ts_dmd_level_dominant_growth_rate,extended,,,,,[],OK
+ts_dmd_level_mode_concentration,extended,,,,,[],OK
+ts_dmd_return_dominant_frequency,extended,,,,,[],OK
+ts_dmd_return_dominant_growth_rate,extended,,,,,[],OK
+ts_dmd_return_mode_concentration,extended,,,,,[],OK
+ts_dominant_cycle_period,daily,,,,,[],OK
+ts_downside_deviation,daily,,,,,['x'],OK
+ts_edge_effective_spread,daily,,,,,[],OK
+ts_effective_transfer_entropy,extended,,,,,"['target', 'source']",OK
+ts_effective_turning_rate,extended,,,,,['x'],OK
+ts_ema,daily,,,,,['x'],OK
+ts_endpoint_deviation,daily,,,,,['x'],OK
+ts_energy_break_score,daily,,,,,"['f1', 'f2', 'f3']",OK
+ts_envelope_boundary_dwell,daily,,,,,['x'],OK
+ts_envelope_compression,daily,,,,,['mid'],OK
+ts_envelope_pressure,daily,,,,,['x'],OK
+ts_event_spacing_cv,daily,,,,,['condition'],OK
+ts_event_spacing_mean,daily,,,,,['condition'],OK
+ts_evt_threshold_stability,extended,,,,,[],OK
+ts_ewm_corr,daily,,,,,"['x', 'y']",OK
+ts_ewm_cov,daily,,,,,"['x', 'y']",OK
+ts_ewm_std,daily,,,,,['x'],OK
+ts_ewm_var,daily,,,,,['x'],OK
+ts_expected_shortfall,daily,,,,,['x'],OK
+ts_expected_shortfall_asymmetry,daily,,,,,['x'],OK
+ts_expectile,extended,,,,,['x'],OK
+ts_expectile_beta,extended,,,,,"['y', 'x']",OK
+ts_expectile_beta_spread,daily,,,,,"['y', 'x']",OK
+ts_expectile_regression_coeff,daily,,,,,"['y', 'x']",OK
+ts_expectile_regression_coeff_prior,daily,,,,,"['y', 'x']",OK
+ts_expectile_regression_forecast_error,daily,,,,,"['y', 'x']",OK
+ts_expectile_regression_resid,daily,,,,,"['y', 'x']",OK
+ts_extrema_confirmation_rate,daily,,,,,"['x', 'y']",OK
+ts_extrema_divergence_strength,daily,,,,,"['x', 'y']",OK
+ts_extremal_dependence_decay,extended,,,,,['x'],OK
+ts_extremal_index,daily,,,,,['x'],OK
+ts_extreme_cluster_ratio,daily,,,,,['x'],OK
+ts_extremogram,extended,,,,,['x'],OK
+ts_feature_effective_rank,extended,,,,,"['f1', 'f2', 'f3']",OK
+ts_feature_mode_share,extended,,,,,"['f1', 'f2', 'f3']",OK
+ts_feature_pca_reconstruction_error,extended,,,,,[],OK
+ts_feature_subspace_rotation,extended,,,,,"['f1', 'f2', 'f3']",OK
+ts_ffill_limited,daily,,,,,[],OK
+ts_first_passage_bias,daily,,,,,"['x', 'scale']",OK
+ts_first_passage_conditional_time,daily,,,,,"['x', 'scale']",OK
+ts_first_passage_hit_probability,daily,,,,,"['x', 'scale']",OK
+ts_fisher_information_shift,extended,,,,,['x'],OK
+ts_forbidden_ordinal_pattern_excess,extended,,,,,['x'],OK
+ts_forbidden_ordinal_pattern_ratio,daily,,,,,['x'],OK
+ts_forbidden_ordinal_pattern_signed_excess,extended,,,,,['x'],OK
+ts_fractional_difference,daily,,,,,['x'],OK
+ts_fractional_difference_discarded_weight_mass,extended,,,,,['x'],OK
+ts_gap_fill_ratio,daily,,,,,[],OK
+ts_gap_reversion_ratio,daily,,,,,[],OK
+ts_gap_survival_duration,daily,,,,,[],OK
+ts_garch_next_vol_forecast,extended,,,,,[],OK
+ts_garch_persistence,extended,,,,,[],OK
+ts_garch_standardized_shock,extended,,,,,[],OK
+ts_garch_vol_surprise,extended,,,,,[],OK
+ts_generalized_hurst_exponent,daily,,,,,['x'],OK
+ts_generalized_hurst_spread_q1_q4,daily,,,,,['x'],OK
+ts_gjr_garch_vol_forecast,extended,,,,,[],OK
+ts_gjr_leverage,extended,,,,,[],OK
+ts_glr_mean_shift_score,daily,,,,,[],OK
+ts_glr_variance_shift_score,daily,,,,,[],OK
+ts_gpd_shape_pwm,daily,,,,,['x'],OK
+ts_hankel_effective_rank,daily,,,,,['x'],OK
+ts_hankel_singular_gap,daily,,,,,['x'],OK
+ts_har_from_return_forecast_error_z,extended,,,,,[],OK
+ts_har_from_return_next_vol,extended,,,,,[],OK
+ts_har_rv_forecast,extended,,,,,[],OK
+ts_har_rv_forecast_error_z,extended,,,,,[],OK
+ts_har_rv_innovation_z,extended,,,,,[],OK
+ts_har_rv_next_var_forecast,extended,,,,,[],OK
+ts_har_rv_next_vol_forecast,extended,,,,,[],OK
+ts_hartigan_dip,daily,,,,,['x'],OK
+ts_higuchi_fractal_dimension,daily,,,,,['x'],OK
+ts_hill_tail_index,daily,,,,,['x'],OK
+ts_hodges_lehmann_location,extended,,,,,[],OK
+ts_hsic,daily,,,,,"['x', 'y']",OK
+ts_huber_regression_coeff,daily,,,,,['y'],OK
+ts_huber_regression_coeff_prior,daily,,,,,['y'],OK
+ts_huber_regression_forecast_error,daily,,,,,['y'],OK
+ts_huber_regression_forecast_error_z,daily,,,,,['y'],OK
+ts_huber_regression_in_sample_resid,extended,,,,,"['y', 'x']",OK
+ts_huber_regression_predictive_resid,extended,,,,,"['y', 'x']",OK
+ts_huber_regression_resid_z,daily,,,,,['y'],OK
+ts_hurst_dfa,daily,,,,,['x'],OK
+ts_hvg_assortativity,extended,,,,,[],OK
+ts_hvg_clustering_coefficient,extended,,,,,[],OK
+ts_hvg_degree_entropy,daily,,,,,[],OK
+ts_hvg_forward_backward_asymmetry,daily,,,,,[],OK
+ts_hvg_motif_entropy,extended,,,,,[],OK
+ts_hysteresis_age,daily,,,,,['z'],OK
+ts_hysteresis_state,daily,,,,,['z'],OK
+ts_impulse_return,daily,,,,,[],OK
+ts_impulse_strength,daily,,,,,[],OK
+ts_impulse_volume,daily,,,,,[],OK
+ts_industry_liquidity_beta,daily,,,,,[],OK
+ts_interval_exploration_efficiency,daily,,,session_close,False,['close'],NEEDS_DECL
+ts_interval_nesting_depth,daily,,,,,[],OK
+ts_interval_occupancy_entropy,daily,,,,,[],OK
+ts_interval_occupancy_mode_distance,daily,,,,,['x'],OK
+ts_interval_overlap_connected_component_ratio,daily,,,,,[],OK
+ts_interval_union_coverage,daily,,,,,[],OK
+ts_joint_energy_shift,daily,,,,,"['f1', 'f2', 'f3']",OK
+ts_jump_bipower_proxy,daily,,,session_close,False,['ret'],NEEDS_DECL
+ts_kalman_beta,extended,,,,,[],OK
+ts_kalman_beta_change,extended,,,,,[],OK
+ts_kalman_beta_uncertainty,extended,,,,,[],OK
+ts_kalman_innovation_z,extended,,,,,[],OK
+ts_kalman_level,extended,,,,,[],OK
+ts_kalman_trend,extended,,,,,[],OK
+ts_kernel_granger_score,extended,,,,,[],OK
+ts_km_diffusion_gradient,daily,,,,,['x'],OK
+ts_km_equilibrium_distance,daily,,,,,['x'],OK
+ts_km_quasipotential_depth,daily,,,,,['x'],OK
+ts_kramers_moyal_diffusion,extended,,,,,['x'],OK
+ts_kramers_moyal_drift,extended,,,,,['x'],OK
+ts_kramers_moyal_local_stability,daily,,,,,['x'],OK
+ts_ks_shift,daily,,,,,['x'],OK
+ts_kurt,daily,,,,,['x'],OK
+ts_l_kurtosis,daily,,,,,['x'],OK
+ts_l_skewness,daily,,,,,['x'],OK
+ts_lag_of_peak_corr,daily,,,,,"['x', 'y']",OK
+ts_lagged_mutual_information,daily,,,,,"['x', 'y']",OK
+ts_last_if,daily,,,,,[],OK
+ts_last_pivot_high,daily,,,,,[],OK
+ts_last_pivot_low,daily,,,,,[],OK
+ts_lempel_ziv_complexity,daily,,,,,['x'],OK
+ts_level_shift_score,daily,,,,,['x'],OK
+ts_leverage_effect,daily,,,session_close,False,['ret'],NEEDS_DECL
+ts_line_convergence,daily,,,,,[],OK
+ts_line_parallelism,daily,,,,,[],OK
+ts_lo_mackinlay_vr,extended,,,,,['x'],OK
+ts_lo_mackinlay_z,extended,,,,,['x'],OK
+ts_local_lyapunov_exponent,extended,,,,,['x'],OK
+ts_location_shift,daily,,,,,['x'],OK
+ts_log_return,daily,,,,,['x'],OK
+ts_lower_partial_moment,daily,,,,,['x'],OK
+ts_lower_tail_coexceedance_probability,extended,,,,,"['x', 'y']",OK
+ts_lz_complexity,extended,,,,,[],OK
+ts_mad,daily,,,,,['x'],OK
+ts_market_liquidity_beta,daily,,,,,[],OK
+ts_markov_committor,daily,,,,,['x'],OK
+ts_markov_entropy_production,extended,,,,,['x'],OK
+ts_markov_mean_first_passage_time,daily,,,,,['x'],OK
+ts_markov_persistence,daily,,,,,['x'],OK
+ts_markov_spectral_gap,daily,,,,,['x'],OK
+ts_markov_state_entropy,daily,,,,,['x'],OK
+ts_markov_stationary_surprisal,daily,,,,,['x'],OK
+ts_markov_transition_surprisal,daily,,,,,['x'],OK
+ts_mass_concentration,daily,,,,,['weight'],OK
+ts_matrix_profile_discord_score,extended,,,,,[],OK
+ts_matrix_profile_motif_age,daily,,,,,['x'],OK
+ts_matrix_profile_motif_frequency,extended,,,,,['x'],OK
+ts_matrix_profile_neighbor_dispersion,extended,,,,,['x'],OK
+ts_matrix_profile_novelty,daily,,,,,['x'],OK
+ts_max,daily,,,,,['x'],OK
+ts_max_buildup,daily,,,,,"['x', 'd']",OK
+ts_max_chord_excursion,daily,,,,,['x'],OK
+ts_max_drawdown,daily,,,,,[],OK
+ts_max_drawdown_activity_cost,daily,,,,,[],OK
+ts_max_if,daily,,,,,"['x', 'condition']",OK
+ts_mean,daily,,,,,['x'],OK
+ts_mean_abs_deviation,extended,,,,,['x'],OK
+ts_mean_excess_slope,daily,,,,,['x'],OK
+ts_mean_if,daily,,,,,[],OK
+ts_mean_reversion_half_life,daily,,,,,['x'],OK
+ts_mean_reversion_ou_approx_half_life,extended,,,,,['x'],OK
+ts_median,daily,,,,,['x'],OK
+ts_median_abs_deviation,extended,,,,,['x'],OK
+ts_min,daily,,,,,['x'],OK
+ts_min_if,daily,,,,,"['x', 'condition']",OK
+ts_mmd_rbf_shift,daily,,,,,['x'],OK
+ts_modwt_band_corr,extended,,,,,"['x', 'y']",OK
+ts_moment,daily,,,,,['x'],OK
+ts_monotonicity,daily,,,,,['x'],OK
+ts_motif_recurrence_count,extended,,,,,[],OK
+ts_multi_regression_adjusted_r2_prior,daily,,,,,['y'],OK
+ts_multi_regression_coeff,daily,,,,,['y'],OK
+ts_multi_regression_coeff_prior,daily,,,,,['y'],OK
+ts_multi_regression_coeff_stability,daily,,,,,['y'],OK
+ts_multi_regression_forecast_error,daily,,,,,['y'],OK
+ts_multi_regression_forecast_error_z,daily,,,,,['y'],OK
+ts_multi_regression_r2,daily,,,,,['y'],OK
+ts_multi_regression_r2_prior,daily,,,,,['y'],OK
+ts_multi_regression_resid,daily,,,,,['y'],OK
+ts_multi_regression_resid_z,daily,,,,,['y'],OK
+ts_multifractal_asymmetry,extended,,,,,[],OK
+ts_multifractal_curvature,daily,,,,,['x'],OK
+ts_multifractal_spectrum_width,daily,,,,,['x'],OK
+ts_multiscale_entropy_slope,extended,,,,,[],OK
+ts_multiscale_permutation_entropy_slope,extended,,,,,['x'],OK
+ts_multiscale_trend_consensus,daily,,,,,['x'],OK
+ts_multiscale_trend_curvature,daily,,,,,['x'],OK
+ts_multiscale_trend_dispersion,daily,,,,,['x'],OK
+ts_mutual_information,daily,,,,,"['x', 'y']",OK
+ts_nearest_structural_level_distance,daily,,,,,['price'],OK
+ts_negative_ratio,daily,,,,,['x'],OK
+ts_new_high,daily,,,,,[],OK
+ts_new_low,daily,,,,,[],OK
+ts_nth_pivot_high,daily,,,,,[],OK
+ts_nth_pivot_high_age,daily,,,,,[],OK
+ts_nth_pivot_low,daily,,,,,[],OK
+ts_nth_pivot_low_age,daily,,,,,[],OK
+ts_nth_value,daily,,,,,[],OK
+ts_opening_mispricing_score,daily,,,,,[],OK
+ts_ordinal_irreversibility,daily,,,,,['x'],OK
+ts_overnight_intraday_cov,daily,,,,,[],OK
+ts_overnight_intraday_sign_agreement,daily,,,,,[],OK
+ts_overnight_intraday_spread,daily,,,,,[],OK
+ts_partial_corr,daily,,,,,[],OK
+ts_pastor_stambaugh_liquidity_gamma,extended,,,,,[],OK
+ts_path_efficiency,daily,,,,,['x'],OK
+ts_path_leadlag_area,extended,,,,,[],OK
+ts_path_signature_area,extended,,,,,[],OK
+ts_path_signature_depth2_norm,extended,,,,,[],OK
+ts_pattern_symmetry,daily,,,,,[],OK
+ts_pct,daily,,,,,['x'],OK
+ts_permutation_entropy,daily,,,,,['x'],OK
+ts_permutation_transition_entropy,daily,,,,,['x'],OK
+ts_persistence_birth_dispersion,extended,,,,,['x'],OK
+ts_persistence_diagram_shift,extended,,,,,['x'],OK
+ts_persistence_entropy_h0,daily,,,,,['x'],OK
+ts_persistence_entropy_h1,daily,,,,,['x'],OK
+ts_pettitt_change_score,extended,,,,,[],OK
+ts_pickands_tail_index,extended,,,,,[],OK
+ts_pivot_high_age,daily,,,,,[],OK
+ts_pivot_high_count,daily,,,,,[],OK
+ts_pivot_high_spacing,daily,,,,,[],OK
+ts_pivot_low_age,daily,,,,,[],OK
+ts_pivot_low_count,daily,,,,,[],OK
+ts_pivot_low_spacing,daily,,,,,[],OK
+ts_poly2_coeff,daily,,,,,['x'],OK
+ts_poly2_forecast_error,extended,,,,,['x'],OK
+ts_poly2_forecast_error_z,extended,,,,,['x'],OK
+ts_poly2_prior_coeff,extended,,,,,['x'],OK
+ts_poly2_resid,daily,,,,,"['y', 'x']",OK
+ts_positive_ratio,daily,,,,,['x'],OK
+ts_prev_high,daily,,,,,[],OK
+ts_prev_low,daily,,,,,[],OK
+ts_price_delay,daily,,,,,"['stock_return', 'benchmark_return']",OK
+ts_product,daily,,,,,['x'],OK
+ts_pseudocount_sample_entropy,extended,,,,,[],OK
+ts_qn_scale,daily,,,,,[],OK
+ts_quantile,daily,,,,,['x'],OK
+ts_quantile_beta_spread,daily,,,,,"['y', 'x']",OK
+ts_quantile_crossing_spectral_concentration,extended,,,,,['x'],OK
+ts_quantile_if,daily,,,,,"['x', 'condition']",OK
+ts_quantile_kurtosis,daily,,,,,['x'],OK
+ts_quantile_range,daily,,,,,['x'],OK
+ts_quantile_regression_coeff,daily,,,,,"['y', 'x']",OK
+ts_quantile_regression_coeff_prior,extended,,,,,"['y', 'x']",OK
+ts_quantile_regression_resid,daily,,,,,"['y', 'x']",OK
+ts_quantile_regression_slope,daily,,,,,"['y', 'x']",OK
+ts_quantile_skew,daily,,,,,['x'],OK
+ts_quantile_transport_curvature,daily,,,,,['x'],OK
+ts_quantile_transport_slope,daily,,,,,['x'],OK
+ts_quantilogram,extended,,,,,['x'],OK
+ts_range_expansion,daily,,,,,[],OK
+ts_rank,daily,,,,,['x'],OK
+ts_rank_if,daily,,,,,"['x', 'condition']",OK
+ts_ratio,daily,,,,,['x'],OK
+ts_realized_quarticity,daily,,,session_close,False,['ret'],NEEDS_DECL
+ts_recovery_fraction,daily,,,,,['x'],OK
+ts_recurrence_determinism,daily,,,,,[],OK
+ts_recurrence_diagonal_entropy,daily,,,,,['x'],OK
+ts_recurrence_divergence,daily,,,,,['x'],OK
+ts_recurrence_laminarity,daily,,,,,[],OK
+ts_recurrence_longest_vertical_length,extended,,,,,[],OK
+ts_recurrence_mean_diagonal_length,extended,,,,,[],OK
+ts_recurrence_rate,daily,,,,,['x'],OK
+ts_recurrence_trapping_time,daily,,,,,['x'],OK
+ts_regime_duration,extended,,,,,[],OK
+ts_regression_forecast_error,daily,,,,,[],OK
+ts_regression_forecast_error_z,daily,,,,,[],OK
+ts_regression_in_sample_resid,daily,,,,,[],OK
+ts_regression_intercept,daily,,,,,[],OK
+ts_regression_r2,daily,,,,,[],OK
+ts_regression_resid,daily,,,,,[],OK
+ts_regression_resid_if,daily,,,,,"['y', 'x', 'condition']",OK
+ts_regression_resid_mean,daily,,,,,[],OK
+ts_regression_slope,daily,,,,,"['y', 'x', 'window']",OK
+ts_regression_tstat,daily,,,,,[],OK
+ts_residualized_hsic,extended,,,,,[],OK
+ts_resistance_break,daily,,,,,[],OK
+ts_resistance_fit_r2,daily,,,,,[],OK
+ts_resistance_level,daily,,,,,[],OK
+ts_resistance_log_slope,extended,,,,,[],OK
+ts_resistance_slope,daily,,,,,[],OK
+ts_response_slope_asymmetry,daily,,,,,"['y', 'x']",OK
+ts_return_spectral_entropy,extended,,,,,[],OK
+ts_ridge_regression_coeff,daily,,,,,['y'],OK
+ts_ridge_regression_coeff_prior,daily,,,,,['y'],OK
+ts_ridge_regression_forecast_error,daily,,,,,['y'],OK
+ts_ridge_regression_forecast_error_z,daily,,,,,['y'],OK
+ts_ridge_regression_in_sample_resid,extended,,,,,"['y', 'x']",OK
+ts_ridge_regression_predictive_resid,extended,,,,,"['y', 'x']",OK
+ts_ridge_regression_resid_z,daily,,,,,['y'],OK
+ts_robust_zscore_inclusive,extended,,,,,['x'],OK
+ts_robust_zscore_prior,extended,,,,,['x'],OK
+ts_roll_effective_spread,extended,,,,,['price'],OK
+ts_rolling_sr_gaussian_mean_shift_score,extended,,,,,[],OK
+ts_roughness,daily,,,,,['x'],OK
+ts_rqa_determinism_fixed_rr,extended,,,,,[],OK
+ts_rqa_laminarity_fixed_rr,extended,,,,,[],OK
+ts_run_concentration,daily,,,,,"['x', 'state']",OK
+ts_run_efficiency,daily,,,,,"['x', 'state']",OK
+ts_run_strength,daily,,,,,"['x', 'state']",OK
+ts_sample_entropy,daily,,,,,['x'],OK
+ts_scale_shift,daily,,,,,['x'],OK
+ts_score_rank_weighted_mean,extended,,,,,"['target', 'score']",OK
+ts_semivariance_balance,daily,,,session_close,False,['ret'],NEEDS_DECL
+ts_sharpe,daily,,,,,['x'],OK
+ts_sign_cluster_index,daily,,,,,['x'],OK
+ts_sign_persistence,daily,,,,,['x'],OK
+ts_signature_mahalanobis_anomaly,extended,,,,,"['f1', 'f2', 'f3']",OK
+ts_skew,daily,,,,,['x'],OK
+ts_sma_cn,daily,,,,,['x'],OK
+ts_spectral_centroid,daily,,,,,['x'],OK
+ts_spectral_entropy,daily,,,,,[],OK
+ts_spectral_flatness,daily,,,,,['x'],OK
+ts_spectral_low_frequency_ratio,extended,,,,,[],OK
+ts_spectral_peak_concentration,daily,,,,,['x'],OK
+ts_spectral_quality_factor,daily,,,,,['x'],OK
+ts_ssa_reconstruction_residual,daily,,,,,['x'],OK
+ts_staleness,daily,,,,,[],OK
+ts_state_age_percentile,daily,,,,,['state'],OK
+ts_state_density,daily,,,,,['x'],OK
+ts_state_entry_strength,daily,,,,,['z'],OK
+ts_state_exit_hazard,daily,,,,,['state'],OK
+ts_state_integral,daily,,,,,['z'],OK
+ts_state_residual_life,daily,,,,,['state'],OK
+ts_std,daily,,,,,['x'],OK
+ts_std_if,daily,,,,,[],OK
+ts_stratified_mean_spread,daily,,,,,"['target', 'sorter']",OK
+ts_structural_level_density,daily,,,,,['price'],OK
+ts_structural_level_strength,daily,,,,,['price'],OK
+ts_sum,daily,,,,,['x'],OK
+ts_sum_decay,daily,,,,,['x'],OK
+ts_sum_if,daily,,,,,[],OK
+ts_support_break,daily,,,,,[],OK
+ts_support_fit_r2,daily,,,,,[],OK
+ts_support_level,daily,,,,,[],OK
+ts_support_log_slope,extended,,,,,[],OK
+ts_support_slope,daily,,,,,[],OK
+ts_swing_amplitude,daily,,,,,[],OK
+ts_swing_amplitude_atr,daily,,,,,[],OK
+ts_swing_amplitude_pct,daily,,,,,[],OK
+ts_swing_duration,daily,,,,,[],OK
+ts_swing_velocity,daily,,,,,[],OK
+ts_tail_imbalance,daily,,,,,['x'],OK
+ts_tail_mean,daily,,,,,[],OK
+ts_tail_ratio,daily,,,,,['x'],OK
+ts_threshold_cycle_asymmetry,daily,,,,,['x'],OK
+ts_threshold_cycle_period,daily,,,,,['x'],OK
+ts_time_since_change,daily,,,,,['condition'],OK
+ts_time_slope,daily,,,,,[],OK
+ts_time_under_water,daily,,,,,['x'],OK
+ts_topk_mean,daily,,,,,[],OK
+ts_topk_std,daily,,,,,[],OK
+ts_topk_sum,daily,,,,,[],OK
+ts_transfer_entropy,extended,,,,,"['target', 'source']",OK
+ts_transfer_entropy_peak_excess,extended,,,,,"['target', 'source']",OK
+ts_transfer_entropy_peak_lag,daily,,,,,"['target', 'source']",OK
+ts_transfer_entropy_peak_strength,daily,,,,,"['target', 'source']",OK
+ts_transition_count,daily,,,,,['condition'],OK
+ts_transition_intensity,daily,,,,,"['x', 'state']",OK
+ts_trend_break_score,daily,,,,,['x'],OK
+ts_trend_tstat,daily,,,,,[],OK
+ts_trimmed_mean,daily,,,,,['x'],OK
+ts_true_streak,daily,,,,,[],OK
+ts_turning_intensity,daily,,,,,['x'],OK
+ts_turning_point_ratio,extended,,,,,[],OK
+ts_turning_rate,daily,,,,,['x'],OK
+ts_turnover_age_dispersion,daily,,,,,"['price', 'turnover']",OK
+ts_turnover_cost_dispersion,daily,,,,,"['price', 'turnover']",OK
+ts_turnover_cost_entropy,daily,,,,,"['price', 'turnover']",OK
+ts_turnover_cost_entropy_vol_scaled,extended,,,,,"['price', 'turnover']",OK
+ts_turnover_cost_mode_distance,daily,,,,,"['price', 'turnover']",OK
+ts_turnover_cost_quantile_distance,daily,,,,,"['price', 'turnover']",OK
+ts_turnover_cost_skew,daily,,,,,"['price', 'turnover']",OK
+ts_turnover_holding_age,daily,,,,,"['price', 'turnover']",OK
+ts_turnover_near_cost_mass,daily,,,,,"['price', 'turnover']",OK
+ts_turnover_old_mass,extended,,,,,"['price', 'turnover']",OK
+ts_turnover_profit_share,daily,,,,,"['price', 'turnover']",OK
+ts_turnover_reference_price,daily,,,,,"['price', 'turnover']",OK
+ts_two_state_regime_probability,extended,,,,,[],OK
+ts_upper_partial_moment,daily,,,,,['x'],OK
+ts_upper_tail_coexceedance_probability,daily,,,,,"['x', 'y']",OK
+ts_upside_deviation,daily,,,,,['x'],OK
+ts_valid_count,daily,,,,,[],OK
+ts_value_at_argextreme,daily,,,,,[],OK
+ts_var,daily,,,,,['x'],OK
+ts_variance_ratio_proxy,extended,,,,,['x'],OK
+ts_variance_ratio_slope,daily,,,,,['x'],OK
+ts_variogram_slope,daily,,,,,['x'],OK
+ts_vector_path_curvature,daily,,,,,"['f1', 'f2']",OK
+ts_vector_path_efficiency,daily,,,,,"['f1', 'f2']",OK
+ts_vector_self_intersection_rate,daily,,,,,"['f1', 'f2']",OK
+ts_vector_state_local_density,daily,,,,,"['f1', 'f2', 'f3', 'f4']",OK
+ts_vector_state_mahalanobis,daily,,,,,"['f1', 'f2', 'f3', 'f4']",OK
+ts_vector_turning_coherence,daily,,,,,"['f1', 'f2']",OK
+ts_vol_acceleration,daily,,,session_close,False,['ret'],NEEDS_DECL
+ts_vol_clustering,daily,,,session_close,False,['ret'],NEEDS_DECL
+ts_vol_of_vol,daily,,,session_close,False,['ret'],NEEDS_DECL
+ts_vol_pvariation_roughness,daily,,,,,['x'],OK
+ts_vol_scaling_break,daily,,,,,['x'],OK
+ts_vol_shift_score,daily,,,,,['x'],OK
+ts_vol_term_structure,daily,,,session_close,False,['ret'],NEEDS_DECL
+ts_wasserstein_shift,daily,,,,,['x'],OK
+ts_wavelet_energy_slope,extended,,,,,[],OK
+ts_wavelet_entropy,extended,,,,,[],OK
+ts_wavelet_high_frequency_ratio,extended,,,,,[],OK
+ts_wavelet_low_frequency_ratio,extended,,,,,[],OK
+ts_wavelet_lowpass_reconstruct,extended,,,,,['x'],OK
+ts_weighted_downside_deviation,extended,,,,,"['x', 'weight']",OK
+ts_weighted_drawdown_area,daily,,,,,"['x', 'weight']",OK
+ts_weighted_expected_shortfall,daily,,,,,"['x', 'weight']",OK
+ts_weighted_permutation_entropy,daily,,,,,['x'],OK
+ts_weighted_semivariance,daily,,,,,"['x', 'weight']",OK
+ts_weighted_standardized_moment,daily,,,,,[],OK
+ts_weighted_time_centroid,daily,,,,,['weight'],OK
+ts_zero_ratio,daily,,,,,['x'],OK
+ts_zscore,daily,,,,,['x'],OK
+ttm_from_cumulative,daily,,,,,[],OK
+ttm_from_quarterly,daily,,,,,[],OK
+turnover_acceleration,daily,,,,,[],OK
+turnover_adjusted_volatility,daily,,,,,[],OK
+turnover_autocorr,daily,,,,,[],OK
+turnover_momentum,daily,,,,,[],OK
+turnover_shock,daily,,,,,[],OK
+turnover_volatility,daily,,,,,[],OK
+turnover_zscore,daily,,,,,[],OK
+ulcer_index,daily,,,,,[],OK
+unitize,daily,,,,,['x'],OK
+up_down_volume_ratio,daily,,,,,[],OK
+up_volume_ratio,daily,,,,,[],OK
+update_acceleration,extended,,,,,"['x', 'update_event']",OK
+update_direction_persistence,extended,,,,,"['x', 'update_event']",OK
+update_path_efficiency,extended,,,,,"['x', 'update_event']",OK
+update_surprise,extended,,,,,"['x', 'update_event']",OK
+valuation_cashflow_disagreement,daily,,,,,[],OK
+valuation_growth_mismatch,daily,,,,,[],OK
+valuation_pcf_definition_gap,daily,,,,,[],OK
+valuation_pcf_gap_positive,extended,,,,,[],OK
+valuation_pcf_gap_signed_log,extended,,,,,[],OK
+valuation_pe_gap_positive,extended,,,,,[],OK
+valuation_pe_gap_signed_log,extended,,,,,[],OK
+valuation_pe_ttm_lyr_gap,daily,,,,,[],OK
+valuation_quality_mismatch,daily,,,,,[],OK
+volume_acceleration,daily,,,,,[],OK
+volume_autocorr,daily,,,,,[],OK
+volume_momentum,daily,,,,,[],OK
+volume_price_range_density,daily,,,,,[],OK
+volume_shock,daily,,,,,[],OK
+volume_volatility,daily,,,,,[],OK
+volume_weighted_momentum,daily,,,,,[],OK
+volume_weighted_return,daily,,,,,[],OK
+volume_zscore,daily,,,,,[],OK
+vwap_deviation,daily,,,,,[],OK
+vwap_to_close_return,daily,session_close,False,session_close,False,"['vwap', 'close']",OK
+where,daily,,,,,"['condition', 'x', 'y']",OK
+winsorize,daily,,,,,['x'],OK
+winsorize_mean,daily,,,,,['x'],OK
+yang_zhang_vol,daily,,,,,[],OK
+yoy_by_period,daily,,,,,[],OK
+zero_return_ratio,daily,,,,,[],OK
+zmijewski_score,daily,,,,,[],OK
+zscore,daily,,,,,['x'],OK

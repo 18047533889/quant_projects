@@ -29,6 +29,16 @@ class JobDeadlineExceeded(RuntimeError):
     pass
 
 
+#: R31-P1-039：service 全局共享的 ResourceBroker（job admission + task admission
+#: 统一）。worker 执行 job 时通过 contextvar 传给内部 scheduler，避免「4 个 HTTP
+#: job × 16 内部 workers = 64 runnable」的过载。
+_service_broker_ctx: "Any | None" = None
+
+
+def _get_service_broker() -> Any | None:
+    return _service_broker_ctx
+
+
 @dataclass
 class QueueSnapshot:
     queued: int
@@ -68,10 +78,21 @@ class BoundedJobQueue:
         self._per_principal: dict[str, int] = {}
         self._workers: list[threading.Thread] = []
         self._started = False
-        self._stopping = False
+        # R32-P0-019: 显式生命周期状态机 ACCEPTING → DRAINING → STOPPED。
+        # DRAINING 拒绝新任务但 worker 继续清空已有队列 —— 历史实现一开始就把
+        # ``_stopping=True``，worker loop ``while not _stopping`` 立即不再消费
+        # queued job，与 drain 语义冲突。
+        self._state = "accepting"
         self._queue_put_times: dict[str, float] = {}
         self.jobs_submitted_total = 0
         self.jobs_rejected_total = 0
+        # R31-P1-039：service 全局共享 broker（跨 job 统一 admission）。
+        try:
+            from runtime.resource_broker import ResourceBroker
+
+            self.broker = ResourceBroker()
+        except Exception:
+            self.broker = None
 
     # -- lifecycle ----------------------------------------------------------
     def start(self, store: Any) -> None:
@@ -88,13 +109,19 @@ class BoundedJobQueue:
         monitor.start()
 
     def drain(self, timeout: float = 30.0) -> None:
-        """Graceful shutdown: stop accepting, drain queued, cancel running (R21-080)."""
-        self._stopping = True
+        """Graceful shutdown: DRAINING (reject new, drain queued), then STOPPED.
+
+        R32-P0-019: 先切到 ``draining`` —— worker 仍 ``while state != stopped``
+        消费 queued job；等 running==0 且 queue 清空后置 ``stopped``。超时则
+        force-mark stragglers interrupted（绝不留下 phantom running）。
+        """
+        self._state = "draining"
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             with self._lock:
                 running = len(self._running)
             if running == 0 and self._pending.empty():
+                self._state = "stopped"
                 return
             # Ask running jobs to stop.
             with self._lock:
@@ -109,9 +136,11 @@ class BoundedJobQueue:
                 if not job.is_terminal:
                     job.status = JobStatus.INTERRUPTED
                     job.finished_at = _utc_now()
+        self._state = "stopped"
 
     def stop(self) -> None:
-        self._stopping = True
+        """Immediate stop: stop consuming; running jobs are not drained."""
+        self._state = "stopped"
 
     # -- admission (R21-049..051) -------------------------------------------
     def _retry_after(self) -> int:
@@ -119,7 +148,7 @@ class BoundedJobQueue:
         return max(1, int(est_wait))
 
     def submit(self, job: JobRecord, *, run_fn: Callable[[JobRecord], None]) -> None:
-        if self._stopping:
+        if self._state != "accepting":
             raise ServiceError(
                 "JOB_REJECTED", "service is shutting down; not accepting new jobs",
                 status=503, extra={"Retry-After": "5"},
@@ -148,10 +177,26 @@ class BoundedJobQueue:
         with self._lock:
             self._per_principal[principal] = self._per_principal.get(principal, 0) + 1
             self._queue_put_times[job.run_id] = time.monotonic()
-        self.jobs_submitted_total += 1
+        # R32-P0-020: 检查与 put 必须原子 —— 用 put_nowait，绝不阻塞请求线程。
+        # 失败时 rollback per-principal counter。
         job.status = JobStatus.QUEUED
         job.queued_at = _utc_now()
-        self._pending.put((job, run_fn))
+        try:
+            self._pending.put_nowait((job, run_fn))
+        except queue.Full:
+            with self._lock:
+                self._per_principal[principal] = max(
+                    0, self._per_principal.get(principal, 0) - 1
+                )
+                self._queue_put_times.pop(job.run_id, None)
+            self.jobs_rejected_total += 1
+            raise ServiceError(
+                "JOB_QUEUE_FULL",
+                f"job queue full at enqueue (running={running_now}, queued={queued_now})",
+                status=429,
+                extra={"Retry-After": str(self._retry_after())},
+            )
+        self.jobs_submitted_total += 1
 
     def cancel(self, run_id: str) -> bool:
         """Request cancellation; returns True if the job was found non-terminal."""
@@ -166,19 +211,48 @@ class BoundedJobQueue:
 
     # -- worker loop ----------------------------------------------------------
     def _worker_loop(self) -> None:
-        while not self._stopping:
+        # R32-P0-019: DRAINING 期间仍消费 queued job，只有 STOPPED 才停止。
+        while self._state != "stopped":
             try:
                 job, run_fn = self._pending.get(timeout=0.5)
             except queue.Empty:
                 continue
-            self._begin(job, run_fn)
+            try:
+                self._begin(job, run_fn)
+            except BaseException:  # noqa: BLE001 - worker must never die
+                # R32-P0-021: _begin 内已兜底；此处为最后防线 —— unexpected
+                # exception 绝不能 kill worker thread（worker pool 容量永久减少）。
+                try:
+                    self._mark_unexpected_failure(job)
+                except Exception:
+                    pass
+
+    def _mark_unexpected_failure(self, job: JobRecord) -> None:
+        """R32-P0-021: unexpected run_fn exception → job FAILED + durable + 继续服务。"""
+        if job.is_terminal or not self._store:
+            return
+        job.status = JobStatus.FAILED
+        job.error_code = "JOB_UNEXPECTED_WORKER_EXCEPTION"
+        job.error = "unexpected exception in run_fn; worker survived"
+        job.finished_at = _utc_now()
+        self._store.update(job)
 
     def _begin(self, job: JobRecord, run_fn: Callable[[JobRecord], None]) -> None:
+        global _service_broker_ctx
         with self._lock:
             self._running[job.run_id] = job
+        prev_broker = _service_broker_ctx
+        _service_broker_ctx = self.broker  # job 执行期间共享 broker
         try:
             run_fn(job)
+        except BaseException:  # noqa: BLE001
+            # R32-P0-021: run_fn 抛出的 unexpected exception 在此兜底 —— 标 FAILED、
+            # 持久化、绝不向上传播到 worker loop 杀掉线程。若 run_fn 内部已把 job
+            # 标成 terminal（SUCCEEDED/FAILED/…），store.update 的 terminal guard
+            # 会拒绝覆盖，保持 terminal 状态权威。
+            self._mark_unexpected_failure(job)
         finally:
+            _service_broker_ctx = prev_broker
             with self._lock:
                 self._running.pop(job.run_id, None)
                 self._queue_put_times.pop(job.run_id, None)
@@ -186,7 +260,7 @@ class BoundedJobQueue:
                 self._per_principal[principal] = max(0, self._per_principal.get(principal, 0) - 1)
 
     def _heartbeat_monitor(self) -> None:
-        while not self._stopping:
+        while self._state != "stopped":
             time.sleep(15.0)
             if self._store is None:
                 continue
@@ -205,11 +279,25 @@ class BoundedJobQueue:
                 except ValueError:
                     wall_age = float("inf")
                 if wall_age > self.heartbeat_stale_seconds:
-                    job.status = JobStatus.INTERRUPTED
-                    job.error_code = "JOB_INTERRUPTED"
-                    job.error = f"heartbeat stale {wall_age:.0f}s; worker considered stuck"
-                    job.finished_at = _utc_now()
-                    self._store.update(job)
+                    # R32-P0-022: CAS 迁移 RUNNING → INTERRUPTED。真实线程随后
+                    # 写 SUCCEEDED 会被 store 的 terminal guard 拒绝覆盖。
+                    interrupted = JobRecord(**vars(job))
+                    interrupted.status = JobStatus.INTERRUPTED
+                    interrupted.error_code = "JOB_INTERRUPTED"
+                    interrupted.error = (
+                        f"heartbeat stale {wall_age:.0f}s; worker considered stuck"
+                    )
+                    interrupted.finished_at = _utc_now()
+                    try:
+                        self._store.cas_transition(
+                            interrupted,
+                            expected_status=JobStatus.RUNNING,
+                            write_manifest=True,
+                        )
+                    except AttributeError:
+                        # 非 JobStore 兼容后端：fallback 到 update（terminal guard
+                        # 仍防止后续覆盖）。
+                        self._store.update(interrupted)
 
     # -- metrics --------------------------------------------------------------
     def snapshot(self) -> QueueSnapshot:

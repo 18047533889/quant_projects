@@ -165,7 +165,14 @@ class ComputeRequest(_RequestModel):
     def _name_cap(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        return str(v)[:128]
+        from security.factor_id import FactorIdError, validate_factor_id
+
+        try:
+            return validate_factor_id(v)
+        except FactorIdError as exc:
+            # R32-P0-035: 超长/非法必须报 validation error，绝不截断 ——
+            # ``[:128]`` 会让两个不同 ID 静默碰撞。
+            raise ValueError(str(exc)) from exc
 
     @field_validator("universe")
     @classmethod
@@ -198,7 +205,12 @@ class MaterializeRequest(_RequestModel):
     def _factor_id_cap(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
-        return str(v)[:128]
+        from security.factor_id import FactorIdError, validate_factor_id
+
+        try:
+            return validate_factor_id(v)
+        except FactorIdError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 class ValidateRequest(_RequestModel):

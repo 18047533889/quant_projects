@@ -87,37 +87,39 @@ def _op(name: str):
 def test_kama_rewarm_requires_er_window_consecutive_values():
     from cleaned_operators.technical.indicators_v2 import KAMA
 
-    # Gap at row 2; er_window=3 so the re-seed needs 3 consecutive finite
-    # prices AFTER the gap (rows 5,6,7 -> seeds at row 7).
+    # Gap at row 2; er_window=3 so the re-seed needs er_window+1 = 4 consecutive
+    # finite prices AFTER the gap (rows 3,4,5,6 -> first legal seed at row 6).
     x = _frame(1.0, 2.0, np.nan, 3.0, 4.0, 5.0, 6.0, 7.0)
     out = KAMA(x, 3, 2, 5)
     vals = out["A"].tolist()
-    # rows 0,1: initial ER warmup (< er_window) -> NaN
+    # rows 0,1: initial ER warmup (< er_window+1) -> NaN
     assert np.isnan(vals[0]) and np.isnan(vals[1])
     # row 2: the gap itself -> NaN
     assert np.isnan(vals[2])
-    # rows 3,4: post-gap contiguous count 1,2 (< 3) -> NaN (no re-seed yet)
-    assert np.isnan(vals[3]) and np.isnan(vals[4])
-    # row 5: third contiguous finite value -> re-seed and emit
-    assert vals[5] == pytest.approx(5.0)
-    # rows 6,7: ER is finite again -> KAMA keeps updating, no frozen flat line
-    assert vals[6] != pytest.approx(vals[5])
+    # rows 3,4,5: post-gap contiguous count 1,2,3 (< 4) -> NaN (no re-seed yet;
+    # R30 §21 — the ER needs close vs close-shift(er), i.e. er+1 prices)
+    assert np.isnan(vals[3]) and np.isnan(vals[4]) and np.isnan(vals[5])
+    # row 6: fourth contiguous finite value -> first legal seed (current close)
+    assert vals[6] == pytest.approx(6.0)
+    # row 7: ER is finite again -> KAMA keeps updating, no frozen flat line
     assert vals[7] != pytest.approx(vals[6])
 
 
 def test_kama_initial_warmup_emits_nan_not_frozen_seed():
     from cleaned_operators.technical.indicators_v2 import KAMA
 
-    # Even at series start the first er_window-1 bars must NOT be a flat frozen
+    # Even at series start the first er_window bars must NOT be a flat frozen
     # seed line (that is the same "not a valid KAMA" pathology as post-gap).
+    # R30 §21: the ER needs er_window+1 prices, so the first legal seed is the
+    # (er+1)-th bar (row 3 for er=3), using the current close.
     x = _frame(1.0, 2.0, 3.0, 4.0, 5.0)
     out = KAMA(x, 3, 2, 5)
     vals = out["A"].tolist()
-    assert np.isnan(vals[0]) and np.isnan(vals[1])
-    assert vals[2] == pytest.approx(3.0)  # third bar re-seeds
-    assert np.isfinite(vals[3]) and np.isfinite(vals[4])
+    assert np.isnan(vals[0]) and np.isnan(vals[1]) and np.isnan(vals[2])
+    assert vals[3] == pytest.approx(4.0)  # 4th bar = er+1 -> first seed
+    assert np.isfinite(vals[4])
     # no flat frozen prefix
-    assert not (vals[2] == vals[3] == vals[4])
+    assert not (vals[3] == vals[4])
 
 
 def test_kama_rewarm_longer_gap_stays_nan_until_er_window():
@@ -181,11 +183,13 @@ def test_supertrend_full_ohlc_gap_breaks_and_rewarms():
 
     st = Supertrend(high, low, close, 3, 2.0)
     vals = st["A"].tolist()
-    assert np.isnan(vals[3])
-    # R30 §22: row 4 (first valid after gap) is UNKNOWN; row 5 re-asserts once
-    # bands are finite again.
-    assert np.isnan(vals[4])
-    assert np.isfinite(vals[5])
+    assert np.isnan(vals[3])  # the gap bar itself
+    # R30 §22: after a gap the trend is UNKNOWN — the first valid bars do NOT
+    # manufacture a direction.  rows 4 (first valid) and 5 stay NaN while the
+    # direction re-asserts from the price/band relationship; a real level
+    # resumes once the trend is established (row 6 onward).
+    assert np.isnan(vals[4]) and np.isnan(vals[5])
+    assert np.isfinite(vals[6])
 
 
 # ---------------------------------------------------------------------------

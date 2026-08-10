@@ -27,17 +27,45 @@ def deep_copy_plan(node: PlanNode) -> PlanNode:
     )
 
 
+#: R32-P1-047: CSE / plan 深度上限（DSL 解析器已限 32；Direct Python API 构造
+#: 的深 plan 在此兜底）。超限抛错，绝不让递归栈溢出。
+MAX_PLAN_DEPTH = 512
+
+
+class PlanDepthLimitError(ValueError):
+    """计划深度超过 ``MAX_PLAN_DEPTH``（R32-P1-047 防 RecursionError）。"""
+
+
+def assert_plan_depth_bounded(root: PlanNode, *, max_depth: int = MAX_PLAN_DEPTH) -> None:
+    """R32-P1-047: 迭代遍历检查计划深度（不递归，栈安全）。
+
+    深表达式在 CSE/planner 的递归遍历前先 fail-closed —— 超深抛
+    ``PlanDepthLimitError``，绝不 RecursionError 崩溃。
+    """
+    stack: list[tuple[PlanNode, int]] = [(root, 1)]
+    while stack:
+        node, depth = stack.pop()
+        if depth > int(max_depth):
+            raise PlanDepthLimitError(
+                f"plan depth {depth} exceeds max_depth={max_depth}; refusing to "
+                "recurse (deep expression protection, R32-P1-047)"
+            )
+        for child in getattr(node, "inputs", ()) or ():
+            stack.append((child, depth + 1))
+
+
 def _postorder(root: PlanNode) -> list[PlanNode]:
-    """后序遍历计划树，返回节点列表。"""
+    """后序遍历计划树，返回节点列表（R32-P1-047: 迭代实现，栈安全）。"""
     out: list[PlanNode] = []
-
-    def visit(n: PlanNode) -> None:
-        """后序递归访问单节点。"""
-        for c in n.inputs:
-            visit(c)
-        out.append(n)
-
-    visit(root)
+    stack: list[tuple[PlanNode, bool]] = [(root, False)]
+    while stack:
+        node, visited = stack.pop()
+        if visited:
+            out.append(node)
+            continue
+        stack.append((node, True))
+        for child in getattr(node, "inputs", ()) or ():
+            stack.append((child, False))
     return out
 
 
@@ -242,13 +270,59 @@ def assert_cse_contracts_resolved(plan: PlanNode, *, production: bool = False) -
     assert_plan_contracts_resolved(plan, production=True)
 
 
+# ---------------------------------------------------------------------------
+# R32-P0-008: cost-based CSE —— 出现两次不等于值得 materialize
+# ---------------------------------------------------------------------------
+
+#: leaf column 的"重算"成本 = 一次数据扫描（最高）；literal 成本 0（永不提取）。
+_COLUMN_RECOMPUTE_COST = 4.0
+_LITERAL_RECOMPUTE_COST = 0.0
+#: materialize 一份共享 panel 的固定成本。
+_MATERIALIZE_COST = 1.0
+
+
+def _recompute_cost(node: PlanNode) -> float:
+    """估算子树重算成本：数据扫描（column）最贵，其余按节点聚合。"""
+    op = str(getattr(node, "op", "") or "")
+    if op == "column":
+        return _COLUMN_RECOMPUTE_COST
+    if op in {"literal", "plan_ref", "materialized_series"}:
+        return _LITERAL_RECOMPUTE_COST
+    cost = 1.0
+    for c in getattr(node, "inputs", ()) or ():
+        cost += _recompute_cost(c)
+    return cost
+
+
+def _memory_cost(node: PlanNode) -> float:
+    """估算共享 panel 内存成本 ≈ 子树节点数（至少 1）。"""
+    size = 0
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        size += 1
+        stack.extend(getattr(n, "inputs", ()) or ())
+    return float(max(1, size))
+
+
+def cse_benefit(count: int, recompute: float, memory: float) -> float:
+    """R32-P0-008: ``benefit = recompute_saved - materialize_cost - memory_cost``。
+
+    ``recompute_saved = (count-1) * recompute``（原需 count 次，提取后 1 次）。
+    literal（recompute=0）或列数少而重复次数低时 benefit<=0 → 不提取。
+    """
+    return (int(count) - 1) * float(recompute) - _MATERIALIZE_COST - float(memory)
+
+
 def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode]]:
-    """对多棵根计划做结构 CSE。
+    """对多棵根计划做 cost-based 结构 CSE（R32-P0-007/008）。
 
-    出现次数大于 1 的结构键对应子树放入 ``shared_nodes``，各根中该子树一律替换为
-    ``op="plan_ref"``、``attrs={"sid": <结构键>}``。
-
-    结构键为 :func:`planner.plan_hash.structural_key` 的 JSON 串，可能较长但唯一稳定。
+    - 只提取 **profitable** 重复子树（``cse_benefit > 0``）——literal/列数少而
+      重复次数低的 cheap 节点不再一视同仁提取（P0-008）；
+    - shared definition 自己 rewrite 成 **nested shared DAG**（P0-007 方案 B）：
+      父 subtree 内部重复的 child 也被替换为 ``plan_ref``，杜绝 orphan shared
+      node（runtime 完整性校验拒绝无人引用的 shared）；
+    - 结构键为 :func:`planner.plan_hash.structural_key` 的 JSON 串，唯一稳定。
 
     参数：
         roots: 多因子逻辑计划根节点列表
@@ -259,9 +333,14 @@ def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode
     if not roots:
         return [], {}
 
+    # R32-P1-047: 深 plan 在递归遍历前 fail-closed。
+    for root in roots:
+        assert_plan_depth_bounded(root)
+
     counts: dict[str, int] = {}  # 结构键 → 在森林中出现过几次
     first_seen: dict[str, PlanNode] = {}  # 首次出现时保留一份用于 shared_nodes
     key_memo: dict[int, str] = {}
+    costs: dict[str, float] = {}
 
     for root in roots:
         for n in _postorder(root):
@@ -269,16 +348,63 @@ def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode
             counts[k] = counts.get(k, 0) + 1
             if k not in first_seen:
                 first_seen[k] = n
+            if k not in costs:
+                costs[k] = _recompute_cost(n)
+
+    # R32-P0-008: 只提取 profitable 子树。
+    shared_keys = {
+        k
+        for k, c in counts.items()
+        if c > 1 and cse_benefit(c, costs[k], _memory_cost(first_seen[k])) > 0
+    }
 
     shared_nodes: dict[str, PlanNode] = {}
-    for k, c in counts.items():
-        if c > 1:
-            shared_nodes[k] = deep_copy_plan(first_seen[k])
+
+    def _shared_def_rewrite(n: PlanNode, memo: dict[int, str]) -> PlanNode:
+        """改写一个 shared definition 的内部重复 child 为 ``plan_ref``。
+
+        shared definition 的**根**保持真实节点（它就是被共享的那棵子树）；其
+        内部重复 child 若也在 ``shared_keys`` 中则替换为 ``plan_ref`` —— 形成
+        nested shared DAG（P0-007 方案 B），内部 child 因此有消费者，不再 orphan。
+        """
+        new_inputs: list[PlanNode] = []
+        for c in n.inputs:
+            ck = structural_key(c, memo)
+            if ck in shared_keys:
+                representative = first_seen[ck]
+                new_inputs.append(
+                    PlanNode(
+                        op="plan_ref",
+                        attrs={"sid": ck},
+                        inputs=[],
+                        semantic_attrs=dict(
+                            getattr(representative, "semantic_attrs", None) or {}
+                        ),
+                    )
+                )
+            else:
+                new_inputs.append(_shared_def_rewrite(c, memo))
+        if not n.inputs:
+            return n
+        return PlanNode(
+            op=n.op,
+            attrs=dict(n.attrs),
+            semantic_attrs=dict(n.semantic_attrs),
+            inputs=new_inputs,
+            node_id=n.node_id,
+        )
+
+    # 构建 nested shared DAG：shared definition 根保持真实节点，内部重叠 child
+    # 改写为 plan_ref。
+    for k in shared_keys:
+        shared_nodes[k] = _shared_def_rewrite(
+            first_seen[k], dict(key_memo)
+        )
 
     def rewrite(n: PlanNode, memo: dict[int, str]) -> PlanNode:
-        """将重复子树替换为 ``plan_ref`` 引用。"""
+        """将重复子树替换为 ``plan_ref`` 引用（根侧）。"""
         k = structural_key(n, memo)
-        if counts.get(k, 0) > 1:
+        if k in shared_keys:
             # R13 NEW-P0-21: a ``plan_ref`` must expose the shared subtree's
             # OUTPUT semantic contract (unit / grain / availability / price-basis
             # / source identity), not just the sid — downstream typing/PIT/SQL
@@ -302,3 +428,51 @@ def apply_cse(roots: list[PlanNode]) -> tuple[list[PlanNode], dict[str, PlanNode
 
     new_roots = [rewrite(r, key_memo) for r in roots]
     return new_roots, shared_nodes
+
+
+def verify_cse_dag(
+    roots: list[PlanNode], shared_nodes: dict[str, PlanNode]
+) -> list[str]:
+    """R32-P0-007: 校验 CSE 产出是合法 shared DAG。
+
+    返回违规列表（空 = 合法）：
+      - dangling ref：plan_ref 的 sid 在 shared_nodes 中不存在；
+      - orphan shared：某 shared node 没有任何 plan_ref 消费者（既不在根中、
+        也不被另一 shared node 引用）；
+      - cycle：shared DAG 内循环引用。
+    """
+    violations: list[str] = []
+
+    def _collect_plan_refs(root: PlanNode) -> set[str]:
+        out: set[str] = set()
+        stack = [root]
+        while stack:
+            n = stack.pop()
+            if str(getattr(n, "op", "")) == "plan_ref":
+                out.add(str((n.attrs or {}).get("sid") or ""))
+            stack.extend(getattr(n, "inputs", ()) or ())
+        return out
+
+    # dangling refs in roots + consumers map.
+    consumers: dict[str, int] = {k: 0 for k in shared_nodes}
+    for root in roots:
+        for sid in _collect_plan_refs(root):
+            if sid not in shared_nodes:
+                violations.append(f"dangling plan_ref sid={sid!r} in root")
+            elif sid in consumers:
+                consumers[sid] += 1
+    # shared definition 内部的 plan_ref 消费者（nested DAG）。
+    for sid, node in shared_nodes.items():
+        for inner_sid in _collect_plan_refs(node):
+            if inner_sid not in shared_nodes:
+                violations.append(
+                    f"dangling plan_ref sid={inner_sid!r} inside shared def {sid!r}"
+                )
+            elif inner_sid == sid:
+                violations.append(f"self-cycle in shared def {sid!r}")
+            else:
+                consumers[inner_sid] += 1
+    for sid, count in consumers.items():
+        if count == 0:
+            violations.append(f"orphan shared node sid={sid!r}: zero consumers")
+    return violations

@@ -119,6 +119,33 @@ PRECISION_FLOAT32_LEGACY = "float32_legacy"
 
 _FLOAT32_DTYPES = frozenset({"float32", "float", "f4", "float16", "f2"})
 
+#: R32-P0-027: write_mode 严格枚举门。除这四个值之外的任何拼写必须拒绝
+#: （历史行为：拼错字符串静默回落为 keep-last upsert，掩盖写入意图错误）。
+WRITE_MODES = frozenset({"upsert", "append", "replace_window", "recompute_window"})
+
+
+def validate_write_mode(write_mode: str) -> str:
+    """R32-P0-027: 严格校验 write_mode 枚举，非法值直接抛 ``ValueError``。
+
+    历史上 ``"upsertt"`` / ``"replaced"`` 等拼写错误会静默走 keep-last upsert；
+    现在入口严格只允许 upsert/append/replace_window/recompute_window。
+    """
+    mode = str(write_mode or "upsert").lower()
+    if mode not in WRITE_MODES:
+        raise ValueError(
+            f"write_mode must be one of {sorted(WRITE_MODES)}, got {write_mode!r}"
+        )
+    if mode == "replace_window":
+        # 依赖调用方随后校验 replace_window 窗口元组（_upsert_partition 内）。
+        pass
+    return mode
+
+
+#: R32-P0-025: OutputGrainContract —— materializer 只支持精确的
+#: ``timestamp × instrument`` 两层 MultiIndex。nlevels>2 的额外 grain（minute/
+#: session/event/relation/extra dimension）必须走专门 schema，禁止静默降维丢弃。
+OUTPUT_GRAIN_MAX_NLEVELS = 2
+
 
 def storage_precision_policy_for(
     value_dtype: str | None,
@@ -309,6 +336,23 @@ class ParquetMaterializer:
         if author is None:
             author = _get_default_author()
 
+        # R32-P0-036/043: factor_id 统一 domain gate（长度超限 reject、禁路径
+        # 穿越/控制字符、Unicode NFC、保留名）。HTTP 之外直接 Python API /
+        # materializer / catalog / delete 走同一个 validator。
+        from security.factor_id import validate_factor_id
+
+        factor_id = validate_factor_id(factor_id)
+
+        # R32-P0-027: write_mode 严格枚举门 —— 拼错字符串必须拒绝，绝不静默
+        # 回落为 keep-last upsert。replace_window 必须在写盘路径前校验窗口。
+        write_mode = validate_write_mode(write_mode)
+        if write_mode == "replace_window":
+            if replace_window is None or len(replace_window) != 2:
+                raise ValueError(
+                    f"write_mode='replace_window' requires replace_window=(start, end), "
+                    f"got {replace_window!r}"
+                )
+
         # --- AST Hash ---
         if ast_hash is None:
             if ir_node is not None:
@@ -450,7 +494,7 @@ class ParquetMaterializer:
         tombstoned_rows = 0
         if deleted_keys:
             null_overwrite = True
-            df = self._append_tombstones(df, deleted_keys)
+            df = self._append_tombstones(df, deleted_keys, metadata=meta)
             tombstoned_rows = len(deleted_keys)
 
         # --- 2. 数据清洗 ---
@@ -561,7 +605,9 @@ class ParquetMaterializer:
             else new_run_id()
         )
 
-        factor_dir = self._lake_root / "factors" / factor_id
+        from security.factor_id import factor_dir_for
+
+        factor_dir = factor_dir_for(self._lake_root, factor_id)
         work_df = attach_partition_columns(df, policy)
 
         if write_local:
@@ -622,6 +668,12 @@ class ParquetMaterializer:
                         write_mode=write_mode,
                         replace_window=replace_window,
                     )
+                    # R32-P0-032: checkpoint success 必须在身份 sidecar durable 之后
+                    # 提交。production 下 sidecar 写失败抛错 → 走 failed 分支，
+                    # 分区不会被标成 success（数据已写但身份缺失 → 下次 resume 重算）。
+                    self._write_checkpoint_fingerprint_file(
+                        partition_dir, fp, production=production, run_id=checkpoint_run_id
+                    )
                     self._catalog.record_partition_checkpoint(
                         factor_id=factor_id,
                         partition_year=ck_year,
@@ -629,7 +681,6 @@ class ParquetMaterializer:
                         run_id=checkpoint_run_id,
                         status="success",
                     )
-                    self._write_checkpoint_fingerprint_file(partition_dir, fp)
                     partitions_written.append(ck_year)
                     partition_keys_written.append(pkey)
                     progress.advance(detail=f"{pkey}, rows={len(partition_df)}")
@@ -725,8 +776,18 @@ class ParquetMaterializer:
 
         if write_local:
             total_rows = self._count_total_rows(factor_dir)
+            # R32-P0-029: 统一记录 long/wide 各语义的行数分解（watermark 的
+            # row_count 保持历史兼容语义，分解指标进 summary）。
+            partition_metrics = self._count_partition_metrics(factor_dir)
         else:
             total_rows = len(active_df)
+            partition_metrics = {
+                "physical_row_count": total_rows,
+                "date_count": int(active_df["datetime"].nunique()),
+                "asset_count": int(active_df["asset"].nunique()),
+                "cell_count": total_rows,
+                "non_null_cell_count": int(active_df["value"].notna().sum()),
+            }
 
         pending_watermark = {
             "start_date": start_date,
@@ -807,6 +868,7 @@ class ParquetMaterializer:
             "force_tombstones": force_tombstones,
             "identity_digest": identity_digest,
             "run_generation": generation,
+            "partition_metrics": partition_metrics,
         }
         if pending_watermark is not None and watermark_deferred:
             summary["pending_watermark"] = pending_watermark
@@ -933,6 +995,23 @@ class ParquetMaterializer:
             raise ValueError(
                 "期望 MultiIndex(timestamp, instrument) Series，"
                 f"实际索引层级数为 {getattr(result.index, 'nlevels', 1)}。"
+            )
+        # R32-P0-025: OutputGrainContract —— 超过两层（datetime, instrument）的
+        # 额外 grain 禁止静默丢弃。minute/session/event/relation 语义有专门 schema，
+        # 统一长表物化必须精确保持两层。
+        nlevels = int(result.index.nlevels)
+        if nlevels > OUTPUT_GRAIN_MAX_NLEVELS:
+            extra = [
+                str(getattr(result.index, "names", None) or [])[i] or f"<level{i}>"
+                for i in range(2, nlevels)
+            ]
+            raise ValueError(
+                f"OutputGrainContract violation: MultiIndex has {nlevels} levels "
+                f"(expected exactly 2: timestamp × instrument). Extra grain levels "
+                f"{extra} would be silently dropped by the factor-lake long "
+                f"materializer — minute/session/event/relation outputs must use "
+                f"their dedicated schema, not be down-sampled. Got index names: "
+                f"{list(result.index.names)}."
             )
 
         df = result.reset_index()
@@ -1063,21 +1142,46 @@ class ParquetMaterializer:
 
     @staticmethod
     def _write_checkpoint_fingerprint_file(
-        partition_dir: Path, fingerprint: dict[str, str]
+        partition_dir: Path,
+        fingerprint: dict[str, str],
+        *,
+        production: bool = False,
+        run_id: str | None = None,
     ) -> None:
         """原子写入分区身份指纹 sidecar（``.identity.json``）。
 
-        tmp 文件名以 ``.tmp`` 结尾，若崩溃残留会被 ``_cleanup_orphan_tmp_files``
-        在下一次 reconcile 时清理。
+        R32-P0-033: tmp 文件名使用 uuid/run_id（不再只用 PID —— 线程内会碰撞，
+        两个并发写同一分区会互相覆盖 tmp）。R32-P0-032: production 下 sidecar
+        写失败必须硬失败（抛错），绝不把「数据写成功但身份 sidecar 失败」标成
+        完整成功 —— checkpoint success 必须在 sidecar durable 之后提交。
         """
+        import uuid
+
+        path = ParquetMaterializer._checkpoint_fingerprint_path(partition_dir)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(
+            f".{path.name}.{run_id or uuid.uuid4().hex[:12]}.tmp"
+        )
         try:
-            path = ParquetMaterializer._checkpoint_fingerprint_path(partition_dir)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
             with open(str(tmp), "w", encoding="utf-8") as fh:
                 json.dump(fingerprint, fh, sort_keys=True, separators=(",", ":"))
+                fh.flush()
+                os.fsync(fh.fileno())
             os.replace(str(tmp), str(path))
-        except OSError:  # pragma: no cover - 指纹写入失败不阻塞落盘
+            try:
+                dir_fd = os.open(str(path.parent), os.O_RDONLY)
+            except OSError:
+                dir_fd = None
+            if dir_fd is not None:
+                try:
+                    os.fsync(dir_fd)
+                except OSError:
+                    pass
+                finally:
+                    os.close(dir_fd)
+        except OSError as exc:
+            if production:
+                raise
             logger.debug(
                 "写入 checkpoint 指纹失败 partition_dir=%s", partition_dir, exc_info=True
             )
@@ -1099,11 +1203,18 @@ class ParquetMaterializer:
     def _append_tombstones(
         df: pd.DataFrame,
         deleted_keys: list[tuple],
+        *,
+        metadata: "MaterializeMetadata | None" = None,
     ) -> pd.DataFrame:
         """把显式删除的 (datetime, asset) 键转成 value=NaN 行（Review-8 #446）。
 
         这些行随后走同一 upsert 路径：dedup keep="last" 用 NaN 覆盖该键的旧
         有限值，读取时返回 NaN（= 该历史值已被删除/退出 universe）。
+
+        R32-P0-034: deleted_keys-only 输入（df 可能为空）时，metadata 列必须
+        从当前 ``MaterializeMetadata`` 显式生成 —— 不能用 ``df.iloc[0]``（空 df
+        下返回 None，导致删除 tombstone 缺 run metadata / factor_version /
+        snapshot identity）。
         """
         rows = []
         for key in deleted_keys:
@@ -1118,6 +1229,14 @@ class ParquetMaterializer:
         for col in df.columns:
             if col not in tomb.columns:
                 tomb[col] = df[col].iloc[0] if len(df) else None
+        if metadata is not None:
+            tomb["calc_time"] = metadata.calc_time
+            tomb["factor_version"] = metadata.factor_version
+            tomb["data_snapshot_id"] = metadata.data_snapshot_id or ""
+            tomb["resolved_snapshot_id"] = metadata.resolved_snapshot_id or ""
+            tomb["storage_precision_policy"] = metadata.storage_precision_policy or ""
+            tomb["is_valid"] = int(metadata.is_valid)
+            tomb["invalid_reason"] = metadata.invalid_reason or ""
         # match the numeric dtype so the concat keeps df's column dtype
         tomb["value"] = tomb["value"].astype(df["value"].dtype)
         return pd.concat([df, tomb], ignore_index=True)
@@ -1282,7 +1401,10 @@ class ParquetMaterializer:
             无
         """
         if policy.is_wide:
-            self._upsert_partition_wide(factor_dir, part_values, new_df, policy=policy)
+            self._upsert_partition_wide(
+                factor_dir, part_values, new_df, policy=policy,
+                write_mode=write_mode, replace_window=replace_window,
+            )
             return
 
         partition_dir = factor_dir / partition_path_segments(
@@ -1301,7 +1423,17 @@ class ParquetMaterializer:
             if parquet_path.exists():
                 existing_df = pd.read_parquet(parquet_path)
                 existing_df["asset"] = existing_df["asset"].astype("string")
-                existing_df["value"] = existing_df["value"].astype("float32")
+                # R32-P0-024: 禁止把已有 float64 历史静默 downcast 成 float32。
+                # 已有分区若为 float64，新数据必须上转换到 float64 合并 ——
+                # ``np.promote_types`` 只升不降，绝不损失历史精度。
+                existing_value_dtype = existing_df["value"].dtype
+                combined_dtype = np.promote_types(
+                    existing_value_dtype, new_df["value"].dtype
+                )
+                existing_df["value"] = existing_df["value"].astype(combined_dtype)
+                if new_df["value"].dtype != combined_dtype:
+                    new_df = new_df.copy()
+                    new_df["value"] = new_df["value"].astype(combined_dtype)
                 for col in METADATA_COLUMNS:
                     if col not in existing_df.columns:
                         if col == "is_valid":
@@ -1361,14 +1493,22 @@ class ParquetMaterializer:
         new_df: pd.DataFrame,
         *,
         policy: PartitionPolicy,
+        write_mode: str = "upsert",
+        replace_window: tuple[str, str] | None = None,
     ) -> None:
         """宽表 panel 分区 upsert（经 long 去重后再 pivot）。
+
+        R32-P0-028: wide 路径与 long 语义对齐 —— 支持 append / replace_window /
+        recompute_window，不再固定 keep-last upsert。R32-P0-024: 读取已有
+        panel 时保留其精度，绝不把 float64 历史降为 float32。
 
         参数:
             factor_dir: 见函数签名
             part_values: 见函数签名
             new_df: 见函数签名
             policy: 分区策略（可选）
+            write_mode: 写入模式（upsert/append/replace_window/recompute_window）
+            replace_window: 替换窗口 (start, end)（ISO 字符串）
 
         返回:
             无
@@ -1391,12 +1531,32 @@ class ParquetMaterializer:
                 if "datetime" in existing_panel.columns:
                     existing_panel = existing_panel.set_index("datetime")
                 existing_long = unpivot_wide_to_long(existing_panel)
+                # R32-P0-024: 宽表 unpivot 保留原精度，不与 new 拼接前降为 float32。
+                if existing_long["value"].dtype != new_long["value"].dtype:
+                    promoted = np.promote_types(
+                        existing_long["value"].dtype, new_long["value"].dtype
+                    )
+                    existing_long["value"] = existing_long["value"].astype(promoted)
+                    new_long = new_long.copy()
+                    new_long["value"] = new_long["value"].astype(promoted)
+                if write_mode == "replace_window" and replace_window is not None:
+                    w_start = pd.Timestamp(replace_window[0])
+                    w_end = pd.Timestamp(replace_window[1])
+                    keep = ~(
+                        (existing_long["datetime"] >= w_start)
+                        & (existing_long["datetime"] <= w_end)
+                    )
+                    existing_long = existing_long.loc[keep]
                 combined_long = pd.concat([existing_long, new_long], ignore_index=True)
             else:
                 combined_long = new_long
 
+            # R32-P0-028: keep 规则与 long 路径一致 —— append 保留旧 key，其余
+            # 模式新值覆盖旧值（recompute_window 的 all-NaN 覆盖由上层 tombstone
+            # 保证，与 long 语义完全一致）。
+            keep_rule = "last" if write_mode != "append" else "first"
             combined_long = combined_long.drop_duplicates(
-                subset=["datetime", "asset"], keep="last"
+                subset=["datetime", "asset"], keep=keep_rule
             )
             panel = pivot_long_to_wide(combined_long)
             self._write_partition_atomic(
@@ -1406,37 +1566,76 @@ class ParquetMaterializer:
             )
 
         logger.info(
-            "宽表分区写入完成: factor_dir=%s, partition=%s, shape=%s",
+            "宽表分区写入完成: factor_dir=%s, partition=%s, mode=%s, shape=%s",
             factor_dir,
             partition_key(part_values),
+            write_mode,
             panel.shape,
         )
 
     @staticmethod
-    def _count_total_rows(factor_dir: Path) -> int:
-        """统计因子目录下所有分区 Parquet 的总行数。
-        
-        参数:
-            factor_dir: 见函数签名
-        
-        返回:
-            int
+    def _count_partition_metrics(
+        factor_dir: Path,
+    ) -> dict[str, int]:
+        """R32-P0-029: 统计因子目录的分解行数指标。
+
+        long 与 wide 的语义不可混用（wide 一行 = 一个日期，long 一行 = 一个
+        cell）。统一记录：
+          - ``physical_row_count``：物理行数（long=cell 数，wide=日期数）；
+          - ``date_count``：去重日期数；
+          - ``asset_count``：去重资产数（long）/ 面板列数（wide）；
+          - ``cell_count``：date × asset 理论格数（= 长表行数）；
+          - ``non_null_cell_count``：有限值格数。
         """
-        total = 0
+        dates: set[Any] = set()
+        assets: set[Any] = set()
+        cells = 0
+        non_null = 0
+        physical_rows = 0
         if not factor_dir.exists():
-            return 0
+            return {
+                "physical_row_count": 0, "date_count": 0, "asset_count": 0,
+                "cell_count": 0, "non_null_cell_count": 0,
+            }
         for pq_file in factor_dir.rglob("*.parquet"):
             if pq_file.name.startswith("."):
                 continue
             try:
-                import pyarrow.parquet as pq
-
-                meta = pq.read_metadata(pq_file)
-                total += meta.num_rows
-            except Exception:
                 df = pd.read_parquet(pq_file)
-                total += len(df)
-        return total
+            except Exception:
+                continue
+            if df.empty:
+                continue
+            physical_rows += len(df)
+            if {"datetime", "asset"}.issubset(df.columns):
+                dates |= set(pd.to_datetime(df["datetime"]).dt.normalize())
+                assets |= set(df["asset"].astype(str))
+                cells += len(df)
+                non_null += int(df["value"].notna().sum())
+            else:
+                # wide panel：index=datetime，columns=asset。
+                dates |= set(pd.to_datetime(df.index).normalize())
+                assets |= {str(c) for c in df.columns}
+                cells += int(df.shape[0] * df.shape[1])
+                non_null += int(df.notna().to_numpy().sum())
+        return {
+            "physical_row_count": physical_rows,
+            "date_count": len(dates),
+            "asset_count": len(assets),
+            "cell_count": cells,
+            "non_null_cell_count": non_null,
+        }
+
+    @staticmethod
+    def _count_total_rows(factor_dir: Path) -> int:
+        """统计因子目录下所有分区 Parquet 的总行数（long 语义物理 cell 行数）。
+
+        R32-P0-029: 具体行数/日期/资产/格数分解见 :meth:`_count_partition_metrics`；
+        本方法保留历史 ``row_count`` 语义（long=cell 行数）供 watermark 兼容。
+        """
+        return ParquetMaterializer._count_partition_metrics(factor_dir)[
+            "physical_row_count"
+        ]
 
     # ------------------------------------------------------------------
     # 便捷接口
@@ -1444,19 +1643,25 @@ class ParquetMaterializer:
 
     def delete_factor(self, factor_id: str, *, delete_files: bool = False) -> None:
         """从 Catalog 删除因子。可选同时删除物理文件。
-        
+
+        R32-P0-036/060: delete_files 同样走 FactorId domain gate + resolve-under-root
+        —— 删除路径越界是灾难，绝不直接拼 ``lake_root / "factors" / factor_id``。
+
         参数:
             factor_id: 因子唯一标识
             delete_files: 见函数签名（可选）
-        
+
         返回:
             无
         """
+        from security.factor_id import factor_dir_for, validate_factor_id
+
+        factor_id = validate_factor_id(factor_id)
         self._catalog.delete_factor(factor_id)
         if delete_files:
             import shutil
 
-            factor_dir = self._lake_root / "factors" / factor_id
+            factor_dir = factor_dir_for(self._lake_root, factor_id)
             if factor_dir.exists():
                 shutil.rmtree(factor_dir)
                 logger.info("已删除因子 '%s' 的物理文件。", factor_id)
@@ -1514,10 +1719,19 @@ def compare_live_vs_materialized(
     lv_nan = np.isnan(lv)
     mt_nan = np.isnan(mt)
     nan_mismatch = int((lv_nan != mt_nan).sum())
-    finite = ~lv_nan & ~mt_nan
+    # R32-P1-057: ±Inf mask 分开比较 —— 不能只靠 np.array_equal(equal_nan=True)。
+    lv_pos_inf = np.isposinf(lv)
+    mt_pos_inf = np.isposinf(mt)
+    lv_neg_inf = np.isneginf(lv)
+    mt_neg_inf = np.isneginf(mt)
+    pos_inf_mask_mismatch = int((lv_pos_inf != mt_pos_inf).sum())
+    neg_inf_mask_mismatch = int((lv_neg_inf != mt_neg_inf).sum())
+    inf_mask_mismatch = pos_inf_mask_mismatch + neg_inf_mask_mismatch
+    finite = ~lv_nan & ~mt_nan & ~lv_pos_inf & ~lv_neg_inf & ~mt_pos_inf & ~mt_neg_inf
     denom = np.where(np.abs(lv) > 0, np.abs(lv), 1.0)
-    rel = np.where(finite, np.abs(lv - mt) / denom, 0.0)
-    abs_e = np.where(finite, np.abs(lv - mt), 0.0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        rel = np.where(finite, np.abs(lv - mt) / denom, 0.0)
+        abs_e = np.where(finite, np.abs(lv - mt), 0.0)
     max_abs = float(np.max(abs_e)) if abs_e.size else 0.0
     max_rel = float(np.max(rel)) if rel.size else 0.0
     sign_flips = 0
@@ -1531,8 +1745,22 @@ def compare_live_vs_materialized(
         )
     rank_corr = None
     rank_changes = None
+    # R32-P0-030: rank 变化必须逐 timestamp 横截面（不 flatten）。Materialize 后
+    # 排序为 [asset, datetime]；这里按 (datetime, asset) MultiIndex unstack 成
+    # date × asset 面板，再对每行（每个 timestamp）做横截面 rank 比较。
     try:
-        if finite.sum() >= 2:
+        if isinstance(live, pd.Series) and isinstance(materialized, pd.Series):
+            l_panel = live.unstack()
+            m_panel = materialized.unstack()
+            common = l_panel.index.intersection(m_panel.index)
+            if len(common) and l_panel.shape == m_panel.shape:
+                lr = l_panel.loc[common].rank(axis=1, method="average")
+                mr = m_panel.loc[common].rank(axis=1, method="average")
+                both_finite = np.isfinite(lr.to_numpy()) & np.isfinite(mr.to_numpy())
+                if both_finite.sum() > 0:
+                    rank_changes = float((lr.to_numpy()[both_finite] != mr.to_numpy()[both_finite]).mean())
+        if rank_changes is None and finite.sum() >= 2:
+            # 兜底：非 Series/无法 unstack 时退化为扁平比较（尽量保持信息）。
             from scipy.stats import spearmanr
 
             corr = spearmanr(lv[finite], mt[finite]).statistic
@@ -1543,8 +1771,13 @@ def compare_live_vs_materialized(
                 rank_changes = float((lr != mr).mean())
     except Exception:  # noqa: BLE001 - rank stats are best-effort
         rank_corr = None
+    # R32-P0-031: equal 必须同时满足 —— exact key/index、NaN mask 零差异、
+    # ±Inf mask 零差异、有限值 tolerance 通过。任一 mask mismatch 即 not equal。
+    finite_tolerance_ok = bool(max_abs <= atol and max_rel <= rtol)
     equal = bool(
-        np.array_equal(lv, mt, equal_nan=True) or (max_abs <= atol and max_rel <= rtol)
+        nan_mismatch == 0
+        and inf_mask_mismatch == 0
+        and (np.array_equal(lv, mt, equal_nan=True) or finite_tolerance_ok)
     )
     return {
         "equal": equal,
@@ -1555,6 +1788,9 @@ def compare_live_vs_materialized(
         "sign_flips": sign_flips,
         "threshold_flips": threshold_flips,
         "nan_mismatch": nan_mismatch,
+        "pos_inf_mask_mismatch": pos_inf_mask_mismatch,
+        "neg_inf_mask_mismatch": neg_inf_mask_mismatch,
+        "inf_mask_mismatch": inf_mask_mismatch,
         "n_finite": int(finite.sum()),
         "n_total": int(lv.size),
     }

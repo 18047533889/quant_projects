@@ -49,10 +49,27 @@ class FactorExecutionScopeHint:
     source_scope_hash: str | None = None
 
 
-# P1-33: 兼容别名。历史导入 ``from api.factor import FactorSemanticIdentity``
+# R32-P1-044: 兼容别名退役。历史导入 ``from api.factor import FactorSemanticIdentity``
 # 拿到的仍是执行作用域提示（供 ``Factor.semantic_identity`` 注解 / 引擎 scope
-# 推断）。真正的因子语义身份在 ``runtime.factor_identity``。
-FactorSemanticIdentity = FactorExecutionScopeHint
+# 推断）。真正的因子语义身份在 ``runtime.factor_identity``。本模块不再直接绑定
+# 该重名（会误导开发者把 scope hint 当 identity）；通过 ``__getattr__`` 抛
+# ``DeprecationWarning`` 兼容旧导入，进入 deprecation 周期。
+def __getattr__(name: str):
+    """R32-P1-044: ``FactorSemanticIdentity`` 兼容名走 deprecation shim。"""
+    if name == "FactorSemanticIdentity":
+        import warnings
+
+        warnings.warn(
+            "api.factor.FactorSemanticIdentity is deprecated (R32-P1-044): this "
+            "name is the execution-scope HINT, not the semantic identity. Use "
+            "FactorExecutionScopeHint, or "
+            "runtime.factor_identity.FactorSemanticIdentity for the real "
+            "semantic identity.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return FactorExecutionScopeHint
+    raise AttributeError(name)
 
 
 @dataclass(frozen=True)
@@ -92,3 +109,17 @@ class Factor:
     # P1-01: 完整执行作用域提示；None 时引擎回退到因子级属性推断。默认 None
     # 保持向后兼容（parse_factor / 既有构造调用点不受影响）。
     semantic_identity: FactorExecutionScopeHint | None = None
+
+    def __post_init__(self) -> None:
+        """R32-P0-043: Direct Python API 的 ``Factor.name`` 走同一 domain validator。
+
+        HTTP validator 已拒绝超长/穿越；Direct Python API 直接构造 ``Factor``
+        可绕过 service —— 必须下沉到 domain 层校验（``security.factor_id``）。
+        非法名抛 ``ValueError``（冻结 dataclass 不赋值，仅校验）。
+        """
+        from security.factor_id import FactorIdError, validate_factor_id
+
+        try:
+            validate_factor_id(self.name)
+        except FactorIdError as exc:
+            raise ValueError(str(exc)) from exc

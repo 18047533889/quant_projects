@@ -1997,6 +1997,12 @@ def bars_per_day(
     lowered = text.lower()
     if lowered in table:
         return table[lowered]
+    # R32-P0-004: "1min"/"5min"/"15min" 长写法归一为 "1m"/"5m"/"15m" —— 否则
+    # ``bars_per_day("1min")`` 抛错，日内 session clock 无法解析分钟频率。
+    if lowered.endswith("min") and lowered[:-3].isdigit():
+        lowered = lowered[:-3] + "m"
+        if lowered in table:
+            return table[lowered]
     if lowered.endswith("d"):
         try:
             days = int(lowered[:-1] or "1")
@@ -2059,6 +2065,10 @@ def bar_freq_to_timedelta(freq: str | None) -> pd.Timedelta:
         return mapping[text]
     if text.endswith("m") and text[:-1].isdigit():
         return pd.Timedelta(minutes=int(text[:-1]))
+    # R32-P0-004: "1min"/"5min"/"15min" 等长写法缺失会让 SessionCalendar 的
+    # bar_timedelta 退化成长达 1 天的错误量（分钟 lookback 全错）。统一归一。
+    if text.endswith("min") and text[:-3].isdigit():
+        return pd.Timedelta(minutes=int(text[:-3]))
     if text.endswith("h") and text[:-1].isdigit():
         return pd.Timedelta(hours=int(text[:-1]))
     return pd.Timedelta(days=1)

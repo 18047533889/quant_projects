@@ -1,0 +1,19 @@
+{
+  "artifacts": [
+    "R30_ALIAS_AUDIT.csv",
+    "R30_AVAILABILITY_CLOCK_AUDIT.csv",
+    "R30_AVAILABILITY_CLOCK_AUDIT.csv.json",
+    "R30_DELETION_MANIFEST.csv",
+    "R30_HARD_GATES.json",
+    "R30_HEAD.json",
+    "R30_PARAMETER_ROLE_AUDIT.csv",
+    "R30_PER_CANONICAL_FINAL_REVIEW.csv",
+    "R30_PER_CANONICAL_FINAL_REVIEW.json",
+    "R30_PRODUCTION_ADMISSION_AUDIT.json",
+    "R30_SOURCE_UNIVERSE_PIT_AUDIT.json",
+    "R30_TOMBSTONE_MANIFEST.json"
+  ],
+  "canonical_set_digest": "d1c62cad7e688bd3",
+  "git_sha": "79fd88e1142a676cbd7844374b46f3c0a405456f",
+  "semantic_contract_digest": "33ed0e3317421996"
+}

@@ -344,7 +344,7 @@ def execute_materialize(
     _eff_dtype, _precision_policy = storage_precision_policy_for(
         value_dtype,
         production=production,
-        lineage_extra=((run_lineage or {}).get("extra") or {}),
+        lineage_extra=dict(lineage.extra),
     )
     lineage.extra["storage_precision_policy"] = _precision_policy
     lineage.extra["storage_value_dtype"] = _eff_dtype
