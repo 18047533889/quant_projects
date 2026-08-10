@@ -57,6 +57,16 @@ from data_access.security.api_principals import (
     get_api_principal_registry,
     reset_api_principal_registry,
 )
+from data_access.security.run_mode import (
+    RunMode,
+    resolve_run_mode,
+    require_publish_permission,
+)
+from data_access.security.governed_frame import (
+    GovernedFrame,
+    ExecutionEnvironmentIdentity,
+    require_governed_provenance,
+)
 
 __all__ = [
     "CredentialMaterial",
@@ -90,4 +100,10 @@ __all__ = [
     "ApiPrincipalRegistry",
     "get_api_principal_registry",
     "reset_api_principal_registry",
+    "RunMode",
+    "resolve_run_mode",
+    "require_publish_permission",
+    "GovernedFrame",
+    "ExecutionEnvironmentIdentity",
+    "require_governed_provenance",
 ]

@@ -426,8 +426,12 @@ def _pca_resid_series(
         center = P.mean(axis=0)
         Pc = P - center
         _U, s, vt = np.linalg.svd(Pc, full_matrices=False)
-        if _numerical_rank(s) < k + 1:
-            continue  # numerical rank < k+1 -> projection subspace undefined (R11 #63).
+        # R26-040..042: projecting onto the top-k PCs and computing the residual
+        # NORM only needs ``rank >= k`` — the ``k+1`` requirement applies to the
+        # eigengap identifiability of the k-th DIRECTION (the score path), not to
+        # the residual magnitude.  rank exactly k -> residual is computable.
+        if _numerical_rank(s) < k:
+            continue  # numerical rank < k -> top-k projection subspace undefined (R11 #63).
         if float(s[0]) <= _EPS:
             continue  # degenerate history (all identical) -> subspace undefined (R11 #62).
         loading = vt[:k]
@@ -776,7 +780,13 @@ def _best_phase(cur: np.ndarray, med: np.ndarray, max_shift: int, n_slots: int, 
         # No historical profile is similar to the current one: reporting "best
         # shift anyway" would output a meaningless phase (R11 #66) -> NaN.
         return np.nan
-    return float(best_k / int(n_slots))
+    # R26-045/046: ``k > 0`` aligns the CURRENT profile shifted LEFT by ``k``
+    # with the median — i.e. the current peak is DELAYED by ``k`` slots relative
+    # to the median.  The documented meaning is "positive = peak EARLY /
+    # negative = peak delayed", so the reported shift is ``-k/n_slots``.  This
+    # unifies implementation, doc and semantic version (the pre-R26 sign was
+    # reversed).
+    return float(-best_k / int(n_slots))
 
 
 def _profile_series(day_vals: list[np.ndarray], history_days: int, n_slots: int, cap: float, phase: bool, max_shift: int) -> list[float]:
@@ -822,12 +832,15 @@ def _profile_panel(frame: pd.DataFrame, history_days: int, n_slots: int, cap: fl
     source="advanced_intraday",
 )
 class IntradayProfileSurpriseEnergy(SeriesOperator):
-    """日内 profile 异常能量（控制时间季节性后的 minute-level 反常度）。
+    """日内 profile 异常能量（equal-observation-count slot profile 的反常度）。
 
-    把每日常模化为固定 ``n_slots`` 个 slot 的 profile，用前 ``history_days`` 天
-    逐 slot 的 Median/MAD 构造 z 分，输出 ``mean(min(z², cap))``。与 profile PCA
-    residual（当前形状是否脱离历史低维空间）不同：这里度量今天整体有多少
-    minute-by-minute 反常。P1。
+    R26-043/044: the profile slots are EQUAL-OBSERVATION-COUNT (``n_slots``
+    groups of consecutive observed bars) — NOT a fixed-clock / fixed-time
+    seasonality grid.  With missing bars the slot wall-clock shifts, so the
+    output is NOT claimed to control fixed-time intraday seasonality; it
+    measures how anomalous today's per-observation-block shape is vs the prior
+    ``history_days`` day's per-slot Median/MAD (``mean(min(z², cap))``).  A
+    fixed-clock profile would be a distinct canonical.  P1。
     """
 
     metadata = _metadata(

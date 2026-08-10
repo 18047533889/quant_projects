@@ -25,6 +25,52 @@ if TYPE_CHECKING:
     from runtime.engine import FactorEngine
 
 
+def materialize_shared_nodes_parallel(
+    dag: Any,
+    backend: Any,
+    ctx: Any,
+    *,
+    max_workers: int | None = None,
+) -> None:
+    """R27-165/231：独立 shared nodes **按依赖并行**物化（不再串行循环）。
+
+    两个彼此完全独立的 shared nodes 现在并行；R27-002。共享子树物化本身
+    ``_materialize_shared_subplan`` 线程安全（每 sid 独立写入
+    ``ctx.shared_result_cache``）。有资源约束时 ``max_workers`` 限制并发。
+
+    R27-006：本函数保留「一次性物化全部 shared」的入口（老路径兼容），真正的
+    DAG-ready 调度（某 shared predecessor ready 就立刻运行）由
+    :mod:`runtime.adaptive_batch_scheduler` 实现。
+    """
+    shared = getattr(dag, "shared_nodes", None) or {}
+    if isinstance(shared, dict):
+        items = list(shared.items())
+    else:
+        items = list(shared)
+    if not items:
+        return
+    if len(items) == 1:
+        sid, sub = items[0]
+        _materialize_shared_subplan(backend, sub, ctx, sid)
+        return
+    try:
+        from concurrent.futures import ThreadPoolExecutor, wait
+
+        def _one(pair):
+            sid, sub = pair
+            _materialize_shared_subplan(backend, sub, ctx, sid)
+
+        workers = max_workers or min(4, len(items))
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="r27-shared") as pool:
+            futures = [pool.submit(_one, pair) for pair in items]
+            done, _ = wait(futures)
+            for f in done:
+                f.result()  # 失败如实冒泡（共享物化失败不静默）
+    except ImportError:
+        for sid, sub in items:
+            _materialize_shared_subplan(backend, sub, ctx, sid)
+
+
 def _materialize_shared_subplan(
     backend: Any,
     sub: Any,
@@ -714,8 +760,7 @@ def execute_run_many(
 
     with routing_execution_scope(perf):
         if ctx.shared_result_cache is not None:
-            for sid, sub in dag.shared_nodes.items():
-                _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
+            materialize_shared_nodes_parallel(dag, engine_to_use.backend, ctx)
             _clear_polars_long_shared_sid(ctx)
             _setup_cse_refcounts(ctx, dag.roots)
             validate_cse_refcount_integrity(dag, ctx)
@@ -853,8 +898,7 @@ def execute_run_many_iter(
 
     with routing_execution_scope(perf):
         if ctx.shared_result_cache is not None:
-            for sid, sub in dag.shared_nodes.items():
-                _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
+            materialize_shared_nodes_parallel(dag, engine_to_use.backend, ctx)
             _clear_polars_long_shared_sid(ctx)
             _setup_cse_refcounts(ctx, dag.roots)
             validate_cse_refcount_integrity(dag, ctx)
@@ -935,12 +979,8 @@ def execute_run_many_parallel(
     )
     assert_production_factors(factors, mode=engine.run_mode, context="run_many_parallel")
 
-    try:
-        from joblib import Parallel, delayed
-    except ImportError as exc:  # pragma: no cover
-        raise ImportError(
-            "run_many_parallel 需要 joblib：pip install 'factor-engine[parallel]'"
-        ) from exc
+    # R27-166：并行 root 路径改用 ``concurrent.futures`` 线程池 as_completed
+    # 流式 sink（不再依赖 joblib，也避免整层 raw list burst memory）。
 
     # PIT 在编译期审计；auto_warmup 走共享 union 窗口 —— 两者都不再退化为逐因子 run()。
     dag, analyses = engine._dag_from_factors(
@@ -1026,8 +1066,7 @@ def execute_run_many_parallel(
     try:
         with routing_execution_scope(perf):
             if ctx.shared_result_cache is not None:
-                for sid, sub in dag.shared_nodes.items():
-                    _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
+                materialize_shared_nodes_parallel(dag, engine_to_use.backend, ctx)
                 _clear_polars_long_shared_sid(ctx)
                 _setup_cse_refcounts(ctx, dag.roots)
             validate_cse_refcount_integrity(dag, ctx)
@@ -1047,11 +1086,19 @@ def execute_run_many_parallel(
                             )
                         _handle_result(result_policy, sink, results, fp.factor_name, result, path, backend_paths)
                 else:
-                    raw = Parallel(n_jobs=workers, backend="threading")(
-                        delayed(_one)(fp) for fp in fps
-                    )
-                    for name, result, path in raw:
-                        _handle_result(result_policy, sink, results, name, result, path, backend_paths)
+                    # R27-166/249：as_completed → 立即 sink/release，不再等整层
+                    # raw list 形成（避免 layer result burst memory，R27-103）。
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                    with ThreadPoolExecutor(
+                        max_workers=workers, thread_name_prefix="r27-root"
+                    ) as pool:
+                        futures = {pool.submit(_one, fp): fp for fp in fps}
+                        for future in as_completed(futures):
+                            name, result, path = future.result()
+                            _handle_result(
+                                result_policy, sink, results, name, result, path, backend_paths
+                            )
                 # Phase 5 R5：本层完成，引用计数归零的共享子树立即释放
                 for fp in fps:
                     _release_consumed_sids(ctx, fp.root)

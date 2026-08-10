@@ -1,0 +1,41 @@
+file,line,symbol,pattern,severity,code,canonicals,review_status,resolution
+cleaned_operators/_causal.py,537,causal_linear_extrapolate_panel,lead_next_call,P0,"prev_idx = next ( ( j for j in range ( i - 1 , - 1 , - 1 ) if np . isfinite ( arr [ j ] ) ) , None )",,reviewed,builtin next(iter) — not the forbidden next operator; no future read
+cleaned_operators/_causal.py,540,causal_linear_extrapolate_panel,lead_next_call,P0,prev2_idx = next (,,reviewed,builtin next(iter) — not the forbidden next operator; no future read
+cleaned_operators/advanced_information.py,761,_peak,random_call,P0,rng = np . random . default_rng ( seed ),,reviewed,fixed-seed default_rng surrogate null for TE peak-excess significance; deterministic; extended/PENDING
+cleaned_operators/advanced_structure.py,385,_calculate_series,random_call,P0,rng = np . random . default_rng ( _SEED ),,reviewed,fixed-seed default_rng(_SEED); deterministic internal fixture
+cleaned_operators/closure_audit.py,492,_condition_bool_contract,random_call,P0,rng = np . random . default_rng ( _stable_seed ( ) ),,reviewed,fixed-seed default_rng(_stable_seed()); audit fixture
+cleaned_operators/closure_audit.py,740,_null_calibration,random_call,P0,rng = np . random . default_rng ( _stable_seed ( ) ),,reviewed,fixed-seed default_rng(_stable_seed()); audit fixture
+cleaned_operators/closure_audit.py,823,_practical_usability,random_call,P0,rng = np . random . default_rng ( _stable_seed ( ) ),,reviewed,fixed-seed default_rng(_stable_seed()); audit fixture
+cleaned_operators/common/_polars_bridge.py,266,from_frame,lead_next_call,P0,"time_col = next ( ( c for c in _TIME_AXIS_COLUMNS if c in columns ) , None )",,reviewed,builtin next(iter) over time-axis columns — benign
+cleaned_operators/common/_polars_bridge.py,308,panel_schema,lead_next_call,P0,"time_col = next ( ( c for c in _TIME_AXIS_COLUMNS if c in columns ) , None )",,reviewed,builtin next(iter) over time-axis columns — benign
+cleaned_operators/common/_polars_bridge.py,494,frame_time_index,lead_next_call,P0,"time_col = next ( ( c for c in _TIME_AXIS_COLUMNS if c in frame . columns ) , None )",,reviewed,builtin next(iter) over time-axis columns — benign
+cleaned_operators/common/polars_robust_stats.py,387,_best_lag_corr_excess,random_call,P0,rng = np . random . default_rng ( seed + row ),,reviewed,fixed-seed default_rng(seed+row) block surrogate for ts_best_lag_corr_excess; deterministic; extended/PENDING
+cleaned_operators/common/scalar_where.py,57,calculate,lead_next_call,P0,template = next (,,reviewed,builtin next(iter) over input frames — benign
+cleaned_operators/composition.py,120,_parts,bidirectional_smoother,P1,"_MISCLASSIFIED_PARTS : dict [ str , str ] = {",,reviewed,false positive: '_MISCLASSIFIED_PARTS' contains substring 'ARTS'
+cleaned_operators/composition.py,184,_same_composition,bidirectional_smoother,P1,if key in _MISCLASSIFIED_PARTS :,,reviewed,false positive: '_MISCLASSIFIED_PARTS' contains substring 'ARTS'
+cleaned_operators/contract_hardening.py,243,_derive_contracts,lead_next_call,P0,preferred = implementations . get ( ) or next ( iter ( implementations . values ( ) ) ),,reviewed,builtin next(iter) over implementations dict — benign
+cleaned_operators/downside_risk.py,399,_best_lag_corr_excess,random_call,P0,rng = np . random . default_rng ( seed + row ),,reviewed,fixed-seed default_rng(seed+row) block surrogate for ts_best_lag_corr_excess; deterministic; extended/PENDING
+cleaned_operators/fiscal_event_ops.py,177,pd_row_sum_skipna,lead_next_call,P0,"template = next ( ( x for x in frames if x is not None ) , None )",,reviewed,builtin next(iter) over frames — benign
+cleaned_operators/fiscal_event_ops.py,199,pl_row_sum_skipna,lead_next_call,P0,"template = next ( ( value for value in inputs if isinstance ( value , pl . DataFrame ) ) , None )",,reviewed,builtin next(iter) over inputs — benign
+cleaned_operators/hvg_ext.py,364,_ts_hvg_forward_backward_asymmetry,bidirectional_smoother,P1,def _ts_hvg_forward_backward_asymmetry (,,reviewed,"ts_hvg_forward_backward_asymmetry = trailing-window HVG graph-asymmetry statistic; 'forward/backward' refers to the graph measure, computed causally on window [t-w+1,t]; NOT a time smoother"
+cleaned_operators/hvg_ext.py,427,_ts_hvg_motif_entropy,bidirectional_smoother,P1,": _ts_hvg_forward_backward_asymmetry ,",,reviewed,same trailing-window HVG asymmetry canonical registration; causal
+cleaned_operators/math_certificate.py,1383,build_hostile_fixtures,random_call,P0,rng = np . random . default_rng ( seed ),,reviewed,fixed-seed default_rng(seed); hostile fixture generator (offline)
+cleaned_operators/operator_audits.py,53,_panel,random_call,P0,rng = np . random . default_rng ( seed ),,reviewed,fixed-seed default_rng(seed); audit fixture
+cleaned_operators/operator_audits.py,464,audit_column_permutation,random_call,P0,order = np . random . default_rng ( 1 ) . permutation ( list ( orig [ panel_keys [ 0 ] ] . columns ) ),,reviewed,fixed-seed default_rng(1).permutation; column-permutation oracle (offline)
+cleaned_operators/operator_spec.py,186,infer_production_policy,lead_next_call,P0,chosen = if in backends_map else next ( iter ( backends_map ) ),,reviewed,builtin next(iter) over backends map — benign
+cleaned_operators/operator_spec.py,470,build_operator_spec,lead_next_call,P0,if in backends_map else next ( iter ( backends_map ) ),,reviewed,builtin next(iter) over backends map — benign
+cleaned_operators/research_spectral.py,251,_phase_surrogate,random_call,P0,"ph = np . random . default_rng ( seed ) . uniform ( 0.0 , 2.0 * np . pi , size = X . shape )",,reviewed,fixed-seed default_rng(seed) phase surrogate; research-only spectral
+cleaned_operators/rolling_pack.py,104,_pl_to_pd,lead_next_call,P0,time_col = next (,,reviewed,builtin next(iter) over columns — benign
+cleaned_operators/search/factor_dedup.py,56,probe_panel,random_call,P0,rng = np . random . default_rng ( seed ),,reviewed,fixed-seed default_rng(seed); dedup probe fixture
+cleaned_operators/search/factor_dedup.py,90,build_typed_fixtures,random_call,P0,rng = np . random . default_rng ( _PROBE_SEED ),,reviewed,fixed-seed default_rng(_PROBE_SEED); dedup probe fixture
+cleaned_operators/search/factor_dedup.py,170,build_ashare_fixture,random_call,P0,rng = np . random . default_rng ( seed ),,reviewed,fixed-seed default_rng(seed); dedup probe fixture
+cleaned_operators/semantic_audit.py,147,_panel,random_call,P0,rng = np . random . default_rng ( seed ),,reviewed,fixed-seed default_rng(seed); audit fixture
+cleaned_operators/semantic_audit.py,157,_panel_pair,random_call,P0,rng = np . random . default_rng ( seed ),,reviewed,fixed-seed default_rng(seed); audit fixture
+cleaned_operators/semantic_audit.py,615,_column_permutation,random_call,P0,rng = np . random . default_rng ( 42 ),,reviewed,fixed-seed default_rng(42); column-permutation audit
+cleaned_operators/semantic_audit.py,661,_missing_state,lead_next_call,P0,"cond_name = next ( ( n for n in names if n in { , , } ) , None )",,reviewed,builtin next(iter) over names — benign
+cleaned_operators/semantic_audit.py,948,_psd_geometry,random_call,P0,rng = np . random . default_rng ( 31 ),,reviewed,fixed-seed default_rng(31); PSD-geometry audit
+cleaned_operators/semantic_audit.py,1016,_golden_hill,random_call,P0,rng = np . random . default_rng ( 17 ),,reviewed,fixed-seed default_rng(17); golden-hill audit
+research_operators/__init__.py,21,build_research_dsl_allowlist,lead_next_call,P0,"operator = implementations . get ( ) or next ( iter ( implementations . values ( ) ) , None )",,reviewed,builtin next(iter) over implementations — benign
+backend/composite_evidence.py,110,composite_production_safe,lead_next_call,P0,chosen = if in backends_map else next ( iter ( backends_map ) ),,reviewed,builtin next(iter) over backends — benign
+backend/polars_expr_emitter.py,1087,_try_fuse_nary_add_ts,lead_next_call,P0,col_name = next ( iter ( cols ) ),,reviewed,builtin next(iter) over cols — benign
+backend/sql_pushdown/emitter.py,7366,compile_plans_batch_to_sql,lead_next_call,P0,"sid , plan = next ( iter ( plans . items ( ) ) )",,reviewed,builtin next(iter) over plans — benign

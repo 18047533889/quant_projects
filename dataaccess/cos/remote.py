@@ -287,13 +287,51 @@ def _remote_daily_paths(
         raise ValidationError(f"remote 模式无法解析 time_range: {time_range}")
     # #P0 收官（0.9.5）：期望 partition 走共享 expected_partitions（trade_day 用
     # 交易日历，跨周末/节假日不再生成不存在的对象路径）。
+    # R25 P0-002：文件名走共享 locator（_daily_filename，StockCapital shares_ 前缀），
+    # 不再 mirror/remote 各自拼。
+    from .mirror import _daily_filename
+
     paths = [
-        f"{base}/{day.isoformat()}.parquet"
-        for day in expected_partitions(dataset_name, start, end, layout="daily_parquet")
+        f"{base}/{_daily_filename(spec, day)}"
+        for day in expected_partitions(dataset_name, start, end, layout=spec.layout)
     ]
     for path in paths:
         authorize_s3_path(path)
     return paths
+
+
+def _remote_period_files(
+    spec: MirrorSpec,
+    dataset_name: str,
+    time_range: tuple[Any, Any] | None,
+) -> list[str]:
+    """R25 P0-001：period_files 布局（US finance）的远程路径。
+
+    partition_clock=period_end（StockIncome/2024-03-31.parquet），predicate 时钟是
+    filing_date——**不能**按 request time_range 展开物理文件名。用目录 glob
+    ``{base}/*.parquet``（宁可多扫不能漏），snapshot resolver 再枚举 exact objects
+    （P0-009）并严格按 filing_date 过滤。time_range 只用于提示（诊断日志）。
+    """
+    base = _s3_table_base(spec)
+    authorize_s3_path(f"{base}/")
+    return [f"{base}/*.parquet"]
+
+
+def _remote_prefixed_date(
+    spec: MirrorSpec,
+    dataset_name: str,
+    time_range: tuple[Any, Any] | None,
+) -> list[str]:
+    """R25 P0-002：prefixed_date_file 布局（StockCapital split/shares）远程路径。
+
+    与 daily 相同走共享 ``_daily_filename``（file_selector 区分 shares_ 前缀），
+    但 expected_partitions 对该布局返回空（不按 request 时间轴枚举）→ 用目录
+    glob + file_selector 前缀精确限定（shares_*.parquet / *.parquet）。
+    """
+    base = _s3_table_base(spec)
+    selector = getattr(spec, "file_selector", None) or ""
+    authorize_s3_path(f"{base}/")
+    return [f"{base}/{selector}*.parquet"]
 
 
 def _remote_single_full(spec: MirrorSpec) -> list[str]:
@@ -376,6 +414,10 @@ def build_remote_paths(
         return _remote_root_file(spec)
     if spec.layout == "daily_parquet":
         return _remote_daily_paths(spec, dataset_name, time_range)
+    if spec.layout in {"period_files", "event_files"}:
+        return _remote_period_files(spec, dataset_name, time_range)
+    if spec.layout == "prefixed_date_file":
+        return _remote_prefixed_date(spec, dataset_name, time_range)
     if spec.layout == "hive_date":
         return _remote_hive_date_paths(spec, dataset_name, time_range)
     if spec.layout == "hive_year":
@@ -585,6 +627,19 @@ def local_mirror_complete_for_range(
         return _local_file_usable(_local_table_dir(spec) / spec.file_name)
     if spec.layout == "root_file":
         return _local_file_usable(spec.local_root / spec.file_name)
+    if spec.layout in {"period_files", "prefixed_date_file", "event_files"}:
+        # R25 P0-001/016：period/event/prefixed 布局按完整目录判断（不能按
+        # time_range 枚举）。目录有任意 verified parquet 视为本地已同步（完整的
+        # 周期文件集，后续由 snapshot/read 层严格过滤）。
+        from .mirror import _local_file_fresh
+
+        local_dir = _local_table_dir(spec) if spec.table else spec.local_root
+        if not local_dir.exists() or not local_dir.is_dir():
+            return False
+        for p in local_dir.glob("*.parquet"):
+            if _local_file_fresh(p):
+                return True
+        return False
     if time_range is None:
         return False
     if spec.layout == "daily_parquet":
@@ -678,6 +733,24 @@ def hybrid_cos_read_paths(
         return None
     if time_range is None or time_range[0] is None:
         return None
+    if spec.layout in {"period_files", "prefixed_date_file", "event_files"}:
+        # R25 P0-001/016：period/event/prefixed 布局禁止 local/remote 混源——
+        # 本地周期文件与远程 glob 无法按 partition_clock 对齐（不混 epoch）。
+        return None
+    # R25 P0-013：auto hybrid 必须先能证明 local/remote 同一 source generation。
+    # 无 publisher manifest 证明同 generation 时，production/strict 禁止混源
+    # （fallback 全部 remote target generation，不混）。research 可降级（返回 None
+    # 表示不混合，走 all-or-nothing remote）。
+    if _strict_mode():
+        try:
+            from data_access.read.query_budget import is_strict_semantics
+
+            if is_strict_semantics():
+                # strict：不允许 local/remote 混 source epoch（无法证明同 generation）。
+                # 返回 None → 调用方走纯 remote（all target generation），不混。
+                return None
+        except Exception:
+            return None
     if local_mirror_complete_for_range(ds.name, time_range=time_range):
         return None  # 本地齐全 → 纯本地，不混合
 
@@ -1017,10 +1090,23 @@ def materialize_remote_via_cli(
         raise ValidationError(f"无法解析 time_range: {time_range}")
 
     paths: list[str] = []
-    if cache_spec.layout == "daily_parquet":
+    if cache_spec.layout in {"period_files", "prefixed_date_file", "event_files"}:
+        # R25 P0-001/016：period/event/prefixed 布局 CLI 缓存也走完整目录 sync
+        # （不能按 time_range 展开物理文件名），并收集命中 file_selector 的文件。
+        from .mirror import _sync_dir_full
+
+        _sync_dir_full(cache_spec)
+        selector = getattr(cache_spec, "file_selector", None) or ""
+        base_dir = _local_table_dir(cache_spec) if cache_spec.table else cache_spec.local_root
+        for p in sorted(base_dir.glob(f"{selector}*.parquet")):
+            if p.exists() and p.stat().st_size > 0:
+                paths.append(str(p))
+    elif cache_spec.layout == "daily_parquet":
         for day in expected_partitions(dataset_name, start, end, layout=cache_spec.layout):
-            _sync_daily_file(cache_spec, day)
-            dest = _local_table_dir(cache_spec) / f"{day.isoformat()}.parquet"
+            _sync_daily_file(cache_spec, day, dataset_name=dataset_name)
+            from .mirror import _daily_filename
+
+            dest = _local_table_dir(cache_spec) / _daily_filename(cache_spec, day)
             if dest.exists() and dest.stat().st_size > 0:
                 paths.append(str(dest))
     elif cache_spec.layout == "hive_date":

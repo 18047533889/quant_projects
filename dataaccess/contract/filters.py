@@ -99,8 +99,11 @@ def validate_filter_requirements(
     from data_access.read.query_budget import is_strict_semantics
 
     effective_strict = strict if strict is not None else is_strict_semantics()
+    # RuntimeDatasetContract.filters 或裸 contract.filter_requirements 都能用。
     requirements: tuple[FilterRequirement, ...] = tuple(
-        getattr(contract, "filter_requirements", ()) or ()
+        getattr(contract, "filters", None)
+        or getattr(contract, "filter_requirements", ())
+        or ()
     )
     if not requirements:
         return

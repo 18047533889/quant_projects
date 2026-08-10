@@ -134,33 +134,34 @@ def _logsumexp(xs: Sequence[float]) -> float:
     return m + float(np.log(np.sum(np.exp(np.asarray(xs, dtype=float) - m))))
 
 
-def _log_finite_horizon_sum(rho: float, K: int) -> float:
-    """``log( sum_{t=0}^{K-1} rho^t )`` in a cancellation-free closed form.
+def _log_finite_horizon_sum(log_rho: float, K: int) -> float:
+    """``log( sum_{t=0}^{K-1} rho^t )`` in a cancellation-free closed form,
+    taking ``log_rho = log(rho)`` so ``rho = |λ|²`` is NEVER materialised.
 
-    P1-L (#136): the finite-horizon energy sum ``Σ |λ|^{2t}`` is evaluated in
-    LOG space.  For ``rho`` far from 1 the geometric-series closed form is used
-    in a way that never computes ``rho^K`` (which overflows for ``rho > 1``);
-    near ``rho == 1`` the direct finite sum is used so ``rho - 1`` never cancels
-    catastrophically.  The result is finite for any ``rho >= 0`` and ``K``.
+    R26-123/124: ``rho = abs(lambda)**2`` overflows to inf for a finite but
+    large lambda, and ``abs_b**2`` underflows to 0 for a tiny-but-nonzero mode
+    amplitude.  Working in ``log_rho = 2·log|λ|`` keeps every branch in log
+    space: near ``rho == 1`` the direct finite sum is used (``rho - 1`` never
+    cancels catastrophically); ``rho > 1`` and ``rho < 1`` use the geometric
+    closed form in log domain.  The result is finite for any finite ``log_rho``.
     """
-    r = float(rho)
-    if r < 0.0 or not np.isfinite(r):
-        return float("-inf")
-    if r == 0.0:
-        # only the t=0 term survives (0^0 == 1): sum == 1, log == 0.
+    lr = float(log_rho)
+    if lr <= float("-inf"):
+        # rho == 0: only the t=0 term survives (0^0 == 1): sum == 1, log == 0.
         return 0.0
+    r = float(np.exp(lr))
     if abs(r - 1.0) < 1e-6:
         return float(np.log(np.sum(r ** np.arange(K, dtype=float))))
-    if r > 1.0:
-        K_log_r = K * float(np.log(r))
+    if lr > 0.0:
+        K_log_r = K * lr
         # log((r^K - 1)/(r - 1)) = K log r + log(1 - r^{-K}) - log(r - 1)
         return (
             K_log_r
             + float(np.log1p(-np.exp(-K_log_r)))
-            - float(np.log(r - 1.0))
+            - float(np.log(np.expm1(lr)))
         )
     # r < 1: log((1 - r^K)/(1 - r)) = log1p(-r^K) - log1p(-r)
-    return float(np.log1p(-np.exp(K * float(np.log(r))))) - float(np.log1p(-r))
+    return float(np.log1p(-np.exp(K * lr))) - float(np.log1p(-r))
 
 
 def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any] | None:
@@ -215,17 +216,27 @@ def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any
     # the direct finite sum is used so ``rho - 1`` never cancels catastrophically),
     # so a growing mode (``rho > 1``) can never overflow and no ``exp(700)``
     # clamp is needed — concentration is a stable log-ratio downstream.
-    rho = np.abs(eig_vals) ** 2
+    # R26-123/124: work in log domain throughout.  ``log_rho = 2·log|λ|`` (never
+    # ``abs(λ)²``, which overflows); ``log_b2 = 2·log|b|`` (never ``abs_b**2``,
+    # which underflows a tiny-but-nonzero mode to 0 and misreads it as
+    # zero-energy).
+    with np.errstate(divide="ignore", invalid="ignore"):
+        log_rho = np.where(eig_vals == 0.0, -np.inf, 2.0 * np.log(np.abs(eig_vals)))
     log_sum = np.array(
-        [_log_finite_horizon_sum(float(rho[j]), int(K)) for j in range(eig_vals.size)],
+        [_log_finite_horizon_sum(float(log_rho[j]), int(K)) for j in range(eig_vals.size)],
         dtype=float,
     )
     # R16-085: a ZERO-amplitude mode has NO energy — ``log(|b|^2 + EPS)`` gave a
     # b=0 mode a fabricated non-zero energy via the machine epsilon.  ``-inf``
     # propagates the correct semantics (the mode ranks last / vanishes).
     abs_b = np.abs(b)
-    log_b2 = np.where(abs_b == 0.0, -np.inf, np.log(abs_b ** 2))
+    log_b2 = np.where(abs_b == 0.0, -np.inf, 2.0 * np.log(abs_b))
     log_energy = log_b2 + log_sum
+    # R26-125: if EVERY mode has ``log_energy == -inf`` (all amplitudes exactly
+    # zero), fail closed explicitly — never let ``-inf - -inf -> NaN`` emerge
+    # from an accidental numeric path in the downstream log-ratio.
+    if np.all(np.isneginf(log_energy)):
+        return None
     order = np.argsort(-log_energy)
     return {
         "eig": eig_vals[order],

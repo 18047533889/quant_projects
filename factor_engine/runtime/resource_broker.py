@@ -386,10 +386,14 @@ class ResourceBroker:
 
     def _reserve_bytes(self) -> int:
         ram = self.hard_memory_limit
-        return max(
+        raw = max(
             int(self.min_host_reserve_gb * 1024**3),
             int(ram * self.min_host_reserve_fraction),
         )
+        # R27-029：默认不要把 MemAvailable 吃到接近 0。小内存机器上
+        # ``min_host_reserve_gb=8`` 会把整个预算占满 → reserve 封顶 35% RAM，
+        # 大服务器上 8GB min 仍生效（128GB → min(8GB, 44.8GB)=8GB）。
+        return min(raw, int(ram * 0.35))
 
     def _usable_spill(self) -> int:
         snap = self._refresh()

@@ -1,4 +1,18 @@
-"""多因子批量依赖图：列重叠、lookback 与可并行层。"""
+"""多因子批量依赖图：真实依赖、lookback 与 locality 分组。
+
+R27-164/232：**列重叠 ≠ 执行依赖**。``referenced_columns`` 相交绝不阻止并行
+（``ts_mean(close,5)`` 与 ``ts_std(close,20)`` 共享只读 ``close``，恰恰更适合放
+同一 locality wave，避免重复 scan/解码）。真正 dependency 只能来自：
+
+    - PlanNode dependency / SourceTransform dependency
+    - CSE dependency（shared sid 消费关系）
+    - state/checkpoint dependency
+    - materialization ordering
+
+因此 ``parallel_layers`` 改为按**真实依赖图**分层；列重叠仅作为
+``locality_groups`` hint（R27-164 明确要求保留 column overlap 作为
+locality/reuse hint，不当作冲突）。
+"""
 
 from __future__ import annotations
 
@@ -16,10 +30,12 @@ class FactorNode:
 
     字段：
         name: 因子名称
-        referenced_columns: 公式引用的数据列集合
+        referenced_columns: 公式引用的数据列集合（**locality hint**，非依赖）
         lookback: 最大历史窗口长度
         has_ts_op: 是否含时序算子
         has_cs_op: 是否含截面算子
+        dependencies: 真实因子级依赖（批内另一因子 root 嵌入本因子计划时）——
+            R27-164：列重叠不是依赖；此集合只含真实 subplan 嵌入。
     """
 
     name: str
@@ -27,6 +43,7 @@ class FactorNode:
     lookback: int
     has_ts_op: bool
     has_cs_op: bool
+    dependencies: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -37,28 +54,35 @@ class FactorBatchGraph:
         nodes: 因子名 → 分析摘要
         column_union: 所有因子引用列的并集
         max_lookback: 批量内最大 lookback
-        column_overlap_groups: 共享至少一列的因子组（用于 CSE / prefetch 提示）
-        parallel_layers: 列集合不相交的因子可并行层（同 data_scope 内）
+        locality_groups: 共享至少一列的因子组（**locality/reuse hint**，
+            不是并行冲突；R27-164）
+        column_overlap_groups: ``locality_groups`` 的兼容别名
+        parallel_layers: 按**真实依赖图**分层的可并行层（同层因子互不依赖；
+            R27-232 不再按列重叠拆层）
     """
 
     nodes: dict[str, FactorNode] = field(default_factory=dict)
     column_union: frozenset[str] = frozenset()
     max_lookback: int = 0
-    #: 共享至少一列的因子组（用于 CSE / prefetch 提示）
+    #: 共享至少一列的因子组（locality/reuse hint —— R27-164 明确定为 hint）。
+    locality_groups: list[list[str]] = field(default_factory=list)
+    #: 兼容别名（历史名称保留）。
     column_overlap_groups: list[list[str]] = field(default_factory=list)
-    #: 列集合不相交的因子可并行（同 data_scope 内）
+    #: 按真实依赖图分层的可并行层（R27-232：列重叠不再造成 false dependency）。
     parallel_layers: list[list[str]] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         """序列化为可 JSON 化的摘要字典。
 
         返回：
-            含因子列表、列并集、lookback、重叠组、并行层与各节点详情的字典
+            含因子列表、列并集、lookback、locality 组、真实依赖并行层与各节点
+            详情的字典。
         """
         return {
             "factors": sorted(self.nodes.keys()),
             "column_union": sorted(self.column_union),
             "max_lookback": self.max_lookback,
+            "locality_groups": self.locality_groups,
             "column_overlap_groups": self.column_overlap_groups,
             "parallel_layers": self.parallel_layers,
             "nodes": {
@@ -67,6 +91,7 @@ class FactorBatchGraph:
                     "lookback": node.lookback,
                     "has_ts_op": node.has_ts_op,
                     "has_cs_op": node.has_cs_op,
+                    "dependencies": sorted(node.dependencies),
                 }
                 for name, node in self.nodes.items()
             },
@@ -84,7 +109,7 @@ def build_factor_batch_graph(
         analyses: 因子名 → ``Analyzer.lower`` 分析结果的映射
 
     返回：
-        含列重叠组与并行层的 ``FactorBatchGraph``
+        含 locality 组与真实依赖并行层的 ``FactorBatchGraph``
     """
     nodes: dict[str, FactorNode] = {}
     column_union: set[str] = set()
@@ -103,20 +128,80 @@ def build_factor_batch_graph(
             has_cs_op=bool(analysis.has_cs_op),
         )
 
-    overlap_groups = _column_overlap_groups(nodes)
-    parallel_layers = _parallel_layers(nodes)
+    # R27-164：真实依赖只在因子 root 嵌入另一因子 root 的 subplan 时存在
+    # （列重叠不是依赖）。
+    deps = _derive_true_factor_dependencies(nodes, analyses)
+    nodes = {
+        name: FactorNode(
+            name=name,
+            referenced_columns=node.referenced_columns,
+            lookback=node.lookback,
+            has_ts_op=node.has_ts_op,
+            has_cs_op=node.has_cs_op,
+            dependencies=frozenset(deps.get(name, set())),
+        )
+        for name, node in nodes.items()
+    }
+
+    locality = _column_overlap_groups(nodes)
+    layers = _dependency_layers(nodes)
 
     return FactorBatchGraph(
         nodes=nodes,
         column_union=frozenset(column_union),
         max_lookback=max_lookback,
-        column_overlap_groups=overlap_groups,
-        parallel_layers=parallel_layers,
+        locality_groups=locality,
+        column_overlap_groups=locality,
+        parallel_layers=layers,
     )
 
 
+def _collect_subplan_ids(root: object) -> set[int]:
+    """深度优先收集计划树所有节点 id（含子节点）。
+
+    用于检测因子 root 是否**真实嵌入**另一因子的 subplan——只有对象级 identity
+    命中才算依赖（R27-164：这不是列重叠启发式）。
+    """
+    out: set[int] = set()
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        out.add(id(node))
+        for child in getattr(node, "inputs", []) or []:
+            stack.append(child)
+    return out
+
+
+def _derive_true_factor_dependencies(
+    nodes: dict[str, FactorNode],
+    analyses: dict[str, "AnalysisResult"],
+) -> dict[str, set[str]]:
+    """因子级真实依赖：A 依赖 B ⇔ A 的 IR 内嵌 B 的 IR root（对象 identity）。
+
+    批内每个因子独立编译，通常**无**跨因子 root 嵌入（共享子树由 CSE 提到
+    shared_nodes），因此这里自然返回空依赖集 → 单层可并行。若未来某因子 root
+    真嵌入另一因子 root，则必须串行。
+    """
+    deps: dict[str, set[str]] = {name: set() for name in nodes}
+    roots: dict[str, object] = {}
+    for name in nodes:
+        analysis = analyses.get(name)
+        roots[name] = getattr(analysis, "ir", None)
+    for name, ir in roots.items():
+        if ir is None:
+            continue
+        subplan = _collect_subplan_ids(ir)
+        for other, other_ir in roots.items():
+            if other == name or other_ir is None:
+                continue
+            # 真实依赖：name 的 IR 内嵌 other 的 IR root（identity 命中）。
+            if id(other_ir) in subplan:
+                deps[name].add(other)
+    return deps
+
+
 def _column_overlap_groups(nodes: dict[str, FactorNode]) -> list[list[str]]:
-    """并查集：共享列的因子归为一组。"""
+    """并查集：共享列的因子归为一组（**locality hint**，R27-164 不是依赖）。"""
     names = sorted(nodes.keys())
     parent = {n: n for n in names}
 
@@ -153,27 +238,30 @@ def _column_overlap_groups(nodes: dict[str, FactorNode]) -> list[list[str]]:
     return [sorted(g) for g in groups.values() if len(g) > 1]
 
 
-def _parallel_layers(nodes: dict[str, FactorNode]) -> list[list[str]]:
-    """列集合互不相交的因子可置于同一并行层。"""
-    remaining = set(nodes.keys())
-    layers: list[list[str]] = []
+def _dependency_layers(nodes: dict[str, FactorNode]) -> list[list[str]]:
+    """按**真实依赖图**分层：同层因子互不依赖（R27-164/232）。
 
+    不再用「列集合不相交」作为并行条件（false dependency）。真实依赖来自
+    ``FactorNode.dependencies``（因子 root 内嵌另一因子 root）。无依赖时全部
+    因子归入单层——它们都只读 shared_nodes + source columns，可同时被调度器
+    admission（内存由 ResourceBroker 约束）。
+    """
+    names = sorted(nodes.keys())
+    deps: dict[str, set[str]] = {
+        name: {d for d in node.dependencies if d in nodes} for name, node in nodes.items()
+    }
+    # 拓扑分层（Kahn）。
+    layers: list[list[str]] = []
+    remaining = set(names)
     while remaining:
-        layer: list[str] = []
-        used_cols: set[str] = set()
-        for name in sorted(remaining):
-            cols = nodes[name].referenced_columns
-            if cols & used_cols:
-                continue
-            layer.append(name)
-            used_cols |= cols
-        if not layer:
-            # 全部冲突：逐个串行
-            name = min(remaining)
-            layer = [name]
-        for name in layer:
-            remaining.discard(name)
-        layers.append(layer)
+        ready = sorted(
+            n for n in remaining if not (deps[n] & remaining)
+        )
+        if not ready:
+            # 环（异常）：按 name 序逐个串行，保证终态。
+            ready = [min(remaining)]
+        layers.append(ready)
+        remaining -= set(ready)
     return layers
 
 

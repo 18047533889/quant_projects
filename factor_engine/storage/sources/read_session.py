@@ -49,6 +49,31 @@ class DataSourceReadSession:
             thresholds=adjust_input_dq_thresholds_from_stats(input_dq_thresholds,stats,names)
             report=self.assert_input_dq(names,raise_on_fail=input_dq_strict,thresholds=thresholds)
         self.prefetch(names); return report
+
+    def prepare_waves(self, waves: Iterable[Any], *, input_dq_check: bool=False,
+                      input_dq_strict: bool=True, input_dq_thresholds=None,
+                      data_snapshot_id: str | None=None) -> list[Any]:
+        """R27-170/248：按 ReadWave 逐波读取，**不**全 batch 一次性 union prefetch。
+
+        每个 wave 只投影该 wave 真实需要的列（R27-067），scan 后 source buffer 喂
+        多个 task（R27-066）。返回每波 prefetch 的 input_dq report（None 表示跳过）。
+        """
+        reports=[]
+        for wave in waves:
+            names=sorted(set(getattr(wave,"columns",[]) or []))
+            if not names:
+                continue
+            snap=data_snapshot_id or getattr(self._source,"data_snapshot_id",None)
+            scope=column_cache_scope(self._source,names,data_snapshot_id=snap); self._last_scope_key=scope.key
+            report=None
+            if input_dq_check:
+                from runtime.input_dq import adjust_input_dq_thresholds_from_stats, load_dataset_stats_for_source
+                stats=load_dataset_stats_for_source(self._source)
+                thresholds=adjust_input_dq_thresholds_from_stats(input_dq_thresholds,stats,names)
+                report=self.assert_input_dq(names,raise_on_fail=input_dq_strict,thresholds=thresholds)
+            self.prefetch(names)
+            reports.append(report)
+        return reports
     def assert_input_dq(self, columns: Iterable[str], *, raise_on_fail: bool=True, thresholds=None):
         from runtime.input_dq import assert_input_dq
         return assert_input_dq(self._source,columns,raise_on_fail=raise_on_fail,thresholds=thresholds)

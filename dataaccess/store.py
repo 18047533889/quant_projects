@@ -689,10 +689,15 @@ class DataAccessStore:
         logger.warning("required_filters 未满足（research 放行）：%s", detail)
 
     def _dataset_required_filters(self, dataset: str) -> list[str]:
-        """#P0-10 数据集级 required filters（COS 契约 required_panel/dimension_filters）。
+        """#P0-10 数据集级 required filters（COS 契约 panel/dimension/**event** filters）。
 
         无论用户选哪些列都强制执行——不再依赖「恰好选中了某个 catalog 字段」。
         columns=None / 物理直读列 / stream / Polars / PyArrow 全部同样受约束。
+
+        **R25 P0-003**：旧实现漏掉 ``required_event_filters``（US finance timeframe）
+        ——Store dataset gate 只收 panel/dimension。现在把 event filters 也并入，
+        与 ContractIR v2 的 FilterRequirement 编译一致（``build_filter_requirements_from_contract``
+        已覆盖三 scope）。禁止再手工拼 tuple。
         """
         try:
             from data_access.cos_contract import get_cos_contract
@@ -706,7 +711,45 @@ class DataAccessStore:
             dict.fromkeys(
                 list(contract.required_panel_filters or ())
                 + list(contract.required_dimension_filters or ())
+                + list(contract.required_event_filters or ())
             )
+        )
+
+    def _enforce_runtime_contract_filters(
+        self,
+        dataset: str,
+        params: Mapping[str, Any] | None = None,
+        filters: Any = None,
+        filters_by_dataset: Mapping[str, Any] | None = None,
+    ) -> None:
+        """R25 P0-003/004：基于 ContractIR v2 FilterRequirement 的统一过滤门。
+
+        与 ``_dataset_required_filters`` / ``_validate_allowed_filter_values`` 互补：
+        后者从 catalog 字段 meta 触发，这里直接从 RuntimeDatasetContract 编译出的
+        FilterRequirement（含 **required_event_filters** 与 **exactly_one** 卡点）
+        触发，覆盖：
+            - read_arrow / read_auto / stream / Polars / PyArrow / read_result；
+            - read_joined（通过 filters_by_dataset）；
+            - columns=None / 物理直读列（不依赖选中 catalog 字段）。
+
+        ``validate_filter_requirements`` 内部按 ``is_strict_semantics()`` 决定
+        fail-closed vs warning 放行。
+        """
+        from data_access.contract.filters import validate_filter_requirements
+        from data_access.contract.runtime_contract import compile_runtime_contract
+
+        try:
+            rc = compile_runtime_contract(dataset, self._registry)
+        except Exception:
+            rc = None
+        if rc is None or not rc.filters:
+            return
+        validate_filter_requirements(
+            rc,
+            read_mode="auto",
+            params=params,
+            filters=filters,
+            filters_by_dataset=filters_by_dataset,
         )
 
     def _fields_meta_for_columns(
@@ -948,9 +991,11 @@ class DataAccessStore:
                 )
             effective = dict((params_by_dataset or {}).get(ds, {}))
             filter_cols = set(global_cols) | set(per_ds_cols.get(ds, set()))
+            # R25 P0-003：join 侧同样补 required_event_filters（US finance timeframe）。
             required = (
                 tuple(contract.required_panel_filters or ())
                 + tuple(contract.required_dimension_filters or ())
+                + tuple(contract.required_event_filters or ())
             )
             if required:
                 missing = []
@@ -1036,6 +1081,11 @@ class DataAccessStore:
             allow_effective_time=allow_effective_time,
         )
         self._event_cutoff_for_contract(dataset, time_range=time_range)
+        # R25 P0-003/004：ContractIR v2 FilterRequirement 统一过滤门（含 event
+        # filters 与 exactly-one），在任何读面 / 任何列选择下都强制执行。
+        self._enforce_runtime_contract_filters(
+            dataset, params=params, filters=filters
+        )
         if fields_meta is None:
             fields_meta = self._fields_meta_for_columns(dataset, columns)
         # #P0-10 数据集级契约门：required_filters / allowed_filter_values 与
@@ -2314,6 +2364,15 @@ class DataAccessStore:
         self._validate_joined_contract_filters(
             per_ds, pbd, filters=filters, filters_by_dataset=filters_by_dataset
         )
+        # R25 P0-003/004：join 每个契约数据集的 FilterRequirement 统一过滤门
+        # （含 US finance required_event_filters=timeframe 的 exactly-one）。
+        for ds in per_ds:
+            self._enforce_runtime_contract_filters(
+                ds,
+                params=pbd.get(ds),
+                filters=filters,
+                filters_by_dataset=filters_by_dataset,
+            )
 
         merged = self._resolve_sql_budget(list(per_ds), query_budget)
         all_cols = [c for cols in per_ds.values() for c in cols]

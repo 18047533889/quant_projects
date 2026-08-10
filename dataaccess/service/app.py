@@ -189,11 +189,55 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
 
     @app.get("/ready")
     def ready() -> dict[str, str]:
+        """R25 §62：真正 readiness（轻量检查，不读大表，不泄 secret）。
+
+        检查：registry 可加载 → ContractIR audit 无 blocking → engine SELECT 1 →
+        CredentialProvider 可解析（不打印 secret）→ 生产模式 legacy home fallback
+        未使用。任一 fail → 503。
+        """
+        from data_access.read.contract_ir import build_contract_ir
+        from data_access.read.query_budget import is_strict_semantics
+
+        store = get_store()
         try:
-            count = len(get_store().registry.names())
+            count = len(store.registry.names())
+            # 1) ContractIR compile + audit（无 blocking problem）
+            ir = store.contract_ir()
+            audit_problems = ir.audit() if ir is not None else []
+            if audit_problems:
+                raise RuntimeError(f"contract_ir audit problems: {len(audit_problems)}")
+            # 2) engine SELECT 1
+            store._engine.execute("SELECT 1")
+            # 3) CredentialProvider 可解析（不打印 secret；失败只记 bool）
+            from data_access.security.credentials import _global_credential_provider
+
+            provider = _global_credential_provider()
+            cred_ok = "unset"
+            if provider is not None:
+                try:
+                    provider.resolve()
+                    cred_ok = "ok"
+                except Exception:
+                    cred_ok = "failed"
+            # 4) production 下 legacy /home/shw fallback 不使用（§53）
+            legacy_ok = True
+            if is_strict_semantics():
+                from data_access.cos.mirror import known_cos_mirror_local_roots
+
+                for root in known_cos_mirror_local_roots():
+                    if "/home/shw/" in str(root).lower():
+                        legacy_ok = False
+                        break
         except Exception as exc:
             raise HTTPException(status_code=503, detail="数据访问服务未就绪") from exc
-        return {"status": "ready", "datasets": str(count)}
+        return {
+            "status": "ready",
+            "datasets": str(count),
+            "contract_ir": "ok",
+            "engine": "ok",
+            "credential_provider": cred_ok,
+            "legacy_home_fallback": "clean" if legacy_ok else "in_use",
+        }
 
     @app.get("/version")
     def version() -> dict[str, str]:

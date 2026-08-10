@@ -206,22 +206,24 @@ def test_eigen_gap_gates_localization_readout():
 def test_dmd_log_finite_horizon_sum_stable():
     from cleaned_operators.dmd import _log_finite_horizon_sum
 
-    # rho huge -> the direct finite-horizon sum would overflow float64; the
-    # log-space form stays finite.
-    assert np.isfinite(_log_finite_horizon_sum(1e6, 100))
+    # R26-123/124: the kernel takes ``log_rho = log(rho)`` so ``rho = |λ|²`` is
+    # never materialised (a huge lambda's rho overflows float64; the log-space
+    # form stays finite).  ``rho = 1e6`` <-> ``log_rho = log(1e6)``.
+    assert np.isfinite(_log_finite_horizon_sum(float(np.log(1e6)), 100))
+    assert np.isfinite(_log_finite_horizon_sum(700.0, 100))  # |lambda| ~ e^350
     # matches the direct sum wherever the direct sum is representable
     for r, K in [(0.5, 50), (0.9, 50), (1.1, 50), (2.0, 50), (5.0, 20), (0.5, 200)]:
         direct = np.log(np.sum(r ** np.arange(K, dtype=float)))
-        assert abs(direct - _log_finite_horizon_sum(r, K)) < 1e-9, (r, K)
+        assert abs(direct - _log_finite_horizon_sum(float(np.log(r)), K)) < 1e-9, (r, K)
     # rho near 1: no catastrophic cancellation (compare against the exact direct
     # finite sum, which is representable here)
     r_near = 1.0000005
     assert abs(
-        _log_finite_horizon_sum(r_near, 1000)
+        _log_finite_horizon_sum(float(np.log(r_near)), 1000)
         - np.log(np.sum(r_near ** np.arange(1000, dtype=float)))
     ) < 1e-12
-    # rho == 0: only the t=0 term survives
-    assert _log_finite_horizon_sum(0.0, 100) == 0.0
+    # rho == 0 (log_rho == -inf): only the t=0 term survives
+    assert _log_finite_horizon_sum(float("-inf"), 100) == 0.0
 
 
 def test_dmd_concentration_bounded_and_monotone():

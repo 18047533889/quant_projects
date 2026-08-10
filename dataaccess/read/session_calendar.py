@@ -583,32 +583,84 @@ def compile_available_from(
     R24 P0-PIT2 §11：``time_representation="date_label"`` 时 knowledge 按日期标签
     处理（不做时区换算）。``latency``（bar 数）叠加在结果上：额外可见性延迟。
     """
+    return compile_available_from_result(
+        knowledge,
+        availability,
+        calendar=calendar,
+        latency=latency,
+        bar_interval_minutes=bar_interval_minutes,
+        strict=strict,
+        time_representation=time_representation,
+    ).available_from
+
+
+def compile_available_from_result(
+    knowledge: Any,
+    availability: str,
+    *,
+    calendar: "MarketCalendar | None" = None,
+    latency: int | None = None,
+    bar_interval_minutes: int = 1,
+    strict: bool | None = None,
+    time_representation: str | None = None,
+    calendar_snapshot_id: str | None = None,
+) -> "AvailabilityResult":
+    """R25 P0-005：AvailabilityCompiler 的结构化版本，返回 ``AvailabilityResult``。
+
+    生产（authoritative=False → 调用方拒绝）+ 研究（可降级，但 lineage 必须记录
+    ``degradation_reason``）。关键顺序（R25 §8）：
+        1. 先决定 strict（缺省用 ``is_strict_semantics()``）；
+        2. calendar-required availability（next_bar / next_session_open /
+           next_trading_day / after_close_next_open / session）+ calendar 缺失
+           → strict 抛 ``CalendarUnavailableError``；research 返回
+           ``AvailabilityResult(authoritative=False, degradation_reason=...)``，
+           **绝不** return raw knowledge 当成已可用。
+    """
+    from data_access.contract.temporal_axis import AvailabilityResult
+    from data_access.core.exceptions import CalendarUnavailableError
+
     av = str(availability or "same_day").lower()
     if av in {"same_instant", "same_day", "effective_date_only"}:
-        return _apply_latency(knowledge, latency, bar_interval_minutes)
+        return AvailabilityResult(
+            available_from=_apply_latency(knowledge, latency, bar_interval_minutes),
+            authoritative=True,
+            calendar_snapshot_id=calendar_snapshot_id,
+        )
     if strict is None:
         strict = _strict_calendar_mode()
     if calendar is None or not getattr(calendar, "has_data", False):
-        # R24 P0-PIT6 §15：calendar-required availability 必须真实日历；strict 下
-        # 日历不可用 = 无法证明可见时点 → hard fail（不回退 same_day/knowledge）。
+        # R25 P0-005：calendar-required availability 必须真实日历。strict 下
+        # 日历不可用 = 无法证明可见时点 → 抛 CalendarUnavailableError（不是裸
+        # ValidationError，供调用方按 §113 reject）。research 返回 degraded
+        # AvailabilityResult（authoritative=False + degradation_reason）。
         if strict:
-            raise ValidationError(
+            raise CalendarUnavailableError(
                 f"availability={av!r} 需要交易日历，但日历不可用"
                 "（calendar=None / 无交易日）。production/strict fail-closed："
                 "禁止 same_day fallback（look-ahead）。请补齐日历数据。"
             )
-        return knowledge  # research 显式降级（调用方需在 lineage 标记 degraded）
+        return AvailabilityResult(
+            available_from=knowledge,
+            authoritative=False,
+            calendar_snapshot_id=calendar_snapshot_id,
+            degradation_reason=f"availability={av!r} requires calendar but calendar unavailable",
+        )
     session = getattr(calendar, "session", None)
     kdate, ktime = _to_local_date_time(
         knowledge, calendar.timezone, time_representation=time_representation
     )
     if kdate is None:
         if strict:
-            raise ValidationError(
+            raise CalendarUnavailableError(
                 f"compile_available_from({availability!r}): knowledge 无法解析成"
                 f"交易所本地日期（{knowledge!r}），无法证明可见时点（strict fail-closed）"
             )
-        return knowledge
+        return AvailabilityResult(
+            available_from=knowledge,
+            authoritative=False,
+            calendar_snapshot_id=calendar_snapshot_id,
+            degradation_reason=f"knowledge {knowledge!r} unresolvable to local date",
+        )
     if av == "next_bar":
         base = _compile_next_bar(knowledge, kdate, ktime, calendar, session, strict=strict)
     elif av in {"session", "next_session_open"}:
@@ -621,23 +673,36 @@ def compile_available_from(
         if td is not None and session is not None and session.segments:
             base = _combine(td, _session_first_start(session))
         else:
-            # #14 右边界 fail-open：日历覆盖不到（kdate 在最后交易日之后）→
-            # 不能把「无法证明何时可用」当作「现在就可用了」。strict 直接报错。
             if td is None and strict:
                 _raise_right_boundary(av, kdate)
             base = knowledge
+            if td is None:
+                return AvailabilityResult(
+                    available_from=knowledge,
+                    authoritative=False,
+                    calendar_snapshot_id=calendar_snapshot_id,
+                    degradation_reason=f"availability={av!r}: calendar right boundary unreachable",
+                )
     else:  # next_trading_day（默认）
         td = calendar.next_trading_day(kdate)
         if td is None:
-            # #14 右边界 fail-open 同上述：strict 下无法证明可用时点必须失败。
             if strict:
                 _raise_right_boundary(av, kdate)
-            base = knowledge
+            return AvailabilityResult(
+                available_from=knowledge,
+                authoritative=False,
+                calendar_snapshot_id=calendar_snapshot_id,
+                degradation_reason=f"availability={av!r}: calendar right boundary unreachable",
+            )
         elif ktime is not None and session is not None and session.segments:
             base = _combine(td, _session_first_start(session))
         else:
             base = td
-    return _apply_latency(base, latency, bar_interval_minutes)
+    return AvailabilityResult(
+        available_from=_apply_latency(base, latency, bar_interval_minutes),
+        authoritative=True,
+        calendar_snapshot_id=calendar_snapshot_id,
+    )
 
 
 def _segment_after(
@@ -1099,4 +1164,6 @@ __all__ = [
     "build_ashare_session",
     "build_us_session",
     "reset_calendars",
+    "compile_available_from",
+    "compile_available_from_result",
 ]

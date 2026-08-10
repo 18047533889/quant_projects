@@ -66,6 +66,10 @@ def _cs_pair_spread(h1: float, h2: float, l1: float, l2: float) -> float:
     single-day sum as gamma), which is not the standard estimator — under a
     pure-spread construction it returns 0 instead of the spread.
     """
+    # R26-072: positive-OHLC contract — a zero/negative price cannot enter the
+    # log-ratio; invalid geometry (high < low) is data-invalid.
+    if not (h1 > 0.0 and h2 > 0.0 and l1 > 0.0 and l2 > 0.0):
+        return np.nan
     if h1 < l1 or h2 < l2:
         return np.nan  # only inverted bars are data errors
     H = max(h1, h2)
@@ -158,6 +162,13 @@ def _roll_spread_series(xv: np.ndarray, window: int, min_periods: int) -> np.nda
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
         x = xv[:, c]
+        # R26-071: positive-price domain hard gate.  A non-positive price makes
+        # ``log(price)`` NaN; a bad price must not be skipped by min_periods and
+        # still emit a normal spread.  Any non-positive observed price -> the
+        # whole column is data-invalid (missing NaN bars are handled by the
+        # min_periods coverage gate, not silently dropped here).
+        if np.any(x <= 0.0):
+            continue
         with np.errstate(invalid="ignore", divide="ignore"):
             dx = np.diff(np.log(x), prepend=np.nan)
         for r in range(rows):
@@ -178,7 +189,15 @@ def _roll_spread_series(xv: np.ndarray, window: int, min_periods: int) -> np.nda
             cov = float(np.cov(a[ok], b[ok], ddof=1)[0, 1])
             if not np.isfinite(cov):
                 continue
-            out[r, c] = 2.0 * np.sqrt(max(-cov, 0.0))
+            # R26-069/070: classic Roll implied spread is
+            # ``2 sqrt(max(-Cov, 0))``; ``Cov >= 0`` means the model assumption
+            # (negatively autocorrelated trade-to-trade returns) is NOT met, so
+            # there is NO valid real spread — the estimator is undefined.  It
+            # must be NaN, never read as "spread = 0, extremely liquid"
+            # (R26-127: undefined estimator -> 0).
+            if cov >= 0.0:
+                continue
+            out[r, c] = 2.0 * np.sqrt(-cov)
     return out
 
 
@@ -193,10 +212,11 @@ def _roll_spread_series(xv: np.ndarray, window: int, min_periods: int) -> np.nda
 class TsRollEffectiveSpread(SeriesOperator):
     """Roll 有效 spread（log 价格差分一阶协方差）。
 
-    ``S = 2 sqrt(max(-Cov(dP_t, dP_{t-1}), 0))``，``price`` 为正价格序列（内部
-    取 log 差分；误传收益率会因 log(负值) 静默 NaN，故参数名明确为 price）。
-    负协方差条件使其经常为 0（流动性极好或协方差为正），这是 Roll 估计器的
-    固有特性。A 股无 L2 时的 cheap liquidity transform。P2 / Research。
+    ``S = 2 sqrt(-Cov(dP_t, dP_{t-1}))``，``price`` 为正价格序列（内部取 log
+    差分；非正价格整列 fail-closed，缺失 bar 由 min_periods coverage 门控制）。
+    R26-069/070：``Cov >= 0`` 时经典 Roll implied spread 无有效实解（模型假设
+    不成立）→ 输出 NaN，绝不报告 ``spread = 0``（“极度流动”是语义错误）。A 股
+    无 L2 时的 cheap liquidity transform。P2 / Research。
     """
 
     metadata = _metadata(

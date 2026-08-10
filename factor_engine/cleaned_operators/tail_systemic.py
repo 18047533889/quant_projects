@@ -343,7 +343,10 @@ class GroupTailLeadScore(SeriesOperator):
         "group_tail_lead_score",
         "尾部领先分 P(E_peer,d+lag | E_i,d) - P(E_peer,d+lag)（共同队列+最小事件数）。",
         ["x", "group_id", "window", "quantile", "side", "lag", "min_periods", "prior_threshold", "min_conditioning_events"],
-        unit="probability",
+        # R26-111: the output is a conditional-probability DIFFERENCE and can be
+        # negative — declared as signed_probability_difference ∈ [-1, 1], never
+        # a [0,1] Probability.
+        unit="signed_probability_difference",
         cost=7,
     )
 
@@ -458,7 +461,10 @@ class RelationDiffusionScore(SeriesOperator):
         "relation_diffusion_score",
         "组内均匀图扩散闭式解 mean + coeff·(x - mean)（无独立矩阵表达力）。",
         ["x", "group", "alpha", "steps"],
-        unit="same_as:target",
+        # R26-112: the inputs are ``x, group, alpha, steps`` — there is no
+        # ``target`` input, so ``same_as:target`` referenced a non-existent
+        # field.  The output unit is the input ``x``'s unit.
+        unit="same_as:x",
         cost=6,
     )
 

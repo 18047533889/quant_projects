@@ -1579,6 +1579,246 @@ class FactorEngine:
             **shard_meta,
         }
 
+    # ------------------------------------------------------------------
+    # R27-140..142/205: materialize_many_fast / plan_many_fast
+    # ------------------------------------------------------------------
+
+    def _scheduler_plan(
+        self,
+        factors: Sequence[Factor],
+        *,
+        enable_cse: bool,
+        perf: PerfConfig | None,
+        pit_enforce: bool,
+        pit_forbid_forward_fill: bool,
+        wave_memory_budget: int = 4 * 1024**3,
+    ) -> tuple[Any, Any, dict[str, AnalysisResult]]:
+        """编译 → PhysicalFactorDAG 调度计划（R27-004..006/063）。"""
+        from runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+
+        dag, analyses = self._dag_from_factors(
+            factors,
+            enable_cse=enable_cse,
+            perf=perf,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+        )
+        scheduler = AdaptiveBatchScheduler(wave_memory_budget=wave_memory_budget)
+        plan = scheduler.plan(dag, analyses, enable_cse=enable_cse)
+        return scheduler, plan, analyses
+
+    def plan_many_fast(
+        self,
+        factors: Sequence[Factor],
+        *,
+        enable_cse: bool | None = None,
+        perf: PerfConfig | None = None,
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
+        resource_profile: str = "balanced",
+        wave_memory_budget: int = 4 * 1024**3,
+    ) -> dict[str, Any]:
+        """R27-142/191: dry-run planner —— 只读 manifest/metadata 估算，不读大数据。
+
+        返回预计读取 GB / task 数 / CSE 节省 / 峰值内存 / worker / shards /
+        backend 分布 / 落盘 GB（R27-109 示例形态）。
+        """
+        from runtime.production_policy import is_production_mode
+
+        pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
+        if enable_cse is None:
+            perf = perf or PerfConfig.from_env()
+            enable_cse = perf.enable_cse
+        scheduler, plan, analyses = self._scheduler_plan(
+            factors,
+            enable_cse=enable_cse,
+            perf=perf,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+            wave_memory_budget=wave_memory_budget,
+        )
+        # DataAccess ScanCost（R27-060/061：真正 read 前拿到字节/行数/remote）。
+        scan_cost = None
+        if self.data_source is not None and hasattr(self.data_source, "estimate_scan_cost"):
+            try:
+                all_fields = set()
+                for a in analyses.values():
+                    all_fields |= set(a.referenced_columns)
+                scan_cost = self.data_source.estimate_scan_cost(
+                    fields=all_fields,
+                )
+            except Exception:
+                scan_cost = None
+        scan_bytes = 0
+        if scan_cost is not None:
+            scan_bytes = int(getattr(scan_cost, "selected_bytes", None) or 0)
+        waves = plan.read_waves
+        n_shared = sum(1 for t in plan.physical_dag.tasks.values() if t.task_type == "CSE_SHARED")
+        n_roots = len(plan.physical_dag.roots)
+        n_fusion = len(plan.fusion_groups)
+        # CSE 节省：shared 被多次消费 → (reuse-1) × 重算成本。
+        cse_saved_ms = 0.0
+        for tid, task in plan.physical_dag.tasks.items():
+            reuse = len(task.consumers)
+            if reuse > 1 and tid in plan.cost_by_task:
+                cse_saved_ms += (reuse - 1) * float(
+                    plan.cost_by_task[tid].get("total_work", 0.0)
+                )
+        broker = scheduler.broker
+        snap = broker.snapshot()
+        return {
+            "factors": len(factors),
+            "unique_dag_tasks": len(plan.physical_dag.tasks),
+            "cse_shared": n_shared,
+            "cse_recompute_cheaper": max(0, n_shared - n_fusion),
+            "cse_saved_ms": round(cse_saved_ms, 3),
+            "native_fusion_groups": n_fusion,
+            "read_waves": waves.to_dict(),
+            "data_scan_bytes": scan_bytes,
+            "projected_scan_bytes": waves.total_scan_bytes,
+            "cpu_slots": snap.hard_cpu_slots,
+            "live_memory_headroom": snap.live_headroom,
+            "recommended_concurrency": broker.recommended_concurrency(),
+            "shards": {tid: s for tid, s in plan.meta.get("shards", {}).items()},
+            "resource_profile": resource_profile,
+            "physical_dag": plan.physical_dag.to_dict(),
+            "analyses": {
+                name: {"referenced_columns": sorted(a.referenced_columns),
+                       "lookback": a.lookback}
+                for name, a in analyses.items()
+            },
+        }
+
+    def materialize_many_fast(
+        self,
+        factors: Sequence[Factor],
+        *,
+        factor_ids: Sequence[str] | None = None,
+        scheduler: str = "adaptive",
+        parallel: str = "hybrid",
+        resource_profile: str = "balanced",
+        auto_shard: bool = True,
+        enable_cse: bool | None = None,
+        native_fusion: bool = True,
+        result_policy: str = "sink",
+        storage_format: str = "long",
+        pit_enforce: bool = False,
+        pit_forbid_forward_fill: bool = False,
+        writer_queue_bytes: int = 4 * 1024**3,
+        wave_memory_budget: int = 4 * 1024**3,
+        materialize_kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """R27-205/140: ``engine.materialize_many_fast(factors, ...)`` 极速批量落值。
+
+        资源感知 + DAG 感知 + as_completed 流式 sink + 边算边写（R27-102..109）。
+        每个 root 结果完成即交给 writer（factor matrix block / 单因子落盘），
+        不驻留整批。数值 / PIT / 安全边界不变（R27-154/159/160：仍走同一
+        compile → backend.execute → materialize 链路）。
+        """
+        from runtime.batch_service import _maybe_prepare_batch_warmup
+        from runtime.materialize_service import execute_materialize
+        from runtime.production_policy import is_production_mode
+        from runtime.resource_broker import ResourceBroker
+        from runtime.streaming_result_sink import ResultItem, StreamingResultSink
+
+        ids = list(factor_ids) if factor_ids is not None else [f.name for f in factors]
+        if len(ids) != len(factors):
+            raise ValueError("factor_ids 长度必须与 factors 一致")
+        pit_enforce = bool(pit_enforce or is_production_mode(self.run_mode))
+        if enable_cse is None:
+            perf = PerfConfig.from_env()
+            enable_cse = perf.enable_cse
+        scheduler, plan, analyses = self._scheduler_plan(
+            factors,
+            enable_cse=enable_cse,
+            perf=None,
+            pit_enforce=pit_enforce,
+            pit_forbid_forward_fill=pit_forbid_forward_fill,
+            wave_memory_budget=wave_memory_budget,
+        )
+        # warmup / input_dq 与现有批跑一致。
+        mk = dict(materialize_kwargs or {})
+        engine_to_use, per_windows = _maybe_prepare_batch_warmup(
+            self, factors, analyses,
+            auto_warmup=bool(mk.get("auto_warmup", False)),
+            trim_warmup=bool(mk.get("trim_warmup", True)),
+            market=mk.get("market"),
+        )
+        ctx = engine_to_use._make_context(shared_result_cache={}, perf=PerfConfig.from_env())
+        from backend.routing_env import routing_execution_scope
+        from runtime.resource_telemetry import record_resource_telemetry
+
+        ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats)
+
+        # 物化参数（与 materialize_sharded 对齐）。
+        mm_args = {
+            "target": str(mk.get("write_target", "local")),
+            "lake_root": mk.get("lake_root"),
+            "staging_dataset": mk.get("staging_dataset", "factor_lake_staging"),
+            "author": mk.get("author"),
+            "frequency": mk.get("frequency"),
+            "description": mk.get("description"),
+            "expression": mk.get("expression"),
+            "dq_check": mk.get("dq_check", False),
+            "dq_strict": mk.get("dq_strict", True),
+            "dq_thresholds": mk.get("dq_thresholds"),
+            "write_metadata": mk.get("write_metadata", True),
+            "data_source_config": mk.get("data_source_config"),
+            "resume_materialize": mk.get("resume_materialize", False),
+            "isolate_partition_failures": mk.get("isolate_partition_failures", True),
+            "preserve_invalid_rows": mk.get("preserve_invalid_rows", False),
+            "value_dtype": str(mk.get("value_dtype", "float32")),
+            "storage_format": str(storage_format),
+            "partition_columns": mk.get("partition_columns"),
+            "clickhouse_table": mk.get("clickhouse_table"),
+        }
+        materializations: dict[str, Any] = {}
+
+        def _writer(batch: list[ResultItem]) -> None:
+            for item in batch:
+                idx = list(ids).index(item.name) if item.name in ids else -1
+                fid = ids[idx] if idx >= 0 else item.name
+                factor = next((f for f in factors if f.name == item.name), None)
+                if factor is None:
+                    materializations[item.name] = {"error": "factor not found"}
+                    continue
+                output = {
+                    "factor": factor,
+                    "analysis": analyses.get(item.name),
+                    "result": item.value,
+                }
+                out = execute_materialize(
+                    engine_to_use,
+                    factor,
+                    output,
+                    factor_id=fid,
+                    **mm_args,
+                )
+                materializations[item.name] = out.get("materialization", out)
+
+        sink = StreamingResultSink(
+            writer=_writer,
+            queue_bytes=writer_queue_bytes,
+            batch_size=mk.get("writer_batch_size", 1),
+        )
+        sink.start()
+        with routing_execution_scope(PerfConfig.from_env()):
+            out = scheduler.run(
+                plan,
+                backend=engine_to_use.backend,
+                ctx=ctx,
+                sink=sink,
+            )
+        ctx.runtime_stats = record_resource_telemetry(ctx.runtime_stats, finalize=True)
+        out["materializations"] = materializations
+        out["factor_ids"] = list(ids)
+        out["storage_format"] = storage_format
+        out["resource_telemetry"] = dict(ctx.runtime_stats.get("resource") or {})
+        out["scheduler"] = "adaptive"
+        out["parallel"] = parallel
+        out["resource_profile"] = resource_profile
+        return out
+
     def materialize_matrix(
         self,
         factors: Sequence[Factor],

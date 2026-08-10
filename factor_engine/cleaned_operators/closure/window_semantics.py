@@ -52,6 +52,8 @@ class WindowSemantics(str, enum.Enum):
     SESSION_WINDOW = "session_window"
     EXPANDING = "expanding"
     RECURSIVE_STATE = "recursive_state"
+    BAR_WINDOW = "bar_window"
+
 
 
 # Canonical -> declared WindowSemantics.  ``None`` = undeclared.

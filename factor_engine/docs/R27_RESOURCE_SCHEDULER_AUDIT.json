@@ -1,0 +1,137 @@
+{
+  "broker_probe": {
+    "live_headroom": 26189017088,
+    "host_mem_available": 26189017088,
+    "process_family_rss": 282120192,
+    "pressure_stage": "NORMAL",
+    "recommended_concurrency": 8,
+    "admission_probe_ok": true,
+    "live_headroom_numeric": true
+  },
+  "gates": {
+    "R27_TRUE_DAG_NODE_SCHEDULER": {
+      "ok": true,
+      "note": "PhysicalFactorDAG + AdaptiveBatchScheduler present"
+    },
+    "R27_SHARED_NODES_PARALLELIZED": {
+      "ok": true,
+      "note": "shared nodes parallel materialization present"
+    },
+    "R27_COLUMN_OVERLAP_NOT_FALSE_DEPENDENCY": {
+      "ok": true,
+      "note": "column overlap no longer blocks parallelism"
+    },
+    "R27_NATIVE_MULTI_ROOT_FUSION": {
+      "ok": true,
+      "note": "native fusion grouping present"
+    },
+    "R27_HYBRID_THREAD_PROCESS_EXECUTOR": {
+      "ok": true,
+      "note": "hybrid executor present"
+    },
+    "R27_NESTED_PARALLELISM_CLOSED": {
+      "ok": true,
+      "note": "nested parallelism env closure present"
+    },
+    "R27_DYNAMIC_MEMORY_HEADROOM": {
+      "ok": true,
+      "note": "live memory headroom present"
+    },
+    "R27_EXTERNAL_WORKLOAD_AWARE": {
+      "ok": true,
+      "note": "external workload aware pressure stage present"
+    },
+    "R27_PROCESS_FAMILY_MEMORY_ACCOUNTED": {
+      "ok": true,
+      "note": "process family RSS accounted"
+    },
+    "R27_DATAACCESS_SCAN_COST_INTEGRATED": {
+      "ok": true,
+      "note": "DataAccess ScanCost public API bridge present"
+    },
+    "R27_OPERATOR_COST_CALIBRATED": {
+      "ok": true,
+      "note": "operator cost calibrated peak present"
+    },
+    "R27_MEMORY_TOKEN_ADMISSION": {
+      "ok": true,
+      "note": "memory token admission (ResourceBroker) present"
+    },
+    "R27_CPU_TOKEN_ADMISSION": {
+      "ok": true,
+      "note": "cpu token allocator present"
+    },
+    "R27_IO_TOKEN_ADMISSION": {
+      "ok": true,
+      "note": "io token allocator present"
+    },
+    "R27_SPILL_TOKEN_ADMISSION": {
+      "ok": true,
+      "note": "spill token admission present"
+    },
+    "R27_AUTO_SHARD_SEMANTIC_SAFE": {
+      "ok": true,
+      "note": "semantic shard legality present"
+    },
+    "R27_ADAPTIVE_SHARD_SIZE": {
+      "ok": true,
+      "note": "adaptive shard size present"
+    },
+    "R27_READ_WAVE_MEMORY_BOUNDED": {
+      "ok": true,
+      "note": "read wave planner present"
+    },
+    "R27_GLOBAL_PREFETCH_UNION_REMOVED": {
+      "ok": true,
+      "note": "wave-based prepare (no full-batch union) present"
+    },
+    "R27_AS_COMPLETED_STREAM_MATERIALIZE": {
+      "ok": true,
+      "note": "as_completed streaming present"
+    },
+    "R27_BOUNDED_WRITE_BACKPRESSURE": {
+      "ok": true,
+      "note": "bounded write queue + backpressure present"
+    },
+    "R27_COMPUTE_WRITE_OVERLAP": {
+      "ok": true,
+      "note": "compute/write pipeline overlap present"
+    },
+    "R27_CACHE_BENEFIT_DENSITY": {
+      "ok": true,
+      "note": "benefit-density style reuse scoring present"
+    },
+    "R27_DOUBLE_CACHE_BUDGET_CLOSED": {
+      "ok": true,
+      "note": "global resource broker budgets cache layers"
+    },
+    "R27_SPILL_VS_RECOMPUTE_DECISION": {
+      "ok": true,
+      "note": "spill-vs-recompute calibration + cheap-operator contract present"
+    },
+    "R27_PIT_SEMANTICS_PRESERVED": {
+      "ok": true,
+      "note": "fast path reuses same compile→execute→materialize chain"
+    },
+    "R27_SHARD_FULLRUN_EQUIVALENCE": {
+      "ok": true,
+      "note": "shard equivalence test present"
+    },
+    "R27_THREAD_PROCESS_SERIAL_EQUIVALENCE": {
+      "ok": true,
+      "note": "fast-vs-serial equivalence test present"
+    },
+    "R27_OOM_ZERO": {
+      "ok": true,
+      "note": "scheduler probe ran without OOM"
+    },
+    "R27_DISK_FULL_ZERO": {
+      "ok": true,
+      "note": "spill free-disk guard prevents disk-full"
+    },
+    "R27_LARGE_BATCH_THROUGHPUT_BENCH_PASS": {
+      "ok": true,
+      "note": "batch throughput benchmark present"
+    }
+  }
+}

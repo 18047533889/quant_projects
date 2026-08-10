@@ -80,8 +80,18 @@ def _register(
     if "left_window" in names and "right_window" in names:
         from cleaned_operators.base import ParamSpec
 
+        # R26-081: the confirmed-pivot state machine is bounded by an explicit
+        # ``pivot_lookback_bars`` (past it the carried pivot/age/deque expires to
+        # NaN), so the true history requirement is ``left + right + lookback`` —
+        # the planner must prefetch that, not just ``left + right``.
+        formula = "left_window + right_window"
+        if "pivot_lookback_bars" in names:
+            param_specs["pivot_lookback_bars"] = ParamSpec(
+                dtype=int, min=1, searchable=False
+            )
+            formula += " + pivot_lookback_bars"
         param_specs["left_window"] = ParamSpec(
-            dtype=int, min=1, history_formula="left_window + right_window"
+            dtype=int, min=1, history_formula=formula
         )
         param_specs["right_window"] = ParamSpec(dtype=int, min=1)
     metadata = OperatorMetadata(
@@ -256,14 +266,21 @@ def _pivot_line(
     *,
     high: bool,
     output: str,
+    pivot_lookback_bars: int = 250,
 ) -> pd.DataFrame:
     k = _w(points, minimum=2)
+    lb = max(1, int(pivot_lookback_bars))
     prices, positions = _confirmed_pivot_events(frame, left_window, right_window, high=high)
     rows, cols = prices.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for col in range(cols):
         history: deque[tuple[float, float]] = deque(maxlen=k)
         for t in range(rows):
+            # R26-081: the pivot deque is bounded BOTH by ``points`` (count) and
+            # by ``pivot_lookback_bars`` (time) — a pivot that is ``points``
+            # old but temporally ancient must not shape today's line.
+            while history and (t - history[0][0]) > lb:
+                history.popleft()
             if np.isfinite(prices[t, col]) and np.isfinite(positions[t, col]):
                 history.append((positions[t, col], prices[t, col]))
             if len(history) < 2:
@@ -279,13 +296,38 @@ def _pivot_line(
     return pd.DataFrame(out, index=frame.index, columns=frame.columns)
 
 
-def _last_pivot(frame, left_window, right_window, *, high):
+def _last_pivot(frame, left_window, right_window, *, high, pivot_lookback_bars=250):
+    # R26-079..081: the confirmed-pivot state machine is UNBOUNDED — an
+    # indefinite ``ffill()`` would carry a pivot from arbitrarily far back,
+    # making the result depend on the warmup/start (a short planner prefetch of
+    # ``left+right`` would disagree with a full-history run).  The state is
+    # explicitly bounded: a confirmed pivot propagates forward only
+    # ``pivot_lookback_bars`` bars, then expires to NaN until the next pivot.
     confirmed = _confirmed_pivot_frame(frame, left_window, right_window, high=high)
-    return confirmed.ffill()
+    lb = max(1, int(pivot_lookback_bars))
+    out = pd.DataFrame(np.nan, index=frame.index, columns=frame.columns)
+    for col in frame.columns:
+        vals = confirmed[col].to_numpy(dtype=float)
+        dst = np.full(len(vals), np.nan)
+        last_price = np.nan
+        age = np.inf
+        for i, value in enumerate(vals):
+            if np.isfinite(value):
+                last_price = value
+                age = 0.0
+            elif np.isfinite(age) and age < lb:
+                age += 1.0
+            else:
+                last_price = np.nan
+                age = np.inf
+            dst[i] = last_price if np.isfinite(age) else np.nan
+        out[col] = dst
+    return out
 
 
-def _pivot_age(frame, left_window, right_window, *, high):
+def _pivot_age(frame, left_window, right_window, *, high, pivot_lookback_bars=250):
     confirmed = _confirmed_pivot_frame(frame, left_window, right_window, high=high)
+    lb = max(1, int(pivot_lookback_bars))
     out = pd.DataFrame(np.nan, index=frame.index, columns=frame.columns)
     for col in frame.columns:
         age = np.nan
@@ -294,58 +336,68 @@ def _pivot_age(frame, left_window, right_window, *, high):
         for i, value in enumerate(vals):
             if np.isfinite(value):
                 age = 0.0
-            elif np.isfinite(age):
+            elif np.isfinite(age) and age < lb:
                 age += 1.0
+            else:
+                age = np.nan  # R26-081: age expires past the declared lookback
             dst[i] = age
         out[col] = dst
     return out
 
 
-def _resistance_level(high, left_window, right_window, points):
-    return _pivot_line(high, left_window, right_window, points, high=True, output="level")
+def _resistance_level(high, left_window, right_window, points, pivot_lookback_bars=250):
+    return _pivot_line(high, left_window, right_window, points, high=True, output="level",
+                       pivot_lookback_bars=pivot_lookback_bars)
 
 
-def _support_level(low, left_window, right_window, points):
-    return _pivot_line(low, left_window, right_window, points, high=False, output="level")
+def _support_level(low, left_window, right_window, points, pivot_lookback_bars=250):
+    return _pivot_line(low, left_window, right_window, points, high=False, output="level",
+                       pivot_lookback_bars=pivot_lookback_bars)
 
 
-def _resistance_slope(high, left_window, right_window, points):
-    return _pivot_line(high, left_window, right_window, points, high=True, output="slope")
+def _resistance_slope(high, left_window, right_window, points, pivot_lookback_bars=250):
+    return _pivot_line(high, left_window, right_window, points, high=True, output="slope",
+                       pivot_lookback_bars=pivot_lookback_bars)
 
 
-def _support_slope(low, left_window, right_window, points):
-    return _pivot_line(low, left_window, right_window, points, high=False, output="slope")
+def _support_slope(low, left_window, right_window, points, pivot_lookback_bars=250):
+    return _pivot_line(low, left_window, right_window, points, high=False, output="slope",
+                       pivot_lookback_bars=pivot_lookback_bars)
 
 
-def _distance_to_resistance(close, high, left_window, right_window, points):
-    return _safe_div(close, _resistance_level(high, left_window, right_window, points)) - 1.0
+def _distance_to_resistance(close, high, left_window, right_window, points, pivot_lookback_bars=250):
+    return _safe_div(close, _resistance_level(high, left_window, right_window, points,
+                                              pivot_lookback_bars=pivot_lookback_bars)) - 1.0
 
 
-def _distance_to_support(close, low, left_window, right_window, points):
-    return _safe_div(close, _support_level(low, left_window, right_window, points)) - 1.0
+def _distance_to_support(close, low, left_window, right_window, points, pivot_lookback_bars=250):
+    return _safe_div(close, _support_level(low, left_window, right_window, points,
+                                           pivot_lookback_bars=pivot_lookback_bars)) - 1.0
 
 
-def _resistance_break(close, high, left_window, right_window, points):
-    return _distance_to_resistance(close, high, left_window, right_window, points).clip(lower=0.0)
+def _resistance_break(close, high, left_window, right_window, points, pivot_lookback_bars=250):
+    return _distance_to_resistance(close, high, left_window, right_window, points,
+                                   pivot_lookback_bars=pivot_lookback_bars).clip(lower=0.0)
 
 
-def _support_break(close, low, left_window, right_window, points):
-    return (-_distance_to_support(close, low, left_window, right_window, points)).clip(lower=0.0)
+def _support_break(close, low, left_window, right_window, points, pivot_lookback_bars=250):
+    return (-_distance_to_support(close, low, left_window, right_window, points,
+                                  pivot_lookback_bars=pivot_lookback_bars)).clip(lower=0.0)
 
 
 _register("ts_confirmed_pivot_high", ["high", "left_window", "right_window"], lambda high, left_window, right_window: _confirmed_pivot_frame(high, left_window, right_window, high=True), category="price_structure", description="Confirmed pivot high emitted at the confirmation timestamp.")
 _register("ts_confirmed_pivot_low", ["low", "left_window", "right_window"], lambda low, left_window, right_window: _confirmed_pivot_frame(low, left_window, right_window, high=False), category="price_structure", description="Confirmed pivot low emitted at the confirmation timestamp.")
-_register("ts_last_pivot_high", ["high", "left_window", "right_window"], lambda high, left_window, right_window: _last_pivot(high, left_window, right_window, high=True), category="price_structure", description="Most recent confirmed pivot-high price.")
-_register("ts_last_pivot_low", ["low", "left_window", "right_window"], lambda low, left_window, right_window: _last_pivot(low, left_window, right_window, high=False), category="price_structure", description="Most recent confirmed pivot-low price.")
-_register("ts_pivot_high_age", ["high", "left_window", "right_window"], lambda high, left_window, right_window: _pivot_age(high, left_window, right_window, high=True), category="price_structure", description="Bars since the latest confirmed pivot high.")
-_register("ts_pivot_low_age", ["low", "left_window", "right_window"], lambda low, left_window, right_window: _pivot_age(low, left_window, right_window, high=False), category="price_structure", description="Bars since the latest confirmed pivot low.")
-_register("ts_resistance_level", ["high", "left_window", "right_window", "points"], _resistance_level, category="price_structure", description="Projected resistance line from recent confirmed pivot highs.")
-_register("ts_support_level", ["low", "left_window", "right_window", "points"], _support_level, category="price_structure", description="Projected support line from recent confirmed pivot lows.")
-_register("ts_resistance_slope", ["high", "left_window", "right_window", "points"], _resistance_slope, category="price_structure", description="Slope of resistance line fitted to confirmed pivot highs.")
-_register("ts_support_slope", ["low", "left_window", "right_window", "points"], _support_slope, category="price_structure", description="Slope of support line fitted to confirmed pivot lows.")
-_register("ts_distance_to_resistance", ["close", "high", "left_window", "right_window", "points"], _distance_to_resistance, category="price_structure", description="Signed close-to-resistance distance.")
-_register("ts_distance_to_support", ["close", "low", "left_window", "right_window", "points"], _distance_to_support, category="price_structure", description="Signed close-to-support distance.")
-_register("ts_resistance_break", ["close", "high", "left_window", "right_window", "points"], _resistance_break, category="price_structure", description="Positive magnitude of a confirmed-resistance breakout.")
+_register("ts_last_pivot_high", ["high", "left_window", "right_window", "pivot_lookback_bars"], lambda high, left_window, right_window, pivot_lookback_bars=250: _last_pivot(high, left_window, right_window, high=True, pivot_lookback_bars=pivot_lookback_bars), category="price_structure", description="Most recent confirmed pivot-high price (bounded by pivot_lookback_bars).")
+_register("ts_last_pivot_low", ["low", "left_window", "right_window", "pivot_lookback_bars"], lambda low, left_window, right_window, pivot_lookback_bars=250: _last_pivot(low, left_window, right_window, high=False, pivot_lookback_bars=pivot_lookback_bars), category="price_structure", description="Most recent confirmed pivot-low price (bounded by pivot_lookback_bars).")
+_register("ts_pivot_high_age", ["high", "left_window", "right_window", "pivot_lookback_bars"], lambda high, left_window, right_window, pivot_lookback_bars=250: _pivot_age(high, left_window, right_window, high=True, pivot_lookback_bars=pivot_lookback_bars), category="price_structure", description="Bars since the latest confirmed pivot high (expires past pivot_lookback_bars).")
+_register("ts_pivot_low_age", ["low", "left_window", "right_window", "pivot_lookback_bars"], lambda low, left_window, right_window, pivot_lookback_bars=250: _pivot_age(low, left_window, right_window, high=False, pivot_lookback_bars=pivot_lookback_bars), category="price_structure", description="Bars since the latest confirmed pivot low (expires past pivot_lookback_bars).")
+_register("ts_resistance_level", ["high", "left_window", "right_window", "points", "pivot_lookback_bars"], _resistance_level, category="price_structure", description="Projected resistance line from recent confirmed pivot highs (bounded by pivot_lookback_bars).")
+_register("ts_support_level", ["low", "left_window", "right_window", "points", "pivot_lookback_bars"], _support_level, category="price_structure", description="Projected support line from recent confirmed pivot lows (bounded by pivot_lookback_bars).")
+_register("ts_resistance_slope", ["high", "left_window", "right_window", "points", "pivot_lookback_bars"], _resistance_slope, category="price_structure", description="Slope of resistance line fitted to confirmed pivot highs (bounded by pivot_lookback_bars).")
+_register("ts_support_slope", ["low", "left_window", "right_window", "points", "pivot_lookback_bars"], _support_slope, category="price_structure", description="Slope of support line fitted to confirmed pivot lows (bounded by pivot_lookback_bars).")
+_register("ts_distance_to_resistance", ["close", "high", "left_window", "right_window", "points", "pivot_lookback_bars"], _distance_to_resistance, category="price_structure", description="Signed close-to-resistance distance (bounded by pivot_lookback_bars).")
+_register("ts_distance_to_support", ["close", "low", "left_window", "right_window", "points", "pivot_lookback_bars"], _distance_to_support, category="price_structure", description="Signed close-to-support distance (bounded by pivot_lookback_bars).")
+_register("ts_resistance_break", ["close", "high", "left_window", "right_window", "points", "pivot_lookback_bars"], _resistance_break, category="price_structure", description="Positive magnitude of a confirmed-resistance breakout (bounded by pivot_lookback_bars).")
 _register("ts_support_break", ["close", "low", "left_window", "right_window", "points"], _support_break, category="price_structure", description="Positive magnitude of a confirmed-support breakdown.")
 
 
@@ -524,7 +576,15 @@ def _bollinger_width(x, window, std_dev):
 
 def _aroon_component(x, window, *, high):
     w = _w(window, minimum=2)
-    fn = (lambda a: 100.0 * (int(np.nanargmax(a)) + 1) / len(a)) if high else (lambda a: 100.0 * (int(np.nanargmin(a)) + 1) / len(a))
+    # R26-076..078: ties must reference the LATEST extreme — a plateau
+    # (10,12,12,11) should count "periods since" from the second 12, not the
+    # first.  ``np.nanargmax(a)`` picks the FIRST of a tie; scanning the
+    # reversed window picks the last occurrence in chronological order (same
+    # tie policy as ``ts_days_since_high/low``, audit 12).
+    if high:
+        fn = lambda a: 100.0 * (int(w) - int(np.nanargmax(a[::-1]))) / len(a)
+    else:
+        fn = lambda a: 100.0 * (int(w) - int(np.nanargmin(a[::-1]))) / len(a)
     return x.rolling(w, min_periods=w).apply(fn, raw=True)
 
 
@@ -766,21 +826,57 @@ for _name, _params, _fn, _desc in [
     _register(_name, _params, _fn, category="candle_geometry", description=_desc)
 
 
+def _cdl_valid(open_, high, low, close):
+    """Tri-state validity mask for the candlestick family (R26-082..084).
+
+    True only when every required OHLC field is finite, strictly positive, and
+    the geometry is valid (``High >= max(Open, Close) >= min(Open, Close) >=
+    Low``).  An invalid bar emits NaN — never a confirmed no-pattern 0.
+    """
+    o, h, l, c = (np.asarray(x.to_numpy(float), dtype=float) for x in (open_, high, low, close))
+    pos = (o > 0.0) & (h > 0.0) & (l > 0.0) & (c > 0.0)
+    geom = (h >= np.maximum(o, c)) & (l <= np.minimum(o, c)) & (h >= l)
+    return pd.DataFrame(
+        pos & geom & np.isfinite(o) & np.isfinite(h) & np.isfinite(l) & np.isfinite(c),
+        index=open_.index, columns=open_.columns,
+    )
+
+
+def _cdl_signed(flag, direction, valid):
+    """Tri-state signed-pattern output (R26-082..087).
+
+    * 0        = no pattern (flag False);
+    * +1 / -1  = directed pattern;
+    * NaN      = invalid OHLC (``valid`` False) OR a pattern whose direction is
+      NEUTRAL (e.g. a spinning top / outside bar with ``open == close``) — a
+      neutral event must never collapse into 0=no-event.
+    """
+    arr = np.where(flag, direction, 0.0)
+    arr = np.where(flag & (direction == 0.0), np.nan, arr)
+    arr = np.where(valid, arr, np.nan)
+    return pd.DataFrame(arr, index=flag.index, columns=flag.columns)
+
+
 def _cdl_doji(open_, high, low, close):
     _, body, rng, _, _ = _candle_parts(open_, high, low, close)
-    return (body <= 0.10 * rng).astype(float)
+    valid = _cdl_valid(open_, high, low, close)
+    flag = body <= 0.10 * rng
+    # doji is an unsigned event: present -> 1, absent -> 0, invalid -> NaN
+    return _cdl_signed(flag, np.ones(flag.shape), valid)
 
 
 def _cdl_hammer(open_, high, low, close):
     _, body, rng, upper, lower = _candle_parts(open_, high, low, close)
+    valid = _cdl_valid(open_, high, low, close)
     flag = (body <= 0.35 * rng) & (lower >= 2.0 * body) & (upper <= 0.35 * np.maximum(body, _EPS))
-    return flag.astype(float)
+    return _cdl_signed(flag, np.ones(flag.shape), valid)
 
 
 def _cdl_inverted_hammer(open_, high, low, close):
     _, body, rng, upper, lower = _candle_parts(open_, high, low, close)
+    valid = _cdl_valid(open_, high, low, close)
     flag = (body <= 0.35 * rng) & (upper >= 2.0 * body) & (lower <= 0.35 * np.maximum(body, _EPS))
-    return flag.astype(float)
+    return _cdl_signed(flag, np.ones(flag.shape), valid)
 
 
 def _cdl_shooting_star(open_, high, low, close):
@@ -789,30 +885,44 @@ def _cdl_shooting_star(open_, high, low, close):
 
 def _cdl_marubozu(open_, high, low, close):
     body, abs_body, rng, upper, lower = _candle_parts(open_, high, low, close)
+    valid = _cdl_valid(open_, high, low, close)
     flag = (abs_body >= 0.90 * rng) & (upper <= 0.05 * rng) & (lower <= 0.05 * rng)
-    return np.sign(body) * flag.astype(float)
+    return _cdl_signed(flag, np.sign(body), valid)
 
 
 def _cdl_spinning_top(open_, high, low, close):
     body, abs_body, rng, upper, lower = _candle_parts(open_, high, low, close)
+    valid = _cdl_valid(open_, high, low, close)
     flag = (abs_body <= 0.35 * rng) & (upper >= abs_body) & (lower >= abs_body)
-    return np.sign(body).replace(0, 1) * flag.astype(float)
+    # R26-085/086: a zero-body bar (perfect doji / spinning-top intersection)
+    # is a NEUTRAL event — never force bullish +1 via ``sign(body).replace(0,1)``.
+    # ``_cdl_signed`` maps a neutral-direction event to NaN (event present,
+    # direction unknown), keeping it distinct from 0 = no-event.
+    return _cdl_signed(flag, np.sign(body), valid)
 
 
 def _cdl_engulfing(open_, high, low, close):
     prev_open, prev_close = open_.shift(1), close.shift(1)
+    valid = _cdl_valid(open_, high, low, close) & _cdl_valid(prev_open, high.shift(1), low.shift(1), prev_close)
     bull = (close > open_) & (prev_close < prev_open) & (open_ <= prev_close) & (close >= prev_open)
     bear = (close < open_) & (prev_close > prev_open) & (open_ >= prev_close) & (close <= prev_open)
-    return bull.astype(float) - bear.astype(float)
+    # R26-083: a two-day pattern requires BOTH days' required OHLC known.
+    return _cdl_signed(bull | bear, bull.astype(float) - bear.astype(float), valid)
 
 
 def _cdl_inside_bar(open_, high, low, close):
-    return ((high < high.shift(1)) & (low > low.shift(1))).astype(float)
+    valid = _cdl_valid(open_, high, low, close) & _cdl_valid(open_.shift(1), high.shift(1), low.shift(1), close.shift(1))
+    flag = (high < high.shift(1)) & (low > low.shift(1))
+    return _cdl_signed(flag, np.ones(flag.shape), valid)
 
 
 def _cdl_outside_bar(open_, high, low, close):
+    valid = _cdl_valid(open_, high, low, close) & _cdl_valid(open_.shift(1), high.shift(1), low.shift(1), close.shift(1))
     flag = (high > high.shift(1)) & (low < low.shift(1))
-    return np.sign(close - open_) * flag.astype(float)
+    direction = np.sign(close - open_)
+    # R26-087: a neutral outside-bar (open == close) is an EVENT with unknown
+    # direction — ``_cdl_signed`` emits NaN, never collapsing it into 0.
+    return _cdl_signed(flag, direction, valid)
 
 
 for _name, _fn, _desc in [

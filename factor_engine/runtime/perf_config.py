@@ -98,6 +98,14 @@ class PerfConfig:
     spill_dir: str | None = None
     #: Phase 5 spill 上限；``None`` 表示自动
     spill_budget_bytes: int | None = None
+    #: R27-106/140：批量执行调度器（``adaptive`` = 资源感知 DAG 调度器）。
+    scheduler: str = "adaptive"
+    #: R27-030/141：资源风格 ``aggressive`` / ``balanced`` / ``coexist``。
+    resource_profile: str = "balanced"
+    #: R27-028/141：是否共存（给其他程序留内存）。
+    coexist: bool = True
+    #: R27-215/233：native multi-root fusion 开关。
+    native_fusion: bool = True
 
     def build_resource_plan(self, config: dict | None = None) -> Any:
         """构造 Phase 5 ``ExecutionResourcePlan``（resources 配置 + 环境变量合并）。"""
@@ -223,6 +231,16 @@ class PerfConfig:
         _ENV_CACHE = cls(
             max_workers=_env_int("FACTOR_ENGINE_MAX_WORKERS", None),
             instrument_chunk_size=_env_int("FACTOR_ENGINE_INSTRUMENT_CHUNK", None),
+            scheduler=_env_str("FACTOR_ENGINE_SCHEDULER", "adaptive").lower()
+            or "adaptive",
+            resource_profile=_env_str(
+                "FACTOR_ENGINE_RESOURCE_PROFILE", "balanced"
+            ).lower()
+            or "balanced",
+            coexist=_env_str("FACTOR_ENGINE_COEXIST", "true").lower()
+            not in {"0", "false", "no"},
+            native_fusion=_env_str("FACTOR_ENGINE_NATIVE_FUSION", "true").lower()
+            not in {"0", "false", "no"},
             max_in_memory_mb=_env_float("FACTOR_ENGINE_MAX_MEMORY_MB", None),
             enable_cse=not disable_cse,
             panel_native=not disable_panel,

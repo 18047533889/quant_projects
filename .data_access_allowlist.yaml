@@ -357,3 +357,15 @@
 # ============================================================================
 - path: AutoFactorEvaluation-RECONSTRUCT/**
   reason: "因子评估重构实验栈：assetization/evaluation/purification worker 按任务目录读写 staging parquet，非 data_access registry dataset"
+
+
+# ============================================================================
+# N. FactorEngine 证据/校准/评估脚本（R25 §49：禁生产 source path 裸读；独立
+#    评估脚本按文件读原始证据 parquet，非 FactorEngine DataAccessSource 生产路径）
+# ============================================================================
+- path: factor_engine/runtime/runtime_calibration.py
+  reason: "运行时校准：直读证据 parquet 做基准对齐，非生产 DataAccessSource 路径"
+- path: factor_engine/scripts/certify_factor_operator_evidence.py
+  reason: "算子证据认证脚本：按文件读证据 parquet 核验（R25 §49 豁免——独立认证流程）"
+- path: factor_engine/scripts/certify_primitive_evidence.py
+  reason: "原语证据认证脚本：按文件读证据 parquet 核验（R25 §49 豁免——独立认证流程）"

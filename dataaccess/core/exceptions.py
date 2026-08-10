@@ -141,6 +141,88 @@ class TemporalContractError(DataAccessError):
     """
 
 
+class CalendarUnavailableError(ValidationError, TemporalContractError):
+    """R25 P0-005 / §78：calendar-required availability 需要真实日历，但日历不可用。
+
+    与旧裸 ``ValidationError`` 区分：PIT/availability 在「无法证明可见时点」时
+    fail-closed，供调用方按 §113（Calendar unavailable → PIT-required production
+    reject）处理。同时继承 ``ValidationError`` 保证 R24 既有契约（match=日历不可用）
+    仍成立。
+    """
+
+
+class FilterContractError(ValidationError):
+    """R25 P0-004 / §78：过滤契约违例（required filter 缺失 / exactly-one 违反）。
+
+    与普通 ValidationError 区分：request 违反 dataset 级过滤契约（如 US finance
+    timeframe 缺失/多值）时抛。
+    """
+
+
+class SourceSnapshotUnavailable(DataAccessError):
+    """R25 P0-009/012 / §78：source snapshot 无法解析 / 无法证明。
+
+    production remote 遇到 unresolved wildcard / 无法证明 source identity 时
+    fail-closed，绝不把「目录非空」当「完整」。
+    """
+
+
+class SourceSnapshotChanged(DataAccessError):
+    """R25 P0-012/013 / §78：source snapshot 在执行期间变化（ETag/version 变化）。
+
+    remote 读前 HEAD 与执行时不一致 / auto hybrid 混 source epoch 时抛。
+    """
+
+
+class PhysicalPartitionResolutionError(DataAccessError):
+    """R25 P0-001/016 / §78：物理分区解析失败（partition_clock 无法映射）。
+
+    不能用 request time_range 展开 period/event 文件名且无 source index 时抛。
+    """
+
+
+class MissingRequiredPartition(DataAccessError):
+    """R25 P0-015 / §78：dense 数据集缺失必需 partition（missing=ERROR）。
+
+    不能统一「404 → debug 跳过」——交易行情缺失交易日文件必须 fail-closed。
+    """
+
+
+class SchemaContractError(ValidationError):
+    """R25 P0-033 / §78：schema evolution 契约违例（跨 epoch 字段缺失/dtype 变化）。
+
+    不允许 ``union_by_name=True`` 当「什么 schema 都能拼」的万能开关。
+    """
+
+
+class SemanticUnitError(ValidationError):
+    """R25 §36/37 / §78：单位/币种/flow semantics 不兼容。
+
+    跨市场单位/货币/定义不可比、requires_fx 无 FX PIT 时抛。
+    """
+
+
+class ResourceAdmissionError(DataAccessError):
+    """R25 §26/27 / §78：资源准入拒绝（object/bytes/remote 预算、全局 governor）。
+
+    不能「执行完才知道扫了多少」——入场前 object count / bytes 超限即拒绝。
+    """
+
+
+class CacheSecurityError(DataAccessError):
+    """R25 §28 / §78：缓存安全违例（principal scope 不匹配 / 权限过宽）。
+
+    cache root 权限不对 / 高权限缓存被低权限复用拒绝。
+    """
+
+
+class UnknownProvenanceError(DataAccessError):
+    """R25 §50 / §78：裸 DataFrame/无 provenance 帧进入 production。
+
+    FactorEngine production 接裸 dataframe 时抛 UnknownProvenanceError。
+    """
+
+
 def propagate_authorization(exc: BaseException) -> None:
     """R24 P1-S9 §25：AuthorizationError 必须原样传播。
 

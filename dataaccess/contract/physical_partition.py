@@ -70,6 +70,10 @@ _MIRROR_LAYOUT_MAP = {
     "hive_year": PhysicalLayout.HIVE_YEAR,
     "single_full": PhysicalLayout.STATIC_SINGLE,
     "root_file": PhysicalLayout.STATIC_SINGLE,
+    # R25 P0-001/002：MirrorSpec 直接声明 period/prefixed/event 布局。
+    "period_files": PhysicalLayout.PERIOD_END_FILE,
+    "prefixed_date_file": PhysicalLayout.PREFIXED_DATE_FILE,
+    "event_files": PhysicalLayout.EVENT_DATE_FILE,
 }
 
 # COSDatasetContract.storage_layout 字符串 → PhysicalLayout 映射（P0-001）。

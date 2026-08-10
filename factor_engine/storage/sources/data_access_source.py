@@ -2204,6 +2204,38 @@ class DataAccessSource(DataSource):
             frequency=frequency,
         )
 
+    def estimate_scan_cost(
+        self,
+        fields: Iterable[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instruments: Iterable[str] | None = None,
+    ) -> Any | None:
+        """R27-060/061/171：DataAccess ScanCost 接入 FE scheduler admission。
+
+        只调用 DataAccess 的**稳定 public API**（``data_access.read.scan_cost.
+        estimate_scan_cost``），不触碰 private store internals。FE scheduler 在
+        真正 read 前就拿到 selected_bytes / projection_bytes / estimated_rows /
+        remote / files / rowgroups（R27-061）。
+
+        返回 ``ScanCost``；不可用时返回 ``None``（调用方回退静态估算）。
+        """
+        try:
+            from data_access.read.scan_cost import estimate_scan_cost
+
+            store = _get_store()
+            physical, _ = self._resolve_columns(list(fields or []))
+            return estimate_scan_cost(
+                store,
+                self.dataset,
+                columns=physical,
+                time_range=time_range or self._time_range(),
+                instrument_filter=_strict_instrument_filter(instruments),
+                prefer_polars=self._lazy_scan,
+                **self.params,
+            )
+        except Exception:
+            return None
+
     def scan_index_long(self):
         self.refresh_snapshot()
         store = _get_store()

@@ -231,10 +231,13 @@ def test_scale_gap_still_breaks_episode_positive_prices():
     rate_full = _get("ts_dc_event_rate").calculate(x, s_full, threshold=1.0, window=10)
     rate_gap = _get("ts_dc_event_rate").calculate(x, s_gap, threshold=1.0, window=10)
     # Without the gap there are events at bars 1,2,4,5 (4/6); with a NaN scale
-    # at bar 2 the episode breaks and only the post-gap events survive (3/6) —
-    # the gap never connects the two sides into one episode.
+    # at bar 2 the episode breaks and only the post-gap events survive — the
+    # gap never connects the two sides into one episode.  R26-116/117: the
+    # event-rate denominator is CLOCK-OBSERVABLE bars (price valid AND scale
+    # valid), so the broken-clock bar 2 is excluded -> 3 events / 5 observable
+    # bars.
     assert rate_full.iloc[-1, 0] == pytest.approx(4.0 / 6.0)
-    assert rate_gap.iloc[-1, 0] == pytest.approx(3.0 / 6.0)
+    assert rate_gap.iloc[-1, 0] == pytest.approx(3.0 / 5.0)
 
 
 def test_nan_price_censors_clock_positive_prices():

@@ -141,9 +141,17 @@ def _mean_shift_score(v: np.ndarray, min_segment: int) -> float:
     n = v.shape[0]
     if n < 2 * min_segment + 2:
         return np.nan
-    ps = np.concatenate(([0.0], np.cumsum(v)))
-    pss = np.concatenate(([0.0], np.cumsum(v * v)))
-    full_ss = pss[n] - ps[n] * ps[n] / n
+    # R26-065..067: recentered prefix moments (Chan-Golub-LeVeque).  Raw prefix
+    # ``sum(x²) - sum(x)²/n`` suffers catastrophic cancellation at large levels
+    # (``x = 1e9 + tiny`` loses the signal entirely).  Centring on the global
+    # mean first keeps the centred values ~0-mean, so the prefix SS is computed
+    # in a numerically stable regime and GLR(x) == GLR(x + 1e9) holds
+    # (metamorphic translation invariance).
+    c = float(np.sum(v)) / n
+    vc = v - c
+    ps = np.concatenate(([0.0], np.cumsum(vc)))
+    pss = np.concatenate(([0.0], np.cumsum(vc * vc)))
+    full_ss = pss[n]
     if not np.isfinite(full_ss) or full_ss <= _EPS:
         return np.nan
     floor = _ss_noise_floor(full_ss, n)
@@ -180,9 +188,14 @@ def _variance_shift_score(v: np.ndarray, min_segment: int) -> float:
     n = v.shape[0]
     if n < 2 * min_segment + 2:
         return np.nan
-    ps = np.concatenate(([0.0], np.cumsum(v)))
-    pss = np.concatenate(([0.0], np.cumsum(v * v)))
-    full_ss = pss[n] - ps[n] * ps[n] / n
+    # R26-065..067: recentered prefix moments (same rationale as
+    # ``_mean_shift_score``) — the variance LLR ratios pooled SS terms that must
+    # be computed without catastrophic cancellation at large levels.
+    c = float(np.sum(v)) / n
+    vc = v - c
+    ps = np.concatenate(([0.0], np.cumsum(vc)))
+    pss = np.concatenate(([0.0], np.cumsum(vc * vc)))
+    full_ss = pss[n]
     if not np.isfinite(full_ss) or full_ss <= _EPS:
         return np.nan
     floor = _ss_noise_floor(full_ss, n)

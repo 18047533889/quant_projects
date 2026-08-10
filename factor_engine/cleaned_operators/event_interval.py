@@ -243,9 +243,10 @@ class EventIntervalMemory(SeriesOperator):
     """事件间隔记忆：连续事件间隔对 ``(τ_i, τ_{i+1})`` 的 Pearson 相关。
 
     正 → 间隔长短持续（聚集/惯性）；负 → 长短交替；≈0 → 间隔近似独立。
-    需要窗口内至少 4 个间隔，否则 NaN。EventBool 语义：1/非零 = 事件，
-    0 = 确认无事件，NaN = unknown；跨越 unknown 的间隔被 censored → 窗口 NaN
-    （R4-54/96）。
+    R26-090/091：需要窗口内至少 6 个有效间隔，否则 NaN（与 kernel 一致）。
+    EventBool 语义（R26-092）：严格 ``{1, 0, NaN}`` —— 1 = 事件，0 = 确认
+    非事件，NaN = unknown；其他有限值直接抛错；跨越 unknown 的间隔被
+    censored → 窗口 NaN（R4-54/96）。
     """
 
     metadata = _metadata(
@@ -277,8 +278,9 @@ class EventIntervalMemory(SeriesOperator):
 class EventLocalVariation(SeriesOperator):
     """事件间隔局部变异：``LV = (3/(n-1))·Σ ((τ_{i+1}-τ_i)/(τ_{i+1}+τ_i))²``。
 
-    规则事件序列 → LV≈0；间隔不规则 / 间歇性 → 大值。需要至少 3 个间隔。
-    EventBool：NaN = unknown，跨越 unknown 的间隔被 censored → 窗口 NaN。
+    规则事件序列 → LV≈0；间隔不规则 / 间歇性 → 大值。R26-090/091：需要至少
+    6 个有效间隔（与 kernel 一致）。EventBool：严格 ``{1, 0, NaN}``，NaN =
+    unknown，跨越 unknown 的间隔被 censored → 窗口 NaN。
     """
 
     metadata = _metadata(
@@ -310,8 +312,8 @@ class EventFanoFactor(SeriesOperator):
 
     F≈1 → 泊松型随机过程；F>1 → 聚集/爆发；F<1 → 更规则。仅统计完整块
     （R4-55，尾部 partial block 不入分布）；含 unknown(NaN) 的块不计数。
-    少于 2 个有效完整块 → NaN。EventBool：1/非零 = 事件，0 = 无事件，
-    NaN = unknown。
+    R26-090/091：少于 ``min_valid_blocks``（默认 5）个有效完整块 → NaN（与
+    kernel/ParamSpec 一致）。EventBool：严格 ``{1, 0, NaN}``。
     """
 
     metadata = _metadata(
@@ -391,12 +393,17 @@ def _declare_closure_contracts() -> None:
         declare_window_semantics,
     )
 
-    # Event-interval statistics count EVENTS, not rows: the trailing window is
-    # an event-clock history; an interval crossing an unknown (NaN) mark is
-    # censored (BREAK), never silently spanned.
+    # R26-088/089: the kernels use a TRAILING BAR window (``i0 = r - window + 1``,
+    # the last ``window`` ROWS), not the last ``window`` EVENTS.  The declared
+    # semantics must match the implementation clock exactly — an event-count
+    # declaration would mis-drive planner prefetch / warmup / cache identity /
+    # miner parameter meaning.  MIN_SUPPORT_WINDOW: a partial bar window is
+    # legitimate when the interval support floor (>=6 intervals) is met; an
+    # interval crossing an unknown (NaN) mark is censored (BREAK), never
+    # silently spanned.
     for _canon in ("event_interval_memory", "event_local_variation"):
         declare_missing_policy(_canon, MissingPolicy.BREAK)
-        declare_window_semantics(_canon, WindowSemantics.EVENT_COUNT_WINDOW)
+        declare_window_semantics(_canon, WindowSemantics.MIN_SUPPORT_WINDOW)
     for _canon in ("event_fano_factor", "event_fano_excess"):
         declare_missing_policy(_canon, MissingPolicy.BREAK)
         declare_window_semantics(_canon, WindowSemantics.CONTIGUOUS_FULL_WINDOW)

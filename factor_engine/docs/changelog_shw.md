@@ -4,6 +4,46 @@
 
 ---
 
+## 2026-08-10 R25 DataAccess 全平台最终收口（第 38 版）
+
+**内容**：DataAccess 全平台收口——权限 / PIT / 物理分区 / Source Snapshot /
+一致性 / 跨市场语义 / 并发 / 缓存 / 服务化 / FactorEngine 协作（详见
+`dataaccess/docs/R25_FULL_PLATFORM_CLOSURE_REPORT.md`）。基线
+`main@7b15a5e7`，20 个 P0 + ContractIR v2 + 12 条不变量：
+
+- **Physical（P0-001/002/016）**：`dataaccess/contract/` 新增 PhysicalPartitionSpec/
+  PhysicalLayout/MissingPartitionSemantics；US finance 编译成 PERIOD_END_FILE
+  （partition_clock=period_end，{period_end}.parquet，query_clock=filing_date）；
+  StockCapital split/shares 用 file_selector（{date}.parquet / shares_{date}.parquet）；
+  event/period 不再被 trade-day enumerator 建模。
+- **Filters（P0-003/004）**：FilterRequirement（panel/event/dimension scope、
+  exactly_one）+ `_enforce_runtime_contract_filters` 覆盖所有读面；timeframe
+  进入 RuntimeDatasetContract（event/exactly_one）。
+- **PIT（P0-005/017/018）**：AvailabilityResult（authoritative/degradation_reason）
+  + CalendarUnavailableError；filing_date date_label 不转时区；A UpdateTime
+  revision_availability_time=None。
+- **Snapshot（P0-009/010/011/012/013/014）**：`dataaccess/snapshot/` 新增
+  ResolvedObject/ResolvedSourceSnapshot/SourceSnapshotResolver/SnapshotVerifier；
+  production 拒绝 unresolved wildcard；QueryBudget v2（max_scan_objects/bytes）；
+  content_digest（etag/versionId）；mirror generation 原子发布（staging→rename→pointer）。
+- **Security（P0-006/007/008/019 + R24 保留）**：production 禁 ~/.cos.yaml；
+  cache principal 隔离；derived factor 权限继承（FE security/access.py）。
+- **Automated Research / FE 边界（P0-020）**：RunMode（interactive/automated/
+  production）；automated_research 走 is_strict_semantics()（INV-07）；GovernedFrame
+  （production 裸 dataframe → UnknownProvenanceError）。
+- **Resource/Cache/Service**：GlobalResourceGovernor（admission 超限拒）、
+  CacheManager（pin/GC/配额，pinned 永不删）、HTTP extra=forbid + 长度/基数限制、
+  /ready 真正 readiness、/v1/read_uri admin-only。
+- **DQ/CI**：unit_sentinel（单位漂移检测）、Production startup gate、
+  ContractIR drift audit（scripts/audit_r25_contract_drift.py）、allowlist 登记
+  3 个 FE 认证/校准脚本。
+
+**测试**：729 unit + 143 contract + 3 concurrency = **875 passed**（新增
+test_r25_physical_layout/filters/availability/snapshot/mirror/resource_schema/
+security_fe/dq/startup_gate 9 个文件 58 个测试）。Freeze 判定见报告 §L。
+
+---
+
 ## 2026-08-10 R24 DataAccess 安全 / PIT / 跨市场语义专项整改（第 37 版）
 
 **内容**：DataAccess 权限边界 / 数据泄露 / COS 多服务器分级权限 / 财务 PIT /

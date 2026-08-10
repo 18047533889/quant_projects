@@ -10,10 +10,10 @@ based, so repeated evaluation is bit-identical (the audit's determinism gate).
   ``I(X_{s+lag}; Y_s | X_s)`` in nats (P1).
 * ``ts_effective_transfer_entropy``  — TE minus the mean over deterministic
   structure-matched circular-shift surrogates; the negative side measures
-  spurious coupling (P2).  Each surrogate circular-shifts the source on the
-  ORIGINAL timeline, then rebuilds the transition triples and re-applies the
-  valid mask, so the null shares the real estimate's missing-gap topology
-  (review item #19).
+  spurious coupling (P2).  R26-103/104: each surrogate fixes the NaN mask and
+  circularly rearranges only the FINITE source subsequence in place, so the
+  null shares the EXACT physical-time missing footprint / observation cohort of
+  the real estimate (the old whole-array shift moved the NaN positions).
 * ``ts_score_rank_weighted_mean``    — exponential-rank (salience) weighted mean
   of a target, weighting the highest-``score`` observations most (P1).
 * ``report_benford_js_divergence``   — first-digit distribution JS divergence
@@ -379,11 +379,24 @@ def _effective_transfer_entropy_window(
     for off in _SURROGATE_OFFSETS:
         if off <= lag or off >= n:
             continue
-        y_shifted = np.empty_like(sw)
-        y_shifted[: n - off] = sw[off:]
-        y_shifted[n - off :] = sw[:off]
-        # Reconstruct (x_lead, y_lag) on the shifted timeline, then re-apply the
-        # same valid mask (drop missing AFTER the shift).
+        # R26-103/104: the surrogate must preserve the EXACT physical-time
+        # missing footprint.  Circular-shifting the whole source array moves the
+        # NaN positions with the values (same count/shape, different footprint),
+        # so the real/null transition cohorts diverge.  Instead the NaN mask is
+        # FIXED and only the finite subsequence is circularly rearranged in
+        # place — the null breaks serial dependence on the SAME observation
+        # cohort the real estimate uses.
+        y_shifted = sw.copy()
+        finite_idx = np.isfinite(sw)
+        vals = sw[finite_idx]
+        if vals.size <= off:
+            continue
+        vals_s = np.empty_like(vals)
+        vals_s[:-off] = vals[off:]
+        vals_s[-off:] = vals[:off]
+        y_shifted[finite_idx] = vals_s
+        # Reconstruct (x_lead, y_lag) on the rearranged timeline, then re-apply
+        # the same valid mask (missing positions are unchanged by construction).
         y_t_s = y_shifted[:-lag]
         mask_s = np.isfinite(x_t) & np.isfinite(y_t_s) & np.isfinite(x_next)
         if int(mask_s.sum()) < max(lag + 2, min_transitions):
@@ -412,12 +425,11 @@ def _effective_transfer_entropy_window(
 class TsEffectiveTransferEntropy(SeriesOperator):
     """有效传递熵：TE 减去确定性 structure-matched surrogate 均值。
 
-    surrogate 用固定偏移 ``[7,11,17,23,31]`` 在**原始时间轴**上对 source 做
-    确定性循环平移（绝不随机 shuffle），再在平移后的时间轴上重建
-    ``(x_lead, y_lag)`` 三元组并重新施加有效掩码（shift 之后才 drop missing），
-    因此 null 与真实估计共享完全相同的缺失 gap 拓扑（review #19）。同一输入
-    每次输出逐位一致。ETE 可为负（真实耦合弱于 surrogate），不 clip。
-    P2 / Research。
+    surrogate 用固定偏移 ``[7,11,17,23,31]`` 在**固定 NaN mask**内对 source 的
+    finite 子序列做确定性循环重排（R26-103/104：绝不移动 NaN 位置、绝不随机
+    shuffle），因此 null 与真实估计在**完全相同**的 physical-time 缺失拓扑 /
+    观测队列上计算，real/null 的有效 transition cohort 一致。同一输入每次
+    输出逐位一致。ETE 可为负（真实耦合弱于 surrogate），不 clip。P2 / Research。
     """
 
     metadata = _metadata(

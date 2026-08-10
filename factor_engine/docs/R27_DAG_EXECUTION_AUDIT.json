@@ -1,0 +1,48 @@
+{
+  "scheduler_probe": {
+    "ok": true,
+    "wall_s": 5.965,
+    "results": [
+      "a",
+      "b",
+      "c"
+    ],
+    "done": 4,
+    "broker_stage": "NORMAL",
+    "scheduler_explanations": 4
+  },
+  "dag_probe": {
+    "topological_order": [
+      "cse:s1",
+      "root:a",
+      "root:b"
+    ],
+    "shared_before_roots": true,
+    "task_count": 3
+  },
+  "fusion_probe": {
+    "can_fuse_same_scope": true,
+    "fusion_groups": [
+      {
+        "group_id": 0,
+        "backend": "pandas_numpy",
+        "source_scope": "x",
+        "roots": [
+          "r1",
+          "r2"
+        ],
+        "estimated_output_bytes": 134217728
+      },
+      {
+        "group_id": 1,
+        "backend": "pandas_numpy",
+        "source_scope": "y",
+        "roots": [
+          "r3"
+        ],
+        "estimated_output_bytes": 67108864
+      }
+    ],
+    "block_size": 100
+  }
+}

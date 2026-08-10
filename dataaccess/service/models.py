@@ -4,10 +4,30 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class ReadRequest(BaseModel):
+class StrictRequestModel(BaseModel):
+    """R25 §59：所有 request 都 ``extra="forbid"``——未知字段直接 422，不静默忽略。
+
+    未知 key 静默忽略会掩盖 typo（``instument_filter`` 悄悄变成 None，安全预算 /
+    授权路径被绕过）。Pydantic v2 用 ``ConfigDict(extra="forbid")``。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
+# R25 §59：请求字段基数/长度上限（防资源放大）。
+MAX_DATASET_NAME_LEN = 200
+MAX_COLUMN_LEN = 128
+MAX_COLUMN_COUNT = 200
+MAX_INSTRUMENT_FILTER_CARDINALITY = 5000
+MAX_FACTOR_IDS_CARDINALITY = 500
+MAX_URI_LEN = 1024
+MAX_TIME_RANGE_YEARS = 50
+
+
+class ReadRequest(StrictRequestModel):
     """POST /v1/read 请求体。"""
 
     dataset: str
@@ -41,6 +61,32 @@ class ReadRequest(BaseModel):
             raise ValueError("columns 必须是非空字符串列表")
         if len(set(value)) != len(value):
             raise ValueError("columns 不允许重复")
+        # R25 §59：列数上限（防宽表 + 防 JSON 内存放大）。
+        if len(value) > MAX_COLUMN_COUNT:
+            raise ValueError(f"columns 数量 {len(value)} 超过上限 {MAX_COLUMN_COUNT}")
+        if any(len(col) > MAX_COLUMN_LEN for col in value):
+            raise ValueError(f"列名长度超过上限 {MAX_COLUMN_LEN}")
+        return value
+
+    @field_validator("dataset")
+    @classmethod
+    def _validate_dataset(cls, value: str) -> str:
+        # R25 §59：dataset 名长度上限。
+        if len(str(value)) > MAX_DATASET_NAME_LEN:
+            raise ValueError(f"dataset 名长度超过上限 {MAX_DATASET_NAME_LEN}")
+        return value
+
+    @field_validator("instrument_filter")
+    @classmethod
+    def _validate_instrument_filter(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        # R25 §59：instrument_filter 基数上限。
+        if len(value) > MAX_INSTRUMENT_FILTER_CARDINALITY:
+            raise ValueError(
+                f"instrument_filter 数量 {len(value)} 超过上限 "
+                f"{MAX_INSTRUMENT_FILTER_CARDINALITY}"
+            )
         return value
 
     @field_validator("max_rows")
@@ -59,7 +105,7 @@ class ReadRequest(BaseModel):
         return self
 
 
-class DatasetInfo(BaseModel):
+class DatasetInfo(StrictRequestModel):
     name: str
     kind: str
     access_mode: str
@@ -77,7 +123,7 @@ class ReadResponseMeta(BaseModel):
     format: str
 
 
-class ReadURIRequest(BaseModel):
+class ReadURIRequest(StrictRequestModel):
     """POST /v1/read_uri 请求体（不必先登记数据集）。"""
 
     uri: str
@@ -91,8 +137,16 @@ class ReadURIRequest(BaseModel):
     limit: int | None = None
     format_out: Literal["parquet", "arrow_ipc", "json"] = "parquet"
 
+    @field_validator("uri")
+    @classmethod
+    def _validate_uri(cls, value: str) -> str:
+        # R25 §59：URI 长度上限。
+        if len(str(value)) > MAX_URI_LEN:
+            raise ValueError(f"URI 长度超过上限 {MAX_URI_LEN}")
+        return value
 
-class FactorReadRequest(BaseModel):
+
+class FactorReadRequest(StrictRequestModel):
     """POST /v1/factors/read 请求体（一次读多因子）。"""
 
     factor_ids: list[str]
@@ -103,3 +157,14 @@ class FactorReadRequest(BaseModel):
     frequency: str | None = None
     limit: int | None = None
     format: Literal["parquet", "arrow_ipc", "json"] = "parquet"
+
+    @field_validator("factor_ids")
+    @classmethod
+    def _validate_factor_ids(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("factor_ids 不能为空")
+        if len(value) > MAX_FACTOR_IDS_CARDINALITY:
+            raise ValueError(
+                f"factor_ids 数量 {len(value)} 超过上限 {MAX_FACTOR_IDS_CARDINALITY}"
+            )
+        return value

@@ -167,6 +167,72 @@ class ContractIR:
         return {k: v.to_dict() for k, v in self.datasets.items()}
 
 
+def audit_runtime_contract_drift(registry: Any) -> list[str]:
+    """R25 §23 Audit 1：RuntimeDatasetContract vs MirrorSpec 物理布局漂移审计。
+
+    抓「Mirror layout != COS contract layout」类冲突：
+        - US finance contract storage_layout=period_files，但 mirror 用
+          daily_parquet（P0-001 的原始形态）→ 必须报；
+        - StockCapital split/shares 目录混放，mirror file_selector 与契约
+          layout 不匹配 → 必须报。
+
+    runtime 只消费 ``compile_runtime_contract`` 产出的 PhysicalPartitionSpec
+    （mirror/remote/auto 同一个 locator），本审计保证二者不漂。
+    """
+    from data_access.contract.physical_partition import (
+        PhysicalLayout,
+        layout_from_contract,
+    )
+    from data_access.contract.runtime_contract import compile_runtime_contract
+    from data_access.cos_contract import get_cos_contract
+
+    problems: list[str] = []
+    names = set(registry.names())
+    for name in sorted(names):
+        contract = get_cos_contract(name)
+        if contract is None:
+            continue
+        contract_layout = layout_from_contract(getattr(contract, "storage_layout", None))
+        if contract_layout is None:
+            continue
+        # US finance / capital 布局：contract 已显式声明 period/event/prefixed。
+        if contract_layout not in {
+            PhysicalLayout.PERIOD_END_FILE,
+            PhysicalLayout.EVENT_DATE_FILE,
+            PhysicalLayout.PREFIXED_DATE_FILE,
+        }:
+            continue
+        try:
+            rc = compile_runtime_contract(name, registry)
+        except Exception as exc:
+            problems.append(
+                f"contract {name!r} RuntimeDatasetContract compile 失败: {exc}"
+            )
+            continue
+        if rc is None or rc.physical_partition is None:
+            problems.append(f"contract {name!r} 无法编译 PhysicalPartitionSpec")
+            continue
+        compiled = rc.physical_partition.layout
+        if compiled != contract_layout:
+            problems.append(
+                f"mirror/spec 布局漂移 {name!r}: COS contract={contract_layout.value} "
+                f"但编译出 {compiled.value}（R25 §23 Audit 1）"
+            )
+        # StockCapital 混放目录：file_selector 必须与契约布局匹配。
+        if contract_layout == PhysicalLayout.PREFIXED_DATE_FILE:
+            from data_access.cos.mirror import mirror_spec_for_dataset
+
+            spec = mirror_spec_for_dataset(name)
+            if spec is not None and getattr(spec, "file_selector", None):
+                rc_sel = rc.physical_partition.file_selector
+                if rc_sel != spec.file_selector:
+                    problems.append(
+                        f"StockCapital {name!r} file_selector 漂移: mirror={spec.file_selector!r} "
+                        f"compiled={rc_sel!r}（R25 §23 Audit 1）"
+                    )
+    return problems
+
+
 def build_contract_ir(
     registry: Any,
     contracts: Mapping[str, Any] | None = None,

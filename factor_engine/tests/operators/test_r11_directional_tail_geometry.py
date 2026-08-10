@@ -135,8 +135,10 @@ def test_dc_fixed_absolute_prefix_invariance_and_anchor_stability():
 # ---------------------------------------------------------------------------
 def test_dc_scale_missing_breaks_episode():
     # The NaN scale at bar 2 breaks the episode: fewer events survive than the
-    # full-scale run (rate 4/6 -> 3/6 under round-2 §24 pre-confirmation
+    # full-scale run (rate 4/6 -> 3/5 under round-2 §24 pre-confirmation
     # running-extrema seeding; prices strictly positive by contract).
+    # R26-116/117: the event-rate denominator is CLOCK-OBSERVABLE bars (price
+    # valid AND scale valid), so the broken-clock bar 2 is excluded.
     # Prices must be strictly positive (concurrent R13/R14 price>0 contract);
     # adding a constant preserves the DC path shape and event positions.
     x = _col([1.0, 3.0, 2.0, 4.0, 5.0, 3.0])
@@ -145,7 +147,7 @@ def test_dc_scale_missing_breaks_episode():
     rate_gap = _get("ts_dc_event_rate").calculate(x, s_gap, threshold=1.0, window=10)
     rate_full = _get("ts_dc_event_rate").calculate(x, s_full, threshold=1.0, window=10)
     assert rate_full.iloc[-1, 0] == pytest.approx(4.0 / 6.0)
-    assert rate_gap.iloc[-1, 0] == pytest.approx(3.0 / 6.0)
+    assert rate_gap.iloc[-1, 0] == pytest.approx(3.0 / 5.0)
 
 
 # ---------------------------------------------------------------------------

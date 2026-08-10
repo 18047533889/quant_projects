@@ -329,8 +329,12 @@ class TsQuantileRegressionBeta(SeriesOperator):
     """精确分位数回归斜率 β_q（LP 求解）。
 
     最小化 ``Σ ρ_q(y - α - βx)``（``ρ_q(u)=u(q-I(u<0))``），exact 线性规划
-    (HiGHS)，不用不稳定的 IRLS 近似。q=0.1 回答"股票自己处于最差收益状态时 x
-    对它的边际关系"。P2 / Research。
+    (HiGHS)，不用不稳定的 IRLS 近似。
+
+    R26-063/064 语义澄清：β_q = ∂Q_y(q|x)/∂x 是 **conditional quantile slope**
+    ——给定 x 时 y 的 q 分位点对 x 的边际变化率。它**不是**"当 y 自己处于
+    q-tail 状态时对 y 做 OLS"的 tail-state regression（那是另一个需要独立
+    实现的 canonical）。P2 / Research。
     """
 
     metadata = _metadata(

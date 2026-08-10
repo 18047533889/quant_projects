@@ -63,8 +63,15 @@ def test_sync_daily_file_invokes_cos_cli(mirror_env, tmp_path):
     assert (mirror_env.local_root / "StockDailyBar" / "2024-01-02.parquet").exists()
 
 
-def test_missing_cos_object_is_skipped(mirror_env):
+def test_missing_dense_object_is_error(mirror_env):
+    """R25 P0-015：dense 行情缺失 partition 必须 fail-closed（不再是 debug 跳过）。
+
+    旧行为「404 → debug → return」会让 StockDailyBar 缺交易日文件静默漏读——
+    D1 密集行情是数据缺口，必须报 MissingRequiredPartition。
+    """
     import subprocess
+
+    from data_access.core.exceptions import MissingRequiredPartition
 
     def fake_run(cmd, **kwargs):
         raise subprocess.CalledProcessError(
@@ -74,10 +81,35 @@ def test_missing_cos_object_is_skipped(mirror_env):
         )
 
     with patch("data_access.cos.mirror.subprocess.run", side_effect=fake_run):
-        sync_dataset(
-            "test_ashare_daily",
-            time_range=("2024-01-07", "2024-01-07"),
+        with pytest.raises(MissingRequiredPartition):
+            sync_dataset(
+                "test_ashare_daily",
+                time_range=("2024-01-07", "2024-01-07"),
+            )
+
+
+def test_missing_sparse_object_empty_ok(tmp_path):
+    """R25 P0-015：稀疏事件表缺失 partition → empty_ok 静默跳过（不 hard fail）。"""
+    import subprocess
+
+    from data_access.cos.mirror import _sync_cos_file
+
+    def fake_run(cmd, **kwargs):
+        raise subprocess.CalledProcessError(
+            1,
+            cmd,
+            stderr="cos object not found: test",
         )
+
+    dest = tmp_path / "events" / "2024-01-02.parquet"
+    with patch("data_access.cos.mirror.subprocess.run", side_effect=fake_run):
+        _sync_cos_file(
+            "cos://test/events/2024-01-02.parquet",
+            dest,
+            missing_semantics="empty_ok",
+            dataset_name="test_sparse_event",
+        )
+    assert not dest.exists()  # 缺失被静默跳过（empty_ok）
 
 
 def test_ensure_local_mirror_raises_without_local_data_or_time_range(mirror_env):

@@ -269,8 +269,20 @@ def _remote_snapshot_meta_enabled() -> bool:
         return False
 
 
+def _path_has_glob(path: str) -> bool:
+    """路径是否含 glob 通配（* / ? / {..}）。"""
+    return any(c in path for c in ("*", "?", "{", "}"))
+
+
 def build_file_manifest(paths: Sequence[str]) -> tuple[FileVersion, ...]:
-    """从 DuckDB glob 路径列表构建文件 manifest（本地 stat / 远程对象头）。"""
+    """从 DuckDB glob 路径列表构建文件 manifest（本地 stat / 远程对象头）。
+
+    R25 P0-009：remote wildcard（``s3://bucket/table/*.parquet``）**不再是**一个
+    FileVersion——它不构成可证明的 snapshot 对象。含通配的远程 pattern 标注
+    ``etag=None`` 且 ``content_length=None``，并把原始 glob 记录在 path 里；
+    strict snapshot 校验（``data_access.snapshot.SnapshotVerifier``）据此在
+    production 下拒绝 unresolved wildcard 直接进 executor。
+    """
     import glob as glob_mod
 
     enable_remote = _remote_snapshot_meta_enabled()
@@ -281,10 +293,13 @@ def build_file_manifest(paths: Sequence[str]) -> tuple[FileVersion, ...]:
             if pattern not in seen:
                 seen.add(str(pattern))
                 extra: dict[str, Any] = {}
-                if enable_remote:
+                if enable_remote and not _path_has_glob(str(pattern)):
                     meta = _remote_object_meta(pattern)
                     if meta:
                         extra = meta
+                # R25 P0-009：glob 仍出现在 path 里（供 snapshot resolver / audit
+                # 识别 unresolved wildcard），但不带 etag/content_length 冒充 exact
+                # object。snapshot 层负责把它解析成 exact object 集。
                 versions.append(FileVersion(path=str(pattern), **extra))
             continue
         expanded = sorted(glob_mod.glob(pattern, recursive=True))

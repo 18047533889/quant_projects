@@ -66,14 +66,22 @@ US_CLEAN_LOCAL_ROOT = Path(
 
 @dataclass(frozen=True)
 class MirrorSpec:
-    """单个 datasets.yaml 条目对应的 COS 镜像规格。"""
+    """单个 datasets.yaml 条目对应的 COS 镜像规格（R25 P0-001/002：只保留
+    deployment/location；layout/filename template/partition clock 来自
+    RuntimeDatasetContract.physical_partition，见 ``physical_partition_for``）。"""
 
     cos_prefix: str
     local_root: Path
     table: str | None = None
-    # daily_parquet | single_full | hive_date | hive_year | root_file
+    # daily_parquet | period_files | prefixed_date_file | single_full | hive_date |
+    # hive_year | root_file | event_files
     layout: str = "daily_parquet"
     file_name: str = "full.parquet"
+    # R25 P0-002：同目录混放不同 schema 时用 file_selector 区分前缀
+    # （StockCapital shares_2024-01-01.parquet vs 2024-01-01.parquet）。
+    file_selector: str | None = None
+    # R25 P0-002：显式文件名模板（如 "{date}.parquet" / "shares_{date}.parquet"）。
+    filename_template: str | None = None
 
 
 def _spec(
@@ -84,6 +92,8 @@ def _spec(
     table: str | None = None,
     layout: str = "daily_parquet",
     file_name: str = "full.parquet",
+    file_selector: str | None = None,
+    filename_template: str | None = None,
 ) -> tuple[str, MirrorSpec]:
     return dataset, MirrorSpec(
         cos_prefix=cos_prefix.rstrip("/"),
@@ -91,6 +101,8 @@ def _spec(
         table=table,
         layout=layout,
         file_name=file_name,
+        file_selector=file_selector,
+        filename_template=filename_template,
     )
 
 
@@ -127,15 +139,16 @@ def _build_mirror_registry() -> dict[str, MirrorSpec]:
         _spec("us_etf_daily", cos_prefix=up, local_root=ur, table="ETFDailyBar"),
         _spec("us_etf_list", cos_prefix=up, local_root=ur, table="ETFList", layout="single_full"),
         _spec("us_security_master", cos_prefix=up, local_root=ur, table="SecurityMaster", layout="single_full"),
-        _spec("us_stock_balance", cos_prefix=up, local_root=ur, table="StockBalance"),
+        _spec("us_stock_balance", cos_prefix=up, local_root=ur, table="StockBalance", layout="period_files", filename_template="{period_end}.parquet"),
         # StockCapitalDaily 目录混放 {date}.parquet（拆分事件）与 shares_{date}.parquet
         # （PIT 股本），两 schema 不同——按数据集拆分镜像，禁止 glob 整个目录。
-        _spec("us_stock_capital_split", cos_prefix=up, local_root=ur, table="StockCapitalDaily"),
-        _spec("us_stock_capital_shares", cos_prefix=up, local_root=ur, table="StockCapitalDaily"),
-        _spec("us_stock_cashflow", cos_prefix=up, local_root=ur, table="StockCashFlow"),
+        # R25 P0-002：用 file_selector 区分前缀，mirror/remote/auto 用同一个 locator。
+        _spec("us_stock_capital_split", cos_prefix=up, local_root=ur, table="StockCapitalDaily", layout="prefixed_date_file", filename_template="{date}.parquet"),
+        _spec("us_stock_capital_shares", cos_prefix=up, local_root=ur, table="StockCapitalDaily", layout="prefixed_date_file", file_selector="shares_", filename_template="shares_{date}.parquet"),
+        _spec("us_stock_cashflow", cos_prefix=up, local_root=ur, table="StockCashFlow", layout="period_files", filename_template="{period_end}.parquet"),
         _spec("us_stock_daily", cos_prefix=up, local_root=ur, table="StockDailyBar"),
         _spec("us_stock_dividend", cos_prefix=up, local_root=ur, table="StockDividend"),
-        _spec("us_stock_income", cos_prefix=up, local_root=ur, table="StockIncome"),
+        _spec("us_stock_income", cos_prefix=up, local_root=ur, table="StockIncome", layout="period_files", filename_template="{period_end}.parquet"),
         _spec("us_stock_indicator", cos_prefix=up, local_root=ur, table="StockIndicator"),
         _spec("us_stock_indices_components", cos_prefix=up, local_root=ur, table="StockIndicesComponents"),
         _spec("us_stock_industry", cos_prefix=up, local_root=ur, table="StockIndustry", layout="single_full"),
@@ -388,7 +401,11 @@ def expected_partitions(
     partition」：
         - ``daily_parquet`` / ``hive_date`` → 期望日期（trade_day 走交易日历，
           calendar_day 走自然日；日历不可用回退自然日并标记 degraded）；
-        - ``hive_year`` → 年份（天然与自然日无关）。
+        - ``hive_year`` → 年份（天然与自然日无关）；
+        - ``period_files`` / ``prefixed_date_file`` / ``event_files`` → **不按
+          request 时间轴枚举物理文件名**（R25 P0-001/016：partition_clock !=
+          predicate_clock 时禁止瞎映射），返回空列表（调用方必须用完整目录
+          sync / source index / manifest，宁可多扫不能漏）。
     remote 侧**不得**再实现一套「自然日逐日枚举」——交易日型数据跨周末会被误判
     缺失 → 误切 remote → 去请求不存在的周末对象。mirror 的
     ``_sync_daily_file`` / ``sync_dataset`` 与 remote 的路径构建全走这里，保证
@@ -397,6 +414,11 @@ def expected_partitions(
     layout = str(layout or "").lower()
     if layout == "hive_year":
         return list(_iter_years(start, end))
+    if layout in {"period_files", "prefixed_date_file", "event_files"}:
+        # R25 P0-001/016：不能按 request time_range 展开 period/event 物理文件名
+        # （StockIncome/2024-03-31.parquet 的 partition_clock=period_end，predicate
+        # = filing_date）。返回空 → 调用方 fallback 完整目录 sync / source index。
+        return []
     return _expected_dates(dataset_name, start, end)
 
 
@@ -405,12 +427,68 @@ def expected_partitions_with_degraded(
 ) -> tuple[list[Any], bool]:
     """共享期望 partition 编译器 + degraded 标记（线程安全，见 ``_expected_dates_with_degraded``）。
 
-    ``hive_year`` 与自然日无关，永不 degraded。
+    ``hive_year`` 与自然日无关，永不 degraded；period/event/prefixed 布局按
+    R25 P0-001/016 不枚举（空列表，非 degraded——调用方用完整 sync/source index）。
     """
     layout = str(layout or "").lower()
     if layout == "hive_year":
         return list(_iter_years(start, end)), False
+    if layout in {"period_files", "prefixed_date_file", "event_files"}:
+        return [], False
     return _expected_dates_with_degraded(dataset_name, start, end)
+
+
+def physical_partition_for(dataset_name: str) -> Any:
+    """R25 P0-001/002/016：**唯一物理分区 locator**（mirror/remote/auto 共用）。
+
+    优先 RuntimeDatasetContract（契约声明，period_files / event_files 等）；无
+    契约或布局未声明时从 MirrorSpec 编译。返回 ``data_access.contract.PhysicalPartitionSpec``。
+
+    **禁止** mirror.py 自己拼 / remote.py 再拼一遍 / registry glob 又是一套——
+    物理布局（layout/filename template/partition clock/缺失语义）只有这一个来源。
+    """
+    from data_access.contract.physical_partition import (
+        MissingPartitionSemantics,
+        PhysicalLayout,
+        PhysicalPartitionSpec,
+        layout_from_mirror,
+    )
+    from data_access.contract.runtime_contract import compile_runtime_contract
+
+    # 1) 契约优先：RuntimeDatasetContract 已把 storage_layout（period_files /
+    #    event_files）编译成 PhysicalPartitionSpec。
+    try:
+        from data_access.registry import load_registry
+
+        rc = compile_runtime_contract(dataset_name, load_registry())
+        if rc is not None and rc.physical_partition is not None:
+            return rc.physical_partition
+    except Exception:
+        pass
+
+    # 2) 退路：MirrorSpec 编译（deployment 声明）。
+    spec = mirror_spec_for_dataset(dataset_name)
+    if spec is None:
+        return None
+    try:
+        layout = layout_from_mirror(getattr(spec, "layout", None) or "daily_parquet")
+    except Exception:
+        layout = PhysicalLayout.DAILY_TRADE_DATE
+    filename_template = getattr(spec, "filename_template", None)
+    file_selector = getattr(spec, "file_selector", None)
+    # StockCapital 混放目录：file_selector 决定 filename template。
+    if layout == PhysicalLayout.PREFIXED_DATE_FILE and not filename_template:
+        sel = file_selector or ""
+        filename_template = f"{sel}{{date}}.parquet"
+    return PhysicalPartitionSpec(
+        layout=layout,
+        partition_clock="period_end"
+        if layout == PhysicalLayout.PERIOD_END_FILE
+        else "date",
+        filename_template=filename_template or "{date}.parquet",
+        file_selector=file_selector,
+        completeness=MissingPartitionSemantics.ERROR,
+    )
 
 
 def _run_cos_cli(args: Sequence[str]) -> None:
@@ -660,8 +738,36 @@ def _local_file_usable(dest: Path) -> bool:
     return True
 
 
-def _sync_cos_file(cos_uri: str, dest: Path) -> None:
+def _missing_semantics_for_dataset(dataset_name: str) -> str:
+    """R25 P0-015：缺失 partition 的契约语义（error / warn / empty_ok）。
+
+    从 COS 契约 ``missing_partition_semantics`` 读取（缺省 error）；事件/稀疏表
+    契约通常声明 empty_ok。Downloader **不自己决定**——按 contract 走。
+    """
+    try:
+        from data_access.cos_contract import get_cos_contract
+
+        c = get_cos_contract(dataset_name)
+        if c is not None and getattr(c, "missing_partition_semantics", None):
+            return str(c.missing_partition_semantics).lower()
+    except Exception:
+        pass
+    return "error"
+
+
+def _sync_cos_file(
+    cos_uri: str,
+    dest: Path,
+    *,
+    missing_semantics: str = "error",
+    dataset_name: str | None = None,
+) -> None:
     """从 COS 下载单个对象到本地（R24 P0-S3 §5.3 / T-S08 安全临时文件）。
+
+    R25 P0-015：缺失对象按 dataset 契约语义处理，**不统一静默跳过**：
+        - missing_semantics="error"  （dense 行情）→ 缺失抛 ``MissingRequiredPartition``；
+        - missing_semantics="warn"   → 告警；
+        - missing_semantics="empty_ok"（稀疏事件表）→ 静默跳过。
 
     - 目标文件是 symlink → 拒绝（symlink 替换攻击：恶意预建 symlink 把下载重定向
       到 root 之外）；
@@ -672,6 +778,8 @@ def _sync_cos_file(cos_uri: str, dest: Path) -> None:
     """
     import os as _os
     import tempfile as _tempfile
+
+    from data_access.core.exceptions import MissingRequiredPartition
 
     dest.parent.mkdir(parents=True, exist_ok=True)
     if _local_file_fresh(dest):
@@ -690,12 +798,21 @@ def _sync_cos_file(cos_uri: str, dest: Path) -> None:
         tmp.close()
         _run_cos_cli(["cp", cos_uri, str(tmp_path)])
         if not tmp_path.exists() or tmp_path.stat().st_size <= 0:
-            logger.debug("cos_mirror: 跳过空/缺失下载 %s", cos_uri)
+            # 空下载：按语义处理（error 强制 / empty_ok 跳过）。
             try:
                 tmp_path.unlink()
             except OSError:
                 pass
-            return
+            if missing_semantics == "empty_ok":
+                logger.debug("cos_mirror: 稀疏事件表空对象（empty_ok）跳过 %s", cos_uri)
+                return
+            if missing_semantics == "warn":
+                logger.warning("cos_mirror: 对象下载为空（warn）%s", cos_uri)
+                return
+            raise MissingRequiredPartition(
+                f"cos_mirror: 数据集 {dataset_name or ''} 必需 partition 下载为空："
+                f"{cos_uri}（missing_semantics=error，production fail-closed）"
+            )
         try:
             _os.chmod(tmp_path, 0o600)  # 文件默认 0600（私有）
         except OSError:
@@ -713,8 +830,18 @@ def _sync_cos_file(cos_uri: str, dest: Path) -> None:
             except OSError:
                 pass
         if _is_missing_object_error(exc):
-            logger.debug("cos_mirror: 跳过缺失文件 %s", cos_uri)
-            return
+            # R25 P0-015：404 / NoSuchKey 按契约语义处理，不统一 debug 跳过。
+            if missing_semantics == "empty_ok":
+                logger.debug("cos_mirror: 稀疏事件表缺失对象（empty_ok）跳过 %s", cos_uri)
+                return
+            if missing_semantics == "warn":
+                logger.warning("cos_mirror: 对象缺失（warn）%s", cos_uri)
+                return
+            raise MissingRequiredPartition(
+                f"cos_mirror: 数据集 {dataset_name or ''} 必需 partition 缺失："
+                f"{cos_uri}（missing_semantics=error，production fail-closed；"
+                "若确为稀疏事件表，请契约声明 missing_partition_semantics=empty_ok）"
+            ) from exc
         raise
     except Exception:
         if tmp is not None:
@@ -725,15 +852,180 @@ def _sync_cos_file(cos_uri: str, dest: Path) -> None:
         raise
 
 
-def _sync_daily_file(spec: MirrorSpec, day: date) -> None:
-    fname = f"{day.isoformat()}.parquet"
+def _daily_filename(spec: MirrorSpec, day: date) -> str:
+    """R25 P0-002：StockCapital split/shares 用同一个 locator 生成文件名。
+
+    - split（file_selector=None）：``{date}.parquet``
+    - shares（file_selector="shares_"）：``shares_{date}.parquet``
+    mirror 与 remote **必须**走同一函数，禁止各自拼。
+    """
+    if spec.filename_template:
+        if "{date}" in spec.filename_template:
+            return spec.filename_template.replace("{date}", day.isoformat())
+        # 无 {date} 占位符的模板：直接按 spec 拼接
+        if spec.file_selector:
+            return f"{spec.file_selector}{day.isoformat()}.parquet"
+        return spec.filename_template
+    if spec.file_selector:
+        return f"{spec.file_selector}{day.isoformat()}.parquet"
+    return f"{day.isoformat()}.parquet"
+
+
+def _sync_daily_file(spec: MirrorSpec, day: date, dataset_name: str | None = None) -> None:
+    fname = _daily_filename(spec, day)
     dest = _local_table_dir(spec) / fname
-    _sync_cos_file(f"{_cos_table_uri(spec)}/{fname}", dest)
+    _sync_cos_file(
+        f"{_cos_table_uri(spec)}/{fname}",
+        dest,
+        missing_semantics=_missing_semantics_for_dataset(dataset_name or ""),
+        dataset_name=dataset_name,
+    )
+
+
+def _sync_dir_full(spec: MirrorSpec) -> None:
+    """R25 P0-001/016：period/event/prefixed 布局的完整目录同步。
+
+    partition_clock != predicate_clock 时**不能**按 request time_range 枚举物理
+    文件名（StockIncome/2024-03-31.parquet 的 partition 是 period_end，request
+    knowledge 是 filing_date）。宁可多扫整个目录，不能漏读真实 filing。
+    """
+    dest = _local_table_dir(spec) if spec.table else spec.local_root
+    dest.mkdir(parents=True, exist_ok=True)
+    _run_cos_cli(["sync", _cos_table_uri(spec) + "/", str(dest) + "/"])
 
 
 def _sync_single_full(spec: MirrorSpec) -> None:
     dest = _local_table_dir(spec) / spec.file_name
     _sync_cos_file(f"{_cos_table_uri(spec)}/{spec.file_name}", dest)
+
+
+def publish_mirror_generation(
+    spec: MirrorSpec,
+    *,
+    generation_id: str | None = None,
+    source_generation: str | None = None,
+    full: bool = False,
+) -> str:
+    """R25 P0-014 / §15：full mirror 的 **generation-based 原子发布**。
+
+    不再 ``cos sync`` 直接写 live directory（读者可能看到 old/new mixture）。
+    流程：
+        1. 解析 generation G（缺省用 source_generation 或时间戳）；
+        2. ``<mirror_root>/generation/G.tmp`` staging；
+        3. sync 全部 + 验证（object inventory / checksum / schema 由调用方 verify）；
+        4. fsync + ``G.tmp -> G`` rename；
+        5. atomic manifest pointer -> G（``generation/current.json``）；
+        6. 旧 generation 延迟 GC（reader 只 resolve pointer）。
+
+    返回发布的 generation_id。读者（``resolve_current_mirror_generation``）只读
+    pointer，**绝不**边 sync 边暴露。
+    """
+    import datetime as _dt
+
+    if generation_id is None:
+        stamp = source_generation or _dt.datetime.now(_dt.timezone.utc).strftime(
+            "%Y%m%dT%H%M%SZ"
+        )
+        generation_id = f"{stamp}-{_rand_suffix()}"
+    mirror_root = spec.local_root
+    staging = mirror_root / "generation" / f"{generation_id}.tmp"
+    final = mirror_root / "generation" / generation_id
+    staging.mkdir(parents=True, exist_ok=True)
+
+    # sync 到 staging（不碰 live）。
+    staging_spec = MirrorSpec(
+        cos_prefix=spec.cos_prefix,
+        local_root=staging,
+        table=spec.table,
+        layout=spec.layout,
+        file_name=spec.file_name,
+        file_selector=spec.file_selector,
+        filename_template=spec.filename_template,
+    )
+    if spec.layout == "single_full":
+        _sync_single_full(staging_spec)
+    elif spec.layout == "root_file":
+        _sync_root_file(staging_spec)
+    elif spec.layout in {"period_files", "prefixed_date_file", "event_files", "daily_parquet"}:
+        _sync_dir_full(staging_spec)
+    elif spec.layout == "hive_date":
+        for year in _iter_years(_dt.date(2000, 1, 1), _dt.date.today()):
+            _sync_hive_year(
+                MirrorSpec(
+                    cos_prefix=spec.cos_prefix,
+                    local_root=staging,
+                    table=spec.table,
+                    layout="hive_date",
+                    file_name=spec.file_name,
+                ),
+                year,
+            )
+    else:
+        _sync_dir_full(staging_spec)
+
+    # 验证 + fsync + atomic rename + pointer。
+    _verify_staged_generation(staging)
+    os.replace(str(staging), str(final))
+    _write_generation_pointer(mirror_root, generation_id, source_generation)
+    logger.info(
+        "cos_mirror: generation %s published (dataset=%s objects=%s)",
+        generation_id,
+        spec.table or spec.cos_prefix,
+        _dir_object_count(final),
+    )
+    return generation_id
+
+
+def _rand_suffix() -> str:
+    import secrets
+
+    return secrets.token_hex(3)
+
+
+def _verify_staged_generation(staging: Path) -> None:
+    """发布前验证 staging 非空且至少有一个 parquet（fail-closed，不发布空 generation）。"""
+    if not staging.exists() or not staging.is_dir():
+        raise ValidationError(f"mirror staging 不存在或非目录: {staging}")
+    parquet_files = list(staging.rglob("*.parquet"))
+    if not parquet_files:
+        raise ValidationError(
+            f"mirror staging 无任何 parquet 文件，拒绝发布空 generation: {staging}"
+        )
+
+
+def _write_generation_pointer(
+    mirror_root: Path, generation_id: str, source_generation: str | None
+) -> None:
+    """原子写 current pointer（generation/current.json），reader 只 resolve 它。"""
+    import time as _time
+
+    gen_dir = mirror_root / "generation"
+    gen_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "current_generation": generation_id,
+        "source_generation": source_generation,
+        "published_at": _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+    }
+    tmp = gen_dir / "current.json.tmp"
+    tmp.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    os.replace(str(tmp), str(gen_dir / "current.json"))
+
+
+def resolve_current_mirror_generation(mirror_root: Path) -> str | None:
+    """reader：读取当前 mirror generation pointer（R25 P0-014）。"""
+    pointer = mirror_root / "generation" / "current.json"
+    try:
+        payload = json.loads(pointer.read_text(encoding="utf-8"))
+        return payload.get("current_generation")
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _dir_object_count(root: Path) -> int:
+    try:
+        return sum(1 for _ in root.rglob("*.parquet"))
+    except OSError:
+        return 0
 
 
 def _sync_root_file(spec: MirrorSpec) -> None:
@@ -770,6 +1062,12 @@ def sync_dataset(
     if spec.layout == "root_file":
         _sync_root_file(spec)
         return
+    if spec.layout in {"period_files", "prefixed_date_file", "event_files"}:
+        # R25 P0-001/002/016：period/event/prefixed 布局走完整目录 sync（不能用
+        # request time_range 展开物理文件名）。StockCapital 混放目录会同时拉到
+        # split 与 shares 两类文件——schema 不同，读取端用 file_selector 区分。
+        _sync_dir_full(spec)
+        return
 
     if full or time_range is None:
         dest = _local_table_dir(spec) if spec.layout == "daily_parquet" else spec.local_root
@@ -784,7 +1082,7 @@ def sync_dataset(
 
     if spec.layout == "daily_parquet":
         for day in expected_partitions(dataset_name, start, end, layout=spec.layout):
-            _sync_daily_file(spec, day)
+            _sync_daily_file(spec, day, dataset_name=dataset_name)
     elif spec.layout == "hive_date":
         for day in expected_partitions(dataset_name, start, end, layout=spec.layout):
             _sync_hive_date(spec, day)
@@ -822,6 +1120,22 @@ def ensure_local_mirror(
         if not _local_file_fresh(dest):
             logger.info("cos_mirror: 拉取根文件 %s", dataset_name)
             _sync_root_file(spec)
+        return
+
+    if spec.layout in {"period_files", "prefixed_date_file", "event_files"}:
+        # R25 P0-001/002/016：period/event/prefixed 布局无法按 request time_range
+        # 增量判断（partition_clock != predicate_clock）。目录为空/无 manifest 时
+        # 直接完整目录 sync（宁可多扫不能漏）。存在 verified 文件即视为已同步。
+        local_dir = _local_table_dir(spec) if spec.table else spec.local_root
+        has_verified = False
+        if local_dir.exists() and local_dir.is_dir():
+            for p in local_dir.glob("*.parquet"):
+                if _local_file_fresh(p):
+                    has_verified = True
+                    break
+        if not has_verified:
+            logger.info("cos_mirror: period/event 布局完整目录 sync %s", dataset_name)
+            _sync_dir_full(spec)
         return
 
     local_dir = _local_table_dir(spec) if spec.layout == "daily_parquet" else spec.local_root
@@ -865,7 +1179,7 @@ def ensure_local_mirror(
             if not _local_file_usable(_local_table_dir(spec) / f"{day.isoformat()}.parquet")
         ]
         for day in missing:
-            _sync_daily_file(spec, day)
+            _sync_daily_file(spec, day, dataset_name=dataset_name)
     elif spec.layout == "hive_date":
         expected = _expected_dates(dataset_name, start, end)
         missing = [
@@ -893,5 +1207,11 @@ def ensure_local_mirror_for_dataset(
     from data_access.registry import StaticDataset
 
     if not isinstance(ds, StaticDataset):
+        return
+    # #P0-15 门：数据集 root 必须落在已知 COS 镜像根下才触发 sync。
+    # 旧实现按数据集**名字**查全局 mirror registry——测试/自选目录数据集同名但
+    # root 在本地（非镜像）也会误触发 COS 拉取，还会因 dense 行情缺 partition
+    # 误判 MissingRequiredPartition。
+    if not dataset_root_requires_cos_mirror(ds):
         return
     ensure_local_mirror(ds.name, time_range=time_range)

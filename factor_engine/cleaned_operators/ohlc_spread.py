@@ -21,8 +21,10 @@
   clipped it to 0).
 * ``ts_pastor_stambaugh_liquidity_gamma`` — Pastor & Stambaugh (2003, JPE)
   order-flow-reversal gamma.  ``flow_t = sign(r_t^e)·amount_t / flow_scale``
-  (P0-M-73: the unit convention is an explicit ``flow_scale`` parameter, default
-  1e6 = "per million currency" — never a hidden kernel constant), regressed as
+  (P0-M-73 + R26-073/074: the output-unit convention is the explicit
+  ``flow_scale`` parameter — default 1e6 = "per million currency" — and the
+  declared output unit ``return_per_flow_scale_currency`` scales with it; the
+  parameter is a unit knob, never a free search alpha), regressed as
   ``r_{t+1}^e = α + β r_t^e + γ flow_t + ε`` over a trailing window of
   *completed* pairs (``s+1 ≤ T``).  Output ``γ``.
 * ``ts_edge_effective_spread`` — valid-pair coverage gates (P0-M-71):
@@ -443,15 +445,19 @@ _SPECS: dict[str, dict[str, Any]] = {
         "domain": "liquidity",
         # R6-163 + P0-M-73: flow = sign(e)·amount/flow_scale, so
         # [gamma] = return / (flow_scale currency units) — NOT a dimensionless
-        # ratio.  Declared honestly; ``flow_scale`` makes the unit convention
-        # explicit (default 1e6 = "per million currency") instead of a hidden
-        # hard-coded 1e6 in the kernel.
-        "unit": "return_per_million_currency",
+        # ratio.  R26-073/074: the output unit is PARAMETRISED by ``flow_scale``
+        # (default 1e6 = "per million currency"), so the declaration must not
+        # hard-code a single value — the honest unit name is
+        # ``return_per_flow_scale_currency`` and ``flow_scale`` is its unit
+        # knob (searchable=False, NOT a free search alpha).  R26-075: raw gamma
+        # is per-currency; cross-market ranking requires prior currency
+        # normalisation of ``amount`` (declared ``money_local``).
+        "unit": "return_per_flow_scale_currency",
         "cost": 4,
         "tags_extra": [],
         "input_units": {"ret": "return_decimal", "benchmark_ret": "return_decimal",
                         "amount": "money_local"},
-        "output_unit": "return_per_million_currency",
+        "output_unit": "return_per_flow_scale_currency",
         "param_specs": _PS_SPECS,
         "relational_specs": _PS_RELATIONAL_SPECS,
     },

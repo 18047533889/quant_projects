@@ -56,6 +56,14 @@ class QualityOptions:
     check_future_timestamp: bool = False
     min_rows: int | None = None                 # 行数下限（coverage）
     check_pit_leakage: bool = False             # report_period <= publish_time
+    # R25 §65：单位漂移 sentinel——{col: (semantics, typical_abs_range)}。
+    # A Return bp semantics、US Ret decimal semantics、ROE ratio 等；监控分布
+    # 突然 100x/10000x 缩放报警。``unit_sentinel`` 与 ``unit_sentinel_warn_only``
+    # 配合：超界默认 BLOCK（fail），显式 warn_only 则 WARN。
+    unit_sentinel: dict[str, tuple[str, tuple[float, float]]] = field(
+        default_factory=dict
+    )
+    unit_sentinel_warn_only: bool = False
 
     def enabled_checks(self) -> list[str]:
         out: list[str] = []
@@ -81,6 +89,8 @@ class QualityOptions:
             out.append("coverage")
         if self.check_pit_leakage:
             out.append("pit_leakage")
+        if self.unit_sentinel:
+            out.append("unit_sentinel")
         return out
 
 
@@ -202,6 +212,22 @@ def run_quality_checks(
         details["pit_leakage"] = {"leaked_rows": leak}
         if leak:
             failures.append(f"PIT leakage (report_period > publish_time): {leak} rows")
+
+    # 12) R25 §65：unit sentinel（单位漂移检测）——黄金 sentinel 监控分布突然
+    # 100x/10000x 缩放。超界默认 BLOCK（fail）；``unit_sentinel_warn_only=True``
+    # 只 WARN（details 里标记 warn_only）。DTO 只负责检测，不修数据（§64）。
+    if options.unit_sentinel:
+        sentinel_failures, sentinel_details = _unit_sentinel_check(
+            table, options.unit_sentinel
+        )
+        details["unit_sentinel"] = {
+            "warn_only": options.unit_sentinel_warn_only,
+            "violations": sentinel_details,
+        }
+        if sentinel_failures and not options.unit_sentinel_warn_only:
+            failures.append(
+                f"unit sentinel violations (可能单位漂移): {sentinel_failures}"
+            )
 
     checks = tuple(_CHECK_NAMES) if not options.enabled_checks() else tuple(options.enabled_checks())
     return QualityReport(
@@ -370,3 +396,54 @@ def _pit_leakage(table: pa.Table) -> int:
         return 0
     leak = pc.sum(pc.and_kleene(pc.is_valid(rp_n), pc.greater(rp_n, pt_n))).as_py()
     return int(leak or 0)
+
+
+def _unit_sentinel_check(
+    table: pa.Table,
+    sentinel: Mapping[str, tuple[str, tuple[float, float]]],
+) -> tuple[list[str], dict[str, Any]]:
+    """R25 §65：单位漂移 sentinel。
+
+    ``sentinel``：``{col: (semantics, (typical_min_abs, typical_max_abs))}``。
+    对非 null 样本的绝对值分位数（p5/p95）与 typical 区间比对：分布突然缩放
+    （100x/10000x）超出 typical 区间 → 判为疑似单位漂移。DQ 不修数据（§64），
+    只 BLOCK/WARN 上报。
+    """
+    failures: list[str] = []
+    violations: dict[str, Any] = {}
+    for col, (semantics, (lo, hi)) in sentinel.items():
+        if col not in table.column_names:
+            failures.append(f"{col}: column missing (sentinel {semantics})")
+            violations[col] = {"semantics": semantics, "error": "missing"}
+            continue
+        arr = table.column(col)
+        try:
+            numeric = pc.cast(arr, pa.float64())
+        except Exception:
+            failures.append(f"{col}: non-numeric (sentinel {semantics})")
+            violations[col] = {"semantics": semantics, "error": "non-numeric"}
+            continue
+        valid = pc.filter(numeric, pc.is_valid(numeric))
+        if int(valid.length()) == 0:
+            violations[col] = {"semantics": semantics, "samples": 0}
+            continue
+        vals = valid.to_pylist()
+        samples = [abs(float(v)) for v in vals if v is not None]
+        if not samples:
+            continue
+        samples.sort()
+        n = len(samples)
+        p5 = samples[int(n * 0.05)]
+        p95 = samples[min(n - 1, int(n * 0.95))]
+        in_band = (p5 >= lo) and (p95 <= hi)
+        violations[col] = {
+            "semantics": semantics,
+            "p5_abs": p5,
+            "p95_abs": p95,
+            "typical_range": [lo, hi],
+            "samples": n,
+            "in_band": in_band,
+        }
+        if not in_band:
+            failures.append(f"{col}={semantics} p5={p5} p95={p95} 超出 typical [{lo},{hi}]")
+    return failures, violations

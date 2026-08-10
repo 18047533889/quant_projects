@@ -19,10 +19,12 @@ All kernels are prefix-causal: the quantile threshold is estimated from the
 trailing window ending at the current row, and every lagged term combines only
 past observations.  By default the threshold is re-estimated every day, so a
 *past* hit label is repainted as the window rolls; ``fixed_threshold=True``
-switches to the strict-past / fixed-event-threshold mode (threshold estimated
-once from the leading strictly-past rows and frozen for the whole window) —
-R5 P1-40(b).  Fail-closed to NaN on degenerate / constant / too-short windows;
-deterministic (no randomness).
+is a CURRENT-WINDOW-PRIOR threshold (R26-105..107): the threshold is estimated
+once from the leading strictly-past rows (current row excluded) and applied to
+the whole window — this is NOT an event-time-frozen process (early labels are
+still informed by data between them and the current row), documented honestly.
+Fail-closed to NaN on degenerate / constant / too-short windows; deterministic
+(no randomness).
 """
 from __future__ import annotations
 
@@ -96,10 +98,16 @@ def _hit_series(
 
     R5 P1-40(b): by default the quantile is re-estimated from the full trailing
     window every day, so a *past* hit label is repainted as the window rolls (a
-    documented property).  ``fixed_threshold=True`` switches to the strict-past /
-    fixed-event-threshold mode: the threshold is estimated ONCE from the
-    strictly-past leading rows (excluding the current row) and frozen for the
-    whole window, so no past label is repainted by today's data.
+    documented property).
+
+    R26-105..107: ``fixed_threshold=True`` is a CURRENT-WINDOW-PRIOR threshold,
+    NOT an event-time-frozen process: the threshold is estimated once from the
+    strictly-past leading rows (the current row excluded) and applied to the
+    WHOLE window, so an EARLY row's label is still informed by data between it
+    and the current row (labels ARE repainted by the window's past, just not by
+    the current row).  It is NOT claimed to be ``E_s`` frozen at its own event
+    time (that would require a per-row expanding quantile, which is a separate
+    estimator).  Renamed/redocumented accordingly (R26-107-B).
     """
     if fixed_threshold:
         lead = chunk[:-1] if chunk.shape[0] > 1 else chunk
@@ -311,6 +319,13 @@ def _hit_spectral_concentration_chunk(
     while i >= 0 and np.isfinite(H[i]):
         i -= 1
     h = H[i + 1 :]
+    # R26-108/109: the WHOLE-chunk coverage gate above can pass while the
+    # trailing contiguous run is only a couple of points (a gap near the end
+    # truncates the FFT segment).  Re-check the truncated run length against the
+    # spectral minimum — an FFT over 2 samples produces a meaningless
+    # concentration ≈ 1.
+    if int(h.shape[0]) < max(8, int(np.ceil(0.5 * n))):
+        return np.nan
     mu = float(h.mean())
     h = h - mu
     powers = np.abs(np.fft.rfft(h)) ** 2.0
@@ -419,7 +434,9 @@ class TsExtremogram(SeriesOperator):
         "极值 excess dependence P(E_{t+lag}|E_t) - P(E)。",
         ["x", "window", "quantile", "lag", "side", "fixed_threshold"],
         domain="price_volume",
-        unit="probability",
+        # R26-110: ``P(E_{t+lag}|E_t) - P(E)`` is a SIGNED probability
+        # difference ∈ [-1, 1] — never a [0,1] Probability.
+        unit="signed_probability_difference",
         cost=4,
     )
 
@@ -501,7 +518,8 @@ class TsCrossExtremogram(SeriesOperator):
         "跨序列极值溢出 P(E_target_t|E_source_{t-lag}) - P(E_target)。",
         ["target", "source", "window", "target_q", "source_q", "lag", "target_side", "source_side", "fixed_threshold"],
         domain="price_volume",
-        unit="probability",
+        # R26-110: a signed probability difference ∈ [-1, 1] — never a [0,1] Probability.
+        unit="signed_probability_difference",
         cost=5,
     )
 

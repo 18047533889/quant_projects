@@ -25,7 +25,16 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class QueryBudget:
-    """单次 read/sql 扫描预算。"""
+    """单次 read/sql 扫描预算（R25 §26：远程对象与扫描字节预算）。
+
+    - ``max_scan_files``         本地/远程匹配文件数上限（旧）
+    - ``max_scan_objects``       exact source objects 上限（R25 P0-010：wildcard
+                                 resolved 后的真实对象数，不是 len(FileVersion)=1）
+    - ``max_scan_bytes``         estimated/actual 扫描字节上限（R25 P0-009/010）
+    - ``max_remote_list_objects``COS LIST 返回对象数上限（R25 §26/§72）
+    - ``max_remote_requests``    远程 HEAD/LIST 请求数上限（R25 §26）
+    - ``max_estimated_memory``   预估内存上限（R25 §26）
+    """
 
     max_rows: int | None = None
     max_result_bytes: int | None = None
@@ -33,6 +42,12 @@ class QueryBudget:
     max_scan_files: int | None = None
     require_columns: bool = False
     require_time_range: bool = False
+    # R25 §26：远程对象与扫描字节预算
+    max_scan_objects: int | None = None
+    max_scan_bytes: int | None = None
+    max_remote_list_objects: int | None = None
+    max_remote_requests: int | None = None
+    max_estimated_memory: int | None = None
 
     def __post_init__(self) -> None:
         """#7 公开 ``QueryBudget`` 自身也做 invariant validation（复用
@@ -53,6 +68,16 @@ class QueryBudget:
             )
         if self.max_scan_files is not None:
             _positive_int(self.max_scan_files, context="QueryBudget.max_scan_files")
+        for key in (
+            "max_scan_objects",
+            "max_scan_bytes",
+            "max_remote_list_objects",
+            "max_remote_requests",
+            "max_estimated_memory",
+        ):
+            val = getattr(self, key)
+            if val is not None:
+                _positive_int(val, context=f"QueryBudget.{key}")
         if not isinstance(self.require_columns, bool):
             raise ValidationError(
                 f"QueryBudget.require_columns 必须是布尔值，收到 {self.require_columns!r}"
@@ -74,6 +99,12 @@ class DatasetQueryPolicy:
     max_result_bytes: int | None = None
     max_elapsed_ms: float | None = None
     max_scan_files: int | None = None
+    # R25 §26
+    max_scan_objects: int | None = None
+    max_scan_bytes: int | None = None
+    max_remote_list_objects: int | None = None
+    max_remote_requests: int | None = None
+    max_estimated_memory: int | None = None
 
 
 def _strict_bool(value: object, *, context: str) -> bool:
@@ -117,6 +148,8 @@ def _positive_finite_float(value: object, *, context: str) -> float:
 _QUERY_POLICY_KEYS = frozenset({
     "require_explicit_columns", "require_time_range", "max_rows",
     "max_result_bytes", "max_elapsed_ms", "max_scan_files",
+    "max_scan_objects", "max_scan_bytes", "max_remote_list_objects",
+    "max_remote_requests", "max_estimated_memory",
 })
 
 
@@ -156,6 +189,11 @@ def parse_dataset_query_policy(raw: object, *, context: str) -> DatasetQueryPoli
         max_result_bytes=_opt_int("max_result_bytes"),
         max_elapsed_ms=_opt_float("max_elapsed_ms"),
         max_scan_files=_opt_int("max_scan_files"),
+        max_scan_objects=_opt_int("max_scan_objects"),
+        max_scan_bytes=_opt_int("max_scan_bytes"),
+        max_remote_list_objects=_opt_int("max_remote_list_objects"),
+        max_remote_requests=_opt_int("max_remote_requests"),
+        max_estimated_memory=_opt_int("max_estimated_memory"),
     )
 
 
@@ -187,6 +225,17 @@ def merge_dataset_policy(
         max_result_bytes=_tighter_int(budget.max_result_bytes, policy.max_result_bytes),
         max_elapsed_ms=_tighter_float(budget.max_elapsed_ms, policy.max_elapsed_ms),
         max_scan_files=_tighter_int(budget.max_scan_files, policy.max_scan_files),
+        max_scan_objects=_tighter_int(budget.max_scan_objects, policy.max_scan_objects),
+        max_scan_bytes=_tighter_int(budget.max_scan_bytes, policy.max_scan_bytes),
+        max_remote_list_objects=_tighter_int(
+            budget.max_remote_list_objects, policy.max_remote_list_objects
+        ),
+        max_remote_requests=_tighter_int(
+            budget.max_remote_requests, policy.max_remote_requests
+        ),
+        max_estimated_memory=_tighter_int(
+            budget.max_estimated_memory, policy.max_estimated_memory
+        ),
         require_columns=budget.require_columns or policy.require_explicit_columns,
         require_time_range=budget.require_time_range or policy.require_time_range,
     )
@@ -215,13 +264,25 @@ def _strict_read_mode() -> bool:
 
 
 def is_strict_semantics() -> bool:
-    """#P0-11 唯一 fail-closed 语义开关：production OR strict_read。
+    """#P0-11 唯一 fail-closed 语义开关：production OR strict_read OR automated_research。
 
     所有 required/allowed filter / PIT / schema / cardinality / snapshot 的
     fail-closed 判定都用它，不再有的地方只查 ``_production_mode()``、有的地方
     查 ``_production_mode() or _strict_read_mode()`` 两套漂移。
+
+    R25 P0-020（INV-07）：``automated_research``（AlphaProbe / LLM mining 默认）
+    在 PIT / calendar / semantic ambiguity / required filters / units / source
+    snapshot / authorization 上**必须接近 production strict**——机器不看 warning，
+    宽松语义会静默污染搜索空间。预算可以更宽，语义不允许放宽。
     """
-    return _production_mode() or _strict_read_mode()
+    if _production_mode() or _strict_read_mode():
+        return True
+    try:
+        from data_access.security.run_mode import resolve_run_mode
+
+        return resolve_run_mode().strict_semantics
+    except Exception:
+        return False
 
 
 # 生产/严格读模式的**最低保障线**（#P0-14）：显式传入的宽松 QueryBudget 永远不能
@@ -245,6 +306,21 @@ def merge_production_floor(budget: QueryBudget) -> QueryBudget:
         ),
         max_scan_files=_tighter_int(
             budget.max_scan_files, _PRODUCTION_FLOOR.max_scan_files
+        ),
+        max_scan_objects=_tighter_int(
+            budget.max_scan_objects, _PRODUCTION_FLOOR.max_scan_objects
+        ),
+        max_scan_bytes=_tighter_int(
+            budget.max_scan_bytes, _PRODUCTION_FLOOR.max_scan_bytes
+        ),
+        max_remote_list_objects=_tighter_int(
+            budget.max_remote_list_objects, _PRODUCTION_FLOOR.max_remote_list_objects
+        ),
+        max_remote_requests=_tighter_int(
+            budget.max_remote_requests, _PRODUCTION_FLOOR.max_remote_requests
+        ),
+        max_estimated_memory=_tighter_int(
+            budget.max_estimated_memory, _PRODUCTION_FLOOR.max_estimated_memory
         ),
         require_columns=budget.require_columns or _PRODUCTION_FLOOR.require_columns,
         require_time_range=(
@@ -361,6 +437,46 @@ def enforce_scan_file_budget(budget: QueryBudget, *, file_count: int) -> None:
         raise ValidationError(
             f"扫描匹配 {file_count} 个文件，超过预算上限 {budget.max_scan_files}。"
             "请缩小 time_range / instrument_filter 或提高 max_scan_files。"
+        )
+
+
+def enforce_scan_object_budget(budget: QueryBudget, *, object_count: int) -> None:
+    """R25 P0-009/010：**真实** source object 数硬限制（不是 len(FileVersion)）。
+
+    wildcard 解析成 exact objects 后按实际数量卡——remote 10000 个 object 不能被
+    「一个 wildcard URI 算 1 个 FileVersion」绕过 max_scan_files/objects。
+    """
+    if budget.max_scan_objects is not None and object_count > budget.max_scan_objects:
+        raise ValidationError(
+            f"source snapshot 解析出 {object_count} 个 exact objects，超过预算上限 "
+            f"{budget.max_scan_objects}（R25 P0-010：wildcard 按真实对象数计）。"
+            "请缩小 time_range / 使用更窄前缀 / 提高 max_scan_objects。"
+        )
+    if budget.max_scan_files is not None and object_count > budget.max_scan_files:
+        raise ValidationError(
+            f"source snapshot 解析出 {object_count} 个 exact objects，超过预算上限 "
+            f"{budget.max_scan_files}（wildcard 展开后按真实文件数计）。"
+            "请缩小 time_range / 提高 max_scan_files。"
+        )
+
+
+def enforce_scan_byte_budget(budget: QueryBudget, *, scan_bytes: int) -> None:
+    """R25 §26/P0-009：estimated/actual 扫描字节硬限制。"""
+    if budget.max_scan_bytes is not None and scan_bytes > budget.max_scan_bytes:
+        raise ValidationError(
+            f"source snapshot 扫描字节 {scan_bytes} 超过预算上限 {budget.max_scan_bytes}"
+            "（R25 §26）。请缩小 time_range / 列选择 / 提高 max_scan_bytes。"
+        )
+
+
+def enforce_remote_request_budget(
+    budget: QueryBudget, *, remote_requests: int
+) -> None:
+    """R25 §26/§72：远程 HEAD/LIST 请求数硬限制。"""
+    if budget.max_remote_requests is not None and remote_requests > budget.max_remote_requests:
+        raise ValidationError(
+            f"远程请求数 {remote_requests} 超过预算上限 {budget.max_remote_requests}"
+            "（R25 §26）。请优先使用 source manifest 或更窄前缀。"
         )
 
 

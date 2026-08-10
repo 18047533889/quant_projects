@@ -111,50 +111,25 @@ def _median_asym(up: list[float], dn: list[float]) -> float:
 
 
 def _dc_column(
-    x: np.ndarray, scale: np.ndarray, theta: float, w: int, threshold_mode: str
+    x: np.ndarray, scale: np.ndarray, theta: float, w: int, threshold_mode: str,
+    scale_mode: str = "absolute",
 ) -> dict[str, np.ndarray]:
     """Forward-walk (recursive) DC event process for one instrument column.
 
-    The event state (direction, extreme, current leg's own start threshold) is
-    streamed bar-by-bar ONCE from the first finite bar and carried in a
-    checkpoint, so a historical bar belongs to exactly ONE event sequence
-    regardless of where the trailing-window left boundary sits (review #31).
-    The trailing window only *selects* which completed legs / events feed each
-    row's aggregate.
-
-    Threshold semantics (R5 P1-41(c)):
-    * ``adaptive`` — confirmation threshold at bar ``i`` is ``theta*scale[i]``,
-      the historical scale available *at that bar* (no repaint of history).
-    * ``fixed_absolute`` — one absolute threshold ``theta*anchor`` where the
-      anchor is pinned ONCE at stream init (first finite scale) and enters the
-      checkpoint, so it never drifts as the window slides (review #32).
-
-    Missing policies:
-    * a NaN price bar censors/breaks the clock (R5 P1-41(a));
-    * a missing / non-positive scale bar BREAKS the episode instead of skipping
-      it — a DC event must never straddle a scale gap (review #34);
-    * every completed leg's overshoot is normalised by the threshold that was
-      in force when THAT leg started (``leg_start_threshold``), never by the
-      opposite-side threshold at the leg's end (review #33).
-
-    Typed contract (P0): ``x`` is a strictly-positive PRICE level.  Any finite
-    ``x <= 0`` FAILS CLOSED (ValueError) — never silently computed, because the
-    family measures ``p/origin - 1`` / ``origin*(1±theta)`` which is undefined
-    for a non-positive price.
-
-    Initial-extrema seeding (review "Directional Change initial extrema"):
-    before the first confirmation the undecided state tracks the pre-confirmation
-    running HIGH and LOW SEPARATELY (``run_high`` / ``run_low``); the first
-    event fires when price moves ``theta`` away from that running extremum (the
-    max/min accumulated before the first confirmation), so the first state's
-    extreme reflects the actual excursion rather than the arbitrary first bar.
-    A single shared ``extreme`` would be dragged by whichever side last updated
-    (a monotone decline would never confirm a down event because the running low
-    keeps up with price).  After the first confirmation the new leg's extreme is
-    seeded from the confirmation price (which, for the FIRST event, equals the
-    pre-confirmation running extremum on the confirming side: ``p == run_high``
-    at an up confirmation, ``p == run_low`` at a down confirmation).
+    R26-113..115: ``scale_mode`` fixes the UNITS of ``scale`` so the threshold
+    comparison is dimensionally valid:
+    * ``absolute`` (default) — ``scale`` is a PriceDistance (ATR / price MAD);
+      the confirmation compares the ABSOLUTE price move ``abs(p - extreme)``
+      against ``theta * scale``.
+    * ``relative`` — ``scale`` is a DimensionlessVol (realized vol ~0.02); the
+      confirmation compares the FRACTIONAL (log) move
+      ``abs(log p - log extreme)`` against ``theta * scale``.  A dimensionless
+      scale must never enter an absolute price comparison (``theta*0.02`` would
+      mean 0.02 PRICE units, not 2%).
+    ``scale_mode`` is part of the operator's semantic identity (each mode is a
+    different factor).
     """
+
     n = x.shape[0]
     # P0: fail closed on any non-positive price in the panel.  The typed layer
     # already declares input_units='price'; this runtime gate is the kernel's
@@ -203,8 +178,10 @@ def _dc_column(
         leg_thr = np.nan
 
     for i in range(n):
-        fin_pref[i + 1] = fin_pref[i] + (1.0 if np.isfinite(x[i]) else 0.0)
         ev_pref[i + 1] = ev_pref[i]
+        # carry the clock-observable prefix forward; a broken bar keeps the
+        # running count (only the +1 below is gated by the scale resolution).
+        fin_pref[i + 1] = fin_pref[i]
 
         p = float(x[i])
         if not np.isfinite(p):
@@ -230,6 +207,14 @@ def _dc_column(
                 continue
             thr = theta * s
 
+        # R26-116/117: the event-rate denominator is CLOCK-OBSERVABLE bars only
+        # — a bar with a finite price but an invalid/unknown threshold (scale)
+        # has no running clock and must NOT be counted as "observable but no
+        # event" (it would dilute the event rate).  Moved AFTER the scale /
+        # threshold resolution so ``fin_pref`` only counts price-valid AND
+        # clock-valid bars.
+        fin_pref[i + 1] = fin_pref[i] + 1.0
+
         if direction == 0:
             # --- undecided: track the pre-confirmation running extrema.
             # A single shared ``extreme`` would be dragged by whichever side last
@@ -244,10 +229,17 @@ def _dc_column(
             if p < run_low:
                 run_low = p
             confirmed: str | None = None
-            if run_high - p >= thr:
-                confirmed = "down"
-            elif p - run_low >= thr:
-                confirmed = "up"
+            if scale_mode == "relative":
+                # R26-115: fractional (log) move vs a DimensionlessVol scale.
+                if np.log(run_high) - np.log(p) >= thr:
+                    confirmed = "down"
+                elif np.log(p) - np.log(run_low) >= thr:
+                    confirmed = "up"
+            else:
+                if run_high - p >= thr:
+                    confirmed = "down"
+                elif p - run_low >= thr:
+                    confirmed = "up"
             if confirmed is not None:
                 # first confirmation: no prior leg to complete.  Seed the new
                 # leg's running extremum from the confirmation price p, which
@@ -268,17 +260,25 @@ def _dc_column(
             if direction == 1:  # up leg: running HIGH, next confirmation is down
                 if p > extreme:
                     extreme = p
-                if extreme - p >= thr:
+                if (np.log(extreme) - np.log(p) >= thr) if scale_mode == "relative" else (extreme - p >= thr):
                     confirmed = "down"
             else:  # down leg: running LOW, next confirmation is up
                 if p < extreme:
                     extreme = p
-                if p - extreme >= thr:
+                if (np.log(p) - np.log(extreme) >= thr) if scale_mode == "relative" else (p - extreme >= thr):
                     confirmed = "up"
             if confirmed is not None:
                 # complete the previous leg (if any) with its OWN start threshold.
                 if leg_kind is not None and leg_start >= 0:
-                    if leg_kind == "up":
+                    if scale_mode == "relative":
+                        # R26-115: overshoot in the SAME log space as the
+                        # threshold, so the ratio ``os_m / leg_thr`` is a valid
+                        # dimensionless overshoot multiple.
+                        if leg_kind == "up":
+                            os_m = float(np.log(np.max(x[leg_start:i])) - np.log(float(x[leg_start])))
+                        else:
+                            os_m = float(np.log(float(x[leg_start])) - np.log(np.min(x[leg_start:i])))
+                    elif leg_kind == "up":
                         os_m = float(np.max(x[leg_start:i])) - float(x[leg_start])
                     else:
                         os_m = float(x[leg_start]) - float(np.min(x[leg_start:i]))
@@ -335,6 +335,7 @@ def _make_dc_op(canonical: str, description: str, unit: str, cost: int, out_key:
         threshold: float = 1.0,
         window: int = 120,
         threshold_mode: str = "adaptive",
+        scale_mode: str = "absolute",
         **_: Any,
     ) -> pd.DataFrame:
         w = int(window)
@@ -352,6 +353,15 @@ def _make_dc_op(canonical: str, description: str, unit: str, cost: int, out_key:
             raise ValueError(
                 f"{canonical} threshold_mode must be 'adaptive' or 'fixed_absolute'"
             )
+        # R26-113..115: the scale's UNIT is fixed by ``scale_mode`` —
+        # ``absolute`` = PriceDistance (ATR / price MAD), ``relative`` =
+        # DimensionlessVol (realized vol).  A dimensionless vol must never enter
+        # an absolute price comparison.
+        if scale_mode not in ("absolute", "relative"):
+            raise ValueError(
+                f"{canonical} scale_mode must be 'absolute' (PriceDistance) or "
+                "'relative' (DimensionlessVol)"
+            )
         xv = x.to_numpy(dtype=float)
         sv = scale.to_numpy(dtype=float)
         # P0: fail closed on any non-positive price — the typed contract declares
@@ -367,13 +377,13 @@ def _make_dc_op(canonical: str, description: str, unit: str, cost: int, out_key:
         rows, cols = xv.shape
         cols_out = []
         for c in range(cols):
-            cols_out.append(_dc_column(xv[:, c], sv[:, c], thr, w, threshold_mode)[out_key])
+            cols_out.append(_dc_column(xv[:, c], sv[:, c], thr, w, threshold_mode, scale_mode)[out_key])
         return frame_like(x, np.column_stack(cols_out) if cols else np.empty((rows, 0)))
 
     metadata = _metadata(
         canonical,
         description,
-        ["x", "scale", "threshold", "window", "threshold_mode"],
+        ["x", "scale", "threshold", "window", "threshold_mode", "scale_mode"],
         domain="price_volume",
         unit=unit,
         cost=cost,

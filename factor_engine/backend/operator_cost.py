@@ -670,3 +670,80 @@ def _complexity_extra(complexity: str) -> float:
     if "N log N" in complexity or "NW" in complexity:
         return 5.0
     return 1.0
+
+
+def record_plan_actual(
+    plan: object,
+    *,
+    actual_elapsed_ms: float,
+    rss_delta_bytes: int,
+    rows: int = 0,
+    instruments: int = 0,
+    backend: str = "pandas_numpy",
+    market: str = "",
+    frequency: str = "",
+    window: int | None = None,
+) -> None:
+    """R27-016/172：task 运行后把实际成本喂给在线校准（EMA）。
+
+    由 AdaptiveBatchScheduler 在每个 task 完成后调用；后续同一
+    (operator, backend, shape, window) 的预测会乘上校准因子。
+    """
+    try:
+        from runtime.runtime_calibration import record_task_actual
+
+        summary = estimate_plan_cost(plan, rows=rows or None)
+        predicted_ms = float(summary.get("total_work", 0.0))
+        predicted_peak = int(summary.get("peak_live_memory_bytes", 0))
+        record_task_actual(
+            operator=str(getattr(plan, "op", "") or "plan"),
+            backend=backend,
+            actual_elapsed_ms=actual_elapsed_ms,
+            rss_delta_bytes=rss_delta_bytes,
+            rows=rows,
+            instruments=instruments,
+            window=window,
+            market=market,
+            frequency=frequency,
+            predicted_ms=predicted_ms,
+            predicted_peak_bytes=predicted_peak,
+        )
+    except Exception:  # noqa: BLE001 - calibration 是尽力而为
+        pass
+
+
+def calibrated_plan_peak_bytes(
+    plan: object,
+    *,
+    rows: int | None = None,
+    instruments: int = 0,
+    backend: str = "pandas_numpy",
+    market: str = "",
+    frequency: str = "",
+    window: int | None = None,
+) -> tuple[int, float]:
+    """R27-019/172：``predicted_peak = static_peak * calibrated_memory_factor *
+    uncertainty``——数值峰值 + 校准，不再是 low/medium/high 档。
+
+    返回 ``(predicted_peak_bytes, uncertainty)``。
+    """
+    summary = estimate_plan_cost(plan, rows=rows)
+    static_peak = int(summary.get("peak_live_memory_bytes", 0))
+    try:
+        from runtime.runtime_calibration import (
+            calibration_key,
+            calibrated_peak_bytes,
+        )
+        from runtime.runtime_calibration import _shape_bucket, _window_bucket
+
+        key = calibration_key(
+            operator=str(getattr(plan, "op", "") or "plan"),
+            backend=backend,
+            shape_bucket=_shape_bucket(rows or 0, instruments),
+            window_bucket=_window_bucket(window),
+            market=market,
+            frequency=frequency,
+        )
+        return calibrated_peak_bytes(static_peak, key)
+    except Exception:
+        return static_peak, 1.30

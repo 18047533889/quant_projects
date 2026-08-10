@@ -466,12 +466,18 @@ class TsMultiscalePermutationEntropySlope(SeriesOperator):
     )
 
     def _calculate_series(
-        self, x: pd.DataFrame, window: int = 120, order: int = 3, min_patterns: int = 5, **_: Any
+        # R26-093..095: the DEFAULT must be runtime-feasible.  For order=3 the
+        # coarsest scale (8) floor is 5·3! = 30 embeddings, which requires
+        # ``window//8 - 3 + 1 >= 30`` -> ``window >= 256`` (the old default
+        # window=120 was guaranteed-all-NaN / guaranteed-raise).  256 is the
+        # minimal feasible default derived from the shared
+        # ``_multiscale_feasible`` / ``_effective_pattern_floor``.
+        self, x: pd.DataFrame, window: int = 256, order: int = 3, min_patterns: int = 5, **_: Any
     ) -> pd.DataFrame:
         ord_ = int(order)
         if not 2 <= ord_ <= 5:
             raise ValueError("ts_multiscale_permutation_entropy_slope requires order in [2, 5]")
-        # NEW-P1-73: fail fast on a guaranteed-all-NaN parameter region.
+        # NEW-P1-73 / R26-093: fail fast on a guaranteed-all-NaN parameter region.
         if not _multiscale_feasible(window=window, order=ord_, min_patterns=min_patterns):
             raise ValueError(
                 "ts_multiscale_permutation_entropy_slope window too small for "
