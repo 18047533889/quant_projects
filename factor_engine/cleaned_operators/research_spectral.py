@@ -79,7 +79,9 @@ _HSIC_SPEC = {
 # runtime; reviewed grid only (0.5/1.0/1.5/2.0).
 _BDS_SPEC = {
     "window": ParamSpec(dtype=int, min=30),
-    "embedding_dim": ParamSpec(dtype=int, min=2),
+    # R22-044: embedding_dim is an estimator-resolution knob (coarse grid only),
+    # never a free economic parameter.
+    "embedding_dim": ParamSpec(dtype=int, min=2, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     "distance_multiplier": ParamSpec(dtype=float, choices=(0.5, 1.0, 1.5, 2.0), param_role=ParamRole.ESTIMATOR_RESOLUTION),
 }
 # R6-217: shift_sigma == 0 makes log_lambda = 0 for every t (no evidence), and
@@ -695,7 +697,10 @@ _SPECS: dict[str, dict[str, Any]] = {
         "tags_extra": [],
         "output_unit": "ratio",
         "param_specs": dict(
-            _BICOH_SPEC, n_surrogates=ParamSpec(dtype=int, min=1)
+            _BICOH_SPEC,
+            # R22-041: n_surrogates is a null-estimator knob — fixed or a very
+            # small coarse grid, never a large-scale alpha-parameter search.
+            n_surrogates=ParamSpec(dtype=int, min=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         ),
         "relational_specs": _BICOH_RELATIONAL_SPECS,
     },

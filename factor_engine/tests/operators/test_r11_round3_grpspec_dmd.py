@@ -266,7 +266,10 @@ def test_dmd_level_return_variants_registered(canon):
     assert f"input_semantic:{expected_semantic}" in tags, canon
     assert "pandas_numpy" in OperatorRegistry.backends_for(canon)
     assert "polars" in OperatorRegistry.backends_for(canon)
-    assert classify_canonical(canon) == "research", canon
+    # R22-035/036: the typed level/return DMD variants are promoted off the
+    # research surface to DIRECT_ALPHA_HIGH_COST (extended authoring tier) —
+    # surface==research is an authoring state, not a semantic verdict (R22-009).
+    assert classify_canonical(canon) == "extended", canon
 
 
 def test_dmd_level_return_variants_compute():

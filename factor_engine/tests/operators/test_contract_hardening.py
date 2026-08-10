@@ -163,14 +163,18 @@ def test_bool_window_is_rejected_by_both_runtime_bases() -> None:
 
 
 def test_misaligned_panels_fail_closed() -> None:
-    # After allow_panel_broadcast changes, operators broadcast across misaligned
-    # columns and return NaN for non-matching pairs instead of raising.
+    # R19-032: ``allow_panel_broadcast`` is removed from ts_corr — the two
+    # correlation panels must be EXACTLY aligned (same instrument columns and
+    # index).  A misaligned panel is a hard error, not a silent NaN broadcast
+    # (which would alias sourceA.Close to sourceB.Close).  Verified live:
+    # ``ValueError: ts_corr: input panel 1 columns are misaligned``.
     x = pd.DataFrame({"A": [1.0, 2.0, 3.0]})
     y = pd.DataFrame({"B": [1.0, 2.0, 3.0]})
-    result = _pd("ts_corr").calculate(x, y, 2)
-    # Result should have both columns A and B, all NaN since they don't overlap
-    assert set(result.columns) == {"A", "B"}
-    assert result.isna().all().all()
+    with pytest.raises(ValueError, match="misaligned"):
+        _pd("ts_corr").calculate(x, y, 2)
+    # An aligned pair still computes normally (regression guard).
+    aligned = _pd("ts_corr").calculate(x, x, 2)
+    assert set(aligned.columns) == {"A"}
 
 
 

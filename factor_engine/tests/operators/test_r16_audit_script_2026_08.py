@@ -289,3 +289,107 @@ def test_golden_null_runner_explicit_outcomes():
     # every canonical has at least one explicit outcome
     for canon in ("ts_mean", "ts_var"):
         assert by_canon[canon], f"{canon} has no outcome"
+
+
+# ---------------------------------------------------------------------------
+# R16-013~020: mining/operator_catalog
+# ---------------------------------------------------------------------------
+
+
+def test_index_source_typed_not_relation():
+    """R16-013: index_* operators require index_pit, never relation_pit."""
+    from mining.operator_catalog import _required_sources
+
+    assert _required_sources("index_member_ratio", {}) == ("index_pit",)
+    assert _required_sources("index_relative_strength", {}) == ("index_pit",)
+    assert _required_sources("relation_exposure", {}) == ("relation_pit",)
+    assert _required_sources("holder_concentration", {}) == ("shareholder_pit",)
+    assert _required_sources("event_frequency", {}) == ("event_pit",)
+
+
+def test_source_capability_concept_gap():
+    """R16-014: source_id present but required concept missing -> concept gap."""
+    from mining.operator_catalog import (
+        SourceCapability, SourceRequirement, source_status,
+    )
+
+    reqs = {"source_requirements": (
+        SourceRequirement("daily_bar", ("price",)),
+        SourceRequirement("fundamental_pit", ("eps", "pe")),
+    )}
+    full = {
+        "daily_bar": SourceCapability("daily_bar", ("price",)),
+        "fundamental_pit": SourceCapability("fundamental_pit", ("eps", "pe")),
+    }
+    st = source_status("pe_ttm", reqs, ["daily_bar", "fundamental_pit"],
+                       source_capabilities=full)
+    assert st.missing == () and st.concept_gap == ()
+    lacking = {
+        "daily_bar": SourceCapability("daily_bar", ("price",)),
+        "fundamental_pit": SourceCapability("fundamental_pit", ("book_value",)),
+    }
+    st2 = source_status("pe_ttm", reqs, ["daily_bar", "fundamental_pit"],
+                        source_capabilities=lacking)
+    assert "fundamental_pit" in st2.concept_gap
+
+
+def test_target_frequency_strict_enum():
+    """R16-018: unknown frequency strings raise."""
+    from mining.operator_catalog import TargetFrequency, bind_target_frequency
+    from backend.operator_errors import OperatorParameterError
+
+    assert bind_target_frequency("daily") is TargetFrequency.DAILY
+    assert bind_target_frequency("minute") is TargetFrequency.MINUTE
+    with pytest.raises(ValueError):
+        bind_target_frequency("weekly/foo")
+
+
+def test_market_support_fail_closed():
+    """R16-019: specialized-but-undeclared market operators fail closed."""
+    from mining.operator_catalog import market_support
+
+    assert market_support("limit_up_close") == ("ashare",)
+    assert market_support("suspension_gap_duration") == ()
+    assert market_support("ts_mean", {"market_semantics": "agnostic"}) == ("ashare", "us")
+
+
+def test_mining_eligible_checks_market():
+    """R16-017: direct mining_eligible with a market context rejects a
+    market-mismatched operator (not only the outer get_mining_operators)."""
+    import mining.operator_catalog as M
+
+    orig = M.cost_contract_declared
+    M.cost_contract_declared = lambda *a, **k: True
+    try:
+        cat = {"production_certified": True, "input_grain": "daily"}
+        ctx_us = M.MiningContext(market="us", available_sources=("daily_bar",))
+        ctx_ashare = M.MiningContext(market="ashare", available_sources=("daily_bar",))
+        assert M.mining_eligible("limit_up_close", catalog=cat,
+                                 role=M.MiningRole.ALPHA, context=ctx_us) is False
+        assert M.mining_eligible("limit_up_close", catalog=cat,
+                                 role=M.MiningRole.ALPHA, context=ctx_ashare) is True
+    finally:
+        M.cost_contract_declared = orig
+
+
+# ---------------------------------------------------------------------------
+# R16-024~028: export_mining_manifest
+# ---------------------------------------------------------------------------
+
+
+def test_runtime_manifest_rejects_pending_schema():
+    """R16-024: a runtime loader must reject a pending/remediation schema."""
+    import json
+    from scripts.export_mining_manifest import validate_runtime_manifest
+
+    tmp = pd.io.common.__file__  # just a writable location under repo tmp
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "runtime_mining_manifest.eligible.json"
+        p.write_text(json.dumps({"manifest_kind": "operator_remediation_pending", "operators": []}))
+        assert validate_runtime_manifest(p)
+        p.write_text(json.dumps({"manifest_kind": "runtime_eligible", "operators": []}))
+        assert validate_runtime_manifest(p) == []
+

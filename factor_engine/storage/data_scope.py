@@ -55,6 +55,8 @@ class ExecutionCacheNamespace:
     operator_evidence_hash: str = ""
     field_contract_hash: str = ""
     universe_hash: str = ""
+    # R20-062..066: 实际 resolved universe membership 进入 cache namespace。
+    universe_membership_hash: str = ""
 
     def to_scope_key(self) -> str:
         payload = json.dumps(
@@ -75,6 +77,8 @@ def compute_execution_cache_scope(
     evidence_version: str = "",
     field_catalog_hash: str = "",
     universe_hash: str = "",
+    # R20-062..066: 实际 resolved universe membership 哈希进入 cache namespace。
+    universe_membership_hash: str = "",
 ) -> str:
     """Build the execution cache namespace for one compiled factor (R10-P0-001).
 
@@ -82,6 +86,10 @@ def compute_execution_cache_scope(
     (``planner.source_dependencies.source_dependency_hash``) — only known after
     compile, which is why the construction-time ``_build_cache`` scope is no
     longer sufficient.
+
+    R20-062..066: ``universe_membership_hash`` 绑定实际 resolved membership
+    （按 as-of date 解析），非空 ``instrument_filter`` 与命名 universe 的
+    相同标签不再能共享同一 cache namespace。
     """
     ns = ExecutionCacheNamespace(
         anchor_snapshot_hash=compute_data_scope(
@@ -102,6 +110,7 @@ def compute_execution_cache_scope(
         operator_evidence_hash=str(evidence_version or ""),
         field_contract_hash=str(field_catalog_hash or ""),
         universe_hash=str(universe_hash or ""),
+        universe_membership_hash=str(universe_membership_hash or ""),
     )
     return ns.to_scope_key()
 
@@ -221,4 +230,80 @@ def compute_data_scope(
         ensure_ascii=False,
         allow_nan=False,
     )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+# ---------------------------------------------------------------------------
+# R20-047..051: 唯一 canonical 执行配置序列化函数
+# ---------------------------------------------------------------------------
+
+
+class ExecutionConfigTypeError(TypeError):
+    """执行配置含无法 canonical 序列化的对象（R20-047..051）。
+
+    与 ``_jsonable`` 同语义：unsupported object 直接抛错，绝不 ``str()`` 兜底
+    （字符串化含内存地址 / 无法重建）。
+    """
+
+
+def canonicalize_execution_config(value: Any) -> Any:
+    """唯一 canonical 执行配置归一化函数（R20-047..051）。
+
+    CSE scope / cache / lineage / identity / snapshot / checkpoint 复用同一逻辑，
+    基于 ``_jsonable`` 的 fail-closed typed schema：
+
+    - 覆盖 str/int/float/bool/None/Enum/date/datetime/Path/dataclass/list/
+      tuple/set/frozenset/Mapping；
+    - float 非有限（NaN/Inf）直接抛 ``NonFiniteLiteralError``-style
+      ``ValueError``（禁止进入稳定 key）；
+    - 任何其它对象抛 ``ExecutionConfigTypeError``，绝不 ``default=str``
+      字符串化。
+
+    配置 **dict 输入**在 hash 前必须先经本函数归一，确保跨进程稳定。
+    """
+    try:
+        return _jsonable(value)
+    except TypeError as exc:
+        raise ExecutionConfigTypeError(str(exc)) from exc
+
+
+def canonicalize_execution_config_strict(value: Any) -> Any:
+    """``canonicalize_execution_config`` 的别名（显式 strict 语义）。"""
+    try:
+        return _jsonable(value)
+    except TypeError as exc:
+        raise ExecutionConfigTypeError(str(exc)) from exc
+
+
+def execution_scope_key(
+    scope: Any,
+    *,
+    source_dependency_hash: str = "",
+    universe_membership_hash: str = "",
+) -> str:
+    """CSE 执行作用域键：绑定真实二级 SourceRef 依赖 + resolved universe membership。
+
+    R20-058..061: 仅 ``FactorExecutionScope.scope_key()``（factor hint + anchor
+    source config）不足以隔离 CSE —— 两个 factor 共享 anchor source 但二级
+    SourceRef 依赖不同时不得跨 dependency 共享 CSE。R20-062..066: 命名
+    universe 的实际 membership（按 as-of 解析）也必须进入作用域键。
+
+    参数：
+        scope: ``planner.dag.FactorExecutionScope`` 或任何带 ``scope_key()``
+            的对象；也可传 ``dict``（字段为 scope_key 的 JSON 载荷）。
+        source_dependency_hash: ``source_dependency_hash(plan)``
+        universe_membership_hash: ``universe_membership_hash(...)``
+    """
+    if isinstance(scope, dict):
+        base = json.dumps(scope, sort_keys=True, separators=(",", ":"))
+    else:
+        base = scope.scope_key() if hasattr(scope, "scope_key") else json.dumps(
+            asdict(scope), sort_keys=True, separators=(",", ":")
+        )
+    payload = {
+        "scope": base,
+        "source_dependency_hash": str(source_dependency_hash or ""),
+        "universe_membership_hash": str(universe_membership_hash or ""),
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]

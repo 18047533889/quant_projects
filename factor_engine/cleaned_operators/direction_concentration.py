@@ -50,25 +50,17 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
 
 
 def _strict_bool(value: Any, name: str = "normalize") -> bool:
-    """Strict boolean: only True/False, 1/0 or 'true'/'false'/'1'/'0' accepted.
+    """R16-101: THE single strict boolean authority.
 
-    Anything else (e.g. the string ``"false"`` reaching a bare ``bool()`` and
-    silently becoming ``True``) raises ``ValueError``.
+    The old LOCAL parser accepted strings (``'true'`` / ``'false'`` / ``'1'``),
+    inconsistent with the global policy that rejects string coercion entirely.
+    Now it delegates to ``cleaned_operators.base.strict_bool_param`` — only
+    ``type(x) is bool`` passes; a string reaching a kernel means the parameter
+    was not declared boolean at the DSL/binder layer.
     """
-    if isinstance(value, (bool, np.bool_)):
-        return bool(value)
-    if isinstance(value, (int, float)):
-        if value == 1:
-            return True
-        if value == 0:
-            return False
-    elif isinstance(value, str):
-        s = value.strip().lower()
-        if s in {"true", "1"}:
-            return True
-        if s in {"false", "0"}:
-            return False
-    raise ValueError(f"{name} must be a strict bool (true/false/1/0)")
+    from cleaned_operators.base import strict_bool_param
+
+    return strict_bool_param(value, name)
 
 
 def _rolling_apply_2d(values: np.ndarray, window: int, fn: Any, min_periods: int = 1) -> np.ndarray:

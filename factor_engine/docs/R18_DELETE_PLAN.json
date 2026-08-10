@@ -1,0 +1,150 @@
+{
+  "count": 20,
+  "deletions": [
+    {
+      "canonical": "arg",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "DSL/grammar primitive — internal supporting layer"
+    },
+    {
+      "canonical": "circulating_cap_unlock_proxy",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    },
+    {
+      "canonical": "constant",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "DSL/grammar primitive — internal supporting layer"
+    },
+    {
+      "canonical": "cube",
+      "delete_reason": "",
+      "direct_use_status": "delete_obsolete",
+      "replacement": "",
+      "retention_reason": "legacy surface — obsolete or aliased"
+    },
+    {
+      "canonical": "fin_total_operating_accruals",
+      "delete_reason": "required concepts (depreciation, amortization) have no provider in either market",
+      "direct_use_status": "delete_no_data",
+      "replacement": "",
+      "retention_reason": "no reliable depreciation/amortization source in A or US after R17 — keep as backlog/docs, not public mining"
+    },
+    {
+      "canonical": "fin_ttm",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    },
+    {
+      "canonical": "holder_concentration_change",
+      "delete_reason": "",
+      "direct_use_status": "delete_no_data",
+      "replacement": "",
+      "retention_reason": "implementation raises (requires distinct relation snapshots); no snapshot provider — delete until real data exists"
+    },
+    {
+      "canonical": "holder_count_change_rate",
+      "delete_reason": "",
+      "direct_use_status": "delete_no_data",
+      "replacement": "",
+      "retention_reason": "TopTen rows are not total shareholder count; no total-holder provider — delete rather than fake"
+    },
+    {
+      "canonical": "holder_pledge_churn",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    },
+    {
+      "canonical": "identity",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    },
+    {
+      "canonical": "intra_negative_jump_variation",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    },
+    {
+      "canonical": "intra_positive_jump_variation",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    },
+    {
+      "canonical": "intra_return_profile_cosine",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    },
+    {
+      "canonical": "intra_signed_jump_ratio",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    },
+    {
+      "canonical": "protected_div",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    },
+    {
+      "canonical": "ts_dmd_dominant_frequency",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "untyped DMD — compat alias; use the ts_dmd_level/return typed variants"
+    },
+    {
+      "canonical": "ts_dmd_dominant_growth_rate",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "untyped DMD — compat alias; use the ts_dmd_level/return typed variants"
+    },
+    {
+      "canonical": "ts_dmd_mode_concentration",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "untyped DMD mode concentration — use the ts_dmd_level/return typed variants"
+    },
+    {
+      "canonical": "valuation_pcf_definition_gap",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    },
+    {
+      "canonical": "valuation_pe_ttm_lyr_gap",
+      "delete_reason": "",
+      "direct_use_status": "move_internal",
+      "replacement": "",
+      "retention_reason": "internal supporting layer — not public mining"
+    }
+  ],
+  "fingerprint": {
+    "dirty": true,
+    "head": "e0d56b06ccc2f5ceaeda0870e460949533e3edaa"
+  },
+  "schema_version": "factor_engine.r18.delete_plan.v1"
+}

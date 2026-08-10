@@ -6,11 +6,22 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import uuid
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+#: 磁盘缓存格式版本（R20-153..172：schema_version 校验，旧格式 fail-closed）。
+PLAN_CACHE_SCHEMA_VERSION = 2
+#: 编译器语义版本：数值语义 / lowering / optimizer 任一变化都会 invalidate
+#: persistent cache 命名空间（R20-159 / R20-468）。
+_OPTIMIZER_COMPILER_SEMANTIC_VERSION = "1"
+_LOWERING_SEMANTIC_VERSION = "1"
+#: 持久化保存的 per-key 写锁（多 writer 同 key 交错生成 payload/meta 的防护）。
+_SAVE_LOCKS: dict[str, threading.Lock] = {}
+_SAVE_LOCKS_GUARD = threading.Lock()
 
 
 def _governor():
@@ -29,14 +40,18 @@ class _SharedCache:
     global accounting drifted below true resident bytes.  Sharing ONE mutable
     backing store (dict + byte counter) makes every operation on any scope touch
     the same bytes, so governor accounting always equals resident bytes.
+
+    R20-119..124: ``lock``（``threading.RLock``）保护 dict 与 byte counter —— 多个
+    scope 并发 set/get/evict/clear 必须同一个原子 critical section。
     """
 
-    __slots__ = ("cache", "nbytes", "refs")
+    __slots__ = ("cache", "nbytes", "refs", "lock")
 
     def __init__(self) -> None:
         self.cache: dict[str, object] = {}
         self.nbytes: int = 0
         self.refs: int = 1
+        self.lock = threading.RLock()
 
 
 class CacheManager:
@@ -129,14 +144,15 @@ class CacheManager:
             无
         """
         scoped = self._scoped_key(key)
-        value = self._cache.get(scoped)
-        if value is not None:
-            # R6-151: record a hit as "most recently used" so LRU eviction
-            # (drop the least-recently-used entry) reflects access, not just
-            # insertion.  Plain-dict insertion order made eviction FIFO.
-            self._cache.pop(scoped, None)
-            self._cache[scoped] = value
-        return value
+        with self._shared.lock:
+            value = self._cache.get(scoped)
+            if value is not None:
+                # R6-151: record a hit as "most recently used" so LRU eviction
+                # (drop the least-recently-used entry) reflects access, not just
+                # insertion.  Plain-dict insertion order made eviction FIFO.
+                self._cache.pop(scoped, None)
+                self._cache[scoped] = value
+            return value
 
     def set(self, key: str, value) -> None:
         """set；受字节预算约束（LRU 逐出）。
@@ -155,16 +171,24 @@ class CacheManager:
         size = estimate_object_bytes(value)
         if size > self.budget_bytes:
             return
-        if scoped in self._cache:
-            old_size = estimate_object_bytes(self._cache[scoped])
-            self._bytes -= old_size
-            gov.release_accounting(self.layer_name, old_size)
-        self._bytes += size
-        gov.reserve_accounting(self.layer_name, size)
-        self._cache[scoped] = value
-        freed = self._evict_to(self.budget_bytes)
-        if freed > 0:
-            gov.release_accounting(self.layer_name, freed)
+        # R20-119..124：dict mutation / byte counter / governor accounting 必须
+        # 同一个原子 critical section。锁顺序恒为 governor → shared（与
+        # ``MemoryGovernor._evict_for`` 一致，避免锁反转死锁）。
+        with gov.lock:
+            with self._shared.lock:
+                if scoped in self._cache:
+                    old_size = estimate_object_bytes(self._cache[scoped])
+                    self._bytes -= old_size
+                    gov.release_accounting(self.layer_name, old_size)
+                    # R20-146..152：overwrite 先 pop 再 insert，让新值成为 MRU
+                    # （plain dict 对已有 key 重新赋值不改变插入位置）。
+                    self._cache.pop(scoped, None)
+                self._bytes += size
+                gov.reserve_accounting(self.layer_name, size)
+                self._cache[scoped] = value
+                freed = self._evict_to(self.budget_bytes)
+                if freed > 0:
+                    gov.release_accounting(self.layer_name, freed)
 
     def _evict_to(self, target: int) -> int:
         from runtime.resource_governor import estimate_object_bytes
@@ -185,7 +209,10 @@ class CacheManager:
         （governor 触发路径的记账由 ``MemoryGovernor._evict_for`` 统一扣减，
         这里只逐出并返回释放字节数，避免重复记账）。
         """
-        return self._evict_to(target if target > 0 else self.budget_bytes)
+        gov = _governor()
+        with gov.lock:
+            with self._shared.lock:
+                return self._evict_to(target if target > 0 else self.budget_bytes)
 
     def clear_memory(self) -> None:
         """clear_memory。
@@ -196,9 +223,12 @@ class CacheManager:
         返回:
             无
         """
-        self._cache.clear()
-        self._bytes = 0
-        _governor().release_all(self.layer_name)
+        gov = _governor()
+        with gov.lock:
+            with self._shared.lock:
+                self._cache.clear()
+                self._bytes = 0
+            gov.release_all(self.layer_name)
 
     def with_scope(self, data_scope: str, *, clear_memory: bool = False) -> CacheManager:
         """返回同类型实例并切换作用域（用于增量窗口隔离）。
@@ -228,12 +258,16 @@ class CacheManager:
 
 def _operator_namespace() -> str:
     """获取算子目录哈希命名空间（用于磁盘缓存路径隔离）。
-    
+
     参数:
         无
-    
+
     返回:
         str
+
+    R20-159：命名空间必须覆盖 numeric semantics / lowering semantics / optimizer
+    compiler semantic version —— 任一语义变更都 invalidate 整个磁盘缓存目录，
+    绝不从旧语义的缓存里拿子树。
     """
     try:
         from cleaned_operators.operator_policy import compute_operator_catalog_hash
@@ -241,10 +275,37 @@ def _operator_namespace() -> str:
 
         return (
             f"{compute_operator_catalog_hash()[:16]}-"
-            f"{compute_field_catalog_hash()[:16]}"
+            f"{compute_field_catalog_hash()[:16]}-"
+            f"{_compiler_semantic_hash()}"
         )
     except Exception:
         return "unknown_ops"
+
+
+def _compiler_semantic_hash() -> str:
+    """Numeric / lowering / optimizer compiler semantic 摘要（R20-159 / R20-468）。
+
+    - ``numeric_semantics_hash()``：真实数值语义指纹（ddof/tie/div-zero/NaN 等）
+    - ``_LOWERING_SEMANTIC_VERSION`` / ``_OPTIMIZER_COMPILER_SEMANTIC_VERSION``：
+      模块级版本常量，任何 lowering/optimizer 语义改动 bump 即 invalidate 缓存
+
+    测试可通过 monkeypatch ``storage.cache._LOWERING_SEMANTIC_VERSION`` /
+    ``_OPTIMIZER_COMPILER_SEMANTIC_VERSION`` 验证缓存失效。
+    """
+    import hashlib
+
+    parts: dict[str, str] = {
+        "lowering_semantic_version": _LOWERING_SEMANTIC_VERSION,
+        "optimizer_compiler_semantic_version": _OPTIMIZER_COMPILER_SEMANTIC_VERSION,
+    }
+    try:
+        from backend.numeric_semantics import numeric_semantics_hash
+
+        parts["numeric_semantics"] = numeric_semantics_hash()
+    except Exception:
+        parts["numeric_semantics"] = "unknown"
+    raw = json.dumps(parts, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def _series_to_frame(series: pd.Series) -> pd.DataFrame:
@@ -288,24 +349,109 @@ def _payload_checksum(path: Path) -> str:
     return h.hexdigest()
 
 
-def _schema_hash(value: Any) -> str:
-    """frame dtypes/columns 摘要（审计 #330 meta ``schema_hash``）。"""
-    if isinstance(value, pd.DataFrame):
-        cols = "|".join(f"{c}:{value[c].dtype}" for c in value.columns)
+def _index_schema_part(index: Any) -> str:
+    """Index 的稳定 schema 摘要（names/dtypes/timezone/categorical）。
+
+    R20-155：``schema_hash`` 必须覆盖 index levels/names/dtypes/timezone/
+    categorical 与 column order，否则改 index dtype 或 tz 不会 invalidate 磁盘
+    缓存。
+    """
+    parts: list[str] = []
+    if isinstance(index, pd.MultiIndex):
+        for name, level in zip(index.names, index.levels):
+            parts.append(
+                f"{name!r}:{level.dtype}:tz={getattr(level, 'tz', None)}"
+                f":cat={isinstance(level, pd.CategoricalIndex)}"
+            )
     else:
-        cols = f"series:{getattr(value, 'dtype', 'unknown')}"
-    return hashlib.sha256(cols.encode("utf-8")).hexdigest()
+        parts.append(
+            f"{getattr(index, 'name', None)!r}:{index.dtype}"
+            f":tz={getattr(index, 'tz', None)}"
+            f":cat={isinstance(index, pd.CategoricalIndex)}"
+        )
+    return "|".join(parts)
+
+
+def _schema_hash(value: Any) -> str:
+    """frame/series 的完整 schema 摘要（dtypes + index + column order）。
+
+    R20-153..155：读 parquet 后重算并比较 —— dtypes/columns/index levels/names/
+    timezone/categorical 任一变化都得到不同 hash，从而 invalidate 磁盘缓存。
+    """
+    h = hashlib.sha256()
+    if isinstance(value, pd.DataFrame):
+        # column order 敏感：显式遍历 columns
+        for col in value.columns:
+            h.update(f"col:{col}:{value[col].dtype}\x00".encode("utf-8"))
+    else:
+        h.update(f"series:{getattr(value, 'dtype', 'unknown')}\x00".encode("utf-8"))
+        h.update(f"name:{getattr(value, 'name', None)!r}\x00".encode("utf-8"))
+    h.update(_index_schema_part(value.index).encode("utf-8"))
+    return h.hexdigest()
+
+
+def _index_schema_meta(index: Any) -> dict[str, Any]:
+    """把 index schema 存为 JSON 元数据（供空轴重建，R20-157 / R20-465）。"""
+    if isinstance(index, pd.MultiIndex):
+        return {
+            "kind": "multi",
+            "names": [str(n) if n is not None else None for n in index.names],
+            "dtypes": [str(l.dtype) for l in index.levels],
+            "tz": [str(getattr(l, "tz", None)) if getattr(l, "tz", None) is not None else None for l in index.levels],
+            "categorical": [isinstance(l, pd.CategoricalIndex) for l in index.levels],
+        }
+    return {
+        "kind": "single",
+        "names": [str(index.name) if index.name is not None else None],
+        "dtypes": [str(index.dtype)],
+        "tz": [str(getattr(index, "tz", None)) if getattr(index, "tz", None) is not None else None],
+        "categorical": [isinstance(index, pd.CategoricalIndex)],
+    }
+
+
+def _rebuild_index_from_meta(meta: dict[str, Any], fallback_columns: list[str]) -> Any:
+    """从 ``index_schema`` meta 重建空 Index / MultiIndex（R20-157 / R20-465）。
+
+    普通空 Series 的 round-trip 会退化成 plain ``pd.Series(dtype=float)``，丢失
+    MultiIndex 轴语义 —— 这里根据 meta 重建空 index schema。
+    """
+    schema = meta.get("index_schema") or {}
+    kind = schema.get("kind")
+    names = list(schema.get("names") or [])
+    dtypes = list(schema.get("dtypes") or [])
+    tz = list(schema.get("tz") or [])
+    if not names:
+        names = list(fallback_columns)
+        dtypes = dtypes or []
+    arrays: list[pd.Index] = []
+    for i, name in enumerate(names):
+        dt = dtypes[i] if i < len(dtypes) else None
+        tz_i = tz[i] if i < len(tz) else None
+        if dt == "datetime64[ns]":
+            arrays.append(pd.DatetimeIndex([], name=name, tz=tz_i))
+        elif tz_i and dt and dt.startswith("datetime64"):
+            arrays.append(pd.DatetimeIndex([], name=name, tz=tz_i))
+        elif dt and dt != "object":
+            arrays.append(pd.Index([], dtype=dt, name=name))
+        else:
+            arrays.append(pd.Index([], dtype="object", name=name))
+    if kind == "multi" or len(arrays) > 1:
+        return pd.MultiIndex.from_arrays(arrays, names=names)
+    return arrays[0] if arrays else pd.RangeIndex(0)
 
 
 def _save_value(path: Path, value: Any) -> None:
     """将 Series/DataFrame 原子写入 Parquet 并附带元数据 JSON。
 
-    审计 #330：
+    审计 #330 + R20-153..172：
         - 先写 ``<key>.tmp.<uuid>.parquet`` 与 ``<key>.tmp.<uuid>.meta.json``；
         - meta 新增 ``payload_checksum``（parquet 字节 sha256）、``schema_hash``
-          （dtypes/columns 摘要）、``generation_id``（uuid）；
+          （**完整** schema：dtypes/columns/index levels/names/timezone/
+          categorical）、``generation_id``（uuid）、``schema_version``（缓存格式
+          版本）、``index_schema``（空轴重建用）；
         - 两份都写成功后才用 ``os.replace`` 原子改名到正式路径，避免读到
-          写了一半的缓存文件。
+          写了一半的缓存文件；
+        - 多 writer 同 key 由 per-key 锁串行化，避免 payload/meta 交错。
 
     参数:
         path: 文件或目录路径
@@ -317,45 +463,58 @@ def _save_value(path: Path, value: Any) -> None:
     meta_path = path.with_suffix(".meta.json")
     if isinstance(value, pd.Series):
         frame = _series_to_frame(value)
-        meta = {"kind": "series", "index_columns": [c for c in frame.columns if c != "__value__"]}
+        meta = {
+            "kind": "series",
+            "index_columns": [c for c in frame.columns if c != "__value__"],
+        }
         is_frame = False
     elif isinstance(value, pd.DataFrame):
         meta = {"kind": "dataframe", "index_name": _jsonable_index_names(value.index)}
         is_frame = True
     else:
         return
+    meta["schema_version"] = PLAN_CACHE_SCHEMA_VERSION
+    meta["index_schema"] = _index_schema_meta(value.index)
 
-    tmp_dir = path.parent
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    tmp_base = f"{path.name}.tmp.{uuid.uuid4().hex}"
-    tmp_parquet = tmp_dir / f"{tmp_base}.parquet"
-    tmp_meta = tmp_dir / f"{tmp_base}.meta.json"
-    try:
-        if is_frame:
-            value.to_parquet(tmp_parquet, index=True)
-        else:
-            frame.to_parquet(tmp_parquet, index=False)
-        meta["payload_checksum"] = _payload_checksum(tmp_parquet)
-        meta["schema_hash"] = _schema_hash(value)
-        meta["generation_id"] = uuid.uuid4().hex
-        tmp_meta.write_text(json.dumps(meta), encoding="utf-8")
-        os.replace(tmp_parquet, path)
-        os.replace(tmp_meta, meta_path)
-    except Exception:
-        # 清理残留 tmp 文件后重抛（若 parquet 已替换而 meta 未替换，下次 load
-        # 会因 checksum 不匹配而 fail-closed 返回 None，安全）。
-        for p in (tmp_parquet, tmp_meta):
-            try:
-                p.unlink(missing_ok=True)
-            except OSError:
-                pass
-        raise
+    # R20-158：per-key 写锁（同 key 多 writer 交错 payload/meta 的防护）。
+    key = str(path)
+    with _SAVE_LOCKS_GUARD:
+        lock = _SAVE_LOCKS.setdefault(key, threading.Lock())
+    with lock:
+        tmp_dir = path.parent
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_base = f"{path.name}.tmp.{uuid.uuid4().hex}"
+        tmp_parquet = tmp_dir / f"{tmp_base}.parquet"
+        tmp_meta = tmp_dir / f"{tmp_base}.meta.json"
+        try:
+            if is_frame:
+                value.to_parquet(tmp_parquet, index=True)
+            else:
+                frame.to_parquet(tmp_parquet, index=False)
+            meta["payload_checksum"] = _payload_checksum(tmp_parquet)
+            meta["schema_hash"] = _schema_hash(value)
+            meta["generation_id"] = uuid.uuid4().hex
+            tmp_meta.write_text(json.dumps(meta), encoding="utf-8")
+            os.replace(tmp_parquet, path)
+            os.replace(tmp_meta, meta_path)
+        except Exception:
+            # 清理残留 tmp 文件后重抛（若 parquet 已替换而 meta 未替换，下次 load
+            # 会因 checksum 不匹配而 fail-closed 返回 None，安全）。
+            for p in (tmp_parquet, tmp_meta):
+                try:
+                    p.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            raise
 
 
 def _load_value(path: Path) -> Any | None:
-    """从 Parquet + 元数据 JSON 恢复缓存值（校验 ``payload_checksum``，fail-closed）。
+    """从 Parquet + 元数据 JSON 恢复缓存值（校验 checksum + schema，fail-closed）。
 
     审计 #330：checksum 缺失或不匹配都返回 ``None``，不信任未经验证的磁盘缓存。
+    R20-153..172：校验 ``schema_version``（旧格式 fail-closed）、读 parquet 后
+    重算 ``schema_hash`` 与 meta 比对（mismatch → cache miss），并按
+    ``index_schema`` 重建空轴（R20-465）。
 
     参数:
         path: 文件或目录路径
@@ -372,31 +531,68 @@ def _load_value(path: Path) -> Any | None:
         if not checksum:
             # 旧格式无校验和：fail-closed，不信任
             return None
+        if int(meta.get("schema_version", 0)) != PLAN_CACHE_SCHEMA_VERSION:
+            return None
         if _payload_checksum(path) != checksum:
             return None
         frame = pd.read_parquet(path)
+        if meta.get("kind") == "dataframe":
+            loaded = frame
+        else:
+            loaded = _frame_to_series(frame, meta=meta)
+        # R20-153：schema mismatch → quarantine/cache miss（不信任未验证缓存）。
+        expected = meta.get("schema_hash")
+        if expected and _schema_hash(loaded) != expected:
+            _logger_cache_mismatch(path, expected)
+            return None
+        return loaded
     except Exception:
         return None
-    if meta.get("kind") == "dataframe":
-        return frame
-    return _frame_to_series(frame)
 
 
-def _frame_to_series(frame: pd.DataFrame) -> pd.Series:
+def _logger_cache_mismatch(path: Path, expected: str) -> None:
+    """R20-153：schema mismatch 的 telemetry（log + 不抛）。"""
+    try:
+        import logging
+
+        logging.getLogger("storage.cache").warning(
+            "persistent cache schema mismatch for %s (expected %s); cache miss",
+            path,
+            expected,
+        )
+    except Exception:
+        pass
+
+
+def _frame_to_series(frame: pd.DataFrame, meta: dict[str, Any] | None = None) -> pd.Series:
     """将缓存 DataFrame 还原为 MultiIndex Series。
-    
+
     参数:
         frame: 长表 DataFrame
-    
+        meta: 可选的持久化 meta（R20-157：空轴重建用）
+
     返回:
         pd.Series
     """
-    if frame.empty:
-        return pd.Series(dtype=float)
     value_col = "__value__"
     if value_col not in frame.columns:
         value_col = frame.columns[-1]
     idx_cols = [c for c in frame.columns if c != value_col]
+    if frame.empty:
+        # R20-157 / R20-465：空 Series round-trip 必须重建原 index schema，
+        # 不能退化成普通空 Series（MultiIndex 轴语义丢失）。
+        if not idx_cols:
+            return pd.Series(dtype=float)
+        if meta is not None and meta.get("index_schema"):
+            idx = _rebuild_index_from_meta(meta, fallback_columns=idx_cols)
+            return pd.Series(dtype=float, index=idx)
+        arrays = [pd.Index([], dtype=frame[c].dtype) for c in idx_cols]
+        if len(arrays) == 1:
+            return pd.Series(dtype=float, index=arrays[0])
+        return pd.Series(
+            dtype=float,
+            index=pd.MultiIndex.from_arrays(arrays, names=list(idx_cols)),
+        )
     if not idx_cols:
         return frame[value_col]
     out = frame.set_index(idx_cols)[value_col]
@@ -462,21 +658,23 @@ class PersistentPlanCache(CacheManager):
 
     def get(self, key: str):
         """get。
-        
+
         参数:
             key: 缓存键
-        
+
         返回:
             无
         """
         scoped = self._scoped_key(key)
-        hit = self._cache.get(scoped)
-        if hit is not None:
-            # R6-151: record the hit as most-recently-used (LRU).
-            self._cache.pop(scoped, None)
-            self._cache[scoped] = hit
-            return hit
+        with self._shared.lock:
+            hit = self._cache.get(scoped)
+            if hit is not None:
+                # R6-151: record the hit as most-recently-used (LRU).
+                self._cache.pop(scoped, None)
+                self._cache[scoped] = hit
+                return hit
 
+        # 磁盘读放在锁外（I/O 不进 critical section）。
         path = self._disk_path(scoped)
         if not path.is_file():
             return None
@@ -493,12 +691,20 @@ class PersistentPlanCache(CacheManager):
         size = estimate_object_bytes(value)
         if size > self.budget_bytes:
             return None
-        self._bytes += size
-        gov.reserve_accounting(self.layer_name, size)
-        self._cache[scoped] = value
-        freed = self._evict_to(self.budget_bytes)
-        if freed > 0:
-            gov.release_accounting(self.layer_name, freed)
+        with gov.lock:
+            with self._shared.lock:
+                # 锁内重查：并发另一个线程可能已把同 key 放入内存。
+                existing = self._cache.get(scoped)
+                if existing is not None:
+                    self._cache.pop(scoped, None)
+                    self._cache[scoped] = existing
+                    return existing
+                self._bytes += size
+                gov.reserve_accounting(self.layer_name, size)
+                self._cache[scoped] = value
+                freed = self._evict_to(self.budget_bytes)
+                if freed > 0:
+                    gov.release_accounting(self.layer_name, freed)
         return value
 
     def set(self, key: str, value) -> None:
@@ -520,16 +726,22 @@ class PersistentPlanCache(CacheManager):
         size = estimate_object_bytes(value)
         if size > self.budget_bytes:
             return
-        if scoped in self._cache:
-            old_size = estimate_object_bytes(self._cache[scoped])
-            self._bytes -= old_size
-            gov.release_accounting(self.layer_name, old_size)
-        self._bytes += size
-        gov.reserve_accounting(self.layer_name, size)
-        self._cache[scoped] = value
-        freed = self._evict_to(self.budget_bytes)
-        if freed > 0:
-            gov.release_accounting(self.layer_name, freed)
+        # R20-119..124：内存记账原子化；磁盘写放在锁外（per-key 锁在
+        # ``_save_value`` 内）。
+        with gov.lock:
+            with self._shared.lock:
+                if scoped in self._cache:
+                    old_size = estimate_object_bytes(self._cache[scoped])
+                    self._bytes -= old_size
+                    gov.release_accounting(self.layer_name, old_size)
+                    # R20-146..152：overwrite → MRU。
+                    self._cache.pop(scoped, None)
+                self._bytes += size
+                gov.reserve_accounting(self.layer_name, size)
+                self._cache[scoped] = value
+                freed = self._evict_to(self.budget_bytes)
+                if freed > 0:
+                    gov.release_accounting(self.layer_name, freed)
         path = self._disk_path(scoped)
         path.parent.mkdir(parents=True, exist_ok=True)
         _save_value(path, value)

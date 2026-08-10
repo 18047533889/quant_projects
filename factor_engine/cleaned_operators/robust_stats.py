@@ -85,12 +85,17 @@ def _rolling_prior_apply_2d(
 ) -> np.ndarray:
     """Prior-only rolling kernel: the baseline is estimated on ``[t-W, t-1]``
     and the current row ``t`` is scored against it.  An extreme ``x_t`` can
-    never contaminate its own median/MAD (R11 round-3 #122)."""
+    never contaminate its own median/MAD (R11 round-3 #122).
+
+    R16-107: the prior window is ``[t-W, t-1]`` — exactly W prior observations
+    (``start = row - window``).  The old ``row - window + 1`` capped at W-1
+    observations, so a W=20 prior used only 19.
+    """
     rows, cols = values.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     for col in range(cols):
         for row in range(rows):
-            start = max(0, row - window + 1)
+            start = max(0, row - window)
             prior = values[start:row, col]
             x_t = values[row, col]
             out[row, col] = fn(prior, x_t, min_periods)

@@ -80,10 +80,10 @@ def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode
     from cleaned_operators.base import (
         _enforce_active_when,
         _kernel_param_defaults,
-        _normalise_integer,
         _validate_common_integer_relations,
         _validate_relational_specs,
     )
+    from cleaned_operators.common.strict_params import normalize_and_validate_scalar_param
     from cleaned_operators.registry import OperatorRegistry
     from backend.operator_errors import OperatorParameterError
 
@@ -109,28 +109,32 @@ def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode
         for _idx, _child in enumerate(node.inputs):
             if _idx >= len(param_names):
                 break
-            if str(getattr(_child, "op", "")) == "literal" and _child.attrs.get("value") is not None:
+            # R19-003: ``"value" in child.attrs`` (NOT ``attrs.get("value") is not
+            # None``) — an explicit ``None`` positional literal is a real bound
+            # value that must enter ParamSpec validation, active_when,
+            # relational-constraint and hash identity, never be conflated with a
+            # missing literal.
+            if str(getattr(_child, "op", "")) == "literal" and "value" in _child.attrs:
                 attrs.setdefault(param_names[_idx], _child.attrs["value"])
         defaults = _kernel_param_defaults(operator) or {}
 
         # per-param scalar validation (dtype / min / max / choices / finite).
-        # ``_normalise_integer`` is the SAME resolver the runtime uses in
-        # ``validate_operator_call``: ParamSpec.dtype -> param_types ->
-        # integer-name whitelist.  Reusing it gives planning-time == runtime
-        # parity, so a ``window=5.9`` that runtime rejects is also rejected
-        # here before any lowering can truncate it.
+        # R19-002: ``normalize_and_validate_scalar_param`` is the SAME unified
+        # authority the runtime call gate uses — planning-time and runtime share
+        # one declared ParamSpec type domain, so ``window=5.9`` that runtime
+        # rejects is also rejected here, and np.int64/np.float64/Decimal/enum
+        # scalars are validated (not silently skipped because they are not
+        # ``isinstance(value, (int, float, str, bool))``).  Structured/vector
+        # values (lists, dicts) are passed through unchanged by the unified entry
+        # exactly as the runtime does.
         validated: dict[str, Any] = {}
         for key, value in attrs.items():
             if key not in param_names:
                 continue
-            # bool must NOT be skipped — it is the bool-as-int case that
-            # ``_normalise_integer`` rejects.  Only structured/non-scalar values
-            # (lists, dicts, panels) are not plan scalar params.
-            if not isinstance(value, (int, float, str, bool)):
-                continue
             try:
-                validated[key] = _normalise_integer(
-                    value, key, types.get(key), specs.get(key)
+                validated[key] = normalize_and_validate_scalar_param(
+                    canonical, key, value, phase="planning",
+                    declared_type=types.get(key), spec=specs.get(key),
                 )
             except OperatorParameterError as exc:
                 raise OperatorParameterError(
@@ -282,7 +286,13 @@ class ParameterCanonicalizer:
 
     def hash_key(self, attrs: dict[str, Any]) -> tuple:
         canon = self.canonicalize(attrs)
-        return (self.canonical or "") + tuple(sorted((k, _freeze(v)) for k, v in canon.items()))
+        # R19-001: a stable tuple schema — ``(canonical, sorted-items)``.  The old
+        # ``str + tuple`` was illegal (TypeError: can only concatenate str not
+        # tuple to str); the canonical form must be a deterministic, cross-process
+        # hashable key: same params -> same key, different semantic params ->
+        # different key, and the element order inside each pair is stable so the
+        # tuple is order-invariant regardless of dict iteration order.
+        return (self.canonical or "", tuple(sorted((k, _freeze(v)) for k, v in canon.items())))
 
 
 def _freeze(value: Any) -> Any:

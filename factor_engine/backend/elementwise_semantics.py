@@ -43,7 +43,16 @@ def min_horizontal_polars(left: "pl.Expr", right: "pl.Expr") -> "pl.Expr":
 def _both_finite(left: "pl.Expr", right: "pl.Expr") -> "pl.Expr":
     import polars as pl
 
-    return left.is_not_null() & right.is_not_null() & ~left.is_nan() & ~right.is_nan()
+    # pandas scalar_compare._compare masks out every NON-FINITE input (Inf
+    # included), so a comparison involving Inf is NULL there.  Match it.
+    return (
+        left.is_not_null()
+        & right.is_not_null()
+        & ~left.is_nan()
+        & ~right.is_nan()
+        & ~left.is_infinite()
+        & ~right.is_infinite()
+    )
 
 
 def compare_polars(op: str, left: "pl.Expr", right: "pl.Expr") -> "pl.Expr":
@@ -100,15 +109,24 @@ def protected_log_sql(value_col: str, *, eps: float, ln_fn: str = "LN") -> str:
 
 
 def protected_div_polars(numer: "pl.Expr", denom: "pl.Expr", *, eps: float, default: float) -> "pl.Expr":
-    """|denom|<=eps → default；NULL 输入 → NULL。"""
+    """|denom|<=eps → default；NULL/±Inf 输入 → NULL；溢出 → default。
+
+    Mirrors pandas ``_safe_divide``: non-finite INPUT is missing (→ NULL), a
+    small denominator is the default, and a division that OVERFLOWS to ±Inf
+    (finite/finite but 1e308/1e-10) falls back to ``default`` rather than
+    leaking Inf.
+    """
     import polars as pl
 
+    raw = numer / denom
     return (
-        pl.when(numer.is_null() | denom.is_null())
+        pl.when(numer.is_null() | denom.is_null() | numer.is_infinite() | denom.is_infinite())
         .then(None)
         .when(denom.abs() <= eps)
         .then(default)
-        .otherwise(numer / denom)
+        .when(raw.is_infinite())
+        .then(default)
+        .otherwise(raw)
     )
 
 

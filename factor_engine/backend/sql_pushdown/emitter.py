@@ -4424,8 +4424,17 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             vol_w = int(_literal_positional(node, 1, default=20) or 20)
             prev_w = f"LAG(_v, {w}) OVER (PARTITION BY inst ORDER BY ts)"
             impulse = f"CASE WHEN {prev_w} IS NULL THEN NULL ELSE _v / {prev_w} - 1.0 END"
-            ret = f"CASE WHEN {prev_w} IS NULL THEN NULL ELSE _v / LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts) - 1.0 END"
-            rv_over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {vol_w - 1} PRECEDING AND CURRENT ROW"
+            # R16-062: the realized-vol BASELINE must be STRICTLY PRIOR — a
+            # current-row ``ret`` (``_v / LAG(_v,1)``) mixed the current value
+            # into the normalizer.  Use only prior 1-step returns and a frame
+            # that ENDS at 1 PRECEDING.
+            ret = (
+                f"CASE WHEN LAG(_v, 2) OVER (PARTITION BY inst ORDER BY ts) IS NULL "
+                f"THEN NULL ELSE "
+                f"LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts) / "
+                f"LAG(_v, 2) OVER (PARTITION BY inst ORDER BY ts) - 1.0 END"
+            )
+            rv_over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {vol_w} PRECEDING AND 1 PRECEDING"
             rv = f"STDDEV({ret}) OVER ({rv_over})"
             rv_cnt = f"COUNT({ret}) OVER ({rv_over})"
             expr = (
@@ -4600,7 +4609,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
 
     if op in {"ts_days_since_high", "ts_days_since_low"}:
         # x.shift(1).rolling(w, min_periods=w)：在「前 w 个 bar」里找极值，
-        # 返回距最近一个 prior bar 的 bar 数。nanargmax → 平手取最早命中。
+        # 返回距最近一个 prior bar 的 bar 数。
+        # R16-061: the canonical Pandas path resolves TIES to the MOST RECENT
+        # hit (``np.argmax``/``argmin`` on the reversed window).  The old SQL
+        # ``MIN(hit_rn)`` returned the FIRST hit — a tie-rich window diverged
+        # from Pandas.  ``MAX(hit_rn)`` = most-recent hit.
         if len(node.inputs) < 1:
             return None
         x_l = _compile_layer(node.inputs[0], dialect=dialect)
@@ -4613,8 +4626,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         sub0 = f"SELECT ts, inst, rn, LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts) AS sh FROM ({rn_sql}) _0"
         sub1 = f"SELECT ts, inst, rn, sh, {agg}(sh) OVER ({over_prev}) AS pxt, COUNT(sh) OVER ({over_prev}) AS pcnt FROM ({sub0}) _1"
         sub2 = f"SELECT ts, inst, rn, pxt, pcnt, CASE WHEN sh = pxt THEN rn END AS hit_rn FROM ({sub1}) _2"
-        sub3 = f"SELECT ts, inst, rn, pcnt, MIN(hit_rn) OVER ({over_prev}) AS first_hit FROM ({sub2}) _3"
-        expr = f"CASE WHEN pcnt < {w} THEN NULL ELSE (rn - 1) - first_hit END"
+        sub3 = f"SELECT ts, inst, rn, pcnt, MAX(hit_rn) OVER ({over_prev}) AS last_hit FROM ({sub2}) _3"
+        expr = f"CASE WHEN pcnt < {w} THEN NULL ELSE (rn - 1) - last_hit END"
         return _Layer(
             f"SELECT ts, inst, {expr} AS _v FROM ({sub3}) _4",
             has_inst_window=True,

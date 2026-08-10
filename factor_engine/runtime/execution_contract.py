@@ -22,6 +22,24 @@ import math
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+# R19 semantic policies: anchor / missing-topology / current-row / time-unit /
+# rank & quantile declarations, imported from the runtime-owned policy module so
+# the history layer exposes them without touching the operator catalog.
+from runtime.semantic_policies import (
+    AnchorPolicy,
+    CurrentRowRequirement,
+    MissingTopologyPolicy,
+    TimeUnit,
+    anchor_belongs_to_campaign,
+    anchor_policy,
+    current_row_requirement,
+    days_named_row_count_canonicals,
+    missing_topology_policy,
+    quantile_policy,
+    rank_semantics,
+    time_unit,
+)
+
 # Serialized-analysis encoding only.  ``analysis.lookback`` carries this value
 # when ``requires_full_history`` was True at analysis time (see
 # ``cleaned_operators.production_policy_extensions_v2``).  Consumers must treat
@@ -91,7 +109,10 @@ _STATEFUL_CANONICALS: frozenset[str] = frozenset({
     "directional_change_state",
     "directional_change_extent",
     "state_since_trend_tstat",
-    "ts_cusum_break_score",
+    # R19-079: ``ts_cusum_break_score`` was renamed.  ``ts_cusum_pressure``
+    # declares its own recursive contract via ``declare_stateful`` (sequential.py)
+    # and ``ts_cumulative_deviation_score`` is a rolling-window operator (not
+    # stateful) — the stale legacy name must not linger in the stateful seed.
     "ts_threshold_cycle_period",
     "ts_threshold_cycle_asymmetry",
     "state_episode_mfe",
@@ -122,6 +143,83 @@ _WINDOW_LIKE_PARAM_NAMES = frozenset({
     "baseline_window", "price_window", "volume_window", "turnover_window",
 })
 
+# ---------------------------------------------------------------------------
+# R19-080/081: "first mathematically valid output" support floor.
+# ``window=20`` does NOT make a 1-sample output valid — the operators below
+# declare the minimum number of FINITE samples inside the window before a
+# non-NaN output is mathematically meaningful.  This is the machine-readable
+# ``minimum_effective_samples`` floor attached to ``HistoryRequirement``.  The
+# floor is an explicit map (no name guessing); operators may later declare it
+# on their own metadata (``min_effective_sample``) and the lookup prefers that
+# extension point.
+# ---------------------------------------------------------------------------
+_MINIMUM_EFFECTIVE_SAMPLES: dict[str, int] = {
+    # skew >= 3 finite samples; kurtosis >= 4 (R19-081).
+    "ts_skew": 3,
+    "ts_kurt": 4,
+    "idio_skew": 3,
+    "coskewness_to_market": 3,
+    # correlation / covariance / rank-corr need a pair of >= 2-3 finite rows.
+    "ts_corr": 3,
+    "ts_cov": 3,
+    "ts_beta": 3,
+    "rank_corr": 3,
+    "ts_autocorr": 2,
+    "volume_autocorr": 2,
+    "turnover_autocorr": 2,
+    # regression family: p + 1 (intercept + regressors); poly2 -> 3 points.
+    "ts_regression": 2,
+    "ts_regression_forecast_error": 2,
+    "ts_poly2_coeff": 3,
+    "ts_poly2_resid": 3,
+    "residual_momentum_capm": 2,
+    "tail_beta": 2,
+    "idio_vol": 2,
+}
+
+
+def minimum_effective_samples(
+    canonical: str, params: Mapping[str, Any] | None = None
+) -> int | None:
+    """Return the declared ``minimum_effective_samples`` floor for ``canonical``.
+
+    R19-080/081: a rolling ``window`` provides ROWS, but skew/kurtosis/
+    correlation/regression need a minimum number of FINITE samples inside the
+    window before the first output is mathematically valid.  Reads the explicit
+    map first; an operator-declared ``metadata.min_effective_sample`` (int) is
+    preferred as the extensible future path.  ``None`` = no declared floor
+    (the operator emits from a single finite sample).
+    """
+    try:
+        meta = _metadata(canonical)
+    except Exception:
+        meta = None
+    if meta is not None:
+        declared = getattr(meta, "min_effective_sample", None)
+        if declared is not None and isinstance(declared, int) and declared > 0:
+            return declared
+        declared_multi = getattr(meta, "minimum_effective_samples", None)
+        if declared_multi is not None and isinstance(declared_multi, int) and declared_multi > 0:
+            return declared_multi
+    if canonical in _MINIMUM_EFFECTIVE_SAMPLES:
+        return _MINIMUM_EFFECTIVE_SAMPLES[canonical]
+    if params is None:
+        return None
+    # regression family floor scales with the number of regressors when the
+    # operator declares them as params (p + 1).
+    if canonical == "ts_regression":
+        try:
+            from cleaned_operators.base import _kernel_param_defaults
+            from cleaned_operators.registry import OperatorRegistry
+
+            op = OperatorRegistry.get(canonical)
+            defaults = _kernel_param_defaults(op) if op is not None else {}
+            n_regressors = int(params.get("n_regressors", defaults.get("n_regressors", 1)))
+            return max(2, n_regressors + 1)
+        except Exception:
+            return 2
+    return None
+
 
 @dataclass(frozen=True)
 class ExecutionContract:
@@ -142,6 +240,12 @@ class ExecutionContract:
     chunking: str = "independent"
     checkpoint_schema: str | None = None
     resolution_error: str | None = None
+    # R16-064: True when the runtime fell back to the legacy ``_STATEFUL_CANONICALS``
+    # seed (a migration-debt marker).  The final state/history authority is the
+    # canonical self-declaration (``_DECLARED_STATEFUL`` / checkpoint registry);
+    # a canonical still resolved via the legacy seed is a migration flag, not a
+    # silent authority.
+    legacy_seed_fallback: bool = False
 
     @property
     def is_stateful(self) -> bool:
@@ -178,12 +282,20 @@ class HistoryRequirement:
     warmup cannot derive them, so ``history_requirement`` reports them as
     ``full_history`` (conservative) unless a declared ``rows`` floor exists.
     ``count`` records the declared event/report/session count when known.
+
+    R19-080/081: ``minimum_effective_samples`` is the "first mathematically
+    valid output" floor — ``window`` bars do NOT make a 1-sample output valid.
+    ``skew`` needs >= 3 finite samples, ``kurtosis`` >= 4, correlation /
+    covariance / rank-corr >= 2-3 pairs, regression >= p+1.  It is separate from
+    ``rows`` (the warm-up) so the planner can distinguish "enough bars to read"
+    from "enough FINITE samples inside the window to emit a non-NaN value".
     """
 
     kind: str = "finite"  # finite | full_history | fiscal_period | session |
     #                       # event_count | report_count | session_count
     rows: int = 2
     count: int | None = None  # event/report/session observation count (event-clock kinds)
+    minimum_effective_samples: int | None = None  # R19-080/081 support floor
     # R11 P1-13: the exact lookback FORMULA as a recoverable expression, e.g.
     # ``"window - 1 + lag"`` with ``semantics="exact_rows"``.  The catalog's
     # legacy ``parameters=["window", "lag"]`` only names the involved params; it
@@ -334,6 +446,37 @@ def _resolve(canonical: str, *, strict: bool = False) -> str:
         return canonical
 
 
+def validate_stateful_seed() -> list[str]:
+    """R16-065: every legacy stateful-seed name must resolve in the FINAL
+    registry.
+
+    A retired / renamed canonical (``ts_cusum_break_score``,
+    ``state_since_reduce`` …) lingering in the seed makes history/state audits
+    target a canonical that no longer exists.  Returns the unresolvable names;
+    the caller (load_all finalization) treats a non-empty list as a hard
+    failure.  An explicitly-migrated mapping may exempt a name.
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    stale: list[str] = []
+    try:
+        catalog = OperatorRegistry._catalog
+    except Exception:
+        return ["<registry unavailable>"]
+    for name in sorted(_STATEFUL_CANONICALS) | sorted(_MACD_FAMILY):
+        if name in _MIGRATED_STATEFUL_NAMES:
+            continue
+        resolved = _resolve(name)
+        if resolved not in catalog and resolved not in _MIGRATED_STATEFUL_NAMES:
+            stale.append(f"{name} (resolved {resolved!r})")
+    return stale
+
+
+# R16-065: explicit migration mapping — names that were renamed/retired and have
+# a documented successor, so the seed-validation knows they are intentional.
+_MIGRATED_STATEFUL_NAMES: frozenset[str] = frozenset()
+
+
 def _metadata(canonical: str, *, strict: bool = False) -> Any | None:
     try:
         from cleaned_operators.registry import OperatorRegistry
@@ -346,6 +489,29 @@ def _metadata(canonical: str, *, strict: bool = False) -> Any | None:
                 f"production: operator metadata lookup failed for {canonical!r}: {exc}"
             ) from exc
         return None
+
+
+# R19-078: retained "direct" operators (the reviewed daily migration surface)
+# must NOT use the heuristic ``_WINDOW_LIKE_PARAM_NAMES`` history fallback —
+# ``lag`` extends history by ``+lag`` while a plain window extends by
+# ``window - 1``, and a wrong guess is off by one bar.  Only legacy / research
+# tiers (and the still-unclassified research surface) may use name-based
+# inference.  The tier is read from the registry/operator-surface
+# classification (never written here).
+_PRODUCTION_DIRECT_TIER = "daily"
+
+
+def _is_production_direct(canonical: str) -> bool:
+    """True when ``canonical`` is a retained production-direct operator (daily
+    authoring tier).  Degrades to False (fallback allowed) when the surface
+    classification is unavailable or the operator is not yet classified —
+    never raises, so a research session is never blocked."""
+    try:
+        from cleaned_operators.operator_surface import classify_canonical
+
+        return classify_canonical(canonical) == _PRODUCTION_DIRECT_TIER
+    except Exception:
+        return False
 
 
 def _checkpoint_spec(canonical: str, *, strict: bool = False) -> Any | None:
@@ -410,10 +576,14 @@ def execution_contract(canonical: str, *, production: bool = False) -> Execution
             checkpoint_schema=declared["checkpoint_schema"],
         )
     if resolved in _STATEFUL_CANONICALS:
+        # R16-064: legacy-seed resolution is a MIGRATION marker — the canonical
+        # still relies on the hand-maintained name set rather than its own
+        # declaration.  It is honest about it (``legacy_seed_fallback=True``).
         return ExecutionContract(
             state_model="recursive",
             chunking="required_full_history",
             checkpoint_schema=None,
+            legacy_seed_fallback=True,
         )
     if lookup_failed:
         # R10 #4: research falls back, but explicitly marked — never silently
@@ -740,6 +910,25 @@ for _canon in ("ts_ema", "EMA"):
 for _canon in ("ts_argmax", "ts_argmin"):
     _HISTORY_TRANSFORMS[_canon] = _window_transform("d")
 
+# R19-078: retained production-direct (daily-tier) operators with a window-like
+# param are now FORBIDDEN from the name-based ``_default_window_extension``
+# fallback, so every one of them gets an EXPLICIT transform here.  A window
+# re-reads ``W`` bars -> ``W - 1`` prior; ``trade_when`` is the one trap where
+# ``signal`` LOOKS window-like but is a value, not a window — identity (0 rows).
+for _canon in (
+    # stateful Wilder / Kaufman indicators (recursive full-history; the window
+    # transform only refines their ``rows`` warm-up estimate).
+    "ADX", "ATR_WILDER", "RSI_WILDER", "KAMA",
+    # rolling window kernels.
+    "coskewness_to_market", "digital_count", "group_decay_linear",
+    "group_ts_decay_linear", "idio_skew", "idio_vol",
+    "price_spread_deviation", "rank_corr", "residual_momentum_capm",
+    "tail_beta", "ts_decay_exp_window", "ts_max_buildup", "ts_moment",
+    "ts_poly2_coeff", "ts_poly2_resid", "ts_quantile", "ts_topk_sum",
+):
+    _HISTORY_TRANSFORMS[_canon] = _window_transform("window", "d")
+_HISTORY_TRANSFORMS["trade_when"] = HistoryTransform(kind="identity")
+
 # Lag / delay operators: a pure lag of ``d`` needs ``d`` prior bars, never d-1.
 for _canon in ("ts_delay", "delay", "ts_delta"):
     _HISTORY_TRANSFORMS[_canon] = _lag_transform("n", "d", "lag", "periods", "window")
@@ -976,16 +1165,26 @@ def _default_window_extension(canonical: str, params: Mapping[str, Any]) -> int 
     each is bounded by its declared ParamSpec default/min, and every window-like
     name contributes ``value - 1``.  A bound but fractional window value is
     UNKNOWN history (``_UNKNOWN``) — never silently truncated to ``value - 1``.
+
+    R19-078: this name-based fallback is FORBIDDEN for retained production-direct
+    (daily-tier) operators.  Such an operator with a window-like param but no
+    explicit ``_HISTORY_TRANSFORMS`` / ``ParamSpec.history_semantics`` /
+    ``history_formula`` declaration returns ``_UNKNOWN`` (conservative full
+    history, fail-closed) instead of a possibly-off-by-one name guess.  Only
+    legacy / research / unclassified tiers keep the heuristic.
     """
     meta = _metadata(canonical)
     if meta is None:
         return 0
     specs = getattr(meta, "param_specs", None) or {}
     param_names = tuple(getattr(meta, "param_names", None) or ())
+    window_like = [n for n in param_names if n in _WINDOW_LIKE_PARAM_NAMES]
+    if not window_like:
+        return 0  # no window-like param to guess; pointwise identity
+    if _is_production_direct(canonical):
+        return _UNKNOWN
     rows = 0
-    for name in param_names:
-        if name not in _WINDOW_LIKE_PARAM_NAMES:
-            continue
+    for name in window_like:
         value = _bound_param(params, name, specs, canonical=canonical)
         if value is _UNKNOWN:
             return _UNKNOWN
@@ -1238,6 +1437,54 @@ def _resolve_history_count(
         return None
 
 
+# R16-066: per-mineable-op HistoryRequirementFactory.  ``window`` / ``lookback``
+# / ``history_days`` NAMES cannot prove the history KIND — event-count /
+# session-count / embedding / full-history are all different.  A mineable
+# operator MAY register ``fn(bound_params) -> HistoryRequirement``; when
+# registered it is the authoritative factory.  Operators without one fall back
+# to the name-based extension, which the audit counts (fallback_usage_count)
+# as migration debt — never silently assumed correct.
+_HISTORY_REQUIREMENT_FACTORIES: dict[str, Callable[[Mapping[str, Any]], HistoryRequirement]] = {}
+
+
+def register_history_factory(
+    canonical: str, fn: Callable[[Mapping[str, Any]], HistoryRequirement]
+) -> None:
+    """Declare a deterministic ``(bound_params) -> HistoryRequirement`` factory.
+
+    Round-16 #066: a mineable operator must expose its history kind from its
+    bound parameters, not from a central name guess.
+    """
+    _HISTORY_REQUIREMENT_FACTORIES[canonical] = fn
+
+
+def history_factory_for(canonical: str) -> Callable[[Mapping[str, Any]], HistoryRequirement] | None:
+    resolved = _resolve(canonical)
+    return _HISTORY_REQUIREMENT_FACTORIES.get(resolved)
+
+
+def history_fallback_canonicals(catalog: dict[str, Any] | None = None) -> list[str]:
+    """R16-066: mineable canonicals still relying on the name-based history
+    fallback (no factory, no ``_HISTORY_TRANSFORMS`` entry).  A mining candidate
+    in this list means the planner guessed history from parameter names."""
+    from cleaned_operators.registry import OperatorRegistry
+
+    catalog = catalog if catalog is not None else getattr(OperatorRegistry, "_catalog", {})
+    fallback: list[str] = []
+    for canonical in sorted(catalog):
+        resolved = _resolve(canonical)
+        if resolved in _HISTORY_REQUIREMENT_FACTORIES:
+            continue
+        if resolved in _HISTORY_TRANSFORMS:
+            continue
+        if resolved in _FIN_REPORT_PERIOD_CANONICALS:
+            continue
+        if resolved in _DECLARED_STATEFUL:
+            continue
+        fallback.append(canonical)
+    return fallback
+
+
 def history_requirement(
     canonical: str,
     params: Mapping[str, Any] | None = None,
@@ -1259,9 +1506,25 @@ def history_requirement(
     finite/stateless contract.
     """
     resolved = _resolve(canonical, strict=production)
+    # R16-066: a registered HistoryRequirementFactory is authoritative — the
+    # operator declares its own history kind from bound params, so no central
+    # name guess can misclassify event-count / session-count / embedding kinds.
+    factory = history_factory_for(resolved)
+    if factory is not None:
+        try:
+            return factory(dict(params or {}))
+        except Exception as exc:
+            if production:
+                raise ExecutionContractResolutionError(
+                    f"production: history factory raised for {resolved!r}: {exc}"
+                ) from exc
     contract = execution_contract(resolved, production=production)
     rows, unknown = _minimum_warmup_rows(resolved, params, production=production)
     declared = _DECLARED_STATEFUL.get(resolved)
+    # R19-080/081: the "first mathematically valid output" floor is attached to
+    # every HistoryRequirement so the planner/evidence layer can distinguish
+    # "enough bars read" from "enough FINITE samples to emit a non-NaN value".
+    effective_floor = minimum_effective_samples(resolved, params or {})
     if declared is not None and declared.get("history_kind") in {
         "event_count", "report_count", "session_count",
     }:
@@ -1276,6 +1539,7 @@ def history_requirement(
             kind=declared["history_kind"],
             rows=max(rows, int(declared.get("minimum_history") or 0)),
             count=_resolve_history_count(declared, resolved, params),
+            minimum_effective_samples=effective_floor,
         )
     if contract.requires_full_history or unknown:
         if (
@@ -1290,9 +1554,15 @@ def history_requirement(
             return HistoryRequirement(
                 kind="finite",
                 rows=max(2, _financial_research_heuristic(resolved, params or {})),
+                minimum_effective_samples=effective_floor,
             )
-        return HistoryRequirement(kind="full_history", rows=rows)
-    return HistoryRequirement(kind="finite", rows=rows)
+        return HistoryRequirement(
+            kind="full_history", rows=rows,
+            minimum_effective_samples=effective_floor,
+        )
+    return HistoryRequirement(
+        kind="finite", rows=rows, minimum_effective_samples=effective_floor,
+    )
 
 
 def _own_history_requirement(canonical: str, params: Mapping[str, Any]) -> HistoryRequirement:
@@ -1305,6 +1575,7 @@ def _own_history_requirement(canonical: str, params: Mapping[str, Any]) -> Histo
     """
     resolved = _resolve(canonical)
     contract = execution_contract(resolved)
+    effective_floor = minimum_effective_samples(resolved, params or {})
     if contract.requires_full_history:
         rows, _ = _minimum_warmup_rows(resolved, params)
         declared = _DECLARED_STATEFUL.get(resolved)
@@ -1315,13 +1586,23 @@ def _own_history_requirement(canonical: str, params: Mapping[str, Any]) -> Histo
                 kind=declared["history_kind"],
                 rows=rows,
                 count=_resolve_history_count(declared, resolved, params),
+                minimum_effective_samples=effective_floor,
             )
-        return HistoryRequirement(kind="full_history", rows=rows)
+        return HistoryRequirement(
+            kind="full_history", rows=rows,
+            minimum_effective_samples=effective_floor,
+        )
     extension = _own_history_extension(resolved, params or {})
     if extension is _UNKNOWN:
         rows, _ = _minimum_warmup_rows(resolved, params)
-        return HistoryRequirement(kind="full_history", rows=rows)
-    return HistoryRequirement(kind="finite", rows=extension)
+        return HistoryRequirement(
+            kind="full_history", rows=rows,
+            minimum_effective_samples=effective_floor,
+        )
+    return HistoryRequirement(
+        kind="finite", rows=extension,
+        minimum_effective_samples=effective_floor,
+    )
 
 
 def own_history_requirement(
@@ -1343,6 +1624,7 @@ def own_history_requirement(
         return HistoryRequirement(
             kind="finite",
             rows=max(2, _financial_research_heuristic(resolved, params or {})),
+            minimum_effective_samples=minimum_effective_samples(resolved, params or {}),
         )
     return req
 
@@ -1421,12 +1703,30 @@ __all__ = [
     "FULL_HISTORY_LOOKBACK_SENTINEL",
     "declared_stateful_canonicals",
     "declare_stateful",
+    "register_history_factory",
+    "history_fallback_canonicals",
     "execution_contract",
     "execution_contract_overrides",
+    "validate_stateful_seed",
     "factor_forward_impact",
     "factor_history_requirement",
     "forward_impact",
     "history_requirement",
     "is_full_history_lookback",
+    "minimum_effective_samples",
     "own_history_requirement",
+    # R19 semantic-policy re-exports (anchor / missing-topology / current-row /
+    # time-unit / rank & quantile declarations).
+    "AnchorPolicy",
+    "MissingTopologyPolicy",
+    "CurrentRowRequirement",
+    "TimeUnit",
+    "anchor_policy",
+    "anchor_belongs_to_campaign",
+    "missing_topology_policy",
+    "current_row_requirement",
+    "time_unit",
+    "days_named_row_count_canonicals",
+    "rank_semantics",
+    "quantile_policy",
 ]

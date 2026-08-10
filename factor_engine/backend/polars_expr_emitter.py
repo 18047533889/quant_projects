@@ -1243,8 +1243,12 @@ def _try_ts_pair_from_base_columns(
     schema = set(base.collect_schema().names())
     if left_name not in schema or right_name not in schema:
         return None
-    lcol = pl.col(left_name)
-    rcol = pl.col(right_name)
+    # pandas rolling pair stats treat ±Inf as missing (the same contract as
+    # single-column rolling aggregations); drop Inf/NaN so a single Inf row
+    # cannot poison the whole polars window.
+    if op in {"ts_corr", "ts_cov", "ts_beta", "vwap"}:
+        lcol = pl.when(lcol.is_nan() | lcol.is_infinite()).then(None).otherwise(lcol)
+        rcol = pl.when(rcol.is_nan() | rcol.is_infinite()).then(None).otherwise(rcol)
     from backend.pair_window_spec import PairWindowSpec
     from backend.pairwise_rolling import polars_pairwise_output_guard, polars_ts_beta_expr, polars_vwap_expr
 
@@ -2093,7 +2097,12 @@ def _compile_polars_impl(
         lo_p, hi_p = parse_winsorize_quantiles(node)
         lo = pl.col(_VAL).quantile(quantile=lo_p, interpolation="linear").over(_TS, order_by=_INST)
         hi = pl.col(_VAL).quantile(quantile=hi_p, interpolation="linear").over(_TS, order_by=_INST)
-        return inner.with_columns(pl.col(_VAL).clip(lo, hi).alias(_VAL))
+        # pandas winsorize ends with ``.replace([inf, -inf], nan)`` — an Inf
+        # input never survives as a clipped extreme.
+        from backend.inf_sanitize import apply_inf_policy_polars_fast
+        return inner.with_columns(
+            apply_inf_policy_polars_fast(pl.col(_VAL).clip(lo, hi), "winsorize").alias(_VAL)
+        )
 
     if op in {"cs_resid", "cs_regression"}:
         from backend.plan_params import int_mode_from_plan_node
@@ -2465,16 +2474,25 @@ def _compile_polars_impl(
             return None
         d = _window_int(node, default=1)
         prev = pl.col(_VAL).shift(d).over(_INST, order_by=_TS)
+        ratio = pl.col(_VAL) / prev
+        # pandas reference: ``np.log(ratio.replace([inf,-inf], nan))`` — an Inf
+        # ratio (Inf price, or an Inf prev) is censored to missing BEFORE log;
+        # a residual -Inf output (log of a ~0 ratio) is NaN at the engine level.
+        from backend.inf_sanitize import apply_inf_policy_polars_fast
+
         return inner.with_columns(
-            pl.when(
-                pl.col(_VAL).is_null()
-                | prev.is_null()
-                | (pl.col(_VAL) <= 0)
-                | (prev <= 0)
-            )
-            .then(None)
-            .otherwise((pl.col(_VAL) / prev).log())
-            .alias(_VAL)
+            apply_inf_policy_polars_fast(
+                pl.when(
+                    pl.col(_VAL).is_null()
+                    | prev.is_null()
+                    | (pl.col(_VAL) <= 0)
+                    | (prev <= 0)
+                    | ratio.is_infinite()
+                )
+                .then(None)
+                .otherwise(ratio.log()),
+                "log_returns",
+            ).alias(_VAL)
         )
 
     if op == "volatility":

@@ -35,3 +35,18 @@ class PlanNode:
         object.__setattr__(
             self, "semantic_attrs", MappingProxyType(dict(self.semantic_attrs))
         )
+
+
+def canonical_target_index(template: Any) -> Any:
+    """Canonical target index 提取（R20-100..102）。
+
+    算子结果对齐必须统一使用同一个 target-index 解析：模板可能是 ``pd.Series``
+    或 ``pd.Index``（``ExecutionContext.template_index``）。所有归一分支
+    （含 1-D ndarray 分支）都必须走本函数 —— 不允许某个分支直接
+    ``template.index`` 而在另一个分支用 ``template`` 本身，导致 axis-only 模板
+    下 1-D 结果被错误对齐到错误长度。
+    """
+    index_attr = getattr(template, "index", None)
+    if index_attr is not None:
+        return index_attr
+    return template

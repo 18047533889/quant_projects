@@ -33,13 +33,14 @@ _cores: int | None = None
 
 
 def physical_cores() -> int:
-    """可用物理核数（缓存；Phase 5 起走 cgroup-aware ``effective_cpu_slots``）。"""
+    """可用物理核数（缓存；Phase 5 起走 cgroup-aware ``effective_cpu_slots``）。
+
+    R20-138：与 :func:`runtime.resource_governor.effective_cpu_slots` 完全对齐 ——
+    env 显式值不再直接 return，而是被 hard CPU limit（cgroup quota / affinity）
+    clamp。容器 2 CPU + ``FACTOR_ENGINE_CPU_BUDGET=16`` → 2（不是 16）。
+    """
     global _cores
     if _cores is not None:
-        return _cores
-    override = os.environ.get("FACTOR_ENGINE_CPU_BUDGET", "").strip()
-    if override.isdigit() and int(override) > 0:
-        _cores = int(override)
         return _cores
     _cores = effective_cpu_slots()
     return _cores

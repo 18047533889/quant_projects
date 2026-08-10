@@ -19,9 +19,11 @@ from cleaned_operators.fundamental.transforms_v2 import (
     _lag_value,
     _period_insert,
     _period_key,
+    _pos_int,
     _safe_div,
     _values,
     _walk_periods,
+    _window_keys,
 )
 
 _EPS = 1e-12
@@ -127,8 +129,15 @@ def _walk_two(
     secondary: pd.DataFrame,
     fn: Callable[[list[object], OrderedDict, OrderedDict, object], float],
 ) -> pd.DataFrame:
-    period_id = period_id.reindex(index=primary.index, columns=primary.columns)
-    secondary = secondary.reindex(index=primary.index, columns=primary.columns)
+    # R23-293: strict panel alignment + bundle proof — a silent reindex of the
+    # secondary panel or the period-id panel would pair two different fiscal
+    # reports (or two different instruments) positionally.  All three inputs
+    # must share the exact date x instrument grid.
+    from cleaned_operators.alignment import align_panel_inputs
+
+    primary, period_id, secondary = align_panel_inputs(
+        primary, period_id, secondary, names=("primary", "period_id", "secondary")
+    )
     out = pd.DataFrame(np.nan, index=primary.index, columns=primary.columns, dtype=float)
     for col in primary.columns:
         order: list[object] = []
@@ -272,11 +281,15 @@ _mk(
 
 def _fin_earnings_cash_gap_volatility(net_profit, ocf, avg_assets, period_id, periods=8, flow_type=None):
     _require_same_flow_grain("fin_earnings_cash_gap_volatility", flow_type, 2)
-    n = max(2, int(periods))
+    # R23-294: strict integer authority (rejects True/3.7/nan/inf/"3.7").
+    # R23-073/074/075: gap volatility is a statistic over ADJACENT fiscal
+    # periods — a skipped report must fail closed, not substitute a
+    # non-adjacent quarter (CONSECUTIVE_REQUIRED default).
+    n = _pos_int(periods, "periods", 2)
     gap = net_profit - ocf
 
     def _calc(o, v, c):
-        vals = np.asarray(_values(o, v, c, n), dtype=float)
+        vals = np.asarray(_values(o, v, c, n, require_consecutive=True), dtype=float)
         return float(np.std(vals)) if len(vals) >= 3 else np.nan
 
     std_gap = _walk_periods(gap, period_id, _calc)
@@ -294,10 +307,16 @@ _mk(
 
 def _fin_earnings_smoothness(net_profit, ocf, period_id, periods=8, flow_type=None):
     _require_same_flow_grain("fin_earnings_smoothness", flow_type, 2)
-    n = max(2, int(periods))
+    # R23-294: strict integer authority.  R23-073/074/075: smoothness pairs
+    # profit vs OCF std over ADJACENT fiscal periods — a skipped report fails
+    # the window closed (CONSECUTIVE_REQUIRED default), never substitutes a
+    # non-adjacent quarter on either series.
+    n = _pos_int(periods, "periods", 2)
 
     def _calc(o, v1, v2, c):
-        keys = o[-n:]
+        keys = _window_keys(o, v1, c, n, require_consecutive=True)
+        if len(keys) != n:
+            return np.nan
         # P1-131: the profit and OCF stds MUST share one report-period key set.
         # Independently taking each series' own recent valid fiscal values can
         # pair profit Q1-Q4 against OCF Q1,Q3,Q4,nextQ1 — a different window
@@ -329,10 +348,15 @@ _mk(
 
 def _fin_persistence(x, period_id, periods=8, flow_type=None):
     _reject_ytd_growth("fin_earnings_persistence", flow_type)
-    n = max(3, int(periods))
+    # R23-294: strict integer authority.  R23-073/074/075: AR(1) persistence is
+    # defined over ADJACENT fiscal periods — Q1->Q3 is NOT a one-step lag and a
+    # skipped report fails the window closed (CONSECUTIVE_REQUIRED default).  An
+    # event-clock variant would need a separate ``*_visible_report_persistence``
+    # canonical, never the same one.
+    n = _pos_int(periods, "periods", 3)
 
     def _calc(o, v, c):
-        vals = np.asarray(_values(o, v, c, n), dtype=float)
+        vals = np.asarray(_values(o, v, c, n, require_consecutive=True), dtype=float)
         return _ar1_slope(vals) if len(vals) >= 4 else np.nan
 
     return _walk_periods(x, period_id, _calc)

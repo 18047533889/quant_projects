@@ -59,10 +59,13 @@ def register() -> None:
                 stat=_stat,
             )
 
+        # ts_topk_sum canonical params are ``["x","d","k"]`` (R19-050 aliases);
+        # inherited ParamSpec keys must sit inside param_names (R6-157).
+        params = ["x", "d", "k", "min_periods"] if name == "ts_topk_sum" else ["x", "window", "k", "min_periods"]
         op = PolarsFunctionOperator(
             name,
             "time_series_order",
-            ["x", "window", "k", "min_periods"],
+            params,
             description,
             calculate,
         )

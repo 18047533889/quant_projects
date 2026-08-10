@@ -30,12 +30,23 @@ class ComplexityBudget:
     Guards the automatic mining / LLM path against pathological formulas
     (10k-node trees, huge variadic nodes, absurd literals) before they burn
     compute budget.
+
+    R21-037..043 adds *pre-parse* size limits: ``ast.parse`` happens only after
+    the raw text passes ``max_formula_bytes/max_formula_chars``, a string
+    literal is capped before it becomes one giant AST Constant, and
+    identifier/keyword length limits prevent pathological names.
     """
     max_ast_nodes: int = 256
     max_depth: int = 32
     max_call_arity: int = 12
     max_literal_magnitude: float = 1e9
     max_variadic_inputs: int = 32
+    # R21-037..041
+    max_formula_bytes: int = 65536
+    max_formula_chars: int = 65536
+    max_string_literal_bytes: int = 8192
+    max_identifier_length: int = 256
+    max_keyword_length: int = 128
 
 
 class _ExprBuilder:
@@ -63,10 +74,32 @@ class _ExprBuilder:
         self._depth-=1
     def build(self,text:str)->Expr:
         normalized=str(text)
+        # R21-038/039: size budget BEFORE ast.parse allocates, and again after
+        # LQTP normalization so normalization cannot expand the payload.
+        if len(normalized.encode("utf-8"))>self._budget.max_formula_bytes:
+            raise DSLParseError(
+                f"expression bytes {len(normalized.encode('utf-8'))} exceed "
+                f"ComplexityBudget.max_formula_bytes={self._budget.max_formula_bytes}"
+            )
+        if len(normalized)>self._budget.max_formula_chars:
+            raise DSLParseError(
+                f"expression chars {len(normalized)} exceed "
+                f"ComplexityBudget.max_formula_chars={self._budget.max_formula_chars}"
+            )
         if self._dialect=="lqtp" or self._surface=="lqtp":
             from api.lqtp_compat import normalize_lqtp_formula
             from api.derived_field_compat import normalize_lqtp_derived_fields
             normalized=normalize_lqtp_derived_fields(normalize_lqtp_formula(normalized))
+            if len(normalized.encode("utf-8"))>self._budget.max_formula_bytes:
+                raise DSLParseError(
+                    f"normalized expression bytes {len(normalized.encode('utf-8'))} exceed "
+                    f"ComplexityBudget.max_formula_bytes (LQTP expansion)"
+                )
+            if len(normalized)>self._budget.max_formula_chars:
+                raise DSLParseError(
+                    f"normalized expression chars {len(normalized)} exceed "
+                    f"ComplexityBudget.max_formula_chars (LQTP expansion)"
+                )
         try:parsed=ast.parse(normalized,mode="eval")
         except SyntaxError as exc:raise DSLParseError(f"Invalid expression syntax: {text}") from exc
         expr=self._visit(parsed.body)
@@ -106,6 +139,14 @@ class _ExprBuilder:
                     )
                 return node.value
             if isinstance(node.value,str):
+                # R21-040: a several-MB string is still one AST Constant — cap
+                # literal bytes so a huge string cannot bypass the node budget.
+                if len(node.value.encode("utf-8"))>self._budget.max_string_literal_bytes:
+                    raise DSLParseError(
+                        f"string literal bytes {len(node.value.encode('utf-8'))} exceed "
+                        f"ComplexityBudget.max_string_literal_bytes="
+                        f"{self._budget.max_string_literal_bytes}"
+                    )
                 # Round-11 #16: strings are NEVER coerced at the parser.  A
                 # numeric-looking string is a string (``"000001"``, ``"2024Q1"``,
                 # a category/version/security code); a declared numeric ParamSpec
@@ -115,6 +156,11 @@ class _ExprBuilder:
         if isinstance(node,ast.Name):
             if node.id in self._allowed:raise DSLParseError(f"Bare name {node.id!r} is not a column reference; use {node.id}(...) for operators.")
             if not _is_field_identifier(node.id):raise DSLParseError(f"Unsupported name: {node.id}")
+            if len(node.id)>self._budget.max_identifier_length:
+                raise DSLParseError(
+                    f"identifier length {len(node.id)} exceeds "
+                    f"ComplexityBudget.max_identifier_length={self._budget.max_identifier_length}"
+                )
             return field(node.id, strict=False)
         if isinstance(node,ast.Attribute):raise DSLParseError("Unsupported data-source attribute. Under dialect='lqtp', only registered DataTable.Field or parameterized DataTable(...).Field references are accepted.")
         raise DSLParseError(f"Unsupported syntax node: {type(node).__name__}")
@@ -133,6 +179,11 @@ class _ExprBuilder:
             )
         if isinstance(node.func,ast.Name):
             name=node.func.id
+            if len(name)>self._budget.max_keyword_length:
+                raise DSLParseError(
+                    f"keyword length {len(name)} exceeds "
+                    f"ComplexityBudget.max_keyword_length={self._budget.max_keyword_length}"
+                )
             if name not in self._allowed:raise DSLParseError(f"Unsupported function: {name}")
             func=self._allowed[name]
         else:func=self._visit(node.func)

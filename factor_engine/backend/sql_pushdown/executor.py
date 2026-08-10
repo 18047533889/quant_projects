@@ -7,14 +7,12 @@
 from __future__ import annotations
 
 import os
-import sys
 from dataclasses import dataclass
 from typing import Any
 
 from backend.context import ExecutionContext
 from backend.pandas_compat import pd
 from planner.logical_plan import PlanNode
-from workspace_paths import quant_projects_root
 
 from .emitter import (
     BatchCompiledSql,
@@ -48,10 +46,14 @@ def _instrument_filter_kind(
 
 
 def _ensure_data_access() -> None:
-    """确保 ``quant_projects`` 根目录在 ``sys.path`` 中以便导入 data_access。"""
-    root = str(quant_projects_root())
-    if root not in sys.path:
-        sys.path.insert(0, root)
+    """R21-130..133: import the installed ``data_access`` as a normal package.
+
+    No runtime ``sys.path`` mutation — which data_access an install uses must be
+    reproducible.  A missing package fails loudly instead of being patched in.
+    """
+    from storage.data_access_loader import ensure_data_access_importable
+
+    ensure_data_access_importable()
 
 
 def _sql_fallback_allowed(exc: BaseException, ctx: ExecutionContext) -> bool:
@@ -244,7 +246,7 @@ def execute_compiled_sql(
 ) -> pd.Series:
     """在 DuckDB 或 ClickHouse 上执行已编译 SQL，返回 MultiIndex Series。"""
     if compiled.dialect == SqlDialect.CLICKHOUSE:
-        return _execute_clickhouse(compiled, ctx)
+        return _execute_clickhouse(compiled, ctx, query_budget=query_budget)
     return _execute_duckdb(compiled, ctx, data_source, query_budget=query_budget)
 
 
@@ -275,7 +277,7 @@ def execute_batch_compiled_sql(
 ) -> dict[str, pd.Series]:
     """执行批量编译 SQL，返回 ``sid -> MultiIndex Series`` 映射。"""
     if compiled.dialect == SqlDialect.CLICKHOUSE:
-        table = _execute_clickhouse_table(compiled, ctx)
+        table = _execute_clickhouse_table(compiled, ctx, query_budget=query_budget)
     else:
         table = _execute_duckdb_table(
             compiled, ctx, data_source, query_budget=query_budget
@@ -361,13 +363,115 @@ def _execute_duckdb_table(
     return store.sql(compiled.query, **kwargs)
 
 
-def _execute_clickhouse_table(compiled: CompiledSql | BatchCompiledSql, ctx: PushdownContext):
-    """在 ClickHouse 上执行 SQL，返回查询结果表。"""
+def _clickhouse_query_settings(budget: Any | None, *, query_id: str | None = None) -> dict[str, Any]:
+    """R21-062: map QueryBudget / env onto ClickHouse ``settings``.
+
+    ClickHouse must not be a budget-free back door: max_execution_time,
+    max_result_rows/bytes, max_memory_usage, max_threads, max_read_rows/bytes,
+    a per-query ``query_id`` (for cancel), and ``readonly`` are set on every
+    production query.  Invalid budget env values fail loudly (R21-064).
+    """
+    from data_access.read.query_budget import QueryBudget
+
+    budget = budget if isinstance(budget, QueryBudget) else None
+    settings: dict[str, Any] = {"readonly": 1}
+    if query_id:
+        settings["query_id"] = str(query_id)
+
+    def _int_env(name: str, default: int | None) -> int | None:
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            raise ValueError(f"invalid {name}={raw!r} (must be an integer)") from None
+        if value <= 0:
+            raise ValueError(f"invalid {name}={value!r} (must be positive)")
+        return value
+
+    # Deadline / execution time (ms -> s; R21-064 invalid value fails startup).
+    max_elapsed_ms = budget.max_elapsed_ms if budget and budget.max_elapsed_ms else None
+    if max_elapsed_ms is None:
+        raw = os.environ.get("FACTOR_ENGINE_CLICKHOUSE_MAX_EXECUTION_TIME_MS", "").strip()
+        if raw:
+            try:
+                max_elapsed_ms = float(raw)
+            except ValueError:
+                raise ValueError(f"invalid FACTOR_ENGINE_CLICKHOUSE_MAX_EXECUTION_TIME_MS={raw!r}")
+    if max_elapsed_ms is not None:
+        settings["max_execution_time"] = max(1, int(max_elapsed_ms / 1000.0))
+
+    max_rows = budget.max_rows if budget else None
+    if max_rows is None:
+        max_rows = _int_env("FACTOR_ENGINE_CLICKHOUSE_MAX_RESULT_ROWS", None)
+    if max_rows is not None:
+        settings["max_result_rows"] = int(max_rows)
+        settings["max_read_rows"] = int(max_rows)
+
+    max_bytes = budget.max_result_bytes if budget else None
+    if max_bytes is None:
+        max_bytes = _int_env("FACTOR_ENGINE_CLICKHOUSE_MAX_RESULT_BYTES", None)
+    if max_bytes is not None:
+        settings["max_result_bytes"] = int(max_bytes)
+        settings["max_read_bytes"] = int(max_bytes)
+
+    mem_bytes = _int_env("FACTOR_ENGINE_CLICKHOUSE_MAX_MEMORY_USAGE", None)
+    if mem_bytes is not None:
+        settings["max_memory_usage"] = int(mem_bytes)
+    threads = _int_env("FACTOR_ENGINE_CLICKHOUSE_MAX_THREADS", None)
+    if threads is not None:
+        settings["max_threads"] = int(threads)
+    return settings
+
+
+def _execute_clickhouse_table(
+    compiled: CompiledSql | BatchCompiledSql,
+    ctx: PushdownContext,
+    *,
+    query_budget: Any | None = None,
+):
+    """在 ClickHouse 上执行 SQL，返回查询结果表（带资源预算）。
+
+    R21-061..063: unlike the old ``execute_query(config, sql)`` (which had no
+    budget), the ClickHouse path now carries QueryBudget-derived settings so
+    switching backend cannot bypass resource governance.
+    """
     _ensure_data_access()
-    from data_access.clickhouse.panel import ClickHouseConfig, execute_query
+    import uuid
+
+    from data_access.clickhouse.panel import ClickHouseConfig
 
     config = ClickHouseConfig.from_env(**(ctx.ch_config or {}))
-    return execute_query(config=config, sql=compiled.query)
+    query_id = str(uuid.uuid4().hex[:16])
+    settings = _clickhouse_query_settings(query_budget, query_id=query_id)
+    import clickhouse_connect
+
+    client = clickhouse_connect.get_client(
+        host=config.host,
+        port=config.port,
+        username=config.username,
+        password=config.password,
+        database=config.database,
+        secure=config.secure,
+        query_limit=settings.get("max_result_rows"),
+        settings=settings,
+    )
+    try:
+        result = client.query(compiled.query, settings=settings)
+        return result.arrow()
+    except Exception as exc:
+        # surface a stable budget code so the error taxonomy does not parse text
+        if "max_result" in str(exc).lower() or "memory limit" in str(exc).lower() or "limit exceeded" in str(exc).lower():
+            from runtime.resource_errors import ResourceBudgetExceeded
+
+            raise ResourceBudgetExceeded(f"ClickHouse budget exceeded: {exc}") from exc
+        raise
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
 
 
 def _execute_duckdb(
@@ -383,9 +487,11 @@ def _execute_duckdb(
     return _series_from_sql_table(table, timestamp_col="ts", instrument_col="inst")
 
 
-def _execute_clickhouse(compiled: CompiledSql, ctx: PushdownContext) -> pd.Series:
+def _execute_clickhouse(
+    compiled: CompiledSql, ctx: PushdownContext, *, query_budget: Any | None = None
+) -> pd.Series:
     """ClickHouse 单因子执行：SQL → 结果表 → MultiIndex Series。"""
-    table = _execute_clickhouse_table(compiled, ctx)
+    table = _execute_clickhouse_table(compiled, ctx, query_budget=query_budget)
     return _series_from_sql_table(table, timestamp_col="ts", instrument_col="inst")
 
 
@@ -419,7 +525,9 @@ def try_execute_sql_pushdown_long(
 
     try:
         if compiled.dialect == SqlDialect.CLICKHOUSE:
-            table = _execute_clickhouse_table(compiled, pctx)
+            table = _execute_clickhouse_table(
+                compiled, pctx, query_budget=getattr(ctx, "query_budget", None)
+            )
         else:
             table = _execute_duckdb_table(
                 compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)
@@ -466,7 +574,9 @@ def try_execute_sql_pushdown_batch_long(
 
     try:
         if compiled.dialect == SqlDialect.CLICKHOUSE:
-            table = _execute_clickhouse_table(compiled, pctx)
+            table = _execute_clickhouse_table(
+                compiled, pctx, query_budget=getattr(ctx, "query_budget", None)
+            )
         else:
             table = _execute_duckdb_table(
                 compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)

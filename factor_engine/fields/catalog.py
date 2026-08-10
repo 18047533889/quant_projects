@@ -76,6 +76,27 @@ def _table(
     )
 
 
+# R23-302 (announcement vs vintage PIT): these are SEPARATE certificates shared
+# by the four A-share financial statements.  announcement_pit_certified=True
+# because PubDate is the market's earliest knowledge time;
+# revision_vintage_pit_certified=False because COS historical files may be
+# re-synced FINAL values — immutable vintage history is NOT proven, so UpdateTime
+# can never be a revision-available-at clock (R23-021/022).
+# knowledge_time_resolution=DATE_ONLY_NEXT_SESSION (R23-010..014): PubDate is a
+# date-only field with no announcement timestamp, so strict PIT uses the value
+# only from the next trading session after PubDate (never same-day open).
+_ASHARE_FINANCIAL_META = {
+    "pit_reason": "financial_pit on PubDate; announcement_pit_certified; "
+                  "revision_vintage_pit_certified=false (R23-302)",
+    "announcement_pit_certified": True,
+    "revision_vintage_pit_certified": False,
+    "restatement_risk": True,
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION",
+    "revision_clock_note": "UpdateTime is vendor/pipeline write time, not a "
+                          "revision-available-at clock; immutable vintage "
+                          "history unproven (R23-021/022)",
+}
+
 ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
     # R17-013: every production-readable table declares strict_pit_allowed
     # explicitly (never the UNKNOWN default); reason lives in metadata.
@@ -104,30 +125,37 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
     # ReportPeriodEndDate.  revision = UpdateTime is the COS write timestamp used
     # ONLY as a deterministic in-snapshot tiebreaker (never as a historical
     # revision-effective time — re-syncs rewrite UpdateTime; COS lqtp dict §4.21).
+    #
+    # Financial tables: knowledge = PubDate (announcement day), period =
+    # ReportPeriodEndDate.  revision = UpdateTime is the COS write timestamp used
+    # ONLY as a deterministic in-snapshot tiebreaker (never as a historical
+    # revision-effective time — re-syncs rewrite UpdateTime; COS lqtp dict §4.21).
+    # PIT certificates are declared in ``_ASHARE_FINANCIAL_META`` above
+    # (R23-302: announcement_pit_certified vs revision_vintage_pit_certified).
     _table(
         "StockIndicator", "ashare_stock_indicator", time="PubDate", domain="fundamental",
         table_kind="financial_event", join_policy="financial_pit", knowledge="PubDate",
         period="ReportPeriodEndDate", revision="UpdateTime", strict_pit_allowed=True,
-        metadata={"pit_reason": "financial_pit on PubDate; PIT-safe"},
+        metadata=dict(_ASHARE_FINANCIAL_META),
     ),
     _table(
         "StockBalance", "ashare_stock_balance", time="PubDate", domain="fundamental",
         table_kind="financial_event", join_policy="financial_pit", knowledge="PubDate",
         period="ReportPeriodEndDate", revision="UpdateTime", strict_pit_allowed=True,
-        metadata={"pit_reason": "financial_pit on PubDate; PIT-safe"},
+        metadata=dict(_ASHARE_FINANCIAL_META),
     ),
     _table(
         "StockIncome", "ashare_stock_income", time="PubDate", domain="fundamental",
         table_kind="financial_event", join_policy="financial_pit", knowledge="PubDate",
         period="ReportPeriodEndDate", revision="UpdateTime", strict_pit_allowed=True,
-        metadata={"pit_reason": "financial_pit on PubDate; PIT-safe"},
+        metadata=dict(_ASHARE_FINANCIAL_META),
     ),
     _table(
         "StockCashFlow", "ashare_stock_cashflow", time="PubDate", domain="fundamental",
         aliases=("StockCashflow",), table_kind="financial_event",
         join_policy="financial_pit", knowledge="PubDate", period="ReportPeriodEndDate",
         revision="UpdateTime", strict_pit_allowed=True,
-        metadata={"pit_reason": "financial_pit on PubDate; PIT-safe"},
+        metadata=dict(_ASHARE_FINANCIAL_META),
     ),
     # StockDividend physical schema (COS lqtp dict §4.17): TradeDate/RightRegDate/
     # ExDividendDate/CashDividend/StockDividend/StockTransfer/UpdateTime.  There is

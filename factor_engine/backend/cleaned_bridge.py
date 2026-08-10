@@ -354,9 +354,12 @@ def _normalize_operator_result(
         return pd.Series(result, index=target)
     array = np.asarray(result)
     if array.ndim == 1:
-        if len(array) != len(template):
-            raise OperatorShapeError(f"operator 1D result length {len(array)} does not match template {len(template)}")
-        return pd.Series(array, index=template.index)
+        if len(array) != len(target):
+            raise OperatorShapeError(f"operator 1D result length {len(array)} does not match template {len(target)}")
+        # R20-100..102: use the canonical ``_target_index(template)`` for the 1D
+        # branch too — ``template`` may itself be a ``pd.Index`` (axis-only
+        # template), in which case ``template.index`` is wrong.
+        return pd.Series(array, index=target)
     if array.ndim == 2:
         if template_panel is None:
             raise OperatorShapeError("operator 2D result requires a panel template")

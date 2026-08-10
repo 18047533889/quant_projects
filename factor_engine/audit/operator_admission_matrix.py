@@ -130,6 +130,17 @@ _HARD_BLOCKERS = frozenset(
 )
 _ROUTING_BLOCKERS = frozenset({"B20", "B21", "B22", "B23", "B16", "B17", "B07"})
 
+# R16-021: blockers carry an explicit severity.  A hard blocker is
+# ``release_blocking`` — ``--strict`` must fail on ANY of them, not only on
+# ``admission_state == unresolved`` (the old gate let denied / evidence-missing
+# / stale-certified blockers through silently).
+_BLOCKER_SEVERITY: dict[str, str] = {
+    code: ("HIGH" if code in _HARD_BLOCKERS else
+           "MEDIUM" if code in _ROUTING_BLOCKERS else "LOW")
+    for code in BLOCKERS
+}
+_RELEASE_BLOCKING_BLOCKERS = _HARD_BLOCKERS
+
 
 @dataclass
 class AdmissionRecord:
@@ -162,6 +173,12 @@ class AdmissionRecord:
 
     stateful: bool = False
     recursive: bool = False
+    # R16-023: recursive MATH is distinct from CHECKPOINT execution.  A
+    # recursive operator whose state depends on its own prior output needs full
+    # history unless it is checkpoint-supported; the four capability flags are
+    # reported separately so the planner never conflates them.
+    stateful_math: bool = False
+    recursive_math: bool = False
     full_history_replay_required: bool = False
     checkpoint_supported: bool = False
     incremental_supported: bool = False
@@ -199,6 +216,9 @@ class AdmissionRecord:
     routing_constraints: list[str] = field(default_factory=list)
     quality_warnings: list[str] = field(default_factory=list)
     blocker_codes: list[str] = field(default_factory=list)  # union, legacy view
+    # R16-021: per-blocker severity + the release-blocking subset.
+    blocker_severities: dict[str, str] = field(default_factory=dict)
+    release_blocking_blockers: list[str] = field(default_factory=list)
     required_actions: list[str] = field(default_factory=list)
     recommended_action: str = ""
     target_mining_lane: str = ""
@@ -401,9 +421,17 @@ def main(argv: list[str] | None = None) -> int:
     for name, path in pools.items():
         print(f"  {name}: {path}")
     if args.strict:
-        unresolved = [r.canonical for r in records if r.admission_state == "unresolved"]
-        if unresolved:
-            print(f"STRICT FAIL: {len(unresolved)} unresolved roles: {unresolved[:10]}")
+        # R16-021: --strict fails on ANY release-blocking blocker — not only
+        # ``admission_state == unresolved``.  Denied / evidence-missing /
+        # cost-contract-missing / stale-certified canonicals were silently
+        # passing the old gate.
+        violating = [
+            (r.canonical, r.release_blocking_blockers)
+            for r in records if getattr(r, "release_blocking_blockers", None)
+        ]
+        if violating:
+            print(f"STRICT FAIL: {len(violating)} canonical(s) with release-blocking "
+                  f"blockers (first: {violating[:5]})")
             return 1
     return 0
 
@@ -461,6 +489,16 @@ def _record(canonical: str, catalog: dict[str, Any]) -> AdmissionRecord:
     rec.execution_model = execution_model.value
     # R15-INC-033/249: ``recursive`` is a specific state model, not "any stateful".
     rec.recursive = execution_model.value == "checkpoint"
+    # R16-023: stateful_math / recursive_math are MATH properties (does the
+    # operator's output depend on its own prior state?), reported SEPARATELY
+    # from checkpoint_supported / incremental_supported / full_history_replay
+    # (execution capabilities).  A recursive operator without checkpoint
+    # support genuinely needs full-history replay — the planner must never
+    # read ``recursive == checkpoint`` and conclude it is safe to chunk.
+    rec.stateful_math = stateful
+    rec.recursive_math = bool(
+        stateful and execution_model.value in ("checkpoint", "full_history")
+    )
     rec.checkpoint_supported = checkpoint
     rec.full_history_replay_required = full_replay
     # R15-INC-034/250: stateless bounded window supports incremental warmup.
@@ -551,6 +589,14 @@ def _record(canonical: str, catalog: dict[str, Any]) -> AdmissionRecord:
     rec.routing_constraints = routing
     rec.quality_warnings = warnings
     rec.blocker_codes = list(dict.fromkeys(list(hard_blockers) + routing + warnings))
+    # R16-021: blocker severities + the release-blocking subset, computed from
+    # the shared severity map (a hard blocker is release_blocking).
+    rec.blocker_severities = {
+        code: _BLOCKER_SEVERITY.get(code, "UNKNOWN") for code in rec.blocker_codes
+    }
+    rec.release_blocking_blockers = sorted(
+        code for code in rec.blocker_codes if code in _RELEASE_BLOCKING_BLOCKERS
+    )
 
     rec.target_mining_lane = _lane_for(role)
     # R15-INC-029/248: intrinsic = certification + role (no context); contextual

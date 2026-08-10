@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import itertools
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -92,6 +93,22 @@ class LoweringContract:
     registration.  ``param_branches`` maps a parameter name to the branch value
     range it drives (e.g. ``{"fast": (5, 26)}``) — used by the static probe to
     sample representative values instead of one fabricated number.
+
+    R20-180..184: the probe layer no longer *guesses* how many panel inputs a
+    composite takes by ``min_inputs - len(deps)``.  The contract now carries the
+    honest arity split:
+
+    - ``panel_arity``: how many *panel* (series) inputs the lowering consumes
+      (e.g. ``StochasticK`` -> 3, ``MACD_line`` -> 1).  ``None`` = derive from
+      the operator kernel signature / ``min_inputs - len(scalar_params)``.
+    - ``scalar_params``: scalar parameters the lowering reads from ``attrs`` /
+      literal inputs (e.g. ``("fast", "slow", "signal")`` for MACD).
+    - ``context_inputs``: positional input indices that are *context* series
+      (e.g. a benchmark panel) rather than the primary priced panel.
+    - ``branch_params``: scalar params whose values drive structural branches
+      in the lowering (e.g. ``fast``/``slow`` for the ``fast < slow`` gate).
+    - ``optional_inputs``: positional input indices that may be either a
+      literal constant or an omitted/panel input (e.g. the ``window`` literal).
     """
 
     deps: tuple[str, ...] = ()
@@ -101,6 +118,11 @@ class LoweringContract:
     history_requirement: str | None = None  # exact_rows / max_rows / finite_observations
     grain_transform: str | None = None  # none / minute_to_daily / tick_to_daily
     statefulness: str = "stateless"
+    panel_arity: int | None = None
+    scalar_params: tuple[str, ...] = ()
+    context_inputs: tuple[int, ...] = ()
+    branch_params: tuple[str, ...] = ()
+    optional_inputs: tuple[int, ...] = ()
 
 
 def _lowering_hash(fn: LoweringFn) -> str:
@@ -215,6 +237,11 @@ def register_lowering(
     deps: tuple[str, ...] | None = None,
     min_inputs: int | None = None,
     contract: LoweringContract | None = None,
+    panel_arity: int | None = None,
+    scalar_params: tuple[str, ...] | None = None,
+    context_inputs: tuple[int, ...] | None = None,
+    branch_params: tuple[str, ...] | None = None,
+    optional_inputs: tuple[int, ...] | None = None,
 ):
     """注册 canonical 算子的 lowering 函数（R5-29）。
 
@@ -228,10 +255,13 @@ def register_lowering(
         deps: 可选的依赖签名——lowering 真正读取的参数名列表。声明后
             ``lowered_primitives`` 用这些参数构造探测 stub，而不是硬编码
             ``{"window":3,"d":3,"std_dev":2.0}``（R5-30）。
-        min_inputs: 展开所需的最少 panel 输入数。
+        min_inputs: 展开所需的最少输入数（含 scalar literal 输入）。
         contract: WS-D #260 — 完整的 ``LoweringContract``（param_branches /
             history_requirement / grain_transform / statefulness）。传入后
             替代 ``deps``/``min_inputs`` 成为 lookups 的唯一契约来源。
+        panel_arity/scalar_params/context_inputs/branch_params/optional_inputs:
+            R20-180..184 的显式 arity 契约（见 ``LoweringContract`` docstring）。
+            非 ``contract`` 调用时以关键字直接声明，存进 ``LoweringContract``。
     """
 
     def decorator(fn: LoweringFn) -> LoweringFn:
@@ -273,6 +303,26 @@ def register_lowering(
             history_requirement=contract.history_requirement if contract is not None else None,
             grain_transform=contract.grain_transform if contract is not None else None,
             statefulness=contract.statefulness if contract is not None else None,
+            panel_arity=(
+                contract.panel_arity if contract is not None and contract.panel_arity is not None
+                else panel_arity
+            ),
+            scalar_params=tuple(
+                contract.scalar_params if contract is not None and contract.scalar_params
+                else (scalar_params or ())
+            ),
+            context_inputs=tuple(
+                contract.context_inputs if contract is not None and contract.context_inputs
+                else (context_inputs or ())
+            ),
+            branch_params=tuple(
+                contract.branch_params if contract is not None and contract.branch_params
+                else (branch_params or ())
+            ),
+            optional_inputs=tuple(
+                contract.optional_inputs if contract is not None and contract.optional_inputs
+                else (optional_inputs or ())
+            ),
         )
         _COMPOSITE_LOWERINGS[key] = fn
         _LOWERING_CONTRACTS[key] = stored
@@ -471,6 +521,19 @@ def lower_composite_operators(
     lowered = lowering(current)
     if lowered.op == current.op and lowered.inputs == current.inputs:
         return current
+    # R20-458/459: 被展开的 composite 根节点必须继承 composite 自身的 output
+    # semantic contract。lowering fn 用 ``_helpers`` 构造的是不带 semantic_attrs
+    # 的裸 primitive 节点；不转移的话，``MACD_line`` / ``BollingerUpper`` 等
+    # 展开后的 root 会丢失 unit / grain / price-basis，下游 typing / SQL / PIT
+    # 与 ``structural_key`` 的 semantic digest 都会跟着错位。
+    if current.semantic_attrs and not lowered.semantic_attrs:
+        lowered = PlanNode(
+            op=lowered.op,
+            inputs=lowered.inputs,
+            attrs=dict(lowered.attrs),
+            semantic_attrs=dict(current.semantic_attrs),
+            node_id=lowered.node_id,
+        )
     return lower_composite_operators(lowered, _stack=_stack + (canon,))
 
 
@@ -559,16 +622,19 @@ def _kernel_panel_count(resolved: str) -> int | None:
 def _probe_panel_count(resolved: str, contract: LoweringContract | None) -> int:
     """Derive the number of panel probe inputs for a composite (WS-D #264).
 
-    Resolution order: the operator kernel signature (honest panel arity) ->
-    the declared contract (``min_inputs`` minus scalar deps the probe passes as
-    attrs) -> a conservative floor of 2 (single-series lowerings ignore the
-    extra probe input; ratio/family lowerings need at least two series).
+    R20-180..184 resolution order: the declared ``panel_arity`` (honest, no
+    guessing) -> the operator kernel signature (honest panel arity) -> the
+    declared contract (``min_inputs`` minus the number of scalar params the
+    probe passes as attrs) -> a conservative floor of 2.
     """
+    if contract is not None and contract.panel_arity is not None:
+        return max(1, int(contract.panel_arity))
     kernel_count = _kernel_panel_count(resolved)
     if kernel_count is not None:
         return kernel_count
     if contract is not None and contract.min_inputs is not None:
-        return max(1, contract.min_inputs - len(contract.deps))
+        scalar = len(contract.scalar_params) if contract.scalar_params else len(contract.deps)
+        return max(1, contract.min_inputs - scalar)
     return 2
 
 
@@ -713,13 +779,26 @@ def composite_param_branches(canon: str) -> dict[str, tuple[float, ...]]:
 
 
 def certified_for_all_branches(canon: str) -> bool:
-    """WS-D #262: certify a composite over EVERY reachable parameter branch.
+    """Deprecated alias for :func:`certified_for_declared_branch_coverage`.
+
+    The old name over-claimed: the certification iterates the *declared*
+    representative branch grid, not every mathematically reachable parameter
+    value.  Kept as an alias so existing callers/tests keep working (R20-190..192).
+    """
+    return certified_for_declared_branch_coverage(canon)
+
+
+def certified_for_declared_branch_coverage(canon: str) -> bool:
+    """R20-190..192: certify a composite over the *declared* branch grid.
 
     Unlike :func:`composite_dual_backend_capable` (default branch only), this
     lowers the probe for every combination of ``composite_param_branches``
     values and requires every lowered primitive to be dual-backend production
-    certified on every branch.  Returns ``False`` when any branch fails to lower
-    or yields an uncertified primitive.
+    certified on every branch.  The grid is the declared representative branch
+    coverage (``param_branches``), not every mathematically reachable value.
+
+    A branch that raises during lowering or yields an uncertified primitive
+    fails the certification (returns ``False``) — it is never a silent pass.
     """
     from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
 
@@ -736,7 +815,10 @@ def certified_for_all_branches(canon: str) -> bool:
     keys = list(branches)
     for combo in itertools.product(*(branches[key] for key in keys)):
         attrs = dict(zip(keys, combo))
-        prims = _probe_primitives(resolved, contract, attrs)
+        try:
+            prims = _probe_primitives(resolved, contract, attrs)
+        except Exception:  # noqa: BLE001 - an illegal-domain branch fails certification
+            return False
         if not prims:
             return False
         if not all(p in PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE for p in prims):
@@ -779,3 +861,335 @@ def registered_lowering_contract(canon: str) -> LoweringContract | None:
     if resolved is None:
         return None
     return _LOWERING_CONTRACTS.get(resolved)
+
+
+# ---------------------------------------------------------------------------
+# R20-184: declared-deps == actual-reads static audit
+# ---------------------------------------------------------------------------
+
+#: scalar helpers whose string-literal positional arguments name ``node.attrs``
+#: keys they read.  ``window_int``/``window_attrs`` read the ``window``/``d``
+#: alias pair (normalized to ``window``).
+_HELPER_ATTR_KEYS: dict[str, tuple[str, ...]] = {
+    "window_int": ("window", "d"),
+    "window_attrs": ("window", "d"),
+}
+
+
+def _static_read_attr_keys(fn: LoweringFn) -> set[str] | None:
+    """Best-effort static scan of ``node.attrs`` keys a lowering function reads.
+
+    Recurses into same-module helper calls (e.g. ``_macd_windows``) so a
+    lowering that delegates param reading to a helper is audited transitively.
+    Returns ``None`` when the function source cannot be parsed (unanalyzable).
+    """
+    import ast as _ast
+
+    try:
+        module_name = getattr(fn, "__module__", "") or ""
+        module = sys.modules.get(module_name) if module_name else None
+        source_file = inspect.getsourcefile(fn)
+        if not source_file:
+            return None
+    except (OSError, TypeError):
+        return None
+
+    keys: set[str] = set()
+    pending: list[LoweringFn] = [fn]
+    visited: set[int] = set()
+
+    while pending:
+        cur = pending.pop()
+        if id(cur) in visited:
+            continue
+        visited.add(id(cur))
+        try:
+            tree = _ast.parse(inspect.getsource(cur))
+        except (OSError, TypeError, SyntaxError):
+            continue
+        for n in _ast.walk(tree):
+            # node.attrs.get("key") / node.attrs.pop("key") / node.attrs.setdefault(...)
+            if (
+                isinstance(n, _ast.Call)
+                and isinstance(n.func, _ast.Attribute)
+                and n.func.attr in ("get", "pop", "setdefault")
+                and n.args
+                and isinstance(n.args[0], _ast.Constant)
+                and isinstance(n.args[0].value, str)
+            ):
+                keys.add(n.args[0].value)
+            # node.attrs["key"]
+            if isinstance(n, _ast.Subscript):
+                try:
+                    val = _ast.literal_eval(n.slice)
+                except Exception:  # noqa: BLE001
+                    val = None
+                if isinstance(val, str):
+                    keys.add(val)
+            if isinstance(n, _ast.Call) and (
+                isinstance(n.func, _ast.Name) or isinstance(n.func, _ast.Attribute)
+            ):
+                fname = n.func.id if isinstance(n.func, _ast.Name) else n.func.attr
+                helper_keys = _HELPER_ATTR_KEYS.get(fname)
+                if helper_keys:
+                    keys.update(helper_keys)
+                elif fname == "float_attr":
+                    for a in n.args:
+                        if isinstance(a, _ast.Constant) and isinstance(a.value, str):
+                            keys.add(a.value)
+                elif isinstance(n.func, _ast.Name) and module is not None:
+                    # recurse into same-module helpers (shared lowering internals)
+                    helper = getattr(module, fname, None)
+                    if (
+                        callable(helper)
+                        and inspect.isfunction(helper)
+                        and inspect.getsourcefile(helper) == source_file
+                    ):
+                        pending.append(helper)
+    # window/d 是同一窗口参数的别名：仅当 lowering 真的读了 "d" 时才归一为
+    # window（绝不无条件注入——那会让所有不读窗口参数的 lowering 误报）。
+    if "d" in keys:
+        keys.discard("d")
+        keys.add("window")
+    return keys
+
+
+@dataclass(frozen=True)
+class LoweringContractAudit:
+    """R20-184 declared-deps vs actual-reads audit result.
+
+    - ``UNUSED_LOWERING_DECLARED_PARAMS``: a declared dep is never read by the
+      lowering body (declared dependency with no consumption).
+    - ``UNDECLARED_LOWERING_PARAM_READS``: the lowering reads a parameter that
+      is neither a declared dep nor a declared scalar/branch param.
+    """
+
+    canonical: str
+    declared_params: tuple[str, ...]
+    read_params: frozenset[str]
+    declared_allowed: frozenset[str]
+    unused_declared_params: tuple[str, ...]
+    undeclared_param_reads: tuple[str, ...]
+    unanalyzable: bool = False
+
+    @property
+    def ok(self) -> bool:
+        return (not self.unanalyzable) and not self.unused_declared_params and not self.undeclared_param_reads
+
+
+def lowering_contract_audit(canon: str) -> LoweringContractAudit:
+    """R20-184: statically verify a composite's declared deps == actual reads.
+
+    ``declared_allowed`` is the union of ``deps`` + ``scalar_params`` +
+    ``branch_params`` — a read parameter is only flagged as undeclared when it
+    is outside ALL of them (e.g. an attribute the lowering reads that the
+    contract never mentions).
+    """
+    resolved = _resolve_composite(canon)
+    if resolved is None:
+        return LoweringContractAudit(
+            canonical=str(canon),
+            declared_params=(),
+            read_params=frozenset(),
+            declared_allowed=frozenset(),
+            unused_declared_params=(),
+            undeclared_param_reads=(),
+        )
+    fn = _COMPOSITE_LOWERINGS.get(resolved)
+    contract = _LOWERING_CONTRACTS.get(resolved)
+    if fn is None or contract is None:
+        return LoweringContractAudit(
+            canonical=resolved,
+            declared_params=(),
+            read_params=frozenset(),
+            declared_allowed=frozenset(),
+            unused_declared_params=(),
+            undeclared_param_reads=(),
+        )
+    read = _static_read_attr_keys(fn)
+    if read is None:
+        return LoweringContractAudit(
+            canonical=resolved,
+            declared_params=tuple(contract.deps),
+            read_params=frozenset(),
+            declared_allowed=frozenset(contract.deps) | frozenset(contract.scalar_params) | frozenset(contract.branch_params),
+            unused_declared_params=(),
+            undeclared_param_reads=(),
+            unanalyzable=True,
+        )
+    allowed = frozenset(contract.deps) | frozenset(contract.scalar_params) | frozenset(contract.branch_params)
+    unused = tuple(p for p in contract.deps if p not in read)
+    undeclared = tuple(sorted(p for p in read if p not in allowed))
+    return LoweringContractAudit(
+        canonical=resolved,
+        declared_params=tuple(contract.deps),
+        read_params=frozenset(read),
+        declared_allowed=allowed,
+        unused_declared_params=unused,
+        undeclared_param_reads=undeclared,
+    )
+
+
+def audit_all_lowering_contracts() -> dict[str, LoweringContractAudit]:
+    """R20-184: run the declared-deps audit over every registered composite."""
+    _ensure_lowerings_loaded()
+    return {canon: lowering_contract_audit(canon) for canon in sorted(_COMPOSITE_LOWERINGS)}
+
+
+#: R20-184 documented exemptions.  A canonical may be exempted from the
+#: declared-deps == actual-reads invariant ONLY with a reason; entries name the
+#: offending param and why it is acceptable.  Used for composites whose lowering
+#: lives in a file outside this round's ownership (e.g. ``planner/lowerings/
+#: timeseries.py``) or whose ``lag``/window param is read from a literal input
+#: index rather than an attr key (a scalar read, not an attr read — the legacy
+#: ``deps`` conflates the two).
+_LOWERING_CONTRACT_AUDIT_EXEMPTIONS: dict[str, dict[str, Any]] = {
+    "ts_ratio": {
+        "params": ("lag",),
+        "reason": (
+            "ts_ratio's lowering reads `lag` from input_index=1 (optional literal "
+            "input), not from node.attrs; the legacy deps=('window','lag') conflates "
+            "attr reads with scalar-input reads. Owned by planner/lowerings/"
+            "timeseries.py (read-only this round)."
+        ),
+    },
+}
+
+
+def assert_lowering_contract_invariants() -> None:
+    """Fail-closed guard: no composite may violate declared-deps == actual-reads.
+
+    Raises ``AssertionError`` (or ``RuntimeError``) listing every canonical that
+    carries an UNUSED declared dep or an UNDECLARED param read.  Documented
+    exemptions (``_LOWERING_CONTRACT_AUDIT_EXEMPTIONS``) are skipped.
+    """
+    violations: list[str] = []
+    for canon, audit in audit_all_lowering_contracts().items():
+        if audit.unanalyzable:
+            continue
+        exemption = _LOWERING_CONTRACT_AUDIT_EXEMPTIONS.get(canon)
+        unused = tuple(
+            p for p in audit.unused_declared_params
+            if not exemption or p not in exemption.get("params", ())
+        )
+        undeclared = tuple(
+            p for p in audit.undeclared_param_reads
+            if not exemption or p not in exemption.get("params", ())
+        )
+        if unused:
+            violations.append(
+                f"{canon}: UNUSED_LOWERING_DECLARED_PARAMS={','.join(unused)}"
+            )
+        if undeclared:
+            violations.append(
+                f"{canon}: UNDECLARED_LOWERING_PARAM_READS={','.join(undeclared)}"
+            )
+    if violations:
+        raise RuntimeError(
+            "R20-184 composite lowering contract violations (declared deps must "
+            "equal actual reads):\n  " + "\n  ".join(violations)
+        )
+
+
+# ---------------------------------------------------------------------------
+# R20-193..194: direct-vs-lowered differential
+# ---------------------------------------------------------------------------
+
+def composite_direct_vs_lowered_equivalent(
+    canon: str,
+    panels: list[Any],
+    *,
+    params: dict[str, Any] | None = None,
+    execute_lowered: Any | None = None,
+    rtol: float = 1e-6,
+    atol: float = 1e-8,
+) -> tuple[bool, dict[str, Any]]:
+    """R20-193..194: run the composite's DIRECT kernel vs its LOWERED plan and
+    compare, so only one production authority can survive when they diverge.
+
+    ``panels`` are positional panel inputs; ``params`` are scalar parameters.
+    ``execute_lowered`` is an optional callable ``fn(lowered_plan, panels,
+    params) -> result`` used to evaluate the lowered DAG (wired by the caller to
+    its backend).  When omitted the helper only verifies the *structural*
+    prerequisites (both a direct kernel and a lowering exist and the lowering
+    actually fires) and reports ``verifiable=False`` with the reason.
+
+    Returns ``(equivalent, report)`` where ``report`` carries per-cell max abs/
+    rel error plus sign/rank/threshold flip counts when execution is possible.
+    """
+    import numpy as np
+
+    from cleaned_operators.registry import OperatorRegistry
+
+    resolved = _resolve_composite(canon)
+    if resolved is None:
+        return False, {"reason": f"no registered lowering for {canon!r}", "canonical": str(canon)}
+    op = OperatorRegistry.get(resolved)
+    if op is None or not callable(getattr(op, "calculate", None)):
+        return False, {"reason": "no direct kernel to compare", "canonical": resolved}
+
+    # Build a PlanNode probe from the panels + params and lower it.
+    probe_inputs: list[PlanNode] = []
+    for i in range(len(panels)):
+        probe_inputs.append(PlanNode(op="column", attrs={"name": f"__p{i}__"}, inputs=[]))
+    probe = PlanNode(op=resolved, inputs=probe_inputs, attrs=dict(params or {}))
+    lowered = lower_composite_operators(probe)
+    if lowered.op == probe.op and lowered.inputs == probe.inputs:
+        return False, {"reason": "lowering did not fire", "canonical": resolved, "verifiable": False}
+
+    if execute_lowered is None:
+        return False, {
+            "reason": "no execute_lowered provided; structural check only",
+            "canonical": resolved,
+            "verifiable": False,
+            "lowered_primitives": tuple(collect_plan_ops(lowered)),
+        }
+    try:
+        direct = op.calculate(*panels, **(params or {}))
+        lowered_out = execute_lowered(lowered, panels, params or {})
+    except Exception as exc:  # noqa: BLE001
+        return False, {"reason": f"execution failed: {exc}", "canonical": resolved, "verifiable": False}
+
+    darr = np.asarray(direct, dtype=float)
+    larr = np.asarray(lowered_out, dtype=float)
+    if darr.shape != larr.shape:
+        return False, {
+            "reason": f"shape mismatch direct={darr.shape} lowered={larr.shape}",
+            "canonical": resolved,
+            "verifiable": True,
+        }
+    finite = np.isfinite(darr) & np.isfinite(larr)
+    denom = np.where(np.abs(darr) > 0, np.abs(darr), 1.0)
+    rel_err = np.where(finite, np.abs(darr - larr) / denom, 0.0)
+    abs_err = np.where(finite, np.abs(darr - larr), 0.0)
+    max_abs = float(np.max(abs_err)) if abs_err.size else 0.0
+    max_rel = float(np.max(rel_err)) if rel_err.size else 0.0
+    sign_flips = 0
+    if finite.any():
+        d_sign = np.sign(darr[finite])
+        l_sign = np.sign(larr[finite])
+        sign_flips = int((d_sign != l_sign).sum())
+    rank_keep = None
+    try:
+        if finite.sum() >= 2:
+            flat_d = darr[finite].ravel()
+            flat_l = larr[finite].ravel()
+            if len(set(flat_d.tolist())) > 1:
+                from scipy.stats import spearmanr  # type: ignore[import-untyped]
+
+                corr = spearmanr(flat_d, flat_l).statistic
+                rank_keep = None if corr is None else float(corr)
+    except Exception:  # noqa: BLE001
+        rank_keep = None
+    equivalent = (max_abs <= atol) or (max_rel <= rtol)
+    report = {
+        "canonical": resolved,
+        "max_abs_error": max_abs,
+        "max_rel_error": max_rel,
+        "sign_flips": sign_flips,
+        "rank_correlation": rank_keep,
+        "threshold_flips": 0,
+        "equivalent": equivalent,
+        "verifiable": True,
+    }
+    return equivalent, report

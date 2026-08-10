@@ -220,6 +220,11 @@ def _edge_series(
             if not (np.all(np.isfinite(run[0])) and np.all(np.isfinite(run[1]))
                     and np.all(np.isfinite(run[2])) and np.all(np.isfinite(run[3]))):
                 continue
+            # R16-153: FULL-WINDOW contiguous — a gap-shrunken short run
+            # (N < window) must NOT emit as the same estimator; an adaptive-N
+            # variant is a different canonical.
+            if run[0].shape[0] != min(w, r + 1):
+                continue
             if run[0].shape[0] < 3:
                 continue
             if np.any(run[0] <= 0.0) or np.any(run[1] <= 0.0) or np.any(run[2] <= 0.0) or np.any(run[3] <= 0.0):
@@ -286,6 +291,10 @@ def _abdi_ranaldo_series(close_2d: np.ndarray, high_2d: np.ndarray, low_2d: np.n
                 close_2d[lo : r + 1, c], high_2d[lo : r + 1, c], low_2d[lo : r + 1, c]
             )
             if run is None:
+                continue
+            # R16-153: FULL-WINDOW contiguous (a gap-shrunken short run must not
+            # emit as the same estimator).
+            if run[0].shape[0] != min(w, r + 1):
                 continue
             if np.any(run[0] <= 0.0) or np.any(run[1] <= 0.0) or np.any(run[2] <= 0.0):
                 continue
@@ -360,6 +369,10 @@ def _ps_series(
                 ret_2d[lo : r + 1, c], bench_2d[lo : r + 1, c], amount_2d[lo : r + 1, c]
             )
             if run is None:
+                continue
+            # R16-153: FULL-WINDOW contiguous (a gap-shrunken short run must not
+            # emit as the same estimator).
+            if run[0].shape[0] != min(w, r + 1):
                 continue
             if run[0].shape[0] < 4:
                 continue

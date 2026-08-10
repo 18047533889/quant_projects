@@ -19,7 +19,8 @@ from cleaned_operators.fundamental.quality_v2 import (
     _reject_ytd_growth,
     _require_same_flow_grain,
 )
-from cleaned_operators.fundamental.transforms_v2 import _lag_value, _walk_periods
+from cleaned_operators.fundamental.transforms_v2 import _lag_value, _pos_int, _walk_periods
+from cleaned_operators.fiscal_strict import GROWTH_FORBIDDEN_FLOW_TYPES, flow_types as _flow_types
 
 _EPS = 1e-12
 _CANONICALS: list[str] = []
@@ -75,7 +76,9 @@ def _growth(x: pd.DataFrame, period_id: pd.DataFrame, periods: int = 1, flow_typ
     # Finding #52: growth over a cumulative-YTD input is not a period growth
     # rate; a caller that declares the YTD grain is rejected at the boundary.
     _reject_ytd_growth("fin_growth", flow_type)
-    p = max(1, int(periods))
+    # R23-295: strict integer authority — reject True/3.7/nan/inf/"3.7", never
+    # coerce (the old ``max(1, int(periods))`` silently truncated 3.7 -> 3).
+    p = _pos_int(periods, "periods")
     return _walk_periods(x, period_id, lambda o, v, c: _pct_change(float(v[c]), _lag_value(o, v, c, p)))
 
 
@@ -86,7 +89,8 @@ def _pct_change(cur: float, old: float) -> float:
 
 
 def _delta(x: pd.DataFrame, period_id: pd.DataFrame, periods: int = 1) -> pd.DataFrame:
-    p = max(1, int(periods))
+    # R23-295: strict integer authority (see ``_growth``).
+    p = _pos_int(periods, "periods")
     return _walk_periods(x, period_id, lambda o, v, c: float(v[c]) - _lag_value(o, v, c, p))
 
 
@@ -111,37 +115,57 @@ def _financing_gap(c, d, di, o, aa, flow_type=None):
 # ---------------------------------------------------------------------------
 
 def _divergence(a: pd.DataFrame, b: pd.DataFrame, period_id: pd.DataFrame, flow_type=None) -> pd.DataFrame:
-    _require_same_flow_grain("fin_divergence", flow_type, 2)
-    return _growth(a, period_id, flow_type=flow_type) - _growth(b, period_id, flow_type=flow_type)
+    # R23-296 (per-slot grain contract): ``a`` is a balance-sheet Stock (e.g.
+    # receivables / inventories) and ``b`` is a Flow (e.g. revenue).  A single
+    # "same flow grain" rule over-rejects the valid (Stock, Flow) pair and a
+    # ``flow_type=None`` skips all checking — so the contract is per-slot:
+    #   slot A: Stock | SinglePeriodFlow | TTMFlow
+    #   slot B: SinglePeriodFlow | TTMFlow
+    #   comparison interval: SAME fiscal interval (both walks share period_id)
+    # A CumulativeYTDFlow on either slot is rejected — its growth is not a
+    # period growth rate.
+    if flow_type is not None:
+        types = _flow_types(flow_type, 2)
+        for slot_label, t in zip(("a", "b"), types):
+            if t in GROWTH_FORBIDDEN_FLOW_TYPES:
+                raise ValueError(
+                    f"fin_divergence slot {slot_label}: growth over a "
+                    f"CumulativeYTDFlow input is not a period growth rate; "
+                    "convert with fin_quarter_from_cumulative first."
+                )
+    # Pass flow_type=None to _growth: the per-slot YTD rejection is already
+    # enforced at the divergence boundary above, and the same-grain rule must
+    # not fire on a legitimate (Stock, Flow) pair.
+    return _growth(a, period_id) - _growth(b, period_id)
 
 
 _mk(
     "fin_receivable_sales_divergence",
-    "应收增长 - 营收增长。",
+    "应收增长 - 营收增长（per-slot：slot_a=Stock，slot_b=SinglePeriodFlow，同一 fiscal interval；R23-296）。",
     ["account_receivable", "operating_revenue", "period_id", "flow_type"],
     lambda a, b, period_id, flow_type=None: _divergence(a, b, period_id, flow_type),
-    extra_tags=["flow_type:SinglePeriodFlow"],
+    extra_tags=["flow_slot_a:Stock", "flow_slot_b:SinglePeriodFlow", "comparison_interval:same_fiscal_interval"],
 )
 _mk(
     "fin_inventory_sales_divergence",
-    "存货增长 - 营收增长。",
+    "存货增长 - 营收增长（per-slot：slot_a=Stock，slot_b=SinglePeriodFlow；R23-296）。",
     ["inventories", "operating_revenue", "period_id", "flow_type"],
     lambda a, b, period_id, flow_type=None: _divergence(a, b, period_id, flow_type),
-    extra_tags=["flow_type:SinglePeriodFlow"],
+    extra_tags=["flow_slot_a:Stock", "flow_slot_b:SinglePeriodFlow", "comparison_interval:same_fiscal_interval"],
 )
 _mk(
     "fin_cash_sales_divergence",
-    "销售收现增长 - 营收增长。",
+    "销售收现增长 - 营收增长（per-slot：slot_a=Stock，slot_b=SinglePeriodFlow；R23-296）。",
     ["goods_sale_cash", "operating_revenue", "period_id", "flow_type"],
     lambda a, b, period_id, flow_type=None: _divergence(a, b, period_id, flow_type),
-    extra_tags=["flow_type:SinglePeriodFlow"],
+    extra_tags=["flow_slot_a:Stock", "flow_slot_b:SinglePeriodFlow", "comparison_interval:same_fiscal_interval"],
 )
 _mk(
     "fin_expense_sales_divergence",
-    "期间费用增长 - 营收增长。",
+    "期间费用增长 - 营收增长（per-slot：slot_a=Stock，slot_b=SinglePeriodFlow；R23-296）。",
     ["period_expense", "operating_revenue", "period_id", "flow_type"],
     lambda a, b, period_id, flow_type=None: _divergence(a, b, period_id, flow_type),
-    extra_tags=["flow_type:SinglePeriodFlow"],
+    extra_tags=["flow_slot_a:Stock", "flow_slot_b:SinglePeriodFlow", "comparison_interval:same_fiscal_interval"],
 )
 
 

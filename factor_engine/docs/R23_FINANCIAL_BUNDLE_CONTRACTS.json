@@ -1,0 +1,18 @@
+{
+  "StockBalance": {
+    "statement_family": "balance",
+    "grain": "stock",
+    "same_period_required_for_multi_statement": true
+  },
+  "StockIncome": {
+    "statement_family": "income",
+    "grain": "flow_ytd/quarterly/TTM",
+    "timeframe_required": true
+  },
+  "StockCashFlow": {
+    "statement_family": "cashflow",
+    "grain": "flow_ytd/quarterly/TTM",
+    "timeframe_required": true
+  },
+  "policy": "multi-statement operators require same fiscal_period + compatible vintage + flow timeframe (R23-032..036)"
+}

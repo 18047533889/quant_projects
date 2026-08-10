@@ -37,24 +37,55 @@ pip install "data-access @ git+https://<TOKEN>@github.com/HKUST-QUANT-SOCIETY/da
 | `FACTOR_ENGINE_SERVICE_ROOT` | job manifest 落盘根 | `./.factor_engine_service` |
 | `FACTOR_ENGINE_SERVICE_SYNC` | `1` 时默认同步跑完再返回 | 关（后台线程） |
 | `FACTOR_ENGINE_OPERATOR_BACKEND` | inline compute 未指定 backend 时 | `auto` |
+| `FACTOR_ENGINE_SERVICE_API_KEY` | 服务 API key（配置后所有路由需认证） | 无 |
+| `FACTOR_ENGINE_SERVICE_API_KEY_MAPPING` | JSON `{key: {identity, roles}}` 主体映射（R21-015） | `{}` |
+| `FACTOR_ENGINE_SERVICE_ALLOW_OPEN` | 允许 research 路由匿名（不影响 production 路由，R21-013） | 关 |
+| `FACTOR_ENGINE_SERVICE_DURABLE_STORE` | `sqlite` 启用多 worker 安全的持久化 job store（R21-076..079） | JSON manifests |
+| `FACTOR_ENGINE_SERVICE_MAX_QUEUE` / `MAX_WORKERS` | 有界队列 / 并发 worker（R21-048..051） | `64` / `4` |
+| `FACTOR_ENGINE_SERVICE_JOB_TIMEOUT` | 任务超时秒（R21-055） | `300` |
+| `FACTOR_ENGINE_SERVICE_SOURCE_PROFILES` | JSON 已批准数据源 profile（R21-020） | `{}` |
+| `FACTOR_ENGINE_SERVICE_MAX_FORMULA_BYTES` | 公式字节上限（R21-038） | `65536` |
 
 Manifest 路径：`$FACTOR_ENGINE_SERVICE_ROOT/manifests/{run_id}.json`
 
 ---
 
-## 2. 接口一览
+## 2. 接口一览（R21）
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/health` | 存活：`{"status":"ok","service":"factor_engine"}` |
+| GET | `/livez` | 仅进程存活（R21-083） |
+| GET | `/readyz` | 就绪：blocker / disk / queue / 证据一致性（R21-084..086） |
+| GET | `/metrics` | 核心 metrics + 队列快照 |
 | GET | `/factor-engine/operators` | DSL 白名单算子列表 |
 | POST | `/factor-engine/validate-spec` | 校验 DSL / spec（**不跑数**） |
-| POST | `/factor-engine/jobs/compute` | 提交计算任务 |
-| POST | `/factor-engine/jobs/materialize` | 提交物化任务 |
-| GET | `/factor-engine/jobs/{run_id}` | 任务状态 + `result_summary` |
-| GET | `/factor-engine/jobs/{run_id}/artifacts` | 产物路径 / preview |
+| POST | `/factor-engine/research/compute` | research 计算（允许 sync） |
+| POST | `/factor-engine/production/compute` | production 计算（**恒异步**，需 API key） |
+| POST | `/factor-engine/production/materialize` | production 物化（需 MATERIALIZE 权限） |
+| POST | `/factor-engine/jobs/compute` | 通用计算（与专用路由同一校验/admission，R21-225） |
+| POST | `/factor-engine/jobs/materialize` | 通用物化 |
+| GET | `/factor-engine/jobs/{run_id}` | 任务状态（owner-or-admin，R21-017） |
+| GET | `/factor-engine/jobs/{run_id}/artifacts` | 产物（owner-or-admin） |
+| POST | `/factor-engine/jobs/{run_id}/cancel` | 取消（R21-057） |
+| POST | `/factor-engine/jobs/{run_id}/retry` | 重试（R21-167..170） |
 
 OpenAPI：`http://主机:8088/docs`
+
+### 2.1 认证 / 授权（R21-011..018）
+
+- `FACTOR_ENGINE_SERVICE_API_KEY` 配置后，所有路由都要求有效 `X-API-Key`；
+  `FACTOR_ENGINE_SERVICE_ALLOW_OPEN=1` 只放行 research 路由。
+- production 路由**无条件**要求认证，不受 ambient `QUANT_PRODUCTION_MODE` 影响。
+- 主体来自 API-key→principal 映射 / JWT / mTLS / 反向代理，**不信任
+  `X-Request-Identity` 头**（R21-014）。
+- `GET /jobs/{id}` 与 `/artifacts` 默认 owner-or-admin（R21-017）。
+
+### 2.2 production 政策不可降级（R21-001..005）
+
+production endpoint 调 config 时强制 production：config 中 research /
+`pit_enforce=false` / `dq.strict=false` / 直接本地写 target 一律拒绝
+（`PRODUCTION_ENDPOINT_CONFIG_POLICY_CONFLICT`），不会静默按 research 跑。
 
 ---
 

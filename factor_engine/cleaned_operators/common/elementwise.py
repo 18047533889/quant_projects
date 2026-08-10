@@ -30,6 +30,8 @@ from cleaned_operators._causal import (
 from cleaned_operators.base import (
     Operator,
     OperatorMetadata,
+    ParamRole,
+    ParamSpec,
     SeriesOperator,
     ScalarOperator,
     TwoVarOperator,
@@ -66,12 +68,12 @@ class Abs(SeriesOperator):
 # canonical=acos backend=pandas_numpy selected=acos source=math/trigonometric.py
 @register_operator(name="acos", category="math", business_category="elementwise_math", canonical="acos", source="factor_dsl_np")
 class Acos(SeriesOperator):
-    """反余弦"""
+    """反余弦（定义域 [-1,1]，越界 → NaN）"""
 
     metadata = OperatorMetadata(
         name="acos",
         category="math",
-        description="计算反余弦值（返回弧度）",
+        description="计算反余弦值（返回弧度；定义域 [-1,1]，越界 → NaN）",
         examples=["acos(value)"],
         param_names=["x"],
         return_type="series",
@@ -79,7 +81,14 @@ class Acos(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return np.arccos(x)
+        # R19-095: asin/acos 只在 [-1,1] 有实数定义；越界/±Inf/NaN → NaN，
+        # 与 polars/duckdb 一致，且用 errstate 抑制 numpy RuntimeWarning。
+        base = x.astype(float)
+        in_domain = base.abs() <= 1.0
+        with np.errstate(invalid="ignore"):
+            result = np.arccos(base)
+        result = result.where(in_domain, np.nan)
+        return result.replace([np.inf, -np.inf], np.nan)
 
 
 
@@ -106,12 +115,12 @@ class Arg(SeriesOperator):
 # canonical=asin backend=pandas_numpy selected=asin source=math/trigonometric.py
 @register_operator(name="asin", category="math", business_category="elementwise_math", canonical="asin", source="factor_dsl_np")
 class Asin(SeriesOperator):
-    """反正弦"""
+    """反正弦（定义域 [-1,1]，越界 → NaN）"""
 
     metadata = OperatorMetadata(
         name="asin",
         category="math",
-        description="计算反正弦值（返回弧度）",
+        description="计算反正弦值（返回弧度；定义域 [-1,1]，越界 → NaN）",
         examples=["asin(value)"],
         param_names=["x"],
         return_type="series",
@@ -119,7 +128,64 @@ class Asin(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return np.arcsin(x)
+        # R19-095: asin/acos 只在 [-1,1] 有实数定义；越界/±Inf/NaN → NaN，
+        # 与 polars/duckdb 一致，且用 errstate 抑制 numpy RuntimeWarning。
+        base = x.astype(float)
+        in_domain = base.abs() <= 1.0
+        with np.errstate(invalid="ignore"):
+            result = np.arcsin(base)
+        result = result.where(in_domain, np.nan)
+        return result.replace([np.inf, -np.inf], np.nan)
+
+
+
+# R22-047..049: bounded-input inverse-trig building blocks.  Only correlation /
+# bounded-ratio / normalized-state inputs are legal (domain [-1,1]); out-of-range
+# values are NaN, identical to the generic asin semantics.
+@register_operator(name="asin_bounded", category="math", business_category="elementwise_math", canonical="asin_bounded", source="factor_dsl_np")
+class AsinBounded(SeriesOperator):
+    """反正弦（bounded-input variant: only correlation / bounded-ratio / normalized-state [-1,1]）"""
+
+    metadata = OperatorMetadata(
+        name="asin_bounded",
+        category="math",
+        description="反余弦角（定义域 [-1,1]，越界 → NaN；仅允许 correlation / bounded ratio / normalized state 输入）",
+        examples=["asin_bounded(corr)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["math", "trigonometric", "inverse", "typed_bounded"]
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        base = x.astype(float)
+        in_domain = base.abs() <= 1.0
+        with np.errstate(invalid="ignore"):
+            result = np.arcsin(base)
+        result = pd.DataFrame(result, index=x.index, columns=x.columns).where(in_domain, np.nan)
+        return result.replace([np.inf, -np.inf], np.nan)
+
+
+@register_operator(name="acos_bounded", category="math", business_category="elementwise_math", canonical="acos_bounded", source="factor_dsl_np")
+class AcosBounded(SeriesOperator):
+    """反余弦（bounded-input variant: only correlation / bounded-ratio / normalized-state [-1,1]）"""
+
+    metadata = OperatorMetadata(
+        name="acos_bounded",
+        category="math",
+        description="反余弦角（定义域 [-1,1]，越界 → NaN；仅允许 correlation / bounded ratio / normalized state 输入）",
+        examples=["acos_bounded(corr)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["math", "trigonometric", "inverse", "typed_bounded"]
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        base = x.astype(float)
+        in_domain = base.abs() <= 1.0
+        with np.errstate(invalid="ignore"):
+            result = np.arccos(base)
+        result = pd.DataFrame(result, index=x.index, columns=x.columns).where(in_domain, np.nan)
+        return result.replace([np.inf, -np.inf], np.nan)
 
 
 
@@ -178,10 +244,18 @@ class BlomTransform(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        ranked = x.rank(axis=1, method='average')
-        n = x.count(axis=1).to_numpy(dtype=float)[:, None]
-        result = sp_stats.norm.ppf((ranked - 3 / 8) / (n + 1 / 4))
-        return pd.DataFrame(result, index=x.index, columns=x.columns).replace([np.inf, -np.inf], np.nan)
+        # R19-098: count/rank 统一 finite mask —— ±Inf 既不能计入 n，也不能作为极端
+        # rank 参与；其 cell 输出 NaN。与 cs_rank_01/cs_rank_pct 的 finite policy 对齐。
+        arr = x.to_numpy(dtype=float, copy=False)
+        valid = pd.DataFrame(np.isfinite(arr), index=x.index, columns=x.columns)
+        masked = x.where(valid)
+        ranked = masked.rank(axis=1, method='average')
+        n = valid.sum(axis=1).to_numpy(dtype=float)[:, None]
+        with np.errstate(invalid="ignore"):
+            result = sp_stats.norm.ppf((ranked - 3 / 8) / (n + 1 / 4))
+        result = pd.DataFrame(result, index=x.index, columns=x.columns)
+        result = result.where(valid, np.nan)
+        return result.replace([np.inf, -np.inf], np.nan)
 
 
 
@@ -236,12 +310,23 @@ class Cap(SeriesOperator):
         examples=["cap(x, -3, 3)"],
         param_names=["x", "lo", "hi"],
         return_type="series",
-        tags=["math", "utility", "clip", "clamp"]
+        tags=["math", "utility", "clip", "clamp"],
+        # R19-124 hidden-kwargs 收口: legacy ``min``/``max`` spellings declared as
+        # explicit aliases (与 polars ``ClipPolars`` 一致),不再是 hidden kwargs。
+        param_aliases={"min": "lo", "max": "hi"},
+        param_specs={
+            "lo": ParamSpec(dtype=float, default=-3.0, searchable=True,
+                            param_role=ParamRole.ECONOMIC),
+            "hi": ParamSpec(dtype=float, default=3.0, searchable=True,
+                            param_role=ParamRole.ECONOMIC),
+        },
     )
 
     def _calculate_series(self, x: pd.DataFrame, lo: float = -3.0, hi: float = 3.0, **kwargs) -> pd.DataFrame:
-        min_val = float(kwargs.get("min", lo))
-        max_val = float(kwargs.get("max", hi))
+        from cleaned_operators.common.strict_params import strict_float
+
+        min_val = strict_float(kwargs.get("min", lo), "lo")
+        max_val = strict_float(kwargs.get("max", hi), "hi")
         return x.clip(lower=min_val, upper=max_val).replace([np.inf, -np.inf], np.nan)
 
 
@@ -594,12 +679,12 @@ class Eig(SeriesOperator):
 # canonical=exp backend=pandas_numpy selected=exp source=math/elementary.py
 @register_operator(name="exp", category="math", business_category="elementwise_math", canonical="exp", source="factor_dsl_np")
 class Exp(SeriesOperator):
-    """指数函数"""
+    """指数函数（溢出 → ±Inf 保留，见 exp_overflow_policy）"""
 
     metadata = OperatorMetadata(
         name="exp",
         category="math",
-        description="计算e的x次方",
+        description="计算e的x次方（溢出 exp(1000)=Inf 保留，不转 NaN；polars/duckdb 一致）",
         examples=["exp(Return)", "exp(close - mean(close, 20))"],
         param_names=["x"],
         return_type="series",
@@ -607,7 +692,11 @@ class Exp(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return np.exp(x)
+        # R19-097: exp overflow policy = allow_inf（pandas/polars/duckdb 的 exp 溢出
+        # 都产生 ±Inf 并保留，见 backend.numeric_semantics.exp_overflow_policy）。
+        # errstate 抑制 numpy OverflowWarning，输出语义不变。
+        with np.errstate(over="ignore", invalid="ignore"):
+            return np.exp(x)
 
 
 
@@ -1499,12 +1588,12 @@ class Polar(SeriesOperator):
 # canonical=power backend=pandas_numpy selected=pow source=math/elementary.py
 @register_operator(name="pow", category="math", business_category="elementwise_math", canonical="power", source="factor_dsl_np")
 class Pow(SeriesOperator):
-    """幂函数"""
+    """幂函数（实数域：负数底数 & 非整数指数 → NaN）"""
 
     metadata = OperatorMetadata(
         name="pow",
         category="math",
-        description="计算x的y次方",
+        description="计算x的y次方（实数域策略：负数底数 & 非整数指数 → NaN，整数指数 → 实数）",
         examples=["pow(close, 2)", "pow(volume, 0.5)"],
         param_names=["x", "y"],
         return_type="series",
@@ -1512,7 +1601,17 @@ class Pow(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, y: float = 2, **kwargs) -> pd.DataFrame:
-        return np.power(x, y)
+        # R19-096: real-domain policy —— 负数底数 & 非整数指数 → NaN；y 为整数 → 实数。
+        # 与 polars/duckdb 一致（见 backend.numeric_semantics.power_real_domain_policy）。
+        base = x.astype(float)
+        exp = float(y)
+        is_integer_exp = float(exp).is_integer()
+        with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+            result = np.power(base, exp)
+        if not is_integer_exp:
+            # 负数底数 & 非整数指数：实数域无定义 → NaN（numpy 已给 NaN，这里显式声明）。
+            result = result.where(base >= 0, np.nan)
+        return result.replace([np.inf, -np.inf], np.nan)
 
 # aliases: POWER
 
@@ -1768,6 +1867,46 @@ class Sin(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         return np.sin(x)
 
+
+
+# R22-047..049: typed cyclic/phase variants of the generic sin/cos.  The
+# generic names stay MOVE_INTERNAL (raw math is not a factor canonical); these
+# typed building blocks are DIRECT_INTERMEDIATE and only accept a phase /
+# cyclic-position / normalized-angular-state input (never a raw price/amount).
+@register_operator(name="sin_phase", category="math", business_category="elementwise_math", canonical="sin_phase", source="factor_dsl_np")
+class SinPhase(SeriesOperator):
+    """sin of a phase/cyclic-position signal (radians or normalized 0..2π)."""
+
+    metadata = OperatorMetadata(
+        name="sin_phase",
+        category="math",
+        description="相位/循环位置正弦（输入须为 phase_radians / cyclic_position / normalized angular state）",
+        examples=["sin_phase(phase)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["math", "trigonometric", "typed_phase"]
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        return np.sin(x)
+
+
+@register_operator(name="cos_phase", category="math", business_category="elementwise_math", canonical="cos_phase", source="factor_dsl_np")
+class CosPhase(SeriesOperator):
+    """cos of a phase/cyclic-position signal (radians or normalized 0..2π)."""
+
+    metadata = OperatorMetadata(
+        name="cos_phase",
+        category="math",
+        description="相位/循环位置余弦（输入须为 phase_radians / cyclic_position / normalized angular state）",
+        examples=["cos_phase(phase)"],
+        param_names=["x"],
+        return_type="series",
+        tags=["math", "trigonometric", "typed_phase"]
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        return np.cos(x)
 
 
 # canonical=sinh backend=pandas_numpy selected=sinh source=math/trigonometric.py
@@ -2532,3 +2671,14 @@ class ReverseOp(SeriesOperator):
 
     def _calculate_series(self, x, **kwargs):
         return -x
+
+
+# R22-047..049: typed phase/bounded trig building blocks live on the extended
+# authoring surface (composition lanes, never a bare daily terminal).  The
+# generic sin/cos/asin/acos names are MOVE_INTERNAL in DirectUse; these typed
+# variants carry the phase/cyclic/correlation input contract.
+from cleaned_operators.operator_surface import extend_extended_only  # noqa: E402
+
+extend_extended_only(
+    ["sin_phase", "cos_phase", "asin_bounded", "acos_bounded"]
+)

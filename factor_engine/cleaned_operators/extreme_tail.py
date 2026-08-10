@@ -186,7 +186,15 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
             continue  # log-ratio is undefined for a zero / non-finite threshold
         if exc.size < mtc:
             continue
-        xi = float(np.mean(np.log(exc / u)))
+        # R16-140: classic Hill is defined on a STRICTLY-POSITIVE tail magnitude.
+        # A ``u < 0`` threshold with a mixed-sign exceedance set would feed
+        # ``log(negative)`` into the mean; that is undefined, not a valid
+        # estimator.  Every ratio ``x_i / u`` must be strictly positive (same
+        # sign, same as the threshold) — otherwise the window is NaN.
+        ratios = exc / u
+        if np.any(ratios <= 0.0) or not np.all(np.isfinite(ratios)):
+            continue
+        xi = float(np.mean(np.log(ratios)))
         if np.isfinite(xi):
             out[t] = xi
     return out

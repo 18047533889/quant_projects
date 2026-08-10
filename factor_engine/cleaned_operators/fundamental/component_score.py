@@ -32,6 +32,15 @@ def _metadata(name: str, params: list[str]) -> OperatorMetadata:
             "fundamental", "daily", "pit_safe", "causal", "typed_v2",
             f"signature:{','.join(params)}->series", "domain:score",
             "unit:score", "cost:1",
+            # R23-300 axis contract: the single ``components`` input is a
+            # COMPONENT-STACK panel (columns = components), NOT a standard
+            # date x instrument panel.  In the standard FactorEngine panel the
+            # columns are instruments, so passing such a panel here would treat
+            # instruments as components and broadcast the cross-sectional score
+            # back onto the stock columns — an implicit shape that is forbidden.
+            # This canonical is SUPPORTING_ONLY until a proper multi-panel
+            # component contract (or a ``ComponentStack`` semantic type) lands.
+            "component_stack_axis", "supporting_only",
         ],
     )
 

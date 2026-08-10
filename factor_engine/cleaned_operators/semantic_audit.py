@@ -66,6 +66,11 @@ class AuditReport:
     skipped: dict[str, list[str]] = field(default_factory=dict)  # rule -> NOT_APPLICABLE reasons
     audit_errors: dict[str, list[str]] = field(default_factory=dict)  # rule -> AUDIT_ERROR reasons
     evidence: dict[str, dict[str, Any]] = field(default_factory=dict)  # canonical -> evidence record
+    # R16-042/044: per-canonical REQUIRED-rule coverage.  A canonical's required
+    # rules that got NO outcome (NOT_RUN) make certification unsafe; the
+    # outcome-matrix hash binds the evidence record to the actual rule results.
+    required_missing: dict[str, list[str]] = field(default_factory=dict)
+    outcome_matrix: dict[tuple[str, str], str] = field(default_factory=dict)  # (canonical, rule) -> PASS|FAIL|N/A|AUDIT_ERROR
 
     def add(self, finding: AuditFinding) -> None:
         self.findings.append(finding)
@@ -105,9 +110,17 @@ class AuditReport:
         }
 
     def certification_safe(self) -> bool:
-        """R13 NEW-P0-71: the audit run is safe to use as certification evidence
-        ONLY when no error-severity finding fired and no rule crashed."""
-        return not self.errors and self.audit_error_count == 0
+        """R13 NEW-P0-71 + R16-042: the audit run is safe to use as
+        certification evidence ONLY when no error-severity finding fired, no
+        rule crashed, AND every canonical's REQUIRED rules got a PASS (or a
+        reviewed N/A) outcome.  A canonical with required rules that never ran
+        (NOT_RUN) is NOT safe — a large NOT_APPLICABLE / NOT_RUN count with no
+        error finding must not certify."""
+        if self.errors or self.audit_error_count:
+            return False
+        if self.required_missing:
+            return False
+        return True
 
     def summary(self) -> str:
         lines = [f"{len(self.findings)} findings across {len(self.ran)} rules"]
@@ -1137,18 +1150,36 @@ def _run_rule_sweep(
         entry = RULES.get(rule)
         if entry is None:
             raise KeyError(f"no audit rule {rule!r}")
+        # R16-041: a rule that reports NOT_APPLICABLE (note_skipped) must not
+        # ALSO be counted as checked — the pre/post skip-count snapshot gives
+        # every (canonical, rule) exactly ONE outcome instead of double-counting.
+        pre_skip = len(report.skipped.get(rule, ()))
+        pre_err = len(report.audit_errors.get(rule, ()))
         try:
             findings = entry["check"](op, ctx)
         except Exception as exc:  # noqa: BLE001 — rule crashed on the operator
             report.note_audit_error(rule, f"{name}: {type(exc).__name__}: {exc}")
+            report.outcome_matrix[(name, rule)] = "AUDIT_ERROR"
             continue
         for finding in findings:
             report.add(finding)
-        report.note_ran(rule)
+        post_skip = len(report.skipped.get(rule, ()))
+        post_err = len(report.audit_errors.get(rule, ()))
+        if post_err > pre_err:
+            report.outcome_matrix[(name, rule)] = "AUDIT_ERROR"
+        elif post_skip > pre_skip:
+            report.outcome_matrix[(name, rule)] = "N/A"
+        else:
+            report.outcome_matrix[(name, rule)] = "PASS" if not findings else "FAIL"
+            report.note_ran(rule)  # genuinely checked (PASS or FAIL)
 
 
 # R13 NEW-P0-06: rules that can run on a contract-generated fixture over the
 # WHOLE production/searchable catalog (not just the 7 curated SAMPLE ops).
+# R16-040: ``param_role_declared`` and ``relational_constraints`` are part of
+# the REQUIRED catalog sweep — a production target's searchable scalars must
+# actually be checked for a declared ParamRole and its relations enforced, not
+# just described in a comment.
 _CONTRACT_CATALOG_RULES: tuple[str, ...] = (
     "default_output_finite",
     "default_searchability",
@@ -1159,7 +1190,32 @@ _CONTRACT_CATALOG_RULES: tuple[str, ...] = (
     "mirror_symmetry",
     "canonical_honesty",
     "semantic_type_gate",
+    "param_role_declared",
+    "relational_constraints",
 )
+
+
+def _required_rules_for(canonical: str, rules: tuple[str, ...]) -> tuple[str, ...]:
+    """R16-039/040: the REQUIRED rule set for a canonical.
+
+    Every rule the catalog sweep is asked to run is required to have an outcome
+    for every applicable production canonical (a rule that cannot decide for
+    this canonical reports N/A with a reason — which IS an outcome).  This is
+    the machine required-rule matrix: nothing is inferred from comments.
+    """
+    return tuple(rules)
+
+
+def _outcome_matrix_hash(report: AuditReport, canonical: str) -> str:
+    """R16-044: stable hash over this canonical's (rule, outcome) pairs."""
+    import hashlib
+
+    pairs = sorted(
+        (rule, outcome)
+        for (canon, rule), outcome in report.outcome_matrix.items()
+        if canon == canonical
+    )
+    return hashlib.sha256(repr(pairs).encode("utf-8")).hexdigest()[:16]
 
 
 def audit_all(*, rule_names: tuple[str, ...] | None = None, sample_limit: int | None = None) -> AuditReport:
@@ -1201,11 +1257,16 @@ def audit_all(*, rule_names: tuple[str, ...] | None = None, sample_limit: int | 
         try:
             op = _resolve_op(canonical)
         except KeyError:
-            report.note_skipped("(catalog-resolve)", f"{canonical}: not in registry")
+            # R16-043: a production target that cannot even be RESOLVED is an
+            # audit error, not a skip — registry membership is the precondition.
+            report.note_audit_error("(catalog-resolve)", f"{canonical}: not in registry")
             continue
         fixture = contract_fixture(canonical)
         if fixture is None:
-            report.note_skipped(
+            # R16-043: the operator IS resolvable but the fixture generator
+            # cannot determine its panel inputs — that is an AUDIT_ERROR (an
+            # unresolvable ResolvedSignature), never a silent NOT_APPLICABLE.
+            report.note_audit_error(
                 "(catalog-fixture)",
                 f"{canonical}: no runnable contract fixture (required panels/units undeterminable)",
             )
@@ -1214,6 +1275,17 @@ def audit_all(*, rule_names: tuple[str, ...] | None = None, sample_limit: int | 
         # every searchable scalar must declare ParamSpec + ParamRole.
         fixture = replace(fixture, production_candidate=True)
         _run_rule_sweep(report, op, fixture, rules)
+        # R16-039/042: every REQUIRED rule must have exactly one outcome for
+        # this canonical.  A required rule with NO outcome is NOT_RUN and
+        # blocks certification.
+        required = _required_rules_for(canonical, rules)
+        missing = [r for r in required if (canonical, r) not in report.outcome_matrix]
+        if missing:
+            report.required_missing[canonical] = missing
+        # R16-044: the evidence record references an outcome-MATRIX hash +
+        # required coverage — "has an evidence record" must prove the required
+        # rules all had an outcome, not just that a bool was written.
+        outcome_hash = _outcome_matrix_hash(report, canonical)
         # R13 NEW-P0-71: a per-canonical evidence record binds the audited
         # implementation hash + fixture source + rule family, so a production
         # certification record can cite WHICH implementation + WHICH rules were
@@ -1226,5 +1298,8 @@ def audit_all(*, rule_names: tuple[str, ...] | None = None, sample_limit: int | 
             "implementation_hash": impl_hash,
             "fixture": "contract",
             "rule_family": list(rules),
+            "outcome_matrix_hash": outcome_hash,
+            "required_rules_with_outcome": len(required) - len(missing),
+            "required_rules_total": len(required),
         }
     return report

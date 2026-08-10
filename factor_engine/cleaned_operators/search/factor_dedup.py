@@ -206,6 +206,8 @@ NUMERIC_CONTROL_PARAMS = frozenset({
     "max_iter", "n_iter", "segments", "min_segments", "max_segments",
     "include_current", "left", "right", "up_count", "down_count",
     "n_levels", "n_buckets", "preset", "side",
+    # R22: more scalar knobs that a generic name heuristic could misread as panel
+    "epsilon", "revision_policy", "min_effective", "k_scale",
 })
 
 
@@ -239,14 +241,32 @@ def split_scalar_panel_params(
             inferred_panel = set(spec.panel_params)
     except Exception:
         inferred_panel = set()
+    # R22-127/129: any parameter with a declared ``ParamSpec.param_role`` is a
+    # scalar knob (estimator resolution / support policy / model order / ...),
+    # never a panel data field — even if a legacy metadata block (mis)lists it
+    # in ``input_fields`` (e.g. DMD ``rank/dim/delay``, HSIC ``purge_gap``).
+    try:
+        role_scalars = {
+            name
+            for name, spec in (getattr(meta, "param_specs", None) or {}).items()
+            if getattr(spec, "param_role", None) is not None
+        }
+    except Exception:
+        role_scalars = set()
     panel = declared_panel | declared_inputs | inferred_panel
     if panel:
         # A numeric-control knob (window/lag/...) can never be a PANEL data
         # field, even if a legacy metadata block (mis)lists it in
         # ``input_fields`` — see ts_average_volume / ts_regression_slope.
-        panel = {p for p in panel if p in all_params and p not in NUMERIC_CONTROL_PARAMS}
+        panel = {
+            p
+            for p in panel
+            if p in all_params
+            and p not in NUMERIC_CONTROL_PARAMS
+            and p not in role_scalars
+        }
         return [p for p in all_params if p not in panel], [p for p in all_params if p in panel]
-    scalar = [p for p in all_params if p in NUMERIC_CONTROL_PARAMS]
+    scalar = [p for p in all_params if p in NUMERIC_CONTROL_PARAMS or p in role_scalars]
     return scalar, [p for p in all_params if p not in scalar]
 
 

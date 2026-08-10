@@ -238,12 +238,13 @@ class GroupDemean(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
         from cleaned_operators._numpy_kernels import group_demean_panel_
 
-        if group is None:
-            # Legacy alias contract: neutralize(x) / group_demean(x) without a
-            # group degrades to cs_demean (row-wise demean).  Returning NaN for
-            # the no-group call would silently break that documented alias.
-            return x.sub(x.mean(axis=1), axis=0)
-        g = group.reindex(index=x.index, columns=x.columns).to_numpy()
+        # R19-063..065: a missing ``group`` must NOT silently degrade to a
+        # global cross-sectional demean — that is a different factor, not a
+        # fallback.  Route the no-group call through the kernel's declared
+        # ``fallback`` policy: the default ``"nan"`` leaves the output NaN
+        # (fail-closed); only the explicit ``fallback_policy="global"`` opts
+        # into row-wise demean, and ``"keep_original"`` preserves the input.
+        g = group.reindex(index=x.index, columns=x.columns).to_numpy() if group is not None else None
         out = group_demean_panel_(
             x.to_numpy(dtype=float, copy=False), g, fallback=fallback_policy
         )
@@ -436,10 +437,10 @@ class GroupCount(SeriesOperator):
                     result.loc[date] = x_slice
                     continue
 
-                result.loc[date] = x_slice.notna().sum()
+                result.loc[date] = np.isfinite(x_slice.to_numpy(dtype=float)).sum()
                 continue
             for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
+                mask = (group_slice == group_val).to_numpy() & np.isfinite(x_slice.to_numpy(dtype=float))
                 result.loc[date, x_slice[mask].index] = float(mask.sum())
         return result
 

@@ -257,9 +257,55 @@ def _factor_dialect(factor_payload: dict[str,Any]) -> tuple[str,str,str|None]:
     elif version is not None: raise ValueError("factor.dialect_version is only valid when factor.dialect='lqtp'")
     return surface,dialect,version
 
+CONFIG_SCHEMA_VERSION = 1
+
+
+def _validate_config_schema_version(payload: dict[str, Any]) -> None:
+    """R21-217..219: config schema_version + unknown-field policy.
+
+    ``schema_version`` absent => latest supported; a newer version is rejected
+    (forward migration must be explicit, never silently ignored).  Unknown
+    top-level keys are already rejected by ``_forbid_unknown``.
+    """
+    version = payload.get("schema_version")
+    if version is None:
+        return
+    try:
+        version_int = int(version)
+    except (TypeError, ValueError):
+        raise ValueError(f"config schema_version must be an integer, got {version!r}") from None
+    if version_int > CONFIG_SCHEMA_VERSION:
+        raise ValueError(
+            f"config schema_version={version_int} is newer than supported "
+            f"{CONFIG_SCHEMA_VERSION}; run an explicit config migration"
+        )
+
+
+def canonical_config_hash(config: "FactorEngineConfig") -> str:
+    """R21-220: reproducible canonical serialization/hash of a parsed config."""
+    import hashlib
+
+    from dataclasses import asdict, is_dataclass
+
+    def _clean(obj: Any) -> Any:
+        if is_dataclass(obj):
+            return {k: _clean(v) for k, v in asdict(obj).items() if v is not None}
+        if isinstance(obj, dict):
+            return {k: _clean(v) for k, v in sorted(obj.items()) if v is not None}
+        if isinstance(obj, (list, tuple)):
+            return [_clean(v) for v in obj]
+        if isinstance(obj, Path):
+            return str(obj)
+        return obj
+
+    canonical = json.dumps(_clean(config), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def load_config(path: str|Path, *, profile: str|None=None) -> FactorEngineConfig:
     config_path=Path(path); payload=yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload,dict): raise ValueError(f"Config must be a mapping: {config_path}")
+    _validate_config_schema_version(payload)
     profile_name=profile or payload.get("profile")
     if profile_name: payload=_deep_merge(load_profile(str(profile_name)),payload)
     base_dir=config_path.parent.resolve()
@@ -270,6 +316,7 @@ def load_config(path: str|Path, *, profile: str|None=None) -> FactorEngineConfig
         {
             "factor","data_source","backend","engine","run","dq","pit",
             "pipeline","materialization","materialize","profile",
+            "schema_version",
             # existing profile sections (merged into the payload from
             # examples/profiles/*.yaml) — documented, not consumed by loader.
             "data_access","label",

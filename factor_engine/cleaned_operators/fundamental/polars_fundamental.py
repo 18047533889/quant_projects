@@ -992,9 +992,11 @@ def fin_days_since_expectation_revision(expected, target_period_id, max_days=252
         # complete non-event after a gap stays censored (NaN, NOT 0 — a 0 would
         # read as "revision happened today") and only resumes at a NEW revision
         # event (the ``event`` branch emits 0 and restarts the clock).
-        # ``age`` starts at ``cap`` (matching the pandas reference) so the first
-        # complete non-event row reads as ``cap``, not 0.
-        age = cap
+        # R23-105/106 left censor (parity with the pandas reference): ``age``
+        # starts at ``None`` so the FIRST complete row — whose publication time
+        # before the sample start is unknown — emits NaN, NOT ``cap`` (a cap
+        # would silently read "stale since max_days" with no history).
+        age = None
         arr = np.full(rows, np.nan, dtype=float)
         for t in range(rows):
             complete = bool(np.isfinite(xv[t]) and _period_key(pv[t]) is not None)
@@ -1416,7 +1418,11 @@ def _revision_compose(
     for i, c in enumerate(cols):
         xv = _xv_of(x, c)
         pv = _pv_of(period_id, c)
-        age = 0
+        # R23-298 left censor (parity with the pandas reference): age starts at
+        # None so the FIRST complete observation — whose publication time before
+        # the sample start is unknown — emits NaN (never age 0).  The clock only
+        # starts at the first genuinely OBSERVED update.
+        age = None
         last_x = None
         last_pid = None
         gap_days = 0
@@ -1428,9 +1434,10 @@ def _revision_compose(
                 gap_days += 1
                 continue
             if last_x is None:
-                # First complete observation: the value just became visible.
-                arr[t] = 0.0
-                age = 0
+                # R23-298 left censor: first observation anchors the confirmed
+                # state but is NOT a proven new report -> NaN until an observed
+                # update.
+                arr[t] = np.nan
                 gap_days = 0
                 last_x, last_pid = xv[t], pv[t]
                 continue
@@ -1442,8 +1449,13 @@ def _revision_compose(
                 gap_days = 0
             else:
                 # Confirmed no economic update: age continues across the gap.
-                age = min(cap, age + gap_days + 1)
-                arr[t] = float(age)
+                # Between the censored anchor and the first observed update the
+                # age stays NaN (still left-censored).
+                if age is None:
+                    arr[t] = np.nan
+                else:
+                    age = min(cap, age + gap_days + 1)
+                    arr[t] = float(age)
                 gap_days = 0
             last_x, last_pid = xv[t], pv[t]
         out[:, i] = arr

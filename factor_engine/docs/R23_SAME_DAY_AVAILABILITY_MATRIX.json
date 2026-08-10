@@ -1,0 +1,11 @@
+{
+  "StockBalance": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "StockIncome": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  },
+  "StockCashFlow": {
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION"
+  }
+}

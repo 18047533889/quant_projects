@@ -109,6 +109,135 @@ def _clear_polars_long_shared_sid(ctx: Any) -> None:
     ctx.runtime_stats = runtime  # type: ignore[attr-defined]
 
 
+def validate_cse_refcount_integrity(dag: Any, ctx: Any) -> dict[str, Any]:
+    """R20-253..319: 共享 CSE DAG 引用完整性审计。
+
+    校验：
+    - ``every plan_ref sid exists``：每个 root 消费的 plan_ref sid 都存在于
+      ``dag.shared_nodes``（无悬空引用）；
+    - ``consumer count 准确``：``ctx._cse_refcounts`` 与
+      ``planner.cse.cse_consumer_counts`` 一致（无虚高/虚低）；
+    - ``no orphan``：``dag.shared_nodes`` 里没有任何 root 消费的 sid（孤儿共享
+      子树不会被释放 → 内存泄漏）。
+
+    返回 ``{"ok": bool, "issues": list[str]}``。生产模式下孤儿/悬空引用抛错
+    （fail closed）。
+    """
+    from planner.cse import collect_consumed_sids, cse_consumer_counts
+
+    issues: list[str] = []
+    shared_nodes = getattr(dag, "shared_nodes", None) or {}
+    roots = getattr(dag, "roots", None) or []
+    roots_plans = [getattr(fp, "root", fp) for fp in roots]
+    consumed: set[str] = set()
+    for root in roots_plans:
+        consumed |= set(collect_consumed_sids(root))
+    for sid in sorted(consumed):
+        if sid not in shared_nodes:
+            issues.append(f"plan_ref sid={sid!r} has no matching shared node (dangling)")
+    for sid in sorted(shared_nodes):
+        if sid not in consumed:
+            issues.append(f"shared sid={sid!r} is orphaned (no root consumes it)")
+    counts = cse_consumer_counts(roots_plans)
+    refcounts = getattr(ctx, "_cse_refcounts", None) or {}
+    for sid, expected in counts.items():
+        actual = refcounts.get(sid, 0)
+        if actual != expected:
+            issues.append(
+                f"sid={sid!r} consumer count mismatch expected={expected} actual={actual}"
+            )
+    report = {"ok": not issues, "issues": issues, "n_shared": len(shared_nodes), "n_consumed": len(consumed)}
+    if issues:
+        try:
+            from runtime.production_policy import is_production_mode
+
+            mode = getattr(ctx, "run_mode", None)
+            if is_production_mode(mode):
+                raise RuntimeError(
+                    "CSE refcount integrity violated (R20-253..319):\n  "
+                    + "\n  ".join(issues)
+                )
+        except RuntimeError:
+            raise
+        except Exception:  # noqa: BLE001
+            pass
+    return report
+
+
+#: R20-241..252 worker-isolation contract for objects shared by parallel roots.
+#:
+#: - ``backend`` / ``engine.data_source`` / ``ctx``: IMMUTABLE after the shared
+#:   subplans are materialized.  Workers only *read* these (never mutate the
+#:   backend instance or the data source); per-root mutable state lives on the
+#:   ``local_ctx`` copy.
+#: - ``ctx.shared_result_cache`` / ``shared_long_lazy_cache`` /
+#:   ``materialized_long_lazy`` / ``materialized_series`` / ``panel_cache``:
+#:   THREAD-LOCAL mutable views — each root gets an independent shallow copy so
+#:   parallel workers cannot race on panel/materialization dictionaries.
+#: - ``ctx.runtime_stats``: THREAD-LOCAL; a fresh dict per root so backend route
+#:   telemetry (``plan_backend_route`` / ``polars_long_fallback_reason`` /
+#:   ``last_operator_backend_route``) is root-local and never overwrites another
+#:   factor's telemetry (R20-241).
+#: - process environment / registries / global governor: PROCESS-LOCAL
+#:   (shared read-only); any per-run override must be scoped inside
+#:   ``routing_execution_scope`` / ``ExecutionResourceScope``.
+_ROOT_LOCAL_TELEMETRY_KEYS = (
+    "plan_backend_route",
+    "polars_long_shared_sid",
+    "used_polars_long_path",
+    "used_polars_long_native",
+    "polars_long_fallback_reason",
+    "polars_long_fallback_plan_op",
+    "polars_long_fallback_exception_type",
+    "polars_long_last_native",
+)
+
+
+def _assert_no_native_certified_fallback(
+    plan: Any,
+    local_ctx: Any,
+    *,
+    run_mode: str | None,
+    factor_name: str,
+) -> None:
+    """R20-241..252 invariant NATIVE_CERTIFIED_BUT_FALLBACK_EXECUTED == 0.
+
+    When EVERY operator in a root plan is dual-backend production certified, a
+    fallback to the pandas path is a semantic-preservation violation — the
+    native path was certified yet the backend executed a fallback.  Production
+    fails closed; research records the event for telemetry.
+    """
+    runtime = getattr(local_ctx, "runtime_stats", None) or {}
+    if runtime.get("polars_long_fallback_reason") is None:
+        return
+    try:
+        from planner.composite_lowering import collect_plan_ops
+
+        ops = set(collect_plan_ops(plan))
+    except Exception:  # noqa: BLE001 - unanalyzable plan: skip invariant
+        return
+    if not ops:
+        return
+    try:
+        from backend.primitive_evidence import PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+
+        native_safe = PRIMITIVE_DUAL_BACKEND_PRODUCTION_SAFE
+    except Exception:  # noqa: BLE001
+        return
+    if ops.issubset(native_safe):
+        from runtime.production_policy import is_production_mode
+
+        if is_production_mode(run_mode):
+            raise RuntimeError(
+                f"NATIVE_CERTIFIED_BUT_FALLBACK_EXECUTED != 0: factor={factor_name!r} "
+                f"plan ops {sorted(ops)} are all dual-backend certified, yet the "
+                "runtime executed a polars_long fallback "
+                f"reason={runtime.get('polars_long_fallback_reason')!r} "
+                f"op={runtime.get('polars_long_fallback_plan_op')!r}.  Native-certified "
+                "plans must never fall back in production (R20-241..252)."
+            )
+
+
 def _execute_root_with_path(
     backend: Any,
     plan: Any,
@@ -120,7 +249,8 @@ def _execute_root_with_path(
     """执行单个因子根计划并快照 backend 路径摘要。
 
     为每个因子根创建独立 ``runtime_stats`` 副本，避免路径统计互相污染；
-    production 模式下校验 fast path runtime 合规性。
+    production 模式下校验 fast path runtime 合规性 + NATIVE_CERTIFIED_BUT_
+    FALLBACK_EXECUTED == 0 不变量。
 
     Returns:
         ``(result, backend_path_dict)`` 元组。
@@ -132,6 +262,11 @@ def _execute_root_with_path(
 
     parent_runtime = dict(getattr(ctx, "runtime_stats", None) or {})
     local_runtime = _fresh_long_runtime(parent_runtime)
+    # R20-241: shared-subplan materialization telemetry must NOT leak into a
+    # root's path summary — drop the shared/route keys before execution so the
+    # root-local backend route is authoritative for THIS factor.
+    for key in _ROOT_LOCAL_TELEMETRY_KEYS:
+        local_runtime.pop(key, None)
     for key in (
         "events",
         "latest",
@@ -169,6 +304,9 @@ def _execute_root_with_path(
     path = snapshot_backend_path(getattr(local_ctx, "runtime_stats", None))
     audit_ctx = f"run_many:{factor_name}" if factor_name else "run_many"
     assert_production_fastpath_runtime(local_ctx, mode=run_mode, context=audit_ctx)
+    _assert_no_native_certified_fallback(
+        plan, local_ctx, run_mode=run_mode, factor_name=factor_name
+    )
     return result, path
 
 
@@ -215,6 +353,14 @@ def _cluster_factors_by_cost(
                 )
                 rw = wctx.run_window
             except Exception:
+                # R20-234..240: warmup/history resolver 异常在 production 下不能
+                # 默认为 short/no-warmup——unresolved history requirement 会静默
+                # 让全历史因子退化成短窗，改变其 semantic history anchor。production
+                # fail closed（抛错），research 保留 fallback 聚类行为。
+                from runtime.production_policy import is_production_mode
+
+                if is_production_mode(engine.run_mode):
+                    raise
                 rw = None
         if rw is not None and rw.full_history_required:
             buckets["full_history"].append(factor)
@@ -572,6 +718,7 @@ def execute_run_many(
                 _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
             _clear_polars_long_shared_sid(ctx)
             _setup_cse_refcounts(ctx, dag.roots)
+            validate_cse_refcount_integrity(dag, ctx)
         out: dict[str, Any] = {}
         backend_paths: dict[str, dict[str, Any]] = {}
         for layer in batch_graph.parallel_layers:
@@ -710,6 +857,7 @@ def execute_run_many_iter(
                 _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
             _clear_polars_long_shared_sid(ctx)
             _setup_cse_refcounts(ctx, dag.roots)
+            validate_cse_refcount_integrity(dag, ctx)
         seen: set[str] = set()
         for layer in batch_graph.parallel_layers:
             for name in layer:
@@ -806,6 +954,8 @@ def execute_run_many_parallel(
     workers = n_jobs if n_jobs is not None else perf.max_workers
     # Phase 5 R1/R15：统一 ExecutionResourcePlan（CPU+RAM 双约束），并包裹
     # ExecutionResourceScope 在退出时恢复线程/内存设置，避免共享 mutable 状态污染。
+    # R20-132..137：production 下资源治理坏了绝不能「无约束继续跑」——plan 解析
+    # 失败必须 hard fail；research 才回退 ``resource_scope=None`` 并告警。
     try:
         from runtime.execution_resources import resource_plan
         from runtime.resource_governor import ExecutionResourceScope
@@ -813,7 +963,9 @@ def execute_run_many_parallel(
         plan = resource_plan(n_jobs=workers)
         workers = plan.n_jobs
         resource_scope = ExecutionResourceScope(
-            plan, duckdb_threads=plan.duckdb_threads
+            plan,
+            duckdb_threads=plan.duckdb_threads,
+            strict=is_production_mode(engine.run_mode),
         )
         logger.info(
             "execution_resources: jobs=%d duckdb_threads=%d total_runnable=%d",
@@ -821,8 +973,15 @@ def execute_run_many_parallel(
             plan.duckdb_threads,
             plan.total_runnable,
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
+        if is_production_mode(engine.run_mode):
+            raise
         resource_scope = None
+        logger.warning(
+            "execution_resources: resource plan resolution failed; running "
+            "unconstrained (research only)",
+            exc_info=True,
+        )
     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
         factors,
@@ -871,6 +1030,7 @@ def execute_run_many_parallel(
                     _materialize_shared_subplan(engine_to_use.backend, sub, ctx, sid)
                 _clear_polars_long_shared_sid(ctx)
                 _setup_cse_refcounts(ctx, dag.roots)
+            validate_cse_refcount_integrity(dag, ctx)
 
             results: dict[str, Any] = {}
             backend_paths: dict[str, dict[str, Any]] = {}

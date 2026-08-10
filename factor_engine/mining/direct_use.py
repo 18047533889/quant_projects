@@ -87,7 +87,7 @@ class DirectUseStatus(str, Enum):
 
 
 # The ONLY statuses that may ever stand alone as a factor terminal
-# (R18-003: positive authority — nothing is terminal by exclusion).
+# (R18-003 / R22-006: positive authority — nothing is terminal by exclusion).
 _DIRECT_TERMINAL_STATUSES = frozenset(
     {
         DirectUseStatus.DIRECT_ALPHA,
@@ -95,6 +95,51 @@ _DIRECT_TERMINAL_STATUSES = frozenset(
         DirectUseStatus.DIRECT_RECIPE,
     }
 )
+
+# R22-029: PublicMiningDisposition — the ONLY legal fates for a retained public
+# canonical.  ``PUBLIC_BUT_HIDDEN`` / ``PUBLIC_RESEARCH`` / ``PUBLIC_PENDING_FOREVER``
+# / ``PUBLIC_UNKNOWN`` are forbidden (R22-030): a public operator must be either
+# mining-visible, explicitly moved/deleted, or its retention is a hard audit fail.
+class PublicMiningDisposition(str, Enum):
+    DIRECT_VISIBLE = "direct_visible"
+    MOVED_RESEARCH_TOOL = "moved_research_tool"
+    MOVED_INTERNAL = "moved_internal"
+    DELETED_REPLACED = "deleted_replaced"
+    DELETED_NONCAUSAL = "deleted_noncausal"
+    DELETED_NO_DATA = "deleted_no_data"
+    DELETED_DUPLICATE = "deleted_duplicate"
+    DELETED_OBSOLETE = "deleted_obsolete"
+
+
+# R22-029: status -> disposition (for the machine matrix).
+_DISPOSITION_BY_STATUS: dict[DirectUseStatus, PublicMiningDisposition] = {
+    DirectUseStatus.DIRECT_ALPHA: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.DIRECT_ALPHA_HIGH_COST: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.DIRECT_STATE: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.DIRECT_CONDITION: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.DIRECT_EVENT: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.DIRECT_GROUP_STATE: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.DIRECT_GLOBAL_STATE: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.DIRECT_INTERMEDIATE: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.DIRECT_SOURCE_TRANSFORM: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.DIRECT_RECIPE: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.DIRECT_CONTROL_FLOW: PublicMiningDisposition.DIRECT_VISIBLE,
+    DirectUseStatus.RESEARCH_TOOL: PublicMiningDisposition.MOVED_RESEARCH_TOOL,
+    DirectUseStatus.MOVE_INTERNAL: PublicMiningDisposition.MOVED_INTERNAL,
+    DirectUseStatus.DELETE_DUPLICATE: PublicMiningDisposition.DELETED_DUPLICATE,
+    DirectUseStatus.DELETE_NO_DATA: PublicMiningDisposition.DELETED_NO_DATA,
+    DirectUseStatus.DELETE_NONCAUSAL: PublicMiningDisposition.DELETED_NONCAUSAL,
+    DirectUseStatus.DELETE_MATH_DEFECT: PublicMiningDisposition.DELETED_REPLACED,
+    DirectUseStatus.DELETE_USELESS: PublicMiningDisposition.DELETED_OBSOLETE,
+    DirectUseStatus.DELETE_OBSOLETE: PublicMiningDisposition.DELETED_OBSOLETE,
+}
+
+
+def public_mining_disposition(status: DirectUseStatus) -> PublicMiningDisposition:
+    """R22-029: machine disposition for one status (defaults to MOVED_INTERNAL)."""
+    return _DISPOSITION_BY_STATUS.get(
+        status, PublicMiningDisposition.MOVED_INTERNAL
+    )
 
 # R18-080 search lanes.  SOURCE_TRANSFORM never consumes alpha tree depth.
 _DIRECT_STATUS_LANES: dict[DirectUseStatus, str] = {
@@ -286,6 +331,22 @@ _PRICE_LEVEL_INTERMEDIATE_OPS = frozenset(
     }
 )
 
+# R18-017: normalized / relative versions of the price-level building blocks
+# ARE direct alphas (dimensionless / scale-invariant).  The spec explicitly
+# lists these; they override the ALPHA_HIGH_COST a full-history indicator would
+# otherwise inherit from the mining layer.
+_RELATIVE_ALPHA_OPS = frozenset(
+    {
+        "vwap_deviation", "NATR", "KeltnerPosition", "ichimoku_cloud_position",
+        "candle_gap_pct", "candle_gap_atr",
+        "ts_swing_amplitude_pct", "ts_swing_amplitude_atr",
+        "ts_channel_width_pct", "ts_channel_width_atr",
+        "ts_distance_to_high", "ts_distance_to_low",
+        "ts_distance_to_resistance", "ts_distance_to_support",
+        "bollinger_pct_b", "bollinger_width",
+    }
+)
+
 # R18-019: missing-value / source transforms are data-processing, never alpha
 # search branches.
 _SOURCE_TRANSFORM_OPS = frozenset(
@@ -298,15 +359,27 @@ _SOURCE_TRANSFORM_OPS = frozenset(
     }
 )
 
-# R18-020: arbitrary math — keep only what has a real finance/stat use.
-#  * trig: cyclic/noise in the raw form -> research tool (phase use is a recipe)
-#  * floor/ceil/round/fix: discrete jumps -> intermediate (bucketing building block)
-#  * monotonic powers/roots: intermediate normalizers (R18-021 family)
+# R18-020 / R22-046..051: arbitrary math — keep only what has a real finance/stat
+# use.  The raw generic trig (sin/cos/asin/acos/sinh/cosh/tan/cot/sec/csc) is raw
+# math with no factor semantics — MOVE_INTERNAL (R22-050 / R22-083).  The typed
+# phase/bounded variants (sin_phase / cos_phase / asin_bounded / acos_bounded)
+# carry the phase/cyclic/correlation input contract and are DIRECT_INTERMEDIATE
+# composition building blocks (R22-047..049).
 _ARBITRARY_MATH_STATUS: dict[str, DirectUseContract] = {
-    "sin": _contract(DirectUseStatus.RESEARCH_TOOL, "cyclic transform — noise in raw form; used only inside a phase/seasonality recipe"),
-    "cos": _contract(DirectUseStatus.RESEARCH_TOOL, "cyclic transform — noise in raw form; used only inside a phase/seasonality recipe"),
-    "acos": _contract(DirectUseStatus.RESEARCH_TOOL, "cyclic transform — domain-narrow; recipe-only"),
-    "asin": _contract(DirectUseStatus.RESEARCH_TOOL, "cyclic transform — domain-narrow; recipe-only"),
+    "sin": _contract(DirectUseStatus.MOVE_INTERNAL, "generic raw sine — no factor semantics; use sin_phase inside a phase/seasonality recipe"),
+    "cos": _contract(DirectUseStatus.MOVE_INTERNAL, "generic raw cosine — no factor semantics; use cos_phase inside a phase/seasonality recipe"),
+    "acos": _contract(DirectUseStatus.MOVE_INTERNAL, "generic raw arccos — no factor semantics; use acos_bounded on a bounded input"),
+    "asin": _contract(DirectUseStatus.MOVE_INTERNAL, "generic raw arcsin — no factor semantics; use asin_bounded on a bounded input"),
+    "sin_phase": _contract(DirectUseStatus.DIRECT_INTERMEDIATE, "typed phase/cyclic-position sine — composition building block"),
+    "cos_phase": _contract(DirectUseStatus.DIRECT_INTERMEDIATE, "typed phase/cyclic-position cosine — composition building block"),
+    "asin_bounded": _contract(DirectUseStatus.DIRECT_INTERMEDIATE, "bounded-input arcsin (correlation/ratio/normalized-state only) — composition building block"),
+    "acos_bounded": _contract(DirectUseStatus.DIRECT_INTERMEDIATE, "bounded-input arccos (correlation/ratio/normalized-state only) — composition building block"),
+    "sinh": _contract(DirectUseStatus.MOVE_INTERNAL, "hyperbolic sine — raw math, not a factor canonical"),
+    "cosh": _contract(DirectUseStatus.MOVE_INTERNAL, "hyperbolic cosine — raw math, not a factor canonical"),
+    "tan": _contract(DirectUseStatus.MOVE_INTERNAL, "tangent — raw math, not a factor canonical"),
+    "cot": _contract(DirectUseStatus.MOVE_INTERNAL, "cotangent — raw math, not a factor canonical"),
+    "csc": _contract(DirectUseStatus.MOVE_INTERNAL, "cosecant — raw math, not a factor canonical"),
+    "sec": _contract(DirectUseStatus.MOVE_INTERNAL, "secant — raw math, not a factor canonical"),
     "atan": _contract(DirectUseStatus.DIRECT_INTERMEDIATE, "phase extraction building block (atan2 preferred)"),
     "atan2": _contract(DirectUseStatus.DIRECT_INTERMEDIATE, "phase/angle extraction building block"),
     "floor": _contract(DirectUseStatus.DIRECT_INTERMEDIATE, "discrete-jump bucketing building block"),
@@ -321,12 +394,23 @@ _ARBITRARY_MATH_STATUS: dict[str, DirectUseContract] = {
     "lerp": _contract(DirectUseStatus.DIRECT_CONTROL_FLOW, "linear interpolation — control-flow building block"),
 }
 
-# R18-061: flex_max / flex_min are exact semantic duplicates of maximum/minimum
-# (only the input flexibility differs).  One canonical + backend policy, no
-# second search branch.
-_FLEX_DUP_REPLACEMENT = {
-    "flex_max": "maximum",
-    "flex_min": "minimum",
+# R18-061: flex_max / flex_min are a DUAL-ARITY form of maximum / minimum.
+# Differential testing proves ``flex_max(x, y) == maximum(x, y)`` exactly on the
+# panel input, but the flex forms additionally accept a scalar window
+# (``flex_max(x, 3) == ts_max(x, 3)``).  So they are RELATED_NOT_DUPLICATE, not
+# EXACT_EQUIVALENT — per R18-022/117 (only merge proven exact equivalents) and
+# R18-088 (high-correlation but not identical -> share a redundancy group, don't
+# delete).  Keep one search branch: DIRECT_INTERMEDIATE comparison building block,
+# budgeted under the ``flex_max_min`` redundancy group.
+_FLEX_MAX_MIN_STATUS = {
+    "flex_max": _contract(
+        DirectUseStatus.DIRECT_INTERMEDIATE,
+        "dual-arity max building block: panel (==maximum) or rolling window (==ts_max)",
+    ),
+    "flex_min": _contract(
+        DirectUseStatus.DIRECT_INTERMEDIATE,
+        "dual-arity min building block: panel (==minimum) or rolling window (==ts_min)",
+    ),
 }
 
 # R18-021: monotonic transform class — Rank-IC / search dedups strict-monotonic
@@ -448,7 +532,51 @@ _SEMANTIC_REDUNDANCY_GROUP: dict[str, str] = {
     "cdl_*": "candlestick_event", "candlestick_pattern": "candlestick_event",
     "dollar_volume": "size_liquidity", "ts_average_volume": "size_liquidity",
     "adv": "size_liquidity",
+    # R18-061: flex vs plain max/min are RELATED_NOT_DUPLICATE (panel == exact,
+    # rolling == ts_max) — budgeted under one family, not deleted.
+    "flex_max": "flex_max_min", "flex_min": "flex_max_min",
+    "maximum": "flex_max_min", "minimum": "flex_max_min",
+    "ts_max": "flex_max_min", "ts_min": "flex_max_min",
 }
+
+# R22-136..137: default search prior / family budget / cost budget per cost lane.
+# These are CONFIGURABLE defaults (R22-137: "具体数值可配置，不要硬编码经济结论")
+# — the miner may override them via its campaign config.  Prior is the relative
+# sampling weight; basic alphas keep a high prior, advanced high-cost families a
+# low prior so hundreds of advanced operators never drown out the basics.
+_SEARCH_PRIOR_BY_LANE: dict[str, float] = {
+    "alpha_direct": 1.0,
+    "alpha_high_cost": 0.2,
+    "intermediate": 0.8,
+    "state": 0.8,
+    "condition": 0.8,
+    "event": 0.8,
+    "group_state": 0.8,
+    "global_state": 0.8,
+    "source_transform": 0.9,
+    "control_flow": 0.8,
+}
+_FAMILY_BUDGET_BY_LANE: dict[str, int] = {
+    "alpha_direct": 16,
+    "alpha_high_cost": 6,
+    "intermediate": 8,
+    "state": 8,
+    "condition": 8,
+    "event": 8,
+    "group_state": 8,
+    "global_state": 8,
+    "source_transform": 4,
+    "control_flow": 8,
+}
+
+
+def _search_budget(lane: str) -> tuple[float, int, int]:
+    """R22-136: (search_prior, family_budget, cost_budget) for a mining lane."""
+    prior = _SEARCH_PRIOR_BY_LANE.get(lane, 0.5)
+    family = _FAMILY_BUDGET_BY_LANE.get(lane, 4)
+    cost = 6 if lane == "alpha_high_cost" else 9
+    return prior, family, cost
+
 
 # R18-047: effective-sample contracts for advanced statistical families.
 _MIN_EFFECTIVE_SAMPLE: dict[str, dict[str, int]] = {
@@ -493,6 +621,27 @@ _DEFAULT_INPUT_RECIPE: dict[str, dict[str, str]] = {
     "coskewness_to_market": {"ret": "return_decimal", "benchmark_ret": "benchmark_return", "window": 60},
     "idio_vol": {"ret": "return_decimal", "benchmark_ret": "benchmark_return", "window": 60},
     "idio_skew": {"ret": "return_decimal", "benchmark_ret": "benchmark_return", "window": 60},
+    # R22-031..045: default input recipes for the promoted research families.
+    # Recipes bind to canonical *concepts* (R22-121), resolved to market sources
+    # by the R17 resolver — never physical columns.
+    "date_diff_days": {"left": "event_date", "right": "event_date"},
+    "ts_wavelet_lowpass_reconstruct": {"x": "continuous_close"},
+    "ts_signature_mahalanobis_anomaly": {
+        "f1": "return_decimal", "f2": "volume", "f3": "turnover",
+    },
+    "ts_persistence_birth_dispersion": {"x": "return_decimal"},
+    "ts_bicoherence_top_decile_excess": {"x": "return_decimal"},
+    "ts_kernel_granger_score": {"y": "return_decimal", "x": "return_decimal"},
+    "ts_residualized_hsic": {"x": "return_decimal", "y": "return_decimal", "z": "return_decimal"},
+    "ts_bds_statistic": {"x": "return_decimal"},
+    "ts_rolling_sr_gaussian_mean_shift_score": {"x": "return_decimal"},
+    "ts_garch_*": {"x": "return_decimal"},
+    "ts_gjr_garch_*": {"x": "return_decimal"},
+    "ts_gjr_leverage": {"x": "return_decimal"},
+    "ts_har_*": {"x": "return_decimal"},
+    "ts_kalman_*": {"x": "return_decimal"},
+    "ts_dmd_level_*": {"x": "continuous_close"},
+    "ts_dmd_return_*": {"x": "return_decimal"},
 }
 
 # R18-055: *_if operators carry a condition slot that only accepts
@@ -580,6 +729,198 @@ _EXPANDING_RANK_VERDICT = _contract(
 
 
 # ---------------------------------------------------------------------------
+# R22-031..051: explicit promotion / verdict table for the research-surface
+# factor families.  ``surface == research`` is an *authoring/lifecycle* state
+# (R22-009..012), NOT a semantic role: a causal, deterministic, panel-shaped
+# operator that merely lacks production evidence gets a DIRECT_* role +
+# PENDING_CERTIFICATION admission, never MiningRole.RESEARCH.  Pure
+# in-sample diagnostics / no-data / raise-on-call canonicals get their honest
+# RESEARCH_TOOL / DELETE_* verdict here so no public operator is ever left in
+# ``PUBLIC_PENDING_FOREVER`` (R22-030 / R22-148).
+#
+# Key is a canonical or a ``family_*`` fnmatch pattern.  Exact keys win over
+# patterns; the table is checked first in ``_resolve_explicit`` so research
+# families always beat the surface-based role fallback.
+_R22_RESEARCH_PROMOTION: dict[str, tuple[DirectUseStatus, str]] = {
+    # ---- research_transform (R22-031..033) ----
+    "ts_wavelet_lowpass_reconstruct": (
+        DirectUseStatus.DIRECT_INTERMEDIATE,
+        "strict-trailing Haar smoothing — composition building block; residual/ratio recipes expose the alpha",
+    ),
+    "ts_signature_mahalanobis_anomaly": (
+        DirectUseStatus.DIRECT_ALPHA_HIGH_COST,
+        "causal 3-channel path-signature anomaly distance — high-cost lane",
+    ),
+    "ts_persistence_birth_dispersion": (
+        DirectUseStatus.DIRECT_ALPHA_HIGH_COST,
+        "causal Rips-H1 persistence dispersion — high-cost lane",
+    ),
+    # ---- DMD (R22-034..039): generic untyped forms move internal as compat
+    # aliases to the level/return typed variants; typed forms are mineable. ----
+    "ts_dmd_level_dominant_growth_rate": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "level-dynamics DMD dominant growth rate"),
+    "ts_dmd_level_dominant_frequency": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "level-dynamics DMD dominant frequency"),
+    "ts_dmd_level_mode_concentration": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "level-dynamics DMD mode concentration"),
+    "ts_dmd_return_dominant_growth_rate": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "return-dynamics DMD dominant growth rate"),
+    "ts_dmd_return_dominant_frequency": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "return-dynamics DMD dominant frequency"),
+    "ts_dmd_return_mode_concentration": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "return-dynamics DMD mode concentration"),
+    "ts_dmd_dominant_growth_rate": (DirectUseStatus.MOVE_INTERNAL, "untyped DMD — compat alias; use the ts_dmd_level/return typed variants"),
+    "ts_dmd_dominant_frequency": (DirectUseStatus.MOVE_INTERNAL, "untyped DMD — compat alias; use the ts_dmd_level/return typed variants"),
+    "ts_dmd_mode_concentration": (DirectUseStatus.MOVE_INTERNAL, "untyped DMD mode concentration — use the ts_dmd_level/return typed variants"),
+    # ---- research_spectral (R22-040..045) ----
+    "ts_bicoherence_top_decile_mean": (
+        DirectUseStatus.DIRECT_INTERMEDIATE,
+        "base bicoherence statistic — bias-corrected sibling preferred as terminal",
+    ),
+    "ts_bicoherence_top_decile_excess": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "surrogate-null-subtracted bicoherence excess"),
+    "ts_kernel_granger_score": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "blocked OOS predictive-improvement score"),
+    "ts_residualized_hsic": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "residualized HSIC dependence statistic"),
+    "ts_bds_statistic": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "nonlinear serial-dependence statistic"),
+    "ts_rolling_sr_gaussian_mean_shift_score": (DirectUseStatus.DIRECT_ALPHA, "rolling change-point intensity — continuous change evidence"),
+    # ---- panel factor models ----
+    "panel_rolling_pca_explained_ratio": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "rolling panel-PCA explained ratio"),
+    "panel_rolling_pca_loading": (DirectUseStatus.DIRECT_INTERMEDIATE, "rolling panel-PCA loading — factor composition building block"),
+    "panel_rolling_pca_resid": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "rolling panel-PCA residual"),
+    "panel_rolling_pca_resid_momentum": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "rolling panel-PCA residual momentum"),
+    "panel_rolling_pca_resid_vol": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "rolling panel-PCA residual volatility"),
+    "panel_rolling_pcr_forecast": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "rolling PCR forecast"),
+    "panel_rolling_pls_forecast": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "rolling PLS forecast"),
+    "panel_rolling_elastic_net_forecast": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "rolling elastic-net forecast"),
+    "panel_mixture_of_experts_score": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "panel MoE regime score"),
+    "panel_regime_conditioned_forecast": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "regime-conditioned forecast"),
+    "industry_rolling_pca_loading": (DirectUseStatus.DIRECT_INTERMEDIATE, "industry rolling-PCA loading — composition building block"),
+    "ts_feature_pca_reconstruction_error": (DirectUseStatus.DIRECT_INTERMEDIATE, "feature PCA reconstruction error"),
+    "cs_autoencoder_reconstruction_error": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "autoencoder reconstruction error"),
+    # ---- volatility / state-space model families (R22-098 high-cost lane) ----
+    "ts_garch_*": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "GARCH volatility dynamics — high-cost model lane"),
+    "ts_gjr_garch_*": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "GJR-GARCH leverage dynamics — high-cost model lane"),
+    "ts_gjr_leverage": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "GJR negative-return shock coefficient — high-cost model lane"),
+    "ts_har_*": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "HAR realized-volatility model family"),
+    "ts_kalman_*": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "Kalman state/innovation family"),
+    "ts_regime_duration": (DirectUseStatus.DIRECT_ALPHA, "regime duration statistic"),
+    "ts_two_state_regime_probability": (DirectUseStatus.DIRECT_STATE, "two-state regime probability — regime state gate"),
+    "ts_change_point_probability": (DirectUseStatus.DIRECT_ALPHA, "change-point probability"),
+    "ts_cusum_vol_break_score": (DirectUseStatus.DIRECT_ALPHA, "CUSUM volatility break score"),
+    # ---- complexity / dependence / spectral ----
+    "ts_lz_complexity": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "Lempel-Ziv complexity"),
+    "ts_active_information_storage": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "active information storage"),
+    "ts_conditional_transfer_entropy": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "conditional transfer entropy"),
+    "ts_effective_transfer_entropy": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "effective transfer entropy"),
+    "ts_markov_entropy_production": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "Markov entropy production"),
+    "ts_multiscale_entropy_slope": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "multiscale entropy slope"),
+    "ts_multiscale_permutation_entropy_slope": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "multiscale permutation-entropy slope"),
+    "ts_pseudocount_sample_entropy": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "sample entropy with pseudocount"),
+    "ts_motif_recurrence_count": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "motif recurrence count"),
+    "ts_matrix_profile_discord_score": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "matrix-profile discord score"),
+    "ts_wavelet_entropy": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "wavelet entropy"),
+    "ts_wavelet_energy_slope": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "wavelet energy slope"),
+    "ts_wavelet_high_frequency_ratio": (DirectUseStatus.DIRECT_INTERMEDIATE, "wavelet high-frequency ratio — composition building block"),
+    "ts_wavelet_low_frequency_ratio": (DirectUseStatus.DIRECT_INTERMEDIATE, "wavelet low-frequency ratio — composition building block"),
+    "ts_spectral_low_frequency_ratio": (DirectUseStatus.DIRECT_INTERMEDIATE, "spectral low-frequency ratio — composition building block"),
+    "ts_modwt_band_corr": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "MODWT band correlation"),
+    "ts_dfa_hurst": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "detrended-fluctuation Hurst exponent"),
+    "ts_local_lyapunov_exponent": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "local Lyapunov exponent"),
+    "ts_extremal_dependence_decay": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "extremal dependence decay"),
+    "ts_turning_point_ratio": (DirectUseStatus.DIRECT_ALPHA, "turning-point ratio"),
+    "ts_roll_effective_spread": (DirectUseStatus.DIRECT_ALPHA, "Roll effective spread"),
+    # ---- copula / knn / group / event ----
+    "ts_copula_central_asymmetry": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "copula central asymmetry"),
+    "cs_rank_copula_entropy": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "rank-copula entropy"),
+    "cs_rank_copula_mi": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "rank-copula mutual information"),
+    "cs_knn_local_gradient_norm": (DirectUseStatus.DIRECT_INTERMEDIATE, "KNN local gradient norm — manifold building block"),
+    "cs_knn_tangent_residual": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "KNN tangent residual"),
+    "group_signal_attraction_share": (DirectUseStatus.DIRECT_ALPHA, "group signal attraction share"),
+    "group_tail_lead_score": (DirectUseStatus.DIRECT_ALPHA, "group tail-lead score"),
+    "relation_diffusion_score": (DirectUseStatus.DIRECT_ALPHA, "relation diffusion score"),
+    "event_hawkes_branching_ratio_proxy": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "Hawkes branching-ratio proxy"),
+    # ---- topology / path signature ----
+    "ts_betti_1_max_persistence": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "Rips-H1 betti-1 max persistence"),
+    "ts_persistence_diagram_shift": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "persistence-diagram shift"),
+    "ts_path_signature_area": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "path-signature area"),
+    "ts_path_signature_depth2_norm": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "path-signature depth-2 norm"),
+    "ts_path_leadlag_area": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "path lead-lag area"),
+    "ts_quantile_crossing_spectral_concentration": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "quantile-crossing spectral concentration"),
+    "ts_fisher_information_shift": (DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "Fisher information shift"),
+    # ---- intraday research (minute input -> daily output, INTRADAY_EOD) ----
+    "intraday_profile_phase_shift": (DirectUseStatus.DIRECT_ALPHA, "intraday profile phase shift"),
+    "intraday_quantile_curve_pca_residual": (DirectUseStatus.DIRECT_ALPHA, "intraday quantile-curve PCA residual"),
+    "intraday_quantile_curve_pca_score": (DirectUseStatus.DIRECT_ALPHA, "intraday quantile-curve PCA score"),
+    "intraday_realized_power_variation": (DirectUseStatus.DIRECT_ALPHA, "intraday realized power variation"),
+    # ---- report family ----
+    "report_benford_js_divergence": (DirectUseStatus.DIRECT_ALPHA, "Benford JS divergence"),
+    "report_revision_magnitude": (DirectUseStatus.DIRECT_ALPHA, "report revision magnitude"),
+    # ---- pure in-sample diagnostics -> research tool (R22-052..056) ----
+    "ts_quantile_regression_beta": (
+        DirectUseStatus.RESEARCH_TOOL,
+        "in-sample quantile-regression coefficient — diagnostic; the *_prior / *_forecast_error counterparts are the mineable forms",
+    ),
+    # R22-058: causal poly2 siblings (prior fit <= t-1; current obs evaluates only).
+    "ts_poly2_prior_coeff": (DirectUseStatus.DIRECT_ALPHA, "prior-fit quadratic coefficient — causal"),
+    "ts_poly2_forecast_error": (DirectUseStatus.DIRECT_ALPHA, "one-step-ahead quadratic forecast error — causal"),
+    "ts_poly2_forecast_error_z": (DirectUseStatus.DIRECT_ALPHA, "standardized one-step-ahead quadratic forecast error — causal"),
+    # R22-060..062: rolling_beta_to_market requires an EXPLICIT benchmark_ret
+    # (raises without it) — it is the explicit-benchmark form (R22-061 route A),
+    # never a self-inclusion beta, so it is directly mineable.
+    "rolling_beta_to_market": (
+        DirectUseStatus.DIRECT_ALPHA,
+        "explicit-benchmark rolling beta (benchmark_ret required) — route-A mineable form",
+    ),
+    # ---- no-data / raise-on-call (R22-077..079): never keep a public operator
+    # that raises on every call, and never fake a field that has no provider. ----
+    "holder_concentration_change": (
+        DirectUseStatus.DELETE_NO_DATA,
+        "implementation raises (requires distinct relation snapshots); no snapshot provider — delete until real data exists",
+    ),
+    "holder_count_change_rate": (
+        DirectUseStatus.DELETE_NO_DATA,
+        "TopTen rows are not total shareholder count; no total-holder provider — delete rather than fake",
+    ),
+}
+
+
+# R22-146..147 / R22-158: causal replacement map — every in-sample diagnostic /
+# benchmark-only research tool points at its mineable causal sibling, so
+# ``CAUSAL_REPLACEMENT_MISSING`` stays 0 (a tool without a safe replacement must
+# declare ``NO_SAFE_REPLACEMENT`` explicitly in the research manifest).
+_CAUSAL_REPLACEMENT_MAP: dict[str, str] = {
+    "ts_multi_regression_coeff": "ts_multi_regression_coeff_prior",
+    "ts_multi_regression_resid": "ts_multi_regression_forecast_error",
+    "ts_multi_regression_resid_z": "ts_multi_regression_forecast_error_z",
+    "ts_multi_regression_r2": "ts_multi_regression_r2_prior",
+    "ts_huber_regression_coeff": "ts_huber_regression_coeff_prior",
+    "ts_huber_regression_in_sample_resid": "ts_huber_regression_forecast_error",
+    "ts_huber_regression_resid_z": "ts_huber_regression_forecast_error_z",
+    "ts_ridge_regression_coeff": "ts_ridge_regression_coeff_prior",
+    "ts_ridge_regression_in_sample_resid": "ts_ridge_regression_forecast_error",
+    "ts_ridge_regression_resid_z": "ts_ridge_regression_forecast_error_z",
+    "ts_ar_forecast": "ts_ar_prior_forecast",
+    "ts_ar_innovation": "ts_ar_prior_innovation",
+    "ts_ar_innovation_z": "ts_ar_prior_innovation_z",
+    "ts_expectile_regression_coeff": "ts_expectile_regression_coeff_prior",
+    "ts_expectile_regression_resid": "ts_expectile_regression_forecast_error",
+    "ts_quantile_regression_beta": "ts_quantile_regression_coeff_prior",
+    "ts_quantile_regression_coeff": "ts_quantile_regression_coeff_prior",
+    "ts_quantile_regression_slope": "ts_quantile_regression_coeff_prior",
+    "ts_quantile_regression_resid": "ts_quantile_regression_coeff_prior",
+    "ts_poly2_coeff": "ts_poly2_prior_coeff",
+    "ts_poly2_resid": "ts_poly2_forecast_error",
+    "intra_idiosyncratic_variance": "intra_idiosyncratic_variance_ex_self",
+    "intra_realized_beta": "intra_realized_beta_ex_self",
+    "intra_realized_correlation": "intra_realized_correlation_ex_self",
+    "micro_bvc_vpin": "intraday_bvc_imbalance",
+    "cs_beta_to_market": "cs_beta_to_market_ex_self",
+    "cs_alpha_to_market": "cs_alpha_to_market_ex_self",
+    "ts_mean_reversion_half_life": "NO_SAFE_REPLACEMENT",
+}
+
+
+def causal_replacement(canonical: str) -> str:
+    """R22-146: recommended mineable replacement for a research-tool / diagnostic
+    canonical (``""`` when the canonical is not a tool; ``NO_SAFE_REPLACEMENT``
+    when it is a tool with no safe causal form)."""
+    return _CAUSAL_REPLACEMENT_MAP.get(canonical, "")
+
+
+# ---------------------------------------------------------------------------
 # classification
 # ---------------------------------------------------------------------------
 
@@ -595,6 +936,12 @@ def _resolve_explicit(canonical: str, catalog: dict[str, Any]) -> DirectUseContr
             "retired and split into successor canonical(s); must not be visible in surface",
             replacement="state_since_sum/state_since_mean/state_since_count/state_since_last",
         )
+    # R22-031..051: research-surface factor families get an explicit DIRECT_* /
+    # honest-tool / honest-delete verdict FIRST, so ``surface == research`` never
+    # silently demotes a causal factor-shaped operator to MiningRole.RESEARCH.
+    for pattern, (status, reason) in _R22_RESEARCH_PROMOTION.items():
+        if _fnmatch_any(canonical, (pattern,)):
+            return _contract(status, reason)
     if canonical in _BOOL_CONDITION_OPS:
         return _contract(DirectUseStatus.DIRECT_CONDITION, "Boolean/comparison/missingness — condition slot only")
     if canonical in _CS_GLOBAL_STATE_OPS:
@@ -613,17 +960,14 @@ def _resolve_explicit(canonical: str, catalog: dict[str, Any]) -> DirectUseContr
         return _FIN_INDEX_ROLE[canonical]
     if canonical in _PRICE_LEVEL_INTERMEDIATE_OPS:
         return _contract(DirectUseStatus.DIRECT_INTERMEDIATE, "price-level building block — not scale-invariant, composition only")
+    if canonical in _RELATIVE_ALPHA_OPS:
+        return _contract(DirectUseStatus.DIRECT_ALPHA, "normalized/relative version of a level building block — dimensionless alpha")
     if canonical in _SOURCE_TRANSFORM_OPS:
         return _contract(DirectUseStatus.DIRECT_SOURCE_TRANSFORM, "missing-value / source transform — data-processing slot only")
     if canonical in _ARBITRARY_MATH_STATUS:
         return _ARBITRARY_MATH_STATUS[canonical]
-    if canonical in _FLEX_DUP_REPLACEMENT:
-        repl = _FLEX_DUP_REPLACEMENT[canonical]
-        return _contract(
-            DirectUseStatus.DELETE_DUPLICATE,
-            "exact semantic duplicate of " + repl + " (only input flexibility differs)",
-            replacement=repl,
-        )
+    if canonical in _FLEX_MAX_MIN_STATUS:
+        return _FLEX_MAX_MIN_STATUS[canonical]
     if canonical in _R18_041_STATUS:
         return _R18_041_STATUS[canonical]
     if canonical in _FUNDAMENTAL_TRANSFORM_RECIPES:
@@ -655,8 +999,11 @@ def _default_from_role(canonical: str, catalog: dict[str, Any]) -> DirectUseCont
     """Fall back to the verified MiningRole (the pre-R18 authority)."""
     role, _src = assign_mining_role_ex(canonical, catalog)
     if role in (MiningRole.ALPHA, MiningRole.INTRADAY_EOD):
-        if catalog.get("lifecycle_status") == "experimental" or not catalog.get("production_certified"):
-            return _contract(DirectUseStatus.DIRECT_ALPHA, "stock-level alpha (verified role)", terminal=False)
+        # R22-103..105: terminal legality is decided by the DirectUseRole, NEVER
+        # by lifecycle_status / production_certified.  A DIRECT_ALPHA with
+        # PENDING_CERTIFICATION has terminal_semantically_legal=True and
+        # production_admitted=False — the certification gate lives in
+        # ``production_admitted``, not in the terminal flag.
         return _contract(DirectUseStatus.DIRECT_ALPHA, "stock-level alpha (verified role)")
     if role is MiningRole.ALPHA_HIGH_COST:
         return _contract(DirectUseStatus.DIRECT_ALPHA_HIGH_COST, "full-history / high-cost alpha (verified role)")
@@ -685,9 +1032,19 @@ def _default_from_role(canonical: str, catalog: dict[str, Any]) -> DirectUseCont
     if role is MiningRole.LEGACY:
         return _contract(DirectUseStatus.DELETE_OBSOLETE, "legacy surface — obsolete or aliased")
     if role is MiningRole.DENIED:
+        # R18-126: a DENIED role alone is NOT a DELETE_USELESS verdict.  The
+        # current DENIED set is DSL/grammar infrastructure (arg/constant) and
+        # arbitrary-math utilities (sinh/cosh/cot/csc/sec/tan) that the mining
+        # layer permanently excludes from factor search.  Per R18-020 those are
+        # "移出默认 mining，必要时 ResearchTool/internal" — never a public factor
+        # canonical, but never mechanically deleted either.  Future/random
+        # non-causal primitives get an explicit DELETE_NONCAUSAL override in
+        # ``_resolve_explicit`` when they appear.
+        if canonical in {"arg", "constant"}:
+            return _contract(DirectUseStatus.MOVE_INTERNAL, "DSL/grammar primitive — internal supporting layer")
         return _contract(
-            DirectUseStatus.DELETE_NONCAUSAL,
-            "permanently-forbidden / non-causal primitive",
+            DirectUseStatus.RESEARCH_TOOL,
+            "permanently excluded from mining — arbitrary-math/utility; research tool only",
         )
     # UNRESOLVED must never survive into the retained set — surface it.
     return _contract(
@@ -697,12 +1054,29 @@ def _default_from_role(canonical: str, catalog: dict[str, Any]) -> DirectUseCont
 
 
 def resolve_direct_use(canonical: str, catalog: dict[str, Any] | None = None) -> DirectUseContract:
-    """R18-124: one final verdict per canonical, never SKIP/UNRESOLVED."""
+    """R18-124: one final verdict per canonical, never SKIP/UNRESOLVED.
+
+    R22-146: a research-tool verdict also records its causal replacement, so the
+    research manifest can report ``reason_not_mineable`` +
+    ``recommended_factor_replacement`` (or ``NO_SAFE_REPLACEMENT``)."""
     from cleaned_operators.registry import OperatorRegistry
 
     catalog = dict(catalog) if catalog is not None else (OperatorRegistry._catalog.get(canonical) or {})
     explicit = _resolve_explicit(canonical, catalog)
-    return explicit if explicit is not None else _default_from_role(canonical, catalog)
+    contract = explicit if explicit is not None else _default_from_role(canonical, catalog)
+    if contract.replacement:
+        return contract
+    repl = _CAUSAL_REPLACEMENT_MAP.get(canonical)
+    if repl:
+        return DirectUseContract(
+            status=contract.status,
+            terminal_allowed=contract.terminal_allowed,
+            retention_reason=contract.retention_reason,
+            ast_positions=contract.ast_positions,
+            replacement=repl,
+            delete_reason=contract.delete_reason,
+        )
+    return contract
 
 
 def resolve_direct_use_status(canonical: str, catalog: dict[str, Any] | None = None) -> DirectUseStatus:
@@ -753,6 +1127,15 @@ _EVENT_SLOTS: dict[str, tuple[str, ...]] = {
     "cross_event": ("a", "b"),
 }
 
+# R22-042/043/122..123: explicit slot semantics for multi-input advanced
+# operators — a miner must never infer meaning from bare ``x/y/z/f1/f2/f3``.
+_SLOT_SEMANTIC_ROLES: dict[str, dict[str, str]] = {
+    "ts_kernel_granger_score": {"y": "target", "x": "predictor"},
+    "ts_residualized_hsic": {
+        "x": "tested_variable", "y": "tested_variable", "z": "conditioning_variable",
+    },
+}
+
 PANEL_PARAM_SET = frozenset(
     {
         "x", "y", "z", "a", "b", "c", "v", "u", "w", "p", "q",
@@ -762,6 +1145,7 @@ PANEL_PARAM_SET = frozenset(
         "open_p", "high_p", "low_p", "close_p", "volume_p", "amount_p",
         "source", "target", "a_", "b_", "condition", "benchmark_ret",
         "member", "ret", "factor",
+        "left", "right",  # date_diff_days date-column inputs are panel fields
     }
 )
 
@@ -779,19 +1163,44 @@ class InputSlotSpec:
     context: str = "data"  # data | context | group | event | condition | scalar
 
 
-def input_slot_specs(canonical: str, catalog: dict[str, Any]) -> tuple[InputSlotSpec, ...]:
+def input_slot_specs(
+    canonical: str,
+    catalog: dict[str, Any],
+    *,
+    panel_params: Iterable[str] | None = None,
+    scalar_params: Iterable[str] | None = None,
+) -> tuple[InputSlotSpec, ...]:
     """Build the R18-029 input-slot contract for a canonical.
 
     ``data_inputs`` are the panel data fields; ``scalar_parameters`` are the
     numeric knobs; ``context_inputs`` / ``group_inputs`` / ``event_inputs`` are
     explicit context slots.  An ``inputs`` key, where kept, equals exactly the
     data-input list (R18-002).
+
+    The data-vs-scalar boundary is the AUTHORITATIVE one — ``split_scalar_panel_params``
+    (declared ``panel_params`` / ``input_fields`` / OperatorSpec inference) — never a
+    hand-rolled name heuristic.  ``panel_params`` / ``scalar_params`` are resolved by
+    :func:`build_direct_use_operator` and passed in; the slot *typing* (data /
+    condition / event / group / context) is layered on top for the R18-002 five-way split.
     """
     params = list(catalog.get("param_names") or ())
-    slots: list[InputSlotSpec] = []
+    if panel_params is None or scalar_params is None:
+        _pp = set(panel_params or ())
+        _sp = set(scalar_params or ())
+        for name in params:
+            if name in _pp or name in PANEL_PARAM_SET:
+                _pp.add(name)
+            else:
+                _sp.add(name)
+        panel_params = [p for p in params if p in _pp]
+        scalar_params = [p for p in params if p in _sp]
+    else:
+        panel_params = list(panel_params)
+        scalar_params = list(scalar_params)
     condition_name = _CONDITION_SLOT_NAMES.get(canonical)
     event_names = _EVENT_SLOTS.get(canonical, ())
     context_names = _CONTEXT_SLOTS.get(canonical, ())
+    slots: list[InputSlotSpec] = []
     for name in params:
         if condition_name and name == condition_name:
             slots.append(
@@ -832,13 +1241,14 @@ def input_slot_specs(canonical: str, catalog: dict[str, Any]) -> tuple[InputSlot
                 )
             )
             continue
-        if name in PANEL_PARAM_SET:
+        if name in panel_params:
+            _role_map = _SLOT_SEMANTIC_ROLES.get(canonical, {})
             slots.append(
                 InputSlotSpec(
                     parameter=name,
                     allowed_semantic_kinds=("field",),
                     allowed_units=(),
-                    allowed_roles=("data",),
+                    allowed_roles=(_role_map[name],) if name in _role_map else ("data",),
                     cardinality="panel",
                     axis_semantics="per_instrument",
                     context="data",
@@ -861,7 +1271,10 @@ def input_slot_specs(canonical: str, catalog: dict[str, Any]) -> tuple[InputSlot
 
 
 def split_input_slots(
-    canonical: str, catalog: dict[str, Any]
+    canonical: str,
+    catalog: dict[str, Any],
+    *,
+    slots: Sequence[InputSlotSpec] | None = None,
 ) -> dict[str, list[str]]:
     """R18-002: data_inputs / scalar_parameters / context_inputs / group_inputs /
     event_inputs split.  ``inputs`` (when needed) == data_inputs."""
@@ -870,7 +1283,9 @@ def split_input_slots(
     context: list[str] = []
     group: list[str] = []
     event: list[str] = []
-    for slot in input_slot_specs(canonical, catalog):
+    if slots is None:
+        slots = input_slot_specs(canonical, catalog)
+    for slot in slots:
         if slot.context == "data":
             data.append(slot.parameter)
         elif slot.context == "scalar":
@@ -931,9 +1346,106 @@ def min_effective_sample_contract(canonical: str) -> dict[str, int]:
     return {}
 
 
+# R22-121: concept fallback for the default input recipe — when no explicit
+# recipe exists, map the operator's data-input names to canonical concepts
+# (resolved to market sources by the R17 resolver; never physical columns).
+_INPUT_CONCEPT_FALLBACK: dict[str, str] = {
+    "x": "continuous_close", "close": "continuous_close",
+    "high": "continuous_high", "low": "continuous_low",
+    "open": "continuous_open", "vwap": "continuous_vwap",
+    "volume": "continuous_volume", "amount": "amount_local",
+    "ret": "return_decimal", "returns": "return_decimal",
+    "return": "return_decimal", "y": "return_decimal",
+    "benchmark_ret": "benchmark_return", "benchmark": "benchmark_return",
+    "weight": "continuous_close", "weights": "continuous_close",
+    "values": "continuous_close", "value": "continuous_close",
+    "f1": "return_decimal", "f2": "volume", "f3": "turnover",
+    "a": "continuous_close", "b": "continuous_close", "c": "continuous_close",
+    "price": "continuous_close", "source": "continuous_close",
+    "target": "return_decimal", "factor": "continuous_close",
+    "open_p": "continuous_open", "high_p": "continuous_high",
+    "low_p": "continuous_low", "close_p": "continuous_close",
+    "volume_p": "continuous_volume", "amount_p": "amount_local",
+    # fundamental period / income / balance concepts (R17 resolver names).
+    "period_id": "period_id",
+    "turnover": "turnover",
+    "pb": "price_to_book",
+    "pe": "price_to_earnings",
+    "market_cap": "market_cap",
+    "change_date": "event_date",
+    "date1": "event_date",
+    "date2": "event_date",
+    "left": "event_date",
+    "right": "event_date",
+    "flow_type": "cash_flow_type",
+    "event": "event_mask",
+    "condition": "condition_bool",
+    "expected": "earnings_expected",
+    "avg_assets": "total_assets",
+    "ocf": "operating_cash_flow",
+    "net_profit": "net_profit",
+    "net_income": "net_profit",
+    "total_assets": "total_assets",
+    "book_value": "book_value",
+    "eps": "earnings_per_share",
+    "revenue": "revenue",
+    "operating_profit": "operating_profit",
+    "equity": "total_equity",
+    "debt": "total_debt",
+    "cash": "cash_balance",
+    "inventory": "inventory",
+    "receivables": "accounts_receivable",
+    "payables": "accounts_payable",
+    # generic multi-series slots — a recipe binds the first series to the
+    # anchor price concept so every retained operator has a real binding.
+    "f1": "return_decimal", "f2": "volume", "f3": "turnover", "f4": "continuous_close",
+    "p1": "continuous_close", "p2": "continuous_close", "p3": "continuous_close",
+    "p4": "continuous_close", "p5": "continuous_close", "p6": "continuous_close",
+    "p7": "continuous_close",
+    "s1": "continuous_close", "s2": "continuous_close", "s3": "continuous_close",
+    "s4": "continuous_close", "s5": "continuous_close", "s6": "continuous_close",
+    "s7": "continuous_close", "s8": "continuous_close", "s9": "continuous_close",
+    "s10": "continuous_close",
+    "sid1": "continuous_close", "sid2": "continuous_close", "sid3": "continuous_close",
+    "sid4": "continuous_close", "sid5": "continuous_close", "sid6": "continuous_close",
+    "sid7": "continuous_close", "sid8": "continuous_close", "sid9": "continuous_close",
+    "sid10": "continuous_close",
+}
+
+
 def default_input_recipe(canonical: str) -> dict[str, str]:
-    """R18-070: operator-level default input binding recipe."""
-    return dict(_DEFAULT_INPUT_RECIPE.get(canonical, {}))
+    """R18-070 / R22-120/121: operator-level default input binding recipe.
+
+    Exact canonical wins; ``family_*`` fnmatch patterns cover promoted research
+    families.  R22-120: EVERY retained direct operator gets at least one real
+    recipe — the fallback maps the operator's data inputs to canonical concepts.
+    """
+    exact = _DEFAULT_INPUT_RECIPE.get(canonical)
+    if exact is not None:
+        return dict(exact)
+    for pattern, recipe in _DEFAULT_INPUT_RECIPE.items():
+        if pattern.endswith("*") and _fnmatch_any(canonical, (pattern,)):
+            return dict(recipe)
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        cat = OperatorRegistry._catalog.get(canonical) or {}
+        panel, _scalar = _authoritative_param_split(canonical, cat)
+        _slots = input_slot_specs(canonical, cat, panel_params=panel, scalar_params=_scalar)
+        data = split_input_slots(canonical, cat, slots=_slots)["data_inputs"]
+        recipe: dict[str, str] = {}
+        for name in data:
+            concept = _INPUT_CONCEPT_FALLBACK.get(name)
+            if concept and name not in recipe:
+                recipe[name] = concept
+        # R22-120: every retained operator with a panel input gets at least one
+        # real binding — anchor the first data input to the close-price concept
+        # when no name-specific concept matched.
+        if not recipe and data:
+            recipe[data[0]] = "continuous_close"
+        return recipe
+    except Exception:
+        return {}
 
 
 def scale_sensitive_flags(canonical: str) -> dict[str, bool]:
@@ -1018,8 +1530,20 @@ class DirectUseOperator:
     production_certified: bool
     directly_usable: bool
 
+    # R22-003..008: the single ``directly_usable`` verdict is split into five
+    # orthogonal fields.  ``directly_usable`` stays as the backward-compatible
+    # alias ``mining_visible ∧ production_admitted`` (the R18 "eligible" notion).
+    mining_visible: bool
+    composition_usable: bool
+    terminal_usable: bool
+    production_admitted: bool
+    context_admitted: bool
+
     min_effective_samples: dict[str, int]
     scale_sensitive: dict[str, bool]
+    search_prior: float
+    family_budget: int
+    cost_budget: int
     retention_usage: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -1124,11 +1648,161 @@ def _backend_names(canonical: str) -> tuple[str, str]:
     return preferred, reference
 
 
+def _authoritative_param_split(canonical: str, catalog: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """(panel_params, scalar_params) from the single authority.
+
+    ``split_scalar_panel_params`` uses declared ``panel_params`` / ``input_fields``
+    + OperatorSpec inference + the numeric-control heuristic — the R7-reviewed
+    boundary.  Falls back to the name heuristic only when resolution fails.
+    """
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+        from cleaned_operators.search.factor_dedup import split_scalar_panel_params
+
+        op = OperatorRegistry.get(canonical, "pandas_numpy") or OperatorRegistry.get(canonical)
+        meta = getattr(op, "metadata", None)
+        params = list(catalog.get("param_names") or getattr(meta, "param_names", None) or [])
+        scalar, panel = split_scalar_panel_params(params, meta, canonical)
+        return list(panel), list(scalar)
+    except Exception:
+        return [], list(catalog.get("param_names") or ())
+
+
+# R22-125: output value-domain vocabulary — every DIRECT_* operator carries one.
+# Status is the primary signal; then a curated family pattern table; then any
+# declared output metadata; finally ``continuous_signed`` (the honest default).
+_OUTPUT_DOMAIN_ALPHA_PATTERNS: list[tuple[str, str]] = [
+    ("_zscore", "zscore"),
+    ("_rank", "rank"),
+    ("cs_rank", "rank"),
+    ("ts_log_return", "return"),
+    ("ts_return", "return"),
+    ("return_decimal", "return"),
+    ("_surprise", "continuous_signed"),
+    ("_ratio", "ratio"),
+    ("_probability", "bounded_0_1"),
+    ("_bounded", "bounded_0_1"),
+    ("_count", "count"),
+    ("_frequency", "frequency"),
+    ("_duration", "duration"),
+    ("_days_since", "duration"),
+    ("_age", "duration"),
+    ("_growth_rate", "growth_rate"),
+    ("_velocity", "growth_rate"),
+    ("_slope", "continuous_signed"),
+    ("_deviation", "continuous_signed"),
+    ("_spread", "continuous_signed"),
+    ("_momentum", "return"),
+    ("_volatility", "continuous_nonnegative"),
+    ("_vol", "continuous_nonnegative"),
+    ("_variance", "continuous_nonnegative"),
+    ("_entropy", "continuous_nonnegative"),
+    ("_distance", "continuous_nonnegative"),
+    ("_imbalance", "continuous_signed"),
+    ("_corr", "bounded_0_1"),
+    ("_beta", "continuous_signed"),
+    ("_alpha", "continuous_signed"),
+    ("_resid", "continuous_signed"),
+    ("_r2", "bounded_0_1"),
+    ("_coeff", "continuous_signed"),
+    ("_coefficient", "continuous_signed"),
+    ("_strength", "continuous_nonnegative"),
+    ("_intensity", "continuous_nonnegative"),
+    ("_index", "continuous_signed"),
+    ("_score", "continuous_signed"),
+    ("_price", "price_level"),
+    ("_level", "price_level"),
+    ("_dollar", "continuous_signed"),
+    ("_amount", "continuous_signed"),
+    ("_turnover", "ratio"),
+    ("_value", "continuous_signed"),
+    ("_change", "continuous_signed"),
+    ("_gap", "continuous_signed"),
+    ("_deviation", "continuous_signed"),
+    ("_shift", "continuous_signed"),
+    ("_decay", "continuous_signed"),
+    ("_concentration", "bounded_0_1"),
+    ("_density", "continuous_nonnegative"),
+    ("_quality", "continuous_signed"),
+    ("_efficiency", "bounded_0_1"),
+    ("_share", "bounded_0_1"),
+    ("_ratio", "ratio"),
+    ("_stability", "bounded_0_1"),
+    ("_persistence", "bounded_0_1"),
+    ("_smoothness", "bounded_0_1"),
+]
+
+
+def _output_value_domain(canonical: str, catalog: dict[str, Any], status: DirectUseStatus) -> str:
+    """R22-124/125: the output value domain for a DIRECT_* operator."""
+    if status is DirectUseStatus.DIRECT_CONDITION:
+        return "boolean"
+    if status is DirectUseStatus.DIRECT_EVENT:
+        return "ternary_event"
+    if status in (
+        DirectUseStatus.DIRECT_STATE,
+        DirectUseStatus.DIRECT_GROUP_STATE,
+        DirectUseStatus.DIRECT_GLOBAL_STATE,
+    ):
+        return "category"
+    if status is DirectUseStatus.DIRECT_SOURCE_TRANSFORM:
+        return "continuous_signed"
+    if status is DirectUseStatus.DIRECT_CONTROL_FLOW:
+        return "continuous_signed"
+    # price-level composition building blocks are never scale-invariant.
+    if status is DirectUseStatus.DIRECT_INTERMEDIATE and canonical in _PRICE_LEVEL_INTERMEDIATE_OPS:
+        return "price_level"
+    if canonical.startswith("cdl_") or canonical in {"candlestick_pattern"}:
+        return "category"
+    if canonical in _BOOL_CONDITION_OPS:
+        return "boolean"
+    # declared output metadata (unit tag) is authoritative when present.
+    declared_unit = str(catalog.get("output_unit") or "").lower()
+    if declared_unit == "ratio":
+        return "ratio"
+    if declared_unit in {"level", "price", "close", "open", "high", "low", "vwap"}:
+        return "price_level"
+    if declared_unit == "volatility":
+        return "continuous_nonnegative"
+    for suffix, domain in _OUTPUT_DOMAIN_ALPHA_PATTERNS:
+        if canonical.endswith(suffix):
+            return domain
+    return "continuous_signed"
+
+
+def _smoke_recipe_ids(canonical: str, default_recipe: dict[str, str]) -> tuple[str, ...]:
+    """R22-163: a mining-visible operator gets at least one legal smoke recipe.
+
+    The smoke recipe is the deterministic minimal invocation a typed grammar can
+    generate — bind every data input to its canonical concept + default scalars.
+    State/Event roles verify role, not non-constant alpha output (R22-164)."""
+    if not default_recipe:
+        return ()
+    binding = ",".join(f"{k}={v}" for k, v in sorted(default_recipe.items()))
+    return (f"smoke:{canonical}::{binding}",)
+
+
+def _is_production_denied(canonical: str) -> bool:
+    """R22-116..117: the static ``PRODUCTION_DENIED`` gate feeds ``production_admitted``
+    (admission), never ``terminal_usable`` / ``mining_visible`` (semantic role)."""
+    try:
+        from cleaned_operators.operator_spec import PRODUCTION_DENIED_CANONICALS
+
+        return canonical in PRODUCTION_DENIED_CANONICALS
+    except Exception:
+        return False
+
+
 def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> DirectUseOperator:
     """Build one R18-096 matrix row (registry-level, no operator execution)."""
     contract = resolve_direct_use(canonical, catalog)
     role, role_src = assign_mining_role_ex(canonical, catalog)
-    split = split_input_slots(canonical, catalog)
+    panel_params, scalar_params = _authoritative_param_split(canonical, catalog)
+    slots = input_slot_specs(
+        canonical, catalog,
+        panel_params=panel_params, scalar_params=scalar_params,
+    )
+    split = split_input_slots(canonical, catalog, slots=slots)
     from cleaned_operators.operator_surface import classify_canonical
 
     tier = classify_canonical(canonical)
@@ -1170,13 +1844,30 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
     preferred, reference = _backend_names(canonical)
     scale_sens = scale_sensitive_flags(canonical)
     eff_sample = min_effective_sample_contract(canonical)
-    directly_usable = (
-        contract.status in _DIRECT_TERMINAL_STATUSES
-        and bool(catalog.get("production_certified"))
+    # R22-003..008: the five-field split replaces the single ``directly_usable``
+    # verdict.  Roles and admission are orthogonal:
+    #   mining_visible     = retained public ∧ role resolved ∧ not delete/tool/internal
+    #   composition_usable = mining_visible ∧ legal AST position ∧ contract complete
+    #   terminal_usable    = composition_usable ∧ status ∈ terminal statuses
+    #   production_admitted= certification ∧ cost contract ∧ sources ∧ not denied
+    #   context_admitted   = at least one market/source context supported
+    mining_visible = (
+        contract.status.value.startswith("direct_")
+        and role is not MiningRole.UNRESOLVED
+    )
+    composition_usable = mining_visible and bool(contract.ast_positions)
+    terminal_usable = mining_visible and contract.status in _DIRECT_TERMINAL_STATUSES
+    production_admitted = (
+        bool(catalog.get("production_certified"))
         and cost_contract_declared(canonical, catalog)
         and not source_status(canonical, catalog, None).missing
+        and not _is_production_denied(canonical)
     )
-    # for market-context ops, directly_usable is only meaningful with a context
+    context_admitted = bool(market)
+    # R18 backward-compatible alias: "usable in eligible mining" = mining-visible
+    # AND production-admitted (certification + cost + sources + not denied).  For
+    # market-context ops the ashare-only direct form is what a miner can admit.
+    directly_usable = mining_visible and production_admitted
     if contract.status is DirectUseStatus.DIRECT_ALPHA and canonical in _MARKET_CONTEXT_STATUS:
         directly_usable = directly_usable and "ashare" in market
     usage = {
@@ -1206,7 +1897,7 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         economic_effect_family=economic_effect_family(canonical),
         semantic_redundancy_group=semantic_redundancy_group(canonical),
         monotonic_transform_class=monotonic_transform_class(canonical),
-        input_slots=input_slot_specs(canonical, catalog),
+        input_slots=slots,
         data_inputs=tuple(split["data_inputs"]),
         scalar_parameters=tuple(split["scalar_parameters"]),
         context_inputs=tuple(split["context_inputs"]),
@@ -1216,9 +1907,9 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         output_semantic_kind=str(catalog.get("output_semantic_kind") or catalog.get("return_type") or "series"),
         output_unit=catalog.get("output_unit"),
         output_cardinality="panel" if role not in (MiningRole.GROUP_STATE, MiningRole.GLOBAL_STATE) else "broadcast",
-        output_value_domain="",
+        output_value_domain=_output_value_domain(canonical, catalog, contract.status),
         default_input_recipe=default_input_recipe(canonical),
-        smoke_recipe_ids=(),
+        smoke_recipe_ids=_smoke_recipe_ids(canonical, default_input_recipe(canonical)),
         supported_markets=market,
         source_recipes=source_reqs,
         default_params=tuple(catalog.get("param_names") or ()),
@@ -1235,8 +1926,16 @@ def build_direct_use_operator(canonical: str, catalog: dict[str, Any]) -> Direct
         reference_backend=reference,
         production_certified=bool(catalog.get("production_certified")),
         directly_usable=directly_usable,
+        mining_visible=mining_visible,
+        composition_usable=composition_usable,
+        terminal_usable=terminal_usable,
+        production_admitted=production_admitted,
+        context_admitted=context_admitted,
         min_effective_samples=eff_sample,
         scale_sensitive=scale_sens,
+        search_prior=_search_budget(_DIRECT_STATUS_LANES.get(contract.status, "alpha_direct"))[0],
+        family_budget=_search_budget(_DIRECT_STATUS_LANES.get(contract.status, "alpha_direct"))[1],
+        cost_budget=_search_budget(_DIRECT_STATUS_LANES.get(contract.status, "alpha_direct"))[2],
         retention_usage=usage,
     )
 
@@ -1282,9 +1981,9 @@ def get_direct_use_mining_operators(
         if ctx.market is not None and ctx.market not in row.supported_markets:
             continue
         if mode == "eligible":
-            if not row.production_certified:
-                continue
-            if not row.terminal_allowed and not row.allowed_ast_positions:
+            # intrinsic direct usability: certified + role-admissible + declared
+            # cost contract + no hard source gap when the operator declares one.
+            if not row.directly_usable:
                 continue
             if ctx.max_cost is not None and row.runtime_cost > ctx.max_cost:
                 continue

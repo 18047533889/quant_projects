@@ -299,7 +299,15 @@ def _tangent_series(feats: np.ndarray, k: int) -> np.ndarray:
                 continue
             tangent_dim = 2
             V = vt[:tangent_dim].T  # (d, tangent_dim)
-            local_scale = float(np.sqrt(np.mean(np.sum(Zc ** 2, axis=1)))) + _EPS
+            # R16-080: a completely-coincident peer cloud has NO local scale —
+            # ``+ _EPS`` fabricated a finite denominator for an unidentifiable
+            # tangent.  A zero / sub-tolerance local scale is NaN (the distance
+            # is undefined), never a machine-constant-normalized value.
+            raw_scale = float(np.sqrt(np.mean(np.sum(Zc ** 2, axis=1))))
+            identity_scale = float(np.sqrt(np.mean(np.sum(U ** 2, axis=1))))
+            if raw_scale <= _EPS * max(1.0, identity_scale):
+                continue
+            local_scale = raw_scale
             off = U[i] - mu
             proj = off - off @ V @ V.T
             out[t, i] = float(np.linalg.norm(proj) / local_scale)
@@ -341,13 +349,21 @@ def _register_knn_op(canonical: str, description: str, unit: str, cost: int, fn)
         # not a guaranteed-NaN dead region.  ``k`` and ``ridge`` are estimator
         # resolution knobs, never freely-searchable economic alphas.
         param_specs={
+            # R16-077: ``k`` / ``ridge`` are estimator-resolution knobs that
+            # must NEVER be freely searched — they expand the AST without
+            # economic signal and their injectivity on a small cross-section is
+            # a fixture artifact (k > breadth -> all-NaN regardless of value).
+            # Explicitly ``searchable=False``: audited preset / robustness lane
+            # only, removed from the default mining search set.
             "k": ParamSpec(
                 dtype=int, min=_KNN_MIN_K,
                 param_role=ParamRole.ESTIMATOR_RESOLUTION, default=20,
+                searchable=False,
             ),
             "ridge": ParamSpec(
                 dtype=float, min=0.0,
                 param_role=ParamRole.ESTIMATOR_RESOLUTION, default=1e-3,
+                searchable=False,
             ),
         },
     )

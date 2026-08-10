@@ -21,6 +21,7 @@ try:
 except ImportError:
     pl = None  # type: ignore
 
+from cleaned_operators.base import ParamRole, ParamSpec
 from cleaned_operators.base_polars import (
     OperatorMetadata,
     SeriesOperator,
@@ -274,11 +275,21 @@ class ClipPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="clip", category="math", description="裁剪到 [lo, hi]",
         examples=["clip(x, -3, 3)"], param_names=["x", "lo", "hi"], return_type="series", tags=["math", "polars"],
+        # R19-050: legacy ``min``/``max`` alias spellings declared explicitly.
+        param_aliases={"min": "lo", "max": "hi"},
+        param_specs={
+            "lo": ParamSpec(dtype=float, min=None, max=None, default=-3.0, searchable=True,
+                            param_role=ParamRole.ECONOMIC),
+            "hi": ParamSpec(dtype=float, min=None, max=None, default=3.0, searchable=True,
+                            param_role=ParamRole.ECONOMIC),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, lo: float = -3.0, hi: float = 3.0, **kwargs) -> pl.DataFrame:
-        lo_v = float(kwargs.get("min", lo))
-        hi_v = float(kwargs.get("max", hi))
+        from cleaned_operators.common.strict_params import strict_float
+
+        lo_v = strict_float(kwargs.get("min", lo), "lo")
+        hi_v = strict_float(kwargs.get("max", hi), "hi")
         cols = _numeric_cols(x)
         return x.with_columns([pl.col(c).clip(lo_v, hi_v).alias(c) for c in cols])
 
@@ -359,52 +370,57 @@ class LogReturnsPolars(SeriesOperator):
 
 @register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="factor_dsl_polars")
 class TSArgmaxPolars(SeriesOperator):
-    """Polars 滚动窗口最大值位置算子（canonical 参数 ``window``，``d`` 为别名）。"""
+    """Polars 滚动窗口最大值距当前 bar 的 bar 数（age，0=当前/最新 bar，并列取最新）。
+
+    R19-039..042/049: ``ts_argmax`` canonical 语义为 **age**（0=当前），与 pandas
+    backend / 共享 kernel ``rolling_days_since_extreme`` 一致。canonical 参数
+    ``window``，``d`` 为别名。"""
 
     metadata = OperatorMetadata(
-        name="ts_argmax", category="time_series", description="窗口内最大值偏移",
+        name="ts_argmax", category="time_series", description="窗口最大值距当前 bar 的 bar 数（0=当前，并列取最近）",
         examples=["ts_argmax(close, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
         param_aliases={"d": "window"},
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
+                                param_role=ParamRole.HORIZON),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        from cleaned_operators.common.gtja_compat import _rolling_days_since_extreme_1d
+        from cleaned_operators._rolling_fast import rolling_days_since_extreme
+        from cleaned_operators.common.strict_params import strict_int
 
-        # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
-        w = int(kwargs.get("d", window))
-        return panel_pandas_bridge(
-            x,
-            lambda pdf: pdf.apply(
-                lambda s: _rolling_days_since_extreme_1d(
-                    s.to_numpy(), w, maximum=True
-                )
-            ),
-        )
+        # ``d`` is a declared parser-level alias for ``window`` (param_aliases);
+        # the binder validates it against window's ParamSpec.
+        w = strict_int(kwargs.get("d", window), "window", minimum=1)
+        return panel_pandas_bridge(x, lambda pdf: rolling_days_since_extreme(pdf, w, maximum=True))
 
 
 @register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="factor_dsl_polars")
 class TSArgminPolars(SeriesOperator):
-    """Polars 滚动窗口最小值位置算子（canonical 参数 ``window``，``d`` 为别名）。"""
+    """Polars 滚动窗口最小值距当前 bar 的 bar 数（age，0=当前/最新 bar，并列取最新）。
+
+    R19-039..042/049: ``ts_argmin`` canonical 语义为 **age**（0=当前），并列取
+    最新 occurrence；需要 "0=窗口最旧 bar" 的 index 语义请用
+    ``ts_argmin_index_from_oldest``。canonical 参数 ``window``，``d`` 为别名。"""
 
     metadata = OperatorMetadata(
-        name="ts_argmin", category="time_series", description="窗口内最小值偏移",
+        name="ts_argmin", category="time_series", description="窗口最小值距当前 bar 的 bar 数（0=当前，并列取最近）",
         examples=["ts_argmin(close, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "polars"],
         param_aliases={"d": "window"},
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
+                                param_role=ParamRole.HORIZON),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        from cleaned_operators.common.gtja_compat import _rolling_days_since_extreme_1d
+        from cleaned_operators._rolling_fast import rolling_days_since_extreme
+        from cleaned_operators.common.strict_params import strict_int
 
         # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
-        w = int(kwargs.get("d", window))
-        return panel_pandas_bridge(
-            x,
-            lambda pdf: pdf.apply(
-                lambda s: _rolling_days_since_extreme_1d(
-                    s.to_numpy(), w, maximum=False
-                )
-            ),
-        )
+        w = strict_int(kwargs.get("d", window), "window", minimum=1)
+        return panel_pandas_bridge(x, lambda pdf: rolling_days_since_extreme(pdf, w, maximum=False))
 
 
 @register_operator(name="ts_quantile", category="time_series", business_category="time_series", canonical="ts_quantile", source="factor_dsl_polars")
@@ -415,11 +431,21 @@ class TSQuantilePolars(SeriesOperator):
         name="ts_quantile", category="time_series", description="滚动分位数",
         examples=["ts_quantile(returns, 20, 0.75)"], param_names=["x", "d", "q"], return_type="series",
         tags=["time_series", "polars"],
+        # R19-050..052: hidden window/p aliases declared explicitly; q in [0,1].
+        param_aliases={"window": "d", "p": "q"},
+        param_specs={
+            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True,
+                           param_role=ParamRole.HORIZON),
+            "q": ParamSpec(dtype=float, min=0, max=1, default=0.5, searchable=True,
+                           param_role=ParamRole.STATE_THRESHOLD),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, d: int = 20, q: float = 0.5, **kwargs) -> pl.DataFrame:
-        window = int(kwargs.get("window", d))
-        quantile = float(kwargs.get("p", q))
+        from cleaned_operators.common.strict_params import strict_int, strict_probability
+
+        w = strict_int(kwargs.get("window", d), "d", minimum=1)
+        quantile = strict_probability(kwargs.get("p", q), "q")
         cols = _numeric_cols(x)
         # pandas rolling().quantile() 跳过 NaN；polars rolling_quantile 会把 NaN
         # 当作最大参与排序。先 fill_nan(None) 对齐 pandas 缺失语义。
@@ -427,7 +453,7 @@ class TSQuantilePolars(SeriesOperator):
             pl.col(c).fill_nan(None).rolling_quantile(
                 quantile=quantile,
                 interpolation="linear",
-                window_size=window,
+                window_size=w,
                 min_samples=1,
             ).alias(c)
             for c in cols
@@ -441,22 +467,30 @@ class TSQuantilePolars(SeriesOperator):
 
 @register_operator(name="rank_corr", category="time_series", business_category="time_series", canonical="rank_corr", source="factor_dsl_polars")
 class RankCorrPolars(SeriesOperator):
-    """Polars 秩相关系数算子。"""
+    """Polars 秩相关系数算子（时序窗口，d>0）。"""
 
     metadata = OperatorMetadata(
-        name="rank_corr", category="time_series", description="秩相关系数",
+        name="rank_corr", category="time_series", description="滚动窗口秩相关系数（d>0 时序窗口）",
         examples=["rank_corr(close, volume, 20)"], param_names=["x", "y", "d"],
         return_type="series", tags=["time_series", "polars"],
+        # R19-016..018: d is the trailing window (>= 1); the old d=0 full-sample
+        # cross-section broadcast was removed (use cs_rank_corr for that).
+        param_aliases={"window": "d"},
+        param_specs={
+            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True,
+                           param_role=ParamRole.HORIZON),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
-        from cleaned_operators._numpy_kernels import rank_corr_
+        from cleaned_operators._numpy_kernels import ts_rank_corr_
+        from cleaned_operators.common.strict_params import strict_int
 
-        window = int(kwargs.get("window", d))
+        w = strict_int(kwargs.get("window", d), "d", minimum=1)
         cols = _align_cols(x, y)
         out: dict[str, np.ndarray] = {}
         for c in cols:
-            out[c] = rank_corr_(x[c].to_numpy(), y[c].to_numpy(), d=window)
+            out[c] = ts_rank_corr_(x[c].to_numpy(), y[c].to_numpy(), w)
         result = pl.DataFrame(out)
         if "date" in x.columns:
             result = result.with_columns(x["date"])
@@ -470,12 +504,19 @@ class TSTopNAvgPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="m_top_n_avg", category="time_series", description="滚动前 N 大均值",
         param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
+        # R19-050: hidden ``d`` alias declared explicitly.
+        param_aliases={"d": "n"},
+        param_specs={
+            "n": ParamSpec(dtype=int, min=1, default=5, searchable=True,
+                           param_role=ParamRole.ECONOMIC),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, n: int = 5, **kwargs) -> pl.DataFrame:
         from cleaned_operators._rolling_fast import rolling_top_n_mean
+        from cleaned_operators.common.strict_params import strict_int
 
-        top_n = int(kwargs.get("d", n))
+        top_n = strict_int(kwargs.get("d", n), "n", minimum=1)
         cols = _numeric_cols(x)
         pdf = x.select(cols).to_pandas()
         out = rolling_top_n_mean(pdf, top_n)
@@ -489,12 +530,18 @@ class TSTopNStdPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="m_top_n_std", category="time_series", description="滚动前 N 大标准差",
         param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
+        param_aliases={"d": "n"},
+        param_specs={
+            "n": ParamSpec(dtype=int, min=2, default=5, searchable=True,
+                           param_role=ParamRole.ECONOMIC),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, n: int = 5, **kwargs) -> pl.DataFrame:
         from cleaned_operators._rolling_fast import rolling_top_n_std
+        from cleaned_operators.common.strict_params import strict_int
 
-        top_n = int(kwargs.get("d", n))
+        top_n = strict_int(kwargs.get("d", n), "n", minimum=2)
         cols = _numeric_cols(x)
         pdf = x.select(cols).to_pandas()
         out = rolling_top_n_std(pdf, top_n)
@@ -508,16 +555,29 @@ class TSTopKSumPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="ts_topk_sum", category="time_series", description="滚动 Top-K 求和",
         param_names=["x", "d", "k"], return_type="series", tags=["time_series", "polars"],
+        # R19-050: hidden window/n aliases declared explicitly.
+        param_aliases={"window": "d", "n": "k"},
+        param_specs={
+            "d": ParamSpec(dtype=int, min=1, default=20, searchable=True,
+                           param_role=ParamRole.HORIZON),
+            "k": ParamSpec(dtype=int, min=1, default=None, searchable=True,
+                           param_role=ParamRole.ECONOMIC),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, d: int = 20, k: int | None = None, **kwargs) -> pl.DataFrame:
+        from backend.operator_errors import OperatorParameterError
         from cleaned_operators._rolling_fast import rolling_top_n_sum_window
+        from cleaned_operators.common.strict_params import strict_int
 
-        window = int(kwargs.get("window", d))
-        top_k = int(k if k is not None else kwargs.get("n", window))
+        w = strict_int(kwargs.get("window", d), "d", minimum=1)
+        k_eff = k if k is not None else kwargs.get("n", d)
+        top_k = strict_int(k_eff, "k", minimum=1)
+        if top_k > w:
+            raise OperatorParameterError("k must be <= window")
         cols = _numeric_cols(x)
         pdf = x.select(cols).to_pandas()
-        out = rolling_top_n_sum_window(pdf, window, top_k)
+        out = rolling_top_n_sum_window(pdf, w, top_k)
         return x.with_columns([pl.Series(name=c, values=out[c].to_numpy()) for c in cols])
 
 
@@ -528,12 +588,18 @@ class CumTopNAvgPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="cum_top_n_avg", category="time_series", description="累积前 N 大均值",
         param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
+        param_aliases={"d": "n"},
+        param_specs={
+            "n": ParamSpec(dtype=int, min=1, default=5, searchable=True,
+                           param_role=ParamRole.ECONOMIC),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, n: int = 5, **kwargs) -> pl.DataFrame:
         from cleaned_operators._rolling_fast import cum_top_n_mean
+        from cleaned_operators.common.strict_params import strict_int
 
-        top_n = int(kwargs.get("d", n))
+        top_n = strict_int(kwargs.get("d", n), "n", minimum=1)
         cols = _numeric_cols(x)
         pdf = x.select(cols).to_pandas()
         out = cum_top_n_mean(pdf, top_n)
@@ -547,12 +613,18 @@ class CumTopNSumPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="cum_top_n_sum", category="time_series", description="累积前 N 大求和",
         param_names=["x", "n"], return_type="series", tags=["time_series", "polars"],
+        param_aliases={"d": "n"},
+        param_specs={
+            "n": ParamSpec(dtype=int, min=1, default=5, searchable=True,
+                           param_role=ParamRole.ECONOMIC),
+        },
     )
 
     def _calculate_series(self, x: pl.DataFrame, n: int = 5, **kwargs) -> pl.DataFrame:
         from cleaned_operators._rolling_fast import cum_top_n_sum
+        from cleaned_operators.common.strict_params import strict_int
 
-        top_n = int(kwargs.get("d", n))
+        top_n = strict_int(kwargs.get("d", n), "n", minimum=1)
         cols = _numeric_cols(x)
         pdf = x.select(cols).to_pandas()
         out = cum_top_n_sum(pdf, top_n)

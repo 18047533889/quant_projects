@@ -39,10 +39,14 @@ class FactorExecutionScope:
     作用域的同结构子树不能共享，否则一次计算的结果会被错误复用到另一作用域
     （#321）。字段均可从 ``Factor`` 对象推断；取不到时使用默认值。
 
+    R20-056..057: ``market`` 默认改为空串（UNKNOWN），**绝不**默认 ``"A"``。
+    A 股默认会污染 US/其它市场的因子（把 US 因子当 A 算）；market 未声明时
+    保持空串，交给下游 gate / universe 判定决定。
+
     字段：
         frequency: 频率（默认 ``"1d"``）
         universe_id: 股票池标识（默认 ``"ALL"``）
-        market: 市场标识（默认 ``"A"``）
+        market: 市场标识（默认 ``""`` —— UNKNOWN，绝不默认 ``"A"``）
         calendar_id: 日历 ID（默认 ``""``）
         source_scope_hash: 数据源作用域哈希（默认 ``""``）
         decision_time_policy: 决策时间策略（默认 ``""``）
@@ -50,7 +54,7 @@ class FactorExecutionScope:
 
     frequency: str = "1d"
     universe_id: str = "ALL"
-    market: str = "A"
+    market: str = ""
     calendar_id: str = ""
     source_scope_hash: str = ""
     decision_time_policy: str = ""

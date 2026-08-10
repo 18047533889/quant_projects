@@ -69,12 +69,34 @@ def test_execute_clickhouse_delegates_to_execute_query():
         ch_config={},
     )
 
-    with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
-        with patch("data_access.clickhouse.panel.execute_query", return_value=table) as mock_eq:
-            series = execute_compiled_sql(compiled, pctx, None)
+    # R21-062: the executor now runs a *budgeted* ClickHouse query directly
+    # (settings carry max_execution_time / max_result_* / query_id) instead of
+    # the unbudgeted `data_access...execute_query(config, sql)`.
+    mock_result = MagicMock()
+    mock_result.arrow.return_value = table
+    mock_client = MagicMock()
+    mock_client.query.return_value = mock_result
 
-    mock_eq.assert_called_once()
+    # clickhouse_connect is not installed in CI here; inject a fake module.
+    import os
+    import types
+
+    os.environ["FACTOR_ENGINE_CLICKHOUSE_MAX_RESULT_ROWS"] = "100000"
+    fake_ch = types.ModuleType("clickhouse_connect")
+    fake_ch.get_client = MagicMock(return_value=mock_client)
+    with patch.dict(sys.modules, {"clickhouse_connect": fake_ch}):
+        with patch("backend.sql_pushdown.executor._ensure_data_access", return_value=None):
+            with patch("data_access.clickhouse.panel.ClickHouseConfig.from_env", return_value=mock_cfg):
+                series = execute_compiled_sql(compiled, pctx, None)
+
+    fake_ch.get_client.assert_called_once()
+    call_kwargs = fake_ch.get_client.call_args.kwargs
+    assert "settings" in call_kwargs
+    assert call_kwargs["settings"].get("readonly") == 1
+    mock_client.query.assert_called_once()
+    assert mock_client.query.call_args.kwargs["settings"].get("max_result_rows") == 100000
     assert len(series) == 2
+    os.environ.pop("FACTOR_ENGINE_CLICKHOUSE_MAX_RESULT_ROWS", None)
 
 
 def test_try_execute_sql_pushdown_none_without_ch_source():

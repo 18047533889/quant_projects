@@ -172,6 +172,66 @@ class SourceRequirement:
     note: str = ""
 
 
+class TargetFrequency(str, Enum):
+    """R16-018: the ONLY legal target frequencies.  A free string
+    (``"weekly/foo"``) silently failing open is a contract bug — an unknown
+    frequency must raise, not be matched loosely."""
+
+    DAILY = "daily"
+    MINUTE = "minute"
+    FUNDAMENTAL_PERIOD = "fundamental_period"
+
+
+def bind_target_frequency(value: str | TargetFrequency | None) -> TargetFrequency | None:
+    """Strict binder (R16-018): unknown strings raise ValueError."""
+    if value is None or isinstance(value, TargetFrequency):
+        return value
+    s = str(value).strip().lower()
+    try:
+        return TargetFrequency(s)
+    except ValueError:
+        raise ValueError(
+            f"target_frequency must be one of {[e.value for e in TargetFrequency]}, "
+            f"got {value!r}"
+        ) from None
+
+
+@dataclass(frozen=True)
+class MiningContext:
+    """R16-017: ONE eligibility context object.
+
+    market / frequency / source / source-capability / session / cost all enter
+    the SAME ``mining_eligible`` decision — the old design filtered market only
+    in the outer ``get_mining_operators``, so a direct ``mining_eligible`` call
+    could admit an A-share-only operator into a US search space.
+    """
+
+    market: str | None = None
+    target_frequency: TargetFrequency | None = None
+    available_sources: tuple[str, ...] | None = None
+    source_capabilities: dict[str, SourceCapability] | None = None
+    max_cost: int | None = None
+
+
+@dataclass(frozen=True)
+class SourceCapability:
+    """R16-014: what a source actually provides in a given environment.
+
+    ``source_id`` existing is NOT enough — ``fundamental_pit`` may exist while
+    the required depreciation / revision-vintage / analyst-target concepts do
+    not.  ``source_status`` performs a required-concepts subset check against
+    this capability when a caller supplies capabilities; an id-only legacy
+    context cannot prove concepts and is treated as UNKNOWN for that source.
+    """
+
+    source_id: str
+    concepts: tuple[str, ...] = ()
+    grain: str | None = None
+    pit_mode: str | None = None          # asof | point_in_time | snapshot
+    vintage_support: bool = False
+    market: str | None = None
+
+
 @dataclass(frozen=True)
 class SourceStatus:
     """R15-INC-022/004: an environment has *unknown* capability until the caller
@@ -183,6 +243,9 @@ class SourceStatus:
     satisfied: tuple[str, ...]
     missing: tuple[str, ...]
     unknown: bool = False
+    # R16-014: concept gaps, e.g. ``fundamental_pit`` present but no
+    # ``depreciation`` concept -> SOURCE_CONCEPT_MISSING.
+    concept_gap: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -270,18 +333,50 @@ _ASHARE_ONLY_CANONICALS = frozenset(
         "ashare_limit_one_price", "ashare_limit_failed",
         "ashare_open_at_upper_limit", "ashare_limit_open_failed",
         "ashare_limit_touch", "ashare_status",
+        # R22-118..119: minute-limit and suspension families are A-share-only
+        # (A-share has a certified minute source; US has none).  Explicitly
+        # declaring the market stops ``market_support`` from failing closed to
+        # ``()`` for these specialized names — they are ashare-context direct
+        # alphas, never a global DELETE (contextual availability, R22-070).
+        "intra_limit_first_hit_time", "intra_limit_duration",
+        "intra_limit_reopen_count",
+        "suspension_frequency", "suspension_status_coverage",
     }
 )
 
 
-def market_support(canonical: str) -> tuple[str, ...]:
-    """Markets a canonical is valid in.  Default both; A-share-specific state
-    machine operators are ashare-only.  No per-operator market metadata exists
-    yet, so this is a small declarative map + the ``ashare_`` prefix contract."""
+def market_support(canonical: str, catalog: dict[str, Any] | None = None) -> tuple[str, ...]:
+    """Markets a canonical is valid in.
+
+    R16-019: metadata is authoritative first (``supported_markets`` /
+    ``market_semantics="agnostic"``).  A-share state/limit/suspension operators
+    are ashare-only.  A SPECIALIZED operator (limit/status/suspension-family)
+    with NO market declaration fails CLOSED (empty support) — it must never be
+    defaulted into both markets.  Generic math operators are market-agnostic by
+    nature and keep the two-market default.
+    """
+    catalog = catalog or {}
+    declared = catalog.get("supported_markets")
+    if isinstance(declared, (list, tuple, frozenset, set)) and declared:
+        return tuple(sorted(str(m) for m in declared))
+    if catalog.get("market_semantics") == "agnostic":
+        return ("ashare", "us")
     name = canonical.lower()
     if name.startswith("ashare_") or canonical in _ASHARE_ONLY_CANONICALS:
         return ("ashare",)
+    if _looks_market_specialized(name):
+        # R16-019: specialized-but-undeclared -> fail closed (no market).
+        return ()
     return ("ashare", "us")
+
+
+def _looks_market_specialized(name: str) -> bool:
+    """A-share-specific state/limit/suspension family names.  These cannot exist
+    in a US context, so without an explicit market declaration they fail closed
+    instead of defaulting to both markets (R16-019)."""
+    return name.startswith(("limit_", "ashare_", "suspension_")) or any(
+        token in name for token in ("_limit_", "_suspension", "one_price_limit")
+    )
 
 
 def validate_market(market: str | None) -> str | None:
@@ -438,10 +533,17 @@ def cost_contract_declared(canonical: str, catalog: dict[str, Any]) -> bool:
 def _required_sources(canonical: str, catalog: dict[str, Any]) -> tuple[str, ...]:
     """R15-INC-005/006: explicit source requirements per canonical.
 
-    Grain-derived default for the common case; a small declarative map handles
-    multi-source AND dependencies (price + fundamental, minute + daily rule,
-    relation + value) that a single-grain proxy cannot express.
+    Priority (R16-015): catalog-declared ``source_requirements`` (typed
+    ``SourceRequirement`` list on the operator metadata) is authoritative; then
+    the legacy migration map (``_MULTI_SOURCE_REQUIREMENTS``); then the
+    grain-derived / family default.  R16-013: ``index_`` operators resolve to
+    ``index_pit`` — the vocabulary already declares it — never a broad
+    ``relation_pit`` name guess.  holder/shareholder/relation/event/index each
+    have their OWN typed source.
     """
+    declared = catalog.get("source_requirements")
+    if isinstance(declared, (list, tuple)) and declared:
+        return tuple(sorted({s.source_id for s in declared if hasattr(s, "source_id")}))
     explicit = _MULTI_SOURCE_REQUIREMENTS.get(canonical)
     if explicit:
         return tuple(sorted({s.source_id for s in explicit}))
@@ -458,12 +560,16 @@ def _required_sources(canonical: str, catalog: dict[str, Any]) -> tuple[str, ...
         catalog.get("scope") or ""
     ) == "fundamental_period":
         return ("fundamental_pit",)
-    if operator_name.startswith(
-        ("holder_", "relation_", "index_", "shareholder_")
-    ):
-        return ("shareholder_pit",) if operator_name.startswith(
-            ("holder_", "shareholder_")
-        ) else ("relation_pit",)
+    # R16-013: typed per-family source — an ``index_*`` operator needs the index
+    # PIT source, never a relation/name-guess fallback.
+    if operator_name.startswith(("holder_", "shareholder_")):
+        return ("shareholder_pit",)
+    if operator_name.startswith("index_"):
+        return ("index_pit",)
+    if operator_name.startswith("relation_"):
+        return ("relation_pit",)
+    if operator_name.startswith("event_"):
+        return ("event_pit",)
     return ("daily_bar",)
 
 
@@ -485,6 +591,8 @@ def source_status(
     canonical: str,
     catalog: dict[str, Any],
     available_sources: Iterable[str] | None,
+    *,
+    source_capabilities: dict[str, SourceCapability] | None = None,
 ) -> SourceStatus:
     """R15-INC-004: distinguish UNKNOWN / explicit-empty / explicit-set.
 
@@ -492,16 +600,53 @@ def source_status(
     it unknown, never assume every source is available.  An explicit empty set
     means nothing is available.  A non-empty set is intersected with the AND
     requirements.
+
+    R16-014: when ``source_capabilities`` is supplied, source_id membership is
+    NOT enough — each required source's ``required_concepts`` must be a subset
+    of the capability's concepts, or the source lands in ``concept_gap``
+    (SOURCE_CONCEPT_MISSING) even though the source exists.
     """
     required = _required_sources(canonical, catalog)
+    # concept requirements per required source
+    required_concepts: dict[str, tuple[str, ...]] = {}
+    declared = catalog.get("source_requirements")
+    if isinstance(declared, (list, tuple)):
+        for s in declared:
+            if hasattr(s, "source_id"):
+                required_concepts[s.source_id] = tuple(
+                    getattr(s, "required_concepts", None) or ()
+                )
+    else:
+        for s in _MULTI_SOURCE_REQUIREMENTS.get(canonical, ()):
+            required_concepts[s.source_id] = tuple(s.required_concepts)
     if available_sources is None:
         return SourceStatus(required, (), (), unknown=True)
     avail = frozenset(str(s) for s in available_sources)
     if not avail:
         return SourceStatus(required, (), required, unknown=False)
-    satisfied = tuple(sorted(s for s in required if s in avail))
-    missing = tuple(sorted(s for s in required if s not in avail))
-    return SourceStatus(required, satisfied, missing, unknown=False)
+    satisfied = []
+    missing = []
+    concept_gap = []
+    for s in required:
+        if s not in avail:
+            missing.append(s)
+            continue
+        # source present — verify concepts when the caller declared capabilities
+        concepts_needed = required_concepts.get(s, ())
+        if source_capabilities is not None and concepts_needed:
+            cap = source_capabilities.get(s)
+            if cap is None:
+                # source id listed but no capability declared -> cannot prove
+                concept_gap.append(s)
+                continue
+            cap_concepts = frozenset(cap.concepts)
+            if not set(concepts_needed) <= cap_concepts:
+                concept_gap.append(s)
+                continue
+        satisfied.append(s)
+    return SourceStatus(tuple(required), tuple(sorted(satisfied)),
+                        tuple(sorted(missing)), unknown=False,
+                        concept_gap=tuple(sorted(concept_gap)))
 
 
 def _sources_available(canonical: str, catalog: dict[str, Any], available_sources: Iterable[str]) -> tuple[str, ...]:
@@ -512,6 +657,29 @@ def _sources_available(canonical: str, catalog: dict[str, Any], available_source
 def assign_mining_role(canonical: str, catalog: dict[str, Any] | None = None) -> MiningRole:
     """Deterministic, fail-closed role assignment (backward-compatible wrapper)."""
     return assign_mining_role_ex(canonical, catalog)[0]
+
+
+def _role_from_direct_status(status: Any) -> MiningRole | None:
+    """R22-009..013: map a DIRECT_* DirectUse verdict to the corresponding
+    MiningRole so the authoring tier (surface) and the semantic role stay
+    orthogonal.  DIRECT_INTERMEDIATE / DIRECT_RECIPE / DIRECT_CONTROL_FLOW map to
+    ALPHA (their ast positions and terminal authority come from DirectUse)."""
+    from mining.direct_use import DirectUseStatus
+
+    mapping = {
+        DirectUseStatus.DIRECT_ALPHA: MiningRole.ALPHA,
+        DirectUseStatus.DIRECT_ALPHA_HIGH_COST: MiningRole.ALPHA_HIGH_COST,
+        DirectUseStatus.DIRECT_STATE: MiningRole.STATE,
+        DirectUseStatus.DIRECT_CONDITION: MiningRole.CONDITION,
+        DirectUseStatus.DIRECT_EVENT: MiningRole.EVENT,
+        DirectUseStatus.DIRECT_GROUP_STATE: MiningRole.GROUP_STATE,
+        DirectUseStatus.DIRECT_GLOBAL_STATE: MiningRole.GLOBAL_STATE,
+        DirectUseStatus.DIRECT_INTERMEDIATE: MiningRole.ALPHA,
+        DirectUseStatus.DIRECT_SOURCE_TRANSFORM: MiningRole.SOURCE_TRANSFORM,
+        DirectUseStatus.DIRECT_RECIPE: MiningRole.ALPHA,
+        DirectUseStatus.DIRECT_CONTROL_FLOW: MiningRole.ALPHA,
+    }
+    return mapping.get(status)
 
 
 def assign_mining_role_ex(
@@ -633,9 +801,23 @@ def assign_mining_role_ex(
     # 9. Reviewed factor-authoring surfaces (daily / extended) → stock-level
     #    alpha.  The surface manifest is version-bound human review
     #    (REVIEWED_MIGRATION_MANIFEST / DAILY_CANONICALS / EXTENDED set), so this
-    #    is a VERIFIED mapping, not a name heuristic.  ``research`` stays a
-    #    separate tier (R15-INC-013: tier and role are orthogonal).
+    #    is a VERIFIED mapping, not a name heuristic.
+    #    R22-009..012: ``surface == research`` is an AUTHORING/LIFECYCLE tier, not
+    #    a semantic role.  A research-surface canonical with an explicit DIRECT_*
+    #    DirectUse verdict resolves to that role; only true research-tool / delete
+    #    verdicts keep the RESEARCH role.  ``_resolve_explicit`` is a pure name
+    #    table lookup, so there is no recursion back into role assignment.
     if surface == "research":
+        try:
+            from mining.direct_use import _resolve_explicit
+
+            contract = _resolve_explicit(canonical, catalog)
+            if contract is not None and contract.status.value.startswith("direct_"):
+                role = _role_from_direct_status(contract.status)
+                if role is not None:
+                    return role, RoleSource.VERIFIED_RULE
+        except Exception:
+            pass
         return MiningRole.RESEARCH, RoleSource.VERIFIED_RULE
     if surface in ("daily", "extended"):
         return MiningRole.ALPHA, RoleSource.VERIFIED_RULE
@@ -727,15 +909,28 @@ def _missing_policy(canonical: str) -> str | None:
         return None
 
 
-def _input_semantic_types(canonical: str, catalog: dict[str, Any]) -> tuple[str, ...]:
-    """R15-INC-018: field/param NAMES are not SemanticTypes.  The catalog does
-    not yet carry per-parameter semantic-type declarations for every operator,
-    so we report declared ``input_fields`` as field names (the honest
-    fallback) and never claim a type where none exists.  A canonical with no
-    declaration reports an empty tuple, NOT a guessed type."""
-    fields = catalog.get("input_fields")
+def _input_field_concepts(canonical: str, catalog: dict[str, Any]) -> tuple[str, ...]:
+    """R16-016: declared INPUT FIELD CONCEPTS (field names / concepts), separate
+    from semantic types.  A field concept (``close``, ``eps``, ``turnover``) is
+    never a SemanticType (``ReturnLike``, ``Volume``).  No fallback between the
+    two."""
+    fields = catalog.get("input_field_concepts")
     if isinstance(fields, (list, tuple, frozenset, set)):
         return tuple(sorted(str(f) for f in fields))
+    legacy = catalog.get("input_fields")
+    if isinstance(legacy, (list, tuple, frozenset, set)):
+        return tuple(sorted(str(f) for f in legacy))
+    return ()
+
+
+def _input_semantic_types(canonical: str, catalog: dict[str, Any]) -> tuple[str, ...]:
+    """R16-016: declared INPUT SEMANTIC TYPES ONLY — never field names.
+
+    R15-INC-018 was only half-fixed: returning ``input_fields`` when present
+    mixed field names with SemanticTypes in one field.  The two are now separate
+    (``input_field_concepts`` vs ``input_semantic_types``) and cannot fall back
+    to each other.  A canonical with no type declaration reports an empty tuple,
+    NOT a guessed type."""
     declared = catalog.get("input_semantic_types")
     if isinstance(declared, (list, tuple, frozenset, set)):
         return tuple(sorted(str(t) for t in declared))
@@ -746,15 +941,27 @@ def _searchable_params(canonical: str, catalog: dict[str, Any]) -> tuple[str, ..
     """R15-INC-008/009: searchable scalars come from the ResolvedSignature's
     scalar params via ``searchable_param_names`` — the single authority — and
     never from a raw scan of ``param_names`` (which would let panel/context
-    objects leak into the search surface).  The pre-R15 ``str(role).lower()``
-    comparison never matched Enum reprs and let estimator/numerical knobs leak."""
+    objects leak into the search surface).
+
+    R16-020: default mining searches ONLY ECONOMIC / HORIZON / STATE_THRESHOLD /
+    MODEL_ORDER.  ``ESTIMATOR_RESOLUTION`` (bins / grid / projections /
+    surrogates / ridge) expands the AST without adding economic signal and is
+    restricted to an audited preset / robustness lane — it is excluded from the
+    default searchable set here."""
     try:
-        from cleaned_operators.base import searchable_param_names
+        from cleaned_operators.base import ParamRole, searchable_param_names
         from cleaned_operators.registry import OperatorRegistry
 
         operator = OperatorRegistry.get(canonical, "pandas_numpy")
         grades = searchable_param_names(getattr(operator, "metadata", None))
-        return tuple(sorted(set(grades.get("full", ())) | set(grades.get("coarse", ()))))
+        excluded = {ParamRole.ESTIMATOR_RESOLUTION}
+        keep = set(grades.get("full", ())) | set(grades.get("coarse", ()))
+        specs = getattr(getattr(operator, "metadata", None), "param_specs", None) or {}
+        for name in list(keep):
+            spec = specs.get(name)
+            if spec is not None and getattr(spec, "param_role", None) in excluded:
+                keep.discard(name)
+        return tuple(sorted(keep))
     except Exception:
         return ()
 
@@ -782,13 +989,21 @@ def mining_eligible(
     role: MiningRole | None = None,
     available_sources: Iterable[str] | None = None,
     target_frequency: str | None = None,
+    context: MiningContext | None = None,
+    market: str | None = None,
 ) -> bool:
     """Machine eligibility: certified AND role-admissible AND source OK AND
-    frequency OK AND declared cost contract.
+    frequency OK AND market OK AND declared cost contract.
 
     This is the single authority for ``mining_eligible`` — nothing else may
     claim an operator is mineable.  R15-INC-004: ``available_sources=None``
     means UNKNOWN capability → fail closed (never assumed available).
+    R16-017: ``market`` is checked HERE (not only in the outer
+    ``get_mining_operators``), so a direct call with a market context cannot
+    admit an A-share-only operator into a US search space.  ``MiningContext``
+    carries market/frequency/source/capability/cost as one object.
+    R16-014: a required source whose concepts the environment cannot prove is a
+    concept gap — fail closed.
     """
     catalog = dict(catalog) if catalog is not None else _catalog_record(canonical)
     role, _src = (
@@ -803,15 +1018,36 @@ def mining_eligible(
     # R15-INC-011: no explicit cost contract → not eligible (no cheap default).
     if not cost_contract_declared(canonical, catalog):
         return False
+
+    # --- R16-017: a unified context may override the individual kwargs. ---
+    if context is not None:
+        ctx_market = context.market
+        ctx_freq = context.target_frequency
+        ctx_sources = context.available_sources
+        ctx_caps = context.source_capabilities
+    else:
+        ctx_market = market
+        ctx_freq = bind_target_frequency(target_frequency)
+        ctx_sources = available_sources
+        ctx_caps = None
+
+    # Market (R16-017): a specific market mismatch fails closed.
+    if ctx_market is not None:
+        supported = market_support(canonical, catalog)
+        if ctx_market not in supported:
+            return False
+
     # Source availability (R15-INC-004): unknown or incomplete → fail closed.
-    status = source_status(canonical, catalog, available_sources)
+    status = source_status(canonical, catalog, ctx_sources,
+                           source_capabilities=ctx_caps)
     if status.unknown:
         return False
-    if status.missing:
+    if status.missing or status.concept_gap:
         return False
+
     # Frequency contract (R15-INC-003): target matches OUTPUT grain.
-    if target_frequency is not None:
-        target = str(target_frequency).lower()
+    if ctx_freq is not None:
+        target = ctx_freq.value if isinstance(ctx_freq, TargetFrequency) else str(ctx_freq).lower()
         output_grain = _output_grain(canonical, catalog, role)
         if output_grain == "minute" and target != "minute":
             return False
@@ -866,19 +1102,31 @@ def _admission_decision(
     actions: list[str] = []
     state: AdmissionState = AdmissionState.PENDING
 
+    # R16-022: NO early exit.  A canonical can carry MULTIPLE independent
+    # blockers, and the matrix must keep the FULL precise set (a denied
+    # canonical may also be evidence-missing / unresolved; an unresolved role
+    # may also have a cost-contract gap).  The terminal state is recorded but
+    # evaluation continues so no reason is flattened away.
     if role is MiningRole.DENIED:
-        return AdmissionState.DENIED, ("B01",), ("delete from public registry: permanently-forbidden primitive",)
+        state = AdmissionState.DENIED
+        blockers.append("B01")
+        actions.append("delete from public registry: permanently-forbidden primitive")
     if role is MiningRole.UNRESOLVED:
-        return AdmissionState.UNRESOLVED, ("B34",), ("assign an explicit MiningRole / output semantic type; UNRESOLVED is never mined",)
+        state = AdmissionState.UNRESOLVED
+        blockers.append("B34")
+        actions.append("assign an explicit MiningRole / output semantic type; UNRESOLVED is never mined")
     if role_source is RoleSource.FALLBACK:
         blockers.append("B34")
         actions.append("replace the fallback role with an explicit/verified classification")
-        state = AdmissionState.UNRESOLVED
-    if role not in _MINEABLE_ROLES:
-        return state, tuple(blockers) or ("B02",), tuple(actions) or ("supporting layer: never mined as a factor",)
+        if state is AdmissionState.PENDING:
+            state = AdmissionState.UNRESOLVED
+    if role not in _MINEABLE_ROLES and not blockers:
+        blockers.append("B02")
+        actions.append("supporting layer: never mined as a factor")
 
     if not bool(catalog.get("production_certified")):
-        state = AdmissionState.PENDING
+        if state is AdmissionState.PENDING:
+            state = AdmissionState.PENDING
         if not catalog.get("implementation_certified"):
             blockers.append("B08"); actions.append("certify implementation evidence")
         if not (catalog.get("semantic_certified") or catalog.get("semantic_golden_verified")):
@@ -892,13 +1140,25 @@ def _admission_decision(
         if not catalog.get("backend_passed"):
             blockers.append("B14"); actions.append("certify backend evidence")
 
+    # R16-022: a DENIED / UNRESOLVED terminal state is never downgraded by
+    # later quality findings — the blockers still accumulate (full precise set),
+    # but the terminal admission state stands.
+    _TERMINAL = (AdmissionState.DENIED, AdmissionState.UNRESOLVED)
     if source_status_.unknown:
-        state = AdmissionState.PENDING
+        if state not in _TERMINAL:
+            state = AdmissionState.PENDING
         blockers.append("B15"); actions.append("declare available source context (unknown capability is not availability)")
     elif source_status_.missing:
-        state = AdmissionState.SOURCE_BLOCKED
+        if state not in _TERMINAL:
+            state = AdmissionState.SOURCE_BLOCKED
         blockers.append("B15")
         actions.append(f"provide sources {sorted(source_status_.missing)}")
+    elif source_status_.concept_gap:
+        # R16-014: source exists but a required concept cannot be proven.
+        if state not in _TERMINAL:
+            state = AdmissionState.SOURCE_BLOCKED
+        blockers.append("B15")
+        actions.append(f"provide required concepts for sources {sorted(source_status_.concept_gap)}")
 
     if not cost_contract_declared(canonical, catalog):
         blockers.append("B33"); actions.append("declare an explicit cost contract (cost: tag or cost_model)")
@@ -914,6 +1174,45 @@ def _admission_decision(
     if state is AdmissionState.PENDING and not blockers:
         state = AdmissionState.ELIGIBLE
     return state, tuple(blockers), tuple(actions)
+
+
+def audit_multi_source_contract(catalog: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """R16-015: every panel_arity>1 operator must carry complete typed source
+    requirements.
+
+    A benchmark / daily+fundamental / minute+daily-limit / group-membership /
+    relation-exposure operator that is still covered by a single-source
+    fallback would silently under-require its data.  This audits each
+    multi-panel operator and reports which of its panel inputs have no typed
+    SourceConcept binding.  A canonical that relies on the legacy migration map
+    is reported as ``legacy_migration`` (accepted for now, not silent).
+    """
+    from cleaned_operators.registry import OperatorRegistry
+
+    catalog = dict(catalog) if catalog is not None else OperatorRegistry._catalog
+    findings: list[dict[str, Any]] = []
+    for canonical, entry in sorted(catalog.items()):
+        pp = tuple(entry.get("panel_params") or ())
+        if len(pp) <= 1:
+            continue
+        reqs = entry.get("source_requirements")
+        src = _required_sources(canonical, entry)
+        record = {
+            "canonical": canonical,
+            "panel_arity": len(pp),
+            "panel_params": pp,
+            "required_sources": list(src),
+            "typed_source_requirements": bool(reqs),
+            "legacy_migration_only": canonical in _MULTI_SOURCE_REQUIREMENTS,
+        }
+        # single-source fallback on a multi-panel operator is a completeness gap
+        if not reqs and len(src) <= 1 and canonical not in _MULTI_SOURCE_REQUIREMENTS:
+            record["gap"] = "multi-panel operator has no typed multi-source contract"
+            findings.append(record)
+        else:
+            record["gap"] = ""
+            findings.append(record)
+    return findings
 
 
 # ---------------------------------------------------------------------------
@@ -979,7 +1278,8 @@ def get_mining_operators(
             role_filter.add(value if isinstance(value, MiningRole) else MiningRole(str(value).lower()))
 
     max_cost = _coerce_max_cost(max_cost)
-    freq = str(target_frequency).lower() if target_frequency else None
+    # R16-018: strict frequency enum — an unknown string raises.
+    freq = bind_target_frequency(target_frequency)
     market = validate_market(market)
     env_sources = tuple(str(s) for s in (available_sources or ())) if available_sources is not None else None
 
@@ -1011,6 +1311,9 @@ def get_mining_operators(
             role=role,
             available_sources=env_sources,
             target_frequency=freq,
+            # R16-017: market is part of the SAME eligibility decision, so a
+            # direct admission check and the manifest query cannot diverge.
+            market=market,
         )
         if mode == "eligible" and not eligible:
             continue

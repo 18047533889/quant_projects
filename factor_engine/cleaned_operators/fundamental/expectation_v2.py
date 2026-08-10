@@ -90,7 +90,12 @@ def fin_surprise_event_percentile(
 
 
 def _same_target(expected, target_period_id):
-    period = target_period_id.reindex(index=expected.index, columns=expected.columns)
+    from cleaned_operators.alignment import align_panel_inputs
+
+    expected, target_period_id = align_panel_inputs(
+        expected, target_period_id, names=("expected", "target_period_id")
+    )
+    period = target_period_id
     return period.eq(period.shift(1)) & period.notna()
 
 
@@ -103,8 +108,16 @@ def _expectation_masks(expected, target_period_id):
     undetermined -> NaN, never a guessed 0 (review R4-26).  The first row is a
     valid baseline (no prior estimate to revise -> 0), matching the parity
     contract.
+
+    R23-039: the target-period panel is strict-aligned to expected (never
+    silently reindexed).
     """
-    period = target_period_id.reindex(index=expected.index, columns=expected.columns)
+    from cleaned_operators.alignment import align_panel_inputs
+
+    expected, target_period_id = align_panel_inputs(
+        expected, target_period_id, names=("expected", "target_period_id")
+    )
+    period = target_period_id
     prev_exp = expected.shift(1)
     prev_period = period.shift(1)
     first_row = pd.DataFrame(False, index=expected.index, columns=expected.columns)
@@ -118,7 +131,12 @@ def _expectation_masks(expected, target_period_id):
 
 
 def _expectation_complete(expected, target_period_id):
-    period = target_period_id.reindex(index=expected.index, columns=expected.columns)
+    from cleaned_operators.alignment import align_panel_inputs
+
+    expected, target_period_id = align_panel_inputs(
+        expected, target_period_id, names=("expected", "target_period_id")
+    )
+    period = target_period_id
     prev_ok = expected.shift(1).notna() & period.shift(1).notna()
     first_row = pd.DataFrame(False, index=expected.index, columns=expected.columns)
     first_row.iloc[0] = True
@@ -179,14 +197,24 @@ def fin_days_since_expectation_revision(
     max_days=252,
 ):
     cap = _pos_int(max_days, "max_days")
+    from cleaned_operators.alignment import align_panel_inputs
+
+    expected, target_period_id = align_panel_inputs(
+        expected, target_period_id, names=("expected", "target_period_id")
+    )
     events = _revision_event(expected, target_period_id)
-    period = target_period_id.reindex(index=expected.index, columns=expected.columns)
+    period = target_period_id
     output = pd.DataFrame(np.nan, index=expected.index, columns=expected.columns)
     for column in expected.columns:
         ev = expected[column].to_numpy(dtype=float)
         pv = period[column].to_numpy()
         event = events[column].fillna(False).to_numpy(dtype=bool)
-        age = cap
+        # R23-105/106: left-censor — with no historical expectation observation
+        # the revision age is UNKNOWN, not stale.  age starts at None (censored)
+        # so the first row emits NaN, and only a genuinely OBSERVED revision
+        # event starts the clock.  The old ``age = cap`` silently reported
+        # "max_days since last revision" on the very first sample row.
+        age = None
         values: list[float] = []
         for i in range(len(expected)):
             complete = bool(np.isfinite(ev[i]) and not pd.isna(pv[i]))
@@ -203,10 +231,12 @@ def fin_days_since_expectation_revision(
                 age = min(cap, age + 1)
                 values.append(float(age))
             else:
-                # P1-06: after a gap (age=None) the revision age is censored —
-                # output NaN, NOT 0 (a 0 would read as "revision happened today").
-                # The age only resumes at a NEW revision event (the ``event[i]``
-                # branch above emits 0 and restarts the clock).
+                # P1-06 / R23-105: before any observed revision event the age is
+                # censored — output NaN, NOT 0 (a 0 would read as "revision
+                # happened today") and NOT max_days (a cap would read as "stale").
+                # The age only starts at the first genuinely observed revision
+                # event (the ``event[i]`` branch above emits 0 and starts the
+                # clock).
                 values.append(np.nan)
                 age = None
         output[column] = values
@@ -257,6 +287,7 @@ def _register(
     params: Iterable[str],
     function,
     description: str,
+    extra_tags: Iterable[str] = (),
 ) -> None:
     metadata = OperatorMetadata(
         name=name,
@@ -270,6 +301,7 @@ def _register(
             "pit_safe",
             "causal",
             "production_extension",
+            *extra_tags,
         ],
     )
 
@@ -383,9 +415,38 @@ _SPECS = (
     ),
 )
 
+# R23-299 / R23-103: cross-source temporal contracts.  ``actual - expected`` is
+# only a valid surprise when the expected snapshot is the last estimate frozen
+# STRICTLY BEFORE the actual's knowledge time — the operator cannot prove that
+# from two daily ffill panels alone (a same-day consensus revision after the
+# earnings print would leak).  The surprise family therefore declares
+# ``requires:PreEventExpectationSnapshot``.  The expectation-revision family
+# infers revisions from daily estimate changes and declares
+# ``requires:ConsensusVintageSource`` — a re-synced historical consensus cannot
+# recover the original vintage revisions.  Both tags let production
+# mining/admission block the operators until the source proves the snapshot,
+# instead of relying on the ``pit_safe`` tag alone.
+_PRE_EVENT_TAGS = ("requires:PreEventExpectationSnapshot", "pre_event_snapshot_required")
+_CONSENSUS_VINTAGE_TAGS = ("requires:ConsensusVintageSource", "consensus_vintage_certified:false")
+_PRE_EVENT_NAMES = frozenset({
+    "fin_surprise", "fin_surprise_zscore", "fin_surprise_event_zscore",
+    "fin_surprise_event_percentile", "fin_actual_expectation_divergence",
+    "fin_beat_streak", "fin_miss_streak",
+})
+_CONSENSUS_VINTAGE_NAMES = frozenset({
+    "fin_expectation_revision", "fin_expectation_revision_pct",
+    "fin_expectation_revision_speed", "fin_expectation_revision_count",
+    "fin_expectation_revision_magnitude", "fin_days_since_expectation_revision",
+})
+
 _NAMES: list[str] = []
 for _name, _params, _function, _description in _SPECS:
-    _register(_name, _params, _function, _description)
+    _tags: list[str] = []
+    if _name in _PRE_EVENT_NAMES:
+        _tags.extend(_PRE_EVENT_TAGS)
+    if _name in _CONSENSUS_VINTAGE_NAMES:
+        _tags.extend(_CONSENSUS_VINTAGE_TAGS)
+    _register(_name, _params, _function, _description, extra_tags=_tags)
     _NAMES.append(_name)
 
 from cleaned_operators import operator_surface as _surface

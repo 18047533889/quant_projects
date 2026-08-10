@@ -40,6 +40,11 @@ class ExecutionContext:
         self.run_mode = str(self.run_mode).lower()
         if self.production_fallback_policy not in {"error", "warn"}:
             raise ValueError("production_fallback_policy must be 'error' or 'warn'")
+        # R20-114..118：execution-local wrapper 只挂在 ctx 上，不 setattr 到共享
+        # inner（并发 context 会互相覆盖 pointer）。inner 的
+        # ``_factor_engine_lqtp_wrapper`` 由 per-thread 注册表提供（见
+        # ``storage.sources.data_access_source.register_logical_wrapper``）。
+        self._logical_wrapper = None  # type: ignore[attr-defined]
         try:
             from storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
 
@@ -51,10 +56,15 @@ class ExecutionContext:
                 wrapper = LQTPLogicalDataSource(inner)
                 setattr(wrapper, "_execution_id", self.execution_id)
                 try:
-                    setattr(inner, "_factor_engine_lqtp_wrapper", wrapper)
+                    from storage.sources.data_access_source import (
+                        register_logical_wrapper,
+                    )
+
+                    register_logical_wrapper(inner, wrapper)
                 except Exception:
                     pass
                 self.data_source = wrapper
+                self._logical_wrapper = wrapper
             else:
                 # Explicitly supplied wrappers are still bound to this context;
                 # execution-local caches from a previous context are cleared.
@@ -65,5 +75,6 @@ class ExecutionContext:
                         if name.startswith("_intraday_") and name.endswith("_cache"):
                             delattr(wrapper, name)
                 setattr(wrapper, "_execution_id", self.execution_id)
+                self._logical_wrapper = wrapper
         except ImportError:
             pass

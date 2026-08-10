@@ -217,10 +217,57 @@ def _op_fn_2d(op: Any):
     return fn
 
 
+# 已知 panel 输入名（group op 的第二 panel 常有 default，签名推断会漏掉）
+_PANEL_INPUT_NAMES = frozenset({
+    "x", "y", "group", "condition", "market", "size", "industry", "benchmark",
+    "factor", "close", "open", "high", "low", "volume", "amount", "returns",
+})
+
+
+def _panel_arity(op: Any) -> int:
+    """推断 operator 需要的 panel 输入数（避免对 bivariate/group op 跑 unary 冒烟
+    产生 M01 假阳性）。"""
+    meta = getattr(op, "metadata", None)
+    if meta is not None:
+        pa = getattr(meta, "panel_arity", None)
+        if pa:
+            return int(pa)
+        pp = getattr(meta, "panel_params", None)
+        if pp:
+            return len(pp)
+        sp = getattr(meta, "scalar_params", None)
+        pnames = getattr(meta, "param_names", None)
+        if sp and pnames is not None:
+            n_scalar = len(sp)
+            n_panel = len(pnames) - n_scalar
+            if n_panel >= 1:
+                return n_panel
+        ifld = getattr(meta, "input_fields", None)
+        if ifld:
+            return len(ifld)
+    import inspect
+    fn = getattr(op, "_calculate_series", None)
+    if fn is not None:
+        try:
+            sig = inspect.signature(fn)
+            n = 0
+            for p in sig.parameters.values():
+                if p.name in ("self", "kwargs"):
+                    continue
+                if p.default is inspect.Parameter.empty or p.name in _PANEL_INPUT_NAMES:
+                    n += 1
+            return n
+        except (TypeError, ValueError):  # noqa: BLE001
+            return 1
+    return 1
+
+
 def _run_dynamic(op: Any, canonical: str, reg) -> dict[str, Any]:
     """跑 reference smoke / prefix / chunk / column permutation / metamorphic。
 
     全部 best-effort：任何异常 → 该字段 False + detail。不适用 → None。
+    需要 2 个 panel 输入（bivariate / group）的 op 不跑 unary 冒烟 —— 记
+    ``math_defect=["requires_2_panels"]``（N/A，不当作 M01 数学参考不匹配）。
     """
     out: dict[str, Any] = {
         "reference_smoke_pass": None,
@@ -234,6 +281,9 @@ def _run_dynamic(op: Any, canonical: str, reg) -> dict[str, Any]:
     }
     if op is None:
         out["math_defect"].append("no_runtime_operator")
+        return out
+    if _panel_arity(op) >= 2:
+        out["math_defect"].append("requires_2_panels")
         return out
     rng = np.random.default_rng(7)
     base = rng.standard_normal((24, 3))

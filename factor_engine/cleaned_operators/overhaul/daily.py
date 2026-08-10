@@ -492,5 +492,9 @@ def register() -> None:
         ("ts_bottomk_std", False, "std", "窗口内最小 K 个值的标准差"),
     ):
         pfn, plfn = _top_spec(top, stat)
-        specs[name] = Spec("time_series_order", ["x", "window", "k", "min_periods"], desc, pfn, plfn)
+        # ts_topk_sum declares canonical params ``["x","d","k"]`` (R19-050,
+        # ``window``/``n`` explicit aliases); its inherited ParamSpec keys must
+        # sit inside the overhaul param_names (R6-157 invariant).
+        params = ["x", "d", "k", "min_periods"] if name == "ts_topk_sum" else ["x", "window", "k", "min_periods"]
+        specs[name] = Spec("time_series_order", params, desc, pfn, plfn)
     register_specs(specs)

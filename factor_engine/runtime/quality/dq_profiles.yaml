@@ -31,6 +31,26 @@ profiles:
       min_non_null_ratio: 0.80
       min_instruments: 500
       max_inf_ratio: 0.0
+    # R21-095/096: role-aware output DQ contracts.  A profile's ``roles`` section
+    # overrides the generic ``output`` thresholds for that factor role
+    # (alpha / condition / event / state / group_state / global_state).
+    # Unknown roles fall back to the profile's generic output thresholds.
+    roles:
+      condition:
+        min_coverage: 0.20
+        max_nan_ratio: 0.80
+        max_inf_ratio: 0.0
+        min_instruments_per_day: 100
+      event:
+        min_coverage: 0.01
+        max_nan_ratio: 0.99
+        max_inf_ratio: 0.0
+        min_instruments_per_day: 10
+      alpha:
+        min_coverage: 0.85
+        max_nan_ratio: 0.15
+        max_inf_ratio: 0.0
+        min_instruments_per_day: 500
 
   us_equity_daily_research:
     output:

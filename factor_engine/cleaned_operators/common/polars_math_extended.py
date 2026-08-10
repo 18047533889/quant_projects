@@ -37,18 +37,38 @@ def _binary(combine):
     return calc
 
 
+def _domain_arc(fn):
+    """R19-095: asin/acos 定义域 [-1,1]，越界/±Inf/NaN → NaN；NULL 保持 NULL。
+
+    与 pandas 侧（elementwise.Asin/Acos）及 duckdb 侧一致 —— 任何 backend 不得
+    对越界输入抛错或返回复数。
+    """
+
+    def calc(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
+        cols = numeric_cols(x)
+        return x.with_columns([
+            pl.when(pl.col(c).is_null()).then(pl.col(c))
+            .when((pl.col(c) >= -1.0) & (pl.col(c) <= 1.0)).then(fn(pl.col(c)))
+            .otherwise(float("nan"))
+            .alias(c)
+            for c in cols
+        ])
+
+    return calc
+
+
 @register_operator(name="asin", category="math", business_category="elementwise_math", canonical="asin", source="factor_dsl_polars")
 class AsinPolars(SeriesOperator):
-    """Polars 反正弦"""
-    metadata = OperatorMetadata(name="asin", category="math", description="反正弦", param_names=["x"], tags=["math", "polars"])
-    _calculate_series = _unary(lambda c: c.arcsin())
+    """Polars 反正弦（定义域 [-1,1]，越界 → NaN）"""
+    metadata = OperatorMetadata(name="asin", category="math", description="反正弦（定义域 [-1,1]，越界 → NaN）", param_names=["x"], tags=["math", "polars"])
+    _calculate_series = _domain_arc(lambda c: c.arcsin())
 
 
 @register_operator(name="acos", category="math", business_category="elementwise_math", canonical="acos", source="factor_dsl_polars")
 class AcosPolars(SeriesOperator):
-    """Polars 反余弦"""
-    metadata = OperatorMetadata(name="acos", category="math", description="反余弦", param_names=["x"], tags=["math", "polars"])
-    _calculate_series = _unary(lambda c: c.arccos())
+    """Polars 反余弦（定义域 [-1,1]，越界 → NaN）"""
+    metadata = OperatorMetadata(name="acos", category="math", description="反余弦（定义域 [-1,1]，越界 → NaN）", param_names=["x"], tags=["math", "polars"])
+    _calculate_series = _domain_arc(lambda c: c.arccos())
 
 
 @register_operator(name="atan", category="math", business_category="elementwise_math", canonical="atan", source="factor_dsl_polars")

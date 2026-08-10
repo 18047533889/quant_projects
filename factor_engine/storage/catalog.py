@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -46,15 +47,17 @@ T = TypeVar("T")
 
 
 def _resolve_strict(strict: bool | None) -> bool:
-    """解析 strict 解码开关：显式值优先，缺省从运行模式推断。"""
+    """解析 strict 解码开关：显式值优先，缺省从运行模式推断。
+
+    R20-220..225: 运行模式解析**意外异常**必须 fail closed（抛错），绝不静默
+    返回 False——否则 production 下 catalog 解码会退化成 permissive decode，
+    把「catalog 损坏/类型非法」伪装成「config 缺失」，导致 corruption 被吞掉。
+    """
     if strict is not None:
         return bool(strict)
-    try:
-        from runtime.production_policy import is_production_mode
+    from runtime.production_policy import is_production_mode
 
-        return is_production_mode()
-    except Exception:  # pragma: no cover - 解析失败按 research 处理
-        return False
+    return is_production_mode()
 
 
 def _strict_default(obj: Any) -> Any:
@@ -381,26 +384,71 @@ def _version_prefix(version: Any) -> str:
     return str(version or "")[:16]
 
 
+class _ThreadSafeConnection:
+    """R20-224: 单个 SQLite 连接 + RLock，供多线程 worker 共享。
+
+    ``check_same_thread=False`` 允许跨线程使用同一连接，但每次调用（execute /
+    executemany / executescript / commit / close）都用 RLock 串行化——SQLite 单写
+    锁语义下，线程池并行 worker 不会出现 ``SQLite objects created in a thread can
+    only be used in that same thread`` 的竞态。
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+        self._lock = threading.RLock()
+
+    def execute(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+        with self._lock:
+            return self._conn.execute(*args, **kwargs)
+
+    def executemany(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+        with self._lock:
+            return self._conn.executemany(*args, **kwargs)
+
+    def executescript(self, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
+        with self._lock:
+            return self._conn.executescript(*args, **kwargs)
+
+    def commit(self) -> None:
+        with self._lock:
+            return self._conn.commit()
+
+    def rollback(self) -> None:
+        with self._lock:
+            return self._conn.rollback()
+
+    def close(self) -> None:
+        with self._lock:
+            return self._conn.close()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
+
+
 class FactorCatalog:
     """SQLite 因子元数据目录（注册、水位线、血缘）。
-    
+
     参数:
         db_path: SQLite 数据库路径
     """
 
     def __init__(self, db_path: str | Path) -> None:
         """初始化实例。
-        
+
         参数:
             db_path: SQLite 数据库路径
-        
+
         返回:
             无
         """
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self._db_path), timeout=30.0)
-        self._conn.row_factory = sqlite3.Row
+        raw_conn = sqlite3.connect(
+            str(self._db_path), timeout=30.0, check_same_thread=False
+        )
+        raw_conn.row_factory = sqlite3.Row
+        # R20-224: 统一走线程安全连接代理（RLock 串行化）。
+        self._conn = _ThreadSafeConnection(raw_conn)
         # WAL 模式：大幅提升多进程并发读写能力
         self._conn.execute("PRAGMA journal_mode=WAL;")
         self._conn.execute("PRAGMA busy_timeout=30000;")

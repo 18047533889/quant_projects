@@ -1078,53 +1078,75 @@ def validate_manifest_for_execution(
     return validate_factor_engine_dsl(formula, surface=surf)
 
 
+# R22-020: the new semantic mining tiers.  ``research`` / ``production`` /
+# ``production_fastpath`` are kept only as backward-compat aliases.
+_R22_MINING_TIER_LANES: dict[str, str] = {
+    # authoritative tiers
+    "direct_standard": "alpha_direct",   # DIRECT_ALPHA / DIRECT_RECIPE terminal lane
+    "direct_high_cost": "alpha_high_cost",  # DIRECT_ALPHA_HIGH_COST lane
+    "direct_all_context": "all",         # every DIRECT_* lane (incl. state/event/intermediate)
+    "research_tools": "research_tools",  # research-tool manifest (NOT for automated miners)
+    # legacy aliases
+    "research": "all",                   # exploration: every retained DIRECT_* incl. uncertified
+    "production": "all",                 # eligible, every DIRECT_* context
+    "production_fastpath": "all",        # eligible, every DIRECT_* context (+fastpath validation flag)
+}
+
+# R22-017..019: fastpath is ONLY an execution preference / performance lane.  It
+# never decides which operator is eligible to be mined — a single-backend
+# (pandas-only) DIRECT_* operator is eligible as long as DirectUse admits it
+# (R22-133..135).  Legacy ``production_fastpath`` keeps its validation flag.
+_FASTPATH_VALIDATION_TIERS = frozenset({"production_fastpath"})
+
+
 def default_mining_operator_allowlist(*, tier: str = "production_fastpath") -> list[str]:
-    """挖掘搜索空间分层 allowlist（R18-001 authority 收口）。
+    """挖掘搜索空间分层 allowlist（R18-001 / R22-018 authority 收口）。
 
-    R18-001: 自动挖掘**只允许**走 ``get_direct_use_mining_operators()`` 这个
-    direct-use authority。旧的 ``backend.fastpath_allowlists`` 只表达 backend
-    execution capability（"这个算子能编译/能执行"），**不能决定矿工能看什么**
-    （"这个算子是否适合自动挖因子"）。所以这里：
+    R18-001 / R22-017..019: 自动挖掘**只允许**走 ``get_direct_use_mining_operators()``
+    这个 direct-use authority。``backend.fastpath_allowlists`` 只表达 backend
+    execution capability（"这个算子能编译/能执行"），**不再决定矿工能看什么**。
 
-    * ``research``（探索）—— 所有 retained DIRECT_* 算子（未认证也允许，供
-      exploration 用）。
-    * ``production`` / ``production_fastpath`` —— DIRECT_* 且 ``directly_usable``
-      的算子，再与 backend capability 交集（只作执行能力 cross-check）。
-
-    ``tier``：``research`` | ``production`` | ``production_fastpath``
+    * 所有 tier 的**搜索空间 surface** 都是 retained DIRECT_* 算子（role-derived，
+      与 evidence 无关 —— certification 由 R18-006 cold-start 在 execution 时
+      逐算子验证，不在搜索空间 surface 层过滤）。
+    * R22-020 新 tier：``direct_standard`` / ``direct_high_cost`` /
+      ``direct_all_context`` / ``research_tools``；旧 ``research`` / ``production`` /
+      ``production_fastpath`` 保留为别名。
     """
     from mining.direct_use import (
         DirectUseContext,
+        DirectUseStatus,
+        direct_use_matrix_rows,
         get_direct_use_mining_operators,
     )
 
     tier_key = resolve_mining_allowlist_tier(tier)
-    admission = "eligible" if tier_key != "research" else "all"
-    rows = get_direct_use_mining_operators(
-        DirectUseContext(), admission=admission
-    )
-    direct = {r.canonical for r in rows}
-    if tier_key == "research":
-        return sorted(direct)
-    if tier_key == "production":
-        from backend.fastpath_allowlists import production_allowlist
-
-        capable = set(production_allowlist())
-    else:
-        capable = set(list_production_fastpath_allowlist())
-    return sorted(direct & capable)
+    if tier_key == "research_tools":
+        rows = direct_use_matrix_rows()
+        return sorted(
+            r.canonical
+            for r in rows
+            if r.direct_use_status is DirectUseStatus.RESEARCH_TOOL
+        )
+    lane = _R22_MINING_TIER_LANES.get(tier_key, "all")
+    rows = get_direct_use_mining_operators(DirectUseContext(), admission="all")
+    direct = [r for r in rows if lane == "all" or r.mining_lane == lane]
+    return sorted(r.canonical for r in direct)
 
 
 def resolve_mining_allowlist_tier(tier: str | None = None) -> str:
-    """解析挖掘 allowlist tier；默认 ``FACTOR_ENGINE_MINING_ALLOWLIST_TIER``。"""
+    """解析挖掘 allowlist tier；默认 ``FACTOR_ENGINE_MINING_ALLOWLIST_TIER``。
+
+    R22-020: 新 tier 名（``direct_standard`` / ``direct_high_cost`` /
+    ``direct_all_context`` / ``research_tools``）优先；旧名仅作兼容别名。"""
     import os
 
     if tier is not None and str(tier).strip():
         return str(tier).strip().lower()
     env = os.environ.get("FACTOR_ENGINE_MINING_ALLOWLIST_TIER", "").strip().lower()
-    if env in {"research", "production", "production_fastpath"}:
+    if env:
         return env
-    return "production_fastpath"
+    return "direct_all_context"
 
 
 def default_mining_search_space_config(
@@ -1156,7 +1178,7 @@ def default_mining_search_space_config(
         "allowlist_tier": tier_key,
         "operators": ops,
         "count": len(ops),
-        "require_fastpath_validation": tier_key == "production_fastpath",
+        "require_fastpath_validation": tier_key in _FASTPATH_VALIDATION_TIERS,
     }
 
 
@@ -1300,20 +1322,46 @@ def default_typed_mining_search_space_config(
             "unit": output_unit,
             "cost": cost,
         }
-        # R18-004: role resolution failure is a HARD ERROR for a mining search
-        # space — never emit an operator signature with a missing role.
-        from mining.operator_catalog import _ROLE_AST_POSITIONS, assign_mining_role
+        # R18-004 / R22-028: role / direct-use resolution failure is a HARD
+        # ERROR for a mining search space — never emit an operator signature
+        # with a missing role (no ``except Exception: pass`` here).
+        from mining.direct_use import (
+            build_direct_use_operator,
+            resolve_direct_use_status,
+            terminal_allowed_for,
+        )
+        from mining.operator_catalog import assign_mining_role
 
         role = assign_mining_role(canonical, entry)
+        row = build_direct_use_operator(canonical, entry)
         signature_entry["mining_role"] = role.value
-        signature_entry["allowed_ast_positions"] = list(_ROLE_AST_POSITIONS.get(role, ()))
-        # R18-003: terminal_allowed comes from a single POSITIVE authority
-        # (resolve_direct_use), never from an exclusion set that lets
-        # INTERNAL/RESEARCH/LEGACY fall through as terminal.
-        signature_entry["terminal_allowed"] = terminal_allowed_for(canonical, entry)
-        from mining.direct_use import resolve_direct_use_status
-
-        signature_entry["direct_use_status"] = resolve_direct_use_status(canonical, entry).value
+        # R22-006: allowed AST positions come from the DirectUse positive
+        # contract (the single authority), NOT the role's exclusion-based
+        # ``_ROLE_AST_POSITIONS`` — an intermediate's positions must not drift
+        # into "terminal" just because its role is ALPHA.
+        signature_entry["allowed_ast_positions"] = list(row.allowed_ast_positions)
+        # R22-006: terminal_allowed is DirectUse positive authority.
+        signature_entry["terminal_allowed"] = row.terminal_usable
+        signature_entry["direct_use_status"] = row.direct_use_status.value
+        # R22-178: complete signature — lane / roles / input slots / output
+        # domain / market-source contexts / cost / search grades / default recipe.
+        signature_entry["direct_use_status"] = row.direct_use_status.value
+        signature_entry["lane"] = row.mining_lane
+        signature_entry["mining_visible"] = row.mining_visible
+        signature_entry["composition_usable"] = row.composition_usable
+        signature_entry["terminal_usable"] = row.terminal_usable
+        signature_entry["production_admitted"] = row.production_admitted
+        signature_entry["context_admitted"] = row.context_admitted
+        signature_entry["output_domain"] = row.output_value_domain or ""
+        signature_entry["market_contexts"] = list(row.supported_markets)
+        signature_entry["source_recipes"] = list(row.source_recipes)
+        signature_entry["search_grades"] = dict(row.search_grade_by_param)
+        signature_entry["default_recipe"] = dict(row.default_input_recipe)
+        # R22-136..137: search budget (configurable defaults — a campaign may
+        # override; never hardcoded economic conclusions).
+        signature_entry["search_prior"] = row.search_prior
+        signature_entry["family_budget"] = row.family_budget
+        signature_entry["cost_budget"] = row.cost_budget
         signatures.append(signature_entry)
 
     return {
@@ -1327,7 +1375,7 @@ def default_typed_mining_search_space_config(
         "field_dq_policy": dq,
         "field_catalog_hash": FIELD_REGISTRY.catalog_hash(),
         "count": len(signatures),
-        "require_fastpath_validation": tier_key == "production_fastpath",
+        "require_fastpath_validation": tier_key in _FASTPATH_VALIDATION_TIERS,
     }
 
 
@@ -1388,7 +1436,7 @@ def validate_formula_in_mining_allowlist(
     domain_errors = validate_max_domains(analysis, max_domains=max_domains)
     if domain_errors:
         return False, "; ".join(domain_errors)
-    if tier_key == "production_fastpath":
+    if tier_key in _FASTPATH_VALIDATION_TIERS:
         return validate_production_fastpath_dsl(text)
     if tier_key == "production":
         return validate_production_dsl(text)

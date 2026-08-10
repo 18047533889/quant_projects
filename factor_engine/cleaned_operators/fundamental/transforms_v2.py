@@ -172,7 +172,13 @@ def _walk_periods(
     *,
     require_parseable: bool | None = None,
 ) -> pd.DataFrame:
-    period_id = period_id.reindex(index=x.index, columns=x.columns)
+    # R23-292: strict panel alignment, never silent reindex.  A period-id panel
+    # that is not on the exact same date/instrument grid as the value panel is a
+    # caller bug — silently reindexing pairs values with the wrong fiscal period
+    # (same day / permuted instrument order is the classic lookahead footgun).
+    from cleaned_operators.alignment import align_panel_inputs
+
+    x, period_id = align_panel_inputs(x, period_id, names=("x", "period_id"))
     if require_parseable is None:
         require_parseable = _default_require_parseable()
     out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)

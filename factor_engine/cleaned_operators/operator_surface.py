@@ -642,7 +642,22 @@ def classify_canonical(canonical:str)->str:
     if canonical in INTERNAL_ONLY_CANONICALS:return "internal"
     if canonical in DAILY_CANONICALS or canonical in daily_factor_migrated():return "daily"
     if canonical in EXTENDED_ONLY_CANONICALS:return "extended"
-    if canonical in RESEARCH_ONLY_CANONICALS:return "research"
+    if canonical in RESEARCH_ONLY_CANONICALS:
+        # R22-009..012/144: ``research`` is an authoring/lifecycle tier, never a
+        # semantic verdict.  A research-surface canonical with an explicit
+        # DIRECT_* DirectUse role is a promoted factor operator and reports the
+        # ``extended`` authoring tier; only true research-tool / delete verdicts
+        # remain on the research surface.  ``_resolve_explicit`` is a pure
+        # name-based table lookup (no recursion back into classification).
+        try:
+            from mining.direct_use import _resolve_explicit
+
+            contract = _resolve_explicit(canonical, {})
+            if contract is not None and contract.status.value.startswith("direct_"):
+                return "extended"
+        except Exception:
+            pass
+        return "research"
     if canonical in UNSAFE_CANONICALS:return "unsafe"
     if canonical in LEGACY_ONLY_CANONICALS:return "legacy"
     return "unclassified"

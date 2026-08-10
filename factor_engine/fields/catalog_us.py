@@ -78,6 +78,24 @@ def _table(
     )
 
 
+# R23-055/302: US financial statements are PIT on filing_date (knowledge) with
+# period_end (accounting period) and an explicit timeframe filter.  Separate
+# announcement / vintage certificates (R23-018/019): filing_date certifies
+# announcement PIT, but immutable vintage history is NOT proven, so
+# revision_vintage_pit_certified=False.  knowledge_time_resolution follows
+# R23-013: filing_date is a date-only placeholder (00:00:00) unless the SEC
+# submission timestamp is proven, so strict PIT uses the value only from the
+# next trading session after filing_date (never same-day open).
+_US_FINANCIAL_META = {
+    "pit_reason": "financial_pit on filing_date; timeframe required; "
+                  "announcement_pit_certified; revision_vintage_pit_certified=false (R23-302)",
+    "announcement_pit_certified": True,
+    "revision_vintage_pit_certified": False,
+    "restatement_risk": True,
+    "knowledge_time_resolution": "DATE_ONLY_NEXT_SESSION",
+    "timeframe_required": True,
+}
+
 US_TABLE_SPECS: tuple[TableSpec, ...] = (
     # R17-013: every production-readable US table declares strict_pit_allowed
     # explicitly (+ reason in metadata); R17-018: dataset names align with the
@@ -126,26 +144,28 @@ US_TABLE_SPECS: tuple[TableSpec, ...] = (
     ),
     # US financial statements: PIT on filing_date; period = period_end;
     # timeframe (quarterly/annual/trailing_twelve_months) MUST be filtered first.
+    # PIT certificates are declared in ``_US_FINANCIAL_META`` above
+    # (R23-302: announcement_pit_certified vs revision_vintage_pit_certified).
     _table(
         "StockBalance", "us_stock_balance", time="filing_date", instrument="ticker",
         domain="fundamental", table_kind="financial_event", join_policy="financial_pit",
         knowledge="filing_date", period="period_end", required_parameters=("timeframe",),
         strict_pit_allowed=True,
-        metadata={"pit_reason": "financial_pit on filing_date; timeframe required; PIT-safe"},
+        metadata=dict(_US_FINANCIAL_META),
     ),
     _table(
         "StockIncome", "us_stock_income", time="filing_date", instrument="ticker",
         domain="fundamental", table_kind="financial_event", join_policy="financial_pit",
         knowledge="filing_date", period="period_end", required_parameters=("timeframe",),
         strict_pit_allowed=True,
-        metadata={"pit_reason": "financial_pit on filing_date; timeframe required; PIT-safe"},
+        metadata=dict(_US_FINANCIAL_META),
     ),
     _table(
         "StockCashFlow", "us_stock_cashflow", time="filing_date", instrument="ticker",
         domain="fundamental", table_kind="financial_event", join_policy="financial_pit",
         knowledge="filing_date", period="period_end", required_parameters=("timeframe",),
         strict_pit_allowed=True,
-        metadata={"pit_reason": "financial_pit on filing_date; timeframe required; PIT-safe"},
+        metadata=dict(_US_FINANCIAL_META),
     ),
     # R17-020: US StockDividend has NO TradeDate and NO period_end.  knowledge =
     # declaration_date (PIT anchor), effective = ex_dividend_date (may be future;

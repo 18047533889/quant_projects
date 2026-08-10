@@ -43,6 +43,29 @@ try:
 except ImportError:
     pl = None  # type: ignore
 
+
+class CrossSectionSampleMask:
+    """统一截面统计样本有效性（R19-027..029）。
+
+    生产因子数值样本的统计有效性统一为 ``np.isfinite``：±Inf 与 NaN 一样
+    不可用，不得计入截面统计的分母/分子（``count``/``mean``/``std``/``sum``/
+    ``percentile``/``mad`` 等共享）。``mask`` 把非有限单元替换为 NaN，使 pandas
+    行统计在 ``skipna=True`` 语义下天然排除 Inf。
+    """
+
+    sample_validity = "finite"
+
+    @staticmethod
+    def mask(x: pd.DataFrame) -> pd.DataFrame:
+        arr = x.to_numpy(dtype=float, copy=False)
+        return pd.DataFrame(
+            np.where(np.isfinite(arr), arr, np.nan),
+            index=x.index,
+            columns=x.columns,
+            dtype=float,
+        )
+
+
 # canonical=c_count backend=pandas_numpy selected=c_count source=cross_sectional/c_ops.py
 @register_operator(name="c_count", category="cross_sectional", business_category="cross_sectional", canonical="c_count", source="factor_dsl_np")
 class CrossSectionalCount(SeriesOperator):
@@ -51,7 +74,7 @@ class CrossSectionalCount(SeriesOperator):
     metadata = OperatorMetadata(
         name="c_count",
         category="cross_sectional",
-        description="计算截面非空计数",
+        description="计算截面有限值计数（sample_validity=finite：±Inf 不计入）",
         examples=["c_count(close)"],
         param_names=["x"],
         return_type="series",
@@ -59,7 +82,8 @@ class CrossSectionalCount(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return broadcast_row_stat(x, x.count(axis=1))
+        xm = CrossSectionSampleMask.mask(x)
+        return broadcast_row_stat(x, xm.count(axis=1))
 
 
 
@@ -71,7 +95,7 @@ class CrossSectionalMean(SeriesOperator):
     metadata = OperatorMetadata(
         name="c_mean",
         category="cross_sectional",
-        description="计算截面均值",
+        description="计算截面均值（sample_validity=finite：±Inf 不计入）",
         examples=["c_mean(volume)"],
         param_names=["x"],
         return_type="series",
@@ -79,7 +103,8 @@ class CrossSectionalMean(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return broadcast_row_stat_all_null_null(x, x.mean(axis=1))
+        xm = CrossSectionSampleMask.mask(x)
+        return broadcast_row_stat_all_null_null(xm, xm.mean(axis=1))
 
 
 
@@ -91,7 +116,7 @@ class CrossSectionalPercentile(SeriesOperator):
     metadata = OperatorMetadata(
         name="c_percentile",
         category="cross_sectional",
-        description="截面 p 分位数值（广播到各列，非百分位排名）",
+        description="截面 p 分位数值（广播到各列，非百分位排名；sample_validity=finite）",
         examples=["c_percentile(PE, 0.5)"],
         param_names=["x", "p"],
         return_type="series",
@@ -99,7 +124,8 @@ class CrossSectionalPercentile(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, p: float = 0.5, **kwargs) -> pd.DataFrame:
-        q = x.quantile(float(p), axis=1)
+        xm = CrossSectionSampleMask.mask(x)
+        q = xm.quantile(float(p), axis=1)
         return broadcast_row_stat(x, q)
 
 
@@ -112,7 +138,7 @@ class CrossSectionalStd(SeriesOperator):
     metadata = OperatorMetadata(
         name="c_std",
         category="cross_sectional",
-        description="计算截面标准差",
+        description="计算截面标准差（sample_validity=finite：±Inf 不计入）",
         examples=["c_std(returns)"],
         param_names=["x"],
         return_type="series",
@@ -120,7 +146,8 @@ class CrossSectionalStd(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return broadcast_row_stat_all_null_null(x, x.std(axis=1))
+        xm = CrossSectionSampleMask.mask(x)
+        return broadcast_row_stat_all_null_null(xm, xm.std(axis=1))
 
 
 @register_operator(name="cs_mad", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad", source="factor_dsl_np")
@@ -129,7 +156,7 @@ class CrossSectionalMad(SeriesOperator):
     metadata = OperatorMetadata(
         name="cs_mad",
         category="cross_sectional",
-        description="截面中位绝对偏差（MAD，广播到各列）",
+        description="截面中位绝对偏差（MAD，广播到各列；sample_validity=finite）",
         examples=["cs_mad(PE)"],
         param_names=["x"],
         return_type="series",
@@ -137,18 +164,20 @@ class CrossSectionalMad(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        med = x.median(axis=1)
-        mad = x.sub(med, axis=0).abs().median(axis=1)
+        xm = CrossSectionSampleMask.mask(x)
+        med = xm.median(axis=1)
+        mad = xm.sub(med, axis=0).abs().median(axis=1)
         return broadcast_row_stat(x, mad)
 
 
 @register_operator(name="cs_mad_zscore", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad_zscore", source="factor_dsl_np")
 class CrossSectionalMadZscore(SeriesOperator):
-    """MAD 稳健 Z-Score：(x - median) / MAD"""
+    """raw-MAD 标准化得分：(x - median) / MAD（不乘 0.6745）"""
     metadata = OperatorMetadata(
         name="cs_mad_zscore",
         category="cross_sectional",
-        description="MAD 稳健 Z-Score：(x - median) / MAD",
+        description="raw-MAD standardized score：(x - median) / MAD；不做 0.6745 缩放，"
+                    "MAD 不乘 1.4826。要 scaled robust zscore 请显式构造：0.6745*cs_mad_zscore(x)。",
         examples=["cs_mad_zscore(PE)"],
         param_names=["x"],
         return_type="series",
@@ -156,9 +185,10 @@ class CrossSectionalMadZscore(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        med = x.median(axis=1)
-        mad = x.sub(med, axis=0).abs().median(axis=1).replace(0, np.nan)
-        return x.sub(med, axis=0).div(mad, axis=0)
+        xm = CrossSectionSampleMask.mask(x)
+        med = xm.median(axis=1)
+        mad = xm.sub(med, axis=0).abs().median(axis=1).replace(0, np.nan)
+        return xm.sub(med, axis=0).div(mad, axis=0)
 
 
 # canonical=c_sum backend=pandas_numpy selected=c_sum source=cross_sectional/c_ops.py
@@ -169,7 +199,7 @@ class CrossSectionalSum(SeriesOperator):
     metadata = OperatorMetadata(
         name="c_sum",
         category="cross_sectional",
-        description="计算截面求和",
+        description="计算截面求和（sample_validity=finite：±Inf 不计入）",
         examples=["c_sum(volume)"],
         param_names=["x"],
         return_type="series",
@@ -177,7 +207,8 @@ class CrossSectionalSum(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return broadcast_row_stat_all_null_null(x, x.sum(axis=1))
+        xm = CrossSectionSampleMask.mask(x)
+        return broadcast_row_stat_all_null_null(xm, xm.sum(axis=1))
 
 
 
@@ -219,8 +250,11 @@ class CrossSectionalNeutralize(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, **kwargs) -> pd.DataFrame:
+        # R19-063: ``group is None`` 不再退化为全局 demean（那是 cs_demean 的职责，
+        # 是另一个因子）。缺 group → fail-closed：输出全 NaN。全局 demean 请显式调用
+        # ``cs_demean``/``c_demean``。
         if group is None:
-            return x.sub(x.mean(axis=1), axis=0)
+            return pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
@@ -228,9 +262,12 @@ class CrossSectionalNeutralize(SeriesOperator):
                 group_slice = group.loc[date]
             else:
                 group_slice = None
+            # R19-064: 该日 group 全 missing 不能 silent global demean -> 保持 NaN。
             if group_slice is None or group_slice.isna().all():
-                result.loc[date] = x_slice - x_slice.mean()
+                result.loc[date] = np.nan
                 continue
+            # R19-065: group membership 部分 missing 时，只有 group known 的股票参与
+            # 组中性化；unknown group 的 cell 保持 NaN（result 初始为 NaN）。
             for group_val in group_slice.dropna().unique():
                 mask = (group_slice == group_val) & x_slice.notna()
                 if mask.sum() > 0:
@@ -246,7 +283,12 @@ class CrossSectionalNeutralize(SeriesOperator):
 
 # helper for rank
 class CrossSectionalRank(SeriesOperator):
-    """截面排名"""
+    """截面 pandas 百分位排名（rank/count）。
+
+    R19-088: 该 semantic 与 ``cs_rank_01`` 不同 —— 它是 pandas ``rank(pct=True)``
+    （最小值 1/n，非 0-1 归一化，singleton=1.0），而 ``cs_rank_01`` 是 0-1 归一化
+    （singleton=0.5）。两者是两种 rank semantic，不是 duplicate，保持分开。
+    """
 
     metadata = OperatorMetadata(
         name="c_rank",
@@ -261,14 +303,18 @@ class CrossSectionalRank(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         return x.rank(pct=True, axis=1)
 
+# R19-066: ``rank`` 与 ``cs_rank_01`` 是 exact duplicate（同一实现 cs_rank_01）——
+# 数值等价已由 tests/operators/test_r19_truthiness_domain.py 证明。合并为一个
+# canonical + alias 需要 registry/surface 协调（unregister + register_alias），
+# 由中央协调处理；此处两个都保留并明示同一实现。
 @register_operator(name="rank", category="cross_sectional", business_category="cross_sectional", canonical="rank", source="factor_dsl_np")
 class Rank(SeriesOperator):
-    """截面 0-1 排名。"""
+    """截面 0-1 排名（与 cs_rank_01 exact duplicate）。"""
 
     metadata = OperatorMetadata(
         name="rank",
         category="cross_sectional",
-        description="截面 0-1 排名（单有效值 → 0.5）；pandas 百分位排名见 rank_pct",
+        description="截面 0-1 排名（单有效值 → 0.5；与 cs_rank_01 同实现）；pandas 百分位排名见 rank_pct",
         examples=["rank(close)"],
         param_names=["x"],
         return_type="series",
@@ -286,12 +332,14 @@ class Rank(SeriesOperator):
     canonical="rank_pct",
     source="factor_dsl_np",
 )
+# R19-067: ``rank_pct`` 与 ``cs_pct_rank`` 是 exact duplicate（同一实现
+# CrossSectionalRank._calculate_series = x.rank(pct=True)）。
 class RankPct(CrossSectionalRank):
-    """截面 pandas 百分位排名 rank/count"""
+    """截面 pandas 百分位排名 rank/count（与 cs_pct_rank exact duplicate）"""
     metadata = OperatorMetadata(
         name="rank_pct",
         category="cross_sectional",
-        description="截面 pandas 百分位排名 rank/count",
+        description="截面 pandas 百分位排名 rank/count（与 cs_pct_rank 同实现）",
         examples=["rank_pct(close)"],
         param_names=["x"],
         return_type="series",
@@ -306,12 +354,14 @@ class RankPct(CrossSectionalRank):
     canonical="cs_quantile",
     source="factor_dsl_np",
 )
+# R19-068: ``cs_quantile`` 与 ``c_percentile`` 是 exact duplicate（同一实现
+# CrossSectionalPercentile._calculate_series = x.quantile(p, axis=1) 广播）。
 class CsQuantile(CrossSectionalPercentile):
-    """截面 p 分位数值（广播到各列；百分位排名见 cs_pct_rank）"""
+    """截面 p 分位数值（广播到各列；与 c_percentile exact duplicate）"""
     metadata = OperatorMetadata(
         name="cs_quantile",
         category="cross_sectional",
-        description="截面 p 分位数值（广播到各列；百分位排名见 cs_pct_rank）",
+        description="截面 p 分位数值（广播到各列；与 c_percentile 同实现；百分位排名见 cs_pct_rank）",
         examples=["cs_quantile(PE, 0.5)"],
         param_names=["x", "p"],
         return_type="series",
@@ -327,11 +377,11 @@ class CsQuantile(CrossSectionalPercentile):
     source="factor_dsl_np",
 )
 class CsPctRank(CrossSectionalRank):
-    """截面百分位排名（同 rank_pct）"""
+    """截面百分位排名（与 rank_pct exact duplicate）"""
     metadata = OperatorMetadata(
         name="cs_pct_rank",
         category="cross_sectional",
-        description="截面百分位排名（同 rank_pct）",
+        description="截面百分位排名（与 rank_pct 同实现）",
         examples=["cs_pct_rank(close)"],
         param_names=["x"],
         return_type="series",
@@ -347,11 +397,11 @@ class CsPctRank(CrossSectionalRank):
     source="factor_dsl_np",
 )
 class CsRank01(SeriesOperator):
-    """截面 0-1 排名（同 rank）"""
+    """截面 0-1 排名（与 rank exact duplicate，canonical 实现）"""
     metadata = OperatorMetadata(
         name="cs_rank_01",
         category="cross_sectional",
-        description="截面 0-1 排名（同 rank）",
+        description="截面 0-1 排名（单有效值 → 0.5；与 rank 同实现）",
         examples=["cs_rank_01(close)"],
         param_names=["x"],
         return_type="series",
@@ -409,7 +459,7 @@ class RowBeta(SeriesOperator):
         for date in y.index:
             y_slice = y.loc[date]
             x_slice = x.loc[date]
-            valid = y_slice.notna() & x_slice.notna()
+            valid = np.isfinite(y_slice.to_numpy(dtype=float)) & np.isfinite(x_slice.to_numpy(dtype=float))
             if valid.sum() > 1:
                 yv = y_slice[valid].values.astype(float)
                 xv = x_slice[valid].values.astype(float)
@@ -449,7 +499,7 @@ class RowCorr(SeriesOperator):
         for date in y.index:
             y_slice = y.loc[date]
             x_slice = x.loc[date]
-            valid = y_slice.notna() & x_slice.notna()
+            valid = np.isfinite(y_slice.to_numpy(dtype=float)) & np.isfinite(x_slice.to_numpy(dtype=float))
             if valid.sum() > 1:
                 yv = y_slice[valid].values.astype(float)
                 xv = x_slice[valid].values.astype(float)
@@ -479,7 +529,8 @@ class RowCount(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        row_counts = x.count(axis=1)
+        xm = CrossSectionSampleMask.mask(x)
+        row_counts = xm.count(axis=1)
         return pd.DataFrame(
             np.tile(row_counts.values[:, None], (1, len(x.columns))),
             index=x.index, columns=x.columns, dtype=float
@@ -505,7 +556,8 @@ class RowKurt(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
-            row_vals = x.loc[date].dropna().values.astype(float)
+            row_vals = x.loc[date].to_numpy(dtype=float)
+            row_vals = row_vals[np.isfinite(row_vals)]
             if len(row_vals) > 3:
                 kurt_val = float(scipy_stats.kurtosis(row_vals, bias=False))
             else:
@@ -629,7 +681,8 @@ class RowSkew(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
-            row_vals = x.loc[date].dropna().values.astype(float)
+            row_vals = x.loc[date].to_numpy(dtype=float)
+            row_vals = row_vals[np.isfinite(row_vals)]
             if len(row_vals) > 2:
                 skew_val = float(scipy_stats.skew(row_vals, bias=False))
             else:
@@ -994,11 +1047,12 @@ class CrossSectionalMadPolars(SeriesOperator):
 # canonical=cs_mad_zscore backend=polars selected=cs_mad_zscore source=cross_sectional/c_ops_polars.py
 @register_operator(name="cs_mad_zscore", category="cross_sectional", business_category="cross_sectional", canonical="cs_mad_zscore", source="factor_dsl_np", backend="polars")
 class CrossSectionalMadZscorePolars(SeriesOperator):
-    """Polars MAD 稳健 Z-Score：(x - median) / MAD"""
+    """Polars raw-MAD 标准化得分：(x - median) / MAD（不乘 0.6745）"""
     metadata = OperatorMetadata(
         name="cs_mad_zscore",
         category="cross_sectional",
-        description="MAD 稳健 Z-Score：(x - median) / MAD",
+        description="raw-MAD standardized score：(x - median) / MAD；不做 0.6745 缩放，"
+                    "MAD 不乘 1.4826。要 scaled robust zscore 请显式构造：0.6745*cs_mad_zscore(x)。",
         examples=["cs_mad_zscore(PE)"],
         param_names=["x"],
         return_type="series",
@@ -1092,12 +1146,15 @@ class CrossSectionalNeutralizePolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
 
+        # R19-063: ``group is None`` 不再退化为全局 demean（那是 cs_demean 的职责）。
+        # 缺 group → fail-closed：输出全 NaN。
         if group is None:
-            numeric_cols = [c for c in x.columns if c not in ['date', 'stock_code']]
-            mean_expr = pl.mean_horizontal(*[pl.col(c) for c in numeric_cols])
-            return x.with_columns([
-                (pl.col(c) - mean_expr).alias(c) for c in numeric_cols
-            ])
+            result_df = pl.DataFrame(
+                np.full((x.height, len(numeric_cols)), np.nan), schema=numeric_cols
+            )
+            if 'date' in x.columns:
+                result_df = result_df.with_columns([x['date']])
+            return result_df
 
         # 将数据转换为 numpy 进行处理
         x_arr = x.select(numeric_cols).to_numpy()
@@ -1113,16 +1170,16 @@ class CrossSectionalNeutralizePolars(SeriesOperator):
             unique_groups = np.unique(row_group[~np.isnan(row_group)])
 
             if len(unique_groups) == 0:
-                # 没有分组信息，使用整行均值
-                row_mean = np.nanmean(row_data)
-                result_arr[row_idx] = row_data - row_mean
-            else:
-                # 按组计算均值并去中心化
-                for g in unique_groups:
-                    mask = row_group == g
-                    if np.any(mask):
-                        group_mean = np.nanmean(row_data[mask])
-                        result_arr[row_idx, mask] = row_data[mask] - group_mean
+                # R19-064: 该日 group 全 missing 不能 silent global demean -> 保持 NaN。
+                result_arr[row_idx] = np.nan
+                continue
+            # R19-065: 只有 group known 的股票参与组中性化；unknown group 的 cell
+            # 保持 NaN（result_arr 初始化为 NaN）。
+            for g in unique_groups:
+                mask = row_group == g
+                if np.any(mask):
+                    group_mean = np.nanmean(row_data[mask])
+                    result_arr[row_idx, mask] = row_data[mask] - group_mean
 
         # 转换回 Polars
         result_df = pl.DataFrame(result_arr, schema=numeric_cols)

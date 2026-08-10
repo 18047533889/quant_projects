@@ -1031,7 +1031,7 @@ _b(
 )
 _b(
     "index_member", "us", "us_index_components",
-    dataset="us_stock_index_components", physical=("StockIndicesComponents.IndexName",),
+    dataset="us_stock_indices_components", physical=("StockIndicesComponents.IndexName",),
     quality=_NATIVE, coverage=_FULL, source_unit=UnitSpec(dimension="boolean"),
     canonical_unit=UnitSpec(dimension="boolean"),
     transform=_identity, temporal_model="exact_daily", available_at="local_close",

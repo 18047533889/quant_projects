@@ -100,6 +100,17 @@ def _cpt_from_sample(
     return total
 
 
+def _cpt_support_floor(window: int) -> int:
+    """R16-105: machine-declared CPT estimator-support floor.
+
+    ``max(5, window // 10)`` was a hidden kernel constant that governed
+    statistical stability.  It is now a named, versioned policy (also exposed
+    as ``metadata.min_effective_sample`` on the operator) so the planner sees
+    the effective-N floor instead of a buried magic number.
+    """
+    return max(5, int(window) // 10)
+
+
 def _column_cpt(
     returns: np.ndarray,
     window: int,
@@ -157,13 +168,21 @@ def _metadata_proxy() -> Any:
             "unit:behavioral_score", "cost:1",
         ],
         param_specs={
+            # R16-102: the trailing window is the ONLY searchable economic
+            # dimension — declared as a HORIZON ParamSpec (default 60 matches
+            # the kernel signature) instead of living only in the docstring.
+            "window": ParamSpec(dtype=int, min=5, default=60, param_role=ParamRole.HORIZON),
             "preset": ParamSpec(dtype=str, choices=("bmw2016",), searchable=False),
             # R11 round-3 #118: coverage gate — fraction of the trailing window
             # that must be finite.  A governance threshold, not a search
             # dimension.
             "min_coverage": ParamSpec(
                 dtype=float,
-                min=0.0,
+                # R16-103: the runtime requires min_coverage > 0 (a coverage
+                # gate of 0 would silently disable the gate).  An inclusive
+                # ``min=0.0`` let compile accept a value runtime rejects — the
+                # exclusive bound is approximated so ``0`` fails at BOTH layers.
+                min=1e-6,
                 max=1.0,
                 default=_MIN_COVERAGE,
                 searchable=False,
@@ -209,7 +228,11 @@ class TsCptValue(SeriesOperator):
         if not (0.0 < mc <= 1.0):
             raise ValueError("min_coverage must be in (0, 1]")
         params = _PRESETS[key]
-        min_periods = max(5, w // 10)
+        # R16-105: the hidden ``max(5, w // 10)`` support policy is now a
+        # machine-declared, NON-searchable policy on the operator metadata
+        # (``min_effective_sample``) so the estimator-support floor is visible
+        # to the planner, not a buried kernel constant.
+        min_periods = _cpt_support_floor(w)
         rv = returns.to_numpy(dtype=float)
         cols = rv.shape[1]
         out = np.column_stack(

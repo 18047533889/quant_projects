@@ -114,6 +114,17 @@ _GLR_PARAM_SPECS = {
     "window": ParamSpec(dtype=int, min=4),
     "min_segment": ParamSpec(dtype=int, min=2),
 }
+# R16-152: the cap / penalty / noise-floor constants ARE the estimator policy —
+# changing one changes the output.  They are versioned into a single policy
+# digest that every GLR canonical carries as a tag, so any constant change
+# changes the operator's definition/evidence identity instead of silently
+# invalidating old evidence.
+_GLR_POLICY_DIGEST = (
+    f"GLR_ESTIMATOR_POLICY_v1(max_llr={_GLR_MAX_LLR:g},"
+    f"penalty_coef={_GLR_SCAN_PENALTY_COEF:g},"
+    f"noise_mult={_GLR_MEASURE_NOISE_MULT:g})"
+)
+
 # R6-24: window >= 2*min_segment + 2 is required for any breakpoint to exist —
 # declared as a relational constraint so search never emits a guaranteed-NaN
 # combination (the runtime also raises, but search should prune first).
@@ -267,6 +278,13 @@ def _glr_series(x2d: np.ndarray, window: int, min_segment: int, which: str) -> n
         for r in range(rows):
             lo = max(0, r - w + 1)
             v = trailing_contiguous_finite(col[lo : r + 1])
+            # R16-150: production requires the FULL declared window to be
+            # contiguous finite.  A gap-shrunken short run (N < W) must NOT
+            # emit as the same estimator — the null penalty and effective N
+            # would silently change the estimator's identity.  (An adaptive-N
+            # variant is a DIFFERENT canonical that must report effective_n.)
+            if v.size != min(w, r + 1):
+                continue
             if v.size < 2 * ms + 2:
                 continue
             if which == "mean":
@@ -318,7 +336,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         # R6-162: sqrt(max_LLR) is a dimensionless score, NOT a level.
         "unit": "dimensionless_score",
         "cost": 3,
-        "tags_extra": ["condition"],
+        "tags_extra": ["condition", _GLR_POLICY_DIGEST],
         "param_specs": _GLR_PARAM_SPECS,
     },
     "ts_glr_variance_shift_score": {
@@ -328,7 +346,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "domain": "change_point",
         "unit": "dimensionless_score",
         "cost": 3,
-        "tags_extra": ["condition"],
+        "tags_extra": ["condition", _GLR_POLICY_DIGEST],
         "param_specs": _GLR_PARAM_SPECS,
     },
     "ts_pettitt_change_score": {
@@ -338,7 +356,7 @@ _SPECS: dict[str, dict[str, Any]] = {
         "domain": "change_point",
         "unit": "ratio",
         "cost": 4,
-        "tags_extra": ["state"],
+        "tags_extra": ["state", _GLR_POLICY_DIGEST],
         "param_specs": _GLR_PARAM_SPECS,
     },
 }

@@ -23,6 +23,9 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass
+from datetime import date, datetime
+from enum import Enum
+from pathlib import Path
 from typing import Any, Mapping
 
 #: ``materialize()`` 未提供任何因子身份时使用的 sentinel（#17）。
@@ -33,30 +36,79 @@ class FactorIdentityMismatch(ValueError):
     """因子语义身份不匹配：生产物化缺少身份 / checkpoint 指纹不符。"""
 
 
+class IdentityHashTypeError(TypeError):
+    """因子身份 payload 含无法 canonical 序列化的对象（R20-073..078）。
+
+    ``_stable_hash`` 不再 ``default=str`` 字符串化 —— 字符串化含内存地址 /
+    无法重建，会让同一配置在不同 worker 上得到不同身份 digest。
+    """
+
+
 # ---------------------------------------------------------------------------
 # 稳定哈希与标量归一
 # ---------------------------------------------------------------------------
 
 
+def _typed_hash_value(v: Any) -> Any:
+    """把身份 payload 值归一为 typed JSON schema（R20-073..078）。"""
+    if isinstance(v, (str, int, float, bool)) or v is None:
+        return v
+    if isinstance(v, Enum):
+        return _typed_hash_value(v.value)
+    if isinstance(v, (date, datetime)):
+        return v.isoformat()
+    if isinstance(v, Path):
+        return str(v.expanduser())
+    if isinstance(v, (set, frozenset)):
+        return sorted((_typed_hash_value(x) for x in v), key=repr)
+    if isinstance(v, (list, tuple)):
+        return [_typed_hash_value(x) for x in v]
+    if isinstance(v, Mapping):
+        return {str(k): _typed_hash_value(val) for k, val in sorted(v.items())}
+    raise IdentityHashTypeError(
+        f"unsupported identity payload value type: "
+        f"{type(v).__module__}.{type(v).__qualname__}"
+    )
+
+
 def _stable_hash(payload: Mapping[str, Any]) -> str:
-    """对字典做 stable canonical SHA-256（字段排序 + 紧凑 JSON）。"""
+    """对字典做 stable canonical SHA-256（字段排序 + 紧凑 JSON）。
+
+    R20-073..078: 不再 ``default=str`` 兜底 —— 未知对象直接抛
+    ``IdentityHashTypeError``（fail-closed），保证身份 digest 跨进程稳定、可
+    重建。内部调用方（``identity_digest`` / ``partition_input_fingerprint`` /
+    ``checkpoint_fingerprint``）均只传 str/None/bool，不受影响。
+    """
+    canonical = _typed_hash_value(payload)
     raw = json.dumps(
-        payload,
+        canonical,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
-        default=str,
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _scalar(value: Any) -> str:
-    """把任意可选字段归一为可比较的稳定字符串（None -> ""）。"""
+    """把任意可选字段归一为可比较的稳定字符串（None -> ""）。
+
+    R20-073..078: 只接受 str/int/float/bool/None/Enum/date/datetime —— 其它
+    类型直接抛 ``IdentityHashTypeError``，绝不 ``str(value)`` 字符串化
+    （``str(object())`` 含内存地址，跨进程不稳定）。
+    """
     if value is None:
         return ""
     if isinstance(value, bool):
         return "1" if value else "0"
-    return str(value)
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    if isinstance(value, Enum):
+        return _scalar(value.value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    raise IdentityHashTypeError(
+        f"unsupported identity scalar type: {type(value).__module__}.{type(value).__qualname__}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +147,22 @@ class FactorSemanticIdentity:
     #: ``source_scope_hash``，或 ctx 覆盖值）。不同 source scope 的同一公式不是
     #: 同一个因子，必须进入身份 digest（否则 CSE 缓存/checkpoint 跨 scope 误用）。
     source_scope_hash: str | None = None
+    #: R20-062..066: 实际 resolved universe membership 哈希（按 as-of date 解析）。
+    #: 非空 instrument_filter 与命名 universe 的相同标签不再能共享身份 ——
+    #: membership 不同 = 不同的因子语义身份。
+    universe_membership_hash: str | None = None
+    #: R20-213..219 (FactorSemanticIdentity V2): 编译器/数值/数学/物化精度语义
+    #: 哈希。任一变化都必须使旧 cache/checkpoint/evidence 失效 —— 否则
+    #: optimizer/lowering/numeric-semantics/storage-precision 规则改变后旧
+    #: factor_version 继续被复用。各字段由 materializer / lineage / ctx 写入
+    #: (materialize_service 把 storage_precision_policy / composite_lowering_hash /
+    #: optimizer_rewrite_hash 写入 lineage.extra),本模块消费进 identity digest。
+    numeric_semantics_hash: str | None = None
+    mathematical_semantics_hash: str | None = None
+    composite_lowering_hash: str | None = None
+    optimizer_rewrite_hash: str | None = None
+    history_contract_hash: str | None = None
+    storage_precision_policy: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -291,6 +359,42 @@ def compute_factor_identity(plan: Any, ctx: Any = None) -> FactorSemanticIdentit
         _ctx_override(scope_hint, "source_scope_hash"),
         _ctx_override(factor, "source_scope_hash"),
     )
+    # R20-062..066: universe_membership_hash 进入身份 digest——同一 universe
+    # 标签但不同实际成员（as-of 变化 / instrument_filter 变化）不是同一个因子。
+    universe_membership_hash = _pick(
+        _ctx_override(ctx, "universe_membership_hash"),
+        _ctx_override(scope_hint, "universe_membership_hash"),
+        _ctx_override(factor, "universe_membership_hash"),
+    )
+    # R20-213..219 (Identity V2): 编译器/数值/数学/物化精度语义哈希。materializer /
+    # lineage_service 把 storage_precision_policy / composite_lowering_hash /
+    # optimizer_rewrite_hash 写入 lineage.extra 与 ctx;numeric/mathematical/
+    # history-contract hash 由计算侧 (backend.numeric_semantics / planner) 写入 ctx。
+    # 任一变化 → identity digest 变化 → 旧 cache/checkpoint/evidence 失效。
+    numeric_semantics_hash = _pick(
+        _ctx_override(ctx, "numeric_semantics_hash"),
+        _ctx_override(scope_hint, "numeric_semantics_hash"),
+    )
+    mathematical_semantics_hash = _pick(
+        _ctx_override(ctx, "mathematical_semantics_hash"),
+        _ctx_override(scope_hint, "mathematical_semantics_hash"),
+    )
+    composite_lowering_hash = _pick(
+        _ctx_override(ctx, "composite_lowering_hash"),
+        _ctx_override(scope_hint, "composite_lowering_hash"),
+    )
+    optimizer_rewrite_hash = _pick(
+        _ctx_override(ctx, "optimizer_rewrite_hash"),
+        _ctx_override(scope_hint, "optimizer_rewrite_hash"),
+    )
+    history_contract_hash = _pick(
+        _ctx_override(ctx, "history_contract_hash"),
+        _ctx_override(scope_hint, "history_contract_hash"),
+    )
+    storage_precision_policy = _pick(
+        _ctx_override(ctx, "storage_precision_policy"),
+        _ctx_override(scope_hint, "storage_precision_policy"),
+    )
 
     return FactorSemanticIdentity(
         ir_hash=str(ir_hash),
@@ -309,6 +413,13 @@ def compute_factor_identity(plan: Any, ctx: Any = None) -> FactorSemanticIdentit
         dialect_version=dialect_version,
         frequency=frequency,
         source_scope_hash=source_scope_hash,
+        universe_membership_hash=universe_membership_hash,
+        numeric_semantics_hash=numeric_semantics_hash,
+        mathematical_semantics_hash=mathematical_semantics_hash,
+        composite_lowering_hash=composite_lowering_hash,
+        optimizer_rewrite_hash=optimizer_rewrite_hash,
+        history_contract_hash=history_contract_hash,
+        storage_precision_policy=storage_precision_policy,
     )
 
 
@@ -428,3 +539,171 @@ def checkpoint_fingerprint_matches(
         if left != right:
             return False
     return True
+
+
+# ---------------------------------------------------------------------------
+# R20-052..055: ExecutionSemanticIdentityV2 —— 单一定义身份 + 投影链
+#
+# ``FactorExecutionScope`` / ``ExecutionCacheNamespace`` / ``FactorSemanticIdentity``
+# 是允许保留的不同 dataclass，但它们都必须是同一个 ``ExecutionSemanticIdentityV2``
+# 的 projection。强不变量：
+#
+#   same ExecutionSemanticIdentity → same CSE scope → same cache namespace
+#   → same checkpoint identity → same materialization factor_version。
+#
+# 任一投影不一致（例如只改 universe 标签字符串而不改 membership）都会使链上
+# 全部投影一起变化 —— 绝不允许「身份 digest 相同但 CSE scope 不同」的 split-brain。
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ExecutionSemanticIdentityV2:
+    """R20-052..055: 统一执行语义身份（单一事实源）。
+
+    是 ``FactorExecutionScope``（CSE scope）、``ExecutionCacheNamespace``
+    （cache namespace）、checkpoint 指纹与 materialization ``factor_version``
+    的同一 projection 源头。任何字段变化都会改变 ``identity_digest()``，从而
+    使整条投影链（CSE scope / cache namespace / checkpoint / factor_version）
+    同步变化。
+
+    字段与 ``FactorSemanticIdentity`` 对齐，另加 ``universe_membership_hash``
+    （R20-062..066）。
+    """
+
+    ir_hash: str
+    operator_contract_hash: str
+    field_contract_hash: str
+    source_contract_hash: str
+    source_dependency_hash: str
+    universe_membership_hash: str = ""
+    market: str | None = None
+    calendar: str | None = None
+    timezone: str | None = None
+    universe: str | None = None
+    price_basis: str | None = None
+    pit_policy: str | None = None
+    decision_time_policy: str | None = None
+    dialect: str | None = None
+    dialect_version: str | None = None
+    frequency: str | None = None
+    source_scope_hash: str | None = None
+    numeric_semantics_hash: str | None = None
+    mathematical_semantics_hash: str | None = None
+    composite_lowering_hash: str | None = None
+    optimizer_rewrite_hash: str | None = None
+    history_contract_hash: str | None = None
+    storage_precision_policy: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def identity_digest(self) -> str:
+        return _stable_hash(self.to_dict())
+
+    @classmethod
+    def from_factor_identity(cls, identity: "FactorSemanticIdentity") -> "ExecutionSemanticIdentityV2":
+        """从 ``FactorSemanticIdentity``（*ExecutionSemanticIdentity* 的既有载体）投影。"""
+        return cls(
+            ir_hash=identity.ir_hash,
+            operator_contract_hash=identity.operator_contract_hash,
+            field_contract_hash=identity.field_contract_hash,
+            source_contract_hash=identity.source_contract_hash,
+            source_dependency_hash=identity.source_dependency_hash,
+            universe_membership_hash=str(identity.universe_membership_hash or ""),
+            market=identity.market,
+            calendar=identity.calendar,
+            timezone=identity.timezone,
+            universe=identity.universe,
+            price_basis=identity.price_basis,
+            pit_policy=identity.pit_policy,
+            decision_time_policy=identity.decision_time_policy,
+            dialect=identity.dialect,
+            dialect_version=identity.dialect_version,
+            frequency=identity.frequency,
+            source_scope_hash=identity.source_scope_hash,
+            numeric_semantics_hash=identity.numeric_semantics_hash,
+            mathematical_semantics_hash=identity.mathematical_semantics_hash,
+            composite_lowering_hash=identity.composite_lowering_hash,
+            optimizer_rewrite_hash=identity.optimizer_rewrite_hash,
+            history_contract_hash=identity.history_contract_hash,
+            storage_precision_policy=identity.storage_precision_policy,
+        )
+
+
+class IdentityProjectionChainError(ValueError):
+    """执行语义身份投影链不一致（R20-052..055）。"""
+
+
+def projection_chain(identity: ExecutionSemanticIdentityV2) -> dict[str, str]:
+    """计算同一身份的全部投影（R20-052..055）。
+
+    返回：
+        ``{"execution_semantic_identity", "cse_scope", "cache_namespace",
+          "checkpoint_identity", "factor_version"}``
+    """
+    digest = identity.identity_digest()
+    cse_scope = _project_cse_scope(identity)
+    cache_ns = _project_cache_namespace(identity)
+    return {
+        "execution_semantic_identity": digest,
+        "cse_scope": cse_scope,
+        "cache_namespace": cache_ns,
+        "checkpoint_identity": digest,
+        "factor_version": digest,
+    }
+
+
+def assert_identity_projection_chain(identity: ExecutionSemanticIdentityV2) -> dict[str, str]:
+    """强不变量：同一 ExecutionSemanticIdentity → 同一 CSE scope → 同一 cache
+    namespace → 同一 checkpoint identity → 同一 factor_version。
+
+    校验每个投影都是 identity digest 的确定性函数（同一身份两次计算投影一致；
+    不同身份必然在某一投影上不同）。
+    """
+    chain1 = projection_chain(identity)
+    chain2 = projection_chain(identity)
+    for key in chain1:
+        if chain1[key] != chain2[key]:
+            raise IdentityProjectionChainError(
+                f"identity projection chain unstable at {key!r}: {chain1[key]!r} vs {chain2[key]!r}"
+            )
+    return chain1
+
+
+def assert_projection_chain_distinct(
+    left: ExecutionSemanticIdentityV2, right: ExecutionSemanticIdentityV2
+) -> bool:
+    """两个不同身份必须在整条投影链上互不相同（任一投影相等 = split-brain）。"""
+    chain_l = assert_identity_projection_chain(left)
+    chain_r = assert_identity_projection_chain(right)
+    if left == right:
+        return chain_l == chain_r
+    return chain_l != chain_r
+
+
+def _project_cse_scope(identity: ExecutionSemanticIdentityV2) -> str:
+    """CSE scope 投影：freq/universe/market/calendar/source_scope_hash +
+    source_dependency_hash + universe_membership_hash。"""
+    payload = {
+        "frequency": _scalar(identity.frequency),
+        "universe_id": _scalar(identity.universe or "ALL"),
+        "market": _scalar(identity.market),
+        "calendar_id": _scalar(identity.calendar),
+        "source_scope_hash": _scalar(identity.source_scope_hash),
+        "source_dependency_hash": _scalar(identity.source_dependency_hash),
+        "universe_membership_hash": _scalar(identity.universe_membership_hash),
+    }
+    return _stable_hash(payload)
+
+
+def _project_cache_namespace(identity: ExecutionSemanticIdentityV2) -> str:
+    """cache namespace 投影：执行语义 + 源依赖 + universe membership + 契约哈希。"""
+    payload = {
+        "source_contract_hash": _scalar(identity.source_contract_hash),
+        "source_dependency_hash": _scalar(identity.source_dependency_hash),
+        "operator_contract_hash": _scalar(identity.operator_contract_hash),
+        "field_contract_hash": _scalar(identity.field_contract_hash),
+        "execution_scope_hash": _project_cse_scope(identity),
+        "universe_membership_hash": _scalar(identity.universe_membership_hash),
+    }
+    return _stable_hash(payload)

@@ -118,10 +118,22 @@ _MINSUPPORT_VALID = (
 # PAIRWISE_VALID + MIN_SUPPORT_WINDOW: pair / two-input estimators that align
 # finite pairs (never compress the time axis silently) and gate on pair count.
 _PAIRWISE_MINSUPPORT = (
+    "ts_residualized_hsic",
+    "ts_bds_statistic",
+    "ts_rolling_sr_gaussian_mean_shift_score",
+    "ts_sr_gaussian_mean_shift_score",
+)
+
+# R16-038: PHYSICAL-AXIS estimators (TE / kernel Granger / cross-spectrum /
+# intrinsic-dimension / Lyapunov / bicoherence) depend on the physical lag /
+# frequency between rows.  Dropping missing rows and re-indexing as continuous
+# time would RE-CONNECT lag/frequency across a gap, so they are declared
+# BREAK + CONTIGUOUS_FULL_WINDOW — a gap invalidates the estimator instead of
+# silently re-pairing.
+_PHYSICAL_AXIS_BREAK = (
     "ts_delay_intrinsic_dimension",
     "ts_local_lyapunov_exponent",
     "ts_kernel_granger_score",
-    "ts_residualized_hsic",
     "ts_transfer_entropy",
     "ts_transfer_entropy_peak_excess",
     "ts_transfer_entropy_peak_lag",
@@ -129,12 +141,9 @@ _PAIRWISE_MINSUPPORT = (
     "ts_effective_transfer_entropy",
     "ts_cross_spectral_coherence",
     "ts_cross_spectral_phase",
-    "ts_bds_statistic",
     "ts_bicoherence_max",
     "ts_bicoherence_top_decile_excess",
     "ts_bicoherence_top_decile_mean",
-    "ts_rolling_sr_gaussian_mean_shift_score",
-    "ts_sr_gaussian_mean_shift_score",
 )
 
 # FULL_WINDOW: statistic whose precision depends on the full declared sample —
@@ -182,34 +191,77 @@ _EVENT_CLOCK = (
 )
 
 
+def _declare_safely(canon: str, *, policy: MissingPolicy | None = None,
+                    window: WindowSemantics | None = None,
+                    family: str | None = None) -> None:
+    """R16-037: conflict-DETECTING declaration.
+
+    A later-loaded central declaration must NEVER silently overwrite a LOCAL
+    operator-file contract with a different value.  If a non-matching
+    declaration already exists, this raises (load/release fails loud); a
+    matching existing declaration is an idempotent no-op; an absent one is
+    declared fresh.
+    """
+    from cleaned_operators.closure.missing_policy import missing_policy_for
+    from cleaned_operators.closure.window_semantics import window_semantics_for
+
+    if policy is not None:
+        existing = missing_policy_for(canon)
+        if existing is not None and existing is not policy:
+            raise RuntimeError(
+                f"R16-037 declared-policy conflict for {canon}: operator/local "
+                f"declares missing_policy={existing.value}, central side-registry "
+                f"wants {policy.value}"
+            )
+        declare_missing_policy(canon, policy, replace=True)
+    if window is not None:
+        existing = window_semantics_for(canon)
+        if existing is not None and existing is not window:
+            raise RuntimeError(
+                f"R16-037 declared-policy conflict for {canon}: operator/local "
+                f"declares window_semantics={existing.value}, central side-registry "
+                f"wants {window.value}"
+            )
+        declare_window_semantics(canon, window, replace=True)
+    if family is not None:
+        declare_current_required_family(canon, family)
+
+
 def declare_all() -> None:
-    """Idempotent batch declaration (safe to call from a test / gate)."""
+    """Idempotent batch declaration (safe to call from a test / gate).
+
+    R16-037: every declaration is conflict-DETECTED — a local operator-file
+    contract with a DIFFERENT value fails loud instead of being silently
+    overridden by this side-registry.
+    """
     for canon in _CONTIGUOUS_CURRENT:
-        declare_missing_policy(canon, MissingPolicy.CURRENT_REQUIRED, replace=True)
-        declare_window_semantics(canon, WindowSemantics.CONTIGUOUS_FULL_WINDOW, replace=True)
-        declare_current_required_family(canon, "current_state")
+        _declare_safely(canon, policy=MissingPolicy.CURRENT_REQUIRED,
+                        window=WindowSemantics.CONTIGUOUS_FULL_WINDOW, family="current_state")
     for canon in _CURRENT_MINSUPPORT:
-        declare_missing_policy(canon, MissingPolicy.CURRENT_REQUIRED, replace=True)
-        declare_window_semantics(canon, WindowSemantics.MIN_SUPPORT_WINDOW, replace=True)
-        declare_current_required_family(canon, "current_state")
+        _declare_safely(canon, policy=MissingPolicy.CURRENT_REQUIRED,
+                        window=WindowSemantics.MIN_SUPPORT_WINDOW, family="current_state")
     for canon in _MINSUPPORT_VALID:
-        declare_missing_policy(canon, MissingPolicy.WINDOW_VALID, replace=True)
-        declare_window_semantics(canon, WindowSemantics.MIN_SUPPORT_WINDOW, replace=True)
+        _declare_safely(canon, policy=MissingPolicy.WINDOW_VALID,
+                        window=WindowSemantics.MIN_SUPPORT_WINDOW)
     for canon in _PAIRWISE_MINSUPPORT:
-        declare_missing_policy(canon, MissingPolicy.PAIRWISE_VALID, replace=True)
-        declare_window_semantics(canon, WindowSemantics.MIN_SUPPORT_WINDOW, replace=True)
+        _declare_safely(canon, policy=MissingPolicy.PAIRWISE_VALID,
+                        window=WindowSemantics.MIN_SUPPORT_WINDOW)
+    for canon in _PHYSICAL_AXIS_BREAK:
+        # R16-038: physical lag/frequency must not be re-connected across a gap.
+        _declare_safely(canon, policy=MissingPolicy.BREAK,
+                        window=WindowSemantics.CONTIGUOUS_FULL_WINDOW)
     for canon in _FULL_WINDOW:
-        declare_missing_policy(canon, MissingPolicy.WINDOW_VALID, replace=True)
-        declare_window_semantics(canon, WindowSemantics.FULL_WINDOW, replace=True)
+        _declare_safely(canon, policy=MissingPolicy.WINDOW_VALID,
+                        window=WindowSemantics.FULL_WINDOW)
     for canon in _CONTIGUOUS_FULL:
-        declare_missing_policy(canon, MissingPolicy.BREAK, replace=True)
-        declare_window_semantics(canon, WindowSemantics.CONTIGUOUS_FULL_WINDOW, replace=True)
+        _declare_safely(canon, policy=MissingPolicy.BREAK,
+                        window=WindowSemantics.CONTIGUOUS_FULL_WINDOW)
     for canon in _CENSOR_CONTIGUOUS:
-        declare_missing_policy(canon, MissingPolicy.CENSOR, replace=True)
-        declare_window_semantics(canon, WindowSemantics.CONTIGUOUS_FULL_WINDOW, replace=True)
+        _declare_safely(canon, policy=MissingPolicy.CENSOR,
+                        window=WindowSemantics.CONTIGUOUS_FULL_WINDOW)
     for canon in _EVENT_CLOCK:
-        declare_missing_policy(canon, MissingPolicy.BREAK, replace=True)
-        declare_window_semantics(canon, WindowSemantics.EVENT_COUNT_WINDOW, replace=True)
+        _declare_safely(canon, policy=MissingPolicy.BREAK,
+                        window=WindowSemantics.EVENT_COUNT_WINDOW)
 
     # SameAxis contracts for the genuinely multi-input estimators
     # (Part BM-259): the two panel inputs must share the exact row index AND the

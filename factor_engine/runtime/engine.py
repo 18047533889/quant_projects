@@ -856,14 +856,35 @@ class FactorEngine:
         return CacheManager(data_scope=scope)
 
     @classmethod
-    def from_loaded_config(cls, config: FactorEngineConfig):
+    def from_loaded_config(cls, config: FactorEngineConfig, *, execution_policy: str | None = None):
         """从已解析的 ``FactorEngineConfig`` 构造 engine 与 factor。
 
         供 pipeline 编排层或测试复用，避免重复读 YAML。
 
+        Args:
+            execution_policy: R21-001..005 endpoint policy floor.  When
+                ``"production"`` is forced by an endpoint, the config must
+                self-declare production (run mode / PIT / DQ / write target);
+                any downgrade raises ``ProductionPolicyConflictError`` instead
+                of silently running research.
+
         Returns:
             ``(engine, factor)`` 元组。
         """
+        if execution_policy is not None:
+            from runtime.endpoint_policy import (
+                EndpointExecutionPolicy,
+                ProductionPolicyConflictError,
+                collect_config_policy_conflicts,
+            )
+
+            policy = EndpointExecutionPolicy.parse(execution_policy)
+            if policy.is_production:
+                conflicts = collect_config_policy_conflicts(config)
+                if conflicts:
+                    raise ProductionPolicyConflictError(
+                        "config lowers production endpoint policy: " + "; ".join(conflicts)
+                    )
         backend = build_backend(config.backend.type)
         # R10 #1: build the data sources under the engine's run-config context so
         # a production run automatically constructs DataAccessSource with the hard
@@ -906,23 +927,37 @@ class FactorEngine:
         ), factor
 
     @classmethod
-    def from_config(cls, config_path: str | Path, *, profile: str | None = None):
+    def from_config(
+        cls,
+        config_path: str | Path,
+        *,
+        profile: str | None = None,
+        execution_policy: str | None = None,
+    ):
         """从 YAML 配置文件构造 engine、factor 与 config。
 
         Args:
             config_path: YAML 配置文件路径。
             profile: 可选 profile 名称，覆盖 YAML 内 ``profile`` 键。
+            execution_policy: R21-001..005 endpoint policy floor (see
+                :meth:`from_loaded_config`).
 
         Returns:
             ``(engine, factor, config)`` 三元组。
         """
         logger.info("加载配置文件: %s", config_path)
         config = load_config(config_path, profile=profile)
-        engine, factor = cls.from_loaded_config(config)
+        engine, factor = cls.from_loaded_config(config, execution_policy=execution_policy)
         return engine, factor, config
 
     @classmethod
-    def run_from_config(cls, config_path: str | Path, *, profile: str | None = None):
+    def run_from_config(
+        cls,
+        config_path: str | Path,
+        *,
+        profile: str | None = None,
+        execution_policy: str | None = None,
+    ):
         """一键从 YAML 配置文件执行单因子。
 
         production 模式或 ``pipeline.batched_engine=True`` 时走 ``run_many``
@@ -931,12 +966,16 @@ class FactorEngine:
         Args:
             config_path: YAML 配置文件路径。
             profile: 可选 profile 名称。
+            execution_policy: R21-001 endpoint policy floor; a research config
+                served by a production endpoint is rejected, not downgraded.
 
         Returns:
             含 ``factor``、``analysis``、``plan``、``result``、``config`` 的字典。
         """
         logger.info("开始从配置执行因子: %s", config_path)
-        engine, factor, config = cls.from_config(config_path, profile=profile)
+        engine, factor, config = cls.from_config(
+            config_path, profile=profile, execution_policy=execution_policy
+        )
         from runtime.config_runtime import resolve_run_kwargs
 
         opts = resolve_run_kwargs(config)
@@ -1697,6 +1736,8 @@ class FactorEngine:
         frequency: str | None = None,
         description: str | None = None,
         expression: str | None = None,
+        execution_policy: str | None = None,
+        write_target: str | None = None,
     ):
         """从 YAML 配置文件执行单因子并物化到因子湖（Parquet）。
 
@@ -1705,12 +1746,17 @@ class FactorEngine:
             lake_root: 覆盖配置中的因子湖根目录。
             factor_id: 覆盖落盘因子 ID。
             author/frequency/description/expression: 覆盖元数据字段。
+            execution_policy: R21-003/004 endpoint policy floor; a research
+                config served by a production endpoint is rejected.
+            write_target: explicit write target override threaded to the
+                materializer so the endpoint policy never stays at the service
+                layer only.
 
         Returns:
             含 ``materialization`` 及 ``config`` 的执行结果字典。
         """
         logger.info("开始从配置物化因子: %s", config_path)
-        engine, factor, config = cls.from_config(config_path)
+        engine, factor, config = cls.from_config(config_path, execution_policy=execution_policy)
         from runtime.config_runtime import resolve_materialize_kwargs
 
         opts = resolve_materialize_kwargs(
@@ -1721,6 +1767,7 @@ class FactorEngine:
             frequency_override=frequency,
             description_override=description,
             expression_override=expression,
+            write_target_override=write_target,
         )
         result = engine.materialize(factor, **opts.to_engine_materialize_kwargs())
         result["config"] = config

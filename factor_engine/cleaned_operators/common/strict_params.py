@@ -37,13 +37,25 @@ from typing import Any, Iterable, Sequence
 import numpy as np
 
 from backend.operator_errors import OperatorParameterError
-from cleaned_operators.base import strict_bool_param, strict_int_param
+from cleaned_operators.base import (
+    _coerce_declared_numeric_string,
+    _normalise_integer,
+    strict_bool_param,
+    strict_int_param,
+    strict_int_runtime,
+)
 
 
 def strict_int(value: Any, name: str, *, minimum: int | None = None,
                maximum: int | None = None) -> int:
-    """Exact finite integer (no bool, no float truncation)."""
-    return strict_int_param(value, name, lower=minimum, upper=maximum)
+    """Exact finite integer (no bool, no float truncation).
+
+    R19-005: this is the RUNTIME kernel gate — a numeric string (``"20"``) is
+    REJECTED.  Numeric-string conversion happens once at the DSL/binder
+    declaration layer (:func:`cleaned_operators.base.bind_numeric_string_if_declared`);
+    a string reaching a kernel means the parameter was not declared numeric.
+    """
+    return strict_int_runtime(value, name, lower=minimum, upper=maximum)
 
 
 def strict_nonnegative_int(value: Any, name: str) -> int:
@@ -130,6 +142,49 @@ def strict_enum(value: Any, name: str, choices: Sequence[Any]) -> Any:
     raise OperatorParameterError(
         f"{name}={value!r} is not an allowed choice {list(choices)}"
     )
+
+
+def normalize_and_validate_scalar_param(
+    canonical: str,
+    param_name: str,
+    value: Any,
+    *,
+    phase: str = "planning",
+    declared_type: type | None = None,
+    spec: Any | None = None,
+) -> Any:
+    """R19-002: the SINGLE unified scalar-parameter validation entry shared by
+    the planning-time validator (``validate_plan_params``), the runtime call
+    gate (``_normalise_call``) and the hash identity path.
+
+    Planning and runtime consume the SAME declared ParamSpec type domain: np
+    scalars (``np.int64``/``np.float64``), Decimal, enum members and explicit
+    ``None`` are validated by exactly the same rules the kernel gate would
+    apply, instead of being skipped because ``isinstance(value, (int, float,
+    str, bool))`` is False (the old planning gap).  Structured / vector values
+    (``list``/``tuple``/``dict``/``set``) are NOT scalar params and pass through
+    unchanged — the vector / structured path owns them, matching the runtime.
+
+    The declaration-layer numeric-string binder (:func:`cleaned_operators.base.
+    bind_numeric_string_if_declared`) runs FIRST, so a numeric string is
+    converted once here and the kernel gates (``strict_int_runtime``) never see
+    it (R19-005).  ``phase`` only labels the error context
+    (``planning``/``runtime``/``hash``); it never changes the validation rules.
+    """
+    if phase not in ("planning", "runtime", "hash"):
+        raise ValueError(
+            f"unknown phase {phase!r}; expected 'planning' | 'runtime' | 'hash'"
+        )
+    if isinstance(value, (list, tuple, dict, set, frozenset)):
+        # Structured / vector param: owned by the vector / structured path.
+        return value
+    coerced = _coerce_declared_numeric_string(value, param_name, declared_type, spec)
+    try:
+        return _normalise_integer(coerced, param_name, declared_type, spec)
+    except OperatorParameterError as exc:
+        raise OperatorParameterError(
+            f"{canonical}.{param_name} [{phase}]: {exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------

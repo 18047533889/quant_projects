@@ -20,6 +20,7 @@ import logging
 import math
 import os
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -186,40 +187,60 @@ def effective_memory_limit_bytes(
     return min(requested, hard_limit)
 
 
-def effective_cpu_slots(
-    *,
-    explicit: int | None = None,
-    env: str = "FACTOR_ENGINE_CPU_BUDGET",
-) -> int:
-    """进程真实 CPU slot 数（cgroup quota 感知），替代 naive ``physical_cores``。
+def _probe_hard_cpu_limit() -> int:
+    """探测进程真实 CPU 硬上限（取最严格约束的最小值）。
 
-    - 显式参数 / ``FACTOR_ENGINE_CPU_BUDGET`` 优先
-    - cgroup v2 ``cpu.max`` quota/period 折算（period 内只能跑 quota 个微秒）
-    - sched affinity（容器亲和性）
-    - host CPU 兜底
+    与内存的 ``hard_limit`` 对齐：cgroup v2 ``cpu.max`` quota 与 sched affinity
+    都是硬约束，取 **min**（容器 quota 2 + affinity 4 → 2；quota 8 + affinity 4
+    → 4）。没有 cgroup 时用 ``sched_getaffinity``；再不行回退 ``cpu_count``。
     """
-    if explicit is not None and explicit > 0:
-        return explicit
-    env_v = _env_int(env, None)
-    if env_v is not None:
-        return env_v
+    candidates: list[int] = []
     qp = _read_cgroup_cpu_quota()
     if qp is not None:
         quota, period = qp
-        # 审计 #337：小数 quota 用 ceil（0.5 quota → 1 slot），不再回退 affinity。
-        slots = max(1, math.ceil(quota / period))
-        return slots
+        # 审计 #337：小数 quota 用 ceil（0.5 quota → 1 slot）。
+        candidates.append(max(1, math.ceil(quota / period)))
     try:
         import os as _os
 
-        return max(1, len(_os.sched_getaffinity(0)))
+        candidates.append(max(1, len(_os.sched_getaffinity(0))))
     except (AttributeError, OSError):
         try:
             import multiprocessing
 
-            return max(1, multiprocessing.cpu_count())
+            candidates.append(max(1, multiprocessing.cpu_count()))
         except Exception:  # pragma: no cover
-            return 4
+            pass
+    if not candidates:
+        return 4
+    return min(candidates)
+
+
+def effective_cpu_slots(
+    *,
+    explicit: int | None = None,
+    env: str = "FACTOR_ENGINE_CPU_BUDGET",
+    hard_limit: int | None = None,
+) -> int:
+    """进程真实 CPU slot 数（cgroup quota 感知），替代 naive ``physical_cores``。
+
+    R20-138：与 :func:`effective_memory_limit_bytes` 同构——先探测 **hard limit**
+    （显式 ``hard_limit`` 参数 > cgroup v2 ``cpu.max`` quota > sched affinity >
+    host CPU），再取 ``min(requested, hard_limit)``。显式配置 / 环境变量都**不能**
+    超过 hard limit：容器 2 CPU + explicit 64 → 最终 2（不再 explicit 直接 return）。
+
+    - 显式参数 / ``FACTOR_ENGINE_CPU_BUDGET`` 优先作为 requested
+    - ``hard_limit`` 显式参数供测试注入模拟容器配额
+    """
+    hard = hard_limit if hard_limit is not None and hard_limit > 0 else _probe_hard_cpu_limit()
+    requested = hard
+    if explicit is not None and explicit > 0:
+        requested = explicit
+    else:
+        env_v = _env_int(env, None)
+        if env_v is not None:
+            requested = env_v
+    return max(1, min(requested, hard))
 
 
 def spill_disk_available(path: str | os.PathLike | None = None) -> int | None:
@@ -477,12 +498,13 @@ def estimate_object_bytes(value: Any) -> int:
 # MemoryGovernor（R2 / R6）
 # ---------------------------------------------------------------------------
 
-#: 运行时 RSS 分档（相对 process budget）
-_STAGE_NORMAL = 0.70
-_STAGE_STOP_WARMUP = 0.80
-_STAGE_EVICT_LRU = 0.85
-_STAGE_SPILL = 0.90
-_STAGE_THROTTLE = 0.95
+#: 运行时 RSS 分档（相对 process budget）——stage 边界（越往上压力越大）：
+#: normal < stop_warmup < evict_lru < spill < throttle < critical
+_STAGE_STOP_WARMUP = 0.70
+_STAGE_EVICT_LRU = 0.80
+_STAGE_SPILL = 0.85
+_STAGE_THROTTLE = 0.90
+_STAGE_CRITICAL = 0.95
 
 
 @dataclass
@@ -492,6 +514,13 @@ class MemoryGovernor:
     可被多个 cache 层共享：每层 ``reserve/release`` 记账，超 budget 时触发
     注册的 evict 回调（LRU）；RSS 超过阈值时分档 throttle。**不**用
     ``gc.collect()`` 当治理手段。
+
+    R20-119..124：``_usage`` / ``_evict_hooks`` / ``throttles`` / ``evictions``
+    是共享 mutable state，threading 下由 ``_lock``（``threading.RLock``）保护。
+    所有 mutate 方法（reserve/release/reserve_accounting/release_accounting/
+    _evict_for/release_all/register_layer/unregister_layer/throttle）都在锁内执行，
+    ``total_usage`` 读也加锁。RLock 可重入：evict hook 内部再调
+    ``release_accounting`` 不会死锁。
     """
 
     process_budget_bytes: int
@@ -501,20 +530,29 @@ class MemoryGovernor:
     _evict_hooks: dict[str, Callable[[int], int]] = field(default_factory=dict)
     throttles: list[str] = field(default_factory=list)
     evictions: list[str] = field(default_factory=list)
+    _lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
+
+    @property
+    def lock(self) -> threading.RLock:
+        """Governor 内部锁（供 cache 层以相同顺序加锁，避免锁顺序反转死锁）。"""
+        return self._lock
 
     @property
     def total_usage(self) -> int:
         """全部登记层的字节占用之和。"""
-        return sum(self._usage.values())
+        with self._lock:
+            return sum(self._usage.values())
 
     def register_layer(self, name: str, evict: Callable[[int], int]) -> None:
         """注册缓存层：``evict(target_bytes) -> freed_bytes``。"""
-        self._evict_hooks[name] = evict
+        with self._lock:
+            self._evict_hooks[name] = evict
 
     def unregister_layer(self, name: str) -> None:
         """从 evict hooks 与记账中移除某层（审计 #333/#334）。"""
-        self._evict_hooks.pop(name, None)
-        self._usage.pop(name, None)
+        with self._lock:
+            self._evict_hooks.pop(name, None)
+            self._usage.pop(name, None)
 
     def reserve_accounting(self, name: str, bytes_: int) -> None:
         """**仅记账**（不触发 evict hook）：cache 内部 ``set`` 时调用（审计 #333）。
@@ -523,12 +561,14 @@ class MemoryGovernor:
         再触发一轮 evict hook。
         """
         bytes_ = max(0, int(bytes_))
-        self._usage[name] = self._usage.get(name, 0) + bytes_
+        with self._lock:
+            self._usage[name] = self._usage.get(name, 0) + bytes_
 
     def release_accounting(self, name: str, bytes_: int) -> None:
         """**仅记账**（不触发 evict hook）：cache 内部 evict/release 时调用（审计 #333）。"""
         bytes_ = max(0, int(bytes_))
-        self._usage[name] = max(0, self._usage.get(name, 0) - bytes_)
+        with self._lock:
+            self._usage[name] = max(0, self._usage.get(name, 0) - bytes_)
 
     def reserve(self, name: str, bytes_: int) -> bool:
         """某层尝试占用 ``bytes_`` 字节；超出全局 budget 时触发 evict。
@@ -536,18 +576,23 @@ class MemoryGovernor:
         返回是否成功；失败时调用方应放弃缓存该对象（宁可重算，不要 OOM）。
         """
         bytes_ = max(0, int(bytes_))
-        if self.total_usage + bytes_ > self.process_budget_bytes:
-            freed = self._evict_for(bytes_)
+        with self._lock:
             if self.total_usage + bytes_ > self.process_budget_bytes:
-                return False
-        self.reserve_accounting(name, bytes_)
-        return True
+                freed = self._evict_for(bytes_)
+                if self.total_usage + bytes_ > self.process_budget_bytes:
+                    return False
+            self.reserve_accounting(name, bytes_)
+            return True
 
     def _evict_for(self, needed: int) -> int:
         """逐出 LRU 缓存直到腾出 ``needed`` 字节。
 
         审计 #333：逐出记账统一走 ``release_accounting``（hook 本身只逐出并返回
         释放字节数，不直接改 ``_usage``，避免与这里重复扣减）。
+
+        在 ``_lock`` 内调用 evict hook（hook 通过 ``release_accounting`` 重入
+        RLock 安全）；lock 顺序恒为 governor → cache（调用方 ``set`` 也先取
+        ``gov.lock``），不会锁反转。
         """
         freed = 0
         for name, hook in self._evict_hooks.items():
@@ -567,7 +612,8 @@ class MemoryGovernor:
 
     def release_all(self, name: str) -> None:
         """清空某层全部记账。"""
-        self._usage.pop(name, None)
+        with self._lock:
+            self._usage.pop(name, None)
 
     # -- 运行时 RSS 分档 --
 
@@ -607,41 +653,65 @@ class MemoryGovernor:
         """返回当前压力档位：normal / stop_warmup / evict_lru / spill / throttle / critical。"""
         budget = self.process_budget_bytes or 1
         frac = self._current_rss() / budget
-        if frac >= _STAGE_THROTTLE:
+        if frac >= _STAGE_CRITICAL:
             return "critical"
-        if frac >= _STAGE_SPILL:
+        if frac >= _STAGE_THROTTLE:
             return "throttle"
-        if frac >= _STAGE_EVICT_LRU:
+        if frac >= _STAGE_SPILL:
             return "spill"
-        if frac >= _STAGE_STOP_WARMUP:
+        if frac >= _STAGE_EVICT_LRU:
             return "evict_lru"
-        if frac >= _STAGE_NORMAL:
+        if frac >= _STAGE_STOP_WARMUP:
             return "stop_warmup"
         return "normal"
 
     def throttle(self, stage: str) -> None:
         """记录一次 throttle 事件（调用方根据 stage 执行对应动作）。"""
-        self.throttles.append(stage)
+        with self._lock:
+            self.throttles.append(stage)
 
     def check_pre_warmup(self) -> bool:
-        """是否允许继续预热新 cache（stop_warmup 及以上不允许）。"""
-        return self.pressure_stage() in ("normal", "stop_warmup")
+        """是否允许继续预热新 cache。
+
+        R20-128..131：``stop_warmup`` 及以上**不允许**继续预热 —— 文档语义是
+        stop_warmup 代表「内存吃紧，别再往 cache 里加东西」。只有 ``normal``
+        档才返回 True。
+        """
+        return self.pressure_stage() == "normal"
 
     def check_admit(self, size_bytes: int, *, factor: float = 1.0) -> bool:
-        """新对象是否可 admit；超 process budget 时触发 evict 后仍不够则拒绝。"""
-        if self.total_usage + size_bytes * factor <= self.process_budget_bytes:
-            return True
-        return self.reserve("__probe__", int(size_bytes * factor))
+        """新对象是否可 admit；超 process budget 时触发 evict 后仍不够则拒绝。
+
+        R20-125..127：旧实现超预算时 ``reserve("__probe__", size)`` 会留下
+        ``__probe__`` ghost accounting（只探测、不真的存对象却记账）。现改为
+        无副作用的 :meth:`can_admit`：必要时先 ``_evict_for``，再判断
+        ``total_usage + size <= budget``；成功返回 True 且不记账，失败返回 False
+        也不记账。
+        """
+        return self.can_admit(size_bytes, factor=factor)
+
+    def can_admit(self, size_bytes: int, *, factor: float = 1.0) -> bool:
+        """无副作用 admission probe（R20-125..127）。
+
+        只在必要时触发 evict（真实逐出缓存），**从不**为探测本身记账。返回
+        True/False 且 ``_usage`` 不含 ``__probe__``。
+        """
+        size = max(0, int(size_bytes * factor))
+        with self._lock:
+            if self.total_usage + size > self.process_budget_bytes:
+                self._evict_for(size)
+            return self.total_usage + size <= self.process_budget_bytes
 
     def summary(self) -> dict[str, Any]:
-        return {
-            "process_budget_bytes": self.process_budget_bytes,
-            "usage_bytes": self.total_usage,
-            "usage_by_layer": dict(self._usage),
-            "pressure_stage": self.pressure_stage(),
-            "throttles": list(self.throttles),
-            "evictions": list(self.evictions),
-        }
+        with self._lock:
+            return {
+                "process_budget_bytes": self.process_budget_bytes,
+                "usage_bytes": self.total_usage,
+                "usage_by_layer": dict(self._usage),
+                "pressure_stage": self.pressure_stage(),
+                "throttles": list(self.throttles),
+                "evictions": list(self.evictions),
+            }
 
 
 # ---------------------------------------------------------------------------
@@ -649,11 +719,21 @@ class MemoryGovernor:
 # ---------------------------------------------------------------------------
 
 
+#: 进程级 RLock：``ExecutionResourceScope`` 修改 DUCKDB/POLARS 等 process-global
+#: env 时加锁，避免两个并发 engine request 的 enter/exit 交错恢复 previous
+#: （R20-138..145）。
+_ENV_LOCK = threading.RLock()
+
+
 class ExecutionResourceScope:
     """context manager：进入时应用 ExecutionResourcePlan，退出时恢复环境。
 
     负责把 DuckDB threads / Polars threads 等动态设置写入环境并在 finally 恢复，
     避免并行 worker 共享 mutable 状态、改完不还原。
+
+    R20-132..137：``strict`` 显式传入真实 run_mode 语义（production → fail-closed），
+    不再从 ``FACTOR_ENGINE_RUN_MODE`` 环境变量猜测（env 只在未显式给出时兜底）。
+    R20-138..145：enter/exit 对 process-global env 的修改由 ``_ENV_LOCK`` 串行化。
     """
 
     def __init__(
@@ -661,36 +741,50 @@ class ExecutionResourceScope:
         plan: ExecutionResourcePlan | None = None,
         *,
         duckdb_threads: int | None = None,
+        strict: bool | None = None,
     ) -> None:
         self.plan = plan or ExecutionResourcePlan.auto()
         self._duckdb_threads = duckdb_threads
+        # R20-132..137：显式 strict 优先；未给出时从 env 兜底。
+        if strict is not None:
+            self.strict = bool(strict)
+        else:
+            self.strict = os.environ.get("FACTOR_ENGINE_RUN_MODE") == "production"
         self._prev: dict[str, str | None] = {}
         self._prev_pragma: int | None = None
+        #: telemetry：requested threads 与 effective threads 分开，不虚假标已生效。
+        self.requested_threads: int | None = None
+        self.effective_threads: int | None = None
+        self.polars_live_effective: bool = False
 
     def __enter__(self) -> "ExecutionResourceScope":
-        self._prev = {
-            "DUCKDB_MAX_THREADS": os.environ.get("DUCKDB_MAX_THREADS"),
-            "POLARS_MAX_THREADS": os.environ.get("POLARS_MAX_THREADS"),
-            "DUCKDB_MEMORY_LIMIT": os.environ.get("DUCKDB_MEMORY_LIMIT"),
-            "DUCKDB_TEMP_DIRECTORY": os.environ.get("DUCKDB_TEMP_DIRECTORY"),
-            "DUCKDB_MAX_TEMP_DIRECTORY_SIZE": os.environ.get("DUCKDB_MAX_TEMP_DIRECTORY_SIZE"),
-        }
-        threads = self._duckdb_threads or self.plan.duckdb_threads
-        os.environ["DUCKDB_MAX_THREADS"] = str(threads)
-        # 审计 #348：polars 线程数是进程级启动期设置，若 polars 已被 import，
-        # 事后改 POLARS_MAX_THREADS 不保证生效。best-effort 仍设置 env，
-        # 但明确告警需要不同 CPU 配额时应走 worker 进程隔离。
-        if "polars" in sys.modules:
-            _logger.warning(
-                "POLARS_MAX_THREADS 在 polars 已导入后不保证生效；需要不同 "
-                "CPU 配额请用 worker 进程隔离"
-            )
-        os.environ["POLARS_MAX_THREADS"] = str(max(1, self.plan.polars_threads))
-        os.environ["DUCKDB_MEMORY_LIMIT"] = str(self.plan.duckdb_budget_bytes)
-        os.environ["DUCKDB_TEMP_DIRECTORY"] = self.plan.spill_dir
-        if self.plan.spill_budget_bytes > 0:
-            os.environ["DUCKDB_MAX_TEMP_DIRECTORY_SIZE"] = str(self.plan.spill_budget_bytes)
-        self._apply_live_pragma(threads)
+        with _ENV_LOCK:
+            self._prev = {
+                "DUCKDB_MAX_THREADS": os.environ.get("DUCKDB_MAX_THREADS"),
+                "POLARS_MAX_THREADS": os.environ.get("POLARS_MAX_THREADS"),
+                "DUCKDB_MEMORY_LIMIT": os.environ.get("DUCKDB_MEMORY_LIMIT"),
+                "DUCKDB_TEMP_DIRECTORY": os.environ.get("DUCKDB_TEMP_DIRECTORY"),
+                "DUCKDB_MAX_TEMP_DIRECTORY_SIZE": os.environ.get("DUCKDB_MAX_TEMP_DIRECTORY_SIZE"),
+            }
+            threads = self._duckdb_threads or self.plan.duckdb_threads
+            self.requested_threads = int(threads)
+            os.environ["DUCKDB_MAX_THREADS"] = str(threads)
+            # 审计 #348：polars 线程数是进程级启动期设置，若 polars 已被 import，
+            # 事后改 POLARS_MAX_THREADS 不保证生效。best-effort 仍设置 env，
+            # 但明确告警需要不同 CPU 配额时应走 worker 进程隔离。
+            self.polars_live_effective = "polars" not in sys.modules
+            if "polars" in sys.modules:
+                _logger.warning(
+                    "POLARS_MAX_THREADS 在 polars 已导入后不保证生效；需要不同 "
+                    "CPU 配额请用 worker 进程隔离"
+                )
+            os.environ["POLARS_MAX_THREADS"] = str(max(1, self.plan.polars_threads))
+            os.environ["DUCKDB_MEMORY_LIMIT"] = str(self.plan.duckdb_budget_bytes)
+            os.environ["DUCKDB_TEMP_DIRECTORY"] = self.plan.spill_dir
+            if self.plan.spill_budget_bytes > 0:
+                os.environ["DUCKDB_MAX_TEMP_DIRECTORY_SIZE"] = str(self.plan.spill_budget_bytes)
+            self.effective_threads = int(threads)
+            self._apply_live_pragma(threads)
         return self
 
     def _apply_live_pragma(self, threads: int) -> None:
@@ -711,7 +805,7 @@ class ExecutionResourceScope:
                     engine._conn.execute(f"PRAGMA threads={int(threads)}")
         except Exception as exc:  # noqa: BLE001
             self._prev_pragma = None
-            if os.environ.get("FACTOR_ENGINE_RUN_MODE") == "production":
+            if self.strict:
                 raise ResourceContractApplyError(
                     f"无法应用 DuckDB live PRAGMA threads={int(threads)}: {exc}"
                 ) from exc
@@ -722,30 +816,31 @@ class ExecutionResourceScope:
             )
 
     def __exit__(self, exc_type, exc, tb) -> None:
-        for key, value in self._prev.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
-        if self._prev_pragma is not None:
-            try:
-                from data_access import get_store
+        with _ENV_LOCK:
+            for key, value in self._prev.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            if self._prev_pragma is not None:
+                try:
+                    from data_access import get_store
 
-                engine = get_store()._engine
-                if hasattr(engine, "_write_lock"):
-                    with engine._write_lock:
-                        engine._conn.execute(f"PRAGMA threads={int(self._prev_pragma)}")
-            except Exception as exc:  # noqa: BLE001
-                # 审计 #349：恢复失败只在非 production 下吞掉；production 不吞。
-                if os.environ.get("FACTOR_ENGINE_RUN_MODE") == "production":
-                    raise ResourceContractApplyError(
-                        f"无法恢复 DuckDB PRAGMA threads={int(self._prev_pragma)}: {exc}"
-                    ) from exc
-                _logger.warning(
-                    "无法恢复 DuckDB PRAGMA threads=%d: %s",
-                    int(self._prev_pragma),
-                    exc,
-                )
+                    engine = get_store()._engine
+                    if hasattr(engine, "_write_lock"):
+                        with engine._write_lock:
+                            engine._conn.execute(f"PRAGMA threads={int(self._prev_pragma)}")
+                except Exception as exc2:  # noqa: BLE001
+                    # 审计 #349：恢复失败只在非 production 下吞掉；production 不吞。
+                    if self.strict:
+                        raise ResourceContractApplyError(
+                            f"无法恢复 DuckDB PRAGMA threads={int(self._prev_pragma)}: {exc2}"
+                        ) from exc2
+                    _logger.warning(
+                        "无法恢复 DuckDB PRAGMA threads=%d: %s",
+                        int(self._prev_pragma),
+                        exc2,
+                    )
 
 
 # ---------------------------------------------------------------------------

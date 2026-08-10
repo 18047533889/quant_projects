@@ -263,7 +263,9 @@ def decode_source_ref(name: str) -> SourceRefSpec | None:
     text=str(name)
     if not text.startswith(_PREFIX): return None
     token=text[len(_PREFIX):]
-    payload=json.loads(base64.urlsafe_b64decode(token+"="*(-len(token)%4)).decode())
+    raw=base64.urlsafe_b64decode(token+"="*(-len(token)%4))
+    payload=json.loads(raw.decode())
+    _enforce_source_ref_size_limits(token, raw, payload)
     return make_source_ref(payload["table"],payload["field"],params=payload.get("params") or {},
         transform=payload.get("transform"),transform_params=payload.get("transform_params") or {},
         dialect=payload.get("dialect","lqtp"),dialect_version=payload.get("dialect_version","2026-07-19"))
@@ -274,6 +276,35 @@ def looks_like_source_ref(name: str) -> bool:
     sync.  Does NOT validate the payload — use ``decode_source_ref_strict`` for
     that."""
     return isinstance(name, str) and name.startswith(_PREFIX)
+
+_SR_MAX_TOKEN_BYTES = 8192          # R21-042
+_SR_MAX_DECODED_BYTES = 16384       # R21-042
+_SR_MAX_PARAMS = 64                 # R21-042
+_SR_MAX_KEY_LEN = 128               # R21-042
+_SR_MAX_VALUE_LEN = 4096            # R21-042
+
+
+def _enforce_source_ref_size_limits(token: str, raw: bytes, payload: Any) -> None:
+    """R21-042: resource bounds on SourceRef base64/JSON decode."""
+    if len(token.encode("utf-8")) > _SR_MAX_TOKEN_BYTES:
+        raise ValueError(
+            f"source ref token bytes {len(token.encode('utf-8'))} exceed {_SR_MAX_TOKEN_BYTES}"
+        )
+    if len(raw) > _SR_MAX_DECODED_BYTES:
+        raise ValueError(
+            f"source ref decoded bytes {len(raw)} exceed {_SR_MAX_DECODED_BYTES}"
+        )
+    if isinstance(payload, dict):
+        params = payload.get("params") or {}
+        tparams = payload.get("transform_params") or {}
+        if isinstance(params, dict) and len(params) + (len(tparams) if isinstance(tparams, dict) else 0) > _SR_MAX_PARAMS:
+            raise ValueError(f"source ref param count exceeds {_SR_MAX_PARAMS}")
+        for key, value in list(params.items()) + list(tparams.items()):
+            if len(str(key)) > _SR_MAX_KEY_LEN:
+                raise ValueError(f"source ref param key too long: {str(key)[:16]}...")
+            if len(str(value)) > _SR_MAX_VALUE_LEN:
+                raise ValueError("source ref param value too long")
+
 
 def decode_source_ref_strict(name: str) -> SourceRefSpec:
     """Audit #392: strictly decode a prefixed SourceRef, raising ValueError on
@@ -295,6 +326,7 @@ def decode_source_ref_strict(name: str) -> SourceRefSpec:
         payload = json.loads(raw.decode("utf-8"))
     except Exception as exc:
         raise ValueError(f"malformed source ref json payload: {exc}") from exc
+    _enforce_source_ref_size_limits(token, raw, payload)
     if not isinstance(payload, dict):
         raise ValueError("source ref payload must be a JSON object")
     for key in ("table", "field"):

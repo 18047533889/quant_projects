@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover
     pl = None  # type: ignore
 
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import ParamRole, ParamSpec
 
 _SKIP = frozenset({"date", "stock_code"})
 _SRC = "factor_dsl_polars_native"
@@ -181,20 +182,29 @@ class TSRankNative(SeriesOperator):
         name="ts_rank",
         category="time_series",
         description="滚动百分位排名",
-        param_names=["x", "window"],
+        param_names=["x", "window", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        # R19-124 hidden-kwargs 收口: min_periods 从隐藏 kwargs 收为声明参数,
+        # 与 pandas ts_rank 对齐。``d`` 不是 ts_rank 的合法别名（polars native
+        # 契约显式拒绝 legacy runtime alias，见 test_rolling_parameter_contracts）。
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
+                                param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
+        },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, min_periods: int = 1, **kwargs) -> pl.DataFrame:
         from cleaned_operators.parameter_validation import strict_integer
 
         if "d" in kwargs:
             from backend.operator_errors import OperatorParameterError
             raise OperatorParameterError("ts_rank accepts window; d is not a supported runtime alias")
         w = strict_integer(window, "window", minimum=1)
-        min_periods = strict_integer(kwargs.get("min_periods", 1), "min_periods", minimum=1)
-        if min_periods > w:
+        mp = strict_integer(min_periods, "min_periods", minimum=1)
+        if mp > w:
             from backend.operator_errors import OperatorParameterError
             raise OperatorParameterError("min_periods must be <= window")
         cols = _numeric_cols(x)
@@ -204,13 +214,13 @@ class TSRankNative(SeriesOperator):
                     pl.col(c)
                     .fill_nan(None)
                     .rolling_rank(
-                        window_size=w, method="average", min_samples=min_periods
+                        window_size=w, method="average", min_samples=mp
                     )
                     / pl.col(c)
                     .fill_nan(None)
                     .is_not_null()
                     .cast(pl.Float64)
-                    .rolling_sum(window_size=w, min_samples=min_periods)
+                    .rolling_sum(window_size=w, min_samples=mp)
                 ).alias(c)
                 for c in cols
             ]
@@ -232,7 +242,7 @@ class TSSharpeNative(SeriesOperator):
         name="ts_sharpe",
         category="time_series",
         description="滚动夏普",
-        param_names=["x", "window", "ann_factor"],
+        param_names=["x", "window", "ann_factor", "min_periods"],
         return_type="series",
         tags=["time_series", "polars", "native"],
     )

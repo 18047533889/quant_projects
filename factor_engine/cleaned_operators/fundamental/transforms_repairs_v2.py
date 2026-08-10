@@ -12,8 +12,8 @@ from cleaned_operators.fundamental.transforms_v2 import (
 )
 
 
-def _register(name,params,fn,desc):
-    meta=OperatorMetadata(name=name,category="fundamental_period",description=desc,param_names=list(params),return_type="series",tags=["fundamental","period_aware","pit_safe","causal","bounded_history","production_repair"])
+def _register(name,params,fn,desc,tags=()):
+    meta=OperatorMetadata(name=name,category="fundamental_period",description=desc,param_names=list(params),return_type="series",tags=["fundamental","period_aware","pit_safe","causal","bounded_history","production_repair",*tags])
     def _calculate_series(self,*args,**kwargs):return fn(*args,**kwargs)
     cls=type(f"FundamentalRepair_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})
     register_operator(name=name,category="fundamental_period",business_category="fundamental",canonical=name,source="fundamental_transforms_repairs_v2",backend="pandas_numpy",status="production")(cls)
@@ -41,8 +41,14 @@ def _revision_masks(x, period_id):
     (review R4-26).  The very first row of the panel is a valid baseline: there
     is no prior disclosure to revise, so it is complete and reads as "no
     revision" (0), matching the pandas/polars parity contract.
+
+    R23-039: period_id is strict-aligned to x (never silently reindexed) — a
+    period-id panel on a different date/instrument grid is a caller bug.
     """
-    pid = period_id.reindex(index=x.index, columns=x.columns)
+    from cleaned_operators.alignment import align_panel_inputs
+
+    x, period_id = align_panel_inputs(x, period_id, names=("x", "period_id"))
+    pid = period_id
     prev_x = x.shift(1)
     prev_pid = pid.shift(1)
     first_row = pd.DataFrame(False, index=x.index, columns=x.columns)
@@ -61,7 +67,10 @@ def _revision_event(x, period_id):
 
 
 def _revision_complete(x, period_id):
-    pid = period_id.reindex(index=x.index, columns=x.columns)
+    from cleaned_operators.alignment import align_panel_inputs
+
+    x, period_id = align_panel_inputs(x, period_id, names=("x", "period_id"))
+    pid = period_id
     prev_ok = x.shift(1).notna() & pid.shift(1).notna()
     first_row = pd.DataFrame(False, index=x.index, columns=x.columns)
     first_row.iloc[0] = True
@@ -176,14 +185,27 @@ def fin_days_since_update(x, period_id, max_days=504):
     0; the elapsed unobservable days are added to the confirmed age.  Only an
     observed change in value or report period is an economic update and resets
     the age.
+
+    R23-094..097 / R23-298 (left censoring): the FIRST complete observation is
+    NOT a new report event — when a backtest sample starts mid-history the
+    report may have been published weeks earlier, so age=0 would under-report
+    staleness.  Without a knowledge_time / PubDate the true publication time
+    before the sample start is unknown -> the first observation is
+    ``left_censored`` and emits NaN.  The age clock only starts at the first
+    genuinely OBSERVED update (a value/period change vs the retained confirmed
+    state); rows between the censored anchor and the first observed update
+    stay NaN.
     """
+    from cleaned_operators.alignment import align_panel_inputs
+
     cap = _pos_int(max_days, "max_days")
-    pid = period_id.reindex(index=x.index, columns=x.columns)
+    x, period_id = align_panel_inputs(x, period_id, names=("x", "period_id"))
+    pid = period_id
     out = pd.DataFrame(np.nan, index=x.index, columns=x.columns, dtype=float)
     for col in x.columns:
         xv = x[col].to_numpy(dtype=float)
         pv = pid[col].to_numpy()
-        age = 0          # trading days since the last CONFIRMED economic update
+        age = None       # trading days since the last OBSERVED economic update
         last_x = None    # last confirmed value (retained across gaps)
         last_pid = None  # last confirmed period id (retained across gaps)
         gap_days = 0     # unobservable trading days currently in a provider gap
@@ -198,9 +220,11 @@ def fin_days_since_update(x, period_id, max_days=504):
                 gap_days += 1
                 continue
             if last_x is None:
-                # First complete observation: the value just became visible.
-                arr.append(0.0)
-                age = 0
+                # R23-298 left censor: first complete observation anchors the
+                # confirmed state but is NOT a proven new report — the age is
+                # unknown (the report may be weeks old), so NaN until a truly
+                # observed update.
+                arr.append(np.nan)
                 gap_days = 0
                 last_x, last_pid = xv[i], pv[i]
                 continue
@@ -214,8 +238,13 @@ def fin_days_since_update(x, period_id, max_days=504):
                 # Confirmed no economic update.  A value identical to the last
                 # confirmed state after a provider gap is NOT an update — the age
                 # continues (confirmed age + elapsed unobservable days + today).
-                age = min(cap, age + gap_days + 1)
-                arr.append(float(age))
+                # Between the censored anchor and the first observed update the
+                # age stays NaN (still left-censored).
+                if age is None:
+                    arr.append(np.nan)
+                else:
+                    age = min(cap, age + gap_days + 1)
+                    arr.append(float(age))
                 gap_days = 0
             last_x, last_pid = xv[i], pv[i]
         out[col] = arr
@@ -226,20 +255,35 @@ def fin_staleness(x, period_id, max_days=504):
     return fin_days_since_update(x, period_id, max_days)
 
 _EXTRA=set()
+# Non-revision repair operators (streaks / cash-earnings gap) are ordinary
+# PIT-safe period operators.
 for _name,_params,_fn,_desc in [
 ("fin_positive_streak",["x","period_id","max_periods"],fin_positive_streak,"Bounded streak of positive report-to-report changes between adjacent fiscal periods; a skipped report ends the streak (review R4-23)."),
 ("fin_negative_streak",["x","period_id","max_periods"],fin_negative_streak,"Bounded streak of negative report-to-report changes between adjacent fiscal periods; a skipped report ends the streak (review R4-23)."),
 ("fin_cash_earnings_gap",["earnings","cashflow","scale_base"],fin_cash_earnings_gap,"Scaled earnings-minus-cashflow gap."),
+]:
+    _register(_name,_params,_fn,_desc);_EXTRA.add(_name)
+
+# R23-297: the revision family infers same-period revisions from DAILY PANEL
+# state change (value changed while the visible report period is unchanged).
+# That is only a valid revision proof when the source provides true historical
+# vintage state (a RevisionEventSource / bitemporal source); a re-synced COS
+# final-value history cannot recover revision events.  The operators therefore
+# DECLARE ``requires:RevisionEventSource`` and ``revision_vintage_pit_certified:false``
+# on their contract so production mining/admission can block them until the
+# source proves immutable vintage history — never claim ``pit_safe`` alone.
+_REVISION_SOURCE_TAGS = ("requires:RevisionEventSource", "revision_vintage_pit_certified:false")
+for _name,_params,_fn,_desc in [
 ("fin_revision_delta",["x","period_id"],fin_revision_delta,"Value change while the visible report period is unchanged; NaN when any required input is missing, 0 only on confirmed no-revision (review R4-26)."),
 ("fin_revision_pct",["x","period_id"],fin_revision_pct,"Percent revision while the visible report period is unchanged; NaN on missing inputs, 0 only on confirmed no-revision (review R4-26)."),
 ("fin_revision_direction",["x","period_id"],fin_revision_direction,"Sign of the latest same-period revision; NaN on missing inputs (review R4-26)."),
 ("fin_revision_count",["x","period_id","window_days","coverage_threshold"],fin_revision_count,"Count of visible revisions in a bounded trading-day window; three-state observation with a known-coverage gate — a window below coverage_threshold emits NaN instead of treating missing history as no-revision (round-7 P0)."),
 ("fin_revision_magnitude",["x","period_id","window_days","coverage_threshold"],fin_revision_magnitude,"Absolute revision magnitude accumulated over a bounded window; three-state observation with a known-coverage gate (round-7 P0)."),
 ("fin_restated_flag",["x","period_id","window_days","coverage_threshold"],fin_restated_flag,"Whether a same-period revision occurred in the bounded window; NaN where the count is undetermined by the known-coverage gate (round-7 P0)."),
-("fin_days_since_update",["x","period_id","max_days"],fin_days_since_update,"Observed-clock trading days since report-period or value update; missing rows emit NaN instead of blindly ageing, and a provider-gap recovery identical to the pre-gap value does NOT reset the confirmed-update age (round-7 P1)."),
-("fin_staleness",["x","period_id","max_days"],fin_staleness,"Observed-clock accounting-data staleness in trading days; missing rows emit NaN (review R4-27)."),
+("fin_days_since_update",["x","period_id","max_days"],fin_days_since_update,"Observed-clock trading days since report-period or value update; missing rows emit NaN instead of blindly ageing, a provider-gap recovery identical to the pre-gap value does NOT reset the confirmed-update age (round-7 P1), and the FIRST sample observation is left-censored (NaN) rather than age 0 (R23-298)."),
+("fin_staleness",["x","period_id","max_days"],fin_staleness,"Observed-clock accounting-data staleness in trading days; missing rows emit NaN (review R4-27), first observation left-censored (R23-298)."),
 ]:
-    _register(_name,_params,_fn,_desc);_EXTRA.add(_name)
+    _register(_name,_params,_fn,_desc,tags=_REVISION_SOURCE_TAGS);_EXTRA.add(_name)
 
 # Surface extension is performed during bootstrap before production tiers and DSL
 # allowlists are consumed.

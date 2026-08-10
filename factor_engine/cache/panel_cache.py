@@ -6,6 +6,7 @@ Phase 5 R6：宽表 panel 往往是最大内存占用（5000 列 × 数千行）
 from __future__ import annotations
 
 import hashlib
+import threading
 from collections import OrderedDict
 from typing import Any
 
@@ -97,6 +98,7 @@ class PanelCache:
         self._budget_bytes = budget_bytes
         self.layer_name = layer_name
         self._bytes = 0
+        self._lock = threading.RLock()
         for value in self._store.values():
             size = _estimate(value)
             self._bytes += size
@@ -122,11 +124,12 @@ class PanelCache:
         return freed
 
     def get(self, key: Any) -> Any | None:
-        if key in self._store:
-            value = self._store.pop(key)
-            self._store[key] = value
-            return value
-        return None
+        with self._lock:
+            if key in self._store:
+                value = self._store.pop(key)
+                self._store[key] = value
+                return value
+            return None
 
     def get_for_series(self, series: Any) -> Any | None:
         """用 Series 身份键查 panel 缓存。"""
@@ -137,16 +140,22 @@ class PanelCache:
         if size > self.budget_bytes:
             return
         gov = _governor()
-        if key in self._store:
-            old_size = _estimate(self._store[key])
-            self._bytes -= old_size
-            gov.release_accounting(self.layer_name, old_size)
-        self._bytes += size
-        gov.reserve_accounting(self.layer_name, size)
-        self._store[key] = panel
-        freed = self._evict_to(self.budget_bytes)
-        if freed > 0:
-            gov.release_accounting(self.layer_name, freed)
+        # R20-119..124：dict mutation / byte counter / governor accounting 原子。
+        with gov.lock:
+            with self._lock:
+                if key in self._store:
+                    old_size = _estimate(self._store[key])
+                    self._bytes -= old_size
+                    gov.release_accounting(self.layer_name, old_size)
+                    # R20-146..152：overwrite → MRU（OrderedDict 对已有 key
+                    # 重新赋值不改变插入位置）。
+                    del self._store[key]
+                self._bytes += size
+                gov.reserve_accounting(self.layer_name, size)
+                self._store[key] = panel
+                freed = self._evict_to(self.budget_bytes)
+                if freed > 0:
+                    gov.release_accounting(self.layer_name, freed)
 
     def set_for_series(self, series: Any, panel: Any) -> None:
         """缓存某 Series unstack 后的宽表 panel。"""
@@ -158,7 +167,11 @@ class PanelCache:
         审计 #332：``target > 0`` 用 ``target``，否则逐出到自身 ``budget_bytes``。
         记账由 ``MemoryGovernor._evict_for`` 统一扣减，这里不重复 release。
         """
-        return self._evict_to(target if target > 0 else self.budget_bytes)
+        gov = _governor()
+        with gov.lock:
+            with self._lock:
+                return self._evict_to(target if target > 0 else self.budget_bytes)
 
     def __len__(self) -> int:
-        return len(self._store)
+        with self._lock:
+            return len(self._store)

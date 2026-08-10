@@ -74,7 +74,7 @@ from storage.factor_schema import FACTOR_METADATA_COLUMNS as METADATA_COLUMNS
 @dataclass(frozen=True)
 class MaterializeMetadata:
     """因子落盘元数据字段容器。
-    
+
     参数:
         无
     """
@@ -84,6 +84,73 @@ class MaterializeMetadata:
     data_snapshot_id: str | None = None
     is_valid: int = 1
     invalid_reason: str = ""
+    #: R20-207..212: row-level metadata records the RESOLVED source snapshot
+    #: (the combined snapshot identity) — not just the caller's explicit
+    #: ``data_snapshot_id``, which may be empty while lineage_extra carries the
+    #: resolved value.
+    resolved_snapshot_id: str | None = None
+    #: R20-201..206: storage precision policy captured per row so catalog /
+    #: checkpoint / lineage all see the same value dtype contract.
+    storage_precision_policy: str = ""
+
+
+# ---------------------------------------------------------------------------
+# R20-210: identity 异常区分
+# ---------------------------------------------------------------------------
+
+class IdentityUnavailable(ValueError):
+    """因子身份合法不可得：既无 IR 也无有效 ast_hash（无身份可计算）。"""
+
+
+class IdentityComputationFailed(RuntimeError):
+    """因子身份计算代码抛异常：production 必须 hard fail，绝不降级为无指纹。"""
+
+
+# ---------------------------------------------------------------------------
+# R20-201..206: storage precision policy
+# ---------------------------------------------------------------------------
+
+#: storage precision policy 常量。production 默认 float64；float32 仅在持有明确
+#: quantization certificate 时允许（``storage_precision_policy`` 落进
+#: lineage/row metadata/checkpoint，成为语义身份的一部分）。
+PRECISION_FLOAT64_DEFAULT = "float64_default"
+PRECISION_FLOAT32_CERTIFIED = "float32_certified"
+PRECISION_FLOAT32_LEGACY = "float32_legacy"
+
+_FLOAT32_DTYPES = frozenset({"float32", "float", "f4", "float16", "f2"})
+
+
+def storage_precision_policy_for(
+    value_dtype: str | None,
+    *,
+    production: bool,
+    lineage_extra: dict | None = None,
+) -> tuple[str, str]:
+    """解析 effective value dtype + storage precision policy（R20-201..206）。
+
+    - 显式 ``value_dtype``：使用它；production 下 float32 且无 quantization
+      certificate 时记录 ``float32_legacy``（保留兼容，但 policy 显式进入血缘）；
+    - 未显式提供：production -> float64，research -> float32。
+    """
+    lineage_extra = lineage_extra or {}
+    float32_certified = bool(
+        lineage_extra.get("storage_precision_policy") == PRECISION_FLOAT32_CERTIFIED
+        or lineage_extra.get("float32_quantization_certified")
+    )
+    if value_dtype is None or str(value_dtype).strip() == "":
+        effective = "float64" if production else "float32"
+        policy = PRECISION_FLOAT64_DEFAULT if production else PRECISION_FLOAT32_LEGACY
+        return effective, policy
+    effective = str(value_dtype).strip().lower()
+    if effective in _FLOAT32_DTYPES:
+        policy = (
+            PRECISION_FLOAT32_CERTIFIED if float32_certified else PRECISION_FLOAT32_LEGACY
+        )
+    elif effective == "float64":
+        policy = PRECISION_FLOAT64_DEFAULT
+    else:
+        policy = "explicit"
+    return effective, policy
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +262,7 @@ class ParquetMaterializer:
         isolate_partition_failures: bool = True,
         resume: bool = False,
         preserve_invalid_rows: bool = False,
-        value_dtype: str = "float32",
+        value_dtype: str | None = None,
         write_target: str = "local",
         defer_watermark: bool = False,
         partition_columns: list[str] | None = None,
@@ -206,6 +273,8 @@ class ParquetMaterializer:
         run_generation: str | None = None,
         force_tombstones: bool | None = None,
         semantic_identity: FactorSemanticIdentity | None = None,
+        write_mode: str = "upsert",
+        replace_window: tuple[str, str] | None = None,
     ) -> dict:
         """将因子计算结果落盘为分区 Parquet。
         
@@ -282,23 +351,40 @@ class ParquetMaterializer:
 
         # R10 #47: 断点续写必须绑定身份 —— 在分区循环前算好身份级指纹组件，
         # 分区级输入指纹在循环内逐分区计算。
+        # R20-210: 身份计算失败必须区分「合法不可得」（IdentityUnavailable：
+        # 无 IR 也无有效 ast_hash -> checkpoint_identity=None，production 重算）
+        # 与「代码抛异常」（IdentityComputationFailed：production hard fail，
+        # 绝不降级为无指纹，否则两个失败的 computation 都退化成 None 并误判
+        # resume 可跳过）。
         checkpoint_identity = semantic_identity
         if checkpoint_identity is None:
-            try:
-                checkpoint_identity = compute_identity_from_materialize_ctx(
-                    ir_node=ir_node,
-                    ast_hash=ast_hash,
-                    data_source_config=data_source_config,
-                    run_lineage=run_lineage,
-                    frequency=frequency,
-                )
-            except Exception:  # pragma: no cover - 身份不可得 → 无指纹 → production 重算
-                logger.debug(
-                    "checkpoint 身份计算失败 factor=%s, 降级为无指纹",
-                    factor_id,
-                    exc_info=True,
-                )
+            has_any_identity = ir_node is not None and ast_hash != NO_FACTOR_IDENTITY
+            if not has_any_identity and ast_hash in (None, NO_FACTOR_IDENTITY):
+                # 合法不可得：没有可用的身份输入。
                 checkpoint_identity = None
+            else:
+                try:
+                    checkpoint_identity = compute_identity_from_materialize_ctx(
+                        ir_node=ir_node,
+                        ast_hash=ast_hash,
+                        data_source_config=data_source_config,
+                        run_lineage=run_lineage,
+                        frequency=frequency,
+                    )
+                except IdentityUnavailable:
+                    checkpoint_identity = None
+                except Exception as exc:
+                    if production:
+                        raise IdentityComputationFailed(
+                            f"factor={factor_id}: checkpoint 身份计算代码抛异常，"
+                            f"production 拒绝降级为无指纹（R20-210）: {exc!r}"
+                        ) from exc
+                    logger.debug(
+                        "checkpoint 身份计算失败 factor=%s, 降级为无指纹",
+                        factor_id,
+                        exc_info=True,
+                    )
+                    checkpoint_identity = None
         identity_digest = (
             checkpoint_identity.identity_digest()
             if checkpoint_identity is not None
@@ -310,6 +396,23 @@ class ParquetMaterializer:
         if source_dep_hash is None and checkpoint_identity is not None:
             source_dep_hash = checkpoint_identity.source_dependency_hash
         generation = str(run_generation or "0")
+
+        # R20-201..206: storage precision policy —— value_dtype 显式单位化进入
+        # lineage / row metadata / checkpoint 指纹，production 默认 float64。
+        effective_value_dtype, precision_policy = storage_precision_policy_for(
+            value_dtype,
+            production=production,
+            lineage_extra=lineage_extra,
+        )
+        if write_metadata:
+            # 把解析后的 precision policy 写回 lineage extra，下游 (catalog /
+            # 事件增量 rebuild / dual-write) 消费同一份存储精度契约。
+            lineage_extra = dict(lineage_extra)
+            lineage_extra["storage_precision_policy"] = precision_policy
+            lineage_extra["storage_value_dtype"] = effective_value_dtype
+            if run_lineage is not None:
+                run_lineage = dict(run_lineage)
+                run_lineage["extra"] = lineage_extra
 
         # --- 0. 可选 DQ 门禁（在清洗前检查原始 result）---
         dq_report = None
@@ -329,12 +432,17 @@ class ParquetMaterializer:
             # R11 #6: 落盘行 factor_version = 语义身份 digest 前缀（缺省 ast_hash
             # 前缀）——不再只用 ast_hash，否则「公式一样但 data_source/执行语义变
             # 了」的因子仍被 catalog 当作同一版本。
+            # R20-207..212: row-level metadata 写 RESOLVED source_snapshot（统一
+            # 用 data_snapshot_id 兜底 lineage_extra 的 combined snapshot），不再
+            # 只写调用方原始 data_snapshot_id。
             meta = MaterializeMetadata(
                 calc_time=datetime.now(timezone.utc).isoformat(),
                 factor_version=(identity_digest or ast_hash)[:16],
                 data_snapshot_id=data_snapshot_id,
+                resolved_snapshot_id=source_snapshot,
+                storage_precision_policy=precision_policy,
             )
-        df = self._normalize_to_long_table(result, metadata=meta, value_dtype=value_dtype)
+        df = self._normalize_to_long_table(result, metadata=meta, value_dtype=effective_value_dtype)
 
         # Review-8 #444/#446: 声明 tombstones 的调用方把历史 key 标记为已删除
         # （value=NaN 覆盖旧值）。deleted_keys 行必须在 _clean 前注入，与普通 NaN
@@ -368,6 +476,12 @@ class ParquetMaterializer:
         force_tombstones = self._resolve_force_tombstones(
             force_tombstones, production, run_lineage
         )
+        # R20-230: recompute_window 的 all-NaN 结果必须覆盖旧 finite —— 绝不因
+        # 「无有效值」而跳过写盘（跳过会让旧有限值残留）。recompute_window 下
+        # 只要 frame 非空（哪怕全 NaN），强制写 tombstone。
+        if write_mode == "recompute_window" and not df.empty and not has_valid_value:
+            force_tombstones = True
+            null_overwrite = True
         if df.empty or (
             not has_valid_value and not null_overwrite and not force_tombstones
         ):
@@ -475,6 +589,11 @@ class ParquetMaterializer:
                     ),
                     run_generation=generation,
                 )
+                # R20-201..206: storage precision policy 进入指纹 sidecar（
+                # checkpoint_fingerprint_matches 比较已知 key，precision 变化会
+                # 通过 identity_digest / 这里补充的 key 同时失效 resume）。
+                fp["storage_precision_policy"] = precision_policy
+                fp["storage_value_dtype"] = effective_value_dtype
                 if resume:
                     checkpoint = self._catalog.get_partition_checkpoint_by_key(
                         factor_id, pkey
@@ -500,6 +619,8 @@ class ParquetMaterializer:
                         part_values,
                         partition_df,
                         policy=policy,
+                        write_mode=write_mode,
+                        replace_window=replace_window,
                     )
                     self._catalog.record_partition_checkpoint(
                         factor_id=factor_id,
@@ -829,6 +950,8 @@ class ParquetMaterializer:
             df["calc_time"] = metadata.calc_time
             df["factor_version"] = metadata.factor_version
             df["data_snapshot_id"] = metadata.data_snapshot_id or ""
+            df["resolved_snapshot_id"] = metadata.resolved_snapshot_id or ""
+            df["storage_precision_policy"] = metadata.storage_precision_policy or ""
             df["is_valid"] = int(metadata.is_valid)
             df["invalid_reason"] = metadata.invalid_reason or ""
         return df
@@ -916,13 +1039,23 @@ class ParquetMaterializer:
         - 有指纹文件且全部组件匹配 → 可跳过；
         - 无指纹文件（旧 checkpoint）→ production 必须重算；research 保留旧行为
           （``status == success`` 即跳过）。
+
+        R20-201..206: storage precision policy 是 resume 判定的一部分——旧分区
+        用 float32 写的指纹在新 precision policy 下不匹配 → 必须重算。
         """
         if not checkpoint or checkpoint.get("status") != "success":
             return False
         stored = ParquetMaterializer._read_checkpoint_fingerprint_file(partition_dir)
         if stored is None:
             return not production
-        return checkpoint_fingerprint_matches(stored, fingerprint)
+        if not checkpoint_fingerprint_matches(stored, fingerprint):
+            return False
+        # 补充精度一致性：身份 digest 变化前先显式比对 precision policy。
+        stored_policy = str(stored.get("storage_precision_policy") or "")
+        current_policy = str(fingerprint.get("storage_precision_policy") or "")
+        if stored_policy and current_policy and stored_policy != current_policy:
+            return False
+        return True
 
     @staticmethod
     def _checkpoint_fingerprint_path(partition_dir: Path) -> Path:
@@ -1125,14 +1258,25 @@ class ParquetMaterializer:
         new_df: pd.DataFrame,
         *,
         policy: PartitionPolicy,
+        write_mode: str = "upsert",
+        replace_window: tuple[str, str] | None = None,
     ) -> None:
         """对指定 hive 分区做幂等 Upsert（long 或 wide）。
+
+        ``write_mode``（R20-230）：
+          - ``upsert``：默认，``[datetime, asset]`` dedup keep="last"（新值覆盖旧值）；
+          - ``append``：不覆盖既有 key——冲突时保留旧行（dedup keep="first"）；
+          - ``replace_window``：先删除分区内 ``[start, end]`` 窗口的旧行，再写入新行；
+          - ``recompute_window``：与 upsert 相同（all-NaN 覆盖旧 finite 由上层
+            强制 tombstone 保证）。
 
         参数:
             factor_dir: 见函数签名
             part_values: 见函数签名
             new_df: 见函数签名
             policy: 分区策略（可选）
+            write_mode: 写入模式（upsert/append/replace_window/recompute_window）
+            replace_window: 替换窗口 (start, end)（ISO 字符串）
 
         返回:
             无
@@ -1167,13 +1311,24 @@ class ParquetMaterializer:
                         else:
                             existing_df[col] = None
                 existing_rows = len(existing_df)
+                if write_mode == "replace_window" and replace_window is not None:
+                    # 删除窗口 [start, end] 内的旧行，再与 new 拼接。
+                    w_start = pd.Timestamp(replace_window[0])
+                    w_end = pd.Timestamp(replace_window[1])
+                    keep = ~(
+                        (existing_df["datetime"] >= w_start)
+                        & (existing_df["datetime"] <= w_end)
+                    )
+                    existing_df = existing_df.loc[keep]
                 combined = pd.concat([existing_df, new_df], ignore_index=True)
             else:
                 combined = new_df
 
-            # 去重：按 [datetime, asset] 保留最后出现的（即最新值）
+            # 去重：按 [datetime, asset]。upsert/recompute -> 保留最新（新值覆盖）；
+            # append -> 保留最先（既有 key 不被新数据覆盖）。
+            keep_rule = "last" if write_mode != "append" else "first"
             combined = combined.drop_duplicates(
-                subset=["datetime", "asset"], keep="last"
+                subset=["datetime", "asset"], keep=keep_rule
             )
 
             # 排序：保证 Polars join_asof 的物理预排序要求
@@ -1189,10 +1344,11 @@ class ParquetMaterializer:
             )
 
         logger.info(
-            "分区写入完成: factor_dir=%s, partition=%s, existing_rows=%d, "
+            "分区写入完成: factor_dir=%s, partition=%s, mode=%s, existing_rows=%d, "
             "incoming_rows=%d, final_rows=%d",
             factor_dir,
             partition_key(part_values),
+            write_mode,
             existing_rows,
             len(new_df),
             len(combined),
@@ -1307,11 +1463,105 @@ class ParquetMaterializer:
 
     def list_factors(self) -> list[dict]:
         """列出所有已注册因子信息。
-        
+
         参数:
             无
-        
+
         返回:
             list[dict]
         """
         return self._catalog.list_factors()
+
+
+def compare_live_vs_materialized(
+    live: pd.Series,
+    materialized: pd.Series,
+    *,
+    rtol: float = 1e-6,
+    atol: float = 1e-8,
+) -> dict[str, Any]:
+    """R20-466: live → materialize → reload 精度差分报告。
+
+    比较原始运行结果与物化后 reload 结果，报告：
+    - ``max_abs_error`` / ``max_rel_error``：逐格最大绝对/相对误差；
+    - ``rank_changes``：cross-sectional 每行 rank 变化比例（Spearman 一致率）；
+    - ``sign_flips``：符号翻转格数；
+    - ``threshold_flips``：跨阈值（0 附近 +- atol）翻转格数；
+    - ``equal``：完全一致（含 NaN 位置一致）。
+    """
+    import numpy as np
+
+    if materialized is None:
+        return {"equal": False, "reason": "materialized reload is None"}
+    # Align on the MultiIndex (materialize sorts [asset, datetime]; live may be
+    # datetime-major).  Position-wise comparison would be wrong.
+    if isinstance(live, pd.Series) and isinstance(materialized, pd.Series):
+        idx = live.index.union(materialized.index)
+        live = live.reindex(idx).sort_index()
+        materialized = materialized.reindex(idx).sort_index()
+    lv = np.asarray(live, dtype=float)
+    mt = np.asarray(materialized, dtype=float)
+    if lv.shape != mt.shape:
+        return {
+            "equal": False,
+            "reason": f"shape mismatch live={lv.shape} materialized={mt.shape}",
+            "max_abs_error": None,
+            "max_rel_error": None,
+            "rank_changes": None,
+            "sign_flips": None,
+            "threshold_flips": None,
+        }
+    lv_nan = np.isnan(lv)
+    mt_nan = np.isnan(mt)
+    nan_mismatch = int((lv_nan != mt_nan).sum())
+    finite = ~lv_nan & ~mt_nan
+    denom = np.where(np.abs(lv) > 0, np.abs(lv), 1.0)
+    rel = np.where(finite, np.abs(lv - mt) / denom, 0.0)
+    abs_e = np.where(finite, np.abs(lv - mt), 0.0)
+    max_abs = float(np.max(abs_e)) if abs_e.size else 0.0
+    max_rel = float(np.max(rel)) if rel.size else 0.0
+    sign_flips = 0
+    threshold_flips = 0
+    if finite.any():
+        lv_s = np.sign(lv[finite])
+        mt_s = np.sign(mt[finite])
+        sign_flips = int((lv_s != mt_s).sum())
+        threshold_flips = int(
+            ((np.abs(lv[finite]) <= atol) != (np.abs(mt[finite]) <= atol)).sum()
+        )
+    rank_corr = None
+    rank_changes = None
+    try:
+        if finite.sum() >= 2:
+            from scipy.stats import spearmanr
+
+            corr = spearmanr(lv[finite], mt[finite]).statistic
+            rank_corr = None if corr is None else float(corr)
+            if len(lv[finite]) > 2:
+                lr = _rank_1d(lv[finite])
+                mr = _rank_1d(mt[finite])
+                rank_changes = float((lr != mr).mean())
+    except Exception:  # noqa: BLE001 - rank stats are best-effort
+        rank_corr = None
+    equal = bool(
+        np.array_equal(lv, mt, equal_nan=True) or (max_abs <= atol and max_rel <= rtol)
+    )
+    return {
+        "equal": equal,
+        "max_abs_error": max_abs,
+        "max_rel_error": max_rel,
+        "rank_correlation": rank_corr,
+        "rank_changes": rank_changes,
+        "sign_flips": sign_flips,
+        "threshold_flips": threshold_flips,
+        "nan_mismatch": nan_mismatch,
+        "n_finite": int(finite.sum()),
+        "n_total": int(lv.size),
+    }
+
+
+def _rank_1d(values: Any) -> Any:
+    """Average-rank a 1-D array (stable, tie-aware)."""
+    import pandas as pd
+
+    return pd.Series(values).rank(method="average").to_numpy()

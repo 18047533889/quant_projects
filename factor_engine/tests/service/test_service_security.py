@@ -43,13 +43,18 @@ def test_service_rejects_config_path_escape(monkeypatch, tmp_path):
 
 def test_service_idempotency_and_identity(monkeypatch, tmp_path):
     monkeypatch.setenv("FACTOR_ENGINE_SERVICE_ROOT", str(tmp_path))
-    monkeypatch.setenv("FACTOR_ENGINE_SERVICE_API_KEY", "test-secret")
+    monkeypatch.setenv(
+        "FACTOR_ENGINE_SERVICE_API_KEY_MAPPING",
+        json.dumps({"test-secret": {"identity": "alice", "roles": ["ADMIN"]}}),
+    )
     from service import app as service_app
+    from service.security import reset_principal_registry
 
+    reset_principal_registry()
     monkeypatch.setattr(service_app, "STORE", service_app.JobStore(tmp_path))
     client = TestClient(service_app.create_app())
     payload = {"formula": "close", "idempotency_key": "same", "sync": True}
-    headers = {"X-API-Key": "test-secret", "X-Request-Identity": "alice"}
+    headers = {"X-API-Key": "test-secret"}
     first = client.post("/factor-engine/research/compute", headers=headers, json=payload)
     second = client.post("/factor-engine/research/compute", headers=headers, json=payload)
     assert first.status_code == 200
@@ -57,6 +62,28 @@ def test_service_idempotency_and_identity(monkeypatch, tmp_path):
     assert second.json()["idempotent"] is True
     job = service_app.STORE.get(first.json()["run_id"])
     assert job is not None and job.requested_by == "alice"
+
+
+def test_request_identity_header_is_not_trusted(monkeypatch, tmp_path):
+    """R21-014/015/018: X-Request-Identity is not a trusted principal."""
+    monkeypatch.setenv("FACTOR_ENGINE_SERVICE_ROOT", str(tmp_path))
+    monkeypatch.setenv("FACTOR_ENGINE_SERVICE_API_KEY", "test-secret")
+    monkeypatch.setenv("FACTOR_ENGINE_SERVICE_SINGLE_PRINCIPAL", "1")
+    monkeypatch.setenv("FACTOR_ENGINE_SERVICE_PRINCIPAL", "service-account")
+    from service import app as service_app
+
+    monkeypatch.setattr(service_app, "STORE", service_app.JobStore(tmp_path))
+    client = TestClient(service_app.create_app())
+    headers = {"X-API-Key": "test-secret", "X-Request-Identity": "impostor"}
+    response = client.post(
+        "/factor-engine/research/compute",
+        headers=headers,
+        json={"formula": "close", "sync": True},
+    )
+    job = service_app.STORE.get(response.json()["run_id"])
+    # The caller's identity header must be ignored; the principal comes from
+    # the key mapping (single-principal contract).
+    assert job is not None and job.requested_by != "impostor"
 
 
 def test_production_endpoint_rejects_research_only_formula(monkeypatch, tmp_path):

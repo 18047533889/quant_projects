@@ -1,44 +1,23 @@
-"""Strict scalar parameter parsing shared by Pandas and Polars operators."""
+"""Strict scalar parameter parsing shared by Pandas and Polars operators.
+
+R19-004: this module is a PURE re-export of the single strict scalar-parameter
+authority (``cleaned_operators.common.strict_params``).  It must never contain
+independent validation logic — the historical ``strict_integer`` /
+``strict_finite_scalar`` were a second implementation whose acceptance domain
+did NOT recognize ``np.integer`` / ``np.floating`` (an np scalar that the
+authoritative ``strict_int`` / ``strict_float`` accept was rejected here),
+creating planning/runtime drift.  They are now the authoritative gates under
+their historical names so existing importers (``common/time_series.py``,
+``common/polars_ops.py``, ``common/polars_daily_native.py``,
+``common/elementwise.py``, …) keep working without a second copy.
+"""
 from __future__ import annotations
 
-import math
-from typing import Any
+from cleaned_operators.common.strict_params import (
+    strict_float as strict_finite_scalar,
+)
+from cleaned_operators.common.strict_params import (
+    strict_int as strict_integer,
+)
 
-from backend.operator_errors import OperatorParameterError
-
-
-def strict_integer(
-    value: Any,
-    name: str,
-    *,
-    minimum: int | None = None,
-    maximum: int | None = None,
-) -> int:
-    """Parse an exact finite integer without bool or float truncation."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise OperatorParameterError(f"{name} must be an integer, got {value!r}")
-    if not math.isfinite(float(value)) or int(value) != value:
-        raise OperatorParameterError(f"{name} must be an exact finite integer, got {value!r}")
-    parsed = int(value)
-    if minimum is not None and parsed < minimum:
-        raise OperatorParameterError(f"{name} must be >= {minimum}, got {parsed}")
-    if maximum is not None and parsed > maximum:
-        raise OperatorParameterError(f"{name} must be <= {maximum}, got {parsed}")
-    return parsed
-
-
-def strict_finite_scalar(
-    value: Any,
-    name: str,
-    *,
-    minimum: float | None = None,
-) -> float:
-    """Parse a finite numeric scalar without accepting booleans."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise OperatorParameterError(f"{name} must be a finite scalar, got {value!r}")
-    parsed = float(value)
-    if not math.isfinite(parsed):
-        raise OperatorParameterError(f"{name} must be a finite scalar, got {value!r}")
-    if minimum is not None and parsed < minimum:
-        raise OperatorParameterError(f"{name} must be >= {minimum}, got {parsed}")
-    return parsed
+__all__ = ["strict_integer", "strict_finite_scalar"]

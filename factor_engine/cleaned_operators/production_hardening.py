@@ -23,18 +23,20 @@ from cleaned_operators.semantic_certification import (
 # surface that is NOT yet mirrored/readable; runtime execution still enforces
 # the dataset/column contract (see storage.sources.data_access_source).
 SOURCE_BLOCKED_CANONICALS: frozenset[str] = frozenset({
-    # ``intraday_vwap_deviation`` is genuinely session-aware (close relative to
-    # the intraday cumulative VWAP) and needs minute bars; it stays off the daily
-    # surface.  ``intraday_volatility`` was audited 2026-08 and is actually the
-    # daily close-to-open rolling volatility (open/close inputs, no minute bars),
-    # so it was removed from this set and promoted.
-    "intraday_vwap_deviation",
+    # R22-070..071: source eligibility is CONTEXTUAL, never a global ban.  A
+    # session-aware operator (close relative to intraday cumulative VWAP) is a
+    # DIRECT_ALPHA in any market with a certified minute source (A-share) and is
+    # context-blocked where no minute source exists (US) — the DirectUse
+    # market-context gate handles that per-market, so it is removed from this
+    # global set.  ``intraday_volatility`` was audited 2026-08 and is actually
+    # the daily close-to-open rolling volatility (open/close inputs, no minute
+    # bars), so it is promoted.
     # ``fin_total_operating_accruals`` needs a standalone, reliable depreciation
     # input.  The data dictionary only exposes net fixed-asset carrying value
     # (after accumulated depreciation), so the operator cannot be PIT-certified
-    # without inventing depreciation (review §5.4).  Keep it source-blocked until
-    # a confirmed depreciation/amortization source exists.
-    "fin_total_operating_accruals",
+    # without inventing depreciation (review §5.4).  Its DirectUse verdict is
+    # DELETE_NO_DATA (R22-073..076) until a confirmed depreciation source exists.
+    # The set is intentionally empty of factor-shaped operators.
 })
 
 NON_FACTOR_PRODUCTION_CANONICALS: frozenset[str] = frozenset({

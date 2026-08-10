@@ -92,59 +92,16 @@ class LqtpYoyOp(SeriesOperator):
         return compute_yoy(x, fiscal_quarter)
 
 
-def _period_op_factory(helper_name: str, description: str, *, canonical: str):
-    """period_helpers 显式算子的轻量 SeriesOperator 工厂。"""
-
-    @register_operator(
-        name=canonical,
-        category="fundamental",
-        business_category="fundamental",
-        canonical=canonical,
-        source="factor_dsl_np",
-        status="experimental",
-    )
-    class _PeriodOp(SeriesOperator):
-        metadata = OperatorMetadata(
-            name=canonical,
-            category="fundamental",
-            description=description,
-            param_names=["x", "fiscal_quarter"],
-            return_type="series",
-            tags=["fundamental", "pit_safe", "period_aware"],
-        )
-
-        def _calculate_series(
-            self, x: pd.DataFrame, fiscal_quarter: pd.DataFrame | None = None, **kwargs
-        ):
-            from cleaned_operators.fundamental import period_helpers as ph
-
-            fn = getattr(ph, helper_name)
-            return fn(x, fiscal_quarter)
-
-    _PeriodOp.__doc__ = description
-    return _PeriodOp
-
-
-QuarterFromCumulativeOp = _period_op_factory(
-    "quarter_from_cumulative",
-    "累计值转单季（显式 period-aware；等同 quarter）",
-    canonical="quarter_from_cumulative",
-)
-TtmFromQuarterlyOp = _period_op_factory(
-    "ttm_from_quarterly",
-    "单季值滚动 4 期 TTM（输入须为单季口径）",
-    canonical="ttm_from_quarterly",
-)
-TtmFromCumulativeOp = _period_op_factory(
-    "ttm_from_cumulative",
-    "累计值 → 单季 → 滚动 4 季 TTM",
-    canonical="ttm_from_cumulative",
-)
-YoyByPeriodOp = _period_op_factory(
-    "yoy_by_period",
-    "按报告期计算同比增速（显式 period-aware；等同 yoy）",
-    canonical="yoy_by_period",
-)
+# R23-301 (single registration authority): ``quarter_from_cumulative`` /
+# ``ttm_from_quarterly`` / ``ttm_from_cumulative`` / ``yoy_by_period`` are NO
+# LONGER registered here (the old row-walking ``period_helpers`` first-seen
+# registration was an override-chain hazard — an import-order permutation could
+# leave the experimental row-walking implementation winning over the strict
+# fiscal-ordinal one).  The single implementation authority for these canonicals
+# is ``cleaned_operators.fiscal_strict`` (strict ordinal + revision-aware,
+# pandas+polars).  The legacy row-walking helpers in ``period_helpers`` remain
+# as private/compat utilities reachable only through the deprecated ``ttm`` /
+# ``quarter`` / ``yoy`` compatibility spellings below.
 
 
 @register_operator(

@@ -862,18 +862,24 @@ def strict_int_param(value: Any, name: str, *, lower: int | None = None, upper: 
 
     Returns the coerced ``int``.  Raises :class:`OperatorParameterError` on any
     violation — never clips, never silently rounds.
+
+    R19-005: numeric strings (``"20"``) are REJECTED here.  Numeric-string
+    conversion is a declaration-layer concern and happens exactly once at the
+    DSL/binder (see :func:`bind_numeric_string_if_declared`); a string that
+    reaches a kernel is a contract violation — the caller did not declare the
+    parameter numeric, so ``strict_int("20")`` must not smuggle it through and
+    bypass the "must have a numeric declaration" principle.
     """
     if isinstance(value, (bool, np.bool_)):
         raise OperatorParameterError(
             f"{name} must be an integer, not bool ({value!r})"
         )
     if isinstance(value, str):
-        try:
-            value = float(value.strip())
-        except (TypeError, ValueError):
-            raise OperatorParameterError(
-                f"{name} must be an integer, not a non-numeric string ({value!r})"
-            )
+        raise OperatorParameterError(
+            f"{name} must be an integer, not a string ({value!r}) — numeric "
+            "strings are converted only at the DSL/binder declaration layer "
+            "(R19-005); declare the parameter numeric to pass a string"
+        )
     if not isinstance(value, (int, float, np.integer, np.floating)):
         raise OperatorParameterError(
             f"{name} must be an integer, not {type(value).__name__} ({value!r})"
@@ -892,6 +898,26 @@ def strict_int_param(value: Any, name: str, *, lower: int | None = None, upper: 
     if upper is not None and result > upper:
         raise OperatorParameterError(f"{name} must be <= {upper}, got {result}")
     return result
+
+
+def strict_int_runtime(value: Any, name: str, *, lower: int | None = None, upper: int | None = None) -> int:
+    """R19-005: the RUNTIME kernel integer gate — numeric strings rejected.
+
+    Kernel-side scalar validation must read exactly this gate (or
+    ``strict_int_param``, which now behaves identically): the value entering a
+    kernel has already passed the declaration-layer binder
+    (:func:`bind_numeric_string_if_declared`), so any string here is a
+    contract violation, never a value to parse.  ``strict_params.strict_int``
+    delegates here so the whole library's kernel-facing integer gate shares one
+    string-rejecting implementation.
+    """
+    if isinstance(value, str):
+        raise OperatorParameterError(
+            f"{name} must be an integer, not a string ({value!r}) — numeric "
+            "strings are converted only at the DSL/binder declaration layer "
+            "(R19-005); declare the parameter numeric to pass a string"
+        )
+    return strict_int_param(value, name, lower=lower, upper=upper)
 
 
 def strict_bool_param(value: Any, name: str) -> bool:
@@ -1010,6 +1036,12 @@ def _validate_param_spec(
 # ``halflife`` / ``lambda_param`` parameter (the kernel would silently swallow it
 # and ``alpha=0.1`` vs ``alpha=0.9`` would manufacture two identical ASTs).
 # New operators must declare ``param_aliases`` instead of relying on this set.
+#
+# R19-006 (parameter alias single authority): ``OperatorMetadata.param_aliases``
+# is the ONE authority; ``_LEGACY_KERNEL_ALIASES`` is a COMPAT FALLBACK that
+# ``_normalise_call`` consults only for alias keys the operator's own metadata
+# did NOT declare (explicit aliases always win), so a metadata-declared alias can
+# never be overridden by a legacy guess.
 _LEGACY_KERNEL_ALIASES: dict[str, tuple[str, ...]] = {
     "d": ("window", "lag", "periods", "delay", "horizon", "lookback"),
     "window": ("window", "period", "span", "n"),
@@ -1085,6 +1117,28 @@ def _coerce_declared_numeric_string(
     return parsed
 
 
+def bind_numeric_string_if_declared(
+    value: Any,
+    name: str,
+    declared_type: type | None = None,
+    spec: ParamSpec | None = None,
+) -> Any:
+    """R19-005: THE declaration-layer numeric-string binder (single occurrence).
+
+    Numeric-string conversion (``"20"`` -> ``20``) is a DSL/binder concern ONLY
+    and happens exactly once per parameter here.  It converts a string literal
+    ONLY when the parameter's declared contract is numeric (``ParamSpec(dtype=
+    int|float)`` or a numeric ``param_types`` entry); a string parameter — or a
+    parameter with no numeric contract — keeps the exact string.  Once past this
+    binder, the runtime kernel gates (:func:`strict_int_runtime` /
+    :func:`strict_int_param`) REJECT strings, so ``strict_int("20")`` can never
+    bypass the "must have a numeric declaration" principle.
+
+    ``_coerce_declared_numeric_string`` is retained as a compatibility alias.
+    """
+    return _coerce_declared_numeric_string(value, name, declared_type, spec)
+
+
 def _kernel_param_defaults(operator: Any) -> dict[str, Any]:
     """Canonical default values from the operator kernel signature.
 
@@ -1156,13 +1210,52 @@ def _choices_contains(choices: Sequence[Any], value: Any, name: str) -> bool:
     return False
 
 
+def _bound_parameters(
+    metadata: OperatorMetadata,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    alias_target: dict[str, str] | None = None,
+    defaults: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build the SINGLE canonical, alias-resolved, default-merged bound dict.
+
+    R19-007/008: this is the one bound every consumer reads — ``active_when``,
+    relational specs, history formula, hash identity and the kernel call.  Alias
+    spellings (``d``) are resolved onto canonical targets (``window``) and
+    kernel/``ParamSpec`` defaults are merged in for unbound parameters, so a
+    judgement is always made on the exact values the kernel will receive.
+    """
+    names = list(getattr(metadata, "param_names", None) or [])
+    bound: dict[str, Any] = {
+        name: args[index] for index, name in enumerate(names[: len(args)])
+    }
+    bound.update(kwargs)
+    explicit_aliases = getattr(metadata, "param_aliases", None) or {}
+    alias_target = alias_target or {}
+    for key in list(bound):
+        target = alias_target.get(key) or explicit_aliases.get(key)
+        if target is not None and target not in bound:
+            bound[target] = bound[key]
+    if defaults:
+        for name, value in defaults.items():
+            if name not in bound:
+                bound[name] = value
+    return bound
+
+
 def _enforce_active_when(
     metadata: OperatorMetadata,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     defaults: dict[str, Any] | None,
-) -> None:
+) -> tuple[frozenset[str], frozenset[str]]:
     """Round-7 P0: enforce ``ParamSpec.active_when`` at runtime.
+
+    Returns ``(active_params, inactive_params)`` — the partition of every
+    active_when-declared parameter judged against the SAME canonical bound the
+    kernel receives (R19-007/008).  Callers that only need the rejection may
+    ignore the return.
+
 
     A parameter is INACTIVE when its controlling parameter's value is not in the
     declared allowed set.  An inactive parameter must be unprovided or exactly
@@ -1179,13 +1272,15 @@ def _enforce_active_when(
     bindable default at all is a contract bug and raises (fail-closed), never a
     silent skip.
     """
-    names = list(getattr(metadata, "param_names", None) or [])
     specs = getattr(metadata, "param_specs", None) or {}
     if not specs:
-        return
-    bound: dict[str, Any] = {name: args[index] for index, name in enumerate(names[: len(args)])}
-    bound.update(kwargs)
+        return frozenset(), frozenset()
+    # R19-007/008: the SAME canonical, alias-resolved, default-merged bound the
+    # kernel receives — never raw args/kwargs.
+    bound = _bound_parameters(metadata, args, kwargs, None, defaults)
     defaults = defaults or {}
+    active: set[str] = set()
+    inactive: set[str] = set()
     for pname, spec in specs.items():
         if spec is None or spec.active_when is None:
             continue
@@ -1218,7 +1313,9 @@ def _enforce_active_when(
             # controller value, judged directly against the allowed set.
             ctrl_val = bound[controller]
         if _active_allows(allowed, ctrl_val):
+            active.add(pname)
             continue  # active
+        inactive.add(pname)
         # INACTIVE: only tolerate unprovided, or equal to the canonical default.
         if pname not in bound:
             continue
@@ -1238,6 +1335,7 @@ def _enforce_active_when(
             "provide only its canonical default or omit it (round-7 P0 — a dead "
             "knob must not create a second AST)"
         )
+    return frozenset(active), frozenset(inactive)
 
 
 def _normalise_call(
@@ -1298,17 +1396,24 @@ def _normalise_call(
                 f"declares {len(names)} parameters {names}; extra positional "
                 "arguments are rejected unless the operator declares variadic"
             )
+    # R19-002: per-value validation routes through the SAME unified
+    # scalar-parameter authority the planning-time validator uses
+    # (``normalize_and_validate_scalar_param``), so runtime and planning share
+    # one declared ParamSpec type domain (np scalars / Decimal / enum / explicit
+    # None included).  The declaration-layer numeric-string binder runs inside
+    # that entry, so a string is converted exactly once here and the kernel
+    # gates (``strict_int_runtime``) never see it (R19-005).
+    from cleaned_operators.common.strict_params import normalize_and_validate_scalar_param
+
+    _canonical = str(getattr(metadata, "name", "") or "")
     processed_args = [
-        _normalise_integer(
-            _coerce_declared_numeric_string(
-                value,
-                names[index] if index < len(names) else "",
-                types.get(names[index]) if index < len(names) else None,
-                specs.get(names[index]) if index < len(names) else None,
-            ),
+        normalize_and_validate_scalar_param(
+            _canonical,
             names[index] if index < len(names) else "",
-            types.get(names[index]) if index < len(names) else None,
-            specs.get(names[index]) if index < len(names) else None,
+            value,
+            phase="runtime",
+            declared_type=types.get(names[index]) if index < len(names) else None,
+            spec=specs.get(names[index]) if index < len(names) else None,
         )
         for index, value in enumerate(args)
     ]
@@ -1339,44 +1444,36 @@ def _normalise_call(
                 alias_target[key] = matched[0]
     processed_kwargs: dict[str, Any] = {}
     for key, value in kwargs.items():
-        # Round-11 #16: controlled numeric-string coercion against the declared
-        # contract happens once per kwarg, before any alias resolution — the
+        # R19-002: unified scalar validation (declaration-layer numeric-string
+        # binder + strict domain) per kwarg, before any alias resolution — the
         # canonical target's spec (via alias_target) is the authority below.
         if key in names:
-            coerced = _coerce_declared_numeric_string(
-                value, key, types.get(key), specs.get(key)
-            )
-            processed_kwargs[key] = _normalise_integer(
-                coerced, key, types.get(key), specs.get(key)
+            processed_kwargs[key] = normalize_and_validate_scalar_param(
+                _canonical, key, value, phase="runtime",
+                declared_type=types.get(key), spec=specs.get(key),
             )
             continue
         if key in alias_target:
             # R7-223: validate against the canonical target's contract.
             canon = alias_target[key]
-            coerced = _coerce_declared_numeric_string(
-                value, canon, types.get(canon), specs.get(canon)
-            )
-            processed_kwargs[key] = _normalise_integer(
-                coerced, canon, types.get(canon), specs.get(canon)
+            processed_kwargs[key] = normalize_and_validate_scalar_param(
+                _canonical, canon, value, phase="runtime",
+                declared_type=types.get(canon), spec=specs.get(canon),
             )
             continue
         if key in aliases:
             # Legacy alias declared without a param_aliases entry but present in
             # the alias set: keep the alias spelling as the kwarg key but validate
             # against the (empty) alias slot — accepted for backward compat.
-            coerced = _coerce_declared_numeric_string(
-                value, key, types.get(key), specs.get(key)
-            )
-            processed_kwargs[key] = _normalise_integer(
-                coerced, key, types.get(key), specs.get(key)
+            processed_kwargs[key] = normalize_and_validate_scalar_param(
+                _canonical, key, value, phase="runtime",
+                declared_type=types.get(key), spec=specs.get(key),
             )
             continue
         if variadic:
-            coerced = _coerce_declared_numeric_string(
-                value, key, types.get(key), specs.get(key)
-            )
-            processed_kwargs[key] = _normalise_integer(
-                coerced, key, types.get(key), specs.get(key)
+            processed_kwargs[key] = normalize_and_validate_scalar_param(
+                _canonical, key, value, phase="runtime",
+                declared_type=types.get(key), spec=specs.get(key),
             )
             continue
         raise OperatorParameterError(
@@ -1385,7 +1482,14 @@ def _normalise_call(
             "visible in the catalog is rejected (R5-06 / round-7 P0); declare it "
             "in param_names / param_aliases or tag the operator variadic."
         )
-    _enforce_active_when(metadata, args, kwargs, defaults)
+    # R19-007/008: active_when reads the SAME canonical, alias-resolved,
+    # default-merged bound that relational specs / history / hash / kernel
+    # consume — never the raw args/kwargs (which may hold alias spellings and
+    # un-normalized values).  ``_bound_parameters`` resolves aliases onto
+    # canonical targets and merges defaults, so a dead-knob judgement is made on
+    # the exact values the kernel will receive.
+    bound = _bound_parameters(metadata, processed_args, processed_kwargs, alias_target, defaults)
+    _enforce_active_when(metadata, (), bound, defaults)
     return tuple(processed_args), processed_kwargs
 
 
@@ -1682,6 +1786,116 @@ def _validate_panel_axes(metadata: OperatorMetadata, args: tuple[Any, ...], kwar
             raise ValueError(f"{metadata.name}: input panel {position} index is misaligned")
 
 
+@dataclass
+class NormalizedBoundParameters:
+    """R19-007/008: the SINGLE normalized, alias-resolved, default-merged bound.
+
+    Every consumer of an operator call — ``active_when``, relational specs,
+    history formula, hash identity and the kernel call itself — reads THIS
+    object's values, never a raw ``args``/``kwargs`` view.  This closes the
+    drift where ``_normalise_call`` normalized one copy while
+    ``_enforce_active_when`` judged a different (raw) copy.
+    """
+
+    panel_inputs: tuple[Any, ...]          # positional PANEL inputs (kernel panels)
+    scalar_params: dict[str, Any]          # canonical scalar name -> normalized value
+    canonical_aliases_resolved: dict[str, str]  # alias kwarg -> canonical target
+    defaults_applied: dict[str, Any]       # kernel/ParamSpec defaults merged for unbound params
+    inactive_params: frozenset[str]        # params judged INACTIVE by active_when
+    normalized_values: dict[str, Any]      # full canonical bound (scalars + merged defaults)
+
+
+@dataclass
+class BoundOperatorCall:
+    """A fully bound operator call: processed kernel arguments + the shared
+    normalized bound (R19-007/008)."""
+
+    metadata: OperatorMetadata
+    args: tuple[Any, ...]                  # processed positional (panels + scalars)
+    kwargs: dict[str, Any]                 # processed kwargs (may retain alias spellings for kernels)
+    bound: NormalizedBoundParameters
+
+
+def _split_bound(
+    metadata: OperatorMetadata,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> tuple[tuple[Any, ...], dict[str, Any], dict[str, str]]:
+    """Split processed args into panel inputs vs canonical scalar params, and
+    report the alias->canonical resolution actually applied (R19-007/008)."""
+    names = list(getattr(metadata, "param_names", None) or [])
+    explicit_aliases = getattr(metadata, "param_aliases", None) or {}
+    # Aliases resolved by ``_normalise_call`` (explicit + legacy kernel aliases).
+    alias_resolved: dict[str, str] = {}
+    for key in kwargs:
+        if key in explicit_aliases:
+            alias_resolved[key] = explicit_aliases[key]
+        elif key in _LEGACY_KERNEL_ALIASES:
+            matched = [t for t in _LEGACY_KERNEL_ALIASES[key] if t in names or t in explicit_aliases]
+            if matched:
+                alias_resolved[key] = matched[0]
+    scalar_params: dict[str, Any] = {}
+    for key, value in kwargs.items():
+        target = explicit_aliases.get(key, key)
+        scalar_params[target] = value
+    panels: list[Any] = []
+    for index, value in enumerate(args):
+        name = names[index] if index < len(names) else ""
+        if _is_panel(value):
+            panels.append(value)
+        elif name:
+            scalar_params.setdefault(name, value)
+    return tuple(panels), scalar_params, alias_resolved
+
+
+def bind_operator_call(
+    operator: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    defaults: dict[str, Any] | None = None,
+) -> BoundOperatorCall:
+    """R19-007/008: bind an operator call into a SINGLE normalized bound.
+
+    ``_normalise_call`` performs declaration-layer numeric-string conversion,
+    ParamSpec normalization and alias-target validation; the resulting
+    normalized values feed ``active_when``, common relations and every declared
+    ``RelationalParamSpec`` from the SAME bound (never the raw ``args``/``kwargs``
+    that previously raced ahead of normalization).  The kernel call, history
+    formula and hash identity consume the same ``BoundOperatorCall.bound``.
+    """
+    metadata = getattr(operator, "metadata", None)
+    if metadata is None:
+        raise ValueError(f"{operator!r} has no metadata; cannot bind call")
+    defaults = defaults if defaults is not None else _kernel_param_defaults(operator)
+    processed_args, processed_kwargs = _normalise_call(
+        metadata, args, kwargs, defaults=defaults
+    )
+    bound = _bound_parameters(metadata, processed_args, processed_kwargs, None, defaults)
+    # active_when was enforced inside ``_normalise_call`` on this same canonical
+    # bound; relations and common integer relations run here on it too.
+    _validate_common_integer_relations(metadata, (), bound)
+    _validate_relational_specs(metadata, operator, (), bound)
+    panel_inputs, scalar_params, alias_resolved = _split_bound(
+        metadata, processed_args, processed_kwargs
+    )
+    active, inactive = _enforce_active_when(metadata, (), bound, defaults)
+    bound_obj = NormalizedBoundParameters(
+        panel_inputs=panel_inputs,
+        scalar_params=scalar_params,
+        canonical_aliases_resolved=alias_resolved,
+        defaults_applied=dict(defaults or {}),
+        inactive_params=frozenset(inactive),
+        normalized_values=dict(bound),
+    )
+    return BoundOperatorCall(
+        metadata=metadata,
+        args=processed_args,
+        kwargs=processed_kwargs,
+        bound=bound_obj,
+    )
+
+
 def validate_operator_call(
     operator: Any,
     args: tuple[Any, ...],
@@ -1700,12 +1914,12 @@ def validate_operator_call(
     metadata = getattr(operator, "metadata", None)
     if metadata is None:
         raise ValueError(f"{operator!r} has no metadata; cannot validate call")
-    processed_args, processed_kwargs = _normalise_call(
-        metadata, args, kwargs, defaults=_kernel_param_defaults(operator)
-    )
+    # R19-007/008: bind into the SINGLE normalized bound (active_when, common
+    # relations, relational specs all read the same canonical values the kernel
+    # receives), then run the panel-axis and operator-specific checks.
+    call = bind_operator_call(operator, args, kwargs)
+    processed_args, processed_kwargs = call.args, call.kwargs
     _validate_panel_axes(metadata, processed_args, processed_kwargs)
-    _validate_common_integer_relations(metadata, processed_args, processed_kwargs)
-    _validate_relational_specs(metadata, operator, processed_args, processed_kwargs)
     valid = operator.validate_params(*processed_args, **processed_kwargs)
     if valid is False:
         raise ValueError(f"{metadata.name}: parameter validation failed")

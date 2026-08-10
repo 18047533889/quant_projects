@@ -104,12 +104,16 @@ ProductionPolicy = Literal["allowed", "pending", "denied", "permanently_forbidde
 # production DSL 禁止（可 research / experimental，不可 production 投递）
 PRODUCTION_DENIED_CANONICALS: frozenset[str] = frozenset(
     {
+        # Non-causal / random / utility primitives — permanently excluded from
+        # production mining (R22-086..087).  These are NOT factor canonicals.
         "dropna",
         "bfill",
         "causal_bfill",
         "fillna_interpolate",
         "shuffle",
         "constant",
+        # Raw matrix / signal-processing primitives — MOVE_INTERNAL capability
+        # (R22-083), never a public factor terminal.
         "fft",
         "ifft",
         "wavelet",
@@ -119,28 +123,28 @@ PRODUCTION_DENIED_CANONICALS: frozenset[str] = frozenset(
         "eig",
         "svd",
         "pca",
-        "rolling_beta_to_market",
-        "downside_beta",
-        "tail_beta",
-        "residual_momentum_capm",
-        "coskewness_to_market",
-        "idio_vol",
-        "idio_skew",
+        # Legacy row-shift / non-PIT fundamental names — kept denied so the
+        # strict PIT-aware fiscal operators are the only production forms
+        # (R22-116..117: the deny list holds only genuinely-forbidden items;
+        # everything else lives in DirectUse admission).
         "quarter",
         "ttm",
         "yoy",
         "avg2",
-        # Strict PIT-aware fiscal operators are production primitives.  Only
-        # the legacy row-shift names quarter/ttm/yoy/avg2 remain denied.
+        "downside_beta",
         "operating_margin",
         "current_ratio",
         "quick_ratio",
         "debt_to_equity",
-        "intraday_vwap_deviation",
-        "rank_corr",
         "ts_poly2_coeff",
         "ts_poly2_resid",
-        "digital_count",
+        # NOTE R22-064..070: tail_beta / residual_momentum_capm / coskewness_to_market /
+        # idio_vol / idio_skew / rank_corr / digital_count / rolling_beta_to_market
+        # are legitimately DIRECT (benchmark-required alpha, dependency alpha, state
+        # statistic) and were removed from this deny list — see the hardening
+        # ``_remove_promoted_legacy_denials`` path.  ``intraday_vwap_deviation`` is
+        # a contextual DIRECT_ALPHA (A-share minute source present; US blocked) and
+        # is denied at the source-context gate, not here.
     }
 )
 

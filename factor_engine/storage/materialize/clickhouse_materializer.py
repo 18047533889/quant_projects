@@ -2,28 +2,19 @@
 """因子结果写入 ClickHouse（ReplacingMergeTree 长表，与 Parquet 路径同构清洗/DQ）。"""
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from typing import Any
 
 from logging_utils import get_logger
-from workspace_paths import quant_projects_root
 
 logger = get_logger("storage.clickhouse_materializer")
 
 
 def _ensure_data_access() -> None:
-    """确保 data_access 包可导入。
-    
-    参数:
-        无
-    
-    返回:
-        无
-    """
-    root = str(quant_projects_root())
-    if root not in sys.path:
-        sys.path.insert(0, root)
+    """R21-130..133: import the installed ``data_access`` (no sys.path injection)."""
+    from storage.data_access_loader import ensure_data_access_importable
+
+    ensure_data_access_importable()
 
 
 @dataclass(frozen=True)

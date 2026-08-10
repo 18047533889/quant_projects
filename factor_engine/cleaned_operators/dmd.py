@@ -56,6 +56,13 @@ from cleaned_operators.gemini_v2_common import (
 
 _EPS = 1e-12
 
+# R16-087/088: VERSIONED numerical policy.  ``np.linalg.pinv`` default rcond is
+# library-version dependent; a fixed rcond + relative imaginary-mode tolerance
+# make the DMD decomposition reproducible and definition-stable across numpy
+# versions (both values enter the definition/evidence hash).
+_PINV_RCOND = 1e-12
+_IMAG_MODE_RTOL = 1e-9
+
 # R5 P1-01/P1-02: ``rank``/``dim``/``delay`` are validated ints (a fractional
 # value is rejected, never silently truncated).
 #
@@ -198,7 +205,10 @@ def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any
     # mis-orders the dominant mode / energies.)
     Phi = Y @ (Vr / S[:r]) @ W          # (L, r) exact modes
     x1 = X[:, 0]
-    b = np.linalg.pinv(Phi) @ x1        # (r,) mode amplitudes
+    # R16-087: the pinv rcond is an explicit, VERSIONED numerical policy —
+    # ``np.linalg.pinv``'s library-default rcond can change the effective rank
+    # across numpy versions.  The value enters the definition/evidence hash.
+    b = np.linalg.pinv(Phi, rcond=_PINV_RCOND) @ x1   # (r,) mode amplitudes
     # P1-L (#136): mode energy carried in LOG space throughout.  With
     # ``rho = |lam|^2``,  log E_j = log|b_j|^2 + log( sum_{t=0}^{K-1} rho_j^t ).
     # The geometric log-sum is a cancellation-free closed form (near ``rho == 1``
@@ -210,7 +220,11 @@ def _hankel_dmd(v: np.ndarray, rank: int, dim: int, delay: int) -> dict[str, Any
         [_log_finite_horizon_sum(float(rho[j]), int(K)) for j in range(eig_vals.size)],
         dtype=float,
     )
-    log_b2 = np.log(np.abs(b) ** 2 + _EPS)
+    # R16-085: a ZERO-amplitude mode has NO energy — ``log(|b|^2 + EPS)`` gave a
+    # b=0 mode a fabricated non-zero energy via the machine epsilon.  ``-inf``
+    # propagates the correct semantics (the mode ranks last / vanishes).
+    abs_b = np.abs(b)
+    log_b2 = np.where(abs_b == 0.0, -np.inf, np.log(abs_b ** 2))
     log_energy = log_b2 + log_sum
     order = np.argsort(-log_energy)
     return {
@@ -239,7 +253,10 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                 continue
             lam0 = res["eig"][0]
             if which == "growth":
-                val = float(np.log(max(abs(lam0), _EPS)))
+                # R16-086: a ZERO eigenvalue has no defined growth rate —
+                # ``log(max(|λ|, EPS))`` let a machine-constant decide an
+                # arbitrary finite growth.  λ == 0 -> NaN (undefined).
+                val = float(np.nan) if abs(lam0) == 0.0 else float(np.log(abs(lam0)))
             elif which == "frequency":
                 # P1-L (#138): the useful metric is the dominant OSCILLATORY
                 # frequency — the max-energy mode among the IMAGINARY modes.  A
@@ -248,7 +265,10 @@ def _dmd_series(x2d: np.ndarray, window: int, rank: int, dim: int, delay: int, w
                 # NaN only when NO mode is imaginary.
                 dom = None
                 for lam in np.asarray(res["eig"]):  # already energy-descending
-                    if abs(lam.imag) >= 1e-9:
+                    # R16-088: RELATIVE imaginary-mode tolerance (versioned), not
+                    # an absolute hidden constant — an absolute ``1e-9`` had no
+                    # scale semantics across differently-scaled series.
+                    if abs(lam.imag) >= _IMAG_MODE_RTOL * max(1.0, abs(lam)):
                         dom = lam
                         break
                 if dom is None:

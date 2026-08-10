@@ -1,0 +1,18 @@
+# R21-119..122 production exact dependency lock
+# lock_digest=879a391afb03e349b085fe69a22303f65ab43fd055ca06df5afd076dced7efa8
+
+python==3.10.12
+numpy==2.2.6
+pandas==2.3.3
+pyarrow==25.0.0
+scipy==1.15.3
+numba==missing
+polars==1.42.1
+duckdb==1.5.4
+clickhouse-connect==missing
+data-access==0.2.0
+factor-engine==missing
+fastapi==0.139.2
+pydantic==2.13.4
+uvicorn==missing
+yaml==6.0.3

@@ -18,19 +18,43 @@ _SKIP = frozenset({"date", "stock_code"})
 
 
 def _pi(value, name: str, minimum: int = 1) -> int:
+    """R16-058: STRICT integer gate — never ``int(value)`` truncation.
+
+    ``5.9`` / ``True`` / ``NaN`` must fail BEFORE reaching the kernel, exactly
+    as the pandas binder rejects them.  The polars backend only receives
+    binder-validated parameters.
+    """
+    from cleaned_operators.base import strict_int_param
+
     if isinstance(value, bool):
-        raise ValueError(f"{name} must be integer")
-    value = int(value)
-    if value < minimum:
+        raise ValueError(f"{name} must be an integer, not bool")
+    result = strict_int_param(value, name)
+    if result < minimum:
         raise ValueError(f"{name} must be >= {minimum}")
-    return value
+    return result
 
 
 def _cols(*frames: pl.DataFrame) -> list[str]:
-    out = [c for c in frames[0].columns if c not in _SKIP]
+    """R16-059: EXACT axis contract — no silent intersection.
+
+    A column mismatch across multi-input frames silently shrank the universe
+    (a missing stock just disappeared).  Without an explicit BroadcastSpec the
+    exact axis/order is REQUIRED: a missing / extra / reordered column in any
+    frame is a hard error.
+    """
+    if not frames:
+        return []
+    base_cols = [c for c in frames[0].columns if c not in _SKIP]
     for frame in frames[1:]:
-        out = [c for c in out if c in frame.columns]
-    return out
+        frame_cols = [c for c in frame.columns if c not in _SKIP]
+        if frame_cols != base_cols:
+            raise ValueError(
+                "polars_state_event: multi-input frames must share the EXACT "
+                f"column axis (R16-059).  base={base_cols[:5]}... got={frame_cols[:5]}... "
+                "— a missing/extra/reordered column would silently shrink the "
+                "universe; broadcast requires an explicit BroadcastSpec"
+            )
+    return base_cols
 
 
 def _make(base: pl.DataFrame, cols: list[str], values: np.ndarray) -> pl.DataFrame:
@@ -49,6 +73,25 @@ def _safe_ratio_1d(num: np.ndarray, den: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+_LEGAL_PRICE_BASIS = frozenset({"raw", "adjusted", "pre_close", "factor_adjusted", "none", None})
+
+
+def _validate_price_basis(**kwargs) -> None:
+    """R16-060: backend-independent price_basis domain gate.
+
+    The pandas path enforces the price_basis domain in its metadata; the native
+    Polars path must enforce the SAME gate so an illegal basis cannot bypass the
+    typed-IR contract on this backend.
+    """
+    basis = kwargs.get("price_basis")
+    if isinstance(basis, str):
+        if basis.strip().lower() not in _LEGAL_PRICE_BASIS:
+            raise ValueError(
+                f"price_basis={basis!r} is not a legal basis {sorted(_LEGAL_PRICE_BASIS - {None})} "
+                "(R16-060 — domain gate is backend-independent)"
+            )
+
+
 def _ratio_op(a, b, name):
     cols = _cols(a, b)
     rows = a.height
@@ -59,18 +102,22 @@ def _ratio_op(a, b, name):
 
 
 def open_close_return(open_px, close, **kwargs):
+    _validate_price_basis(**kwargs)
     return _ratio_op(close, open_px, "open_close_return")
 
 
 def open_to_vwap_return(open_px, vwap, **kwargs):
+    _validate_price_basis(**kwargs)
     return _ratio_op(vwap, open_px, "open_to_vwap_return")
 
 
 def overnight_return(open_px, pre_close, **kwargs):
+    _validate_price_basis(**kwargs)
     return _ratio_op(open_px, pre_close, "overnight_return")
 
 
 def vwap_to_close_return(vwap, close, **kwargs):
+    _validate_price_basis(**kwargs)
     return _ratio_op(close, vwap, "vwap_to_close_return")
 
 
@@ -140,7 +187,24 @@ def ts_max_buildup(x, d):
 
 
 def _truth(cv: np.ndarray) -> np.ndarray:
-    return np.isfinite(cv) & (cv != 0)
+    """R16-057: STRICT ConditionBool/EventBool truth — legal set {0, 1, NaN}.
+
+    The old ``np.isfinite(cv) & (cv != 0)`` read ``-1`` / ``0.2`` / ``2`` as
+    True — inconsistent with the pandas strict tri-state validator.  Any finite
+    value outside {0, 1} is a DATA ERROR shared by every backend, so it raises
+    here instead of silently becoming a truthy.
+    """
+    missing = cv != cv
+    valid = (cv == 0.0) | (cv == 1.0)
+    bad = ~missing & ~valid
+    if np.any(bad):
+        bad_values = sorted({str(v) for v in np.unique(cv[bad]).tolist()})[:10]
+        raise ValueError(
+            f"ConditionBool/EventBool input must be {{0, 1, NaN}}; found values "
+            f"outside the legal set: {bad_values} (R16-057 — ±Inf / -1 / 0.2 must "
+            "never be read as a truthy)"
+        )
+    return cv == 1.0
 
 
 def ts_transition_count(condition, window=20, missing_policy="break"):
@@ -176,7 +240,7 @@ def ts_transition_count(condition, window=20, missing_policy="break"):
 
 
 def ts_time_since_change(condition, max_lookback=None, missing_policy="break", initial_semantics="since_transition"):
-    limit = None if max_lookback is None else int(max_lookback)
+    limit = None if max_lookback is None else _pi(max_lookback, "max_lookback", minimum=1)
     policy = str(missing_policy).lower()
     if policy not in ("break", "carry"):
         raise ValueError("missing_policy must be 'break' or 'carry'")
@@ -243,7 +307,8 @@ def _gaps_censored(valid_col: np.ndarray, positions: np.ndarray, start: int) -> 
 
 def ts_event_spacing_mean(condition, window=60, min_events=2):
     w = _pi(window, "window")
-    min_e = max(2, int(min_events))
+    # R16-058: strict int gate — never ``max(2, int(min_events))`` silent clamp.
+    min_e = _pi(min_events, "min_events", minimum=2)
     cols = _cols(condition)
     rows = condition.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
@@ -265,7 +330,8 @@ def ts_event_spacing_mean(condition, window=60, min_events=2):
 
 def ts_event_spacing_cv(condition, window=60, min_events=3):
     w = _pi(window, "window")
-    min_e = max(3, int(min_events))
+    # R16-058: strict int gate — never ``max(3, int(min_events))`` silent clamp.
+    min_e = _pi(min_events, "min_events", minimum=3)
     cols = _cols(condition)
     rows = condition.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)

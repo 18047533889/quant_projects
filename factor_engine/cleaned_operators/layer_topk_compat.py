@@ -76,9 +76,12 @@ def register():
         ("ts_bottomk_std", False, "std", "sample std (ddof=1) of smallest K values; k>=2"),
     ):
         pandas_fn, polars_fn = _spec(top, stat)
+        # ts_topk_sum canonical params are ``["x","d","k"]`` (R19-050 aliases);
+        # inherited ParamSpec keys must sit inside param_names (R6-157).
+        params = ["x", "d", "k", "min_periods"] if name == "ts_topk_sum" else ["x", "window", "k", "min_periods"]
         specs[name] = Spec(
             "time_series_order",
-            ["x", "window", "k", "min_periods"],
+            params,
             description,
             pandas_fn,
             polars_fn,

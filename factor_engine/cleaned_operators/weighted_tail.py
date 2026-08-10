@@ -162,7 +162,8 @@ def _validate_nonneg_weight(weight: pd.DataFrame, name: str) -> None:
 
 
 def _metadata(
-    name: str, description: str, params: list[str], *, unit: str, output_unit: str | None = None
+    name: str, description: str, params: list[str], *, unit: str, output_unit: str | None = None,
+    cost: str = "cost:1",
 ) -> Any:
     from cleaned_operators.base import OperatorMetadata
 
@@ -180,7 +181,7 @@ def _metadata(
         return_type="series",
         tags=[
             "time_series_risk", "daily", "pit_safe", "causal", "typed_v2",
-            f"signature:{','.join(params)}->series", f"unit:{unit}", "cost:1",
+            f"signature:{','.join(params)}->series", f"unit:{unit}", cost,
         ],
         output_unit=output_unit,
     )
@@ -242,8 +243,14 @@ class TsStratifiedMeanSpread(SeriesOperator):
             order = np.argsort(s, kind="stable")
             xs = x[order]
             ss = s[order]
-            k = max(1, int(round(q * x.size)))
-            k = min(k, x.size - 1)
+            # R16-094: ``k = round(q * N)`` OVERLAPPED the strata on odd N
+            # (N=7, q=.5 -> round(3.5)=4, so top-4 and bottom-4 overlap).  Use
+            # ``floor(q * N)`` and REQUIRE ``2*k <= N`` (guaranteed for q<=0.5
+            # with floor) plus a min-stratum floor; a degenerate/overlapping
+            # stratum is NaN, never a silent adjustment.
+            k = int(np.floor(q * x.size))
+            if k < 1 or 2 * k > x.size:
+                return np.nan
             top = _stratified_stratum_mean(xs, ss, k, top=True)
             bot = _stratified_stratum_mean(xs, ss, k, top=False)
             if not np.isfinite(top) or not np.isfinite(bot):
@@ -399,7 +406,12 @@ class TsWeightedExpectedShortfall(SeriesOperator):
         "ts_weighted_expected_shortfall",
         "加权期望损失: 加权分位数之外尾部的加权均值。",
         ["x", "weight", "window", "quantile", "side", "min_tail_count"],
-        unit="level",
+        # R16-096: ES is the WEIGHTED MEAN of x over the tail — its unit is
+        # ``same_as:x``, not a generic level.
+        unit="same_as:x",
+        # R16-098: weighted quantile + per-window sort is NOT a linear rolling;
+        # the real cost is W log W.
+        cost="cost:3",
     )
 
     def _calculate_series(
@@ -435,6 +447,15 @@ class TsWeightedExpectedShortfall(SeriesOperator):
             if np.any(wv < 0.0):
                 return np.nan
             if xv.size < max(min_tail, 3):
+                return np.nan
+            # R16-097: member-count alone cannot gate a WEIGHTED tail — one
+            # huge weight + many tiny weights passes a size gate while carrying
+            # ~no effective tail mass.  Kish effective-N ``(sum w)^2 / sum w^2``
+            # is the honest sample-size; a too-small Kish is NaN.
+            sw = float(wv.sum())
+            sw2 = float(np.sum(wv * wv))
+            kish = (sw * sw) / sw2 if sw2 > 0.0 else 0.0
+            if kish < min_tail:
                 return np.nan
             return _weighted_es_tail(xv, wv, q, kind, min_tail)
 

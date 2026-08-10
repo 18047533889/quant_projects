@@ -31,8 +31,10 @@ Outputs (``--out``, default ``build/mining``):
 from __future__ import annotations
 
 import csv
+import enum
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -50,57 +52,55 @@ _DEFAULT_ADMISSION = "pending"
 def _searchable_schema(canonical: str) -> dict[str, dict[str, Any]]:
     """R15-INC-061: full schema for every searchable scalar — dtype, domain,
     choices, default, role, search grade and active_when.  A name alone is never
-    enough to protect the search space from estimator-knob overfitting."""
-    schema: dict[str, dict[str, Any]] = {}
-    try:
-        from cleaned_operators.base import (
-            ParamRole,
-            effective_param_role,
-            param_search_grade,
-            searchable_param_names,
+    enough to protect the search space from estimator-knob overfitting.
+
+    R16-025: "no default" and "default is None" are DISTINCT — the JSON carries
+    an explicit ``has_default`` flag (a bare ``None`` serialized as the default
+    made them indistinguishable and could pin an operator to a phantom default).
+    R16-026: a schema build error on a MINEABLE operator ABORTS the manifest
+    instead of silently emitting an empty schema dict.
+    """
+    from cleaned_operators.base import (
+        MISSING,
+        effective_param_role,
+        param_search_grade,
+        searchable_param_names,
+    )
+    from cleaned_operators.registry import OperatorRegistry
+
+    operator = OperatorRegistry.get(canonical, "pandas_numpy")
+    metadata = getattr(operator, "metadata", None)
+    if metadata is None:
+        raise ValueError(
+            f"searchable schema for {canonical}: no operator metadata — a "
+            "mineable operator with an unbuildable schema must abort the manifest "
+            "(R16-026)"
         )
-        from cleaned_operators.registry import OperatorRegistry
-
-        operator = OperatorRegistry.get(canonical, "pandas_numpy")
-        metadata = getattr(operator, "metadata", None)
-        if metadata is None:
-            return schema
-        grades = searchable_param_names(metadata)
-        searchable = set(grades.get("full", ())) | set(grades.get("coarse", ()))
-        specs = getattr(metadata, "param_specs", None) or {}
-        for name in sorted(searchable):
-            spec = specs.get(name)
-            dtype = getattr(spec, "dtype", None)
-            default = getattr(spec, "default", None)
-            try:
-                from cleaned_operators.base import MISSING
-
-                if default is MISSING:
-                    default = None
-            except Exception:
-                pass
-            if hasattr(default, "__class__") and type(default).__name__ in (
-                "_MissingDefaultType",
-            ):
-                default = None
-            entry: dict[str, Any] = {
-                "dtype": dtype.__name__ if dtype is not None else None,
-                "min": getattr(spec, "min", None),
-                "max": getattr(spec, "max", None),
-                "choices": list(getattr(spec, "choices", ())) or None,
-                "default": default,
-                "role": None,
-                "search_grade": param_search_grade(spec),
-                "active_when": getattr(spec, "active_when", None),
-            }
-            try:
-                role = effective_param_role(spec)
-                entry["role"] = role.value if role is not None else None
-            except Exception:
-                entry["role"] = None
-            schema[name] = entry
-    except Exception:
-        pass
+    grades = searchable_param_names(metadata)
+    searchable = set(grades.get("full", ())) | set(grades.get("coarse", ()))
+    specs = getattr(metadata, "param_specs", None) or {}
+    schema: dict[str, dict[str, Any]] = {}
+    for name in sorted(searchable):
+        spec = specs.get(name)
+        dtype = getattr(spec, "dtype", None)
+        default = getattr(spec, "default", MISSING)
+        has_default = default is not MISSING
+        serialized_default = None if not has_default else default
+        _choices = getattr(spec, "choices", None)
+        entry: dict[str, Any] = {
+            "dtype": dtype.__name__ if dtype is not None else None,
+            "min": getattr(spec, "min", None),
+            "max": getattr(spec, "max", None),
+            "choices": list(_choices) if _choices else None,
+            "has_default": has_default,
+            "default": serialized_default,
+            "role": None,
+            "search_grade": param_search_grade(spec),
+            "active_when": getattr(spec, "active_when", None),
+        }
+        role = effective_param_role(spec)
+        entry["role"] = role.value if role is not None else None
+        schema[name] = entry
     return schema
 
 
@@ -161,18 +161,48 @@ def _query_fingerprint() -> dict[str, str]:
 
     from cleaned_operators.registry import OperatorRegistry
 
+    def _canonicalize(value: Any) -> Any:
+        """JSON-canonicalize a catalog value (R16-027): enums/sets/frozensets/
+        dataclasses/tuples become plain JSON-able structures so the fingerprint
+        reflects VALUES, not key names."""
+        if isinstance(value, dict):
+            return {str(k): _canonicalize(v) for k, v in sorted(value.items(), key=lambda kv: str(kv[0]))}
+        if isinstance(value, (list, tuple)):
+            return [_canonicalize(v) for v in value]
+        if isinstance(value, (set, frozenset)):
+            return sorted(_canonicalize(v) for v in value)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if isinstance(value, enum.Enum):
+            return _canonicalize(value.value)
+        if hasattr(value, "__dict__"):
+            return _canonicalize(value.__dict__)
+        try:
+            import numpy as np
+
+            if isinstance(value, np.generic):
+                return value.item()
+        except Exception:
+            pass
+        return str(value)
+
     registry_digest = ""
     try:
+        # R16-027: hash the FULL logical catalog (values + aliases), so changing
+        # only ``output_unit`` (or a role / ParamSpec value) changes the
+        # fingerprint — the old key-names-only digest never moved.
         blob = json.dumps(
             {
-                c: sorted(k for k in OperatorRegistry._catalog[c] if not callable(k))
-                for c in sorted(OperatorRegistry._catalog)
+                "catalog": _canonicalize(OperatorRegistry._catalog),
+                "aliases": _canonicalize(getattr(OperatorRegistry, "_aliases", {}) or {}),
             },
             sort_keys=True,
         )
         registry_digest = hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            f"registry fingerprint could not be computed (R16-027): {exc}"
+        ) from exc
     evidence_digest = ""
     try:
         from backend.factor_operator_evidence import load_factor_operator_evidence
@@ -194,7 +224,15 @@ def _query_fingerprint() -> dict[str, str]:
 def export_mining_manifest(
     out_dir: Path, *, admission: str = _DEFAULT_ADMISSION
 ) -> dict[str, Path]:
-    """Export the manifest.  API default == CLI default (R15-INC-053)."""
+    """Export the manifest.  API default == CLI default (R15-INC-053).
+
+    R16-024: ``runtime_mining_manifest.eligible.json`` and
+    ``operator_remediation_plan.pending.json`` are TWO STRICTLY SEPARATE
+    schemas.  A runtime loader must reject the pending schema (a downstream
+    consumer that reads only the canonical list from a pending manifest could
+    mine operators that were never certified).  The legacy aggregate
+    ``mining_manifest.json`` is kept for the CLI view.
+    """
     operators = get_mining_operators(admission=admission)
     manifest = {
         "schema_version": "factor_engine.mining_manifest.v2",
@@ -205,6 +243,33 @@ def export_mining_manifest(
         "operators": [_manifest_entry(op) for op in operators],
     }
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- R16-024: eligible-only runtime manifest (the ONLY mining search space) ---
+    eligible_ops = [e for e in manifest["operators"] if e["mining_eligible"]]
+    runtime_manifest = {
+        "schema_version": "factor_engine.runtime_mining_manifest.eligible.v1",
+        "manifest_kind": "runtime_eligible",
+        "query_fingerprint": manifest["query_fingerprint"],
+        "count": len(eligible_ops),
+        "operators": eligible_ops,
+    }
+    runtime_path = out_dir / "runtime_mining_manifest.eligible.json"
+    runtime_path.write_text(
+        json.dumps(runtime_manifest, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+
+    # --- R16-024: pending remediation plan (NEVER a runtime search space) ---
+    remediation = {
+        "schema_version": "factor_engine.operator_remediation_plan.pending.v1",
+        "manifest_kind": "operator_remediation_pending",
+        "query_fingerprint": manifest["query_fingerprint"],
+        "count": len(manifest["operators"]),
+        "operators": manifest["operators"],
+    }
+    pending_path = out_dir / "operator_remediation_plan.pending.json"
+    pending_path.write_text(
+        json.dumps(remediation, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
 
     json_path = out_dir / "mining_manifest.json"
     json_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -244,17 +309,56 @@ def export_mining_manifest(
         )
     md_path.write_text("\n".join(md_lines), encoding="utf-8")
 
-    return {"json": json_path, "csv": csv_path, "md": md_path}
+    return {
+        "json": json_path,
+        "csv": csv_path,
+        "md": md_path,
+        "eligible": runtime_path,
+        "pending": pending_path,
+    }
 
 
-def validate_cold_start(out_dir: Path) -> list[str]:
-    """R15-INC-056/057: resolve the cold-start DSL AST to canonical + role and
-    verify each against the manifest admission — never a raw set comparison.
+def validate_runtime_manifest(path: Path) -> list[str]:
+    """R16-024: a runtime loader rejects a PENDING-schema manifest.
 
-    DSL pseudo-functions (``intraday_*`` features, technical macros) lower to
-    primitives before IR; they are resolved via the registry alias map when
-    possible and otherwise reported as unverifiable rather than skipped.
+    ``operator_remediation_plan.pending.json`` must never be consumed as a
+    mining search space — a downstream consumer that reads only the canonical
+    list could mine operators that were never certified.  This is the loader's
+    fail-closed gate.
     """
+    if not path.exists():
+        return [f"runtime manifest not found: {path}"]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return [f"runtime manifest unreadable: {exc}"]
+    kind = payload.get("manifest_kind")
+    if kind != "runtime_eligible":
+        return [
+            f"runtime manifest schema rejected: manifest_kind={kind!r} — only "
+            "'runtime_eligible' may be loaded as a mining search space (R16-024)"
+        ]
+    return []
+
+
+def validate_cold_start(out_dir: Path, seed_source: str | Path | None = None) -> list[str]:
+    """R15-INC-056/057 + R16-028/029: real cold-start validation.
+
+    Phase 1 (R16-028): lineage FIRST.  The manifest's commit / dirty / registry
+    fingerprints must match the CURRENT tree — an old manifest produced by a
+    different commit must be STALE, not accepted.
+
+    Phase 2 (R15-INC-051 + aliases): every production-certified factor and every
+    resolvable alias is present in the manifest.
+
+    Phase 3 (R16-029): every REAL cold-start seed expression is walked through
+    parse -> type -> bind -> source -> smoke-execute.  A seed that cannot bind /
+    source / execute is a violation — registry membership alone never proves a
+    factor can run.
+    """
+    import numpy as np
+    import pandas as pd
+
     manifest_path = out_dir / "mining_manifest.json"
     if not manifest_path.exists():
         return ["mining_manifest.json not found — run export first"]
@@ -262,21 +366,29 @@ def validate_cold_start(out_dir: Path) -> list[str]:
     in_manifest = {e["canonical"] for e in manifest["operators"]}
     admission_state = {e["canonical"]: e.get("admission_state") for e in manifest["operators"]}
 
-    from cleaned_operators.registry import OperatorRegistry
-    from cleaned_operators.operator_surface import is_dsl_name_allowed
-
     violations: list[str] = []
 
-    # R15-INC-051: CERTIFIED_FACTOR_NOT_IN_MINING_MANIFEST.  Only a
-    # PRODUCTION-CERTIFIED factor operator must be present in the manifest —
-    # an uncertified mineable-role operator is legitimately absent from a
-    # pending/all manifest (it has not passed the gates yet).  A DENIED /
-    # supporting canonical is likewise legitimately absent.
+    # ---- Phase 1 (R16-028): artifact lineage must be current. ----
+    fp = manifest.get("query_fingerprint") or {}
+    current = _query_fingerprint()
+    if fp.get("commit_sha") and fp["commit_sha"] != current["commit_sha"]:
+        violations.append(
+            f"STALE manifest: commit {fp.get('commit_sha')} != current {current['commit_sha']}"
+        )
+    if fp.get("dirty"):
+        violations.append(f"STALE manifest: built on a dirty tree ({len(fp['dirty'])} bytes)")
+    if fp.get("registry_fingerprint") and fp["registry_fingerprint"] != current["registry_fingerprint"]:
+        violations.append("STALE manifest: registry fingerprint does not match current tree")
+    if fp.get("evidence_fingerprint") and fp["evidence_fingerprint"] != current["evidence_fingerprint"]:
+        violations.append("STALE manifest: evidence fingerprint does not match current tree")
+
+    from cleaned_operators.registry import OperatorRegistry
+
+    # ---- Phase 2 (R15-INC-051): certified factor + alias membership. ----
     for name in sorted(OperatorRegistry._catalog):
         entry = OperatorRegistry._catalog[name]
         if not entry.get("production_certified"):
             continue
-        role = None
         try:
             from mining.operator_catalog import assign_mining_role
 
@@ -292,11 +404,6 @@ def validate_cold_start(out_dir: Path) -> list[str]:
             if admission_state.get(name) == "unresolved":
                 violations.append(f"{name}: UNRESOLVED admission in manifest")
 
-    # DSL names / aliases: every registered alias must resolve (via the registry
-    # alias map) to a canonical that is present in the manifest when the target
-    # is mineable.  An alias pointing at a missing or supporting canonical is a
-    # broken formula — the R12 "register every canonical, verify membership"
-    # invariant was a set comparison that never proved the AST could resolve.
     try:
         aliases = getattr(OperatorRegistry, "_aliases", {}) or {}
         for alias in sorted(aliases):
@@ -305,7 +412,6 @@ def validate_cold_start(out_dir: Path) -> list[str]:
             except Exception:
                 canonical = None
             if canonical is None or canonical not in in_manifest:
-                # only flag if the alias target is a factor-shaped canonical
                 target = aliases[alias]
                 if target in OperatorRegistry._catalog:
                     from mining.operator_catalog import assign_mining_role
@@ -325,6 +431,95 @@ def validate_cold_start(out_dir: Path) -> list[str]:
                         )
     except Exception:
         pass
+
+    # ---- Phase 3 (R16-029): real seed expressions parse/type/bind/execute. ----
+    # Each seed is walked through parse -> type -> operator-graph smoke execute.
+    # Registry membership alone never proves a factor can run: an operator whose
+    # kernel cannot even bind/execute on synthetic inputs is a defect, and an
+    # illegally-bound relational param is caught by the binder here.
+    try:
+        from fundamental_cold_start import load_cold_start
+
+        seeds, _report = load_cold_start(seed_source)
+    except Exception as exc:
+        violations.append(f"cold-start seeds unavailable: {exc}")
+        return violations
+    if not seeds:
+        return violations
+
+    from api.dsl_parser import parse_expr
+    from cleaned_operators.registry import OperatorRegistry
+
+    synthetic = pd.DataFrame(
+        np.random.default_rng(7).normal(size=(60, 5)),
+        index=pd.date_range("2024-01-01", periods=60, freq="B"),
+        columns=[f"S{i:03d}" for i in range(5)],
+    )
+
+    def _referenced_canonicals(dsl: str) -> list[str]:
+        """Every operator name the DSL calls, resolved via the registry alias map."""
+        out: list[str] = []
+        for token in re.findall(r"\b([a-z_][a-z0-9_]*)\s*\(", dsl):
+            try:
+                out.append(OperatorRegistry.resolve_canonical(token))
+            except Exception:
+                continue
+        return out
+
+    executed = 0
+    failed = 0
+    for row in seeds:
+        factor_id = str(row.get("factor_id", "")).strip()
+        dsl = str(row.get("dsl", "")).strip()
+        try:
+            tree = parse_expr(dsl)  # parse + type
+            if tree is None:
+                raise ValueError("dsl parse returned None")
+        except Exception as exc:  # noqa: BLE001
+            failed += 1
+            violations.append(
+                f"cold-start seed {factor_id} ({dsl!r}) failed parse/type: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            if failed > 20:
+                break
+            continue
+        # operator-graph smoke execute: every referenced canonical must bind its
+        # declared panel inputs and run on synthetic data.
+        for canonical in _referenced_canonicals(dsl):
+            try:
+                operator = OperatorRegistry.get(canonical, "pandas_numpy")
+                # R22: bind EVERY declared data input, not just ``panel_params``
+                # (defaulting to a single "x" broke two-input kernels like
+                # safe_div_null(x, y)).
+                from mining.direct_use import _authoritative_param_split, input_slot_specs, split_input_slots
+
+                cat = OperatorRegistry._catalog.get(canonical) or {}
+                _panel, _scalar = _authoritative_param_split(canonical, cat)
+                _slots = input_slot_specs(canonical, cat, panel_params=_panel, scalar_params=_scalar)
+                data = split_input_slots(canonical, cat, slots=_slots)["data_inputs"]
+                # Fundamental period transforms (period_id / fiscal_quarter /
+                # date columns) need a REAL period calendar — a synthetic random
+                # panel cannot satisfy that semantics.  Their cold-start smoke is
+                # the DSL parse/type (already done above); synthetic operator
+                # execution is skipped here, not failed.
+                if any(
+                    name in {"period_id", "fiscal_quarter", "change_date", "event_date"}
+                    or name.startswith(("date", "report_period"))
+                    for name in data
+                ):
+                    continue
+                panels = [synthetic for _ in (data or ("x",))]
+                operator.calculate(*panels)
+                executed += 1
+            except Exception as exc:  # noqa: BLE001
+                failed += 1
+                violations.append(
+                    f"cold-start seed {factor_id}: operator {canonical!r} failed "
+                    f"bind/execute on synthetic panels: {type(exc).__name__}: {exc}"
+                )
+                if failed > 20:
+                    break
     return violations
 
 
@@ -338,19 +533,30 @@ def main() -> int:
         help="eligible (certified only) | pending (certified + reviewed admissible, default) | all (every registered canonical)",
     )
     parser.add_argument("--validate-cold-start", action="store_true")
+    parser.add_argument(
+        "--seed-source",
+        default=None,
+        help="path to the cold-start seed CSV (default: locate fundamental_factors_single_default_1288.csv)",
+    )
     args = parser.parse_args()
     out_dir = Path(args.out)
     paths = export_mining_manifest(out_dir, admission=args.admission)
     for name, path in paths.items():
         print(f"  {name}: {path}")
     if args.validate_cold_start:
-        violations = validate_cold_start(out_dir)
+        # R16-024: the runtime loader must first reject a non-eligible schema.
+        runtime_errors = validate_runtime_manifest(paths["eligible"])
+        if runtime_errors:
+            for e in runtime_errors:
+                print(f"runtime manifest error: {e}")
+            return 2
+        violations = validate_cold_start(out_dir, seed_source=args.seed_source)
         if violations:
             print("cold-start violations:")
             for v in violations[:40]:
                 print(f"  {v}")
             return 2
-        print("cold-start validation: OK (all public DSL names in manifest)")
+        print("cold-start validation: OK (lineage current + all seeds parse/bind/execute)")
     return 0
 
 

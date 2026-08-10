@@ -19,6 +19,7 @@ except ImportError:
     pl = None  # type: ignore
 
 from cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import ParamRole, ParamSpec
 
 _SKIP = frozenset({"date", "stock_code"})
 
@@ -134,11 +135,26 @@ class TSBetaPolars(SeriesOperator):
     """Polars 滚动 Beta"""
     metadata = OperatorMetadata(
         name="m_beta", category="time_series", description="滚动 Beta",
-        param_names=["y", "x", "window"], return_type="series", tags=["time_series", "polars"],
+        param_names=["y", "x", "window", "min_periods"], return_type="series", tags=["time_series", "polars"],
+        # R19-033..035: 与 pandas ``MovingBeta`` 共享同一 authority —— min_periods
+        # 默认 5（reviewed rolling_beta default），不是 polars 的 1。
+        param_aliases={"d": "window"},
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, searchable=True,
+                                param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=2, default=5, searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
+        },
     )
 
-    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        w = max(1, int(kwargs.get("d", window)))
+    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20, min_periods: int = 5, **kwargs) -> pl.DataFrame:
+        from cleaned_operators.common.strict_params import strict_int
+
+        w = strict_int(kwargs.get("d", window), "window", minimum=2)
+        mp = strict_int(min_periods, "min_periods", minimum=2)
+        if mp > w:
+            from backend.operator_errors import OperatorParameterError
+            raise OperatorParameterError("min_periods must be <= window")
         cols = _align_cols(y, x)
         merged = y
         x_cols: list[str] = []
@@ -149,8 +165,8 @@ class TSBetaPolars(SeriesOperator):
         exprs = []
         for c in cols:
             xn = f"__x_{c}"
-            cov = pl.rolling_cov(pl.col(c), pl.col(xn), window_size=w, min_samples=1, ddof=1)
-            var = pl.col(xn).rolling_var(window_size=w, min_samples=1, ddof=1)
+            cov = pl.rolling_cov(pl.col(c), pl.col(xn), window_size=w, min_samples=mp, ddof=1)
+            var = pl.col(xn).rolling_var(window_size=w, min_samples=mp, ddof=1)
             exprs.append((cov / var).alias(c))
         return merged.with_columns(exprs).drop(x_cols)
 

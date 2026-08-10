@@ -1070,8 +1070,8 @@ class Lasso(SeriesOperator):
 
         def _lasso_trend(x_vals):
             n = len(x_vals)
-            valid = ~np.isnan(x_vals)
-            if valid.sum() < 3:
+            valid = np.isfinite(x_vals)
+            if int(valid.sum()) < 3:
                 return np.nan
             xv = x_vals[valid]
             idx = np.arange(n)[valid]
@@ -1468,8 +1468,8 @@ class Ridge(SeriesOperator):
 
         def _ridge_trend(x_vals):
             n = len(x_vals)
-            valid = ~np.isnan(x_vals)
-            if valid.sum() < 3:
+            valid = np.isfinite(x_vals)
+            if int(valid.sum()) < 3:
                 return np.nan
             xv = x_vals[valid]
             idx = np.arange(n)[valid]
@@ -1709,12 +1709,12 @@ class wavg(SeriesOperator):
     )
     def _calculate_series(self, x: pd.DataFrame, w: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         def _wavg(x_vals, w_vals):
-            valid = ~(np.isnan(x_vals) | np.isnan(w_vals))
+            valid = np.isfinite(x_vals) & np.isfinite(w_vals)
             x_v = x_vals[valid]
             w_v = w_vals[valid]
-            if len(x_v) == 0 or np.nansum(w_v) == 0:
+            if len(x_v) == 0 or w_v.sum() == 0:
                 return np.nan
-            return np.nansum(x_v * w_v) / np.nansum(w_v)
+            return float((x_v * w_v).sum() / w_v.sum())
 
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for col in x.columns:
@@ -1740,12 +1740,12 @@ class wsum(SeriesOperator):
     )
     def _calculate_series(self, x: pd.DataFrame, w: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         def _wsum(x_vals, w_vals):
-            valid = ~(np.isnan(x_vals) | np.isnan(w_vals))
+            valid = np.isfinite(x_vals) & np.isfinite(w_vals)
             x_v = x_vals[valid]
             w_v = w_vals[valid]
             if len(x_v) == 0:
                 return np.nan
-            return np.nansum(x_v * w_v)
+            return float((x_v * w_v).sum())
 
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for col in x.columns:

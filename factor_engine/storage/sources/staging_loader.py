@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import sys
 from typing import Any
 
 import pandas as pd
@@ -18,19 +17,10 @@ _VALUE_COLUMNS = ("value",)
 
 
 def _ensure_data_access() -> None:
-    """确保 data_access 包可导入。
-    
-    参数:
-        无
-    
-    返回:
-        无
-    """
-    from workspace_paths import quant_projects_root
+    """R21-130..133: import the installed ``data_access`` (no sys.path injection)."""
+    from storage.data_access_loader import ensure_data_access_importable
 
-    root = str(quant_projects_root())
-    if root not in sys.path:
-        sys.path.insert(0, root)
+    ensure_data_access_importable()
 
 
 def load_factor_series_from_staging(

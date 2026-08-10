@@ -182,6 +182,15 @@ def _build_semantic_identity(
     scope_m = getattr(scope, "market", None)
     scope_c = getattr(scope, "calendar_id", None)
     scope_d = getattr(scope, "decision_time_policy", None)
+    # R20-201..206: storage precision policy 从 lineage 侧接线进 identity ctx。
+    # ``compute_factor_identity`` 当前忽略未知 ctx key；当 #183 把
+    # ``storage_precision_policy`` 加进 ``FactorSemanticIdentity`` 后，它自动进入
+    # identity digest / factor_version / checkpoint 失效判定。
+    storage_precision_policy = (
+        lineage_extra.get("storage_precision_policy")
+        or lineage_extra.get("storage_value_dtype")
+        or getattr(getattr(engine, "backend", None), "storage_precision_policy", None)
+    )
     ctx: dict[str, Any] = {
         "ir_hash": ast_hash,
         "operator_contract_hash": (run_lineage or {}).get("operator_catalog_hash"),
@@ -191,6 +200,7 @@ def _build_semantic_identity(
         "data_source_config": data_source_config,
         "factor": factor,
         "frequency": frequency,
+        "storage_precision_policy": storage_precision_policy,
         "market": (
             (scope_m or None)
             or getattr(engine, "market", None)
@@ -325,6 +335,19 @@ def execute_materialize(
     # （否则 engine=production + env=research 时 direct-local 写守卫、semantic
     # identity mismatch 门、incremental tombstone 策略全部失效）。
     production = is_production_mode(engine.run_mode)
+    # R20-201..206: storage precision policy 在 orchestrator 层解析一次，写进
+    # lineage extra，让 identity ctx / catalog / 事件 rebuild 消费同一份精度契约。
+    # 显式 ``value_dtype=None`` 时 production 默认 float64；float32 需 quantization
+    # certificate（否则记录 ``float32_legacy`` 诚实标记）。
+    from storage.materialize.materializer import storage_precision_policy_for
+
+    _eff_dtype, _precision_policy = storage_precision_policy_for(
+        value_dtype,
+        production=production,
+        lineage_extra=((run_lineage or {}).get("extra") or {}),
+    )
+    lineage.extra["storage_precision_policy"] = _precision_policy
+    lineage.extra["storage_value_dtype"] = _eff_dtype
     # #收官轮 P0：完整语义身份（含 frequency/market/universe/pit/dialect）在
     # orchestrator 层构建后显式传入——物化器不再根据残缺 ctx 重建（那样 freq
     # 1d 与 5m 会同 digest / 同 factor_version）。

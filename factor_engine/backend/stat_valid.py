@@ -18,13 +18,17 @@ def rank_excludes_nan(canon: str) -> bool:
 
 
 def polars_rank_input(value_col: str, *, exclude_nan: bool) -> "pl.Expr":
-    """rank 输入列：无效值置 NULL，不参与 rank/count。"""
+    """rank 输入列：无效值置 NULL，不参与 rank/count。
+
+    ±Inf is excluded exactly like NaN (RankSpec.inf_policy="exclude", pandas
+    reference ``cs_rank_01`` masks via ``np.isfinite`` — NEW-255).
+    """
     import polars as pl
 
     c = pl.col(value_col)
     if exclude_nan:
-        return pl.when(c.is_null() | c.is_nan()).then(None).otherwise(c)
-    return pl.when(c.is_null()).then(None).otherwise(c)
+        return pl.when(c.is_null() | c.is_nan() | c.is_infinite()).then(None).otherwise(c)
+    return pl.when(c.is_null() | c.is_infinite()).then(None).otherwise(c)
 
 
 def polars_row_stat_invalid(value_col: str, *, exclude_nan: bool) -> "pl.Expr":
@@ -33,8 +37,8 @@ def polars_row_stat_invalid(value_col: str, *, exclude_nan: bool) -> "pl.Expr":
 
     c = pl.col(value_col)
     if exclude_nan:
-        return c.is_null() | c.is_nan()
-    return c.is_null()
+        return c.is_null() | c.is_nan() | c.is_infinite()
+    return c.is_null() | c.is_infinite()
 
 
 def stat_valid_sql(col: str, *, dialect: "SqlDialect", exclude_nan: bool = True) -> str:

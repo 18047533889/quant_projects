@@ -1,0 +1,2306 @@
+[
+  {
+    "canonical": "acos",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "generic raw arccos — no factor semantics; use acos_bounded on a bounded input",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "acos_bounded",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "arg",
+    "current_surface": "unsafe",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "DSL/grammar primitive — internal supporting layer",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "asin",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "generic raw arcsin — no factor semantics; use asin_bounded on a bounded input",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "asin_bounded",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "baseline_scaled_wasserstein_distance",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "circulating_cap_ratio_change",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "circulating_cap_unlock_proxy",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "composition_normalized_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "constant",
+    "current_surface": "internal",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "DSL/grammar primitive — internal supporting layer",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cos",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "generic raw cosine — no factor semantics; use cos_phase inside a phase/seasonality recipe",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cos_phase",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cosh",
+    "current_surface": "unsafe",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "hyperbolic cosine — raw math, not a factor canonical",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cot",
+    "current_surface": "unsafe",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "cotangent — raw math, not a factor canonical",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_autoencoder_reconstruction_error",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_isotonic_residual_lagged_direction",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_knn_local_gradient_norm",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_knn_local_linear_residual",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_knn_tangent_residual",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_multi_ridge_resid",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_physical_panel_coverage",
+    "current_surface": "extended",
+    "direct_use_status": "direct_global_state",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_rank_combined_churn",
+    "current_surface": "extended",
+    "direct_use_status": "direct_group_state",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_rank_composition_churn",
+    "current_surface": "extended",
+    "direct_use_status": "direct_group_state",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_rank_copula_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_rank_copula_mi",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_sliced_wasserstein_copula_shift",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_tail_breadth",
+    "current_surface": "extended",
+    "direct_use_status": "direct_group_state",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_trimmed_ols_resid",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "cs_universe_coverage",
+    "current_surface": "extended",
+    "direct_use_status": "direct_global_state",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "csc",
+    "current_surface": "unsafe",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "cosecant — raw math, not a factor canonical",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "event_allan_log_mean",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "event_allan_scaling_slope",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "event_fano_excess",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "event_hawkes_branching_ratio_proxy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "event_interval_mark_coupling",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "event_mark_autocorr",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "event_response_effective_events",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "event_response_overlap_ratio",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "fin_fundamental_strength_coverage",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "fin_mean_abs_deviation",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "fin_median_abs_deviation",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "fin_percentile_vs_prior_history",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "fin_period_restated",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "fin_period_revision_age",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "fin_period_revision_count",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "fin_ttm",
+    "current_surface": "extended",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "fin_zscore_vs_prior_history",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "group_feature_coverage_ratio",
+    "current_surface": "extended",
+    "direct_use_status": "direct_group_state",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "group_feature_valid_member_count",
+    "current_surface": "extended",
+    "direct_use_status": "direct_group_state",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "group_signal_attraction_share",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "group_spd_feature_structure_shift",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "group_tail_centrality",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "group_tail_lead_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "group_wasserstein_barycenter_distance",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "holder_class_js_shift",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "holder_concentration_change",
+    "current_surface": "research",
+    "direct_use_status": "delete_no_data",
+    "disposition": "deleted_no_data",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "holder_count_change_rate",
+    "current_surface": "research",
+    "direct_use_status": "delete_no_data",
+    "disposition": "deleted_no_data",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "holder_disclosure_count",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "holder_disclosure_coverage",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "holder_pledge_churn",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "holder_topk_share_sum",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "identity",
+    "current_surface": "internal",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "industry_rolling_pca_loading",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_idiosyncratic_variance",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "intra_idiosyncratic_variance_ex_self"
+  },
+  {
+    "canonical": "intra_negative_jump_variation",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_positive_jump_variation",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_realized_beta",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "intra_realized_beta_ex_self"
+  },
+  {
+    "canonical": "intra_realized_correlation",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "intra_realized_correlation_ex_self"
+  },
+  {
+    "canonical": "intra_return_profile_cosine",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intra_signed_jump_ratio",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_barrier_approach_acceleration",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_impact_decay_rate",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_profile_phase_shift",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_profile_surprise_energy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_quantile_curve_pca_residual",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_quantile_curve_pca_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_realized_power_variation",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_subsampled_rv_dispersion",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_volatility_signature_slope",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_vwap_deviation",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "intraday_wasserstein_pair_distance",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "micro_bvc_vpin",
+    "current_surface": "research",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "research-tier operator — research tool only",
+    "recommended_factor_replacement": "intraday_bvc_imbalance"
+  },
+  {
+    "canonical": "ohlc_corwin_schultz_spread",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_mixture_of_experts_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_regime_conditioned_forecast",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_rolling_elastic_net_forecast",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_rolling_pca_explained_ratio",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_rolling_pca_loading",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_rolling_pca_resid",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_rolling_pca_resid_momentum",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_rolling_pca_resid_vol",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_rolling_pcr_forecast",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "panel_rolling_pls_forecast",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "piotroski_f_score_tolerant",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "piotroski_observed_count",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "piotroski_partial_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "protected_div",
+    "current_surface": "internal",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "relation_diffusion_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "relation_distinct_count",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "relation_distribution_excess_kurtosis",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "relation_distribution_pearson_kurtosis",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "relation_overlap_ratio",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "relation_rank_entity_mobility",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "report_benford_js_divergence",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "report_revision_magnitude",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "rolling_beta_to_market",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "sec",
+    "current_surface": "unsafe",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "secant — raw math, not a factor canonical",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "sin",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "generic raw sine — no factor semantics; use sin_phase inside a phase/seasonality recipe",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "sin_phase",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "sinh",
+    "current_surface": "unsafe",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "hyperbolic sine — raw math, not a factor canonical",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "state_since_count",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "state_since_last",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "state_since_mean",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "state_since_sum",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "tan",
+    "current_surface": "unsafe",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "tangent — raw math, not a factor canonical",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_abs_concentration",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_abs_entropy_nats",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_active_information_storage",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_activity_clock_lagged_value_prior",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_ar_fitted_value",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_ar_forecast",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_ar_prior_forecast"
+  },
+  {
+    "canonical": "ts_ar_in_sample_resid",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_ar_innovation",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_ar_prior_innovation"
+  },
+  {
+    "canonical": "ts_ar_innovation_z",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_ar_prior_innovation_z"
+  },
+  {
+    "canonical": "ts_autocorrelation_time_initial_positive_sequence",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_bds_statistic",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_best_lag_corr_excess",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_best_lag_corr_raw",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_beta_break_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_betti_1_max_persistence",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_bicoherence_top_decile_excess",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_bicoherence_top_decile_mean",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_bures_corr_shift",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_change_point_probability",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_conditional_transfer_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_copula_central_asymmetry",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_cross_extremogram",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_cross_quantilogram",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_cumulative_deviation_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_cusum_vol_break_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dc_duration_asymmetry",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dc_event_rate",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dc_overshoot_asymmetry",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dc_overshoot_ratio",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_detrended_level_spectral_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dfa_hurst",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dmd_dominant_frequency",
+    "current_surface": "research",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "untyped DMD — compat alias; use the ts_dmd_level/return typed variants",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dmd_dominant_growth_rate",
+    "current_surface": "research",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "untyped DMD — compat alias; use the ts_dmd_level/return typed variants",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dmd_level_dominant_frequency",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dmd_level_dominant_growth_rate",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dmd_level_mode_concentration",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dmd_mode_concentration",
+    "current_surface": "research",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "untyped DMD mode concentration — use the ts_dmd_level/return typed variants",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dmd_return_dominant_frequency",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dmd_return_dominant_growth_rate",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_dmd_return_mode_concentration",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_effective_transfer_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_effective_turning_rate",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_evt_threshold_stability",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_expectile",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_expectile_beta",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_expectile_regression_coeff",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_expectile_regression_coeff_prior"
+  },
+  {
+    "canonical": "ts_expectile_regression_resid",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_expectile_regression_forecast_error"
+  },
+  {
+    "canonical": "ts_extremal_dependence_decay",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_extremogram",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_feature_effective_rank",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_feature_mode_share",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_feature_pca_reconstruction_error",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_feature_subspace_rotation",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_fisher_information_shift",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_forbidden_ordinal_pattern_excess",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_forbidden_ordinal_pattern_signed_excess",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_fractional_difference_discarded_weight_mass",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_garch_next_vol_forecast",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_garch_persistence",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_garch_standardized_shock",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_garch_vol_surprise",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_gjr_garch_vol_forecast",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_gjr_leverage",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_har_from_return_forecast_error_z",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_har_from_return_next_vol",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_har_rv_forecast",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_har_rv_forecast_error_z",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_har_rv_innovation_z",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_har_rv_next_var_forecast",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_har_rv_next_vol_forecast",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_hodges_lehmann_location",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_huber_regression_coeff",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_huber_regression_coeff_prior"
+  },
+  {
+    "canonical": "ts_huber_regression_in_sample_resid",
+    "current_surface": "extended",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_huber_regression_forecast_error"
+  },
+  {
+    "canonical": "ts_huber_regression_predictive_resid",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_huber_regression_resid_z",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_huber_regression_forecast_error_z"
+  },
+  {
+    "canonical": "ts_hvg_assortativity",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_hvg_clustering_coefficient",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_hvg_motif_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_kalman_beta",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_kalman_beta_change",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_kalman_beta_uncertainty",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_kalman_innovation_z",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_kalman_level",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_kalman_trend",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_kernel_granger_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_kramers_moyal_diffusion",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_kramers_moyal_drift",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_lo_mackinlay_vr",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_lo_mackinlay_z",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_local_lyapunov_exponent",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_lower_tail_coexceedance_probability",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_lz_complexity",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_markov_entropy_production",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_matrix_profile_discord_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_matrix_profile_motif_frequency",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_matrix_profile_neighbor_dispersion",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_mean_abs_deviation",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_mean_reversion_half_life",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "NO_SAFE_REPLACEMENT"
+  },
+  {
+    "canonical": "ts_mean_reversion_ou_approx_half_life",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_median_abs_deviation",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_modwt_band_corr",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_motif_recurrence_count",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_multi_regression_coeff",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_multi_regression_coeff_prior"
+  },
+  {
+    "canonical": "ts_multi_regression_r2",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_multi_regression_r2_prior"
+  },
+  {
+    "canonical": "ts_multi_regression_resid",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_multi_regression_forecast_error"
+  },
+  {
+    "canonical": "ts_multi_regression_resid_z",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_multi_regression_forecast_error_z"
+  },
+  {
+    "canonical": "ts_multifractal_asymmetry",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_multiscale_entropy_slope",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_multiscale_permutation_entropy_slope",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_pastor_stambaugh_liquidity_gamma",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_path_leadlag_area",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_path_signature_area",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_path_signature_depth2_norm",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_persistence_birth_dispersion",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_persistence_diagram_shift",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_pettitt_change_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_pickands_tail_index",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_poly2_coeff",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "in-sample polynomial fit coefficient — diagnostic; use ts_poly2_resid prior forms for causality",
+    "recommended_factor_replacement": "ts_poly2_prior_coeff"
+  },
+  {
+    "canonical": "ts_poly2_forecast_error",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_poly2_forecast_error_z",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_poly2_prior_coeff",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_poly2_resid",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "in-sample polynomial residual — diagnostic; causal counterpart preferred",
+    "recommended_factor_replacement": "ts_poly2_forecast_error"
+  },
+  {
+    "canonical": "ts_pseudocount_sample_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_quantile_crossing_spectral_concentration",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_quantile_regression_beta",
+    "current_surface": "research",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "in-sample quantile-regression coefficient — diagnostic; the *_prior / *_forecast_error counterparts are the mineable forms",
+    "recommended_factor_replacement": "ts_quantile_regression_coeff_prior"
+  },
+  {
+    "canonical": "ts_quantile_regression_coeff",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_quantile_regression_coeff_prior"
+  },
+  {
+    "canonical": "ts_quantile_regression_coeff_prior",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_quantile_regression_resid",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_quantile_regression_coeff_prior"
+  },
+  {
+    "canonical": "ts_quantile_regression_slope",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_quantile_regression_coeff_prior"
+  },
+  {
+    "canonical": "ts_quantilogram",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_recurrence_longest_vertical_length",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_recurrence_mean_diagonal_length",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_regime_duration",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_residualized_hsic",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_resistance_log_slope",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_return_spectral_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_ridge_regression_coeff",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_ridge_regression_coeff_prior"
+  },
+  {
+    "canonical": "ts_ridge_regression_in_sample_resid",
+    "current_surface": "extended",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_ridge_regression_forecast_error"
+  },
+  {
+    "canonical": "ts_ridge_regression_predictive_resid",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_ridge_regression_resid_z",
+    "current_surface": "daily",
+    "direct_use_status": "research_tool",
+    "disposition": "moved_research_tool",
+    "reason_not_mineable": "diagnostic / in-sample metric — research tool only",
+    "recommended_factor_replacement": "ts_ridge_regression_forecast_error_z"
+  },
+  {
+    "canonical": "ts_robust_zscore_inclusive",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_robust_zscore_prior",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_roll_effective_spread",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_rolling_sr_gaussian_mean_shift_score",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_rqa_determinism_fixed_rr",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_rqa_laminarity_fixed_rr",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_score_rank_weighted_mean",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_signature_mahalanobis_anomaly",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_spectral_low_frequency_ratio",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_support_log_slope",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_transfer_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_transfer_entropy_peak_excess",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_turning_point_ratio",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_turnover_cost_entropy_vol_scaled",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_turnover_old_mass",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_two_state_regime_probability",
+    "current_surface": "extended",
+    "direct_use_status": "direct_state",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_variance_ratio_proxy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_wavelet_energy_slope",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_wavelet_entropy",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha_high_cost",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_wavelet_high_frequency_ratio",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_wavelet_low_frequency_ratio",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_wavelet_lowpass_reconstruct",
+    "current_surface": "extended",
+    "direct_use_status": "direct_intermediate",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "ts_weighted_downside_deviation",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "update_acceleration",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "update_direction_persistence",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "update_path_efficiency",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "update_surprise",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "valuation_pcf_definition_gap",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "valuation_pcf_gap_positive",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "valuation_pcf_gap_signed_log",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "valuation_pe_gap_positive",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "valuation_pe_gap_signed_log",
+    "current_surface": "extended",
+    "direct_use_status": "direct_alpha",
+    "disposition": "direct_visible",
+    "reason_not_mineable": "",
+    "recommended_factor_replacement": ""
+  },
+  {
+    "canonical": "valuation_pe_ttm_lyr_gap",
+    "current_surface": "daily",
+    "direct_use_status": "move_internal",
+    "disposition": "moved_internal",
+    "reason_not_mineable": "internal supporting layer — not public mining",
+    "recommended_factor_replacement": ""
+  }
+]

@@ -50,6 +50,11 @@ from cleaned_operators.dynamic_knn import _avg_tie_ranks, _neighbors
 
 _EPS = 1e-12
 _RHO_EPS = 0.05  # |Spearman| below this → try both monotone fits, keep the better.
+# R16-157: the rho threshold decides the up / down / double-fit MODEL SELECTION
+# route but was a hidden module constant.  Versioned into the estimator-policy
+# digest carried by the monotone-fit canonicals, so changing it changes their
+# definition/evidence identity (never a silent behavior change).
+_RHO_EPS_POLICY_DIGEST = f"CS_EXT_ISOTONIC_RHO_EPS={_RHO_EPS:g}"
 _MIN_Q_ROWS = 3  # trailing rows needed to compute a stock's own quantile threshold.
 _MIN_ALIGNED = 3  # aligned trailing rows needed for a valid pairwise joint stat.
 # R9-OP-018: the group coexceedance factor is the mean excess over *valid*
@@ -66,7 +71,8 @@ _MIN_PAIR_ROWS = 20
 _MIN_ISOTONIC_BREADTH = 10
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int,
+              extra_tags: tuple[str, ...] = ()) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="cross_section_ext",
@@ -77,7 +83,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             "cross_section_ext", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
             f"signature:{','.join(params)}->series", "domain:price_volume",
-            f"unit:{unit}", f"cost:{cost}",
+            f"unit:{unit}", f"cost:{cost}", *extra_tags,
         ],
     )
 
@@ -560,6 +566,8 @@ class CsIsotonicResidual(SeriesOperator):
         ["y", "x"],
         unit="residual",
         cost=6,
+        # R16-157: the rho model-selection threshold is part of the definition.
+        extra_tags=(_RHO_EPS_POLICY_DIGEST,),
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, **_: Any) -> pd.DataFrame:

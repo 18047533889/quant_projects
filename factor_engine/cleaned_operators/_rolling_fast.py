@@ -264,8 +264,31 @@ NEW-020: 对每个窗口，用**有效样本的实际物理行偏移**做 OLS：
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
+def _argextreme_1d(col: np.ndarray, window: int, *, maximum: bool, age: bool) -> np.ndarray:
+    """1-D rolling extreme position/age with ``latest`` tie-break.
+
+    ``index_from_oldest`` (``age=False``): 0-based offset from the window's
+    OLDEST bar (0 = oldest).  ``age`` (``age=True``): bars since the most recent
+    extreme (0 = current bar).  Ties always resolve to the NEWEST occurrence
+    (``hits[-1]``) — R19-039..042/049 tie authority, identical across backends.
+    A window with no finite value outputs NaN (Unknown).
+    """
+    out = np.full(col.shape[0], np.nan, dtype=np.float64)
+    for i in range(col.shape[0]):
+        start = max(0, i - window + 1)
+        seg = col[start : i + 1]
+        valid = np.isfinite(seg)
+        if not valid.any():
+            continue
+        extreme = float(np.max(seg[valid])) if maximum else float(np.min(seg[valid]))
+        hits = np.flatnonzero(valid & (seg == extreme))
+        hit = int(hits[-1])
+        out[i] = float((seg.size - 1 - hit) if age else hit)
+    return out
+
+
 def rolling_argmax(x: pd.DataFrame, window: int) -> pd.DataFrame:
-    """滚动窗口内最大值的位置（0-based，窗口内相对下标，0=窗口最旧 bar）。
+    """滚动窗口内最大值的位置（index_from_oldest，0=窗口最旧 bar，tie=latest）。
 
 NEW-018: 全窗口无有限值时输出 ``NaN``（Unknown 不能伪装成合法极值位置）。
 NEW-019: 目标极值只在 ``np.isfinite`` 的样本上求，``+Inf`` 既不作 target 也不
@@ -278,25 +301,13 @@ NEW-019: 目标极值只在 ``np.isfinite`` 的样本上求，``+Inf`` 既不作
 返回:
     极大值位置 panel。
 """
-    arr = x.to_numpy(dtype=np.float64, copy=False)
-    n, m = arr.shape
-    out = np.full((n, m), np.nan, dtype=np.float64)
-    for j in range(m):
-        col = arr[:, j]
-        for i in range(n):
-            start = max(0, i - window + 1)
-            seg = col[start : i + 1]
-            valid = np.isfinite(seg)
-            if not valid.any():
-                continue
-            extreme = float(np.max(seg[valid]))
-            hits = np.flatnonzero(valid & (seg == extreme))
-            out[i, j] = float(hits[-1])
-    return pd.DataFrame(out, index=x.index, columns=x.columns)
+    return _apply_colwise_1d(
+        x, lambda col: _argextreme_1d(col, window, maximum=True, age=False)
+    )
 
 
 def rolling_argmin(x: pd.DataFrame, window: int) -> pd.DataFrame:
-    """滚动窗口内最小值的位置（0-based，窗口内相对下标，0=窗口最旧 bar）。
+    """滚动窗口内最小值的位置（index_from_oldest，0=窗口最旧 bar，tie=latest）。
 
 NEW-018/019: 同 :func:`rolling_argmax` —— 全 NaN 窗口输出 NaN；极值只在
 有限样本上求。
@@ -308,21 +319,138 @@ NEW-018/019: 同 :func:`rolling_argmax` —— 全 NaN 窗口输出 NaN；极值
 返回:
     极小值位置 panel。
 """
-    arr = x.to_numpy(dtype=np.float64, copy=False)
-    n, m = arr.shape
-    out = np.full((n, m), np.nan, dtype=np.float64)
-    for j in range(m):
-        col = arr[:, j]
-        for i in range(n):
-            start = max(0, i - window + 1)
-            seg = col[start : i + 1]
-            valid = np.isfinite(seg)
-            if not valid.any():
-                continue
-            extreme = float(np.min(seg[valid]))
-            hits = np.flatnonzero(valid & (seg == extreme))
-            out[i, j] = float(hits[-1])
-    return pd.DataFrame(out, index=x.index, columns=x.columns)
+    return _apply_colwise_1d(
+        x, lambda col: _argextreme_1d(col, window, maximum=False, age=False)
+    )
+
+
+def rolling_days_since_extreme(x: pd.DataFrame, window: int, *, maximum: bool) -> pd.DataFrame:
+    """滚动极值距当前 bar 的 bar 数（age，0=当前 bar，tie=latest）。
+
+R19-039..042/049: ``ts_argmax`` / ``ts_argmin`` canonical 语义为 **age**
+（0=当前/最新 bar），并列取最新 occurrence。index-from-oldest 语义由
+:func:`rolling_argmax` / :func:`rolling_argmin`（及 canonical
+``ts_argmax_index_from_oldest`` / ``ts_argmin_index_from_oldest``）提供。
+
+参数:
+    x: 输入宽表 panel。
+    window: 滚动窗口长度。
+    maximum: ``True`` 取最大极值（argmax），``False`` 取最小极值（argmin）。
+
+返回:
+    极值 age panel。
+"""
+    return _apply_colwise_1d(
+        x, lambda col: _argextreme_1d(col, window, maximum=maximum, age=True)
+    )
+
+
+# R19-030: current-row observation policy for paired window statistics.
+#
+# A rolling correlation/covariance at row ``t`` is defined over the window's
+# valid x/y pairs.  The chosen policy: the statistic MAY EXIST at a row where
+# the current x/y pair is missing (NaN/Inf), as long as the window still holds
+# >= min_periods finite pairs.  This matches the Numba fastpath
+# (``backend.numba_kernels.rolling_corr_panel``) which skips non-finite pairs
+# and only NaNs when fewer than ``min_count`` pairs are present.  The old pandas
+# slow path forced ``current-row missing -> NaN`` via ``.where(valid)`` — a
+# contradiction that manufactured cross-backend drift.  All backends now share
+# the fastpath policy.
+CURRENT_ROW_POLICY = "window_statistic_can_exist_without_current_observation"
+CurrentObservationRole = CURRENT_ROW_POLICY
+
+
+def rolling_signed_product(
+    x: pd.DataFrame,
+    window: int,
+    min_periods: int = 1,
+) -> pd.DataFrame:
+    """Signed + zero-safe rolling product (R19-043/044).
+
+    The old log-domain implementation replaced ``0`` with NaN (``[2,0,3]`` -> NaN
+    instead of ``0``) and produced NaN for any negative input (``[-2,-3]`` ->
+    NaN instead of ``6``).  The signed product maintains ``zero_count`` /
+    ``sign_parity`` / ``sum_log_abs`` over the causal window:
+      ``[2,0,3]``  -> ``0``
+      ``[-2,-3]``  -> ``6``
+      ``[-2,3]``   -> ``-6``
+    ``±Inf`` and ``NaN`` are missing (skipped); an all-missing window is NaN.
+    """
+    w = _strict_window_int(window, "window")
+    mp = _strict_window_int(min_periods, "min_periods")
+    if mp > w:
+        raise OperatorParameterError("min_periods must be <= window")
+    finite = pd.DataFrame(
+        np.isfinite(x.to_numpy(dtype=np.float64, copy=False)),
+        index=x.index,
+        columns=x.columns,
+    )
+    clean = x.where(finite)
+    count = finite.rolling(w, min_periods=1).sum()
+    zero_count = clean.eq(0).rolling(w, min_periods=1).sum()
+    negative_count = clean.lt(0).rolling(w, min_periods=1).sum()
+    log_abs = np.log(clean.abs().where(clean.ne(0)))
+    with np.errstate(over="ignore", invalid="ignore"):
+        magnitude = np.exp(log_abs.rolling(w, min_periods=1).sum())
+    sign = pd.DataFrame(
+        np.where((negative_count % 2).eq(0), 1.0, -1.0),
+        index=x.index,
+        columns=x.columns,
+    )
+    result = (magnitude * sign).mask(zero_count.gt(0), 0.0)
+    # Fail closed on overflow: a product exceeding float64 (1e308*1e308) is not
+    # a usable alpha -> NaN, never ±Inf.
+    result = result.mask(~np.isfinite(result.to_numpy(dtype=np.float64, copy=False)))
+    return result.where(count >= mp)
+
+
+# R19-045/046: explicit partial-window / missing policy for ALL age-weighted
+# operators (``ts_sum_decay``, ``ts_decay_exp_window``).  Weights are indexed
+# oldest_to_newest (index 0 = oldest bar).  A partial window of length L < W
+# uses the L NEWEST age slots (``weights[-L:]``) renormalized to unit mass —
+# identical to the WMA ``RenormalizedPartialWMA_age_slot_anchored`` policy.
+# Missing values (NaN/Inf) are skipped and the surviving weights renormalized,
+# so one missing bar never collapses the whole window.
+AGE_WEIGHTED_PARTIAL_POLICY = "RenormalizedPartialAgeWeighted_newest_slot_anchored"
+
+
+def _age_weighted_1d_numpy(arr: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    n = arr.shape[0]
+    wlen = weights.shape[0]
+    out = np.empty(n, dtype=np.float64)
+    for i in range(n):
+        start = max(0, i - wlen + 1)
+        seg = arr[start : i + 1]
+        ww = weights[-len(seg) :]  # newest-L age slots (partial-window anchor)
+        mask = np.isfinite(seg)
+        if not mask.any():
+            out[i] = np.nan
+        else:
+            s = seg[mask]
+            w = ww[mask]
+            out[i] = np.dot(s, w) / w.sum()
+    return out
+
+
+def rolling_age_weighted(
+    x: pd.DataFrame, window: int, weights: np.ndarray
+) -> pd.DataFrame:
+    """Shared age-weighted rolling mean kernel (R19-045..048).
+
+    ``weights`` is the FULL-window weight vector in oldest_to_newest order
+    (index 0 = oldest bar); it is NOT required to be normalized — each window
+    renormalizes internally.  Partial windows use ``weights[-L:]``
+    (newest-L age slots) and missing values are skipped + reweighted
+    (see :data:`AGE_WEIGHTED_PARTIAL_POLICY`).
+    """
+    w = _strict_window_int(window, "window")
+    wts = np.asarray(weights, dtype=np.float64)
+    if wts.ndim != 1 or wts.shape[0] != w:
+        raise OperatorParameterError(
+            f"rolling_age_weighted: weights must be a 1-D array of length {w}, "
+            f"got shape {wts.shape}"
+        )
+    return _apply_colwise_1d(x, lambda col: _age_weighted_1d_numpy(col, wts))
 
 
 def rolling_beta(

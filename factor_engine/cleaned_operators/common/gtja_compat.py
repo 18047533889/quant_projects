@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from cleaned_operators.registry import OperatorRegistry
 
 
@@ -145,25 +145,42 @@ def _safe_divide(left, right, *, epsilon: float, default: float, missing_default
     return pd.DataFrame(raw, index=x.index, columns=x.columns)
 
 
-@register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
+@register_operator(name="ts_argmax", category="time_series", business_category="time_series", canonical="ts_argmax", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="R19-039..042: ts_argmax canonical = age (0=current, tie=latest); index_from_oldest lives in ts_argmax_index_from_oldest")
 class GTJATSArgmax(SeriesOperator):
-    metadata = OperatorMetadata(name="ts_argmax", category="time_series", description="窗口最大值距当前 bar 的距离（0=当前，tie 取最近）", examples=["ts_argmax(high, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"], param_aliases={"d": "window"})
+    """滚动窗口最大值距当前 bar 的 bar 数（age，0=当前/最新 bar，并列取最新）。
+
+    R19-039..042/049: ``ts_argmax`` canonical 语义为 **age**（0=当前），与共享
+    kernel ``rolling_days_since_extreme`` 一致；需要 "0=窗口最旧 bar" 的 index
+    语义请用 ``ts_argmax_index_from_oldest``。"""
+
+    metadata = OperatorMetadata(name="ts_argmax", category="time_series", description="窗口最大值距当前 bar 的 bar 数（0=当前，并列取最近）", examples=["ts_argmax(high, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"], param_aliases={"d": "window"}, param_specs={"window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON)})
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
-        # ``d`` is a declared parser-level alias for ``window`` (param_aliases);
-        # the central gate passes the alias kwarg through under its own key.
-        w = max(1, int(kwargs.get("d", window)))
-        return x.apply(lambda s: _rolling_days_since_extreme_1d(s.to_numpy(), w, maximum=True))
+        from cleaned_operators._rolling_fast import rolling_days_since_extreme
+        from cleaned_operators.common.strict_params import strict_int
 
-
-@register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
-class GTJATSArgmin(SeriesOperator):
-    metadata = OperatorMetadata(name="ts_argmin", category="time_series", description="窗口最小值距当前 bar 的距离（0=当前，tie 取最近）", examples=["ts_argmin(low, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"], param_aliases={"d": "window"})
-
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
-        w = max(1, int(kwargs.get("d", window)))
-        return x.apply(lambda s: _rolling_days_since_extreme_1d(s.to_numpy(), w, maximum=False))
+        w = strict_int(kwargs.get("d", window), "window", minimum=1)
+        return rolling_days_since_extreme(x, w, maximum=True)
+
+
+@register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="R19-039..042: ts_argmin canonical = age (0=current, tie=latest); index_from_oldest lives in ts_argmin_index_from_oldest")
+class GTJATSArgmin(SeriesOperator):
+    """滚动窗口最小值距当前 bar 的 bar 数（age，0=当前/最新 bar，并列取最新）。
+
+    R19-039..042/049: ``ts_argmin`` canonical 语义为 **age**（0=当前），并列取
+    最新 occurrence；需要 "0=窗口最旧 bar" 的 index 语义请用
+    ``ts_argmin_index_from_oldest``。"""
+
+    metadata = OperatorMetadata(name="ts_argmin", category="time_series", description="窗口最小值距当前 bar 的 bar 数（0=当前，并列取最近）", examples=["ts_argmin(low, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"], param_aliases={"d": "window"}, param_specs={"window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON)})
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+        from cleaned_operators._rolling_fast import rolling_days_since_extreme
+        from cleaned_operators.common.strict_params import strict_int
+
+        # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
+        w = strict_int(kwargs.get("d", window), "window", minimum=1)
+        return rolling_days_since_extreme(x, w, maximum=False)
 
 
 @register_operator(name="ts_regression", category="time_series", business_category="time_series", canonical="ts_regression", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
@@ -184,14 +201,16 @@ class GTJATimeSlope(SeriesOperator):
         return x.apply(lambda s: _rolling_time_slope_1d(s.to_numpy(), w, mp))
 
 
-@register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
+@register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="R19-043/044: ts_product signed + zero-safe (single shared kernel)")
 class GTJATSProduct(SeriesOperator):
-    metadata = OperatorMetadata(name="ts_product", category="time_series", description="保留零与负号的滚动乘积", examples=["ts_product(x, 5)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"])
+    metadata = OperatorMetadata(name="ts_product", category="time_series", description="保留零与负号的滚动乘积（signed + zero-safe）", examples=["ts_product(x, 5)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"], param_specs={"window": ParamSpec(dtype=int, min=1, default=5, searchable=True, param_role=ParamRole.HORIZON)})
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 5, **kwargs) -> pd.DataFrame:
-        w = max(1, int(window))
-        mp = max(1, min(int(kwargs.get("min_periods", 1)), w))
-        return _rolling_product(x, w, mp)
+        from cleaned_operators._rolling_fast import rolling_signed_product
+        from cleaned_operators.common.strict_params import strict_int
+
+        w = strict_int(window, "window", minimum=1)
+        return rolling_signed_product(x, w)
 
 
 @register_operator(name="protected_div", category="data_cleaning", business_category="data_cleaning", canonical="protected_div", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")

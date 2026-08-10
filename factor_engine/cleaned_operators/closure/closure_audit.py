@@ -64,23 +64,39 @@ _ESTIMATOR_KNOB_EXACT = {
 
 @dataclass
 class ClosureInvariant:
-    """One release invariant with its current violation list."""
+    """One release invariant with its current violation list.
+
+    R16-035: every detector carries a five-state outcome
+    PASS / FAIL / N/A / NOT_RUN / AUDIT_ERROR.  A detector that did NOT run
+    (e.g. behavioral source-scan disabled) is NOT_RUN — an empty finding list
+    must never be mistaken for PASS.
+    """
 
     name: str
     description: str
     violations: list[str] = field(default_factory=list)
+    outcome: str = "PASS"  # PASS | FAIL | N/A | NOT_RUN | AUDIT_ERROR
+    required: bool = True  # a required detector in NOT_RUN blocks release
 
     @property
     def count(self) -> int:
         return len(self.violations)
+
+    def finalize(self) -> None:
+        """Compute the outcome from the violation list."""
+        if self.outcome == "NOT_RUN":
+            return
+        if self.outcome == "AUDIT_ERROR":
+            return
+        self.outcome = "FAIL" if self.violations else "PASS"
 
 
 @dataclass
 class ClosureReport:
     invariants: dict[str, ClosureInvariant] = field(default_factory=dict)
 
-    def add(self, name: str, description: str) -> ClosureInvariant:
-        inv = ClosureInvariant(name, description)
+    def add(self, name: str, description: str, *, required: bool = True) -> ClosureInvariant:
+        inv = ClosureInvariant(name, description, required=required)
         self.invariants[name] = inv
         return inv
 
@@ -89,7 +105,17 @@ class ClosureReport:
 
     def release_safe(self, allowlist: set[str] | None = None) -> bool:
         allow = allowlist or set()
-        return all(v.count == 0 or v.name in allow for v in self.invariants.values())
+        for v in self.invariants.values():
+            if v.name in allow:
+                continue
+            if v.outcome in ("FAIL", "AUDIT_ERROR"):
+                return False
+            # R16-035: a REQUIRED detector that did not run (NOT_RUN) blocks.
+            if v.required and v.outcome == "NOT_RUN":
+                return False
+            if v.count and v.outcome == "PASS":
+                return False
+        return True
 
 
 # ---------------------------------------------------------------------------
@@ -100,9 +126,23 @@ def _is_production(entry: dict[str, Any]) -> bool:
     return entry.get("status") in ("production", "implemented")
 
 
+def _panel_params_typed(entry: dict[str, Any]) -> tuple[str, ...]:
+    """R16-036: the typed ``panel_params`` contract is authoritative.  The
+    legacy ``_PANEL_PARAMS`` name whitelist (group_id/high_limit/activity/f1/
+    benchmark … are easily missed) is only a fallback for operators that never
+    declared the typed contract."""
+    declared = entry.get("panel_params")
+    if isinstance(declared, (list, tuple, frozenset, set)) and declared:
+        return tuple(str(p) for p in declared)
+    return ()
+
+
 def _scalar_params(entry: dict[str, Any], specs: dict[str, Any]) -> list[str]:
     """Non-panel parameter names for an operator, preserving order."""
     names = list(entry.get("param_names") or [])
+    typed = _panel_params_typed(entry)
+    if typed:
+        return [p for p in names if p not in typed]
     return [p for p in names if p not in _PANEL_PARAMS]
 
 
@@ -112,9 +152,44 @@ def _specs_of(entry: dict[str, Any]) -> dict[str, Any]:
 
 def _multi_input(entry: dict[str, Any]) -> bool:
     names = list(entry.get("param_names") or [])
-    panels = [p for p in names if p in _PANEL_PARAMS]
+    typed = _panel_params_typed(entry)
+    panels = [p for p in names if p in typed] if typed else [
+        p for p in names if p in _PANEL_PARAMS
+    ]
     # operator has more than one panel input (x,y / x,z / price+event ...)
     return len(panels) >= 2
+
+
+def _has_session_contract(canonical: str) -> bool:
+    """R16-031: does the canonical declare a SessionContract / session calendar?"""
+    try:
+        from cleaned_operators.operator_spec import build_operator_spec
+
+        spec = build_operator_spec(canonical)
+        sc = getattr(spec, "session_contract", None)
+        if sc:
+            return True
+    except Exception:
+        pass
+    try:
+        from cleaned_operators.registry import OperatorRegistry
+
+        entry = OperatorRegistry._catalog.get(canonical, {})
+        return bool(
+            entry.get("session_contract")
+            or entry.get("session_calendar")
+            or entry.get("available_at")
+        )
+    except Exception:
+        return False
+
+
+def _is_minute_family(canonical: str) -> bool:
+    """R16-032: intraday / session / volume-clock family canonicals are minute
+    INPUT by construction even before a grain contract is declared."""
+    return canonical.startswith(
+        ("intraday_", "intra_", "session_", "volume_clock", "minute_")
+    ) or "_session" in canonical or "_intraday" in canonical
 
 
 # ---------------------------------------------------------------------------
@@ -208,9 +283,10 @@ def _scan_source_files() -> SourceScan:
     int_trunc: list[str] = []
     for path in sorted(root.rglob("*.py")):
         rel = str(path.relative_to(root))
-        if path.name.startswith("_"):
-            skipped.append(rel)
-            continue
+        # R16-033: ``_*.py`` PRIVATE SHARED KERNELS (``_rolling_fast.py`` /
+        # ``_numpy_kernels.py`` / ``_dedupe.py``) ARE production source and must
+        # be scanned — a filename rule silently excluded them.  Only generated /
+        # vendor / cache and the infra-metadata whitelist are skipped.
         if path.name in _SKIP_SOURCE_FILES:
             skipped.append(rel)
             continue
@@ -354,12 +430,21 @@ def run_semantic_closure_audit(
         ):
             inv_und_class.violations.append(canonical)
 
-        # mining reachability
+        # mining reachability — R16-030: INTRINSIC only.  ``mining_eligible``
+        # with no source context fails closed to UNKNOWN, which would flag
+        # every operator as UNUSED.  Closure checks intrinsic reachability
+        # (certification + mineable role + cost contract); REAL source
+        # eligibility is a MiningContext decision, never a closure invariant.
         try:
-            eligible = _mining.mining_eligible(canonical, catalog=entry)
+            intrinsic = (
+                bool(entry.get("production_certified"))
+                and _mining.assign_mining_role(canonical, entry)
+                in _mining._MINEABLE_ROLES
+                and _mining.cost_contract_declared(canonical, entry)
+            )
         except Exception:  # pragma: no cover
-            eligible = False
-        if not eligible and canonical not in research_tools:
+            intrinsic = False
+        if not intrinsic and canonical not in research_tools:
             inv_unused.violations.append(canonical)
 
         # scalar params: declared role required (Part A-2 fail-closed)
@@ -402,34 +487,65 @@ def run_semantic_closure_audit(
                     f"{mining_role_value} is a terminal alpha slot)"
                 )
 
-        # minute -> daily session contract
+        # minute <-> daily session contract (R16-031/032).
         g_in, g_out = entry.get("input_grain"), entry.get("output_grain")
-        if g_in and g_out and g_in != g_out and not entry.get("same_session_usable"):
-            inv_m2d.violations.append(
-                f"{canonical} ({g_in}->{g_out}, same_session_usable unset)"
-            )
+        str_in = str(g_in or "").lower()
+        str_out = str(g_out or "").lower()
+        eod_ok = (
+            entry.get("available_at") == "session_close"
+            and entry.get("same_session_usable") is False
+        )
+        session_contract = _has_session_contract(canonical)
+        # R16-032: a minute-input canonical MUST declare a COMPLETE grain
+        # contract — comparing only when both sides exist hid the missing-
+        # declaration case.
+        if str_in == "minute" or _is_minute_family(canonical):
+            if not g_in or not g_out:
+                inv_m2d.violations.append(
+                    f"{canonical} incomplete GrainContract (in={g_in!r}, out={g_out!r})"
+                )
+            elif eod_ok:
+                pass  # R16-031: EOD factor (available_at=session_close,
+                      # same_session_usable=False) is the CORRECT state.
+            elif str_in != str_out and entry.get("same_session_usable") and not session_contract:
+                inv_m2d.violations.append(
+                    f"{canonical} ({str_in}->{str_out}) marked same_session_usable=True "
+                    "without a SessionContract"
+                )
 
-    # source-scan invariants (recursive; skipped when include_behavioral=False)
+    # source-scan invariants (recursive; NOT_RUN when include_behavioral=False)
+    scan = None
     if include_behavioral:
         scan = _scan_source_files()
-        inv_clamp = report.invariants["OPERATOR_WITH_SILENT_PARAM_CLAMP"]
-        inv_int = report.invariants["OPERATOR_WITH_RUNTIME_INT_TRUNCATION"]
-        inv_unscanned = report.invariants["UNSCANNED_REGISTERED_CANONICALS"]
+    inv_clamp = report.invariants["OPERATOR_WITH_SILENT_PARAM_CLAMP"]
+    inv_int = report.invariants["OPERATOR_WITH_RUNTIME_INT_TRUNCATION"]
+    inv_unscanned = report.invariants["UNSCANNED_REGISTERED_CANONICALS"]
+    if scan is None:
+        # R16-035: disabling the behavioral detectors is NOT a PASS — they are
+        # required detectors and report NOT_RUN, which blocks release_safe.
+        inv_clamp.outcome = "NOT_RUN"
+        inv_int.outcome = "NOT_RUN"
+        inv_unscanned.outcome = "NOT_RUN"
+    else:
         for loc in scan.clamp:
             inv_clamp.violations.append(loc)
         for loc in scan.int_trunc:
             inv_int.violations.append(loc)
         # R15-INC-062: build the REAL canonical → implementation-file map (from
         # the operator class's module) instead of guessing by filename or a
-        # name-extraction regex.  A canonical whose implementation file resolves
-        # inside the tree but was NOT scanned is a hard violation.
+        # name-extraction regex.  R16-034: a canonical whose implementation
+        # file was NOT scanned — whether skipped or unresolved — is UNSCANNED
+        # (NOT_RUN), never silently covered.
         for canonical in sorted(catalog):
             file = _canonical_module_file(canonical)
             if file is None:
                 continue  # no in-tree implementation file (external/dynamic)
-            if file not in scan.scanned_files and file not in scan.skipped_files:
+            if file not in scan.scanned_files:
                 inv_unscanned.violations.append(f"{canonical} ({file})")
 
+    # finalize every invariant into its five-state outcome (R16-035)
+    for inv in report.invariants.values():
+        inv.finalize()
     return report
 
 

@@ -79,4 +79,8 @@ def test_days_since_revision_is_bounded_and_resets_only_on_revision():
     target = _panel(["Q2", "Q2", "Q3", "Q3", "Q3", "Q3"])
     expected = _panel([10.0, 11.0, 20.0, 20.0, 19.0, 19.0])
     age = fin_days_since_expectation_revision(expected, target, 3)
-    np.testing.assert_allclose(age["A"].to_numpy(), [3.0, 0.0, 1.0, 2.0, 0.0, 1.0])
+    # R23-105/106 left-censor: the FIRST observation has no history, so the
+    # revision age is UNKNOWN (NaN), not "stale at max_days" — the old
+    # ``age = max_days`` initial clock silently reported a cap as staleness.
+    # The clock only starts at the first genuinely observed revision event.
+    np.testing.assert_allclose(age["A"].to_numpy(), [np.nan, 0.0, 1.0, 2.0, 0.0, 1.0], equal_nan=True)
