@@ -105,23 +105,27 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
     _table(
         "StockIndicator", "ashare_stock_indicator", time="PubDate", domain="fundamental",
         table_kind="financial_event", join_policy="financial_pit", knowledge="PubDate",
-        period="ReportPeriodEndDate", revision="UpdateTime",
+        period="ReportPeriodEndDate", revision="UpdateTime", strict_pit_allowed=True,
+        metadata={"pit_reason": "financial_pit on PubDate; PIT-safe"},
     ),
     _table(
         "StockBalance", "ashare_stock_balance", time="PubDate", domain="fundamental",
         table_kind="financial_event", join_policy="financial_pit", knowledge="PubDate",
-        period="ReportPeriodEndDate", revision="UpdateTime",
+        period="ReportPeriodEndDate", revision="UpdateTime", strict_pit_allowed=True,
+        metadata={"pit_reason": "financial_pit on PubDate; PIT-safe"},
     ),
     _table(
         "StockIncome", "ashare_stock_income", time="PubDate", domain="fundamental",
         table_kind="financial_event", join_policy="financial_pit", knowledge="PubDate",
-        period="ReportPeriodEndDate", revision="UpdateTime",
+        period="ReportPeriodEndDate", revision="UpdateTime", strict_pit_allowed=True,
+        metadata={"pit_reason": "financial_pit on PubDate; PIT-safe"},
     ),
     _table(
         "StockCashFlow", "ashare_stock_cashflow", time="PubDate", domain="fundamental",
         aliases=("StockCashflow",), table_kind="financial_event",
         join_policy="financial_pit", knowledge="PubDate", period="ReportPeriodEndDate",
-        revision="UpdateTime",
+        revision="UpdateTime", strict_pit_allowed=True,
+        metadata={"pit_reason": "financial_pit on PubDate; PIT-safe"},
     ),
     # StockDividend physical schema (COS lqtp dict §4.17): TradeDate/RightRegDate/
     # ExDividendDate/CashDividend/StockDividend/StockTransfer/UpdateTime.  There is
@@ -131,46 +135,60 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
         "StockDividend", "ashare_stock_dividend", time="TradeDate", domain="corporate_action",
         table_kind="effective_event", join_policy="effective_only", knowledge=None,
         effective="ExDividendDate", strict_pit_allowed=False,
+        metadata={"pit_reason": "no announcement time; effective-only (ex-date)"},
     ),
     # IndexDailyBar keys on (TradeDate, Symbol) — Symbol, not IndexSymbol.  Index
     # selection must use instrument_filter (e.g. ["000300.SH"]), not a parameter.
     _table(
         "IndexDailyBar", "ashare_index_daily", instrument="Symbol", domain="index",
         aliases=("BenchmarkIndexDailyBar",), join_policy="exact_date",
+        strict_pit_allowed=True, metadata={"pit_reason": "exact_date; PIT-safe"},
     ),
     _table(
         "IndexConstituent", "ashare_index_constituent", domain="index",
         table_kind="relation", join_policy="exact", required_parameters=("IndexSymbol",),
-        cardinality="one_to_many",
+        cardinality="one_to_many", strict_pit_allowed=True,
+        metadata={"pit_reason": "exact_daily relation; PIT-safe; IndexSymbol required"},
     ),
-    _table("EtfDailyBar", "ashare_etf_daily", domain="etf", aliases=("ETFDailyBar",)),
+    _table("EtfDailyBar", "ashare_etf_daily", domain="etf", aliases=("ETFDailyBar",),
+           strict_pit_allowed=True, metadata={"pit_reason": "exact_daily; PIT-safe"}),
     # Calendar stores natural days in TradeDate (COS lqtp dict §Calendar), not "Date".
-    _table("Calendar", "ashare_calendar", time="TradeDate", instrument=None, domain="calendar", table_kind="calendar"),
+    _table("Calendar", "ashare_calendar", time="TradeDate", instrument=None, domain="calendar", table_kind="calendar",
+           strict_pit_allowed=True, metadata={"pit_reason": "calendar reference; PIT-safe"}),
     # List tables are D1 natural-day snapshots with full history (incl. delisted
     # symbols).  Marking them current_snapshot_only forced strict_pit_allowed=False
     # and allowed survivorship-biased backfill; with full history they are exact
     # equi-join PIT-safe tables.
-    _table("StockList", "ashare_stock_list", time="TradeDate", instrument="Symbol", domain="reference", join_policy="exact"),
-    _table("EtfList", "ashare_etf_list", time="TradeDate", instrument="Symbol", domain="reference", aliases=("ETFList",), join_policy="exact"),
-    _table("IndexList", "ashare_index_list", time="TradeDate", instrument="Symbol", domain="reference", join_policy="exact"),
+    _table("StockList", "ashare_stock_list", time="TradeDate", instrument="Symbol", domain="reference", join_policy="exact",
+           strict_pit_allowed=True, metadata={"pit_reason": "exact full-history; PIT-safe"}),
+    _table("EtfList", "ashare_etf_list", time="TradeDate", instrument="Symbol", domain="reference", aliases=("ETFList",), join_policy="exact",
+           strict_pit_allowed=True, metadata={"pit_reason": "exact full-history; PIT-safe"}),
+    _table("IndexList", "ashare_index_list", time="TradeDate", instrument="Symbol", domain="reference", join_policy="exact",
+           strict_pit_allowed=True, metadata={"pit_reason": "exact full-history; PIT-safe"}),
     # StockIndustry is a natural-day snapshot per (TradeDate, Symbol, IndustrySource);
     # with full history an exact equi join on TradeDate is PIT-safe and avoids the
     # "current industry viewed into the past" lookahead.  Single source still required.
     _table(
         "StockIndustry", "ashare_stock_industry", time="TradeDate", domain="classification",
         table_kind="relation", join_policy="exact", required_parameters=("IndustrySource",),
+        strict_pit_allowed=True,
+        metadata={"pit_reason": "exact_daily relation; PIT-safe; IndustrySource required"},
     ),
-    _table("StockStatus", "ashare_stock_status", domain="status", join_policy="state_asof"),
+    _table("StockStatus", "ashare_stock_status", domain="status", join_policy="state_asof",
+           strict_pit_allowed=True,
+           metadata={"pit_reason": "S1 daily snapshot; exact join when fresh, carry age recorded (R17-072)"}),
     _table(
         "StockTopTenShareholder", "ashare_stock_topten_shareholder", time="PubDate",
         domain="ownership", table_kind="relation", join_policy="relation_pit",
         knowledge="PubDate", period="ReportPeriodEndDate", cardinality="one_to_many",
+        strict_pit_allowed=True, metadata={"pit_reason": "relation_pit on PubDate; PIT-safe"},
     ),
     _table(
         "StockTopTenFloatShareholder", "ashare_stock_topten_float_shareholder",
         time="PubDate", domain="ownership", table_kind="relation",
         join_policy="relation_pit", knowledge="PubDate", period="ReportPeriodEndDate",
-        cardinality="one_to_many",
+        cardinality="one_to_many", strict_pit_allowed=True,
+        metadata={"pit_reason": "relation_pit on PubDate; PIT-safe"},
     ),
 )
 

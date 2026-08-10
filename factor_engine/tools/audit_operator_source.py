@@ -199,7 +199,7 @@ def scan_file(path: Path, res: ScanResult) -> None:
                         finding_id=_finding_id(category, path, i),
                         category=category,
                         severity=_severity(category),
-                        file=str(path.relative_to(ROOT)),
+                        file=_repo_path(path),
                         line=i,
                         owning_canonical=owning,
                         code=line.strip()[:200],
